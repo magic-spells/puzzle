@@ -7,6 +7,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/mattn/go-isatty"
 )
 
 const (
@@ -31,13 +33,14 @@ func New(f *os.File) *Printer {
 	return newWithEnv(f, os.Getenv)
 }
 
-// IsTerminal reports whether f is a terminal-like character device.
+// IsTerminal reports whether f is a real terminal. A char-device stat check is
+// not enough: /dev/null is a character device, and treating it as a TTY makes
+// interactive prompts block forever in cron/CI environments.
 func IsTerminal(f *os.File) bool {
 	if f == nil {
 		return false
 	}
-	info, err := f.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
+	return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
 }
 
 func newWithEnv(f *os.File, getenv func(string) string) *Printer {

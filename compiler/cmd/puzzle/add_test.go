@@ -2,14 +2,17 @@ package main
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
+	embeddedskills "github.com/magic-spells/puzzle/skills"
 )
 
 // addRequireNode skips a test when node is unavailable — loading an existing
@@ -312,6 +315,172 @@ func TestAddPieceDispatchCopies(t *testing.T) {
 	}
 	if out := buf.String(); !strings.Contains(out, "button") {
 		t.Errorf("summary should mention the piece, got:\n%s", out)
+	}
+}
+
+func TestDetectSkillTargetsUsesExistingConfigDirs(t *testing.T) {
+	home := t.TempDir()
+	for _, name := range []string{".claude", ".cursor"} {
+		if err := os.Mkdir(filepath.Join(home, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A file named like a config root is not an install target.
+	if err := os.WriteFile(filepath.Join(home, ".codex"), []byte("not a directory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	targets, err := detectSkillTargets(home)
+	if err != nil {
+		t.Fatalf("detect targets: %v", err)
+	}
+	if len(targets) != 2 {
+		t.Fatalf("detected %d targets, want 2: %#v", len(targets), targets)
+	}
+	if targets[0].Name != "Claude Code" || targets[0].Root != filepath.Join(home, ".claude") {
+		t.Errorf("first target = %#v, want Claude Code", targets[0])
+	}
+	if targets[1].Name != "Cursor" || targets[1].Root != filepath.Join(home, ".cursor") {
+		t.Errorf("second target = %#v, want Cursor", targets[1])
+	}
+}
+
+func TestAddSkillsNoDetectedTargetsIsFriendlyNoOp(t *testing.T) {
+	home := t.TempDir()
+	var buf bytes.Buffer
+	env := addEnvironment{
+		homeDir:     func() (string, error) { return home, nil },
+		interactive: false,
+	}
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+		t.Fatalf("add skills with no targets: %v", err)
+	}
+	if out := buf.String(); !strings.Contains(out, "nothing to install") {
+		t.Errorf("expected a friendly no-target note, got:\n%s", out)
+	}
+}
+
+func TestAddSkillsNonInteractiveInstallsAllDetectedTargets(t *testing.T) {
+	home := t.TempDir()
+	for _, name := range []string{".claude", ".codex", ".cursor"} {
+		if err := os.Mkdir(filepath.Join(home, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var buf bytes.Buffer
+	env := addEnvironment{
+		homeDir:     func() (string, error) { return home, nil },
+		interactive: false,
+	}
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+		t.Fatalf("add skills: %v", err)
+	}
+
+	want, err := fs.ReadFile(embeddedskills.FS, "puzzle/SKILL.md")
+	if err != nil {
+		t.Fatalf("read embedded skill: %v", err)
+	}
+	for _, name := range []string{".claude", ".codex", ".cursor"} {
+		dest := filepath.Join(home, name, "skills", "puzzle", "SKILL.md")
+		got, err := os.ReadFile(dest)
+		if err != nil {
+			t.Errorf("read %s: %v", dest, err)
+			continue
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("%s does not match embedded SKILL.md", dest)
+		}
+		if !strings.Contains(buf.String(), filepath.Dir(dest)) {
+			t.Errorf("output does not include destination %s:\n%s", filepath.Dir(dest), buf.String())
+		}
+	}
+}
+
+func TestAddSkillsOverwriteRefusalAndSuccess(t *testing.T) {
+	home := t.TempDir()
+	if err := os.Mkdir(filepath.Join(home, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := addEnvironment{
+		homeDir:     func() (string, error) { return home, nil },
+		interactive: false,
+	}
+
+	var buf bytes.Buffer
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+		t.Fatalf("initial add skills: %v", err)
+	}
+	skillPath := filepath.Join(home, ".claude", "skills", "puzzle", "SKILL.md")
+	custom := []byte("locally customized\n")
+	if err := os.WriteFile(skillPath, custom, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(home, ".cursor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	buf.Reset()
+	err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skill"}, "", false, env)
+	if err == nil {
+		t.Fatal("expected existing skill directory to be refused")
+	}
+	if !strings.Contains(err.Error(), "--overwrite") || !strings.Contains(err.Error(), filepath.Dir(skillPath)) {
+		t.Fatalf("overwrite error should include the hint and destination, got: %v", err)
+	}
+	afterRefusal, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(afterRefusal, custom) {
+		t.Fatalf("refused install changed SKILL.md: %q", afterRefusal)
+	}
+	if cursorSkill := filepath.Join(home, ".cursor", "skills", "puzzle", "SKILL.md"); fsFileExists(cursorSkill) {
+		t.Errorf("refused install partially wrote %s", cursorSkill)
+	}
+
+	buf.Reset()
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skill"}, "", true, env); err != nil {
+		t.Fatalf("add skill --overwrite: %v", err)
+	}
+	want, err := fs.ReadFile(embeddedskills.FS, "puzzle/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterOverwrite, err := os.ReadFile(skillPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(afterOverwrite, want) {
+		t.Error("--overwrite did not restore the embedded SKILL.md")
+	}
+	if cursorSkill := filepath.Join(home, ".cursor", "skills", "puzzle", "SKILL.md"); !fsFileExists(cursorSkill) {
+		t.Errorf("--overwrite did not install the newly detected Cursor target at %s", cursorSkill)
+	}
+}
+
+func TestCopySkillTreeRecursivelyPreservesFiles(t *testing.T) {
+	source := fstest.MapFS{
+		"puzzle/SKILL.md":                    {Data: []byte("skill root\n")},
+		"puzzle/references/routing/guide.md": {Data: []byte("nested reference\n")},
+	}
+	dest := filepath.Join(t.TempDir(), "skills", "puzzle")
+	if err := copySkillTree(source, "puzzle", dest); err != nil {
+		t.Fatalf("copy skill tree: %v", err)
+	}
+
+	for rel, want := range map[string]string{
+		"SKILL.md":                    "skill root\n",
+		"references/routing/guide.md": "nested reference\n",
+	} {
+		got, err := os.ReadFile(filepath.Join(dest, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Errorf("read %s: %v", rel, err)
+			continue
+		}
+		if string(got) != want {
+			t.Errorf("%s = %q, want %q", rel, got, want)
+		}
 	}
 }
 

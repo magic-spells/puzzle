@@ -11,14 +11,15 @@ a reactive browser runtime, and a Go + esbuild compiler/CLI. Optional static
 generation prerenders routes without adding an SSR server or hydration layer.
 
 [[DOC-SPEC]] is the enforceable contract and wins all conflicts. Decisions
-D1-D77 in [[DOC-DECISIONS]] explain why the contract has its current shape.
+D1-D78 in [[DOC-DECISIONS]] explain why the contract has its current shape.
 [[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
 
 ## Current state
 
 - `0.1.0` shipped publicly on npm 2026-07-21 (MIT, five packages, manual
   publish). In progress: `0.1.1` with interactive `puzzle init` prompts
-  (D77/v1.44).
+  (D77/v1.44) and the embedded agent skill + `puzzle add skills` installer
+  (D78/v1.45).
 - Runtime, compiler, CLI, static generation, state-preserving dev reload,
   TypeScript transpilation, model validation/relationships/write sync, nested
   routing, slots, refs, scoped styles, animations, and optional morphs are all
