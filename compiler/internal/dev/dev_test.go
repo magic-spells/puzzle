@@ -2,7 +2,9 @@ package dev
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -32,11 +34,17 @@ func newTestServer(t *testing.T, dist string) *httptest.Server {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	srv := newServer(dist, ctx)
+	srv := newServer(dist, ctx, nil)
 	ts := httptest.NewServer(srv.handler())
 	t.Cleanup(ts.Close)
 	// The SSE test builds its own server so it can reach the hub directly.
 	return ts
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
 }
 
 func TestHistoryFallback(t *testing.T) {
@@ -84,6 +92,100 @@ func TestServeTimeInjection(t *testing.T) {
 	}
 	if strings.Contains(string(onDisk), "EventSource") {
 		t.Fatalf("dist/index.html on disk was mutated with the reload client")
+	}
+}
+
+func TestDevProxy(t *testing.T) {
+	type backendRequest struct {
+		method string
+		path   string
+		query  string
+		header string
+		body   string
+	}
+	requests := make(chan backendRequest, 2)
+	backend := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body []byte
+		if r.Body != nil {
+			var err error
+			body, err = io.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		requests <- backendRequest{
+			method: r.Method,
+			path:   r.URL.Path,
+			query:  r.URL.RawQuery,
+			header: r.Header.Get("X-Proxy-Test"),
+			body:   string(body),
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte("from backend"))
+	})
+	backendDown := false
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if backendDown {
+			return nil, errors.New("connection refused")
+		}
+		recorder := httptest.NewRecorder()
+		backend.ServeHTTP(recorder, r)
+		return recorder.Result(), nil
+	})
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+
+	dist := writeDist(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	backendURL := "http://backend.test"
+	srv := newServer(dist, ctx, map[string]string{"/api": backendURL})
+	var proxyLog bytes.Buffer
+	srv.proxyLog = &proxyLog
+	handler := srv.handler()
+
+	req := httptest.NewRequest(http.MethodPost, "http://puzzle.test/api/x?mode=full", strings.NewReader("payload"))
+	req.Header.Set("X-Proxy-Test", "preserved")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+	if response.Code != http.StatusAccepted || response.Body.String() != "from backend" {
+		t.Fatalf("proxy response = %d %q, want %d %q", response.Code, response.Body.String(), http.StatusAccepted, "from backend")
+	}
+	got := <-requests
+	if got.method != http.MethodPost || got.path != "/api/x" || got.query != "mode=full" || got.header != "preserved" || got.body != "payload" {
+		t.Fatalf("forwarded request = %+v", got)
+	}
+
+	// The exact prefix is registered separately from its subtree form.
+	exactResponse := httptest.NewRecorder()
+	handler.ServeHTTP(exactResponse, httptest.NewRequest(http.MethodGet, "http://puzzle.test/api", nil))
+	if exactResponse.Code != http.StatusAccepted {
+		t.Fatalf("GET /api status = %d, want %d", exactResponse.Code, http.StatusAccepted)
+	}
+	if got := <-requests; got.path != "/api" {
+		t.Fatalf("exact prefix forwarded path = %q, want /api", got.path)
+	}
+
+	rootResponse := httptest.NewRecorder()
+	handler.ServeHTTP(rootResponse, httptest.NewRequest(http.MethodGet, "http://puzzle.test/", nil))
+	if rootResponse.Code != http.StatusOK || !strings.Contains(rootResponse.Body.String(), `id="app"`) || !strings.Contains(rootResponse.Body.String(), "EventSource") {
+		t.Fatalf("root no longer serves the injected SPA shell: %d %q", rootResponse.Code, rootResponse.Body.String())
+	}
+	fallbackResponse := httptest.NewRecorder()
+	handler.ServeHTTP(fallbackResponse, httptest.NewRequest(http.MethodGet, "http://puzzle.test/client/route", nil))
+	if fallbackResponse.Code != http.StatusOK || !strings.Contains(fallbackResponse.Body.String(), `id="app"`) || !strings.Contains(fallbackResponse.Body.String(), "EventSource") {
+		t.Fatalf("history fallback no longer serves the injected SPA shell: %d %q", fallbackResponse.Code, fallbackResponse.Body.String())
+	}
+
+	backendDown = true
+	downResponse := httptest.NewRecorder()
+	handler.ServeHTTP(downResponse, httptest.NewRequest(http.MethodGet, "http://puzzle.test/api/down", nil))
+	if downResponse.Code != http.StatusBadGateway {
+		t.Fatalf("backend-down status = %d, want %d", downResponse.Code, http.StatusBadGateway)
+	}
+	if got := proxyLog.String(); !strings.Contains(got, "proxy /api → "+backendURL+" refused — is the backend running?") {
+		t.Fatalf("backend-down log is not friendly: %q", got)
 	}
 }
 
@@ -161,7 +263,7 @@ func TestSSEBroadcast(t *testing.T) {
 	dist := writeDist(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := newServer(dist, ctx)
+	srv := newServer(dist, ctx, nil)
 	ts := httptest.NewServer(srv.handler())
 	defer ts.Close()
 

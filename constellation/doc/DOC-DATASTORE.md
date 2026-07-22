@@ -46,16 +46,19 @@ Views access the store as `this.ctx.store`.
 | `findMany(type, { filter }?)` | Return local records, optionally filtered; tracked at collection level. |
 | `loadOne(type, id)` | GET the adapter endpoint/id and identity-preserving upsert. |
 | `loadAll(type)` | GET the collection endpoint and upsert every returned record. |
+| `upsert(type, objectOrArray)` | Apply server-authoritative object(s) by explicit primary key, preserving identity and marking records synchronized. |
 | `request(type, path?, options?)` | Custom adapter request with method/body/headers; 204/empty responses map to `null`. |
 
 Local record methods:
 
 - `record.update(patch)`: validate patched fields, mutate locally, notify;
-- `record.destroy()`: remove locally and notify;
+- `record.destroy()`: remove locally, mark this instance deleted, and notify;
 - `record.validate()`: return `{ valid, errors }` without throwing;
 - `record.save()`: validate the full record, POST when new or PUT when already
-  synchronized, then safely apply the response;
-- `record.delete()`: DELETE first, then remove locally on success or 404;
+  synchronized, then safely apply the response; reject before the adapter when
+  the instance is already deleted;
+- `record.delete()`: DELETE first, then remove locally on success or 404; once
+  removed, later calls on the same instance resolve without another request;
 - `record.toJSON()`: return enumerable data only.
 
 `PuzzleValidationError` represents local schema failures.
@@ -68,12 +71,15 @@ and is ignored while other fields still merge.
 ## Validation boundaries
 
 Local authoring operations validate before mutation and throw on failure.
-`Model.validate(data)` and `record.validate()` support non-throwing form UX.
+`Model.validate(data, { fields }?)` and `record.validate()` support non-throwing
+form UX. Static validation mirrors `createRecord`: it omits the `required` error
+for an omitted/null primary field the store will generate, while preserving the
+error for `''`; `{ fields }` limits validation to an edited field subset.
 
-Server reads and storage hydration are authoritative recovery paths and do not
-enforce local authoring rules. They still reject unsafe assignment keys,
-framework-owned internals, and primary-key collisions that would corrupt record
-identity.
+Server reads, public `upsert`, and storage hydration are authoritative recovery
+paths and do not enforce local authoring rules. They still reject unsafe
+assignment keys, framework-owned internals, and primary-key collisions that
+would corrupt record identity.
 
 ## Relationships
 
@@ -83,6 +89,31 @@ collection using the conventional or configured foreign key.
 
 Relationships are lazy getters backed by the same store. Reading them inside
 `data()` participates in normal record/collection dependency tracking.
+
+## Custom endpoint responses
+
+`store.request()` returns parsed response data without changing the Store. When
+a custom action returns fresh records, apply them explicitly with
+`store.upsert()` instead of throwing the response away and issuing follow-up
+`loadOne()` requests:
+
+```js
+async checkIn() {
+  const payload = await this._store.request('habit', `/${this.id}/check-ins`, {
+    method: 'POST'
+  });
+  return {
+    habit: this._store.upsert('habit', payload.habit),
+    checkin: this._store.upsert('checkin', payload.checkin)
+  };
+}
+```
+
+`upsert` is server-authoritative and validation-exempt. It retains an existing
+record's identity or instantiates a synced record under the server-provided
+primary key, notifies subscribers, and schedules persistence once per call.
+Every object must carry a non-null primary key; arrays are shape/key-checked in
+full before any element is applied. Envelope responses stay explicit as above.
 
 ## Reactive subscriptions
 

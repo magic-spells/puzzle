@@ -762,6 +762,79 @@ describe('Store — optional persistence', () => {
 	});
 });
 
+describe('Store — public server-authoritative upsert (D21/D50)', () => {
+	it('merges in place, marks synced, notifies once per flush, and persists', () => {
+		const storage = { getItem: () => null, setItem: vi.fn() };
+		const store = makeStore({ storage });
+		const original = store.createRecord('todo', { id: 't1', text: 'local' });
+		store.flush();
+		storage.setItem.mockClear();
+
+		const component = { onStoreChange: vi.fn() };
+		store.withTracking(component, () => store.findMany('todo'));
+		const persistSpy = vi.spyOn(store, '_persist');
+
+		const upserted = store.upsert('todo', { id: 't1', text: 'server', completed: true });
+		expect(upserted).toBe(original);
+		expect(original).toMatchObject({ text: 'server', completed: true });
+		expect(original._synced).toBe(true);
+		expect(persistSpy).toHaveBeenCalledTimes(1);
+
+		store.flush();
+		expect(component.onStoreChange).toHaveBeenCalledTimes(1);
+		expect(JSON.parse(storage.setItem.mock.calls[0][1]).todo[0]).toMatchObject({
+			id: 't1',
+			text: 'server',
+			__synced: true,
+		});
+	});
+
+	it('instantiates a real synced record under the server primary key without local validation', () => {
+		const store = makeStore();
+		const record = store.upsert('todo', { id: 'server-1', text: '' });
+
+		expect(record).toBeInstanceOf(Todo);
+		expect(record._synced).toBe(true);
+		expect(store.findOne('todo', 'server-1')).toBe(record);
+	});
+
+	it('upserts arrays in order and calls _persist once for the batch', () => {
+		const store = makeStore();
+		const persistSpy = vi.spyOn(store, '_persist');
+
+		const records = store.upsert('todo', [
+			{ id: 't1', text: 'one' },
+			{ id: 't2', text: 'two' },
+		]);
+
+		expect(records.map((record) => record.id)).toEqual(['t1', 't2']);
+		expect(records.every((record) => record._synced)).toBe(true);
+		expect(persistSpy).toHaveBeenCalledTimes(1);
+	});
+
+	it('rejects a malformed array before applying any element', () => {
+		const store = makeStore();
+		expect(() =>
+			store.upsert('todo', [{ id: 'would-have-landed', text: 'x' }, null])
+		).toThrow(/expected an array of JSON objects/);
+		expect(store.findMany('todo')).toEqual([]);
+	});
+
+	it('rejects pk-less objects before creating a phantom synced record', () => {
+		const store = makeStore();
+		expect(() => store.upsert('todo', { text: 'no id' })).toThrow(
+			/requires primary key "id"/
+		);
+		expect(() =>
+			store.upsert('todo', [
+				{ id: 'would-have-landed', text: 'x' },
+				{ text: 'no id' },
+			])
+		).toThrow(/requires primary key "id"/);
+		expect(store.findMany('todo')).toEqual([]);
+	});
+});
+
 describe('Store — server read path (D21)', () => {
 	class ApiTodo extends PuzzleModel {
 		static schema = {

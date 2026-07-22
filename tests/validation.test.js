@@ -208,15 +208,16 @@ describe('Model.validate — each rule fails and passes (non-throwing)', () => {
 describe('Model.validate — collection, short-circuit, and skip semantics', () => {
 	it('collects all failing fields in schema-declaration order', () => {
 		const { errors } = User.validate({
-			// id missing (but not required beyond primary — pk is required),
+			// id omitted — createRecord will generate the primary key, so static
+			// validate mirrors that acceptance and reports only authored fields.
 			name: 'a', // min fails
 			age: -5, // min fails
 			role: 'nope', // oneOf fails
 			email: 'x', // custom fails
 			tags: [1, 2, 3, 4], // max fails
 		});
-		expect(errors.map((e) => e.field)).toEqual(['id', 'name', 'age', 'role', 'email', 'tags']);
-		expect(errors[0].rule).toBe('required'); // id is .primary() → required
+		expect(errors.map((e) => e.field)).toEqual(['name', 'age', 'role', 'email', 'tags']);
+		expect(errors[0].rule).toBe('min');
 	});
 
 	it('required short-circuits a field: only one error for a missing required field', () => {

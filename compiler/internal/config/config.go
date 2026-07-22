@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,6 +37,7 @@ const configLoadTimeout = 10 * time.Second
 type Config struct {
 	Styles Styles
 	Build  Build
+	Dev    Dev
 	// Output is the resolved `output` key: "" (absent — the default SPA build)
 	// or "static" (per-route static HTML, the SSG mode). Any other value is
 	// rejected by validate with a message naming the allowed values.
@@ -55,6 +57,12 @@ type Build struct {
 	// was absent (default behavior), a non-nil pointer is the explicit user
 	// value. The pointer lets "unset" be distinguished from an explicit false.
 	DropConsole *bool
+}
+
+// Dev mirrors the `dev` block of puzzle.config.js.
+type Dev struct {
+	// Proxy maps same-origin path prefixes to backend origins for puzzle dev.
+	Proxy map[string]string `json:"proxy"`
 }
 
 // TailwindEnabled reports whether the Tailwind pipeline is declared.
@@ -96,6 +104,7 @@ type rawConfig struct {
 	Build struct {
 		DropConsole json.RawMessage `json:"dropConsole"`
 	} `json:"build"`
+	Dev Dev `json:"dev"`
 	// Output is kept raw so a non-string or unsupported value can be named
 	// precisely in the rejection message (parallel to build.dropConsole).
 	Output json.RawMessage `json:"output"`
@@ -242,6 +251,26 @@ func validate(raw rawConfig) (Config, error) {
 		}
 		cfg.Build.DropConsole = &drop
 	}
+
+	// dev.proxy is consumed only by puzzle dev. Prefixes stay intact when
+	// forwarded, so each key must be an absolute request path prefix and each
+	// target must name an http(s) backend origin.
+	for prefix, target := range raw.Dev.Proxy {
+		if !strings.HasPrefix(prefix, "/") {
+			return Config{}, fmt.Errorf(
+				"%s: dev.proxy prefix %q must start with '/'",
+				ConfigFileName, prefix,
+			)
+		}
+		parsed, err := url.Parse(target)
+		if err != nil || !parsed.IsAbs() || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return Config{}, fmt.Errorf(
+				"%s: dev.proxy target for %q must be an absolute http or https URL; got %q",
+				ConfigFileName, prefix, target,
+			)
+		}
+	}
+	cfg.Dev.Proxy = raw.Dev.Proxy
 
 	// output: the SSG opt-in. Absent leaves it "" (the default SPA build); the
 	// only accepted value is the string 'static'. A non-string, or any other

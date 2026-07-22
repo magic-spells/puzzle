@@ -1015,6 +1015,25 @@ Notes:
 
 ---
 
+## Backends in dev
+
+Point a same-origin path at a local backend in `puzzle.config.js`:
+
+```javascript
+export default {
+  dev: {
+    proxy: { '/api': 'http://localhost:3091' },
+  },
+};
+```
+
+`puzzle dev` now forwards `/api` and `/api/*` requests to that backend with the
+path unchanged. The app can use `apiURL: ''`, so development requests stay
+same-origin and need no CORS setup. Restart the dev server after changing the
+proxy config; production builds are unaffected.
+
+---
+
 ## Development Commands
 
 ```bash

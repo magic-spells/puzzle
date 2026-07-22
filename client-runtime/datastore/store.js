@@ -278,12 +278,17 @@ export class Store {
 		this._persist();
 	}
 
-	/** Called by PuzzleModel.destroy() — removes FIRST, then notifies. */
+	/** Called by PuzzleModel.destroy()/confirmed delete() — removes FIRST, then notifies. */
 	removeRecord(record) {
 		const type = record._type;
 		if (!type) return;
 		const id = record[this.modelFor(type).primaryKey()];
 		this._typeMap(type).delete(id);
+		// One removed-instance state for both local destroy() and D50's confirmed
+		// delete: stale references can delete idempotently and can never save() a
+		// resurrected copy. Set before detaching so lifecycle guards see a coherent
+		// terminal state as soon as removal completes.
+		record._deleted = true;
 		record._store = null;
 		this._notify(type, id);
 		this._persist();
@@ -332,6 +337,41 @@ export class Store {
 		return record;
 	}
 
+	/**
+	 * Merge server-authoritative data into the Store without another GET (D21/D50).
+	 * This is the public companion to request() for custom-action responses: existing
+	 * records update in place; new records instantiate validation-exempt and synced.
+	 *
+	 * Every payload must be a JSON-object shape with an explicit primary key. The pk
+	 * guard is load-bearing: private _upsert would otherwise generate an id and mark
+	 * the phantom record synced, making its next save() PUT to a nonsense URL. Arrays
+	 * preflight every element before mutation, then persist once for the whole batch.
+	 */
+	upsert(type, objectOrArray) {
+		const isArray = Array.isArray(objectOrArray);
+		const list = isArray ? objectOrArray : [objectOrArray];
+		const pk = this.modelFor(type).primaryKey();
+
+		for (const data of list) {
+			if (data == null || typeof data !== 'object' || Array.isArray(data)) {
+				throw new Error(
+					isArray
+						? `[puzzle] upsert('${type}') expected an array of JSON objects`
+						: `[puzzle] upsert('${type}') expected a JSON object`
+				);
+			}
+			if (data[pk] == null) {
+				throw new Error(
+					`[puzzle] upsert('${type}') requires primary key "${pk}" on every record`
+				);
+			}
+		}
+
+		const records = list.map((data) => this._upsert(type, data));
+		this._persist();
+		return isArray ? records : records[0];
+	}
+
 	async _fetchAdapter(type, suffix) {
 		const endpoint = this.modelFor(type).adapter?.endpoint;
 		if (!endpoint) {
@@ -346,7 +386,7 @@ export class Store {
 		return res.json();
 	}
 
-	/** Create or update-in-place by primary key; notifies either way. */
+	/** Create or update-in-place by primary key; notifies either way. Public callers use upsert(). */
 	_upsert(type, data) {
 		const pk = this.modelFor(type).primaryKey();
 		const existing = data?.[pk] != null ? this._typeMap(type).get(data[pk]) : null;

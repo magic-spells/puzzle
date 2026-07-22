@@ -30,6 +30,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -131,7 +133,12 @@ func Serve(root string, opts Options) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	srv := newServer(dist, ctx)
+	cfg, cfgErr := config.LoadConfig(absRoot)
+	if cfgErr != nil {
+		logWarning(stderr, "%v (styles: continuing without the Tailwind pipeline)", cfgErr)
+	}
+
+	srv := newServer(dist, ctx, cfg.Dev.Proxy)
 
 	// Reload broadcasts are coalesced (D27): one .pzl edit triggers BOTH an
 	// esbuild rebuild AND a Tailwind rescan — two recompositions of styles.css.
@@ -152,10 +159,6 @@ func Serve(root string, opts Options) error {
 	pl := &pipeline{dist: dist}
 	stylesStatus := ""
 
-	cfg, cfgErr := config.LoadConfig(absRoot)
-	if cfgErr != nil {
-		logWarning(stderr, "%v (styles: continuing without the Tailwind pipeline)", cfgErr)
-	}
 	tailwindEnabled := cfgErr == nil && cfg.TailwindEnabled()
 
 	builder, builderErr := build.NewWatchBuilder(absRoot)
@@ -382,23 +385,71 @@ func Serve(root string, opts Options) error {
 // its handler can be driven directly by httptest without a real listener,
 // watcher, or build.
 type server struct {
-	dist string
-	hub  *hub
+	dist     string
+	hub      *hub
+	proxies  map[string]string
+	proxyLog io.Writer
 	// ctx is cancelled on shutdown; SSE handlers watch it so http.Server.Shutdown
 	// does not hang on their long-lived streams (constellation/doc/DOC-BUILD-PLAN.md Phase 3
 	// risk: "SSE + http.Server.Shutdown").
 	ctx context.Context
 }
 
-func newServer(dist string, ctx context.Context) *server {
-	return &server{dist: dist, hub: newHub(), ctx: ctx}
+func newServer(dist string, ctx context.Context, proxies map[string]string) *server {
+	return &server{dist: dist, hub: newHub(), proxies: proxies, proxyLog: os.Stderr, ctx: ctx}
 }
 
 func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(reloadPath, s.serveSSE)
-	mux.HandleFunc("/", s.serveStatic)
+
+	// Proxy patterns must be registered before the static catch-all so matching
+	// backend requests never reach the SPA history fallback. ServeMux treats an
+	// exact pattern and its subtree form separately, hence both registrations.
+	prefixes := make([]string, 0, len(s.proxies))
+	for prefix := range s.proxies {
+		prefixes = append(prefixes, prefix)
+	}
+	sort.Strings(prefixes)
+	rootProxied := false
+	for _, configuredPrefix := range prefixes {
+		prefix := strings.TrimRight(configuredPrefix, "/")
+		if prefix == "" {
+			prefix = "/"
+		}
+		proxy := s.reverseProxy(prefix, s.proxies[configuredPrefix])
+		mux.Handle(prefix, proxy)
+		if prefix == "/" {
+			rootProxied = true
+			continue
+		}
+		mux.Handle(prefix+"/", proxy)
+	}
+	if !rootProxied {
+		mux.HandleFunc("/", s.serveStatic)
+	}
 	return mux
+}
+
+func (s *server) reverseProxy(prefix, targetURL string) http.Handler {
+	target, _ := url.Parse(targetURL) // validated by config.LoadConfig
+	proxy := httputil.NewSingleHostReverseProxy(target)
+
+	// NewSingleHostReverseProxy normally prepends a path carried by the target
+	// URL. dev.proxy has no rewrite semantics, so keep the browser's path and
+	// query byte-for-byte while still letting the standard director set the
+	// backend scheme, host, and forwarding headers.
+	director := proxy.Director
+	proxy.Director = func(r *http.Request) {
+		requestPath, requestRawPath, requestQuery := r.URL.Path, r.URL.RawPath, r.URL.RawQuery
+		director(r)
+		r.URL.Path, r.URL.RawPath, r.URL.RawQuery = requestPath, requestRawPath, requestQuery
+	}
+	proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
+		fmt.Fprintf(s.proxyLog, "proxy %s → %s refused — is the backend running?\n", prefix, targetURL)
+		http.Error(w, "puzzle dev: backend unavailable", http.StatusBadGateway)
+	}
+	return proxy
 }
 
 // serveStatic serves an existing regular file under dist verbatim; any other

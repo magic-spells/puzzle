@@ -378,6 +378,15 @@ import Icon from './Icon.pzl';              // relative
 import Icon from '@/components/Icon.pzl';   // app/components/Icon.pzl
 ```
 
+## Syntax Highlighting
+
+Editor extensions provide full `.pzl` highlighting — native HTML, JavaScript/TypeScript, and CSS per section, plus Puzzle's template expressions, directives, event bindings, and formatter chains:
+
+- **[puzzle-vscode](https://github.com/magic-spells/puzzle-vscode)** - Visual Studio Code extension with snippets and completions
+- **[puzzle-sublime](https://github.com/magic-spells/puzzle-sublime)** - Sublime Text 4 syntax package
+
+Install instructions are in each repository's README.
+
 ## Documentation
 
 - **[User Guide](constellation/doc/DOC-USER-GUIDE.md)** - Complete guide to building Puzzle applications
