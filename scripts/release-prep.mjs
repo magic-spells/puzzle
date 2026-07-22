@@ -151,7 +151,7 @@ console.log('='.repeat(70));
 console.log('\nPublish IN THIS ORDER (root LAST — its optionalDependencies must');
 console.log('already exist on the registry before the root package resolves):\n');
 for (const { pkg } of MATRIX) {
-	console.log(`  npm publish npm/${pkg} --access public`);
+	console.log(`  npm publish ./npm/${pkg} --access public`);
 }
 console.log('  npm publish --access public   # root package — MUST go last\n');
 console.log('Reminder: run the full suites first if you have not already:');
