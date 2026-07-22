@@ -396,7 +396,7 @@ Install instructions are in each repository's README.
 
 ### AI project memory
 
-This repository uses [Constellation MCP](https://github.com/ShiftinBits/constellation-mcp)
+This repository uses [Constellation MCP](https://github.com/magic-spells/constellation)
 as long-term project memory for AI-assisted development. The cards in
 `constellation/` preserve decisions, features, data structures, component and
 file relationships, flows, and plans so future AI conversations can recover the
