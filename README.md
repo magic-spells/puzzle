@@ -389,4 +389,4 @@ puzzle doctor
 
 ## License
 
-Puzzle Framework is provided under a proprietary, source-available license. You may view the code for evaluation and internal use, but redistribution or commercial use requires written permission from the maintainers. See `LICENSE.txt` for full terms.
+Puzzle Framework is released under the [MIT License](LICENSE.txt).

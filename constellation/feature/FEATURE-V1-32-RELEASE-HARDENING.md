@@ -68,10 +68,12 @@ backslash paths.
 esbuild model: bin/puzzle.js shim in @magic-spells/puzzle resolves
 @magic-spells/puzzle-{darwin-arm64,darwin-x64,linux-x64,linux-arm64} from pinned
 optionalDependencies and execs the binary; npm/ holds the four manifests (binaries
-release-built, gitignored); .github/workflows/release.yml (v* tags) asserts
-tag==package.json==version.go==manifests, runs verify-pack, cross-compiles with
--ldflags version stamping, publishes platform packages BEFORE the root. No postinstall.
-Windows: unsupported-but-not-hostile (shim prints the go-install fallback).
+release-built, gitignored). Releases are published BY HAND: scripts/release-prep.mjs
+asserts package.json==version.go==manifests, runs verify-pack, cross-compiles with
+-ldflags version stamping, and prints the publish commands (platform packages BEFORE
+the root). There is no CI publish workflow — the tag-triggered release.yml was removed
+pre-0.1.0 in favor of manual publishing. No postinstall. Windows:
+unsupported-but-not-hostile (shim prints the go-install fallback).
 
 ## Docs
 
@@ -82,7 +84,9 @@ PuzzleView reserved-name list in SPEC §4; §20/§22/§27/§34 amended in place.
 
 ## Deferred (from the same review, deliberately)
 
-License decisions; Windows CI + win32 package; bundle budgets; compiler benchmarks;
+License decisions (resolved pre-0.1.0: MIT, everywhere — root LICENSE.txt, all five
+package.json license fields, platform LICENSE.txt copies, README); Windows CI + win32
+package; bundle budgets; compiler benchmarks;
 concurrent-mount() promise sharing; D65 3-tier transitionMode trim; router file
 decomposition; persistence write-batching; destroy()/delete() rename; scheduler
 unification; belongsTo null-FK subscription gap.

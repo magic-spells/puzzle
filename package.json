@@ -63,7 +63,7 @@
 		"prepublishOnly": "node scripts/release-prep.mjs",
 		"release:prep": "node scripts/release-prep.mjs"
 	},
-	"license": "SEE LICENSE IN LICENSE.txt",
+	"license": "MIT",
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/magic-spells/puzzle.git"
