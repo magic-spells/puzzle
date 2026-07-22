@@ -435,3 +435,9 @@ puzzle doctor
 ## License
 
 Puzzle is released under the [MIT License](LICENSE.txt).
+
+---
+
+<p align="center">
+  Made by <a href="https://github.com/coryschulz">Cory Schulz</a>
+</p>
