@@ -1,11 +1,36 @@
-# Puzzle Framework
+# Puzzle
 
 A SPA-first JavaScript framework with single-file components, reactive data binding, and Go-based compilation.
 
-> **Status: 0.1.0 release candidate** (decisions D1–D76, shipped amendments
-> through v1.43). The browser runtime, Go compiler, static generator, and CLI
-> are implemented and covered by Go, Vitest/jsdom, type, package, example, and
-> browser-focused checks. The first public npm release is being prepared.
+## Quick start
+
+Install the `puzzle` CLI once (a prebuilt Go binary — no toolchain needed):
+
+```bash
+npm install -g @magic-spells/puzzle
+```
+
+Then scaffold and run a new app:
+
+```bash
+puzzle init my-app
+cd my-app
+npm install
+
+puzzle dev     # develop with live reload
+puzzle build   # build for production
+```
+
+Or add Puzzle to an existing project — one dev dependency gives you both the
+client runtime and the CLI:
+
+```bash
+npm install -D @magic-spells/puzzle
+```
+
+> **Status: 0.1.0** — the first public release. The browser runtime, Go
+> compiler, static generator, and CLI are implemented and covered by Go,
+> Vitest/jsdom, type, package, example, and browser-focused checks.
 >
 > **[constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) is the canonical, frozen v1
 > contract** — its per-amendment sections (§12–§41) are the source of truth for
@@ -58,12 +83,17 @@ matching your machine. Once installed, `puzzle` is on your `PATH` for npm script
 
 ### Scaffold a new project
 
+With the CLI installed globally (`npm install -g @magic-spells/puzzle`):
+
 ```bash
-npx @magic-spells/puzzle init my-app   # or: npm exec @magic-spells/puzzle init my-app
+puzzle init my-app
 cd my-app
 npm install
 npm run dev
 ```
+
+The generated app depends on `@magic-spells/puzzle` locally, so collaborators
+who clone it only need `npm install` — no global CLI required.
 
 ### Unsupported platforms (e.g. Windows) or building from source
 
@@ -389,4 +419,4 @@ puzzle doctor
 
 ## License
 
-Puzzle Framework is released under the [MIT License](LICENSE.txt).
+Puzzle is released under the [MIT License](LICENSE.txt).
