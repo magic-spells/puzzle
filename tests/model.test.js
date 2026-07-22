@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
+import { Store } from '../client-runtime/datastore/store.js';
 
 // Mirror of the canonical examples/todos model (examples/todos/app/models/todo.js)
 class Todo extends PuzzleModel {
@@ -226,10 +227,11 @@ describe('PuzzleModel', () => {
 		expect(todo.text).toBe('b');
 	});
 
-	it('_store is non-enumerable: excluded from serialization and rendering', () => {
+	it('framework lifecycle state is non-enumerable: excluded from serialization and rendering', () => {
 		const todo = new Todo({ id: 't1', text: 'a' });
 		todo._store = { recordChanged() {}, removeRecord() {} };
 		expect(Object.keys(todo)).not.toContain('_store');
+		expect(Object.keys(todo)).not.toContain('_deleted');
 		expect(JSON.parse(JSON.stringify(todo))).toEqual({ id: 't1', text: 'a' });
 	});
 
@@ -275,5 +277,49 @@ describe('PuzzleModel', () => {
 			expect(todo.text).toBe('b');
 			expect(todo.pwned).toBeUndefined();
 		});
+	});
+});
+
+describe('PuzzleModel.validate() / createRecord() parity (D48)', () => {
+	it('accepts an omitted or null primary key, but still reports other required fields', () => {
+		expect(Todo.validate({ text: 'ready' })).toEqual({ valid: true, errors: [] });
+		expect(Todo.validate({ id: null, text: 'ready' })).toEqual({ valid: true, errors: [] });
+		expect(Todo.validate({ id: 't1', text: 'ready' })).toEqual({ valid: true, errors: [] });
+
+		expect(Todo.validate({}).errors).toEqual([
+			{ field: 'text', rule: 'required', message: '"text" is required' },
+		]);
+	});
+
+	it('matches createRecord acceptance across generated, supplied, and invalid values', () => {
+		const cases = [
+			{ text: 'generated' },
+			{ id: null, text: 'generated from null' },
+			{ id: 'provided', text: 'provided' },
+			{ id: '', text: 'empty pk stays invalid' },
+			{ id: 'missing-text' },
+			{ text: '' },
+		];
+
+		for (const data of cases) {
+			const store = new Store({ todo: Todo });
+			let createAccepted = true;
+			try {
+				store.createRecord('todo', data);
+			} catch {
+				createAccepted = false;
+			}
+			expect(Todo.validate(data).valid, JSON.stringify(data)).toBe(createAccepted);
+		}
+	});
+
+	it('supports partial validation through the public { fields } option', () => {
+		expect(Todo.validate({ text: '' }, { fields: ['completed'] })).toEqual({
+			valid: true,
+			errors: [],
+		});
+		expect(Todo.validate({ text: '' }, { fields: ['text'] }).errors).toEqual([
+			{ field: 'text', rule: 'required', message: '"text" is required' },
+		]);
 	});
 });

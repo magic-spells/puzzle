@@ -322,6 +322,12 @@ record.destroy()
 3. **`record.update(fields)`** — merges the fields, marks the record dirty, and notifies subscribers; components that queried this record in `data()` re-run and re-render. Returns the record.
 4. **`record.destroy()`** — removes the record from the store and notifies subscribers so lists drop it on the next render.
 
+Removal is terminal for that record instance. Both local `destroy()` and a
+confirmed adapter `delete()` mark it deleted: a later `record.delete()` resolves
+with the same record without another request, while `record.save()` rejects with
+`cannot save a deleted record`. A model instance constructed directly with `new`
+was never added to a store, so its first `delete()` still rejects.
+
 See [[DOC-DATASTORE]] for the full store query surface and the reactive rendering flow.
 
 ---
@@ -335,9 +341,9 @@ Per [[DOC-SPEC]] §7 and §20, v1 draws a precise line between what the store *a
   - **`store.createRecord(type, data)`** validates after defaults + primary-key generation. On failure it throws **`PuzzleValidationError`** (exported from the package root) and inserts, notifies, and persists nothing.
   - **`record.update(patch)`** validates **only the fields present in the patch** (rules are per-field, so this is exact — a record created under laxer rules cannot be bricked by an unrelated update). On failure it throws and leaves the record untouched. The primary-key immutability check still runs first. Applies to store-attached and store-less records alike — the rules live on the class.
   - `err.errors` is `[{ field, rule, message }]` in schema-declaration order (rules within a field in declared order); `err.message` is the first error's message. Both methods keep their return-the-record contract on success.
-  - **Non-throwing surface for form UX:** static **`Model.validate(data)`** (pre-create check) and instance **`record.validate()`** (current field values) return `{ valid, errors }` with the same errors shape — validate first, then write. There is no persistent `record.errors` state.
-  - **Rule semantics** (no type coercion — rules compare what they are given): `required` fails on `undefined`/`null`/`''` and short-circuits that field's remaining rules; a non-required field that is `undefined`/`null` skips its remaining rules; `min`/`max` compare `.length` for strings/arrays and value for numbers/dates (an incomparable/NaN-ish comparison passes, never throws); `oneOf` is strict `===` membership; a custom `validate(fn)` treats a falsy return as invalid but lets a *thrown* exception propagate. **Type-aware bounds (SPEC §35):** on a field *declared* `number()`/`date()`, a wrong-runtime-type value fails `min`/`max` with a type-mismatch message (`"age" must be a number`) instead of silently measuring `.length` — form inputs hand you strings, so convert (`Number(input.value)`) before writing. Type mismatches on `string()`/`array()` fields are still not validated.
-  - **Exempt by design:** `store.loadAll`/`loadOne` upserts (the server is authoritative — backend drift must not crash the read path) and storage hydration (fail-soft startup). See [[DOC-SPEC]] §20.
+  - **Non-throwing surface for form UX:** static **`Model.validate(data, { fields }?)`** (pre-create check) and instance **`record.validate()`** (current field values) return `{ valid, errors }` with the same errors shape — validate first, then write. Static validation mirrors `createRecord` acceptance: an omitted/null primary field produces no `required` error because the store will generate it; an empty-string primary key remains invalid because the store does not generate for `''`. Pass `{ fields: ['name', 'email'] }` to validate only an edited subset. There is no persistent `record.errors` state.
+  - **Rule semantics** (no type coercion — rules compare what they are given): outside the static primary-key exception above, `required` fails on `undefined`/`null`/`''` and short-circuits that field's remaining rules; a non-required field that is `undefined`/`null` skips its remaining rules; `min`/`max` compare `.length` for strings/arrays and value for numbers/dates (an incomparable/NaN-ish comparison passes, never throws); `oneOf` is strict `===` membership; a custom `validate(fn)` treats a falsy return as invalid but lets a *thrown* exception propagate. **Type-aware bounds (SPEC §35):** on a field *declared* `number()`/`date()`, a wrong-runtime-type value fails `min`/`max` with a type-mismatch message (`"age" must be a number`) instead of silently measuring `.length` — form inputs hand you strings, so convert (`Number(input.value)`) before writing. Type mismatches on `string()`/`array()` fields are still not validated.
+  - **Exempt by design:** `store.loadAll`/`loadOne` and public `store.upsert` (server data is authoritative — backend drift must not crash the read path) plus storage hydration (fail-soft startup). See [[DOC-SPEC]] §20.
 
   A worked form flow — validate first, then write:
 
@@ -398,7 +404,25 @@ Per [[DOC-SPEC]] §7 and §20, v1 draws a precise line between what the store *a
     **Template-access caveat:** reading a relationship in the template renders current state but subscribes nothing (render runs outside the tracked eval) — always seed the traversal from `data()`.
   - **The property name is reserved.** Assigning to it (e.g. an embedded `{ author: {...} }` server payload) warns once and is ignored — set the FK field instead. This keeps `Object.assign(record, payload)` safe on the server read path.
 
-- **Server access (D21 read + D50 write):** the model declares its server location — `static adapter = { endpoint: '/api/todos' }` — and both halves of the adapter now consume it. **Read path (D21):** `await store.loadAll('todo')` / `await store.loadOne('todo', id)` fetch from `apiURL + endpoint` and upsert records (subscribed views re-render when data arrives). **Write path (v1.18, D50):** `record.save()` (POST first, PUT once synced), `record.delete()` (confirmed DELETE), and `store.request(type, path, opts)` (custom endpoints) — all local-first with the same `endpoint`. `save()` **validates the full record first (§20): invalid rejects with `PuzzleValidationError` and makes no request.** Write verbs reject with `PuzzleAdapterError`; the read path keeps its plain-`Error` messages. The documented custom-endpoint idiom **wraps `store.request` in a model instance method**, e.g. `publish() { return this._store.request('post', \`/${this.id}/publish\`, { method: 'POST' }); }`. **Query fault-in and automatic write-through — Status: Planned — not in v1.** See [[DOC-SPEC]] §22. Local persistence is in-memory with optional localStorage.
+- **Server access (D21 read + D50 write):** the model declares its server location — `static adapter = { endpoint: '/api/todos' }` — and both halves of the adapter consume it. **Read path (D21):** `await store.loadAll('todo')` / `await store.loadOne('todo', id)` fetch from `apiURL + endpoint` and upsert records (subscribed views re-render when data arrives). **Write path (D50):** `record.save()` (POST first, PUT once synced), idempotent `record.delete()` (confirmed DELETE), and `store.request(type, path, opts)` (custom endpoints) — all local-first with the same `endpoint`. `save()` **validates the full record first (§20): invalid rejects with `PuzzleValidationError` and makes no request.** Write verbs reject with `PuzzleAdapterError`; the read path keeps its plain-`Error` messages. `store.upsert(type, objectOrArray)` applies server-authoritative custom-action data without another GET, preserving existing record identity and marking records synced.
+
+  The custom-endpoint idiom wraps `request()` in a model method, then explicitly
+  upserts each record in the raw response. Envelope responses are not merged
+  automatically:
+
+  ```js
+  async checkIn() {
+    const payload = await this._store.request('habit', `/${this.id}/check-ins`, {
+      method: 'POST'
+    });
+    return {
+      habit: this._store.upsert('habit', payload.habit),
+      checkin: this._store.upsert('checkin', payload.checkin)
+    };
+  }
+  ```
+
+  Each upserted object must carry its model's primary key. **Query fault-in and automatic write-through — Status: Planned — not in v1.** See [[DOC-SPEC]] §22. Local persistence is in-memory with optional localStorage.
 
 ---
 

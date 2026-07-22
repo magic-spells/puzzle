@@ -123,7 +123,12 @@ function fieldErrors(field, def, value) {
 	const missing = value === undefined || value === null || value === '';
 
 	// required first — short-circuits this field's remaining rules on failure.
-	if (def.required && missing) {
+	// A nullish primary key is the one exception: createRecord generates it before
+	// enforcing D48, so the public pre-check must accept the same input. Keep ''
+	// invalid because the Store only generates for null/undefined — real parity,
+	// not a broader relaxation of `.primary()`'s required contract.
+	const autoGeneratablePrimary = def.primary && (value === undefined || value === null);
+	if (def.required && missing && !autoGeneratablePrimary) {
 		errors.push({
 			field,
 			rule: 'required',
@@ -239,8 +244,8 @@ const POLLUTION_SKIP = new Set(['__proto__', 'constructor', 'prototype']);
 
 // Keys that must never be copied off a server/storage payload onto a live record:
 // the pollution family (above) plus the framework-reserved non-enumerable
-// internals (`_store`/`_type`/`_synced`).
-const MERGE_SKIP = new Set([...POLLUTION_SKIP, '_store', '_type', '_synced']);
+// internals (`_store`/`_type`/`_synced`/`_deleted`).
+const MERGE_SKIP = new Set([...POLLUTION_SKIP, '_store', '_type', '_synced', '_deleted']);
 
 /** Shared body of safeAssign/safeMerge: assign every own key not in `skipSet`. */
 function assignSkipping(target, src, skipSet) {
@@ -281,9 +286,10 @@ function safeAssign(target, src) {
  * (`__proto__`/`constructor`/`prototype` — JSON.parse produces a literal own
  * `__proto__`, whose [[Set]] would hit Object.prototype's accessor setter and
  * re-prototype the record, severing every PuzzleModel method; `constructor`/`prototype`
- * would shadow the class), and ADDITIONALLY skips the reserved `_store`/`_type`/`_synced`
- * fields so a hostile or accidental payload can't detach a record from its store,
- * retype it, or forge its sync provenance. Callers that
+ * would shadow the class), and ADDITIONALLY skips the reserved
+ * `_store`/`_type`/`_synced`/`_deleted` fields so a hostile or accidental payload
+ * can't detach a record from its store, retype it, forge its sync provenance, or
+ * impersonate a locally removed instance. Callers that
  * legitimately set `_synced` do so explicitly right after this merge. All other keys
  * keep exact `record[key] = src[key]` assignment semantics; Object.keys preserves
  * enumeration order (identical to Object.assign for ordinary data).
@@ -316,6 +322,16 @@ export class PuzzleModel {
 		// choice. createRecord() leaves it false. Non-enumerable, so it never reaches
 		// toJSON()/persistence — it is provenance only, not a persisted field.
 		Object.defineProperty(this, '_synced', {
+			value: false,
+			writable: true,
+			enumerable: false,
+		});
+
+		// Removed-instance flag (D50 lifecycle amendment): removeRecord sets it for
+		// both confirmed delete() and local destroy(), allowing a stale reference's
+		// later delete() to resolve idempotently while a never-added instance still
+		// rejects. Non-enumerable: record data and persistence never see it.
+		Object.defineProperty(this, '_deleted', {
 			value: false,
 			writable: true,
 			enumerable: false,
@@ -395,12 +411,13 @@ export class PuzzleModel {
 	}
 
 	/**
-	 * Validate a data object against ALL schema-declared fields, without
-	 * throwing — the pre-create form-check surface (constellation/doc/DOC-SPEC.md §20, D48).
+	 * Validate a data object without throwing — the pre-create form-check surface
+	 * (constellation/doc/DOC-SPEC.md §20, D48). `options.fields` exposes the same
+	 * partial-field machinery used by update(); omitted means every declared field.
 	 * @returns {{ valid: boolean, errors: Array<{field, rule, message}> }}
 	 */
-	static validate(data = {}) {
-		const errors = this._collectErrors(data);
+	static validate(data = {}, { fields } = {}) {
+		const errors = this._collectErrors(data, fields);
 		return { valid: errors.length === 0, errors };
 	}
 
@@ -460,11 +477,15 @@ export class PuzzleModel {
 	 * Sync this record to the server (constellation/doc/DOC-SPEC.md §22, D50). The
 	 * Store owns the network; the verb just delegates. Local-first: the mutation is
 	 * already on screen, so a failed save() rejects and keeps the dirty local state
-	 * (retry by calling again). A store-less record has nowhere to sync — reject
-	 * asynchronously (never a sync throw) so callers only ever `await`.
+	 * (retry by calling again). A deleted record cannot be resurrected through this
+	 * verb; any other store-less record has nowhere to sync. Both reject asynchronously
+	 * (never a sync throw) so callers only ever `await`.
 	 * @returns {Promise<PuzzleModel>}
 	 */
 	save() {
+		if (this._deleted) {
+			return Promise.reject(new Error('[puzzle] cannot save a deleted record'));
+		}
 		if (!this._store) {
 			return Promise.reject(
 				new Error('[puzzle] cannot save() a store-less record — create it via store.createRecord() first')
@@ -475,14 +496,15 @@ export class PuzzleModel {
 
 	/**
 	 * Confirmed server delete (constellation/doc/DOC-SPEC.md §22, D50): DELETE first,
-	 * local remove on ack. Distinct from destroy() (local-only, unchanged). Reject
-	 * asynchronously for a store-less record.
+	 * local remove on ack. Distinct from destroy() (local-only). A removed instance
+	 * resolves idempotently; a never-added instance still rejects asynchronously.
 	 * @returns {Promise<PuzzleModel>}
 	 */
 	delete() {
+		if (this._deleted) return Promise.resolve(this);
 		if (!this._store) {
 			return Promise.reject(
-				new Error('[puzzle] cannot delete() a store-less record — create it via store.createRecord() first')
+				new Error('[puzzle] cannot delete() a record that was never added to a store')
 			);
 		}
 		return this._store.deleteRecord(this);

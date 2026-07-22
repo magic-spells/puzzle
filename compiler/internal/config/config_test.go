@@ -241,6 +241,42 @@ func TestLoadConfigDropConsoleNonBooleanRejected(t *testing.T) {
 	}
 }
 
+func TestLoadConfigDevProxy(t *testing.T) {
+	requireNode(t)
+	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };\n")
+	cfg, err := LoadConfig(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := cfg.Dev.Proxy["/api"]; got != "http://localhost:3091" {
+		t.Fatalf("Dev.Proxy[/api] = %q, want http://localhost:3091", got)
+	}
+}
+
+func TestLoadConfigDevProxyPrefixMustStartWithSlash(t *testing.T) {
+	requireNode(t)
+	root := writeConfig(t, "export default { dev: { proxy: { api: 'http://localhost:3091' } } };\n")
+	_, err := LoadConfig(root)
+	if err == nil {
+		t.Fatal("expected an error for a dev.proxy prefix without a leading slash")
+	}
+	if !strings.Contains(err.Error(), `dev.proxy prefix "api" must start with '/'`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadConfigDevProxyTargetMustBeAbsoluteHTTPURL(t *testing.T) {
+	requireNode(t)
+	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'localhost:3091' } } };\n")
+	_, err := LoadConfig(root)
+	if err == nil {
+		t.Fatal("expected an error for a non-URL dev.proxy target")
+	}
+	if !strings.Contains(err.Error(), `dev.proxy target for "/api" must be an absolute http or https URL`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestLoadConfigOutputStatic(t *testing.T) {
 	requireNode(t)
 	// output: 'static' resolves to StaticOutput() == true.

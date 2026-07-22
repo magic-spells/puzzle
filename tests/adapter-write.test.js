@@ -277,6 +277,17 @@ describe('save() — synced provenance from read/hydrate paths', () => {
 		expect(fetchSpy.mock.calls[1][0]).toBe('https://x.test/v1/api/todos/t1');
 	});
 
+	it('a record from public upsert is synced → first save() PUTs', async () => {
+		const fetchSpy = mockFetch({ body: '' });
+		const store = apiStore();
+		const record = store.upsert('todo', { id: 'u1', text: 'custom action response' });
+
+		await record.save();
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(fetchSpy.mock.calls[0][1].method).toBe('PUT');
+		expect(fetchSpy.mock.calls[0][0]).toBe('https://x.test/v1/api/todos/u1');
+	});
+
 	it('a hydrated-from-storage record is synced → first save() PUTs', async () => {
 		const blob = JSON.stringify({ todo: [{ id: 'h1', text: 'hydrated', completed: false }] });
 		const storage = {
@@ -448,6 +459,41 @@ describe('delete()', () => {
 		expect(fetchSpy).toHaveBeenCalledWith('https://x.test/v1/api/todos/a%2Fb', { method: 'DELETE' });
 	});
 
+	it('a second delete on the same removed instance resolves without another request', async () => {
+		const fetchSpy = mockFetch({ body: '' }, { body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		await todo.save();
+		await todo.delete();
+		await expect(todo.delete()).resolves.toBe(todo);
+
+		expect(store.findMany('todo')).toEqual([]);
+		expect(fetchSpy).toHaveBeenCalledTimes(2); // POST + first DELETE only
+	});
+
+	it('destroy() marks the instance removed, so a later delete resolves locally', async () => {
+		const fetchSpy = mockFetch({ body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		todo.destroy();
+		await expect(todo.delete()).resolves.toBe(todo);
+		expect(todo._deleted).toBe(true);
+		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+
+	it('save() after delete rejects clearly without resurrecting via POST', async () => {
+		const fetchSpy = mockFetch({ body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		await todo.delete();
+		await expect(todo.save()).rejects.toThrow(/cannot save a deleted record/);
+		expect(fetchSpy).toHaveBeenCalledTimes(1); // DELETE only
+		expect(store.findMany('todo')).toEqual([]);
+	});
+
 	it('an in-flight delete of A never evicts a newer B that reused A\'s id (identity guard)', async () => {
 		let resolveFetch;
 		const fetchSpy = vi.fn(() => new Promise((r) => (resolveFetch = r)));
@@ -604,7 +650,7 @@ describe('no-adapter and store-less rejections', () => {
 
 	it('delete() on a store-less record rejects asynchronously', async () => {
 		const rec = new ApiTodo({ id: 'x', text: 'y' });
-		await expect(rec.delete()).rejects.toThrow(/store-less record/);
+		await expect(rec.delete()).rejects.toThrow(/never added/);
 	});
 
 	it('request() rejects when the model declares no adapter', async () => {
@@ -616,7 +662,7 @@ describe('no-adapter and store-less rejections', () => {
 	});
 });
 
-describe('_synced never persists; destroy() unchanged', () => {
+describe('framework lifecycle flags stay private; destroy() remains local-only', () => {
 	it('_synced is absent from toJSON() and the persisted storage blob', async () => {
 		let saved = null;
 		const storage = { getItem: () => null, setItem: (_k, v) => (saved = v) };
@@ -639,6 +685,8 @@ describe('_synced never persists; destroy() unchanged', () => {
 		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
 		todo.destroy();
 		expect(store.findOne('todo', 't1')).toBeNull();
+		expect(todo._deleted).toBe(true);
+		expect('_deleted' in todo.toJSON()).toBe(false);
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 });

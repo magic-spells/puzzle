@@ -97,5 +97,8 @@
 		"tailwindcss": "^4.3.2",
 		"typescript": "^7.0.2",
 		"vitest": "^3.2.4"
+	},
+	"dependencies": {
+		"@magic-spells/puzzle": "file:../../../../../private/tmp/claude-501/-Users-coryschulz-Code--magic-spells/7b528865-8d47-43d1-8404-1b20ff5961df/scratchpad/magic-spells-puzzle-0.1.1.tgz"
 	}
 }

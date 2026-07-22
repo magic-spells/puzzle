@@ -72,7 +72,7 @@ func TestRecomposeOnTailwindWrite(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := newServer(dist, ctx)
+	srv := newServer(dist, ctx, nil)
 	ts := httptest.NewServer(srv.handler())
 	defer ts.Close()
 
