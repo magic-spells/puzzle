@@ -16,10 +16,10 @@ D1-D78 in [[DOC-DECISIONS]] explain why the contract has its current shape.
 
 ## Current state
 
-- `0.1.0` shipped publicly on npm 2026-07-21 (MIT, five packages, manual
-  publish). In progress: `0.1.1` with interactive `puzzle init` prompts
-  (D77/v1.44) and the embedded agent skill + `puzzle add skills` installer
-  (D78/v1.45).
+- `0.1.0` shipped publicly on npm 2026-07-21; `0.1.1` (interactive `puzzle
+  init` prompts, D77/v1.44) followed 2026-07-22 (MIT, five packages, manual
+  publish). In progress: `0.1.2` with the embedded agent skill + `puzzle add
+  skills` installer (D78/v1.45).
 - Runtime, compiler, CLI, static generation, state-preserving dev reload,
   TypeScript transpilation, model validation/relationships/write sync, nested
   routing, slots, refs, scoped styles, animations, and optional morphs are all

@@ -31,9 +31,10 @@ run.
 
 ## Current release state
 
-- Published: `0.1.0` went live on npm 2026-07-21 (all five packages, MIT,
-  manual publish via `npm run release:prep` — there is no CI publish).
-  Working version: `0.1.1` (interactive `puzzle init` prompts, D77/v1.44).
+- Published: `0.1.0` (2026-07-21) and `0.1.1` (2026-07-22, D77 init prompts)
+  are live on npm (all five packages, MIT, manual publish via
+  `npm run release:prep` — there is no CI publish). Working version: `0.1.2`
+  (embedded agent skill + `puzzle add skills`, D78/v1.45).
 - Product line: v1 through v1.44, decisions D1-D77, plus the July 21
   pre-release correctness/performance hardening pass.
 - Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`, and
