@@ -1,12 +1,20 @@
 ---
 name: 'D78 — Agent-skill distribution: embedded skill + `puzzle add skills` (v1.45)'
-status: built
+status: verified
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
   - DECISION-D77-INIT-PROMPTS
   - DECISION-D32-CLI-TOOLING
   - FILE-CLI-ADD
+verified_at: '2026-07-22T19:43:05.019Z'
+verified_sha: 1c2f4b6fef8106cbf3d0a433bfb6186ef89fcc73
+notes:
+  - kind: verified
+    text: >-
+      Merged to main in PR #9. Verified end-to-end: install/refusal/--overwrite/no-target paths
+      against a fake HOME with the real huh dependency; full Go + JS suites green.
+    sha: 1c2f4b6fef8106cbf3d0a433bfb6186ef89fcc73
 ---
 
 # D78 — Agent-skill distribution: embedded skill + `puzzle add skills` (v1.45)

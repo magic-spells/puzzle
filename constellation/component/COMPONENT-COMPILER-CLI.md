@@ -11,7 +11,8 @@ connections:
   - FILE-GENERATE
   - FILE-PIECES
   - FILE-PZLC
-verified_at: '2026-07-22T01:03:37.581Z'
+verified_at: '2026-07-22T19:43:05.365Z'
+verified_sha: 1c2f4b6fef8106cbf3d0a433bfb6186ef89fcc73
 ---
 
 # Compiler CLI
