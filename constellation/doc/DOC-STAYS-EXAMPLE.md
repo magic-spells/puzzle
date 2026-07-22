@@ -3,7 +3,6 @@ name: Puzzle Stays (examples/stays) — Airbnb-style example app
 kind: reference-app
 status: verified
 verified_at: '2026-07-22T00:04:06.034Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 connections:
   - DOC-BLOG-EXAMPLE
   - COMPONENT-PUZZLE-APP
@@ -18,7 +17,7 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified end-to-end at dce8052. Evidence: `puzzle build examples/stays` green in development
+      Verified end-to-end. Evidence: `puzzle build examples/stays` green in development
       (35.9 KB gzip) and production (20.1 KB gzip) modes; npm test 224/224; live browser walkthrough
       via Playwright against `puzzle dev` — all routes render (/, /search, /listing/:id, /account +
       3 nested children, catch-all 404, mobile 390px), search text filter narrows the grid, calendar
@@ -27,7 +26,6 @@ notes:
       and lands on /account/trips showing it, heart toggled on Home appears in /account/wishlist,
       travel-stamp tilts confirmed via computed transform matrices, window scroll resets to 0 on
       navigation, zero console/page errors.
-    sha: dce8052dcfc485613f0140f719174ae2f167bc4c
   - kind: state
     text: >-
       The "window-scroller apps must reset scroll themselves" gotcha in this card's body is RESOLVED
@@ -35,7 +33,6 @@ notes:
       _lastPath/window.scrollTo workaround was deleted in the same change. The example additionally
       gains correct back/forward position restore for free. The gotcha text remains as the
       historical motivation for D33.
-    sha: ecbc220863cb26d96ef46ccfa6c1c20c5c5d0fb5
 ---
 
 # Puzzle Stays (examples/stays)

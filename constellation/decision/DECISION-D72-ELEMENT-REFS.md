@@ -11,17 +11,15 @@ connections:
   - DECISION-D44-DOM-ISLANDS
   - DECISION-D62-HANDLER-CACHING
 verified_at: '2026-07-17T23:27:05.105Z'
-verified_sha: 10613c327cac6e46be4fc4f2ecb258cedcae5528
 notes:
   - kind: verified
     text: >-
-      Verified at merge (PR #45, merge 10613c3): 13 Go packages green cold; vitest 764/764
-      post-merge with PR #44's round-5 changes (both suites coexisting); emission contract proven
+      Verified at merge: 13 Go packages green cold; vitest 764/764
+      post-merge with the round-5 review changes (both suites coexisting); emission contract proven
       through a real production build — minified todos bundle contains
       ref:this.__ref("newTodoInput") exactly (call site + method definition = the only two __ref
       occurrences), no ref DOM attribute. Merge with round-5's viewManager/PuzzleView changes
       auto-resolved and re-verified.
-    sha: 10613c327cac6e46be4fc4f2ecb258cedcae5528
 ---
 
 # D72 — Element refs: static `ref="name"` → `this.refs.name` (v1.39)

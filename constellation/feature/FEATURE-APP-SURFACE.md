@@ -8,15 +8,13 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC
 verified_at: '2026-07-14T17:04:48.129Z'
-verified_sha: 1600ce7f34f7a486f9fdb2d4b20c5d986f70a48c
 notes:
   - kind: verified
     text: >-
-      Umbrella resolved at 1600ce7 by the D66 triage: app lifecycle hooks admitted and shipped as
+      Umbrella resolved by the D66 triage: app lifecycle hooks admitted and shipped as
       v1.31 (SPEC §34); settings/computed/methods, global keyboard events, $events, ctx.utils,
       devtools re-rejected with rationale in the DECISION card. Last planned feature card — backlog
       empty.
-    sha: 1600ce7f34f7a486f9fdb2d4b20c5d986f70a48c
 ---
 
 # App-level surface

@@ -19,7 +19,6 @@ notes:
       Edit-time trap: the keyed-map separator must be the `\x00` escape sequence in
       source, not a literal NUL byte — a literal NUL makes the file binary to git.
 verified_at: '2026-07-22T00:04:08.069Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 ---
 
 # ViewManager and ViewNode

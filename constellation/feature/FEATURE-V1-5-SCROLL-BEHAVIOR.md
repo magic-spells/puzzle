@@ -2,7 +2,6 @@
 name: "v1.5 — Router scroll behavior"
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
-verified_sha: 95cc18ec36d881132ee5c43e9288ceeb00b31fd2
 connections:
   - DECISION-D33-ROUTER-SCROLL
   - COMPONENT-ROUTER

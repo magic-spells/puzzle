@@ -11,7 +11,6 @@ connections:
   - DOC-PUZZLE-FILE
   - DOC-SPEC
 verified_at: '2026-07-12T00:15:02.801Z'
-verified_sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 notes:
   - kind: verified
     text: >-
@@ -19,7 +18,6 @@ notes:
       delay-before-show rejected) and verified at the merged main sha (480 vitest + all Go green).
       One refinement recorded on COMPONENT-PUZZLE-VIEW: loaded flips at swap time, coinciding with
       data-commit when no hold is configured.
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 ---
 
 # D52 — Skeleton anti-flash: opt-in `min-duration` hold; the error slot resolves won't-build (v1.20)

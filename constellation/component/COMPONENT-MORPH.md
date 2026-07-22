@@ -13,7 +13,6 @@ connections:
   - DOC-ROUTER
   - FILE-MORPH
 verified_at: '2026-07-17T23:33:29.572Z'
-verified_sha: 10613c327cac6e46be4fc4f2ecb258cedcae5528
 notes:
   - kind: gotcha
     text: >-

@@ -15,7 +15,6 @@ notes:
       scope. A sync-shaped function that returns a Promise while another async
       scope is active is retried; data() must remain safe to rerun.
 verified_at: '2026-07-22T00:04:07.883Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 ---
 
 # Store

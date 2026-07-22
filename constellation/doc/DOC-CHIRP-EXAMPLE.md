@@ -3,7 +3,6 @@ name: Chirp (examples/chirp) — Twitter-clone example app
 kind: reference-app
 status: verified
 verified_at: '2026-07-22T00:04:05.137Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 connections:
   - DOC-STAYS-EXAMPLE
   - DOC-BLOG-EXAMPLE
@@ -22,7 +21,7 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified end-to-end at d458c40. Evidence: `puzzle build examples/chirp` green in development
+      Verified end-to-end. Evidence: `puzzle build examples/chirp` green in development
       (47.2 KB gzip) and production (30.1 KB gzip); npm test 272/272 (includes the new router
       regression test); 31-check Playwright walkthrough against `puzzle dev` — Home skeleton shimmer
       under a delayed posts.json then live feed, compose (280 counter, Escape-clears via
@@ -32,7 +31,6 @@ notes:
       chirp), unknown-handle state, Explore trends/search/enter-key/no-results {#unless}/Follow
       toggle, notifications {#case} rows + mark-all-read draining the layout badge live, catch-all
       404, and localStorage persistence of a composed chirp across reload. Zero console/page errors.
-    sha: d458c40762129a438ad9678b2981ec8899414a3f
 ---
 
 # Chirp (examples/chirp)

@@ -2,7 +2,6 @@
 name: D61 — URL/history/title commit atomically with the incoming mount (D19 refinement)
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
-verified_sha: 95cc18ec36d881132ee5c43e9288ceeb00b31fd2
 connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
@@ -25,7 +24,6 @@ notes:
       #commitLocation PERSISTS that captured value — so the decision's actual goal (a
       superseded/failed nav commits nothing, including scroll) still holds; only the measurement
       moved back to click time.
-    sha: b28705330ce4399f214ddd34309f01fd6a655b86
 ---
 
 # D61 — URL/history/title commit atomically with the incoming mount

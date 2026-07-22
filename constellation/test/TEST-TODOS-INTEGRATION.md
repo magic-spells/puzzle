@@ -2,7 +2,6 @@
 name: Todos end-to-end integration test
 status: verified
 verified_at: '2026-07-22T00:04:06.910Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 framework: vitest
 connections:
   - FLOW-REACTIVITY
@@ -18,19 +17,17 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified at b9131f2: 12 jsdom tests green driving a real PuzzleApp DOM-only —
+      Verified: 12 jsdom tests green driving a real PuzzleApp DOM-only —
       add/special-chars/toggle/filter (keyed
       identity)/delete/clear-completed/empty-state/persistence round-trip/loadAll upsert/13-op
       endurance. Fixture = compiler golden file #1.
-    sha: b9131f2b7fef62833621beebc82acb5fed42c654
   - kind: verified
     text: >-
-      Re-verified at 440f883: suite body extracted to tests/helpers/todos-suite.js (runTodosSuite)
+      Re-verified: suite body extracted to tests/helpers/todos-suite.js (runTodosSuite)
       and now runs TWICE — fixture variant (todos-app.test.js) and compiled variant
       (todos-app-compiled.test.js, modules fresh-compiled from the real .pzl sources by pzlc on
       every npm test). Zero behavioral differences; 144/144. The v1 loop is closed: compiler output
       passes the exact suite the runtime was proven against.
-    sha: 440f883e8626ca0dab618108c4e70d9afb312b7c
   - kind: verified
     text: >-
       TodoItem extraction (v1.1 Step 3): rows are real components (todo prop + @toggle/@remove
@@ -42,15 +39,13 @@ notes:
       resolves verbatim .pzl imports via a vitest resolveId plugin (basename-flatten in
       todos-compiled/). Live-proven in Chromium: mid-enter 33.9px/opacity .55/1 live animation;
       settle 65.0px/0 animations (released); leave deferred removal. 183/183.
-    sha: 4bba312efe9de194b0ee3cc88dd00ed2c70c68b1
   - kind: verified
     text: >-
       Re-verified at the v1.16–v1.21 merge (fresh baseline — old one unreachable after squash). Both
-      lanes green in the 480-test run at this sha; compiled fixtures rebuilt by the pretest Go build
+      lanes green in the 480-test run; compiled fixtures rebuilt by the pretest Go build
       (which now carries the v1.12 formatter-guard emission and v1.20/v1.21 codegen — byte-identical
       for the todos fixtures, which use neither min-duration nor named slots). Todos app semantics
       untouched by v1.16–v1.21 (its schema rules were already satisfied by the app's writes).
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 ---
 
 # Todos integration test

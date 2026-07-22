@@ -8,17 +8,15 @@ connections:
   - DECISION-D40-ELSE-IF
   - DECISION-D46-INLINE-SVG
 verified_at: '2026-07-17T21:32:34.193Z'
-verified_sha: 9b6e929010bed8f84ed23f9f63b29f138b35edf8
 notes:
   - kind: verified
     text: >-
-      Verified at merge (PR #42, code commit 802c962): Go suites green on cold cache; vitest 736
+      Verified at merge: Go suites green on cold cache; vitest 736
       green; examples/todos dist byte-identical between a main-built and branch-built compiler; e2e
       probe (inline + block comment wrapping deliberately broken {#if} markup in Home.pzl) built
       clean with zero comment text in dist/ and app.js still byte-identical. styles.css caveat found
       and documented: Tailwind's raw-source scanner can lift utility-shaped words (block, inline)
       out of ANY comment — CSS-only, never the JS bundle.
-    sha: 9b6e929010bed8f84ed23f9f63b29f138b35edf8
 ---
 
 # D70 — Template comments: `{## }` inline + `{#comment}…{/comment}` raw block (v1.37)

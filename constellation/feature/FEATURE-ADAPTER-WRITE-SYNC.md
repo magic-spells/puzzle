@@ -11,14 +11,12 @@ connections:
   - DOC-MODELS
   - DOC-SPEC
 verified_at: '2026-07-12T00:14:45.180Z'
-verified_sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 notes:
   - kind: verified
     text: >-
       Verified at the merged main sha: save/delete/request semantics reviewed against SPEC §22 at
       ship (validate-first, POST/PUT provenance, pk adoption, confirmed deletes);
-      tests/adapter-write.test.js (27) + full suite green at this sha (480 vitest).
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
+      tests/adapter-write.test.js (27) + full suite green (480 vitest).
 ---
 
 # v1.18 — Adapter write sync & custom adapter methods

@@ -11,7 +11,6 @@ connections:
   - DOC-PUZZLE-FILE
   - DOC-SPEC
 verified_at: '2026-07-14T07:08:22.704Z'
-verified_sha: f867f10b5a09efb6fbf650f0d5432cc0edc17332
 ---
 
 # Scoped styles (`<styles scoped>`)

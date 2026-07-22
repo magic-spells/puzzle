@@ -2,7 +2,6 @@
 name: CODE_REVIEW.md — prototype audit vs SPEC
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
-verified_sha: 95cc18ec36d881132ee5c43e9288ceeb00b31fd2
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-STORE
@@ -45,7 +44,7 @@ The existing implementation is a pre-SPEC prototype. **None of it has ever run e
 
 ### 1.1 It has never compiled (fixed/confirmed)
 
-- The repo had **no `go.sum`**, so `go build ./...` failed before reaching any code. Fixed on this branch (commit `ecbe6af`).
+- The repo had **no `go.sum`**, so `go build ./...` failed before reaching any code. Fixed on this branch.
 - With deps resolved, the build still fails: **`watcher.go:69: undefined: os`** — `filepath.Walk` callback uses `os.FileInfo` without importing `os`. This was flagged in `project_plan.md` and is now empirically confirmed: the CLI has never been runnable from a clean checkout.
 
 ### 1.2 The parser cannot parse blocks — empirically verified

@@ -12,14 +12,12 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
 verified_at: '2026-07-12T00:15:03.604Z'
-verified_sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 notes:
   - kind: verified
     text: >-
       Decision implemented as written and verified at the merged main sha (480 vitest + all Go
       green); bare-slot goldens byte-identical as required; no deviations from the recorded
       contract.
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
   - kind: state
     text: >-
       Amended by D74 (v1.41): the bare default `<slot/>` spelling this card froze is retired — the

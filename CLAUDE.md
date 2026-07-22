@@ -33,7 +33,7 @@ run.
 
 - Package version: `0.1.0`, preparing for the first public npm release.
 - Product line: v1 through v1.43, decisions D1-D76, plus the July 21
-  pre-release correctness/performance hardening at commit `3433c47`.
+  pre-release correctness/performance hardening pass.
 - Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`, and
   `./puzzle-env` exports plus a `puzzle` binary shim and four optional platform
   binary packages (macOS/Linux, arm64/x64).

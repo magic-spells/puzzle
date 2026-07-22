@@ -10,7 +10,6 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - DOC-SPEC
 verified_at: '2026-07-14T07:07:57.217Z'
-verified_sha: f867f10b5a09efb6fbf650f0d5432cc0edc17332
 notes:
   - kind: verified
     text: >-
@@ -18,7 +17,6 @@ notes:
       override suppression, warn-once null path); goldens + hand-written fixture updated
       fixture-first; Go +6 codegen tests, vitest +4 incl. custom-pk reorder-by-move; 540 vitest +
       all Go green.
-    sha: f867f10b5a09efb6fbf650f0d5432cc0edc17332
 ---
 
 # D58 — List keying: pk-aware auto-key, explicit key override, null-key warning

@@ -1,19 +1,16 @@
 #!/usr/bin/env node
 // Local dry-run of the release pipeline (`npm run release:prep`).
 //
-// release.yml does all of this on a v* tag in CI; this script does it on YOUR
-// machine so you can eyeball the result before publishing @magic-spells/puzzle
-// by hand (Cory publishes manually — no NODE_AUTH_TOKEN in CI). Steps, fail-fast:
+// This is the ONLY release pipeline — releases are published by hand from this
+// machine; there is no publish workflow in CI. Steps, fail-fast:
 //
 //   1. Version consistency — package.json vs compiler/internal/version/version.go
-//      and each npm/puzzle-*/package.json (all must agree, exactly like the CI
-//      "Assert tag matches" step, minus the tag).
+//      and each npm/puzzle-*/package.json (all must agree).
 //   2. Pack allowlist — delegate to scripts/verify-pack.mjs (the tarball must ship
 //      only the runtime + declarations + bin shim).
 //   3. Cross-compile the four per-platform CLI binaries into npm/<pkg>/bin/puzzle,
-//      version-stamped via -ldflags (matches release.yml's build matrix).
-//   4. Copy LICENSE.txt into each platform package dir (their manifests say
-//      "SEE LICENSE IN LICENSE.txt").
+//      version-stamped via -ldflags.
+//   4. Copy LICENSE.txt (MIT) into each platform package dir.
 //   5. Host smoke test — run the binary built for THIS platform with --version and
 //      assert it reports the expected version.
 //   6. Summary — print the exact `npm publish` commands in the REQUIRED order
@@ -28,7 +25,7 @@ import { dirname, join } from 'node:path';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-// GOOS, GOARCH, platform package dir name — the release.yml build matrix.
+// GOOS, GOARCH, platform package dir name — the release build matrix.
 const MATRIX = [
 	{ goos: 'darwin', goarch: 'arm64', pkg: 'puzzle-darwin-arm64' },
 	{ goos: 'darwin', goarch: 'amd64', pkg: 'puzzle-darwin-x64' },
@@ -58,7 +55,7 @@ const version = readJSON('package.json').version;
 if (!version) fail('package.json has no "version" field');
 console.log(`release-prep: root package version is ${version}`);
 
-// version.go — parse `var Version = "..."` exactly like release.yml's sed does.
+// version.go — parse `var Version = "..."`.
 const versionGo = readFileSync(join(repoRoot, 'compiler/internal/version/version.go'), 'utf8');
 const goMatch = versionGo.match(/^var Version = "(.*)"$/m);
 if (!goMatch) fail('could not find `var Version = "..."` in compiler/internal/version/version.go');

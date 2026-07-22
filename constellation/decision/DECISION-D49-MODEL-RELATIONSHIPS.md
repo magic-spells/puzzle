@@ -11,13 +11,11 @@ connections:
   - DOC-DATASTORE
   - DOC-SPEC
 verified_at: '2026-07-12T00:14:58.605Z'
-verified_sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 notes:
   - kind: verified
     text: >-
       Decision implemented as written and verified at the merged main sha (480 vitest green); blog
       acceptance case landed; no deviations from the recorded contract.
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 ---
 
 # D49 — `hasMany`/`belongsTo` resolve as lazy store-backed getters with FK-by-convention (v1.17)

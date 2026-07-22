@@ -3,7 +3,6 @@ name: Puzzle Press (examples/blog) — v1 reference app
 kind: reference-app
 status: verified
 verified_at: '2026-07-22T01:03:40.898Z'
-verified_sha: 5f16d58d1472c1c1f8f4266e9cc4c0ae40ad14d1
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-ROUTER
@@ -21,7 +20,7 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified end-to-end at c272a11 (examples/blog landed). Evidence: `puzzle build examples/blog`
+      Verified end-to-end (examples/blog landed). Evidence: `puzzle build examples/blog`
       green in dev + production modes; npm test 164/164 with the pretest smoke guard (D20 negative
       check confirmed: an attr on a component's <puzzle-view> fails the build, exit 1); dev server
       checks — /api/*.json seeds served 200, history fallback serves the shell for /posts/p2 and
@@ -30,29 +29,25 @@ notes:
       5→2 with active state, /posts/p1 byline (custom formatter) + reading time + pluralized comment
       count, comment create/remove reactive, '*' catch-all NotFound, deep-link cold start shows
       loading then post after seeds resolve.
-    sha: 59786fe5301a0c33910d94d9e41db416bda57a85
   - kind: verified
     text: >-
       Re-verified at the v1.16–v1.21 merge (fresh baseline — old one unreachable after squash).
       v1.17 acceptance case landed here: post.js declares author: Puzzle.belongsTo('user') +
       comments: Puzzle.hasMany('comment'), and PostDetail's data() traverses post.author /
       [...post.comments].sort(...) instead of manual findOne/findMany joins — identical rendered
-      output, verified by the full suite + relationship tests at this sha (480 vitest green).
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
+      output, verified by the full suite + relationship tests (480 vitest green).
   - kind: verified
     text: >-
       Re-verified at the correctness-pass HEAD: the only bound-file change was package.json (types
       condition on the ./morph export; verify-pack script unchanged in behavior for this card's
       claims). Blog example itself untouched; build:blog green in the full gate (npm test pretest
       rebuilds it; 510 vitest pass).
-    sha: 7e725e1bbf64e98bd186d399df5ed8632555c5d9
   - kind: verified
     text: >-
-      v1.32 (PR #40): only package.json changed in this card's binding (new test scripts +
+      v1.32: only package.json changed in this card's binding (new test scripts +
       Playwright/TypeScript devDeps + bin/optionalDependencies for distribution); the blog example
       itself is untouched and still builds via build:blog in pretest. No claim in this card
       affected.
-    sha: b28705330ce4399f214ddd34309f01fd6a655b86
 ---
 
 # Puzzle Press (examples/blog)

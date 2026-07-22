@@ -2,7 +2,6 @@
 name: HMR with state preservation
 status: verified
 verified_at: '2026-07-22T01:03:42.322Z'
-verified_sha: 5f16d58d1472c1c1f8f4266e9cc4c0ae40ad14d1
 connections:
   - DECISION-D57-HMR-STATE-RELOAD
   - DECISION-D27-FAST-DEV-REBUILDS
@@ -21,24 +20,22 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified at 373f0e6: tests/hmr-dev-reload.test.js (13 — end-to-end transplant, one-shot +
+      Verified: tests/hmr-dev-reload.test.js (13 — end-to-end transplant, one-shot +
       expiry + corrupt-blob fail-soft, safe-filter units, window publish/clear, storage-less safety)
       + Go TestBuildDevDefineDCE (dev bundle keeps __puzzleHMR/__PUZZLE_APP__, prod DCEs both) +
       dev.go client test; live proof on examples/todos: dev build carries the hooks, prod build's
       only residue is the inert empty __devSnapshot method (48128 B). Gotcha baked into the code +
       test: the __PUZZLE_DEV__ probe MUST be spelled inline at each gate — a hoisted `const DEV`
       does not constant-propagate into class-method scopes and left dead `Z && …` guards in the prod
-      bundle (measured, fixed in review). 532 vitest + all Go green at this sha.
-    sha: 373f0e60d7cc827411dbb7a8fcdfa7185f86be45
+      bundle (measured, fixed in review). 532 vitest + all Go green.
   - kind: verified
     text: >-
-      v1.32 (PR #40): two-phase restore (body updated) — store transplants pre-nav-#0 in _hydrateAll
+      v1.32: two-phase restore (body updated) — store transplants pre-nav-#0 in _hydrateAll
       replace mode (HMR beats configured storage on duplicate pks, identity preserved), view-local
       layer restores post-mount; snapshots serialize view._localState() only (derived values
       recomputed, never pinned). Fixes the masked bug where store-derived views rendered empty until
       the next mutation after a dev reload. DCE guard green; hmr-dev-reload.test.js grew
       first-paint/override/derived-recompute coverage.
-    sha: b28705330ce4399f214ddd34309f01fd6a655b86
 ---
 
 # v1.25 — State-preserving development reload

@@ -2,7 +2,6 @@
 name: TEMPLATE_SYNTAX.md — template grammar reference
 status: verified
 verified_at: '2026-07-22T00:04:06.109Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - DOC-SPEC

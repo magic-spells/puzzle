@@ -11,14 +11,12 @@ connections:
   - DOC-ROUTER
   - DOC-SPEC
 verified_at: '2026-07-12T00:14:46.752Z'
-verified_sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 notes:
   - kind: verified
     text: >-
       Verified at the merged main sha: three-seam base application reviewed against SPEC §23 at
-      ship; tests/router-base.test.js (20) + all router suites + full suite green at this sha (480
+      ship; tests/router-base.test.js (20) + all router suites + full suite green (480
       vitest).
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 ---
 
 # v1.19 — Router base-path support

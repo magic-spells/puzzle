@@ -3,7 +3,6 @@ name: Grimoire (examples/grimoire) — Notion-clone block editor example
 kind: reference-app
 status: verified
 verified_at: '2026-07-22T00:04:05.709Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 connections:
   - DECISION-D44-DOM-ISLANDS
   - DECISION-D45-BACKSPACE-DELETE-FILTERS
@@ -24,7 +23,7 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified end-to-end at a17a949. Evidence: three phased Opus builds each browser-verified
+      Verified end-to-end. Evidence: three phased Opus builds each browser-verified
       (scaffold: seed/routing/persistence/reactive toggles; editor core: 40+ assertions on
       typing/split/merge/convert/arrow-nav/paste/title echo; features: 50/50 checks on slash
       filter+convert+strip, Escape-leaves-text, divider-below on non-empty, turn-into re-seed with
@@ -35,14 +34,12 @@ notes:
       verification overall: the turn-into Enter double-dispatch into the focused island (fixed via
       capture-phase stopPropagation) and the menu positioning. npm test 285/285 with build:grimoire
       in pretest; production build 23.3 KB gzip.
-    sha: a17a949e4853d7b44b122d401d4c176251c72385
   - kind: verified
     text: >-
-      Re-verified at 512fd2c after the origin/main merge and the islands renumber (v1.10→v1.13,
+      Re-verified after the origin/main merge and the islands renumber (v1.10→v1.13,
       D41/D42→D44/D45; the example's comments/README now cite the new numbers). The 13-check lead
       Playwright smoke re-ran green against the merged runtime (main's v1.10-v1.12 router/formatter
       changes coexist cleanly); 327 vitest with build:grimoire in pretest.
-    sha: 512fd2c37cf7cef74a8eed131545a7c479eb4176
 ---
 
 # Grimoire (examples/grimoire)

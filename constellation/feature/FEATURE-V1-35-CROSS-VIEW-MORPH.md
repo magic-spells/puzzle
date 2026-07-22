@@ -8,7 +8,6 @@ connections:
   - COMPONENT-ROUTER
   - DOC-SPEC
 verified_at: '2026-07-17T07:52:48.042Z'
-verified_sha: badb14a44ff1449d0abdc9b7db7954b6a3979a4d
 notes:
   - kind: state
     text: >-

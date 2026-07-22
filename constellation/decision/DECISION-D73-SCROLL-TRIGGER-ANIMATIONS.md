@@ -9,11 +9,10 @@ connections:
   - DOC-USER-GUIDE
   - DECISION-D28-ANIMATIONS
 verified_at: '2026-07-19T05:39:52.996Z'
-verified_sha: 3dae90eb5a8830b9b9eb128a191d858a2c10216b
 notes:
   - kind: verified
     text: >-
-      Verified at 3dae90e (base 54f6a01 + triggerAnchor 3dae90e): full vitest 788/788 (764 baseline
+      Verified: full vitest 788/788 (764 baseline
       + 15 visible-trigger + 9 triggerAnchor tests, controllable fake IO + pause/play fake WAAPI),
       all Go packages ok, tsc clean — re-run by the orchestrator, not just the build agents.
       Contract spot-checked at file level: paused-WAAPI hold (animate.js playAnimation({paused})),
@@ -21,7 +20,6 @@ notes:
       snapshot-iterated delivery, empty-set unobserve, empty-bucket disconnect), PuzzleView
       #deferredEnter/#useVisibleTrigger/#resolveAnchor/#abortEnter wiring incl.
       destroy-resolves-pending playIn and playOut unwind. No deviations from the card's contract.
-    sha: 3dae90eb5a8830b9b9eb128a191d858a2c10216b
 ---
 
 # D73 — Scroll-triggered enter animations: `trigger: 'visible'` on the `in` spec (v1.40)

@@ -18,18 +18,16 @@ connections:
   - FILE-EXAMPLES-CANVAS-README
   - FILE-EXAMPLES-CANVAS-PLAN
 verified_at: '2026-07-22T00:04:04.941Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 notes:
   - kind: verified
     text: >-
-      Verified at 9c143f7 (Phase 2+3 commit). Evidence: dev + prod builds green (prod 78.5 KB raw /
+      Verified (Phase 2+3). Evidence: dev + prod builds green (prod 78.5 KB raw /
       22.9 KB gzip incl. app); 260 vitest + all Go package suites pass; independent Playwright pass
       against the served production bundle in Chromium — drag-move commits exact deltas (Panel
       540,360 → 620,410 after +80/+50 drag), SE-handle resize exact (220×140 → 260×170 after
       +40/+30), Escape mid-drag leaves position untouched, stack reorder swaps Title/Subtitle order
       in the Profile card, marquee selects 2 free elements, zero page errors (only sandbox font
       fetch + favicon 404 console noise, same as kanban/orrery).
-    sha: 9c143f7abd4235242555cffe6508efee747e7285
 ---
 
 # Puzzle Studio (examples/canvas)

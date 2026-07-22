@@ -3,7 +3,6 @@ name: Puzzle Orrery (examples/orrery) — canvas × datastore animation demo
 kind: reference-app
 status: verified
 verified_at: '2026-07-22T00:04:05.804Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 connections:
   - DOC-STAYS-EXAMPLE
   - DOC-BLOG-EXAMPLE
@@ -20,7 +19,7 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified at caf6639. Evidence: `go run ./compiler/cmd/puzzle build examples/orrery --mode
+      Verified. Evidence: `go run ./compiler/cmd/puzzle build examples/orrery --mode
       development` green (app.js 93.6 KB / 25.0 KB gzip, styles.css, index.html); node --check on
       all 7 plain .js files; live Playwright walkthrough against the served dist in Chromium —
       canvas DPR-sized imperatively (726×518), scene paints (sun + rings + 5 seeded planets incl.
@@ -28,7 +27,6 @@ notes:
       6th body record and the panel gained its row (store→DOM and canvas→store both live), Pause
       froze successive frames exactly, zero app console errors (only the sandbox-blocked Google
       Fonts fetch, same as kanban).
-    sha: caf663997be0bcdfc56310cb1975800ac7f9a0fc
 ---
 
 # Puzzle Orrery (examples/orrery)

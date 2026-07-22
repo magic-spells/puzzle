@@ -10,13 +10,11 @@ connections:
   - DOC-DATASTORE
   - DOC-SPEC
 verified_at: '2026-07-12T00:14:41.892Z'
-verified_sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 notes:
   - kind: verified
     text: >-
       Verified at the merged main sha: implementation reviewed line-by-line against SPEC §20 at
-      ship, tests/validation.test.js (27) + full suite green at this sha (480 vitest).
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
+      ship, tests/validation.test.js (27) + full suite green (480 vitest).
 ---
 
 # v1.16 — Schema validation enforcement

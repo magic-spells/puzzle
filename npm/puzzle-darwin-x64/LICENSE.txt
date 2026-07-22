@@ -1,49 +1,21 @@
-Puzzle Framework Source-Available License
-Version 1.0 — April 2024
+MIT License
 
-Copyright (c) 2024 Magic Spells. All rights reserved.
+Copyright (c) 2026 Magic Spells
 
-1. Grant of Limited Rights
-   Subject to the terms below, Magic Spells grants you a personal, non-transferable,
-   non-sublicensable, revocable license to download, view, and use the Puzzle
-   Framework source code (the "Software") solely for (a) internal evaluation, and
-   (b) developing applications for your own internal deployment.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-2. Restrictions
-   You must not: (a) distribute, publish, sublicense, sell, rent, lease, loan, or
-   otherwise make the Software (or any portion of it) available to any third
-   party; (b) use the Software for any commercial hosting or software-as-a-service
-   offering; (c) use the Software to create or distribute a competing framework;
-   (d) remove or alter proprietary notices; or (e) use the Software in violation of
-   applicable law. Compiled binaries, derivative works, and modifications remain
-   subject to these restrictions and must stay within your organization.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-3. Feedback
-   If you provide feedback or suggestions about the Software, you grant Magic
-   Spells a worldwide, royalty-free, irrevocable license to use and incorporate
-   that feedback without restriction.
-
-4. Ownership
-   Magic Spells retains all right, title, and interest in and to the Software.
-   This license does not transfer any ownership rights to you.
-
-5. Term and Termination
-   This license terminates automatically if you breach it. Upon termination, you
-   must cease all use of the Software and destroy all copies in your possession or
-   control. Sections 2 through 7 survive termination.
-
-6. Disclaimer of Warranty
-   THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
-
-7. Limitation of Liability
-   TO THE MAXIMUM EXTENT PERMITTED BY LAW, MAGIC SPELLS WILL NOT BE LIABLE FOR ANY
-   INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR EXEMPLARY DAMAGES ARISING OUT
-   OF OR RELATING TO THIS LICENSE OR THE USE OF THE SOFTWARE, EVEN IF ADVISED OF
-   THE POSSIBILITY OF SUCH DAMAGES.
-
-8. Contact and Commercial Licensing
-   For commercial use rights, distribution requests, or any permissions beyond
-   this license, contact Magic Spells at legal@magic-spells.dev.
-
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

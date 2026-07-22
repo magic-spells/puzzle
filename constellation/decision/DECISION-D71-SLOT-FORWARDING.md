@@ -12,22 +12,19 @@ connections:
   - FILE-TESTS-SLOT-FORWARDING-TEST
   - FILE-TESTS-SLOT-FORWARDING-COMPILED-TEST
 verified_at: '2026-07-22T00:04:06.730Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 notes:
   - kind: verified
     text: >-
-      Verified at 9c199aa: expandNode/expandChildList descent + clone link preservation traced in
+      Verified: expandNode/expandChildList descent + clone link preservation traced in
       viewManager.js; walkSlots inCallSite named-marker rejection traced in slot.go;
       tests/slot-forwarding.test.js + slot-forwarding-compiled.test.js green in the 746-test suite;
       all D69 citations re-pointed to D71 (grep-clean outside morph code); SPEC §24 forwarding
       paragraph and DOC-DECISIONS index line landed in the same commit.
-    sha: 9c199aae4054c5cffcfd4bad5882ff7d14ade177
   - kind: verified
     text: >-
-      Re-verified at 10613c3: expandNode/expandChildList/expandSlots/partitionSlots untouched since
-      the 9c199aa stamp; slot.go's only change is the additive D72 ref-on-slot rejection firing
+      Re-verified: expandNode/expandChildList/expandSlots/partitionSlots untouched since
+      the prior stamp; slot.go's only change is the additive D72 ref-on-slot rejection firing
       before the D71 named-marker rule. Forwarding semantics intact.
-    sha: 10613c327cac6e46be4fc4f2ecb258cedcae5528
   - kind: state
     text: >-
       Respelled by D74 (v1.41): the forwarding form is now `<Card><children/></Card>` (or `<Slot/>`

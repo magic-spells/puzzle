@@ -16,7 +16,6 @@ notes:
       reused ancestor has seen the attempted params. This documented D19/D30 soft
       edge is tracked by FEATURE-TRANSACTIONAL-ANCESTOR-REFRESH.
 verified_at: '2026-07-22T00:04:07.695Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 ---
 
 # Router

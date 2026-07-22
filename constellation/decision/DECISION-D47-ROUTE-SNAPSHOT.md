@@ -2,7 +2,6 @@
 name: "D47 — Per-navigation route snapshot: `this.route` through the D19 gate (v1.15)"
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
-verified_sha: 95cc18ec36d881132ee5c43e9288ceeb00b31fd2
 connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D30-NESTED-ROUTES
