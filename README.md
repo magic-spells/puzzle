@@ -47,7 +47,7 @@ npm install -D @magic-spells/puzzle
 - **Single-file components** (`.pzl`) with template + scripts + styles — optional TypeScript (`<scripts lang="ts">`), scoped styles (`<styles scoped>`), skeletons, comments, slots, and refs
 - **Reactive data** with automatic view updates
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and write sync
-- **Liquid-style formatters** for data transformation
+- **Chainable display formatters** — `{ title | downcase | truncate(40) }`
 - **Nested routing** with view slots — history, hash, and memory modes; scroll restoration; base paths; anchors
 - **Virtual DOM** with efficient diffing and pk-aware list keying
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
