@@ -34,6 +34,11 @@ Cobra command surface shipped by the platform binary:
 - `puzzle add piece` resolves local/HTTPS registries, transitive dependencies,
   did-you-mean names, all-or-nothing overwrite checks, theme/dependency next
   steps, and sha256 `pieces.lock` entries.
+- `puzzle add skills` (alias `skill`; D78) installs the embedded agent skill
+  (`skills/puzzle/`, `go:embed`) into detected `~/.claude`/`~/.codex`/`~/.cursor`
+  config dirs: huh checkbox multi-select on a TTY with all targets pre-selected,
+  silent install-to-all on non-TTY, pieces-style all-or-nothing `--overwrite`
+  pre-flight, friendly no-op when nothing is detected.
 - `puzzle doctor`, `puzzle info`, and `puzzle --version` provide diagnostics and
   environment/project metadata.
 - `puzzle upgrade` (D76) checks the npm registry and upgrades via the user's
@@ -54,7 +59,9 @@ root through symlinks.
 Each command self-registers from its own file. Filesystem writes use atomic
 helpers where a partial artifact would be harmful. Shared terminal output
 handles TTY color, build tables, concise errors, and an ldflags-stampable
-version matching the package.
+version matching the package. TTY gates use a real isatty check (D78 fix):
+`/dev/null` is a character device but is not a terminal, so prompts can never
+block under cron/CI stdin.
 
 `pzlc` is the internal/test-facing single-file compiler with explicit
 view/layout/component mode; it is not the app workflow.

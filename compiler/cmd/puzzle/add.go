@@ -55,9 +55,10 @@ const tailwindStylesCSS = `@import "tailwindcss";
 `
 
 var addCmd = &cobra.Command{
-	Use:   "add <integration|piece> [name…]",
-	Short: "Add an integration (tailwind) or UI pieces from the registry",
-	Long: `Wire an official integration into the current app, or copy UI pieces in.
+	Use:   "add <integration|piece|skills> [name…]",
+	Short: "Add an integration, UI pieces, or the Puzzle agent skill",
+	Long: `Wire an official integration into the current app, copy UI pieces in, or
+install the Puzzle agent skill for supported coding tools.
 
 Integrations (v1: tailwind):
   puzzle add tailwind          declares the Tailwind pipeline in puzzle.config.js
@@ -74,10 +75,18 @@ Pieces (copy-in components):
                                steps (D3). Refuses to overwrite existing files
                                unless --overwrite is given.
 
+Agent skill:
+  puzzle add skills            installs the CLI's embedded Puzzle skill into every
+                               detected Claude Code, Codex, and Cursor config dir.
+                               On a TTY, all detected targets are pre-selected in a
+                               checkbox list; scripts install to all without prompting.
+                               Existing skill directories require --overwrite.
+                               "skill" is accepted as an alias.
+
 The registry source is --registry, else $PUZZLE_PIECES_REGISTRY, else the public
 puzzle-pieces registry; it may be a local directory or an http(s) URL.`,
 	// MinimumNArgs(1), not ExactArgs(1): `add piece` takes one or more piece names
-	// after the "piece" selector.
+	// after the "piece" selector; the other selectors ignore the trailing slice.
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		registry, _ := cmd.Flags().GetString("registry")
@@ -93,22 +102,33 @@ puzzle-pieces registry; it may be a local directory or an http(s) URL.`,
 
 func init() {
 	addCmd.Flags().String("registry", "", "Piece registry source: a local directory or http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the public registry)")
-	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces")
+	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces or skills")
 	addCmd.Flags().String("dir", "", "App root to add pieces into (default: walk up from the current directory for package.json/puzzle.config.js)")
 	rootCmd.AddCommand(addCmd)
 }
 
 // runAdd dispatches on the requested integration/selector. args[0] selects:
 // "tailwind"/"tailwindcss" wire the Tailwind pipeline (unchanged); "piece"
-// copies the remaining args as piece names from the registry.
+// copies the remaining args as piece names from the registry; "skills"/"skill"
+// installs the embedded Puzzle agent skill into detected tool config dirs.
 func runAdd(w io.Writer, out *ui.Printer, dir string, args []string, registry string, overwrite bool) error {
+	return runAddWithEnvironment(w, out, dir, args, registry, overwrite, addEnvironment{
+		homeDir:     os.UserHomeDir,
+		input:       os.Stdin,
+		interactive: ui.IsTerminal(os.Stdin),
+	})
+}
+
+func runAddWithEnvironment(w io.Writer, out *ui.Printer, dir string, args []string, registry string, overwrite bool, env addEnvironment) error {
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
 	case "tailwind", "tailwindcss":
 		return addTailwind(w, out, dir)
 	case "piece":
 		return addPieces(w, out, dir, registry, overwrite, args[1:])
+	case "skills", "skill":
+		return addSkills(w, out, overwrite, env)
 	default:
-		return fmt.Errorf("unknown integration %q (supported: tailwind, piece)", args[0])
+		return fmt.Errorf("unknown integration %q (supported: tailwind, piece, skills)", args[0])
 	}
 }
 
