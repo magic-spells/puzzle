@@ -17,7 +17,7 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified end-to-end at dce8052. Evidence: `puzzle build examples/stays` green in development
+      Verified end-to-end. Evidence: `puzzle build examples/stays` green in development
       (35.9 KB gzip) and production (20.1 KB gzip) modes; npm test 224/224; live browser walkthrough
       via Playwright against `puzzle dev` — all routes render (/, /search, /listing/:id, /account +
       3 nested children, catch-all 404, mobile 390px), search text filter narrows the grid, calendar

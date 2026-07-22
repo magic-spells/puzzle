@@ -15,7 +15,7 @@ notes:
   - kind: verified
     text: >-
       Verified at the merged main sha: three-seam base application reviewed against SPEC §23 at
-      ship; tests/router-base.test.js (20) + all router suites + full suite green at this sha (480
+      ship; tests/router-base.test.js (20) + all router suites + full suite green (480
       vitest).
 ---
 

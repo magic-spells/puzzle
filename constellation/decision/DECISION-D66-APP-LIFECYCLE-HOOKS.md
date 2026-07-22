@@ -12,7 +12,7 @@ verified_at: '2026-07-14T17:04:46.083Z'
 notes:
   - kind: verified
     text: >-
-      Verified at ship (1600ce7): runtime exactly as decided — awaited beforeMount pre-navigation-#0
+      Verified at ship: runtime exactly as decided — awaited beforeMount pre-navigation-#0
       with abort-teardown skipping beforeUnmount, non-awaited mounted post-HMR-restore with both
       error channels logged, sync beforeUnmount pre-teardown, mount()-time non-function validation,
       unmount()/#teardown() split. All ten seed-after-mount examples swept to beforeMount; music's

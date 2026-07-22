@@ -16,7 +16,7 @@ notes:
     text: >-
       Verified at the merged main sha: getter install/partition semantics reviewed against SPEC §21
       at ship; blog acceptance case landed (PostDetail traversals); tests/relationships.test.js (21)
-      + full suite green at this sha (480 vitest).
+      + full suite green (480 vitest).
 ---
 
 # v1.17 — Model relationships (`hasMany` / `belongsTo`)

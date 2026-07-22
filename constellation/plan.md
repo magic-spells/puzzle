@@ -17,7 +17,7 @@ D1-D76 in [[DOC-DECISIONS]] explain why the contract has its current shape.
 ## Current state
 
 - `0.1.0` is release-candidate code: v1 through v1.43, D1-D76, plus the
-  pre-release hardening at `3433c47`.
+  July 21 pre-release hardening pass.
 - Runtime, compiler, CLI, static generation, state-preserving dev reload,
   TypeScript transpilation, model validation/relationships/write sync, nested
   routing, slots, refs, scoped styles, animations, and optional morphs are all

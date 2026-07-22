@@ -44,7 +44,7 @@ The existing implementation is a pre-SPEC prototype. **None of it has ever run e
 
 ### 1.1 It has never compiled (fixed/confirmed)
 
-- The repo had **no `go.sum`**, so `go build ./...` failed before reaching any code. Fixed on this branch (commit `ecbe6af`).
+- The repo had **no `go.sum`**, so `go build ./...` failed before reaching any code. Fixed on this branch.
 - With deps resolved, the build still fails: **`watcher.go:69: undefined: os`** — `filepath.Walk` callback uses `os.FileInfo` without importing `os`. This was flagged in `project_plan.md` and is now empirically confirmed: the CLI has never been runnable from a clean checkout.
 
 ### 1.2 The parser cannot parse blocks — empirically verified

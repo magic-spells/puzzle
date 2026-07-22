@@ -17,7 +17,7 @@ notes:
       Verified at the merged main sha: parser validation, codegen emission (bare-slot byte-identity
       — pre-existing goldens unchanged), and ViewManager partition/fallback expansion reviewed
       against SPEC §24 at ship; tests/named-slots.test.js (7) + ~14 Go subtests + full suite green
-      at this sha (480 vitest + all Go).
+      (480 vitest + all Go).
 ---
 
 # v1.21 — Named slots

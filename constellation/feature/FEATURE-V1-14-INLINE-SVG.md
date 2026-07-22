@@ -13,7 +13,7 @@ verified_at: '2026-07-11T04:53:46.945Z'
 notes:
   - kind: verified
     text: >-
-      Verified at 90c993d: shipped end-to-end (parser, codegen resolve pass, plugin WatchFiles,
+      Verified: shipped end-to-end (parser, codegen resolve pass, plugin WatchFiles,
       runtime string-children seed, pzlc --assets, scaffold icon); all suites green.
   - kind: state
     text: >-

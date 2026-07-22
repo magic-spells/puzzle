@@ -17,7 +17,7 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified end-to-end at a571b6f. Evidence: `puzzle build examples/chat` green (21.6 KB gzip
+      Verified end-to-end. Evidence: `puzzle build examples/chat` green (21.6 KB gzip
       incl. app); npm test 275/275; 26-check Playwright drive against `puzzle dev`, twice
       consecutively all-green — seeded sidebar + Welcome hero, skeleton visible on first open (4
       pulse nodes at +180ms) with URL committed immediately, token streaming visible in the DOM with
@@ -36,7 +36,7 @@ notes:
       D16) — pass one object ({ text, model }) for multi-value callbacks.
   - kind: verified
     text: >-
-      Re-verified at 3e8794c after the Claude-style restyle (warm near-black + terracotta) and the
+      Re-verified after the Claude-style restyle (warm near-black + terracotta) and the
       AI composer card with model picker: 31-check Playwright drive all-green twice (26 prior checks
       + controlled select defaults to puzzle-core, selection sticks across re-renders, chosen model
       stamped on the reply meta, seeded meta variety). Build 22.3 KB gzip.

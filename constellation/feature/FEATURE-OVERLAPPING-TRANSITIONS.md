@@ -16,16 +16,16 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified at 373f0e6: tests/router-overlap.test.js (8 — pin styles + coexistence, hook
+      Verified: tests/router-overlap.test.js (8 — pin styles + coexistence, hook
       ordering, sequential-default guard, mid-overlap interruption with exactly-once destroys,
       reused-layout patch-driven teardown, instant-out, config validation) + tests/app.test.js
-      passthrough case; full suite 532 vitest + all Go packages green at this sha. Review pass by
+      passthrough case; full suite 532 vitest + all Go packages green. Review pass by
       the orchestrator added the settle-handler .catch (a throwing viewWillHide/viewDidHide would
       otherwise strand the pinned leaver + surface an unhandled rejection) and the PuzzleApp
       transitionMode conditional passthrough.
   - kind: verified
     text: >-
-      v1.32 (PR #40): overlap semantics unchanged by the hardening pass (the router diffs —
+      v1.32: overlap semantics unchanged by the hardening pass (the router diffs —
       #observeMount, #runPendingPush finally, #pendingIndex, departure-scroll capture — are all
       orthogonal to the pin/concurrent-play machinery). Now exercised in REAL browsers: the
       Playwright suite asserts outgoing+incoming coexist mid-transition and no inline position:fixed

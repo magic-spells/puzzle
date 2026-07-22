@@ -21,7 +21,7 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified end-to-end at d458c40. Evidence: `puzzle build examples/chirp` green in development
+      Verified end-to-end. Evidence: `puzzle build examples/chirp` green in development
       (47.2 KB gzip) and production (30.1 KB gzip); npm test 272/272 (includes the new router
       regression test); 31-check Playwright walkthrough against `puzzle dev` — Home skeleton shimmer
       under a delayed posts.json then live feed, compose (280 counter, Escape-clears via

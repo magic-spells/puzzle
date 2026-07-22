@@ -11,7 +11,7 @@ verified_at: '2026-07-17T21:32:34.193Z'
 notes:
   - kind: verified
     text: >-
-      Verified at merge (PR #42, code commit 802c962): Go suites green on cold cache; vitest 736
+      Verified at merge: Go suites green on cold cache; vitest 736
       green; examples/todos dist byte-identical between a main-built and branch-built compiler; e2e
       probe (inline + block comment wrapping deliberately broken {#if} markup in Home.pzl) built
       clean with zero comment text in dist/ and app.js still byte-identical. styles.css caveat found

@@ -11,7 +11,7 @@ verified_at: '2026-07-14T17:04:48.129Z'
 notes:
   - kind: verified
     text: >-
-      Umbrella resolved at 1600ce7 by the D66 triage: app lifecycle hooks admitted and shipped as
+      Umbrella resolved by the D66 triage: app lifecycle hooks admitted and shipped as
       v1.31 (SPEC §34); settings/computed/methods, global keyboard events, $events, ctx.utils,
       devtools re-rejected with rationale in the DECISION card. Last planned feature card — backlog
       empty.

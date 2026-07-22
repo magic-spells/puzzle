@@ -13,7 +13,7 @@ verified_at: '2026-07-11T04:53:45.732Z'
 notes:
   - kind: verified
     text: >-
-      Verified at 90c993d: full Go suite + 365 vitest green; end-to-end puzzle init/build/dev
+      Verified: full Go suite + 365 vitest green; end-to-end puzzle init/build/dev
       exercised ({#svg} inlined vnode in bundle, .svg-edit live reload, missing-file recovery
       covered by build/watch tests).
 ---

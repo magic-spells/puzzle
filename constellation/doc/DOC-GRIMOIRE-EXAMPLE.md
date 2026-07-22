@@ -23,7 +23,7 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified end-to-end at a17a949. Evidence: three phased Opus builds each browser-verified
+      Verified end-to-end. Evidence: three phased Opus builds each browser-verified
       (scaffold: seed/routing/persistence/reactive toggles; editor core: 40+ assertions on
       typing/split/merge/convert/arrow-nav/paste/title echo; features: 50/50 checks on slash
       filter+convert+strip, Escape-leaves-text, divider-below on non-empty, turn-into re-seed with
@@ -36,7 +36,7 @@ notes:
       in pretest; production build 23.3 KB gzip.
   - kind: verified
     text: >-
-      Re-verified at 512fd2c after the origin/main merge and the islands renumber (v1.10→v1.13,
+      Re-verified after the origin/main merge and the islands renumber (v1.10→v1.13,
       D41/D42→D44/D45; the example's comments/README now cite the new numbers). The 13-check lead
       Playwright smoke re-ran green against the merged runtime (main's v1.10-v1.12 router/formatter
       changes coexist cleanly); 327 vitest with build:grimoire in pretest.

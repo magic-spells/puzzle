@@ -10,7 +10,7 @@ verified_at: '2026-07-15T22:04:51.554Z'
 notes:
   - kind: verified
     text: >-
-      Merged to main in PR #40 (b287053). Full verification at merge: 627 vitest, all Go packages +
+      Merged to main. Full verification at merge: 627 vitest, all Go packages +
       vet, 14 Playwright tests (Chromium+WebKit) including the scroll-restore regression guard,
       test:types, e2e-pack (real tarball install + build), verify-pack. Release remainders tracked
       outside this card: license text, NODE_AUTH_TOKEN secret, v0.1.0 tag.

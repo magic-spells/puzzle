@@ -21,7 +21,7 @@ verified_at: '2026-07-22T00:04:04.941Z'
 notes:
   - kind: verified
     text: >-
-      Verified at 9c143f7 (Phase 2+3 commit). Evidence: dev + prod builds green (prod 78.5 KB raw /
+      Verified (Phase 2+3). Evidence: dev + prod builds green (prod 78.5 KB raw /
       22.9 KB gzip incl. app); 260 vitest + all Go package suites pass; independent Playwright pass
       against the served production bundle in Chromium — drag-move commits exact deltas (Panel
       540,360 → 620,410 after +80/+50 drag), SE-handle resize exact (220×140 → 260×170 after

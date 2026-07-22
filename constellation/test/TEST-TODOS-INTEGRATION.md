@@ -17,13 +17,13 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified at b9131f2: 12 jsdom tests green driving a real PuzzleApp DOM-only —
+      Verified: 12 jsdom tests green driving a real PuzzleApp DOM-only —
       add/special-chars/toggle/filter (keyed
       identity)/delete/clear-completed/empty-state/persistence round-trip/loadAll upsert/13-op
       endurance. Fixture = compiler golden file #1.
   - kind: verified
     text: >-
-      Re-verified at 440f883: suite body extracted to tests/helpers/todos-suite.js (runTodosSuite)
+      Re-verified: suite body extracted to tests/helpers/todos-suite.js (runTodosSuite)
       and now runs TWICE — fixture variant (todos-app.test.js) and compiled variant
       (todos-app-compiled.test.js, modules fresh-compiled from the real .pzl sources by pzlc on
       every npm test). Zero behavioral differences; 144/144. The v1 loop is closed: compiler output
@@ -42,7 +42,7 @@ notes:
   - kind: verified
     text: >-
       Re-verified at the v1.16–v1.21 merge (fresh baseline — old one unreachable after squash). Both
-      lanes green in the 480-test run at this sha; compiled fixtures rebuilt by the pretest Go build
+      lanes green in the 480-test run; compiled fixtures rebuilt by the pretest Go build
       (which now carries the v1.12 formatter-guard emission and v1.20/v1.21 codegen — byte-identical
       for the todos fixtures, which use neither min-duration nor named slots). Todos app semantics
       untouched by v1.16–v1.21 (its schema rules were already satisfied by the app's writes).

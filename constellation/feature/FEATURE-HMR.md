@@ -20,17 +20,17 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified at 373f0e6: tests/hmr-dev-reload.test.js (13 — end-to-end transplant, one-shot +
+      Verified: tests/hmr-dev-reload.test.js (13 — end-to-end transplant, one-shot +
       expiry + corrupt-blob fail-soft, safe-filter units, window publish/clear, storage-less safety)
       + Go TestBuildDevDefineDCE (dev bundle keeps __puzzleHMR/__PUZZLE_APP__, prod DCEs both) +
       dev.go client test; live proof on examples/todos: dev build carries the hooks, prod build's
       only residue is the inert empty __devSnapshot method (48128 B). Gotcha baked into the code +
       test: the __PUZZLE_DEV__ probe MUST be spelled inline at each gate — a hoisted `const DEV`
       does not constant-propagate into class-method scopes and left dead `Z && …` guards in the prod
-      bundle (measured, fixed in review). 532 vitest + all Go green at this sha.
+      bundle (measured, fixed in review). 532 vitest + all Go green.
   - kind: verified
     text: >-
-      v1.32 (PR #40): two-phase restore (body updated) — store transplants pre-nav-#0 in _hydrateAll
+      v1.32: two-phase restore (body updated) — store transplants pre-nav-#0 in _hydrateAll
       replace mode (HMR beats configured storage on duplicate pks, identity preserved), view-local
       layer restores post-mount; snapshots serialize view._localState() only (derived values
       recomputed, never pinned). Fixes the masked bug where store-derived views rendered empty until

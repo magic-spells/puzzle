@@ -16,7 +16,7 @@ notes:
     text: >-
       Verified at the merged main sha: save/delete/request semantics reviewed against SPEC §22 at
       ship (validate-first, POST/PUT provenance, pk adoption, confirmed deletes);
-      tests/adapter-write.test.js (27) + full suite green at this sha (480 vitest).
+      tests/adapter-write.test.js (27) + full suite green (480 vitest).
 ---
 
 # v1.18 — Adapter write sync & custom adapter methods

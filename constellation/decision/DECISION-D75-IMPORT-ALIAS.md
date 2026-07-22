@@ -12,7 +12,7 @@ verified_at: '2026-07-21T21:31:58.788Z'
 notes:
   - kind: verified
     text: >-
-      Verified at merge (PR #49, merge f29d137): all Go packages green + 788/788 vitest on merged
+      Verified at merge: all Go packages green + 788/788 vitest on merged
       main. Resolution proven end-to-end, not just unit-tested — examples/chirp and examples/stays
       build with their converted '@/components/…' imports and the aliased component's markup lands
       in dist/app.js; `puzzle build --static` on examples/static-docs exercises the separate

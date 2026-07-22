@@ -17,7 +17,7 @@ notes:
       Verified at the merged main sha: min-duration hold reviewed against SPEC §16 v1.20 paragraphs
       at ship (loaded flips at swap, last-wins, destroy cancels; parser/codegen byte-identity for
       absent/0); tests/skeleton-antiflash.test.js (5) + Go parser/codegen cases + full suite green
-      at this sha (480 vitest + all Go).
+      (480 vitest + all Go).
 ---
 
 # v1.20 — Skeleton follow-ups

@@ -10,14 +10,14 @@ verified_at: '2026-07-17T08:28:24.546Z'
 notes:
   - kind: verified
     text: >-
-      Verified at commit fae3338: two-line guard in captureFromLeaving (snapshot skip + click-pin
+      Verified: two-line guard in captureFromLeaving (snapshot skip + click-pin
       condition) traced in the diff; 5 new vitest cases green (suite 725); browser-verified on the
       music demo — runtime-injected marker on the Album header → 0 reverse flights on back-nav,
       unmarked control cycle → forward + reverse both fly, no clone/blob/scroll-lock residue either
       way.
   - kind: verified
     text: >-
-      Verified at 21d9ed0 (the final trigger/target API, replacing the earlier fae3338 -target-only
+      Verified (the final trigger/target API, replacing the earlier -target-only
       cut): role-scoped launch/receive selectors + morphId() traced in the diff; 26 morph tests /
       736 suite green; browser QA on the music demo — trigger→target forward flight (click AND pure
       programmatic hash nav), zero reverse flights on back, plain Info-dialog live pair round-trips,

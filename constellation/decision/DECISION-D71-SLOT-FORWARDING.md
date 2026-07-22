@@ -15,15 +15,15 @@ verified_at: '2026-07-22T00:04:06.730Z'
 notes:
   - kind: verified
     text: >-
-      Verified at 9c199aa: expandNode/expandChildList descent + clone link preservation traced in
+      Verified: expandNode/expandChildList descent + clone link preservation traced in
       viewManager.js; walkSlots inCallSite named-marker rejection traced in slot.go;
       tests/slot-forwarding.test.js + slot-forwarding-compiled.test.js green in the 746-test suite;
       all D69 citations re-pointed to D71 (grep-clean outside morph code); SPEC §24 forwarding
       paragraph and DOC-DECISIONS index line landed in the same commit.
   - kind: verified
     text: >-
-      Re-verified at 10613c3: expandNode/expandChildList/expandSlots/partitionSlots untouched since
-      the 9c199aa stamp; slot.go's only change is the additive D72 ref-on-slot rejection firing
+      Re-verified: expandNode/expandChildList/expandSlots/partitionSlots untouched since
+      the prior stamp; slot.go's only change is the additive D72 ref-on-slot rejection firing
       before the D71 named-marker rule. Forwarding semantics intact.
   - kind: state
     text: >-

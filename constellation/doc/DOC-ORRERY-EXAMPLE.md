@@ -19,7 +19,7 @@ connections:
 notes:
   - kind: verified
     text: >-
-      Verified at caf6639. Evidence: `go run ./compiler/cmd/puzzle build examples/orrery --mode
+      Verified. Evidence: `go run ./compiler/cmd/puzzle build examples/orrery --mode
       development` green (app.js 93.6 KB / 25.0 KB gzip, styles.css, index.html); node --check on
       all 7 plain .js files; live Playwright walkthrough against the served dist in Chromium —
       canvas DPR-sized imperatively (726×518), scene paints (sun + rings + 5 seeded planets incl.
