@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/magic-spells/puzzle/compiler/internal/update"
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
 func TestFindProjectInstall(t *testing.T) {
@@ -116,7 +117,7 @@ func TestUpgradeCheckOnlyReports(t *testing.T) {
 	if err := runUpgrade(&stdout, &stderr, plainPrinter(), t.TempDir(), "", true); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "puzzle 0.2.0 available (current 0.1.0)") {
+	if !strings.Contains(stdout.String(), "puzzle 0.2.0 available (current "+version.Version+")") {
 		t.Fatalf("check output missing version comparison:\n%s", stdout.String())
 	}
 	if _, err := update.ReadCache(); err == nil {
@@ -126,14 +127,14 @@ func TestUpgradeCheckOnlyReports(t *testing.T) {
 
 func TestUpgradeUpToDateOutput(t *testing.T) {
 	oldFetchLatest := fetchLatest
-	fetchLatest = func(time.Duration) (string, error) { return "0.1.0", nil }
+	fetchLatest = func(time.Duration) (string, error) { return version.Version, nil }
 	t.Cleanup(func() { fetchLatest = oldFetchLatest })
 
 	var stdout bytes.Buffer
 	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), t.TempDir(), "", true); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := stdout.String(), "✓ puzzle 0.1.0 is up to date\n"; got != want {
+	if got, want := stdout.String(), "✓ puzzle "+version.Version+" is up to date\n"; got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
 }
@@ -237,7 +238,7 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			if strings.TrimSpace(string(cwd)) != project {
 				t.Fatalf("command cwd = %q, want %q", strings.TrimSpace(string(cwd)), project)
 			}
-			if !strings.Contains(stdout.String(), "✓ upgraded 0.1.0 → 0.2.0") {
+			if !strings.Contains(stdout.String(), "✓ upgraded "+version.Version+" → 0.2.0") {
 				t.Fatalf("success output missing:\n%s", stdout.String())
 			}
 			cached, err := update.ReadCache()

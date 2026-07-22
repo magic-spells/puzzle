@@ -31,8 +31,10 @@ run.
 
 ## Current release state
 
-- Package version: `0.1.0`, preparing for the first public npm release.
-- Product line: v1 through v1.43, decisions D1-D76, plus the July 21
+- Published: `0.1.0` went live on npm 2026-07-21 (all five packages, MIT,
+  manual publish via `npm run release:prep` — there is no CI publish).
+  Working version: `0.1.1` (interactive `puzzle init` prompts, D77/v1.44).
+- Product line: v1 through v1.44, decisions D1-D77, plus the July 21
   pre-release correctness/performance hardening pass.
 - Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`, and
   `./puzzle-env` exports plus a `puzzle` binary shim and four optional platform
@@ -43,8 +45,9 @@ run.
 - Canonical app: `examples/todos`. Other examples are acceptance cases for
   routing, data, TypeScript, morphs, static output, DOM islands, canvas, and
   virtual scrolling.
-- Release blockers are documentation/package verification and the human npm
-  publish step, not unfinished framework features.
+- Releases are published by hand: bump versions everywhere (package.json +
+  optionalDependencies pins, four platform manifests, version.go), run
+  `npm run release:prep`, publish the four platform packages, then the root.
 
 ## Architecture at a glance
 

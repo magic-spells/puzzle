@@ -107,6 +107,7 @@ slice-of-work view.
 - **D74** [[DECISION-D74-CHILDREN-MARKER]] — `<children/>` replaces the bare `<slot/>`: one role per spelling (`<children/>` default marker with optional fallback, `<slot name>` named-only with `name` required, `<Slot/>` router outlet, bare-only); emission byte-stable (`SLOT_TAG` markers unchanged), runtime/SSG untouched; amends D16/D53/D71 spellings pre-npm-publish (v1.41 → SPEC §24)
 - **D75** [[DECISION-D75-IMPORT-ALIAS]] — the `@` app import alias: `@/…` resolves to the app's `app/` directory in every bundle (one esbuild alias entry, segment-boundary matching leaves `@magic-spells/…` untouched); fixed and zero-config, a general `resolve.alias` stays deferred (v1.42 → SPEC §40)
 - **D76** [[DECISION-D76-CLI-UPGRADE]] — CLI update notification + `puzzle upgrade`: `build`/`dev` print a cache-first, never-blocking newer-release notice (TTY-only; `CI`/`PUZZLE_NO_UPDATE_CHECK` skip it); `upgrade` detects project/global/manual install context and drives the user's own package manager (lockfile-detected, dep-field preserved, result confirmed) — npm stays the owner of installation, the binary never self-replaces (v1.43 → SPEC §41)
+- **D77** [[DECISION-D77-INIT-PROMPTS]] — interactive `puzzle init`: TTY-gated template + TypeScript prompts when the flags are absent (name → template → TS, flags win, non-TTY byte-identical); widens D32's sole prompt exception now that the installed CLI is the only onboarding path — `create-puzzle-app` stays unpublished (v1.44 → SPEC §42)
 
 ## Open questions (tracked, not yet decided)
 
