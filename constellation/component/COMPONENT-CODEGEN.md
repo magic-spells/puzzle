@@ -8,7 +8,6 @@ connections:
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
 verified_at: '2026-07-22T01:03:36.670Z'
-verified_sha: 5f16d58d1472c1c1f8f4266e9cc4c0ae40ad14d1
 ---
 
 # Render-function codegen

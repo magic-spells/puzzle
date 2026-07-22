@@ -3,7 +3,6 @@ name: Puzzle Chat (examples/chat) — AI-assistant demo app
 kind: reference-app
 status: verified
 verified_at: '2026-07-22T00:04:05.040Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 connections:
   - DOC-STAYS-EXAMPLE
   - COMPONENT-PUZZLE-APP
@@ -27,7 +26,6 @@ notes:
       seed data, clock + timeago formatters, @click:stop delete without navigation, active-thread
       delete returns home, catch-all 404, zero console/page errors. Full-height shell confirmed
       (sidebar 800/800px viewport).
-    sha: a571b6ffdf32ed9117f929f4f8fb8ea8127edf4d
   - kind: gotcha
     text: >-
       Controlled <select>: the vdom assigns the select's `value` property during attr-patching
@@ -36,14 +34,12 @@ notes:
       value={ state } for re-renders (Composer.pzl does both). Also: component callback props
       forward only the FIRST argument (the parent binding compiles to `(event) => handler(event)`,
       D16) — pass one object ({ text, model }) for multi-value callbacks.
-    sha: 3e8794c176b86dd354cfc7f0e63bcf1f1a017c07
   - kind: verified
     text: >-
       Re-verified at 3e8794c after the Claude-style restyle (warm near-black + terracotta) and the
       AI composer card with model picker: 31-check Playwright drive all-green twice (26 prior checks
       + controlled select defaults to puzzle-core, selection sticks across re-renders, chosen model
       stamped on the reply meta, seeded meta variety). Build 22.3 KB gzip.
-    sha: 3e8794c176b86dd354cfc7f0e63bcf1f1a017c07
 ---
 
 # Puzzle Chat (examples/chat)

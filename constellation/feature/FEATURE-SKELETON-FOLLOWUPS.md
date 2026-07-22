@@ -11,7 +11,6 @@ connections:
   - DOC-PUZZLE-FILE
   - DOC-SPEC
 verified_at: '2026-07-12T00:14:51.161Z'
-verified_sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 notes:
   - kind: verified
     text: >-
@@ -19,7 +18,6 @@ notes:
       at ship (loaded flips at swap, last-wins, destroy cancels; parser/codegen byte-identity for
       absent/0); tests/skeleton-antiflash.test.js (5) + Go parser/codegen cases + full suite green
       at this sha (480 vitest + all Go).
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 ---
 
 # v1.20 — Skeleton follow-ups

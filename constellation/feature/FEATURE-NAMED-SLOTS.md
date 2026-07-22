@@ -11,7 +11,6 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
 verified_at: '2026-07-12T00:14:51.270Z'
-verified_sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 notes:
   - kind: verified
     text: >-
@@ -19,7 +18,6 @@ notes:
       — pre-existing goldens unchanged), and ViewManager partition/fallback expansion reviewed
       against SPEC §24 at ship; tests/named-slots.test.js (7) + ~14 Go subtests + full suite green
       at this sha (480 vitest + all Go).
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 ---
 
 # v1.21 — Named slots

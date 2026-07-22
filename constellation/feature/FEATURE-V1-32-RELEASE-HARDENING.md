@@ -7,7 +7,6 @@ connections:
   - DOC-DATASTORE
 kind: amendment
 verified_at: '2026-07-15T22:04:51.554Z'
-verified_sha: b28705330ce4399f214ddd34309f01fd6a655b86
 notes:
   - kind: verified
     text: >-
@@ -15,7 +14,6 @@ notes:
       vet, 14 Playwright tests (Chromium+WebKit) including the scroll-restore regression guard,
       test:types, e2e-pack (real tarball install + build), verify-pack. Release remainders tracked
       outside this card: license text, NODE_AUTH_TOKEN secret, v0.1.0 tag.
-    sha: b28705330ce4399f214ddd34309f01fd6a655b86
 ---
 
 The pre-0.1.0 hardening bundle (branch fix/pre-0.1.0-hardening, SPEC §35): the fifth

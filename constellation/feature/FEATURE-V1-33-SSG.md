@@ -2,7 +2,6 @@
 name: v1.33 — Static site generation (D67)
 status: verified
 verified_at: '2026-07-17T04:04:00.000Z'
-verified_sha: 6e865ddbdce0bdaca867070b8780de123addf58a
 connections:
   - DECISION-D67-SSG-STATIC-BUILD
   - DECISION-D01-SPA-ONLY

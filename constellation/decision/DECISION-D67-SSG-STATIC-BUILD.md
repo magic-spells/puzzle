@@ -2,7 +2,6 @@
 name: "D67 — Static site generation as an additive build output mode"
 status: verified
 verified_at: '2026-07-22T01:03:46.828Z'
-verified_sha: 5f16d58d1472c1c1f8f4266e9cc4c0ae40ad14d1
 connections:
   - DECISION-D01-SPA-ONLY
   - COMPONENT-ROUTER

@@ -12,7 +12,6 @@ connections:
   - DOC-PUZZLE-FILE
   - DOC-SPEC
 verified_at: '2026-07-14T07:08:05.177Z'
-verified_sha: f867f10b5a09efb6fbf650f0d5432cc0edc17332
 notes:
   - kind: verified
     text: >-
@@ -20,7 +19,6 @@ notes:
       codegen.ScopeID (FNV-1a over slash-normalized relative path), root-only stamp covering
       view/component/skeleton renders, plugin-side @scope wrapping with an id-agreement test;
       unscoped goldens byte-identical; 540 vitest + all Go green.
-    sha: f867f10b5a09efb6fbf650f0d5432cc0edc17332
 ---
 
 # D59 — Scoped styles: `<styles scoped>` via native `@scope` wrapping

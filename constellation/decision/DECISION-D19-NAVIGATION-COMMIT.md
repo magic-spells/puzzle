@@ -2,7 +2,6 @@
 name: "D19 — Navigation semantics: commit-ordered URL, nav tokens, catch-all 404, layout reuse"
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
-verified_sha: 95cc18ec36d881132ee5c43e9288ceeb00b31fd2
 connections:
   - COMPONENT-ROUTER
   - DOC-VIEW-LIFECYCLE

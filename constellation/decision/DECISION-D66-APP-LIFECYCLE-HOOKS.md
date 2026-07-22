@@ -9,7 +9,6 @@ connections:
   - COMPONENT-PUZZLE-APP
   - DOC-SPEC
 verified_at: '2026-07-14T17:04:46.083Z'
-verified_sha: 1600ce7f34f7a486f9fdb2d4b20c5d986f70a48c
 notes:
   - kind: verified
     text: >-
@@ -18,7 +17,6 @@ notes:
       error channels logged, sync beforeUnmount pre-teardown, mount()-time non-function validation,
       unmount()/#teardown() split. All ten seed-after-mount examples swept to beforeMount; music's
       seedReady export + six view preambles deleted. 13 new tests; 553 vitest + all Go green.
-    sha: 1600ce7f34f7a486f9fdb2d4b20c5d986f70a48c
 ---
 
 # D66 — App lifecycle hooks: `beforeMount` / `mounted` / `beforeUnmount`

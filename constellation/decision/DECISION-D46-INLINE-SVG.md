@@ -10,14 +10,12 @@ connections:
   - DOC-COMPILER-DESIGN
   - DOC-SPEC
 verified_at: '2026-07-11T04:53:45.732Z'
-verified_sha: 90c993d6d39c09b4794754baf574f883cf59f1e9
 notes:
   - kind: verified
     text: >-
       Verified at 90c993d: full Go suite + 365 vitest green; end-to-end puzzle init/build/dev
       exercised ({#svg} inlined vnode in bundle, .svg-edit live reload, missing-file recovery
       covered by build/watch tests).
-    sha: 90c993d6d39c09b4794754baf574f883cf59f1e9
 ---
 
 # D46 — `{#svg 'path'}` compile-time SVG inlining (v1.14)

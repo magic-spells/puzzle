@@ -2,7 +2,6 @@
 name: "v1.13 — DOM islands + backspace/delete key filters"
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
-verified_sha: 95cc18ec36d881132ee5c43e9288ceeb00b31fd2
 connections:
   - DECISION-D44-DOM-ISLANDS
   - DECISION-D45-BACKSPACE-DELETE-FILTERS

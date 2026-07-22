@@ -10,13 +10,11 @@ connections:
   - DOC-COMPILER-DESIGN
   - DOC-SPEC
 verified_at: '2026-07-11T04:53:46.945Z'
-verified_sha: 90c993d6d39c09b4794754baf574f883cf59f1e9
 notes:
   - kind: verified
     text: >-
       Verified at 90c993d: shipped end-to-end (parser, codegen resolve pass, plugin WatchFiles,
       runtime string-children seed, pzlc --assets, scaffold icon); all suites green.
-    sha: 90c993d6d39c09b4794754baf574f883cf59f1e9
   - kind: state
     text: >-
       SVG-asset DEDUP amendment (branch feat/svg-asset-dedup, stacked on

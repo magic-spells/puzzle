@@ -24,7 +24,6 @@ connections:
   - FLOW-BUILD
   - FLOW-REACTIVITY
 verified_at: '2026-07-22T00:04:05.875Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 ---
 
 # Puzzle 0.1 release surface

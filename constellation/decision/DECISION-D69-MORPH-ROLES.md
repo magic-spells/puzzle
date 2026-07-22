@@ -7,7 +7,6 @@ connections:
   - COMPONENT-MORPH
   - DOC-SPEC
 verified_at: '2026-07-17T08:28:24.546Z'
-verified_sha: 21d9ed03f5e960a40e6cfa603f5509b80e03e1cb
 notes:
   - kind: verified
     text: >-
@@ -16,7 +15,6 @@ notes:
       music demo — runtime-injected marker on the Album header → 0 reverse flights on back-nav,
       unmarked control cycle → forward + reverse both fly, no clone/blob/scroll-lock residue either
       way.
-    sha: fae333826e6a0946159d2d09c267813232b7d645
   - kind: verified
     text: >-
       Verified at 21d9ed0 (the final trigger/target API, replacing the earlier fae3338 -target-only
@@ -24,7 +22,6 @@ notes:
       736 suite green; browser QA on the music demo — trigger→target forward flight (click AND pure
       programmatic hash nav), zero reverse flights on back, plain Info-dialog live pair round-trips,
       no residue.
-    sha: 21d9ed03f5e960a40e6cfa603f5509b80e03e1cb
 ---
 
 # D69 — Directional morph roles: `data-puzzle-morph-trigger` / `data-puzzle-morph-target` (v1.36)

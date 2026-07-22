@@ -6,7 +6,6 @@ connections:
   - DECISION-D53-NAMED-SLOTS
   - DOC-SPEC
 verified_at: '2026-07-14T07:08:23.035Z'
-verified_sha: f867f10b5a09efb6fbf650f0d5432cc0edc17332
 ---
 
 # Virtual scrolling

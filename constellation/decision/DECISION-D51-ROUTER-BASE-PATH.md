@@ -11,13 +11,11 @@ connections:
   - DOC-ROUTER
   - DOC-SPEC
 verified_at: '2026-07-12T00:15:00.443Z'
-verified_sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 notes:
   - kind: verified
     text: >-
       Decision implemented as written and verified at the merged main sha (480 vitest green); no
       deviations from the recorded contract.
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
   - kind: state
     text: >-
       Round-3 fix (fix/code-review-round3): click interception now also accepts the exact '#'+base

@@ -2,7 +2,6 @@
 name: Cross-fade / overlapping route transitions
 status: verified
 verified_at: '2026-07-22T01:03:43.287Z'
-verified_sha: 5f16d58d1472c1c1f8f4266e9cc4c0ae40ad14d1
 connections:
   - DECISION-D56-OVERLAP-TRANSITIONS
   - DECISION-D28-ANIMATIONS
@@ -24,7 +23,6 @@ notes:
       the orchestrator added the settle-handler .catch (a throwing viewWillHide/viewDidHide would
       otherwise strand the pinned leaver + surface an unhandled rejection) and the PuzzleApp
       transitionMode conditional passthrough.
-    sha: 373f0e60d7cc827411dbb7a8fcdfa7185f86be45
   - kind: verified
     text: >-
       v1.32 (PR #40): overlap semantics unchanged by the hardening pass (the router diffs —
@@ -33,7 +31,6 @@ notes:
       Playwright suite asserts outgoing+incoming coexist mid-transition and no inline position:fixed
       pin survives settle, on Chromium AND WebKit. Documented as EXPERIMENTAL for 0.1.0 in README
       (interaction-matrix caution: overlap×morph, overlap×nested-reused-layout).
-    sha: b28705330ce4399f214ddd34309f01fd6a655b86
 ---
 
 # v1.24 — Overlapping route transitions

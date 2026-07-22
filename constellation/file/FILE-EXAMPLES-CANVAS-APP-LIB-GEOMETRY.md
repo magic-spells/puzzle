@@ -7,7 +7,6 @@ summary: Load-bearing file for DOC-CANVAS-EXAMPLE.
 connections:
   - DOC-CANVAS-EXAMPLE
 verified_at: '2026-07-22T00:04:11.936Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 ---
 
 # geometry.js

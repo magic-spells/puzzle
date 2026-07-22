@@ -16,7 +16,6 @@ connections:
   - FILE-CODEGEN
   - FILE-VIEW-MANAGER
 verified_at: '2026-07-22T01:03:40.412Z'
-verified_sha: 5f16d58d1472c1c1f8f4266e9cc4c0ae40ad14d1
 notes:
   - kind: verified
     text: >-
@@ -28,7 +27,6 @@ notes:
       green; every respelled example .pzl compile-checked via pzlc (12/12). Runtime/SSG/router
       zero-diff as designed. Implementation by two Opus subagents against this card's contract;
       reviewed + verified by the session orchestrator.
-    sha: 6579995c284b81d4c24a81d037d3965b540efd08
 ---
 
 # D74 — `<children/>`: the default marker leaves the `slot` word (v1.41)

@@ -10,7 +10,6 @@ connections:
   - TEST-TODOS-INTEGRATION
   - DOC-SPEC
 verified_at: '2026-07-14T07:08:15.922Z'
-verified_sha: f867f10b5a09efb6fbf650f0d5432cc0edc17332
 ---
 
 # v1.26 — List keying

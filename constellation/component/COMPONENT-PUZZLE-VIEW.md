@@ -17,7 +17,6 @@ notes:
       keys. A successful data() replaces the model layer, so reusing one key for
       raw local state and a reshaped model value loses the raw value by design.
 verified_at: '2026-07-22T00:04:07.617Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 ---
 
 # PuzzleView

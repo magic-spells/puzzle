@@ -9,7 +9,6 @@ connections:
   - DOC-USER-GUIDE
   - DECISION-D28-ANIMATIONS
 verified_at: '2026-07-19T05:39:52.996Z'
-verified_sha: 3dae90eb5a8830b9b9eb128a191d858a2c10216b
 notes:
   - kind: verified
     text: >-
@@ -21,7 +20,6 @@ notes:
       snapshot-iterated delivery, empty-set unobserve, empty-bucket disconnect), PuzzleView
       #deferredEnter/#useVisibleTrigger/#resolveAnchor/#abortEnter wiring incl.
       destroy-resolves-pending playIn and playOut unwind. No deviations from the card's contract.
-    sha: 3dae90eb5a8830b9b9eb128a191d858a2c10216b
 ---
 
 # D73 — Scroll-triggered enter animations: `trigger: 'visible'` on the `in` spec (v1.40)

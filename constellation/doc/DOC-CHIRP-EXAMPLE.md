@@ -3,7 +3,6 @@ name: Chirp (examples/chirp) — Twitter-clone example app
 kind: reference-app
 status: verified
 verified_at: '2026-07-22T00:04:05.137Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 connections:
   - DOC-STAYS-EXAMPLE
   - DOC-BLOG-EXAMPLE
@@ -32,7 +31,6 @@ notes:
       chirp), unknown-handle state, Explore trends/search/enter-key/no-results {#unless}/Follow
       toggle, notifications {#case} rows + mark-all-read draining the layout badge live, catch-all
       404, and localStorage persistence of a composed chirp across reload. Zero console/page errors.
-    sha: d458c40762129a438ad9678b2981ec8899414a3f
 ---
 
 # Chirp (examples/chirp)

@@ -3,7 +3,6 @@ name: Puzzle Orrery (examples/orrery) — canvas × datastore animation demo
 kind: reference-app
 status: verified
 verified_at: '2026-07-22T00:04:05.804Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 connections:
   - DOC-STAYS-EXAMPLE
   - DOC-BLOG-EXAMPLE
@@ -28,7 +27,6 @@ notes:
       6th body record and the panel gained its row (store→DOM and canvas→store both live), Pause
       froze successive frames exactly, zero app console errors (only the sandbox-blocked Google
       Fonts fetch, same as kanban).
-    sha: caf663997be0bcdfc56310cb1975800ac7f9a0fc
 ---
 
 # Puzzle Orrery (examples/orrery)

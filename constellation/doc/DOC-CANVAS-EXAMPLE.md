@@ -18,7 +18,6 @@ connections:
   - FILE-EXAMPLES-CANVAS-README
   - FILE-EXAMPLES-CANVAS-PLAN
 verified_at: '2026-07-22T00:04:04.941Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 notes:
   - kind: verified
     text: >-
@@ -29,7 +28,6 @@ notes:
       +40/+30), Escape mid-drag leaves position untouched, stack reorder swaps Title/Subtitle order
       in the Profile card, marquee selects 2 free elements, zero page errors (only sandbox font
       fetch + favicon 404 console noise, same as kanban/orrery).
-    sha: 9c143f7abd4235242555cffe6508efee747e7285
 ---
 
 # Puzzle Studio (examples/canvas)

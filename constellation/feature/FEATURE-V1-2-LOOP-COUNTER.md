@@ -2,7 +2,6 @@
 name: "v1.2 — Loop counter binding"
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
-verified_sha: 95cc18ec36d881132ee5c43e9288ceeb00b31fd2
 connections:
   - DECISION-D29-LOOP-COUNTER
   - COMPONENT-TEMPLATE-PARSER

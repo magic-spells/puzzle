@@ -11,13 +11,11 @@ connections:
   - DOC-MODELS
   - DOC-SPEC
 verified_at: '2026-07-12T00:14:59.496Z'
-verified_sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 notes:
   - kind: verified
     text: >-
       Decision implemented as written and verified at the merged main sha (480 vitest green); no
       deviations from the recorded contract.
-    sha: 60276918bffe8a470ff6b9e8ff7eb926e994b9e6
 ---
 
 # D50 — Adapter write path: explicit `save()`/`delete()` verbs, local-first, validate-before-sync (v1.18)

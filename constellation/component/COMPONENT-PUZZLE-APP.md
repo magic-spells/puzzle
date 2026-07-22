@@ -18,7 +18,6 @@ notes:
       call const pending = app.mount(); wire(app.store); await pending, or live in
       beforeMount.
 verified_at: '2026-07-22T01:03:39.466Z'
-verified_sha: 5f16d58d1472c1c1f8f4266e9cc4c0ae40ad14d1
 ---
 
 # PuzzleApp

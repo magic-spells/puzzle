@@ -9,7 +9,6 @@ connections:
   - DECISION-D03-SCRIPTS-REAL-JS
   - DECISION-D67-SSG-STATIC-BUILD
 verified_at: '2026-07-21T21:31:58.788Z'
-verified_sha: f29d1376409fcf854719ba0844073f51f7059e20
 notes:
   - kind: verified
     text: >-
@@ -20,7 +19,6 @@ notes:
       prerender BuildOptions; `puzzle dev` serves the aliased bundle (watch path). Renumbered from
       D73/§39/v1.40 during the merge — main had taken those for scroll-trigger animations (D73) and
       <children/> (D74) while the branch was open.
-    sha: f29d1376409fcf854719ba0844073f51f7059e20
 ---
 
 # D75 — The `@` app import alias (v1.42)

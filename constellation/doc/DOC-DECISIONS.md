@@ -2,7 +2,6 @@
 name: DECISIONS.md — decision-log index (D1–D75)
 status: verified
 verified_at: '2026-07-22T00:04:05.457Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 connections:
   - DOC-SPEC
 ---

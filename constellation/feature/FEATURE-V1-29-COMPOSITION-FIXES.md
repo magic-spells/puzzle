@@ -3,7 +3,6 @@ name: v1.29 — composition-layer fixes (handler caching, hidden-tab flush, memo
 kind: amendment
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
-verified_sha: 95cc18ec36d881132ee5c43e9288ceeb00b31fd2
 connections:
   - DECISION-D62-HANDLER-CACHING
   - DECISION-D63-HIDDEN-TAB-FLUSH

@@ -11,7 +11,6 @@ connections:
   - DECISION-D44-DOM-ISLANDS
   - DECISION-D62-HANDLER-CACHING
 verified_at: '2026-07-17T23:27:05.105Z'
-verified_sha: 10613c327cac6e46be4fc4f2ecb258cedcae5528
 notes:
   - kind: verified
     text: >-
@@ -21,7 +20,6 @@ notes:
       ref:this.__ref("newTodoInput") exactly (call site + method definition = the only two __ref
       occurrences), no ref DOM attribute. Merge with round-5's viewManager/PuzzleView changes
       auto-resolved and re-verified.
-    sha: 10613c327cac6e46be4fc4f2ecb258cedcae5528
 ---
 
 # D72 — Element refs: static `ref="name"` → `this.refs.name` (v1.39)

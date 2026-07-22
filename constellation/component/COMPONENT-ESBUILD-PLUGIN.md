@@ -16,7 +16,6 @@ connections:
   - FILE-STYLES
   - FILE-STYLES-WATCH
 verified_at: '2026-07-22T00:04:07.365Z'
-verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
 ---
 
 # esbuild plugin and build pipeline
