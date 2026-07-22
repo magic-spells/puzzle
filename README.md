@@ -156,33 +156,33 @@ are useful for documentation ##}
 ### Control Flow
 
 ```html
-<!-- Conditionals (with {:else if} chaining, v1.9) -->
+<!-- Conditionals with {:else if} chaining -->
 {#if loggedIn}
-<p>Welcome back!</p>
+  <p>Welcome back!</p>
 {:else if loading}
-<p>Loading...</p>
+  <p>Loading...</p>
 {:else}
-<p>Please log in</p>
+  <p>Please log in</p>
 {/if}
 
 <!-- Loops -->
 {#for item in items}
-<li>{ item.name }</li>
+  <li>{ item.name }</li>
 {/for}
 
-<!-- Multi-branch (v1.7) -->
+<!-- Multi-branch; a {:when} takes comma-separated values, matching any of them -->
 {#case status}
-  {:when 'loading'}
+  {:when 'loading', 'paused'}
     <LoadingSpinner />
-  {:when 'error'}
+  {:when 'error', 'no-connection'}
     <ErrorMessage />
   {:else}
     <SuccessContent />
 {/case}
 
-<!-- Inverted conditional (v1.7) -->
+<!-- Inverted conditional -->
 {#unless user.isAdmin}
-<p>Access denied</p>
+  <p>Access denied</p>
 {/unless}
 ```
 
@@ -199,12 +199,12 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
   <select value={ selectedOption }></select>
 </form>
 
-<!-- Event modifiers (v1.7): prevent / stop / once + key filters, and they stack -->
+<!-- Event modifiers: prevent / stop / once + key filters, and they stack -->
 <input @keydown:enter={ handleSubmit } @keydown:escape:prevent={ cancelEdit } />
 <button @click:once={ claimReward }>Claim</button>
 ```
 
-**Event modifiers (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) shipped in v1.7 (D38).** They stack; canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §5.
+**Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §5.
 
 ### Slots & Nested Routing
 
@@ -216,7 +216,7 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
   <!-- routed view renders here -->
 </div>
 
-<!-- Named component slots (v1.21): static slot="name" on a direct child -->
+<!-- Named component slots: static slot="name" on a direct child -->
 <Card>
   <h2 slot="header">Card Title</h2>
   <p>Card content</p>
@@ -224,9 +224,9 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 </Card>
 ```
 
-**Named slots shipped in v1.21 (D53).** The child declares regions with `<slot name="header">fallback</slot>`, and the call site routes a direct child into one with a static `slot="header"` attribute (stripped from the rendered output). Routed views fill the default slot only. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §24.
+**Named slots.** The child declares regions with `<slot name="header">fallback</slot>`, and the call site routes a direct child into one with a static `slot="header"` attribute (stripped from the rendered output). Routed views fill the default slot only. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §24.
 
-Reusable components declare default child content with `<children/>` (D74):
+Reusable components declare default child content with `<children/>`:
 
 ```html
 <article class="card">
@@ -237,6 +237,17 @@ Reusable components declare default child content with `<children/>` (D74):
 ## Built-in Formatters
 
 Formatters transform data for display without modifying the underlying values.
+They chain left to right with `|`, so each one receives the previous result:
+
+```html
+{ title | downcase | replace('-', ' ') }
+<!-- "My-Blog-Post" → "my blog post" -->
+{ post.body | trim | truncate(140) | capitalize }
+<!-- Chains can be any length; arguments go in parentheses -->
+```
+
+An unregistered formatter name never crashes a render — the value passes
+through that step unchanged and a single `console.error` names the offender.
 
 ### String Formatters
 
@@ -332,7 +343,7 @@ Formatters transform data for display without modifying the underlying values.
       }
     }
 
-    // `click` is a callback prop (D16): a parent writes <Button @click={ handler }>
+    // `click` is a callback prop: a parent writes <Button @click={ handler }>
     // and the compiler hands the child a function on this.props.click. There is
     // no this.$emit — the child gates the event, the parent's function does the work.
     events = {
@@ -406,7 +417,7 @@ disable it; the check is skipped automatically when `CI` is set.
 `puzzle upgrade` updates a project or global package-manager install;
 `puzzle upgrade --check` only reports the current and latest versions.
 
-The full CLI surface shipped in v1.4 (D32 — see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §13): `init`, `generate`, `add`, `doctor`, and `info` join `dev` and `build`.
+The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §13): `init`, `generate`, `add`, `doctor`, and `info` join `dev` and `build`.
 
 ```bash
 # Scaffold a project; omitting the name prompts only in an interactive terminal
