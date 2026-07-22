@@ -22,8 +22,10 @@ Cobra command surface shipped by the platform binary:
   static build and prints raw/gzip output plus prerender summaries.
 - `puzzle dev [dir] --port` starts [[COMPONENT-DEV-SERVER]].
 - `puzzle init <name>` embeds `default` and `todos` app trees, with optional
-  TypeScript editor config. A TTY may prompt for a missing name; non-TTY input
-  never hangs. Targets are npm-name validated and must be empty.
+  TypeScript editor config. On a TTY it prompts for whatever was not given —
+  missing name, then template, then TypeScript y/N (D77; explicit flags are
+  never re-asked); non-TTY input never prompts and never hangs. Targets are
+  npm-name validated and must be empty.
 - `puzzle generate` / `g` creates component/view/layout/model stubs. `.pzl`
   templates compile in tests, and model generation prints registry wiring
   instead of rewriting user JavaScript.

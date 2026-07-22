@@ -11,13 +11,14 @@ a reactive browser runtime, and a Go + esbuild compiler/CLI. Optional static
 generation prerenders routes without adding an SSR server or hydration layer.
 
 [[DOC-SPEC]] is the enforceable contract and wins all conflicts. Decisions
-D1-D76 in [[DOC-DECISIONS]] explain why the contract has its current shape.
+D1-D77 in [[DOC-DECISIONS]] explain why the contract has its current shape.
 [[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
 
 ## Current state
 
-- `0.1.0` is release-candidate code: v1 through v1.43, D1-D76, plus the
-  July 21 pre-release hardening pass.
+- `0.1.0` shipped publicly on npm 2026-07-21 (MIT, five packages, manual
+  publish). In progress: `0.1.1` with interactive `puzzle init` prompts
+  (D77/v1.44).
 - Runtime, compiler, CLI, static generation, state-preserving dev reload,
   TypeScript transpilation, model validation/relationships/write sync, nested
   routing, slots, refs, scoped styles, animations, and optional morphs are all
@@ -26,8 +27,8 @@ D1-D76 in [[DOC-DECISIONS]] explain why the contract has its current shape.
   optional macOS/Linux binaries for arm64/x64.
 - `examples/todos` is the canonical integration app. The rest of `examples/`
   are focused acceptance/showcase apps.
-- The feature backlog is empty. Remaining release work is truthing docs,
-  package verification, tag/publish, and launch assets.
+- The 0.1.0 backlog is done and published; open work is the 0.1.1 init
+  prompts and launch assets (demo links, announcement).
 
 ## Deferred / known limitations
 

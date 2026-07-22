@@ -26,34 +26,57 @@ becomes an npm package name, so it must be lowercase letters, digits and
 hyphens, starting with a letter.
 
 With no argument, prompts for the app name when run interactively (a TTY); in
-scripts and CI the argument is required.`,
+scripts and CI the argument is required. When interactive, --template and
+--typescript are also prompted for unless the flag was passed explicitly; in
+scripts and CI the flag defaults are used silently and nothing is prompted.`,
 	// MaximumNArgs(1), not ExactArgs(1): the name may be omitted and prompted
 	// for interactively (see RunE). Zero args on a non-TTY still errors (D32
 	// scriptability — puzzle init must stay non-interactive under pipes/CI).
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Interactive means a real terminal on stdin. Every prompt below is gated
+		// on this exact check so a non-TTY (pipe, CI, `< /dev/null`) stays fully
+		// non-interactive: it never prompts, never hangs on stdin, and falls back
+		// to args/flag defaults (D32: init is non-interactive by contract except
+		// for these opt-in TTY prompts).
+		interactive := ui.IsTerminal(os.Stdin)
+
 		var appName string
 		if len(args) == 1 {
 			appName = args[0]
-		} else {
-			// No app-name argument. Prompt only on a real terminal; a non-TTY
-			// (pipe, CI, `< /dev/null`) hard-errors so scripts stay predictable
-			// and never hang waiting on stdin (D32: init is non-interactive by
-			// contract except for this opt-in TTY prompt).
-			fi, err := os.Stdin.Stat()
-			if err != nil || fi.Mode()&os.ModeCharDevice == 0 {
-				return fmt.Errorf("app name required (usage: puzzle init <app-name>)")
-			}
+		} else if interactive {
 			name, perr := promptAppName(os.Stdin, os.Stdout)
 			if perr != nil {
 				return perr
 			}
 			appName = name
+		} else {
+			// No app-name argument on a non-TTY: hard-error so scripts stay
+			// predictable rather than blocking on a prompt they can't answer.
+			return fmt.Errorf("app name required (usage: puzzle init <app-name>)")
 		}
 
 		template, _ := cmd.Flags().GetString("template")
 		dir, _ := cmd.Flags().GetString("dir")
 		typescript, _ := cmd.Flags().GetBool("typescript")
+
+		// On a TTY, prompt for any question whose flag was not passed explicitly.
+		// An explicit flag is authoritative and never second-guessed; a non-TTY
+		// skips both prompts and keeps the flag defaults.
+		if interactive && !cmd.Flags().Changed("template") {
+			t, perr := promptTemplate(os.Stdin, os.Stdout)
+			if perr != nil {
+				return perr
+			}
+			template = t
+		}
+		if interactive && !cmd.Flags().Changed("typescript") {
+			ts, perr := promptTypeScript(os.Stdin, os.Stdout)
+			if perr != nil {
+				return perr
+			}
+			typescript = ts
+		}
 
 		if !scaffold.ValidTemplate(template) {
 			return fmt.Errorf("invalid --template %q (available: %s)", template, strings.Join(scaffold.Templates, ", "))
@@ -116,6 +139,55 @@ func promptAppName(r io.Reader, w io.Writer) (string, error) {
 			continue
 		}
 		return name, nil
+	}
+}
+
+// promptTemplate reads a template choice from r, re-prompting until it names a
+// known template (scaffold.Templates). Empty input selects scaffold.DefaultTemplate,
+// so pressing Enter keeps the same default the --template flag carries. Invalid
+// input prints the accepted set and loops; EOF / a read error ends the loop with
+// an error so a closed stdin never hangs (mirroring promptAppName). Reader/Writer
+// so tests can drive it with plain buffers.
+func promptTemplate(r io.Reader, w io.Writer) (string, error) {
+	scanner := bufio.NewScanner(r)
+	for {
+		fmt.Fprintf(w, "  Template (%s) [%s] › ", strings.Join(scaffold.Templates, "/"), scaffold.DefaultTemplate)
+		if !scanner.Scan() {
+			return "", fmt.Errorf("template required (usage: puzzle init --template <%s>)", strings.Join(scaffold.Templates, "|"))
+		}
+		choice := strings.TrimSpace(scanner.Text())
+		if choice == "" {
+			return scaffold.DefaultTemplate, nil
+		}
+		if !scaffold.ValidTemplate(choice) {
+			fmt.Fprintf(w, "  invalid template %q (available: %s)\n", choice, strings.Join(scaffold.Templates, ", "))
+			continue
+		}
+		return choice, nil
+	}
+}
+
+// promptTypeScript reads a yes/no answer from r for whether to add a strict
+// tsconfig.json. It defaults to No: empty input (a bare Enter) means no, matching
+// the --typescript flag default. y/yes/n/no are accepted case-insensitively;
+// anything else re-prompts. EOF / a read error ends the loop with an error so a
+// closed stdin never hangs (mirroring promptAppName). Reader/Writer so tests can
+// drive it with plain buffers.
+func promptTypeScript(r io.Reader, w io.Writer) (bool, error) {
+	scanner := bufio.NewScanner(r)
+	for {
+		fmt.Fprint(w, "  Add TypeScript config? [y/N] › ")
+		if !scanner.Scan() {
+			return false, fmt.Errorf("typescript answer required (usage: puzzle init --typescript)")
+		}
+		switch strings.ToLower(strings.TrimSpace(scanner.Text())) {
+		case "", "n", "no":
+			return false, nil
+		case "y", "yes":
+			return true, nil
+		default:
+			fmt.Fprintln(w, "  please answer y or n")
+		}
 	}
 }
 
