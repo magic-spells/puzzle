@@ -1,0 +1,28 @@
+<puzzle-view>
+  <div class="prose-doc rounded-2xl border border-line bg-surface p-6">
+    <h2 class="font-display text-2xl text-ink">Overview</h2>
+    <p>
+      A Puzzle app is a tree of <code>.pzl</code> components mounted by a router.
+      Each component's template is HTML with a light expression syntax; its logic
+      lives in a <code>{ '<scripts>' }</code> block right below.
+    </p>
+    <p>
+      This is the <strong class="text-ink font-semibold">index child</strong> — a route
+      with an empty path (<code>path: ''</code>) that fills the shell's slot at the
+      bare <code>/guide</code> URL. It defines no <code>meta.title</code>, so this page
+      inherits the shell's title.
+    </p>
+    <p>
+      Read the <a href="/guide/templates" class="text-accent underline underline-offset-2 hover:text-accent-2">template syntax</a>
+      pane next.
+    </p>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The index child (path: '' in routes.js). No meta.title of its own — it rides
+// the shell's title, exercising the SSG leaf → root title walk.
+export default class GuideIndex extends PuzzleView {}
+</scripts>

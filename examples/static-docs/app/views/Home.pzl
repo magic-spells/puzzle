@@ -1,0 +1,77 @@
+<puzzle-view>
+  <section class="max-w-2xl">
+    <p class="font-mono text-[11px] uppercase tracking-[0.3em] text-accent mb-5">A small field guide</p>
+    <h1 class="font-display text-5xl md:text-6xl leading-[1.05] text-ink">
+      Build the SPA. Ship the HTML.
+    </h1>
+    <p class="mt-6 text-lg text-muted leading-relaxed">
+      Puzzle is a single-file-component framework with a built-in store and router.
+      With <code class="font-mono text-sm bg-surface-2 border border-line-2 rounded px-1.5 py-0.5">output: 'static'</code>
+      the very same app prerenders each content page to plain HTML, then wakes up
+      as a live SPA the instant it loads.
+    </p>
+
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a href="/guide" class="px-5 py-2.5 rounded-xl bg-accent text-white font-medium hover:bg-accent-2 transition-colors">Read the guide</a>
+      <a href="/about" class="px-5 py-2.5 rounded-xl border border-line text-ink hover:bg-surface-2 transition-colors">What is this?</a>
+    </div>
+  </section>
+
+  <!-- The interactive proof. This whole page is prerendered to static HTML — the
+       count below is baked in as "0". Once the SPA takes over at navigation #0,
+       the same button becomes live. Load the page, then click it. -->
+  <section class="mt-16 rounded-2xl border border-line bg-surface p-7">
+    <div class="flex items-center gap-2 mb-1">
+      <span class="h-2 w-2 rounded-full bg-accent"></span>
+      <h2 class="font-display text-2xl text-ink">Static, then interactive</h2>
+    </div>
+    <p class="text-muted mb-6">
+      This card was written to disk as HTML — no JavaScript needed to see it. The
+      counter starts at its prerendered value and comes alive after takeover.
+    </p>
+
+    <div class="flex items-center gap-5">
+      <button
+        class="h-12 px-5 rounded-xl bg-ink text-paper font-medium hover:bg-accent transition-colors"
+        @click={ increment }>
+        Clicked { count } { count | plural('time') }
+      </button>
+      <button
+        class="h-12 px-4 rounded-xl border border-line text-muted hover:text-ink hover:bg-surface-2 transition-colors"
+        @click={ reset }
+        disabled={ count === 0 }>
+        Reset
+      </button>
+    </div>
+  </section>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class HomeView extends PuzzleView {
+  // Local view state, seeded in created() — runs at build time too, so the
+  // prerendered HTML shows "Clicked 0 times".
+  created() {
+    this.setData({ count: 0 });
+  }
+
+  data() {
+    // `count` is read back out for the template. On increment we setData() then
+    // refresh() so this re-runs (SPEC §4: setData alone re-renders but does not
+    // re-run data()).
+    return { count: this.getData().count };
+  }
+
+  events = {
+    increment: () => {
+      this.setData('count', this.getData().count + 1);
+      this.refresh();
+    },
+    reset: () => {
+      this.setData('count', 0);
+      this.refresh();
+    },
+  };
+}
+</scripts>

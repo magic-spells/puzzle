@@ -1,0 +1,19 @@
+<puzzle-view class="page">
+  <header class="page-header">
+    <h1>Two-way binding</h1>
+    <p>An input field bound to a record in the datastore.</p>
+  </header>
+  <main>
+    <Slot/>
+  </main>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class DefaultLayout extends PuzzleView {
+  data() {
+    return {};
+  }
+}
+</scripts>

@@ -1,0 +1,21 @@
+<puzzle-view class="status">
+  {#if state === 'loading'}
+    <p class="loading">Loading…</p>
+  {:else if state === 'error'}
+    <p class="error">Something went wrong.</p>
+  {:else if state === 'empty'}
+    <p class="empty">Nothing here yet.</p>
+  {:else}
+    <p class="ready">Ready.</p>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class ElseIf extends PuzzleView {
+  data() {
+    return { state: 'loading' };
+  }
+}
+</scripts>

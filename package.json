@@ -1,0 +1,97 @@
+{
+	"name": "@magic-spells/puzzle",
+	"version": "0.1.0",
+	"description": "SPA-first JavaScript framework — single-file .pzl components, reactive data() components, Go + esbuild compiler",
+	"type": "module",
+	"main": "./client-runtime/index.js",
+	"module": "./client-runtime/index.js",
+	"types": "./types/index.d.ts",
+	"bin": {
+		"puzzle": "./bin/puzzle.js"
+	},
+	"exports": {
+		".": {
+			"types": "./types/index.d.ts",
+			"default": "./client-runtime/index.js"
+		},
+		"./morph": {
+			"types": "./types/morph.d.ts",
+			"default": "./client-runtime/morph.js"
+		},
+		"./ssg": {
+			"types": "./types/ssg.d.ts",
+			"default": "./client-runtime/ssg/index.js"
+		},
+		"./puzzle-env": {
+			"types": "./puzzle-env.d.ts"
+		},
+		"./formatters/manifest": "./client-runtime/formatters/builtins-all.js"
+	},
+	"sideEffects": false,
+	"files": [
+		"client-runtime",
+		"!client-runtime/**/*.go",
+		"types",
+		"puzzle-env.d.ts",
+		"bin/puzzle.js"
+	],
+	"keywords": [
+		"puzzle",
+		"spa",
+		"framework",
+		"reactive",
+		"single-file-components",
+		"virtual-dom",
+		"client-side"
+	],
+	"homepage": "https://github.com/magic-spells/puzzle#readme",
+	"scripts": {
+		"build:example-modules": "go run ./compiler/cmd/pzlc --mode component examples/todos/app/components/TodoItem.pzl tests/fixtures/todos-compiled/TodoItem.compiled.js && go run ./compiler/cmd/pzlc --mode view examples/todos/app/views/Home.pzl tests/fixtures/todos-compiled/Home.compiled.js && go run ./compiler/cmd/pzlc --mode layout examples/todos/app/layouts/Default.pzl tests/fixtures/todos-compiled/Default.compiled.js",
+		"build:blog": "go run ./compiler/cmd/puzzle build examples/blog --mode development && node -e \"const fs=require('fs');['examples/blog/dist/app.js','examples/blog/dist/index.html','examples/blog/dist/styles.css','examples/blog/dist/api/posts.json'].map(f=>fs.accessSync(f))\"",
+		"build:virtual-scroll": "go run ./compiler/cmd/pzlc --mode view examples/virtual-scroll/app/views/Home.pzl tests/fixtures/virtual-scroll/Home.compiled.js",
+		"build:slot-forwarding": "go run ./compiler/cmd/pzlc --mode component tests/fixtures/slot-forwarding/Card.pzl tests/fixtures/slot-forwarding/Card.compiled.js && go run ./compiler/cmd/pzlc --mode layout tests/fixtures/slot-forwarding/WrappedLayout.pzl tests/fixtures/slot-forwarding/WrappedLayout.compiled.js",
+		"build:grimoire": "go run ./compiler/cmd/puzzle build examples/grimoire --mode development && node -e \"const fs=require('fs');['examples/grimoire/dist/app.js','examples/grimoire/dist/index.html','examples/grimoire/dist/styles.css'].map(f=>fs.accessSync(f))\"",
+		"build:typed-todos": "go run ./compiler/cmd/puzzle build examples/typed-todos --mode development && node -e \"const fs=require('fs');const s=fs.readFileSync('examples/typed-todos/dist/app.js','utf8');['examples/typed-todos/dist/app.js','examples/typed-todos/dist/index.html','examples/typed-todos/dist/styles.css'].map(f=>fs.accessSync(f));if(/\\binterface\\b|: TodoRecord|import type/.test(s)){throw new Error('typed-todos bundle still contains TypeScript syntax')}\"",
+		"build": "node scripts/release-prep.mjs",
+		"pretest": "npm run build:example-modules && npm run build:blog && npm run build:grimoire && npm run build:typed-todos && npm run build:virtual-scroll && npm run build:slot-forwarding",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:browser": "playwright test",
+		"test:types": "tsc -p tests-types",
+		"test:e2e-pack": "node scripts/e2e-pack.mjs",
+		"verify:pack": "node scripts/verify-pack.mjs",
+		"prepublishOnly": "node scripts/release-prep.mjs",
+		"release:prep": "node scripts/release-prep.mjs"
+	},
+	"license": "SEE LICENSE IN LICENSE.txt",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/magic-spells/puzzle.git"
+	},
+	"bugs": {
+		"url": "https://github.com/magic-spells/puzzle/issues"
+	},
+	"optionalDependencies": {
+		"@magic-spells/puzzle-darwin-arm64": "0.1.0",
+		"@magic-spells/puzzle-darwin-x64": "0.1.0",
+		"@magic-spells/puzzle-linux-arm64": "0.1.0",
+		"@magic-spells/puzzle-linux-x64": "0.1.0"
+	},
+	"peerDependencies": {
+		"@magic-spells/morph-engine": ">=0.1.0"
+	},
+	"peerDependenciesMeta": {
+		"@magic-spells/morph-engine": {
+			"optional": true
+		}
+	},
+	"devDependencies": {
+		"@magic-spells/morph-engine": "^0.1.1",
+		"@playwright/test": "^1.61.1",
+		"@tailwindcss/cli": "^4.3.2",
+		"jsdom": "^26.1.0",
+		"tailwindcss": "^4.3.2",
+		"typescript": "^7.0.2",
+		"vitest": "^3.2.4"
+	}
+}

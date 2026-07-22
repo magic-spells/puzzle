@@ -1,0 +1,311 @@
+<puzzle-view>
+  <!-- One rendered block. Receives ONLY primitives (id/type/text/checked/
+       indent/number + placeholder/phHeight/slashActive) plus callback props
+       (sync/split/mergeUp/navigate/convert/remove/toggle/slash/slashKey/grab/
+       indentBy) so store-record identity can't go stale behind a shallow prop
+       compare. Each text branch's [data-block-text] div is a contenteditable DOM
+       island (D44): ALWAYS editable, browser-owned children, one-way flow (input
+       → store, never store → island). Programmatic text changes here set the
+       island DOM imperatively AND ask Doc to update the store.
+
+       Every {#case} branch root carries a distinct static `key` so a type change
+       (turn-into) FAILS sameNode and REPLACES the branch, re-seeding a fresh
+       island from the template — without the key, two unkeyed <div> roots would
+       pair as the same node and carry the old (frozen) island children forward
+       (stale structure surviving a turn-into). Indent is a padding-left step.
+
+       DRAG / MENU AFFORDANCES (all OUTSIDE the island, so no component/live DOM
+       lives inside browser-owned subtrees, SPEC §17): the .block-row is a
+       `group relative` host; the ⠿ handle sits in the left gutter (pointerdown →
+       Doc's drag state machine, which also treats a no-move pointerup as a click
+       that opens the Turn-into menu). When `placeholder` is set the row renders
+       as an empty slot of the dragged block's height (the drag view-model, spliced
+       into Doc's block list during a drag). -->
+  <div class="block-row group relative" data-block-id={ id } style="{#if placeholder}height:{ phHeight }px{/if}{#if !placeholder}padding-left:{ indentPx }px{/if}">
+    {#if placeholder}
+      <div class="block-placeholder h-full w-full"></div>
+    {:else}
+      <button
+        type="button"
+        class="gr-handle absolute top-1.5 -left-6 flex h-5 w-5 items-center justify-center rounded text-faint opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-muted select-none text-sm leading-none"
+        @pointerdown={ onGrab(event) }
+        aria-label="Drag or turn into"
+      >⠿</button>
+      {#case type}
+        {:when 'heading1'}
+          <div key="h1" class="mt-6 mb-1 text-3xl font-bold leading-snug text-ink" data-block-text contenteditable="true" island data-empty={ text === '' } @input={ onInput(event) } @keydown:enter={ onEnter(event) } @keydown:backspace={ onBackspace(event) } @keydown:up={ onUp(event) } @keydown:down={ onDown(event) } @keydown:escape={ onEscape(event) } @keydown:tab={ onTab(event) } @paste={ onPaste(event) }>{ text }</div>
+        {:when 'heading2'}
+          <div key="h2" class="mt-5 mb-1 text-2xl font-semibold leading-snug text-ink" data-block-text contenteditable="true" island data-empty={ text === '' } @input={ onInput(event) } @keydown:enter={ onEnter(event) } @keydown:backspace={ onBackspace(event) } @keydown:up={ onUp(event) } @keydown:down={ onDown(event) } @keydown:escape={ onEscape(event) } @keydown:tab={ onTab(event) } @paste={ onPaste(event) }>{ text }</div>
+        {:when 'heading3'}
+          <div key="h3" class="mt-4 mb-0.5 text-xl font-semibold leading-snug text-ink" data-block-text contenteditable="true" island data-empty={ text === '' } @input={ onInput(event) } @keydown:enter={ onEnter(event) } @keydown:backspace={ onBackspace(event) } @keydown:up={ onUp(event) } @keydown:down={ onDown(event) } @keydown:escape={ onEscape(event) } @keydown:tab={ onTab(event) } @paste={ onPaste(event) }>{ text }</div>
+        {:when 'bullet'}
+          <div key="bullet" class="flex gap-2 py-0.5">
+            <span class="shrink-0 select-none leading-7 text-ink">•</span>
+            <div class="flex-1 leading-7 text-ink" data-block-text contenteditable="true" island data-empty={ text === '' } @input={ onInput(event) } @keydown:enter={ onEnter(event) } @keydown:backspace={ onBackspace(event) } @keydown:up={ onUp(event) } @keydown:down={ onDown(event) } @keydown:escape={ onEscape(event) } @keydown:tab={ onTab(event) } @paste={ onPaste(event) }>{ text }</div>
+          </div>
+        {:when 'numbered'}
+          <div key="numbered" class="flex gap-2 py-0.5">
+            <span class="shrink-0 select-none leading-7 text-ink tabular-nums">{ number }.</span>
+            <div class="flex-1 leading-7 text-ink" data-block-text contenteditable="true" island data-empty={ text === '' } @input={ onInput(event) } @keydown:enter={ onEnter(event) } @keydown:backspace={ onBackspace(event) } @keydown:up={ onUp(event) } @keydown:down={ onDown(event) } @keydown:escape={ onEscape(event) } @keydown:tab={ onTab(event) } @paste={ onPaste(event) }>{ text }</div>
+          </div>
+        {:when 'todo'}
+          <div key="todo" class="flex items-start gap-2 py-0.5">
+            <input type="checkbox" class="mt-[7px] shrink-0 accent-ink" checked={ checked } @change={ onToggle } />
+            <div class="flex-1 leading-7 {#if checked}text-faint line-through{/if}{#if !checked}text-ink{/if}" data-block-text contenteditable="true" island data-empty={ text === '' } @input={ onInput(event) } @keydown:enter={ onEnter(event) } @keydown:backspace={ onBackspace(event) } @keydown:up={ onUp(event) } @keydown:down={ onDown(event) } @keydown:escape={ onEscape(event) } @keydown:tab={ onTab(event) } @paste={ onPaste(event) }>{ text }</div>
+          </div>
+        {:when 'quote'}
+          <div key="quote" class="my-2 border-l-[3px] border-ink/25 pl-3.5">
+            <div class="leading-7 text-ink/80" data-block-text contenteditable="true" island data-empty={ text === '' } @input={ onInput(event) } @keydown:enter={ onEnter(event) } @keydown:backspace={ onBackspace(event) } @keydown:up={ onUp(event) } @keydown:down={ onDown(event) } @keydown:escape={ onEscape(event) } @keydown:tab={ onTab(event) } @paste={ onPaste(event) }>{ text }</div>
+          </div>
+        {:when 'code'}
+          <pre key="code" class="my-2 overflow-x-auto rounded-md bg-code px-3.5 py-3"><code class="font-mono text-sm leading-6 text-ink" data-block-text contenteditable="true" island data-empty={ text === '' } @input={ onInput(event) } @keydown:enter={ onEnter(event) } @keydown:backspace={ onBackspace(event) } @keydown:up={ onUp(event) } @keydown:down={ onDown(event) } @keydown:escape={ onEscape(event) } @keydown:tab={ onTab(event) } @paste={ onPaste(event) }>{ text }</code></pre>
+        {:when 'divider'}
+          <!-- Non-editable, so it can't be reached by a Backspace-merge; a hover ✕
+               is its only delete affordance (turn-into/drag still use the gutter
+               handle above). -->
+          <div key="divider" class="group/div relative my-4">
+            <hr class="border-t border-line" />
+            <button
+              class="absolute right-0 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded text-faint opacity-0 group-hover/div:opacity-100 hover:bg-hover hover:text-ink text-xs leading-none"
+              @click={ onRemove }
+              aria-label="Delete divider"
+            >✕</button>
+          </div>
+        {:else}
+          <div key="p" class="py-0.5 leading-7 text-ink" data-block-text contenteditable="true" island data-empty={ text === '' } @input={ onInput(event) } @keydown:enter={ onEnter(event) } @keydown:backspace={ onBackspace(event) } @keydown:up={ onUp(event) } @keydown:down={ onDown(event) } @keydown:escape={ onEscape(event) } @keydown:tab={ onTab(event) } @paste={ onPaste(event) }>{ text }</div>
+      {/case}
+    {/if}
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { textOf, caretOffset, setCaret, atStart, atEnd, insertText } from '../lib/caret.js';
+import { consumePendingFocus } from '../lib/focus.js';
+
+const INDENT_STEP = 24; // px per indent level
+
+// Types whose Enter-split creates another block of the SAME type (Notion). All
+// other types split into a fresh paragraph.
+const LIST_TYPES = new Set(['bullet', 'numbered', 'todo']);
+
+export default class Block extends PuzzleView {
+  // Slash-menu detection is LOCAL to the block (only the island knows the caret).
+  // `_slashOn` tracks whether we've reported an open menu to Doc; `_slashAt` is
+  // the character offset of the triggering '/'. Doc owns the menu STATE and the
+  // command list — the block only reports lifecycle up the `@slash` channel and,
+  // while Doc says the menu is open for THIS block (`slashActive` prop), reroutes
+  // Arrow/Enter/Escape into the `@slashKey` channel instead of caret motion.
+  created() {
+    this._slashOn = false;
+    this._slashAt = 0;
+  }
+
+  data(params, props) {
+    const indent = props.indent || 0;
+    return {
+      id: props.id,
+      type: props.type,
+      text: props.text,
+      checked: props.checked,
+      number: props.number,
+      indentPx: indent * INDENT_STEP,
+      placeholder: !!props.placeholder,
+      phHeight: props.phHeight || 0,
+    };
+  }
+
+  // ---- focus routing --------------------------------------------------------
+  // A structural edit elsewhere may have parked a caret request for THIS block
+  // (a split's new block, a merge's survivor, a turn-into re-seed). Consume it
+  // whenever our DOM is fresh — on first mount and after every re-render — and
+  // drop the caret into our own island. Doc's flushFocus() sweep is the backstop
+  // for the frames before we exist.
+  mounted() {
+    this._takeFocus();
+  }
+
+  afterUpdate() {
+    // Doc drives menu open/close through the slashActive prop; if it closed the
+    // menu behind our back (select / cancel / turn-into), forget our local
+    // open-state so a later '/' re-detects fresh.
+    if (!this.props.slashActive) this._slashOn = false;
+    this._takeFocus();
+  }
+
+  _island() {
+    return this.element ? this.element.querySelector('[data-block-text]') : null;
+  }
+
+  _takeFocus() {
+    const offset = consumePendingFocus(this.props.id);
+    if (offset === null) return;
+    const el = this._island();
+    if (el) setCaret(el, offset);
+  }
+
+  // Report the slash lifecycle to Doc, given the island's current text + caret.
+  // Trigger rule (SPEC-shaped, Notion-ish): a '/' typed at offset 0 OR right
+  // after whitespace opens the menu; the query is the run of non-space chars
+  // after it. A space in the query, or deleting back past the '/', closes it.
+  _evaluateSlash(el) {
+    if (!this.props.slash) return;
+    const text = textOf(el);
+    const off = caretOffset(el);
+
+    if (!this._slashOn) {
+      const slashIdx = off - 1;
+      if (
+        slashIdx >= 0 &&
+        text[slashIdx] === '/' &&
+        (slashIdx === 0 || /\s/.test(text[slashIdx - 1]))
+      ) {
+        this._slashOn = true;
+        this._slashAt = slashIdx;
+        this.props.slash({ kind: 'open', offset: slashIdx, query: '' });
+      }
+      return;
+    }
+
+    // Active: validate the '/' still anchors us and re-derive the query.
+    if (off <= this._slashAt || text[this._slashAt] !== '/') {
+      this._slashOn = false;
+      this.props.slash({ kind: 'close' });
+      return;
+    }
+    const query = text.slice(this._slashAt + 1, off);
+    if (/\s/.test(query)) {
+      this._slashOn = false;
+      this.props.slash({ kind: 'close' });
+      return;
+    }
+    this.props.slash({ kind: 'query', query });
+  }
+
+  events = {
+    // The DOM change lands on the child's own checkbox; the child hands it up to
+    // the parent's `@toggle` callback prop (SPEC §6 callback props).
+    onToggle: () => {
+      if (this.props.toggle) this.props.toggle();
+    },
+
+    // ⠿ handle pointerdown → Doc's drag state machine. Doc decides drag vs click
+    // (a no-move pointerup opens the Turn-into menu).
+    onGrab: (event) => {
+      if (this.props.placeholder) return;
+      if (this.props.grab) this.props.grab(event);
+    },
+
+    // Per-keystroke store echo. Island flow is one-way (D44): the DOM already
+    // holds the truth, we only push it to the store. We also toggle data-empty
+    // imperatively so the placeholder hides on the first character, a frame
+    // before the store round-trip re-renders the attribute. Finally we re-derive
+    // slash-menu state from the fresh text + caret.
+    onInput: (event) => {
+      const el = event.currentTarget;
+      const text = textOf(el);
+      el.toggleAttribute('data-empty', text === '');
+      if (this.props.sync) this.props.sync(text);
+      this._evaluateSlash(el);
+    },
+
+    // Enter: while the slash menu is open, select the highlighted command;
+    // otherwise split at the caret, or convert an empty list/todo to a paragraph.
+    onEnter: (event) => {
+      if (event.isComposing) return; // let IME composition finish
+      if (this.props.slashActive) {
+        event.preventDefault();
+        if (this.props.slashKey) this.props.slashKey('select');
+        return;
+      }
+      event.preventDefault();
+      const el = event.currentTarget;
+      const full = textOf(el);
+      const off = caretOffset(el);
+
+      // Notion: Enter on an EMPTY list/todo demotes it to a paragraph instead of
+      // adding another empty item.
+      if (LIST_TYPES.has(this.props.type) && full === '') {
+        if (this.props.convert) this.props.convert();
+        return;
+      }
+
+      const before = full.slice(0, off);
+      const after = full.slice(off);
+      // The retained head stays in THIS island — set it imperatively (store echo
+      // is one-way). Doc mirrors it to the store and creates the tail block.
+      el.textContent = before;
+      el.toggleAttribute('data-empty', before === '');
+      if (this.props.split) this.props.split({ before, after });
+    },
+
+    // Backspace: only intercept a collapsed caret at the very start — merge into
+    // the previous block. Anywhere else, let the browser delete a character
+    // (which, mid-slash, re-runs onInput → re-derives / closes the menu).
+    onBackspace: (event) => {
+      const el = event.currentTarget;
+      if (!atStart(el)) return;
+      event.preventDefault();
+      if (this.props.mergeUp) this.props.mergeUp(textOf(el));
+    },
+
+    // ArrowUp: drive the menu when open, else previous text block's end.
+    onUp: (event) => {
+      if (this.props.slashActive) {
+        event.preventDefault();
+        if (this.props.slashKey) this.props.slashKey('up');
+        return;
+      }
+      const el = event.currentTarget;
+      if (!atStart(el)) return;
+      event.preventDefault();
+      if (this.props.navigate) this.props.navigate('up');
+    },
+
+    // ArrowDown: drive the menu when open, else next text block's start.
+    onDown: (event) => {
+      if (this.props.slashActive) {
+        event.preventDefault();
+        if (this.props.slashKey) this.props.slashKey('down');
+        return;
+      }
+      const el = event.currentTarget;
+      if (!atEnd(el)) return;
+      event.preventDefault();
+      if (this.props.navigate) this.props.navigate('down');
+    },
+
+    // Escape: close the slash menu leaving the typed text intact. When no menu is
+    // open, let it bubble (Doc's document handler closes a Turn-into menu).
+    onEscape: (event) => {
+      if (!this.props.slashActive) return;
+      event.preventDefault();
+      if (this.props.slashKey) this.props.slashKey('cancel');
+    },
+
+    // Tab / Shift-Tab: indent / outdent (Doc clamps to 0..3). Suppressed while a
+    // menu is open so it can't steal focus or shift the block underneath.
+    onTab: (event) => {
+      event.preventDefault();
+      if (this.props.slashActive) return;
+      if (this.props.indentBy) this.props.indentBy(event.shiftKey ? -1 : 1);
+    },
+
+    // Paste as plain text (no pasted HTML structure into the island).
+    onPaste: (event) => {
+      event.preventDefault();
+      const cd = event.clipboardData || window.clipboardData;
+      const text = cd ? cd.getData('text/plain') : '';
+      const el = event.currentTarget;
+      const synced = insertText(text); // true → an input event fired → auto-sync
+      el.toggleAttribute('data-empty', textOf(el) === '');
+      if (!synced && this.props.sync) this.props.sync(textOf(el));
+    },
+
+    // Divider ✕.
+    onRemove: () => {
+      if (this.props.remove) this.props.remove();
+    },
+  };
+}
+</scripts>

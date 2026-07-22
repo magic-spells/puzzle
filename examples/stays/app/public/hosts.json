@@ -1,0 +1,82 @@
+[
+  {
+    "id": "h-mara",
+    "name": "Mara",
+    "superhost": true,
+    "yearsHosting": 8,
+    "rating": 4.95,
+    "reviewCount": 370,
+    "bio": "Desert-and-coast wanderer who loves matching guests to their perfect quiet corner.",
+    "accent": { "from": "#e6c9b0", "to": "#c99a7a" }
+  },
+  {
+    "id": "h-diego",
+    "name": "Diego",
+    "superhost": false,
+    "yearsHosting": 4,
+    "rating": 4.8,
+    "reviewCount": 98,
+    "bio": "Lifelong skier and paddler — my places are built for mountain weekends.",
+    "accent": { "from": "#b0c4d6", "to": "#7a94ac" }
+  },
+  {
+    "id": "h-yuki",
+    "name": "Yuki",
+    "superhost": true,
+    "yearsHosting": 6,
+    "rating": 4.98,
+    "reviewCount": 187,
+    "bio": "Restoring old Kyoto machiya, one tatami room at a time.",
+    "accent": { "from": "#e6b0c0", "to": "#c98aa0" }
+  },
+  {
+    "id": "h-ines",
+    "name": "Inês",
+    "superhost": true,
+    "yearsHosting": 7,
+    "rating": 4.96,
+    "reviewCount": 373,
+    "bio": "From Lisbon to the Greek isles — I keep sunlit homes with a view.",
+    "accent": { "from": "#e6d0a8", "to": "#c9a86a" }
+  },
+  {
+    "id": "h-sofia",
+    "name": "Sofia",
+    "superhost": false,
+    "yearsHosting": 5,
+    "rating": 4.83,
+    "reviewCount": 240,
+    "bio": "Beach and jungle escapes, always barefoot-friendly.",
+    "accent": { "from": "#a8d6c4", "to": "#6aae94" }
+  },
+  {
+    "id": "h-lars",
+    "name": "Lars",
+    "superhost": false,
+    "yearsHosting": 3,
+    "rating": 4.85,
+    "reviewCount": 112,
+    "bio": "Copenhagen minimalist — I believe a good home is a calm one.",
+    "accent": { "from": "#cdd2da", "to": "#9aa0ac" }
+  },
+  {
+    "id": "h-omar",
+    "name": "Omar",
+    "superhost": false,
+    "yearsHosting": 2,
+    "rating": 4.68,
+    "reviewCount": 89,
+    "bio": "Downtown NYC native sharing the city's best-kept loft.",
+    "accent": { "from": "#b8bcc9", "to": "#7a808f" }
+  },
+  {
+    "id": "h-nina",
+    "name": "Nina",
+    "superhost": false,
+    "yearsHosting": 9,
+    "rating": 4.88,
+    "reviewCount": 124,
+    "bio": "Alpine lodges from the Southern Alps to Mont Blanc — bring the whole group.",
+    "accent": { "from": "#c0cdc9", "to": "#8aa89c" }
+  }
+]

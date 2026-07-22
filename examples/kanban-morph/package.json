@@ -1,0 +1,19 @@
+{
+  "name": "kanban-morph",
+  "version": "1.0.0",
+  "description": "Kanban demo where task cards morph open into a route-mounted dialog (shared-element morph, v1.23/D55)",
+  "main": "app.js",
+  "scripts": {
+    "dev": "puzzle dev --port 3021",
+    "build": "puzzle build"
+  },
+  "dependencies": {
+    "@magic-spells/morph-engine": "^0.1.0",
+    "@magic-spells/puzzle": "^1.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "tailwindcss": "^4.1.14"
+  },
+  "type": "module"
+}

@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+@theme {
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Roboto", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink: #05060a;
+  --color-surface: #0c0e15;
+  --color-surface-2: #11131c;
+  --color-elevated: #171a25;
+
+  --color-hairline: rgba(255, 255, 255, 0.09);
+  --color-line: rgba(255, 255, 255, 0.055);
+
+  --color-fg: #e8ecf5;
+  --color-muted: #8b93a7;
+  --color-faint: #565d70;
+
+  --color-accent: #7dd3fc;
+  --color-accent-2: #a78bfa;
+  --color-danger: #f871a0;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink);
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .font-display {
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  .app-glow {
+    background: radial-gradient(
+      120% 80% at 50% -10%,
+      rgba(125, 211, 252, 0.12) 0%,
+      rgba(167, 139, 250, 0.06) 30%,
+      transparent 62%
+    );
+  }
+
+  /* The canvas paints its own deep-space background; this gradient is a fallback
+     for the instant before the first frame, plus a faint vignette at the edges. */
+  .orrery-stage {
+    border: 1px solid var(--color-hairline);
+    border-radius: 1rem;
+    background:
+      radial-gradient(120% 120% at 50% 40%, rgba(125, 211, 252, 0.05), transparent 55%),
+      radial-gradient(140% 140% at 50% 50%, transparent 60%, rgba(0, 0, 0, 0.5)),
+      #05060a;
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+    overflow: hidden;
+  }
+
+  .orrery-hint {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--color-faint);
+    background: color-mix(in srgb, var(--color-ink) 62%, transparent);
+    backdrop-filter: blur(4px);
+    border: 1px solid var(--color-line);
+    border-radius: 9999px;
+    padding: 0.28rem 0.7rem;
+    pointer-events: none;
+  }
+
+  .panel-card {
+    border: 1px solid var(--color-hairline);
+    border-radius: 0.85rem;
+    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
+  }
+
+  .panel-card.is-active {
+    border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--color-accent) 40%, transparent),
+      0 16px 44px rgba(0, 0, 0, 0.34);
+  }
+
+  .toolbar-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-fg);
+    border: 1px solid var(--color-hairline);
+    border-radius: 0.6rem;
+    background: var(--color-elevated);
+    padding: 0.5rem 0.85rem;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease;
+  }
+
+  .toolbar-btn:hover {
+    border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+    background: var(--color-surface-2);
+  }
+
+  .toolbar-btn.is-danger:hover {
+    border-color: color-mix(in srgb, var(--color-danger) 55%, transparent);
+  }
+
+  /* Range + color inputs picked up straight from the record. Kept lean; the
+     browser defaults already look fine in dark mode with color-scheme:dark. */
+  .row-range {
+    width: 100%;
+    accent-color: var(--color-accent);
+  }
+}

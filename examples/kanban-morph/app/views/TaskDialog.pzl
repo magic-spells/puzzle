@@ -1,0 +1,77 @@
+<puzzle-view class="contents">
+  <div class="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-8">
+    <button type="button" class="task-backdrop absolute inset-0" aria-label="Close" @click={ close }></button>
+    <dialog class="task-dialog relative flex w-full max-w-xl flex-col" open="open" data-puzzle-morph="task-{ taskId }">
+      {#if task}
+        <header class="flex items-start justify-between gap-4 px-7 pt-7">
+          <div>
+            <p class="font-mono text-[11px] uppercase tracking-[0.35em] text-accent">{ task.status }</p>
+            <h2 class="mt-2 font-display text-4xl leading-none text-fg">{ task.title }</h2>
+          </div>
+          <button type="button" class="task-close" aria-label="Close" @click={ close }>✕</button>
+        </header>
+        <div class="px-7 py-6">
+          <p class="text-sm leading-6 text-muted">{ task.description }</p>
+        </div>
+        <footer class="mt-auto flex items-center justify-between border-t border-line px-7 py-4">
+          <span class="font-mono text-[11px] tracking-[0.15em] text-faint">{ taskId }</span>
+          <span class="font-mono text-[11px] tracking-[0.15em] text-faint">column { task.status } · slot { task.order }</span>
+        </footer>
+      {/if}
+    </dialog>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Routed overlay for a task's details — the leaf child of the board route
+// (path 'task/:taskId'), rendered inside Board's <Slot/> so the board (and the
+// clicked card) stays mounted beneath it. There is ZERO morph code in this
+// view: the shell shares its data-puzzle-morph value with the card, and the
+// router pairs them on the way in and out (D55) — including the browser back
+// button. Escape / backdrop / the ✕ button just navigate; the reverse morph is
+// awaited by the router before this view is destroyed.
+export default class TaskDialog extends PuzzleView {
+  created() {
+    this._onKey = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      this._close();
+    };
+  }
+
+  data(params) {
+    // findMany (not findOne) so a deep link rendered BEFORE the seeds land
+    // subscribes to the collection and fills in when they do.
+    const tasks = this.ctx.store.findMany('task');
+    return {
+      taskId: params.taskId,
+      task: tasks.find((task) => task.id === params.taskId) || null,
+    };
+  }
+
+  mounted() {
+    document.addEventListener('keydown', this._onKey);
+  }
+
+  // The morph flies the dialog back while this view is still mounted; fade the
+  // backdrop out alongside it. viewWillHide fires as the out phase starts —
+  // exactly when the reverse flight begins.
+  viewWillHide() {
+    const backdrop = this.element && this.element.querySelector('.task-backdrop');
+    if (backdrop) backdrop.classList.add('is-leaving');
+  }
+
+  destroyed() {
+    document.removeEventListener('keydown', this._onKey);
+  }
+
+  _close() {
+    this.ctx.router.push('/');
+  }
+
+  events = {
+    close: () => this._close(),
+  };
+}
+</scripts>

@@ -1,0 +1,40 @@
+<puzzle-view>
+  <section class="max-w-2xl prose-doc">
+    <p class="font-mono text-[11px] uppercase tracking-[0.3em] text-accent">About</p>
+    <h1 class="font-display text-4xl md:text-5xl text-ink">A guide that builds itself</h1>
+    <p>
+      This little site is itself a Puzzle app running in static mode. Every page you
+      read was rendered to HTML at build time — including the three principles below,
+      which were seeded into the store in <code>beforeMount</code> and read straight
+      out of this view's <code>data()</code>.
+    </p>
+  </section>
+
+  <section class="mt-12 grid gap-4">
+    {#for principle in principles}
+      <article class="rounded-2xl border border-line bg-surface p-6">
+        <h2 class="font-display text-2xl text-ink">{ principle.title }</h2>
+        <p class="mt-2 text-muted leading-relaxed">{ principle.body }</p>
+      </article>
+    {/for}
+  </section>
+
+  <p class="mt-10 text-sm text-faint">
+    { principles.length } principles, all baked into this page's static HTML.
+  </p>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class AboutView extends PuzzleView {
+  // Reads the records seeded at build time in app.js `beforeMount`. findMany
+  // auto-subscribes (SPEC §4); at build time it runs once under Node and the
+  // result is serialized into the static HTML.
+  data() {
+    return {
+      principles: this.ctx.store.findMany('principle'),
+    };
+  }
+}
+</scripts>

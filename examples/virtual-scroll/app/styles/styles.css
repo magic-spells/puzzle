@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+/* Tailwind v4 content detection — scan the app sources for utility classes. */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/* "Night desk" theme — a quiet near-monochrome dark palette with one amber accent. */
+@theme {
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Roboto", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink: #0a0a0c;
+  --color-surface: #131317;
+  --color-surface-2: #17171b;
+  --color-elevated: #202027;
+
+  --color-hairline: rgba(255, 255, 255, 0.09);
+  --color-line: rgba(255, 255, 255, 0.055);
+
+  --color-fg: #ece9e3;
+  --color-muted: #93929a;
+  --color-faint: #5a5960;
+
+  --color-accent: #e6a94d;
+  --color-accent-2: #f2bd6a;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink);
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .font-display {
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+}

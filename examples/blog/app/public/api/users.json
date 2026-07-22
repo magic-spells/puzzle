@@ -1,0 +1,26 @@
+[
+  {
+    "id": "u1",
+    "name": "Jane Doe",
+    "email": "jane@puzzle.dev",
+    "role": "maintainer",
+    "bio": "Created Puzzle and looks after the runtime kernel and the overall design of the framework.",
+    "joinedAt": "2026-01-15T00:00:00.000Z"
+  },
+  {
+    "id": "u2",
+    "name": "Marcus Lee",
+    "email": "marcus@puzzle.dev",
+    "role": "engineer",
+    "bio": "Works on the Go compiler and the esbuild plugin — parsing .pzl files and emitting virtual DOM.",
+    "joinedAt": "2026-02-03T00:00:00.000Z"
+  },
+  {
+    "id": "u3",
+    "name": "Priya Nair",
+    "email": "priya@puzzle.dev",
+    "role": "author",
+    "bio": "Writes the docs and the template guides, and keeps the formatter system honest.",
+    "joinedAt": "2026-03-20T00:00:00.000Z"
+  }
+]

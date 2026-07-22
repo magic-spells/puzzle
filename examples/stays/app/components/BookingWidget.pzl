@@ -1,0 +1,123 @@
+<puzzle-view>
+  <!-- The reservation card. Props carry the listing plus the currently-selected
+       check-in/check-out (owned by the Listing view, echoed down here). Because
+       props changing re-runs data() (SPEC §9), the price breakdown recomputes
+       automatically the moment the calendar updates the dates upstairs. -->
+  <div class="rounded-2xl ring-1 ring-line shadow-xl shadow-black/5 p-6 bg-elevated">
+    <!-- Header: nightly price + a compact rating on the right. -->
+    <div class="flex items-baseline justify-between gap-3 mb-5">
+      <div class="min-w-0">
+        <span class="text-2xl font-semibold text-fg">{ price | currency }</span>
+        <span class="text-muted"> night</span>
+      </div>
+      <div class="text-sm text-fg shrink-0">★ { rating | rating } <span class="text-muted">· { reviewCount } reviews</span></div>
+    </div>
+
+    <!-- Date summary: two cells that show the chosen dates, or a prompt. -->
+    <div class="grid grid-cols-2 rounded-lg ring-1 ring-hairline overflow-hidden mb-4">
+      <div class="p-3 border-r border-hairline">
+        <div class="text-[10px] font-semibold uppercase tracking-wide text-fg">Check-in</div>
+        <div class="text-sm mt-0.5 {#if checkIn}text-fg{/if}{#if !checkIn}text-muted{/if}">{#if checkIn}{ checkIn | monthDay }{:else}Add date{/if}</div>
+      </div>
+      <div class="p-3">
+        <div class="text-[10px] font-semibold uppercase tracking-wide text-fg">Checkout</div>
+        <div class="text-sm mt-0.5 {#if checkOut}text-fg{/if}{#if !checkOut}text-muted{/if}">{#if checkOut}{ checkOut | monthDay }{:else}Add date{/if}</div>
+      </div>
+    </div>
+
+    <!-- Reserve button. When no dates are picked it renders inert (muted fill,
+         no-op handler); once a full range is chosen it turns coral and calls the
+         parent's `reserve` callback (wired as @reserve on the tag). -->
+    {#if hasDates}
+      <button
+        type="button"
+        class="w-full rounded-lg bg-accent hover:bg-accent-2 text-accent-ink font-semibold py-3 transition-colors"
+        @click={ reserve }>Reserve</button>
+    {:else}
+      <button
+        type="button"
+        class="w-full rounded-lg bg-surface-2 text-faint font-semibold py-3 cursor-default"
+        @click={ noop }>Select dates</button>
+    {/if}
+
+    <p class="text-center text-xs text-muted mt-3">You won't be charged — this is a demo</p>
+
+    <!-- Price breakdown, only meaningful once a range spans one or more nights. -->
+    {#if hasDates}
+      <div class="mt-5 pt-5 border-t border-line space-y-3 text-sm">
+        <div class="flex items-center justify-between text-fg">
+          <span class="underline decoration-muted/40">{ price | currency } × { nights } { nights | plural('night','nights') }</span>
+          <span>{ subtotal | currency }</span>
+        </div>
+        <div class="flex items-center justify-between text-fg">
+          <span class="underline decoration-muted/40">Cleaning fee</span>
+          <span>{ cleaning | currency }</span>
+        </div>
+        <div class="flex items-center justify-between text-fg">
+          <span class="underline decoration-muted/40">Service fee</span>
+          <span>{ service | currency }</span>
+        </div>
+        <div class="flex items-center justify-between font-semibold text-fg pt-3 border-t border-line">
+          <span>Total</span>
+          <span>{ total | currency }</span>
+        </div>
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class BookingWidget extends PuzzleView {
+  data(params, props) {
+    const listing = props.listing || null;
+    const checkIn = props.checkIn || '';
+    const checkOut = props.checkOut || '';
+    const hasDates = !!(checkIn && checkOut);
+
+    // All money math lives here (SPEC §8 keeps logic out of the template). Props
+    // driving data() means these recompute every time the calendar commits a new
+    // range upstream — no manual re-sync.
+    let nights = 0;
+    let subtotal = 0;
+    let cleaning = 0;
+    let service = 0;
+    let total = 0;
+    if (listing && hasDates) {
+      const a = new Date(`${checkIn}T00:00:00`);
+      const b = new Date(`${checkOut}T00:00:00`);
+      nights = Math.max(0, Math.round((b - a) / 86_400_000));
+      subtotal = (listing.pricePerNight || 0) * nights;
+      cleaning = listing.cleaningFee || 0;
+      service = Math.round(subtotal * 0.12); // flat 12% demo service fee
+      total = subtotal + cleaning + service;
+    }
+
+    return {
+      checkIn,
+      checkOut,
+      hasDates,
+      nights,
+      subtotal,
+      cleaning,
+      service,
+      total,
+      // Defensive header values — listing may be null for a beat during seed.
+      price: listing ? listing.pricePerNight : 0,
+      rating: listing ? listing.rating : 0,
+      reviewCount: listing ? listing.reviewCount : 0
+    };
+  }
+
+  events = {
+    // Hand the reserve intent up to the Listing view, which creates the trip
+    // and navigates. Guarded so a missing prop can't throw.
+    reserve: () => {
+      if (typeof this.props.reserve === 'function') this.props.reserve();
+    },
+    // The inert "Select dates" button — deliberately does nothing.
+    noop: () => {}
+  };
+}
+</scripts>

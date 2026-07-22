@@ -1,0 +1,19 @@
+{
+  "name": "static-docs",
+  "version": "1.0.0",
+  "description": "Static documentation site built with Puzzle's SSG mode (v1.33)",
+  "main": "app.js",
+  "scripts": {
+    "dev": "puzzle dev",
+    "build": "puzzle build"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^1.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "concurrently": "^8.2.2",
+    "tailwindcss": "^4.1.14"
+  },
+  "type": "module"
+}

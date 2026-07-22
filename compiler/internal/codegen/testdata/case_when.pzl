@@ -1,0 +1,26 @@
+<puzzle-view class="order">
+  {#case order.status}
+    {:when 'pending', 'processing'}
+      <span class="spin">Working…</span>
+    {:when 'shipped'}
+      <div class="track">
+        {#if order.tracking}
+          <a href="/t">{ order.tracking }</a>
+        {:else}
+          <span>No tracking yet</span>
+        {/if}
+      </div>
+    {:else}
+      <p class="unknown">Unknown status</p>
+  {/case}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class CaseWhen extends PuzzleView {
+  data() {
+    return { order: { status: 'shipped', tracking: 'ABC123' } };
+  }
+}
+</scripts>

@@ -1,0 +1,56 @@
+<puzzle-view class="h-full">
+  <div class="h-full overflow-y-auto">
+    <div class="max-w-[860px] mx-auto px-8 py-10">
+      <header class="mb-8">
+        <div class="text-[0.7rem] uppercase tracking-[0.24em] text-muted mb-2">Mission Control</div>
+        <h1 class="font-display text-[2.3rem] font-semibold text-ink tracking-wide leading-tight">Flight Operations</h1>
+        <p class="mt-2 text-[0.95rem] text-muted max-w-[48ch]">Live status across the fleet, active missions, and crew. Choose a section in the sidebar to drill into telemetry.</p>
+      </header>
+
+      <!-- Stat tiles cascade in (StatTile stagger) -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10">
+        {#for s in stats, i}
+          <StatTile stat={ s } index={ i } />
+        {/for}
+      </div>
+
+      <!-- Recent telemetry feed -->
+      <div>
+        <div class="flex items-center gap-2.5 mb-3.5">
+          <span class="w-1 h-4 rounded-full bg-accent"></span>
+          <h2 class="font-display text-[0.95rem] font-semibold text-ink tracking-[0.14em] uppercase">Recent telemetry</h2>
+        </div>
+        <div class="rounded-xl border border-hair bg-surface divide-y divide-hair overflow-hidden">
+          {#for e in feed}
+            <div class="flex items-center gap-3.5 px-5 py-3.5">
+              <span class="w-2 h-2 shrink-0 rounded-full { e.dotClass }"></span>
+              <span class="flex-1 text-[0.9rem] text-body">{ e.text }</span>
+              <span class="shrink-0 font-mono text-[0.72rem] text-muted tabular-nums">{ e.time }</span>
+            </div>
+          {/for}
+        </div>
+      </div>
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import StatTile from '../components/StatTile.pzl';
+import { overview, tone } from '../data/catalog.js';
+
+export default class OverviewView extends PuzzleView {
+  data() {
+    return {
+      stats: overview.stats,
+      // Precompute each feed row's dot class here (templates can't call helpers).
+      feed: overview.feed.map((e) => ({ ...e, dotClass: tone(e.tone).dot }))
+    };
+  }
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' }, duration: 300, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' }, to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

@@ -1,0 +1,14 @@
+<puzzle-view>
+  <div class="card">
+    <div class="body">
+      <children/>
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The global wrapper component a layout forwards routed content into (D71).
+export default class Card extends PuzzleView {}
+</scripts>

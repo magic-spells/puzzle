@@ -1,0 +1,74 @@
+<puzzle-view class="min-h-screen">
+  {#if hasPages}
+    <!-- A page exists; mounted() redirects to it. Render nothing meaningful in
+         the flash before the redirect commits. -->
+    <div class="h-1"></div>
+  {:else}
+    <div class="mx-auto max-w-2xl px-12 py-24 text-center">
+      <div class="text-6xl mb-5">📖</div>
+      <h1 class="font-display text-3xl font-semibold text-ink mb-2">Your grimoire is empty</h1>
+      <p class="text-muted mb-8">Every spellbook starts with a single blank page. Write your first one.</p>
+      <button
+        class="inline-flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+        @click={ createFirst }
+      >
+        <span>＋</span>
+        <span>Create your first page</span>
+      </button>
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Home extends PuzzleView {
+  // Find the first page by order (sorting in data(), never the template).
+  data() {
+    const pages = this.ctx.store
+      .findMany('page')
+      .slice()
+      .sort((a, b) => a.order - b.order);
+    const first = pages[0] || null;
+    return {
+      first,
+      firstId: first ? first.id : null,
+      hasPages: pages.length > 0,
+    };
+  }
+
+  // Redirect into the first page. On a normal load the store has hydrated from
+  // localStorage before we mount, so mounted() handles it. On the very first
+  // visit the store is still empty at mount (app.js seeds just after mount) —
+  // but data() is subscribed to the page collection, so it re-runs when the
+  // seed lands and afterUpdate() catches the redirect then. The guard makes it
+  // fire exactly once.
+  mounted() {
+    this._maybeRedirect();
+  }
+
+  afterUpdate() {
+    this._maybeRedirect();
+  }
+
+  _maybeRedirect() {
+    if (this._redirected) return;
+    const { firstId } = this.getData();
+    if (firstId) {
+      this._redirected = true;
+      this.ctx.router.push('/p/' + firstId);
+    }
+  }
+
+  events = {
+    createFirst: () => {
+      const page = this.ctx.store.createRecord('page', {
+        title: 'Untitled',
+        icon: '📄',
+        order: 0,
+      });
+      this.ctx.router.push('/p/' + page.id);
+    },
+  };
+}
+</scripts>

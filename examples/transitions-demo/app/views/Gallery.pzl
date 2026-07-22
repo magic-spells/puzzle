@@ -1,0 +1,77 @@
+<puzzle-view class="view view-gallery">
+  <div class="view-eyebrow">02 — Gallery</div>
+  <h2 class="view-title">Gallery</h2>
+  <p class="view-body">
+    A grid of tiles. Same slide, different contents — the overlap app keeps this
+    grid moving in as Aurora slides out, so they cross in the middle.
+  </p>
+  <div class="gallery-grid">
+    <span class="tile tile-1"></span>
+    <span class="tile tile-2"></span>
+    <span class="tile tile-3"></span>
+    <span class="tile tile-4"></span>
+    <span class="tile tile-5"></span>
+    <span class="tile tile-6"></span>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class GalleryView extends PuzzleView {
+  // Same shared-axis slide as every view (SPEC §12) so the comparison reads
+  // clean — only the mode differs between the two apps, never the animation.
+  animations = {
+    in: {
+      from: { opacity: 0, transform: 'translateX(48px)' },
+      to: { opacity: 1, transform: 'translateX(0)' },
+      duration: 340,
+      easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
+    },
+    out: {
+      from: { opacity: 1, transform: 'translateX(0)' },
+      to: { opacity: 0, transform: 'translateX(-48px)' },
+      duration: 300,
+      easing: 'cubic-bezier(0.55, 0, 0.55, 0.2)'
+    }
+  };
+
+  data() {
+    return {};
+  }
+}
+</scripts>
+
+<styles>
+.view-gallery {
+  background:
+    radial-gradient(120% 120% at 15% 0%, rgba(251, 146, 60, 0.28), transparent 55%),
+    linear-gradient(160deg, #18181b 0%, #0f0f12 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  justify-content: flex-start;
+}
+
+.view-gallery .view-body {
+  margin-bottom: 20px;
+}
+
+.gallery-grid {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: 58px;
+  gap: 10px;
+}
+
+.tile {
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.tile-1 { background: linear-gradient(135deg, #f472b6, #db2777); }
+.tile-2 { background: linear-gradient(135deg, #fb923c, #ea580c); }
+.tile-3 { background: linear-gradient(135deg, #fbbf24, #d97706); }
+.tile-4 { background: linear-gradient(135deg, #34d399, #059669); }
+.tile-5 { background: linear-gradient(135deg, #38bdf8, #0284c7); }
+.tile-6 { background: linear-gradient(135deg, #818cf8, #6d28d9); }
+</styles>

@@ -1,0 +1,17 @@
+<puzzle-view class="panel">
+  <div class="body">
+    <children>
+      <p class="empty">Nothing yet, { placeholder }</p>
+    </children>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Panel extends PuzzleView {
+  data() {
+    return { placeholder: 'add one' };
+  }
+}
+</scripts>

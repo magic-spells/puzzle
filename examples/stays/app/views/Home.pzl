@@ -1,0 +1,143 @@
+<puzzle-view>
+  {#if loaded}
+    <!-- Hero. Big display headline with the punch word in the coral accent, a
+         warm subline, and a search pill that links to /search (the real search
+         lives there; this is the familiar Airbnb entry point). -->
+    <section class="text-center py-10 sm:py-16">
+      <h1 class="font-display text-4xl sm:text-6xl font-bold text-fg tracking-tight leading-[1.05]">
+        Find your place,<br />
+        <span class="text-accent">anywhere.</span>
+      </h1>
+      <p class="text-muted text-lg mt-5 max-w-xl mx-auto">
+        Cabins, beachfront villas, city lofts and more — { total } hand-picked stays around the world, ready when you are.
+      </p>
+
+      <a href="/search" class="mt-8 inline-flex items-center gap-3 pl-6 pr-2 py-2 rounded-full bg-bg ring-1 ring-hairline shadow hover:shadow-md transition-shadow text-fg font-medium hover:no-underline">
+        <span>Where to?</span>
+        <span class="w-px h-6 bg-line"></span>
+        <span class="text-muted font-normal">Anytime · Any guests</span>
+        <span class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-accent text-accent-ink text-lg">⌕</span>
+      </a>
+    </section>
+
+    <!-- Category chips. Horizontally scrollable on mobile so the row never wraps.
+         Filtering is LOCAL: a chip click sets activeTag and re-runs data() (see
+         setTag), which recomputes the grid — no navigation, no store round-trip.
+         Active chip is the Airbnb-style dark pill; inactive chips are ghost pills. -->
+    <div class="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
+      {#for cat in categories}
+        <button
+          type="button"
+          class="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-colors {#if cat.tag === activeTag}bg-fg text-bg{/if}{#if cat.tag !== activeTag}ring-1 ring-line text-muted hover:ring-hairline{/if}"
+          @click={ setTag(cat.tag) }>
+          {#if cat.emoji}<span class="text-base leading-none">{ cat.emoji }</span>{/if}
+          <span>{ cat.label }</span>
+        </button>
+      {/for}
+    </div>
+
+    <!-- Guest favorites lead the page, but only in the unfiltered view — once a
+         category is picked the page is about that category, so this section hides. -->
+    {#if activeTag === 'all'}
+      {#if favorites.length > 0}
+        <section class="mt-10">
+          <div class="flex items-baseline gap-2 mb-5">
+            <h2 class="font-display text-2xl font-bold text-fg">Guest favorites</h2>
+            <span class="text-muted text-sm">Most loved by travelers</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">
+            {#for listing in favorites, i}
+              <ListingCard listing={ listing } index={ i } />
+            {/for}
+          </div>
+        </section>
+      {/if}
+    {/if}
+
+    <!-- The filtered grid. Heading reflects the active category so the page reads
+         as "Explore stays" or e.g. "Cabins". -->
+    <section class="mt-12">
+      <h2 class="font-display text-2xl font-bold text-fg mb-5">{ heading }</h2>
+      {#if filtered.length > 0}
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">
+          {#for listing in filtered, i}
+            <ListingCard listing={ listing } index={ i } />
+          {/for}
+        </div>
+      {:else}
+        <div class="py-16 text-center text-muted">No stays in this category yet.</div>
+      {/if}
+    </section>
+  {:else}
+    <div class="py-24 text-center text-muted">Finding places to stay…</div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ListingCard from '../components/ListingCard.pzl';
+
+// The six browseable categories plus the "All" reset, in display order. Tags
+// match the seed's listing.tags slugs, so filtering is a plain includes() check.
+const CATEGORIES = [
+  { tag: 'all',         label: 'All',         emoji: ''    },
+  { tag: 'cabin',       label: 'Cabins',      emoji: '🏕️' },
+  { tag: 'beach',       label: 'Beachfront',  emoji: '🏝️' },
+  { tag: 'city',        label: 'City',        emoji: '🏙️' },
+  { tag: 'countryside', label: 'Countryside', emoji: '🌄' },
+  { tag: 'design',      label: 'Design',      emoji: '✨' },
+  { tag: 'trending',    label: 'Trending',    emoji: '🔥' },
+];
+
+export default class HomeView extends PuzzleView {
+  // Seed the local filter state before the first data() run. activeTag is UI
+  // state, so it lives in setData (not the store) and drives the recompute below.
+  created() {
+    this.setData({ activeTag: 'all' });
+  }
+
+  data(params, props) {
+    const store = this.ctx.store;
+    const listings = store.findMany('listing');
+
+    // Read the current chip out of local state and derive the visible grid here
+    // in data() (SPEC §8: logic lives in data(), not the template). setData does
+    // not re-run data(), so setTag() calls refresh() to land back here.
+    const activeTag = this.getData().activeTag || 'all';
+    const filtered = activeTag === 'all'
+      ? listings
+      : listings.filter((l) => Array.isArray(l.tags) && l.tags.includes(activeTag));
+
+    // Guest favorites for the lead section (unfiltered view only).
+    const favorites = listings.filter((l) => l.guestFavorite);
+
+    const active = CATEGORIES.find((c) => c.tag === activeTag);
+    const heading = activeTag === 'all' ? 'Explore stays' : (active ? active.label : 'Explore stays');
+
+    return {
+      categories: CATEGORIES,
+      activeTag,
+      listings,
+      filtered,
+      favorites,
+      heading,
+      total: listings.length,
+      loaded: listings.length > 0,
+    };
+  }
+
+  events = {
+    // Category filter. Mirror the chip into local state, then refresh() so data()
+    // recomputes `filtered` from the new activeTag (setData alone won't, SPEC §4).
+    setTag: (tag) => {
+      this.setData('activeTag', tag);
+      this.refresh();
+    }
+  };
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 260, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

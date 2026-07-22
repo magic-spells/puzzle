@@ -1,0 +1,41 @@
+<puzzle-view>
+  <!-- /u/:handle/likes pane. NOTE: likes are LOCAL to the signed-in user in this
+       demo (the `liked` flag lives on the post record, persisted to localStorage
+       — there's no per-user likes graph in the seed). So this pane shows the
+       chirps YOU have liked regardless of whose profile you're on. That's a
+       deliberate demo simplification; a real app would key likes by user. -->
+  {#if liked.length}
+    {#for post in liked, i}
+      <ChirpCard post={ post } index={ i } />
+    {/for}
+  {:else}
+    <div class="py-16 px-8 text-center">
+      <div class="text-5xl text-like leading-none">♥</div>
+      <h2 class="mt-4 text-xl font-bold text-fg">No likes yet</h2>
+      <p class="mt-2 text-muted">Tap the heart on any chirp and it will show up here.</p>
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ChirpCard from '@/components/ChirpCard.pzl';
+
+const byNewest = (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+
+export default class ProfileLikes extends PuzzleView {
+  data(params, props) {
+    // Liked chirps (local flag) — subscribes to posts, so un-liking one elsewhere
+    // drops it from this grid live.
+    const liked = this.ctx.store
+      .findMany('post', { filter: (p) => p.liked })
+      .sort(byNewest);
+    return { liked };
+  }
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateX(8px)' }, to: { opacity: 1, transform: 'translateX(0)' }, duration: 220, easing: 'ease-out' },
+    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 120, easing: 'ease-in' }
+  };
+}
+</scripts>

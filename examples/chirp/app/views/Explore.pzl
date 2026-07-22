@@ -1,0 +1,166 @@
+<puzzle-view>
+  <!-- Explore: search + trends. The query is local UI state; typing filters live
+       via @input (setData+refresh). The @keydown:enter modifier (v1.7, D38) is
+       the showcase here — pressing Enter blurs the field to dismiss the mobile
+       keyboard (the results are already applied on every keystroke). With no
+       query we show computed hashtag trends + a WhoToFollow card; with a query we
+       show matching people then matching chirps, and a {#unless} empty state when
+       nothing matches. Not a skeleton view — it reads the store synchronously and
+       re-renders when the seed lands (store subscription), the stays pattern. -->
+
+  <!-- Search bar. -->
+  <div class="sticky top-0 z-10 p-3 border-b border-line bg-bg/80 backdrop-blur">
+    <input
+      type="text"
+      value={ query }
+      placeholder="Search Chirp"
+      class="w-full rounded-full bg-surface-2 px-4 py-2 text-fg placeholder-faint focus:outline-none focus:ring-1 focus:ring-accent"
+      @input={ onSearch(event) }
+      @keydown:enter={ applySearch(event) } />
+  </div>
+
+  {#if searching}
+    <!-- {#unless} showcase (v1.7, D36): the no-results branch. Its {:else} holds
+         the actual results, so the empty state reads first. -->
+    {#unless hasResults}
+      <div class="py-16 px-8 text-center">
+        <h2 class="text-xl font-bold text-fg">No results for "{ query }"</h2>
+        <p class="mt-2 text-muted">Try a different name, @handle, or #hashtag.</p>
+      </div>
+    {:else}
+      {#if userResults.length}
+        <div>
+          <h2 class="px-4 py-3 text-lg font-bold text-fg border-b border-line">People</h2>
+          {#for u in userResults, i}
+            <a href="/u/{ u.handle }" class="flex items-center gap-3 px-4 py-3 border-b border-line hover:bg-surface-2 transition-colors hover:no-underline">
+              <Avatar user={ u } size="md" />
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-1">
+                  <span class="font-bold text-fg truncate">{ u.name }</span>
+                  {#if u.verified}<span class="text-accent shrink-0">✓</span>{/if}
+                </div>
+                <div class="text-muted text-sm truncate">{ u.at }</div>
+                {#if u.bio}<div class="text-muted text-sm truncate">{ u.bio }</div>{/if}
+              </div>
+              <FollowButton user={ u } />
+            </a>
+          {/for}
+        </div>
+      {/if}
+      {#if chirpResults.length}
+        <div>
+          <h2 class="px-4 py-3 text-lg font-bold text-fg border-b border-line">Chirps</h2>
+          {#for post in chirpResults, i}
+            <ChirpCard post={ post } index={ i } />
+          {/for}
+        </div>
+      {/if}
+    {/unless}
+  {:else}
+    <!-- Default view: trends then suggestions. -->
+    <div class="border-b border-line">
+      <h2 class="px-4 pt-4 pb-2 text-xl font-bold text-fg">Trends for you</h2>
+      {#if trends.length}
+        {#for t in trends, i}
+          <button type="button" class="w-full text-left px-4 py-3 hover:bg-surface-2 transition-colors" @click={ setQuery(t.tag) }>
+            <div class="text-xs text-muted">Trending in dev</div>
+            <div class="font-bold text-fg">{ t.tag }</div>
+            <div class="text-xs text-muted">{ t.count | compact } { t.count | plural('chirp', 'chirps') }</div>
+          </button>
+        {/for}
+      {:else}
+        <p class="px-4 pb-4 text-muted">No trends yet — check back once the feed fills up.</p>
+      {/if}
+    </div>
+
+    <div class="p-4">
+      <WhoToFollow />
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ChirpCard from '../components/ChirpCard.pzl';
+import Avatar from '../components/Avatar.pzl';
+import FollowButton from '../components/FollowButton.pzl';
+import WhoToFollow from '../components/WhoToFollow.pzl';
+
+const byNewest = (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+
+export default class ExploreView extends PuzzleView {
+  created() {
+    this.setData({ query: '' });
+  }
+
+  data(params, props) {
+    const store = this.ctx.store;
+    const query = (this.getData().query || '').trim();
+    const q = query.toLowerCase();
+
+    const posts = store.findMany('post');
+    const users = store.findMany('user');
+
+    // Trends: tally #hashtag occurrences across every chirp body, top six.
+    // (Counting/sorting is data() work — SPEC §8.)
+    const counts = {};
+    posts.forEach((p) => {
+      const tags = String(p.body || '').match(/#[A-Za-z0-9_]+/g) || [];
+      tags.forEach((raw) => {
+        const tag = raw.toLowerCase();
+        counts[tag] = (counts[tag] || 0) + 1;
+      });
+    });
+    const trends = Object.keys(counts)
+      .map((tag) => ({ tag, count: counts[tag] }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+
+    // Results only exist while there's a query. Match users by name/handle and
+    // chirps by body substring (a hashtag query like "#css" matches its chirps).
+    let userResults = [];
+    let chirpResults = [];
+    if (q) {
+      userResults = users.filter(
+        (u) => u.handle.toLowerCase().includes(q) || String(u.name || '').toLowerCase().includes(q)
+      );
+      chirpResults = posts
+        .filter((p) => String(p.body || '').toLowerCase().includes(q))
+        .sort(byNewest);
+    }
+
+    return {
+      query,
+      trends,
+      searching: q.length > 0,
+      userResults,
+      chirpResults,
+      hasResults: userResults.length + chirpResults.length > 0,
+    };
+  }
+
+  events = {
+    onSearch: (event) => {
+      this.setData('query', event.target.value);
+      this.refresh();
+    },
+
+    // @keydown:enter — the results are already live, so Enter just dismisses the
+    // keyboard by blurring the input (modifier showcase).
+    applySearch: (event) => {
+      if (event && event.target && event.target.blur) event.target.blur();
+    },
+
+    // Tapping a trend loads it into the search box.
+    setQuery: (tag) => {
+      this.setData('query', tag);
+      this.refresh();
+    },
+  };
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 240, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },   to: { opacity: 0, transform: 'translateY(-6px)' }, duration: 150, easing: 'ease-in' }
+  };
+}
+</scripts>

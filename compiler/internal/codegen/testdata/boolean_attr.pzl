@@ -1,0 +1,14 @@
+<puzzle-view class="form">
+  <input type="text" value={ name } autofocus />
+  <button disabled={ !name.trim() }>Go</button>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class BooleanAttr extends PuzzleView {
+  data() {
+    return { name: '' };
+  }
+}
+</scripts>

@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
+ * and JS so the utility classes they use are generated. Paths are relative to
+ * this stylesheet (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/*
+ * "Night desk" theme — a quiet, near-monochrome dark palette with a single
+ * warm amber accent. Semantic tokens defined here become Tailwind utilities
+ * (bg-surface, text-muted, border-hairline, font-display, …).
+ */
+@theme {
+  /* Type — editorial serif display, grotesque UI, mono for numerals */
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Roboto", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Surfaces — layered neutral blacks */
+  --color-ink: #0a0a0c;
+  --color-surface: #131317;
+  --color-surface-2: #17171b;
+  --color-elevated: #202027;
+
+  /* Hairlines — translucent so they read against any surface */
+  --color-hairline: rgba(255, 255, 255, 0.09);
+  --color-line: rgba(255, 255, 255, 0.055);
+
+  /* Text — warm off-white stepping down to faint */
+  --color-fg: #ece9e3;
+  --color-muted: #93929a;
+  --color-faint: #5a5960;
+
+  /* The one accent — warm amber, plus a brighter hover and a muted danger */
+  --color-accent: #e6a94d;
+  --color-accent-2: #f2bd6a;
+  --color-danger: #cf6b5e;
+}
+
+/* Base styles — dark canvas everywhere, refined text rendering */
+@layer base {
+  html {
+    background-color: var(--color-ink);
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Instrument Serif reads better with a touch of optical sizing at scale */
+  .font-display {
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+}
+
+/*
+ * A single, barely-there amber glow overhead — atmospheric depth without a
+ * multi-color gradient. Sits behind the content, fades out quickly.
+ */
+@layer components {
+  .app-glow {
+    background: radial-gradient(
+      120% 80% at 50% -10%,
+      rgba(230, 169, 77, 0.10) 0%,
+      rgba(230, 169, 77, 0.03) 28%,
+      transparent 60%
+    );
+  }
+}

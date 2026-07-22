@@ -1,0 +1,104 @@
+---
+name: Puzzle
+verified_at: '2026-07-22T00:04:04.329Z'
+verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
+status: verified
+---
+
+# Puzzle project map
+
+Puzzle is a SPA-first JavaScript framework with `.pzl` single-file components,
+a reactive browser runtime, and a Go + esbuild compiler/CLI. Optional static
+generation prerenders routes without adding an SSR server or hydration layer.
+
+[[DOC-SPEC]] is the enforceable contract and wins all conflicts. Decisions
+D1-D76 in [[DOC-DECISIONS]] explain why the contract has its current shape.
+[[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
+
+## Current state
+
+- `0.1.0` is release-candidate code: v1 through v1.43, D1-D76, plus the
+  pre-release hardening at `3433c47`.
+- Runtime, compiler, CLI, static generation, state-preserving dev reload,
+  TypeScript transpilation, model validation/relationships/write sync, nested
+  routing, slots, refs, scoped styles, animations, and optional morphs are all
+  implemented.
+- The npm package includes the JavaScript runtime/types, the `puzzle` shim, and
+  optional macOS/Linux binaries for arm64/x64.
+- `examples/todos` is the canonical integration app. The rest of `examples/`
+  are focused acceptance/showcase apps.
+- The feature backlog is empty. Remaining release work is truthing docs,
+  package verification, tag/publish, and launch assets.
+
+## Deferred / known limitations
+
+Explicitly future or unshipped, not release blockers:
+
+- Tailwind standalone-binary support in the styles runner (consideration).
+- FLIP animations for keyed reorders.
+- D23 `setData` ergonomics papercut (`setData` re-running `data()` when it
+  touches keys `data()` read; today pair `setData` with explicit `refresh()`).
+- Height animations need explicit px — WAAPI cannot animate to `auto`.
+
+## Release checklist
+
+1. Keep README, CLAUDE, [[DOC-RELEASE-SURFACE]], and current-state component
+   cards aligned with HEAD.
+2. Run Vitest and all Go package tests; run type/package/example checks where
+   the changed surface calls for them.
+3. Verify the npm tarball and platform-package metadata.
+4. Tag and publish the four platform packages before the root package.
+5. Smoke-test install, scaffold, dev, production build, and static build from a
+   clean consumer project.
+
+## Card map
+
+### Contracts and release truth
+
+- [[DOC-SPEC]] — frozen public contract; every amendment requires a decision.
+- [[DOC-DECISIONS]] — numeric decision index and links to ADR cards.
+- [[DOC-RELEASE-SURFACE]] — complete, compact shipped-surface inventory.
+- [[DOC-BUILD-PLAN]] — v1 implementation plan and release-phase status.
+
+### Runtime components
+
+- [[COMPONENT-PUZZLE-APP]] — app wiring and lifecycle.
+- [[COMPONENT-ROUTER]] — routing, transitions, scrolling, and commit semantics.
+- [[COMPONENT-PUZZLE-VIEW]] — component state and lifecycle.
+- [[COMPONENT-VIEW-MANAGER]] — vnode/DOM patching and composition.
+- [[COMPONENT-ANIMATIONS]] — WAAPI and visible-trigger scheduling.
+- [[COMPONENT-STORE]] / [[COMPONENT-PUZZLE-MODEL]] — data layer.
+- [[COMPONENT-FORMATTERS]] — formatter registry and built-ins.
+- [[COMPONENT-DEVSTATE]] — development reload state transfer.
+- [[COMPONENT-MORPH]] — optional shared-element morph integration.
+- [[COMPONENT-SSG]] — static prerender runtime and serializer.
+
+### Compiler and tooling
+
+- [[COMPONENT-TEMPLATE-PARSER]] — `.pzl` sections, grammar, and errors.
+- [[COMPONENT-CODEGEN]] — render emission and expression resolution.
+- [[COMPONENT-ESBUILD-PLUGIN]] — bundling, config, styles, aliases, outputs.
+- [[COMPONENT-COMPILER-CLI]] — CLI commands, scaffolds, generators, pieces.
+- [[COMPONENT-DEV-SERVER]] — watch/rebuild/server/SSE loop.
+- [[FLOW-BUILD]] / [[FLOW-REACTIVITY]] — end-to-end build and update flows.
+
+### User and contributor references
+
+- [[DOC-USER-GUIDE]], [[DOC-PUZZLE-FILE]], [[DOC-TEMPLATE-SYNTAX]],
+  [[DOC-EVENTS]], [[DOC-MODELS]], [[DOC-DATASTORE]], [[DOC-ROUTER]].
+- [[DOC-ARCHITECTURE]], [[DOC-APP-ANATOMY]], [[DOC-VIEW-LIFECYCLE]],
+  [[DOC-RUNTIME-KERNEL]], [[DOC-COMPILER-DESIGN]], [[DOC-COMPILATION-FLOW]],
+  [[DOC-TESTING]], [[DOC-DEVELOPMENT]], [[DOC-CODE-REVIEW]], [[DOC-GLOSSARY]].
+- Example-specific cards document notable patterns; they are not substitutes
+  for the public contract.
+
+## Conventions
+
+- Decision cards keep rationale and rejected alternatives. Git keeps the full
+  timeline. Component/flow cards describe current behavior and durable gotchas,
+  not release-by-release history.
+- Read cards before changing covered code and update them in the same work.
+- Keep future/rejected ideas explicitly labeled; never blur them into the
+  shipped surface.
+- Run `npx vitest run` and `go test ./...` in `compiler/` before claiming
+  success.

@@ -1,0 +1,53 @@
+<puzzle-view class="h-full">
+  <div class="relative h-full flex overflow-hidden">
+    <!-- Master list -->
+    <div class="flex-1 min-w-0 overflow-y-auto">
+      <div class="max-w-[760px] mx-auto px-8 py-9">
+        <header class="mb-6">
+          <div class="text-[0.7rem] uppercase tracking-[0.24em] text-muted mb-1.5">Crew</div>
+          <h1 class="font-display text-[1.9rem] font-semibold text-ink tracking-wide">Roster</h1>
+          <p class="mt-1.5 text-[0.9rem] text-muted">{ items.length } personnel on the manifest · select one for the dossier</p>
+        </header>
+
+        <div class="flex flex-col gap-2.5">
+          {#for item in items, i}
+            <ListRow item={ item } index={ i } active={ selectedId === item.id } @select={ selectItem(item) } />
+          {/for}
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail child route renders here (nested routes, D30): /crew fills the
+         slot with the empty index child; /crew/:id slides in Detail.pzl. -->
+    <Slot />
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ListRow from '../components/ListRow.pzl';
+import { crew } from '../data/catalog.js';
+
+export default class CrewView extends PuzzleView {
+  // Selection is URL state (nested routes, v1.3/D30) — see Fleet.pzl for the
+  // full pattern notes.
+  data(params) {
+    return {
+      items: crew,
+      selectedId: params.id || null,
+    };
+  }
+
+  events = {
+    selectItem: (item) => {
+      const { selectedId } = this.getData();
+      this.ctx.router.push(selectedId === item.id ? '/crew' : `/crew/${item.id}`);
+    }
+  };
+
+  animations = {
+    in:  { from: { opacity: 0 }, to: { opacity: 1 }, duration: 220, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' }, to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

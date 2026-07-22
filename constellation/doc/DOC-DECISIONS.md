@@ -1,0 +1,115 @@
+---
+name: DECISIONS.md — decision-log index (D1–D75)
+status: verified
+verified_at: '2026-07-22T00:04:05.457Z'
+verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
+connections:
+  - DOC-SPEC
+---
+
+Index of the ADR-lite decision log. Each decision D1–D75 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+
+# Decision Log (index)
+
+Running log of architectural decisions. **Each decision is a DECISION card** —
+the cards carry the full Context / Decision / Alternatives / Consequences;
+this index maps the historical D-numbers to them. Append new decisions as new
+`DECISION-D<nn>-…` cards with the next number and add them here. Do not
+renumber or delete entries; mark superseded decisions with the `supersedes`
+field on the successor card.
+
+[[DOC-SPEC]] is the enforceable contract; the decision cards record **why**.
+
+## Founding & v1 contract
+
+- **D1** [[DECISION-D01-SPA-ONLY]] — SPA-only, client-side-rendering framework
+- **D2** [[DECISION-D02-CLASS-COMPONENTS]] — class-based components; `Puzzle.createView` removed
+- **D3** [[DECISION-D03-SCRIPTS-REAL-JS]] — `<scripts>` blocks are real JavaScript (the most consequential decision in the project)
+- **D4** [[DECISION-D04-EVENT-HANDLER-CONVENTION]] — bare identifier vs call expression in `@event`
+- **D5** [[DECISION-D05-SCHEMA-BUILDERS]] — schema via `Puzzle.*` field builders
+- **D6** [[DECISION-D06-COMPUTED-GETTERS]] — model computed properties are plain getters
+- **D7** [[DECISION-D07-NAMING]] — `PuzzleApp`, `app.mount()`, "formatters"
+- **D8** [[DECISION-D08-MINIMAL-CONFIG]] — minimal v1 config surface
+- **D9** [[DECISION-D09-GO-ESBUILD-COMPILER]] — compiler is Go + an esbuild `onLoad` plugin
+- **D10** [[DECISION-D10-PROTOTYPE-RENDER]] — generated `render()` attached via prototype assignment
+- **D11** [[DECISION-D11-PROJECT-LAYOUT]] — `app/` source, `dist/` output
+- **D12** [[DECISION-D12-TAILWIND-FIRST]] — Tailwind-first styling; `<styles>` is global CSS in v1
+- **D13** [[DECISION-D13-CLI-DEV-BUILD]] — CLI v1 is `puzzle dev` + `puzzle build`; build defaults to production
+- **D14** [[DECISION-D14-TODOS-MILESTONE]] — the v1 milestone is the todos app, end-to-end
+- **D15** [[DECISION-D15-PLAIN-CLASS-VIEW]] — `PuzzleView` is a plain class, not a web component
+- **D16** [[DECISION-D16-COMPOSITION-SLOTS-CALLBACKS]] — default composition + callback props; no `$emit` (marker respelled by D74)
+- **D17** [[DECISION-D17-RENDER-FUNCTIONS-VDOM]] — compiled render functions + runtime virtual DOM; no shadow DOM
+- **D18** [[DECISION-D18-PER-NODE-LISTENERS]] — per-node event listeners; document delegation rejected for v1
+- **D19** [[DECISION-D19-NAVIGATION-COMMIT]] — commit-ordered URL, nav tokens, catch-all 404, layout reuse
+- **D20** [[DECISION-D20-PUZZLE-VIEW-ELEMENT]] — `<puzzle-view>` element for views/layouts only; components render inline
+- **D21** [[DECISION-D21-ADAPTER-READ-PATH]] — server data via explicit load methods reading the model's adapter
+- **D22** [[DECISION-D22-NO-ESCAPE-BY-DEFAULT]] — interpolation safety under the vdom; no escape-by-default
+- **D23** [[DECISION-D23-REFRESH-PATTERN]] — derived-from-local-UI state re-runs `data()` via `this.refresh()`
+- **D24** [[DECISION-D24-CLASS-NAME-EXTRACTION]] — compiled component name from the `export default class` declaration
+- **D25** [[DECISION-D25-BARE-FORMATTER-CALLS]] — formatter calls compile to bare `__f.name(...)`; `__missing` deferred
+
+## Build & tooling (Phase 3+)
+
+- **D26** [[DECISION-D26-TAILWIND-PIPELINE]] — node-read config, one-shot-per-build CLI, unified composition
+- **D27** [[DECISION-D27-FAST-DEV-REBUILDS]] — direct CLI resolution + warm Tailwind watcher + esbuild incremental context (amends D26)
+- **D27b** [[DECISION-D27B-BLOG-EXAMPLE]] — `examples/blog/` replaces the deprecated `example-app/` *(the log historically numbered two entries D27)*
+- **D31** [[DECISION-D31-FORMATTER-TREESHAKE]] — compile-time formatter tree-shaking: manifest-seeded registry
+- **D35** [[DECISION-D35-NO-SASS]] — no Sass support, ever
+
+## Shipped amendments (v1.1–v1.42)
+
+Each shipped as an additive amendment; the corresponding FEATURE card is the
+slice-of-work view.
+
+- **D28** [[DECISION-D28-ANIMATIONS]] — view & component animations (v1.1 → [[FEATURE-V1-1-ANIMATIONS]])
+- **D29** [[DECISION-D29-LOOP-COUNTER]] — `{#for}` trailing `, name` loop counter (v1.2 → [[FEATURE-V1-2-LOOP-COUNTER]])
+- **D30** [[DECISION-D30-NESTED-ROUTES]] — children arrays, chain-prefix reuse, root-only layouts (v1.3 → [[FEATURE-V1-3-NESTED-ROUTES]])
+- **D32** [[DECISION-D32-CLI-TOOLING]] — init/generate/add/doctor/info (v1.4 → [[FEATURE-V1-4-CLI-TOOLING]])
+- **D33** [[DECISION-D33-ROUTER-SCROLL]] — router-owned window scroll (v1.5 → [[FEATURE-V1-5-SCROLL-BEHAVIOR]])
+- **D34** [[DECISION-D34-HASH-ROUTING]] — opt-in `routerMode: 'hash'` (v1.6 → [[FEATURE-V1-6-HASH-ROUTING]])
+- **D36** [[DECISION-D36-UNLESS]] — `{#unless}` inverted conditional (v1.7 → [[FEATURE-V1-7-TEMPLATE-EVENT-GRAMMAR]])
+- **D37** [[DECISION-D37-CASE-WHEN]] — `{#case}`/`{:when}` multi-branch block (v1.7 → [[FEATURE-V1-7-TEMPLATE-EVENT-GRAMMAR]])
+- **D38** [[DECISION-D38-EVENT-MODIFIERS]] — `@event:modifier={...}` (v1.7 → [[FEATURE-V1-7-TEMPLATE-EVENT-GRAMMAR]])
+- **D39** [[DECISION-D39-SKELETON]] — `<puzzle-skeleton>` loading templates (v1.8 → [[FEATURE-V1-8-SKELETONS]])
+- **D40** [[DECISION-D40-ELSE-IF]] — `{:else if}` conditional chaining (v1.9 → [[FEATURE-V1-9-ELSE-IF]])
+- **D41** [[DECISION-D41-SCROLL-ANCHORS-PERSISTENCE]] — anchor-target scrolling + sessionStorage scroll persistence (v1.10 → [[FEATURE-V1-10-SCROLL-FOLLOWUPS]])
+- **D42** [[DECISION-D42-MEMORY-MODE]] — `routerMode: 'memory'` + go/back/forward API (v1.11 → [[FEATURE-V1-11-MEMORY-MODE]])
+- **D43** [[DECISION-D43-FORMATTER-MISSING-GUARD]] — the `__missing` formatter typo-guard, superseding the D25 deferral (v1.12 → [[FEATURE-V1-12-FORMATTER-GUARD]])
+- **D44** [[DECISION-D44-DOM-ISLANDS]] — the `island` DOM-ownership attribute (v1.13 → [[FEATURE-V1-13-DOM-ISLANDS]])
+- **D45** [[DECISION-D45-BACKSPACE-DELETE-FILTERS]] — `backspace`/`delete` key filters (v1.13 → [[FEATURE-V1-13-DOM-ISLANDS]])
+- **D46** [[DECISION-D46-INLINE-SVG]] — `{#svg 'path'}` compile-time SVG inlining from `app/assets/` (v1.14 → [[FEATURE-V1-14-INLINE-SVG]])
+- **D47** [[DECISION-D47-ROUTE-SNAPSHOT]] — per-navigation route snapshot `this.route` through the D19 gate; reuseLayout commit reorder (v1.15 → [[FEATURE-V1-15-ROUTE-SNAPSHOT]])
+- **D48** [[DECISION-D48-SCHEMA-VALIDATION]] — schema validation enforces at the local write boundary: throw on write, `{ valid, errors }` to render (v1.16 → [[FEATURE-SCHEMA-VALIDATION]])
+- **D49** [[DECISION-D49-MODEL-RELATIONSHIPS]] — `hasMany`/`belongsTo` resolve as lazy store-backed getters with FK-by-convention (v1.17 → [[FEATURE-MODEL-RELATIONSHIPS]])
+- **D50** [[DECISION-D50-ADAPTER-WRITE-SYNC]] — adapter write path: explicit `save()`/`delete()` verbs, local-first, validate-before-sync (v1.18 → [[FEATURE-ADAPTER-WRITE-SYNC]])
+- **D51** [[DECISION-D51-ROUTER-BASE-PATH]] — one `routerBase` applied at the path-shape boundary: pathname prefix (history), in-fragment prefix (hash), inert (memory) (v1.19 → [[FEATURE-ROUTER-BASE-PATH]])
+- **D52** [[DECISION-D52-SKELETON-ANTIFLASH]] — skeleton anti-flash: opt-in `min-duration` hold; the error slot resolves won't-build (v1.20 → [[FEATURE-SKELETON-FOLLOWUPS]])
+- **D53** [[DECISION-D53-NAMED-SLOTS]] — named slots: `<slot name>` with fallbacks, filled by `slot="…"` attributes on direct component children (v1.21 → [[FEATURE-NAMED-SLOTS]])
+- **D54** [[DECISION-D54-TYPESCRIPT-SCRIPTS]] — `<scripts lang="ts">` TypeScript, transpile-only via esbuild; `.pzl` stays the only extension (v1.22 → [[FEATURE-TYPESCRIPT-SCRIPTS]])
+- **D55** [[DECISION-D55-MORPH-TRANSITIONS]] — shared-element morph route transitions: `data-puzzle-morph` identity pairing + one router morph-handler slot; engine stays an optional peer (v1.23 → [[FEATURE-MORPH-TRANSITIONS]])
+- **D56** [[DECISION-D56-OVERLAP-TRANSITIONS]] — overlapping route transitions: opt-in `transitionMode: 'overlap'`, fixed-pin positioning keeps D28's no-wrapper rule (v1.24 → [[FEATURE-OVERLAPPING-TRANSITIONS]])
+- **D57** [[DECISION-D57-HMR-STATE-RELOAD]] — HMR as a state-preserving dev reload: snapshot/restore across the SSE reload, per-module swap explicitly not built (v1.25 → [[FEATURE-HMR]])
+- **D58** [[DECISION-D58-LIST-KEYING]] — list keying: pk-aware `ViewNode.keyOf` auto-key, explicit `key={…}` overrides instead of doubling, null keys warn once (v1.26 → [[FEATURE-V1-26-LIST-KEYING]])
+- **D59** [[DECISION-D59-SCOPED-STYLES]] — `<styles scoped>` via native `@scope` wrapping + one root-stamped attribute; the compiler still never parses CSS (v1.27 → [[FEATURE-SCOPED-STYLES]])
+- **D60** [[DECISION-D60-DROP-CONSOLE-OPT-OUT]] — production console-strip becomes opt-out: `build: { dropConsole: false }` in puzzle.config.js keeps user console calls; default (strip) unchanged, dev builds never strip
+- **D61** [[DECISION-D61-ATOMIC-LOCATION-COMMIT]] — URL/history/title commit atomically with the incoming mount, inside #swap's commit window after the out phase + token checks; restores D19's stated atomicity, closes the phantom-history-entry and URL/view-divergence holes (v1.28 → SPEC §30)
+- **D62** [[DECISION-D62-HANDLER-CACHING]] — data-independent `@event` handlers emit per-instance cached closures (`this.__h`); component callback props stop defeating shallowEqual, cached DOM listener sites stop rebinding per patch (v1.29 → [[FEATURE-V1-29-COMPOSITION-FIXES]], SPEC §31)
+- **D63** [[DECISION-D63-HIDDEN-TAB-FLUSH]] — store flush keeps rAF primary but gains a `document.hidden` schedule branch + fallback timer; hidden-tab apps deliver (throttled) instead of freezing (v1.29 → [[FEATURE-V1-29-COMPOSITION-FIXES]])
+- **D64** [[DECISION-D64-MEMO-HELPER]] — `this.memo(key, deps, factory)`: per-instance reference-stable derived values, the blessed idiom for object/array props under shallowEqual (v1.29 → [[FEATURE-V1-29-COMPOSITION-FIXES]], SPEC §32)
+- **D65** [[DECISION-D65-PER-ROUTE-TRANSITION-MODE]] — per-route/per-view `transitionMode` override, resolved destination-only (route field → view/layout field → app default), amends D56 (v1.30 → SPEC §33)
+- **D66** [[DECISION-D66-APP-LIFECYCLE-HOOKS]] — app lifecycle hooks `beforeMount`/`mounted`/`beforeUnmount` on the config; the FEATURE-APP-SURFACE triage re-rejects the rest of the umbrella (v1.31 → SPEC §34, [[FEATURE-APP-SURFACE]])
+- **D67** [[DECISION-D67-SSG-STATIC-BUILD]] — static site generation as an additive build output mode: `puzzle build --static` prerenders per-route HTML via a ViewNode serializer + node prerender step, router takeover at nav #0; amends D1's scope, not its architecture (v1.33 → SPEC §36, [[FEATURE-V1-33-SSG]])
+- **D68** [[DECISION-D68-CROSS-VIEW-MORPH]] — cross-view morphs: enableMorph captures sibling-swap sources at the router's leave hook and flies a clone at enter (both directions, skeleton-aware, click-candidate pinning for polish); router untouched, amends D55 (v1.35 → SPEC §37, [[FEATURE-V1-35-CROSS-VIEW-MORPH]])
+- **D69** [[DECISION-D69-MORPH-ROLES]] — directional morph roles: `data-puzzle-morph-trigger` (launches only) / `data-puzzle-morph-target` (receives only, preferred landing on id collision) alongside symmetric plain `data-puzzle-morph`; trigger→target pairs are forward-only — direction as an element property, not a history property (v1.36 → SPEC §37)
+- **D70** [[DECISION-D70-TEMPLATE-COMMENTS]] — template comments: `{## }` inline (brace-depth scan, not string-aware) + `{#comment}…{/comment}` raw-discard block (nestable, can wrap broken markup); both erased at the lexer, text positions only (v1.37 → SPEC §6)
+- **D71** [[DECISION-D71-SLOT-FORWARDING]] — default-slot forwarding through a component invocation: `<Card><children/></Card>` in a layout forwards the routed page into Card's default slot (expansion walk descends into call-site children); named markers there are compile errors — decision minted retroactively for the 458f907 wrapper-layout fix, which had mis-cited D69 (v1.38 → SPEC §24)
+- **D72** [[DECISION-D72-ELEMENT-REFS]] — element refs: static `ref="name"` → `this.refs.name`, populated pre-`mounted()`, re-pointed on replacement, guarded-null on removal; compiled to a per-instance cached setter (`this.__ref`), braces form rejected by the expression boundary (v1.39 → SPEC §38)
+- **D73** [[DECISION-D73-SCROLL-TRIGGER-ANIMATIONS]] — scroll-triggered enter animations: `trigger: 'visible'` + `triggerOffset` on the `in` spec; paused-WAAPI from-state hold, shared per-rootMargin IntersectionObserver, hook bracket defers to the reveal, every degradation lands on `'mount'` behavior; runtime-only, amends D28 (v1.40 → SPEC §39)
+- **D74** [[DECISION-D74-CHILDREN-MARKER]] — `<children/>` replaces the bare `<slot/>`: one role per spelling (`<children/>` default marker with optional fallback, `<slot name>` named-only with `name` required, `<Slot/>` router outlet, bare-only); emission byte-stable (`SLOT_TAG` markers unchanged), runtime/SSG untouched; amends D16/D53/D71 spellings pre-npm-publish (v1.41 → SPEC §24)
+- **D75** [[DECISION-D75-IMPORT-ALIAS]] — the `@` app import alias: `@/…` resolves to the app's `app/` directory in every bundle (one esbuild alias entry, segment-boundary matching leaves `@magic-spells/…` untouched); fixed and zero-config, a general `resolve.alias` stays deferred (v1.42 → SPEC §40)
+- **D76** [[DECISION-D76-CLI-UPGRADE]] — CLI update notification + `puzzle upgrade`: `build`/`dev` print a cache-first, never-blocking newer-release notice (TTY-only; `CI`/`PUZZLE_NO_UPDATE_CHECK` skip it); `upgrade` detects project/global/manual install context and drives the user's own package manager (lockfile-detected, dep-field preserved, result confirmed) — npm stays the owner of installation, the binary never self-replaces (v1.43 → SPEC §41)
+
+## Open questions (tracked, not yet decided)
+
+- `Puzzle.*` vs dedicated builder namespace (see [[DECISION-D05-SCHEMA-BUILDERS]]).
+- Whether `puzzle dev` serves `/api` mocks (post-v1).

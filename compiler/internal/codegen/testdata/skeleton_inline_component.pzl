@@ -1,0 +1,22 @@
+<puzzle-view>
+  <div class="user-card">
+    <h2>{ user.name }</h2>
+  </div>
+</puzzle-view>
+
+<puzzle-skeleton>
+  <div class="user-card is-loading">
+    <h2 class="bg-skeleton h-5"></h2>
+  </div>
+</puzzle-skeleton>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class SkeletonInlineComponent extends PuzzleView {
+  async data(params, props) {
+    const user = await this.ctx.store.findOne('user', props.userId);
+    return { user };
+  }
+}
+</scripts>

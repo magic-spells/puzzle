@@ -1,0 +1,75 @@
+<puzzle-view class="flex h-full">
+  <!-- Sidebar. Part of the persistent Shell frame, so it stays mounted while the
+       Welcome/Thread child swaps at <Slot /> below — only the child animates. -->
+  <aside class="w-72 shrink-0 flex flex-col bg-surface border-r border-hairline">
+    <div class="flex items-center gap-2.5 px-4 h-16 border-b border-hairline">
+      <span class="grid place-items-center w-8 h-8 rounded-lg bg-accent text-white text-sm font-bold">P</span>
+      <span class="font-semibold tracking-tight">Puzzle Chat</span>
+    </div>
+
+    <div class="p-3">
+      <button
+        type="button"
+        class="w-full flex items-center justify-center gap-2 h-10 rounded-xl border border-hairline text-sm font-medium text-fg hover:bg-surface-2 transition-colors"
+        @click={ newChat }>
+        <span class="text-lg leading-none">+</span> New chat
+      </button>
+    </div>
+
+    <nav class="flex-1 min-h-0 overflow-y-auto px-2 pb-3 flex flex-col gap-1">
+      {#for conversation in conversations, i}
+        <ConversationItem
+          conversation={ conversation }
+          active={ conversation.id === activeId }
+          index={ i }
+          @select={ openConversation(conversation) }
+          @delete={ removeConversation(conversation) } />
+      {/for}
+    </nav>
+  </aside>
+
+  <!-- The matched child (Welcome index, or Thread at c/:id) renders here. -->
+  <div class="flex-1 min-w-0 flex flex-col">
+    <Slot />
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ConversationItem from '../components/ConversationItem.pzl';
+
+// The persistent sidebar-plus-pane frame and the nested-route parent (D30): it
+// renders its matched child at <Slot />. data(params) receives the FULL merged
+// params, so `params.id` is set whenever a thread is open — that drives the
+// active-row highlight. The conversation query auto-subscribes, so creating a
+// thread or bumping one's updatedAt (a streamed reply) reorders the list live.
+export default class Shell extends PuzzleView {
+  data(params) {
+    const conversations = this.ctx.store
+      .findMany('conversation')
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    return {
+      conversations,
+      activeId: params.id || null,
+    };
+  }
+
+  events = {
+    newChat: () => {
+      this.ctx.router.push('/');
+    },
+    openConversation: (conversation) => {
+      this.ctx.router.push(`/c/${conversation.id}`);
+    },
+    removeConversation: (conversation) => {
+      const wasActive = conversation.id === this.getData().activeId;
+      // Drop the thread's messages first, then the thread itself.
+      this.ctx.store
+        .findMany('message', { filter: (m) => m.conversationId === conversation.id })
+        .forEach((m) => m.destroy());
+      conversation.destroy();
+      if (wasActive) this.ctx.router.push('/');
+    },
+  };
+}
+</scripts>

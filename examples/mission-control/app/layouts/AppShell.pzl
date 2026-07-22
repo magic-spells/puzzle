@@ -1,0 +1,86 @@
+<puzzle-view class="flex h-screen bg-void text-body font-sans overflow-hidden">
+  <!-- Persistent sidebar. It is part of the layout, so it never animates on a
+       route change — only the <Slot/> view swaps (D28 one-animator rule). -->
+  <aside class="relative w-[248px] shrink-0 flex flex-col bg-panel border-r border-hair">
+    <div class="sidebar-glow absolute inset-x-0 top-0 h-44 pointer-events-none"></div>
+
+    <!-- Brand -->
+    <div class="relative px-5 pt-6 pb-6">
+      <div class="flex items-center gap-3">
+        <span class="grid place-items-center w-9 h-9 rounded-lg bg-accent/15 border border-accent/30 text-accent">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3.2"></circle>
+            <ellipse cx="12" cy="12" rx="10" ry="4.4" transform="rotate(30 12 12)"></ellipse>
+          </svg>
+        </span>
+        <div>
+          <div class="font-display text-ink text-[0.98rem] font-semibold tracking-[0.16em] uppercase leading-none">Orbital</div>
+          <div class="mt-1 text-[0.66rem] uppercase tracking-[0.24em] text-muted">Mission Control</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav. Active state is computed declaratively in data() from this.route
+         (see <scripts>), so the highlight tracks navigation with no DOM hacks. -->
+    <nav class="relative flex-1 px-3 py-2 flex flex-col gap-1.5">
+      <a href="/" class="group relative flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-lg text-[0.9rem] font-medium transition-colors {#if isOverview}bg-surface-hi text-ink nav-glow{/if}{#if !isOverview}text-body hover:text-ink hover:bg-surface/60{/if}">
+        <span class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 rounded-full transition-all {#if isOverview}h-5 bg-accent{/if}{#if !isOverview}h-0 bg-transparent{/if}"></span>
+        <span class="w-1.5 h-1.5 rounded-full transition-colors {#if isOverview}bg-accent{/if}{#if !isOverview}bg-muted/50 group-hover:bg-muted{/if}"></span>
+        Overview
+      </a>
+      <a href="/fleet" class="group relative flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-lg text-[0.9rem] font-medium transition-colors {#if isFleet}bg-surface-hi text-ink nav-glow{/if}{#if !isFleet}text-body hover:text-ink hover:bg-surface/60{/if}">
+        <span class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 rounded-full transition-all {#if isFleet}h-5 bg-accent{/if}{#if !isFleet}h-0 bg-transparent{/if}"></span>
+        <span class="w-1.5 h-1.5 rounded-full transition-colors {#if isFleet}bg-accent{/if}{#if !isFleet}bg-muted/50 group-hover:bg-muted{/if}"></span>
+        Fleet
+      </a>
+      <a href="/missions" class="group relative flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-lg text-[0.9rem] font-medium transition-colors {#if isMissions}bg-surface-hi text-ink nav-glow{/if}{#if !isMissions}text-body hover:text-ink hover:bg-surface/60{/if}">
+        <span class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 rounded-full transition-all {#if isMissions}h-5 bg-accent{/if}{#if !isMissions}h-0 bg-transparent{/if}"></span>
+        <span class="w-1.5 h-1.5 rounded-full transition-colors {#if isMissions}bg-accent{/if}{#if !isMissions}bg-muted/50 group-hover:bg-muted{/if}"></span>
+        Missions
+      </a>
+      <a href="/crew" class="group relative flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-lg text-[0.9rem] font-medium transition-colors {#if isCrew}bg-surface-hi text-ink nav-glow{/if}{#if !isCrew}text-body hover:text-ink hover:bg-surface/60{/if}">
+        <span class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 rounded-full transition-all {#if isCrew}h-5 bg-accent{/if}{#if !isCrew}h-0 bg-transparent{/if}"></span>
+        <span class="w-1.5 h-1.5 rounded-full transition-colors {#if isCrew}bg-accent{/if}{#if !isCrew}bg-muted/50 group-hover:bg-muted{/if}"></span>
+        Crew
+      </a>
+    </nav>
+
+    <!-- Status footer -->
+    <div class="relative px-5 py-4 border-t border-hair">
+      <div class="flex items-center gap-2 text-[0.7rem] uppercase tracking-[0.18em] text-muted">
+        <span class="relative flex w-2 h-2">
+          <span class="absolute inline-flex w-full h-full rounded-full bg-good opacity-60 animate-ping"></span>
+          <span class="relative inline-flex w-2 h-2 rounded-full bg-good"></span>
+        </span>
+        Systems nominal
+      </div>
+    </div>
+  </aside>
+
+  <!-- Content region. `relative` is the positioning context the detail panel
+       docks into; `overflow-hidden` clips the panel while it is off-screen. -->
+  <main class="relative flex-1 min-w-0 bg-abyss overflow-hidden">
+    <Slot/>
+  </main>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class AppShell extends PuzzleView {
+  // Highlight the active section from this.route (v1.15, D47) — the per-navigation
+  // route snapshot. The section is the ROOT route name (chain[0]): a detail route
+  // like /fleet/:id resolves to the chain [fleet, fleet-detail], so chain[0] is
+  // 'fleet'. Correct inside the pre-commit gate and in every router mode — no
+  // dependency on router.current timing, no DOM class juggling.
+  data() {
+    const section = this.route.chain[0].name;
+    return {
+      isOverview: section === 'overview',
+      isFleet: section === 'fleet',
+      isMissions: section === 'missions',
+      isCrew: section === 'crew',
+    };
+  }
+}
+</scripts>

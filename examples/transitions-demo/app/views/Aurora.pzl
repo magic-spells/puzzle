@@ -1,0 +1,59 @@
+<puzzle-view class="view view-aurora">
+  <div class="view-eyebrow">01 — Aurora</div>
+  <h2 class="view-title">Aurora</h2>
+  <p class="view-body">
+    An indigo-to-violet wash. Slide between routes and watch how the two apps
+    trade this card in and out — sequential leaves a gap, overlap does not.
+  </p>
+  <div class="aurora-orb"></div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class AuroraView extends PuzzleView {
+  // Shared-axis slide (SPEC §12). The `to` of `in` and the `from` of `out` are
+  // the element's natural resting style (opacity 1, translateX(0)) so nothing
+  // snaps when the filled styles release.
+  animations = {
+    in: {
+      from: { opacity: 0, transform: 'translateX(48px)' },
+      to: { opacity: 1, transform: 'translateX(0)' },
+      duration: 340,
+      easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
+    },
+    out: {
+      from: { opacity: 1, transform: 'translateX(0)' },
+      to: { opacity: 0, transform: 'translateX(-48px)' },
+      duration: 300,
+      easing: 'cubic-bezier(0.55, 0, 0.55, 0.2)'
+    }
+  };
+
+  data() {
+    return {};
+  }
+}
+</scripts>
+
+<styles>
+/* Shared .view / .view-title / .view-body base lives in the layout's <styles>. */
+.view-aurora {
+  background:
+    radial-gradient(120% 120% at 80% 0%, rgba(129, 140, 248, 0.55), transparent 60%),
+    linear-gradient(155deg, #4338ca 0%, #6d28d9 55%, #3b0764 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.aurora-orb {
+  position: absolute;
+  top: -60px;
+  right: -40px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(196, 181, 253, 0.9), rgba(99, 102, 241, 0.15) 70%);
+  filter: blur(2px);
+  opacity: 0.75;
+}
+</styles>

@@ -1,0 +1,14 @@
+{
+  "name": "transitions-demo",
+  "version": "1.0.0",
+  "description": "Side-by-side demo of Puzzle v1.24 overlapping route transitions",
+  "main": "app.js",
+  "scripts": {
+    "dev": "puzzle dev",
+    "build": "puzzle build"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^1.0.0"
+  },
+  "type": "module"
+}

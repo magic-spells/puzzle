@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
+ * and JS so the utility classes they use are generated. Paths are relative to
+ * this stylesheet (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/*
+ * "Warm paper" theme — a quiet, light documentation palette: off-white paper,
+ * near-black ink, one terracotta accent. Semantic tokens defined here become
+ * Tailwind utilities (bg-paper, text-muted, border-line, font-display, …).
+ */
+@theme {
+  /* Type — editorial serif display, grotesque UI, mono for code */
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Roboto", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Surfaces — warm paper stepping up to white cards */
+  --color-paper: #fbfaf8;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f2ee;
+
+  /* Hairlines — translucent so they read against any surface */
+  --color-line: rgba(20, 18, 15, 0.09);
+  --color-line-2: rgba(20, 18, 15, 0.05);
+
+  /* Text — near-black ink stepping down to faint */
+  --color-ink: #1c1a17;
+  --color-muted: #6a655d;
+  --color-faint: #9a948a;
+
+  /* The one accent — warm terracotta, plus a darker hover */
+  --color-accent: #bd4b2c;
+  --color-accent-2: #9e3d22;
+}
+
+/* Base styles — warm paper canvas everywhere, refined text rendering */
+@layer base {
+  html {
+    background-color: var(--color-paper);
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Instrument Serif reads better with a touch of tightening at scale */
+  .font-display {
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+}
+
+/*
+ * A light "prose" helper for the guide/body copy — spacing and small type
+ * niceties without pulling in the typography plugin.
+ */
+@layer components {
+  .prose-doc > * + * {
+    margin-top: 1rem;
+  }
+
+  .prose-doc p {
+    color: var(--color-muted);
+    line-height: 1.7;
+  }
+
+  .prose-doc code {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-line-2);
+    border-radius: 0.375rem;
+    padding: 0.1rem 0.35rem;
+  }
+}

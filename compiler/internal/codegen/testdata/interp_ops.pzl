@@ -1,0 +1,16 @@
+<puzzle-view class="ops">
+  <p class="sum">{ a + b }</p>
+  <p class="cmp">{ count > 0 }</p>
+  <p class="neg">{ !ready }</p>
+  <p class="chain">{ user.profile?.name }</p>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class InterpOps extends PuzzleView {
+  data() {
+    return { a: 1, b: 2, count: 0, ready: false, user: {} };
+  }
+}
+</scripts>

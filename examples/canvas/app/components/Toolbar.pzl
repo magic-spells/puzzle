@@ -1,0 +1,47 @@
+<puzzle-view>
+  <div class="studio-panel border-b h-12 shrink-0 flex items-center gap-4 px-4">
+    <span class="font-mono text-[11px] uppercase tracking-wide text-muted select-none">Puzzle · Studio</span>
+
+    <div class="flex items-center gap-1">
+      <button
+        class="px-2.5 py-1 rounded-md text-[13px] text-muted hover:text-fg hover:bg-surface-2 transition-colors"
+        @click={ add('rect') }>▭ Rect</button>
+      <button
+        class="px-2.5 py-1 rounded-md text-[13px] text-muted hover:text-fg hover:bg-surface-2 transition-colors"
+        @click={ add('ellipse') }>◯ Ellipse</button>
+      <button
+        class="px-2.5 py-1 rounded-md text-[13px] text-muted hover:text-fg hover:bg-surface-2 transition-colors"
+        @click={ add('text') }>T Text</button>
+      <button
+        class="px-2.5 py-1 rounded-md text-[13px] text-muted hover:text-fg hover:bg-surface-2 transition-colors"
+        @click={ add('frame') }>▣ Frame</button>
+    </div>
+
+    <div class="ml-auto font-mono text-[11px] text-faint select-none">
+      {#if selCount > 0}
+        { selCount } selected
+      {:else}
+        click to select · ⌫ delete · ⌘D duplicate
+      {/if}
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The top chrome bar: create buttons + a status hint. Creation is delegated to
+// the Editor via the `create` callback prop ({ type }); the toolbar holds no
+// state of its own.
+export default class Toolbar extends PuzzleView {
+  data(params, props) {
+    return { selCount: props.selCount || 0 };
+  }
+
+  events = {
+    add: (type) => {
+      this.props.create({ type });
+    }
+  };
+}
+</scripts>

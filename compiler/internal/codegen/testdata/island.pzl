@@ -1,0 +1,18 @@
+<puzzle-view class="editor">
+  <div contenteditable="true" island class={ blockClass } @keydown:backspace={ onBackspace } @keydown:delete={ onDelete } @input={ syncText(event) }>{ block.text }</div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Editor extends PuzzleView {
+  data() {
+    return { block: { text: '' }, blockClass: 'block' };
+  }
+  events = {
+    onBackspace: (event) => {},
+    onDelete: (event) => {},
+    syncText: (event) => {},
+  };
+}
+</scripts>

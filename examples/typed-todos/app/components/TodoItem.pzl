@@ -1,0 +1,42 @@
+<puzzle-view>
+  <div class="group flex items-center px-5 py-3.5 border-b border-white/10 hover:bg-white/5">
+    <label class="flex items-center cursor-pointer mr-4">
+      <input type="checkbox" class="w-4 h-4 accent-sky-500" checked={ todo.completed } @change={ toggle(event) } />
+    </label>
+    <span class="flex-1 truncate {#if todo.completed}text-white/40 line-through{/if}{#if !todo.completed}text-white{/if}">
+      { todo.text }
+    </span>
+    <button
+      class="ml-3 w-7 h-7 shrink-0 rounded-md flex items-center justify-center text-xl leading-none text-white/40 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100"
+      @click={ remove(event) }
+      title="Delete todo">
+      ×
+    </button>
+  </div>
+</puzzle-view>
+
+<scripts lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+import type { TodoRecord } from '../models/todo';
+
+interface TodoItemProps {
+  todo: TodoRecord;
+  toggle: (event: Event) => void;
+  remove: (event: Event) => void;
+}
+
+export default class TodoItem extends PuzzleView {
+  data(_params: unknown, props: TodoItemProps): { todo: TodoRecord } {
+    return { todo: props.todo };
+  }
+
+  events = {
+    toggle: (event: Event): void => {
+      (this.props as TodoItemProps).toggle(event);
+    },
+    remove: (event: Event): void => {
+      (this.props as TodoItemProps).remove(event);
+    },
+  };
+}
+</scripts>

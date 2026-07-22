@@ -1,0 +1,121 @@
+<puzzle-view class="absolute inset-y-0 right-0 w-[384px] max-w-[86%] flex flex-col bg-panel border-l border-hair-lit panel-lift panel-glow">
+  {#if item}
+    <!-- Header -->
+    <div class="flex items-start justify-between gap-4 px-6 pt-6 pb-5 border-b border-hair">
+      <div class="min-w-0">
+        <span class="inline-flex items-center gap-1.5 mb-2.5 px-2.5 py-1 rounded-full border font-mono text-[0.64rem] uppercase tracking-[0.14em] { statusRing } { statusText }">
+          <span class="w-1.5 h-1.5 rounded-full { dotClass }"></span>{ item.status }
+        </span>
+        <h2 class="font-display text-[1.5rem] font-semibold leading-tight text-ink truncate">{ item.name }</h2>
+        <p class="mt-1 text-[0.86rem] text-muted">{ item.subtitle }</p>
+      </div>
+      <button
+        type="button"
+        class="shrink-0 w-9 h-9 grid place-items-center rounded-lg border border-hair text-muted hover:text-ink hover:border-hair-lit hover:bg-surface transition-colors"
+        title="Close"
+        @click={ handleClose }>
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+      </button>
+    </div>
+
+    <!-- Body -->
+    <div class="flex-1 overflow-y-auto px-6 py-6 flex flex-col gap-6">
+      <!-- Telemetry grid (hairline dividers via gap-px over a hair background) -->
+      <div class="grid grid-cols-2 gap-px bg-hair rounded-xl overflow-hidden border border-hair">
+        {#for s in item.stats}
+          <div class="bg-panel px-4 py-3.5">
+            <div class="text-[0.64rem] uppercase tracking-[0.16em] text-muted">{ s.label }</div>
+            <div class="mt-1.5 font-mono text-[1.05rem] text-ink tabular-nums">{ s.value }</div>
+          </div>
+        {/for}
+      </div>
+
+      <!-- Tags -->
+      {#if item.tags && item.tags.length}
+        <div class="flex flex-wrap gap-1.5">
+          {#for t in item.tags}
+            <span class="px-2.5 py-1 rounded-full text-[0.72rem] font-medium tracking-wide text-accent-hi bg-accent/10 border border-accent/25">{ t }</span>
+          {/for}
+        </div>
+      {/if}
+
+      <!-- Briefing -->
+      <div>
+        <div class="flex items-center gap-2 mb-2.5">
+          <span class="w-1 h-3.5 rounded-full bg-accent"></span>
+          <div class="text-[0.64rem] uppercase tracking-[0.18em] text-muted">Briefing</div>
+        </div>
+        <p class="text-[0.92rem] leading-relaxed text-body">{ item.summary }</p>
+      </div>
+    </div>
+  {:else}
+    <!-- Unknown :id (a stale deep link): keep the panel chrome, offer a way back -->
+    <div class="flex items-start justify-between gap-4 px-6 pt-6 pb-5 border-b border-hair">
+      <h2 class="font-display text-[1.5rem] font-semibold leading-tight text-ink">No record</h2>
+      <button
+        type="button"
+        class="shrink-0 w-9 h-9 grid place-items-center rounded-lg border border-hair text-muted hover:text-ink hover:border-hair-lit hover:bg-surface transition-colors"
+        title="Close"
+        @click={ handleClose }>
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+      </button>
+    </div>
+    <div class="flex-1 px-6 py-6">
+      <p class="text-[0.92rem] leading-relaxed text-muted">Nothing on the board matches this id.</p>
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { fleet, missions, crew, tone } from '../data/catalog.js';
+
+// The slide-in details panel, now a ROUTED VIEW (nested routes, v1.3/D30)
+// rather than an {#if}-gated component: it fills the section view's <Slot/>
+// whenever a /fleet/:id, /missions/:id or /crew/:id URL is active. Ids are
+// unique across all three catalogs, so one detail view serves every section.
+//
+// Because this file lives under app/views/, its <puzzle-view> compiles to a
+// real element carrying the classes above (D20) — that element is docked to
+// the right edge of the section view's `relative` container and IS the
+// animation target the router slides in and out.
+const ALL = [...fleet, ...missions, ...crew];
+
+export default class DetailView extends PuzzleView {
+  // `params` are the chain's FULL merged params, so `params.id` is set at
+  // every depth. Selecting a different row while the panel is open is a
+  // params-only navigation: the router REUSES this instance and re-runs
+  // data() with the new id — content swaps in place, no re-slide (the calm
+  // default).
+  data(params) {
+    const item = ALL.find((entry) => entry.id === params.id) || null;
+    const t = tone(item ? item.statusTone : 'idle');
+    return {
+      item,
+      dotClass: t.dot,
+      statusText: t.text,
+      statusRing: t.ring,
+    };
+  }
+
+  events = {
+    handleClose: () => {
+      // Back to the parent list route: drop the trailing /:id segment. The
+      // index child matches the bare path and this panel slides out.
+      this.ctx.router.push(window.location.pathname.replace(/\/[^/]+$/, '') || '/');
+    }
+  };
+
+  // Slide in from the right edge. One animator per transition (D28, D30):
+  // when only the detail level swaps (/fleet ⇄ /fleet/:id) THIS view is the
+  // topmost swapped instance and plays the slide; when a whole section swaps
+  // (/crew → /fleet/:id) the section view animates instead and this panel is
+  // skipEnter'd, appearing already in place. The `in` `to` (translateX(0),
+  // opacity:1) must equal the panel's resting CSS, or it snaps when WAAPI
+  // releases the enter fill.
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateX(100%)' }, to: { opacity: 1, transform: 'translateX(0)' }, duration: 300, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    out: { from: { opacity: 1, transform: 'translateX(0)' }, to: { opacity: 0, transform: 'translateX(100%)' }, duration: 220, easing: 'ease-in' }
+  };
+}
+</scripts>

@@ -1,0 +1,237 @@
+<puzzle-view class="flex flex-col h-full">
+  <header class="h-16 shrink-0 flex items-center px-6 border-b border-hairline">
+    <h1 class="font-semibold tracking-tight truncate">{#if conversation}{ conversation.displayTitle }{:else}Conversation{/if}</h1>
+  </header>
+
+  <div class="pz-msg-scroll flex-1 min-h-0 overflow-y-auto">
+    <div class="max-w-3xl mx-auto px-6 py-8 flex flex-col gap-5">
+      <!-- {#unless} (v1.7, D36): the empty-thread affordance renders only when
+           there are no messages. -->
+      {#unless messages.length}
+        <div class="text-center text-muted py-16">No messages yet — say something below.</div>
+      {/unless}
+
+      {#for message in messages}
+        <MessageBubble message={ message } />
+      {/for}
+
+      {#if showTyping}
+        <TypingIndicator />
+      {/if}
+    </div>
+  </div>
+
+  <div class="shrink-0 border-t border-hairline px-6 py-4">
+    <div class="max-w-3xl mx-auto">
+      <!-- Always-rendered wrapper: if this {#if} sat directly among the
+           Composer's siblings, toggling it would shift the Composer's child
+           index and index-based patching would destroy/recreate it (losing
+           the draft mid-typing). -->
+      <div class="empty:hidden mb-0">
+        {#if streaming}
+          <div class="mb-3 flex justify-center">
+            <button
+              type="button"
+              class="px-4 py-1.5 rounded-full border border-hairline text-sm text-muted hover:text-fg hover:bg-surface-2 transition-colors"
+              @click={ stopGenerating }>
+              Stop generating
+            </button>
+          </div>
+        {/if}
+      </div>
+      <Composer disabled={ streaming } @send={ sendMessage(event) } />
+    </div>
+  </div>
+</puzzle-view>
+
+<puzzle-skeleton>
+  <header class="h-16 shrink-0 flex items-center px-6 border-b border-hairline">
+    <div class="h-4 w-44 rounded bg-skeleton animate-pulse"></div>
+  </header>
+  <div class="flex-1 min-h-0 overflow-y-auto">
+    <div class="max-w-3xl mx-auto px-6 py-8 flex flex-col gap-6">
+      {#for 1...3}
+        <div class="flex gap-3 animate-pulse">
+          <div class="w-8 h-8 rounded-full bg-skeleton shrink-0"></div>
+          <div class="flex-1 space-y-2 pt-1">
+            <div class="h-4 w-3/4 rounded bg-skeleton"></div>
+            <div class="h-4 w-1/2 rounded bg-skeleton"></div>
+          </div>
+        </div>
+      {/for}
+    </div>
+  </div>
+</puzzle-skeleton>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import MessageBubble from '../components/MessageBubble.pzl';
+import Composer from '../components/Composer.pzl';
+import TypingIndicator from '../components/TypingIndicator.pzl';
+import { streamReply } from '../lib/assistant.js';
+
+// Conversations we've already opened once: only a conversation's FIRST open
+// shows the skeleton; revisits are instant.
+const seen = new Set();
+const DEFAULT_TITLE = 'New chat';
+const DEFAULT_MODEL = 'puzzle-core';
+
+function uid(prefix) {
+  return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+export default class Thread extends PuzzleView {
+  // data() receives the chain's full merged params (D30), so params.id is the
+  // open conversation. The store queries here auto-subscribe this view: a streamed
+  // token (message.update) OR an updatedAt bump (conversation.update) re-runs it.
+  data(params) {
+    const store = this.ctx.store;
+    const id = params.id;
+
+    const build = () => {
+      const conversation = store.findOne('conversation', id);
+      const messages = store
+        .findMany('message', { filter: (m) => m.conversationId === id })
+        .sort((a, b) => a.createdAt - b.createdAt);
+      const last = messages[messages.length - 1];
+      // `streaming` is DERIVED from the data (a pending assistant message) rather
+      // than a local flag — so it's always per-conversation correct, even if you
+      // switch threads mid-stream. The typing indicator shows only in the gap
+      // between "streaming started" and "first token landed" (content still empty).
+      const streaming = messages.some((m) => m.pending);
+      const showTyping = streaming && !!last && last.role === 'assistant' && !last.content;
+      return { conversation, messages, streaming, showTyping };
+    };
+
+    // First open of this conversation: hold data() ~500ms so the
+    // <puzzle-skeleton> is actually visible. EVERY run started before the
+    // deadline chains on the same gate — the mounted() handoff writes to the
+    // store immediately, and if that re-run committed instantly it would swap
+    // the real template in and wipe the skeleton. Once the gate has resolved,
+    // all later runs (streamed tokens, sends) are fully synchronous.
+    if (!seen.has(id)) {
+      seen.add(id);
+      this._skeletonGate = new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    if (this._skeletonGate) {
+      return this._skeletonGate.then(() => {
+        this._skeletonGate = null;
+        return build();
+      });
+    }
+    return build();
+  }
+
+  // The Welcome handoff: if the newest message is an unanswered user message,
+  // start the assistant reply. Fires against the skeleton DOM (D39), so it reads
+  // the store directly rather than the not-yet-committed component model.
+  mounted() {
+    const id = this.params.id;
+    const messages = this.ctx.store
+      .findMany('message', { filter: (m) => m.conversationId === id })
+      .sort((a, b) => a.createdAt - b.createdAt);
+    const last = messages[messages.length - 1];
+    if (last && last.role === 'user') this.startReply(last.content, DEFAULT_MODEL);
+  }
+
+  // Cancel any in-flight stream so tokens never land on a torn-down view.
+  destroyed() {
+    if (this._cancel) {
+      this._cancel();
+      this._cancel = null;
+    }
+  }
+
+  // Keep the message list pinned to the bottom as content grows.
+  afterUpdate() {
+    const scroller = this.element && this.element.querySelector('.pz-msg-scroll');
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }
+
+  startReply(promptText, model = DEFAULT_MODEL) {
+    const store = this.ctx.store;
+    const conversationId = this.params.id;
+    const conversation = store.findOne('conversation', conversationId);
+
+    // The assistant's message starts empty + pending; tokens append to it. The
+    // chosen model is stamped on the record so MessageBubble can show it.
+    const assistant = store.createRecord('message', {
+      id: uid('m'),
+      conversationId,
+      role: 'assistant',
+      content: '',
+      pending: true,
+      model,
+      createdAt: new Date(),
+    });
+
+    this._cancel = streamReply(promptText, {
+      model,
+      onToken: (token) => {
+        // Update THROUGH THE STORE (not setData): re-renders the thread AND —
+        // via the updatedAt bump — reorders/refreshes the sidebar (item 10).
+        assistant.update({ content: assistant.content + token });
+        if (conversation) conversation.update({ updatedAt: new Date() });
+      },
+      onDone: () => {
+        this._cancel = null;
+        // Clearing pending re-runs data() (subscribed) → streaming derives false.
+        assistant.update({ pending: false });
+      },
+    });
+  }
+
+  events = {
+    // Composer callback prop: a follow-up user message, then a fresh reply. The
+    // Composer passes a single { text, model } object — the parent's
+    // `@send={ sendMessage(event) }` binding only forwards the first arg (D16).
+    sendMessage: (payload) => {
+      if (this.getData().streaming) return;
+      const { text, model } = payload || {};
+      if (!text) return;
+      const store = this.ctx.store;
+      const conversationId = this.params.id;
+      const conversation = store.findOne('conversation', conversationId);
+      const now = new Date();
+
+      store.createRecord('message', {
+        id: uid('m'),
+        conversationId,
+        role: 'user',
+        content: text,
+        createdAt: now,
+      });
+
+      if (conversation) {
+        const patch = { updatedAt: now };
+        // Auto-title an as-yet-unnamed thread from its first user message.
+        if (!conversation.title || conversation.title === DEFAULT_TITLE) {
+          patch.title = text.length > 40 ? `${text.slice(0, 40)}…` : text;
+        }
+        conversation.update(patch);
+      }
+
+      this.startReply(text, model || DEFAULT_MODEL);
+    },
+
+    stopGenerating: () => {
+      if (this._cancel) {
+        this._cancel();
+        this._cancel = null;
+      }
+      const store = this.ctx.store;
+      const messages = store
+        .findMany('message', { filter: (m) => m.conversationId === this.params.id })
+        .sort((a, b) => a.createdAt - b.createdAt);
+      const last = messages[messages.length - 1];
+      // Clearing pending re-runs data() → streaming derives false.
+      if (last && last.pending) last.update({ pending: false });
+    },
+  };
+
+  animations = {
+    in:  { from: { opacity: 0 }, to: { opacity: 1 }, duration: 200, easing: 'ease-out' },
+    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 140, easing: 'ease-in' },
+  };
+}
+</scripts>

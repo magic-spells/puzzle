@@ -1,0 +1,110 @@
+<puzzle-view class="min-h-screen flex flex-col bg-bg text-fg">
+  <!-- Sticky top header. Stays mounted across Home/Search/Listing/Account
+       navigations because they all reuse this layout — only <Slot/> swaps. -->
+  <header class="sticky top-0 z-20 bg-bg border-b border-line">
+    <div class="max-w-6xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between gap-4">
+      <!-- Brand -->
+      <a href="/" class="flex items-center gap-2 font-display text-lg font-bold text-accent hover:no-underline shrink-0">
+        <span class="inline-flex items-center justify-center w-8 h-8 rounded-xl text-accent-ink text-sm" style="background:linear-gradient(135deg,#ff385c,#e31c5f)">⌂</span>
+        <span class="hidden sm:inline">Puzzle Stays</span>
+      </a>
+
+      <!-- Center search pill (desktop only) — a link to the search view. -->
+      <a href="/search" class="hidden md:flex items-center gap-3 pl-5 pr-2 py-2 rounded-full border border-hairline shadow-sm hover:shadow-md transition-shadow text-sm font-medium text-fg hover:no-underline">
+        <span>Anywhere</span>
+        <span class="w-px h-5 bg-line"></span>
+        <span>Any week</span>
+        <span class="w-px h-5 bg-line"></span>
+        <span class="text-muted font-normal">Add guests</span>
+        <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-accent text-accent-ink">⌕</span>
+      </a>
+
+      <!-- Right-side nav -->
+      <nav class="flex items-center gap-1 sm:gap-2 shrink-0">
+        <a href="/search" class="hidden sm:inline-flex px-3 py-2 rounded-full text-sm font-medium transition-colors hover:bg-surface-2 hover:no-underline {#if section === 'search'}text-accent{/if}{#if section !== 'search'}text-fg{/if}">Stays</a>
+        <a href="/account/trips" class="hidden sm:inline-flex px-3 py-2 rounded-full text-sm font-medium transition-colors hover:bg-surface-2 hover:no-underline {#if tripsActive}text-accent{/if}{#if !tripsActive}text-fg{/if}">Trips</a>
+        <a href="/account/wishlist" class="inline-flex items-center justify-center w-9 h-9 rounded-full text-lg transition-colors hover:bg-surface-2 hover:no-underline {#if wishlistActive}text-accent{/if}{#if !wishlistActive}text-fg{/if}" aria-label="Wishlist">♡</a>
+        <a href="/account" class="inline-flex items-center justify-center w-9 h-9 rounded-full text-accent-ink text-sm font-semibold hover:no-underline" style="background:linear-gradient(135deg,#ff385c,#e31c5f)" aria-label="Account">C</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Routed view renders here. The window scrolls (no h-screen/overflow-hidden),
+       so long listing pages behave like a normal document. -->
+  <main class="flex-1">
+    <div class="max-w-6xl mx-auto px-5 sm:px-8 py-8">
+      <Slot/>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-line bg-surface">
+    <div class="max-w-6xl mx-auto px-5 sm:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-muted">
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span>© 2026 Puzzle Stays, Inc. — a Puzzle framework demo</span>
+        <span class="hidden sm:inline text-faint">·</span>
+        <a href="/" class="hover:text-fg hover:no-underline">Privacy</a>
+        <span class="text-faint">·</span>
+        <a href="/" class="hover:text-fg hover:no-underline">Terms</a>
+        <span class="text-faint">·</span>
+        <a href="/" class="hover:text-fg hover:no-underline">Sitemap</a>
+      </div>
+      <span class="text-faint">Built with Puzzle</span>
+    </div>
+  </footer>
+
+  <!-- Mobile bottom tab bar. The header's text links are desktop-only, so on
+       small screens navigation moves here — same per-link active flags as the
+       header so only the tab you're on lights up. -->
+  <nav class="sm:hidden sticky bottom-0 z-20 flex border-t border-line bg-bg">
+    <a href="/search" class="flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors hover:no-underline {#if section === 'search'}text-accent{/if}{#if section !== 'search'}text-muted{/if}">
+      <span class="text-xl leading-none">⌕</span>
+      Explore
+    </a>
+    <a href="/account/wishlist" class="flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors hover:no-underline {#if wishlistActive}text-accent{/if}{#if !wishlistActive}text-muted{/if}">
+      <span class="text-xl leading-none">♡</span>
+      Wishlist
+    </a>
+    <a href="/account/trips" class="flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors hover:no-underline {#if tripsActive}text-accent{/if}{#if !tripsActive}text-muted{/if}">
+      <span class="text-xl leading-none">🧳</span>
+      Trips
+    </a>
+    <a href="/account" class="flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors hover:no-underline {#if profileActive}text-accent{/if}{#if !profileActive}text-muted{/if}">
+      <span class="text-xl leading-none">◔</span>
+      Profile
+    </a>
+  </nav>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class MainLayout extends PuzzleView {
+  // data() re-runs on every navigation that reuses this layout (SPEC §9), so the
+  // active-nav highlight recomputes from this.route (v1.15, D47) — the per-nav
+  // route snapshot, correct inside the pre-commit gate. The section is the ROOT
+  // route name (chain[0]): 'home' | 'search' | 'listing' | 'account'.
+  data(params, props) {
+    const section = this.route.chain[0].name;
+
+    // Finer-grained flags for the account links: `section === 'account'` alone
+    // would light up Trips, Wishlist, and Profile together on any /account page —
+    // so match the leaf route name of the /account chain.
+    const leaf = this.route.route.name;
+    return {
+      section,
+      tripsActive: leaf === 'account-trips',
+      wishlistActive: leaf === 'account-wishlist',
+      profileActive: leaf === 'account-profile',
+    };
+  }
+
+  // Plays on entering/leaving this layout. Since the whole app shares MainLayout,
+  // view-only swaps animate their own <Slot/> content, not this shell
+  // (constellation/doc/DOC-SPEC.md §12).
+  animations = {
+    in:  { from: { opacity: 0, transform: 'scale(0.98)' }, to: { opacity: 1, transform: 'scale(1)' },    duration: 280, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'scale(1)' },    to: { opacity: 0, transform: 'scale(0.99)' }, duration: 180, easing: 'ease-in' }
+  };
+}
+</scripts>

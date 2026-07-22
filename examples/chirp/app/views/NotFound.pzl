@@ -1,0 +1,27 @@
+<puzzle-view>
+  <!-- Catch-all '*' route. Playful, centered 404 with a way home. Shares
+       MainLayout, so it's a view swap inside the reused shell. -->
+  <div class="py-20 sm:py-28 px-8 text-center">
+    <div class="text-7xl sm:text-8xl leading-none">🐦</div>
+    <div class="mt-4 font-bold text-4xl text-accent">404</div>
+    <h1 class="mt-4 text-2xl font-bold text-fg">This bird flew away.</h1>
+    <p class="mt-2 text-muted">We couldn't find that page. It may have been deleted, or never hatched.</p>
+
+    <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+      <a href="/"
+        class="inline-flex px-5 py-2.5 rounded-full bg-accent text-accent-ink text-sm font-semibold hover:bg-accent-2 transition-colors hover:no-underline">Back to home</a>
+      <a href="/explore" class="text-sm font-medium text-muted hover:text-fg hover:no-underline">or explore what's trending →</a>
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class NotFoundView extends PuzzleView {
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 280, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

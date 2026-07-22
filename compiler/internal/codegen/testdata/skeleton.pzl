@@ -1,0 +1,23 @@
+<puzzle-view class="post-detail">
+  <h1>{ post.title }</h1>
+  <p>{ post.body }</p>
+</puzzle-view>
+
+<puzzle-skeleton>
+  <div class="animate-pulse">
+    {#for 1...3, n}
+      <div class="bg-skeleton h-4" data-row={ n }></div>
+    {/for}
+  </div>
+</puzzle-skeleton>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Skeleton extends PuzzleView {
+  async data(params) {
+    const post = await this.ctx.store.findOne('post', params.id);
+    return { post };
+  }
+}
+</scripts>

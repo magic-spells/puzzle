@@ -1,0 +1,14 @@
+<puzzle-view class="fmt">
+  <p class="joined">{ tags | join(', ') | upcase }</p>
+  <p class="money">{ price | currency('$', 2) }</p>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class FormatterChain extends PuzzleView {
+  data() {
+    return { tags: [], price: 0 };
+  }
+}
+</scripts>

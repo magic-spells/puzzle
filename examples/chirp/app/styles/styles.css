@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
+ * and JS so the utility classes they use are generated. Paths are relative to
+ * this stylesheet (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/*
+ * Chirp palette (v4 @theme). A DARK, X/Twitter-like chrome on true black with a
+ * single chirp-blue accent, plus a like-pink and a rechirp-green for the two
+ * toggle actions. Contrast with examples/stays (a light marketplace): the token
+ * NAMES match stays' so shared utilities (bg-bg, text-fg, text-muted,
+ * border-line, bg-accent, …) behave identically across both demos — only the
+ * values differ. Per-record gradients (avatars, banners) come from inline styles
+ * off the model getters, so these named tokens only dress the shell.
+ */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-display: var(--font-sans);
+
+  --color-bg: #000000;        /* page background */
+  --color-surface: #16181c;   /* cards, compose box */
+  --color-surface-2: #1d1f23; /* hover fills, input backgrounds */
+  --color-elevated: #202327;  /* popover/pill fills */
+  --color-line: #2f3336;      /* borders/dividers */
+  --color-hairline: #3e4144;  /* stronger border (hover rings) */
+
+  --color-fg: #e7e9ea;        /* primary text */
+  --color-muted: #71767b;     /* secondary text */
+  --color-faint: #4a4f55;     /* placeholders, disabled */
+
+  --color-accent: #1d9bf0;    /* chirp blue */
+  --color-accent-2: #1a8cd8;  /* hover blue */
+  --color-accent-ink: #ffffff;
+
+  --color-like: #f91880;      /* like pink */
+  --color-boost: #00ba7c;     /* rechirp green */
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-fg);
+    background: var(--color-bg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Interactive affordance for the app's many <button> handlers. */
+  button {
+    cursor: pointer;
+  }
+}
+
+/*
+ * Skeleton shimmer utility used by the <puzzle-skeleton> loading templates
+ * (SPEC §16) in Home.pzl and PostDetail.pzl. Placeholder blocks get
+ * `class="skeleton-shimmer"`: a surface-2 fill with a gentle brightness pulse so
+ * the reserved layout reads as "loading" rather than "broken". The
+ * prefers-reduced-motion override below stills the animation (a plain static
+ * block) for readers who opt out of motion — same courtesy as the framework's
+ * view animations (SPEC §12).
+ */
+@layer utilities {
+  .skeleton-shimmer {
+    background-color: var(--color-surface-2);
+    animation: chirp-shimmer 1.4s ease-in-out infinite;
+  }
+
+  @keyframes chirp-shimmer {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-shimmer {
+      animation: none;
+    }
+  }
+}

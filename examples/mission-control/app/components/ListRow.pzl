@@ -1,0 +1,51 @@
+<puzzle-view>
+  <button
+    type="button"
+    class="group w-full text-left flex items-center gap-3.5 px-4 py-3.5 rounded-xl border transition-colors {#if active}bg-surface-hi sel-glow{/if}{#if !active}border-hair bg-surface hover:bg-surface-hi hover:border-hair-lit{/if}"
+    @click={ handleSelect }>
+    <span class="mt-px w-2.5 h-2.5 shrink-0 rounded-full { dotClass }"></span>
+    <span class="flex-1 min-w-0">
+      <span class="block font-display text-[1rem] font-medium text-ink tracking-wide truncate">{ item.name }</span>
+      <span class="block text-[0.8rem] text-muted truncate">{ item.subtitle }</span>
+    </span>
+    <span class="shrink-0 font-mono text-[0.68rem] uppercase tracking-[0.12em] {#if active}text-accent-hi{/if}{#if !active}text-body{/if}">{ item.status }</span>
+    <span class="shrink-0 text-lg leading-none transition-all group-hover:translate-x-0.5 {#if active}text-accent-hi translate-x-0.5{/if}{#if !active}text-muted{/if}">›</span>
+  </button>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { tone } from '../data/catalog.js';
+
+// A selectable master-list row. It is its OWN component (not a bare <div>)
+// because only component vnodes run enter/leave animations — that is what makes
+// the staggered cascade below work. `select` is a callback prop (D16): the parent
+// passes @select={ selectItem(item) } and this row invokes this.props.select.
+export default class ListRow extends PuzzleView {
+  data(params, props) {
+    return {
+      item: props.item,
+      active: props.active || false,
+      dotClass: tone(props.item.statusTone).dot,
+    };
+  }
+
+  events = {
+    handleSelect: (event) => {
+      const { select } = this.props;
+      if (typeof select === 'function') select(event);
+    }
+  };
+
+  // Staggered entrance: each row's `in` is delayed by its index, so a freshly
+  // mounted list cascades in. The `to` keyframe (opacity:1, translateY(0)) is the
+  // row's resting CSS — required because WAAPI releases the enter's fill on finish.
+  get animations() {
+    const i = this.props.index ?? 0;
+    return {
+      in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' }, duration: 300, delay: i * 45, easing: 'ease-out' },
+      out: { from: { opacity: 1, transform: 'translateY(0)' }, to: { opacity: 0, transform: 'translateY(-6px)' }, duration: 150, easing: 'ease-in' }
+    };
+  }
+}
+</scripts>

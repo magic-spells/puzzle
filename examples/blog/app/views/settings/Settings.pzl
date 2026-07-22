@@ -1,0 +1,29 @@
+<puzzle-view>
+  <section class="settings-shell">
+    <h1 class="text-[1.9rem] text-ink mb-3">Settings</h1>
+    <p class="text-slate mb-6">
+      A nested-routes demo (v1.3, D30): this shell view stays mounted while the
+      pane below swaps through its slot.
+    </p>
+    <nav class="flex gap-2 mb-6 border-b border-border pb-3">
+      <a href="/settings" class="px-3 py-1.5 rounded-lg text-[0.9rem] text-brand hover:bg-surface">General</a>
+      <a href="/settings/profile" class="px-3 py-1.5 rounded-lg text-[0.9rem] text-brand hover:bg-surface">Profile</a>
+      <a href="/settings/notifications" class="px-3 py-1.5 rounded-lg text-[0.9rem] text-brand hover:bg-surface">Notifications</a>
+    </nav>
+    <Slot />
+  </section>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class SettingsView extends PuzzleView {
+  // Route transition (constellation/doc/DOC-SPEC.md §12). On a pane swap this
+  // shell is a REUSED ancestor and never animates — only entering/leaving the
+  // whole /settings section plays these (the one-animator rule, D30).
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 260, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

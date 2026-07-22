@@ -1,0 +1,206 @@
+@import "tailwindcss";
+
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+@theme {
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Roboto", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink: #0a0a0c;
+  --color-surface: #131317;
+  --color-surface-2: #17171b;
+  --color-elevated: #202027;
+
+  --color-hairline: rgba(255, 255, 255, 0.09);
+  --color-line: rgba(255, 255, 255, 0.055);
+
+  --color-fg: #ece9e3;
+  --color-muted: #93929a;
+  --color-faint: #5a5960;
+
+  --color-accent: #e6a94d;
+  --color-accent-2: #f2bd6a;
+  --color-danger: #cf6b5e;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink);
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .font-display {
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  .app-glow {
+    background: radial-gradient(
+      120% 80% at 50% -10%,
+      rgba(230, 169, 77, 0.10) 0%,
+      rgba(230, 169, 77, 0.03) 28%,
+      transparent 60%
+    );
+  }
+
+  .kanban-column {
+    min-height: 28rem;
+    border: 1px solid var(--color-hairline);
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+    overflow: hidden;
+  }
+
+  .kanban-cards {
+    min-height: 20rem;
+  }
+
+  .kanban-card {
+    touch-action: none;
+    user-select: none;
+  }
+
+  /* A real <button> since v1.23 polish — focusable + Enter/Space activation.
+     display/width/text-align undo the UA button box; the card look is ours. */
+  .kanban-card-body {
+    display: block;
+    width: 100%;
+    text-align: left;
+    cursor: grab;
+    border: 1px solid var(--color-hairline);
+    border-radius: 0.75rem;
+    background: var(--color-elevated);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+    /* Springy release (overshoot bezier); the pressed rule below overrides to
+       a quick ease-out on the way down. Safe on a morph source: the engine
+       inline-disables transitions on both elements for the morph's duration,
+       and it measures the LIVE rect at show() — so opening from a mid-press
+       card starts the blob exactly where the card visually is. */
+    transition:
+      transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .kanban-card-body:active {
+    cursor: grabbing;
+  }
+
+  .kanban-card-body:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* Pointer-down "push back", driven by the board's drag state machine
+     (is-pressed on the [data-task-id] wrapper): scale down + pull the shadow
+     in so the card reads as pushed away from the light. */
+  .kanban-card.is-pressed .kanban-card-body {
+    transform: scale(0.98);
+    box-shadow: 0 5px 16px rgba(0, 0, 0, 0.3);
+    transition-duration: 110ms;
+    transition-timing-function: ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .kanban-card-body {
+      transition: none;
+    }
+  }
+
+  .kanban-placeholder {
+    border: 1px dashed rgba(230, 169, 77, 0.45);
+    border-radius: 0.75rem;
+    background: rgba(230, 169, 77, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(230, 169, 77, 0.08);
+  }
+
+  .kanban-ghost {
+    cursor: grabbing;
+    opacity: 0.96;
+    filter: drop-shadow(0 22px 34px rgba(0, 0, 0, 0.38));
+  }
+
+  /* ---- task dialog (morph target, D55) ----------------------------------
+     Rules for morph elements: no transform-based positioning (the flex
+     parent centers it), no stylesheet opacity, no transitions on the shell —
+     the engine drives inline transform/opacity during the reveal. The
+     radius/border/background/shadow DELTAS from .kanban-card-body are what
+     the blob visibly interpolates. */
+
+  .task-backdrop {
+    background: rgba(5, 5, 7, 0.62);
+    backdrop-filter: blur(2px);
+    animation: task-backdrop-in 220ms ease-out both;
+    /* backdrop-filter must be transitioned explicitly — Chrome applies the
+       blur at full strength regardless of the element's opacity. */
+    transition:
+      opacity 420ms ease-out,
+      backdrop-filter 420ms ease-out;
+  }
+
+  /* Fade out WITH the reverse flight. `animation: none` is load-bearing: the
+     filling entrance animation otherwise outranks the transitioned opacity in
+     the cascade, and the backdrop would sit at full black until the view is
+     destroyed. */
+  .task-backdrop.is-leaving {
+    animation: none;
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+
+  /* A real <dialog> used NON-modally (static `open` attribute, no showModal):
+     showModal's top layer would paint above the morph blob and break the
+     reveal. Non-modal keeps it a normal box — semantics without the top layer.
+     The resets neutralize the UA dialog styles (margin/padding/border/bg). */
+  .task-dialog {
+    margin: 0;
+    padding: 0;
+    min-height: 21rem;
+    color: inherit;
+    border: 1px solid color-mix(in srgb, var(--color-accent) 22%, var(--color-hairline));
+    border-radius: 1.25rem;
+    background: var(--color-surface-2);
+    box-shadow: 0 32px 90px rgba(0, 0, 0, 0.55);
+    overflow: hidden;
+  }
+
+  .task-close {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border: 1px solid var(--color-hairline);
+    border-radius: 9999px;
+    color: var(--color-muted);
+    font-size: 0.8rem;
+    line-height: 1;
+    transition: color 160ms ease-out, border-color 160ms ease-out;
+  }
+
+  .task-close:hover {
+    color: var(--color-fg);
+    border-color: var(--color-accent);
+  }
+}
+
+@keyframes task-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

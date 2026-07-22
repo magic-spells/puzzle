@@ -1,0 +1,62 @@
+<puzzle-view>
+  <!-- One guest review. The Listing view renders these in a two-up grid and
+       threads the loop counter in as `index`, which becomes the entrance delay
+       so the review cards cascade in (same stagger trick as AlbumCard). -->
+  <div class="rounded-2xl ring-1 ring-line p-5">
+    <!-- Reviewer identity row. The avatar is a deterministic gradient chip from
+         the model's `accent` (no real photo), with the author's initial on top —
+         both come from Review's defensive getters, so a half-seeded record can't
+         throw here. -->
+    <div class="flex items-center gap-3 mb-3">
+      <div
+        class="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-accent-ink font-semibold text-sm shadow-sm"
+        style="background:{ review.avatar }">{ review.initial }</div>
+      <div class="min-w-0">
+        <div class="font-semibold text-fg text-[15px] truncate">{ review.author }</div>
+        {#if review.city}
+          <div class="text-muted text-sm truncate">{ review.city }</div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Meta line: month + year of the stay, then an inline star rating. -->
+    <div class="flex items-center gap-2 text-sm text-muted mb-2">
+      <span>{ review.date | monthYear }</span>
+      <span class="text-faint">·</span>
+      <span class="text-fg">★ { review.rating }</span>
+    </div>
+
+    <!-- The review body — a comfortable 15px reading size. -->
+    <p class="text-[15px] leading-relaxed text-fg">{ review.text }</p>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class ReviewCard extends PuzzleView {
+  data(params, props) {
+    return {
+      review: props.review,
+      index: props.index ?? 0
+    };
+  }
+
+  // Per-instance staggered entrance, driven by the grid position the parent
+  // passes as `index`. A getter (not a static field) so the delay is read per
+  // instance at mount time (constellation/doc/DOC-SPEC.md §12), exactly like
+  // the music demo's AlbumCard.
+  get animations() {
+    const index = this.props.index ?? 0;
+    return {
+      in: {
+        from: { opacity: 0, transform: 'translateY(12px)' },
+        to:   { opacity: 1, transform: 'translateY(0)' },
+        duration: 280,
+        delay: index * 40,
+        easing: 'ease-out'
+      }
+    };
+  }
+}
+</scripts>

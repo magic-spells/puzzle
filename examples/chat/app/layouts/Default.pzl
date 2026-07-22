@@ -1,0 +1,16 @@
+<puzzle-view class="h-screen w-screen overflow-hidden bg-bg text-fg">
+  <Slot/>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A minimal full-viewport dark shell. The Shell view owns the sidebar/pane
+// split; this layout just fixes the app to the viewport and clips overflow so
+// the sidebar and thread scroll independently rather than the window.
+export default class DefaultLayout extends PuzzleView {
+  data() {
+    return {};
+  }
+}
+</scripts>

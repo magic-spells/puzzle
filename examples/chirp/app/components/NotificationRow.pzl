@@ -1,0 +1,112 @@
+<puzzle-view>
+  <!-- One notification row. Props: `notification` and `index` (stagger). The row
+       is clickable — @click marks it read (record.update notifies the layout's
+       unread-badge query, so the badge drains live) then routes to the relevant
+       chirp (or the actor's profile for a follow). The icon glyph AND the
+       sentence are both branched on notification.type with {#case} (v1.7, D37):
+       five types, each with its own colored icon + phrasing, no fallthrough.
+       Unread rows get a faint surface tint plus an accent dot on the right. -->
+  <article
+    class="flex gap-3 px-4 py-3 border-b border-line hover:bg-surface-2 transition-colors cursor-pointer {#if unread}bg-surface{/if}"
+    @click={ open(event) }>
+    <!-- Type icon column. -->
+    <div class="w-7 shrink-0 text-xl text-center leading-none pt-0.5">
+      {#case notification.type}
+        {:when 'like'}<span class="text-like">♥</span>
+        {:when 'rechirp'}<span class="text-boost">🔁</span>
+        {:when 'follow'}<span class="text-accent">👤</span>
+        {:else}<span class="text-accent">💬</span>
+      {/case}
+    </div>
+
+    <div class="flex-1 min-w-0">
+      <a href="{ actorPath }" class="inline-block" @click={ nav(actorPath, event) }>
+        <Avatar user={ actor } size="sm" />
+      </a>
+
+      <!-- Actor + action sentence. -->
+      <p class="mt-1 text-fg text-sm">
+        <a href="{ actorPath }" class="font-bold hover:underline" @click={ nav(actorPath, event) }>{ actorName }</a>
+        {#if actorVerified}<span class="text-accent">✓</span>{/if}
+        {#case notification.type}
+          {:when 'like'}liked your chirp
+          {:when 'rechirp'}rechirped your chirp
+          {:when 'follow'}followed you
+          {:when 'reply'}replied to your chirp
+          {:when 'mention'}mentioned you in a chirp
+          {:else}sent you a notification
+        {/case}
+        <span class="text-muted">· { notification.createdAt | timeago }</span>
+      </p>
+
+      <!-- Referenced chirp preview (not shown for follows, which have no post). -->
+      {#if preview}
+        <p class="mt-1 text-muted text-sm line-clamp-2">{ preview }</p>
+      {/if}
+    </div>
+
+    {#if unread}<span class="mt-1 w-2 h-2 shrink-0 rounded-full bg-accent"></span>{/if}
+  </article>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Avatar from './Avatar.pzl';
+
+export default class NotificationRow extends PuzzleView {
+  data(params, props) {
+    const n = props.notification;
+    const store = this.ctx.store;
+
+    const actor = n ? store.findOne('user', n.actorId) : null;
+    const post = n && n.postId ? store.findOne('post', n.postId) : null;
+
+    return {
+      notification: n,
+      actor,
+      actorName: actor ? actor.name : 'Someone',
+      actorVerified: !!(actor && actor.verified),
+      actorPath: actor ? '/u/' + actor.handle : '#',
+      preview: post ? post.body : '',
+      unread: !!(n && !n.read),
+    };
+  }
+
+  events = {
+    // Row tap: mark read (drains the layout badge) then route to the target.
+    open: () => {
+      const n = this.getData().notification;
+      if (!n) return;
+      n.update({ read: true });
+      if (n.type === 'follow') {
+        const actor = this.ctx.store.findOne('user', n.actorId);
+        if (actor) this.ctx.router.push('/u/' + actor.handle);
+      } else if (n.postId) {
+        this.ctx.router.push('/post/' + n.postId);
+      }
+    },
+
+    // Actor avatar/name → profile. preventDefault + stopPropagation so it doesn't
+    // also fire the row's open().
+    nav: (path, event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.ctx.router.push(path);
+    },
+  };
+
+  // Gentle per-row stagger on first render (index threaded from the list).
+  get animations() {
+    const index = this.props.index ?? 0;
+    return {
+      in: {
+        from: { opacity: 0, transform: 'translateY(6px)' },
+        to: { opacity: 1, transform: 'translateY(0)' },
+        duration: 220,
+        delay: index * 30,
+        easing: 'ease-out',
+      },
+    };
+  }
+}
+</scripts>

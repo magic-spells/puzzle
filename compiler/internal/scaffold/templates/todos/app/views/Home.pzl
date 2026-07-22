@@ -1,0 +1,208 @@
+<puzzle-view class="w-full max-w-xl mx-auto">
+  <div class="bg-surface border border-hairline rounded-2xl overflow-hidden shadow-2xl shadow-black/50">
+    <div class="p-5 border-b border-line">
+      <form class="flex items-center gap-2.5" @submit={ addTodo(event) }>
+        <input
+          type="text"
+          class="flex-1 h-12 px-4 rounded-xl bg-ink border border-hairline text-fg placeholder-faint focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/20 transition-colors"
+          placeholder="What needs doing?"
+          value={ newTodoText }
+          @input={ updateNewTodoText(event) }
+          autofocus
+        />
+        <button
+          type="submit"
+          class="h-12 px-5 rounded-xl bg-accent text-ink font-semibold tracking-tight hover:bg-accent-2 disabled:bg-elevated disabled:text-faint disabled:cursor-not-allowed transition-colors"
+          disabled={ !newTodoText.trim() } >
+          Add
+        </button>
+      </form>
+    </div>
+
+    {#if todos.length > 0}
+      <div class="grid grid-cols-3 divide-x divide-line border-b border-line">
+        <div class="py-5 text-center">
+          <div class="font-mono text-2xl tabular-nums text-fg">{ activeTodos.length }</div>
+          <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">active</div>
+        </div>
+        <div class="py-5 text-center">
+          <div class="font-mono text-2xl tabular-nums text-fg">{ completedTodos.length }</div>
+          <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">done</div>
+        </div>
+        <div class="py-5 text-center">
+          <div class="font-mono text-2xl tabular-nums text-fg">{ todos.length }</div>
+          <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">total</div>
+        </div>
+      </div>
+
+      <div class="flex border-b border-line px-2">
+        <button
+          class="relative flex-1 py-3.5 text-sm font-medium transition-colors {#if currentFilter === 'all'}text-accent{/if}{#if currentFilter !== 'all'}text-muted hover:text-fg{/if}"
+          @click={ setFilter('all') }>
+          All
+          {#if currentFilter === 'all'}<span class="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent"></span>{/if}
+        </button>
+        <button
+          class="relative flex-1 py-3.5 text-sm font-medium transition-colors {#if currentFilter === 'active'}text-accent{/if}{#if currentFilter !== 'active'}text-muted hover:text-fg{/if}"
+          @click={ setFilter('active') } >
+          Active
+          {#if currentFilter === 'active'}<span class="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent"></span>{/if}
+        </button>
+        <button
+          class="relative flex-1 py-3.5 text-sm font-medium transition-colors {#if currentFilter === 'completed'}text-accent{/if}{#if currentFilter !== 'completed'}text-muted hover:text-fg{/if}"
+          @click={ setFilter('completed') } >
+          Completed
+          {#if currentFilter === 'completed'}<span class="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-accent"></span>{/if}
+        </button>
+      </div>
+
+      <div class="max-h-96 overflow-y-auto">
+        {#for todo in filteredTodos}
+          <TodoItem todo={ todo } @toggle={ toggleTodo(todo) } @remove={ deleteTodo(todo) } />
+        {/for}
+      </div>
+
+      <div class="p-5 flex flex-col sm:flex-row gap-2.5 justify-center">
+        {#if completedTodos.length > 0}
+          <button class="px-4 py-2.5 rounded-xl border border-hairline text-muted hover:text-fg hover:border-white/20 text-sm font-medium transition-colors" @click={ clearCompleted }>
+            Clear completed ({ completedTodos.length })
+          </button>
+        {/if}
+
+        {#if activeTodos.length > 0}
+          <button class="px-4 py-2.5 rounded-xl border border-accent/40 text-accent hover:bg-accent/10 text-sm font-medium transition-colors" @click={ markAllComplete }>
+            Complete all
+          </button>
+        {/if}
+      </div>
+    {:else}
+      <div class="py-16 px-8 text-center">
+        <div class="text-4xl mb-4 opacity-40 grayscale">📝</div>
+        <h3 class="font-display text-2xl text-fg mb-1">Nothing here yet</h3>
+        <p class="text-sm text-muted">Add your first todo above to get started.</p>
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import TodoItem from '../components/TodoItem.pzl';
+
+export default class TodoHome extends PuzzleView {
+  // Subtle view fade-in on load (constellation/doc/DOC-SPEC.md §12). No `out`
+  // for now — snappy back-navigation.
+  animations = {
+    in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 200 }
+  };
+
+  // runs one time when object is created, before data() runs
+  created() {
+    this.setData({
+      newTodoText: '',
+      currentFilter: 'all'
+    });
+  }
+
+  // data() defines component model - runs on mount and when subscribed store data changes
+  data(params, props) {
+    const store = this.ctx.store;
+    const localData = this.getData();
+
+    const todos = store.findMany('todo');
+    const activeTodos = todos.filter(todo => !todo.completed);
+    const completedTodos = todos.filter(todo => todo.completed);
+
+    let filteredTodos = todos;
+    if (localData.currentFilter === 'active') {
+      filteredTodos = activeTodos;
+    } else if (localData.currentFilter === 'completed') {
+      filteredTodos = completedTodos;
+    }
+
+    return {
+      todos,
+      activeTodos,
+      completedTodos,
+      filteredTodos,
+      newTodoText: localData.newTodoText,
+      currentFilter: localData.currentFilter,
+      hasData: todos.length > 0
+    };
+  }
+
+  // Event handlers — class field of arrow functions so `this` is always
+  // the component instance (see constellation/doc/DOC-SPEC.md §4–5)
+  events = {
+    updateNewTodoText: (event) => {
+      this.setData('newTodoText', event.target.value);
+    },
+
+    addTodo: (event) => {
+      event.preventDefault();
+      const text = this.getData().newTodoText.trim();
+
+      if (text) {
+        const store = this.ctx.store;
+        store.createRecord('todo', { text });
+        this.setData('newTodoText', '');
+      }
+    },
+
+    toggleTodo: (todo) => {
+      todo.toggle();
+    },
+
+    deleteTodo: (todo) => {
+      todo.destroy();
+    },
+
+    setFilter: (filter) => {
+      this.setData('currentFilter', filter);
+      // filteredTodos is derived in data(); setData() alone does not re-run
+      // data() (SPEC §4), so refresh() re-runs it to recompute the filtered
+      // list from the just-updated currentFilter.
+      this.refresh();
+    },
+
+    clearCompleted: () => {
+      if (confirm('Clear all completed todos?')) {
+        const store = this.ctx.store;
+        const completed = store.findMany('todo').filter(t => t.completed);
+        completed.forEach(todo => todo.destroy());
+      }
+    },
+
+    markAllComplete: () => {
+      const store = this.ctx.store;
+      const active = store.findMany('todo').filter(t => !t.completed);
+      active.forEach(todo => todo.markComplete());
+    }
+  };
+
+  // Component lifecycle
+  mounted() {
+    console.log('Todo app mounted!');
+
+    // Focus the input when component mounts
+    const input = this.element.querySelector('input[type="text"]');
+    if (input) {
+      input.focus();
+    }
+  }
+
+  beforeUpdate() {
+    // Could add optimizations here
+  }
+
+  afterUpdate() {
+    // Update document title with todo count
+    const data = this.getData();
+    const activeCount = data.activeTodos ? data.activeTodos.length : 0;
+    document.title = activeCount > 0
+      ? `(${activeCount}) Puzzle Todos`
+      : 'Puzzle Todos';
+  }
+}
+</scripts>
+

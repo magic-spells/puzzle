@@ -1,0 +1,57 @@
+<puzzle-view>
+  <!-- Notifications list. "Mark all read" flips every unread record; because the
+       MainLayout's unread badge subscribes to the same notification query, you
+       can watch the badge drain live as the rows here go read (cross-page store
+       reactivity — one of this example's showpieces). Each row is a
+       NotificationRow, which does its own {#case} type-branching. -->
+  <div class="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-line bg-bg/80 backdrop-blur">
+    <h1 class="text-xl font-bold text-fg">Notifications</h1>
+    {#if unreadCount}
+      <button type="button" class="text-sm font-semibold text-accent hover:underline" @click={ markAll }>Mark all read</button>
+    {/if}
+  </div>
+
+  {#if notifications.length}
+    {#for n in notifications, i}
+      <NotificationRow notification={ n } index={ i } />
+    {/for}
+  {:else}
+    <div class="py-16 px-8 text-center">
+      <div class="text-5xl">🔔</div>
+      <h2 class="mt-4 text-xl font-bold text-fg">Nothing to see here — yet</h2>
+      <p class="mt-2 text-muted">Likes, rechirps, replies and follows will show up here.</p>
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import NotificationRow from '../components/NotificationRow.pzl';
+
+export default class NotificationsView extends PuzzleView {
+  data(params, props) {
+    const store = this.ctx.store;
+    // Newest first; unread count drives the header button's visibility.
+    const notifications = store
+      .findMany('notification')
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    const unreadCount = notifications.filter((n) => !n.read).length;
+    return { notifications, unreadCount };
+  }
+
+  events = {
+    // Update every unread record. Each update() notifies subscribers, so both
+    // these rows and the layout's badge react in the same tick.
+    markAll: () => {
+      this.ctx.store
+        .findMany('notification', { filter: (n) => !n.read })
+        .forEach((n) => n.update({ read: true }));
+    },
+  };
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 240, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },   to: { opacity: 0, transform: 'translateY(-6px)' }, duration: 150, easing: 'ease-in' }
+  };
+}
+</scripts>

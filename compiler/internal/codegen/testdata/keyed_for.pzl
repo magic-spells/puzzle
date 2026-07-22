@@ -1,0 +1,17 @@
+<puzzle-view class="list">
+  <ul class="items">
+    {#for item in items}
+      <li class="item">{ item.name }</li>
+    {/for}
+  </ul>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class KeyedFor extends PuzzleView {
+  data() {
+    return { items: this.ctx.store.findMany('item') };
+  }
+}
+</scripts>

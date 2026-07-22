@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
+ * and JS so the utility classes they use are generated. Paths are relative to
+ * this stylesheet (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/* A couple of semantic tokens become Tailwind utilities (bg-surface, …). */
+@theme {
+  --color-surface: #f7f7f8;
+  --color-accent: #4f46e5;
+  --color-accent-2: #6366f1;
+}
+
+@layer base {
+  body {
+    -webkit-font-smoothing: antialiased;
+  }
+}

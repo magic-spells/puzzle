@@ -1,0 +1,20 @@
+<puzzle-view class="page">
+  <Card title="Save" count={ total } @close={ handleClose } @save={ save(payload) }>
+    <p class="body">Card body</p>
+  </Card>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Card from '../components/Card.pzl';
+
+export default class UsesComponent extends PuzzleView {
+  data() {
+    return { total: 0, payload: {} };
+  }
+  events = {
+    handleClose: (event) => {},
+    save: (payload) => {},
+  };
+}
+</scripts>

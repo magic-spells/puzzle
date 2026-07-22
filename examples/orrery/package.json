@@ -1,0 +1,19 @@
+{
+  "name": "orrery",
+  "version": "1.0.0",
+  "description": "Canvas orrery demo — the reactive datastore drives a requestAnimationFrame animation loop, built with Puzzle framework",
+  "main": "app.js",
+  "scripts": {
+    "dev": "puzzle dev",
+    "build": "puzzle build"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^1.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "concurrently": "^8.2.2",
+    "tailwindcss": "^4.1.14"
+  },
+  "type": "module"
+}

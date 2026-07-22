@@ -1,0 +1,225 @@
+<puzzle-view class="stack">
+
+  <!-- ── CARD 1 · text inputs ─────────────────────────────── -->
+  <div class="card">
+    <p class="eyebrow">datastore ⇄ text</p>
+
+    <div class="preview">
+      <div class="avatar" style={ avatarStyle }>{ profile.initials }</div>
+      <div>
+        <div class="preview-name">{ profile.displayName }</div>
+        <div class="preview-tagline">{ profile.tagline }</div>
+      </div>
+    </div>
+
+    <label class="field">
+      <span class="field-label">Display name</span>
+      <input
+        type="text"
+        value={ profile.displayName }
+        @input={ updateText('displayName', event) }
+        placeholder="Type a name…" />
+    </label>
+
+    <label class="field">
+      <span class="field-label">Tagline</span>
+      <input
+        type="text"
+        value={ profile.tagline }
+        @input={ updateText('tagline', event) }
+        placeholder="Type a tagline…" />
+    </label>
+  </div>
+
+  <!-- ── proof · the raw record in the datastore ──────────── -->
+  <div class="card store-panel">
+    <div class="store-title">store record <code>profile#me</code></div>
+    <pre>{ storeJSON }</pre>
+    <button class="reset" @click={ reset }>Reset record</button>
+  </div>
+
+  <!-- ── CARD 2 · range slider + color picker ─────────────── -->
+  <div class="card">
+    <p class="eyebrow">datastore ⇄ slider & color</p>
+
+    <div class="swatch-row">
+      <div class="swatch" style={ hueSwatchStyle }></div>
+      <div class="swatch" style={ colorSwatchStyle }></div>
+    </div>
+
+    <label class="field">
+      <span class="field-label">Accent hue · <b>{ profile.hue }</b></span>
+      <div class="range-row">
+        <input
+          type="range" min="0" max="360"
+          value={ profile.hue }
+          @input={ updateNumber('hue', event) } />
+        <input
+          type="number" min="0" max="360"
+          class="num"
+          value={ profile.hue }
+          @input={ updateNumber('hue', event) } />
+      </div>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Color · <b>{ profile.color }</b></span>
+      <div class="range-row">
+        <input
+          type="color"
+          class="color"
+          value={ profile.color }
+          @input={ updateText('color', event) } />
+        <input
+          type="text"
+          class="num hex"
+          value={ profile.color }
+          @input={ updateText('color', event) } />
+      </div>
+    </label>
+  </div>
+
+  <!-- ── CARD 3 · live markdown ───────────────────────────── -->
+  <div class="card">
+    <p class="eyebrow">datastore ⇄ markdown</p>
+    <div class="md-grid">
+      <textarea
+        class="md-input"
+        value={ profile.notes }
+        @input={ updateText('notes', event) }></textarea>
+      <div class="md-preview"><!-- filled from afterUpdate() --></div>
+    </div>
+  </div>
+
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Home extends PuzzleView {
+  // Make sure the single profile record exists before the first render.
+  created() {
+    const store = this.ctx.store;
+    if (!store.findOne('profile', 'me')) {
+      store.createRecord('profile', { id: 'me' });
+    }
+  }
+
+  // Reading the record here auto-subscribes the view: any update() to it
+  // re-runs data() and re-renders — so every input, swatch, and the JSON
+  // panel stay in lockstep with the datastore.
+  data() {
+    const profile = this.ctx.store.findOne('profile', 'me');
+
+    return {
+      profile,
+      avatarStyle: `background: ${profile.color}`,
+      hueSwatchStyle: `background: hsl(${profile.hue} 80% 60%)`,
+      colorSwatchStyle: `background: ${profile.color}`,
+      storeJSON: JSON.stringify(
+        {
+          displayName: profile.displayName,
+          tagline: profile.tagline,
+          hue: profile.hue,
+          color: profile.color,
+        },
+        null,
+        2
+      ),
+    };
+  }
+
+  events = {
+    // Write the keystroke back to the store record. The store is the single
+    // source of truth; the input mirrors it on the next render.
+    updateText: (field, event) => {
+      this.record().update({ [field]: event.target.value });
+    },
+
+    // Range / number inputs hand back strings — coerce so the field stays a
+    // real number in the datastore.
+    updateNumber: (field, event) => {
+      this.record().update({ [field]: Number(event.target.value) });
+    },
+
+    reset: () => {
+      this.record().update({
+        displayName: 'Ada Lovelace',
+        tagline: 'First programmer',
+        hue: 220,
+        color: '#ff5fa2',
+        notes:
+          '# Hello, Puzzle\n\nType **markdown** on the left and watch it *render* live on the right.\n\n- bound to the `profile#me` record\n- rendered on every store change\n\nInline `code` and [links](https://example.com) work too.',
+      });
+    },
+  };
+
+  record() {
+    return this.ctx.store.findOne('profile', 'me');
+  }
+
+  // The template escapes `{ }` interpolation (no raw-HTML directive in v1), so
+  // the rendered markdown is written to innerHTML here. afterUpdate() runs after
+  // every reactive re-render, so the preview tracks the store on each keystroke.
+  mounted() {
+    this.renderMarkdown();
+  }
+
+  afterUpdate() {
+    this.renderMarkdown();
+  }
+
+  renderMarkdown() {
+    const el = this.element.querySelector('.md-preview');
+    if (el) el.innerHTML = markdownToHTML(this.record().notes || '');
+  }
+}
+
+// Tiny, dependency-free markdown → HTML. Escapes first, then applies a handful
+// of inline/block rules — enough to make the live-binding point.
+function markdownToHTML(src) {
+  const esc = (s) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const inline = (s) =>
+    esc(s)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        '<a href="$2" target="_blank" rel="noopener">$1</a>'
+      );
+
+  const lines = src.split('\n');
+  const out = [];
+  let list = null; // accumulates <li> while inside a bullet run
+
+  const closeList = () => {
+    if (list) {
+      out.push('<ul>' + list.join('') + '</ul>');
+      list = null;
+    }
+  };
+
+  for (const line of lines) {
+    const heading = /^(#{1,3})\s+(.*)$/.exec(line);
+    const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
+
+    if (heading) {
+      closeList();
+      const level = heading[1].length;
+      out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+    } else if (bullet) {
+      (list ??= []).push(`<li>${inline(bullet[1])}</li>`);
+    } else if (line.trim() === '') {
+      closeList();
+    } else {
+      closeList();
+      out.push(`<p>${inline(line)}</p>`);
+    }
+  }
+  closeList();
+  return out.join('\n');
+}
+</scripts>

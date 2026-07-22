@@ -1,0 +1,84 @@
+<puzzle-view>
+  <!-- Airbnb-style photo mosaic. Each "photo" is really a {from,to,icon}
+       gradient stop from the listing (no real imagery in this demo), so every
+       tile is a CSS linear-gradient with its scene emoji floated on top. The
+       component needs a single root element, so both layouts live inside one
+       wrapper (only one is visible at a time via responsive utilities). -->
+  <div>
+  <!-- Mobile: a single hero tile (the cover) at a 4:3 crop. The mosaic below is
+       hidden on small screens because five tiles don't breathe on a phone. -->
+  <div class="sm:hidden rounded-2xl overflow-hidden ring-1 ring-line">
+    <div
+      class="aspect-[4/3] flex items-center justify-center transition-[filter] duration-200 hover:brightness-95"
+      style="background:{ cover.bg }">
+      <span class="text-7xl drop-shadow-sm select-none">{ cover.icon }</span>
+    </div>
+  </div>
+
+  <!-- Desktop: a 4-col × 2-row grid. The cover spans a 2×2 block on the left;
+       the remaining four photos fill the two columns on the right. -->
+  <div class="hidden sm:grid grid-cols-4 grid-rows-2 gap-2 rounded-2xl overflow-hidden aspect-[3/2]">
+    <!-- Big cover tile (2×2). A subtle "1 / N photos" pill sits bottom-right,
+         mirroring Airbnb's gallery affordance. -->
+    <div
+      class="col-span-2 row-span-2 relative flex items-center justify-center transition-[filter] duration-200 hover:brightness-95"
+      style="background:{ cover.bg }">
+      <span class="text-7xl drop-shadow-sm select-none">{ cover.icon }</span>
+      <span class="absolute bottom-3 right-3 px-2.5 py-1 rounded-full bg-bg/90 text-fg text-xs font-semibold shadow-sm">1 / { count } photos</span>
+    </div>
+
+    <!-- The four smaller tiles. -->
+    {#for tile in rest, i}
+      <div
+        class="relative flex items-center justify-center transition-[filter] duration-200 hover:brightness-95"
+        style="background:{ tile.bg }">
+        <span class="text-4xl drop-shadow-sm select-none">{ tile.icon }</span>
+      </div>
+    {/for}
+  </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class PhotoGallery extends PuzzleView {
+  data(params, props) {
+    const listing = props.listing || null;
+
+    // photos is a Puzzle.array() of {from,to,icon}; it can be briefly empty
+    // mid-seed, so fall back to a neutral tile rather than reading fields off
+    // undefined in the template.
+    const photos = (listing && listing.photos) || [];
+    const cover = this._tile(photos[0]);
+    // The four right-hand tiles. slice never over-reads a short array.
+    const rest = photos.slice(1, 5).map((p) => this._tile(p));
+
+    return {
+      cover,
+      rest,
+      count: photos.length || 1
+    };
+  }
+
+  // Turn a {from,to,icon} stop into a ready-to-use tile (CSS gradient + emoji),
+  // with the same neutral fallback the Listing/Host models use.
+  _tile(p) {
+    const stop = p || {};
+    return {
+      bg: `linear-gradient(135deg, ${stop.from || '#e8e8ee'}, ${stop.to || '#d4d4de'})`,
+      icon: stop.icon || '🏠'
+    };
+  }
+
+  // Gentle fade-in when the gallery mounts.
+  animations = {
+    in: {
+      from: { opacity: 0, transform: 'translateY(8px)' },
+      to:   { opacity: 1, transform: 'translateY(0)' },
+      duration: 300,
+      easing: 'ease-out'
+    }
+  };
+}
+</scripts>

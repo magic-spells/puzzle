@@ -1,0 +1,282 @@
+[
+  {
+    "id": "r-1",
+    "listingId": "l-joshua-dome",
+    "author": "Priya",
+    "city": "Austin, United States",
+    "date": "2026-05-18",
+    "rating": 5,
+    "text": "The dome stayed cool even in the desert heat, and the night sky was unreal. We spent hours in the hot tub just watching stars.",
+    "accent": { "from": "#e6c9b0", "to": "#c99a7a" }
+  },
+  {
+    "id": "r-2",
+    "listingId": "l-joshua-dome",
+    "author": "Marcus",
+    "city": "Denver, United States",
+    "date": "2026-03-02",
+    "rating": 5,
+    "text": "Total silence and total dark — exactly what we needed. Mara left a little guide to the best hikes right at the park entrance.",
+    "accent": { "from": "#b0c4d6", "to": "#7a94ac" }
+  },
+  {
+    "id": "r-3",
+    "listingId": "l-joshua-dome",
+    "author": "Elena",
+    "city": "Portland, United States",
+    "date": "2025-11-14",
+    "rating": 4,
+    "text": "Magical spot for stargazing. The road in is a bit rough but the dome itself is spotless and cozy.",
+    "accent": { "from": "#e6b0c0", "to": "#c98aa0" }
+  },
+  {
+    "id": "r-4",
+    "listingId": "l-bigsur-cabin",
+    "author": "Tom",
+    "city": "San Francisco, United States",
+    "date": "2026-04-27",
+    "rating": 5,
+    "text": "Falling asleep to the sound of the ocean under the redwoods was unforgettable. The wood stove made the foggy mornings perfect.",
+    "accent": { "from": "#a8d6c4", "to": "#6aae94" }
+  },
+  {
+    "id": "r-5",
+    "listingId": "l-bigsur-cabin",
+    "author": "Hana",
+    "city": "Seattle, United States",
+    "date": "2025-09-09",
+    "rating": 4,
+    "text": "Gorgeous cabin with real seclusion. Cell service is nonexistent, which honestly became our favorite part.",
+    "accent": { "from": "#e6d0a8", "to": "#c9a86a" }
+  },
+  {
+    "id": "r-6",
+    "listingId": "l-tahoe-chalet",
+    "author": "Ryan",
+    "city": "Sacramento, United States",
+    "date": "2026-02-16",
+    "rating": 5,
+    "text": "The A-frame is even better in person — we skied all day and came back to the fireplace and hot tub every night. Lake views for days.",
+    "accent": { "from": "#b0c4d6", "to": "#7a94ac" }
+  },
+  {
+    "id": "r-7",
+    "listingId": "l-tahoe-chalet",
+    "author": "Chloe",
+    "city": "Los Angeles, United States",
+    "date": "2025-07-21",
+    "rating": 4,
+    "text": "Great summer base right by the water. Plenty of room for six of us and the kayaks out back were a nice touch.",
+    "accent": { "from": "#e6c9b0", "to": "#c99a7a" }
+  },
+  {
+    "id": "r-8",
+    "listingId": "l-kyoto-machiya",
+    "author": "Daniel",
+    "city": "London, United Kingdom",
+    "date": "2026-06-11",
+    "rating": 5,
+    "text": "Staying in a real machiya near Gion felt like stepping back in time. The little garden and cedar bath were the highlight of our trip.",
+    "accent": { "from": "#e6b0c0", "to": "#c98aa0" }
+  },
+  {
+    "id": "r-9",
+    "listingId": "l-kyoto-machiya",
+    "author": "Aiko",
+    "city": "Osaka, Japan",
+    "date": "2026-01-28",
+    "rating": 5,
+    "text": "Beautifully restored and impeccably clean. Yuki's tips for tea houses and morning temple visits were spot on.",
+    "accent": { "from": "#e6d0a8", "to": "#c9a86a" }
+  },
+  {
+    "id": "r-10",
+    "listingId": "l-kyoto-machiya",
+    "author": "Sophie",
+    "city": "Melbourne, Australia",
+    "date": "2025-10-05",
+    "rating": 4,
+    "text": "So peaceful and central — we walked everywhere. The tatami rooms are lovely, just note it's authentically snug.",
+    "accent": { "from": "#a8d6c4", "to": "#6aae94" }
+  },
+  {
+    "id": "r-11",
+    "listingId": "l-lisbon-loft",
+    "author": "Miguel",
+    "city": "Madrid, Spain",
+    "date": "2026-05-30",
+    "rating": 5,
+    "text": "The balcony over the Alfama rooftops is pure magic at sunset. We had our morning coffee to church bells every day.",
+    "accent": { "from": "#e6c9b0", "to": "#c99a7a" }
+  },
+  {
+    "id": "r-12",
+    "listingId": "l-lisbon-loft",
+    "author": "Greta",
+    "city": "Berlin, Germany",
+    "date": "2026-04-03",
+    "rating": 5,
+    "text": "Flooded with light and full of charm — those hand-painted tiles! Steps from the tram and the best pastéis in town.",
+    "accent": { "from": "#b0c4d6", "to": "#7a94ac" }
+  },
+  {
+    "id": "r-13",
+    "listingId": "l-lisbon-loft",
+    "author": "Owen",
+    "city": "Dublin, Ireland",
+    "date": "2025-12-19",
+    "rating": 4,
+    "text": "Perfect little loft in the old quarter. It's a few flights of stairs but the view makes every step worth it.",
+    "accent": { "from": "#e6b0c0", "to": "#c98aa0" }
+  },
+  {
+    "id": "r-14",
+    "listingId": "l-tulum-beach",
+    "author": "Camila",
+    "city": "Mexico City, Mexico",
+    "date": "2026-06-25",
+    "rating": 5,
+    "text": "Waking up to the surf just steps from the palapa was a dream. The private pool and open-air kitchen made our group getaway effortless.",
+    "accent": { "from": "#a8d6c4", "to": "#6aae94" }
+  },
+  {
+    "id": "r-15",
+    "listingId": "l-tulum-beach",
+    "author": "Jordan",
+    "city": "Miami, United States",
+    "date": "2025-11-30",
+    "rating": 4,
+    "text": "Right on the sand and huge — eight of us had tons of space. It gets warm midday but the ocean breeze and pool sorted us out.",
+    "accent": { "from": "#e6d0a8", "to": "#c9a86a" }
+  },
+  {
+    "id": "r-16",
+    "listingId": "l-copenhagen-flat",
+    "author": "Freja",
+    "city": "Aarhus, Denmark",
+    "date": "2026-05-07",
+    "rating": 5,
+    "text": "So calm and beautifully designed — the pale oak and reading nook were everything. Nørrebro's cafés are right downstairs.",
+    "accent": { "from": "#cdd2da", "to": "#9aa0ac" }
+  },
+  {
+    "id": "r-17",
+    "listingId": "l-copenhagen-flat",
+    "author": "Noah",
+    "city": "Amsterdam, Netherlands",
+    "date": "2025-08-22",
+    "rating": 4,
+    "text": "Bikes made exploring the city so easy from here. Spotless minimalist flat, exactly like the photos.",
+    "accent": { "from": "#b8bcc9", "to": "#7a808f" }
+  },
+  {
+    "id": "r-18",
+    "listingId": "l-queenstown-lodge",
+    "author": "Isla",
+    "city": "Auckland, New Zealand",
+    "date": "2026-03-19",
+    "rating": 5,
+    "text": "That view over the lake to the Remarkables from the sauna is something I'll never forget. Nina thought of every detail.",
+    "accent": { "from": "#c0cdc9", "to": "#8aa89c" }
+  },
+  {
+    "id": "r-19",
+    "listingId": "l-queenstown-lodge",
+    "author": "Ben",
+    "city": "Sydney, Australia",
+    "date": "2025-10-27",
+    "rating": 5,
+    "text": "Incredible alpine lodge — hot tub under the stars after a day on the trails was unbeatable. Would come back in a heartbeat.",
+    "accent": { "from": "#b0c4d6", "to": "#7a94ac" }
+  },
+  {
+    "id": "r-20",
+    "listingId": "l-santorini-cave",
+    "author": "Lucas",
+    "city": "Paris, France",
+    "date": "2026-06-02",
+    "rating": 5,
+    "text": "The plunge pool hanging over the caldera is even more stunning than the photos. We watched the Oia sunset from our own terrace every night.",
+    "accent": { "from": "#e6c9b0", "to": "#c99a7a" }
+  },
+  {
+    "id": "r-21",
+    "listingId": "l-santorini-cave",
+    "author": "Anna",
+    "city": "Stockholm, Sweden",
+    "date": "2026-04-15",
+    "rating": 5,
+    "text": "A once-in-a-lifetime cave house. Cool and quiet inside, breathtaking outside. Inês checked in just enough to be helpful.",
+    "accent": { "from": "#e6d0a8", "to": "#c9a86a" }
+  },
+  {
+    "id": "r-22",
+    "listingId": "l-santorini-cave",
+    "author": "Kai",
+    "city": "Honolulu, United States",
+    "date": "2025-09-28",
+    "rating": 4,
+    "text": "Postcard-perfect and worth every step down the cliff path. Bring good shoes — and a camera you won't want to put down.",
+    "accent": { "from": "#a8d6c4", "to": "#6aae94" }
+  },
+  {
+    "id": "r-23",
+    "listingId": "l-chamonix-chalet",
+    "author": "Sven",
+    "city": "Zurich, Switzerland",
+    "date": "2026-02-04",
+    "rating": 5,
+    "text": "Skied right back to the door, then straight into the sauna. Enormous chalet — all ten of us were comfortable with room to spare.",
+    "accent": { "from": "#dfe6ee", "to": "#9aa8ba" }
+  },
+  {
+    "id": "r-24",
+    "listingId": "l-chamonix-chalet",
+    "author": "Marie",
+    "city": "Lyon, France",
+    "date": "2025-12-11",
+    "rating": 4,
+    "text": "Classic Alpine chalet with the Mont Blanc views you dream about. Big and warm; the kitchen handled our group dinners easily.",
+    "accent": { "from": "#c4d4e0", "to": "#6a86a0" }
+  },
+  {
+    "id": "r-25",
+    "listingId": "l-bali-treehouse",
+    "author": "Leah",
+    "city": "Vancouver, Canada",
+    "date": "2026-05-24",
+    "rating": 5,
+    "text": "Sleeping in the canopy with the jungle all around felt like a dream. The open-air bath and pool below were pure Ubud bliss.",
+    "accent": { "from": "#6aae7a", "to": "#2f6a3f" }
+  },
+  {
+    "id": "r-26",
+    "listingId": "l-bali-treehouse",
+    "author": "Arjun",
+    "city": "Singapore, Singapore",
+    "date": "2026-01-09",
+    "rating": 5,
+    "text": "Woke up to birdsong and green light every morning. Sofia was so welcoming and the rice terraces nearby are stunning.",
+    "accent": { "from": "#8fc48a", "to": "#4a8a4a" }
+  },
+  {
+    "id": "r-27",
+    "listingId": "l-nyc-loft",
+    "author": "Rachel",
+    "city": "Boston, United States",
+    "date": "2026-06-17",
+    "rating": 5,
+    "text": "Those arched windows and cast-iron columns are pure SoHo. We rolled out of bed into the best galleries and coffee downtown.",
+    "accent": { "from": "#5a6070", "to": "#22262f" }
+  },
+  {
+    "id": "r-28",
+    "listingId": "l-nyc-loft",
+    "author": "Diego",
+    "city": "Chicago, United States",
+    "date": "2025-08-14",
+    "rating": 4,
+    "text": "Great location and loads of character. It's a lively neighborhood so expect a little street noise — part of the New York charm.",
+    "accent": { "from": "#b8bcc9", "to": "#7a808f" }
+  }
+]

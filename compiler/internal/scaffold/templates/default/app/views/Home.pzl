@@ -1,0 +1,32 @@
+<puzzle-view class="w-full">
+  <div class="space-y-8">
+    <div class="space-y-2">
+      <h1 class="flex items-center gap-3 text-3xl font-semibold tracking-tight">
+        <span class="inline-block size-7 text-rose-500 hover:text-rose-600">{#svg 'icons/heart.svg'}</span>
+        { heading }
+      </h1>
+      <p class="text-gray-500">{ message }</p>
+    </div>
+
+    <Counter label={ counterLabel } />
+
+    <div class="rounded-xl border border-gray-200 dark:border-gray-800 p-5 text-sm text-gray-500">
+      Edit <code class="font-mono text-gray-700 dark:text-gray-300">app/views/Home.pzl</code> and save — the dev server live-reloads.
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Counter from '../components/Counter.pzl';
+
+export default class Home extends PuzzleView {
+  data(params, props) {
+    return {
+      heading: 'Welcome to Puzzle',
+      message: 'A SPA-first framework with single-file .pzl components.',
+      counterLabel: 'Clicks',
+    };
+  }
+}
+</scripts>

@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+/dist
+/public/styles.css
+
+# Puzzle cached files
+.puzzle/
+
+# OS files
+.DS_Store

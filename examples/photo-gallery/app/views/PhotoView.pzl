@@ -1,0 +1,93 @@
+<!-- The ROOT is the overlay box itself — NOT class="contents". The view's
+     opacity animations run on this root element, and a display:contents element
+     generates no box, so opacity on it is a visual NO-OP: the close fade never
+     painted, and during a live-pair fly-back (which holds this view mounted
+     until the blob lands) the backdrop sat fully opaque, then vanished
+     abruptly. With a real box here, the chrome fades while the image flies
+     home. -->
+<puzzle-view class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8">
+    <!-- Near-black backdrop; clicking it closes. A real <button> for keyboard/AT. -->
+    <button type="button" class="photo-backdrop absolute inset-0" aria-label="Close" @click={ close }></button>
+
+    {#if photo}
+      <!-- MORPH counterpart of the grid card's <img> (same plain
+           data-puzzle-morph value). Sized by classes only (max-w/max-h +
+           object-contain); no transform/opacity or dynamic style binding, so the
+           engine can measure its resting rect. `relative` lifts it above the
+           absolute backdrop button. -->
+      <img
+        data-puzzle-morph="photo-{ photo.id }"
+        src="{ photo.src }"
+        alt="Photo by { photo.author }"
+        class="relative max-w-[94vw] max-h-[84vh] w-auto h-auto object-contain rounded-lg shadow-2xl shadow-black/60" />
+
+      <div class="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-6">
+        <span class="rounded-full bg-black/55 px-4 py-1.5 text-sm font-semibold text-white backdrop-blur-sm">
+          { photo.author }
+        </span>
+      </div>
+    {:else}
+      <!-- Genuine not-found: the store is seeded before the first data(). -->
+      <div class="relative text-center">
+        <h2 class="text-xl text-fg mb-2">Photo not found</h2>
+        <p class="text-muted">No photo with that id.</p>
+      </div>
+    {/if}
+
+    <button type="button" class="photo-close" aria-label="Close" @click={ close }>✕</button>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class PhotoView extends PuzzleView {
+  created() {
+    this._onKey = (event) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      this._close();
+    };
+  }
+
+  data(params, props) {
+    // Works in BOTH mounts: top-level /photo/:id (All Photos) and the nested
+    // /album/:slug/photo/:id child (params merge down the chain, so params.id is
+    // present in both; params.slug is present only under an album). Capture the
+    // album slug for the cold-deep-link close fallback below.
+    this._albumSlug = params.slug || null;
+    // findOne is safe here — the store is fully seeded in beforeMount before the
+    // first data() runs.
+    return {
+      photo: this.ctx.store.findOne('photo', params.id),
+    };
+  }
+
+  mounted() {
+    document.addEventListener('keydown', this._onKey);
+  }
+
+  destroyed() {
+    document.removeEventListener('keydown', this._onKey);
+  }
+
+  // Close by PUSHING the grid path — a new history entry, never a pop. The
+  // browsing trail therefore stays in the stack (album → photo → album →
+  // photo …), so browser Back re-traverses every photo you viewed, morphing at
+  // each step (Back from an open photo closes it; Back from a grid reopens the
+  // photo you closed). The same-path no-op guard makes this safe to spam.
+  _close() {
+    this.ctx.router.push(this._albumSlug ? `/album/${this._albumSlug}` : '/');
+  }
+
+  events = {
+    close: () => this._close(),
+  };
+
+  // Opacity-only (D68 capture-flight rule): the engine measures the fullscreen
+  // image's landing rect once when the flight starts, so a transform-based
+  // entrance would slide the image away from where the morph blob lands.
+  animations = {
+    in:  { from: { opacity: 0 }, to: { opacity: 1 }, duration: 220, easing: 'ease-out' },
+    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 180, easing: 'ease-in' },
+  };
+}
+</scripts>

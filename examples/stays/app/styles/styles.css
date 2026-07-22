@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
+ * and JS so the utility classes they use are generated. Paths are relative to
+ * this stylesheet (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/*
+ * Puzzle Stays palette (v4 @theme). A LIGHT, Airbnb-like marketplace chrome on a
+ * near-white background with a coral/pink accent; each listing's photos carry
+ * their own per-record gradient (a Puzzle.array() of {from,to,icon} stops) via
+ * inline styles, so the named tokens here only dress the shell. Token NAMES
+ * mirror the music example so shared utilities (bg-bg, text-fg, text-muted,
+ * border-line, bg-accent, …) behave identically across both demos.
+ */
+@theme {
+  --font-sans: 'Circular', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-display: var(--font-sans);
+
+  --color-bg: #ffffff;            /* app background */
+  --color-surface: #f7f7f7;       /* footer, muted panels */
+  --color-surface-2: #f0f0f0;     /* hover, raised rows */
+  --color-elevated: #ffffff;      /* menus, cards */
+  --color-hairline: #dddddd;      /* stronger dividers, inputs */
+  --color-line: #ebebeb;          /* card rings, hairlines */
+
+  --color-fg: #222222;            /* primary text (near-black) */
+  --color-muted: #6a6a6a;         /* secondary text */
+  --color-faint: #b0b0b0;         /* meta, disabled */
+
+  --color-accent: #ff385c;        /* brand, active nav, primary button */
+  --color-accent-2: #e31c5f;      /* accent hover */
+  --color-accent-ink: #ffffff;    /* text on an accent fill */
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-fg);
+    background: var(--color-bg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Interactive affordance for the app's many <button> handlers. */
+  button {
+    cursor: pointer;
+  }
+}

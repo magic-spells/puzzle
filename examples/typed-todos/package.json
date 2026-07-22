@@ -1,0 +1,19 @@
+{
+  "name": "typed-todos",
+  "version": "1.0.0",
+  "description": "Todo app built with Puzzle + TypeScript (<scripts lang=\"ts\">)",
+  "type": "module",
+  "scripts": {
+    "dev": "puzzle dev",
+    "build": "puzzle build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^1.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "tailwindcss": "^4.1.14",
+    "typescript": "^5.6.0"
+  }
+}

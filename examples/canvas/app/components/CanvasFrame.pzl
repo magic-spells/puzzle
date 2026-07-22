@@ -1,0 +1,55 @@
+<puzzle-view>
+  <div
+    class="el-node {#if node.selected}el-selected{/if} {#if node.dropTarget}el-drop-target{/if}"
+    style={ node.css }
+    data-el-id={ node.el.id }
+    @pointerdown={ down(event) }>
+    <span
+      class="frame-label"
+      data-el-id={ node.el.id }
+      @pointerdown={ down(event) }>{ node.el.name }</span>
+    <div class="absolute inset-0 overflow-hidden" style="border-radius:inherit">
+      {#for child in node.children}
+        <div class="contents">
+          {#if child.placeholder}
+            <div class="frame-drop-gap" style={ child.css }></div>
+          {:else}
+            <CanvasShape node={ child } @press={ childPress(event) } />
+          {/if}
+        </div>
+      {/for}
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import CanvasShape from './CanvasShape.pzl';
+
+// A frame: a positioned box that clips and hosts its children. The name label
+// sits OUTSIDE the clip (above the box). Children render in an inner
+// overflow-hidden layer so they're masked by the frame's rounded corners.
+//
+// Both the frame body and its children live under this component's DOM, so a
+// pointerdown on a child bubbles up to the frame's own `down`. We disambiguate
+// by resolving the nearest [data-el-id] from the event target: if it isn't this
+// frame, the child already handled it and we bail. Child presses are forwarded
+// untouched via `childPress`.
+export default class CanvasFrame extends PuzzleView {
+  data(params, props) {
+    return { node: props.node };
+  }
+
+  events = {
+    down: (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      const hit = event.target.closest('[data-el-id]');
+      if (hit && hit.dataset.elId !== this.props.node.el.id) return;
+      this.props.press({ event, id: this.props.node.el.id });
+    },
+    childPress: (payload) => {
+      this.props.press(payload);
+    }
+  };
+}
+</scripts>

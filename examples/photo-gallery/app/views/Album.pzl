@@ -1,0 +1,67 @@
+<puzzle-view>
+  {#if album}
+    <!-- Header mirrors the All Photos view, but titled with the album (author)
+         name and its photo count. -->
+    <header class="px-6 sm:px-8 pt-8 pb-5">
+      <a href="/" class="inline-flex items-center gap-1 text-xs font-medium text-muted hover:text-fg hover:no-underline">
+        <span aria-hidden="true">‹</span> Library
+      </a>
+      <h1 class="mt-2 text-[26px] sm:text-3xl font-bold tracking-tight text-fg">{ album.name }</h1>
+      <p class="mt-1 text-sm text-muted">{ photos.length } { photos.length === 1 ? 'photo' : 'photos' }</p>
+    </header>
+
+    <!-- Same square-tile grid as the gallery, filtered to this author. The morph
+         id namespace (photo-<id>) is shared, so a tile here morphs to fullscreen
+         and back exactly like one on the All Photos grid — nothing extra. -->
+    <div class="px-6 sm:px-8 pb-16 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
+      {#for photo in photos}
+        <!-- base makes each card's href album-scoped (/album/<slug>/photo/<id>),
+             so opening a photo is a nested CHILD navigation that keeps this grid
+             (and this card's live morph <img>) mounted beneath the overlay. -->
+        <PhotoCard photo={ photo } base={ '/album/' + slug } />
+      {/for}
+    </div>
+  {:else}
+    <!-- No such album: the store is fully seeded before the first data(), so an
+         unmatched slug is genuinely unknown, not a mid-load miss. -->
+    <div class="px-6 sm:px-8 py-24 text-center">
+      <h2 class="text-xl text-fg mb-2">No such album</h2>
+      <p class="text-muted mb-6">We couldn't find an album for "{ slug }".</p>
+      <a href="/" class="inline-block px-5 py-2.5 rounded-full bg-accent text-accent-ink text-sm font-semibold hover:bg-accent-2 hover:no-underline transition-colors">Back to All Photos</a>
+    </div>
+  {/if}
+
+  <!-- Nested child mount point (D30). On the bare /album/:slug URL this holds the
+       hidden AlbumIndex (renders nothing); on /album/:slug/photo/:id it holds the
+       fullscreen PhotoView overlay. The overlay is position:fixed inset-0 z-50 —
+       it escapes this main's overflow-y-auto because no ancestor here carries a
+       transform/filter (the album view's only animation is opacity, and it isn't
+       even the animator on the child swap). Same trick kanban-morph uses. -->
+  <Slot/>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import PhotoCard from '../components/PhotoCard.pzl';
+import { albumSlug, groupAlbums } from '../albums.js';
+
+export default class AlbumView extends PuzzleView {
+  // Albums are derived from the photo records (no album model). findMany
+  // subscribes this view, so if the seeded photo set changed the album would
+  // stay in sync. `album` carries the display name + count; `photos` is the
+  // author's photos in store order.
+  data(params, props) {
+    const all = this.ctx.store.findMany('photo');
+    const album = groupAlbums(all).find((a) => a.slug === params.slug) || null;
+    const photos = album ? all.filter((p) => albumSlug(p.author) === params.slug) : [];
+    return { album, photos, slug: params.slug };
+  }
+
+  // Opacity-only, like the gallery — a reused parent doesn't animate on the
+  // child swap, but this in-animation still runs when the album view itself is
+  // the topmost swapped view (e.g. arriving from All Photos).
+  animations = {
+    in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 240, easing: 'ease-out' },
+  };
+}
+</scripts>

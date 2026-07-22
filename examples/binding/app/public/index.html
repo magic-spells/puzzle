@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Puzzle — Two-way binding</title>
+  <style>
+    :root {
+      --bg: #0b0c10;
+      --card: #15171e;
+      --line: #262a35;
+      --fg: #e9ecf2;
+      --muted: #9aa3b2;
+      --faint: #5b6472;
+      --accent: #7c9cff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 4rem 1.5rem;
+    }
+    .page { width: 100%; max-width: 30rem; }
+    .page-header { text-align: center; margin-bottom: 1.75rem; }
+    .page-header h1 { margin: 0; font-size: 2rem; letter-spacing: -0.02em; }
+    .page-header p { margin: 0.4rem 0 0; color: var(--muted); font-size: 0.95rem; }
+
+    .stack { display: flex; flex-direction: column; gap: 1.25rem; }
+    .card {
+      display: block;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 1.5rem;
+    }
+    .eyebrow {
+      margin: 0 0 1rem;
+      font-size: 0.7rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--faint);
+    }
+
+    .preview {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      background: #0f1117;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .avatar {
+      flex: none;
+      width: 3rem;
+      height: 3rem;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-weight: 600;
+      color: #0b0c10;
+      background: var(--accent);
+    }
+    .preview-name { font-size: 1.15rem; font-weight: 600; }
+    .preview-tagline { color: var(--muted); font-size: 0.9rem; }
+
+    .field { display: block; margin-bottom: 1rem; }
+    .field-label {
+      display: block;
+      margin-bottom: 0.35rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    /* Direct-child only, so it doesn't hit the range/number/color inputs
+       nested in .range-row (which have their own sizing rules). */
+    .field > input {
+      width: 100%;
+      height: 2.75rem;
+      padding: 0 0.85rem;
+      background: #0f1117;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--fg);
+      font-size: 1rem;
+    }
+    .field > input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(124, 156, 255, 0.2);
+    }
+
+    /* ── swatches ── */
+    .swatch-row { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; }
+    .swatch {
+      flex: 1;
+      height: 3rem;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+    }
+
+    /* ── range / number / color inputs ── */
+    .range-row { display: flex; align-items: center; gap: 0.85rem; }
+    /* the slider takes most of its row; the number box is a small companion */
+    input[type="range"] {
+      flex: 1 1 auto;
+      min-width: 0;
+      accent-color: var(--accent);
+      height: 1.5rem;
+    }
+    .num {
+      flex: none;
+      width: 4rem;
+      height: 2.5rem;
+      padding: 0 0.6rem;
+      background: #0f1117;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--fg);
+      font: 0.9rem "JetBrains Mono", ui-monospace, monospace;
+    }
+    .num:focus { outline: none; border-color: var(--accent); }
+    /* color picker: fixed swatch, hex text fills the rest of the row */
+    input[type="color"] {
+      flex: none;
+      width: 4rem;
+      height: 2.5rem;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0f1117;
+      cursor: pointer;
+    }
+    .hex { flex: 1 1 auto; min-width: 0; text-transform: lowercase; }
+
+    /* ── live markdown ── */
+    .md-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+    @media (max-width: 34rem) { .md-grid { grid-template-columns: 1fr; } }
+    .md-input {
+      min-height: 11rem;
+      resize: vertical;
+      padding: 0.75rem;
+      background: #0f1117;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--fg);
+      font: 0.85rem/1.55 "JetBrains Mono", ui-monospace, monospace;
+    }
+    .md-input:focus { outline: none; border-color: var(--accent); }
+    .md-preview {
+      padding: 0.75rem 1rem;
+      background: #0f1117;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow-wrap: anywhere;
+    }
+    .md-preview h1 { font-size: 1.3rem; margin: 0 0 0.5rem; }
+    .md-preview h2 { font-size: 1.1rem; margin: 0.75rem 0 0.4rem; }
+    .md-preview h3 { font-size: 0.95rem; margin: 0.75rem 0 0.4rem; }
+    .md-preview p { margin: 0.5rem 0; }
+    .md-preview ul { margin: 0.5rem 0; padding-left: 1.2rem; }
+    .md-preview li { margin: 0.15rem 0; }
+    .md-preview code {
+      background: #1b1e27;
+      padding: 0.1rem 0.35rem;
+      border-radius: 5px;
+      font: 0.85em "JetBrains Mono", ui-monospace, monospace;
+      color: var(--accent);
+    }
+    .md-preview a { color: var(--accent); }
+
+    .store-title { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
+    .store-title code { color: var(--accent); }
+    .store-panel pre {
+      margin: 0;
+      padding: 0.85rem 1rem;
+      background: #0f1117;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font: 0.85rem/1.5 "JetBrains Mono", ui-monospace, monospace;
+      color: var(--fg);
+      white-space: pre-wrap;
+    }
+
+    .reset {
+      width: 100%;
+      height: 2.75rem;
+      margin-top: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .reset:hover { color: var(--fg); border-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

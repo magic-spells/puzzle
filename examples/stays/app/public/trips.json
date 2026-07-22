@@ -1,0 +1,37 @@
+[
+  {
+    "id": "t-1",
+    "listingId": "l-kyoto-machiya",
+    "checkIn": "2024-04-06",
+    "checkOut": "2024-04-11",
+    "status": "completed"
+  },
+  {
+    "id": "t-2",
+    "listingId": "l-lisbon-loft",
+    "checkIn": "2024-09-14",
+    "checkOut": "2024-09-19",
+    "status": "completed"
+  },
+  {
+    "id": "t-3",
+    "listingId": "l-tulum-beach",
+    "checkIn": "2025-02-08",
+    "checkOut": "2025-02-13",
+    "status": "completed"
+  },
+  {
+    "id": "t-4",
+    "listingId": "l-santorini-cave",
+    "checkIn": "2026-09-19",
+    "checkOut": "2026-09-24",
+    "status": "upcoming"
+  },
+  {
+    "id": "t-5",
+    "listingId": "l-joshua-dome",
+    "checkIn": "2026-10-28",
+    "checkOut": "2026-11-02",
+    "status": "upcoming"
+  }
+]

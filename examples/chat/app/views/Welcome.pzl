@@ -1,0 +1,75 @@
+<puzzle-view class="h-full overflow-y-auto">
+  <div class="min-h-full flex flex-col items-center justify-center px-6 py-16">
+    <div class="w-full max-w-2xl text-center">
+      <div class="mx-auto w-14 h-14 rounded-2xl bg-accent grid place-items-center text-2xl text-white mb-6">◆</div>
+      <h1 class="text-3xl font-semibold tracking-tight">Puzzle Chat</h1>
+      <p class="mt-3 text-muted leading-relaxed">
+        A local, offline assistant that answers questions about the Puzzle framework and streams
+        its replies word by word. Pick a prompt to start a conversation.
+      </p>
+
+      <div class="grid sm:grid-cols-2 gap-3 mt-8 text-left">
+        {#for s in suggestions}
+          <!-- @click:once (v1.7, D38) guards a fast double-click from creating two
+               conversations — the handler fires at most once for this card. -->
+          <button
+            type="button"
+            class="group rounded-2xl border border-hairline bg-surface p-4 hover:bg-surface-2 hover:border-accent/40 transition-colors"
+            @click:once={ startChat(s.prompt) }>
+            <div class="text-sm font-semibold text-fg">{ s.title }</div>
+            <div class="mt-1 text-sm text-muted group-hover:text-fg transition-colors">{ s.prompt }</div>
+          </button>
+        {/for}
+      </div>
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Unique-enough id for a browser-created record (seed ids are deterministic; these
+// aren't persisted anywhere, so a timestamp + random suffix is plenty).
+function uid(prefix) {
+  return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
+
+// The index child (path: ''): the empty/hero state. Clicking a suggestion creates
+// the conversation and the first user message, then navigates to the new thread —
+// Thread.mounted() sees the unanswered user message and kicks off the reply.
+export default class Welcome extends PuzzleView {
+  data() {
+    return {
+      suggestions: [
+        { title: 'Formatters', prompt: 'What are formatters?' },
+        { title: 'Animations', prompt: 'How do animations work?' },
+        { title: 'Nested routes', prompt: 'Explain nested routes' },
+        { title: 'The store', prompt: 'How does store reactivity work?' },
+      ],
+    };
+  }
+
+  events = {
+    startChat: (prompt) => {
+      const store = this.ctx.store;
+      const id = uid('c');
+      const now = new Date();
+      const title = prompt.length > 40 ? `${prompt.slice(0, 40)}…` : prompt;
+      store.createRecord('conversation', { id, title, createdAt: now, updatedAt: now });
+      store.createRecord('message', {
+        id: uid('m'),
+        conversationId: id,
+        role: 'user',
+        content: prompt,
+        createdAt: now,
+      });
+      this.ctx.router.push(`/c/${id}`);
+    },
+  };
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' }, duration: 280, easing: 'ease-out' },
+    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 140, easing: 'ease-in' },
+  };
+}
+</scripts>

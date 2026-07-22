@@ -1,0 +1,27 @@
+<puzzle-view>
+  <div class="relative overflow-hidden rounded-xl border border-hair bg-surface px-5 py-5">
+    <div class="text-[0.66rem] uppercase tracking-[0.18em] text-muted">{ stat.label }</div>
+    <div class="mt-2 font-mono text-[2rem] leading-none text-ink tabular-nums">{ stat.value }</div>
+    <div class="mt-2 text-[0.78rem] text-body">{ stat.hint }</div>
+    <div class="absolute -right-6 -top-6 w-16 h-16 rounded-full bg-accent/10 blur-xl pointer-events-none"></div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A small dashboard stat tile. A component (not a bare <div>) so it can stagger
+// in on the Overview — same delay-by-index pattern as ListRow.
+export default class StatTile extends PuzzleView {
+  data(params, props) {
+    return { stat: props.stat };
+  }
+
+  get animations() {
+    const i = this.props.index ?? 0;
+    return {
+      in: { from: { opacity: 0, transform: 'translateY(12px)' }, to: { opacity: 1, transform: 'translateY(0)' }, duration: 320, delay: i * 70, easing: 'ease-out' }
+    };
+  }
+}
+</scripts>

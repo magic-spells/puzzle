@@ -1,0 +1,45 @@
+<puzzle-view class="relative min-h-screen flex flex-col bg-ink text-fg">
+  <div class="app-glow pointer-events-none absolute inset-x-0 top-0 h-[460px]"></div>
+
+  <header class="relative pt-14 pb-8">
+    <div class="max-w-6xl mx-auto px-6 text-center">
+      <div class="flex items-center justify-center gap-3 mb-4">
+        <span class="h-px w-8 bg-hairline"></span>
+        <span class="font-mono text-[11px] uppercase tracking-[0.4em] text-faint">Puzzle</span>
+        <span class="h-px w-8 bg-hairline"></span>
+      </div>
+      <h1 class="font-display text-6xl md:text-7xl leading-none text-fg">
+        Orrery
+      </h1>
+      <p class="mt-4 text-sm text-muted">
+        The datastore is the scene graph · requestAnimationFrame is the clock.
+      </p>
+    </div>
+  </header>
+
+  <main class="relative flex-1 pb-16">
+    <div class="max-w-6xl mx-auto px-6">
+      <Slot/>
+    </div>
+  </main>
+
+  <footer class="relative py-8 border-t border-line">
+    <div class="max-w-6xl mx-auto px-6">
+      <p class="text-center font-mono text-[11px] tracking-[0.15em] text-faint">
+        built with the puzzle framework
+      </p>
+    </div>
+  </footer>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class DefaultLayout extends PuzzleView {
+  data(params, props) {
+    return {
+      title: props.title || 'Puzzle Orrery'
+    };
+  }
+}
+</scripts>

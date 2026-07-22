@@ -1,0 +1,23 @@
+<puzzle-view class="evt">
+  <button @click={ clear }>Clear</button>
+  <button @click={ setFilter('all') }>All</button>
+  <form @submit={ addTodo(event) }>
+    <input @input={ update(event) } />
+  </form>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Events extends PuzzleView {
+  data() {
+    return {};
+  }
+  events = {
+    clear: (event) => {},
+    setFilter: (f) => {},
+    addTodo: (event) => {},
+    update: (event) => {},
+  };
+}
+</scripts>

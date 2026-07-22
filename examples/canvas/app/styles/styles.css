@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+@theme {
+  --font-sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Roboto", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink: #0b0c0e;
+  --color-surface: #141519;
+  --color-surface-2: #191b20;
+  --color-elevated: #21242b;
+
+  --color-hairline: rgba(255, 255, 255, 0.09);
+  --color-line: rgba(255, 255, 255, 0.055);
+
+  --color-fg: #e9e9ee;
+  --color-muted: #979aa4;
+  --color-faint: #5c5f6a;
+
+  --color-accent: #5b8def;
+  --color-accent-2: #7ea4f2;
+  --color-danger: #cf6b5e;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink);
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+}
+
+@layer components {
+  .studio-panel {
+    background: var(--color-surface);
+    border-color: var(--color-hairline);
+  }
+
+  .stage-grid {
+    background-color: var(--color-ink);
+    background-image: radial-gradient(
+      circle,
+      rgba(255, 255, 255, 0.055) 1px,
+      transparent 1px
+    );
+    background-size: 24px 24px;
+    touch-action: none;
+  }
+
+  .el-node {
+    position: absolute;
+    box-sizing: border-box;
+  }
+
+  .el-selected {
+    outline: 1.5px solid var(--color-accent);
+    outline-offset: 0;
+  }
+
+  .el-drop-target {
+    outline: 1.5px dashed var(--color-accent-2);
+    outline-offset: 2px;
+  }
+
+  .sel-handle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: var(--color-ink);
+    border: 1.5px solid var(--color-accent);
+    border-radius: 1px;
+    pointer-events: auto;
+    box-sizing: border-box;
+  }
+
+  .frame-drop-gap {
+    position: absolute;
+    border: 1px dashed var(--color-accent-2);
+    border-radius: 4px;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+
+  .canvas-marquee {
+    position: absolute;
+    border: 1px solid var(--color-accent);
+    background: rgba(91, 141, 239, 0.12);
+    pointer-events: none;
+  }
+
+  .frame-label {
+    position: absolute;
+    top: -1.4rem;
+    left: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--color-faint);
+    user-select: none;
+    cursor: default;
+  }
+
+  .studio-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-elevated) transparent;
+  }
+
+  .studio-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .studio-scroll::-webkit-scrollbar-thumb {
+    background: var(--color-elevated);
+    border-radius: 8px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  .studio-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

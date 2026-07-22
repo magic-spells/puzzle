@@ -1,0 +1,101 @@
+<puzzle-view>
+  <!-- One panel row = one `body` record, fully editable. Every input writes
+       straight back to the record with body.update({...}); because the Home view
+       is subscribed via findMany('body'), that write re-renders this row (fresh
+       props) AND retimes the orbit on the canvas — one edit, two projections. -->
+  <div class="panel-card p-3.5 {#if active}is-active{/if}" @click={ rowClick(event) }>
+    <div class="flex items-center gap-2.5 mb-3">
+      <input
+        type="color"
+        class="w-7 h-7 shrink-0 rounded cursor-pointer bg-transparent border border-hairline"
+        value={ body.color }
+        @input={ setColor(event) } />
+      <input
+        type="text"
+        class="flex-1 min-w-0 bg-transparent text-sm font-medium text-fg outline-none"
+        value={ body.name }
+        @input={ setName(event) } />
+      <button
+        type="button"
+        class="shrink-0 w-6 h-6 grid place-items-center rounded text-muted hover:text-danger"
+        @click={ remove(event) }>×</button>
+    </div>
+
+    <div class="flex flex-col gap-2.5">
+      <label class="block">
+        <span class="flex items-center justify-between text-[11px] font-mono text-faint mb-1">
+          <span>distance</span><span class="text-muted">{ distanceLabel } px</span>
+        </span>
+        <input
+          type="range" min="30" max="280" step="1"
+          class="row-range"
+          value={ body.distance }
+          @input={ setDistance(event) } />
+      </label>
+
+      <label class="block">
+        <span class="flex items-center justify-between text-[11px] font-mono text-faint mb-1">
+          <span>size</span><span class="text-muted">{ sizeLabel } px</span>
+        </span>
+        <input
+          type="range" min="2" max="16" step="1"
+          class="row-range"
+          value={ body.size }
+          @input={ setSize(event) } />
+      </label>
+
+      <label class="block">
+        <span class="flex items-center justify-between text-[11px] font-mono text-faint mb-1">
+          <span>speed</span><span class="text-muted">{ speedLabel }</span>
+        </span>
+        <input
+          type="range" min="-90" max="90" step="1"
+          class="row-range"
+          value={ body.speed }
+          @input={ setSpeed(event) } />
+      </label>
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A selectable, editable record row. `select` is a callback prop (D16): the
+// parent binds @select={ selectBody(body.id) } and this row invokes
+// this.props.select(). Reading props.body.* below does NOT subscribe the row —
+// the parent's findMany('body') is the subscription, and prop reactivity
+// re-runs this data() with the fresh record whenever anything changes.
+export default class BodyRow extends PuzzleView {
+  data(params, props) {
+    const body = props.body;
+    const speed = Math.round(body.speed);
+    return {
+      body,
+      active: !!props.active,
+      distanceLabel: `${Math.round(body.distance)}`,
+      sizeLabel: `${Math.round(body.size)}`,
+      speedLabel: `${speed}°/s${speed < 0 ? ' · retrograde' : ''}`,
+    };
+  }
+
+  events = {
+    // Row click selects — but not when the click landed on an actual control.
+    rowClick: (event) => {
+      if (event.target.closest && event.target.closest('input, button')) return;
+      const { select } = this.props;
+      if (typeof select === 'function') select();
+    },
+
+    // Writes straight back to the store record. Range inputs hand back strings,
+    // so coerce numeric fields with Number().
+    setName: (event) => { this.props.body.update({ name: event.target.value }); },
+    setColor: (event) => { this.props.body.update({ color: event.target.value }); },
+    setDistance: (event) => { this.props.body.update({ distance: Number(event.target.value) }); },
+    setSize: (event) => { this.props.body.update({ size: Number(event.target.value) }); },
+    setSpeed: (event) => { this.props.body.update({ speed: Number(event.target.value) }); },
+
+    remove: (event) => { this.props.body.destroy(); },
+  };
+}
+</scripts>

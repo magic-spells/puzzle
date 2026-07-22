@@ -1,0 +1,15 @@
+<puzzle-view class="shell">
+  <main class="content">
+    <children/>
+  </main>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class SlotLayout extends PuzzleView {
+  data() {
+    return {};
+  }
+}
+</scripts>

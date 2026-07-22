@@ -1,0 +1,83 @@
+<puzzle-view>
+  <!-- Index child of /account (path ''). Renders inside AccountShell's <Slot/>
+       at the bare /account URL. As the topmost swapped view on a pane change it
+       animates alone while the shell above holds still (D30). -->
+  <div class="space-y-10">
+    <!-- About card. Soft white panel with a hairline ring — the light,
+         Airbnb-like card treatment used across the app. -->
+    <section class="rounded-2xl ring-1 ring-line p-6 shadow-sm">
+      <h2 class="text-lg font-semibold text-fg">About { name }</h2>
+      <p class="mt-3 text-fg leading-relaxed">{ bio }</p>
+
+      <dl class="mt-5 grid gap-2 text-sm">
+        <div class="flex items-center gap-2 text-muted">
+          <span class="w-5 text-center">📍</span>
+          <span>Lives in { home }</span>
+        </div>
+        <div class="flex items-center gap-2 text-muted">
+          <span class="w-5 text-center">🗓️</span>
+          <span>On Puzzle Stays since { joined }</span>
+        </div>
+        <div class="flex items-center gap-2 text-muted">
+          <span class="w-5 text-center">💬</span>
+          <span>Speaks JavaScript and English</span>
+        </div>
+        <div class="flex items-center gap-2 text-muted">
+          <span class="w-5 text-center text-accent">✓</span>
+          <span>Identity verified</span>
+        </div>
+      </dl>
+    </section>
+
+    <!-- The fun part: a passport-stamp wall, one badge per city visited. The
+         summary counts are derived in data() (distinct countries/years) — logic
+         stays out of the template per SPEC §8. -->
+    <section>
+      <h2 class="font-display text-2xl font-bold text-fg">Where { name }'s been</h2>
+      <p class="mt-1 text-muted">One stamp per city — collect them all.</p>
+      <p class="mt-2 text-sm text-faint">
+        { stamps.length } cities · { distinctCountries } countries · { distinctYears } years of travel
+      </p>
+
+      {#if stamps.length > 0}
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-6 mt-6">
+          {#for stamp in stamps, i}
+            <TravelStamp stamp={ stamp } index={ i } />
+          {/for}
+        </div>
+      {:else}
+        <p class="mt-6 text-muted">No stamps yet — the passport's still crisp.</p>
+      {/if}
+    </section>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import TravelStamp from '@/components/TravelStamp.pzl';
+
+export default class Profile extends PuzzleView {
+  data(params, props) {
+    // Traveler may not be seeded yet on first paint; default stamps to [] so the
+    // grid and the distinct-counts below never touch undefined.
+    const me = this.ctx.store.findOne('traveler', 'me');
+    const stamps = (me && Array.isArray(me.stamps) && me.stamps) || [];
+
+    return {
+      name: (me && me.name) || 'Guest',
+      bio: (me && me.bio) || '',
+      home: (me && me.home) || '',
+      joined: (me && me.joined) || '',
+      stamps,
+      // Distinct-count derivations (kept out of the template).
+      distinctCountries: new Set(stamps.map((s) => s.country)).size,
+      distinctYears: new Set(stamps.map((s) => s.year)).size,
+    };
+  }
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateX(8px)' }, to: { opacity: 1, transform: 'translateX(0)' }, duration: 220, easing: 'ease-out' },
+    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 120, easing: 'ease-in' }
+  };
+}
+</scripts>

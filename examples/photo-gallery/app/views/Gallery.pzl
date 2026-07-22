@@ -1,0 +1,46 @@
+<puzzle-view>
+  <!-- Apple Photos style header, INSIDE the scroll area: a big left-aligned
+       title with a photo-count subtitle. Branding lives in the sidebar now, so
+       this view just names the collection. -->
+  <header class="px-6 sm:px-8 pt-8 pb-5">
+    <h1 class="text-[26px] sm:text-3xl font-bold tracking-tight text-fg">All Photos</h1>
+    <p class="mt-1 text-sm text-muted">{ photos.length } { photos.length === 1 ? 'photo' : 'photos' }</p>
+  </header>
+
+  {#if photos.length}
+    <!-- Tight Photos-like grid of square tiles. -->
+    <div class="px-6 sm:px-8 pb-16 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-1.5">
+      {#for photo in photos}
+        <PhotoCard photo={ photo } />
+      {/for}
+    </div>
+  {:else}
+    <!-- Empty state: the store is fully seeded before the first data(), so no
+         photos means the picsum fetch failed (logged in app.js's beforeMount).
+         The mount is never aborted for a network error — the gallery just says so. -->
+    <div class="px-6 sm:px-8 py-24 text-center">
+      <h2 class="text-xl text-fg mb-2">No photos to show</h2>
+      <p class="text-muted">Couldn't reach Lorem Picsum. Check your connection and reload.</p>
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import PhotoCard from '../components/PhotoCard.pzl';
+
+export default class GalleryView extends PuzzleView {
+  data(params, props) {
+    return {
+      photos: this.ctx.store.findMany('photo'),
+    };
+  }
+  // Opacity-only entrance: on a reverse morph (fullscreen → card) this view is
+  // the flight target, and the engine measures the landing card's rect ONCE at
+  // flight start — a translate-based entrance would slide the card out from under
+  // the incoming blob (D68 capture-flight rule).
+  animations = {
+    in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 240, easing: 'ease-out' },
+  };
+}
+</scripts>

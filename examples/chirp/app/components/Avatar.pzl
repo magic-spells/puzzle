@@ -1,0 +1,36 @@
+<puzzle-view>
+  <!-- Gradient avatar bubble. Props: `user` (a user record) and `size`
+       ('sm' 32px | 'md' 40px | 'lg' 48px, default 'md'). No link of its own —
+       every caller wraps it in the anchor that owns the destination, so the
+       component stays a pure presentational leaf. The gradient comes off the
+       record's `avatarBg` getter; the emoji is `avatarIcon`. Both are guarded so
+       a mid-seed `undefined` user renders a neutral bird bubble instead of
+       throwing in the template. -->
+  <span
+    class="inline-flex items-center justify-center rounded-full shrink-0 select-none leading-none { sizeClass }"
+    style="background:{ bg }">{ icon }</span>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Fixed size → utility map. Kept module-level so it isn't rebuilt each data().
+const SIZES = {
+  sm: 'w-8 h-8 text-base',
+  md: 'w-10 h-10 text-lg',
+  lg: 'w-12 h-12 text-2xl',
+};
+
+export default class Avatar extends PuzzleView {
+  data(params, props) {
+    const user = props.user || null;
+    return {
+      icon: (user && user.avatarIcon) || '🐦',
+      // Fallback to the chirp-blue gradient so a missing record still reads as
+      // an avatar rather than a transparent hole.
+      bg: user ? user.avatarBg : 'linear-gradient(135deg,#1d9bf0,#1a8cd8)',
+      sizeClass: SIZES[props.size] || SIZES.md,
+    };
+  }
+}
+</scripts>

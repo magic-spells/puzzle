@@ -1,0 +1,118 @@
+<puzzle-view>
+  <!-- /account/trips pane. Reservations booked on a listing page (with 't-local-'
+       ids) land in the store and show up here reactively. -->
+  {#if hasTrips}
+    <div class="space-y-10">
+      {#if upcoming.length > 0}
+        <section>
+          <h2 class="font-display text-2xl font-bold text-fg mb-4">Upcoming trips</h2>
+          <div class="space-y-4">
+            {#for row in upcoming, i}
+              <a href="/listing/{ row.listing.id }"
+                class="trip-row group flex gap-4 rounded-2xl ring-1 ring-line p-3 shadow-sm hover:shadow-md transition-shadow hover:no-underline"
+                style="animation-delay:{ i * 60 }ms">
+                <div class="w-24 h-24 sm:w-28 sm:h-28 shrink-0 rounded-xl flex items-center justify-center text-3xl"
+                  style="background:{ row.listing.cover }">{ row.icon }</div>
+                <div class="min-w-0 flex-1 flex flex-col justify-center">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-semibold text-fg truncate">{ row.listing.location }</span>
+                    <span class="shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-accent text-accent-ink">Upcoming</span>
+                  </div>
+                  <div class="text-sm text-muted truncate">{ row.listing.title }</div>
+                  <div class="text-sm text-muted mt-1">{ row.trip.checkIn | dateRange(row.trip.checkOut) }</div>
+                  <div class="text-xs text-faint mt-0.5">{ row.trip.nights } { row.trip.nights | plural('night', 'nights') }</div>
+                </div>
+              </a>
+            {/for}
+          </div>
+        </section>
+      {/if}
+
+      {#if completed.length > 0}
+        <section>
+          <h2 class="font-display text-2xl font-bold text-fg mb-4">Where you've been</h2>
+          <div class="divide-y divide-line rounded-2xl ring-1 ring-line overflow-hidden">
+            {#for row in completed, i}
+              <a href="/listing/{ row.listing.id }"
+                class="trip-row group flex items-center gap-3 p-3 hover:bg-surface-2 transition-colors hover:no-underline"
+                style="animation-delay:{ i * 45 }ms">
+                <div class="w-12 h-12 shrink-0 rounded-lg flex items-center justify-center text-lg"
+                  style="background:{ row.listing.cover }">{ row.icon }</div>
+                <div class="min-w-0 flex-1">
+                  <div class="text-sm font-semibold text-fg truncate">{ row.listing.location }</div>
+                  <div class="text-xs text-muted truncate">{ row.listing.title } · { row.trip.checkIn | dateRange(row.trip.checkOut) }</div>
+                </div>
+                <span class="shrink-0 text-[11px] font-medium px-2 py-0.5 rounded-full bg-surface-2 text-muted">Completed</span>
+              </a>
+            {/for}
+          </div>
+        </section>
+      {/if}
+    </div>
+  {:else}
+    <!-- No trips at all — nudge toward search. Booking a stay creates a trip and
+         routes back here. -->
+    <div class="py-16 text-center">
+      <div class="text-5xl">🧳</div>
+      <h2 class="mt-4 text-xl font-semibold text-fg">No trips yet — time to dust off the suitcase</h2>
+      <p class="mt-1 text-muted">Your booked stays will show up here.</p>
+      <a href="/search"
+        class="inline-flex mt-6 px-5 py-2.5 rounded-lg bg-accent text-accent-ink text-sm font-semibold hover:bg-accent-2 transition-colors hover:no-underline">Start searching</a>
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Trips extends PuzzleView {
+  data(params, props) {
+    const store = this.ctx.store;
+    const trips = store.findMany('trip');
+    const listings = store.findMany('listing');
+
+    // Defensive id → listing map for the join (listings may seed a beat before
+    // or after trips; a missing listing just drops the row rather than throwing).
+    const listingById = {};
+    listings.forEach((l) => { listingById[l.id] = l; });
+
+    const rows = trips
+      .map((trip) => {
+        const listing = listingById[trip.listingId];
+        if (!listing) return null;
+        const photo = (Array.isArray(listing.photos) && listing.photos[0]) || {};
+        return { trip, listing, icon: photo.icon || '📷' };
+      })
+      .filter(Boolean);
+
+    // Upcoming ascending (soonest first), completed descending (most recent first).
+    const byCheckIn = (a, b) => a.trip.checkIn.localeCompare(b.trip.checkIn);
+    const upcoming = rows.filter((r) => r.trip.status === 'upcoming').sort(byCheckIn);
+    const completed = rows.filter((r) => r.trip.status !== 'upcoming').sort((a, b) => byCheckIn(b, a));
+
+    return { upcoming, completed, hasTrips: rows.length > 0 };
+  }
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateX(8px)' }, to: { opacity: 1, transform: 'translateX(0)' }, duration: 220, easing: 'ease-out' },
+    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 120, easing: 'ease-in' }
+  };
+}
+</scripts>
+
+<styles>
+/* Per-row staggered fade-up. The framework animation system drives one animator
+   per transition (the pane), so individual rows get their entrance from this
+   keyframe, delayed inline by index. */
+.trip-row {
+  opacity: 0;
+  animation: trip-row-in 360ms ease-out forwards;
+}
+@keyframes trip-row-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trip-row { animation: none; opacity: 1; }
+}
+</styles>

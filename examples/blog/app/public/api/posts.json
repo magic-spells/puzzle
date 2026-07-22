@@ -1,0 +1,42 @@
+[
+  {
+    "id": "p1",
+    "title": "Why Single-File Components Won",
+    "authorId": "u1",
+    "tags": ["components", "design"],
+    "publishedAt": "2026-06-04T09:00:00.000Z",
+    "body": "Every Puzzle component lives in one .pzl file: the template, the class that drives it, and its styles sit side by side. We kept coming back to the same problem in other frameworks — the markup, the behavior, and the CSS for one idea were scattered across three files and two directories. Co-locating them is not just tidier. It makes a component something you can read top to bottom, reason about in isolation, and delete without hunting for leftovers. The template block is plain HTML plus a small set of directives, the scripts block is real JavaScript handed straight to esbuild, and the styles block is ordinary CSS. Nothing in the file is a dialect you have to learn twice."
+  },
+  {
+    "id": "p2",
+    "title": "Inside the Go Compiler",
+    "authorId": "u2",
+    "tags": ["compiler", "internals"],
+    "publishedAt": "2026-06-12T14:30:00.000Z",
+    "body": "The Puzzle compiler is written in Go and runs as an esbuild plugin. When esbuild loads a .pzl file, the plugin splits it into its three sections, parses the template into an AST, and generates a render function that builds a virtual DOM tree. The trick that keeps the whole thing honest is that we never touch your JavaScript. The scripts block is emitted byte for byte, and the generated render() is attached afterward by prototype assignment. That means your class body is exactly what you wrote — editors, linters, and formatters all work with zero special tooling. Go gives us fast, dependency-free builds, and esbuild gives us bundling and minification for free."
+  },
+  {
+    "id": "p3",
+    "title": "Liquid-Style Formatters for Display Logic",
+    "authorId": "u3",
+    "tags": ["templates", "formatters"],
+    "publishedAt": "2026-06-21T11:15:00.000Z",
+    "body": "Formatters are how Puzzle keeps display logic out of your components. Borrowed from Liquid, they chain left to right with a pipe: write { publishedAt | date('long') } or { title | truncate(60) } and the value is transformed only for display. The underlying record never changes. The framework ships with formatters for strings, numbers, arrays, and dates, and you register your own in the app config. The one rule worth repeating is that formatters are for formatting, not for filtering or sorting. Anything that changes which records you show belongs in data(), where it is easy to test and easy to read."
+  },
+  {
+    "id": "p4",
+    "title": "Reactive data() Without the Boilerplate",
+    "authorId": "u1",
+    "tags": ["reactivity", "components"],
+    "publishedAt": "2026-07-01T08:45:00.000Z",
+    "body": "The heart of a Puzzle component is its data() method. It returns the model the template renders, and any store query made inside it automatically subscribes the component to changes. Update a record anywhere in the app and every component that read it re-runs data() and repaints — no dependency arrays, no manual subscriptions, no selectors. Local UI state that should not trigger a full reload uses setData() instead, which updates state and re-renders without re-running data(). That single split — data() for reactive sources, setData() for local flags — is most of what you need to know to build a real application."
+  },
+  {
+    "id": "p5",
+    "title": "Routing in a SPA-First World",
+    "authorId": "u2",
+    "tags": ["router", "internals"],
+    "publishedAt": "2026-07-06T16:20:00.000Z",
+    "body": "Puzzle is built for single-page apps, so routing is a first-class part of the runtime rather than a bolt-on. Routes map a path to a view and a layout, and the router intercepts in-app link clicks so navigation stays instant. Dynamic segments like /posts/:id land in the params object your view reads, and a * catch-all handles anything that does not match. The commit is atomic: the incoming view resolves its data() off-screen first, then the URL moves and the new view renders in one step. If a rapid second navigation supersedes the first, the loser is discarded before it ever mounts."
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "name": "binding",
+  "version": "1.0.0",
+  "description": "Two-way binding demo: an input field bound to a datastore record",
+  "type": "module",
+  "scripts": {
+    "dev": "puzzle dev",
+    "build": "puzzle build"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^1.0.0"
+  }
+}

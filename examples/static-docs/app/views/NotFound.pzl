@@ -1,0 +1,27 @@
+<puzzle-view>
+  <section class="max-w-2xl">
+    <p class="font-mono text-[11px] uppercase tracking-[0.3em] text-accent mb-5">404</p>
+    <h1 class="font-display text-5xl md:text-6xl leading-[1.05] text-ink">
+      This page wandered off
+    </h1>
+    <p class="mt-6 text-lg text-muted leading-relaxed">
+      The page you're looking for isn't here — it may have moved, or the link that
+      brought you here was mistyped. Nothing's broken; you've just reached the edge
+      of the map.
+    </p>
+
+    <div class="mt-8">
+      <a href="/" class="px-5 py-2.5 rounded-xl bg-accent text-white font-medium hover:bg-accent-2 transition-colors">Back to the guide</a>
+    </div>
+  </section>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The catch-all view (routes.js `path: '*'`, D19). Under SSG (D67) it renders to
+// dist/404.html — the filename static hosts serve for unknown URLs — and once the
+// SPA takes over the router shows it for any unmatched client path. No data() —
+// pure chrome content, serialized once at build time.
+export default class NotFound extends PuzzleView {}
+</scripts>

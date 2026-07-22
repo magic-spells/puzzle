@@ -1,0 +1,135 @@
+<puzzle-view class="demo-layout">
+  <!-- Slim header bar. Static chrome — it is REUSED across every navigation, so
+       it never animates; only the routed view in the slot below transitions. -->
+  <header class="demo-topbar">
+    <span class="demo-brand">
+      <span class="demo-dot"></span>
+      puzzle
+    </span>
+    <span class="demo-topbar-meta">route transition</span>
+  </header>
+
+  <!-- The routed view mounts here. IMPORTANT (SPEC §26): neither this <main> nor
+       any ancestor up to <body> may carry transform / filter / contain — those
+       would re-root the overlap pin's `position: fixed` and break the effect. -->
+  <main class="demo-stage">
+    <Slot/>
+  </main>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class DefaultLayout extends PuzzleView {
+  // A shared layout carries no view state here — it just frames the slot.
+  data() {
+    return {};
+  }
+}
+</scripts>
+
+<styles>
+/* Small global reset so the two embedded apps sit predictably in their columns. */
+.demo-layout *,
+.demo-layout *::before,
+.demo-layout *::after {
+  box-sizing: border-box;
+}
+
+.demo-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 460px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: #0d0d11;
+  overflow: hidden; /* clips the card corners; does NOT clip the fixed pin */
+}
+
+.demo-topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  padding: 0 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.demo-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.demo-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a78bfa;
+  box-shadow: 0 0 10px 1px rgba(167, 139, 250, 0.7);
+}
+
+.demo-topbar-meta {
+  font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* The stage fills the remaining height; the routed card fills the stage. */
+.demo-stage {
+  flex: 1;
+  display: flex;
+  padding: 18px;
+}
+
+/* Shared card base — each view supplies its own gradient/accent on top.
+   Kept in the layout so every view file carries only what makes it distinct. */
+.view {
+  position: relative;
+  flex: 1;
+  min-height: 360px;
+  width: 100%;
+  padding: 32px;
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  color: #f5f5f7;
+}
+
+.view-eyebrow {
+  font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 10px;
+}
+
+.view-title {
+  margin: 0 0 12px;
+  font-size: 44px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.view-body {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.78);
+}
+</styles>

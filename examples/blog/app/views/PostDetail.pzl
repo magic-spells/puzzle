@@ -1,0 +1,139 @@
+<puzzle-view>
+  {#if post}
+    <article>
+      <div class="flex flex-wrap gap-1.5 mb-3">
+        {#for tag in post.tags}
+          <span class="text-[0.72rem] font-semibold uppercase tracking-[0.03em] text-brand bg-brand-tint py-0.5 px-2 rounded-full">{ tag }</span>
+        {/for}
+      </div>
+      <h1 class="mb-2.5 text-[2rem] text-ink">{ post.title }</h1>
+      <div class="flex flex-wrap items-center gap-2 text-muted text-[0.85rem] mb-6">
+        {#if author}
+          <span class="font-semibold text-body">{ author.name | byline }</span>
+          <span class="text-faint">·</span>
+        {/if}
+        <span>{ post.publishedAt | date('long') }</span>
+        <span class="text-faint">·</span>
+        <span>{ post.readingTime } min read</span>
+      </div>
+      <p class="text-[1.08rem] text-slate">{ post.body }</p>
+    </article>
+
+    <section class="mt-10 border-t border-border pt-6">
+      <h2 class="text-[1.2rem] text-ink mb-4">
+        { comments.length } { comments.length | pluralize('comment', 'comments') }
+      </h2>
+
+      {#if comments.length > 0}
+        <ul class="list-none p-0 mb-6 flex flex-col gap-3">
+          {#for comment in comments}
+            <CommentItem comment={ comment } @remove={ removeComment(comment) }></CommentItem>
+          {/for}
+        </ul>
+      {:else}
+        <p class="text-muted">Be the first to comment.</p>
+      {/if}
+
+      <form class="flex flex-col gap-3 bg-surface border border-border rounded-xl p-5" @submit={ addComment(event) }>
+        <input
+          class="w-full border border-border-soft rounded-lg py-2.5 px-3 text-ink focus:outline-none focus:border-brand focus:shadow-[0_0_0_3px_rgba(76,110,245,0.15)]"
+          type="text"
+          placeholder="Your name"
+          value={ authorName }
+          @input={ updateAuthorName(event) } />
+        <textarea
+          class="w-full border border-border-soft rounded-lg py-2.5 px-3 text-ink min-h-24 resize-y focus:outline-none focus:border-brand focus:shadow-[0_0_0_3px_rgba(76,110,245,0.15)]"
+          placeholder="Write a comment…"
+          value={ commentText }
+          @input={ updateCommentText(event) }></textarea>
+        <button class="inline-block self-start px-5 py-2.5 rounded-lg text-[0.95rem] font-semibold cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-brand text-white hover:bg-brand-dark" type="submit" disabled={ !commentText.trim() }>
+          Add comment
+        </button>
+      </form>
+    </section>
+  {:else}
+    {#if loaded}
+      <div class="p-10 text-center text-muted bg-surface border border-dashed border-faint rounded-xl">
+        <h1 class="text-ink mb-2">Post not found</h1>
+        <p>That post does not exist. <a href="/posts">Back to all posts</a>.</p>
+      </div>
+    {:else}
+      <div class="p-10 text-center text-muted bg-surface border border-dashed border-faint rounded-xl">
+        <p>Loading post…</p>
+      </div>
+    {/if}
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import CommentItem from '../components/CommentItem.pzl';
+
+export default class PostDetailView extends PuzzleView {
+  created() {
+    // Local form state — seeded here so data() can read it back on first run.
+    this.setData({
+      commentText: '',
+      authorName: ''
+    });
+  }
+
+  data(params, props) {
+    const store = this.ctx.store;
+    const local = this.getData();
+
+    const allPosts = store.findMany('post');
+    const post = store.findOne('post', params.id);
+    const author = post ? post.author : null;
+    const comments = post
+      ? [...post.comments].sort((a, b) => a.createdAt - b.createdAt)
+      : [];
+
+    return {
+      post,
+      author,
+      comments,
+      // Distinguish "still loading" from a genuine miss: once any post has been
+      // seeded, a null lookup means the id really does not exist.
+      loaded: allPosts.length > 0,
+      commentText: local.commentText,
+      authorName: local.authorName
+    };
+  }
+
+  events = {
+    updateAuthorName: (event) => {
+      this.setData('authorName', event.target.value);
+    },
+
+    updateCommentText: (event) => {
+      this.setData('commentText', event.target.value);
+    },
+
+    addComment: (event) => {
+      event.preventDefault();
+      const { commentText, authorName } = this.getData();
+      const text = commentText.trim();
+      if (!text) return;
+
+      this.ctx.store.createRecord('comment', {
+        postId: this.params.id,
+        author: authorName.trim() || 'Anonymous',
+        text
+      });
+
+      this.setData({ commentText: '', authorName: '' });
+    },
+
+    removeComment: (comment) => {
+      comment.destroy();
+    }
+  };
+
+  // Route transition (constellation/doc/DOC-SPEC.md §12) — see Home.pzl for the full rationale.
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 260, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

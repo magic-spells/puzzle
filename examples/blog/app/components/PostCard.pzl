@@ -1,0 +1,59 @@
+<puzzle-view>
+  <a class="block py-5 px-6 bg-surface border border-border rounded-xl text-inherit transition hover:no-underline hover:border-border-strong hover:shadow-[0_6px_18px_rgba(31,41,51,0.06)]" href="/posts/{ post.id }">
+    <div class="flex flex-wrap gap-1.5 mb-2.5">
+      {#for tag in post.tags}
+        <span class="text-[0.72rem] font-semibold uppercase tracking-[0.03em] text-brand bg-brand-tint py-0.5 px-2 rounded-full">{ tag }</span>
+      {/for}
+    </div>
+    <h3 class="mb-1.5 text-[1.2rem] text-ink">{ post.title }</h3>
+    <p class="mb-3 text-body">{ post.body | truncate(140) }</p>
+    <div class="flex items-center gap-2 text-[0.8rem] text-muted">
+      <span>{ post.readingTime } min read</span>
+      <span class="text-faint">·</span>
+      <span>{ post.publishedAt | timeago }</span>
+    </div>
+  </a>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Renders a single post summary. The whole card is an <a>, so a plain click is
+// intercepted by the router for instant SPA navigation to /posts/:id.
+export default class PostCard extends PuzzleView {
+  data(params, props) {
+    return {
+      post: props.post
+    };
+  }
+
+  // Staggered enter + leave animations (constellation/doc/DOC-SPEC.md §12). v1's
+  // {#for} exposes no loop index, so the parent view threads each card's position
+  // in as an `index` prop; here that becomes a per-card `delay` so the list
+  // cascades in instead of all appearing at once. `animations` is a GETTER (not a
+  // static field) because the delay is per-instance — it's read at mount time,
+  // after props are set (and again at unmount, when the ViewManager checks for
+  // `out`). The `in` `to` keyframe equals the card's natural resting style, so
+  // nothing snaps when the enter's filled styles release. On removal (e.g. a tag
+  // filter dropping this post), the ViewManager keeps the <a> in the DOM to play
+  // `out` before removing it, and siblings reflow around it (viewManager.js).
+  get animations() {
+    const index = this.props.index ?? 0;
+    return {
+      in: {
+        from: { opacity: 0, transform: 'translateY(12px)' },
+        to: { opacity: 1, transform: 'translateY(0)' },
+        duration: 300,
+        delay: index * 70,
+        easing: 'ease-out'
+      },
+      out: {
+        from: { opacity: 1, transform: 'translateY(0) scale(1)' },
+        to: { opacity: 0, transform: 'translateY(-8px) scale(0.96)' },
+        duration: 200,
+        easing: 'ease-in'
+      }
+    };
+  }
+}
+</scripts>

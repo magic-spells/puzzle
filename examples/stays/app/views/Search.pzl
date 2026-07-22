@@ -1,0 +1,236 @@
+<puzzle-view>
+  <header class="mb-6">
+    <h1 class="font-display text-3xl font-bold text-fg">Search stays</h1>
+    <p class="text-muted mt-1">
+      { count } { count | plural('place', 'places') }{#if anyActive} · filtered from { total }{/if}
+    </p>
+  </header>
+
+  <!-- Filter bar. Every control writes to LOCAL state and calls refresh(), so
+       data() re-runs and recomputes `results` (setData alone won't re-run it,
+       SPEC §4). No store writes, no navigation — pure client-side browsing. -->
+  <div class="rounded-2xl ring-1 ring-line bg-bg p-5 sm:p-6 mb-8 space-y-5">
+    <!-- Free-text destination search: matched against title/city/country. -->
+    <input
+      type="text"
+      class="w-full h-12 px-4 rounded-xl bg-surface border border-hairline text-fg placeholder-faint focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/20 transition-colors"
+      placeholder="Search destinations, stays…"
+      value={ query }
+      @input={ updateQuery(event) } />
+
+    <div class="flex flex-wrap gap-x-8 gap-y-5">
+      <!-- Guests stepper, clamped 1–10 in the handlers. -->
+      <div>
+        <div class="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Guests</div>
+        <div class="inline-flex items-center gap-4">
+          <button
+            type="button"
+            class="w-9 h-9 rounded-full ring-1 ring-hairline flex items-center justify-center text-lg leading-none transition-colors hover:ring-fg {#if guests <= 1}text-faint{/if}{#if guests > 1}text-fg{/if}"
+            aria-label="Fewer guests"
+            @click={ decGuests }>−</button>
+          <span class="min-w-6 text-center font-semibold text-fg tabular-nums">{ guests }</span>
+          <button
+            type="button"
+            class="w-9 h-9 rounded-full ring-1 ring-hairline flex items-center justify-center text-lg leading-none transition-colors hover:ring-fg {#if guests >= 10}text-faint{/if}{#if guests < 10}text-fg{/if}"
+            aria-label="More guests"
+            @click={ incGuests }>+</button>
+        </div>
+      </div>
+
+      <!-- Price buckets. -->
+      <div>
+        <div class="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Price</div>
+        <div class="flex flex-wrap gap-2">
+          {#for p in priceChips}
+            <button
+              type="button"
+              class="px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors {#if p.active}bg-fg text-bg{/if}{#if !p.active}ring-1 ring-line text-muted hover:ring-hairline{/if}"
+              @click={ setPrice(p.bucket) }>{ p.label }</button>
+          {/for}
+        </div>
+      </div>
+    </div>
+
+    <!-- Property type, from the distinct listing.type values in the store. -->
+    <div>
+      <div class="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Type</div>
+      <div class="flex flex-wrap gap-2">
+        {#for t in typeChips}
+          <button
+            type="button"
+            class="px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors {#if t.active}bg-fg text-bg{/if}{#if !t.active}ring-1 ring-line text-muted hover:ring-hairline{/if}"
+            @click={ setType(t.type) }>{ t.label }</button>
+        {/for}
+      </div>
+    </div>
+
+    <!-- Amenities: a curated subset, toggled independently. A listing must have
+         EVERY selected amenity to match (AND, not OR). -->
+    <div>
+      <div class="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Amenities</div>
+      <div class="flex flex-wrap gap-2">
+        {#for a in amenityChips}
+          <button
+            type="button"
+            class="px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors {#if a.active}bg-fg text-bg{/if}{#if !a.active}ring-1 ring-line text-muted hover:ring-hairline{/if}"
+            @click={ toggleAmenity(a.name) }>{ a.name }</button>
+        {/for}
+      </div>
+    </div>
+
+    <!-- Reset, only when something is actually filtering. -->
+    {#if anyActive}
+      <div>
+        <button type="button" class="text-sm font-semibold text-fg underline underline-offset-4 hover:text-accent" @click={ clearAll }>Clear all filters</button>
+      </div>
+    {/if}
+  </div>
+
+  <!-- Results grid — same shape as Home's Explore grid. -->
+  {#if count > 0}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">
+      {#for listing in results, i}
+        <ListingCard listing={ listing } index={ i } />
+      {/for}
+    </div>
+  {:else}
+    <div class="py-20 text-center">
+      <div class="text-5xl mb-3">🧭</div>
+      <p class="text-fg font-semibold text-lg">No stays match</p>
+      <p class="text-muted mt-1">Try removing a filter to see more places.</p>
+      {#if anyActive}
+        <button type="button" class="mt-4 inline-flex px-5 py-2.5 rounded-full bg-fg text-bg text-sm font-semibold hover:opacity-90 transition-opacity" @click={ clearAll }>Clear all filters</button>
+      {/if}
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ListingCard from '../components/ListingCard.pzl';
+
+// Curated amenity toggles (a subset of the seed's canonical amenity strings,
+// which must match exactly for the AND-filter below to work).
+const AMENITIES = ['Wifi', 'Pool', 'Hot tub', 'Fireplace', 'Pets allowed', 'Ocean view', 'Mountain view'];
+
+// Price buckets as pure predicates so the filter stays declarative. `any` is the
+// unfiltered default.
+const PRICE_BUCKETS = [
+  { bucket: 'any',   label: 'Any price',  test: () => true },
+  { bucket: 'low',   label: 'Under $150', test: (n) => n < 150 },
+  { bucket: 'mid',   label: '$150–$300',  test: (n) => n >= 150 && n <= 300 },
+  { bucket: 'high',  label: '$300+',      test: (n) => n > 300 },
+];
+
+export default class SearchView extends PuzzleView {
+  // Initialize every filter to its neutral value before the first data() run.
+  created() {
+    this.setData({
+      query: '',
+      guests: 1,
+      price: 'any',
+      type: '',
+      amenities: [],
+    });
+  }
+
+  data(params, props) {
+    const store = this.ctx.store;
+    const state = this.getData();
+    const query = state.query || '';
+    const guests = state.guests || 1;
+    const priceBucket = state.price || 'any';
+    const typeFilter = state.type || '';
+    const selected = state.amenities || [];
+
+    const listings = store.findMany('listing');
+    const q = query.trim().toLowerCase();
+    const priceTest = (PRICE_BUCKETS.find((b) => b.bucket === priceBucket) || PRICE_BUCKETS[0]).test;
+
+    // The combined predicate. Every clause must pass (AND). Defensive guards keep
+    // a half-seeded record (missing amenities array) from throwing mid-filter.
+    const results = listings.filter((l) => {
+      if (q) {
+        const hay = `${l.title} ${l.city} ${l.country}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (guests > (l.guests || 0)) return false;
+      if (!priceTest(l.pricePerNight)) return false;
+      if (typeFilter && l.type !== typeFilter) return false;
+      if (selected.length) {
+        const have = Array.isArray(l.amenities) ? l.amenities : [];
+        if (!selected.every((a) => have.includes(a))) return false;
+      }
+      return true;
+    });
+
+    // Distinct property types for the type chips, alphabetized, with an "Any"
+    // reset in front.
+    const distinctTypes = Array.from(new Set(listings.map((l) => l.type))).sort();
+    const typeChips = [{ type: '', label: 'Any type', active: typeFilter === '' }]
+      .concat(distinctTypes.map((t) => ({ type: t, label: t, active: t === typeFilter })));
+
+    // Precompute chip active flags here rather than calling array methods inside
+    // the template — keeps the markup to simple field reads.
+    const priceChips = PRICE_BUCKETS.map((b) => ({ bucket: b.bucket, label: b.label, active: b.bucket === priceBucket }));
+    const amenityChips = AMENITIES.map((name) => ({ name, active: selected.includes(name) }));
+
+    const anyActive = q.length > 0 || guests > 1 || priceBucket !== 'any' || typeFilter !== '' || selected.length > 0;
+
+    return {
+      query,
+      guests,
+      results,
+      count: results.length,
+      total: listings.length,
+      typeChips,
+      priceChips,
+      amenityChips,
+      anyActive,
+    };
+  }
+
+  events = {
+    // Each control mirrors into local state then refresh()es so data() recomputes
+    // the result set (setData does not re-run data(), SPEC §4).
+    updateQuery: (event) => {
+      this.setData('query', event.target.value);
+      this.refresh();
+    },
+    decGuests: () => {
+      this.setData('guests', Math.max(1, (this.getData().guests || 1) - 1));
+      this.refresh();
+    },
+    incGuests: () => {
+      this.setData('guests', Math.min(10, (this.getData().guests || 1) + 1));
+      this.refresh();
+    },
+    setPrice: (bucket) => {
+      this.setData('price', bucket);
+      this.refresh();
+    },
+    setType: (type) => {
+      this.setData('type', type);
+      this.refresh();
+    },
+    // Toggle one amenity in/out of the selected set (copy, don't mutate in place).
+    toggleAmenity: (name) => {
+      const current = this.getData().amenities || [];
+      const next = current.includes(name)
+        ? current.filter((a) => a !== name)
+        : current.concat(name);
+      this.setData('amenities', next);
+      this.refresh();
+    },
+    clearAll: () => {
+      this.setData({ query: '', guests: 1, price: 'any', type: '', amenities: [] });
+      this.refresh();
+    },
+  };
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 240, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

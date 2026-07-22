@@ -1,0 +1,226 @@
+<puzzle-view>
+  <aside class="studio-panel border-l w-full h-full overflow-y-auto studio-scroll text-[13px]">
+    {#if selCount === 0}
+      <div class="h-full flex items-center justify-center px-6 text-center">
+        <p class="text-faint select-none">Select an element to edit it</p>
+      </div>
+    {:else if selCount > 1}
+      <div class="p-4 space-y-4">
+        <header class="flex items-center justify-between">
+          <span class="text-fg font-medium">{ selCount } selected</span>
+        </header>
+
+        <div class="space-y-2">
+          <label class="block font-mono text-[10px] uppercase tracking-wider text-faint">Fill all</label>
+          <div class="flex flex-wrap gap-1.5">
+            {#for color in swatches}
+              <button
+                class="w-6 h-6 rounded-md border border-hairline"
+                style="background:{ color }"
+                @click={ fillMany(color) }></button>
+            {/for}
+          </div>
+        </div>
+
+        <button
+          class="w-full py-1.5 rounded-md text-danger border border-danger/40 hover:bg-danger/10 transition-colors"
+          @click={ removeMany }>Delete { selCount } elements</button>
+      </div>
+    {:else}
+      <div class="pb-6">
+        <header class="px-4 py-3 border-b border-hairline">
+          <div class="text-fg font-medium truncate">{ el.name }</div>
+          <div class="font-mono text-[10px] uppercase tracking-wider text-faint mt-0.5">{ el.type }</div>
+        </header>
+
+        <!-- Position & size -->
+        <section class="px-4 py-3 border-b border-hairline space-y-2">
+          <label class="block font-mono text-[10px] uppercase tracking-wider text-faint">Position & size</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center gap-2">
+              <span class="w-4 text-faint">X</span>
+              <input type="number" class="w-full bg-surface-2 border border-hairline rounded-md px-2 py-1 text-fg focus:outline-none focus:border-accent/60" value={ el.x } @change={ setX(event) } />
+            </label>
+            <label class="flex items-center gap-2">
+              <span class="w-4 text-faint">Y</span>
+              <input type="number" class="w-full bg-surface-2 border border-hairline rounded-md px-2 py-1 text-fg focus:outline-none focus:border-accent/60" value={ el.y } @change={ setY(event) } />
+            </label>
+            <label class="flex items-center gap-2">
+              <span class="w-4 text-faint">W</span>
+              <input type="number" class="w-full bg-surface-2 border border-hairline rounded-md px-2 py-1 text-fg focus:outline-none focus:border-accent/60" value={ el.w } @change={ setW(event) } />
+            </label>
+            <label class="flex items-center gap-2">
+              <span class="w-4 text-faint">H</span>
+              <input type="number" class="w-full bg-surface-2 border border-hairline rounded-md px-2 py-1 text-fg focus:outline-none focus:border-accent/60" value={ el.h } @change={ setH(event) } />
+            </label>
+          </div>
+        </section>
+
+        <!-- Fill -->
+        <section class="px-4 py-3 border-b border-hairline space-y-2">
+          <label class="block font-mono text-[10px] uppercase tracking-wider text-faint">Fill</label>
+          <div class="flex flex-wrap gap-1.5">
+            {#for color in swatches}
+              <button
+                class="w-6 h-6 rounded-md border border-hairline {#if el.fill === color}ring-2 ring-accent ring-offset-1 ring-offset-surface{/if}"
+                style="background:{ color }"
+                @click={ setFill(color) }></button>
+            {/for}
+          </div>
+        </section>
+
+        <!-- Opacity -->
+        <section class="px-4 py-3 border-b border-hairline space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="font-mono text-[10px] uppercase tracking-wider text-faint">Opacity</label>
+            <span class="font-mono text-[11px] text-muted">{ el.opacity }%</span>
+          </div>
+          <input type="range" min="0" max="100" class="w-full accent-accent" value={ el.opacity } @input={ setOpacity(event) } />
+        </section>
+
+        <!-- Radius -->
+        {#if showRadius}
+          <section class="px-4 py-3 border-b border-hairline space-y-2">
+            <div class="flex items-center justify-between">
+              <label class="font-mono text-[10px] uppercase tracking-wider text-faint">Radius</label>
+              <span class="font-mono text-[11px] text-muted">{ el.radius }</span>
+            </div>
+            <input type="range" min="0" max="40" class="w-full accent-accent" value={ el.radius } @input={ setRadius(event) } />
+          </section>
+        {/if}
+
+        <!-- Shadow -->
+        <section class="px-4 py-3 border-b border-hairline space-y-2">
+          <label class="block font-mono text-[10px] uppercase tracking-wider text-faint">Shadow</label>
+          <div class="grid grid-cols-4 gap-1">
+            <button class="py-1 rounded-md text-[12px] border border-hairline {#if el.shadowBlur === 0}bg-elevated text-fg{:else}text-muted hover:bg-surface-2{/if}" @click={ setShadow(0, 0) }>None</button>
+            <button class="py-1 rounded-md text-[12px] border border-hairline {#if el.shadowBlur === 16}bg-elevated text-fg{:else}text-muted hover:bg-surface-2{/if}" @click={ setShadow(16, 4) }>Soft</button>
+            <button class="py-1 rounded-md text-[12px] border border-hairline {#if el.shadowBlur === 32}bg-elevated text-fg{:else}text-muted hover:bg-surface-2{/if}" @click={ setShadow(32, 10) }>Med</button>
+            <button class="py-1 rounded-md text-[12px] border border-hairline {#if el.shadowBlur === 56}bg-elevated text-fg{:else}text-muted hover:bg-surface-2{/if}" @click={ setShadow(56, 20) }>Hard</button>
+          </div>
+        </section>
+
+        <!-- Text -->
+        {#if isText}
+          <section class="px-4 py-3 border-b border-hairline space-y-3">
+            <div class="space-y-2">
+              <label class="block font-mono text-[10px] uppercase tracking-wider text-faint">Text</label>
+              <input type="text" class="w-full bg-surface-2 border border-hairline rounded-md px-2 py-1 text-fg focus:outline-none focus:border-accent/60" value={ el.text } @input={ setText(event) } />
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="font-mono text-[10px] uppercase tracking-wider text-faint">Font size</label>
+                <span class="font-mono text-[11px] text-muted">{ el.fontSize }</span>
+              </div>
+              <input type="range" min="10" max="72" class="w-full accent-accent" value={ el.fontSize } @input={ setFontSize(event) } />
+            </div>
+          </section>
+        {/if}
+
+        <!-- Frame layout -->
+        {#if isFrame}
+          <section class="px-4 py-3 border-b border-hairline space-y-3">
+            <label class="block font-mono text-[10px] uppercase tracking-wider text-faint">Layout</label>
+            <div class="grid grid-cols-3 gap-1">
+              <button class="py-1 rounded-md text-[12px] border border-hairline {#if el.layout === 'free'}bg-elevated text-fg{:else}text-muted hover:bg-surface-2{/if}" @click={ setLayout('free') }>Free</button>
+              <button class="py-1 rounded-md text-[12px] border border-hairline {#if el.layout === 'stack-v'}bg-elevated text-fg{:else}text-muted hover:bg-surface-2{/if}" @click={ setLayout('stack-v') }>Stack ↓</button>
+              <button class="py-1 rounded-md text-[12px] border border-hairline {#if el.layout === 'stack-h'}bg-elevated text-fg{:else}text-muted hover:bg-surface-2{/if}" @click={ setLayout('stack-h') }>Stack →</button>
+            </div>
+            {#if isStack}
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <label class="font-mono text-[10px] uppercase tracking-wider text-faint">Gap</label>
+                  <span class="font-mono text-[11px] text-muted">{ el.gap }</span>
+                </div>
+                <input type="range" min="0" max="48" class="w-full accent-accent" value={ el.gap } @input={ setGap(event) } />
+              </div>
+              <div class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <label class="font-mono text-[10px] uppercase tracking-wider text-faint">Padding</label>
+                  <span class="font-mono text-[11px] text-muted">{ el.padding }</span>
+                </div>
+                <input type="range" min="0" max="64" class="w-full accent-accent" value={ el.padding } @input={ setPadding(event) } />
+              </div>
+            {/if}
+          </section>
+        {/if}
+
+        <!-- Arrange -->
+        <section class="px-4 py-3 space-y-2">
+          <label class="block font-mono text-[10px] uppercase tracking-wider text-faint">Arrange</label>
+          <div class="grid grid-cols-2 gap-1">
+            <button class="py-1.5 rounded-md text-[12px] text-muted border border-hairline hover:bg-surface-2 hover:text-fg transition-colors" @click={ forward }>Forward</button>
+            <button class="py-1.5 rounded-md text-[12px] text-muted border border-hairline hover:bg-surface-2 hover:text-fg transition-colors" @click={ backward }>Backward</button>
+          </div>
+          <button class="w-full py-1.5 rounded-md text-danger border border-danger/40 hover:bg-danger/10 transition-colors" @click={ removeOne }>Delete</button>
+        </section>
+      </div>
+    {/if}
+  </aside>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { reorder, deleteElements } from '../lib/geometry.js';
+
+const SWATCHES = [
+  '#5B8DEF', '#8B7CF6', '#EF6BA8', '#F1934C',
+  '#E8C34A', '#58BB8A', '#6B7280', '#E9E9EE',
+];
+
+// The right-hand inspector. It edits the single selected record LIVE via
+// record.update() — the store notifies subscribers, the Editor re-runs data(),
+// and the whole tree (plus this panel) re-renders. Sliders write on @input
+// (continuous); number fields on @change (commit). All writes go through the
+// live record in props.single; multi-select fans out over props.selectedIds.
+export default class Inspector extends PuzzleView {
+  data(params, props) {
+    const el = props.single || null;
+    const type = el ? el.type : '';
+    return {
+      el,
+      type,
+      selCount: props.selCount || 0,
+      selectedIds: props.selectedIds || [],
+      isText: type === 'text',
+      isFrame: type === 'frame',
+      showRadius: type === 'rect' || type === 'frame',
+      isStack: el ? (el.layout === 'stack-v' || el.layout === 'stack-h') : false,
+      swatches: SWATCHES,
+    };
+  }
+
+  events = {
+    // Position & size — commit on change; clamp W/H to a sane minimum.
+    setX: (event) => this.props.single.update({ x: Number(event.target.value) || 0 }),
+    setY: (event) => this.props.single.update({ y: Number(event.target.value) || 0 }),
+    setW: (event) => this.props.single.update({ w: Math.max(8, Number(event.target.value) || 8) }),
+    setH: (event) => this.props.single.update({ h: Math.max(8, Number(event.target.value) || 8) }),
+
+    setFill: (color) => this.props.single.update({ fill: color }),
+    setOpacity: (event) => this.props.single.update({ opacity: Number(event.target.value) }),
+    setRadius: (event) => this.props.single.update({ radius: Number(event.target.value) }),
+    setShadow: (blur, y) => this.props.single.update({ shadowBlur: blur, shadowY: y }),
+
+    setText: (event) => this.props.single.update({ text: event.target.value }),
+    setFontSize: (event) => this.props.single.update({ fontSize: Number(event.target.value) }),
+
+    setLayout: (layout) => this.props.single.update({ layout }),
+    setGap: (event) => this.props.single.update({ gap: Number(event.target.value) }),
+    setPadding: (event) => this.props.single.update({ padding: Number(event.target.value) }),
+
+    forward: () => reorder(this.ctx.store, this.props.single, 1),
+    backward: () => reorder(this.ctx.store, this.props.single, -1),
+    removeOne: () => deleteElements(this.ctx.store, [this.props.single.id]),
+
+    // Multi-select
+    fillMany: (color) => {
+      (this.props.selectedIds || []).forEach((id) => {
+        const rec = this.ctx.store.findOne('element', id);
+        if (rec) rec.update({ fill: color });
+      });
+    },
+    removeMany: () => deleteElements(this.ctx.store, this.props.selectedIds || []),
+  };
+}
+</scripts>

@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go:
+    name: Go (compiler)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go build ./...
+      - run: go test ./...
+
+  js:
+    name: JS (runtime)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Go is needed because `npm test` runs `build:example-modules` (pretest),
+      # which compiles examples/todos's .pzl files with the real compiler so the
+      # compiled-variant integration suite runs against fresh compiler output.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run verify:pack
+      # Type-check the public .d.ts surface against a strict consumer fixture
+      # (imports from the package root exactly as a `<scripts lang="ts">` app would).
+      - run: npm run test:types
+
+  e2e-pack:
+    name: E2E (packed tarball)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Go builds the compiler (run via `go run`); Node packs + installs the
+      # tarball and drives the app build. Proves the SHIPPED package resolves and
+      # builds a real app from node_modules, not the in-repo esbuild alias.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:e2e-pack
+
+  browser:
+    name: Browser smoke (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Go runs the two example dev servers Playwright's webServer starts.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:browser

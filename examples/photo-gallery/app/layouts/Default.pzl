@@ -1,0 +1,86 @@
+<puzzle-view class="h-screen flex bg-ink text-fg overflow-hidden">
+  <!-- Persistent left rail, Apple Photos style. It stays mounted across every
+       navigation that reuses this layout (All Photos / Album / Photo), so only
+       the routed <Slot/> below swaps — the one-animator rule means the sidebar
+       never animates. Independently scrollable; hidden below md (no hamburger —
+       out of scope), where the grid takes the full width.
+
+       No z-index here (and no transform/filter on the layout root) so the
+       PhotoView fullscreen overlay — position:fixed inset-0 z-50 — paints above
+       the sidebar and covers the entire viewport. -->
+  <aside class="sidebar hidden md:flex w-[236px] shrink-0 flex-col h-screen overflow-y-auto bg-white/[0.04] border-r border-white/10 backdrop-blur-xl px-3 py-4">
+    <!-- App name. The conic-gradient tile evokes the Photos app icon's pinwheel. -->
+    <a href="/" class="flex items-center gap-2.5 px-2.5 pb-4 hover:no-underline">
+      <span class="inline-block w-6 h-6 rounded-[7px] shrink-0 shadow-sm" style="background:conic-gradient(from 210deg,#ff5f6d,#ffc371,#47e08a,#4facfe,#b06ab3,#ff5f6d)"></span>
+      <span class="text-[15px] font-bold text-fg">Photos</span>
+    </a>
+
+    <!-- ── Library ─────────────────────────────────────────────────────── -->
+    <div class="px-2.5 pt-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-faint">Library</div>
+
+    <!-- Active state is derived from the current route in data() (this.route,
+         v1.15/D47), so this row lights up whenever we're on the '/' gallery. -->
+    <a href="/" class="group flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-sm transition-colors hover:no-underline {#if routeName === 'gallery'}bg-blue-500/90 text-white{:else}text-fg hover:bg-white/[0.06]{/if}">
+      <!-- Inline "images" glyph (lucide geometry). Inline SVG in a template is
+           namespaced by the runtime, so no {#svg}/app/assets plumbing needed. -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-[18px] h-[18px] shrink-0" aria-hidden="true">
+        <rect width="18" height="14" x="3" y="3" rx="2" ry="2" />
+        <path d="m3 15 4-4a2 2 0 0 1 2.8 0L15 16" />
+        <path d="m15 13 1.5-1.5a2 2 0 0 1 2.8 0L21 13" />
+        <circle cx="8" cy="8" r="1.5" />
+      </svg>
+      <span class="flex-1">All Photos</span>
+      <span class="tabular-nums text-xs {#if routeName === 'gallery'}text-white/70{:else}text-faint{/if}">{ totalCount }</span>
+    </a>
+
+    <!-- ── Albums ──────────────────────────────────────────────────────── -->
+    <div class="px-2.5 pt-5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-faint">Albums</div>
+
+    <!-- One row per photographer. findMany('photo') in data() subscribes this
+         layout, so the list is reactive; each row carries a small picsum cover
+         thumb (28px, requested at /56/56 for retina). -->
+    {#for album in albums}
+      <a href="/album/{ album.slug }" class="group flex items-center gap-2.5 px-2 py-[6px] rounded-lg text-sm transition-colors hover:no-underline {#if album.slug === activeSlug}bg-blue-500/90 text-white{:else}text-fg hover:bg-white/[0.06]{/if}">
+        <img src="https://picsum.photos/id/{ album.cover.id }/56/56" alt="" loading="lazy" class="w-7 h-7 rounded-md object-cover shrink-0 bg-surface-2" />
+        <span class="flex-1 truncate">{ album.name }</span>
+        <span class="tabular-nums text-xs {#if album.slug === activeSlug}text-white/70{:else}text-faint{/if}">{ album.count }</span>
+      </a>
+    {/for}
+  </aside>
+
+  <!-- Routed view renders here. flex-1 + overflow-y-auto makes the main content
+       scroll INDEPENDENTLY of the sidebar. No max-width wrapper: the grid views
+       are full-bleed (Apple Photos style) and pad themselves. -->
+  <main class="flex-1 min-w-0 overflow-y-auto">
+    <Slot/>
+  </main>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { groupAlbums } from '../albums.js';
+
+export default class DefaultLayout extends PuzzleView {
+  // data() re-runs on every navigation that reuses this layout (SPEC §9), so the
+  // active-nav highlight recomputes from the current route with no extra wiring.
+  // We read this.route (v1.15, D47) — the per-navigation route snapshot — which
+  // is correct INSIDE the pre-commit gate (unlike router.current / location,
+  // which still hold the OLD route there). routeName lights up the "All Photos"
+  // row on the '/' gallery route; activeSlug is the album :slug and is null off
+  // the album route, so a plain `album.slug === activeSlug` comparison in the
+  // template highlights exactly the current album (null never matches a slug).
+  //
+  // findMany('photo') subscribes this layout to the store, so the derived album
+  // list (and the All-Photos total) update reactively.
+  data(params, props) {
+    const photos = this.ctx.store.findMany('photo');
+    const routeName = this.route ? this.route.route.name : '';
+    return {
+      totalCount: photos.length,
+      albums: groupAlbums(photos),
+      routeName,
+      activeSlug: routeName === 'album' ? this.route.params.slug : null,
+    };
+  }
+}
+</scripts>

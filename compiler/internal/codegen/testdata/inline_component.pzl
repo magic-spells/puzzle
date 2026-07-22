@@ -1,0 +1,16 @@
+<puzzle-view>
+  <button class="btn" @click={ onClick }>{ label }</button>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class InlineComponent extends PuzzleView {
+  data(params, props) {
+    return { label: props.label };
+  }
+  events = {
+    onClick: (event) => {},
+  };
+}
+</scripts>

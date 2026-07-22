@@ -1,0 +1,234 @@
+<puzzle-view>
+  <!-- A two-month availability calendar. Selection state (checkIn/checkOut)
+       lives in the parent Listing view and arrives as props; this component owns
+       only the visible-month offset locally. Every pick is reported back up via
+       the `select` callback (wired as @select on the tag). -->
+  <div>
+    <div class="relative">
+      <!-- Prev/next month arrows. Prev is clamped so the user can never page
+           before the current real month (there's nothing to book in the past). -->
+      <button
+        type="button"
+        class="absolute left-0 top-0 w-9 h-9 flex items-center justify-center rounded-full transition-colors {#if canPrev}text-fg hover:bg-surface-2{/if}{#if !canPrev}text-faint cursor-default{/if}"
+        aria-label="Previous month"
+        @click={ prevMonth }>‹</button>
+      <button
+        type="button"
+        class="absolute right-0 top-0 w-9 h-9 flex items-center justify-center rounded-full text-fg hover:bg-surface-2 transition-colors"
+        aria-label="Next month"
+        @click={ nextMonth }>›</button>
+
+      <div class="grid sm:grid-cols-2 gap-6 sm:gap-8">
+        {#for month in months}
+          <div>
+            <div class="text-center font-semibold text-sm text-fg mb-3">{ month.name }</div>
+
+            <!-- Weekday header: S M T W T F S. -->
+            <div class="grid grid-cols-7 gap-1 mb-1">
+              {#for wd in weekdays}
+                <div class="text-center text-[11px] text-faint py-1">{ wd }</div>
+              {/for}
+            </div>
+
+            <!-- Day grid. Leading blanks pad the first week; disabled days render
+                 as plain divs (not buttons) so they can't be clicked. -->
+            <div class="grid grid-cols-7 gap-1">
+              {#for cell in month.cells, i}
+                <div class="aspect-square flex items-center justify-center">
+                  {#if cell.day}
+                    {#if cell.disabled}
+                      <div class="w-full h-full flex items-center justify-center text-sm { cell.cls }">{ cell.day }</div>
+                    {:else}
+                      <button type="button" class="w-full h-full flex items-center justify-center text-sm { cell.cls }" @click={ pick(cell.iso) }>{ cell.day }</button>
+                    {/if}
+                  {/if}
+                </div>
+              {/for}
+            </div>
+          </div>
+        {/for}
+      </div>
+    </div>
+
+    <!-- Footer: the selected span with a Clear button, or a prompt. -->
+    <div class="mt-5 pt-4 border-t border-line text-sm">
+      {#if hasRange}
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-fg font-medium">{ nights } { nights | plural('night','nights') } · { checkIn | monthDay } – { checkOut | monthDay }</span>
+          <button type="button" class="text-fg underline hover:text-accent" @click={ clear }>Clear dates</button>
+        </div>
+      {:else}
+        <span class="text-muted">Add your travel dates for exact pricing</span>
+      {/if}
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Zero-pad and assemble an ISO yyyy-mm-dd from y / 0-based-month / day WITHOUT
+// touching Date's UTC parser, so the string never drifts a day across timezones
+// (the whole app treats these ISO strings as local calendar dates).
+function isoOf(y, m, d) {
+  return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+export default class Calendar extends PuzzleView {
+  data(params, props) {
+    const listing = props.listing || null;
+    const checkIn = props.checkIn || '';
+    const checkOut = props.checkOut || '';
+
+    // Local month paging survives data() re-runs (props change on every pick),
+    // the same way the music demo's AppLayout keeps queueOpen through getData().
+    const prev = this.getData() || {};
+    const monthOffset = Number.isInteger(prev.monthOffset) ? prev.monthOffset : 0;
+
+    // "Today" at local midnight. isDateBooked is a deterministic hash of
+    // (listing id + ISO date), so availability is stable on ANY real date with
+    // no server or persisted bookings — the grid looks the same every reload.
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Two consecutive months starting at (current month + offset).
+    const base = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+    const months = [
+      this._buildMonth(base.getFullYear(), base.getMonth(), listing, checkIn, checkOut, today),
+      this._buildMonth(base.getFullYear(), base.getMonth() + 1, listing, checkIn, checkOut, today)
+    ];
+
+    const hasRange = !!(checkIn && checkOut);
+    let nights = 0;
+    if (hasRange) {
+      const a = new Date(`${checkIn}T00:00:00`);
+      const b = new Date(`${checkOut}T00:00:00`);
+      nights = Math.max(0, Math.round((b - a) / 86_400_000));
+    }
+
+    return {
+      months,
+      weekdays: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
+      monthOffset,
+      canPrev: monthOffset > 0,
+      checkIn,
+      checkOut,
+      hasRange,
+      nights
+    };
+  }
+
+  // Build one month's grid of cells. Normalizes month overflow (month 12 rolls
+  // into next January) via the Date constructor.
+  _buildMonth(year, month, listing, checkIn, checkOut, today) {
+    const first = new Date(year, month, 1);
+    const y = first.getFullYear();
+    const m = first.getMonth();
+    const monthName = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const leading = first.getDay(); // 0 = Sunday
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+    const cells = [];
+    for (let i = 0; i < leading; i++) cells.push({ blank: true });
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const iso = isoOf(y, m, day);
+      const dateObj = new Date(y, m, day);
+      const past = dateObj.getTime() < today.getTime();
+      const booked = !!(listing && listing.isDateBooked(iso));
+      const disabled = past || booked;
+
+      // ISO strings compare lexicographically, so range membership is a plain
+      // string comparison.
+      const isCheckIn = iso === checkIn;
+      const isCheckOut = iso === checkOut;
+      const inRange = checkIn && checkOut && iso > checkIn && iso < checkOut;
+
+      let cls;
+      if (disabled) {
+        // Booked nights get a strike-through; past days just fade out. Both are
+        // non-interactive.
+        cls = `rounded-full text-faint cursor-default${booked ? ' line-through' : ''}`;
+      } else if (isCheckIn || isCheckOut) {
+        cls = 'rounded-full bg-fg text-bg font-semibold';
+      } else if (inRange) {
+        cls = 'rounded-md bg-surface-2 text-fg';
+      } else {
+        cls = 'rounded-full text-fg hover:ring-1 hover:ring-inset hover:ring-fg cursor-pointer';
+      }
+
+      cells.push({ blank: false, day, iso, disabled, booked, cls });
+    }
+
+    return { name: monthName, cells };
+  }
+
+  // Is any night in the half-open span (checkIn, iso] booked? A stay can't span a
+  // booked night, so this vetoes a range that would jump over one.
+  _rangeHasBooked(listing, checkIn, iso) {
+    if (!listing) return false;
+    const d = new Date(`${checkIn}T00:00:00`);
+    const end = new Date(`${iso}T00:00:00`);
+    d.setDate(d.getDate() + 1); // start the day AFTER check-in
+    while (d.getTime() <= end.getTime()) {
+      const s = isoOf(d.getFullYear(), d.getMonth(), d.getDate());
+      if (listing.isDateBooked(s)) return true;
+      d.setDate(d.getDate() + 1);
+    }
+    return false;
+  }
+
+  events = {
+    prevMonth: () => {
+      const o = this.getData().monthOffset;
+      if (o > 0) {
+        this.setData('monthOffset', o - 1);
+        this.refresh();
+      }
+    },
+    nextMonth: () => {
+      this.setData('monthOffset', this.getData().monthOffset + 1);
+      this.refresh();
+    },
+
+    // Range selection. The clicked day arrives as a plain ISO string because the
+    // template writes @click={ pick(cell.iso) } — call-expression handlers pass
+    // exactly what's written. Every branch ends by reporting the new range up.
+    pick: (iso) => {
+      const listing = this.getData().listing || this.props.listing;
+      const ci = this.props.checkIn || '';
+      const co = this.props.checkOut || '';
+
+      let nextIn = '';
+      let nextOut = '';
+
+      if (!ci || (ci && co)) {
+        // No start yet, or a complete range already exists → begin fresh.
+        nextIn = iso;
+      } else if (iso <= ci) {
+        // Clicked on or before the start → restart the selection here.
+        nextIn = iso;
+      } else if (this._rangeHasBooked(listing, ci, iso)) {
+        // Ranges can't span booked nights → restart at the clicked day.
+        nextIn = iso;
+      } else {
+        // Valid second click → complete the range.
+        nextIn = ci;
+        nextOut = iso;
+      }
+
+      this._emit(nextIn, nextOut);
+    },
+
+    clear: () => this._emit('', '')
+  };
+
+  // Report the selection to the parent (wired as @select on the tag). Whatever
+  // we pass becomes the parent handler's `event`.
+  _emit(checkIn, checkOut) {
+    if (typeof this.props.select === 'function') {
+      this.props.select({ checkIn, checkOut });
+    }
+  }
+}
+</scripts>

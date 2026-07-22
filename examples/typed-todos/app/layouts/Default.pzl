@@ -1,0 +1,35 @@
+<puzzle-view class="relative min-h-screen flex flex-col bg-slate-950 text-white">
+  <header class="pt-16 pb-10">
+    <div class="max-w-lg mx-auto px-6 text-center">
+      <div class="font-mono text-[11px] uppercase tracking-[0.4em] text-white/40 mb-4">Puzzle · TypeScript</div>
+      <h1 class="text-5xl md:text-6xl font-bold leading-none">Typed Todos</h1>
+      <p class="mt-4 text-sm text-white/60">{ subtitle }</p>
+    </div>
+  </header>
+
+  <main class="flex-1 pb-16">
+    <div class="max-w-lg mx-auto px-6">
+      <Slot/>
+    </div>
+  </main>
+
+  <footer class="py-8 border-t border-white/10">
+    <p class="text-center font-mono text-[11px] tracking-[0.15em] text-white/40">
+      built with the puzzle framework
+    </p>
+  </footer>
+</puzzle-view>
+
+<scripts lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+
+interface LayoutModel {
+  subtitle: string;
+}
+
+export default class DefaultLayout extends PuzzleView {
+  data(): LayoutModel {
+    return { subtitle: 'A quiet, fully-typed place to keep your list.' };
+  }
+}
+</scripts>

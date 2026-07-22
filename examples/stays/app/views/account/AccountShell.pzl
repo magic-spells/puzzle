@@ -1,0 +1,82 @@
+<puzzle-view>
+  <!-- /account parent view (nested routes v1.3, D30). This shell stays mounted
+       while its child pane — Profile / Trips / Wishlist — swaps through the
+       <Slot/> below. On a pane swap the shell is a REUSED ancestor: its data()
+       re-runs with the full merged params but the shell itself never animates
+       (the one-animator rule) — only the leaf pane plays its in/out. -->
+  <div>
+    <h1 class="font-display text-3xl font-bold text-fg">Account</h1>
+
+    <!-- Identity strip: gradient avatar + name + home + tenure. Defensive
+         defaults below mean this renders sensibly even before traveler.json has
+         seeded (findOne returns undefined mid-boot). -->
+    <div class="flex items-center gap-4 mt-5">
+      <span
+        class="inline-flex items-center justify-center w-16 h-16 rounded-full text-accent-ink text-2xl font-bold shrink-0 shadow-sm"
+        style="background:linear-gradient(135deg,#ff385c,#e31c5f)">{ initial }</span>
+      <div class="min-w-0">
+        <div class="text-xl font-semibold text-fg truncate">{ name }</div>
+        <div class="text-sm text-muted truncate">{ home }</div>
+        <div class="text-sm text-muted">On Puzzle Stays since { joined }</div>
+      </div>
+    </div>
+
+    <!-- Tab nav. Active section comes from this.route (v1.15, D47) — the leaf
+         route name of the navigation this data() run is gating, matched against
+         the child route names. Correct inside the pre-commit gate, unlike the URL
+         (one navigation behind here). Active tab: text-fg with a bottom border
+         that overlaps the container rule (-mb-px). -->
+    <nav class="flex gap-6 mt-8 border-b border-line">
+      <a href="/account"
+        class="pb-3 text-sm font-medium transition-colors hover:no-underline {#if isProfile}text-fg border-b-2 border-fg -mb-px{/if}{#if !isProfile}text-muted hover:text-fg{/if}">Profile</a>
+      <a href="/account/trips"
+        class="pb-3 text-sm font-medium transition-colors hover:no-underline {#if isTrips}text-fg border-b-2 border-fg -mb-px{/if}{#if !isTrips}text-muted hover:text-fg{/if}">Trips</a>
+      <a href="/account/wishlist"
+        class="pb-3 text-sm font-medium transition-colors hover:no-underline {#if isWishlist}text-fg border-b-2 border-fg -mb-px{/if}{#if !isWishlist}text-muted hover:text-fg{/if}">Wishlist</a>
+    </nav>
+
+    <!-- Matched child pane renders here (v1.3 nested-view slot). -->
+    <div class="pt-8">
+      <Slot/>
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class AccountShell extends PuzzleView {
+  data(params, props) {
+    // The signed-in user is a single record with id 'me'. May be undefined for
+    // a beat during the initial seed, so every field has a fallback.
+    const me = this.ctx.store.findOne('traveler', 'me');
+    const name = (me && me.name) || 'Guest';
+
+    // Active tab from this.route (v1.15, D47) — the leaf route name of the
+    // navigation this data() run is gating. Correct inside the pre-commit gate,
+    // where window.location.pathname is still one navigation behind (the reused
+    // shell's data() runs before pushState commits).
+    const routeName = this.route.route.name;
+    const isProfile = routeName === 'account-profile';
+    const isTrips = routeName === 'account-trips';
+    const isWishlist = routeName === 'account-wishlist';
+
+    return {
+      name,
+      initial: name.charAt(0).toUpperCase(),
+      home: (me && me.home) || '',
+      joined: (me && me.joined) || '',
+      isProfile,
+      isTrips,
+      isWishlist,
+    };
+  }
+
+  // Subtle enter/leave for the whole /account section. On a sibling-pane swap
+  // this shell is reused and holds still — only the leaf pane animates (D30).
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 260, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

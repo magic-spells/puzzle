@@ -1,0 +1,36 @@
+<puzzle-view>
+  <div class="kanban-card mb-3" data-task-id={ task.id } @pointerdown={ down(event) }>
+    {#if task.__placeholder}
+      <div class="kanban-placeholder" style="height:{ task.height }px"></div>
+    {:else}
+      <button type="button" class="kanban-card-body px-4 py-3.5" data-puzzle-morph="task-{ task.id }" aria-haspopup="dialog" @click={ keyOpen(event) }>
+        <span class="block text-sm font-semibold leading-5 text-fg">{ task.title }</span>
+        <span class="mt-1 block text-xs leading-4 text-faint">{ task.description | truncate(64) }</span>
+      </button>
+    {/if}
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class TaskCard extends PuzzleView {
+  data(params, props) {
+    return { task: props.task };
+  }
+
+  events = {
+    down: (event) => {
+      if (this.props.task.__placeholder) return;
+      this.props.grab(event);
+    },
+    // Keyboard/AT activation only: Enter/Space on the button synthesize a
+    // click with detail 0. Pointer clicks (detail >= 1) are already handled
+    // by the board's pointerup path, so this guard prevents a double push.
+    keyOpen: (event) => {
+      if (event.detail !== 0) return;
+      this.props.open();
+    }
+  };
+}
+</scripts>

@@ -1,0 +1,118 @@
+<puzzle-view class="w-full">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+    <!-- ── Stage: toolbar + canvas (2/3 on md+) ─────────────────────────── -->
+    <section class="md:col-span-2 flex flex-col gap-3">
+      <div class="flex flex-wrap items-center gap-2">
+        <button type="button" class="toolbar-btn" @click={ addPlanet }>+ Add planet</button>
+        <button type="button" class="toolbar-btn" @click={ togglePause }>
+          {#if running}Pause{:else}Resume{/if}
+        </button>
+        <button type="button" class="toolbar-btn" @click={ toggleTrails }>
+          Trails: {#if trails}on{:else}off{/if}
+        </button>
+        <button type="button" class="toolbar-btn is-danger" @click={ reset }>Reset</button>
+      </div>
+
+      <OrreryCanvas
+        running={ running }
+        trails={ trails }
+        selectedId={ selectedId }
+        @select={ selectBody(event) } />
+    </section>
+
+    <!-- ── Panel: one editable row per body (1/3 on md+) ────────────────── -->
+    <aside class="md:col-span-1 flex flex-col gap-3">
+      <div class="flex items-baseline justify-between px-1">
+        <h2 class="font-display text-2xl text-fg">Bodies</h2>
+        <span class="font-mono text-[11px] tabular-nums text-faint">{ count } in orbit</span>
+      </div>
+
+      <div class="flex flex-col gap-3">
+        {#for body in bodies}
+          <BodyRow body={ body } active={ selectedId === body.id } @select={ selectBody(body.id) } />
+        {/for}
+      </div>
+
+      {#if count === 0}
+        <p class="px-1 text-sm text-muted">No bodies. Add one, or click empty space on the canvas.</p>
+      {/if}
+    </aside>
+
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import OrreryCanvas from '../components/OrreryCanvas.pzl';
+import BodyRow from '../components/BodyRow.pzl';
+import { seedBodies } from '../seed.js';
+import { randomPlanetColor, randomSpeed, randomSize, nextPlanetName, clamp } from '../util.js';
+
+// The Home view owns the UI state (selection, running, trails) and reads it back
+// out of getData() on every data() re-run so it survives store-driven refreshes
+// (the Board.pzl pattern). The bodies themselves live in the store; this view is
+// subscribed through findMany('body'), so any create/update/destroy re-renders
+// the panel and re-passes fresh props down to the canvas.
+export default class Home extends PuzzleView {
+  created() {
+    const reduced =
+      typeof matchMedia === 'function' &&
+      matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    this.setData({
+      selectedId: '',
+      running: !reduced, // respect reduced-motion: start paused
+      trails: false,
+    });
+  }
+
+  data() {
+    const local = this.getData();
+    const bodies = this.ctx.store.findMany('body');
+    return {
+      bodies,
+      count: bodies.length,
+      selectedId: local.selectedId || '',
+      running: local.running !== false, // default true unless explicitly paused
+      trails: !!local.trails,
+    };
+  }
+
+  events = {
+    // Selection is local UI state. Receives an id string from BOTH sources:
+    //   panel row → @select={ selectBody(body.id) }  (loop var)
+    //   canvas    → @select={ selectBody(event) }     (hit-test id forwarded up)
+    selectBody: (id) => {
+      const { selectedId } = this.getData();
+      this.setData({ selectedId: selectedId === id ? '' : id });
+    },
+
+    togglePause: () => {
+      this.setData({ running: !this.getData().running });
+    },
+
+    toggleTrails: () => {
+      this.setData({ trails: !this.getData().trails });
+    },
+
+    addPlanet: () => {
+      this.ctx.store.createRecord('body', {
+        name: nextPlanetName(this.ctx.store),
+        color: randomPlanetColor(),
+        size: randomSize(),
+        distance: clamp(60 + Math.random() * 200, 40, 280),
+        speed: randomSpeed(),
+        phase: Math.random() * 360,
+      });
+    },
+
+    reset: () => {
+      // findMany returns a fresh array, so destroying while iterating is safe.
+      this.ctx.store.findMany('body').forEach((body) => body.destroy());
+      seedBodies.forEach((body) => this.ctx.store.createRecord('body', body));
+      this.setData({ selectedId: '' });
+    },
+  };
+}
+</scripts>

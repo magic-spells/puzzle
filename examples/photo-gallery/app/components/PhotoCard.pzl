@@ -1,0 +1,50 @@
+<puzzle-view>
+  <!-- A plain <a>: the router intercepts same-origin clicks and turns this into a
+       push(href), so no @click handler is needed. `href` is prebuilt in data()
+       from the optional `base` prop — '' → "/photo/<id>" (All Photos, a sibling
+       swap → D68 capture flight); "/album/<slug>" → "/album/<slug>/photo/<id>"
+       (an album, a nested child swap → D55 live pair). Same morph id namespace
+       either way, so the <img> below is untouched. -->
+  <a href="{ href }" class="photo-card group block hover:no-underline">
+    <div class="relative overflow-hidden rounded-md ring-1 ring-white/[0.06]">
+      <!-- MORPH SOURCE/TARGET. Plain symmetric `data-puzzle-morph` so it both
+           launches (card → fullscreen) and receives (fullscreen → card). Sized
+           purely by classes (aspect-[3/2] object-cover — SAME framing and SAME URL as
+           the fullscreen view, so the morph is one continuous bitmap) with no transform/opacity
+           or dynamic style binding — the morph engine measures this element's
+           live rect, so it must not be mid-animation on click. The hover
+           affordance lives on sibling elements, never on the <img>. -->
+      <img
+        data-puzzle-morph="photo-{ photo.id }"
+        src="{ photo.src }"
+        alt="Photo by { photo.author }"
+        loading="lazy"
+        class="w-full aspect-[3/2] object-cover bg-surface-2" />
+
+      <!-- Hover chrome — a caption gradient that fades in (Apple Photos tiles are
+           captionless at rest). No transform on the morphing subtree. -->
+      <div class="pointer-events-none absolute inset-0 flex items-end bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100">
+        <span class="px-2.5 pb-2 text-xs font-semibold text-white drop-shadow truncate">{ photo.author }</span>
+      </div>
+      <div class="pointer-events-none absolute inset-0 rounded-md ring-0 ring-white/0 transition-[box-shadow] duration-200 group-hover:ring-2 group-hover:ring-white/60 group-focus-visible:ring-2 group-focus-visible:ring-white/60"></div>
+    </div>
+  </a>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class PhotoCard extends PuzzleView {
+  data(params, props) {
+    // `base` (default '') scopes the target URL: '' → /photo/<id>;
+    // '/album/<slug>' → /album/<slug>/photo/<id>. Prebuilt here so the template
+    // attr stays a single interpolation ({ href }) rather than a mixed literal +
+    // two expressions.
+    const base = props.base || '';
+    return {
+      photo: props.photo,
+      href: `${base}/photo/${props.photo.id}`,
+    };
+  }
+}
+</scripts>

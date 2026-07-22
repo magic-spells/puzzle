@@ -1,0 +1,67 @@
+<puzzle-view>
+  <div class="block">
+  {#case message.role}
+    {:when 'user'}
+      <div class="flex justify-end">
+        <div class="max-w-[80%] rounded-2xl rounded-br-md bg-accent text-white px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap">{ message.content }</div>
+      </div>
+      <div class="mt-1 pr-1 text-right text-[11px] text-faint">{ message.createdAt | clock }</div>
+    {:when 'assistant'}
+      <div class="flex gap-3">
+        <div class="shrink-0 w-8 h-8 grid place-items-center rounded-full bg-accent/20 text-accent text-sm font-semibold ring-1 ring-accent/30">◆</div>
+        <div class="min-w-0">
+          <div class="max-w-[80%] rounded-2xl rounded-tl-md bg-surface-2 text-fg px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap">{ message.content }{#if message.pending}<span class="pz-caret">▍</span>{/if}</div>
+          <div class="mt-1 pl-1 text-[11px] text-faint">{#if message.model}{ message.model } · {/if}{ message.createdAt | clock }</div>
+        </div>
+      </div>
+    {:when 'system'}
+      <div class="text-center text-xs text-faint py-1 px-6 whitespace-pre-wrap">{ message.content }</div>
+    {:else}
+      <div class="flex gap-3">
+        <div class="shrink-0 w-8 h-8 grid place-items-center rounded-full bg-red-500/15 text-red-400 text-sm ring-1 ring-red-500/30">!</div>
+        <div class="max-w-[80%] rounded-2xl rounded-tl-md bg-red-500/10 text-red-300 ring-1 ring-red-500/25 px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap">{ message.content }</div>
+      </div>
+  {/case}
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// One message, styled by role via {#case} (v1.7, D37): user bubbles right in the
+// accent, assistant left with a bot avatar, system centered and muted, and the
+// {:else} branch catches the 'error' role. A blinking caret trails an assistant
+// message while it is still streaming (message.pending).
+export default class MessageBubble extends PuzzleView {
+  data(params, props) {
+    // Re-query by id instead of returning props.message directly: records
+    // mutate IN PLACE, so the parent's prop is always reference-equal and
+    // prop-diffing can't see a streamed token or the pending flip. The findOne
+    // subscribes this bubble to ITS OWN record key — every update() re-renders
+    // exactly this bubble.
+    return {
+      message: this.ctx.store.findOne('message', props.message.id) ?? props.message,
+    };
+  }
+
+  animations = {
+    in: { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' }, duration: 220, easing: 'ease-out' },
+  };
+}
+</scripts>
+
+<styles>
+.pz-caret {
+  display: inline-block;
+  margin-left: 1px;
+  color: var(--color-accent-2);
+  animation: pz-blink 1s step-end infinite;
+}
+@keyframes pz-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pz-caret { animation: none; }
+}
+</styles>

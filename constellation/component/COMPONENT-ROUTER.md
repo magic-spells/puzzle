@@ -1,0 +1,76 @@
+---
+name: Router
+status: verified
+connections:
+  - COMPONENT-PUZZLE-VIEW
+  - COMPONENT-VIEW-MANAGER
+  - COMPONENT-ANIMATIONS
+  - COMPONENT-MORPH
+  - COMPONENT-SSG
+  - FILE-ROUTER
+notes:
+  - kind: gotcha
+    text: >-
+      A reused ancestor refresh mutates that instance before the final navigation
+      commit. If a later fresh descendant load fails, URL/current stay put but the
+      reused ancestor has seen the attempted params. This documented D19/D30 soft
+      edge is tracked by FEATURE-TRANSACTIONAL-ANCESTOR-REFRESH.
+verified_at: '2026-07-22T00:04:07.695Z'
+verified_sha: c0d180a71fd57b8d715dd3f1726ccc66827517a3
+---
+
+# Router
+
+Route compiler and navigation state machine for history, hash, and memory
+modes. Public surface: `start`, `stop`, `push`, `go`, `back`, `forward`,
+`current`, and the narrow `setMorphHandler` integration seam.
+
+Nested route definitions flatten to leaf matchers in declaration order.
+Children use relative paths; empty children are index routes; layouts are
+top-level only; merged params reach every view; nearest leaf metadata wins for
+title and transition settings. Top-level `*` is the catch-all. Duplicate params,
+absolute child paths, nested catch-alls/layouts, invalid transition modes, and
+invalid base/memory config fail at construction.
+
+Navigation is load-then-commit. The router computes the shared route-node
+prefix, preloads fresh views, refreshes reused ancestors with one frozen
+`{ path, route, params, chain }` snapshot, and abandons/destroys fresh work on
+failure or supersession. The winning swap commits location/history/title,
+scroll bookkeeping, mounted tree, and `current` in one synchronous window.
+Same-path pushes are no-ops. Trailing `/` is insignificant for matching. The D39
+skeleton gate must start all gated loads before any skeleton-exempt preload opens
+its tracking scope, or a store-connected layout's gated sync `data()` queues
+behind the skeleton view's fetch and nothing paints.
+
+The route chain becomes nested keyed component vnodes through each `<Slot/>`.
+The shared prefix keeps its instances; the topmost divergent view (or a changed
+layout) is the sole animator and lower fresh views skip enter. Missing outlets
+warn because a preloaded child has no mount target. The whole chain is rebuilt on
+each navigation, not only the divergent survivor: patchComponent pushes children
+through on every re-render, so a survivor-only swap would be reverted by a later
+ancestor re-render (regression-tested).
+
+Sequential transitions await the old unit's out phase before commit. A failing
+leave hook is logged and the swap continues so the incoming preloaded chain is
+not leaked. `transitionMode: 'overlap'` pins the leaver at its measured fixed
+rect, commits the entrant immediately, and removes the leaver when out settles.
+Mode resolution is destination-only: nearest route override, incoming
+view/layout class field, then app default. Interruptions synchronously destroy
+doomed pending-out subtrees.
+
+The morph slot calls `leave(oldRoot)` at out start and awaits its promise before
+destroy; `enter(newRoot, { initial })` runs post-commit/pre-paint. Errors are
+logged and never wedge navigation. Params-only updates do not fire morph hooks.
+
+History/hash modes intercept safe same-origin unmodified links and delegate
+pop/go to browser history. Hash routing keeps app paths base-free inside the
+fragment. `routerBase` prefixes real URLs in history/hash and is inert in
+memory. Memory mode owns an entry stack and has no URL/title/scroll effects.
+
+Scroll defaults to top on push and saved position on pop, with per-entry keys,
+sessionStorage persistence (50-entry cap), anchor targets, custom behavior, and
+opt-out. Failed/initial navigations do not move scroll.
+
+Static output takeover recognizes matching `data-puzzle-ssg` markup at
+navigation zero, replaces it inside the commit window, removes the marker, and
+skips the initial enter animation. After that the page is the same SPA.

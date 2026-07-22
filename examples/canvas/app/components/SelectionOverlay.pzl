@@ -1,0 +1,42 @@
+<puzzle-view>
+  <div
+    class="absolute pointer-events-none border-[1.5px] border-accent rounded-[1px]"
+    style={ overlay.css }>
+    {#if handles}
+      <div class="contents">
+        <div class="sel-handle" style="left:-4px;top:-4px;cursor:nwse-resize" @pointerdown={ grab(event, 'nw') }></div>
+        <div class="sel-handle" style="left:calc(50% - 4px);top:-4px;cursor:ns-resize" @pointerdown={ grab(event, 'n') }></div>
+        <div class="sel-handle" style="right:-4px;top:-4px;cursor:nesw-resize" @pointerdown={ grab(event, 'ne') }></div>
+        <div class="sel-handle" style="right:-4px;top:calc(50% - 4px);cursor:ew-resize" @pointerdown={ grab(event, 'e') }></div>
+        <div class="sel-handle" style="right:-4px;bottom:-4px;cursor:nwse-resize" @pointerdown={ grab(event, 'se') }></div>
+        <div class="sel-handle" style="left:calc(50% - 4px);bottom:-4px;cursor:ns-resize" @pointerdown={ grab(event, 's') }></div>
+        <div class="sel-handle" style="left:-4px;bottom:-4px;cursor:nesw-resize" @pointerdown={ grab(event, 'sw') }></div>
+        <div class="sel-handle" style="left:-4px;top:calc(50% - 4px);cursor:ew-resize" @pointerdown={ grab(event, 'w') }></div>
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The selection bounding box. The outline itself is non-interactive
+// (pointer-events-none on the root); when `handles` is set, eight resize grips
+// straddle the border with pointer-events-auto so they can grab the pointer. A
+// grip press is stopped from bubbling (it must not reach the stage/marquee) and
+// forwarded up as a { event, dir } resize request.
+export default class SelectionOverlay extends PuzzleView {
+  data(params, props) {
+    return { overlay: props.overlay, handles: !!props.handles };
+  }
+
+  events = {
+    grab: (event, dir) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      event.stopPropagation();
+      if (event.preventDefault) event.preventDefault();
+      if (this.props.resize) this.props.resize({ event, dir });
+    },
+  };
+}
+</scripts>

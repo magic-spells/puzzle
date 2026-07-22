@@ -1,0 +1,91 @@
+<puzzle-view>
+  <header class="flex items-baseline justify-between gap-4 mb-5">
+    <h1 class="text-[1.75rem] text-ink">All posts</h1>
+    <p class="text-muted text-[0.9rem]">
+      { posts.length } { posts.length | pluralize('post', 'posts') }
+    </p>
+  </header>
+
+  <div class="flex flex-wrap gap-2 mb-6">
+    <button
+      class="border rounded-full py-1.5 px-3.5 text-[0.85rem] font-medium cursor-pointer capitalize transition-colors {#if activeTag === 'all'}bg-brand border-brand text-white{:else}bg-surface text-body border-border-soft hover:border-brand hover:text-brand{/if}"
+      type="button"
+      @click={ setTag('all') }>
+      All
+    </button>
+    {#for tag in tags}
+      <button
+        class="border rounded-full py-1.5 px-3.5 text-[0.85rem] font-medium cursor-pointer capitalize transition-colors {#if activeTag === tag}bg-brand border-brand text-white{:else}bg-surface text-body border-border-soft hover:border-brand hover:text-brand{/if}"
+        type="button"
+        @click={ setTag(tag) }>
+        { tag }
+      </button>
+    {/for}
+  </div>
+
+  {#if posts.length > 0}
+    <div class="flex flex-col gap-4">
+      {#for post in posts, i}
+        <PostCard post={ post } index={ i }></PostCard>
+      {/for}
+    </div>
+  {:else}
+    <div class="p-8 text-center text-muted bg-surface border border-dashed border-faint rounded-xl">
+      <p>No posts in this tag yet.</p>
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import PostCard from '../components/PostCard.pzl';
+
+export default class PostsView extends PuzzleView {
+  created() {
+    this.setData('activeTag', 'all');
+  }
+
+  // data() derives the tag list and the filtered, sorted posts from the store.
+  // The active tag is local UI state read back from getData().
+  data(params, props) {
+    const store = this.ctx.store;
+    const activeTag = this.getData().activeTag;
+
+    const allPosts = store.findMany('post');
+    const tags = [...new Set(allPosts.flatMap((post) => post.tags))].sort();
+
+    const matching =
+      activeTag === 'all'
+        ? allPosts
+        : store.findMany('post', { filter: (post) => post.tags.includes(activeTag) });
+
+    const posts = [...matching].sort((a, b) => b.publishedDate - a.publishedDate);
+
+    return {
+      // The template loops with `{#for post in posts, i}` (D29, v1.2) and passes
+      // the loop counter `i` to each PostCard for its stagger delay — no
+      // position-tagged copy needed. `posts` drives the count, the empty-state
+      // check, and the list; keying stays on `post.id` (item form auto-keys by
+      // `<loopvar>.id`, so filter changes reconcile correctly).
+      posts,
+      tags,
+      activeTag
+    };
+  }
+
+  events = {
+    setTag: (tag) => {
+      // D23 derived-list pattern: setData() updates local state but does not
+      // re-run data(), so refresh() recomputes the filtered list from it.
+      this.setData('activeTag', tag);
+      this.refresh();
+    }
+  };
+
+  // Route transition (constellation/doc/DOC-SPEC.md §12) — see Home.pzl for the full rationale.
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 260, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

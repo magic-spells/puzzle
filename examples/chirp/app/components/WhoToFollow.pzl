@@ -1,0 +1,49 @@
+<puzzle-view>
+  <!-- "Who to follow" suggestion card. No props — it queries the store itself for
+       the three most-followed accounts you're NOT already following (excluding
+       yourself). Because the query subscribes, following someone from this card
+       drops them out of the list on the next render (they now pass the
+       followedByMe filter out). Used by Explore and the profile pages — NOT the
+       layout (the layout can't import Agent B components). -->
+  <section class="rounded-2xl border border-line overflow-hidden">
+    <h2 class="px-4 py-3 text-lg font-bold text-fg">Who to follow</h2>
+
+    {#if users.length}
+      <div>
+        {#for u in users, i}
+          <a href="/u/{ u.handle }" class="flex items-center gap-3 px-4 py-3 hover:bg-surface-2 transition-colors hover:no-underline">
+            <Avatar user={ u } size="md" />
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-1">
+                <span class="font-bold text-fg truncate">{ u.name }</span>
+                {#if u.verified}<span class="text-accent shrink-0">✓</span>{/if}
+              </div>
+              <div class="text-muted text-sm truncate">{ u.at }</div>
+            </div>
+            <FollowButton user={ u } />
+          </a>
+        {/for}
+      </div>
+    {:else}
+      <p class="px-4 pb-4 text-muted text-sm">You're following everyone worth following. Nice.</p>
+    {/if}
+  </section>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Avatar from './Avatar.pzl';
+import FollowButton from './FollowButton.pzl';
+
+export default class WhoToFollow extends PuzzleView {
+  data(params, props) {
+    // Suggest accounts I'm not following (and not me), most-followed first,
+    // capped at three. Filtering/sorting live here (SPEC §8), not the template.
+    const users = this.ctx.store
+      .findMany('user', { filter: (u) => u.id !== 'me' && !u.followedByMe })
+      .sort((a, b) => (b.followerCount || 0) - (a.followerCount || 0))
+      .slice(0, 3);
+    return { users };
+  }
+}
+</scripts>

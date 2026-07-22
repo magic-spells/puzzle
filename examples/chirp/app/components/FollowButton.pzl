@@ -1,0 +1,38 @@
+<puzzle-view>
+  <!-- Follow / Following pill. Prop: `user` (the user record to follow). The
+       label is driven by the record's local `followedByMe` flag; clicking calls
+       the model's toggleFollow() (flips the flag + adjusts followerCount in one
+       update(), which re-runs the owning view's data() and re-props us). Follow
+       is the solid accent pill; Following is a ghost ring that reveals a pink
+       "Unfollow" on hover (plain group-hover swap — no extra state). We
+       stopPropagation so a tap on the button inside a clickable row never
+       bubbles into that row's navigation. -->
+  <button
+    type="button"
+    class="group shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors {#if following}bg-transparent text-fg ring-1 ring-hairline hover:ring-like{/if}{#if !following}bg-accent hover:bg-accent-2 text-accent-ink{/if}"
+    @click={ toggle(event) }>
+    {#if following}<span class="group-hover:hidden">Following</span><span class="hidden group-hover:inline text-like">Unfollow</span>{:else}Follow{/if}
+  </button>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class FollowButton extends PuzzleView {
+  data(params, props) {
+    const user = props.user || null;
+    return {
+      user,
+      following: !!(user && user.followedByMe),
+    };
+  }
+
+  events = {
+    toggle: (event) => {
+      event.stopPropagation();
+      const user = this.getData().user;
+      if (user) user.toggleFollow();
+    },
+  };
+}
+</scripts>

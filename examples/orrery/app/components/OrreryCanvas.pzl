@@ -1,0 +1,265 @@
+<puzzle-view>
+  <!-- No width/height attributes on the <canvas>! The vdom patcher only diffs
+       attributes that appear in the template, so imperative attrs survive a
+       re-render — but ONLY if the template never declares them. We size the
+       backing store in mounted()/on resize instead (devicePixelRatio-scaled). -->
+  <div class="orrery-stage relative w-full h-[420px] md:h-[520px]">
+    <canvas class="block w-full h-full" @click={ stageClick(event) }></canvas>
+    <div class="orrery-hint absolute bottom-3 left-1/2 -translate-x-1/2">
+      click a planet to select · click empty space to spawn
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { clamp, randomPlanetColor, randomSpeed, randomSize, nextPlanetName } from '../util.js';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OrreryCanvas — the demo's whole point in one component.
+//
+// THREE ideas, and how they compose:
+//
+//  1. THE STORE IS THE SCENE GRAPH. Each planet is a `body` record holding only
+//     its parameters (distance, size, speed, color, phase, name). Positions are
+//     NEVER stored — they're a pure function of parameters + time.
+//
+//  2. requestAnimationFrame IS THE CLOCK. mounted() starts a rAF loop and
+//     destroyed() cancels it. Every frame advances an elapsed-seconds counter
+//     (only while `running`), computes each planet's angle, and paints. The
+//     store is untouched during animation — no 60fps writes, ever.
+//
+//  3. data() IS THE REACTIVE BRIDGE. data() calls store.findMany('body'), which
+//     auto-subscribes this component to the whole `body` type. Any
+//     createRecord / update() / destroy() anywhere re-runs data(), so the very
+//     next frame's `this.getData()` already reflects the change — a slider drag
+//     retimes an orbit MID-ANIMATION with zero extra wiring. The loop reads
+//     getData() every frame precisely so it always sees the latest scene.
+//
+// The canvas also writes BACK to the store (see stageClick): a click either
+// selects a planet (hit-test → callback prop up to the view) or spawns a new one
+// at the clicked orbit radius via store.createRecord. Same store, two
+// projections: pixels here, DOM rows in the side panel.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TAU = Math.PI * 2;
+const DEG = Math.PI / 180;
+const BG = '#05060a';           // deep space (matches --color-ink)
+const TRAIL_FADE = 'rgba(5, 6, 10, 0.08)'; // low-alpha ink → motion trails
+const SUN_R = 15;
+const MIN_ORBIT = 40;
+const MAX_ORBIT = 280;
+
+export default class OrreryCanvas extends PuzzleView {
+  // findMany('body') here is what subscribes the canvas to the scene. props flow
+  // down from the Home view (the toolbar owns running/trails/selection).
+  data(params, props) {
+    return {
+      bodies: this.ctx.store.findMany('body'),
+      running: !!props.running,
+      trails: !!props.trails,
+      selectedId: props.selectedId || '',
+    };
+  }
+
+  created() {
+    this._raf = 0;
+    this._elapsed = 0;      // seconds of animated time (frozen while paused)
+    this._lastTs = null;
+    this._positions = new Map(); // id → { x, y, r } recorded each frame for hit-testing
+    this._ro = null;
+    this._canvas = null;
+    this._g = null;         // 2d context
+    this._cssW = 0;
+    this._cssH = 0;
+    this._loop = (ts) => this._frame(ts);
+  }
+
+  mounted() {
+    const canvas = this.element.querySelector('canvas');
+    if (!canvas) return;
+    this._canvas = canvas;
+    this._g = canvas.getContext('2d');
+
+    this._resize();
+
+    // Re-size + repaint whenever the stage changes size (responsive columns,
+    // window resize, device rotation).
+    if (typeof ResizeObserver === 'function') {
+      this._ro = new ResizeObserver(() => this._resize());
+      this._ro.observe(canvas.parentElement || canvas);
+    }
+
+    this._lastTs = null;
+    this._raf = requestAnimationFrame(this._loop);
+  }
+
+  destroyed() {
+    if (this._raf) cancelAnimationFrame(this._raf);
+    this._raf = 0;
+    if (this._ro) {
+      this._ro.disconnect();
+      this._ro = null;
+    }
+  }
+
+  events = {
+    // The canvas → store direction. A click is a hit-test against the positions
+    // we recorded on the last painted frame.
+    stageClick: (event) => {
+      const canvas = this._canvas;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      // Hit a planet? Select it (bubbles up to the view via the callback prop).
+      for (const [id, p] of this._positions) {
+        if (Math.hypot(x - p.x, y - p.y) <= p.r + 6) {
+          if (typeof this.props.select === 'function') this.props.select(id);
+          return;
+        }
+      }
+
+      // Missed → spawn a planet at the clicked orbit radius. We choose its phase
+      // so it appears EXACTLY under the cursor right now:
+      //   angle = phase + elapsed*speed  ⇒  phase = clickAngle - elapsed*speed
+      const cx = this._cssW / 2;
+      const cy = this._cssH / 2;
+      const dx = x - cx;
+      const dy = y - cy;
+      const distance = clamp(Math.hypot(dx, dy), MIN_ORBIT, MAX_ORBIT);
+      const clickAngleDeg = Math.atan2(dy, dx) / DEG;
+      const speed = randomSpeed();
+      const phase = clickAngleDeg - this._elapsed * speed;
+
+      this.ctx.store.createRecord('body', {
+        name: nextPlanetName(this.ctx.store),
+        color: randomPlanetColor(),
+        size: randomSize(),
+        distance,
+        speed,
+        phase,
+      });
+      // No setData / no manual redraw needed: createRecord re-runs data() (we're
+      // subscribed), and the loop paints the new body on the next frame.
+    },
+  };
+
+  // ── the clock ──────────────────────────────────────────────────────────────
+  _frame(ts) {
+    this._raf = requestAnimationFrame(this._loop);
+    if (this._lastTs == null) this._lastTs = ts;
+    const dt = (ts - this._lastTs) / 1000;
+    this._lastTs = ts;
+
+    // Only advance time while running — pause freezes the scene but the loop
+    // keeps painting, so edits made while paused still show immediately.
+    const { running } = this.getData();
+    if (running) this._elapsed += dt;
+
+    this._paint();
+  }
+
+  // ── device-pixel-ratio-aware sizing ────────────────────────────────────────
+  _resize() {
+    const canvas = this._canvas;
+    const g = this._g;
+    if (!canvas || !g) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.round(rect.width));
+    const h = Math.max(1, Math.round(rect.height));
+
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    this._cssW = w;
+    this._cssH = h;
+
+    // Draw in CSS pixels; the transform maps them to the dpr-scaled backing store.
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this._paint();
+  }
+
+  // ── the painter (reads the latest scene every frame) ────────────────────────
+  _paint() {
+    const g = this._g;
+    if (!g) return;
+
+    const { bodies, trails, selectedId } = this.getData();
+    const w = this._cssW;
+    const h = this._cssH;
+    const cx = w / 2;
+    const cy = h / 2;
+
+    // Background: full clear normally; a translucent fill when trails are on, so
+    // prior planet pixels fade out gradually into comet-like streaks.
+    if (trails) {
+      g.fillStyle = TRAIL_FADE;
+      g.fillRect(0, 0, w, h);
+    } else {
+      g.clearRect(0, 0, w, h);
+      g.fillStyle = BG;
+      g.fillRect(0, 0, w, h);
+    }
+
+    // Faint orbit rings (redrawn crisp each frame, even under trails).
+    g.lineWidth = 1;
+    g.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    for (const b of bodies) {
+      g.beginPath();
+      g.arc(cx, cy, b.distance, 0, TAU);
+      g.stroke();
+    }
+
+    this._drawSun(g, cx, cy);
+
+    // Planets. Record each one's painted position for the click hit-test.
+    this._positions.clear();
+    for (const b of bodies) {
+      const angle = (b.phase + this._elapsed * b.speed) * DEG;
+      const x = cx + Math.cos(angle) * b.distance;
+      const y = cy + Math.sin(angle) * b.distance;
+      const r = Math.max(1, b.size);
+      const selected = b.id === selectedId;
+
+      g.save();
+      g.shadowColor = b.color;
+      g.shadowBlur = selected ? 20 : 12;
+      g.fillStyle = b.color;
+      g.beginPath();
+      g.arc(x, y, r, 0, TAU);
+      g.fill();
+      g.restore();
+
+      if (selected) {
+        g.beginPath();
+        g.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        g.lineWidth = 2;
+        g.arc(x, y, r + 5, 0, TAU);
+        g.stroke();
+      }
+
+      this._positions.set(b.id, { x, y, r });
+    }
+  }
+
+  _drawSun(g, cx, cy) {
+    const glow = g.createRadialGradient(cx, cy, 0, cx, cy, SUN_R * 2.6);
+    glow.addColorStop(0, 'rgba(255, 224, 160, 1)');
+    glow.addColorStop(0.4, 'rgba(245, 190, 95, 0.85)');
+    glow.addColorStop(1, 'rgba(245, 190, 95, 0)');
+    g.fillStyle = glow;
+    g.beginPath();
+    g.arc(cx, cy, SUN_R * 2.6, 0, TAU);
+    g.fill();
+
+    g.fillStyle = '#ffe6a8';
+    g.beginPath();
+    g.arc(cx, cy, SUN_R * 0.55, 0, TAU);
+    g.fill();
+  }
+}
+</scripts>

@@ -1,0 +1,14 @@
+{
+  "name": "@magic-spells/puzzle-linux-arm64",
+  "version": "0.1.0",
+  "description": "The Linux arm64 binary for the Puzzle framework CLI.",
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "files": ["bin/puzzle"],
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "homepage": "https://github.com/magic-spells/puzzle#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/magic-spells/puzzle.git"
+  }
+}

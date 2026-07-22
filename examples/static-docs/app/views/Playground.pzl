@@ -1,0 +1,58 @@
+<puzzle-view>
+  <section class="max-w-2xl">
+    <p class="font-mono text-[11px] uppercase tracking-[0.3em] text-accent mb-4">Playground</p>
+    <h1 class="font-display text-4xl md:text-5xl text-ink">An SPA island</h1>
+    <p class="mt-4 text-muted leading-relaxed">
+      This route is flagged <code class="font-mono text-sm bg-surface-2 border border-line-2 rounded px-1.5 py-0.5">prerender: false</code>,
+      so the build skips it and writes the plain SPA shell at <code>/playground/</code> —
+      no baked HTML, no <code>data-puzzle-ssg</code> marker. It renders entirely in the
+      browser. The escape hatch for pages that are pure interaction.
+    </p>
+  </section>
+
+  <section class="mt-10 rounded-2xl border border-line bg-surface p-7">
+    <label class="block text-sm text-muted mb-2" for="pg-input">Type something</label>
+    <input
+      id="pg-input"
+      type="text"
+      class="w-full h-12 px-4 rounded-xl bg-paper border border-line text-ink placeholder-faint focus:outline-none focus:border-accent transition-colors"
+      placeholder="Live-rendered, client-side only…"
+      value={ text }
+      @input={ update } />
+
+    <div class="mt-5 flex items-center gap-6">
+      <div>
+        <div class="font-mono text-3xl tabular-nums text-ink">{ text.length }</div>
+        <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">characters</div>
+      </div>
+      <div>
+        <div class="font-mono text-3xl tabular-nums text-ink">{ wordCount }</div>
+        <div class="mt-1 text-[10px] uppercase tracking-[0.22em] text-faint">words</div>
+      </div>
+    </div>
+  </section>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class PlaygroundView extends PuzzleView {
+  created() {
+    this.setData({ text: '' });
+  }
+
+  data() {
+    const text = this.getData().text;
+    const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+    return { text, wordCount };
+  }
+
+  events = {
+    update: (event) => {
+      this.setData('text', event.target.value);
+      // wordCount is derived in data(), so re-run it (SPEC §4).
+      this.refresh();
+    },
+  };
+}
+</scripts>

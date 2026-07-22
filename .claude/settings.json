@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__constellation",
+      "mcp__constellation__add_connected_repo",
+      "mcp__constellation__add_connection",
+      "mcp__constellation__add_connections",
+      "mcp__constellation__append_note",
+      "mcp__constellation__assemble",
+      "mcp__constellation__check_integrity",
+      "mcp__constellation__check_sync",
+      "mcp__constellation__create_card",
+      "mcp__constellation__create_cards",
+      "mcp__constellation__delete_card",
+      "mcp__constellation__describe_type",
+      "mcp__constellation__diff_plan",
+      "mcp__constellation__edit_section",
+      "mcp__constellation__get_card",
+      "mcp__constellation__init_plan",
+      "mcp__constellation__list_cards",
+      "mcp__constellation__list_connected_repos",
+      "mcp__constellation__list_notes",
+      "mcp__constellation__plan_log",
+      "mcp__constellation__remove_connected_repo",
+      "mcp__constellation__remove_connection",
+      "mcp__constellation__rename_card",
+      "mcp__constellation__search",
+      "mcp__constellation__set_sync_point",
+      "mcp__constellation__set_verified",
+      "mcp__constellation__stale_report",
+      "mcp__constellation__start_viewer",
+      "mcp__constellation__stop_viewer",
+      "mcp__constellation__traverse",
+      "mcp__constellation__update_card"
+    ]
+  }
+}

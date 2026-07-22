@@ -1,0 +1,31 @@
+<puzzle-view>
+  <div class="prose-doc rounded-2xl border border-line bg-surface p-6">
+    <h2 class="font-display text-2xl text-ink">{ 'template syntax' | titlecase }</h2>
+    <p>
+      A Puzzle template is HTML with a small set of block tags and inline
+      expressions. The heading above was produced by piping a plain string through
+      the <code>titlecase</code> formatter registered in <code>app.js</code>.
+    </p>
+    <ul class="mt-3 space-y-2 text-muted list-disc pl-5">
+      <li><strong class="text-ink font-medium">Interpolation</strong> — wrap an expression in curly braces to print it.</li>
+      <li><strong class="text-ink font-medium">Conditionals</strong> — <code>#if</code> / <code>:else</code> / <code>#unless</code> blocks.</li>
+      <li><strong class="text-ink font-medium">Loops</strong> — <code>#for item in items</code> blocks.</li>
+      <li><strong class="text-ink font-medium">Formatters</strong> — pipe a value through a display transform, Liquid-style.</li>
+      <li><strong class="text-ink font-medium">Events</strong> — bind a handler with an <code>@click</code>-style attribute.</li>
+    </ul>
+    <p class="mt-4">
+      This is the <strong class="text-ink font-semibold">sibling child</strong>
+      (<code>path: 'templates'</code>). It defines its own <code>meta.title</code>,
+      so at <code>/guide/templates</code> the SSG title walk stops here — check the
+      browser tab.
+    </p>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The sibling child. Defines meta.title in routes.js, so it wins the SSG title
+// walk at its own /guide/templates/ path.
+export default class GuideTemplates extends PuzzleView {}
+</scripts>

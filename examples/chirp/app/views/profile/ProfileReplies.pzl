@@ -1,0 +1,39 @@
+<puzzle-view>
+  <!-- /u/:handle/replies pane: the owner's replies (isReply), newest first. Each
+       ChirpCard shows its own "Replying to @x" context line. -->
+  {#if replies.length}
+    {#for post in replies, i}
+      <ChirpCard post={ post } index={ i } />
+    {/for}
+  {:else}
+    <div class="py-16 px-8 text-center">
+      <h2 class="text-xl font-bold text-fg">No replies yet</h2>
+      <p class="mt-2 text-muted">Replies to other chirps will show up here.</p>
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ChirpCard from '@/components/ChirpCard.pzl';
+
+const byNewest = (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+
+export default class ProfileReplies extends PuzzleView {
+  data(params, props) {
+    const store = this.ctx.store;
+    const user = store.findMany('user', { filter: (u) => u.handle === params.handle })[0] || null;
+
+    const replies = user
+      ? store.findMany('post', { filter: (p) => p.authorId === user.id && p.isReply }).sort(byNewest)
+      : [];
+
+    return { replies };
+  }
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateX(8px)' }, to: { opacity: 1, transform: 'translateX(0)' }, duration: 220, easing: 'ease-out' },
+    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 120, easing: 'ease-in' }
+  };
+}
+</scripts>

@@ -1,0 +1,112 @@
+<puzzle-view class="min-h-screen bg-white text-ink">
+  <!-- Fixed left sidebar + scrollable main. The layout stays mounted across
+       every route (all routes share it), so only <Slot/> swaps on navigation
+       and the page list / active highlight persist. data(params) re-runs on each
+       reused-layout navigation (SPEC §9), so `activeId` tracks the URL. -->
+  <aside class="fixed inset-y-0 left-0 z-10 w-60 flex flex-col bg-sidebar border-r border-line">
+    <div class="px-4 pt-4 pb-3">
+      <span class="font-display text-lg font-semibold tracking-tight text-ink">Grimoire ✦</span>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto px-2 pb-2">
+      {#if pages.length}
+        {#for page in pages}
+          <div
+            class="page-row group flex items-center gap-1.5 rounded-md px-2 py-1 cursor-pointer hover:bg-hover {#if page.id === activeId}bg-hover{/if}"
+            @click={ open(page.id) }
+          >
+            <span class="w-5 shrink-0 text-center text-base leading-6">{ page.icon }</span>
+            <span class="flex-1 min-w-0 truncate text-sm text-ink">{ page.title }</span>
+            <button
+              class="shrink-0 w-5 h-5 flex items-center justify-center rounded text-faint opacity-0 group-hover:opacity-100 hover:bg-hover hover:text-ink text-xs leading-none"
+              @click:stop={ remove(page.id) }
+              aria-label="Delete page"
+            >✕</button>
+          </div>
+        {/for}
+      {:else}
+        <p class="px-2 py-1 text-xs text-faint">No pages yet.</p>
+      {/if}
+    </nav>
+
+    <div class="px-2 py-2 border-t border-line">
+      <button
+        class="w-full flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted hover:bg-hover hover:text-ink"
+        @click={ newPage }
+      >
+        <span class="w-5 text-center leading-none">＋</span>
+        <span>New page</span>
+      </button>
+    </div>
+  </aside>
+
+  <main class="ml-60 min-h-screen">
+    <Slot/>
+  </main>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class DefaultLayout extends PuzzleView {
+  // Sidebar model. findMany auto-subscribes the layout to the page collection,
+  // so creating/deleting a page re-runs this and the list stays live. Sorting
+  // happens here, never in the template (SPEC §6).
+  data(params, props) {
+    const pages = this.ctx.store
+      .findMany('page')
+      .slice()
+      .sort((a, b) => a.order - b.order);
+
+    return {
+      pages,
+      // On `/p/:id` this is the current page id; on `/` it is undefined, so no
+      // row highlights. Layouts receive the merged route params (SPEC §9).
+      activeId: params.id || null,
+    };
+  }
+
+  events = {
+    open: (id) => {
+      this.ctx.router.push('/p/' + id);
+    },
+
+    newPage: () => {
+      const store = this.ctx.store;
+      const maxOrder = store
+        .findMany('page')
+        .reduce((max, p) => Math.max(max, p.order), -1);
+      const page = store.createRecord('page', {
+        title: 'Untitled',
+        icon: '📄',
+        order: maxOrder + 1,
+      });
+      this.ctx.router.push('/p/' + page.id);
+    },
+
+    remove: (id) => {
+      const store = this.ctx.store;
+      const page = store.findOne('page', id);
+      if (!page) return;
+
+      // Delete the page's blocks first, then the page itself.
+      store
+        .findMany('block', { filter: (b) => b.pageId === id })
+        .forEach((b) => b.destroy());
+
+      const wasActive = this.getData().activeId === id;
+      page.destroy();
+
+      // If we deleted the page we were viewing, land somewhere sensible.
+      if (wasActive) {
+        const remaining = store
+          .findMany('page')
+          .slice()
+          .sort((a, b) => a.order - b.order);
+        if (remaining.length) this.ctx.router.push('/p/' + remaining[0].id);
+        else this.ctx.router.push('/');
+      }
+    },
+  };
+}
+</scripts>

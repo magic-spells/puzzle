@@ -1,0 +1,103 @@
+<puzzle-view class="w-full max-w-lg mx-auto">
+  <div class="bg-white/5 border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+    <div class="p-5 border-b border-white/10">
+      <form class="flex items-center gap-2.5" @submit={ addTodo(event) }>
+        <input
+          type="text"
+          class="flex-1 h-11 px-4 rounded-xl bg-black/30 border border-white/10 text-white placeholder-white/40 focus:outline-none focus:border-sky-400/60"
+          placeholder="What needs doing?"
+          value={ newTodoText }
+          @input={ updateNewTodoText(event) }
+          autofocus />
+        <button
+          type="submit"
+          class="h-11 px-5 rounded-xl bg-sky-500 text-white font-semibold hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed"
+          disabled={ !newTodoText.trim() }>
+          Add
+        </button>
+      </form>
+    </div>
+
+    {#if todos.length > 0}
+      <div class="grid grid-cols-2 divide-x divide-white/10 border-b border-white/10 text-center">
+        <div class="py-4">
+          <div class="font-mono text-2xl text-white">{ activeCount }</div>
+          <div class="mt-1 text-[10px] uppercase tracking-[0.2em] text-white/40">active</div>
+        </div>
+        <div class="py-4">
+          <div class="font-mono text-2xl text-white">{ todos.length }</div>
+          <div class="mt-1 text-[10px] uppercase tracking-[0.2em] text-white/40">total</div>
+        </div>
+      </div>
+
+      <div class="max-h-96 overflow-y-auto">
+        {#for todo in todos}
+          <TodoItem todo={ todo } @toggle={ toggleTodo(todo) } @remove={ deleteTodo(todo) } />
+        {/for}
+      </div>
+    {:else}
+      <div class="py-16 px-8 text-center">
+        <div class="text-4xl mb-3 opacity-40">📝</div>
+        <p class="text-sm text-white/60">Add your first todo above to get started.</p>
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<scripts lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+import TodoItem from '../components/TodoItem.pzl';
+import type { TodoRecord } from '../models/todo';
+
+interface HomeModel {
+  todos: TodoRecord[];
+  activeCount: number;
+  newTodoText: string;
+}
+
+export default class TypedHome extends PuzzleView {
+  animations = {
+    in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 200 },
+  };
+
+  created(): void {
+    this.setData({ newTodoText: '' });
+  }
+
+  data(): HomeModel {
+    const store = this.ctx.store;
+    const todos = store.findMany('todo') as TodoRecord[];
+    const local = this.getData<{ newTodoText: string }>();
+
+    return {
+      todos,
+      activeCount: todos.filter((t) => !t.completed).length,
+      newTodoText: local.newTodoText,
+    };
+  }
+
+  events = {
+    updateNewTodoText: (event: Event): void => {
+      const input = event.target as HTMLInputElement;
+      this.setData('newTodoText', input.value);
+    },
+
+    addTodo: (event: Event): void => {
+      event.preventDefault();
+      const text: string = this.getData<{ newTodoText: string }>().newTodoText.trim();
+      if (text) {
+        this.ctx.store.createRecord('todo', { text });
+        this.setData('newTodoText', '');
+      }
+    },
+
+    toggleTodo: (todo: TodoRecord): void => {
+      todo.toggle();
+    },
+
+    deleteTodo: (todo: TodoRecord): void => {
+      todo.destroy();
+    },
+  };
+}
+</scripts>

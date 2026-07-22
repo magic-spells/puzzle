@@ -1,0 +1,71 @@
+<puzzle-view class="view view-about">
+  <div class="view-eyebrow">03 — About</div>
+  <h2 class="view-title">About</h2>
+  <p class="view-body">
+    Sequential mode plays the outgoing view's <em>out</em> fully, then mounts the
+    incoming view and plays its <em>in</em> — a clean but gapped hand-off.
+  </p>
+  <p class="view-body view-body-2">
+    Overlap mode (<code>transitionMode: 'overlap'</code>) pins the leaver in place
+    and plays both at once, so the routes cross-slide with no blank frame.
+  </p>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class AboutView extends PuzzleView {
+  // Identical shared-axis slide (SPEC §12) — the mode is the only variable.
+  animations = {
+    in: {
+      from: { opacity: 0, transform: 'translateX(48px)' },
+      to: { opacity: 1, transform: 'translateX(0)' },
+      duration: 340,
+      easing: 'cubic-bezier(0.22, 1, 0.36, 1)'
+    },
+    out: {
+      from: { opacity: 1, transform: 'translateX(0)' },
+      to: { opacity: 0, transform: 'translateX(-48px)' },
+      duration: 300,
+      easing: 'cubic-bezier(0.55, 0, 0.55, 0.2)'
+    }
+  };
+
+  data() {
+    return {};
+  }
+}
+</scripts>
+
+<styles>
+.view-about {
+  background:
+    radial-gradient(120% 120% at 85% 10%, rgba(45, 212, 191, 0.4), transparent 55%),
+    linear-gradient(155deg, #0f766e 0%, #065f46 55%, #064e3b 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  justify-content: center;
+  gap: 14px;
+}
+
+.view-about .view-body {
+  color: rgba(240, 253, 250, 0.86);
+}
+
+.view-about code,
+.view-about em {
+  font-style: normal;
+  color: #ecfeff;
+}
+
+.view-about code {
+  font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+  font-size: 12.5px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.view-body-2 {
+  color: rgba(240, 253, 250, 0.72);
+}
+</styles>

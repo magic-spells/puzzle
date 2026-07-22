@@ -1,0 +1,29 @@
+<puzzle-view>
+  <section class="max-w-2xl">
+    <p class="font-mono text-[11px] uppercase tracking-[0.3em] text-accent mb-4">The guide</p>
+    <h1 class="font-display text-4xl md:text-5xl text-ink">How Puzzle fits together</h1>
+    <p class="mt-4 text-muted leading-relaxed">
+      A nested-routes shell (v1.3, D30): this view stays mounted while the pane
+      below swaps through its <code class="font-mono text-sm bg-surface-2 border border-line-2 rounded px-1 py-0.5">{ '<Slot/>' }</code>.
+      Under SSG each pane is prerendered at its own joined path.
+    </p>
+
+    <nav class="mt-6 flex gap-2 border-b border-line pb-3">
+      <a href="/guide" class="px-3 py-1.5 rounded-lg text-sm text-accent hover:bg-surface-2 transition-colors">Overview</a>
+      <a href="/guide/templates" class="px-3 py-1.5 rounded-lg text-sm text-accent hover:bg-surface-2 transition-colors">Template syntax</a>
+    </nav>
+  </section>
+
+  <section class="mt-8 max-w-2xl">
+    <Slot />
+  </section>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Nested shell (SPEC §12, D30). It defines meta.title in routes.js ("Guide · …");
+// its index child defines none, so the SSG leaf → root title walk falls through
+// to this title at /guide/. The sibling pane overrides it at /guide/templates/.
+export default class GuideShell extends PuzzleView {}
+</scripts>

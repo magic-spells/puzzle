@@ -1,0 +1,24 @@
+<puzzle-view class="evt-mods">
+  <form @submit:prevent={ addTodo(event) }>
+    <input @keydown:enter={ submit } @keydown:escape:prevent={ cancel } />
+  </form>
+  <button @click:stop:once={ handleOnce }>Once</button>
+  <button @click={ plain }>Plain</button>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class EventMods extends PuzzleView {
+  data() {
+    return {};
+  }
+  events = {
+    addTodo: (event) => {},
+    submit: (event) => {},
+    cancel: (event) => {},
+    handleOnce: (event) => {},
+    plain: (event) => {},
+  };
+}
+</scripts>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0a0a0c">
+  <title>Overlapping route transitions — Puzzle v1.24</title>
+  <link href="/styles.css" rel="stylesheet">
+  <style>
+    /* ---------------------------------------------------------------------
+       Page shell. The two app columns and every ancestor up to <body> stay
+       free of transform / filter / contain — those would re-root the overlap
+       pin's `position: fixed` and break the effect (SPEC §26).
+       --------------------------------------------------------------------- */
+    :root {
+      --bg: #0a0a0c;
+      --fg: #f5f5f7;
+      --muted: rgba(255, 255, 255, 0.58);
+      --faint: rgba(255, 255, 255, 0.34);
+      --line: rgba(255, 255, 255, 0.09);
+      --accent: #a78bfa;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(90% 60% at 50% -10%, rgba(124, 58, 237, 0.16), transparent 60%),
+        var(--bg);
+      color: var(--fg);
+      font-family: "Hanken Grotesk", system-ui, -apple-system, Segoe UI, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 56px 24px 72px;
+    }
+
+    header.page-head {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .page-eyebrow {
+      font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    h1.page-title {
+      margin: 14px 0 10px;
+      font-size: 38px;
+      line-height: 1.1;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .page-sub {
+      margin: 0 auto;
+      max-width: 60ch;
+      font-size: 15px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    /* Control bar — populated by app.js; drives BOTH apps at once. */
+    #controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      margin: 28px 0 34px;
+    }
+
+    .ctl-group {
+      display: inline-flex;
+      gap: 8px;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .ctl {
+      appearance: none;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      padding: 9px 16px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      background: transparent;
+      cursor: pointer;
+      transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .ctl:hover { color: var(--fg); }
+
+    .ctl-route.is-active {
+      color: #12121a;
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+
+    .ctl-history { color: var(--faint); }
+    .ctl-history:hover { color: var(--fg); border-color: var(--line); }
+
+    /* Two columns; each has a label above its app container. Fixed min-height
+       so the sequential side's mid-transition gap never jumps the page. */
+    .stage-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 22px;
+    }
+
+    @media (max-width: 720px) {
+      .stage-grid { grid-template-columns: 1fr; }
+    }
+
+    .stage-col { min-width: 0; }
+
+    .stage-label {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-family: ui-monospace, "JetBrains Mono", Menlo, monospace;
+      font-size: 12px;
+      color: var(--fg);
+    }
+
+    .stage-label .tag {
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--faint);
+    }
+
+    /* App mount points. min-height holds the column steady through transitions. */
+    #app-seq,
+    #app-overlap {
+      min-height: 480px;
+      display: flex;
+    }
+
+    #app-seq > *,
+    #app-overlap > * { flex: 1; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-head">
+      <div class="page-eyebrow">Puzzle v1.24 · D56</div>
+      <h1 class="page-title">Overlapping route transitions</h1>
+      <p class="page-sub">
+        The same three-route app, mounted twice. One control bar drives both.
+        On the left, default <strong>sequential</strong> transitions leave a gap
+        as one view slides out before the next slides in. On the right,
+        <strong>transitionMode: 'overlap'</strong> cross-slides them concurrently.
+      </p>
+    </header>
+
+    <!-- Buttons injected here by app.js, wired to push/back/forward on BOTH apps. -->
+    <div id="controls"></div>
+
+    <div class="stage-grid">
+      <section class="stage-col">
+        <div class="stage-label">
+          transitionMode: 'sequential'<span class="tag">default</span>
+        </div>
+        <div id="app-seq"></div>
+      </section>
+
+      <section class="stage-col">
+        <div class="stage-label">
+          transitionMode: 'overlap'<span class="tag">v1.24</span>
+        </div>
+        <div id="app-overlap"></div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

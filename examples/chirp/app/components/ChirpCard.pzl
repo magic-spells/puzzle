@@ -1,0 +1,167 @@
+<puzzle-view>
+  <!-- One row in any feed. The WHOLE card navigates to the chirp's detail page
+       (@click on the <article> root → router.push in `open`); every inner
+       interactive thing (author link, avatar, @mentions, #hashtags, the reply /
+       rechirp / like controls) must swallow that click so it doesn't double-fire
+       card navigation. Anchors go through `nav()` which does BOTH
+       preventDefault (cancel the browser's own follow) AND stopPropagation
+       (cancel the card's router.push), then routes explicitly — deterministic,
+       no reliance on the router's ambient <a> interception racing the card.
+       Props contract (fixed — Home, Explore, PostDetail and the profile panes all
+       render this): `post` (a post record) and `index` (feed position → stagger). -->
+  <article
+    class="flex gap-3 px-4 py-3 border-b border-line hover:bg-surface-2 transition-colors cursor-pointer"
+    @click={ open(event) }>
+    <!-- Author avatar → author profile. -->
+    <a href="{ authorPath }" class="shrink-0" @click={ nav(authorPath, event) }>
+      <Avatar user={ avatarUser } size="md" />
+    </a>
+
+    <div class="flex-1 min-w-0">
+      <!-- Byline: name · @handle · relative time. -->
+      <div class="flex items-center gap-1 text-sm min-w-0">
+        <a href="{ authorPath }" class="font-bold text-fg hover:underline truncate" @click={ nav(authorPath, event) }>{ authorName }</a>
+        {#if authorVerified}<span class="text-accent shrink-0">✓</span>{/if}
+        <a href="{ authorPath }" class="text-muted truncate hover:underline" @click={ nav(authorPath, event) }>{ authorAt }</a>
+        <span class="text-muted shrink-0">·</span>
+        <span class="text-muted shrink-0">{ post.createdAt | timeago }</span>
+      </div>
+
+      <!-- Replying-to context line, only for replies. -->
+      {#if isReply}
+        <div class="text-sm text-muted">
+          Replying to <a href="{ parentPath }" class="text-accent hover:underline" @click={ nav(parentPath, event) }>{ parentAt }</a>
+        </div>
+      {/if}
+
+      <!-- Body. Parsed into typed segments in data() (SPEC §8 keeps logic out of
+           the template); each segment is rendered by kind with {#case} (v1.7,
+           D37) — mentions/hashtags become accent links, plain runs are text.
+           The {#for} body root is a <span> (an element, not a bare {#case}) so
+           the compiler is happy, and the spans stay inline so the sentence flows. -->
+      <div class="mt-0.5 text-fg whitespace-pre-wrap break-words">
+        {#for seg in segments, si}<span>{#case seg.kind}{:when 'mention'}<a href="/u/{ seg.value }" class="text-accent hover:underline" @click={ nav('/u/' + seg.value, event) }>@{ seg.value }</a>{:when 'hashtag'}<a href="/explore" class="text-accent hover:underline" @click={ nav('/explore', event) }>#{ seg.value }</a>{:else}{ seg.value }{/case}</span>{/for}
+      </div>
+
+      <!-- Action row. Counts run through | compact (847 → "847", 3.4M). Reply
+           icon routes to the detail thread; rechirp/like toggle the record's
+           local flags and light up green/pink. record.update() (inside the model
+           methods) notifies subscribers, so the feed's owning view re-runs data()
+           and this same card re-renders with the new count. -->
+      <div class="flex items-center gap-6 mt-2 text-muted text-sm">
+        <button type="button" class="flex items-center gap-1.5 hover:text-accent transition-colors" @click={ nav('/post/' + post.id, event) }>
+          <span class="text-base leading-none">💬</span>{#if post.replyCount}<span>{ post.replyCount | compact }</span>{/if}
+        </button>
+        <button type="button" class="flex items-center gap-1.5 transition-colors {#if post.rechirped}text-boost{/if}{#if !post.rechirped}hover:text-boost{/if}" @click={ toggleRechirp(event) }>
+          <span class="text-base leading-none">🔁</span>{#if post.rechirpCount}<span>{ post.rechirpCount | compact }</span>{/if}
+        </button>
+        <button type="button" class="flex items-center gap-1.5 transition-colors {#if post.liked}text-like{/if}{#if !post.liked}hover:text-like{/if}" @click={ toggleLike(event) }>
+          <span class="text-base leading-none">{#if post.liked}♥{:else}♡{/if}</span>{#if post.likeCount}<span>{ post.likeCount | compact }</span>{/if}
+        </button>
+      </div>
+    </div>
+  </article>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Avatar from './Avatar.pzl';
+
+// Split a chirp body into typed segments for {#case}-driven rendering. @mentions
+// and #hashtags become their own segments; everything else is plain text (spaces
+// included, so the rendered spans re-assemble the original sentence). A single
+// pass, kept module-level so it isn't recreated on every data() run.
+function parseBody(body) {
+  const text = String(body || '');
+  const segments = [];
+  const re = /([@#])([A-Za-z0-9_]+)/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) segments.push({ kind: 'text', value: text.slice(last, m.index) });
+    segments.push({ kind: m[1] === '@' ? 'mention' : 'hashtag', value: m[2] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) segments.push({ kind: 'text', value: text.slice(last) });
+  // Guarantee at least one segment so the {#for} always has a body.
+  return segments.length ? segments : [{ kind: 'text', value: '' }];
+}
+
+export default class ChirpCard extends PuzzleView {
+  data(params, props) {
+    const post = props.post || null;
+    const store = this.ctx.store;
+
+    // Author join — subscribes this card to the author record too.
+    const author = post ? store.findOne('user', post.authorId) : null;
+
+    // Reply context: resolve the parent chirp's author for the "Replying to @x"
+    // line. Both joins are guarded (parent may not be seeded yet, or was deleted).
+    let parentAuthor = null;
+    if (post && post.isReply) {
+      const parent = store.findOne('post', post.replyToId);
+      parentAuthor = parent ? store.findOne('user', parent.authorId) : null;
+    }
+
+    return {
+      post,
+      segments: parseBody(post ? post.body : ''),
+      avatarUser: author,
+      authorName: author ? author.name : 'Unknown',
+      authorAt: author ? author.at : '',
+      authorPath: author ? '/u/' + author.handle : '#',
+      authorVerified: !!(author && author.verified),
+      isReply: !!(post && post.isReply),
+      parentAt: parentAuthor ? parentAuthor.at : '@someone',
+      parentPath: parentAuthor ? '/u/' + parentAuthor.handle : '#',
+    };
+  }
+
+  events = {
+    // Card body → detail. Text/whitespace clicks bubble here; inner controls
+    // stopPropagation so they never reach this.
+    open: () => {
+      const post = this.getData().post;
+      if (post) this.ctx.router.push('/post/' + post.id);
+    },
+
+    // Explicit navigation for inner anchors. preventDefault cancels the anchor's
+    // own load; stopPropagation cancels the card's open(); then we route.
+    nav: (path, event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.ctx.router.push(path);
+    },
+
+    // Local engagement toggles. stopPropagation keeps the tap on the button
+    // (never the card). The model methods flip the flag + count in one update().
+    toggleLike: (event) => {
+      event.stopPropagation();
+      const post = this.getData().post;
+      if (post) post.toggleLike();
+    },
+    toggleRechirp: (event) => {
+      event.stopPropagation();
+      const post = this.getData().post;
+      if (post) post.toggleRechirp();
+    },
+  };
+
+  // Per-instance staggered entrance (stays' ListingCard pattern). The parent
+  // feed threads each row's position in as `index` via {#for … , i}; a getter,
+  // not a static field, because the delay is read per instance at mount
+  // (DOC-SPEC §12). Enter-only — feed rows shouldn't animate out one by one.
+  get animations() {
+    const index = this.props.index ?? 0;
+    return {
+      in: {
+        from: { opacity: 0, transform: 'translateY(8px)' },
+        to: { opacity: 1, transform: 'translateY(0)' },
+        duration: 260,
+        delay: index * 40,
+        easing: 'ease-out',
+      },
+    };
+  }
+}
+</scripts>

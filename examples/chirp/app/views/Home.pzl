@@ -1,0 +1,128 @@
+<puzzle-view>
+  <!-- The home timeline. This is one of the two skeleton views (SPEC §16): its
+       data() is async and awaits the (memoized) store seed, so on a cold load the
+       <puzzle-skeleton> below renders instantly in place while the fetch is in
+       flight, then the real feed patches over it once data() commits — the
+       navigation no longer gates on the load. Everything else is a normal feed:
+       a "For you" / "Following" tab switch (local state via setData+refresh, the
+       stays Home chip pattern), the composer, and the chirp list. -->
+
+  <!-- Tab bar. Sticky so it stays pinned as the feed scrolls under it. -->
+  <div class="sticky top-0 z-10 flex border-b border-line bg-bg/80 backdrop-blur">
+    <button
+      type="button"
+      class="flex-1 py-4 text-sm font-semibold hover:bg-surface-2 transition-colors {#if activeTab === 'for-you'}text-fg{/if}{#if activeTab !== 'for-you'}text-muted{/if}"
+      @click={ setTab('for-you') }>
+      <span class="relative inline-block pb-3 {#if activeTab === 'for-you'}border-b-4 border-accent{/if}">For you</span>
+    </button>
+    <button
+      type="button"
+      class="flex-1 py-4 text-sm font-semibold hover:bg-surface-2 transition-colors {#if activeTab === 'following'}text-fg{/if}{#if activeTab !== 'following'}text-muted{/if}"
+      @click={ setTab('following') }>
+      <span class="relative inline-block pb-3 {#if activeTab === 'following'}border-b-4 border-accent{/if}">Following</span>
+    </button>
+  </div>
+
+  <!-- Composer at the top of the timeline, X-style. -->
+  <ComposeBox />
+
+  <!-- Feed, or the appropriate empty state. -->
+  {#if feed.length}
+    {#for post in feed, i}
+      <ChirpCard post={ post } index={ i } />
+    {/for}
+  {:else}
+    {#if activeTab === 'following'}
+      <!-- {#unless} showcase (v1.7, D36): the "Following" tab with nobody in it. -->
+      {#unless following.length}
+        <div class="py-16 px-8 text-center">
+          <h2 class="text-xl font-bold text-fg">Your Following feed is quiet</h2>
+          <p class="mt-2 text-muted">You're not following anyone yet — find folks on <a href="/explore" class="text-accent hover:underline">Explore</a>.</p>
+        </div>
+      {/unless}
+    {:else}
+      <div class="py-16 px-8 text-center text-muted">No chirps yet. Be the first to say something.</div>
+    {/if}
+  {/if}
+</puzzle-view>
+
+<puzzle-skeleton>
+  <!-- Shown while the first data() resolves (SPEC §16). Only created()-seeded
+       state is readable here, so this is deliberately static: a composer
+       placeholder plus five shimmering chirp rows built with a range {#for}. -->
+  <div>
+    <div class="flex gap-3 px-4 py-3 border-b border-line">
+      <div class="skeleton-shimmer w-10 h-10 rounded-full shrink-0"></div>
+      <div class="flex-1 space-y-3 pt-1">
+        <div class="skeleton-shimmer h-5 w-2/3 rounded"></div>
+        <div class="skeleton-shimmer h-8 w-24 rounded-full ml-auto"></div>
+      </div>
+    </div>
+    {#for 1...5}
+      <div class="flex gap-3 px-4 py-3 border-b border-line">
+        <div class="skeleton-shimmer w-10 h-10 rounded-full shrink-0"></div>
+        <div class="flex-1 space-y-2 pt-1">
+          <div class="skeleton-shimmer h-4 w-40 rounded"></div>
+          <div class="skeleton-shimmer h-4 w-full rounded"></div>
+          <div class="skeleton-shimmer h-4 w-4/5 rounded"></div>
+        </div>
+      </div>
+    {/for}
+  </div>
+</puzzle-skeleton>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ChirpCard from '../components/ChirpCard.pzl';
+import ComposeBox from '../components/ComposeBox.pzl';
+import { seedStore } from '../seed.js';
+
+// Newest-first comparator (ISO datetimes sort lexicographically).
+const byNewest = (a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+
+export default class HomeView extends PuzzleView {
+  // The tab is local UI state; seed it before the first data() run.
+  created() {
+    this.setData({ activeTab: 'for-you' });
+  }
+
+  async data(params, props) {
+    // Skeleton view: kick (or join) the memoized seed, then read synchronously.
+    // Because seedStore() is memoized this is safe to await on every data() run —
+    // it never re-initiates a load (the D21 gotcha the seed contract guards).
+    await seedStore(this.ctx.store);
+
+    const store = this.ctx.store;
+    const activeTab = this.getData().activeTab || 'for-you';
+
+    const users = store.findMany('user');
+    const topLevel = store.findMany('post').filter((p) => !p.isReply).sort(byNewest);
+
+    // "Following" = chirps by accounts I follow, plus my own. Computed here so
+    // the {#unless} empty state can key off `following.length`.
+    const followedIds = new Set(users.filter((u) => u.followedByMe).map((u) => u.id));
+    followedIds.add('me');
+    const following = topLevel.filter((p) => followedIds.has(p.authorId));
+
+    return {
+      activeTab,
+      following,
+      feed: activeTab === 'following' ? following : topLevel,
+    };
+  }
+
+  events = {
+    // Flip the tab, then refresh() so data() recomputes `feed` from it
+    // (setData alone won't re-run data() — SPEC §4).
+    setTab: (tab) => {
+      this.setData('activeTab', tab);
+      this.refresh();
+    },
+  };
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 240, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },   to: { opacity: 0, transform: 'translateY(-6px)' }, duration: 150, easing: 'ease-in' }
+  };
+}
+</scripts>

@@ -1,0 +1,28 @@
+
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class IndexedFor extends PuzzleView {
+  data() {
+    return { items: this.ctx.store.findMany('item') };
+  }
+}
+
+import { ViewNode } from '@magic-spells/puzzle';
+
+IndexedFor.prototype.render = function () {
+  const __d = this.getData();
+  const __f = this.ctx.formatters.getAll();
+
+  return new ViewNode('puzzle-view', { class: 'list' }, [
+    new ViewNode('ul', { class: 'items' },
+      __d.items.map((item, i) =>
+        new ViewNode('li', {
+          key: ViewNode.keyOf(item),
+          class: 'item',
+        }, [
+          new ViewNode('text', { value: String(i + 1) + '. ' + String(item.name) }),
+        ])
+      )
+    ),
+  ]);
+};

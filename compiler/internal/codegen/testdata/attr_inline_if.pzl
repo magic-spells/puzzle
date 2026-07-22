@@ -1,0 +1,13 @@
+<puzzle-view class="root">
+  <span class="badge {#if active}on{:else}off{/if}">Status</span>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class AttrInlineIf extends PuzzleView {
+  data() {
+    return { active: false };
+  }
+}
+</scripts>

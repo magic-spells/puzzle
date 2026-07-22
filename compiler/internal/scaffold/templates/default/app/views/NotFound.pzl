@@ -1,0 +1,16 @@
+<puzzle-view class="w-full">
+  <div class="space-y-4 py-12 text-center">
+    <p class="font-mono text-sm text-rose-500">404</p>
+    <h1 class="text-3xl font-semibold tracking-tight">Page not found</h1>
+    <p class="text-gray-500">The page you're looking for doesn't exist or has moved.</p>
+    <a href="/" class="inline-block text-sm font-medium text-rose-500 hover:text-rose-600">
+      Back home
+    </a>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class NotFound extends PuzzleView {}
+</scripts>

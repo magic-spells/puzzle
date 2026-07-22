@@ -1,0 +1,5 @@
+**/*.min.js
+**/*.min.css
+assets/
+node_modules/
+**/*.md

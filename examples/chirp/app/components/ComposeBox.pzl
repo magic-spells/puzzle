@@ -1,0 +1,114 @@
+<puzzle-view>
+  <!-- The composer, reused for both top-level chirps (Home) and replies
+       (PostDetail). Props: `replyToId` ('' = a top-level chirp) and `placeholder`
+       (default "What's happening?"). `draft` is LOCAL UI state (setData, not the
+       store) so keystrokes stay cheap; the live counter is derived in data(), so
+       onInput does setData THEN refresh() to recompute it (setData alone never
+       re-runs data() — SPEC §4). Two event-modifier showcases live here (v1.7,
+       D38): the form commits with @submit:prevent (no page reload) and Escape in
+       the textarea clears the draft via @keydown:escape. -->
+  <form class="flex gap-3 px-4 py-3 border-b border-line" @submit:prevent={ submitChirp }>
+    <a href="{ mePath }" class="shrink-0"><Avatar user={ me } size="md" /></a>
+
+    <div class="flex-1 min-w-0">
+      <textarea
+        rows="2"
+        value={ draft }
+        placeholder="{ placeholder }"
+        class="w-full bg-transparent text-fg text-lg placeholder-faint resize-none focus:outline-none py-1"
+        @input={ onInput(event) }
+        @keydown:escape={ clearDraft }></textarea>
+
+      <div class="flex items-center justify-between mt-1 pt-2 border-t border-line">
+        <!-- Remaining characters; turns like-pink as you cross into the last 20,
+             and negative once you're over the 280 limit. -->
+        <span class="text-sm tabular-nums {#if nearLimit}text-like{/if}{#if !nearLimit}text-muted{/if}">{ remaining }</span>
+        <button
+          type="submit"
+          disabled={ !canSubmit }
+          class="rounded-full bg-accent hover:bg-accent-2 text-accent-ink font-semibold px-4 py-1.5 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          {#if isReply}Reply{:else}Chirp{/if}
+        </button>
+      </div>
+    </div>
+  </form>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Avatar from './Avatar.pzl';
+
+const LIMIT = 280;
+
+export default class ComposeBox extends PuzzleView {
+  // Seed the draft before the first data() run so the counter has something to
+  // read on mount (created()-seeded state is also what a skeleton could read).
+  created() {
+    this.setData({ draft: '' });
+  }
+
+  data(params, props) {
+    const me = this.ctx.store.findOne('user', 'me');
+    const draft = this.getData().draft || '';
+    const remaining = LIMIT - draft.length;
+    return {
+      me,
+      mePath: me ? '/u/' + me.handle : '#',
+      placeholder: props.placeholder || "What's happening?",
+      isReply: !!props.replyToId,
+      draft,
+      remaining,
+      nearLimit: remaining < 20,
+      // Empty drafts and over-limit drafts can't post.
+      canSubmit: draft.trim().length > 0 && remaining >= 0,
+    };
+  }
+
+  events = {
+    // Mirror the textarea into local state, then refresh() so `remaining` and
+    // `canSubmit` recompute in data().
+    onInput: (event) => {
+      this.setData('draft', event.target.value);
+      this.refresh();
+    },
+
+    // @keydown:escape → wipe the draft (modifier showcase).
+    clearDraft: () => {
+      this.setData('draft', '');
+      this.refresh();
+    },
+
+    // @submit:prevent handler. Create the chirp with a 'c-local-' id (app.js
+    // persists those to localStorage across reloads), and when it's a reply bump
+    // the parent's replyCount by one so the thread counts update immediately.
+    submitChirp: () => {
+      const body = (this.getData().draft || '').trim();
+      if (!body || body.length > LIMIT) return;
+
+      const store = this.ctx.store;
+      const replyToId = this.props.replyToId || '';
+
+      store.createRecord('post', {
+        id: 'c-local-' + Date.now(),
+        authorId: 'me',
+        body,
+        createdAt: new Date().toISOString(),
+        replyToId,
+        likeCount: 0,
+        rechirpCount: 0,
+        replyCount: 0,
+        liked: false,
+        rechirped: false,
+      });
+
+      if (replyToId) {
+        const parent = store.findOne('post', replyToId);
+        if (parent) parent.update({ replyCount: (parent.replyCount || 0) + 1 });
+      }
+
+      this.setData('draft', '');
+      this.refresh();
+    },
+  };
+}
+</scripts>

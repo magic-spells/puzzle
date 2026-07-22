@@ -1,0 +1,32 @@
+<puzzle-view class="min-h-screen flex flex-col bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100">
+  <header class="border-b border-gray-200 dark:border-gray-800">
+    <div class="max-w-2xl mx-auto px-6 py-5 flex items-center gap-3">
+      <span class="text-lg font-semibold tracking-tight">Puzzle</span>
+      <span class="text-sm text-gray-500">starter</span>
+    </div>
+  </header>
+
+  <main class="flex-1">
+    <div class="max-w-2xl mx-auto px-6 py-12">
+      <Slot/>
+    </div>
+  </main>
+
+  <footer class="border-t border-gray-200 dark:border-gray-800">
+    <div class="max-w-2xl mx-auto px-6 py-6 text-sm text-gray-500">
+      Built with the Puzzle framework.
+    </div>
+  </footer>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class DefaultLayout extends PuzzleView {
+  data(params, props) {
+    return {
+      title: props.title || 'Puzzle App',
+    };
+  }
+}
+</scripts>

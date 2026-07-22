@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
+ * and JS so the utility classes they use are generated. Paths are relative to
+ * this stylesheet (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/*
+ * Puzzle Press palette (v4 @theme). Defining the blog's slate + indigo colors as
+ * named tokens generates matching utilities (text-ink, bg-brand, border-border,
+ * …) so the converted templates read semantically instead of scattering hex.
+ */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+
+  --color-ink: #1f2933;           /* headings / brand wordmark */
+  --color-slate: #3e4c59;         /* strong body text */
+  --color-body: #52606d;          /* body / nav text */
+  --color-muted: #7b8794;         /* meta, footer */
+  --color-faint: #cbd2d9;         /* separators, dots */
+
+  --color-brand: #4c6ef5;         /* links, primary buttons, accents */
+  --color-brand-dark: #3b5bdb;    /* primary hover */
+  --color-brand-tint: #eef2ff;    /* tag chips, ghost hover */
+
+  --color-page: #f5f7fa;          /* page background */
+  --color-surface: #ffffff;       /* cards, header, footer */
+  --color-code: #eef1f6;          /* inline <code> background */
+  --color-border: #e4e9f0;        /* default borders */
+  --color-border-soft: #d3dae6;
+  --color-border-strong: #c3cfe6; /* card hover border */
+  --color-danger: #e03131;
+}
+
+/*
+ * Global element defaults that aren't per-element utilities. Tailwind's preflight
+ * already applies box-sizing:border-box and zeroes body margin, so only the
+ * blog-specific body/link/code styling remains here.
+ */
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-ink);
+    background: var(--color-page);
+    line-height: 1.6;
+  }
+
+  a { color: var(--color-brand); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  code {
+    font-family: 'SFMono-Regular', Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: var(--color-code);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+  }
+}

@@ -1,0 +1,132 @@
+<puzzle-view class="min-h-screen bg-bg text-fg">
+  <!-- X-style three-column app frame. The window scrolls (no h-screen /
+       overflow-hidden shell), so long threads behave like a normal document.
+       This layout stays mounted across every route (they all share it), so only
+       the center <Slot/> swaps on navigation — the sidebar, right rail and
+       mobile tab bar persist, and the unread badge below re-renders live. -->
+  <div class="mx-auto flex w-full max-w-[1290px] justify-center">
+
+    <!-- LEFT SIDEBAR (lg+). Logo + primary nav. Active state comes from
+         this.route (v1.15, D47) in data(), which re-runs on every navigation
+         that reuses this layout (SPEC §9) — so the highlight tracks the route
+         with no extra wiring. -->
+    <aside class="hidden lg:flex flex-col shrink-0 w-[240px] xl:w-[260px] sticky top-0 h-screen px-2 py-1">
+      <a href="/" class="flex items-center gap-3 px-3 py-3 rounded-full hover:bg-surface-2 hover:no-underline w-fit transition-colors" aria-label="Chirp home">
+        <span class="inline-flex items-center justify-center w-9 h-9 rounded-full text-accent-ink text-xl" style="background:linear-gradient(135deg,#1d9bf0,#1a8cd8)">🐦</span>
+        <span class="font-display text-xl font-bold text-fg">Chirp</span>
+      </a>
+
+      <nav class="flex flex-col gap-1 mt-2">
+        <a href="/" class="flex items-center gap-4 px-4 py-3 rounded-full text-xl transition-colors hover:bg-surface-2 hover:no-underline w-fit {#if isHome}font-bold text-fg{/if}{#if !isHome}text-muted{/if}">
+          <span class="text-2xl leading-none">🏠</span>
+          <span>Home</span>
+        </a>
+        <a href="/explore" class="flex items-center gap-4 px-4 py-3 rounded-full text-xl transition-colors hover:bg-surface-2 hover:no-underline w-fit {#if isExplore}font-bold text-fg{/if}{#if !isExplore}text-muted{/if}">
+          <span class="text-2xl leading-none">🔍</span>
+          <span>Explore</span>
+        </a>
+        <a href="/notifications" class="relative flex items-center gap-4 px-4 py-3 rounded-full text-xl transition-colors hover:bg-surface-2 hover:no-underline w-fit {#if isNotifications}font-bold text-fg{/if}{#if !isNotifications}text-muted{/if}">
+          <span class="relative text-2xl leading-none">
+            🔔
+            {#if unreadCount}
+              <span class="absolute -top-1 -right-2 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-accent text-accent-ink text-[11px] font-bold leading-none">{ unreadCount }</span>
+            {/if}
+          </span>
+          <span>Notifications</span>
+        </a>
+        <a href="/u/puzzler" class="flex items-center gap-4 px-4 py-3 rounded-full text-xl transition-colors hover:bg-surface-2 hover:no-underline w-fit {#if isProfile}font-bold text-fg{/if}{#if !isProfile}text-muted{/if}">
+          <span class="text-2xl leading-none">🧩</span>
+          <span>Profile</span>
+        </a>
+      </nav>
+
+      <!-- Static "compose" affordance — the real compose box lives in the feed. -->
+      <a href="/" class="mt-4 mx-3 py-3 rounded-full bg-accent text-accent-ink font-bold text-center hover:bg-accent-2 hover:no-underline transition-colors">Chirp</a>
+
+      <div class="mt-auto flex items-center gap-3 mb-3 mx-1 px-3 py-3 rounded-full hover:bg-surface-2 transition-colors">
+        <span class="inline-flex items-center justify-center w-10 h-10 rounded-full text-lg shrink-0" style="background:linear-gradient(135deg,#7c5cff,#4a2fd6)">🧩</span>
+        <div class="min-w-0 leading-tight">
+          <div class="text-sm font-bold text-fg truncate">Puzzle Fan</div>
+          <div class="text-sm text-muted truncate">@puzzler</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER COLUMN. Fixed 600px reading width with side rules, matching X.
+         Bottom padding on mobile clears the fixed tab bar. -->
+    <main class="w-full max-w-[600px] min-h-screen border-x border-line pb-16 lg:pb-0">
+      <Slot/>
+    </main>
+
+    <!-- RIGHT RAIL (xl+). Deliberately holds NO component imports — the layout
+         owns its own frame and never reaches into app/components (that's the
+         other half of the demo). This "About this demo" card is plain markup. -->
+    <aside class="hidden xl:block shrink-0 w-[320px] px-6 py-3">
+      <div class="sticky top-3 rounded-2xl bg-surface border border-line p-4">
+        <h2 class="font-display text-lg font-bold text-fg">About this demo</h2>
+        <p class="mt-2 text-sm text-muted">Chirp is a Puzzle framework example — a tiny Twitter clone with no backend and no image assets. Everything is seeded from JSON into the reactive store.</p>
+        <ul class="mt-3 space-y-1.5 text-sm text-muted">
+          <li>💀 <span class="text-fg">Skeleton loaders</span> while feeds fetch</li>
+          <li>🔀 <span class="text-fg">#case</span> multi-branch rendering</li>
+          <li>🚫 <span class="text-fg">#unless</span> empty states</li>
+          <li>⌨️ <span class="text-fg">Event modifiers</span> on the composer</li>
+          <li>🗂️ <span class="text-fg">Nested routes</span> for profile tabs</li>
+          <li>🔔 A <span class="text-fg">live unread badge</span> — mark notifications read and watch it drain from here</li>
+        </ul>
+        <a href="/explore" class="inline-block mt-4 text-sm font-semibold text-accent hover:underline">Explore trending chirps →</a>
+      </div>
+      <p class="mt-4 px-2 text-xs text-faint">Built with Puzzle · a framework demo</p>
+    </aside>
+  </div>
+
+  <!-- MOBILE BOTTOM TAB BAR. The left sidebar is desktop-only, so on small
+       screens navigation moves here — same per-link active flags as the sidebar
+       so only the tab you're on lights up, and the same unread badge. -->
+  <nav class="lg:hidden fixed bottom-0 inset-x-0 z-20 flex border-t border-line bg-bg">
+    <a href="/" class="flex-1 flex items-center justify-center py-3 text-2xl hover:bg-surface-2 hover:no-underline transition-colors {#if isHome}text-fg{/if}{#if !isHome}text-muted{/if}" aria-label="Home">🏠</a>
+    <a href="/explore" class="flex-1 flex items-center justify-center py-3 text-2xl hover:bg-surface-2 hover:no-underline transition-colors {#if isExplore}text-fg{/if}{#if !isExplore}text-muted{/if}" aria-label="Explore">🔍</a>
+    <a href="/notifications" class="relative flex-1 flex items-center justify-center py-3 text-2xl hover:bg-surface-2 hover:no-underline transition-colors {#if isNotifications}text-fg{/if}{#if !isNotifications}text-muted{/if}" aria-label="Notifications">
+      🔔
+      {#if unreadCount}
+        <span class="absolute top-2 right-[calc(50%-18px)] min-w-[16px] h-[16px] px-1 flex items-center justify-center rounded-full bg-accent text-accent-ink text-[10px] font-bold leading-none">{ unreadCount }</span>
+      {/if}
+    </a>
+    <a href="/u/puzzler" class="flex-1 flex items-center justify-center py-3 text-2xl hover:bg-surface-2 hover:no-underline transition-colors {#if isProfile}text-fg{/if}{#if !isProfile}text-muted{/if}" aria-label="Profile">🧩</a>
+  </nav>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class MainLayout extends PuzzleView {
+  // data() re-runs on every navigation that reuses this layout (SPEC §9), so the
+  // active-nav highlight recomputes from this.route (v1.15, D47) — the per-nav
+  // route snapshot, correct inside the pre-commit gate — with no extra wiring.
+  //
+  // The unread badge is the cross-page reactivity showpiece: findMany with a
+  // filter auto-subscribes this layout to the notification collection (SPEC §9),
+  // so when the Notifications view marks a record read the count here re-runs and
+  // the badge drains LIVE — no event plumbing between the two views.
+  data(params, props) {
+    // The ROOT route name (chain[0]) is the section for the active-nav flags.
+    const section = this.route.chain[0].name;
+    const unread = this.ctx.store.findMany('notification', { filter: (n) => !n.read });
+
+    return {
+      unreadCount: unread.length,
+      isHome: section === 'home',
+      isExplore: section === 'explore',
+      isNotifications: section === 'notifications',
+      isProfile: section === 'profile',
+    };
+  }
+
+  // Subtle enter/leave for the whole shell. Since the app shares MainLayout,
+  // view-only swaps animate their own <Slot/> content, not this frame
+  // (constellation/doc/DOC-SPEC.md §12).
+  animations = {
+    in:  { from: { opacity: 0 }, to: { opacity: 1 }, duration: 220, easing: 'ease-out' },
+    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 140, easing: 'ease-in' }
+  };
+}
+</scripts>

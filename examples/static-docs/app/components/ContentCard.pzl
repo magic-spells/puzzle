@@ -1,0 +1,22 @@
+<puzzle-view>
+  <div class="rounded-2xl border border-line bg-white/60 shadow-sm overflow-hidden">
+    <div class="p-8 md:p-10">
+      <children/>
+    </div>
+    <div class="px-8 py-3 border-t border-line bg-surface-2/50">
+      <p class="font-mono text-[10px] uppercase tracking-[0.25em] text-faint">
+        routed content · wrapped by ContentCard — slot forwarding (D69)
+      </p>
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A global wrapper component the layout forwards the routed page into
+// (v1.36, D69): the layout writes <ContentCard><Slot/></ContentCard> and the
+// router-filled content lands in THIS component's default slot — at build time
+// (prerender) and in the browser alike.
+export default class ContentCard extends PuzzleView {}
+</scripts>

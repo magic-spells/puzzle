@@ -1,0 +1,20 @@
+<puzzle-view class="icons">
+  <span class="inline-block size-5">{#svg 'icons/heart.svg'}</span>
+  {#for item in items}
+    <li>{#svg 'icons/heart.svg'}</li>
+  {/for}
+</puzzle-view>
+
+<puzzle-skeleton>
+  <div class="animate-pulse">{#svg 'icons/heart.svg'}</div>
+</puzzle-skeleton>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class InlineSvg extends PuzzleView {
+  data() {
+    return { items: [] };
+  }
+}
+</scripts>

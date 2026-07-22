@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
+ * and JS so the utility classes they use are generated. Paths are relative to
+ * this stylesheet (app/styles/), so "../" is the app root.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/*
+ * Puzzle Chat palette (v4 @theme). A dark, warm-neutral chrome (near-black
+ * browns) with one terracotta accent used sparingly — user bubbles, the send
+ * button, and the active sidebar row. Claude-chat-inspired.
+ */
+@theme {
+  --color-bg: #1a1915;          /* app background — near-black warm */
+  --color-surface: #201f1a;     /* sidebar */
+  --color-surface-2: #2a2925;   /* raised rows, hover, composer card */
+  --color-hairline: rgba(196, 189, 173, 0.14);
+  --color-line: rgba(196, 189, 173, 0.09);
+
+  --color-fg: #f0eee6;          /* warm off-white */
+  --color-muted: #a8a49a;       /* secondary text */
+  --color-faint: #7c7970;       /* meta, disabled */
+
+  --color-accent: #d97757;      /* user bubble, send button, active row (terracotta) */
+  --color-accent-2: #e5825f;    /* accent hover */
+  --color-skeleton: #2a2925;    /* ghost placeholder blocks */
+}
+
+@layer base {
+  /* <puzzle-view> is a custom element (defaults to display:inline). Make view
+     and layout roots block-level so the h-screen/h-full chain actually sizes
+     the shell; roots that need flex set it themselves via utilities. */
+  puzzle-view {
+    display: block;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Dark scrollbars so the message list and sidebar don't flash light gutters. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-surface-2) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-surface-2);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+}

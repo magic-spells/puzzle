@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+@theme {
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+  --font-sans: "Hanken Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Roboto", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink: #0a0a0c;
+  --color-surface: #131317;
+  --color-surface-2: #17171b;
+  --color-elevated: #202027;
+
+  --color-hairline: rgba(255, 255, 255, 0.09);
+  --color-line: rgba(255, 255, 255, 0.055);
+
+  --color-fg: #ece9e3;
+  --color-muted: #93929a;
+  --color-faint: #5a5960;
+
+  --color-accent: #e6a94d;
+  --color-accent-2: #f2bd6a;
+  --color-danger: #cf6b5e;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink);
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .font-display {
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  .app-glow {
+    background: radial-gradient(
+      120% 80% at 50% -10%,
+      rgba(230, 169, 77, 0.10) 0%,
+      rgba(230, 169, 77, 0.03) 28%,
+      transparent 60%
+    );
+  }
+
+  .kanban-column {
+    min-height: 28rem;
+    border: 1px solid var(--color-hairline);
+    border-radius: 1rem;
+    background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+    overflow: hidden;
+  }
+
+  .kanban-cards {
+    min-height: 20rem;
+  }
+
+  .kanban-card {
+    touch-action: none;
+    user-select: none;
+  }
+
+  .kanban-card-body {
+    cursor: grab;
+    border: 1px solid var(--color-hairline);
+    border-radius: 0.75rem;
+    background: var(--color-elevated);
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+  }
+
+  .kanban-card-body:active {
+    cursor: grabbing;
+  }
+
+  .kanban-placeholder {
+    border: 1px dashed rgba(230, 169, 77, 0.45);
+    border-radius: 0.75rem;
+    background: rgba(230, 169, 77, 0.08);
+    box-shadow: inset 0 0 0 1px rgba(230, 169, 77, 0.08);
+  }
+
+  .kanban-ghost {
+    cursor: grabbing;
+    opacity: 0.96;
+    filter: drop-shadow(0 22px 34px rgba(0, 0, 0, 0.38));
+  }
+}

@@ -1,0 +1,25 @@
+<puzzle-view>
+  <section class="max-w-2xl prose-doc">
+    <p class="font-mono text-[11px] uppercase tracking-[0.3em] text-accent">Tag</p>
+    <h1 class="font-display text-4xl md:text-5xl text-ink">#{ tag }</h1>
+    <p>
+      This view is mounted by the dynamic route <code>/tags/:tag</code>. Because its
+      path carries a <code>:param</code>, the v1 static build cannot know which tags
+      to emit, so <code>puzzle build --static</code> SKIPS it with a warning and
+      writes no file (a <code>staticPaths()</code> enumeration hook is the planned
+      follow-up). As a normal SPA route it still works — navigate here from a link.
+    </p>
+  </section>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class TagView extends PuzzleView {
+  // `this.route` carries the per-navigation snapshot (v1.15, D47); params are also
+  // available directly. Read the :tag capture for display.
+  data(params) {
+    return { tag: params.tag };
+  }
+}
+</scripts>

@@ -1,0 +1,25 @@
+<puzzle-view>
+  <div class="text-center py-12 px-6 bg-surface border border-border rounded-xl">
+    <p class="text-5xl font-extrabold text-brand">404</p>
+    <h1 class="mt-1 mb-2 text-2xl text-ink">Page not found</h1>
+    <p class="mb-6 text-body">We could not find the page you were looking for.</p>
+    <a class="inline-block px-5 py-2.5 rounded-lg text-[0.95rem] font-semibold cursor-pointer transition-colors bg-brand text-white hover:bg-brand-dark" href="/">Back to home</a>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// Rendered by the '*' catch-all route (routes.js) for any unmatched path.
+export default class NotFoundView extends PuzzleView {
+  data(params, props) {
+    return {};
+  }
+
+  // Route transition (constellation/doc/DOC-SPEC.md §12) — see Home.pzl for the full rationale.
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 260, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

@@ -1,0 +1,68 @@
+<puzzle-view>
+  <!-- A single passport stamp: a round, double-ringed badge tinted from the
+       stamp's accent colours. The whole inline style (gradient wash + border
+       tint + resting rotation) is assembled in data() so the template stays
+       declarative. -->
+  <div
+    class="travel-stamp relative aspect-square rounded-full border-2 border-dashed flex items-center justify-center p-2 select-none"
+    style={ badgeStyle }>
+    <!-- Inner solid ring, tinted from the accent's darker stop, for the layered
+         rubber-stamp look. -->
+    <div class="absolute inset-[6px] rounded-full border" style={ ringStyle }></div>
+
+    <div class="relative flex flex-col items-center justify-center text-center gap-0.5">
+      <span class="text-3xl leading-none">{ icon }</span>
+      <span class="uppercase tracking-[0.15em] text-[11px] font-bold text-fg">{ city }</span>
+      <span class="text-[10px] text-muted">{ country }</span>
+      <span class="text-[10px] font-semibold text-fg">{ year }</span>
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A tiny lookup gives each stamp a slightly different tilt (cycled by index) so
+// the wall reads as hand-stamped rather than grid-perfect. Shared by data() and
+// the animations getter so the pop lands at the same resting angle.
+const ROTATIONS = [-3, 2, -1];
+const tiltFor = (index) => ROTATIONS[((index % ROTATIONS.length) + ROTATIONS.length) % ROTATIONS.length];
+
+export default class TravelStamp extends PuzzleView {
+  data(params, props) {
+    const stamp = props.stamp || {};
+    const accent = stamp.accent || {};
+    const from = accent.from || '#c9a86a';
+    const to = accent.to || '#8a6a3a';
+    const rot = tiltFor(props.index ?? 0);
+
+    // Alpha-suffix trick: appending a 2-digit hex byte to a #RRGGBB colour makes
+    // a #RRGGBBAA value — '22' is ~13% opacity, giving a very light background
+    // wash from the same accent that colours the border.
+    return {
+      icon: stamp.icon || '🌍',
+      city: stamp.city || '',
+      country: stamp.country || '',
+      year: stamp.year || '',
+      badgeStyle: `background: linear-gradient(135deg, ${from}22, ${to}22); border-color: ${from}; transform: rotate(${rot}deg)`,
+      ringStyle: `border-color: ${to}`,
+    };
+  }
+
+  // Stamped-on entrance: pops from half-scale up past 1 and settles at the
+  // resting tilt, staggered by index. The overshoot easing supplies the bounce.
+  get animations() {
+    const index = this.props.index ?? 0;
+    const rot = tiltFor(index);
+    return {
+      in: {
+        from: { opacity: 0, transform: `scale(0.5) rotate(${rot}deg)` },
+        to:   { opacity: 1, transform: `scale(1) rotate(${rot}deg)` },
+        duration: 380,
+        delay: index * 80,
+        easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)'
+      }
+    };
+  }
+}
+</scripts>

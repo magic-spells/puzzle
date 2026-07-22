@@ -1,0 +1,862 @@
+<puzzle-view class="h-full w-full flex flex-col">
+  <Toolbar selCount={ selCount } @create={ createElement(event) } />
+
+  <div class="flex-1 min-h-0 flex">
+    <div class="w-60 shrink-0">
+      <LayersPanel nodes={ layerNodes } @select={ selectFromLayers(event) } />
+    </div>
+
+    <div class="flex-1 min-w-0 overflow-auto studio-scroll bg-ink">
+      <div
+        class="stage-grid relative"
+        style="width:2400px;height:1600px"
+        data-stage
+        @pointerdown={ stagePress(event) }>
+        {#for node in nodes}
+          <div class="contents">
+            {#case node.kind}
+              {:when 'frame'}
+                <CanvasFrame node={ node } @press={ pressElement(event) } />
+              {:else}
+                <CanvasShape node={ node } @press={ pressElement(event) } />
+            {/case}
+          </div>
+        {/for}
+        {#for ghost in ghosts}
+          <div class="contents">
+            {#case ghost.kind}
+              {:when 'frame'}
+                <CanvasFrame node={ ghost } @press={ ghostNoop(event) } />
+              {:else}
+                <CanvasShape node={ ghost } @press={ ghostNoop(event) } />
+            {/case}
+          </div>
+        {/for}
+        {#if marquee}
+          <div class="canvas-marquee" style={ marquee.css }></div>
+        {/if}
+        {#if overlay}
+          <SelectionOverlay overlay={ overlay } handles={ overlay.handles } @resize={ startResize(event) } />
+        {/if}
+      </div>
+    </div>
+
+    <div class="w-64 shrink-0">
+      <Inspector single={ single } selCount={ selCount } selectedIds={ selectedIds } />
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Toolbar from '../components/Toolbar.pzl';
+import LayersPanel from '../components/LayersPanel.pzl';
+import Inspector from '../components/Inspector.pzl';
+import CanvasFrame from '../components/CanvasFrame.pzl';
+import CanvasShape from '../components/CanvasShape.pzl';
+import SelectionOverlay from '../components/SelectionOverlay.pzl';
+import {
+  placeChildren,
+  elementCss,
+  boundsCss,
+  selectionBounds,
+  absolutePosition,
+  cloneElement,
+  frameAt,
+  stackInsertionIndex,
+  pointInFrame,
+  boxesIntersect,
+  nextName,
+  newId,
+  deleteElements,
+  duplicateElements,
+} from '../lib/geometry.js';
+
+const ARROWS = {
+  ArrowLeft: [-1, 0],
+  ArrowRight: [1, 0],
+  ArrowUp: [0, -1],
+  ArrowDown: [0, 1],
+};
+
+const CREATE_DEFAULTS = {
+  rect: { w: 160, h: 120, radius: 8 },
+  ellipse: { w: 120, h: 120 },
+  text: { w: 200, h: 24, text: 'Text', fontSize: 16, fill: '#E9E9EE' },
+  frame: { w: 320, h: 240, fill: '#191B20', radius: 12 },
+};
+
+const DRAG_THRESHOLD = 4;
+const MIN_SIZE = 8;
+
+const RESIZE_CURSORS = {
+  nw: 'nwse-resize', se: 'nwse-resize',
+  ne: 'nesw-resize', sw: 'nesw-resize',
+  n: 'ns-resize', s: 'ns-resize',
+  e: 'ew-resize', w: 'ew-resize',
+};
+
+// The canvas editor. `selectedIds` is LOCAL ephemeral state (setData), read back
+// inside data() the kanban way. `drag` is the OTHER ephemeral channel: a pointer
+// gesture (move / resize / marquee) publishes its live state through setData +
+// this.refresh(), and data() derives the render tree from it — NO store writes
+// happen until the gesture drops (see _commitMove / _commitResize).
+//
+// Gesture machine (kanban-derived): press seeds `this._drag` (PENDING for a
+// move, DRAGGING immediately for a resize/marquee-after-threshold); document
+// pointermove/pointerup/keydown listeners are added on press and torn down in the
+// single _cleanup() used by drop, Escape, and destroyed(). pointermove stores raw
+// coords on this._drag and schedules ONE rAF (_publishDrag) — store writes are
+// drop-time only.
+export default class Editor extends PuzzleView {
+  created() {
+    this.setData({ selectedIds: [], drag: null });
+    this._drag = null;
+    this._raf = null;
+    this._stageEl = null;
+    this._storedUserSelect = '';
+    this._storedCursor = '';
+    this._onKeyDown = (event) => this._handleKeyDown(event);
+    this._onPointerMove = (event) => this._handlePointerMove(event);
+    this._onPointerUp = (event) => this._handlePointerUp(event);
+    this._onDragKey = (event) => this._handleDragKey(event);
+  }
+
+  mounted() {
+    document.addEventListener('keydown', this._onKeyDown);
+  }
+
+  destroyed() {
+    document.removeEventListener('keydown', this._onKeyDown);
+    this._cleanup(false);
+  }
+
+  animations = {
+    in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 200 },
+  };
+
+  data() {
+    const store = this.ctx.store;
+    const elements = store.findMany('element');
+    const existing = new Set(elements.map((e) => e.id));
+
+    // Defensive: the inspector can delete elements, leaving dead ids in local
+    // selection state. Filter to what still exists before deriving anything.
+    const selectedIds = (this.getData().selectedIds || []).filter((id) => existing.has(id));
+    const sel = new Set(selectedIds);
+
+    const drag = this.getData().drag || null;
+    const isResize = !!(drag && drag.mode === 'resize');
+    const isMove = !!(drag && drag.mode === 'move');
+    const isMarquee = !!(drag && drag.mode === 'marquee');
+
+    // For a resize, feed the ephemeral box through the pure layout helpers by
+    // swapping in a cloned record — positions, overlay bounds and sibling reflow
+    // then all track the live drag with no store write.
+    const workElements = isResize
+      ? elements.map((e) => {
+          if (e.id !== drag.id) return e;
+          const b = drag.box;
+          return drag.stackChild
+            ? cloneElement(e, { w: b.w, h: b.h })
+            : cloneElement(e, { x: b.x, y: b.y, w: b.w, h: b.h });
+        })
+      : elements;
+
+    const draggedSet = isMove ? new Set(drag.ids) : new Set();
+
+    const childrenOf = (frame) => workElements.filter((e) => e.frameId === frame.id);
+    const buildShape = (el, x, y) => ({
+      id: el.id, kind: 'shape', el, css: elementCss(el, x, y), selected: sel.has(el.id),
+    });
+
+    const topLevel = workElements
+      .filter((e) => e.frameId === '')
+      .slice()
+      .sort((a, b) => a.z - b.z);
+
+    // --- Canvas render tree (dragged elements are lifted into the ghost layer) -
+    const nodes = [];
+    topLevel.forEach((el) => {
+      if (isMove && draggedSet.has(el.id)) return;
+
+      if (el.type === 'frame') {
+        let kids = childrenOf(el);
+        if (isMove) kids = kids.filter((k) => !draggedSet.has(k.id));
+
+        // Reorder placeholder: a synthetic child holding the dragged element's
+        // footprint, slotted into the stack at the live insertion index.
+        if (isMove && drag.reorder && drag.reorderFrameId === el.id) {
+          const dragged = elements.find((e) => e.id === drag.ids[0]);
+          if (dragged) {
+            const sorted = kids.slice().sort((a, b) => a.z - b.z);
+            const n = sorted.length;
+            let k = drag.reorderIndex == null ? n : drag.reorderIndex;
+            k = Math.max(0, Math.min(k, n));
+            const phZ = n === 0
+              ? 0
+              : k === 0
+                ? sorted[0].z - 1
+                : k >= n
+                  ? sorted[n - 1].z + 1
+                  : (sorted[k - 1].z + sorted[k].z) / 2;
+            kids = kids.concat([{ id: '__ph__', z: phZ, w: dragged.w, h: dragged.h, placeholder: true }]);
+          }
+        }
+
+        const placed = placeChildren(el, kids);
+        const children = placed.map((p) => {
+          if (p.el.placeholder) {
+            return {
+              id: '__ph__', kind: 'shape', placeholder: true,
+              css: `left:${p.x}px;top:${p.y}px;width:${p.el.w}px;height:${p.el.h}px;`,
+            };
+          }
+          return buildShape(p.el, p.x, p.y);
+        });
+
+        nodes.push({
+          id: el.id, kind: 'frame', el, css: elementCss(el, el.x, el.y),
+          selected: sel.has(el.id), children,
+          dropTarget: isMove && drag.targetFrameId === el.id,
+        });
+      } else {
+        nodes.push(buildShape(el, el.x, el.y));
+      }
+    });
+
+    // --- Ghost layer: dragged elements rendered at abs + delta, non-interactive
+    const ghosts = [];
+    if (isMove) {
+      drag.ids.forEach((id) => {
+        const el = elements.find((e) => e.id === id);
+        if (!el) return;
+        const abs = absolutePosition(el, elements);
+        const gx = abs.x + (drag.dx || 0);
+        const gy = abs.y + (drag.dy || 0);
+
+        if (el.type === 'frame') {
+          const kids = placeChildren(el, elements.filter((e) => e.frameId === el.id)).map((p) => ({
+            id: p.el.id, kind: 'shape', el: p.el,
+            css: elementCss(p.el, p.x, p.y) + 'pointer-events:none;', selected: false,
+          }));
+          ghosts.push({
+            id: el.id, kind: 'frame', el, css: elementCss(el, gx, gy) + 'pointer-events:none;',
+            selected: true, children: kids, dropTarget: false,
+          });
+        } else {
+          ghosts.push({
+            id: el.id, kind: 'shape', el,
+            css: elementCss(el, gx, gy) + 'pointer-events:none;', selected: true,
+          });
+        }
+      });
+    }
+
+    // --- Layers panel gets the STABLE full tree (never lifts the dragged node) -
+    const layerNodes = elements
+      .filter((e) => e.frameId === '')
+      .slice()
+      .sort((a, b) => a.z - b.z)
+      .map((el) => {
+        if (el.type === 'frame') {
+          const children = elements
+            .filter((e) => e.frameId === el.id)
+            .slice()
+            .sort((a, b) => a.z - b.z)
+            .map((c) => ({ el: c, selected: sel.has(c.id) }));
+          return { kind: 'frame', el, selected: sel.has(el.id), children };
+        }
+        return { kind: 'shape', el, selected: sel.has(el.id) };
+      });
+
+    // Overlay is suppressed mid-move / mid-marquee (handles must not eat the
+    // gesture); during a resize it stays and TRACKS the live box.
+    let overlay = null;
+    if (!drag || isResize) {
+      if (selectedIds.length) {
+        overlay = {
+          css: boundsCss(selectionBounds(selectedIds, workElements)),
+          handles: selectedIds.length === 1,
+        };
+      }
+    }
+
+    const marquee = isMarquee && drag.box ? { css: boundsCss(drag.box) } : null;
+
+    const single = selectedIds.length === 1
+      ? store.findOne('element', selectedIds[0])
+      : null;
+
+    return {
+      nodes,
+      ghosts,
+      layerNodes,
+      overlay,
+      marquee,
+      single,
+      selCount: selectedIds.length,
+      selectedIds,
+    };
+  }
+
+  events = {
+    pressElement: (payload) => {
+      this._applySelect(payload);
+      this._startMove(payload);
+    },
+
+    selectFromLayers: (payload) => {
+      this._applySelect(payload);
+    },
+
+    ghostNoop: () => {},
+
+    stagePress: (event) => {
+      // A press that lands on an element bubbles up here; ignore it.
+      if (event.target.closest('[data-el-id]')) return;
+      if (event.button !== undefined && event.button !== 0) return;
+
+      this.setData({ selectedIds: [] });
+
+      this._stageEl = this.element.querySelector('[data-stage]');
+      const rect = this._stageEl.getBoundingClientRect();
+      const sx = event.clientX - rect.left;
+      const sy = event.clientY - rect.top;
+
+      this._drag = {
+        phase: 'PENDING',
+        mode: 'marquee',
+        startX: event.clientX,
+        startY: event.clientY,
+        start: { sx, sy },
+        box: null,
+      };
+      event.preventDefault();
+      this._beginGesture('crosshair');
+      this.refresh();
+    },
+
+    startResize: (payload) => {
+      const { event, dir } = payload;
+      if (event.button !== undefined && event.button !== 0) return;
+      if (this._drag) return;
+
+      const store = this.ctx.store;
+      const elements = store.findMany('element');
+      const existing = new Set(elements.map((e) => e.id));
+      const selectedIds = (this.getData().selectedIds || []).filter((id) => existing.has(id));
+      if (selectedIds.length !== 1) return;
+
+      const el = store.findOne('element', selectedIds[0]);
+      if (!el) return;
+
+      const abs = absolutePosition(el, elements);
+      this._stageEl = this.element.querySelector('[data-stage]');
+
+      this._drag = {
+        phase: 'DRAGGING',
+        mode: 'resize',
+        dir,
+        id: el.id,
+        startX: event.clientX,
+        startY: event.clientY,
+        origin: { x: el.x, y: el.y, w: el.w, h: el.h },
+        abs: { x: abs.x, y: abs.y },
+        stackChild: this._isStackChild(el, elements),
+        box: { x: el.x, y: el.y, w: el.w, h: el.h },
+      };
+      event.preventDefault();
+      this._beginGesture(RESIZE_CURSORS[dir] || 'default');
+    },
+
+    createElement: (payload) => {
+      const store = this.ctx.store;
+      const elements = store.findMany('element');
+      const topLevel = elements.filter((e) => e.frameId === '');
+      const count = topLevel.length;
+      const maxZ = topLevel.reduce((max, e) => Math.max(max, e.z), -1);
+
+      const data = Object.assign(
+        {
+          id: newId(),
+          type: payload.type,
+          name: nextName(elements, payload.type),
+          frameId: '',
+          x: 640 + (count % 5) * 32,
+          y: 200 + (count % 5) * 32,
+          z: maxZ + 1,
+        },
+        CREATE_DEFAULTS[payload.type] || {}
+      );
+
+      store.createRecord('element', data);
+      this.setData({ selectedIds: [data.id] });
+      this.refresh();
+    },
+  };
+
+  // Shared selection logic for canvas presses and layer-row clicks.
+  // Shift toggles; a plain click on an unselected element replaces the
+  // selection; a plain click on an already-selected element leaves the
+  // selection intact (group-drag depends on this).
+  _applySelect(payload) {
+    const { event, id } = payload;
+    let selectedIds = (this.getData().selectedIds || []).slice();
+
+    if (event && event.shiftKey) {
+      if (selectedIds.includes(id)) {
+        selectedIds = selectedIds.filter((x) => x !== id);
+      } else {
+        selectedIds.push(id);
+      }
+    } else if (!selectedIds.includes(id)) {
+      selectedIds = [id];
+    }
+
+    this.setData({ selectedIds });
+    this.refresh();
+  }
+
+  _isStackChild(el, elements) {
+    if (!el || !el.frameId) return false;
+    const parent = elements.find((e) => e.id === el.frameId);
+    return !!(parent && (parent.layout === 'stack-v' || parent.layout === 'stack-h'));
+  }
+
+  // Promote a selection press into a move gesture. Runs AFTER _applySelect, so
+  // it reads the resolved selection snapshot.
+  _startMove(payload) {
+    const { event, id } = payload;
+    if (event && event.button !== undefined && event.button !== 0) return;
+    if (this._drag) return;
+
+    const store = this.ctx.store;
+    const elements = store.findMany('element');
+    const existing = new Set(elements.map((e) => e.id));
+    const selectedIds = (this.getData().selectedIds || []).filter((sid) => existing.has(sid));
+
+    // Filter the drag set:
+    //   - a child of a selected frame rides along -> drop it (drag the frame).
+    const selSet = new Set(selectedIds);
+    let dragIds = selectedIds.filter((sid) => {
+      const el = elements.find((e) => e.id === sid);
+      if (!el) return false;
+      if (el.frameId && selSet.has(el.frameId)) return false;
+      return true;
+    });
+
+    let reorder = false;
+    let reorderFrameId = null;
+    if (dragIds.length === 1 && this._isStackChild(elements.find((e) => e.id === dragIds[0]), elements)) {
+      // A lone stack child is a REORDER drag.
+      reorder = true;
+      reorderFrameId = elements.find((e) => e.id === dragIds[0]).frameId;
+    } else if (dragIds.length > 1) {
+      // Stack children can't be freely positioned in a multi-drag -> drop them.
+      dragIds = dragIds.filter((sid) => !this._isStackChild(elements.find((e) => e.id === sid), elements));
+    }
+
+    if (!dragIds.length) return;
+
+    // Frames never reparent (no nested frames) -> skip drop hit-testing entirely.
+    const draggingFrame = dragIds.some((sid) => {
+      const el = elements.find((e) => e.id === sid);
+      return el && el.type === 'frame';
+    });
+
+    // A plain click on an already-selected element inside a multi-selection
+    // collapses to just that element ON RELEASE (only if it never became a drag).
+    let clickCandidate = null;
+    if (event && !event.shiftKey && selectedIds.length > 1 && selectedIds.includes(id)) {
+      clickCandidate = id;
+    }
+
+    this._stageEl = this.element.querySelector('[data-stage]');
+    const rect = this._stageEl.getBoundingClientRect();
+    const sx = event.clientX - rect.left;
+    const sy = event.clientY - rect.top;
+
+    this._drag = {
+      phase: 'PENDING',
+      mode: 'move',
+      startX: event.clientX,
+      startY: event.clientY,
+      curSx: sx,
+      curSy: sy,
+      ids: dragIds,
+      reorder,
+      reorderFrameId,
+      reorderIndex: null,
+      draggingFrame,
+      clickCandidate,
+      dx: 0,
+      dy: 0,
+      targetFrameId: null,
+    };
+    if (event.preventDefault) event.preventDefault();
+    this._beginGesture('grabbing');
+  }
+
+  _beginGesture(cursor) {
+    this._storedUserSelect = document.body.style.userSelect;
+    this._storedCursor = document.body.style.cursor;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = cursor;
+    document.addEventListener('pointermove', this._onPointerMove);
+    document.addEventListener('pointerup', this._onPointerUp);
+    document.addEventListener('keydown', this._onDragKey);
+  }
+
+  _handlePointerMove(event) {
+    const d = this._drag;
+    if (!d) return;
+
+    if (d.mode === 'resize') {
+      this._resizeMove(event);
+      return;
+    }
+
+    const dx = event.clientX - d.startX;
+    const dy = event.clientY - d.startY;
+
+    if (d.phase === 'PENDING') {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      d.phase = 'DRAGGING';
+      d.clickCandidate = null; // it moved -> it's a drag, not a click
+    }
+    if (d.phase !== 'DRAGGING') return;
+
+    event.preventDefault();
+
+    const rect = this._stageEl.getBoundingClientRect();
+    d.curSx = event.clientX - rect.left;
+    d.curSy = event.clientY - rect.top;
+
+    if (d.mode === 'marquee') {
+      const x = Math.min(d.start.sx, d.curSx);
+      const y = Math.min(d.start.sy, d.curSy);
+      d.box = { x, y, w: Math.abs(d.curSx - d.start.sx), h: Math.abs(d.curSy - d.start.sy) };
+    } else {
+      d.dx = dx;
+      d.dy = dy;
+    }
+
+    this._scheduleRaf();
+  }
+
+  _resizeMove(event) {
+    const d = this._drag;
+    const dx = event.clientX - d.startX;
+    const dy = event.clientY - d.startY;
+    const dir = d.dir;
+    const o = d.origin;
+
+    let x = o.x;
+    let y = o.y;
+    let w = o.w;
+    let h = o.h;
+
+    if (d.stackChild) {
+      // Stack children are layout-positioned: resize is pure w/h from top-left.
+      if (dir.indexOf('e') !== -1) w = o.w + dx;
+      if (dir.indexOf('w') !== -1) w = o.w - dx;
+      if (dir.indexOf('s') !== -1) h = o.h + dy;
+      if (dir.indexOf('n') !== -1) h = o.h - dy;
+      w = Math.max(MIN_SIZE, w);
+      h = Math.max(MIN_SIZE, h);
+    } else {
+      if (dir.indexOf('e') !== -1) w = Math.max(MIN_SIZE, o.w + dx);
+      if (dir.indexOf('s') !== -1) h = Math.max(MIN_SIZE, o.h + dy);
+      if (dir.indexOf('w') !== -1) {
+        w = Math.max(MIN_SIZE, o.w - dx);
+        x = o.x + (o.w - w); // clamp: right edge stays put
+      }
+      if (dir.indexOf('n') !== -1) {
+        h = Math.max(MIN_SIZE, o.h - dy);
+        y = o.y + (o.h - h); // clamp: bottom edge stays put
+      }
+    }
+
+    d.box = { x, y, w, h };
+    this._scheduleRaf();
+  }
+
+  _scheduleRaf() {
+    if (this._raf) return;
+    this._raf = requestAnimationFrame(() => {
+      this._raf = null;
+      this._publishDrag();
+    });
+  }
+
+  _publishDrag() {
+    const d = this._drag;
+    if (!d) return;
+
+    if (d.mode === 'resize') {
+      this.setData({ drag: { mode: 'resize', id: d.id, box: d.box, stackChild: d.stackChild } });
+      this.refresh();
+      return;
+    }
+
+    if (d.mode === 'marquee') {
+      const store = this.ctx.store;
+      const elements = store.findMany('element');
+      const box = d.box || { x: 0, y: 0, w: 0, h: 0 };
+      const ids = elements
+        .filter((e) => e.frameId === '')
+        .filter((e) => {
+          const abs = absolutePosition(e, elements);
+          return boxesIntersect(box, { x: abs.x, y: abs.y, w: e.w, h: e.h });
+        })
+        .map((e) => e.id);
+      this.setData({ selectedIds: ids, drag: { mode: 'marquee', box } });
+      this.refresh();
+      return;
+    }
+
+    // move
+    const store = this.ctx.store;
+    const elements = store.findMany('element');
+    let targetFrameId = null;
+    let reorderActive = false;
+    let reorderFrameId = null;
+    let reorderIndex = null;
+
+    if (d.reorder) {
+      const child = elements.find((e) => e.id === d.ids[0]);
+      const parent = child ? elements.find((e) => e.id === child.frameId) : null;
+      if (parent && pointInFrame(d.curSx, d.curSy, parent, elements)) {
+        reorderActive = true;
+        reorderFrameId = parent.id;
+        targetFrameId = parent.id;
+        const siblings = elements.filter((e) => e.frameId === parent.id && e.id !== child.id);
+        reorderIndex = stackInsertionIndex(parent, siblings, d.curSx, d.curSy, elements);
+      }
+    }
+
+    if (!reorderActive && !d.draggingFrame) {
+      const f = frameAt(d.curSx, d.curSy, elements, new Set(d.ids));
+      if (f) targetFrameId = f.id;
+    }
+
+    this.setData({
+      drag: {
+        mode: 'move',
+        ids: d.ids,
+        dx: d.dx,
+        dy: d.dy,
+        targetFrameId,
+        reorder: reorderActive,
+        reorderFrameId,
+        reorderIndex,
+        draggingFrame: d.draggingFrame,
+      },
+    });
+    this.refresh();
+  }
+
+  _handlePointerUp(event) {
+    const d = this._drag;
+    if (!d) return;
+    if (event.preventDefault) event.preventDefault();
+
+    if (d.phase === 'DRAGGING') {
+      if (d.mode === 'move') this._commitMove();
+      else if (d.mode === 'resize') this._commitResize();
+      // marquee: selection already committed to selectedIds during the drag.
+    } else if (d.clickCandidate) {
+      // Release without a drag: collapse the multi-selection to the pressed one.
+      this.setData({ selectedIds: [d.clickCandidate] });
+    }
+
+    this._cleanup(true);
+  }
+
+  _handleDragKey(event) {
+    if (!this._drag || event.key !== 'Escape') return;
+    event.preventDefault();
+    // Cancel: tear down with NO store writes; selection is left untouched.
+    this._cleanup(true);
+  }
+
+  _commitMove() {
+    const d = this._drag;
+    const store = this.ctx.store;
+    const elements = store.findMany('element');
+    const sx = d.curSx;
+    const sy = d.curSy;
+    const dx = d.dx;
+    const dy = d.dy;
+
+    // Reorder within the same stack frame.
+    if (d.reorder) {
+      const child = store.findOne('element', d.ids[0]);
+      const parent = child ? elements.find((e) => e.id === child.frameId) : null;
+      if (parent && pointInFrame(sx, sy, parent, elements)) {
+        const siblings = elements
+          .filter((e) => e.frameId === parent.id && e.id !== child.id)
+          .slice()
+          .sort((a, b) => a.z - b.z);
+        let idx = stackInsertionIndex(parent, siblings, sx, sy, elements);
+        idx = Math.max(0, Math.min(idx, siblings.length));
+        siblings.splice(idx, 0, child);
+        siblings.forEach((s, i) => {
+          const rec = store.findOne('element', s.id);
+          if (rec && rec.z !== i) rec.update({ z: i });
+        });
+        return;
+      }
+      // Pointer left the parent -> fall through to a normal reparent-out.
+    }
+
+    // Snapshot absolute drop positions BEFORE mutating anything.
+    const drops = d.ids
+      .map((id) => {
+        const el = store.findOne('element', id);
+        if (!el) return null;
+        const abs = absolutePosition(el, elements);
+        return { el, finalAbs: { x: abs.x + dx, y: abs.y + dy } };
+      })
+      .filter(Boolean);
+
+    const target = d.draggingFrame ? null : frameAt(sx, sy, elements, new Set(d.ids));
+
+    drops.forEach(({ el, finalAbs }) => {
+      if (target && el.type !== 'frame') {
+        const fAbs = absolutePosition(target, elements);
+        if (target.layout === 'stack-v' || target.layout === 'stack-h') {
+          const siblings = store
+            .findMany('element')
+            .filter((e) => e.frameId === target.id && e.id !== el.id)
+            .slice()
+            .sort((a, b) => a.z - b.z);
+          let idx = stackInsertionIndex(target, siblings, sx, sy, elements);
+          idx = Math.max(0, Math.min(idx, siblings.length));
+          siblings.splice(idx, 0, el);
+          el.update({ frameId: target.id, x: 0, y: 0 });
+          siblings.forEach((s, i) => {
+            const rec = store.findOne('element', s.id);
+            if (rec) rec.update({ z: i });
+          });
+        } else {
+          const maxZ = store
+            .findMany('element')
+            .filter((e) => e.frameId === target.id)
+            .reduce((m, e) => Math.max(m, e.z), -1);
+          el.update({
+            frameId: target.id,
+            x: Math.round(finalAbs.x - fAbs.x),
+            y: Math.round(finalAbs.y - fAbs.y),
+            z: maxZ + 1,
+          });
+        }
+      } else {
+        const cameFromFrame = el.frameId !== '';
+        const patch = { frameId: '', x: Math.round(finalAbs.x), y: Math.round(finalAbs.y) };
+        if (cameFromFrame) {
+          const maxZ = store
+            .findMany('element')
+            .filter((e) => e.frameId === '')
+            .reduce((m, e) => Math.max(m, e.z), -1);
+          patch.z = maxZ + 1;
+        }
+        el.update(patch);
+      }
+    });
+  }
+
+  _commitResize() {
+    const d = this._drag;
+    const el = this.ctx.store.findOne('element', d.id);
+    if (!el || !d.box) return;
+    const b = d.box;
+    const patch = { w: Math.round(b.w), h: Math.round(b.h) };
+    if (!d.stackChild) {
+      patch.x = Math.round(b.x);
+      patch.y = Math.round(b.y);
+    }
+    el.update(patch);
+  }
+
+  _cleanup(refresh) {
+    if (this._raf) {
+      cancelAnimationFrame(this._raf);
+      this._raf = null;
+    }
+    document.removeEventListener('pointermove', this._onPointerMove);
+    document.removeEventListener('pointerup', this._onPointerUp);
+    document.removeEventListener('keydown', this._onDragKey);
+
+    document.body.style.userSelect = this._storedUserSelect;
+    document.body.style.cursor = this._storedCursor;
+
+    this._drag = null;
+    this._stageEl = null;
+    this.setData({ drag: null });
+    if (refresh) this.refresh();
+  }
+
+  _handleKeyDown(event) {
+    // A pointer gesture owns the keyboard (Escape cancels it) — stay out of the way.
+    if (this._drag) return;
+
+    const target = event.target;
+    if (target && target.closest && target.closest('input, textarea, select, [contenteditable]')) {
+      return;
+    }
+
+    const store = this.ctx.store;
+    const selectedIds = (this.getData().selectedIds || []).slice();
+
+    if (event.key === 'Escape') {
+      this.setData({ selectedIds: [] });
+      this.refresh();
+      return;
+    }
+
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (!selectedIds.length) return;
+      event.preventDefault();
+      deleteElements(store, selectedIds);
+      this.setData({ selectedIds: [] });
+      this.refresh();
+      return;
+    }
+
+    if ((event.metaKey || event.ctrlKey) && (event.key === 'd' || event.key === 'D')) {
+      if (!selectedIds.length) return;
+      event.preventDefault();
+      const newIds = duplicateElements(store, selectedIds);
+      this.setData({ selectedIds: newIds });
+      this.refresh();
+      return;
+    }
+
+    const delta = ARROWS[event.key];
+    if (delta) {
+      if (!selectedIds.length) return;
+      event.preventDefault();
+      const step = event.shiftKey ? 10 : 1;
+      const elements = store.findMany('element');
+
+      selectedIds.forEach((id) => {
+        const rec = store.findOne('element', id);
+        if (!rec) return;
+        // Children of stack frames are layout-positioned — nudging x/y is a
+        // no-op visually, so skip them.
+        if (rec.frameId) {
+          const parent = elements.find((el) => el.id === rec.frameId);
+          if (parent && (parent.layout === 'stack-v' || parent.layout === 'stack-h')) {
+            return;
+          }
+        }
+        rec.update({ x: rec.x + delta[0] * step, y: rec.y + delta[1] * step });
+      });
+
+      this.refresh();
+    }
+  }
+}
+</scripts>

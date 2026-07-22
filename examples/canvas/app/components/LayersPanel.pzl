@@ -1,0 +1,74 @@
+<puzzle-view>
+  <aside class="studio-panel border-r w-full h-full overflow-y-auto studio-scroll">
+    <header class="px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-faint select-none">Layers</header>
+
+    {#if hasRows}
+      <div class="pb-2">
+        {#for row in rows}
+          <div
+            class="px-3 py-1.5 text-[13px] cursor-default select-none flex items-center gap-2 {#if row.indent}pl-7{/if} {#if row.selected}bg-elevated text-fg{:else}text-muted hover:bg-surface-2{/if}"
+            @click={ pick(event, row.id) }>
+            <span class="w-3 text-center text-faint">{ row.glyph }</span>
+            <span class="truncate">{ row.name }</span>
+          </div>
+        {/for}
+      </div>
+    {:else}
+      <p class="px-3 py-2 text-[13px] text-faint select-none">Nothing on the canvas yet</p>
+    {/if}
+  </aside>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+const GLYPHS = { frame: '▣', rect: '▭', ellipse: '◯', text: 'T' };
+
+// The layers list. It flattens the same node tree the Editor renders, but
+// TOP-MOST FIRST (reverse paint order) — frames followed by their (also
+// reversed) children, indented. Clicks forward the raw DOM event so the Editor
+// can honor shift-toggle.
+export default class LayersPanel extends PuzzleView {
+  data(params, props) {
+    const nodes = props.nodes || [];
+    const rows = [];
+
+    nodes.slice().reverse().forEach((node) => {
+      if (node.kind === 'frame') {
+        rows.push({
+          id: node.el.id,
+          name: node.el.name,
+          glyph: GLYPHS.frame,
+          selected: node.selected,
+          indent: false,
+        });
+        node.children.slice().reverse().forEach((child) => {
+          rows.push({
+            id: child.el.id,
+            name: child.el.name,
+            glyph: GLYPHS[child.el.type] || '·',
+            selected: child.selected,
+            indent: true,
+          });
+        });
+      } else {
+        rows.push({
+          id: node.el.id,
+          name: node.el.name,
+          glyph: GLYPHS[node.el.type] || '·',
+          selected: node.selected,
+          indent: false,
+        });
+      }
+    });
+
+    return { rows, hasRows: rows.length > 0 };
+  }
+
+  events = {
+    pick: (event, id) => {
+      this.props.select({ event, id });
+    }
+  };
+}
+</scripts>

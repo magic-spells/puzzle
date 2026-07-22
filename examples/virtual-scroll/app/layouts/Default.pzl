@@ -1,0 +1,43 @@
+<puzzle-view class="relative min-h-screen flex flex-col bg-ink text-fg">
+  <header class="relative pt-14 pb-8">
+    <div class="max-w-2xl mx-auto px-6 text-center">
+      <div class="flex items-center justify-center gap-3 mb-4">
+        <span class="h-px w-8 bg-hairline"></span>
+        <span class="font-mono text-[11px] uppercase tracking-[0.4em] text-faint">Puzzle</span>
+        <span class="h-px w-8 bg-hairline"></span>
+      </div>
+      <h1 class="font-display text-5xl md:text-6xl leading-none text-fg">
+        Virtual Scroll
+      </h1>
+      <p class="mt-4 text-sm text-muted">
+        10,000 rows, a handful of DOM nodes — a pure-userland recipe on stock Puzzle.
+      </p>
+    </div>
+  </header>
+
+  <main class="relative flex-1 pb-16">
+    <div class="max-w-2xl mx-auto px-6">
+      <Slot/>
+    </div>
+  </main>
+
+  <footer class="relative py-8 border-t border-line">
+    <div class="max-w-2xl mx-auto px-6">
+      <p class="text-center font-mono text-[11px] tracking-[0.15em] text-faint">
+        built with the puzzle framework
+      </p>
+    </div>
+  </footer>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class DefaultLayout extends PuzzleView {
+  data(params, props) {
+    return {
+      title: props.title || 'Puzzle — Virtual Scroll',
+    };
+  }
+}
+</scripts>

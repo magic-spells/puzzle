@@ -1,0 +1,24 @@
+<puzzle-view class="account">
+  {#unless user.verified}
+    <p class="warn">Please verify your account.</p>
+  {:else}
+    <p class="ok">You are verified.</p>
+  {/unless}
+  {#unless items.length}
+    <div class="empty">
+      {#unless loading}
+        <span>No items yet.</span>
+      {/unless}
+    </div>
+  {/unless}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Unless extends PuzzleView {
+  data() {
+    return { user: { verified: false }, items: [], loading: false };
+  }
+}
+</scripts>

@@ -1,0 +1,45 @@
+<puzzle-view class="relative min-h-screen flex flex-col bg-paper text-ink">
+  <header class="sticky top-0 z-10 border-b border-line bg-paper/85 backdrop-blur">
+    <div class="max-w-3xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="/" class="flex items-baseline gap-2">
+        <span class="font-display text-2xl leading-none text-ink">Puzzle</span>
+        <span class="font-mono text-[10px] uppercase tracking-[0.3em] text-faint">Field Guide</span>
+      </a>
+      <nav class="flex items-center gap-1 text-sm">
+        <a href="/" class="px-3 py-1.5 rounded-lg text-muted hover:text-ink hover:bg-surface-2 transition-colors">Home</a>
+        <a href="/guide" class="px-3 py-1.5 rounded-lg text-muted hover:text-ink hover:bg-surface-2 transition-colors">Guide</a>
+        <a href="/about" class="px-3 py-1.5 rounded-lg text-muted hover:text-ink hover:bg-surface-2 transition-colors">About</a>
+        <a href="/playground" class="px-3 py-1.5 rounded-lg text-muted hover:text-ink hover:bg-surface-2 transition-colors">Playground</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="relative flex-1">
+    <div class="max-w-3xl mx-auto px-6 py-14">
+      <!-- Default-slot forwarding (v1.36, D69): the router-filled <Slot/> sits
+           INSIDE a component invocation, so the routed page renders within
+           ContentCard's default slot — prerendered and in the browser alike. -->
+      <ContentCard>
+        <Slot />
+      </ContentCard>
+    </div>
+  </main>
+
+  <footer class="border-t border-line">
+    <div class="max-w-3xl mx-auto px-6 py-8">
+      <p class="font-mono text-[11px] tracking-[0.15em] text-faint">
+        prerendered with puzzle · <span class="text-muted">output: 'static'</span>
+      </p>
+    </div>
+  </footer>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ContentCard from '../components/ContentCard.pzl';
+
+// A pure chrome layout (SPEC §12): header nav + footer around the routed <Slot/>.
+// No data() — it holds no build-time state, so the prerenderer just serializes
+// its markup once per page. The <Slot/> is forwarded through ContentCard (D69).
+export default class DefaultLayout extends PuzzleView {}
+</scripts>

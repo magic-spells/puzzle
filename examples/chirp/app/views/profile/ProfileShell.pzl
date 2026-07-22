@@ -1,0 +1,145 @@
+<puzzle-view>
+  <!-- /u/:handle parent view (nested routes v1.3, D30). The banner + identity
+       header stay mounted while the Chirps / Replies / Likes pane swaps through
+       the <Slot/> below. On a tab swap this shell is a REUSED ancestor: its
+       data() re-runs with the full merged params (so the active tab tracks the
+       URL) but the shell itself holds still — only the leaf pane animates. The
+       {#unless} showcase (v1.7, D36) lives here: hide the FollowButton when the
+       profile is my own, showing an "Edit profile" affordance instead. -->
+  <!-- <Slot/> is rendered UNCONDITIONALLY at the bottom: the router mounts the
+       matched child pane there on first commit, so we never gate its existence on
+       the async user lookup. For an unknown handle the header shows a not-found
+       banner and the panes below simply render their own empty lists (the
+       contract's "guard children too" rule). -->
+  <div>
+    <!-- STABLE STRUCTURE: the root keeps exactly two children — the header
+         container below and the <Slot/> wrapper at the bottom — across every
+         data() re-run. The {#if user} swap happens INSIDE this container, so the
+         seed landing (user: null → record) never changes the root's child list.
+         Reconciliation pairs unkeyed siblings by tag order (index alignment), so
+         a shell whose child COUNT changes across a re-render would mis-pair the
+         slot wrapper with a header element and tear down the routed pane. -->
+    <div>
+    {#if user}
+      <!-- Banner gradient from the record. -->
+      <div class="h-32 sm:h-40" style="background:{ user.bannerBg }"></div>
+
+      <div class="px-4">
+        <!-- Avatar overlaps the banner; follow/edit action sits opposite it. -->
+        <div class="flex items-end justify-between -mt-8">
+          <div class="rounded-full ring-4 ring-bg"><Avatar user={ user } size="lg" /></div>
+          {#unless isMe}
+            <FollowButton user={ user } />
+          {:else}
+            <button type="button" class="rounded-full px-4 py-1.5 text-sm font-semibold ring-1 ring-hairline text-fg hover:bg-surface-2 transition-colors" @click={ noop }>Edit profile</button>
+          {/unless}
+        </div>
+
+        <!-- Name / handle. -->
+        <div class="mt-3">
+          <div class="flex items-center gap-1">
+            <h1 class="text-xl font-bold text-fg">{ user.name }</h1>
+            {#if user.verified}<span class="text-accent">✓</span>{/if}
+          </div>
+          <div class="text-muted">{ user.at }</div>
+        </div>
+
+        {#if user.bio}<p class="mt-3 text-fg">{ user.bio }</p>{/if}
+
+        <!-- Location + join date (join string derived in data()). -->
+        <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted">
+          {#if user.location}<span>📍 { user.location }</span>{/if}
+          {#if joined}<span>🗓️ { joined }</span>{/if}
+        </div>
+
+        <!-- Follow counts. -->
+        <div class="mt-3 flex gap-4 text-sm">
+          <span><span class="font-bold text-fg">{ user.followingCount | compact }</span> <span class="text-muted">Following</span></span>
+          <span><span class="font-bold text-fg">{ user.followerCount | compact }</span> <span class="text-muted">Followers</span></span>
+        </div>
+      </div>
+
+      <!-- Tab nav. Active pane comes from this.route (v1.15, D47) in data() —
+           the leaf route name of the navigation this data() run is gating
+           (AccountShell pattern). -->
+      <nav class="flex mt-4 border-b border-line">
+        <a href="/u/{ user.handle }"
+          class="flex-1 text-center py-4 text-sm font-semibold transition-colors hover:bg-surface-2 hover:no-underline {#if isChirps}text-fg border-b-2 border-accent -mb-px{/if}{#if !isChirps}text-muted{/if}">Chirps</a>
+        <a href="/u/{ user.handle }/replies"
+          class="flex-1 text-center py-4 text-sm font-semibold transition-colors hover:bg-surface-2 hover:no-underline {#if isReplies}text-fg border-b-2 border-accent -mb-px{/if}{#if !isReplies}text-muted{/if}">Replies</a>
+        <a href="/u/{ user.handle }/likes"
+          class="flex-1 text-center py-4 text-sm font-semibold transition-colors hover:bg-surface-2 hover:no-underline {#if isLikes}text-fg border-b-2 border-accent -mb-px{/if}{#if !isLikes}text-muted{/if}">Likes</a>
+      </nav>
+    {:else}
+      <!-- Unknown handle vs still-seeding: only show the friendly not-found banner
+           once users have loaded, never mid-seed. -->
+      {#if loaded}
+        <div class="py-16 px-8 text-center border-b border-line">
+          <h1 class="text-2xl font-bold text-fg mb-2">This account doesn't exist</h1>
+          <p class="text-muted">Try searching for another. <a href="/explore" class="text-accent hover:underline">Explore</a>.</p>
+        </div>
+      {:else}
+        <div class="py-24 text-center text-muted">Loading…</div>
+      {/if}
+    {/if}
+    </div>
+
+    <!-- Matched child pane renders here (v1.3 nested-view slot) — always present. -->
+    <div><Slot/></div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Avatar from '@/components/Avatar.pzl';
+import FollowButton from '@/components/FollowButton.pzl';
+
+export default class ProfileShell extends PuzzleView {
+  data(params, props) {
+    const store = this.ctx.store;
+
+    // Resolve the profile owner by handle (params merge down the nested chain, so
+    // the child panes read the same params.handle).
+    const user = store.findMany('user', { filter: (u) => u.handle === params.handle })[0] || null;
+    const me = store.findOne('user', 'me');
+    const isMe = !!(user && me && user.id === me.id);
+
+    // "Joined July 2024" derived here (no date formatter needed for month+year).
+    let joined = '';
+    if (user && user.joined) {
+      const d = new Date(user.joined + 'T00:00:00');
+      if (!isNaN(d.getTime())) {
+        joined = 'Joined ' + d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      }
+    }
+
+    // Active tab from this.route (v1.15, D47) — the leaf route name of the
+    // navigation this data() run is gating, correct inside the pre-commit gate.
+    const routeName = this.route.route.name;
+    const isReplies = routeName === 'profile-replies';
+    const isLikes = routeName === 'profile-likes';
+
+    return {
+      user,
+      isMe,
+      joined,
+      loaded: store.findMany('user').length > 0,
+      isReplies,
+      isLikes,
+      isChirps: !isReplies && !isLikes,
+    };
+  }
+
+  events = {
+    // "Edit profile" is a demo affordance — deliberately inert.
+    noop: () => {},
+  };
+
+  // Subtle enter/leave for the whole profile section. On a tab swap the shell is
+  // reused and holds still — only the leaf pane animates (D30).
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 240, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },   to: { opacity: 0, transform: 'translateY(-6px)' }, duration: 150, easing: 'ease-in' }
+  };
+}
+</scripts>

@@ -1,0 +1,71 @@
+<puzzle-view>
+  <section class="text-center pt-6 pb-10">
+    <h1 class="mb-3 text-4xl text-ink">Notes on building Puzzle</h1>
+    <p class="max-w-[34rem] mx-auto mb-6 text-body text-[1.05rem]">
+      A running blog about the framework itself — single-file components, the Go
+      compiler, the formatter system, and the reactive data layer.
+    </p>
+    <Button variant="primary" @press={ goToPosts }>Browse all posts</Button>
+  </section>
+
+  <section>
+    <h2 class="text-[1.35rem] text-ink mb-4">Latest posts</h2>
+
+    {#if hasPosts}
+      <div class="flex flex-col gap-4">
+        {#for post in recentPosts, i}
+          <PostCard post={ post } index={ i }></PostCard>
+        {/for}
+      </div>
+    {:else}
+      <div class="p-8 text-center text-muted bg-surface border border-dashed border-faint rounded-xl">
+        <p>Posts are loading…</p>
+      </div>
+    {/if}
+  </section>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Button from '../components/Button.pzl';
+import PostCard from '../components/PostCard.pzl';
+
+export default class HomeView extends PuzzleView {
+  // data() reads the store and derives the three newest posts. The store starts
+  // empty and is seeded after mount (see app.js); when the seed lands, the
+  // 'post' subscription re-runs data() and the list fills in.
+  data(params, props) {
+    const posts = this.ctx.store.findMany('post');
+    // Just the three newest posts — no position-tagging needed. The template
+    // loops with `{#for post in recentPosts, i}` (D29, v1.2), so PostCard gets
+    // its stagger index straight from the loop counter `i`. Keying is unaffected:
+    // the item form still auto-keys each row by `post.id`.
+    const recentPosts = [...posts]
+      .sort((a, b) => b.publishedDate - a.publishedDate)
+      .slice(0, 3);
+
+    return {
+      recentPosts,
+      hasPosts: posts.length > 0
+    };
+  }
+
+  events = {
+    goToPosts: () => {
+      this.ctx.router.push('/posts');
+    }
+  };
+
+  // Route transition (constellation/doc/DOC-SPEC.md §12). Sequential per D28: the outgoing view
+  // plays `out` and is destroyed, then this view plays `in`. All blog routes
+  // share the Default layout, so every navigation is a view-swap inside a reused
+  // layout — the VIEW is the animator (the layout never animates). The view also
+  // plays its `in` once on first paint (only the layout is silent on first
+  // paint). The `in` `to` keyframe equals the natural resting style, so nothing
+  // snaps when the enter's filled styles release.
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 260, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

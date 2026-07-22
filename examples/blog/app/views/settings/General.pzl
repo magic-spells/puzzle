@@ -1,0 +1,22 @@
+<puzzle-view>
+  <div class="settings-pane-general bg-surface border border-border rounded-xl p-5">
+    <h2 class="text-[1.35rem] text-ink mb-2">General</h2>
+    <p class="text-body">
+      The index child (an empty path) — it renders at the bare
+      <code>/settings</code> URL inside the shell's slot.
+    </p>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class SettingsGeneralView extends PuzzleView {
+  // Pane swap animation: on a sibling-pane navigation THIS pane is the topmost
+  // swapped view, so it animates alone while the shell above holds still (D30).
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateX(8px)' }, to: { opacity: 1, transform: 'translateX(0)' }, duration: 200, easing: 'ease-out' },
+    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 120, easing: 'ease-in' }
+  };
+}
+</scripts>

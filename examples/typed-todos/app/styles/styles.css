@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+/* Scan the app's TypeScript, .pzl components/views/layouts, and HTML so the
+ * utility classes they use are generated. Paths are relative to app/styles/. */
+@source "../**/*.pzl";
+@source "../**/*.ts";
+@source "../**/*.js";
+@source "../public/**/*.html";

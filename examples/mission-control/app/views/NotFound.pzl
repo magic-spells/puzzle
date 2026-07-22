@@ -1,0 +1,28 @@
+<puzzle-view class="h-full">
+  <div class="h-full grid place-items-center px-8">
+    <div class="text-center max-w-[440px]">
+      <div class="font-mono text-[0.72rem] uppercase tracking-[0.3em] text-crit mb-4">Signal lost</div>
+      <h1 class="font-display text-[3.4rem] font-semibold text-ink leading-none mb-3">404</h1>
+      <p class="text-[0.95rem] text-muted mb-7">No telemetry channel matches this coordinate. The requested route has drifted out of range.</p>
+      <a href="/" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-hair-lit bg-surface text-ink text-[0.9rem] font-medium hover:bg-surface-hi hover:border-accent/50 transition-colors">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+        Return to Overview
+      </a>
+    </div>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class NotFoundView extends PuzzleView {
+  data() {
+    return {};
+  }
+
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' }, duration: 240, easing: 'ease-out' },
+    out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 140, easing: 'ease-in' }
+  };
+}
+</scripts>

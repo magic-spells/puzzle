@@ -1,0 +1,30 @@
+<puzzle-view class="h-full flex flex-col items-center justify-center text-center px-6">
+  <div class="text-5xl font-bold text-accent">404</div>
+  <p class="mt-3 text-muted">That page doesn't exist.</p>
+  <button
+    type="button"
+    class="mt-6 px-5 h-11 rounded-2xl bg-accent text-white font-semibold hover:bg-accent-2 transition-colors"
+    @click={ goHome }>
+    Back to chat
+  </button>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class NotFound extends PuzzleView {
+  data() {
+    return {};
+  }
+
+  events = {
+    goHome: () => {
+      this.ctx.router.push('/');
+    },
+  };
+
+  animations = {
+    in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 200 },
+  };
+}
+</scripts>

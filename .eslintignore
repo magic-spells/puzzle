@@ -1,0 +1,5 @@
+# Root .eslintignore
+**/assets/
+**/node_modules/
+*.json
+*.md

@@ -1,0 +1,48 @@
+<puzzle-view>
+  <li class="list-none grid grid-rows-[1fr]">
+    <div class="overflow-hidden py-4 px-5 bg-surface border border-border rounded-[10px]">
+      <div class="flex items-baseline justify-between gap-3 mb-1.5">
+        <span class="font-semibold text-ink">{ comment.author }</span>
+        <span class="text-[0.78rem] text-muted">{ comment.createdAt | timeago }</span>
+      </div>
+      <p class="mb-2.5 text-slate">{ comment.text }</p>
+      <button class="border-0 bg-transparent text-danger text-[0.8rem] font-semibold cursor-pointer p-0 hover:underline" type="button" @click={ handleRemove }>Delete</button>
+    </div>
+  </li>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A single comment. The mutation is parent-owned: this component only reports
+// intent through the @remove callback prop, and the parent decides what to do.
+export default class CommentItem extends PuzzleView {
+  data(params, props) {
+    return {
+      comment: props.comment
+    };
+  }
+
+  events = {
+    handleRemove: (event) => {
+      const { remove } = this.props;
+      if (typeof remove === 'function') remove(event);
+    }
+  };
+
+  // Enter/leave animations (constellation/doc/DOC-SPEC.md §12) — a real height
+  // grow/collapse for UNKNOWN content height, no hardcoded px and no measuring.
+  // WAAPI can't animate to height:auto, so instead the root <li> is a CSS grid
+  // whose single row is animated `grid-template-rows: 0fr <-> 1fr`; the
+  // overflow:hidden inner wrapper (.comment-item__inner) clips the content as the
+  // row collapses. `1fr` resolves to the content's real height, so any comment
+  // length works. The `in` `to` (grid-template-rows:1fr, opacity:1) equals the
+  // CSS resting state, so the enter release is invisible. On removal the parent
+  // calls comment.destroy(); the ViewManager keeps the <li> in the DOM to play
+  // `out` (collapse) before removing it, so the list smoothly closes the gap.
+  animations = {
+    in:  { from: { gridTemplateRows: '0fr', opacity: 0 }, to: { gridTemplateRows: '1fr', opacity: 1 }, duration: 260, easing: 'ease-out' },
+    out: { from: { gridTemplateRows: '1fr', opacity: 1 }, to: { gridTemplateRows: '0fr', opacity: 0 }, duration: 220, easing: 'ease-in' }
+  };
+}
+</scripts>

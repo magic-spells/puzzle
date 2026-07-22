@@ -1,0 +1,420 @@
+<puzzle-view class="w-full">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <section class="kanban-column">
+      <header class="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-line">
+        <h2 class="text-sm font-semibold text-fg">Todo</h2>
+        <span class="font-mono text-[11px] tabular-nums text-faint">{ todoCount }</span>
+      </header>
+      <div class="kanban-cards p-3" data-column="todo">
+        {#for task in todoTasks}
+          <TaskCard task={ task } @grab={ startDrag(event, task.id) } />
+        {/for}
+      </div>
+    </section>
+
+    <section class="kanban-column">
+      <header class="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-line">
+        <h2 class="text-sm font-semibold text-fg">Doing</h2>
+        <span class="font-mono text-[11px] tabular-nums text-faint">{ doingCount }</span>
+      </header>
+      <div class="kanban-cards p-3" data-column="doing">
+        {#for task in doingTasks}
+          <TaskCard task={ task } @grab={ startDrag(event, task.id) } />
+        {/for}
+      </div>
+    </section>
+
+    <section class="kanban-column">
+      <header class="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-line">
+        <h2 class="text-sm font-semibold text-fg">Done</h2>
+        <span class="font-mono text-[11px] tabular-nums text-faint">{ doneCount }</span>
+      </header>
+      <div class="kanban-cards p-3" data-column="done">
+        {#for task in doneTasks}
+          <TaskCard task={ task } @grab={ startDrag(event, task.id) } />
+        {/for}
+      </div>
+    </section>
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import TaskCard from '../components/TaskCard.pzl';
+
+const DRAG_THRESHOLD = 5;
+const STATUSES = ['todo', 'doing', 'done'];
+
+export default class BoardView extends PuzzleView {
+  created() {
+    this.columns = [
+      { id: 'todo', title: 'Todo' },
+      { id: 'doing', title: 'Doing' },
+      { id: 'done', title: 'Done' },
+    ];
+
+    this._drag = null;
+    this._firstRects = new Map();
+    this._storedUserSelect = '';
+    this._storedCursor = '';
+    this._onPointerMove = (event) => this._handlePointerMove(event);
+    this._onPointerUp = (event) => this._handlePointerUp(event);
+    this._onKeyDown = (event) => this._handleKeyDown(event);
+
+    this.setData({
+      dragging: false,
+      draggingId: '',
+      targetCol: null,
+      targetIndex: 0,
+      dragHeight: 0,
+    });
+  }
+
+  data() {
+    const localData = this.getData();
+    const tasks = this.ctx.store.findMany('task');
+    const buckets = {
+      todo: this._ordered(tasks, 'todo'),
+      doing: this._ordered(tasks, 'doing'),
+      done: this._ordered(tasks, 'done'),
+    };
+
+    const counts = {
+      todo: buckets.todo.length,
+      doing: buckets.doing.length,
+      done: buckets.done.length,
+    };
+
+    if (localData.dragging && localData.draggingId) {
+      STATUSES.forEach((status) => {
+        buckets[status] = buckets[status].filter((task) => task.id !== localData.draggingId);
+      });
+
+      if (localData.targetCol && buckets[localData.targetCol]) {
+        const placeholder = {
+          id: '__ph__',
+          __placeholder: true,
+          height: localData.dragHeight || 72,
+        };
+        const targetIndex = this._clamp(localData.targetIndex, 0, buckets[localData.targetCol].length);
+        buckets[localData.targetCol].splice(targetIndex, 0, placeholder);
+      }
+    }
+
+    return {
+      columns: this.columns,
+      todoTasks: buckets.todo,
+      doingTasks: buckets.doing,
+      doneTasks: buckets.done,
+      todoCount: counts.todo,
+      doingCount: counts.doing,
+      doneCount: counts.done,
+      dragging: localData.dragging,
+      draggingId: localData.draggingId,
+      targetCol: localData.targetCol,
+      targetIndex: localData.targetIndex,
+      dragHeight: localData.dragHeight,
+    };
+  }
+
+  events = {
+    startDrag: (event, taskId) => {
+      if (this._drag) return;
+      if (event.button !== undefined && event.button !== 0) return;
+
+      const location = this._findTaskLocation(taskId);
+      if (!location) return;
+
+      event.preventDefault();
+      this._storedUserSelect = document.body.style.userSelect;
+      this._storedCursor = document.body.style.cursor;
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'grabbing';
+
+      this._drag = {
+        phase: 'PENDING',
+        id: taskId,
+        startX: event.clientX,
+        startY: event.clientY,
+        sourceCol: location.status,
+        sourceIndex: location.index,
+        targetCol: location.status,
+        targetIndex: location.index,
+        offsetX: 0,
+        offsetY: 0,
+        height: 0,
+        ghost: null,
+      };
+
+      document.addEventListener('pointermove', this._onPointerMove);
+      document.addEventListener('pointerup', this._onPointerUp);
+      document.addEventListener('keydown', this._onKeyDown);
+    }
+  };
+
+  beforeUpdate() {
+    this._firstRects = this._snapshotRects();
+  }
+
+  afterUpdate() {
+    if (!this.element || !this._firstRects) return;
+
+    this.element.querySelectorAll('[data-task-id]').forEach((element) => {
+      const id = element.dataset.taskId;
+      const first = this._firstRects.get(id);
+      const last = element.getBoundingClientRect();
+
+      if (!first) {
+        if (id === '__ph__' && element.animate) {
+          element.animate(
+            [
+              { opacity: 0, transform: 'scale(0.96)' },
+              { opacity: 1, transform: 'scale(1)' },
+            ],
+            { duration: 140, easing: 'ease-out' }
+          );
+        }
+        return;
+      }
+
+      const dx = first.left - last.left;
+      const dy = first.top - last.top;
+      if ((Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) && element.animate) {
+        element.animate(
+          [
+            { transform: `translate(${dx}px, ${dy}px)` },
+            { transform: 'translate(0, 0)' },
+          ],
+          { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' }
+        );
+      }
+    });
+  }
+
+  destroyed() {
+    this._cleanup(false);
+  }
+
+  _handlePointerMove(event) {
+    if (!this._drag) return;
+
+    const dx = event.clientX - this._drag.startX;
+    const dy = event.clientY - this._drag.startY;
+
+    if (this._drag.phase === 'PENDING') {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      this._promote(event);
+    }
+
+    if (this._drag.phase !== 'DRAGGING') return;
+
+    event.preventDefault();
+    this._moveGhost(event);
+
+    const target = this._hitTest(event.clientX, event.clientY);
+    if (target.col !== this._drag.targetCol || target.index !== this._drag.targetIndex) {
+      this._drag.targetCol = target.col;
+      this._drag.targetIndex = target.index;
+      this._publishDragState();
+    }
+  }
+
+  _handlePointerUp(event) {
+    if (!this._drag) return;
+
+    event.preventDefault();
+    if (this._drag.phase === 'DRAGGING' && this._drag.targetCol) {
+      this._drag.phase = 'DROP';
+      this._commitDrop();
+    } else {
+      this._drag.phase = 'CANCEL';
+    }
+
+    this._cleanup(true);
+  }
+
+  _handleKeyDown(event) {
+    if (!this._drag || event.key !== 'Escape') return;
+
+    event.preventDefault();
+    this._drag.phase = 'CANCEL';
+    this._cleanup(true);
+  }
+
+  _promote(event) {
+    const card = this._findTaskElement(this._drag.id);
+    if (!card) {
+      this._drag.phase = 'CANCEL';
+      this._cleanup(true);
+      return;
+    }
+
+    const rect = card.getBoundingClientRect();
+    const ghost = card.cloneNode(true);
+    ghost.classList.add('kanban-ghost');
+    ghost.style.position = 'fixed';
+    ghost.style.left = '0';
+    ghost.style.top = '0';
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.height = `${rect.height}px`;
+    ghost.style.margin = '0';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.zIndex = '9999';
+    ghost.style.transformOrigin = '50% 50%';
+
+    document.body.appendChild(ghost);
+
+    this._drag.phase = 'DRAGGING';
+    this._drag.offsetX = event.clientX - rect.left;
+    this._drag.offsetY = event.clientY - rect.top;
+    this._drag.height = rect.height;
+    this._drag.ghost = ghost;
+
+    this._moveGhost(event);
+    this._publishDragState();
+  }
+
+  _publishDragState() {
+    if (!this._drag) return;
+
+    this.setData({
+      dragging: this._drag.phase === 'DRAGGING',
+      draggingId: this._drag.id,
+      targetCol: this._drag.targetCol,
+      targetIndex: this._drag.targetIndex,
+      dragHeight: this._drag.height,
+    });
+    this.refresh();
+  }
+
+  _moveGhost(event) {
+    if (!this._drag || !this._drag.ghost) return;
+
+    const x = event.clientX - this._drag.offsetX;
+    const y = event.clientY - this._drag.offsetY;
+    this._drag.ghost.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(3deg) scale(1.03)`;
+  }
+
+  _hitTest(x, y) {
+    if (!this.element) return { col: null, index: 0 };
+
+    const columns = Array.from(this.element.querySelectorAll('[data-column]'));
+    const column = columns.find((element) => {
+      const rect = element.getBoundingClientRect();
+      return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+    });
+
+    if (!column) return { col: null, index: 0 };
+
+    const cards = Array.from(column.querySelectorAll('[data-task-id]'))
+      .filter((element) => element.dataset.taskId !== '__ph__');
+    let index = 0;
+
+    cards.forEach((card) => {
+      const rect = card.getBoundingClientRect();
+      if (y > rect.top + rect.height / 2) index += 1;
+    });
+
+    return { col: column.dataset.column, index };
+  }
+
+  _commitDrop() {
+    if (!this._drag || !this._drag.targetCol) return;
+
+    const store = this.ctx.store;
+    const dragged = store.findOne('task', this._drag.id);
+    if (!dragged) return;
+
+    const targetCol = this._drag.targetCol;
+    const sourceCol = this._drag.sourceCol;
+    const targetTasks = this._tasksForStatus(targetCol)
+      .filter((task) => task.id !== dragged.id);
+    const targetIndex = this._clamp(this._drag.targetIndex, 0, targetTasks.length);
+
+    targetTasks.splice(targetIndex, 0, dragged);
+    targetTasks.forEach((task, index) => {
+      task.update({ status: targetCol, order: index });
+    });
+
+    if (sourceCol !== targetCol) {
+      this._tasksForStatus(sourceCol)
+        .filter((task) => task.id !== dragged.id)
+        .forEach((task, index) => {
+          task.update({ status: sourceCol, order: index });
+        });
+    }
+  }
+
+  _cleanup(shouldRefresh) {
+    const ghost = this._drag && this._drag.ghost;
+
+    document.removeEventListener('pointermove', this._onPointerMove);
+    document.removeEventListener('pointerup', this._onPointerUp);
+    document.removeEventListener('keydown', this._onKeyDown);
+
+    if (ghost && ghost.parentNode) {
+      ghost.parentNode.removeChild(ghost);
+    }
+
+    document.body.style.userSelect = this._storedUserSelect;
+    document.body.style.cursor = this._storedCursor;
+    this._drag = null;
+
+    this.setData({
+      dragging: false,
+      draggingId: '',
+      targetCol: null,
+      targetIndex: 0,
+      dragHeight: 0,
+    });
+
+    if (shouldRefresh) this.refresh();
+  }
+
+  _snapshotRects() {
+    const rects = new Map();
+    if (!this.element) return rects;
+
+    this.element.querySelectorAll('[data-task-id]').forEach((element) => {
+      rects.set(element.dataset.taskId, element.getBoundingClientRect());
+    });
+
+    return rects;
+  }
+
+  _findTaskElement(taskId) {
+    if (!this.element) return null;
+
+    return Array.from(this.element.querySelectorAll('[data-task-id]'))
+      .find((element) => element.dataset.taskId === taskId) || null;
+  }
+
+  _findTaskLocation(taskId) {
+    for (const status of STATUSES) {
+      const tasks = this._tasksForStatus(status);
+      const index = tasks.findIndex((task) => task.id === taskId);
+      if (index !== -1) return { status, index };
+    }
+
+    return null;
+  }
+
+  _tasksForStatus(status) {
+    return this._ordered(this.ctx.store.findMany('task'), status);
+  }
+
+  _ordered(tasks, status) {
+    return tasks
+      .filter((task) => task.status === status)
+      .slice()
+      .sort((a, b) => {
+        if (a.order !== b.order) return a.order - b.order;
+        return String(a.id).localeCompare(String(b.id));
+      });
+  }
+
+  _clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+}
+</scripts>

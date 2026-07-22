@@ -1,0 +1,102 @@
+<puzzle-view>
+  <!-- The whole card is one link to the detail route. hover:no-underline keeps
+       the anchor from underlining the text rows on hover (Airbnb-style). The
+       Wishlist page imports this same component, so the props contract is fixed:
+       `listing` (a listing record) and `index` (grid position, for the stagger). -->
+  <a href="/listing/{ listing.id }" class="group block hover:no-underline">
+    <!-- Cover tile. background is the listing's per-record gradient (the model's
+         `cover` getter turns photos[0]'s {from,to} into a CSS linear-gradient),
+         and the scene emoji floats centered on top. Gentle scale on group-hover
+         mirrors the music demo's AlbumCard. -->
+    <div
+      class="aspect-square rounded-xl mb-3 relative overflow-hidden ring-1 ring-line shadow-sm transition-transform duration-200 group-hover:scale-[1.02]"
+      style="background:{ listing.cover }">
+      <div class="absolute inset-0 flex items-center justify-center">
+        <span class="text-5xl drop-shadow-sm select-none">{ coverIcon }</span>
+      </div>
+
+      <!-- Top-left "Guest favorite" badge — a white pill, only when the listing
+           earns it. -->
+      {#if listing.guestFavorite}
+        <span class="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-bg text-fg text-xs font-semibold shadow">Guest favorite</span>
+      {/if}
+
+      <!-- Top-right wishlist heart. This is a <button> inside the <a>, so the
+           handler must stop the click from navigating (see toggleSave). Filled
+           accent heart when saved, otherwise a white outline heart with a drop
+           shadow so it reads on any cover gradient. -->
+      <button
+        type="button"
+        class="absolute top-2.5 right-2.5 w-9 h-9 flex items-center justify-center text-2xl leading-none transition-transform hover:scale-110 active:scale-95"
+        aria-label="Save to wishlist"
+        @click={ toggleSave(event) }>
+        {#if listing.saved}
+          <span class="text-accent drop-shadow">♥</span>
+        {:else}
+          <span class="text-white/85 drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">♡</span>
+        {/if}
+      </button>
+    </div>
+
+    <!-- Row 1: location + rating on one baseline. -->
+    <div class="flex items-baseline justify-between gap-2">
+      <span class="font-semibold text-fg text-[15px] truncate">{ listing.location }</span>
+      <span class="text-sm text-fg shrink-0">★ { listing.rating | rating }</span>
+    </div>
+
+    <!-- Row 2–4: the secondary lines, all muted gray under the near-black location. -->
+    <div class="text-muted text-sm truncate mt-0.5">{ listing.title }</div>
+    <div class="text-muted text-sm">{ listing.type }</div>
+    <div class="mt-1 text-fg">
+      <span class="font-semibold">{ listing.pricePerNight | currency }</span><span class="text-muted"> night</span>
+    </div>
+  </a>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class ListingCard extends PuzzleView {
+  data(params, props) {
+    const listing = props.listing;
+
+    // Defensive cover-icon lookup: photos is a Puzzle.array() that may be empty
+    // mid-seed, so fall back to a neutral house glyph rather than reading `.icon`
+    // off undefined in the template.
+    const photos = (listing && listing.photos) || [];
+    const coverIcon = (photos[0] && photos[0].icon) || '🏠';
+
+    return { listing, coverIcon };
+  }
+
+  events = {
+    // Wishlist mechanic. The card is a link, so we preventDefault +
+    // stopPropagation to swallow the navigation, then flip the record's `saved`
+    // flag. record.update() notifies every subscriber, so the same heart lights
+    // up here, on the Wishlist page, and in the header count — all at once.
+    toggleSave: (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const listing = this.getData().listing;
+      listing.update({ saved: !listing.saved });
+    }
+  };
+
+  // Per-instance staggered entrance: the parent grid threads each card's row
+  // position in as `index` (via the {#for … , i} counter), and that becomes the
+  // animation delay so the grid cascades in. A getter, not a static field,
+  // because the delay is read per instance at mount (constellation/doc/DOC-SPEC.md §12).
+  get animations() {
+    const index = this.props.index ?? 0;
+    return {
+      in: {
+        from: { opacity: 0, transform: 'translateY(14px)' },
+        to:   { opacity: 1, transform: 'translateY(0)' },
+        duration: 300,
+        delay: index * 45,
+        easing: 'ease-out'
+      }
+    };
+  }
+}
+</scripts>

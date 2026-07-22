@@ -1,0 +1,19 @@
+[
+  {
+    "id": "me",
+    "name": "Cory",
+    "home": "Los Angeles, United States",
+    "joined": 2019,
+    "bio": "Chasing good light, slow mornings, and a window seat everywhere I go.",
+    "stamps": [
+      { "city": "Marrakech", "country": "Morocco", "year": 2022, "icon": "🕌", "accent": { "from": "#e6c9a8", "to": "#c99a5a" } },
+      { "city": "Kyoto", "country": "Japan", "year": 2023, "icon": "⛩️", "accent": { "from": "#e6b0c0", "to": "#c98aa0" } },
+      { "city": "Reykjavik", "country": "Iceland", "year": 2023, "icon": "❄️", "accent": { "from": "#c4d8e0", "to": "#7aa0b0" } },
+      { "city": "Lisbon", "country": "Portugal", "year": 2024, "icon": "🚋", "accent": { "from": "#e6d0a8", "to": "#c9a86a" } },
+      { "city": "Tulum", "country": "Mexico", "year": 2024, "icon": "🌊", "accent": { "from": "#a8d6c4", "to": "#6aae94" } },
+      { "city": "Mexico City", "country": "Mexico", "year": 2024, "icon": "🌮", "accent": { "from": "#e6b09a", "to": "#c9705a" } },
+      { "city": "Copenhagen", "country": "Denmark", "year": 2025, "icon": "🚲", "accent": { "from": "#cdd2da", "to": "#9aa0ac" } },
+      { "city": "Queenstown", "country": "New Zealand", "year": 2025, "icon": "🏔️", "accent": { "from": "#c0cdc9", "to": "#8aa89c" } }
+    ]
+  }
+]

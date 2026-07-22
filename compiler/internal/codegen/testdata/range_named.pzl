@@ -1,0 +1,15 @@
+<puzzle-view class="dots">
+  {#for 1...count, n}
+    <span class="dot">{ n }</span>
+  {/for}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class RangeNamed extends PuzzleView {
+  data() {
+    return { count: 3 };
+  }
+}
+</scripts>

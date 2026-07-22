@@ -1,0 +1,223 @@
+<puzzle-view>
+  {#if listing}
+    <!-- ===== Title block ===== -->
+    <header class="mb-6">
+      <h1 class="font-display text-2xl sm:text-3xl font-semibold text-fg leading-tight">{ listing.title }</h1>
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-sm text-fg">
+        <span>★ { listing.rating | rating }</span>
+        <span class="text-faint">·</span>
+        <span class="underline decoration-muted/40">{ listing.reviewCount } reviews</span>
+        <span class="text-faint">·</span>
+        <span class="text-muted">{ listing.location }</span>
+        {#if listing.guestFavorite}
+          <span class="ml-1 px-2.5 py-0.5 rounded-full bg-surface-2 text-fg text-xs font-semibold">Guest favorite</span>
+        {/if}
+        {#if hostSuperhost}
+          <span class="px-2.5 py-0.5 rounded-full bg-surface-2 text-fg text-xs font-semibold">Superhost</span>
+        {/if}
+      </div>
+    </header>
+
+    <!-- ===== Photo mosaic ===== -->
+    <PhotoGallery listing={ listing } />
+
+    <!-- ===== Two-column body ===== -->
+    <div class="grid lg:grid-cols-[1fr_380px] gap-10 mt-8">
+      <!-- LEFT: host, description, amenities, calendar. -->
+      <div class="min-w-0">
+        <!-- Host summary row. -->
+        <div class="flex items-start justify-between gap-4 pb-6 border-b border-line">
+          <div class="min-w-0">
+            <h2 class="text-xl font-semibold text-fg">{ listing.type } hosted by {#if host}{ host.name }{:else}your host{/if}</h2>
+            <p class="text-muted text-sm mt-1">
+              { listing.guests } { listing.guests | plural('guest','guests') } ·
+              { listing.bedrooms } { listing.bedrooms | plural('bedroom','bedrooms') } ·
+              { listing.beds } { listing.beds | plural('bed','beds') } ·
+              { listing.baths } { listing.baths | plural('bath','baths') }
+            </p>
+          </div>
+          {#if host}
+            <div class="text-right shrink-0">
+              <div
+                class="w-12 h-12 rounded-full ml-auto flex items-center justify-center text-accent-ink font-semibold shadow-sm"
+                style="background:{ host.avatar }">{ host.initial }</div>
+              <div class="text-xs text-muted mt-1">{ host.yearsHosting } years hosting</div>
+              {#if host.superhost}
+                <div class="text-xs text-accent font-medium mt-0.5">Superhost</div>
+              {/if}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Description. -->
+        {#if listing.description}
+          <p class="text-fg leading-relaxed py-6 border-b border-line">{ listing.description }</p>
+        {/if}
+
+        <!-- Amenities grid — each amenity paired with its matching emoji. -->
+        <div class="py-6 border-b border-line">
+          <h2 class="text-xl font-semibold text-fg mb-4">What this place offers</h2>
+          <div class="grid sm:grid-cols-2 gap-x-6 gap-y-4">
+            {#for amenity in amenities, i}
+              <div class="flex items-center gap-3 text-fg">
+                <span class="text-xl w-6 text-center select-none">{ amenity.icon }</span>
+                <span>{ amenity.name }</span>
+              </div>
+            {/for}
+          </div>
+        </div>
+
+        <!-- Date picker. Its @select callback flows the chosen range back into
+             this view's local state, which then re-props the BookingWidget. -->
+        <div class="py-6">
+          <h2 class="text-xl font-semibold text-fg mb-1">Select your dates</h2>
+          <p class="text-muted text-sm mb-5">
+            {#if checkIn}{#if checkOut}Your trip is set — review it on the right.{:else}Now pick your checkout date.{/if}{:else}Add your check-in and checkout dates.{/if}
+          </p>
+          <Calendar
+            listing={ listing }
+            checkIn={ checkIn }
+            checkOut={ checkOut }
+            @select={ onDatesSelect(event) } />
+        </div>
+      </div>
+
+      <!-- RIGHT: sticky booking widget. -->
+      <div class="lg:sticky lg:top-24 self-start">
+        <BookingWidget
+          listing={ listing }
+          checkIn={ checkIn }
+          checkOut={ checkOut }
+          @reserve={ onReserve(event) } />
+      </div>
+    </div>
+
+    <!-- ===== Reviews ===== -->
+    <section class="border-t border-line pt-8 mt-4">
+      <h2 class="text-xl font-semibold text-fg mb-6">★ { listing.rating | rating } · { listing.reviewCount } reviews</h2>
+      {#if reviews.length > 0}
+        <div class="grid sm:grid-cols-2 gap-5">
+          {#for review in reviews, i}
+            <ReviewCard review={ review } index={ i } />
+          {/for}
+        </div>
+      {:else}
+        <p class="text-muted">No reviews yet for this stay.</p>
+      {/if}
+    </section>
+  {:else}
+    <!-- Not-found vs still-loading. `loaded` flips true once the listing seed
+         lands, so we only show the friendly 404 after seeding, never during it. -->
+    {#if loaded}
+      <div class="py-24 text-center">
+        <h1 class="text-2xl font-semibold text-fg mb-2">This stay doesn't exist</h1>
+        <p class="text-muted">We couldn't find that listing. <a href="/" class="text-accent hover:no-underline">Back home</a>.</p>
+      </div>
+    {:else}
+      <div class="py-24 text-center text-muted">Loading…</div>
+    {/if}
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import PhotoGallery from '../components/PhotoGallery.pzl';
+import Calendar from '../components/Calendar.pzl';
+import BookingWidget from '../components/BookingWidget.pzl';
+import ReviewCard from '../components/ReviewCard.pzl';
+
+// Canonical amenity → emoji map (the 14 amenity strings the seed uses). Kept as
+// a module constant so it isn't rebuilt on every data() run.
+const AMENITY_ICONS = {
+  'Wifi': '📶',
+  'Kitchen': '🍳',
+  'Free parking': '🚗',
+  'Pool': '🏊',
+  'Hot tub': '🛁',
+  'Washer': '🧺',
+  'Air conditioning': '❄️',
+  'Fireplace': '🔥',
+  'Pets allowed': '🐾',
+  'EV charger': '🔌',
+  'Ocean view': '🌊',
+  'Mountain view': '⛰️',
+  'BBQ grill': '🍖',
+  'Sauna': '🧖'
+};
+
+export default class ListingView extends PuzzleView {
+  data(params, props) {
+    const store = this.ctx.store;
+    const listing = store.findOne('listing', params.id);
+
+    // Defensive joins — host may not be seeded for a beat; guard so the template
+    // never reads off undefined.
+    const host = listing ? store.findOne('host', listing.hostId) : null;
+
+    // Reviews for this listing, newest first (ISO dates sort lexicographically).
+    const reviews = store
+      .findMany('review', { filter: (r) => r.listingId === params.id })
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+    // Amenities with their matching emoji; unknown strings fall back to a check.
+    const amenities = (listing ? listing.amenities || [] : []).map((name) => ({
+      name,
+      icon: AMENITY_ICONS[name] || '✓'
+    }));
+
+    // Selected dates are LOCAL UI state kept across data() re-runs (store changes
+    // re-run this), the way music's AppLayout preserves queueOpen via getData().
+    const prev = this.getData() || {};
+    const checkIn = prev.checkIn || '';
+    const checkOut = prev.checkOut || '';
+
+    // loaded gates the not-found message so it never flashes mid-seed.
+    const loaded = store.findMany('listing').length > 0;
+
+    return {
+      listing,
+      host,
+      hostSuperhost: !!(host && host.superhost),
+      reviews,
+      amenities,
+      checkIn,
+      checkOut,
+      loaded
+    };
+  }
+
+  events = {
+    // Calendar reports its selection here; either date may be '' mid-selection.
+    // setData updates local state (it does NOT re-run data()), then refresh()
+    // re-renders so the new dates re-prop the Calendar + BookingWidget.
+    onDatesSelect: (event) => {
+      const sel = event || {};
+      this.setData({ checkIn: sel.checkIn || '', checkOut: sel.checkOut || '' });
+      this.refresh();
+    },
+
+    // Reserve: create a local trip and jump to the trips list. Locally-created
+    // trips use a 't-local-' id so app.js persists them to localStorage across
+    // reloads (the in-memory store isn't durable on its own).
+    onReserve: () => {
+      const d = this.getData();
+      const listing = d.listing;
+      if (!listing || !d.checkIn || !d.checkOut) return;
+      this.ctx.store.createRecord('trip', {
+        id: 't-local-' + Date.now(),
+        listingId: listing.id,
+        checkIn: d.checkIn,
+        checkOut: d.checkOut,
+        status: 'upcoming'
+      });
+      this.ctx.router.push('/account/trips');
+    }
+  };
+
+  // View enter/leave, matching the music demo's Album view feel.
+  animations = {
+    in:  { from: { opacity: 0, transform: 'translateY(10px)' }, to: { opacity: 1, transform: 'translateY(0)' },  duration: 260, easing: 'ease-out' },
+    out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
+  };
+}
+</scripts>

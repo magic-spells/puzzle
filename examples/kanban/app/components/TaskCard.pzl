@@ -1,0 +1,28 @@
+<puzzle-view>
+  <div class="kanban-card mb-3" data-task-id={ task.id } @pointerdown={ down(event) }>
+    {#if task.__placeholder}
+      <div class="kanban-placeholder" style="height:{ task.height }px"></div>
+    {:else}
+      <article class="kanban-card-body px-4 py-3.5">
+        <h3 class="text-sm font-semibold leading-5 text-fg">{ task.title }</h3>
+      </article>
+    {/if}
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class TaskCard extends PuzzleView {
+  data(params, props) {
+    return { task: props.task };
+  }
+
+  events = {
+    down: (event) => {
+      if (this.props.task.__placeholder) return;
+      this.props.grab(event);
+    }
+  };
+}
+</scripts>

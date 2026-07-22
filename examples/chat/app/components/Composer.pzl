@@ -1,0 +1,104 @@
+<puzzle-view>
+  <!-- @submit:prevent (v1.7, D38) stops the native form submit without a manual
+       event.preventDefault() in the handler. The whole card is the focus target
+       (focus-within), so the input itself stays chrome-free. -->
+  <form
+    class="rounded-2xl border border-hairline bg-surface-2 px-3 pt-2 pb-2 transition-colors focus-within:border-accent/60 focus-within:ring-2 focus-within:ring-accent/25"
+    @submit:prevent={ submit }>
+    <!-- Row 1: the text input — borderless/transparent; native Enter submits. -->
+    <input
+      type="text"
+      class="w-full bg-transparent px-1 py-2 text-fg placeholder-faint focus:outline-none disabled:opacity-50"
+      placeholder="Ask about the Puzzle framework…"
+      value={ draft }
+      @input={ updateDraft(event) }
+      @keydown:escape={ clearDraft }
+      disabled={ busy }
+      autofocus />
+
+    <!-- Row 2: controls — model selector (left) + send button (right). -->
+    <div class="flex items-center justify-between gap-2 pt-1">
+      <!-- Model selector: local UI state via setData (NOT data()), same as draft.
+           A real <select> for a11y, styled quiet, with a ▾ affordance. -->
+      <div class="relative inline-flex items-center">
+        <select
+          class="appearance-none bg-transparent pl-1 pr-5 py-1 text-xs sm:text-sm text-muted hover:text-fg focus:outline-none focus:text-fg cursor-pointer transition-colors disabled:opacity-50"
+          value={ model }
+          @change={ pickModel(event) }
+          disabled={ busy }
+          aria-label="Model">
+          <option value="puzzle-nano">puzzle-nano · fastest</option>
+          <!-- `selected` covers the INITIAL render: the vdom assigns the select's
+               `value` property before the option children exist, which would fall
+               back to the first option. Re-renders are covered by value={ model }. -->
+          <option value="puzzle-core" selected>puzzle-core</option>
+          <option value="puzzle-max">puzzle-max · thorough</option>
+        </select>
+        <span class="pointer-events-none absolute right-1 text-faint text-[10px]">▾</span>
+      </div>
+
+      <!-- Send: compact accent circle with an ↑ arrow; disabled when the draft is
+           blank or a reply is streaming. -->
+      <button
+        type="submit"
+        class="grid place-items-center w-8 h-8 rounded-full bg-accent text-white hover:bg-accent-2 disabled:bg-surface disabled:text-faint disabled:cursor-not-allowed transition-colors"
+        disabled={ !draft.trim() || busy }
+        aria-label="Send">
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10 16V4" />
+          <path d="M5 9l5-5 5 5" />
+        </svg>
+      </button>
+    </div>
+  </form>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The message input, restyled as a modern AI-chat input card: one bordered
+// bg-surface-2 card holding the (chrome-free) text row and a controls row with a
+// model selector and a send button. Both `draft` and `model` are LOCAL UI state
+// (setData, not data()); `send` is a callback prop the parent supplies, and
+// `disabled` (streaming) comes in as a prop. value={ draft } is the two-way input
+// binding; @keydown:escape clears it.
+export default class Composer extends PuzzleView {
+  created() {
+    this.setData({ draft: '', model: 'puzzle-core' });
+  }
+
+  data(params, props) {
+    return {
+      draft: this.getData().draft ?? '',
+      // Surfaced for the controlled <select value={ model }> — still pure local
+      // UI state managed by setData (never sourced from props/store), like draft.
+      model: this.getData().model ?? 'puzzle-core',
+      busy: props.disabled || false,
+    };
+  }
+
+  events = {
+    updateDraft: (event) => {
+      this.setData('draft', event.target.value);
+    },
+    clearDraft: () => {
+      this.setData('draft', '');
+    },
+    pickModel: (event) => {
+      this.setData('model', event.target.value);
+    },
+    submit: () => {
+      const text = (this.getData().draft || '').trim();
+      if (!text || this.props.disabled) return;
+      // Component callback props receive exactly what the child passes, but the
+      // parent's `@send={ sendMessage(event) }` binding wraps to
+      // `(event) => sendMessage(event)` — only the FIRST arg binds. So pass a
+      // single object; the parent destructures { text, model } (SPEC §5, D16).
+      if (typeof this.props.send === 'function') {
+        this.props.send({ text, model: this.getData().model });
+      }
+      this.setData('draft', '');
+    },
+  };
+}
+</scripts>

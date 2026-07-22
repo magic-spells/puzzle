@@ -1,0 +1,963 @@
+<puzzle-view class="min-h-screen">
+  {#if page}
+    <article class="doc-column mx-auto max-w-2xl px-12 py-14">
+      <!-- Title. The text span is a contenteditable island: editing it syncs
+           page.title to the store, which re-renders the sidebar live (the store
+           echo showing off). `key={ page.id }` re-seeds the island on a page
+           switch — an island's children are frozen after mount (D44), so without
+           the key a reused Doc would show the previous page's title. -->
+      <h1 class="flex items-start gap-3 font-display text-4xl font-bold leading-tight text-ink mb-4">
+        <span class="text-4xl leading-none">{ page.icon }</span>
+        <span
+          key={ page.id }
+          class="flex-1 outline-none"
+          data-doc-title
+          contenteditable="true"
+          island
+          @input={ onTitleInput(event) }
+          @keydown:enter={ onTitleEnter(event) }
+          @paste={ onTitlePaste(event) }
+        >{ page.title }</span>
+      </h1>
+
+      <div data-block-list>
+        {#for block in blocks}
+          <Block
+            id={ block.id }
+            type={ block.type }
+            text={ block.text }
+            checked={ block.checked }
+            indent={ block.indent }
+            number={ block.number }
+            placeholder={ block.__placeholder }
+            phHeight={ block.height }
+            slashActive={ slashBlockId === block.id }
+            @toggle={ toggleBlock(block.id) }
+            @sync={ syncBlock(block.id, event) }
+            @split={ splitBlock(block.id, event) }
+            @mergeUp={ mergeUpBlock(block.id, event) }
+            @navigate={ navigateBlock(block.id, event) }
+            @convert={ convertBlock(block.id) }
+            @remove={ removeBlock(block.id) }
+            @slash={ onSlash(event, block.id) }
+            @slashKey={ onSlashKey(event, block.id) }
+            @grab={ startDrag(event, block.id) }
+            @indentBy={ indentBlock(block.id, event) }
+          />
+        {/for}
+      </div>
+
+      <!-- Click zone: append an empty paragraph and focus it for typing. -->
+      <div
+        class="mt-3 -mx-2 rounded px-2 py-2 text-sm text-faint cursor-text hover:bg-hover hover:text-muted"
+        @click={ appendBlock }
+      >Click to add a block…</div>
+    </article>
+  {:else}
+    <div class="mx-auto max-w-2xl px-12 py-24 text-center">
+      <div class="text-5xl mb-4">🕯️</div>
+      <h1 class="font-display text-2xl font-semibold text-ink mb-2">This page has faded</h1>
+      <p class="text-muted">The spell you were looking for is no longer in the grimoire.</p>
+    </div>
+  {/if}
+
+  <!-- Slash / Turn-into command menu. Rendered in Doc's NORMAL reconciled tree
+       (never inside a block island — a component/menu inside browser-owned DOM
+       would be frozen, SPEC §17). Positioned with fixed coordinates measured off
+       the anchor block/handle at open time. -->
+  {#if menuOpen}
+    <div class="gr-menu" style="left:{ menuX }px; top:{ menuY }px">
+      {#if menuCommands.length}
+        {#for cmd in menuCommands, i}
+          <div
+            class="gr-menu-row {#if i === menuHighlight}is-active{/if}{#if cmd.danger} is-danger{/if}"
+            @mousedown:prevent={ noop }
+            @mouseenter={ hoverCommand(i) }
+            @click={ pickCommand(cmd.id) }
+          >
+            <span class="gr-menu-glyph">{ cmd.glyph }</span>
+            <span class="gr-menu-label">{ cmd.label }</span>
+          </div>
+        {/for}
+      {:else}
+        <div class="gr-menu-empty">No matches</div>
+      {/if}
+    </div>
+  {/if}
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Block from '../components/Block.pzl';
+import { textOf, insertText } from '../lib/caret.js';
+import { requestFocus, flushFocus } from '../lib/focus.js';
+
+const DRAG_THRESHOLD = 5; // px before a handle press promotes to a drag
+
+// The full command palette (slash menu). Turn-into reuses it minus Divider, plus
+// a red Delete row. `id` is the {#for} key AND the lookup handle; `keywords` are
+// pre-lowercased for cheap filtering; `glyph` is a CSS/text badge (no icon lib).
+const SLASH_COMMANDS = [
+  { id: 'paragraph', type: 'paragraph', label: 'Text',          glyph: '¶',   keywords: 'text plain paragraph body' },
+  { id: 'heading1',  type: 'heading1',  label: 'Heading 1',     glyph: 'H1',  keywords: 'heading title big h1' },
+  { id: 'heading2',  type: 'heading2',  label: 'Heading 2',     glyph: 'H2',  keywords: 'heading subtitle h2' },
+  { id: 'heading3',  type: 'heading3',  label: 'Heading 3',     glyph: 'H3',  keywords: 'heading subheading h3' },
+  { id: 'bullet',    type: 'bullet',    label: 'Bulleted list', glyph: '•',   keywords: 'bullet unordered ul list point' },
+  { id: 'numbered',  type: 'numbered',  label: 'Numbered list', glyph: '1.',  keywords: 'numbered ordered ol list' },
+  { id: 'todo',      type: 'todo',      label: 'To-do',         glyph: '☑',   keywords: 'todo checkbox task check' },
+  { id: 'quote',     type: 'quote',     label: 'Quote',         glyph: '❝',   keywords: 'quote blockquote citation' },
+  { id: 'code',      type: 'code',      label: 'Code',          glyph: '</>', keywords: 'code snippet monospace pre' },
+  { id: 'divider',   type: 'divider',   label: 'Divider',       glyph: '―',   keywords: 'divider hr rule separator line' },
+];
+
+const TURN_COMMANDS = SLASH_COMMANDS.filter((c) => c.type !== 'divider').concat([
+  { id: '__delete', type: '__delete', label: 'Delete', glyph: '🗑', keywords: 'delete remove trash', danger: true },
+]);
+
+// ---------------------------------------------------------------------------
+// BLOCK <-> DOC MENU PROTOCOL
+//
+// Two channels, both callback props on <Block> (SPEC §6). The block owns the
+// island (and thus the caret); Doc owns the menu STATE and the command list.
+//
+//   @slash={ onSlash(event, id) }     — lifecycle from the island's own typing:
+//       { kind: 'open',  offset, query } typed a triggering '/'
+//       { kind: 'query', query }        query text changed (filter + reset)
+//       { kind: 'close' }               '/' removed / space typed / caret left
+//   @slashKey={ onSlashKey(event, id) } — keys the island intercepts WHILE Doc
+//       says its menu is open (slashActive prop): 'up' | 'down' | 'select' |
+//       'cancel'. These drive the menu instead of moving the caret.
+//
+// The Turn-into menu is opened by Doc itself (a no-move pointerup on the ⠿
+// handle, see the drag machine) and driven by a document keydown listener —
+// the island need not be focused for it. Both menus share the same render,
+// highlight, and selection code; `menuKind` ('slash'|'turn') selects behaviour
+// (slash strips the typed "/query"; turn keeps the text, just converts).
+// ---------------------------------------------------------------------------
+
+export default class Doc extends PuzzleView {
+  created() {
+    // Drag state machine (adapted from the kanban Board): a mutable `_drag`
+    // scratch object plus published setData mirror for data() to splice the
+    // placeholder. FLIP rects are only snapshotted while a drag is live so the
+    // per-keystroke re-render stays cheap.
+    this._drag = null;
+    this._dragActive = false;
+    this._firstRects = new Map();
+    this._storedUserSelect = '';
+    this._storedCursor = '';
+    this._onPointerMove = (e) => this._handlePointerMove(e);
+    this._onPointerUp = (e) => this._handlePointerUp(e);
+    this._onDragKey = (e) => this._handleDragKey(e);
+    this._onDocKeyDown = (e) => this._handleDocKeyDown(e);
+    this._onDocPointerDown = (e) => this._handleDocPointerDown(e);
+    this._menuListening = false;
+
+    this.setData({
+      dragging: false,
+      draggingId: '',
+      targetIndex: 0,
+      dragHeight: 0,
+      // Menu state (all local UI, never a store query — persists across data()
+      // re-runs because #commit merges data()'s result, D39/PuzzleView).
+      menuOpen: false,
+      menuKind: null,       // 'slash' | 'turn'
+      menuBlockId: null,
+      slashBlockId: null,   // block id whose SLASH menu is open (drives key reroute)
+      menuX: 0,
+      menuY: 0,
+      menuHighlight: 0,
+      menuCommands: [],
+      slashOffset: 0,
+      slashQuery: '',
+    });
+  }
+
+  // Load the page and its ordered blocks. Sorting AND the numbered-list
+  // numbering are computed here (never in the template, SPEC §6). Both queries
+  // auto-subscribe, so edits to any block re-run this and repaint. Islands make
+  // the per-keystroke repaint safe — the editable subtree is never reconciled.
+  data(params) {
+    const store = this.ctx.store;
+    const page = store.findOne('page', params.id);
+
+    const ordered = store
+      .findMany('block', { filter: (b) => b.pageId === params.id })
+      .slice()
+      .sort((a, b) => a.order - b.order);
+
+    // Numbered lists restart at 1 for each consecutive run of `numbered` blocks
+    // at the same indent. Any other type (or an indent change) breaks the run.
+    let runCount = 0;
+    let prevType = null;
+    let prevIndent = null;
+    const blocks = ordered.map((b) => {
+      let number = null;
+      if (b.type === 'numbered') {
+        if (prevType !== 'numbered' || prevIndent !== b.indent) runCount = 0;
+        runCount += 1;
+        number = runCount;
+      } else {
+        runCount = 0;
+      }
+      prevType = b.type;
+      prevIndent = b.indent;
+      return {
+        id: b.id,
+        type: b.type,
+        text: b.text,
+        checked: b.checked,
+        indent: b.indent,
+        number,
+      };
+    });
+
+    // During a drag, remove the dragged block (the ghost stands in for it) and
+    // splice a placeholder view-model at the hit-tested index. Keeping every
+    // other block keyed by id means the patcher MOVES their DOM — island content
+    // (possibly newer than the store by an in-flight keystroke) rides along
+    // untouched. We never rebuild moved rows from store text.
+    const local = this.getData();
+    if (local.dragging && local.draggingId) {
+      const filtered = blocks.filter((b) => b.id !== local.draggingId);
+      const idx = this._clamp(local.targetIndex, 0, filtered.length);
+      filtered.splice(idx, 0, {
+        id: '__ph__',
+        __placeholder: true,
+        height: local.dragHeight || 32,
+      });
+      return { page, blocks: filtered };
+    }
+
+    return { page, blocks };
+  }
+
+  // Backstop for the focus router (freshly created blocks land a frame late) and
+  // the drop FLIP. flushFocus is a no-op when nothing is pending.
+  afterUpdate() {
+    flushFocus();
+    if (this._dragActive) {
+      this._runFlip();
+      // The drop render (dragging just cleared) is the last frame that needs a
+      // FLIP; stop snapshotting afterwards so typing doesn't thrash layout.
+      if (!this.getData().dragging) this._dragActive = false;
+    }
+  }
+
+  beforeUpdate() {
+    if (this._dragActive) this._firstRects = this._snapshotRects();
+  }
+
+  destroyed() {
+    this._teardownMenuListeners();
+    this._cleanupDrag(false);
+  }
+
+  // ---- store / order helpers (Doc owns them; Block owns caret math) ---------
+
+  _ordered() {
+    const pid = this.params.id;
+    return this.ctx.store
+      .findMany('block', { filter: (b) => b.pageId === pid })
+      .slice()
+      .sort((a, b) => a.order - b.order);
+  }
+
+  _reindex(list) {
+    list.forEach((b, i) => {
+      if (b.order !== i) b.update({ order: i });
+    });
+  }
+
+  _isTextBlock(b) {
+    return b.type !== 'divider';
+  }
+
+  _clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  // Splice a freshly-created record directly after `afterId`, then reindex.
+  _insertAfter(afterId, attrs) {
+    const store = this.ctx.store;
+    const cur = store.findOne('block', afterId);
+    if (!cur) return null;
+    const rec = store.createRecord('block', { pageId: cur.pageId, indent: cur.indent, ...attrs });
+    const ordered = this._ordered().filter((b) => b.id !== rec.id);
+    const idx = ordered.findIndex((b) => b.id === afterId);
+    ordered.splice(idx + 1, 0, rec);
+    this._reindex(ordered);
+    return rec;
+  }
+
+  events = {
+    // Todo checkbox → flip the record's checked flag.
+    toggleBlock: (id) => {
+      const block = this.ctx.store.findOne('block', id);
+      if (block) block.update({ checked: !block.checked, updatedAt: new Date() });
+    },
+
+    // Island → store echo (one-way, D44). The DOM already holds the text.
+    syncBlock: (id, text) => {
+      const block = this.ctx.store.findOne('block', id);
+      if (block) block.update({ text, updatedAt: new Date() });
+    },
+
+    // Enter mid-text: the head stayed in the current block's island (Block set
+    // its DOM); persist the head, then create the tail block right after it.
+    splitBlock: (id, split) => {
+      const store = this.ctx.store;
+      const cur = store.findOne('block', id);
+      if (!cur) return;
+
+      cur.update({ text: split.before, updatedAt: new Date() });
+
+      const inherits = cur.type === 'bullet' || cur.type === 'numbered' || cur.type === 'todo';
+      const rec = this._insertAfter(id, {
+        type: inherits ? cur.type : 'paragraph',
+        text: split.after,
+      });
+      if (rec) {
+        requestFocus(rec.id, 0);
+        flushFocus();
+      }
+    },
+
+    // Backspace at the start: merge this block's text onto the previous text
+    // block and destroy this one.
+    mergeUpBlock: (id, tail) => {
+      const store = this.ctx.store;
+      const ordered = this._ordered();
+      const idx = ordered.findIndex((b) => b.id === id);
+      if (idx <= 0) return;
+
+      let prevIdx = idx - 1;
+      while (prevIdx >= 0 && !this._isTextBlock(ordered[prevIdx])) prevIdx -= 1;
+      if (prevIdx < 0) return;
+
+      const prev = ordered[prevIdx];
+      const junction = (prev.text || '').length;
+      const merged = (prev.text || '') + tail;
+
+      const prevEl = document.querySelector(
+        '[data-block-id="' + prev.id + '"] [data-block-text]'
+      );
+      if (prevEl) {
+        prevEl.textContent = merged;
+        prevEl.toggleAttribute('data-empty', merged === '');
+      }
+      prev.update({ text: merged, updatedAt: new Date() });
+
+      ordered[idx].destroy();
+      this._reindex(ordered.filter((b) => b.id !== id));
+
+      requestFocus(prev.id, junction);
+      flushFocus();
+    },
+
+    // ArrowUp/Down at a boundary: walk to the previous/next TEXT block.
+    navigateBlock: (id, dir) => {
+      const ordered = this._ordered();
+      const idx = ordered.findIndex((b) => b.id === id);
+      if (idx < 0) return;
+
+      const step = dir === 'up' ? -1 : 1;
+      let t = idx + step;
+      while (t >= 0 && t < ordered.length && !this._isTextBlock(ordered[t])) t += step;
+      if (t < 0 || t >= ordered.length) return;
+
+      requestFocus(ordered[t].id, dir === 'up' ? -1 : 0);
+      flushFocus();
+    },
+
+    // Enter on an empty list/todo → paragraph. The type change flips the branch
+    // key, so the island is REPLACED and re-seeded. We must NOT flushFocus()
+    // synchronously here (the old island is still in the DOM); just park the
+    // request and let the re-rendered block consume it in its own afterUpdate.
+    convertBlock: (id) => {
+      const block = this.ctx.store.findOne('block', id);
+      if (!block) return;
+      block.update({ type: 'paragraph', checked: false, updatedAt: new Date() });
+      requestFocus(id, 0);
+    },
+
+    // Divider ✕ → destroy and reindex.
+    removeBlock: (id) => {
+      const store = this.ctx.store;
+      const block = store.findOne('block', id);
+      if (!block) return;
+      const ordered = this._ordered();
+      block.destroy();
+      this._reindex(ordered.filter((b) => b.id !== id));
+    },
+
+    // Tab / Shift-Tab from a block → clamp indent to 0..3. The island keeps its
+    // key/type so it is NOT re-seeded; the caret survives the padding-left patch.
+    indentBlock: (id, delta) => {
+      const block = this.ctx.store.findOne('block', id);
+      if (!block) return;
+      const next = this._clamp((block.indent || 0) + delta, 0, 3);
+      if (next !== block.indent) block.update({ indent: next, updatedAt: new Date() });
+    },
+
+    // ---- slash menu ---------------------------------------------------------
+
+    onSlash: (payload, id) => {
+      if (!payload) return;
+      if (payload.kind === 'open') {
+        this._openMenu('slash', id, { offset: payload.offset, query: payload.query || '' });
+      } else if (payload.kind === 'query') {
+        if (this.getData().menuKind !== 'slash' || this.getData().menuBlockId !== id) return;
+        this._updateSlashQuery(payload.query || '');
+      } else if (payload.kind === 'close') {
+        if (this.getData().menuKind === 'slash' && this.getData().menuBlockId === id) {
+          this._closeMenu();
+        }
+      }
+    },
+
+    onSlashKey: (action, id) => {
+      const d = this.getData();
+      if (!d.menuOpen || d.menuKind !== 'slash' || d.menuBlockId !== id) return;
+      if (action === 'up') this._moveHighlight(-1);
+      else if (action === 'down') this._moveHighlight(1);
+      else if (action === 'select') this._selectHighlighted();
+      else if (action === 'cancel') this._closeMenu();
+    },
+
+    // Menu row interactions (rendered in Doc's tree).
+    noop: () => {},
+    hoverCommand: (i) => this._setMenu({ menuHighlight: i }),
+    pickCommand: (cmdId) => {
+      const cmd = this.getData().menuCommands.find((c) => c.id === cmdId);
+      if (cmd) this._applyCommand(cmd);
+    },
+
+    // ---- drag (handle pointerdown) -----------------------------------------
+
+    startDrag: (event, blockId) => {
+      if (this._drag) return;
+      if (event.button !== undefined && event.button !== 0) return;
+
+      const ordered = this._ordered();
+      const index = ordered.findIndex((b) => b.id === blockId);
+      if (index < 0) return;
+
+      // A press on the handle always begins as PENDING — the pointerup decides
+      // whether it was a click (open Turn-into) or a drag (reorder).
+      this._closeMenu();
+      event.preventDefault();
+
+      this._drag = {
+        phase: 'PENDING',
+        id: blockId,
+        startX: event.clientX,
+        startY: event.clientY,
+        targetIndex: index,
+        offsetX: 0,
+        offsetY: 0,
+        height: 0,
+        ghost: null,
+      };
+
+      document.addEventListener('pointermove', this._onPointerMove);
+      document.addEventListener('pointerup', this._onPointerUp);
+      document.addEventListener('keydown', this._onDragKey);
+    },
+
+    // ---- title island -------------------------------------------------------
+
+    onTitleInput: (event) => {
+      const { page } = this.getData();
+      if (page) page.update({ title: textOf(event.currentTarget), updatedAt: new Date() });
+    },
+
+    onTitleEnter: (event) => {
+      if (event.isComposing) return;
+      event.preventDefault();
+      const first = this._ordered().find((b) => this._isTextBlock(b));
+      if (first) {
+        requestFocus(first.id, 0);
+        flushFocus();
+      }
+    },
+
+    onTitlePaste: (event) => {
+      event.preventDefault();
+      const cd = event.clipboardData || window.clipboardData;
+      const text = cd ? cd.getData('text/plain') : '';
+      const synced = insertText(text);
+      if (!synced) {
+        const { page } = this.getData();
+        if (page) page.update({ title: textOf(event.currentTarget) });
+      }
+    },
+
+    appendBlock: () => {
+      const { page } = this.getData();
+      if (!page) return;
+      const store = this.ctx.store;
+      const maxOrder = store
+        .findMany('block', { filter: (b) => b.pageId === page.id })
+        .reduce((max, b) => Math.max(max, b.order), -1);
+      const rec = store.createRecord('block', {
+        pageId: page.id,
+        type: 'paragraph',
+        text: '',
+        order: maxOrder + 1,
+      });
+      requestFocus(rec.id, 0);
+      flushFocus();
+    },
+  };
+
+  // ---- menu internals -------------------------------------------------------
+
+  // setData + synchronous refresh so a menu-state change (especially the
+  // slashActive prop) propagates to the child blocks THIS turn — before the next
+  // keystroke the island might dispatch.
+  _setMenu(patch) {
+    this.setData(patch);
+    this.refresh();
+  }
+
+  _filterSlash(query) {
+    const q = (query || '').trim().toLowerCase();
+    if (!q) return SLASH_COMMANDS.slice();
+    return SLASH_COMMANDS.filter(
+      (c) => c.label.toLowerCase().includes(q) || c.keywords.includes(q)
+    );
+  }
+
+  _openMenu(kind, blockId, { offset = 0, query = '' } = {}) {
+    const commands = kind === 'slash' ? this._filterSlash(query) : TURN_COMMANDS.slice();
+
+    // Anchor: under the block row for slash, off the handle for turn-into. A
+    // menu anchored near the bottom of the viewport flips ABOVE its anchor
+    // (Notion behavior) rather than running off-screen; both axes clamp to an
+    // 8px viewport margin. Height is estimated from the row count against the
+    // CSS caps (max-height 24rem ≈ 384px; rows ≈ 30px + 8px padding).
+    const estHeight = Math.min(commands.length * 30 + 8, 384);
+    const row = document.querySelector('[data-block-id="' + blockId + '"]');
+    let x = 120;
+    let y = 160;
+    if (row) {
+      const anchor = kind === 'turn' ? row.querySelector('.gr-handle') || row : row;
+      const r = anchor.getBoundingClientRect();
+      x = Math.max(8, Math.min(r.left, window.innerWidth - 248)); // min-width 15rem + margin
+      y = r.bottom + 4;
+      if (y + estHeight > window.innerHeight - 8) {
+        y = Math.max(8, r.top - 4 - estHeight);
+      }
+    }
+    this._setMenu({
+      menuOpen: true,
+      menuKind: kind,
+      menuBlockId: blockId,
+      slashBlockId: kind === 'slash' ? blockId : null,
+      menuX: x,
+      menuY: y,
+      menuHighlight: 0,
+      menuCommands: commands,
+      slashOffset: offset,
+      slashQuery: query,
+    });
+    this._setupMenuListeners();
+  }
+
+  _updateSlashQuery(query) {
+    const commands = this._filterSlash(query);
+    this._setMenu({ slashQuery: query, menuCommands: commands, menuHighlight: 0 });
+  }
+
+  _moveHighlight(step) {
+    const d = this.getData();
+    const n = d.menuCommands.length;
+    if (!n) return;
+    const next = (d.menuHighlight + step + n) % n;
+    this._setMenu({ menuHighlight: next });
+  }
+
+  _selectHighlighted() {
+    const d = this.getData();
+    const cmd = d.menuCommands[d.menuHighlight];
+    if (cmd) this._applyCommand(cmd);
+  }
+
+  _closeMenu() {
+    if (!this.getData().menuOpen) return;
+    this._teardownMenuListeners();
+    this._setMenu({
+      menuOpen: false,
+      menuKind: null,
+      menuBlockId: null,
+      slashBlockId: null,
+      menuCommands: [],
+      menuHighlight: 0,
+      slashQuery: '',
+    });
+  }
+
+  _setupMenuListeners() {
+    if (this._menuListening) return;
+    this._menuListening = true;
+    document.addEventListener('keydown', this._onDocKeyDown, true);
+    document.addEventListener('pointerdown', this._onDocPointerDown, true);
+  }
+
+  _teardownMenuListeners() {
+    if (!this._menuListening) return;
+    this._menuListening = false;
+    document.removeEventListener('keydown', this._onDocKeyDown, true);
+    document.removeEventListener('pointerdown', this._onDocPointerDown, true);
+  }
+
+  // Escape closes either menu. Turn-into (no island driving it) also gets
+  // Arrow/Enter here; slash nav arrives through the block's @slashKey channel so
+  // we deliberately skip nav keys for it to avoid double-handling.
+  _handleDocKeyDown(e) {
+    const d = this.getData();
+    if (!d.menuOpen) return;
+    // We listen in the CAPTURE phase, so stopping propagation on a key we act on
+    // prevents it from ever reaching a still-focused block island (otherwise a
+    // Turn-into Enter would ALSO split the focused block). Slash-menu nav is the
+    // exception: those keys must reach the island (Block reroutes them via
+    // @slashKey), so we return early WITHOUT stopping for menuKind === 'slash'.
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      this._closeMenu();
+      return;
+    }
+    if (d.menuKind !== 'turn') return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      this._moveHighlight(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      this._moveHighlight(-1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      this._selectHighlighted();
+    }
+  }
+
+  _handleDocPointerDown(e) {
+    if (!this.getData().menuOpen) return;
+    const t = e.target;
+    // A press inside the menu (rows use @mousedown:prevent to keep island focus)
+    // or on a drag handle must not close it.
+    if (t && t.closest && (t.closest('.gr-menu') || t.closest('.gr-handle'))) return;
+    this._closeMenu();
+  }
+
+  // Apply a chosen command to the menu's target block.
+  //   slash: strip the typed "/query" from island DOM + store, then convert.
+  //   turn:  keep the block's text, just convert (or delete).
+  // Divider is special (§ handled below). Focus lands in the affected block via a
+  // PARKED request consumed by the re-seeded island's own afterUpdate (the same
+  // convert race convertBlock() documents) — never a synchronous flush here.
+  _applyCommand(cmd) {
+    const d = this.getData();
+    const store = this.ctx.store;
+    const id = d.menuBlockId;
+    const block = store.findOne('block', id);
+    if (!block) {
+      this._closeMenu();
+      return;
+    }
+
+    if (cmd.id === '__delete') {
+      this._deleteBlock(id);
+      this._closeMenu();
+      return;
+    }
+
+    // Compute the text that should remain (slash strips "/query").
+    let remaining = block.text || '';
+    let caret = remaining.length;
+    if (d.menuKind === 'slash') {
+      const start = d.slashOffset;
+      const end = d.slashOffset + 1 + (d.slashQuery || '').length;
+      remaining = remaining.slice(0, start) + remaining.slice(end);
+      caret = start;
+    }
+
+    if (cmd.type === 'divider') {
+      this._applyDivider(block, remaining);
+      this._closeMenu();
+      return;
+    }
+
+    // Write the stripped text to the island DOM (browser-owned) + store when it
+    // changed, so the re-seed reads the clean text.
+    if (remaining !== (block.text || '')) {
+      const el = document.querySelector('[data-block-id="' + id + '"] [data-block-text]');
+      if (el) {
+        el.textContent = remaining;
+        el.toggleAttribute('data-empty', remaining === '');
+      }
+      block.update({ text: remaining, updatedAt: new Date() });
+    }
+
+    if (block.type !== cmd.type) {
+      block.update({ type: cmd.type, checked: false, updatedAt: new Date() });
+    }
+
+    requestFocus(id, caret);
+    this._closeMenu();
+  }
+
+  // Divider: if nothing but the slash query was there, the block itself becomes a
+  // divider and a fresh paragraph is dropped below for the caret; otherwise the
+  // block keeps its text and a divider is inserted below it.
+  _applyDivider(block, remaining) {
+    const id = block.id;
+    if (remaining === '') {
+      block.update({ type: 'divider', text: '', checked: false, updatedAt: new Date() });
+      const rec = this._insertAfter(id, { type: 'paragraph', text: '' });
+      if (rec) {
+        requestFocus(rec.id, 0);
+        flushFocus();
+      }
+    } else {
+      const el = document.querySelector('[data-block-id="' + id + '"] [data-block-text]');
+      if (el) {
+        el.textContent = remaining;
+        el.toggleAttribute('data-empty', remaining === '');
+      }
+      block.update({ text: remaining, updatedAt: new Date() });
+      this._insertAfter(id, { type: 'divider', text: '' });
+      requestFocus(id, remaining.length);
+      flushFocus();
+    }
+  }
+
+  // Delete a block (Turn-into → Delete), landing the caret on the previous text
+  // block when there is one.
+  _deleteBlock(id) {
+    const store = this.ctx.store;
+    const block = store.findOne('block', id);
+    if (!block) return;
+    const ordered = this._ordered();
+    const idx = ordered.findIndex((b) => b.id === id);
+
+    let prev = null;
+    for (let i = idx - 1; i >= 0; i -= 1) {
+      if (this._isTextBlock(ordered[i])) {
+        prev = ordered[i];
+        break;
+      }
+    }
+
+    block.destroy();
+    this._reindex(ordered.filter((b) => b.id !== id));
+
+    if (prev) {
+      requestFocus(prev.id, -1);
+      flushFocus();
+    }
+  }
+
+  // ---- drag internals (adapted from kanban Board) --------------------------
+
+  _handlePointerMove(e) {
+    if (!this._drag) return;
+
+    const dx = e.clientX - this._drag.startX;
+    const dy = e.clientY - this._drag.startY;
+
+    if (this._drag.phase === 'PENDING') {
+      if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      this._promote(e);
+    }
+
+    if (this._drag.phase !== 'DRAGGING') return;
+
+    e.preventDefault();
+    this._moveGhost(e);
+
+    const index = this._hitTest(e.clientY);
+    if (index !== this._drag.targetIndex) {
+      this._drag.targetIndex = index;
+      this._publishDragState();
+    }
+  }
+
+  _handlePointerUp(e) {
+    if (!this._drag) return;
+    const wasPending = this._drag.phase === 'PENDING';
+    const dragId = this._drag.id;
+
+    if (this._drag.phase === 'DRAGGING') {
+      e.preventDefault();
+      this._commitDrop();
+    }
+    this._cleanupDrag(true);
+
+    // A press that never moved is a click on the handle → open Turn-into.
+    if (wasPending) this._openMenu('turn', dragId);
+  }
+
+  _handleDragKey(e) {
+    if (!this._drag || e.key !== 'Escape') return;
+    e.preventDefault();
+    // Cancel: drop the drag with no reorder.
+    this._cleanupDrag(true);
+  }
+
+  _promote(e) {
+    const row = this._blockElement(this._drag.id);
+    if (!row) {
+      this._cleanupDrag(true);
+      return;
+    }
+
+    const rect = row.getBoundingClientRect();
+    const ghost = row.cloneNode(true);
+    ghost.classList.add('gr-ghost');
+    ghost.style.position = 'fixed';
+    ghost.style.left = '0';
+    ghost.style.top = '0';
+    ghost.style.width = rect.width + 'px';
+    ghost.style.height = rect.height + 'px';
+    ghost.style.margin = '0';
+    ghost.style.paddingLeft = '0';
+    ghost.style.pointerEvents = 'none';
+    ghost.style.zIndex = '9999';
+    ghost.style.transformOrigin = '0 50%';
+    document.body.appendChild(ghost);
+
+    this._storedUserSelect = document.body.style.userSelect;
+    this._storedCursor = document.body.style.cursor;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'grabbing';
+
+    this._drag.phase = 'DRAGGING';
+    this._drag.offsetX = e.clientX - rect.left;
+    this._drag.offsetY = e.clientY - rect.top;
+    this._drag.height = rect.height;
+    this._drag.ghost = ghost;
+    this._dragActive = true;
+
+    this._moveGhost(e);
+    this._publishDragState();
+  }
+
+  _publishDragState() {
+    if (!this._drag) return;
+    this.setData({
+      dragging: this._drag.phase === 'DRAGGING',
+      draggingId: this._drag.id,
+      targetIndex: this._drag.targetIndex,
+      dragHeight: this._drag.height,
+    });
+    this.refresh();
+  }
+
+  _moveGhost(e) {
+    if (!this._drag || !this._drag.ghost) return;
+    const x = e.clientX - this._drag.offsetX;
+    const y = e.clientY - this._drag.offsetY;
+    this._drag.ghost.style.transform =
+      'translate3d(' + x + 'px, ' + y + 'px, 0) rotate(1.5deg) scale(1.01)';
+  }
+
+  // Midpoint hit-test against the real (non-placeholder) rows: how many rows the
+  // pointer has passed the middle of = the target index in the dragged-out list.
+  _hitTest(y) {
+    if (!this.element) return this._drag ? this._drag.targetIndex : 0;
+    const rows = Array.from(this.element.querySelectorAll('[data-block-id]')).filter(
+      (el) => el.dataset.blockId !== '__ph__'
+    );
+    let index = 0;
+    rows.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (y > r.top + r.height / 2) index += 1;
+    });
+    return index;
+  }
+
+  _commitDrop() {
+    if (!this._drag) return;
+    const store = this.ctx.store;
+    const dragged = store.findOne('block', this._drag.id);
+    if (!dragged) return;
+
+    const ordered = this._ordered().filter((b) => b.id !== dragged.id);
+    const idx = this._clamp(this._drag.targetIndex, 0, ordered.length);
+    ordered.splice(idx, 0, dragged);
+    this._reindex(ordered);
+  }
+
+  _cleanupDrag(shouldRefresh) {
+    const ghost = this._drag && this._drag.ghost;
+
+    document.removeEventListener('pointermove', this._onPointerMove);
+    document.removeEventListener('pointerup', this._onPointerUp);
+    document.removeEventListener('keydown', this._onDragKey);
+
+    if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+
+    document.body.style.userSelect = this._storedUserSelect;
+    document.body.style.cursor = this._storedCursor;
+    this._drag = null;
+
+    this.setData({ dragging: false, draggingId: '', targetIndex: 0, dragHeight: 0 });
+    if (shouldRefresh) this.refresh();
+  }
+
+  // ---- FLIP (only while a drag is active) ----------------------------------
+
+  _snapshotRects() {
+    const rects = new Map();
+    if (!this.element) return rects;
+    this.element.querySelectorAll('[data-block-id]').forEach((el) => {
+      rects.set(el.dataset.blockId, el.getBoundingClientRect());
+    });
+    return rects;
+  }
+
+  _runFlip() {
+    if (!this.element || !this._firstRects) return;
+    this.element.querySelectorAll('[data-block-id]').forEach((el) => {
+      const id = el.dataset.blockId;
+      const first = this._firstRects.get(id);
+      const last = el.getBoundingClientRect();
+
+      if (!first) {
+        if (id === '__ph__' && el.animate) {
+          el.animate(
+            [
+              { opacity: 0, transform: 'scale(0.98)' },
+              { opacity: 1, transform: 'scale(1)' },
+            ],
+            { duration: 120, easing: 'ease-out' }
+          );
+        }
+        return;
+      }
+
+      const dx = first.left - last.left;
+      const dy = first.top - last.top;
+      if ((Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) && el.animate) {
+        el.animate(
+          [
+            { transform: 'translate(' + dx + 'px, ' + dy + 'px)' },
+            { transform: 'translate(0, 0)' },
+          ],
+          { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' }
+        );
+      }
+    });
+  }
+
+  _blockElement(id) {
+    if (!this.element) return null;
+    return this.element.querySelector('[data-block-id="' + id + '"]');
+  }
+}
+</scripts>

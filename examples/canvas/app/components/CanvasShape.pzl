@@ -1,0 +1,32 @@
+<puzzle-view>
+  <div
+    class="el-node cursor-default select-none {#if node.selected}el-selected{/if}"
+    style={ node.css }
+    data-el-id={ node.el.id }
+    @pointerdown={ down(event) }>
+    {#if node.el.type === 'text'}{ node.el.text }{/if}
+  </div>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A single canvas element: rect / ellipse / text. Absolutely positioned via the
+// pre-computed `node.css` from geometry.elementCss. Selection is a parent
+// concern — this component just reports pointerdown up through the `press`
+// callback prop with a { event, id } payload.
+export default class CanvasShape extends PuzzleView {
+  data(params, props) {
+    return { node: props.node };
+  }
+
+  events = {
+    down: (event) => {
+      // Ignore non-primary buttons (right / middle). Phase 2 will branch here
+      // into a drag state machine before delegating selection.
+      if (event.button !== undefined && event.button !== 0) return;
+      this.props.press({ event, id: this.props.node.el.id });
+    }
+  };
+}
+</scripts>

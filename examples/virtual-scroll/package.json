@@ -1,0 +1,18 @@
+{
+  "name": "virtual-scroll",
+  "version": "1.0.0",
+  "description": "Pure-userland fixed-height virtual scrolling — a 10,000-row list with a bounded DOM window, built on stock Puzzle (no framework changes)",
+  "main": "app.js",
+  "scripts": {
+    "dev": "puzzle dev",
+    "build": "puzzle build"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^1.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "tailwindcss": "^4.1.14"
+  },
+  "type": "module"
+}

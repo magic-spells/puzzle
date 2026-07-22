@@ -1,0 +1,15 @@
+<puzzle-view class="card">
+  <header><slot name="header">Untitled</slot></header>
+  <div class="body"><children/></div>
+  <footer><slot name="footer"/></footer>
+</puzzle-view>
+
+<scripts>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Card extends PuzzleView {
+  data() {
+    return {};
+  }
+}
+</scripts>
