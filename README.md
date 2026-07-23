@@ -48,7 +48,7 @@ npm install -D @magic-spells/puzzle
 - **Reactive data** with automatic view updates
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and write sync
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
-- **Nested routing** with view slots — history, hash, and memory modes; scroll restoration; base paths; anchors
+- **Nested routing** with view slots — history, hash, and memory modes; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
 - **Virtual DOM** with efficient diffing and pk-aware list keying
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
