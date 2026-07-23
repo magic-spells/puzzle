@@ -151,6 +151,10 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if err != nil {
 		return "", err
 	}
+	// Accessibility warnings (v1.48, D82): a read-only walk over the fresh AST,
+	// BEFORE resolveInlineSVG splices never-parsed raw markup in. Out-of-band
+	// like every Warning — the generated JS is byte-identical.
+	collectA11yWarnings(root.Children, opts.Filename, warnings)
 	// <script> is optional (DOC-SPEC.md §4). With no user class to bind the
 	// render tail to, synthesize a minimal module — the runtime import plus an
 	// empty PuzzleView subclass named from the filename — and drive the rest of
@@ -218,6 +222,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		return "", err
 	}
 	if skel != nil {
+		collectA11yWarnings(skel.Children, opts.Filename, warnings)
 		if err := c.resolveInlineSVG(skel.Children, opts.AssetsDir, inlined); err != nil {
 			return "", err
 		}
