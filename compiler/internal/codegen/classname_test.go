@@ -245,6 +245,12 @@ func TestCompileErrors(t *testing.T) {
 			want: "event modifiers are not allowed on component callback props",
 		},
 		{
+			name: "outside modifier on component callback prop (D86 — blanket rule)",
+			src:  "<puzzle-view class=\"x\"><Child @select:outside={ onSelect } /></puzzle-view>\n<script>\nexport default class C extends PuzzleView {}\n</script>",
+			mode: ModeView,
+			want: "event modifiers are not allowed on component callback props",
+		},
+		{
 			name: "component skeleton with two roots",
 			src:  "<puzzle-view><span>a</span></puzzle-view>\n<puzzle-skeleton><span>x</span><span>y</span></puzzle-skeleton>\n<script>\nexport default class C extends PuzzleView {}\n</script>",
 			mode: ModeComponent,

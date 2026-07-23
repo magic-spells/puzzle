@@ -11,6 +11,7 @@ export default class EventMods extends PuzzleView {
     cancel: (event) => {},
     handleOnce: (event) => {},
     plain: (event) => {},
+    closePanel: (event) => {},
   };
 }
 
@@ -34,6 +35,13 @@ EventMods.prototype.render = function () {
     ]),
     new ViewNode('button', { '@click': ((this.__h ??= {})[4] ??= (event) => this.events.plain(event)) }, [
       new ViewNode('text', { value: 'Plain' }),
+    ]),
+    new ViewNode('div', {
+      class: 'panel',
+      '@click:outside': ((this.__h ??= {})[5] ??= (event) => this.events.closePanel(event)),
+      '@click': ((this.__h ??= {})[6] ??= (event) => this.events.plain(event)),
+    }, [
+      new ViewNode('text', { value: 'Panel' }),
     ]),
   ]);
 };
