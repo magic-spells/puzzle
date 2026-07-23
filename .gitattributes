@@ -1,2 +1,13 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Highlight .pzl as HTML on github.com (blobs + PR diffs).
+# Linguist has no Puzzle grammar yet, and HTML is the closest built-in
+# (our TextMate scope is text.html.puzzle). Real first-class highlighting
+# needs a Linguist PR once .pzl adoption crosses their threshold.
+*.pzl linguist-language=HTML
+
+# ...but keep the language bar honest. This repo is a Go compiler + JS
+# runtime; 174 .pzl demo/fixture files would otherwise bury that.
+examples/**                           linguist-documentation
+compiler/internal/codegen/testdata/** linguist-generated
