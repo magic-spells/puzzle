@@ -7,7 +7,7 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/parser"
 )
 
-// module_stamp_test.go — the D80 `Class.__pzlModule = "<path>"` stamp the
+// module_stamp_test.go — the D81 `Class.__pzlModule = "<path>"` stamp the
 // static-pages build reads to map a route's view/layout classes back to their
 // source .pzl. It is emitted immediately after the render tail; ModulePath
 // (threaded by the esbuild plugin) is the stamped value, and its absence

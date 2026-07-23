@@ -1,4 +1,4 @@
-// Static output mode (D80) — the prerender + shell-surgery half
+// Static output mode (D81) — the prerender + shell-surgery half
 // (client-runtime/ssg/index.js `mode: 'static'`): per-page store snapshot capture,
 // __pzlModule stamp collection (+ the missing-stamp error), slug rules + collision
 // suffixing, static shell surgery (app.js tag stripped, data + entry scripts
@@ -94,7 +94,7 @@ function writeShell(dir, shell = SHELL) {
 	return shellPath;
 }
 
-describe('static prerender (D80)', () => {
+describe('static prerender (D81)', () => {
 	describe('per-page store snapshot capture', () => {
 		it('captures each page`s store snapshot as `data` (wire shape)', async () => {
 			class Seeded extends PuzzleView {

@@ -74,7 +74,7 @@ type Options struct {
 
 	// ModulePath is the app-root-relative, forward-slashed path of the source
 	// .pzl (e.g. "app/views/Home.pzl"), stamped onto the compiled class as
-	// `Class.__pzlModule = "<path>"` so the static-pages build (D80) can map a
+	// `Class.__pzlModule = "<path>"` so the static-pages build (D81) can map a
 	// route's view/layout classes back to their source modules for per-page entry
 	// generation. The esbuild plugin threads its app-relative `name` in here.
 	// Empty means "no app root is known" (the standalone pzlc single-file path and
@@ -276,7 +276,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	b.WriteString("  return ")
 	b.WriteString(rootExpr)
 	b.WriteString(";\n};\n")
-	// 3b. module stamp (v1.45, D80): the app-relative source path, stamped as a
+	// 3b. module stamp (v1.45, D81): the app-relative source path, stamped as a
 	//     static class field immediately after the render tail. The static-pages
 	//     build reads Class.__pzlModule off each route's view/layout classes to
 	//     emit per-page entry imports. With no app root known (pzlc, goldens) the
@@ -310,7 +310,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	return b.String(), nil
 }
 
-// moduleStampPath returns the value for the `Class.__pzlModule` stamp (D80):
+// moduleStampPath returns the value for the `Class.__pzlModule` stamp (D81):
 // the app-relative ModulePath when the plugin supplied one, else the plain
 // basename of Filename. Both are forward-slash-normalized so the stamp is
 // byte-stable across build OSes (parallel to ScopeID's normalization).

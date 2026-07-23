@@ -75,6 +75,6 @@ opt-out. Failed/initial navigations do not move scroll.
 Hybrid output takeover (`output: 'hybrid'`, D67) recognizes matching
 `data-puzzle-ssg` markup at navigation zero, replaces it inside the commit
 window, removes the marker, and skips the initial enter animation. After that
-the page is the same SPA. (True static output, `output: 'static'`/D80, involves
+the page is the same SPA. (True static output, `output: 'static'`/D81, involves
 no router — those pages are mounted by `mountStatic`, stamped `data-puzzle-static`,
 and never taken over.)

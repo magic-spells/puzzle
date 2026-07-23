@@ -10,12 +10,12 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
-  - DECISION-D80-STATIC-PAGES-MODE
+  - DECISION-D81-STATIC-PAGES-MODE
 ---
 
 # v1.33 — Static site generation (D67)
 
-> **Renamed by D80 (v1.47):** the mode this slice shipped is now spelled `output: 'hybrid'` / `puzzle build --hybrid` (behavior byte-identical). Read every `--static` / `output: 'static'` / `data-puzzle-ssg` below as the hybrid mode; `output: 'static'` now names the separate true-static mode ([[FEATURE-V1-47-STATIC-PAGES]], [[DECISION-D80-STATIC-PAGES-MODE]]).
+> **Renamed by D81 (v1.47):** the mode this slice shipped is now spelled `output: 'hybrid'` / `puzzle build --hybrid` (behavior byte-identical). Read every `--static` / `output: 'static'` / `data-puzzle-ssg` below as the hybrid mode; `output: 'static'` now names the separate true-static mode ([[FEATURE-V1-47-STATIC-PAGES]], [[DECISION-D81-STATIC-PAGES-MODE]]).
 
 `puzzle build --static` / `output: 'static'`: prerender every static route to `dist/<path>/index.html` (directory-style, URLs identical to the SPA routes), each page content-complete with `meta.title` injected and `data-puzzle-ssg` stamped on the target element; the runtime takes over at navigation #0 and the site is the same SPA afterward. Ship [[DECISION-D67-SSG-STATIC-BUILD]].
 

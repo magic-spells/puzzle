@@ -91,7 +91,7 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 		// an older checkout; esbuild only errs if something actually imports it,
 		// which happens only under `puzzle build --hybrid`.
 		buildOpts.Alias["@magic-spells/puzzle/ssg"] = filepath.Join(filepath.Dir(runtime), "ssg", "index.js")
-		// The static-pages kernel (mountStatic, D80) resolves the same way — each
+		// The static-pages kernel (mountStatic, D81) resolves the same way — each
 		// generated per-page entry imports it. Same lazy-error posture as /ssg: the
 		// file may be absent in an older checkout, and only a `puzzle build
 		// --static` page entry imports it, so esbuild errs only then.

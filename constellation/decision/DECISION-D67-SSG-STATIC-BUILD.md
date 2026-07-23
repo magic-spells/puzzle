@@ -4,7 +4,7 @@ status: verified
 verified_at: '2026-07-22T01:03:46.828Z'
 connections:
   - DECISION-D01-SPA-ONLY
-  - DECISION-D80-STATIC-PAGES-MODE
+  - DECISION-D81-STATIC-PAGES-MODE
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-VIEW-MANAGER
@@ -14,11 +14,11 @@ connections:
 notes:
   - kind: state
     text: >-
-      RENAMED by D80 (v1.47). The mode this card describes — prerendered pages + the full
+      RENAMED by D81 (v1.47). The mode this card describes — prerendered pages + the full
       SPA bundle + router takeover at navigation #0 — is now spelled `output: 'hybrid'` /
       `puzzle build --hybrid` (behavior byte-identical). `output: 'static'` / `--static`
       now means a DIFFERENT true-static mode (no router, no app.js, per-page mount module):
-      see [[DECISION-D80-STATIC-PAGES-MODE]] and SPEC §36. Read every `output: 'static'` /
+      see [[DECISION-D81-STATIC-PAGES-MODE]] and SPEC §36. Read every `output: 'static'` /
       `--static` / `data-puzzle-ssg` reference below as the hybrid mode.
   - kind: state
     text: >-

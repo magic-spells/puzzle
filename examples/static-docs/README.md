@@ -1,7 +1,7 @@
 # Puzzle Static Docs Example
 
 A small static documentation site — a short field guide to the Puzzle framework
-itself — built to demonstrate Puzzle's **true static output** mode (v1.47, D80 ·
+itself — built to demonstrate Puzzle's **true static output** mode (v1.47, D81 ·
 [SPEC §36](../../constellation/doc/DOC-SPEC.md)).
 
 ## What `output: 'static'` is
@@ -9,7 +9,7 @@ itself — built to demonstrate Puzzle's **true static output** mode (v1.47, D80
 With `output: 'static'`, the same Puzzle app you'd normally ship as a single-page
 app is **prerendered to one HTML file per static route** at build time — content
 and `<title>` baked in, so a page is readable (and crawlable) before a line of
-JavaScript runs. What makes this *static* (as of D80) is what the output does
+JavaScript runs. What makes this *static* (as of D81) is what the output does
 **not** contain:
 
 - **No router, no SPA takeover, no history API.** Moving between pages is a plain

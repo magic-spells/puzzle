@@ -7,7 +7,7 @@ import GuideIndex from './views/guide/GuideIndex.pzl';
 import GuideTemplates from './views/guide/GuideTemplates.pzl';
 import DefaultLayout from './layouts/Default.pzl';
 
-// Each route carries a `meta.title` (SPEC §2). In static mode (D80) the build
+// Each route carries a `meta.title` (SPEC §2). In static mode (D81) the build
 // walks the matched layout+view chain leaf → root and injects the nearest-defined
 // title into each page's <title> — the same walk the SPA router's #setTitle does.
 export default [
@@ -56,7 +56,7 @@ export default [
     },
   },
 
-  // Client-rendered island (D67/D80): `prerender: false` opts this route OUT of
+  // Client-rendered island (D67/D81): `prerender: false` opts this route OUT of
   // prerendering. In static mode the build writes an empty-target shell at
   // /playground/ — no baked markup, `#app` unstamped — but still ships the page's
   // data island and entry module, so the view renders entirely client-side. The

@@ -37,10 +37,10 @@ run.
   agent skill + `puzzle add skills` (D78/v1.45, published 2026-07-22). Working
   version `0.2.0` (versions bumped, unpublished) adds path-shaped links via
   `router.url()` + the `link` formatter (D79/v1.46) and the true static-pages
-  output mode (`output: 'static'` / `--static`, D80/v1.47); the D67
+  output mode (`output: 'static'` / `--static`, D81/v1.47); the D67
   prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid` — the config
   rename is why this is 0.2.0, not 0.1.3.
-- Product line: v1 through v1.47, decisions D1-D80, plus the July 21
+- Product line: v1 through v1.47, decisions D1-D81, plus the July 21
   pre-release correctness/performance hardening pass.
 - Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`,
   `./static`, and `./puzzle-env` exports plus a `puzzle` binary shim and four

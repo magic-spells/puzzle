@@ -8,7 +8,7 @@ connections:
   - COMPONENT-CODEGEN
   - COMPONENT-ESBUILD-PLUGIN
   - DECISION-D67-SSG-STATIC-BUILD
-  - DECISION-D80-STATIC-PAGES-MODE
+  - DECISION-D81-STATIC-PAGES-MODE
   - FEATURE-V1-33-SSG
   - FEATURE-V1-47-STATIC-PAGES
   - FILE-SSG-RUNTIME
@@ -30,9 +30,9 @@ Puzzle prerenders routes to static HTML at build time in **two output modes** �
 
 ## Hybrid mode (`output: 'hybrid'`, D67)
 
-The original prerender mode, formerly spelled `output: 'static'` and renamed by D80 (behavior byte-identical). Each page is the prerendered markup **plus** the shared `/app.js` SPA bundle. Shell injection stamps `data-puzzle-ssg` on the empty `#id` target, injects title/content, and containment-checks every path. The browser [[COMPONENT-ROUTER]] recognizes the `data-puzzle-ssg` marker at navigation zero, replaces the prerendered children in its commit window, removes the marker, and skips the initial enter — after which the site is an ordinary SPA (routing, transitions, morph unchanged). Choose hybrid for apps that want prerendered first paint and instant client-side navigation afterward.
+The original prerender mode, formerly spelled `output: 'static'` and renamed by D81 (behavior byte-identical). Each page is the prerendered markup **plus** the shared `/app.js` SPA bundle. Shell injection stamps `data-puzzle-ssg` on the empty `#id` target, injects title/content, and containment-checks every path. The browser [[COMPONENT-ROUTER]] recognizes the `data-puzzle-ssg` marker at navigation zero, replaces the prerendered children in its commit window, removes the marker, and skips the initial enter — after which the site is an ordinary SPA (routing, transitions, morph unchanged). Choose hybrid for apps that want prerendered first paint and instant client-side navigation afterward.
 
-## Static mode (`output: 'static'`, D80)
+## Static mode (`output: 'static'`, D81)
 
 A **true static site**: no router, no SPA takeover, no history API in the output — navigation is plain `<a>` page loads and `dist/` ships no `app.js`. The build ([[FILE-BUILD-PRERENDER-PAGES]]) generates one per-page ES module `dist/_puzzle/<slug>.js` (slug: `/`→`index`, `*`→`404`, else path `/`→`--`, collisions suffixed) that imports `mountStatic` from `@magic-spells/puzzle/static` plus exactly that page's view/layout/component classes — resolved through the codegen `__pzlModule` stamp on every class. esbuild code-splitting factors shared components + the router-free view-layer runtime into `dist/_puzzle/chunks/`. Shell injection (`injectStaticShell`) stamps `data-puzzle-static` on the target, serializes each page's context store (`store._serializeAll()`) into an inline `<script type="application/json" data-puzzle-static-data>` island, swaps the `/app.js` tag for the page's module, and drops `staging/app.js`. `beforeMount` runs only at build time.
 

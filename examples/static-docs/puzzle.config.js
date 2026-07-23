@@ -8,7 +8,7 @@ export default {
 		use: ['tailwindcss'],
 	},
 
-	// Build output mode (SPEC §36 — D67/D80). `output: 'static'` (v1.47, D80)
+	// Build output mode (SPEC §36 — D67/D81). `output: 'static'` (v1.47, D81)
 	// prerenders every static route to its own dist/<path>/index.html as a TRUE
 	// static page: no router, no SPA bundle, plain <a> navigation, and a small
 	// per-page module that wakes each page's own components. The config-file

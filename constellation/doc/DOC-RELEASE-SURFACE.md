@@ -43,7 +43,7 @@ second specification. Decision cards hold rationale and git holds chronology.
 - App config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
   `scrollBehavior`, `routerMode`, `routerInitialPath`, `routerBase`,
   `transitionMode`, `beforeMount`, `mounted`, and `beforeUnmount`.
-- The app is SPA-first. Prerendered output comes in two modes (D67/D80), never a
+- The app is SPA-first. Prerendered output comes in two modes (D67/D81), never a
   request-time SSR server or hydration protocol: `output: 'hybrid'` ships
   prerendered pages the SPA takes over at navigation zero; `output: 'static'`
   ships true static pages with no router or `app.js` and a per-page mount module.
@@ -137,7 +137,7 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Prerendered builds (both modes) write directory-style pages plus `404.html`
   for a catch-all, skip dynamic routes with a warning, and support
   `prerender: false` islands. `--hybrid` (`output: 'hybrid'`, D67) shares one
-  `app.js` the router takes over; `--static` (`output: 'static'`, D80) ships no
+  `app.js` the router takes over; `--static` (`output: 'static'`, D81) ships no
   `app.js`, stamping the target `data-puzzle-static` and emitting one per-page
   `dist/_puzzle/<slug>.js` (mountStatic + that page's classes) with shared
   runtime split into `dist/_puzzle/chunks/` and build-time data inlined as a

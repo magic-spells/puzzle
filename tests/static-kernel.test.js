@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Static output kernel (D80) — client-runtime/static/index.js `mountStatic()`.
+// Static output kernel (D81) — client-runtime/static/index.js `mountStatic()`.
 // The parity net: prerender a fixture route in static mode, drop the prerendered
 // markup + data island into a jsdom document exactly as the shell surgery would,
 // then mountStatic() and assert (1) the mounted innerHTML equals the prerendered
@@ -93,7 +93,7 @@ afterEach(() => {
 	document.body.innerHTML = '';
 });
 
-describe('static kernel — mountStatic (D80)', () => {
+describe('static kernel — mountStatic (D81)', () => {
 	it('mounts to markup identical to the prerendered output (parity)', async () => {
 		const { pages } = await prerender(config(), { mode: 'static' });
 		const page = pages[0];

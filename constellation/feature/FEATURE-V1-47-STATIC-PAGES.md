@@ -1,9 +1,9 @@
 ---
-name: v1.47 — True static-pages output mode (D80)
+name: v1.47 — True static-pages output mode (D81)
 status: verified
 verified_at: '2026-07-23T00:00:00.000Z'
 connections:
-  - DECISION-D80-STATIC-PAGES-MODE
+  - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D67-SSG-STATIC-BUILD
   - DECISION-D01-SPA-ONLY
   - COMPONENT-SSG
@@ -16,7 +16,7 @@ connections:
   - FILE-BUILD-PRERENDER-PAGES
 ---
 
-# v1.47 — True static-pages output mode (D80)
+# v1.47 — True static-pages output mode (D81)
 
 `output: 'static'` / `puzzle build --static` becomes a **true static site**: per-route
 content-complete HTML with no router, no SPA takeover, and no history API — plain
@@ -24,7 +24,7 @@ content-complete HTML with no router, no SPA takeover, and no history API — pl
 that mounts only its own components over the prerendered markup. The former D67
 behavior (prerendered pages + full SPA bundle + router takeover) is renamed
 `output: 'hybrid'` / `--hybrid`, byte-identical. Ship
-[[DECISION-D80-STATIC-PAGES-MODE]].
+[[DECISION-D81-STATIC-PAGES-MODE]].
 
 ## Scope
 

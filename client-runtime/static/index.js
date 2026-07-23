@@ -1,5 +1,5 @@
 /**
- * Static output kernel (D80) — `@magic-spells/puzzle/static`.
+ * Static output kernel (D81) — `@magic-spells/puzzle/static`.
  *
  * The browser half of the true-static output mode. A page built with
  * `output: 'static'` ships content-complete HTML (SEO, no-JS readable) plus a small

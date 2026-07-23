@@ -156,7 +156,7 @@ func Build(root string, opts Options) error {
 		return fmt.Errorf("copying public assets: %w", err)
 	}
 
-	// Prerender modes (D67 hybrid / D80 static): render each route inside staging,
+	// Prerender modes (D67 hybrid / D81 static): render each route inside staging,
 	// AFTER the shell (public/index.html) has been copied in — the prerender
 	// injects into it — and BEFORE the swap, so a prerender failure discards
 	// staging and leaves the last good dist/ untouched (same guarantee as a

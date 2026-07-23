@@ -19,7 +19,7 @@
 <scripts>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// The catch-all view (routes.js `path: '*'`, D19). In static mode (D80) it renders
+// The catch-all view (routes.js `path: '*'`, D19). In static mode (D81) it renders
 // to dist/404.html — the filename static hosts serve for unknown URLs. (In hybrid
 // mode the live router would also show it for any unmatched client path.) No
 // data() — pure chrome content, serialized once at build time.

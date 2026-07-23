@@ -7,7 +7,7 @@ import formatters from './formatters.js';
 // The v1 config surface is intentionally small: target, routes, models,
 // formatters, apiURL — see constellation/doc/DOC-SPEC.md §2.
 const app = new PuzzleApp({
-  // Where the app mounts. In static mode (D80) `target` must be an `'#id'`
+  // Where the app mounts. In static mode (D81) `target` must be an `'#id'`
   // selector pointing at an empty element in the shell — the prerenderer injects
   // each route's markup there and stamps it `data-puzzle-static` (NOT
   // `data-puzzle-ssg`: no router ever takes these pages over).
@@ -25,7 +25,7 @@ const app = new PuzzleApp({
   // time but be missing client-side (the build warns). See app/formatters.js.
   formatters,
 
-  // App lifecycle hook (v1.28, D60). In static mode (D80) this runs ONLY at build
+  // App lifecycle hook (v1.28, D60). In static mode (D81) this runs ONLY at build
   // time with a `{ store, config }` facade before the routes are prerendered. Any
   // records seeded here flow into the first data() of every page, land in the
   // static HTML, and are serialized into an inline data island that the client
@@ -53,11 +53,11 @@ const app = new PuzzleApp({
 });
 
 // Start the app. This app.js entry is what `puzzle dev` and a plain/hybrid build
-// run in the browser. In static mode (D80) the build runs app.js under Node once
+// run in the browser. In static mode (D81) the build runs app.js under Node once
 // to prerender the pages, then ships a small per-page module (mountStatic) instead
 // of this bundle — dist/ contains no app.js. app.mount() is a no-op at build time.
 app.mount();
 
-// Required by the static/hybrid build (D67/D80): the Go build imports this default
+// Required by the static/hybrid build (D67/D81): the Go build imports this default
 // export to read `app.config` for prerendering.
 export default app;

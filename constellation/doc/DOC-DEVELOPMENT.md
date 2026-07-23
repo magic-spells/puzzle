@@ -72,7 +72,7 @@ Review generated diffs; never update goldens merely to silence a failure.
 `puzzle build [dir]` creates a production bundle by default.
 `--mode development` keeps readable output; `--static` emits true static pages
 (no router or `app.js`, per-page mount modules) and `--hybrid` emits prerendered
-pages plus the SPA bundle the router takes over (D67/D80). `puzzle dev [dir]` performs an initial build, serves
+pages plus the SPA bundle the router takes over (D67/D81). `puzzle dev [dir]` performs an initial build, serves
 `dist/` with SPA fallback, watches recursively, rebuilds incrementally, and
 broadcasts state-preserving SSE reloads after successful builds.
 

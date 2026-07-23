@@ -9,7 +9,7 @@
 // prerender failure discards staging and leaves the last good dist/ exactly as
 // it was (the same atomic-swap guarantee compile failures already get).
 //
-// The true static-pages mode (`--static` / `output: 'static'`, D80) lives in
+// The true static-pages mode (`--static` / `output: 'static'`, D81) lives in
 // prerender_pages.go and reuses the shared bundle/exec helpers here.
 package build
 
