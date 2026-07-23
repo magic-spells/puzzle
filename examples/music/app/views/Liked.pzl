@@ -44,7 +44,7 @@
   {:else}
     <div class="py-20 text-center">
       <p class="text-muted">Songs you like will appear here.</p>
-      <a href="#/search" class="text-accent">Find something to love</a>.
+      <a href="{ '/search' | link }" class="text-accent">Find something to love</a>.
     </div>
   {/if}
 </puzzle-view>

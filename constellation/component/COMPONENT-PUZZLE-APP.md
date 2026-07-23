@@ -24,9 +24,11 @@ verified_at: '2026-07-22T01:03:39.466Z'
 
 
 `PuzzleApp` owns one application lifetime. The constructor is side-effect-free;
-`mount()` resolves the target, creates Store/FormatterRegistry/Router, builds
-`ctx = { store, router, formatters }`, restores development state, starts
-navigation, and resolves to the app after the first route lands.
+`mount()` resolves the target, creates Store/FormatterRegistry/Router,
+registers the router-bound `link` formatter after the router exists (if-absent
+so a config `link` wins — D79), builds `ctx = { store, router, formatters }`,
+restores development state, starts navigation, and resolves to the app after
+the first route lands.
 
 Public config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
 `scrollBehavior`, `routerMode`, `routerInitialPath`, `routerBase`,

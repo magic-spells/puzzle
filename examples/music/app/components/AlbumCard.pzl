@@ -1,5 +1,5 @@
 <puzzle-view>
-  <a href="#/album/{ album.id }" class="group block hover:no-underline">
+  <a href="{ '/album/' + album.id | link }" class="group block hover:no-underline">
     <div
       data-puzzle-morph-trigger="album-{ album.id }"
       class="aspect-square rounded-xl mb-3 relative overflow-hidden shadow-lg shadow-black/40 ring-1 ring-white/10 transition-transform duration-200 group-hover:scale-[1.02]"

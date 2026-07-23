@@ -3,27 +3,27 @@
     <!-- Sidebar. Stays mounted across Library/Artist/Album/Search navigations
          because they all reuse this layout — only <Slot/> swaps. -->
     <aside class="hidden sm:flex w-60 shrink-0 flex-col bg-surface border-r border-line p-3">
-      <a href="#/" class="flex items-center gap-2.5 px-3 py-3 mb-4 font-display text-lg font-bold text-fg hover:no-underline">
+      <a href="{ '/' | link }" class="flex items-center gap-2.5 px-3 py-3 mb-4 font-display text-lg font-bold text-fg hover:no-underline">
         <span class="inline-block w-7 h-7 rounded-lg" style="background:linear-gradient(135deg,#7c5cff,#22d3ee)"></span>
         Puzzle Sounds
       </a>
 
-      <a href="#/" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors hover:no-underline hover:text-fg {#if section === 'library'}text-fg bg-surface-2{:else}text-muted{/if}">
+      <a href="{ '/' | link }" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors hover:no-underline hover:text-fg {#if section === 'library'}text-fg bg-surface-2{:else}text-muted{/if}">
         <Icon name="home" size={ 18 } /> Home
       </a>
-      <a href="#/search" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors hover:no-underline hover:text-fg {#if section === 'search'}text-fg bg-surface-2{:else}text-muted{/if}">
+      <a href="{ '/search' | link }" class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-colors hover:no-underline hover:text-fg {#if section === 'search'}text-fg bg-surface-2{:else}text-muted{/if}">
         <Icon name="search" size={ 18 } /> Search
       </a>
 
       <div class="mt-6 px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-faint">Library</div>
       {#for artist in artists, i}
-        <a href="#/artist/{ artist.id }" class="px-3 py-2 rounded-lg text-sm text-muted hover:text-fg hover:no-underline hover:bg-surface-2 transition-colors">{ artist.name }</a>
+        <a href="{ '/artist/' + artist.id | link }" class="px-3 py-2 rounded-lg text-sm text-muted hover:text-fg hover:no-underline hover:bg-surface-2 transition-colors">{ artist.name }</a>
       {/for}
 
       <div class="mt-6 px-3 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-faint">Playlists</div>
 
       <!-- Pinned Liked Songs — always first. -->
-      <a href="#/liked" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted hover:text-fg hover:no-underline hover:bg-surface-2 transition-colors">
+      <a href="{ '/liked' | link }" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted hover:text-fg hover:no-underline hover:bg-surface-2 transition-colors">
         <span class="inline-flex items-center justify-center w-6 h-6 rounded shrink-0 text-white/90" style="background:linear-gradient(135deg,#7c5cff,#c86dd7)"><Icon name="heart-filled" size={ 12 } /></span>
         Liked Songs
       </a>
@@ -31,7 +31,7 @@
       <!-- User playlists from the store, sorted by `order`. findMany subscribes
            this layout, so creating a playlist below makes it appear instantly. -->
       {#for p in playlists, i}
-        <a href="#/playlist/{ p.id }" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted hover:text-fg hover:no-underline hover:bg-surface-2 transition-colors">
+        <a href="{ '/playlist/' + p.id | link }" class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted hover:text-fg hover:no-underline hover:bg-surface-2 transition-colors">
           <span class="inline-block w-6 h-6 rounded shrink-0" style="background:{ p.artwork }"></span>
           <span class="truncate">{ p.name }</span>
         </a>
@@ -62,11 +62,11 @@
        screens navigation moves to a bottom tab bar under the player — same
        active-section highlight, driven by the same computed `section`. -->
   <nav class="sm:hidden shrink-0 flex border-t border-line bg-surface">
-    <a href="#/" class="flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors hover:no-underline {#if section === 'library'}text-fg{:else}text-muted{/if}">
+    <a href="{ '/' | link }" class="flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors hover:no-underline {#if section === 'library'}text-fg{:else}text-muted{/if}">
       <Icon name="home" size={ 22 } />
       Home
     </a>
-    <a href="#/search" class="flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors hover:no-underline {#if section === 'search'}text-fg{:else}text-muted{/if}">
+    <a href="{ '/search' | link }" class="flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors hover:no-underline {#if section === 'search'}text-fg{:else}text-muted{/if}">
       <Icon name="search" size={ 22 } />
       Search
     </a>

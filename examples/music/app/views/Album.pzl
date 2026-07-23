@@ -19,7 +19,7 @@
           <h1 class="font-display text-3xl sm:text-5xl font-bold text-fg leading-tight">{ album.title }</h1>
           <p class="text-muted mt-3">
             {#if artist}
-              <a href="#/artist/{ album.artistId }" 
+              <a href="{ '/artist/' + album.artistId | link }"
                 class="text-fg font-semibold hover:text-accent hover:no-underline">
                 { artist.name }
               </a> · 
@@ -50,7 +50,7 @@
          miss here is a genuine not-found. -->
     <div class="py-24 text-center">
       <h1 class="text-xl text-fg mb-2">Album not found</h1>
-      <p class="text-muted">No album with that id. <a href="#/" class="text-accent">Back to your library</a>.</p>
+      <p class="text-muted">No album with that id. <a href="{ '/' | link }" class="text-accent">Back to your library</a>.</p>
     </div>
   {/if}
 </puzzle-view>
