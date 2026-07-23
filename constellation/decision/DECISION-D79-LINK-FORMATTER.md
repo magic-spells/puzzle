@@ -1,6 +1,6 @@
 ---
 name: 'D79 — Path-shaped template links: `router.url()` + the router-bound `link` formatter (v1.46)'
-status: built
+status: verified
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-FORMATTERS
@@ -12,6 +12,16 @@ connections:
   - DECISION-D43-FORMATTER-MISSING-GUARD
   - FILE-ROUTER
   - FILE-FORMATTER-REGISTRY
+verified_at: '2026-07-23T03:10:23.970Z'
+verified_sha: 5be830df5735ed947f41d4b947a7f856be415291
+notes:
+  - kind: verified
+    text: >-
+      Built and verified on branch claude/link-format-abstraction-anat62: router.url() (router.js),
+      if-absent link registration in PuzzleApp.mount (app.js), Router typings, 16 new spec-driven
+      tests (tests/router-url.test.js), examples/music converted (21 hrefs, all pzlc-clean). Full
+      suites green: 833 vitest, go test ./... all ok, tsc types clean.
+    sha: 5be830df5735ed947f41d4b947a7f856be415291
 ---
 
 # D79 — Path-shaped template links: `router.url()` + the router-bound `link` formatter (v1.46)
