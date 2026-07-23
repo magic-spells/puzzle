@@ -23,6 +23,7 @@
  */
 
 import { ViewNode, PLACEHOLDER_TAG } from './ViewNode.js';
+import { beginFlip, playFlip } from './flip.js';
 
 // these must be assigned as element properties, not attributes
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'muted']);
@@ -618,9 +619,14 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 	let oldUnkeyed = oldChildren.filter((c) => c.key == null);
 	let unkeyedIdx = 0;
 	const seenNewKeys = new Set();
+	// FLIP fast path (D85): one property check per new child during the pairing
+	// map we already run. Lists without any `flip` attr never call into flip.js
+	// — zero measurements, zero extra passes.
+	let hasFlip = false;
 
 	// First pass: pair every new child with its old counterpart (or none)
 	const pairs = newChildren.map((newChild) => {
+		if (!hasFlip && 'flip' in newChild.attrs) hasFlip = true;
 		if (newChild.key != null) {
 			const mapKey = newChild.tag + '\x00' + newChild.key;
 			if (seenNewKeys.has(mapKey)) warnDuplicateKey(newChild.key);
@@ -643,6 +649,12 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 		}
 		return [null, newChild];
 	});
+
+	// FLIP First-measure (D85): retained `flip` rows record their pre-patch
+	// rects NOW — before removals reflow the survivors and before the move pass.
+	// beginFlip bails candidate-free / reduced-motion / no-WAAPI lists before
+	// any measurement.
+	const flip = hasFlip ? beginFlip(pairs) : null;
 
 	// Remove old children that found no new counterpart
 	for (const child of oldChildren) {
@@ -667,6 +679,10 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 		}
 		ref = newChild.el;
 	}
+
+	// FLIP Last + Play (D85): every retained element is patched and in final
+	// position — measure again and animate the moved rows from where they were.
+	if (flip) playFlip(flip);
 }
 
 /** The next sibling that is not a leaving (mid-out-animation) element. */
@@ -679,9 +695,10 @@ function nextPersistentSibling(node) {
 // ---- attributes / properties / listeners --------------------------------------
 
 function setAttr(el, name, value) {
-	// `key`, `island` (D44), and `ref` (D72) are framework directives, never DOM
-	// markup — the ref setter is invoked by mount()/patchAttrs, not written here.
-	if (name === 'key' || name === 'island' || name === 'ref') return;
+	// `key`, `island` (D44), `ref` (D72), and `flip` (D85) are framework
+	// directives, never DOM markup — the ref setter is invoked by
+	// mount()/patchAttrs, and flip by patchKeyedChildren, not written here.
+	if (name === 'key' || name === 'island' || name === 'ref' || name === 'flip') return;
 
 	if (name.startsWith('@')) {
 		// '@event' or '@event:mod:mod' (event modifiers). The bare event drives
@@ -723,7 +740,7 @@ function setAttr(el, name, value) {
 }
 
 function removeAttr(el, name) {
-	if (name === 'key' || name === 'island' || name === 'ref') return;
+	if (name === 'key' || name === 'island' || name === 'ref' || name === 'flip') return;
 
 	if (name.startsWith('@')) {
 		// Split the same way setAttr does so the correct DOM event type detaches
