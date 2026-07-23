@@ -23,3 +23,4 @@ InlineComponent.prototype.render = function () {
     new ViewNode('text', { value: String(__d.label) }),
   ]);
 };
+InlineComponent.__pzlModule = 'inline_component.pzl';

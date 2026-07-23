@@ -24,3 +24,4 @@ RangeNamed.prototype.render = function () {
     )
   );
 };
+RangeNamed.__pzlModule = 'range_named.pzl';

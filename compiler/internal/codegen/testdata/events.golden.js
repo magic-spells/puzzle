@@ -31,3 +31,4 @@ Events.prototype.render = function () {
     ]),
   ]);
 };
+Events.__pzlModule = 'events.pzl';

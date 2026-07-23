@@ -26,3 +26,4 @@ IndexedFor.prototype.render = function () {
     ),
   ]);
 };
+IndexedFor.__pzlModule = 'indexed_for.pzl';

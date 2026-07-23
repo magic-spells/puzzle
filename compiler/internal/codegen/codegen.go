@@ -71,6 +71,16 @@ const (
 type Options struct {
 	Filename string
 	Mode     EmissionMode
+
+	// ModulePath is the app-root-relative, forward-slashed path of the source
+	// .pzl (e.g. "app/views/Home.pzl"), stamped onto the compiled class as
+	// `Class.__pzlModule = "<path>"` so the static-pages build (D79) can map a
+	// route's view/layout classes back to their source modules for per-page entry
+	// generation. The esbuild plugin threads its app-relative `name` in here.
+	// Empty means "no app root is known" (the standalone pzlc single-file path and
+	// the codegen goldens): the stamp then falls back to the plain basename of
+	// Filename.
+	ModulePath string
 	// AssetsDir is the absolute (or test-relative) path of the app's assets dir
 	// ({#svg} paths resolve from here, v1.14 D46). Empty means "not configured":
 	// any {#svg} then fails with a "this project has no app/assets/ directory"
@@ -266,6 +276,15 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	b.WriteString("  return ")
 	b.WriteString(rootExpr)
 	b.WriteString(";\n};\n")
+	// 3b. module stamp (v1.45, D79): the app-relative source path, stamped as a
+	//     static class field immediately after the render tail. The static-pages
+	//     build reads Class.__pzlModule off each route's view/layout classes to
+	//     emit per-page entry imports. With no app root known (pzlc, goldens) the
+	//     stamp is the plain basename. Inert for every non-static build path.
+	b.WriteString(className)
+	b.WriteString(".__pzlModule = ")
+	b.WriteString(jsString(moduleStampPath(opts)))
+	b.WriteString(";\n")
 	// 4. skeleton tail (v1.8, D39), same prototype-assignment idiom as render().
 	if skel != nil {
 		b.WriteString("\n")
@@ -289,6 +308,21 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		}
 	}
 	return b.String(), nil
+}
+
+// moduleStampPath returns the value for the `Class.__pzlModule` stamp (D79):
+// the app-relative ModulePath when the plugin supplied one, else the plain
+// basename of Filename. Both are forward-slash-normalized so the stamp is
+// byte-stable across build OSes (parallel to ScopeID's normalization).
+func moduleStampPath(opts Options) string {
+	if opts.ModulePath != "" {
+		return strings.ReplaceAll(filepath.ToSlash(opts.ModulePath), "\\", "/")
+	}
+	norm := strings.ReplaceAll(filepath.ToSlash(opts.Filename), "\\", "/")
+	if i := strings.LastIndexByte(norm, '/'); i >= 0 {
+		norm = norm[i+1:]
+	}
+	return norm
 }
 
 type compiler struct {
