@@ -11,7 +11,7 @@ a reactive browser runtime, and a Go + esbuild compiler/CLI. Optional static
 generation prerenders routes without adding an SSR server or hydration layer.
 
 [[DOC-SPEC]] is the enforceable contract and wins all conflicts. Decisions
-D1-D85 in [[DOC-DECISIONS]] explain why the contract has its current shape.
+D1-D86 in [[DOC-DECISIONS]] explain why the contract has its current shape.
 [[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
 
 ## Current state
@@ -27,10 +27,14 @@ D1-D85 in [[DOC-DECISIONS]] explain why the contract has its current shape.
   (the breaking config rename is what makes this 0.2.0). Also folding into
   0.2.0 (2026-07 framework-gap review, in progress): compiler a11y warnings
   (D82/v1.48), router query snapshot + `replace()` (D83/v1.49), route head
-  management (D84/v1.50), and FLIP keyed-reorder animation via a `flip`
-  attribute (D85/v1.51) — zero new template grammar across all four. Element
-  actions, `<Portal>`, and lazy routes were reviewed and deferred (SPEC
-  deferred list has the rationale).
+  management (D84/v1.50), FLIP keyed-reorder animation via a `flip`
+  attribute (D85/v1.51), and the `@event:outside` modifier (D86/v1.52 —
+  Cory's design; document-capture outside-dismiss, retiring the pattern 16
+  puzzle-pieces hand-roll) — zero new template grammar across all five.
+  Element actions, `<Portal>`, and lazy routes were reviewed and deferred
+  (SPEC deferred list has the rationale). Pieces migration to
+  `@event:outside` is queued for AFTER 0.2.0 ships (older compilers reject
+  unknown modifiers).
 - Runtime, compiler, CLI, static generation (hybrid + static modes),
   state-preserving dev reload,
   TypeScript transpilation, model validation/relationships/write sync, nested

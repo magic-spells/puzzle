@@ -1,12 +1,12 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D85)
+name: DECISIONS.md — decision-log index (D1–D86)
 status: verified
 verified_at: '2026-07-22T00:04:05.457Z'
 connections:
   - DOC-SPEC
 ---
 
-Index of the ADR-lite decision log. Each decision D1–D85 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+Index of the ADR-lite decision log. Each decision D1–D86 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
 
 # Decision Log (index)
 
@@ -116,6 +116,7 @@ slice-of-work view.
 - **D83** [[DECISION-D83-QUERY-REPLACE]] — router query snapshot + `replace()`: the route snapshot gains `pathname`/`query` (frozen null-proto, `URLSearchParams` decoding, repeated keys → arrays)/`hash`, parsed once per navigation; `replace(path)` mirrors `push()` through the same atomic-commit pipeline via one added boolean (`replaceState` keeping the scroll-entry key; memory `stack[index]` overwrite; scroll untouched by default) — the internal action-enum refactor explicitly rejected (v1.49 → SPEC §44, [[FEATURE-V1-49-QUERY-REPLACE]])
 - **D84** [[DECISION-D84-HEAD-MANAGEMENT]] — route head management: reserved `meta` fields `title`/`description`/`canonical`/`socialImage`, per-field leaf→root resolution (`null` suppresses), `data-puzzle-head`-marked managed tags rendered by SSG shell surgery AND the SPA commit path (identity adoption on takeover, memory mode no-op, title-only apps byte-identical); `robots`/`themeColor`, data-derived values, and per-network overrides deferred (v1.50 → SPEC §45, [[FEATURE-V1-50-HEAD-MANAGEMENT]])
 - **D85** [[DECISION-D85-FLIP-ATTRIBUTE]] — FLIP keyed-reorder animation via a `flip` directive ATTRIBUTE (bare or `flip={ {duration, easing} }`), joining `key`/`island`/`ref` in the directive strip lists — the `animate:flip` syntax namespace rejected for its grammar/tooling ripple; translation-only First/Last measurement around keyed reconciliation, visual-rect capture on rapid reorders, WeakMap-tracked Puzzle-owned animations, reduced-motion/no-WAAPI/no-flip fast paths free (v1.51 → SPEC §46, [[FEATURE-V1-51-FLIP]])
+- **D86** [[DECISION-D86-OUTSIDE-MODIFIER]] — the `outside` event modifier: `@event:outside={ handler }` attaches to `document` (CAPTURE phase — immune to unrelated `stopPropagation`, and the opening interaction can never self-dismiss) and gates on `el.contains(event.target)` before every other modifier step; framework-owned cleanup on every removal shape via the D72 `releaseSubtree` walk; event-generic (`@pointerdown:outside`, `@focusin:outside`), one `eventGenericMods` table entry, zero grammar/tooling ripple — retires the hand-rolled pattern 16 puzzle-pieces carry (32 removeEventListener sites); `use:` actions deferral reinforced (v1.52 → SPEC §5/§47, [[FEATURE-V1-52-OUTSIDE-MODIFIER]])
 
 ## Open questions (tracked, not yet decided)
 

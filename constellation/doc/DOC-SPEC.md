@@ -192,9 +192,10 @@ A binding may carry `:modifier` suffixes — `@event:modifier[:modifier…]={ ha
 | `prevent` | `event.preventDefault()` | any event |
 | `stop` | `event.stopPropagation()` | any event |
 | `once` | handler fires **once ever** for this binding (the spent-marker survives per-patch handler swaps; it clears only when the binding is actually removed, so a later re-add starts fresh) | any event |
+| `outside` | the listener attaches to **`document` (capture phase)** and the handler runs only when the event target is **outside** the bound element — declarative outside-dismiss for popovers/dropdowns; framework-owned cleanup on unmount (v1.52, D86 — full contract §47) | any event |
 | `enter` `escape` `tab` `space` `up` `down` `left` `right` `backspace` `delete` | key filter — handler runs only when `event.key` matches (`Enter`/`Escape`/`Tab`/`' '`/`ArrowUp`/`ArrowDown`/`ArrowLeft`/`ArrowRight`/`Backspace`/`Delete`; `backspace`/`delete` added in v1.13, D45) | `keydown`/`keyup`/`keypress` only |
 
-Modifiers stack, and **execution order is canonical regardless of written order**: key-gate → once-spend → `preventDefault` → `stopPropagation` → handler. The key gate runs first, so a non-matching key bails before `preventDefault` (native behavior preserved) and without spending `once`.
+Modifiers stack, and **execution order is canonical regardless of written order**: outside-gate (v1.52) → key-gate → once-spend → `preventDefault` → `stopPropagation` → handler. The gates run first, so an inside event (for `outside`) or a non-matching key bails before `preventDefault` (native behavior preserved) and without spending `once`.
 
 **Compile errors (not warnings):** unknown modifier, a key filter on a non-keyboard event, a duplicate modifier, more than one key filter, or any modifier on a **component callback prop** (component-tag `@name={...}`, D16).
 
@@ -1053,6 +1054,16 @@ A keyed `{#for}` row root may declare `flip` (bare) or `flip={ { duration, easin
 - `prefers-reduced-motion` and missing Web Animations mean no measurement work at all; a list with no `flip` attributes (or unchanged order) costs nothing beyond a cheap scan. A `flip` on an unkeyed row warns once (positional-diff lists have no stable identity to animate).
 - Simultaneous author-controlled transform *animations* on the same element may conflict — documented; a wrapper element is the escape hatch.
 
+## 47. The `outside` event modifier: `@event:outside` (v1.52)
+
+`@click:outside={ close }` — a generic event modifier (§5 table, D86) for declarative outside-dismiss. Works on any event: `@pointerdown:outside` dismisses on press, `@focusin:outside` detects focus leaving a widget.
+
+- **Placement semantics:** the listener attaches to **`document` in the capture phase**; the handler runs only when `el.contains(event.target)` is false for the element carrying the binding. Capture is load-bearing: an unrelated component's `stopPropagation()` cannot swallow the outside event, and the interaction that opens a panel cannot dismiss it in the same dispatch (a panel mounted synchronously mid-event attaches after document's capture phase has passed).
+- **Gate order:** the outside-gate runs before every other modifier step (§5's canonical order) — an inside event spends no `once`, triggers no `preventDefault`.
+- **Lifecycle:** the framework owns the document listener. It attaches when the bound element mounts and detaches on every removal shape (conditional toggle, keyed-row removal, subtree teardown, full view destroy) and on the inline-null toggle (`@pointerdown:outside={ open ? close : null }`). The idiomatic form puts the binding on the panel root inside `{#if open}`, so the listener's lifetime tracks the panel; the always-mounted alternative is the root-element binding with the null-toggle.
+- `@click` and `@click:outside` on one element are independent bindings. Existing §5 compile errors are unchanged (`outside` on a component callback prop is rejected like every modifier).
+- **Documented limitations:** events inside an `<iframe>` never reach the parent document; on touch, `pointerdown` fires at scroll-start — prefer `@click:outside` where scroll tolerance matters. The event choice is the author's.
+
 ## Deferred features (post-v1)
 
 Explicitly out of scope for v1. Docs may describe them only if marked **"Planned — not in v1"**.
@@ -1066,7 +1077,7 @@ Explicitly out of scope for v1. Docs may describe them only if marked **"Planned
 - Global event bus (`this.$events`), `ctx.utils`, devtools hook — re-rejected at the D60 triage (singleton store records are the bus; the 3-service ctx is a selling point; `window.__PUZZLE_APP__` covers dev introspection, D57)
 - Virtual scrolling
 - ~~HMR~~ — shipped in v1.25 as a state-preserving dev reload (§27, D57). Per-module hot swap (patching a changed component without a reload) remains deferred on top of it.
-- Element actions (`use:name` directives) — considered at the 2026-07 framework-gap review and deferred: D72 refs already deliver element-lifetime callbacks, view lifecycle covers document-listener patterns, and the native `popover`/`<dialog>` top layer covers the dominant dismiss-behavior cases. If real pressure appears, the intended shape is dynamic function refs (`ref={ expr }` on the §31 handler cache), not a new directive namespace.
+- Element actions (`use:name` directives) — considered at the 2026-07 framework-gap review and deferred: D72 refs already deliver element-lifetime callbacks, view lifecycle covers document-listener patterns, and the dominant dismiss-behavior case shipped as the `@event:outside` modifier (v1.52, §47/D86) — which further narrows what an action system would add. If real pressure appears, the intended shape is dynamic function refs (`ref={ expr }` on the §31 handler cache), not a new directive namespace.
 - `<Portal>` — considered at the same review and deferred: §26's containing-block contract already keeps `position: fixed` overlays reliable, the native top layer (`<dialog>.showModal()`, `popover`) covers modals/popovers on our ES2022 floor, and a portal entangles the one-animator transition, overlap pinning, morph scanning, and SSG inline serialization. Document the native pattern instead.
 - Lazy route views + code splitting + link preloading — real for large apps, but Puzzle bundles are small enough that the pressure is weak today, and it undercuts the §16 skeleton story (a skeleton cannot render before its module arrives). Deserves its own release; static mode's per-page splitting is the in-repo precedent. (Also listed at §36.)
 
