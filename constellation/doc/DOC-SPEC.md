@@ -982,7 +982,7 @@ The CLI reports newer published releases and can upgrade itself through the user
 - Prints one dim line — `✨ puzzle <latest> available (current <v>) — run puzzle upgrade` — after the build summary (`build`) or the ready banner (`dev`).
 - **Entirely skipped** when `CI` or `PUZZLE_NO_UPDATE_CHECK` is non-empty, or stdout is not a terminal. Piped/scripted invocations never touch the network.
 - The notice is printed **from cache only**: `<os.UserCacheDir()>/puzzle/update-check.json` (`checked_at` RFC3339 + `latest`). A missing or ≥24h-old cache triggers a background fire-and-forget refresh (3s timeout) — a short-lived `build` may exit before it lands, so the notice appears on a later run. The passive path never blocks a command, never delays exit, and never surfaces network errors.
-- Registry endpoint: `GET <registry>/@magic-spells/puzzle/latest` with the `application/vnd.npm.install-v1+json` Accept header. `<registry>` defaults to `https://registry.npmjs.org`; `PUZZLE_REGISTRY` overrides it (mirrors, tests).
+- Registry endpoint: `GET <registry>/@magic-spells/puzzle/latest` with an `application/json` Accept header — never the abbreviated `application/vnd.npm.install-v1+json` format, which npm serves for packuments only and answers with 406 on version endpoints (D80). `<registry>` defaults to `https://registry.npmjs.org`; `PUZZLE_REGISTRY` overrides it (mirrors, tests).
 
 **`puzzle upgrade [--check]`:**
 - Fetches the latest version synchronously (5s timeout; a failure here IS an error, unlike the passive path). Current ≥ latest short-circuits with `✓ … is up to date`. `--check` reports current vs latest and changes nothing.

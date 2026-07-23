@@ -100,8 +100,12 @@ func TestFetchLatest(t *testing.T) {
 		if r.URL.Path != "/@magic-spells/puzzle/latest" {
 			t.Errorf("path = %q", r.URL.Path)
 		}
-		if got, want := r.Header.Get("Accept"), "application/vnd.npm.install-v1+json"; got != want {
-			t.Errorf("Accept = %q, want %q", got, want)
+		// The real npm registry rejects the abbreviated install-v1 format on
+		// version endpoints such as /latest; emulate that so a regression to
+		// the packument-only Accept header fails this test.
+		if r.Header.Get("Accept") == "application/vnd.npm.install-v1+json" {
+			http.Error(w, "not acceptable", http.StatusNotAcceptable)
+			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"version":"0.2.0"}`))

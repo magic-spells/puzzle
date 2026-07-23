@@ -54,6 +54,7 @@ npm install -D @magic-spells/puzzle
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
 - **Go-based compiler** for fast builds and state-preserving live reload (store and JSON-safe local view state survive edits)
 - **SPA-first output with optional static prerendering** — no request-time SSR server or hydration layer
+- **[Puzzle Pieces](https://github.com/magic-spells/puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magic-spells.github.io/puzzle-pieces/))
 
 > **Experimental in 0.1.0:** overlapping route transitions (`transitionMode:
 > 'overlap'`) and shared-element morph transitions (`@magic-spells/puzzle/morph`)
@@ -378,6 +379,19 @@ import Icon from './Icon.pzl';              // relative
 import Icon from '@/components/Icon.pzl';   // app/components/Icon.pzl
 ```
 
+## Puzzle Pieces
+
+[Puzzle Pieces](https://github.com/magic-spells/puzzle-pieces) is the official
+component library for Puzzle — ready-made `.pzl` components (and their styles)
+you can drop into any app:
+
+```bash
+puzzle add piece <name>
+```
+
+Preview every piece in the live catalog at
+[magic-spells.github.io/puzzle-pieces](https://magic-spells.github.io/puzzle-pieces/).
+
 ## Syntax Highlighting
 
 Editor extensions provide full `.pzl` highlighting — native HTML, JavaScript/TypeScript, and CSS per section, plus Puzzle's template expressions, directives, event bindings, and formatter chains:
@@ -437,7 +451,7 @@ puzzle init my-app --template todos
 # Generate a stub (component, view, layout, or model)
 puzzle generate component UserCard --path components/ui/
 
-# Wire up Tailwind, install a piece, or run diagnostics
+# Wire up Tailwind, install a piece (see Puzzle Pieces above), or run diagnostics
 puzzle add tailwind
 puzzle add piece <name>
 puzzle doctor

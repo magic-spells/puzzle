@@ -46,7 +46,9 @@ func FetchLatest(timeout time.Duration) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("creating registry request: %w", err)
 	}
-	req.Header.Set("Accept", "application/vnd.npm.install-v1+json")
+	// npm only serves the abbreviated install-v1 format for packuments; asking
+	// for it on a version endpoint like /latest gets a 406.
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := (&http.Client{Timeout: timeout}).Do(req)
 	if err != nil {
