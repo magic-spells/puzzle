@@ -59,27 +59,27 @@ func TestSplitSectionsScriptsOpaque(t *testing.T) {
 	}
 }
 
-func TestSplitSectionsRenamedTags(t *testing.T) {
+func TestSplitSectionsMisnamedTags(t *testing.T) {
 	tests := []struct {
-		oldName string
-		newName string
-		attrs   string
+		badName  string
+		goodName string
+		attrs    string
 	}{
-		{oldName: "scripts", newName: "script", attrs: ` lang="ts"`},
-		{oldName: "styles", newName: "style", attrs: " scoped"},
+		{badName: "scripts", goodName: "script", attrs: ` lang="ts"`},
+		{badName: "styles", goodName: "style", attrs: " scoped"},
 	}
 	for _, tc := range tests {
-		t.Run(tc.oldName, func(t *testing.T) {
-			src := "<puzzle-view></puzzle-view>\n\n  <" + tc.oldName + tc.attrs + ">x</" + tc.oldName + ">"
-			_, err := SplitSections(src, "Renamed.pzl")
+		t.Run(tc.badName, func(t *testing.T) {
+			src := "<puzzle-view></puzzle-view>\n\n  <" + tc.badName + tc.attrs + ">x</" + tc.badName + ">"
+			_, err := SplitSections(src, "Misnamed.pzl")
 			if err == nil {
-				t.Fatal("expected renamed-tag error")
+				t.Fatal("expected misnamed-tag error")
 			}
 			pe, ok := err.(*ParseError)
 			if !ok {
 				t.Fatalf("error type = %T, want *ParseError", err)
 			}
-			wantMessage := "<" + tc.oldName + "> was renamed to <" + tc.newName + "> in 0.2.0"
+			wantMessage := "<" + tc.badName + "> should be named <" + tc.goodName + ">"
 			if pe.Message != wantMessage {
 				t.Fatalf("message = %q, want %q", pe.Message, wantMessage)
 			}

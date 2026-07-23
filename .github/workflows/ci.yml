@@ -38,7 +38,7 @@ jobs:
       - run: npm test
       - run: npm run verify:pack
       # Type-check the public .d.ts surface against a strict consumer fixture
-      # (imports from the package root exactly as a `<scripts lang="ts">` app would).
+      # (imports from the package root exactly as a `<script lang="ts">` app would).
       - run: npm run test:types
 
   e2e-pack:

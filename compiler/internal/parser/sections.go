@@ -99,9 +99,9 @@ func SplitSections(src, filename string) (*Sections, error) {
 			i = i + 4 + idx + 3
 			continue
 		}
-		if oldName, newName := renamedSectionTagAt(src, i); oldName != "" {
+		if badName, goodName := misnamedSectionTagAt(src, i); badName != "" {
 			return nil, posErr(src, filename, i,
-				"<"+oldName+"> was renamed to <"+newName+"> in 0.2.0")
+				"<"+badName+"> should be named <"+goodName+">")
 		}
 		name, isClose := sectionTagAt(src, i)
 		if name == "" || isClose {
@@ -290,25 +290,25 @@ func strayContentErr(src, filename string, off int, follows string) *ParseError 
 		"unexpected content outside a section — only <puzzle-view>, <puzzle-skeleton>, <script> and <style> may appear at the top level")
 }
 
-// renamedSectionTagAt recognizes the pre-0.2.0 names so the top-level scanner
-// can report the migration directly instead of falling through to the generic
-// stray-content error. A boundary is required so similarly prefixed custom
-// markup is still diagnosed as ordinary stray content.
-func renamedSectionTagAt(src string, i int) (oldName, newName string) {
-	for _, rename := range []struct {
-		old string
-		new string
+// misnamedSectionTagAt recognizes near-miss section names so the top-level
+// scanner can point at the correct spelling instead of falling through to the
+// generic stray-content error. A boundary is required so similarly prefixed
+// custom markup is still diagnosed as ordinary stray content.
+func misnamedSectionTagAt(src string, i int) (badName, goodName string) {
+	for _, m := range []struct {
+		bad  string
+		good string
 	}{
-		{old: "scripts", new: "script"},
-		{old: "styles", new: "style"},
+		{bad: "scripts", good: "script"},
+		{bad: "styles", good: "style"},
 	} {
-		prefix := "<" + rename.old
+		prefix := "<" + m.bad
 		if !strings.HasPrefix(src[i:], prefix) {
 			continue
 		}
 		after := i + len(prefix)
 		if after >= len(src) || isBoundary(src[after]) {
-			return rename.old, rename.new
+			return m.bad, m.good
 		}
 	}
 	return "", ""
