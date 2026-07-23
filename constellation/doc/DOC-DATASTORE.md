@@ -1,7 +1,7 @@
 ---
 name: Puzzle datastore
 status: verified
-verified_at: '2026-07-22T00:04:05.380Z'
+verified_at: '2026-07-23T16:30:51.171Z'
 connections:
   - DOC-SPEC
   - DOC-MODELS
@@ -10,6 +10,7 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - FILE-STORE
   - FILE-PUZZLE-MODEL
+verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
 ---
 
 # Puzzle datastore

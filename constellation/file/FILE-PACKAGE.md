@@ -6,7 +6,8 @@ language: JSON
 summary: Load-bearing file for DOC-BLOG-EXAMPLE.
 connections:
   - DOC-BLOG-EXAMPLE
-verified_at: '2026-07-22T01:03:45.609Z'
+verified_at: '2026-07-23T16:30:53.566Z'
+verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
 ---
 
 # package.json
