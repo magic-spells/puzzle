@@ -11,16 +11,18 @@ a reactive browser runtime, and a Go + esbuild compiler/CLI. Optional static
 generation prerenders routes without adding an SSR server or hydration layer.
 
 [[DOC-SPEC]] is the enforceable contract and wins all conflicts. Decisions
-D1-D79 in [[DOC-DECISIONS]] explain why the contract has its current shape.
+D1-D80 in [[DOC-DECISIONS]] explain why the contract has its current shape.
 [[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
 
 ## Current state
 
 - `0.1.0` shipped publicly on npm 2026-07-21; `0.1.1` (interactive `puzzle
   init` prompts, D77/v1.44) followed 2026-07-22 (MIT, five packages, manual
-  publish). `0.1.2` added the embedded agent skill + `puzzle add skills`
-  installer (D78/v1.45). Working: the true static-pages output mode — `output:
-  'static'` / `--static` (D79/v1.46), with the D67 prerendered-SPA mode renamed
+  publish). `0.1.2` shipped the embedded agent skill + `puzzle add skills`
+  installer (D78/v1.45, published 2026-07-22). Working: mode-agnostic
+  path-shaped links — `router.url()` + the built-in `link` formatter
+  (D79/v1.46) — and the true static-pages output mode — `output: 'static'` /
+  `--static` (D80/v1.47), with the D67 prerendered-SPA mode renamed
   `output: 'hybrid'` / `--hybrid`.
 - Runtime, compiler, CLI, static generation (hybrid + static modes),
   state-preserving dev reload,

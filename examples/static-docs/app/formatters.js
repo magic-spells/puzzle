@@ -1,5 +1,5 @@
 // App formatters module (SPEC §2 · display transforms only — logic belongs in
-// data()). In static mode (D79) the build reads formatters from THIS file so they
+// data()). In static mode (D80) the build reads formatters from THIS file so they
 // exist in the per-page bundle and re-render identically client-side. Formatters
 // registered only in app.js config are available at build time (prerender) but
 // NOT client-side in static mode, so the build warns; keeping them here is the fix.

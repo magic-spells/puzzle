@@ -47,7 +47,7 @@ the staged build path.
 Production builds are SPA bundles by default. [[COMPONENT-SSG]] can additionally
 execute the server-safe bundle and serialize eligible routes to static HTML, in
 two output modes: `output: 'hybrid'` (D67 — prerendered pages the SPA takes over
-at navigation zero) and `output: 'static'` (D79 — true static pages with no
+at navigation zero) and `output: 'static'` (D80 — true static pages with no
 router or `app.js`, each waking its own components via a per-page module). Either
 is build-time rendering, not an SSR server and not hydration.
 

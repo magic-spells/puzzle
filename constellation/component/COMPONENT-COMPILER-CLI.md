@@ -20,7 +20,7 @@ verified_sha: 1c2f4b6fef8106cbf3d0a433bfb6186ef89fcc73
 Cobra command surface shipped by the platform binary:
 
 - `puzzle build [dir] [--mode] [--static|--hybrid]` runs the production/
-  development, true-static (D79), or hybrid-prerender (D67) build — the two
+  development, true-static (D80), or hybrid-prerender (D67) build — the two
   output flags are mutually exclusive and must agree with any `output` config
   value — and prints raw/gzip output plus prerender summaries.
 - `puzzle dev [dir] --port` starts [[COMPONENT-DEV-SERVER]].

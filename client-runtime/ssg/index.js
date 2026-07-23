@@ -44,7 +44,7 @@ import { assembleChain } from './assemble.js';
  * @param {'hybrid'|'static'} [opts.mode] `'hybrid'` (default) is the router-takeover
  *   mode; `'static'` additionally captures each page's store snapshot (`data`), its
  *   view/layout `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot
- *   so prerenderToDir can emit true static pages (D79).
+ *   so prerenderToDir can emit true static pages (D80).
  * @returns {Promise<{
  *   pages: Array<{ path: string, html: string|null, title: string|null, prerender?: boolean,
  *     data?: object, modules?: { views: string[], layout: string|null }, route?: object }>,
@@ -152,7 +152,7 @@ export async function prerender(config, opts = {}) {
  * @param {string} options.outDir directory to write the per-route files into
  * @param {string} options.shellPath the app shell HTML (the built index.html)
  * @param {'hybrid'|'static'} [options.mode] `'hybrid'` (default) is the current
- *   router-takeover output, byte-identical to before D79. `'static'` emits true
+ *   router-takeover output, byte-identical to before D80. `'static'` emits true
  *   static pages: the `/app.js` bundle tag is stripped, each page carries a
  *   `data-puzzle-static` target + an inline JSON data island + a per-page module
  *   script, and the summary gains the extra fields the Go static build needs.
@@ -194,7 +194,7 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 }
 
 /**
- * The static-mode (D79) writer: strip the app-bundle tag once, then per page compute
+ * The static-mode (D80) writer: strip the app-bundle tag once, then per page compute
  * a collision-free slug, inject the static shell (content + `data-puzzle-static`
  * marker, inline JSON data island, per-page module script), and collect the extended
  * summary the Go static build consumes (per page: `entry`, `modules`, `route`; top
@@ -350,7 +350,7 @@ function resolveTitle(chain) {
 	return null;
 }
 
-// ---- static-mode per-page capture (D79) -------------------------------------
+// ---- static-mode per-page capture (D80) -------------------------------------
 
 /**
  * Attach the static-mode fields to a rendered page (CONTRACT 3): the page's store
@@ -443,7 +443,7 @@ export function injectShell(shell, { targetId, content, title }) {
 	return out;
 }
 
-// ---- static-mode shell surgery (D79) ----------------------------------------
+// ---- static-mode shell surgery (D80) ----------------------------------------
 
 // Any `<script … src="/app.js" …></script>` — the SPA bundle tag. Static pages
 // have no router/app.js, so it is struck once (a missing tag warns; see

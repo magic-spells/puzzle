@@ -98,7 +98,7 @@ nodes. User class semantics are not rewritten.
   stripped by default.
 - `puzzle build --mode development`: one readable development build.
 - `puzzle build --static`: true static pages — build-time route HTML plus one
-  per-page mount module, no `app.js` (D79).
+  per-page mount module, no `app.js` (D80).
 - `puzzle build --hybrid`: production SPA bundle plus build-time route HTML the
   router takes over at navigation zero (D67).
 - `puzzle dev`: incremental development build, recursive watch, static server,

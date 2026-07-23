@@ -1,5 +1,5 @@
 // True static-pages output for `puzzle build --static` (or `output: 'static'`
-// in puzzle.config.js), decision D79. Unlike the hybrid mode (prerender.go),
+// in puzzle.config.js), decision D80. Unlike the hybrid mode (prerender.go),
 // which prerenders per-route HTML that the full SPA runtime takes over, the
 // static mode ships content-complete HTML pages plus a SMALL per-page ES-module
 // bundle: no router, no SPA takeover, no history API. Navigation is plain <a>

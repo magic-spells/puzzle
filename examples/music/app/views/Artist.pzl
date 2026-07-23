@@ -66,7 +66,7 @@
          reaching here means the id genuinely has no artist — a real not-found. -->
     <div class="py-24 text-center">
       <h1 class="text-xl text-fg mb-2">Artist not found</h1>
-      <p class="text-muted">No artist with that id. <a href="#/" class="text-accent">Back to your library</a>.</p>
+      <p class="text-muted">No artist with that id. <a href="{ '/' | link }" class="text-accent">Back to your library</a>.</p>
     </div>
   {/if}
 

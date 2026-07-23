@@ -151,7 +151,7 @@ func normalizeFixture(s string) string {
 		if trimmed == "" || strings.HasPrefix(trimmed, "//") {
 			continue
 		}
-		// The D79 module stamp (Class.__pzlModule = '…') is build-time metadata
+		// The D80 module stamp (Class.__pzlModule = '…') is build-time metadata
 		// orthogonal to render structure — the hand-written render-structure
 		// anchors (golden #1) predate it, so drop it from the structural compare.
 		if strings.Contains(trimmed, ".__pzlModule = ") {

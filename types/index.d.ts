@@ -176,6 +176,8 @@ export interface Router {
 	back(): void | Promise<void>;
 	/** Go forward one entry. */
 	forward(): void | Promise<void>;
+	/** Path-shaped route in, mode-encoded href out (`'/x'` history, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (v1.46, D79). */
+	url(path: string): string;
 	/** The current route snapshot, or null before the first navigation. */
 	readonly current: RouteSnapshot | null;
 	/** Register the shared-element morph handler (v1.23, D55); null unregisters. */

@@ -108,7 +108,7 @@ func (p *Plugin) setup(build api.PluginBuild) {
 		res, cerr := codegen.Compile(sec, codegen.Options{
 			Filename: name,
 			Mode:     codegen.ModeForPath(name),
-			// The app-relative name is also the module stamp (D79): view/layout
+			// The app-relative name is also the module stamp (D80): view/layout
 			// classes carry Class.__pzlModule so the static-pages build can map a
 			// route back to its source .pzl for per-page entry generation.
 			ModulePath: name,

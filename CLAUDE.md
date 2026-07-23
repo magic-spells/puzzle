@@ -34,10 +34,12 @@ run.
 - Published: `0.1.0` (2026-07-21) and `0.1.1` (2026-07-22, D77 init prompts)
   are live on npm (all five packages, MIT, manual publish via
   `npm run release:prep` — there is no CI publish). `0.1.2` shipped the embedded
-  agent skill + `puzzle add skills` (D78/v1.45). Working version adds the true
-  static-pages output mode (`output: 'static'` / `--static`, D79/v1.46); the D67
-  prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid`.
-- Product line: v1 through v1.46, decisions D1-D79, plus the July 21
+  agent skill + `puzzle add skills` (D78/v1.45, published 2026-07-22). Working
+  version adds path-shaped links via `router.url()` + the `link` formatter
+  (D79/v1.46) and the true static-pages output mode (`output: 'static'` /
+  `--static`, D80/v1.47); the D67 prerendered-SPA mode is renamed
+  `output: 'hybrid'` / `--hybrid`.
+- Product line: v1 through v1.47, decisions D1-D80, plus the July 21
   pre-release correctness/performance hardening pass.
 - Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`,
   `./static`, and `./puzzle-env` exports plus a `puzzle` binary shim and four

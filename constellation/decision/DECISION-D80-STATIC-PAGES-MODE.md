@@ -1,5 +1,5 @@
 ---
-name: "D79 — True static-pages output mode; old mode renamed 'hybrid'"
+name: "D80 — True static-pages output mode; old mode renamed 'hybrid'"
 status: verified
 verified_at: '2026-07-23T00:00:00.000Z'
 connections:
@@ -8,13 +8,13 @@ connections:
   - COMPONENT-SSG
   - COMPONENT-CODEGEN
   - DOC-SPEC
-  - FEATURE-V1-46-STATIC-PAGES
+  - FEATURE-V1-47-STATIC-PAGES
   - FILE-STATIC-MOUNT
   - FILE-SSG-ASSEMBLE
   - FILE-BUILD-PRERENDER-PAGES
 ---
 
-# D79 — True static-pages output mode; old mode renamed 'hybrid'
+# D80 — True static-pages output mode; old mode renamed 'hybrid'
 
 `output: 'static'` now means a **true static site**: per-route content-complete HTML with **no router, no SPA takeover, and no history API** in the output — navigation is plain `<a>` page loads. Each page ships a small per-page ES module that mounts only its own components over the prerendered markup. The former `output: 'static'` behavior (prerendered pages + full SPA bundle + router takeover, D67) is renamed `output: 'hybrid'` / `puzzle build --hybrid`, byte-identical.
 
