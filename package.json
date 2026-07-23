@@ -1,6 +1,6 @@
 {
 	"name": "@magic-spells/puzzle",
-	"version": "0.1.2",
+	"version": "0.2.0",
 	"description": "SPA-first JavaScript framework — single-file .pzl components, reactive data() components, Go + esbuild compiler",
 	"type": "module",
 	"main": "./client-runtime/index.js",
@@ -80,10 +80,10 @@
 		"url": "https://github.com/magic-spells/puzzle/issues"
 	},
 	"optionalDependencies": {
-		"@magic-spells/puzzle-darwin-arm64": "0.1.2",
-		"@magic-spells/puzzle-darwin-x64": "0.1.2",
-		"@magic-spells/puzzle-linux-arm64": "0.1.2",
-		"@magic-spells/puzzle-linux-x64": "0.1.2"
+		"@magic-spells/puzzle-darwin-arm64": "0.2.0",
+		"@magic-spells/puzzle-darwin-x64": "0.2.0",
+		"@magic-spells/puzzle-linux-arm64": "0.2.0",
+		"@magic-spells/puzzle-linux-x64": "0.2.0"
 	},
 	"peerDependencies": {
 		"@magic-spells/morph-engine": ">=0.1.0"

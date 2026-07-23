@@ -16,3 +16,4 @@ Card.prototype.render = function () {
     ]),
   ]);
 };
+Card.__pzlModule = 'Card.pzl';
