@@ -19,8 +19,10 @@ verified_sha: 1c2f4b6fef8106cbf3d0a433bfb6186ef89fcc73
 
 Cobra command surface shipped by the platform binary:
 
-- `puzzle build [dir] [--mode] [--static]` runs the production/development or
-  static build and prints raw/gzip output plus prerender summaries.
+- `puzzle build [dir] [--mode] [--static|--hybrid]` runs the production/
+  development, true-static (D81), or hybrid-prerender (D67) build — the two
+  output flags are mutually exclusive and must agree with any `output` config
+  value — and prints raw/gzip output plus prerender summaries.
 - `puzzle dev [dir] --port` starts [[COMPONENT-DEV-SERVER]].
 - `puzzle init <name>` embeds `default` and `todos` app trees, with optional
   TypeScript editor config. On a TTY it prompts for whatever was not given —

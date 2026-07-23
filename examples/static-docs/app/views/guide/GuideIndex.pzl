@@ -23,6 +23,6 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The index child (path: '' in routes.js). No meta.title of its own — it rides
-// the shell's title, exercising the SSG leaf → root title walk.
+// the shell's title, exercising the static-build leaf → root title walk.
 export default class GuideIndex extends PuzzleView {}
 </scripts>

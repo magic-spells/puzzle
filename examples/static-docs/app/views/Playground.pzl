@@ -4,9 +4,10 @@
     <h1 class="font-display text-4xl md:text-5xl text-ink">An SPA island</h1>
     <p class="mt-4 text-muted leading-relaxed">
       This route is flagged <code class="font-mono text-sm bg-surface-2 border border-line-2 rounded px-1.5 py-0.5">prerender: false</code>,
-      so the build skips it and writes the plain SPA shell at <code>/playground/</code> —
-      no baked HTML, no <code>data-puzzle-ssg</code> marker. It renders entirely in the
-      browser. The escape hatch for pages that are pure interaction.
+      so the build skips prerendering and writes an empty-target shell at <code>/playground/</code> —
+      no baked HTML, no <code>data-puzzle-static</code> marker — but still ships this
+      page's module, so it renders entirely in the browser. A client-rendered island:
+      the escape hatch for pages that are pure interaction.
     </p>
   </section>
 

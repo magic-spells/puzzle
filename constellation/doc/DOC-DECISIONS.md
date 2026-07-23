@@ -1,12 +1,12 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D75)
+name: DECISIONS.md — decision-log index (D1–D81)
 status: verified
 verified_at: '2026-07-22T00:04:05.457Z'
 connections:
   - DOC-SPEC
 ---
 
-Index of the ADR-lite decision log. Each decision D1–D75 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+Index of the ADR-lite decision log. Each decision D1–D81 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
 
 # Decision Log (index)
 
@@ -55,7 +55,7 @@ field on the successor card.
 - **D31** [[DECISION-D31-FORMATTER-TREESHAKE]] — compile-time formatter tree-shaking: manifest-seeded registry
 - **D35** [[DECISION-D35-NO-SASS]] — no Sass support, ever
 
-## Shipped amendments (v1.1–v1.42)
+## Shipped amendments (v1.1–v1.47)
 
 Each shipped as an additive amendment; the corresponding FEATURE card is the
 slice-of-work view.
@@ -111,6 +111,7 @@ slice-of-work view.
 - **D78** [[DECISION-D78-AGENT-SKILL-DISTRIBUTION]] — agent-skill distribution: the app-builder AI skill lives in-repo (`skills/puzzle/SKILL.md`), is embedded into the binary, and `puzzle add skills` installs it into every detected Claude Code/Codex/Cursor config dir — huh checkbox multi-select on a TTY (all pre-selected), silent install-to-all otherwise, pieces-style `--overwrite`; also fixed `ui.IsTerminal` to a real isatty check (`/dev/null` no longer counts as a TTY) (v1.45 → SPEC §13 amendment)
 - **D79** [[DECISION-D79-LINK-FORMATTER]] — path-shaped template links: `router.url(path)` mode-encodes a path-shaped route into the href (`base + path` history, `'#' + base + path` hash, unchanged memory; non-`/` strings pass through), plus a built-in router-bound `link` formatter (`{ path | link }`) registered by PuzzleApp at mount **if absent** (user config wins); closes D34's `<a href>` seam and absorbs D51's history-mode base prefixing — runtime-only, no compiler or §2 config change; hash-mode interceptor deliberately does NOT claim plain `/x` hrefs (v1.46 → SPEC §6/§9/§15)
 - **D80** [[DECISION-D80-REGISTRY-ACCEPT-HEADER]] — registry fetch asks for `application/json`: npm 406s the abbreviated install-v1 format on version endpoints, so D76's specified header broke the update notice and `puzzle upgrade` in every release; test registry now emulates the 406 (fix → SPEC §41)
+- **D81** [[DECISION-D81-STATIC-PAGES-MODE]] — true static-pages output mode: `output: 'static'` / `--static` now emits per-route HTML with no router, no SPA takeover, and no `app.js` — each page ships a per-page `mountStatic` module importing only its own classes (keyed on new codegen `__pzlModule` stamps), shared runtime split into chunks, build-time data serialized into an inline island and rehydrated client-side; the D67 prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid`, byte-identical (v1.47 → SPEC §36 amendment, [[FEATURE-V1-47-STATIC-PAGES]])
 
 ## Open questions (tracked, not yet decided)
 

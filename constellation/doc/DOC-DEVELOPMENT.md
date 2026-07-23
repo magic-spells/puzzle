@@ -70,8 +70,9 @@ Review generated diffs; never update goldens merely to silence a failure.
 ## CLI development
 
 `puzzle build [dir]` creates a production bundle by default.
-`--mode development` keeps readable output, and `--static` enables
-prerendered route pages. `puzzle dev [dir]` performs an initial build, serves
+`--mode development` keeps readable output; `--static` emits true static pages
+(no router or `app.js`, per-page mount modules) and `--hybrid` emits prerendered
+pages plus the SPA bundle the router takes over (D67/D81). `puzzle dev [dir]` performs an initial build, serves
 `dist/` with SPA fallback, watches recursively, rebuilds incrementally, and
 broadcasts state-preserving SSE reloads after successful builds.
 

@@ -5,7 +5,7 @@
     <p class="mt-4 text-muted leading-relaxed">
       A nested-routes shell (v1.3, D30): this view stays mounted while the pane
       below swaps through its <code class="font-mono text-sm bg-surface-2 border border-line-2 rounded px-1 py-0.5">{ '<Slot/>' }</code>.
-      Under SSG each pane is prerendered at its own joined path.
+      In static mode each pane is prerendered to its own joined path.
     </p>
 
     <nav class="mt-6 flex gap-2 border-b border-line pb-3">
@@ -23,7 +23,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Nested shell (SPEC §12, D30). It defines meta.title in routes.js ("Guide · …");
-// its index child defines none, so the SSG leaf → root title walk falls through
-// to this title at /guide/. The sibling pane overrides it at /guide/templates/.
+// its index child defines none, so the static-build leaf → root title walk falls
+// through to this title at /guide/. The sibling overrides it at /guide/templates/.
 export default class GuideShell extends PuzzleView {}
 </scripts>

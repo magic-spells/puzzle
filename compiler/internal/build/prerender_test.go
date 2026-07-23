@@ -24,6 +24,22 @@ func requireSSGRuntime(t *testing.T) {
 	}
 }
 
+// requireStaticRuntime skips the calling test unless the JS static-pages kernel
+// (client-runtime/static/index.js, mountStatic) exists — it is written
+// concurrently by a separate agent. Until it lands, the per-page entries can't
+// resolve @magic-spells/puzzle/static and the prerender pass can't run mode
+// 'static', so a full static build is not meaningful. The Go-only pieces (config
+// parsing, flag reconciliation, entry-file generation) are covered by
+// non-skipped unit tests.
+func requireStaticRuntime(t *testing.T) {
+	t.Helper()
+	requireNodeBin(t)
+	kernel := filepath.Join(repoRoot(t), "client-runtime", "static", "index.js")
+	if _, err := os.Stat(kernel); err != nil {
+		t.Skipf("static kernel not present yet (%s) — skipping the integration run", kernel)
+	}
+}
+
 func requireNodeBin(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("node"); err != nil {
@@ -141,12 +157,14 @@ export default class NotFound extends PuzzleView {}
 	}
 }
 
-// TestBuildStaticEmitsPerRouteHTML is the integration run: a Static=true build of
-// a fixture app writes one index.html per STATIC route (directory style), each
-// carrying the SSG takeover marker (data-puzzle-ssg) and its route's <title>; the
-// dynamic :id route is skipped; and the .puzzle-prerender/ bundle never ships in
-// dist/. Skipped until the JS SSG runtime lands.
-func TestBuildStaticEmitsPerRouteHTML(t *testing.T) {
+// TestBuildHybridEmitsPerRouteHTML is the integration run for the HYBRID mode
+// (formerly 'static'): an Output:"hybrid" build of a fixture app writes one
+// index.html per STATIC route (directory style), each carrying the SSG takeover
+// marker (data-puzzle-ssg) and its route's <title>; the dynamic :id route is
+// skipped; and the .puzzle-prerender/ bundle never ships in dist/. It asserts
+// today's behavior is byte-for-byte unchanged under the new name. Skipped until
+// the JS SSG runtime lands.
+func TestBuildHybridEmitsPerRouteHTML(t *testing.T) {
 	requireSSGRuntime(t)
 	root := writeSSGFixture(t, baseSSGFixture())
 
@@ -156,7 +174,7 @@ func TestBuildStaticEmitsPerRouteHTML(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	buildErr := Build(root, Options{Development: true, Static: true})
+	buildErr := Build(root, Options{Development: true, Output: "hybrid"})
 	w.Close()
 	os.Stdout = oldStdout
 	captured, _ := io.ReadAll(r)
@@ -165,6 +183,9 @@ func TestBuildStaticEmitsPerRouteHTML(t *testing.T) {
 	}
 	if !strings.Contains(string(captured), "3 pages prerendered") {
 		t.Errorf("build summary should report '3 pages prerendered', got:\n%s", captured)
+	}
+	if !strings.Contains(string(captured), "puzzle build · hybrid") {
+		t.Errorf("hybrid build summary header should read 'puzzle build · hybrid', got:\n%s", captured)
 	}
 	dist := filepath.Join(root, "dist")
 
@@ -213,19 +234,19 @@ func TestBuildStaticEmitsPerRouteHTML(t *testing.T) {
 	}
 }
 
-// TestBuildStaticViaConfig proves output: 'static' in puzzle.config.js enables
-// the same prerender step WITHOUT the --static flag (Options.Static=false).
-func TestBuildStaticViaConfig(t *testing.T) {
+// TestBuildHybridViaConfig proves output: 'hybrid' in puzzle.config.js enables
+// the takeover prerender step WITHOUT any flag (Options.Output=="").
+func TestBuildHybridViaConfig(t *testing.T) {
 	requireSSGRuntime(t)
 	files := baseSSGFixture()
-	files["puzzle.config.js"] = "export default { output: 'static' };\n"
+	files["puzzle.config.js"] = "export default { output: 'hybrid' };\n"
 	root := writeSSGFixture(t, files)
 
 	if err := Build(root, Options{Development: true}); err != nil {
-		t.Fatalf("config-driven static Build failed: %v", err)
+		t.Fatalf("config-driven hybrid Build failed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "dist", "about", "index.html")); err != nil {
-		t.Errorf("output:'static' should prerender routes without --static; dist/about/index.html missing: %v", err)
+		t.Errorf("output:'hybrid' should prerender routes without a flag; dist/about/index.html missing: %v", err)
 	}
 }
 
@@ -235,7 +256,7 @@ func TestBuildStaticViaConfig(t *testing.T) {
 func TestBuildStaticPrerenderFailureLeavesDistIntact(t *testing.T) {
 	requireSSGRuntime(t)
 
-	// First: a clean SPA build (no --static) populates dist/ with a marker.
+	// First: a clean SPA build (no prerender) populates dist/ with a marker.
 	files := baseSSGFixture()
 	root := writeSSGFixture(t, files)
 	if err := Build(root, Options{Development: true}); err != nil {
@@ -259,10 +280,10 @@ export default class Home extends PuzzleView {
 		t.Fatal(err)
 	}
 
-	// A --static build must now FAIL...
-	err := Build(root, Options{Development: true, Static: true})
+	// A --hybrid build must now FAIL...
+	err := Build(root, Options{Development: true, Output: "hybrid"})
 	if err == nil {
-		t.Fatal("expected the static Build to fail on the throwing data()")
+		t.Fatal("expected the hybrid Build to fail on the throwing data()")
 	}
 
 	// ...and the previous good dist/index.html must be byte-identical.

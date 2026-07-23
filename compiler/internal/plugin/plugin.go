@@ -106,9 +106,13 @@ func (p *Plugin) setup(build api.PluginBuild) {
 		}
 
 		res, cerr := codegen.Compile(sec, codegen.Options{
-			Filename:  name,
-			Mode:      codegen.ModeForPath(name),
-			AssetsDir: p.assetsDir,
+			Filename: name,
+			Mode:     codegen.ModeForPath(name),
+			// The app-relative name is also the module stamp (D81): view/layout
+			// classes carry Class.__pzlModule so the static-pages build can map a
+			// route back to its source .pzl for per-page entry generation.
+			ModulePath: name,
+			AssetsDir:  p.assetsDir,
 			// Bundled builds dedup {#svg} into shared virtual modules (D46
 			// amendment); the standalone pzlc path leaves this off and inlines.
 			SVGDedup: true,

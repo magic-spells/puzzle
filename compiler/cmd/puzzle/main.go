@@ -30,9 +30,14 @@ var buildCmd = &cobra.Command{
 	Long: `Compile .pzl components and package the app into dist/ (app.js, styles.css,
 and the copied public/ assets).
 
-With --static, additionally prerender each static route to its own
-dist/<path>/index.html (SSG mode) — the same step enabled by output: 'static'
-in puzzle.config.js. Dynamic (:id / *) routes are skipped with a warning.`,
+With --static, additionally emit true static pages: each static route becomes
+its own dist/<path>/index.html plus a small per-page module bundle under
+dist/_puzzle/ — no router, no SPA takeover. With --hybrid, prerender each
+static route to dist/<path>/index.html that the full SPA runtime takes over on
+load (the mode formerly spelled --static). Either flag has a puzzle.config.js
+equivalent (output: 'static' | 'hybrid'); passing a flag that disagrees with
+the config output value is an error. Dynamic (:id / *) routes are skipped with
+a warning.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := "."
@@ -47,9 +52,15 @@ in puzzle.config.js. Dynamic (:id / *) routes are skipped with a warning.`,
 			return fmt.Errorf("invalid --mode %q (expected \"production\" or \"development\")", mode)
 		}
 		static, _ := cmd.Flags().GetBool("static")
+		hybrid, _ := cmd.Flags().GetBool("hybrid")
+
+		output, err := outputFlag(static, hybrid)
+		if err != nil {
+			return err
+		}
 
 		start := time.Now()
-		if err := build.Build(dir, build.Options{Development: mode == "development", Static: static}); err != nil {
+		if err := build.Build(dir, build.Options{Development: mode == "development", Output: output}); err != nil {
 			return err
 		}
 		out := ui.New(os.Stdout)
@@ -82,9 +93,26 @@ development mode (no minification).`,
 	},
 }
 
+// outputFlag reconciles the mutually exclusive --static / --hybrid build flags
+// into the build.Options.Output mode string. Both set is a usage error; neither
+// set leaves the mode to puzzle.config.js `output` (empty here).
+func outputFlag(static, hybrid bool) (string, error) {
+	switch {
+	case static && hybrid:
+		return "", fmt.Errorf("--static and --hybrid are mutually exclusive — pass at most one")
+	case static:
+		return "static", nil
+	case hybrid:
+		return "hybrid", nil
+	default:
+		return "", nil
+	}
+}
+
 func init() {
 	buildCmd.Flags().String("mode", "production", "Build mode: production (minified) or development (readable)")
-	buildCmd.Flags().Bool("static", false, "Prerender each static route to its own dist/<path>/index.html (SSG mode)")
+	buildCmd.Flags().Bool("static", false, "Emit true static pages: per-route HTML + a per-page module bundle, no SPA takeover")
+	buildCmd.Flags().Bool("hybrid", false, "Prerender each static route to dist/<path>/index.html that the SPA runtime takes over")
 	devCmd.Flags().Int("port", 3000, "Port for the dev server")
 
 	rootCmd.AddCommand(buildCmd)

@@ -21,3 +21,4 @@ AttrInlineIf.prototype.render = function () {
     ]),
   ]);
 };
+AttrInlineIf.__pzlModule = 'attr_inline_if.pzl';

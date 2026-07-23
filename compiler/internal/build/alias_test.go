@@ -103,17 +103,17 @@ func TestBuildResolvesAppAlias(t *testing.T) {
 	}
 }
 
-// TestBuildStaticResolvesAppAlias covers the SECOND esbuild bundle: the static
-// build's prerender entry is assembled in prerender.go with its own BuildOptions
-// and only receives aliases through configureRuntime. If the '@' wiring ever
-// regresses to the main bundle alone, the prerender bundle fails to resolve and
-// this test catches it.
-func TestBuildStaticResolvesAppAlias(t *testing.T) {
+// TestBuildHybridResolvesAppAlias covers the SECOND esbuild bundle: the hybrid
+// build's prerender entry is assembled in prerender.go (bundlePrerenderEntry)
+// with its own BuildOptions and only receives aliases through configureRuntime.
+// If the '@' wiring ever regresses to the main bundle alone, the prerender
+// bundle fails to resolve and this test catches it.
+func TestBuildHybridResolvesAppAlias(t *testing.T) {
 	requireSSGRuntime(t)
 	root := writeSSGFixture(t, aliasFixture())
 
-	if err := Build(root, Options{Development: true, Static: true}); err != nil {
-		t.Fatalf("static Build with '@' imports failed: %v", err)
+	if err := Build(root, Options{Development: true, Output: "hybrid"}); err != nil {
+		t.Fatalf("hybrid Build with '@' imports failed: %v", err)
 	}
 
 	home := readFile(t, filepath.Join(root, "dist", "index.html"))

@@ -69,8 +69,11 @@ filled by a direct call-site child carrying a static `slot=\"…\"`.
 transitions from committing over a newer navigation.
 
 **prerender / static build** — Build-time execution and serialization of static
-routes. The browser receives the normal SPA bundle; this is not request-time SSR
-or hydration.
+routes to per-route HTML (D67/D81); never request-time SSR or hydration. Two
+output modes: `output: 'hybrid'` ships the prerendered pages plus the normal SPA
+bundle the router takes over at navigation zero; `output: 'static'` ships true
+static pages — no router, no `app.js` — with a per-page `mountStatic` module that
+wakes each page's own components.
 
 **PuzzleApp** — Application owner for configuration, shared context, router
 startup, lifecycle, and teardown.

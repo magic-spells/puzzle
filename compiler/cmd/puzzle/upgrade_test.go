@@ -14,6 +14,13 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
+// testLatest is the stubbed registry "latest" for tests that exercise the
+// newer-version-available flow. It must always compare newer than
+// version.Version — a literal current version here silently flips these tests
+// onto the up-to-date short-circuit the moment the real version catches up
+// (which is exactly what happened when 0.2.0 was hardcoded).
+const testLatest = "99.0.0"
+
 func TestFindProjectInstall(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -106,7 +113,7 @@ func TestUpgradeCommandArguments(t *testing.T) {
 
 func TestUpgradeCheckOnlyReports(t *testing.T) {
 	oldFetchLatest := fetchLatest
-	fetchLatest = func(time.Duration) (string, error) { return "0.2.0", nil }
+	fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
 	t.Cleanup(func() { fetchLatest = oldFetchLatest })
 
 	oldCacheDir := update.CacheDir
@@ -117,7 +124,7 @@ func TestUpgradeCheckOnlyReports(t *testing.T) {
 	if err := runUpgrade(&stdout, &stderr, plainPrinter(), t.TempDir(), "", true); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(stdout.String(), "puzzle 0.2.0 available (current "+version.Version+")") {
+	if !strings.Contains(stdout.String(), "puzzle "+testLatest+" available (current "+version.Version+")") {
 		t.Fatalf("check output missing version comparison:\n%s", stdout.String())
 	}
 	if _, err := update.ReadCache(); err == nil {
@@ -141,7 +148,7 @@ func TestUpgradeUpToDateOutput(t *testing.T) {
 
 func TestUpgradeManualInstallInstructions(t *testing.T) {
 	oldFetchLatest := fetchLatest
-	fetchLatest = func(time.Duration) (string, error) { return "0.2.0", nil }
+	fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
 	t.Cleanup(func() { fetchLatest = oldFetchLatest })
 
 	var stdout bytes.Buffer
@@ -180,21 +187,21 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			manager:  "npm",
 			lockfile: "package-lock.json",
 			field:    "devDependencies",
-			wantArgs: []string{"install", "--save-dev", "@magic-spells/puzzle@0.2.0"},
+			wantArgs: []string{"install", "--save-dev", "@magic-spells/puzzle@" + testLatest},
 		},
 		{
 			name:     "pnpm dependency",
 			manager:  "pnpm",
 			lockfile: "pnpm-lock.yaml",
 			field:    "dependencies",
-			wantArgs: []string{"add", "@magic-spells/puzzle@0.2.0"},
+			wantArgs: []string{"add", "@magic-spells/puzzle@" + testLatest},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			oldFetchLatest := fetchLatest
-			fetchLatest = func(time.Duration) (string, error) { return "0.2.0", nil }
+			fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
 			t.Cleanup(func() { fetchLatest = oldFetchLatest })
 
 			project := t.TempDir()
@@ -217,7 +224,7 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			t.Setenv("PUZZLE_TEST_ARGS", argsPath)
 			t.Setenv("PUZZLE_TEST_CWD", cwdPath)
 			t.Setenv("PUZZLE_TEST_PACKAGE_JSON", installedPackage)
-			t.Setenv("PUZZLE_TEST_VERSION", "0.2.0")
+			t.Setenv("PUZZLE_TEST_VERSION", testLatest)
 
 			oldCacheDir := update.CacheDir
 			update.CacheDir = t.TempDir()
@@ -238,15 +245,15 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			if strings.TrimSpace(string(cwd)) != project {
 				t.Fatalf("command cwd = %q, want %q", strings.TrimSpace(string(cwd)), project)
 			}
-			if !strings.Contains(stdout.String(), "✓ upgraded "+version.Version+" → 0.2.0") {
+			if !strings.Contains(stdout.String(), "✓ upgraded "+version.Version+" → "+testLatest) {
 				t.Fatalf("success output missing:\n%s", stdout.String())
 			}
 			cached, err := update.ReadCache()
 			if err != nil {
 				t.Fatal(err)
 			}
-			if cached.Latest != "0.2.0" {
-				t.Fatalf("cached latest = %q, want 0.2.0", cached.Latest)
+			if cached.Latest != testLatest {
+				t.Fatalf("cached latest = %q, want %q", cached.Latest, testLatest)
 			}
 		})
 	}

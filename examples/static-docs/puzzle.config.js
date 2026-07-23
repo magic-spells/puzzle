@@ -8,9 +8,13 @@ export default {
 		use: ['tailwindcss'],
 	},
 
-	// Static site generation (v1.33, D67 — SPEC §36). `output: 'static'` prerenders
-	// every static route to its own dist/<path>/index.html. This is the config-file
-	// equivalent of the `puzzle build --static` flag; either one is sufficient.
-	// `'static'` is the only legal value — anything else is a config error.
+	// Build output mode (SPEC §36 — D67/D81). `output: 'static'` (v1.47, D81)
+	// prerenders every static route to its own dist/<path>/index.html as a TRUE
+	// static page: no router, no SPA bundle, plain <a> navigation, and a small
+	// per-page module that wakes each page's own components. The config-file
+	// equivalent of `puzzle build --static`; either is sufficient. The other legal
+	// value is 'hybrid' (the renamed D67 mode): the same prerendered pages PLUS the
+	// full SPA bundle and a router that takes over at navigation #0. Anything else
+	// is a config error.
 	output: 'static',
 };

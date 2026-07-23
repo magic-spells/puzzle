@@ -33,17 +33,23 @@ run.
 
 - Published: `0.1.0` (2026-07-21) and `0.1.1` (2026-07-22, D77 init prompts)
   are live on npm (all five packages, MIT, manual publish via
-  `npm run release:prep` — there is no CI publish). Working version: `0.1.2`
-  (embedded agent skill + `puzzle add skills`, D78/v1.45; path-shaped links
-  via `router.url()` + the `link` formatter, D79/v1.46).
-- Product line: v1 through v1.46, decisions D1-D79, plus the July 21
+  `npm run release:prep` — there is no CI publish). `0.1.2` shipped the embedded
+  agent skill + `puzzle add skills` (D78/v1.45, published 2026-07-22). Working
+  version `0.2.0` (versions bumped, unpublished) adds path-shaped links via
+  `router.url()` + the `link` formatter (D79/v1.46) and the true static-pages
+  output mode (`output: 'static'` / `--static`, D81/v1.47); the D67
+  prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid` — the config
+  rename is why this is 0.2.0, not 0.1.3.
+- Product line: v1 through v1.47, decisions D1-D81, plus the July 21
   pre-release correctness/performance hardening pass.
-- Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`, and
-  `./puzzle-env` exports plus a `puzzle` binary shim and four optional platform
-  binary packages (macOS/Linux, arm64/x64).
-- Architecture: SPA-first browser runtime with optional static prerendering.
-  Static builds emit content-complete HTML, then the same SPA runtime takes
-  over at navigation zero. There is no SSR server or hydration protocol.
+- Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`,
+  `./static`, and `./puzzle-env` exports plus a `puzzle` binary shim and four
+  optional platform binary packages (macOS/Linux, arm64/x64).
+- Architecture: SPA-first browser runtime with two optional prerender output
+  modes. `output: 'hybrid'` emits content-complete HTML the same SPA runtime
+  takes over at navigation zero; `output: 'static'` emits true static pages —
+  no router, no `app.js` — with a per-page `mountStatic` module. There is no SSR
+  server or hydration protocol in either.
 - Canonical app: `examples/todos`. Other examples are acceptance cases for
   routing, data, TypeScript, morphs, static output, DOM islands, canvas, and
   virtual scrolling.
@@ -72,7 +78,11 @@ run.
   tree-shaking.
 - `devstate.js`: development-only state snapshot/restore across full reloads.
 - `morph.js`: optional morph-engine integration.
-- `ssg/`: route prerender orchestration and ViewNode-to-HTML serialization.
+- `ssg/`: route prerender orchestration, ViewNode-to-HTML serialization, and the
+  shared DOM-free chain assembly used by both prerender modes.
+- `static/`: `mountStatic`, the per-page browser kernel for `output: 'static'`
+  (rehydrate data island, assemble + preload chain, mount over prerendered
+  markup; no router). Hybrid output reuses the router takeover instead.
 
 ### Go compiler and CLI (`compiler/`)
 

@@ -290,6 +290,37 @@ func TestLoadConfigOutputStatic(t *testing.T) {
 	}
 }
 
+func TestLoadConfigOutputHybrid(t *testing.T) {
+	requireNode(t)
+	// output: 'hybrid' resolves to HybridOutput() == true (and StaticOutput()
+	// false) — the prerender + SPA-takeover mode formerly spelled 'static'.
+	root := writeConfig(t, "export default { output: 'hybrid' };\n")
+	cfg, err := LoadConfig(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.HybridOutput() {
+		t.Fatalf("expected HybridOutput()==true for output:'hybrid', got Output=%q", cfg.Output)
+	}
+	if cfg.StaticOutput() {
+		t.Error("expected StaticOutput()==false for output:'hybrid'")
+	}
+}
+
+func TestLoadConfigOutputInvalidNamesBothModes(t *testing.T) {
+	requireNode(t)
+	// The rejection message for an unsupported value must name BOTH allowed modes
+	// so the door to the renamed 'hybrid' is discoverable.
+	root := writeConfig(t, "export default { output: 'server' };\n")
+	_, err := LoadConfig(root)
+	if err == nil {
+		t.Fatal("expected an error for an unsupported output value")
+	}
+	if !strings.Contains(err.Error(), "static") || !strings.Contains(err.Error(), "hybrid") {
+		t.Errorf("error should name both 'static' and 'hybrid', got: %v", err)
+	}
+}
+
 func TestLoadConfigOutputAbsentDefaultsSPA(t *testing.T) {
 	requireNode(t)
 	// No output key: the default SPA build — StaticOutput() is false.

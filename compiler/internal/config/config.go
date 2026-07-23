@@ -38,9 +38,11 @@ type Config struct {
 	Styles Styles
 	Build  Build
 	Dev    Dev
-	// Output is the resolved `output` key: "" (absent — the default SPA build)
-	// or "static" (per-route static HTML, the SSG mode). Any other value is
-	// rejected by validate with a message naming the allowed values.
+	// Output is the resolved `output` key: "" (absent — the default SPA build),
+	// "static" (the true static-pages mode: per-route HTML, per-page module
+	// bundles, no router), or "hybrid" (per-route prerendered HTML that the full
+	// SPA runtime takes over on load — the mode formerly spelled 'static'). Any
+	// other value is rejected by validate with a message naming both.
 	Output string
 }
 
@@ -85,12 +87,19 @@ func (c Config) DropConsole() bool {
 	return *c.Build.DropConsole
 }
 
-// StaticOutput reports whether the app declares the static (SSG) output mode
-// via `output: 'static'`. Absent (or no config file) reports false — the
-// default SPA build. The `puzzle build --static` flag enables the same step
+// StaticOutput reports whether the app declares the true static-pages output
+// mode via `output: 'static'`. Absent (or no config file) reports false — the
+// default SPA build. The `puzzle build --static` flag enables the same mode
 // without touching the config.
 func (c Config) StaticOutput() bool {
 	return c.Output == "static"
+}
+
+// HybridOutput reports whether the app declares the hybrid (prerender +
+// SPA-takeover) output mode via `output: 'hybrid'` — the behavior formerly
+// spelled 'static'. The `puzzle build --hybrid` flag enables the same mode.
+func (c Config) HybridOutput() bool {
+	return c.Output == "hybrid"
 }
 
 // rawConfig is the permissive shape used to decode the JSON that node prints.
@@ -272,21 +281,22 @@ func validate(raw rawConfig) (Config, error) {
 	}
 	cfg.Dev.Proxy = raw.Dev.Proxy
 
-	// output: the SSG opt-in. Absent leaves it "" (the default SPA build); the
-	// only accepted value is the string 'static'. A non-string, or any other
-	// string, is rejected with a message naming the allowed values — the grammar
+	// output: the prerender opt-in. Absent leaves it "" (the default SPA build);
+	// the accepted values are 'static' (true static pages) and 'hybrid'
+	// (prerender + SPA takeover, the old 'static'). A non-string, or any other
+	// string, is rejected with a message naming both allowed values — the grammar
 	// is recognized so the door stays open for future modes.
 	if len(raw.Output) > 0 {
 		var out string
 		if err := json.Unmarshal(raw.Output, &out); err != nil {
 			return Config{}, fmt.Errorf(
-				"%s: output must be the string 'static'; got %s",
+				"%s: output must be a string ('static' or 'hybrid'); got %s",
 				ConfigFileName, strings.TrimSpace(string(raw.Output)),
 			)
 		}
-		if out != "static" {
+		if out != "static" && out != "hybrid" {
 			return Config{}, fmt.Errorf(
-				"%s: output %q is not supported (the only allowed value is 'static'; omit the key for the default SPA build)",
+				"%s: output %q is not supported (allowed values are 'static' and 'hybrid'; omit the key for the default SPA build)",
 				ConfigFileName, out,
 			)
 		}

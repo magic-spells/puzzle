@@ -23,3 +23,4 @@ Panel.prototype.render = function () {
     ]),
   ]);
 };
+Panel.__pzlModule = 'children_fallback.pzl';

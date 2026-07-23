@@ -86,11 +86,16 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 		// FILE, so prefix substitution would produce index.js/morph. Longest
 		// key wins, so the bare specifier stays untouched (v1.23, D55).
 		buildOpts.Alias["@magic-spells/puzzle/morph"] = filepath.Join(filepath.Dir(runtime), "morph.js")
-		// The SSG runtime (prerenderToDir) resolves the same way — the static
+		// The SSG runtime (prerenderToDir) resolves the same way — the hybrid
 		// build's prerender bundle imports it. The target file may not exist in
 		// an older checkout; esbuild only errs if something actually imports it,
-		// which happens only under `puzzle build --static`.
+		// which happens only under `puzzle build --hybrid`.
 		buildOpts.Alias["@magic-spells/puzzle/ssg"] = filepath.Join(filepath.Dir(runtime), "ssg", "index.js")
+		// The static-pages kernel (mountStatic, D81) resolves the same way — each
+		// generated per-page entry imports it. Same lazy-error posture as /ssg: the
+		// file may be absent in an older checkout, and only a `puzzle build
+		// --static` page entry imports it, so esbuild errs only then.
+		buildOpts.Alias["@magic-spells/puzzle/static"] = filepath.Join(filepath.Dir(runtime), "static", "index.js")
 		pl.SetRuntimeDir(filepath.Dir(runtime))
 		return
 	}

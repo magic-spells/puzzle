@@ -19,3 +19,4 @@ WrappedLayout.prototype.render = function () {
     ]),
   ]);
 };
+WrappedLayout.__pzlModule = 'WrappedLayout.pzl';

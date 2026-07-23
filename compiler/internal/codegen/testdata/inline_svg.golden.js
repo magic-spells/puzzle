@@ -32,6 +32,7 @@ InlineSvg.prototype.render = function () {
     ),
   ]);
 };
+InlineSvg.__pzlModule = 'inline_svg.pzl';
 
 InlineSvg.prototype.renderSkeleton = function () {
   const __d = this.getData();

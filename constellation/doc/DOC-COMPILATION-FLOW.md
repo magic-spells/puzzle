@@ -97,7 +97,10 @@ nodes. User class semantics are not rewritten.
 - `puzzle build`: production ES2022 ESM, minified, linked map, console calls
   stripped by default.
 - `puzzle build --mode development`: one readable development build.
-- `puzzle build --static`: production bundle plus build-time route HTML.
+- `puzzle build --static`: true static pages — build-time route HTML plus one
+  per-page mount module, no `app.js` (D81).
+- `puzzle build --hybrid`: production SPA bundle plus build-time route HTML the
+  router takes over at navigation zero (D67).
 - `puzzle dev`: incremental development build, recursive watch, static server,
   SPA fallback, and state-preserving SSE reload.
 
