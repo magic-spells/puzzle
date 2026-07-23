@@ -7,8 +7,11 @@
  * included), instantiates each route's layout+view chain exactly as the Router's
  * #navigate assembles it (each instance preloaded — created() + awaited data(),
  * no DOM, no mounted()/animations), serializes the tree (serialize.js), and
- * injects the markup + resolved <title> into the app shell. The router takes over
- * on load (see router.js #swap SSG branch) so subsequent navigation stays SPA.
+ * injects the markup + resolved <title> + managed head tags (D84, head.js —
+ * description/canonical/social metadata crawlers must see without running JS)
+ * into the app shell. The router takes over on load (see router.js #swap SSG
+ * branch) so subsequent navigation stays SPA — and adopts the marker-bearing
+ * head tags by identity at its own commits.
  *
  * This module runs under Node only (it reads/writes files via node:fs). The Go
  * build (M3) bundles it beside the user's `app/app.js` default export and calls
@@ -33,6 +36,7 @@ import { Router } from '../router/router.js';
 import builtinFormatters from '@magic-spells/puzzle/formatters/manifest';
 import { serialize } from './serialize.js';
 import { assembleChain } from './assemble.js';
+import { resolveHead, MANAGED_TAGS } from '../head.js';
 
 /**
  * Prerender every static route in `config` to an HTML content string + title.
@@ -46,13 +50,18 @@ import { assembleChain } from './assemble.js';
  *   view/layout `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot
  *   so prerenderToDir can emit true static pages (D81).
  * @returns {Promise<{
- *   pages: Array<{ path: string, html: string|null, title: string|null, prerender?: boolean,
+ *   pages: Array<{ path: string, html: string|null, title: string|null,
+ *     head: { title: string|null, description: string|null, canonical: string|null,
+ *       socialImage: string|null } | null,
+ *     prerender?: boolean,
  *     data?: object, modules?: { views: string[], layout: string|null }, route?: object }>,
  *   skipped: Array<{ path: string, reason: string }>,
  *   warnings: string[]
- * }>} `html`/`title` are null for a `prerender: false` page (the shell is written
- *   verbatim at its path by prerenderToDir). `data`/`modules`/`route` are present
- *   only in static mode.
+ * }>} `html`/`title`/`head` are null for a `prerender: false` page (the shell is
+ *   written verbatim at its path by prerenderToDir — no head injection either).
+ *   `head` is the D84 per-field leaf→root resolution (head.js); `title` rides
+ *   beside it (=== head.title) for pre-D84 compatibility. `data`/`modules`/`route`
+ *   are present only in static mode.
  */
 export async function prerender(config, opts = {}) {
 	const mode = opts.mode ?? 'hybrid';
@@ -102,7 +111,7 @@ export async function prerender(config, opts = {}) {
 		// into the empty target — html stays null (CONTRACT 3).
 		if (chain.some((route) => route.prerender === false)) {
 			const ctx = await createPageContext();
-			const page = { path: fullPath, html: null, title: null, prerender: false };
+			const page = { path: fullPath, html: null, title: null, head: null, prerender: false };
 			if (isStatic) attachStaticFields(page, entry, ctx);
 			pages.push(page);
 			continue;
@@ -118,7 +127,7 @@ export async function prerender(config, opts = {}) {
 				cause: err,
 			});
 		}
-		const page = { path: fullPath, html: rendered.html, title: rendered.title };
+		const page = { path: fullPath, html: rendered.html, title: rendered.title, head: rendered.head };
 		if (isStatic) attachStaticFields(page, entry, ctx);
 		pages.push(page);
 	}
@@ -182,8 +191,13 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 	for (const page of pages) {
 		const html =
 			page.prerender === false
-				? shell // opt-out: the plain SPA shell, untouched
-				: injectShell(shell, { targetId, content: page.html, title: page.title });
+				? shell // opt-out: the plain SPA shell, untouched (no head injection either)
+				: injectShell(shell, {
+						targetId,
+						content: page.html,
+						title: page.title,
+						head: page.head,
+					});
 		const outPath = pageOutputPath(outDir, page.path);
 		fs.mkdirSync(path.dirname(outPath), { recursive: true });
 		fs.writeFileSync(outPath, html);
@@ -219,6 +233,7 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 			targetId,
 			content: page.html, // null for a prerender:false page → empty, unmarked target
 			title: page.title,
+			head: page.head, // null for prerender:false → no head injection (D84)
 			slug,
 			data: page.data ?? {},
 		});
@@ -331,23 +346,17 @@ function joinPath(parentPath, childPath) {
  * Assemble the layout+view chain for a static route (shared assembleChain: preload
  * every instance created() + awaited data() with no DOM, build the nested keyed
  * component vnodes the way the Router's #navigate does) and serialize to an HTML
- * string. Returns the rendered content plus the resolved <title>.
+ * string. Returns the rendered content plus the resolved head fields (D84) —
+ * ONE resolveHead walk feeds both `head` and the compatibility `title`
+ * (=== head.title), so this path and the router's #syncHead can never diverge
+ * on resolution semantics.
  */
 async function renderRoute(entry, ctx) {
 	const { chain } = entry;
 	const { topVnode } = await assembleChain(entry, ctx);
 	const html = await serialize(topVnode, { ctx });
-	const title = resolveTitle(chain);
-	return { html, title };
-}
-
-/** Nearest-defined `meta.title` walking the chain leaf → root (mirrors #setTitle). */
-function resolveTitle(chain) {
-	for (let i = chain.length - 1; i >= 0; i--) {
-		const meta = chain[i].meta;
-		if (meta && meta.title != null) return meta.title;
-	}
-	return null;
+	const head = resolveHead(chain);
+	return { html, title: head.title, head };
 }
 
 // ---- static-mode per-page capture (D81) -------------------------------------
@@ -416,14 +425,16 @@ function serializeRouteJSON(entry) {
 // ---- shell injection --------------------------------------------------------
 
 /**
- * Inject rendered markup and the resolved title into the app shell by STRING
+ * Inject rendered markup and the resolved title/head into the app shell by STRING
  * SURGERY (no HTML-parser dependency). Finds the EMPTY target element by its id,
  * rebuilds it with a `data-puzzle-ssg` marker (the router's takeover signal) and
- * the content inside, and replaces the first `<title>…</title>` with the resolved
- * title when one exists (else the shell title is kept). A missing or non-empty
- * target element is a descriptive throw.
+ * the content inside, then applies the head: with a resolved `head` (D84) the
+ * title replacement AND the managed `data-puzzle-head` tags are applied
+ * (applyHead); with only a bare `title` (a direct API caller predating D84) the
+ * pre-D84 title-only path runs — no managed tags, byte-compatible. A missing or
+ * non-empty target element is a descriptive throw.
  */
-export function injectShell(shell, { targetId, content, title }) {
+export function injectShell(shell, { targetId, content, title, head }) {
 	// Match `<tag …id="targetId"…></tag>` with NOTHING (but whitespace) inside —
 	// the backreference \1 requires the same tag name to close (targetElementRe).
 	const match = shell.match(targetElementRe(targetId));
@@ -439,7 +450,9 @@ export function injectShell(shell, { targetId, content, title }) {
 	// Function replacement so a `$` in content/attrs is never read as a $-pattern.
 	let out = shell.replace(full, () => rebuilt);
 
-	if (title != null) {
+	if (head) {
+		out = applyHead(out, head);
+	} else if (title != null) {
 		out = replaceTitle(out, title);
 	}
 	return out;
@@ -469,10 +482,11 @@ function stripAppBundle(shell) {
  *  - injects, immediately before `</body>` (or appended if none): an inline JSON
  *    data island (`<` escaped to `<` so a `</script>` in a record can never
  *    break out of the script) and the per-page ES module `<script>`;
- *  - replaces the title as injectShell does.
+ *  - applies the title/head exactly as injectShell does (resolved `head` →
+ *    applyHead with managed D84 tags; bare `title` → pre-D84 title-only path).
  * The caller has already stripped the app-bundle tag from `shell`.
  */
-export function injectStaticShell(shell, { targetId, content, title, slug, data }) {
+export function injectStaticShell(shell, { targetId, content, title, head, slug, data }) {
 	let out = shell;
 
 	// A prerender:false page keeps its empty, UNMARKED target (the kernel mounts into
@@ -501,7 +515,11 @@ export function injectStaticShell(shell, { targetId, content, title, slug, data 
 		? out.replace(/<\/body>/i, () => `${scripts}</body>`)
 		: out + scripts;
 
-	if (title != null) out = replaceTitle(out, title);
+	if (head) {
+		out = applyHead(out, head);
+	} else if (title != null) {
+		out = replaceTitle(out, title);
+	}
 	return out;
 }
 
@@ -542,6 +560,88 @@ function targetElementRe(targetId) {
 /** Replace the first `<title>…</title>` with an HTML-escaped title. */
 function replaceTitle(html, title) {
 	return html.replace(/<title>[\s\S]*?<\/title>/, () => `<title>${escapeHtml(title)}</title>`);
+}
+
+// ---- managed head surgery (D84) ---------------------------------------------
+
+/**
+ * Apply a resolved head (head.js resolveHead) to shell HTML — the SSG half of
+ * the D84 contract, shared by injectShell and injectStaticShell. The `<title>`
+ * goes through the pre-existing replaceTitle for a NON-NULL head.title (null or
+ * never-resolved keeps the shell's title — the same leave-alone posture the SPA
+ * applies to document.title). Then per managed tag identity (head.js
+ * MANAGED_TAGS — the same table syncHead consumes, so the two delivery paths
+ * can never emit different shapes or identities):
+ *  - a same-identity `data-puzzle-head` tag already in the shell is REPLACED in
+ *    place (the regex keys on the marker attribute, element-shape-agnostic —
+ *    managed <meta>/<link> are void elements, so replacing the open tag
+ *    replaces the whole thing);
+ *  - a tag whose field no longer resolves is REMOVED (the framework owns every
+ *    marker-bearing tag — mirrors syncHead's removal);
+ *  - the rest are collected and inserted ONCE immediately before `</head>`
+ *    (case-insensitive). No `</head>` (fragment/malformed shell) DEGRADES:
+ *    ride after the first `</title>` instead, or warn + skip — never throw,
+ *    the page content is still worth writing.
+ * All values are attribute-escaped (escapeAttr) so hostile metadata — quotes,
+ * `</head>`, `<script>` — cannot break out of the generated tag.
+ */
+function applyHead(html, head) {
+	let out = head.title != null ? replaceTitle(html, head.title) : html;
+
+	const inserts = [];
+	for (const spec of MANAGED_TAGS) {
+		const value = head[spec.field];
+		const markerRe = managedTagRe(spec.id);
+		if (value == null) {
+			out = out.replace(markerRe, '');
+			continue;
+		}
+		const tagHtml = buildHeadTag(spec, value);
+		if (markerRe.test(out)) {
+			out = out.replace(markerRe, () => tagHtml);
+		} else {
+			inserts.push(tagHtml);
+		}
+	}
+
+	if (inserts.length) {
+		const block = inserts.join('');
+		if (/<\/head>/i.test(out)) {
+			out = out.replace(/<\/head>/i, () => `${block}</head>`);
+		} else if (/<\/title>/i.test(out)) {
+			out = out.replace(/<\/title>/i, (m) => m + block);
+		} else {
+			console.warn(
+				'[puzzle] head injection skipped — the shell has no </head> (or </title>) to anchor the managed tags'
+			);
+		}
+	}
+	return out;
+}
+
+/**
+ * One managed tag as an HTML string (the string twin of syncHead's DOM build).
+ * `spec.id`/`spec.attr`/`spec.name` are framework constants (MANAGED_TAGS) and
+ * need no escaping; the VALUE is author/route data and always escapes.
+ */
+function buildHeadTag(spec, value) {
+	// twitter:card is a constant flag of "a social image exists", not a value carrier.
+	const content = escapeAttr(String(spec.fixed ?? value));
+	if (spec.tag === 'link') {
+		return `<link rel="canonical" href="${content}" data-puzzle-head="${spec.id}">`;
+	}
+	return `<meta ${spec.attr}="${spec.name}" content="${content}" data-puzzle-head="${spec.id}">`;
+}
+
+/**
+ * Match ONE element open tag by its `data-puzzle-head` identity. The lookbehind
+ * mirrors targetElementRe's id= handling: a plain \b would let a hypothetical
+ * `x-data-puzzle-head=` attribute satisfy the match.
+ */
+function managedTagRe(id) {
+	return new RegExp(
+		'<[^>]*(?<![-\\w])data-puzzle-head=["\']' + escapeRegExp(id) + '["\'][^>]*>'
+	);
 }
 
 /**
@@ -586,6 +686,16 @@ function parseTargetId(target) {
 /** Escape the three characters that would break HTML text content (for <title>). */
 function escapeHtml(s) {
 	return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Escape a double-quoted attribute value (mirrors serialize.js escapeAttr). */
+function escapeAttr(s) {
+	return String(s)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
 }
 
 /** Escape every regex metacharacter so an id matches literally in the shell regex. */

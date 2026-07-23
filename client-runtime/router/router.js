@@ -23,7 +23,7 @@
  * - COMMIT is atomic and ordered (D19 + D61): every FRESH view's preload() AND
  *   every REUSED ancestor's refresh() (routed content, so AWAITED — it gates the
  *   commit) resolve FIRST; THEN, inside #swap's synchronous #committing window,
- *   #commitLocation (URL + memory stack + title) runs immediately before the
+ *   #commitLocation (URL + memory stack + title/head, D84) runs immediately before the
  *   mount/patch + #commitState — location, DOM and #state all land TOGETHER. In
  *   SEQUENTIAL mode that window opens only AFTER the outgoing unit's out animation
  *   settles and both #swap token checks pass, so a push superseded or failed
@@ -94,7 +94,7 @@
  *
  * View transitions (constellation/doc/DOC-SPEC.md §12, D28 generalized by D30): after the
  * gated loads resolve, the swap runs ASYNC and SEQUENTIAL in #swap(), and location
- * + title + mount + #state commit TOGETHER inside its #committing window (D61 —
+ * + title/head + mount + #state commit TOGETHER inside its #committing window (D61 —
  * #commitLocation, no longer split ahead of the swap; in sequential mode that is
  * AFTER the out animation). ONE ANIMATOR PER TRANSITION,
  * the **topmost swapped instance**; every fresh view BELOW it has its enter
@@ -151,7 +151,7 @@
  * `transitionMode` is resolvable at three tiers, most specific first —
  * (1) a `transitionMode` field on a route/child-route definition, nearest-defined
  * walking the DESTINATION chain leaf → root (#resolveTransitionMode, the same
- * walk #setTitle uses for meta.title); (2) a `transitionMode` field on the
+ * walk #syncHead's resolveHead uses per meta head field); (2) a `transitionMode` field on the
  * incoming animator's VIEW or LAYOUT class (colocated with `animations` — layouts
  * qualify too, they are PuzzleView subclasses); (3) this constructor's
  * `transitionMode` option as the app-level default. Resolution is
@@ -220,8 +220,8 @@
  * read). The FULL D19/D28/D30 pipeline runs unchanged (atomic commit, cancellation
  * tokens, sequential transitions, nested chains); only the URL side effects vanish.
  * Deliberate differences (D42): NO document-level side effects — no popstate
- * listener is registered and #setTitle is a no-op (an embed must not rename the
- * host tab); scroll is a NO-OP (#scrollEnabled() returns false → no window.scrollTo,
+ * listener is registered and #syncHead is a no-op (an embed must not rename the
+ * host tab or edit the host <head>, D84); scroll is a NO-OP (#scrollEnabled() returns false → no window.scrollTo,
  * no sessionStorage, no scrollRestoration touch); the click interceptor STAYS ACTIVE
  * (same-origin pathname links route in memory, exactly the history-mode path — the
  * hash-specific `#/` rules never apply, so a bare `#anchor` href falls through to
@@ -251,6 +251,7 @@
 
 import { ViewNode } from '../views/ViewNode.js';
 import { cancelAnimations } from '../views/animate.js';
+import { resolveHead, syncHead } from '../head.js';
 
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
 // { entryKey: {x,y} } under a single key; capped so a long session can't grow it
@@ -316,8 +317,8 @@ export class Router {
 	// (constellation/doc/DOC-SPEC.md §26). #defaultTransitionMode is the constructor
 	// option — the FALLBACK tier once nothing more specific applies (#resolveTransitionMode
 	// below): a route-chain node's own `transitionMode` field wins first (nearest-
-	// defined, leaf→root, same walk as #setTitle's meta.title), then the incoming
-	// animator VIEW/LAYOUT instance's own `transitionMode` field, then this default.
+	// defined, leaf→root, same walk as #syncHead's per-field meta head resolution),
+	// then the incoming animator VIEW/LAYOUT instance's own `transitionMode` field, then this default.
 	// Resolution is DESTINATION-ONLY — the outgoing view/route is never consulted
 	// (D65): the card coming in always controls the transition. Gates ONLY the
 	// #swap out/in sequencing — every other path (matching, commit, interruption,
@@ -1016,7 +1017,7 @@ export class Router {
 			return;
 		}
 
-		// LOCATION is NOT committed here anymore (D61): URL + memory stack + title all
+		// LOCATION is NOT committed here anymore (D61): URL + memory stack + title/head (D84) all
 		// move into #commitLocation, called inside the synchronous #committing window
 		// — the params-only branch below and #swap's commit block — so they land
 		// ATOMICALLY with the mount/#state, one out-animation LATER in sequential mode.
@@ -1119,7 +1120,7 @@ export class Router {
 	}
 
 	/**
-	 * Commit this navigation's LOCATION side effects — URL + memory stack + title —
+	 * Commit this navigation's LOCATION side effects — URL + memory stack + title/head (D84) —
 	 * inside the synchronous commit window, ATOMICALLY with the mount/#commitState
 	 * that follow (D61). Moved out of #navigate's post-gate block so that, in
 	 * SEQUENTIAL mode, it runs only AFTER the outgoing unit's out animation settles
@@ -1206,12 +1207,12 @@ export class Router {
 		// clear its pending target so the next go() bases off the freshly-committed
 		// #index (Fix 3 / D42). Already null in history/hash mode.
 		this.#pendingIndex = null;
-		this.#setTitle(entry);
+		this.#syncHead(entry);
 	}
 
 	/**
 	 * The async view transition. It animates the outgoing unit out, tears it down,
-	 * COMMITS location/title/memory-stack (#commitLocation, the FIRST statement
+	 * COMMITS location/title-head/memory-stack (#commitLocation, the FIRST statement
 	 * inside the #committing window — D61, so a superseded/failed out never moves
 	 * the URL), mounts the (preloaded) incoming sub-chain, and animates the animator
 	 * in — enforcing the one-animator rule documented in the file header
@@ -1326,7 +1327,7 @@ export class Router {
 		const topView = views[keep];
 		for (let i = keep + 1; i < views.length; i++) views[i].skipEnter();
 
-		// Enter the commit window: #commitLocation (URL + memory stack + title) runs
+		// Enter the commit window: #commitLocation (URL + memory stack + title/head) runs
 		// FIRST, ATOMICALLY with the mount/#commitState below (D61). In sequential
 		// mode the out-phase already settled and BOTH token checks above passed, so a
 		// superseded or failed navigation never reaches this line and never touches
@@ -1821,7 +1822,7 @@ export class Router {
 	 * This navigation's transition mode (D65), destination-only — the outgoing
 	 * view/route is never consulted. Three tiers, most specific first:
 	 *   1. Nearest-defined `transitionMode` walking the DESTINATION chain
-	 *      leaf → root (same walk as #setTitle's meta.title) — lets a parent
+	 *      leaf → root (same walk as #syncHead's per-field head resolution) — lets a parent
 	 *      route (e.g. a `/settings` shell) set it once for every child.
 	 *   2. The incoming animator's (view or layout instance) own `transitionMode`
 	 *      field, colocated with `animations` on the class.
@@ -1849,18 +1850,26 @@ export class Router {
 		return this.#defaultTransitionMode;
 	}
 
-	/** Document title: nearest-defined meta.title walking the chain leaf → root. */
-	#setTitle(entry) {
-		// Memory mode sets NO document.title (D42): an embedded widget must not
-		// rename the host page's tab — a document-level side effect like the URL.
+	/**
+	 * Managed head sync (D84, v1.50 — subsumes the pre-D84 #setTitle): resolve
+	 * the four reserved meta fields (title/description/canonical/socialImage)
+	 * from the destination chain — head.js resolveHead, the same nearest-defined
+	 * leaf→root walk #setTitle performed for meta.title alone — and sync
+	 * document.title + the `data-puzzle-head`-marked tags (head.js syncHead:
+	 * update in place / create / remove-when-unresolved). Runs inside
+	 * #commitLocation, so D61 atomicity covers the head exactly as it covered the
+	 * title: a failed or superseded navigation never touches it. On hybrid
+	 * takeover the SSG-emitted tags carry the SAME identities, so navigation #0
+	 * adopts them in place — never duplicates. Title semantics stay byte-
+	 * compatible: only a non-null resolved title assigns document.title (see
+	 * resolveHead's asymmetry note on explicit null).
+	 */
+	#syncHead(entry) {
+		// Memory mode performs NO document work (D42): an embedded widget must not
+		// rename the host page's tab or edit the host <head> — document-level side
+		// effects like the URL.
 		if (this.#mode === 'memory') return;
-		for (let i = entry.chain.length - 1; i >= 0; i--) {
-			const meta = entry.chain[i].meta;
-			if (meta && meta.title != null) {
-				document.title = meta.title;
-				return;
-			}
-		}
+		syncHead(resolveHead(entry.chain));
 	}
 
 	#handlePopState() {

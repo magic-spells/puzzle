@@ -10,7 +10,8 @@
     "types": [],
     "paths": {
       "@magic-spells/puzzle": ["../types/index.d.ts"],
-      "@magic-spells/puzzle/morph": ["../types/morph.d.ts"]
+      "@magic-spells/puzzle/morph": ["../types/morph.d.ts"],
+      "@magic-spells/puzzle/ssg": ["../types/ssg.d.ts"]
     }
   },
   "include": ["consumer.ts"]
