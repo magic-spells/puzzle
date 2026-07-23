@@ -34,7 +34,7 @@ func writeAssets(t *testing.T, files map[string]string) string {
 // compiles it as a view with the given assets dir.
 func compileTemplate(t *testing.T, body, assetsDir string) (*Result, error) {
 	t.Helper()
-	src := body + "\n<scripts>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class T extends PuzzleView {}\n</scripts>\n"
+	src := body + "\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class T extends PuzzleView {}\n</script>\n"
 	sec, err := parser.SplitSections(src, "T.pzl")
 	if err != nil {
 		t.Fatalf("split: %v", err)

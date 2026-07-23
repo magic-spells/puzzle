@@ -5,7 +5,7 @@
   <p class="chain">{ user.profile?.name }</p>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class InterpOps extends PuzzleView {
@@ -13,4 +13,4 @@ export default class InterpOps extends PuzzleView {
     return { a: 1, b: 2, count: 0, ready: false, user: {} };
   }
 }
-</scripts>
+</script>

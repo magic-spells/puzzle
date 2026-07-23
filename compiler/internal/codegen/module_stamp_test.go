@@ -30,10 +30,10 @@ const stampSrc = `<puzzle-view>
   <h1>Home</h1>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `
 
 // TestModuleStampUsesModulePath: when the plugin supplies an app-relative

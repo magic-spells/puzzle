@@ -2,7 +2,7 @@
   <Slot/>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class DefaultLayout extends PuzzleView {
@@ -12,4 +12,4 @@ export default class DefaultLayout extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

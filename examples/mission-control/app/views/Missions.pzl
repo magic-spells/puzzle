@@ -23,7 +23,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import ListRow from '../components/ListRow.pzl';
 import { missions } from '../data/catalog.js';
@@ -50,4 +50,4 @@ export default class MissionsView extends PuzzleView {
     out: { from: { opacity: 1, transform: 'translateY(0)' }, to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

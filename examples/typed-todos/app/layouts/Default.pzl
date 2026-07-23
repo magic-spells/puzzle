@@ -20,7 +20,7 @@
   </footer>
 </puzzle-view>
 
-<scripts lang="ts">
+<script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 
 interface LayoutModel {
@@ -32,4 +32,4 @@ export default class DefaultLayout extends PuzzleView {
     return { subtitle: 'A quiet, fully-typed place to keep your list.' };
   }
 }
-</scripts>
+</script>

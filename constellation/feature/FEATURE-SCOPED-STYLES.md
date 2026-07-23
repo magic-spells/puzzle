@@ -1,5 +1,5 @@
 ---
-name: Scoped styles (<styles scoped>)
+name: Scoped styles (<style scoped>)
 status: verified
 connections:
   - DECISION-D59-SCOPED-STYLES
@@ -13,7 +13,7 @@ connections:
 verified_at: '2026-07-14T07:08:22.704Z'
 ---
 
-# Scoped styles (`<styles scoped>`)
+# Scoped styles (`<style scoped>`)
 
 **Shipped in v1.27** (D59) — the card's own "may resolve won't-build" hedge
 resolved the other way once native `@scope` reached cross-engine Baseline,
@@ -23,7 +23,7 @@ rationale and rejected alternatives in [[DECISION-D59-SCOPED-STYLES]].
 
 ## What shipped
 
-- A bare `scoped` attribute — the only attribute `<styles>` accepts
+- A bare `scoped` attribute — the only attribute `<style>` accepts
   (previously attrs were silently discarded; now valued/dynamic/unknown/
   duplicate are positioned compile errors with did-you-mean) — confines the
   block to the component's own rendered subtree.

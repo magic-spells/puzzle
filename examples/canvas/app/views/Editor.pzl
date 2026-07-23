@@ -47,7 +47,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Toolbar from '../components/Toolbar.pzl';
 import LayersPanel from '../components/LayersPanel.pzl';
@@ -859,4 +859,4 @@ export default class Editor extends PuzzleView {
     }
   }
 }
-</scripts>
+</script>

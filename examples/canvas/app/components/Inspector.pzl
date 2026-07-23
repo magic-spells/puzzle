@@ -159,7 +159,7 @@
   </aside>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { reorder, deleteElements } from '../lib/geometry.js';
 
@@ -223,4 +223,4 @@ export default class Inspector extends PuzzleView {
     removeMany: () => deleteElements(this.ctx.store, this.props.selectedIds || []),
   };
 }
-</scripts>
+</script>

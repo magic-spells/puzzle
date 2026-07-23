@@ -6,7 +6,7 @@ import (
 )
 
 func TestComposeTailwindThenCollected(t *testing.T) {
-	// Tailwind output comes first; the collected <styles> blocks are appended.
+	// Tailwind output comes first; the collected <style> blocks are appended.
 	tailwind := ".btn{color:blue}"
 	// The collector already sorts blocks by source path; Compose preserves that
 	// order verbatim (here two blocks, A before B).

@@ -35,7 +35,7 @@ runtime bundle.
    overwrite `app.js`, its map, or `styles.css`. The guard is root-level only:
    nested files with those names, `index.html`, and other assets copy fine
    (guarded by `TestBuildAllowsNestedReservedNames`).
-2. Compile every reachable `.pzl` module. User `<scripts>` stays JavaScript;
+2. Compile every reachable `.pzl` module. User `<script>` stays JavaScript;
    TypeScript mode is transpile-only.
 3. Compose `styles.css` from the optional Tailwind layer and collected component
    styles in deterministic order.

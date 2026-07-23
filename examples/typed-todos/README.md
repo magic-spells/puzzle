@@ -1,14 +1,14 @@
 # Typed Todos — Puzzle + TypeScript
 
 A small todo app that uses TypeScript throughout, demonstrating Puzzle's
-`<scripts lang="ts">` support (v1.22, D54).
+`<script lang="ts">` support (v1.22, D54).
 
 ## What's typed
 
 - **Model** (`app/models/todo.ts`) — a `PuzzleModel` subclass with a typed schema,
   a typed computed getter, and a `TodoRecord` type re-used across the app.
 - **Routes** (`app/routes.ts`) — typed with the `Route` interface from the package.
-- **`.pzl` files** — every `<scripts>` block declares `lang="ts"`. `data()` returns
+- **`.pzl` files** — every `<script>` block declares `lang="ts"`. `data()` returns
   a declared model interface, `props`/events are typed, and `getData<T>()` is
   parameterized.
 
@@ -16,7 +16,7 @@ A small todo app that uses TypeScript throughout, demonstrating Puzzle's
 
 Puzzle is **transpile-only** for TypeScript, exactly like Vite: the compiler
 threads `lang="ts"` through to esbuild, which strips the types during the build.
-The Go compiler never parses TypeScript — `<scripts>` stays an opaque string.
+The Go compiler never parses TypeScript — `<script>` stays an opaque string.
 There is no type-checking in the build; run `npm run typecheck` (plain `tsc`)
 for that.
 

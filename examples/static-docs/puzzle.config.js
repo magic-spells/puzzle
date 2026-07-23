@@ -3,7 +3,7 @@
 export default {
 	// Declaring the Tailwind pipeline makes `puzzle build` / `puzzle dev` run the
 	// Tailwind CLI and fold its output into dist/styles.css ahead of the collected
-	// <styles> blocks.
+	// <style> blocks.
 	styles: {
 		use: ['tailwindcss'],
 	},

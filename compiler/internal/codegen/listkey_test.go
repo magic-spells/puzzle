@@ -16,10 +16,10 @@ func TestForKeyAutoKeyOf(t *testing.T) {
   <ul>{#for item in items}<li>{ item.name }</li>{/for}</ul>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { items: [] }; } }
-</scripts>
+</script>
 `)
 	if !strings.Contains(got, "key: ViewNode.keyOf(item)") {
 		t.Errorf("item-form root without explicit key must emit ViewNode.keyOf(item):\n%s", got)
@@ -31,10 +31,10 @@ func TestForExplicitKeySuppressesElementRoot(t *testing.T) {
   <ul>{#for item in items}<li key={ item.slug }>{ item.name }</li>{/for}</ul>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { items: [] }; } }
-</scripts>
+</script>
 `)
 	if strings.Contains(got, "ViewNode.keyOf") {
 		t.Errorf("explicit key on element root must suppress the synthetic keyOf:\n%s", got)
@@ -52,10 +52,10 @@ func TestForExplicitStaticKeySuppresses(t *testing.T) {
   <ul>{#for item in items}<li key="row">{ item.name }</li>{/for}</ul>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { items: [] }; } }
-</scripts>
+</script>
 `)
 	if strings.Contains(got, "ViewNode.keyOf") {
 		t.Errorf("explicit static key must suppress the synthetic keyOf:\n%s", got)
@@ -70,10 +70,10 @@ func TestForExplicitMixedKeySuppresses(t *testing.T) {
   <ul>{#for item in items}<li key="row-{ item.id }">{ item.name }</li>{/for}</ul>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { items: [] }; } }
-</scripts>
+</script>
 `)
 	// A mixed (template-literal) key is an explicit key too — it must suppress the
 	// synthetic keyOf and must not double the key property (D58 / hasKeyAttr).
@@ -93,11 +93,11 @@ func TestForExplicitKeySuppressesComponentRoot(t *testing.T) {
   {#for item in items}<Row key={ item.slug } item={ item } />{/for}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Row from './Row.pzl';
 export default class T extends PuzzleView { data() { return { items: [] }; } }
-</scripts>
+</script>
 `)
 	if strings.Contains(got, "ViewNode.keyOf") {
 		t.Errorf("explicit key on component root must suppress the synthetic keyOf:\n%s", got)
@@ -115,10 +115,10 @@ func TestForExplicitKeySuppressesRangeRoot(t *testing.T) {
   {#for 1...count, n}<span key={ n }>{ n }</span>{/for}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { count: 3 }; } }
-</scripts>
+</script>
 `)
 	// The author's explicit key replaces the synthetic `key: n`; assert no doubling.
 	if strings.Count(got, "key:") != 1 {
@@ -134,10 +134,10 @@ func TestRangeFormKeyUnchanged(t *testing.T) {
   {#for 1...count}<span class="dot"></span>{/for}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { count: 3 }; } }
-</scripts>
+</script>
 `)
 	if !strings.Contains(got, "key: __i") {
 		t.Errorf("range form without explicit key must keep its number key:\n%s", got)

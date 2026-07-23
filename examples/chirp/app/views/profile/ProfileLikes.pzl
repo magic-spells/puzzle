@@ -17,7 +17,7 @@
   {/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import ChirpCard from '@/components/ChirpCard.pzl';
 
@@ -38,4 +38,4 @@ export default class ProfileLikes extends PuzzleView {
     out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 120, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

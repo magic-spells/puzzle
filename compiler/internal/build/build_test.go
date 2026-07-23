@@ -49,7 +49,7 @@ func TestBuildExample(t *testing.T) {
 	// The example declares the Tailwind pipeline (puzzle.config.js), which is
 	// unavailable in most CI/offline environments. Inject a fake runner so the
 	// test exercises composition, not the real toolchain, and can assert the
-	// Tailwind layer lands ahead of the collected <styles> blocks.
+	// Tailwind layer lands ahead of the collected <style> blocks.
 	fake := &fakeRunner{css: "/* TAILWIND-LAYER */\n.tw-marker{color:red}"}
 	if err := Build(root, Options{Development: true, Runner: fake}); err != nil {
 		t.Fatalf("Build failed: %v", err)
@@ -439,7 +439,7 @@ func TestBuildFailedCompileLeavesDistIntact(t *testing.T) {
 	// Introduce a .pzl that does not compile (mismatched closing tag) and import
 	// it from the entry, then rebuild: the build must FAIL...
 	if err := os.WriteFile(filepath.Join(appDir, "Broken.pzl"),
-		[]byte("<puzzle-view><div></span></puzzle-view>\n<scripts></scripts>"), 0o644); err != nil {
+		[]byte("<puzzle-view><div></span></puzzle-view>\n<script></script>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(appDir, "app.js"),

@@ -25,7 +25,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // One message, styled by role via {#case} (v1.7, D37): user bubbles right in the
@@ -48,9 +48,9 @@ export default class MessageBubble extends PuzzleView {
     in: { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' }, duration: 220, easing: 'ease-out' },
   };
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .pz-caret {
   display: inline-block;
   margin-left: 1px;
@@ -64,4 +64,4 @@ export default class MessageBubble extends PuzzleView {
 @media (prefers-reduced-motion: reduce) {
   .pz-caret { animation: none; }
 }
-</styles>
+</style>

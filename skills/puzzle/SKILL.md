@@ -46,14 +46,14 @@ set `build: { dropConsole: false }` in puzzle.config.js to keep console calls.
 
 ## .pzl anatomy
 
-Template markup + `<scripts>` (+ optional `<styles>`, `scoped` supported):
+Template markup + `<script>` (+ optional `<style>`, `scoped` supported):
 
 ```html
 <puzzle-view>
   <button class={ classes } @click={ increment }>{ count | number }</button>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Counter extends PuzzleView {
   data() { return { count: this.getData()?.count ?? 0 }; }  // runs at render — and under NODE during prerender
@@ -64,7 +64,7 @@ export default class Counter extends PuzzleView {
   mounted() { /* browser-only setup: listeners, intervals, DOM */ }
   destroyed() { /* MANDATORY cleanup of window listeners/intervals */ }
 }
-</scripts>
+</script>
 ```
 
 Template syntax: `{ expr | formatter }` (formatters are registered display
@@ -72,7 +72,7 @@ helpers — the project term is *formatter*, never *filter*),
 `{#if}/{:else if}/{:else}/{/if}`, `{#unless}`, `{#for item in items, i}`
 (trailing `, name` binds the index), `{#case}/{:when}`, `@event={ handler }`
 with modifiers, component imports used as capitalized tags.
-`<scripts lang="ts">` for TypeScript (transpile-only — types stripped, never
+`<script lang="ts">` for TypeScript (transpile-only — types stripped, never
 checked, at compile).
 
 Rules that bite:
@@ -289,7 +289,7 @@ to `dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
 ## Styling
 
 Tailwind v4 is the supported pipeline (`styles: { use: ['tailwindcss'] }` — the
-CLI folds Tailwind output + collected `<styles>` blocks into `dist/styles.css`;
+CLI folds Tailwind output + collected `<style>` blocks into `dist/styles.css`;
 wire it with `puzzle add tailwind`). For puzzle-pieces apps, merge the registry's
 `theme/pieces.css` after `@import "tailwindcss"` and style ONLY via its semantic
 tokens (`bg-surface`, `text-ink`, `bg-brand`, `border-border`…); dark mode is

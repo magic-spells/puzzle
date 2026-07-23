@@ -64,7 +64,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	// Non-fatal codegen diagnostics (e.g. a template referencing a <scripts>
+	// Non-fatal codegen diagnostics (e.g. a template referencing a <script>
 	// import) print to stderr; the compiled module is still emitted.
 	for _, w := range res.Warnings {
 		fmt.Fprintf(os.Stderr, "%s:%d:%d: warning: %s\n", w.File, w.Line, w.Col, w.Message)

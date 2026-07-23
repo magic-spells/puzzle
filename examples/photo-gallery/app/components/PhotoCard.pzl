@@ -31,7 +31,7 @@
   </a>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class PhotoCard extends PuzzleView {
@@ -47,4 +47,4 @@ export default class PhotoCard extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

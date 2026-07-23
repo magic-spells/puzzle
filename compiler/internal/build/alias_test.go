@@ -34,28 +34,28 @@ export default [
 		"app/layouts/Default.pzl": `<puzzle-view>
   <main><Slot/></main>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class DefaultLayout extends PuzzleView {}
-</scripts>
+</script>
 `,
 		// Two levels down: the relative spelling would be '../../components/…'.
 		"app/views/deep/Deep.pzl": `<puzzle-view>
   <Widget/>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Widget from '@/components/Widget.pzl';
 export default class Deep extends PuzzleView {}
-</scripts>
+</script>
 `,
 		"app/components/Widget.pzl": `<puzzle-view>
   <p>ALIAS_WIDGET_MARKER</p>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Widget extends PuzzleView {}
-</scripts>
+</script>
 `,
 		"app/public/index.html": `<!DOCTYPE html>
 <html lang="en">

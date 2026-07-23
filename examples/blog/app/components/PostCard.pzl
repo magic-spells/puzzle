@@ -15,7 +15,7 @@
   </a>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Renders a single post summary. The whole card is an <a>, so a plain click is
@@ -56,4 +56,4 @@ export default class PostCard extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

@@ -150,7 +150,7 @@ func TestIntegrationHomePzl(t *testing.T) {
 
 // TestIntegrationTodoItemPzl covers the row markup extracted from Home.pzl into
 // its own component (Step 3): the svg/path checkmark, the date formatter, the
-// checkbox @change, and the callback-prop handlers in <scripts>.
+// checkbox @change, and the callback-prop handlers in <script>.
 func TestIntegrationTodoItemPzl(t *testing.T) {
 	src, err := os.ReadFile(repoFile(t, "examples/todos/app/components/TodoItem.pzl"))
 	if err != nil {

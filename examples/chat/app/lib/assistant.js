@@ -51,7 +51,7 @@ const KNOWLEDGE = [
   {
     keywords: ['pzl', 'single-file', 'anatomy', 'component file', 'structure'],
     answer:
-      "A .pzl file is a single-file component: an HTML template at the top, a <scripts> block exporting a class that extends PuzzleView (real JavaScript, handed straight to esbuild), and an optional <styles> block. Views and layouts use a <puzzle-view> root; reusable components need one single root element. The Go compiler turns the template into a render() function attached to your class by prototype assignment — it never rewrites your class body.",
+      "A .pzl file is a single-file component: an HTML template at the top, a <script> block exporting a class that extends PuzzleView (real JavaScript, handed straight to esbuild), and an optional <style> block. Views and layouts use a <puzzle-view> root; reusable components need one single root element. The Go compiler turns the template into a render() function attached to your class by prototype assignment — it never rewrites your class body.",
   },
   {
     keywords: ['skeleton', 'loading', 'placeholder', 'ghost'],

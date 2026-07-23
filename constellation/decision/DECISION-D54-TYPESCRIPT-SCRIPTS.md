@@ -1,5 +1,5 @@
 ---
-name: "D54 — TypeScript scripts: <scripts lang=\"ts\"> transpile-only via esbuild (v1.22)"
+name: "D54 — TypeScript scripts: <script lang=\"ts\"> transpile-only via esbuild (v1.22)"
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
@@ -15,22 +15,22 @@ connections:
   - DOC-COMPILER-DESIGN
 ---
 
-# D54 — TypeScript scripts: `<scripts lang="ts">`, transpile-only (v1.22)
+# D54 — TypeScript scripts: `<script lang="ts">`, transpile-only (v1.22)
 
 Cashes in the promise [[DECISION-D03-SCRIPTS-REAL-JS]] made — "Editors, ESLint,
 Prettier, and (later) TypeScript work with zero special tooling." A `.pzl`
-opts a component's logic into TypeScript with `<scripts lang="ts">`; esbuild
+opts a component's logic into TypeScript with `<script lang="ts">`; esbuild
 strips the types during the build. See [[DOC-SPEC]] §25.
 
 ## Context
-`<scripts>` is an opaque string the Go compiler never parses (D3); esbuild owns
+`<script>` is an opaque string the Go compiler never parses (D3); esbuild owns
 the JS module graph (D9). TypeScript users had no first-class path — a `.pzl`
 body had to be plain JS. The build already runs through esbuild, which transpiles
 TS natively, so the enabling work is almost entirely **plumbing a flag**, not new
 compilation.
 
 ## Decision
-- **Mechanism: a `lang` attribute on `<scripts>`.** `lang="ts"` → TypeScript;
+- **Mechanism: a `lang` attribute on `<script>`.** `lang="ts"` → TypeScript;
   absent or `lang="js"` → JavaScript (byte-identical to pre-v1.22). Any other
   value, an empty value, a dynamic `lang={…}`, or a second attribute is a
   positioned compile error (with a did-you-mean for near-misses like
@@ -42,7 +42,7 @@ compilation.
 - **Transpile-only, like Vite.** esbuild strips types; there is **no
   type-checking in the build**. Type safety is an editor/`tsc --noEmit` concern.
   This keeps builds fast and the Go side ignorant of TS.
-- **Loader threading.** The generated module is the user's `<scripts>` verbatim
+- **Loader threading.** The generated module is the user's `<script>` verbatim
   plus an injected runtime import and the appended
   `Name.prototype.render = function () {…}` (D10). Those generated parts are
   plain JS, which is valid TS, so **one loader covers the whole mixed module**:
@@ -61,7 +61,7 @@ compilation.
 - **A `.pzt` file extension (implying `lang="ts"`).** Deferred, not refused. An
   extension alias multiplies surface everywhere a glob names `.pzl`: parser file
   filters, `generate`/`init` templates, Tailwind `@source` lines, editor
-  grammars/file associations, and import specifiers. `<scripts lang="ts">` adds
+  grammars/file associations, and import specifiers. `<script lang="ts">` adds
   TypeScript with **zero new file-type surface**, matching how Vue/Svelte SFCs do
   it. An alias that simply implies `lang="ts"` can be layered on later without
   breaking anything.

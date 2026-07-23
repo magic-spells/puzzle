@@ -44,7 +44,7 @@ npm install -D @magic-spells/puzzle
 
 ## Features
 
-- **Single-file components** (`.pzl`) with template + scripts + styles — optional TypeScript (`<scripts lang="ts">`), scoped styles (`<styles scoped>`), skeletons, comments, slots, and refs
+- **Single-file components** (`.pzl`) with template + scripts + styles — optional TypeScript (`<script lang="ts">`), scoped styles (`<style scoped>`), skeletons, comments, slots, and refs
 - **Reactive data** with automatic view updates
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and write sync
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
@@ -325,7 +325,7 @@ through that step unchanged and a single `console.error` names the offender.
   </button>
 </puzzle-view>
 
-<scripts>
+<script>
   import { PuzzleView } from '@magic-spells/puzzle';
   import Icon from './Icon.pzl';
 
@@ -359,18 +359,18 @@ through that step unchanged and a single `console.error` names the offender.
       }
     }
   }
-</scripts>
+</script>
 
-<styles>
+<style>
   .btn { padding: 0.75rem 1.5rem; border: 1px solid transparent; border-radius:
   0.5rem; cursor: pointer; transition: all 0.2s; } .btn--primary { background:
   var(--primary-color); color: white; } .btn--medium { font-size: 1rem; }
-</styles>
+</style>
 ```
 
 ### Imports
 
-Component imports live in `<scripts>` and can be relative or use `@`, the
+Component imports live in `<script>` and can be relative or use `@`, the
 built-in alias for your `app/` directory — no configuration, works from any
 depth:
 

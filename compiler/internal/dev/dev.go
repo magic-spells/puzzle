@@ -19,7 +19,7 @@
 // api.Context (build.WatchBuilder) and a single long-lived `tailwindcss --watch`
 // child (styles.TailwindWatcher) instead of a cold full build + one-shot Tailwind
 // per change. dist/styles.css is recomposed whenever either the watcher rewrites
-// its private output or an esbuild rebuild changes the collected <styles>; the
+// its private output or an esbuild rebuild changes the collected <style>; the
 // two reloads a single edit produces are coalesced. Production `puzzle build`
 // keeps D26's one-shot path.
 package dev
@@ -149,10 +149,10 @@ func Serve(root string, opts Options) error {
 	// Styles / Tailwind (D27, amending D26). In dev we no longer re-spawn the
 	// Tailwind CLI per rebuild. Instead:
 	//   - an incremental esbuild api.Context (build.WatchBuilder) rebuilds the JS
-	//     bundle reusing caches, and exposes the collected <styles>;
+	//     bundle reusing caches, and exposes the collected <style>;
 	//   - a single `tailwindcss --watch` child (styles.TailwindWatcher) runs for
 	//     the whole session, continuously rewriting a PRIVATE output file;
-	//   - dist/styles.css is (re)composed from that file + the collected <styles>
+	//   - dist/styles.css is (re)composed from that file + the collected <style>
 	//     whenever EITHER side changes.
 	// Production `puzzle build` keeps D26's one-shot path. Every fast-path failure
 	// degrades gracefully — we never leave dev without CSS updates.
@@ -789,7 +789,7 @@ const reloadCoalesceDelay = 100 * time.Millisecond
 const tailwindPollInterval = 150 * time.Millisecond
 
 // pipeline (re)composes dist/styles.css from the Tailwind layer and the
-// collected <styles> blocks. The Tailwind layer comes from the warm watcher's
+// collected <style> blocks. The Tailwind layer comes from the warm watcher's
 // private output file; if that path is unavailable (watcher failed to start or
 // died) it falls back to running the CLI one-shot, so styles never silently
 // freeze (D27). Composition may be invoked concurrently (rebuild, the output
@@ -839,7 +839,7 @@ func (p *pipeline) tailwindCSS() (string, error) {
 	return string(data), nil
 }
 
-// recompose writes dist/styles.css = Tailwind layer + collected <styles>.
+// recompose writes dist/styles.css = Tailwind layer + collected <style>.
 func (p *pipeline) recompose() error {
 	tw, err := p.tailwindCSS()
 	if err != nil {

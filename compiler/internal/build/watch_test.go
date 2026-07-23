@@ -51,28 +51,28 @@ const viewTmpl = `<puzzle-view>
   <h1>%MARKER%</h1>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 
-<styles>
+<style>
 .home { color: red; }
-</styles>
+</style>
 `
 
 const extraPzl = `<puzzle-view>
   <span>extra</span>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Extra extends PuzzleView {}
-</scripts>
+</script>
 
-<styles>
+<style>
 .extra { color: blue; }
-</styles>
+</style>
 `
 
 // TestWatchBuilderIncrementalRebuild proves the persistent esbuild context
@@ -112,7 +112,7 @@ func TestWatchBuilderIncrementalRebuild(t *testing.T) {
 	}
 }
 
-// TestWatchBuilderCSSResetOnDelete proves the shared <styles> collector drops a
+// TestWatchBuilderCSSResetOnDelete proves the shared <style> collector drops a
 // deleted .pzl's CSS between rebuilds (no lingering stale styles).
 func TestWatchBuilderCSSResetOnDelete(t *testing.T) {
 	root := scratchApp(t)
@@ -156,7 +156,7 @@ func TestWatchBuilderCSSResetOnDelete(t *testing.T) {
 }
 
 // TestWatchBuilderCSSResetOnStyleRemoval proves editing a file to REMOVE its
-// <styles> drops the stale block (the collector's set-or-delete path).
+// <style> drops the stale block (the collector's set-or-delete path).
 func TestWatchBuilderCSSResetOnStyleRemoval(t *testing.T) {
 	root := scratchApp(t)
 	home := filepath.Join(root, "app", "views", "Home.pzl")
@@ -177,22 +177,22 @@ func TestWatchBuilderCSSResetOnStyleRemoval(t *testing.T) {
 		t.Fatalf("first CSS should contain .home, got:\n%s", b.CSS())
 	}
 
-	// Rewrite the view without a <styles> block.
+	// Rewrite the view without a <style> block.
 	noStyles := `<puzzle-view>
   <h1>HOME</h1>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `
 	write(t, home, noStyles)
 	if err := b.Rebuild(); err != nil {
 		t.Fatalf("second Rebuild: %v", err)
 	}
 	if strings.Contains(b.CSS(), ".home") {
-		t.Errorf("removed <styles> block lingers after rebuild:\n%s", b.CSS())
+		t.Errorf("removed <style> block lingers after rebuild:\n%s", b.CSS())
 	}
 }
 
@@ -313,13 +313,13 @@ func TestWatchBuilderFailedRebuildKeepsCSS(t *testing.T) {
 	// Introduce a compile error (unclosed {#if}) — the rebuild must fail and the
 	// last-good .home CSS must survive.
 	write(t, home, `<puzzle-view>{#if open}<h1>HOME</h1></puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
-<styles>
+</script>
+<style>
 .home { color: red; }
-</styles>
+</style>
 `)
 	if err := b.Rebuild(); err == nil {
 		t.Fatal("expected the rebuild to fail on the unclosed {#if}")
@@ -334,10 +334,10 @@ const svgHomeTmpl = `<puzzle-view>
   <span class="inline-block size-5">{#svg 'icons/heart.svg'}</span>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `
 
 // TestWatchBuilderInlineSVGRebuild is the WatchFiles regression (v1.14, D46):

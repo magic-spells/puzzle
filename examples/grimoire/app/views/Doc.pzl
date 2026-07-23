@@ -86,7 +86,7 @@
   {/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Block from '../components/Block.pzl';
 import { textOf, insertText } from '../lib/caret.js';
@@ -960,4 +960,4 @@ export default class Doc extends PuzzleView {
     return this.element.querySelector('[data-block-id="' + id + '"]');
   }
 }
-</scripts>
+</script>

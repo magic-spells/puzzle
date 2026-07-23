@@ -61,7 +61,7 @@ Additional parser/lexer findings:
 
 - **Wrong dialect.** Supports `{#each items as item, i}`, `{#case}/{:when}`, `{#unless}`, `{#raw}`. SPEC v1 needs `{#if}/{:else}/{/if}`, `{#for item in items}`, `{#for 1...n}` — `for` is an "unknown block type" today, and `case`/`unless` were post-v1 at review time (both later shipped in v1.7 — D36/D37 — with corrected syntax/semantics; `each`/`raw` remain rejected).
 - **Half the lexer is dead code**: `scanIdentifier`, `scanString`, `skipWhitespaceInExpression` are never called on any live path; 10 of 17 token types are never produced.
-- **Not HTML-aware at all**: no tags, attributes, component tags, or `<puzzle-view>/<scripts>/<styles>` extraction (the whole `.pzl` file is fed to the control-flow parser, so HTML becomes escaped text). SPEC §3/§6 require an HTML-aware template parser with an attribute-value mini-grammar (inline `{#if}` in `class`).
+- **Not HTML-aware at all**: no tags, attributes, component tags, or `<puzzle-view>/<script>/<style>` extraction (the whole `.pzl` file is fed to the control-flow parser, so HTML becomes escaped text). SPEC §3/§6 require an HTML-aware template parser with an attribute-value mini-grammar (inline `{#if}` in `class`).
 - Filter-argument parsing is by `strings.Split(",")` — breaks on any arg containing a comma or nested parens (self-acknowledged in a comment).
 
 ### 1.3 Compiler orchestration contradicts SPEC §11

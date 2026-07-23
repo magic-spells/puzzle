@@ -35,7 +35,7 @@ instantly visible on every navigation.
 > **Note (SPEC §26):** the app columns and every ancestor up to `<body>` stay
 > free of `transform` / `filter` / `contain` — those would re-root the overlap
 > pin's `position: fixed` and break the effect. No Tailwind here — plain CSS via
-> `<styles>` blocks plus the page-shell `<style>` in `index.html`.
+> `<style>` blocks plus the page-shell `<style>` in `index.html`.
 
 ## Running the Example
 

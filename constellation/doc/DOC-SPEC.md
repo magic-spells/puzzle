@@ -70,24 +70,24 @@ That is the **entire** v1 config surface: `target`, `routes`, `models`, `formatt
   <!-- markup + template directives -->
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class MyComponent extends PuzzleView { ... }
-</scripts>
+</script>
 
-<styles>
+<style>
 /* optional global CSS */
-</styles>
+</style>
 ```
 
-- `<puzzle-view>` is required; `<scripts>` and `<styles>` are optional. (v1.8 adds a fourth optional section, `<puzzle-skeleton>` — see §16.)
-- Component imports (other `.pzl` files) live inside `<scripts>`, which is where esbuild resolves them.
-- At most one `<styles>` block per file. Blocks are emitted as global CSS — v1 styling is Tailwind-first via utility classes; since v1.27 a bare `scoped` attribute opts a block into per-component scoping (§29, D59).
+- `<puzzle-view>` is required; `<script>` and `<style>` are optional. (v1.8 adds a fourth optional section, `<puzzle-skeleton>` — see §16.) The section tags are **singular** — `<script>`, `<style>`, plus the attribute forms `<script lang="ts">` (§25) and `<style scoped>` (§29). Sections are recognized only at the top level, so a `<script>`/`<style>` **element inside a template body** is ordinary markup, not a section.
+- Component imports (other `.pzl` files) live inside `<script>`, which is where esbuild resolves them.
+- At most one `<style>` block per file. Blocks are emitted as global CSS — v1 styling is Tailwind-first via utility classes; since v1.27 a bare `scoped` attribute opts a block into per-component scoping (§29, D59).
 - **Two emission modes (D20).** Files under `app/views/**` and `app/layouts/**` compile to a real `<puzzle-view>` DOM element carrying the tag's attributes — the view boundary that navigation swaps and animations target (§12); the base stylesheet ships `puzzle-view { display: block }`. **Reusable components render inline**: the template's contents are emitted with no wrapper element, so `<CustomButton/>` renders as its `<button>` and nested components never stack wrapper elements (a list of items with buttons stays flat). For components, `<puzzle-view>` is only the template delimiter: it must carry **no attributes** (compile error — put them on your root element) and the template needs a **single root element** in v1 (fragments deferred).
 
-## 4. `<scripts>` blocks are real JavaScript
+## 4. `<script>` blocks are real JavaScript
 
-This is the most consequential rule in the spec. The contents of `<scripts>` must parse as standard JavaScript — no custom dialect. The compiler extracts the block and hands it to esbuild **untouched**; the Go compiler never parses JS. Editors, ESLint, Prettier, and TypeScript work with zero special tooling. (TypeScript shipped in v1.22 via `<scripts lang="ts">`, transpile-only — the Go compiler still treats the body as an opaque string; see §25.)
+This is the most consequential rule in the spec. The contents of `<script>` must parse as standard JavaScript — no custom dialect. The compiler extracts the block and hands it to esbuild **untouched**; the Go compiler never parses JS. Editors, ESLint, Prettier, and TypeScript work with zero special tooling. (TypeScript shipped in v1.22 via `<script lang="ts">`, transpile-only — the Go compiler still treats the body as an opaque string; see §25.)
 
 Concretely, compared to older examples:
 
@@ -209,7 +209,7 @@ Modifiers stack, and **execution order is canonical regardless of written order*
 Supported:
 
 - **Interpolation:** `{ expression }` with plain JS expressions.
-- **Expression boundary (contract):** template expressions are **lexed, not parsed** — the compiler tokenizes them (string/template/regex/comment-aware) and prefixes data identifiers, but has no expression grammar (§4: the Go compiler never parses JS). Consequences, by design and not bugs: (a) the only names in scope are `data()` fields, loop variables/counters, `event` (in handlers), and JS globals — an identifier imported or declared in `<scripts>` is **not** reachable (it compiles to a data read of the same name and evaluates `undefined`; since the pre-0.1.0 hardening pass the compiler emits a positioned **warning** when a template expression reads a name that `<scripts>` imports); (b) binding-introducing forms are unsupported in expressions — arrow functions, object literals at expression head (positioned compile error), and destructuring — because a lexer cannot see binding positions. The supported idiom is unchanged: compute in `data()`, render the result.
+- **Expression boundary (contract):** template expressions are **lexed, not parsed** — the compiler tokenizes them (string/template/regex/comment-aware) and prefixes data identifiers, but has no expression grammar (§4: the Go compiler never parses JS). Consequences, by design and not bugs: (a) the only names in scope are `data()` fields, loop variables/counters, `event` (in handlers), and JS globals — an identifier imported or declared in `<script>` is **not** reachable (it compiles to a data read of the same name and evaluates `undefined`; since the pre-0.1.0 hardening pass the compiler emits a positioned **warning** when a template expression reads a name that `<script>` imports); (b) binding-introducing forms are unsupported in expressions — arrow functions, object literals at expression head (positioned compile error), and destructuring — because a lexer cannot see binding positions. The supported idiom is unchanged: compute in `data()`, render the result.
 - **Formatters:** `{ value | formatter(args) }`, chainable (`{ text | trim | capitalize }`). Display-only; filtering/sorting belongs in `data()`. **Unknown-formatter guard (v1.12, D43):** a formatter name not in the runtime registry does **not** crash the render — the compiled call is guarded (`(__f["name"] || __f.__missing("name"))(…)` — bracket access, since registry keys are arbitrary strings), the value passes through unchanged, and one `console.error` per unknown name identifies it (with a did-you-mean suggestion when a close match exists). A compile-time check is impossible by design: custom formatters are registered at runtime (§2), and the compiler never parses JS (§4). **Built-in `link` (v1.46, D79):** `{ path | link }` converts a path-shaped route into the mode-appropriate href via `router.url()` (§9) — `href="{ '/collections/' + c.id | link }"` renders `/collections/1` in history mode (base-prefixed under a `routerBase`), `#/collections/1` in hash mode, and unchanged in memory mode. Registered by `PuzzleApp` at mount (after the router exists), **only if absent** — a user `link` in `config.formatters` wins. Fail-soft per formatter convention: nullish → `''`, non-strings coerced; strings not starting with `/` pass through untouched (external URLs, `mailto:`, bare `#anchor`). Not part of the D31 tree-shake manifest (it needs the live router; the scanner ignores the name like any custom formatter).
 - **Conditionals:** `{#if expr} … {:else} … {/if}`.
 - **Conditional chaining (v1.9, D40):** `{#if a} … {:else if b} … {:else} … {/if}` — zero or more `{:else if expr}` clauses between the `{#if}` body and the optional trailing `{:else}`, which must be the **last** clause. `expr` is any JS expression, exactly like `{#if}`. Desugars at parse time to nested `{#if}` nodes (additive; codegen unchanged). Spelled `else if` (JS), not `elsif` — `{:elsif}`/`{:elseif}` get a did-you-mean compile error. Compile errors: an empty condition, `{:else if}` after `{:else}`, `{:else if}` outside `{#if}`, inside `{#unless}` or `{#case}` (see D36/D37), and inside attribute-value inline-ifs (the attribute mini-grammar stays flat `{#if}…{:else}` only).
@@ -219,7 +219,7 @@ Supported:
 - **Attribute values:** interpolation and inline `{#if}` blocks inside attribute values, e.g. `class="base {#if done}line-through{/if}"`.
 - **Bindings:** `value={ var }` (two-way on inputs), `checked={ expr }`, `disabled={ expr }`, and other dynamic attributes.
 - **Events:** `@event={ … }` per section 5.
-- **Components:** capitalized tags with props — `<UserProfile userId={selectedUserId} />` — imported in `<scripts>`.
+- **Components:** capitalized tags with props — `<UserProfile userId={selectedUserId} />` — imported in `<script>`.
 - **Component children (default slot):** children written at a component's call site render at the child's `<children/>` marker (D16; spelled `<slot />` until v1.41 — D74, §24) — `<Card><p>body</p></Card>`. Guidance: **props for data, slots for markup** — pass `label="Save"` when it's a string, pass children when the caller supplies actual content.
 - **Callback props:** `@name={ handler }` on a **component tag** passes the wrapped handler to the child as the prop `name`; the child receives it via `data(params, props)` and calls it like any function. DOM listeners belong to the child's own template — the event lands on the child's element first, the child's handler gates/shapes it, then invokes the parent's callback, which executes in the parent (D16).
 - **Layout slot:** `<Slot/>` inside layout components renders the routed view.
@@ -561,7 +561,7 @@ The Shopify-snippet ergonomic for icons: one SVG file on disk, referenced by nam
 
 **Cost model, stated plainly:** each `{#svg}` use embeds its own copy of the string in the bundle — identical to hand-pasting, right for small icons. A huge SVG used many times belongs in `app/public/` as an `<img src>` instead.
 
-**Tooling.** `pzlc` grew `--assets <dir>` (default: the nearest ancestor `app` directory's `assets/`). `puzzle init` scaffolds `app/assets/icons/heart.svg` and uses it in the default template's `Home.pzl`. Related but distinct: `import data from './x.json'` in `<scripts>` has always worked (esbuild's built-in JSON loader) — see DOC-PUZZLE-FILE.
+**Tooling.** `pzlc` grew `--assets <dir>` (default: the nearest ancestor `app` directory's `assets/`). `puzzle init` scaffolds `app/assets/icons/heart.svg` and uses it in the default template's `Home.pzl`. Related but distinct: `import data from './x.json'` in `<script>` has always worked (esbuild's built-in JSON loader) — see DOC-PUZZLE-FILE.
 
 ## 19. Route snapshot in `data()`: `this.route` (v1.15)
 
@@ -699,14 +699,14 @@ Multi-region composition. Named slots shipped in v1.21 (D53); v1.41 (D74) retire
 - **Forwarding through a component (v1.38, D71 — respelled by v1.41):** a default marker placed INSIDE a component invocation forwards the enclosing template's default content through that component — `<Card><children/></Card>` in a layout hands the routed page to Card's default slot (`<Slot/>` works identically in that position — same node). The expansion walk substitutes the enclosing template's markers in call-site children before the inner component expands its own; a routed vnode's pinned instance rides along and mounts as usual. Only the default marker forwards: `<slot name="x">` inside a component invocation is a positioned compile error (no defined fill source — the router fills the default slot only), enforced through nested elements, control flow, and deeper invocations.
 - Scoped slots (child data flowing back into parent-provided content) remain deferred.
 
-## 25. TypeScript scripts: `<scripts lang="ts">` (v1.22)
+## 25. TypeScript scripts: `<script lang="ts">` (v1.22)
 
-Opt a component's logic into TypeScript. Shipped in v1.22 (D54); parser + esbuild plugin + CLI — **codegen and the runtime kernel are untouched**, and a `<scripts>` with no `lang` (or `lang="js"`) compiles byte-for-byte as before.
+Opt a component's logic into TypeScript. Shipped in v1.22 (D54); parser + esbuild plugin + CLI — **codegen and the runtime kernel are untouched**, and a `<script>` with no `lang` (or `lang="js"`) compiles byte-for-byte as before.
 
 ```html
 <puzzle-view class="home"><h1>{ title }</h1></puzzle-view>
 
-<scripts lang="ts">
+<script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 
 interface HomeModel { title: string; }
@@ -716,10 +716,10 @@ export default class Home extends PuzzleView {
     return { title: 'Hello' };
   }
 }
-</scripts>
+</script>
 ```
 
-- **Attribute:** the only attribute `<scripts>` accepts is `lang`. `lang="ts"` → TypeScript; **absent or `lang="js"` → JavaScript** (identical to pre-v1.22). An unknown value, empty value, dynamic `lang={…}`, or a second attribute is a **positioned compile error** (with a did-you-mean for near-misses like `"typescript"`). The Go compiler still treats the `<scripts>` body as an **opaque string** — it never parses TS (D3).
+- **Attribute:** the only attribute `<script>` accepts is `lang`. `lang="ts"` → TypeScript; **absent or `lang="js"` → JavaScript** (identical to pre-v1.22). An unknown value, empty value, dynamic `lang={…}`, or a second attribute is a **positioned compile error** (with a did-you-mean for near-misses like `"typescript"`). The Go compiler still treats the `<script>` body as an **opaque string** — it never parses TS (D3).
 - **Transpile-only (like Vite):** esbuild strips types during the build; there is **no type-checking in the build**. Use `tsc --noEmit` or an editor for type safety. The generated render tail + injected import are plain JS (valid TS), so one loader covers the mixed module: the plugin sets `Loader: LoaderTS`; standalone `pzlc` runs esbuild's Transform API to strip types.
 - **`.pzl` stays the only extension** — a `.pzt` alias was considered and deferred (D54).
 - **Typings:** the package ships `types/index.d.ts` (all four exports + config/store/router/formatters, wired via `exports.types`) and a `puzzle-env.d.ts` shim (`declare module '*.pzl'` → `typeof PuzzleView`) so `import X from './X.pzl'` resolves. `puzzle init --typescript` scaffolds a strict/noEmit `tsconfig.json`; the default stays JS. `examples/typed-todos` is the worked example.
@@ -756,11 +756,11 @@ How `{#for}` rows get their reconciliation keys. Shipped in v1.26 (D58); codegen
 - **Null keys warn.** When `keyOf` resolves `null`/`undefined` (no `.id`, unmodeled data), it warns once — naming the offending item shape — and returns null, so the list degrades to positional diffing **diagnosed** instead of silently. The existing duplicate-key warning (§ v1.23 review pass) is unchanged and covers the colliding-values case. Production builds already strip `console.*`; the warning is dev-only in effect.
 - **Range form unchanged:** range/counter loops key by the generated number (unique by construction) with byte-identical emission to v1.25.
 
-## 29. Scoped styles: `<styles scoped>` (v1.27)
+## 29. Scoped styles: `<style scoped>` (v1.27)
 
-Opt-in per-component style scoping via native CSS `@scope`. Shipped in v1.27 (D59); parser + codegen root-stamp + plugin CSS collector. **A `<styles>` block without the attribute emits byte-identically to v1** — global CSS, as always.
+Opt-in per-component style scoping via native CSS `@scope`. Shipped in v1.27 (D59); parser + codegen root-stamp + plugin CSS collector. **A `<style>` block without the attribute emits byte-identically to v1** — global CSS, as always.
 
-- **Grammar:** `scoped` is a **bare, static** attribute and the only one `<styles>` accepts — same posture as `island` (§17) and `min-duration` (§16). A valued or dynamic `scoped`, or any other attribute, is a positioned compile error (did-you-mean when close). One `<styles>` per file, as before.
+- **Grammar:** `scoped` is a **bare, static** attribute and the only one `<style>` accepts — same posture as `island` (§17) and `min-duration` (§16). A valued or dynamic `scoped`, or any other attribute, is a positioned compile error (did-you-mean when close). One `<style>` per file, as before.
 - **Semantics:** the block's rules match only inside this component's own rendered subtree — two components with colliding selectors in scoped blocks do not affect each other. Scoping is **outward containment, not inward**: rules still cascade into nested child components like ordinary CSS (no hard boundary in this cut); a child's own scoped rule at equal specificity beats the parent's via `@scope` proximity.
 - **Mechanism (the compiler never parses CSS):** a stable scope id is derived per file (`pzl-` + 8-hex FNV-1a of the compiler-relative, slash-normalized path); the template root vnode gains one static `data-<scopeId>` attribute (root-only — the cascade covers descendants; view-mode skeletons reuse the root's attrs and are covered); the collected block is emitted wrapped as `@scope ([data-<scopeId>]) { … }`, verbatim inside. The styles pipeline (§13, Tailwind) is untouched.
 - **Browser floor:** `@scope` ships verbatim in the bundle — Baseline engines (Chrome/Edge 118+, Safari 17.4+, current Firefox). An engine without `@scope` treats the block as global (v1 behavior), never breakage.
@@ -879,7 +879,7 @@ The pre-release hardening bundle (branch fix/pre-0.1.0-hardening): correctness f
 - **Type-aware validation bounds** (§20): declared `number()`/`date()` fields reject wrong-runtime-type values in `min`/`max` instead of measuring string length.
 - **Persisted sync provenance** (§22, §8 wire shape): `_synced` rides out-of-band (`__synced`) in the persistence blob; hydration restores real provenance instead of assuming synced.
 
-**Correctness fixes (no intended semantic surface):** schema object/array defaults deep-clone per record; save-boundary reconciliation guards (destroy-wins, pk-collision refusal — §22); `mounted()` defers to the first landed commit when a prop update supersedes the initial async `data()` (never fires against the placeholder anchor); router-owned mount rejections observed; deferred redirect pushes survive a sync commit throw; memory-mode `go()` chains synchronous calls correctly; `beforeUnmount` thenable rejections logged (§34); two-phase HMR restore (§27); formatter fail-soft (invalid decimals/dates/locales/time zones). Compiler: empty/Vue-dotted event names are positioned errors with did-you-mean (§5); failed one-shot builds no longer wipe the last good `dist/` (staging swap); template reads of `<scripts>`-imported names warn (§6 expression boundary); MixedAttr `key=` suppresses the synthetic key (§28); classname extraction is comment/string-aware; `{#svg}` rejects backslash paths (§18).
+**Correctness fixes (no intended semantic surface):** schema object/array defaults deep-clone per record; save-boundary reconciliation guards (destroy-wins, pk-collision refusal — §22); `mounted()` defers to the first landed commit when a prop update supersedes the initial async `data()` (never fires against the placeholder anchor); router-owned mount rejections observed; deferred redirect pushes survive a sync commit throw; memory-mode `go()` chains synchronous calls correctly; `beforeUnmount` thenable rejections logged (§34); two-phase HMR restore (§27); formatter fail-soft (invalid decimals/dates/locales/time zones). Compiler: empty/Vue-dotted event names are positioned errors with did-you-mean (§5); failed one-shot builds no longer wipe the last good `dist/` (staging swap); template reads of `<script>`-imported names warn (§6 expression boundary); MixedAttr `key=` suppresses the synthetic key (§28); classname extraction is comment/string-aware; `{#svg}` rejects backslash paths (§18).
 
 **Distribution (new, no runtime change):** `@magic-spells/puzzle` ships a `bin` shim resolving per-platform binary packages (`@magic-spells/puzzle-{darwin-arm64,darwin-x64,linux-x64,linux-arm64}`) from `optionalDependencies` — one `npm install` yields runtime + CLI; release workflow stamps `puzzle --version` via ldflags and publishes platform packages before the root. `go install` remains the unsupported-platform fallback.
 
@@ -970,10 +970,10 @@ Every bundled import specifier beginning `@/` resolves to the app's `app/` direc
 
 **Contract:**
 - **Always on, not configurable.** No opt-in, no `puzzle.config.js` key. `app/` is already the framework-fixed source root (both build paths hardcode the entry as `app/app.js`), so the anchor needs no configuration. A general `resolve.alias` block stays deferred.
-- **Bundle-wide.** It applies wherever esbuild resolves a specifier: `.pzl` `<scripts>` blocks, `app.js`, `routes.js`, models, `.ts` files under `<scripts lang="ts">` (§25), JSON imports. All three build paths get it — `puzzle dev`, `puzzle build`, and the separate prerender bundle of `puzzle build --static` / `--hybrid` (§36).
+- **Bundle-wide.** It applies wherever esbuild resolves a specifier: `.pzl` `<script>` blocks, `app.js`, `routes.js`, models, `.ts` files under `<script lang="ts">` (§25), JSON imports. All three build paths get it — `puzzle dev`, `puzzle build`, and the separate prerender bundle of `puzzle build --static` / `--hybrid` (§36).
 - **Relative paths are untouched.** `./` and `../` imports keep working exactly as before; `@/` is additive.
 - **Scoped packages are untouched.** esbuild matches alias keys on segment boundaries, so a bare `@` key catches `@` and `@/…` only: `@magic-spells/puzzle`, `@magic-spells/morph-engine`, and every other scoped package resolve normally. npm cannot publish a package named exactly `@`, so no collision exists.
-- **Module resolution only.** It does NOT apply to `{#svg 'icons/x.svg'}` asset paths (already resolved against `app/assets`, §18), to `<styles>` blocks, or to `@import`s inside `styles.css` — different resolvers.
+- **Module resolution only.** It does NOT apply to `{#svg 'icons/x.svg'}` asset paths (already resolved against `app/assets`, §18), to `<style>` blocks, or to `@import`s inside `styles.css` — different resolvers.
 
 **Implementation:** one entry in the esbuild `Alias` map, set in `configureRuntime` (`compiler/internal/build/options.go`) alongside the existing `@magic-spells/puzzle` runtime entries. Parser, codegen, and the runtime kernel are untouched — this is purely a bundler-resolution concern.
 
@@ -1014,7 +1014,7 @@ Explicitly out of scope for v1. Docs may describe them only if marked **"Planned
 
 - ~~Cross-fade / overlapping route transitions~~ — shipped in v1.24 (§26, D56: opt-in `transitionMode: 'overlap'`, fixed-pin positioning). A per-route/per-view override shipped in v1.30 (§33, D65 — destination-only); a per-NAVIGATION (call-site) override remains deferred.
 - ~~Named slots~~ — shipped in v1.21 (§24, D53); scoped slots remain deferred. (Event modifiers, `{#unless}`, and multi-branch `{#case}` shipped in v1.7 — D36/D37/D38; the `{#switch}` name was rejected in favor of `{#case}`.)
-- ~~Scoped styles (`<styles scoped>`)~~ — shipped in v1.27 (§29, D59: native `@scope` wrapping, root-stamped attribute). A hard child boundary (`to (…)`) remains deferred on top of it.
+- ~~Scoped styles (`<style scoped>`)~~ — shipped in v1.27 (§29, D59: native `@scope` wrapping, root-stamped attribute). A hard child boundary (`to (…)`) remains deferred on top of it.
 - ~~Schema validation enforcement, relationships~~ — both shipped: validation enforcement in v1.16 (§20, D48), `hasMany`/`belongsTo` resolution in v1.17 (§21, D49)
 - ~~Adapter write sync, custom adapter methods~~ — shipped in v1.18 (§22, D50: `save()`/`delete()`/`store.request()`). Query fault-in remains deferred (re-affirmed in D50).
 - App-level `settings`, `computed`, global `events`, `methods` — re-rejected at the D60 triage (module constants / singleton store records / view-scoped listeners cover the observed demand). ~~App lifecycle hooks~~ — shipped in v1.28 (§30, D60: `beforeMount`/`mounted`/`beforeUnmount` on the config).

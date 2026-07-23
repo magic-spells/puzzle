@@ -11,7 +11,7 @@
   </div>
 </puzzle-skeleton>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Skeleton extends PuzzleView {
@@ -20,4 +20,4 @@ export default class Skeleton extends PuzzleView {
     return { post };
   }
 }
-</scripts>
+</script>

@@ -3,7 +3,7 @@
   <p>{ body }</p>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Card extends PuzzleView {
@@ -11,9 +11,9 @@ export default class Card extends PuzzleView {
     return { title: 'Hi', body: 'Scoped.' };
   }
 }
-</scripts>
+</script>
 
-<styles scoped>
+<style scoped>
 .card { padding: 1rem; }
 h2 { color: rebeccapurple; }
-</styles>
+</style>

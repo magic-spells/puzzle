@@ -16,7 +16,7 @@
   </section>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The catch-all view (routes.js `path: '*'`, D19). In static mode (D81) it renders
@@ -24,4 +24,4 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // mode the live router would also show it for any unmatched client path.) No
 // data() — pure chrome content, serialized once at build time.
 export default class NotFound extends PuzzleView {}
-</scripts>
+</script>

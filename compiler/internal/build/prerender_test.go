@@ -102,44 +102,44 @@ export default [
 		"app/layouts/Default.pzl": `<puzzle-view>
   <main><Slot/></main>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class DefaultLayout extends PuzzleView {}
-</scripts>
+</script>
 `,
 		"app/views/Home.pzl": `<puzzle-view>
   <h1>Home</h1>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {
   data() { return { greeting: 'hello' }; }
 }
-</scripts>
+</script>
 `,
 		"app/views/About.pzl": `<puzzle-view>
   <h1>About</h1>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class About extends PuzzleView {}
-</scripts>
+</script>
 `,
 		"app/views/Post.pzl": `<puzzle-view>
   <h1>Post</h1>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Post extends PuzzleView {}
-</scripts>
+</script>
 `,
 		"app/views/NotFound.pzl": `<puzzle-view>
   <h1>Not Found</h1>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class NotFound extends PuzzleView {}
-</scripts>
+</script>
 `,
 		"app/public/index.html": `<!DOCTYPE html>
 <html lang="en">
@@ -269,12 +269,12 @@ func TestBuildStaticPrerenderFailureLeavesDistIntact(t *testing.T) {
 	broken := `<puzzle-view>
   <h1>Home</h1>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {
   data() { throw new Error('BOOM_FROM_DATA'); }
 }
-</scripts>
+</script>
 `
 	if err := os.WriteFile(filepath.Join(root, "app", "views", "Home.pzl"), []byte(broken), 0o644); err != nil {
 		t.Fatal(err)

@@ -13,8 +13,8 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class NotFound extends PuzzleView {}
-</scripts>
+</script>

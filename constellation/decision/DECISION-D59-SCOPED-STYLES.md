@@ -1,5 +1,5 @@
 ---
-name: "D59 — Scoped styles: <styles scoped> via native @scope wrapping"
+name: "D59 — Scoped styles: <style scoped> via native @scope wrapping"
 status: verified
 connections:
   - FEATURE-SCOPED-STYLES
@@ -21,9 +21,9 @@ notes:
       unscoped goldens byte-identical; 540 vitest + all Go green.
 ---
 
-# D59 — Scoped styles: `<styles scoped>` via native `@scope` wrapping
+# D59 — Scoped styles: `<style scoped>` via native `@scope` wrapping
 
-Settled (v1.27). A bare `scoped` attribute on `<styles>` confines the block to
+Settled (v1.27). A bare `scoped` attribute on `<style>` confines the block to
 the component's own subtree — implemented by **wrapping the verbatim CSS in a
 native `@scope` rule** and stamping one static attribute on the template root.
 The Go compiler still never parses a single CSS selector.
@@ -31,7 +31,7 @@ The Go compiler still never parses a single CSS selector.
 ## Context
 
 [[FEATURE-SCOPED-STYLES]] was the lowest-priority backlog card ("may resolve
-won't-build") because Tailwind-first apps rarely write `<styles>` at all
+won't-build") because Tailwind-first apps rarely write `<style>` at all
 (D12), and the classic implementation — Vue-style compile-time selector
 rewriting (`.card h2` → `.card h2[data-x]`) — required a real CSS selector
 transformer in Go, breaking the deliberate "compiler never parses CSS"
@@ -45,7 +45,7 @@ seven characters of opt-in.
 ## Decision
 
 - **Spelling: bare static `scoped`** — the only legal attribute on
-  `<styles>`, mirroring `island` (D44) and `<puzzle-skeleton
+  `<style>`, mirroring `island` (D44) and `<puzzle-skeleton
   min-duration>` (D52) exactly: a valued `scoped="true"`/`scoped={x}` or any
   other attribute is a positioned compile error (did-you-mean where close).
   Absent → today's global emission, **byte-identical** (existing goldens
@@ -83,7 +83,7 @@ seven characters of opt-in.
   and boundary-precise, but requires parsing every selector (combinators,
   pseudo-classes, `@media` nesting) in Go — the exact complexity D35 refused
   for Sass. `@scope` buys ~95% of the value for ~2% of the code.
-- **Auto-scoping every `<styles>` block (no attribute):** breaking change to
+- **Auto-scoping every `<style>` block (no attribute):** breaking change to
   the frozen SPEC — existing blocks legitimately target `body`, keyframes,
   resets, third-party markup. Opt-in matches the framework's escape-hatch
   grammar (`island`, `min-duration`).
@@ -94,11 +94,11 @@ seven characters of opt-in.
 
 ## Consequences
 
-- First-ever attribute on `<styles>`; `parseAttrString`-family validation now
+- First-ever attribute on `<style>`; `parseAttrString`-family validation now
   runs for the styles section (previously attrs were silently discarded —
   that silent acceptance ends; stray attrs become loud).
 - The scope id is derived from the path: **renaming a `.pzl` changes its
   scope id** — invisible in practice (id and CSS move together in the same
   rebuild).
-- `<styles scoped>` on a file whose root also carries `island` or morph
+- `<style scoped>` on a file whose root also carries `island` or morph
   attrs composes fine (one more static attr on the root vnode).

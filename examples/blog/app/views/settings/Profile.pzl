@@ -9,7 +9,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class SettingsProfileView extends PuzzleView {
@@ -23,4 +23,4 @@ export default class SettingsProfileView extends PuzzleView {
     out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 120, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

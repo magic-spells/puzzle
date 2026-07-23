@@ -48,14 +48,14 @@ const buttonPzl = `<puzzle-view>
   <button @click={ onClick }>{ label }</button>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Button extends PuzzleView {}
-</scripts>
+</script>
 
-<styles>
+<style>
 .btn { color: blue; }
-</styles>
+</style>
 `
 
 const homePzl = `<puzzle-view class="home">
@@ -63,15 +63,15 @@ const homePzl = `<puzzle-view class="home">
   <Button label="Hi" />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Button from '../components/Button.pzl';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 
-<styles>
+<style>
 .home { color: red; }
-</styles>
+</style>
 `
 
 const appJS = `import Home from './views/Home.pzl';
@@ -101,7 +101,7 @@ func TestPluginTransform(t *testing.T) {
 			t.Errorf("bundle missing %q", want)
 		}
 	}
-	// The component was reached from Home's <scripts> import — esbuild owns the
+	// The component was reached from Home's <script> import — esbuild owns the
 	// module graph, so components compile for free.
 	// esbuild re-prints string literals with double quotes.
 	if !strings.Contains(bundle, `new ViewNode("button"`) {
@@ -133,10 +133,10 @@ func TestPluginUnless(t *testing.T) {
   {/unless}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `
 	root := writeApp(t, map[string]string{
 		"app/app.js":         "import Home from './views/Home.pzl';\nexport default Home;\n",
@@ -176,10 +176,10 @@ func TestPluginCase(t *testing.T) {
   {/case}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `
 	root := writeApp(t, map[string]string{
 		"app/app.js":         "import Home from './views/Home.pzl';\nexport default Home;\n",
@@ -216,10 +216,10 @@ func TestPluginInlineSVG(t *testing.T) {
   <span class="inline-block size-5">{#svg 'icons/heart.svg'}</span>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `
 	root := writeApp(t, map[string]string{
 		"app/app.js":                 "import Home from './views/Home.pzl';\nexport default Home;\n",
@@ -249,10 +249,10 @@ export default class Home extends PuzzleView {}
 // with the error located in the .pzl (the {#svg} header), not the svg file.
 func TestPluginInlineSVGMissing(t *testing.T) {
 	svgHome := `<puzzle-view><span>{#svg 'icons/gone.svg'}</span></puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `
 	root := writeApp(t, map[string]string{
 		"app/app.js":         "import Home from './views/Home.pzl';\nexport default Home;\n",
@@ -278,10 +278,10 @@ export default class Home extends PuzzleView {}
 // with the error located inside the svg file (not the .pzl).
 func TestPluginInlineSVGMalformed(t *testing.T) {
 	svgHome := `<puzzle-view><span>{#svg 'icons/bad.svg'}</span></puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `
 	root := writeApp(t, map[string]string{
 		"app/app.js":               "import Home from './views/Home.pzl';\nexport default Home;\n",
@@ -316,17 +316,17 @@ func TestPluginSVGDedup(t *testing.T) {
   <span>{#svg 'icons/star.svg'}</span>
   <span>{#svg 'icons/star.svg'}</span>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Side from '../components/Side.pzl';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `
 	sidePzl := `<puzzle-view><i>{#svg 'icons/star.svg'}</i></puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Side extends PuzzleView {}
-</scripts>
+</script>
 `
 	root := writeApp(t, map[string]string{
 		"app/app.js":                "import Home from './views/Home.pzl';\nexport default Home;\n",
@@ -361,10 +361,10 @@ func TestPluginTemplateError(t *testing.T) {
     <p>still open</p>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `
 	root := writeApp(t, map[string]string{
 		"app/app.js":         "import Home from './views/Home.pzl';\nexport default Home;\n",
@@ -405,10 +405,10 @@ func TestScanFormatters(t *testing.T) {
   {/for}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `,
 	})
 
@@ -436,16 +436,16 @@ export default class Home extends PuzzleView {}
 func TestScanFormattersOutsideAppDir(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view><h1>{ title | downcase }</h1></puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `,
 		"shared/Card.pzl": `<puzzle-view><span>{ label | upcase }</span></puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Card extends PuzzleView {}
-</scripts>
+</script>
 `,
 	})
 
@@ -465,10 +465,10 @@ export default class Card extends PuzzleView {}
 func TestScanFormattersTolerantAndPrunes(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view><h1>{ title | downcase }</h1></puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `,
 		// Malformed template (unclosed {#if}) — previously fatal to the build.
 		"app/components/Broken.pzl": `<puzzle-view>{#if oops}<p>{ x | upcase }</p></puzzle-view>`,
@@ -502,10 +502,10 @@ func TestScanFormattersCoversAllEmitSites(t *testing.T) {
   <h1 class="s { status | upcase }">x</h1>
   <div class="{#if on}{ label | trim }{/if}">y</div>
 </puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `,
 	})
 	got, err := ScanFormatters(root)
@@ -534,12 +534,12 @@ func TestScanFormattersCoversSkeleton(t *testing.T) {
   <p>{ when | date('long') }</p>
 </puzzle-skeleton>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {
   async data() { return { title: 'x', when: new Date() }; }
 }
-</scripts>
+</script>
 `,
 	})
 	got, err := ScanFormatters(filepath.Join(root, "app"))
@@ -603,10 +603,10 @@ import manifest from '@magic-spells/puzzle/formatters/manifest';
 console.log(Home, manifest);
 `,
 		"app/views/Home.pzl": `<puzzle-view><h1>{ title | upcase }</h1></puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `,
 	})
 	runtimeDir := filepath.Join(root, "client-runtime")
@@ -665,10 +665,10 @@ export default class Home extends PuzzleView {}
 
 	// Add a NEW formatter usage mid-session, rescan, and rebuild the same context.
 	if err := os.WriteFile(home, []byte(`<puzzle-view><h1>{ title | upcase } <span>{ when | timeago }</span></h1></puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -729,7 +729,7 @@ console.log(manifest);
 	}
 }
 
-// tsHomePzl is a view whose <scripts lang="ts"> uses TypeScript-only syntax: an
+// tsHomePzl is a view whose <script lang="ts"> uses TypeScript-only syntax: an
 // interface, a typed local, and a typed class field / method signature. None of
 // this is valid JavaScript — a clean build proves esbuild stripped the types
 // under LoaderTS (v1.22, D54).
@@ -737,7 +737,7 @@ const tsHomePzl = `<puzzle-view class="home">
   <h1>{ title }</h1>
 </puzzle-view>
 
-<scripts lang="ts">
+<script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 
 interface HomeModel {
@@ -752,10 +752,10 @@ export default class Home extends PuzzleView {
     return { title: 'Hello ' + x };
   }
 }
-</scripts>
+</script>
 `
 
-// TestPluginTypeScript drives a <scripts lang="ts"> view through the plugin and
+// TestPluginTypeScript drives a <script lang="ts"> view through the plugin and
 // asserts the bundle compiles cleanly with all TS syntax stripped (v1.22, D54).
 func TestPluginTypeScript(t *testing.T) {
 	root := writeApp(t, map[string]string{
@@ -791,10 +791,10 @@ func TestPluginTypeScriptError(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/app.js": appJS,
 		"app/views/Home.pzl": `<puzzle-view><h1>hi</h1></puzzle-view>
-<scripts lang="typescript">
+<script lang="typescript">
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 `,
 	})
 

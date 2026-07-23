@@ -47,7 +47,7 @@
   </section>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class HomeView extends PuzzleView {
@@ -75,4 +75,4 @@ export default class HomeView extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>

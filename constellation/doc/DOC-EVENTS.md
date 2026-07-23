@@ -45,7 +45,7 @@ export default class TodoHome extends PuzzleView {
 }
 ```
 
-Two syntax rules follow from `<scripts>` being real JavaScript (SPEC §4):
+Two syntax rules follow from `<script>` being real JavaScript (SPEC §4):
 
 - `events` is a **class field** (`events = { ... };`), not an object-literal member — and there are **no commas between class members**.
 - Every handler **must be an arrow function**.

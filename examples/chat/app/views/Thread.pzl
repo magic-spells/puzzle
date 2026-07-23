@@ -63,7 +63,7 @@
   </div>
 </puzzle-skeleton>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import MessageBubble from '../components/MessageBubble.pzl';
 import Composer from '../components/Composer.pzl';
@@ -234,4 +234,4 @@ export default class Thread extends PuzzleView {
     out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 140, easing: 'ease-in' },
   };
 }
-</scripts>
+</script>

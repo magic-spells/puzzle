@@ -11,7 +11,7 @@
   </p>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class AboutView extends PuzzleView {
@@ -35,9 +35,9 @@ export default class AboutView extends PuzzleView {
     return {};
   }
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .view-about {
   background:
     radial-gradient(120% 120% at 85% 10%, rgba(45, 212, 191, 0.4), transparent 55%),
@@ -68,4 +68,4 @@ export default class AboutView extends PuzzleView {
 .view-body-2 {
   color: rgba(240, 253, 250, 0.72);
 }
-</styles>
+</style>

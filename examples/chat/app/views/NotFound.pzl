@@ -9,7 +9,7 @@
   </button>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class NotFound extends PuzzleView {
@@ -27,4 +27,4 @@ export default class NotFound extends PuzzleView {
     in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 200 },
   };
 }
-</scripts>
+</script>

@@ -78,7 +78,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { textOf, caretOffset, setCaret, atStart, atEnd, insertText } from '../lib/caret.js';
 import { consumePendingFocus } from '../lib/focus.js';
@@ -308,4 +308,4 @@ export default class Block extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>

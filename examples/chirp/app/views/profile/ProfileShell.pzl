@@ -89,7 +89,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Avatar from '@/components/Avatar.pzl';
 import FollowButton from '@/components/FollowButton.pzl';
@@ -142,4 +142,4 @@ export default class ProfileShell extends PuzzleView {
     out: { from: { opacity: 1, transform: 'translateY(0)' },   to: { opacity: 0, transform: 'translateY(-6px)' }, duration: 150, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

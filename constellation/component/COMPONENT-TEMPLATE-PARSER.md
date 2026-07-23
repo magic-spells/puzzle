@@ -15,8 +15,8 @@ verified_at: '2026-07-22T00:04:07.972Z'
 HTML-aware lexer and recursive-descent parser for `.pzl` files. It returns a
 positioned AST or an error list; there is no partial/best-effort output.
 
-`SplitSections` recognizes one `<puzzle-view>`, optional `<scripts>`, optional
-`<styles>`, and optional `<puzzle-skeleton>`. Scripts remain opaque bytes.
+`SplitSections` recognizes one `<puzzle-view>`, optional `<script>`, optional
+`<style>`, and optional `<puzzle-skeleton>`. Scripts remain opaque bytes.
 Section closing scans are quote/comment/template/interpolation aware, including
 literal close-tag text inside template comments and skeleton bodies. Scripts
 accept absent/`lang="js"`/`lang="ts"`; styles accept only bare `scoped`;

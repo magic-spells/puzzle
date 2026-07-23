@@ -10,7 +10,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class TaskCard extends PuzzleView {
@@ -25,4 +25,4 @@ export default class TaskCard extends PuzzleView {
     }
   };
 }
-</scripts>
+</script>

@@ -4,7 +4,7 @@
     <p>
       A Puzzle app is a tree of <code>.pzl</code> components mounted by a router.
       Each component's template is HTML with a light expression syntax; its logic
-      lives in a <code>{ '<scripts>' }</code> block right below.
+      lives in a <code>{ '<script>' }</code> block right below.
     </p>
     <p>
       This is the <strong class="text-ink font-semibold">index child</strong> — a route
@@ -19,10 +19,10 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The index child (path: '' in routes.js). No meta.title of its own — it rides
 // the shell's title, exercising the static-build leaf → root title walk.
 export default class GuideIndex extends PuzzleView {}
-</scripts>
+</script>

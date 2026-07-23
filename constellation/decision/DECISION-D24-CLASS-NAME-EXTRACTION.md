@@ -13,10 +13,10 @@ connections:
 Settled. The compiler extracts the component class name by textually matching the mandated `export default class <Name> extends PuzzleView` declaration — a read-only lookup, never a rewrite.
 
 ## Context
-The compiler appends `Name.prototype.render = function () {…}` after the user's `<scripts>`, so it needs the class name — but the Go side never parses JavaScript ([[DECISION-D03-SCRIPTS-REAL-JS]]).
+The compiler appends `Name.prototype.render = function () {…}` after the user's `<script>`, so it needs the class name — but the Go side never parses JavaScript ([[DECISION-D03-SCRIPTS-REAL-JS]]).
 
 ## Decision
-[[DOC-SPEC]] §4 already mandates that `<scripts>` contains `export default class <Name> extends PuzzleView`; the compiler extracts `<Name>` by matching that declaration shape textually (anchored pattern, first match at the start of a line wins) — a read-only lookup, not a rewrite; `<scripts>` stays byte-for-byte verbatim. An anonymous default class (`export default class extends …`) is a build error ("name your component class"). This matches the Phase 1 golden fixture exactly as written (`Home.pzl` → `TodoHome.prototype.render`), so golden file #1 needs no churn.
+[[DOC-SPEC]] §4 already mandates that `<script>` contains `export default class <Name> extends PuzzleView`; the compiler extracts `<Name>` by matching that declaration shape textually (anchored pattern, first match at the start of a line wins) — a read-only lookup, not a rewrite; `<script>` stays byte-for-byte verbatim. An anonymous default class (`export default class extends …`) is a build error ("name your component class"). This matches the Phase 1 golden fixture exactly as written (`Home.pzl` → `TodoHome.prototype.render`), so golden file #1 needs no churn.
 
 ## Alternatives rejected
 - **Filename-derived naming** (the original default plan in COMPILER_DESIGN §b) — breaks the canonical app itself, where `Home.pzl` exports `class TodoHome`.

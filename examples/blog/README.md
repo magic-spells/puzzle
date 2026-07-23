@@ -5,7 +5,7 @@ canonical single-view app styled with Tailwind, this example is the second v1
 reference app: it leans into the features todos does not cover — multiple
 models, route params and a catch-all, reusable components with props and
 callbacks, network-seeded data, custom formatters — and it styles itself with
-plain per-file `<styles>` blocks instead of Tailwind (no `puzzle.config.js`, no
+plain per-file `<style>` blocks instead of Tailwind (no `puzzle.config.js`, no
 build-time CSS pipeline).
 
 ## What each file demonstrates
@@ -52,7 +52,7 @@ the global stylesheet tidy.
   (the parent owns the mutation).
 
 ### Layout (`app/layouts/`)
-- **Default.pzl** — nav + `<Slot/>` + footer, and the base `<styles>` block for
+- **Default.pzl** — nav + `<Slot/>` + footer, and the base `<style>` block for
   the whole app.
 
 ## The `loadAll` seed pattern

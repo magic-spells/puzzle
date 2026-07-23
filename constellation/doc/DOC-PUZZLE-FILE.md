@@ -28,24 +28,24 @@ Each `.pzl` file can contain up to four top-level blocks:
   <!-- Markup + Puzzle directives -->
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import OtherComponent from './OtherComponent.pzl';
 
 export default class ComponentName extends PuzzleView {
   // component definition (see below)
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 /* Optional global CSS */
-</styles>
+</style>
 ```
 
 - `<puzzle-view>`: The web component root with any HTML attributes (class, id, data-*, etc.) and Puzzle directives (`{}` interpolations, `#if`, `#for`, etc.).
 - `<puzzle-skeleton>`: Optional loading template (v1.8, D39) shown while the first `data()` is pending, then swapped for the real template (see [Skeleton Loading States](#skeleton-loading-states)).
-- `<scripts>`: Class extending PuzzleView with component logic and lifecycle. Imports — including other `.pzl` components — live inside this block, where esbuild resolves them.
-- `<styles>`: Optional CSS, emitted as global CSS. A bare `scoped` attribute confines the block to the component (v1.27, D59 — see [Styles Block](#styles-block)).
+- `<script>`: Class extending PuzzleView with component logic and lifecycle. Imports — including other `.pzl` components — live inside this block, where esbuild resolves them.
+- `<style>`: Optional CSS, emitted as global CSS. A bare `scoped` attribute confines the block to the component (v1.27, D59 — see [Styles Block](#styles-block)).
 
 Only the `<puzzle-view>` block is required.
 
@@ -53,15 +53,15 @@ Only the `<puzzle-view>` block is required.
 
 ---
 
-## `<scripts>` Block
+## `<script>` Block
 
-The contents of `<scripts>` must parse as **standard JavaScript** — no custom dialect. The compiler hands the block to esbuild untouched, so editors, ESLint, and Prettier work with zero special tooling. Concretely: `events` and `animations` are **class fields** (`events = { ... };`), not object-literal members, and there are **no commas between class members**.
+The contents of `<script>` must parse as **standard JavaScript** — no custom dialect. The compiler hands the block to esbuild untouched, so editors, ESLint, and Prettier work with zero special tooling. Concretely: `events` and `animations` are **class fields** (`events = { ... };`), not object-literal members, and there are **no commas between class members**.
 
-Because esbuild owns module resolution, **JSON imports just work**: `import config from './config.json'` in a `<scripts>` block yields a real JS object via esbuild's built-in JSON loader — no config, no `<script>`-tag tricks. (SVG files are different: they're inlined into templates via `{#svg 'path'}` — see [[DOC-TEMPLATE-SYNTAX]] and [[DOC-SPEC]] §18 — not imported in `<scripts>`.)
+Because esbuild owns module resolution, **JSON imports just work**: `import config from './config.json'` in a `<script>` block yields a real JS object via esbuild's built-in JSON loader — no config, no `<script>`-tag tricks. (SVG files are different: they're inlined into templates via `{#svg 'path'}` — see [[DOC-TEMPLATE-SYNTAX]] and [[DOC-SPEC]] §18 — not imported in `<script>`.)
 
 Imports may be relative or use the built-in **`@` alias for your `app/` directory** (v1.42, D75): `import Icon from '@/components/Icon.pzl'` resolves the same from any depth, which beats `../../components/Icon.pzl` once views are nested. Always on, no configuration; scoped packages like `@magic-spells/puzzle` are unaffected. See [[DOC-SPEC]] §40.
 
-The class exported from `<scripts>` extends `PuzzleView` and supports the following:
+The class exported from `<script>` extends `PuzzleView` and supports the following:
 
 | Property      | Type                    | Purpose |
 | ------------- | ----------------------- | ------- |
@@ -233,19 +233,19 @@ The compiler converts the `<puzzle-view>` template into an internal render funct
 - `params` — data returned from `data()` merged with event handlers and a `ctx` property.
 - `params.ctx` — the same context object exposed on `this.ctx`.
 
-When you provide a `data(params, props)` method in the `<scripts>` export, Puzzle invokes it to collect the model for the component. Return a plain object from `data()`; Puzzle persists the object, makes it available to the template, and re-runs `data()` whenever subscribed records change. You can still call `this.setData()` elsewhere (e.g. inside event handlers) for incremental updates, but `data()` itself should return the definitive model shape.
+When you provide a `data(params, props)` method in the `<script>` export, Puzzle invokes it to collect the model for the component. Return a plain object from `data()`; Puzzle persists the object, makes it available to the template, and re-runs `data()` whenever subscribed records change. You can still call `this.setData()` elsewhere (e.g. inside event handlers) for incremental updates, but `data()` itself should return the definitive model shape.
 
 ---
 
 ## Styles Block
 
-- `<styles>` — in v1, styles are emitted as global CSS, applied as-is. v1 styling is Tailwind-first via utility classes.
-- `<styles scoped>` — **Shipped in v1.27 (D59).** See [[DOC-SPEC]] §29. A bare `scoped` attribute (the only attribute `<styles>` accepts) confines the block to this component's own rendered subtree: the compiler stamps one `data-<scopeId>` attribute on the template root and wraps the verbatim CSS in a native `@scope ([data-<scopeId>]) { … }` rule (it never parses your selectors). A valued/dynamic `scoped`, or any other attribute, is a compile error. Rules still cascade into nested child components like ordinary CSS; a `<styles>` block without the attribute emits global CSS, byte-identically to before.
+- `<style>` — in v1, styles are emitted as global CSS, applied as-is. v1 styling is Tailwind-first via utility classes.
+- `<style scoped>` — **Shipped in v1.27 (D59).** See [[DOC-SPEC]] §29. A bare `scoped` attribute (the only attribute `<style>` accepts) confines the block to this component's own rendered subtree: the compiler stamps one `data-<scopeId>` attribute on the template root and wraps the verbatim CSS in a native `@scope ([data-<scopeId>]) { … }` rule (it never parses your selectors). A valued/dynamic `scoped`, or any other attribute, is a compile error. Rules still cascade into nested child components like ordinary CSS; a `<style>` block without the attribute emits global CSS, byte-identically to before.
   ```html
   <puzzle-view class="card"><h2>{ title }</h2></puzzle-view>
-  <styles scoped> h2 { color: rebeccapurple; } </styles>
+  <style scoped> h2 { color: rebeccapurple; } </style>
   ```
-- At most one `<styles>` block per file; combine styles into one block.
+- At most one `<style>` block per file; combine styles into one block.
 
 ---
 
@@ -277,7 +277,7 @@ When you provide a `data(params, props)` method in the `<scripts>` export, Puzzl
   {/for}
 </puzzle-skeleton>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import PostCard from '../components/PostCard.pzl';
 
@@ -288,7 +288,7 @@ export default class PostList extends PuzzleView {
     return { posts };
   }
 }
-</scripts>
+</script>
 ```
 
 #### Rules
@@ -337,7 +337,7 @@ There is **no error section** (settled won't-build, v1.20/D52): a declarative er
   <div class="bg-skeleton h-8 w-1/2"></div>
 </puzzle-skeleton>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class PostDetail extends PuzzleView {
@@ -353,7 +353,7 @@ export default class PostDetail extends PuzzleView {
     }
   }
 }
-</scripts>
+</script>
 ```
 
 Because `data()` **resolves** (with `{ error }`) instead of rejecting, its result commits normally and the skeleton swaps out into the error branch. This is the sanctioned pattern — see [[DOC-SPEC]] §16.
@@ -367,7 +367,7 @@ Because `data()` **resolves** (with `{ error }`) instead of rejecting, its resul
   <button @click={ submitForm }>Save</button>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class FormComponent extends PuzzleView {
@@ -391,7 +391,7 @@ export default class FormComponent extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>
 ```
 
 ## Related Documentation

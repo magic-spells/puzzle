@@ -16,10 +16,10 @@ func TestForItemDollarIdentifier(t *testing.T) {
   <ul>{#for $foo in items}<li>{ $foo }</li>{/for}</ul>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { items: [] }; } }
-</scripts>
+</script>
 `)
 	// Collection resolves against the model; the lambda param is the intact
 	// identifier (not split on any character).
@@ -49,10 +49,10 @@ func TestForAllowedIdentifiersCompile(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := compileSrc(t, `<puzzle-view>{#for `+tc.item+` in items, `+tc.counter+`}<div>{ `+tc.item+` }</div>{/for}</puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { items: [] }; } }
-</scripts>`)
+</script>`)
 			if !strings.Contains(got, ".map(("+tc.item+", "+tc.counter+") =>") {
 				t.Errorf("allowed loop identifiers did not compile intact:\n%s", got)
 			}

@@ -9,7 +9,7 @@
   <div class="animate-pulse">{#svg 'icons/heart.svg'}</div>
 </puzzle-skeleton>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class InlineSvg extends PuzzleView {
@@ -17,4 +17,4 @@ export default class InlineSvg extends PuzzleView {
     return { items: [] };
   }
 }
-</scripts>
+</script>

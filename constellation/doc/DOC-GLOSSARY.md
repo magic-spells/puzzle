@@ -85,7 +85,7 @@ snapshot, data/local layers, lifecycle, refs, memoization, and render hooks.
 
 **router outlet** — Capitalized bare `<Slot/>`, where a routed child mounts.
 
-**scoped styles** — A `<styles scoped>` block wrapped in native `@scope` and
+**scoped styles** — A `<style scoped>` block wrapped in native `@scope` and
 anchored by a stable compiler-generated root attribute.
 
 **skeleton** — Optional first-load placeholder declared with

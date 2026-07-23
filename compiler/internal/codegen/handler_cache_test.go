@@ -14,7 +14,7 @@ import (
 
 // viewSrc wraps a template body + a scripts block into a compilable view .pzl.
 func viewSrc(body, scripts string) string {
-	return "<puzzle-view>\n" + body + "\n</puzzle-view>\n\n<scripts>\n" + scripts + "\n</scripts>\n"
+	return "<puzzle-view>\n" + body + "\n</puzzle-view>\n\n<script>\n" + scripts + "\n</script>\n"
 }
 
 const plainScripts = "import { PuzzleView } from '@magic-spells/puzzle';\n" +

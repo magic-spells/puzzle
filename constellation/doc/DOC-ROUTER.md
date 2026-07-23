@@ -96,7 +96,7 @@ Navigating to `/user/42` matches the `user` route with `params.id === '42'`. Par
 `:param` segments arrive as the first argument to the view's `data()` method:
 
 ```js
-// views/User.pzl <scripts>
+// views/User.pzl <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class UserView extends PuzzleView {
@@ -168,7 +168,7 @@ The real layout from the todos app ([examples/todos/app/layouts/Default.pzl](../
   </footer>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class DefaultLayout extends PuzzleView {
@@ -178,7 +178,7 @@ export default class DefaultLayout extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>
 ```
 
 Layouts are full `PuzzleView` components — they can have `data()`, `events`, and lifecycle hooks like any other component. Different routes can use different layouts (e.g. `DefaultLayout` for pages, `AuthLayout` for login).

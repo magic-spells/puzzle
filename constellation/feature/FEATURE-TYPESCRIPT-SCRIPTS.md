@@ -21,7 +21,7 @@ zero special tooling" promise of [[DECISION-D03-SCRIPTS-REAL-JS]]. Driven by
 
 ## Intent
 
-A component author writes `<scripts lang="ts">` and uses TypeScript — interfaces,
+A component author writes `<script lang="ts">` and uses TypeScript — interfaces,
 type annotations, `getData<T>()` — with the build stripping types transpile-only
 (like Vite). No type-checking in the build; `.pzl` stays the only extension.
 
@@ -29,7 +29,7 @@ type annotations, `getData<T>()` — with the build stripping types transpile-on
 
 **In (shipped):**
 - **Parser** ([[COMPONENT-TEMPLATE-PARSER]], `sections.go`): the section splitter
-  reads the `lang` attribute on `<scripts>` into `Sections.ScriptsLang`
+  reads the `lang` attribute on `<script>` into `Sections.ScriptsLang`
   ("" | "ts"). Absent / `lang="js"` → "" (JS). Unknown value, empty value,
   dynamic `lang={…}`, or a second attribute → positioned compile error with a
   did-you-mean. Body stays opaque.
@@ -47,7 +47,7 @@ type annotations, `getData<T>()` — with the build stripping types transpile-on
 - **CLI:** `puzzle init --typescript` (D32 surface) writes a strict/noEmit
   `tsconfig.json` (via `scaffold.WriteTypeScriptConfig`); refuses to clobber an
   existing one. Default stays JS.
-- **Editor:** the Sublime grammar embeds `source.ts` for `<scripts lang="ts">`
+- **Editor:** the Sublime grammar embeds `source.ts` for `<script lang="ts">`
   (the `lang="ts"` rule precedes the plain-JS rule).
 - **Example:** `examples/typed-todos` — typed model (`todo.ts` + `TodoRecord`),
   typed routes, and `lang="ts"` `.pzl` files (typed `data()`/props/events).

@@ -1,6 +1,6 @@
 /**
  * Ambient module shim so `import Home from './views/Home.pzl'` type-checks in a
- * Puzzle app authored with `<scripts lang="ts">`. Each `.pzl` file compiles to a
+ * Puzzle app authored with `<script lang="ts">`. Each `.pzl` file compiles to a
  * module whose default export is a PuzzleView subclass.
  *
  * Reference it from your app's tsconfig.json — either add this file to the

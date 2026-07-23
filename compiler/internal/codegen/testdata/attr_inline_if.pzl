@@ -2,7 +2,7 @@
   <span class="badge {#if active}on{:else}off{/if}">Status</span>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class AttrInlineIf extends PuzzleView {
@@ -10,4 +10,4 @@ export default class AttrInlineIf extends PuzzleView {
     return { active: false };
   }
 }
-</scripts>
+</script>

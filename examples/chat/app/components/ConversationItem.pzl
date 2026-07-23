@@ -19,7 +19,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A sidebar row. `select` and `delete` are callback props (D16): the parent
@@ -56,4 +56,4 @@ export default class ConversationItem extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

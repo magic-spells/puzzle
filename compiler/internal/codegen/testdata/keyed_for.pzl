@@ -6,7 +6,7 @@
   </ul>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class KeyedFor extends PuzzleView {
@@ -14,4 +14,4 @@ export default class KeyedFor extends PuzzleView {
     return { items: this.ctx.store.findMany('item') };
   }
 }
-</scripts>
+</script>

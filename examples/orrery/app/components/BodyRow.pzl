@@ -58,7 +58,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A selectable, editable record row. `select` is a callback prop (D16): the
@@ -98,4 +98,4 @@ export default class BodyRow extends PuzzleView {
     remove: (event) => { this.props.body.destroy(); },
   };
 }
-</scripts>
+</script>

@@ -1,5 +1,5 @@
 // Package codegen turns a parsed .pzl template (constellation/doc/DOC-COMPILER-DESIGN.md §c) into
-// the generated JS module — the user's <scripts> emitted VERBATIM plus an
+// the generated JS module — the user's <script> emitted VERBATIM plus an
 // injected runtime import and an appended `Name.prototype.render = function
 // () {…}` (constellation/doc/DOC-COMPILER-DESIGN.md §d, constellation/doc/DOC-APP-ANATOMY.md §1). The correctness
 // anchor is the Phase 1 hand-written fixture
@@ -38,7 +38,7 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/parser"
 )
 
-// ScopeID derives the stable per-file scope id for <styles scoped> (v1.27, D59):
+// ScopeID derives the stable per-file scope id for <style scoped> (v1.27, D59):
 // `pzl-` + 8 lowercase hex chars of FNV-1a-32 over the compiler-relative,
 // forward-slash-normalized source path. It is the SINGLE source of the id — both
 // the codegen root stamp (data-<id>) and the esbuild plugin's @scope CSS wrapper
@@ -106,7 +106,7 @@ type Result struct {
 	JS           string
 	InlinedFiles []string
 	// Warnings are non-fatal codegen diagnostics (v0.1 hardening): a template
-	// expression that references a <scripts> import, which resolveExpr rewrites to
+	// expression that references a <script> import, which resolveExpr rewrites to
 	// __d.<name> → undefined at render (SPEC §6). Out-of-band — the generated JS is
 	// unaffected, so goldens never move. The plugin/pzlc print them to stderr.
 	Warnings []Warning
@@ -151,7 +151,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if err != nil {
 		return "", err
 	}
-	// <scripts> is optional (DOC-SPEC.md §4). With no user class to bind the
+	// <script> is optional (DOC-SPEC.md §4). With no user class to bind the
 	// render tail to, synthesize a minimal module — the runtime import plus an
 	// empty PuzzleView subclass named from the filename — and drive the rest of
 	// codegen from it exactly as if the user had written it.
@@ -178,7 +178,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		return "", err
 	}
 
-	// Scoped styles (v1.27, D59): a bare `scoped` on <styles> stamps ONE static
+	// Scoped styles (v1.27, D59): a bare `scoped` on <style> stamps ONE static
 	// data-<scopeId> attribute on the template ROOT vnode so the plugin's
 	// @scope ([data-<scopeId>]) { … } CSS matches this component's subtree only.
 	// Root-only — @scope's cascade covers descendants (no Vue-style per-node
@@ -230,9 +230,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		}
 	}
 
-	// <scripts>-import collision warnings (out-of-band; goldens unaffected). Scan
+	// <script>-import collision warnings (out-of-band; goldens unaffected). Scan
 	// the emitted render expressions for `__d.<name>` reads whose <name> is an
-	// import binding in <scripts> — those resolve to undefined at render (SPEC §6).
+	// import binding in <script> — those resolve to undefined at render (SPEC §6).
 	if imports := scriptImportBindings(sec.Scripts); len(imports) > 0 {
 		seen := map[string]bool{}
 		var hit []string
@@ -244,7 +244,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 			*warnings = append(*warnings, Warning{
 				File: opts.Filename, Line: root.Pos.Line, Col: root.Pos.Col,
 				Message: fmt.Sprintf(
-					"template expression references %q, which is imported in <scripts> — template expressions can only read data() fields; %q will be undefined",
+					"template expression references %q, which is imported in <script> — template expressions can only read data() fields; %q will be undefined",
 					name, name),
 			})
 		}
@@ -256,7 +256,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	}
 
 	var b strings.Builder
-	// 1. user's <scripts>, byte-for-byte verbatim (or the synthesized module for
+	// 1. user's <script>, byte-for-byte verbatim (or the synthesized module for
 	//    a scriptless .pzl).
 	b.WriteString(scripts)
 	// 2. injected runtime import (after the scripts, before the render tail —

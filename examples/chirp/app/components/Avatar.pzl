@@ -11,7 +11,7 @@
     style="background:{ bg }">{ icon }</span>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Fixed size → utility map. Kept module-level so it isn't rebuilt each data().
@@ -33,4 +33,4 @@ export default class Avatar extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

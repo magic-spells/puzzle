@@ -30,7 +30,7 @@
   </section>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Avatar from './Avatar.pzl';
 import FollowButton from './FollowButton.pzl';
@@ -46,4 +46,4 @@ export default class WhoToFollow extends PuzzleView {
     return { users };
   }
 }
-</scripts>
+</script>

@@ -16,7 +16,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Counter from '../components/Counter.pzl';
 
@@ -29,4 +29,4 @@ export default class Home extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

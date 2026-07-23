@@ -4,5 +4,5 @@
        (D30), and this one deliberately renders nothing — it is the
        closed-panel state. Selecting a row navigates to the :id sibling, which
        swaps Detail.pzl into the same <Slot/> and plays its slide-in. No
-       <scripts> needed: the compiler synthesizes an empty PuzzleView subclass. -->
+       <script> needed: the compiler synthesizes an empty PuzzleView subclass. -->
 </puzzle-view>

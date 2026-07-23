@@ -85,7 +85,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import TodoItem from '../components/TodoItem.pzl';
 
@@ -204,5 +204,5 @@ export default class TodoHome extends PuzzleView {
       : 'Puzzle Todos';
   }
 }
-</scripts>
+</script>
 

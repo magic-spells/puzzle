@@ -119,7 +119,7 @@
   {/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import PhotoGallery from '../components/PhotoGallery.pzl';
 import Calendar from '../components/Calendar.pzl';
@@ -220,4 +220,4 @@ export default class ListingView extends PuzzleView {
     out: { from: { opacity: 1, transform: 'translateY(0)' },    to: { opacity: 0, transform: 'translateY(-8px)' }, duration: 160, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

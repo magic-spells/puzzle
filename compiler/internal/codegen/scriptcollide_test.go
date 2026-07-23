@@ -7,7 +7,7 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/parser"
 )
 
-// scriptcollide_test.go — the <scripts>-import collision warning. A template
+// scriptcollide_test.go — the <script>-import collision warning. A template
 // expression referencing an import resolves to __d.<name> (undefined at render);
 // the compile surfaces a Warning while the generated JS stays unchanged.
 
@@ -36,17 +36,17 @@ func compileResult(t *testing.T, src string) *Result {
 func TestScriptImportCollisionWarns(t *testing.T) {
 	res := compileResult(t, `<puzzle-view><span>{ count > MAX }</span></puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { MAX } from './limits.js';
 export default class T extends PuzzleView { data() { return { count: 0 }; } }
-</scripts>
+</script>
 `)
 	w := warningFor(res.Warnings, "MAX")
 	if w == nil {
 		t.Fatalf("expected a warning naming MAX, got %#v", res.Warnings)
 	}
-	if !strings.Contains(w.Message, "imported in <scripts>") || !strings.Contains(w.Message, "will be undefined") {
+	if !strings.Contains(w.Message, "imported in <script>") || !strings.Contains(w.Message, "will be undefined") {
 		t.Errorf("warning message missing expected text: %q", w.Message)
 	}
 	if w.File != "T.pzl" || w.Line < 1 {
@@ -59,11 +59,11 @@ export default class T extends PuzzleView { data() { return { count: 0 }; } }
 	// Once per file+name — a second use in the same file does not double-warn.
 	res2 := compileResult(t, `<puzzle-view><span>{ MAX }</span><span>{ MAX + 1 }</span></puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { MAX } from './limits.js';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	n := 0
 	for _, w := range res2.Warnings {
@@ -81,10 +81,10 @@ func TestNoCollisionForDataField(t *testing.T) {
 	// but never referenced in the template — no warning either.
 	res := compileResult(t, `<puzzle-view><span>{ count }</span></puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { count: 0 }; } }
-</scripts>
+</script>
 `)
 	if len(res.Warnings) != 0 {
 		t.Errorf("expected no warnings for a plain data field, got %#v", res.Warnings)
@@ -96,11 +96,11 @@ func TestNoCollisionInsideStringLiteral(t *testing.T) {
 	// is never emitted as __d.MAX, so no warning (the string-aware scan holds).
 	res := compileResult(t, `<puzzle-view><span>{ 'MAX is the cap' }</span><b>MAX</b></puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { MAX } from './limits.js';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if warningFor(res.Warnings, "MAX") != nil {
 		t.Errorf("MAX inside a string/static text must not warn, got %#v", res.Warnings)
@@ -168,12 +168,12 @@ func TestScriptImportBindings(t *testing.T) {
 func TestCollisionForDefaultAndRenamedImport(t *testing.T) {
 	res := compileResult(t, `<puzzle-view><span>{ Helper.run() }{ bar }</span></puzzle-view>
 
-<scripts>
+<script>
 import Helper from './helper.js';
 import { foo as bar } from './mod.js';
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if warningFor(res.Warnings, "Helper") == nil {
 		t.Errorf("expected a warning for the default import Helper: %#v", res.Warnings)
@@ -186,11 +186,11 @@ export default class T extends PuzzleView {}
 	// data field, so it must not warn.
 	res2 := compileResult(t, `<puzzle-view><span>{ foo }</span></puzzle-view>
 
-<scripts>
+<script>
 import { foo as bar } from './mod.js';
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { foo: 1 }; } }
-</scripts>
+</script>
 `)
 	if warningFor(res2.Warnings, "foo") != nil {
 		t.Errorf("the exported name foo (renamed to bar) must not warn: %#v", res2.Warnings)

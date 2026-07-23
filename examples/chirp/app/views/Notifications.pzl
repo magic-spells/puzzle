@@ -24,7 +24,7 @@
   {/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import NotificationRow from '../components/NotificationRow.pzl';
 
@@ -54,4 +54,4 @@ export default class NotificationsView extends PuzzleView {
     out: { from: { opacity: 1, transform: 'translateY(0)' },   to: { opacity: 0, transform: 'translateY(-6px)' }, duration: 150, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

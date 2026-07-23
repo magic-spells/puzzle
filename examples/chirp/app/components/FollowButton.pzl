@@ -15,7 +15,7 @@
   </button>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class FollowButton extends PuzzleView {
@@ -35,4 +35,4 @@ export default class FollowButton extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>

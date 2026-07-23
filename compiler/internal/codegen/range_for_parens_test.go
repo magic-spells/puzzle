@@ -19,12 +19,12 @@ func TestRangeForParenthesizesBounds(t *testing.T) {
   {/for}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {
   data() { return { start: 0, end: 5 }; }
 }
-</scripts>
+</script>
 `)
 	// length: (end) - (start + 1) + 1
 	if !strings.Contains(got, "Array.from({ length: (__d.end) - (__d.start + 1) + 1 }") {

@@ -84,7 +84,7 @@ func TestParseSvgHeaderErrors(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<scripts></scripts>"
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
 			_, err := Parse([]byte(src), "test.pzl")
 			if err == nil {
 				t.Fatalf("expected error, got none")
@@ -98,7 +98,7 @@ func TestParseSvgHeaderErrors(t *testing.T) {
 
 // TestParseUnknownBlockMentionsSvg confirms {#svg} joins the unknown-block hint.
 func TestParseUnknownBlockMentionsSvg(t *testing.T) {
-	src := "<puzzle-view>{#nope}x{/nope}</puzzle-view>\n<scripts></scripts>"
+	src := "<puzzle-view>{#nope}x{/nope}</puzzle-view>\n<script></script>"
 	_, err := Parse([]byte(src), "test.pzl")
 	if err == nil {
 		t.Fatalf("expected error, got none")
@@ -111,7 +111,7 @@ func TestParseUnknownBlockMentionsSvg(t *testing.T) {
 // TestParseSvgInsideIsland confirms {#svg} inside an island subtree parses (it is
 // not a component/slot, so island validation lets it through).
 func TestParseSvgInsideIsland(t *testing.T) {
-	src := `<puzzle-view><div island>{#svg 'icons/heart.svg'}</div></puzzle-view>` + "\n<scripts></scripts>"
+	src := `<puzzle-view><div island>{#svg 'icons/heart.svg'}</div></puzzle-view>` + "\n<script></script>"
 	root, err := Parse([]byte(src), "test.pzl")
 	if err != nil {
 		t.Fatalf("unexpected parse error: %v", err)

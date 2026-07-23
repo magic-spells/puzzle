@@ -19,7 +19,7 @@
   {/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import ListingCard from '@/components/ListingCard.pzl';
 
@@ -36,4 +36,4 @@ export default class Wishlist extends PuzzleView {
     out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 120, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

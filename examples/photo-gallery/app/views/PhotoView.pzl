@@ -37,7 +37,7 @@
     <button type="button" class="photo-close" aria-label="Close" @click={ close }>✕</button>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class PhotoView extends PuzzleView {
@@ -90,4 +90,4 @@ export default class PhotoView extends PuzzleView {
     out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 180, easing: 'ease-in' },
   };
 }
-</scripts>
+</script>

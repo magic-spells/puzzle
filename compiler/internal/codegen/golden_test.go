@@ -110,10 +110,10 @@ func TestFormatterHyphenatedName(t *testing.T) {
   <p>{ x | foo-bar }</p>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { x: '' }; } }
-</scripts>
+</script>
 `)
 	if !strings.Contains(got, `(__f["foo-bar"] || __f.__missing("foo-bar"))`) {
 		t.Errorf("hyphenated formatter must emit bracket access, got:\n%s", got)
@@ -133,7 +133,7 @@ export default class T extends PuzzleView { data() { return { x: '' }; } }
 //
 // Full-line-comment stripping is required because the fixture is hand-annotated
 // (editorial banners in render(), and a differently-worded setFilter comment in
-// <scripts>); the compiler emits neither. It is symmetric (applied to both
+// <script>); the compiler emits neither. It is symmetric (applied to both
 // sides) and only drops lines whose first non-space token is `//`, so URLs and
 // `//` inside strings are untouched.
 func normalizeFixture(s string) string {
@@ -141,7 +141,7 @@ func normalizeFixture(s string) string {
 	s = strings.ReplaceAll(s, "'../../../client-runtime/views/ViewNode.js'", "'@magic-spells/puzzle'")
 	// Cross-component import: the hand fixture points at the sibling COMPILED
 	// module (runnable JS the fixture lane imports directly); the compiler emits
-	// the <scripts> specifier verbatim ('../components/TodoItem.pzl'). Same
+	// the <script> specifier verbatim ('../components/TodoItem.pzl'). Same
 	// import, different specifier — map the fixture form to the compiler form so
 	// the golden compare stays structural (symmetric with the runtime mapping).
 	s = strings.ReplaceAll(s, "'./TodoItem.compiled.js'", "'../components/TodoItem.pzl'")

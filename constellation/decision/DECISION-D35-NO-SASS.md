@@ -26,6 +26,6 @@ The `{ name: 'sass', input: ... }` roadmap example is removed; `styles.use` stay
 - Keeping Sass as a deferred/future pipeline — the historical preprocessor need is gone with native CSS nesting; a second pipeline doubles the support surface for a shrinking audience.
 
 ## Consequences
-Supersedes the "Sass … deferred" phrasing in **D12** (and the "deferred Sass shape" asides in **D26**/**D3**): those entries stand as append-only history, but the status they recorded is now settled here. Scoped styles (`<styles scoped>`) are untouched — they remain genuinely deferred.
+Supersedes the "Sass … deferred" phrasing in **D12** (and the "deferred Sass shape" asides in **D26**/**D3**): those entries stand as append-only history, but the status they recorded is now settled here. Scoped styles (`<style scoped>`) are untouched — they remain genuinely deferred.
 
 Non-breaking: no config that ever validated stops validating; a Sass entry was already a parse-and-reject error and stays one.

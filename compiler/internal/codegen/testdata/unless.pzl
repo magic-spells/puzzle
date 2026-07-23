@@ -13,7 +13,7 @@
   {/unless}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Unless extends PuzzleView {
@@ -21,4 +21,4 @@ export default class Unless extends PuzzleView {
     return { user: { verified: false }, items: [], loading: false };
   }
 }
-</scripts>
+</script>

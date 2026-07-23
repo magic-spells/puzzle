@@ -4,7 +4,7 @@
   </Card>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Card from '../components/Card.pzl';
 
@@ -17,4 +17,4 @@ export default class UsesComponent extends PuzzleView {
     save: (payload) => {},
   };
 }
-</scripts>
+</script>

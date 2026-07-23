@@ -22,10 +22,10 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The sibling child. Defines meta.title in routes.js, so it wins the static-build
 // title walk at its own /guide/templates/ path.
 export default class GuideTemplates extends PuzzleView {}
-</scripts>
+</script>

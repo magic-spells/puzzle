@@ -141,7 +141,7 @@ func TestClassNameFromFilename(t *testing.T) {
 	}
 }
 
-// TestCompileScriptless proves <scripts> is optional: a template-only .pzl
+// TestCompileScriptless proves <script> is optional: a template-only .pzl
 // compiles to a synthesized PuzzleView subclass named from the filename, in both
 // view and component modes, and the emitted module is valid JS (node --check).
 func TestCompileScriptless(t *testing.T) {
@@ -222,43 +222,43 @@ func TestCompileErrors(t *testing.T) {
 	}{
 		{
 			name: "component with attrs on puzzle-view",
-			src:  "<puzzle-view class=\"x\"><span>hi</span></puzzle-view>\n<scripts>\nexport default class C extends PuzzleView {}\n</scripts>",
+			src:  "<puzzle-view class=\"x\"><span>hi</span></puzzle-view>\n<script>\nexport default class C extends PuzzleView {}\n</script>",
 			mode: ModeComponent,
 			want: "components render inline",
 		},
 		{
 			name: "component with two roots",
-			src:  "<puzzle-view><span>a</span><span>b</span></puzzle-view>\n<scripts>\nexport default class C extends PuzzleView {}\n</scripts>",
+			src:  "<puzzle-view><span>a</span><span>b</span></puzzle-view>\n<script>\nexport default class C extends PuzzleView {}\n</script>",
 			mode: ModeComponent,
 			want: "single root element",
 		},
 		{
 			name: "bad event handler",
-			src:  "<puzzle-view class=\"x\"><button @click={ a + b }>x</button></puzzle-view>\n<scripts>\nexport default class C extends PuzzleView {}\n</scripts>",
+			src:  "<puzzle-view class=\"x\"><button @click={ a + b }>x</button></puzzle-view>\n<script>\nexport default class C extends PuzzleView {}\n</script>",
 			mode: ModeView,
 			want: "single call expression",
 		},
 		{
 			name: "event modifiers on component callback prop",
-			src:  "<puzzle-view class=\"x\"><Child @select:once={ onSelect } /></puzzle-view>\n<scripts>\nexport default class C extends PuzzleView {}\n</scripts>",
+			src:  "<puzzle-view class=\"x\"><Child @select:once={ onSelect } /></puzzle-view>\n<script>\nexport default class C extends PuzzleView {}\n</script>",
 			mode: ModeView,
 			want: "event modifiers are not allowed on component callback props",
 		},
 		{
 			name: "component skeleton with two roots",
-			src:  "<puzzle-view><span>a</span></puzzle-view>\n<puzzle-skeleton><span>x</span><span>y</span></puzzle-skeleton>\n<scripts>\nexport default class C extends PuzzleView {}\n</scripts>",
+			src:  "<puzzle-view><span>a</span></puzzle-view>\n<puzzle-skeleton><span>x</span><span>y</span></puzzle-skeleton>\n<script>\nexport default class C extends PuzzleView {}\n</script>",
 			mode: ModeComponent,
 			want: "a component skeleton must have a single root element",
 		},
 		{
 			name: "component skeleton with empty body",
-			src:  "<puzzle-view><span>a</span></puzzle-view>\n<puzzle-skeleton></puzzle-skeleton>\n<scripts>\nexport default class C extends PuzzleView {}\n</scripts>",
+			src:  "<puzzle-view><span>a</span></puzzle-view>\n<puzzle-skeleton></puzzle-skeleton>\n<script>\nexport default class C extends PuzzleView {}\n</script>",
 			mode: ModeComponent,
 			want: "a component skeleton must have a single root element",
 		},
 		{
 			name: "component skeleton with component root",
-			src:  "<puzzle-view><span>a</span></puzzle-view>\n<puzzle-skeleton><Spinner /></puzzle-skeleton>\n<scripts>\nexport default class C extends PuzzleView {}\n</scripts>",
+			src:  "<puzzle-view><span>a</span></puzzle-view>\n<puzzle-skeleton><Spinner /></puzzle-skeleton>\n<script>\nexport default class C extends PuzzleView {}\n</script>",
 			mode: ModeComponent,
 			want: "a component skeleton's root must be a plain element",
 		},

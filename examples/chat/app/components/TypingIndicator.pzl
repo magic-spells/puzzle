@@ -9,7 +9,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Three bouncing dots, shown while the assistant is "thinking" — i.e. streaming
@@ -23,9 +23,9 @@ export default class TypingIndicator extends PuzzleView {
     in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 160 },
   };
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .pz-dot {
   width: 7px;
   height: 7px;
@@ -42,4 +42,4 @@ export default class TypingIndicator extends PuzzleView {
 @media (prefers-reduced-motion: reduce) {
   .pz-dot { animation: none; }
 }
-</styles>
+</style>

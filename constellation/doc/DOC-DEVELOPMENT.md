@@ -84,7 +84,7 @@ supported. See [[FLOW-BUILD]] for build guarantees and failure behavior.
 
 1. Read the connected Constellation cards before changing a covered area and
    update them in the same work. Connect load-bearing source through FILE cards.
-2. Treat `<scripts>` as real JavaScript (D3). TypeScript mode transpiles syntax
+2. Treat `<script>` as real JavaScript (D3). TypeScript mode transpiles syntax
    but does not type-check component bodies. To prove a block parses, extract it
    to a `.mjs` file and run `node --check` on it.
 3. Define `events` as arrow-function class fields so handlers retain the

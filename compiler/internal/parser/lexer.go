@@ -6,7 +6,7 @@ import (
 )
 
 // lexer.go is the HTML-aware template lexer (constellation/doc/DOC-COMPILER-DESIGN.md §c). It
-// tokenizes the <puzzle-view> CONTENT only — <scripts>/<styles> bodies are
+// tokenizes the <puzzle-view> CONTENT only — <script>/<style> bodies are
 // never scanned for template syntax (that split happens in sections.go).
 //
 // The one salvage from the prototype is the idea of line/col bookkeeping; the

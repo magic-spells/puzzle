@@ -136,7 +136,7 @@ func Build(root string, opts Options) error {
 
 	// Styles → one global stylesheet (index.html links /styles.css): the
 	// Tailwind layer (when puzzle.config.js declares it) followed by the
-	// collected <styles> blocks. A declared-but-unrunnable Tailwind fails the
+	// collected <style> blocks. A declared-but-unrunnable Tailwind fails the
 	// build — the pipeline is never silently skipped. Written into staging, not
 	// dist/, so a Tailwind failure above never touches the last good build.
 	tailwindCSS, err := runTailwind(absRoot, cfg, opts)

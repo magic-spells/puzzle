@@ -63,7 +63,7 @@
   </article>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Avatar from './Avatar.pzl';
 
@@ -164,4 +164,4 @@ export default class ChirpCard extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

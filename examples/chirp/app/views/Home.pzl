@@ -71,7 +71,7 @@
   </div>
 </puzzle-skeleton>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import ChirpCard from '../components/ChirpCard.pzl';
 import ComposeBox from '../components/ComposeBox.pzl';
@@ -125,4 +125,4 @@ export default class HomeView extends PuzzleView {
     out: { from: { opacity: 1, transform: 'translateY(0)' },   to: { opacity: 0, transform: 'translateY(-6px)' }, duration: 150, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

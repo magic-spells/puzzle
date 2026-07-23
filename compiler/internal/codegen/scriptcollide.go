@@ -2,11 +2,11 @@ package codegen
 
 import "github.com/magic-spells/puzzle/compiler/internal/parser"
 
-// scriptcollide.go — the <scripts>-import collision WARNING (v0.1 hardening).
+// scriptcollide.go — the <script>-import collision WARNING (v0.1 hardening).
 //
 // A template expression can only read data() fields: resolveExpr rewrites every
 // non-scope, non-global, non-keyword identifier ROOT to `__d.<name>` (expr.go).
-// So a name that is actually an IMPORT in <scripts> — `{ count > MAX }` with MAX
+// So a name that is actually an IMPORT in <script> — `{ count > MAX }` with MAX
 // imported — silently becomes `__d.MAX` → undefined at render, with no
 // diagnostic. This pass detects that collision and emits a Warning (out-of-band:
 // the generated JS is untouched, so goldens never move).
@@ -19,9 +19,9 @@ import "github.com/magic-spells/puzzle/compiler/internal/parser"
 //     are far less likely to shadow a data field, so they are the strong signal.
 //   - both scans are string/comment/regex-aware via the shared parser.LexSkip
 //     scanner, so an identifier inside a string literal or comment is never
-//     matched (the Go compiler still never truly parses the opaque <scripts>).
+//     matched (the Go compiler still never truly parses the opaque <script>).
 
-// jsTok is one lexical token of the opaque <scripts> body for the import scan:
+// jsTok is one lexical token of the opaque <script> body for the import scan:
 // an identifier run, a single punctuation byte, or an opaque unit (string,
 // template literal, comment, or regex literal — content irrelevant here).
 type jsTok struct {
@@ -58,7 +58,7 @@ func tokenizeJS(s string) []jsTok {
 }
 
 // scriptImportBindings returns the set of LOCAL identifiers bound by top-level
-// `import` statements in the opaque <scripts> body. It covers default, named
+// `import` statements in the opaque <script> body. It covers default, named
 // (honoring `as` renames — the local name is bound, not the imported name),
 // and namespace (`* as ns`) forms; bare side-effect imports bind nothing.
 // Dynamic `import(...)` and `import.meta` are not binding forms and are skipped.

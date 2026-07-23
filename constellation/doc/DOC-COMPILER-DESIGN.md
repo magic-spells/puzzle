@@ -21,12 +21,12 @@ connections:
 # Compiler design
 
 The compiler translates `.pzl` component modules into ordinary JavaScript
-modules for esbuild. Its central constraint is D3: user `<scripts>` is real
+modules for esbuild. Its central constraint is D3: user `<script>` is real
 JavaScript and the Go compiler never rewrites its semantics.
 
 ## Section extraction
 
-A file contains one `<puzzle-view>`, optional `<scripts>` and `<styles>`,
+A file contains one `<puzzle-view>`, optional `<script>` and `<style>`,
 and an optional `<puzzle-skeleton>`. The section scanner is aware of quoted
 strings, comments, regular expressions, and template literals so tag-like text
 inside JavaScript does not end a section early.

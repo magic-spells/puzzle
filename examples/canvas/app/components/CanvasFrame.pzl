@@ -22,7 +22,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import CanvasShape from './CanvasShape.pzl';
 
@@ -52,4 +52,4 @@ export default class CanvasFrame extends PuzzleView {
     }
   };
 }
-</scripts>
+</script>

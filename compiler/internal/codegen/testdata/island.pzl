@@ -2,7 +2,7 @@
   <div contenteditable="true" island class={ blockClass } @keydown:backspace={ onBackspace } @keydown:delete={ onDelete } @input={ syncText(event) }>{ block.text }</div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Editor extends PuzzleView {
@@ -15,4 +15,4 @@ export default class Editor extends PuzzleView {
     syncText: (event) => {},
   };
 }
-</scripts>
+</script>

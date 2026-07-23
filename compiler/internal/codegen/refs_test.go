@@ -16,10 +16,10 @@ func TestRefEmission(t *testing.T) {
   <canvas ref="chart"></canvas>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if !strings.Contains(got, `ref: this.__ref("chart")`) {
 		t.Errorf("ref should emit `ref: this.__ref(\"chart\")`\n%s", got)
@@ -38,10 +38,10 @@ func TestRefWithIsland(t *testing.T) {
   <div ref="grid" island><span>seed</span></div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if !strings.Contains(got, `ref: this.__ref("grid")`) {
 		t.Errorf("ref emission missing\n%s", got)
@@ -58,10 +58,10 @@ func TestRefWithDynamicAttrsAndEvents(t *testing.T) {
   <div ref="box" class={ cls } @click={ onClick }></div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if !strings.Contains(got, `ref: this.__ref("box")`) {
 		t.Errorf("ref emission missing\n%s", got)
@@ -81,10 +81,10 @@ func TestRefEscaping(t *testing.T) {
   <div ref="$el"></div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if !strings.Contains(got, `ref: this.__ref("$el")`) {
 		t.Errorf("ref name should emit verbatim as a double-quoted literal\n%s", got)
@@ -98,10 +98,10 @@ func TestRefFreeByteIdentity(t *testing.T) {
   <div class="card"><h2>{ title }</h2></div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if strings.Contains(got, "__ref") {
 		t.Errorf("a ref-free template must not emit any __ref call\n%s", got)

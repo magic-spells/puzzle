@@ -53,7 +53,7 @@
   </form>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The message input, restyled as a modern AI-chat input card: one bordered
@@ -101,4 +101,4 @@ export default class Composer extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>

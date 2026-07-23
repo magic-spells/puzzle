@@ -50,11 +50,11 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## `.pzl` files and templates
 
-- One `<puzzle-view>` template; optional `<scripts>` and `<styles>`; optional
+- One `<puzzle-view>` template; optional `<script>` and `<style>`; optional
   `<puzzle-skeleton min-duration="…">`.
-- `<scripts>` is real JS. `lang="ts"` enables esbuild transpilation only; the
+- `<script>` is real JS. `lang="ts"` enables esbuild transpilation only; the
   build does not type-check `.pzl` bodies.
-- `<styles scoped>` uses native `@scope`; unscoped styles are global.
+- `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and formatter chains; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.
 - `{#if}` with `{:else if}`/`{:else}`, `{#unless}`, `{#case}` with `{:when}`,

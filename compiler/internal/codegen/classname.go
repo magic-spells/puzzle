@@ -20,7 +20,7 @@ import (
 // `export default class Fake` sitting at column 0 used to win the regex match
 // and emit `Fake.prototype.render = …`, a ReferenceError at module load.
 
-// extractClassName finds the exported class name in the opaque <scripts> body.
+// extractClassName finds the exported class name in the opaque <script> body.
 // It returns a positioned error when there is no `export default class`
 // declaration or when the class is anonymous.
 func extractClassName(scripts, file string, scriptsPos parser.Position) (string, error) {
@@ -28,7 +28,7 @@ func extractClassName(scripts, file string, scriptsPos parser.Position) (string,
 	if !found {
 		return "", &parser.ParseError{
 			File: file, Line: scriptsPos.Line, Col: scriptsPos.Col,
-			Message: "no `export default class <Name> extends PuzzleView` declaration found in <scripts> (SPEC §4, D24)",
+			Message: "no `export default class <Name> extends PuzzleView` declaration found in <script> (SPEC §4, D24)",
 		}
 	}
 	if name == "" {
@@ -166,7 +166,7 @@ func isASCIISpace(b byte) bool {
 }
 
 // classNameFromFilename derives a valid JS class identifier from a .pzl filename
-// for scriptless components (DOC-SPEC.md §4, where <scripts> is optional). The
+// for scriptless components (DOC-SPEC.md §4, where <script> is optional). The
 // base name has its extension stripped, every character that is not a JS
 // identifier char replaced with '_', and a leading '_' prepended when the result
 // would otherwise start with a digit. An empty/degenerate name falls back to a

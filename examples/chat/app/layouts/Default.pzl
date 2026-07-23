@@ -2,7 +2,7 @@
   <Slot/>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A minimal full-viewport dark shell. The Shell view owns the sidebar/pane
@@ -13,4 +13,4 @@ export default class DefaultLayout extends PuzzleView {
     return {};
   }
 }
-</scripts>
+</script>

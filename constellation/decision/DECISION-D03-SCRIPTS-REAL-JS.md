@@ -1,5 +1,5 @@
 ---
-name: "D3 — `<scripts>` blocks are real JavaScript"
+name: "D3 — `<script>` blocks are real JavaScript"
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
@@ -9,7 +9,7 @@ connections:
   - DOC-SPEC
 ---
 
-# D3 — `<scripts>` blocks are real JavaScript
+# D3 — `<script>` blocks are real JavaScript
 
 Settled per [[DOC-SPEC]] §4 — the most consequential decision in the project. `.pzl` scripts must be standard JavaScript, so the Go compiler never parses JS.
 
@@ -24,7 +24,7 @@ Older examples used an object-literal dialect inside class bodies (`events: {...
 - Method-shorthand handlers — rejected because method shorthand would mis-bind `this`; the compiler rejects it at build time (handlers must be arrow functions).
 
 ## Consequences
-- The Go compiler **never parses JavaScript** — `<scripts>` is handed to esbuild untouched.
+- The Go compiler **never parses JavaScript** — `<script>` is handed to esbuild untouched.
 - Editors, ESLint, Prettier, and (future) TypeScript work with zero special tooling.
 - Handlers in `events` must be **arrow functions**: class-field initializers evaluate during construction with `this` bound to the instance, so arrows permanently capture the component. Method shorthand would mis-bind `this`; the compiler rejects it at build time.
 - The base class must never read `this.events` in its constructor (fields initialize after `super()` returns); the runtime reads it lazily at mount time.

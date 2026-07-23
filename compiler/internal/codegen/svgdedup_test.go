@@ -78,10 +78,10 @@ func TestSVGDedupForBodyRootKey(t *testing.T) {
   {#for item in items}{#svg 'icons/heart.svg'}{/for}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Icons extends PuzzleView { data() { return { items: [] }; } }
-</scripts>
+</script>
 `
 	sec, err := parser.SplitSections(src, "Icons.pzl")
 	if err != nil {

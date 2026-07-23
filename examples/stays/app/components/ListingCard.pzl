@@ -53,7 +53,7 @@
   </a>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class ListingCard extends PuzzleView {
@@ -99,4 +99,4 @@ export default class ListingCard extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

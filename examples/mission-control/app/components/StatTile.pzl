@@ -7,7 +7,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A small dashboard stat tile. A component (not a bare <div>) so it can stagger
@@ -24,4 +24,4 @@ export default class StatTile extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

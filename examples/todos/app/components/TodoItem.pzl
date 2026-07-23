@@ -36,7 +36,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class TodoItem extends PuzzleView {
@@ -69,4 +69,4 @@ export default class TodoItem extends PuzzleView {
     out: { from: { height: '65px', opacity: 1, transform: 'scale(1)' }, to: { height: '0px', opacity: 0, transform: 'scale(0.9)' }, duration: 180, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

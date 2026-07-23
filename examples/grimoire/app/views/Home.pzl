@@ -19,7 +19,7 @@
   {/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Home extends PuzzleView {
@@ -71,4 +71,4 @@ export default class Home extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>

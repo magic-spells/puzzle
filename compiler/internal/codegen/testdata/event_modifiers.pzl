@@ -6,7 +6,7 @@
   <button @click={ plain }>Plain</button>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class EventMods extends PuzzleView {
@@ -21,4 +21,4 @@ export default class EventMods extends PuzzleView {
     plain: (event) => {},
   };
 }
-</scripts>
+</script>

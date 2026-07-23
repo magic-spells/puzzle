@@ -1,7 +1,7 @@
 {
   "name": "typed-todos",
   "version": "1.0.0",
-  "description": "Todo app built with Puzzle + TypeScript (<scripts lang=\"ts\">)",
+  "description": "Todo app built with Puzzle + TypeScript (<script lang=\"ts\">)",
   "type": "module",
   "scripts": {
     "dev": "puzzle dev",

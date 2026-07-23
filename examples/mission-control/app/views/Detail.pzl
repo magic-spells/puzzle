@@ -66,7 +66,7 @@
   {/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { fleet, missions, crew, tone } from '../data/catalog.js';
 
@@ -118,4 +118,4 @@ export default class DetailView extends PuzzleView {
     out: { from: { opacity: 1, transform: 'translateX(0)' }, to: { opacity: 0, transform: 'translateX(100%)' }, duration: 220, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

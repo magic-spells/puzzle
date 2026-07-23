@@ -50,7 +50,7 @@ shape is:
 - `puzzle.config.js` is optional. In v1 its only built style pipeline is
   `styles.use: ['tailwindcss']`; [[FLOW-BUILD]] reads it through Node, then
   writes one `dist/styles.css` containing Tailwind first and collected
-  `<styles>` blocks after.
+  `<style>` blocks after.
 
 Build/dev expectations: `puzzle build [dir]` and `puzzle dev [dir]` both treat
 `[dir]/app/app.js` as the entry and write `[dir]/dist`. `puzzle dev` serves

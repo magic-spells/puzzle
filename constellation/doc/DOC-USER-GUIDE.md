@@ -72,7 +72,7 @@ examples/blog/
 # dist/ (build output from `puzzle build`) is generated and git-ignored
 ```
 
-Styling here is done with per-file `<styles>` blocks — no `puzzle.config.js`, no
+Styling here is done with per-file `<style>` blocks — no `puzzle.config.js`, no
 Tailwind. The companion `examples/todos/` shows the Tailwind pipeline instead.
 
 ## File Organization
@@ -97,7 +97,7 @@ import ChirpCard from '@/components/ChirpCard.pzl';   // app/components/ChirpCar
 import User from '@/models/user.js';                   // app/models/user.js
 ```
 
-It works from any depth and in any bundled file — `.pzl` `<scripts>` blocks,
+It works from any depth and in any bundled file — `.pzl` `<script>` blocks,
 `app.js`, `routes.js`, models — which makes it worth reaching for once views
 live in subfolders and relative imports start climbing `../../`. Relative
 imports keep working exactly as before; the two spellings mix freely.
@@ -379,7 +379,7 @@ Views are page components that load and display data. The pattern is simple:
   </section>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Button from '../components/Button.pzl';
 import PostCard from '../components/PostCard.pzl';
@@ -406,9 +406,9 @@ export default class HomeView extends PuzzleView {
     }
   };
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .hero {
   text-align: center;
   padding: 1.5rem 0 2.5rem;
@@ -447,7 +447,7 @@ export default class HomeView extends PuzzleView {
   border: 1px dashed #cbd2d9;
   border-radius: 12px;
 }
-</styles>
+</style>
 ```
 
 `@press` on the `<Button>` tag is a **callback prop** (D16): the compiler hands the child a function on `this.props.press`, and the child's own `@click` handler invokes it. `<PostCard>` renders each summary as a real `<a href>` that the router intercepts for SPA navigation.
@@ -527,7 +527,7 @@ params and props** in `data(params, props)` — the router does not inject a
   {/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import CommentItem from '../components/CommentItem.pzl';
 
@@ -592,9 +592,9 @@ export default class PostDetailView extends PuzzleView {
     }
   };
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .post__tags {
   display: flex;
   flex-wrap: wrap;
@@ -652,7 +652,7 @@ export default class PostDetailView extends PuzzleView {
   border: 1px dashed #cbd2d9;
   border-radius: 12px;
 }
-</styles>
+</style>
 ```
 
 Notes on this view:
@@ -660,7 +660,7 @@ Notes on this view:
 - The comment form uses one-way `value={ … }` bindings plus manual `@input` handlers that `setData` local state, then `createRecord('comment', …)` on submit.
 - `<CommentItem @remove={ removeComment(comment) }>` is a **callback prop** carrying the loop variable; the child reports intent and the **parent owns the mutation** (`comment.destroy()`).
 - The nested conditional shown (`{#if post}…{:else}{#if loaded}…{/if}{/if}`) predates v1.9 — since `{:else if}` chaining shipped (D40) you can flatten it to `{#if post}…{:else if loaded}…{:else}…{/if}`.
-- The `<styles>` block above is abridged and is a standalone walkthrough of the `<styles>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see [[DOC-DECISIONS]] D27), so this section no longer mirrors that file verbatim.
+- The `<style>` block above is abridged and is a standalone walkthrough of the `<style>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see [[DOC-DECISIONS]] D27), so this section no longer mirrors that file verbatim.
 
 ---
 
@@ -679,7 +679,7 @@ names are prefixed (`.btn`, `.post-card`, …) so the global stylesheet stays ti
   </button>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A reusable button. Component-mode files render inline, so <puzzle-view> is
@@ -704,9 +704,9 @@ export default class Button extends PuzzleView {
     }
   };
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .btn {
   display: inline-block;
   padding: 0.6rem 1.25rem;
@@ -741,7 +741,7 @@ export default class Button extends PuzzleView {
 .btn--ghost:hover:not(:disabled) {
   background: #eef2ff;
 }
-</styles>
+</style>
 ```
 
 Key points: the `<button>` (not `<puzzle-view>`) carries the attributes; the label
@@ -769,7 +769,7 @@ called — `this.$emit` does not exist in v1.
   </a>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Renders a single post summary. The whole card is an <a>, so a plain click is
@@ -781,9 +781,9 @@ export default class PostCard extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .post-card {
   display: block;
   padding: 1.25rem 1.5rem;
@@ -792,12 +792,12 @@ export default class PostCard extends PuzzleView {
   border-radius: 12px;
   color: inherit;
 }
-</styles>
+</style>
 ```
 
 `PostCard` takes an **object prop** (`post={ post }`) and renders a real
 `<a href="/posts/{ post.id }">`; the router intercepts the click for SPA
-navigation. The `<styles>` block is abridged here to illustrate the feature;
+navigation. The `<style>` block is abridged here to illustrate the feature;
 the shipped `examples/blog/app/components/PostCard.pzl` now uses Tailwind
 utilities instead (see [[DOC-DECISIONS]] D27).
 
@@ -814,7 +814,7 @@ utilities instead (see [[DOC-DECISIONS]] D27).
   </li>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A single comment. The mutation is parent-owned: this component only reports
@@ -833,7 +833,7 @@ export default class CommentItem extends PuzzleView {
     }
   };
 }
-</scripts>
+</script>
 ```
 
 `CommentItem`'s `<button>` fires a DOM `@click`, which invokes the `remove`

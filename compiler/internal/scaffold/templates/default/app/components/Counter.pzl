@@ -21,7 +21,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Counter extends PuzzleView {
@@ -49,4 +49,4 @@ export default class Counter extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>

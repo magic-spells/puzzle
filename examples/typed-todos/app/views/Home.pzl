@@ -44,7 +44,7 @@
   </div>
 </puzzle-view>
 
-<scripts lang="ts">
+<script lang="ts">
 import { PuzzleView } from '@magic-spells/puzzle';
 import TodoItem from '../components/TodoItem.pzl';
 import type { TodoRecord } from '../models/todo';
@@ -100,4 +100,4 @@ export default class TypedHome extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>

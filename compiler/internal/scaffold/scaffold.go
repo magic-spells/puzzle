@@ -146,7 +146,7 @@ func Create(parentDir, appName, template string) (*Result, error) {
 // tsconfigJSON is the strict, noEmit tsconfig written by --typescript (v1.22,
 // D54). It drives editor type-checking of the app's .ts/.js files only: the
 // Puzzle build never runs tsc, and the `include` globs can't reach a .pzl's
-// `<scripts>` body, so those bodies stay transpile-only (D54 never type-checks
+// `<script>` body, so those bodies stay transpile-only (D54 never type-checks
 // them). `include` picks up the package's shipped `puzzle-env.d.ts` shim so
 // `import X from './views/X.pzl'` resolves to a PuzzleView subclass (typed .pzl
 // imports), and `paths` mirrors the build's '@' app alias (SPEC §40, D75) so

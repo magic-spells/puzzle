@@ -4,7 +4,7 @@
 // become esbuild api.Message values with file/line/col (§e) so the build fails
 // with normal esbuild formatting; a file that fails to compile emits no output.
 //
-// <styles> blocks are collected into a per-plugin, mutex-guarded map (esbuild
+// <style> blocks are collected into a per-plugin, mutex-guarded map (esbuild
 // runs onLoad concurrently across files) and joined deterministically — sorted
 // by file path — into a single global CSS string via CSS().
 package plugin
@@ -24,7 +24,7 @@ import (
 
 // Plugin owns the cross-file state of one build: the app root (used to derive
 // stable, app-relative filenames for error reporting and the D20 emission-mode
-// decision) and the thread-safe <styles> collector.
+// decision) and the thread-safe <style> collector.
 type Plugin struct {
 	appRoot   string
 	assetsDir string // <appRoot>/app/assets — {#svg} paths resolve from here (D46)
@@ -129,7 +129,7 @@ func (p *Plugin) setup(build api.PluginBuild) {
 		out := res.JS
 
 		// Out-of-band codegen warnings (e.g. a template expression referencing a
-		// <scripts> import). The bundle build runs at LogLevelSilent, so print
+		// <script> import). The bundle build runs at LogLevelSilent, so print
 		// directly to stderr rather than routing through esbuild's suppressed
 		// warning channel; the generated JS is unaffected.
 		for _, w := range res.Warnings {
@@ -138,7 +138,7 @@ func (p *Plugin) setup(build api.PluginBuild) {
 
 		// Set-or-delete keeps the collector correct across incremental rebuilds
 		// (the persistent dev api.Context reuses one Plugin — see build.WatchBuilder):
-		// a file edited to REMOVE its <styles> must drop its old entry, not keep
+		// a file edited to REMOVE its <style> must drop its old entry, not keep
 		// the stale block. onLoad re-runs for every changed file, so this fires
 		// whenever a .pzl's styles appear or disappear. Deleted files (whose
 		// onLoad never re-runs) are pruned separately in CSS().
@@ -159,7 +159,7 @@ func (p *Plugin) setup(build api.PluginBuild) {
 		}
 		p.mu.Unlock()
 
-		// TypeScript scripts (v1.22, D54): <scripts lang="ts"> marks the whole
+		// TypeScript scripts (v1.22, D54): <script lang="ts"> marks the whole
 		// generated module TS so esbuild strips types (transpile-only, like Vite).
 		// The injected render tail + runtime import are plain JS, which is valid TS,
 		// so one loader covers the mixed module. Absent lang → LoaderJS, byte-for-byte
@@ -180,7 +180,7 @@ func (p *Plugin) setup(build api.PluginBuild) {
 	})
 }
 
-// CSS returns every collected <styles> block, sorted by source file path and
+// CSS returns every collected <style> block, sorted by source file path and
 // joined with blank lines. v1 emits global CSS with no scoping.
 func (p *Plugin) CSS() string {
 	p.mu.Lock()
@@ -220,7 +220,7 @@ func (p *Plugin) CSS() string {
 	return b.String()
 }
 
-// PruneCSS drops collected <styles> entries whose source .pzl is not in keep,
+// PruneCSS drops collected <style> entries whose source .pzl is not in keep,
 // the set of absolute source paths in the current module graph (derived from the
 // esbuild metafile after a successful incremental rebuild). This catches the one
 // case CSS()'s os.Stat prune cannot: a file still on disk but no longer imported,

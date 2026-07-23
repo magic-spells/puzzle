@@ -23,7 +23,7 @@ field on the successor card.
 
 - **D1** [[DECISION-D01-SPA-ONLY]] — SPA-only, client-side-rendering framework
 - **D2** [[DECISION-D02-CLASS-COMPONENTS]] — class-based components; `Puzzle.createView` removed
-- **D3** [[DECISION-D03-SCRIPTS-REAL-JS]] — `<scripts>` blocks are real JavaScript (the most consequential decision in the project)
+- **D3** [[DECISION-D03-SCRIPTS-REAL-JS]] — `<script>` blocks are real JavaScript (the most consequential decision in the project)
 - **D4** [[DECISION-D04-EVENT-HANDLER-CONVENTION]] — bare identifier vs call expression in `@event`
 - **D5** [[DECISION-D05-SCHEMA-BUILDERS]] — schema via `Puzzle.*` field builders
 - **D6** [[DECISION-D06-COMPUTED-GETTERS]] — model computed properties are plain getters
@@ -32,7 +32,7 @@ field on the successor card.
 - **D9** [[DECISION-D09-GO-ESBUILD-COMPILER]] — compiler is Go + an esbuild `onLoad` plugin
 - **D10** [[DECISION-D10-PROTOTYPE-RENDER]] — generated `render()` attached via prototype assignment
 - **D11** [[DECISION-D11-PROJECT-LAYOUT]] — `app/` source, `dist/` output
-- **D12** [[DECISION-D12-TAILWIND-FIRST]] — Tailwind-first styling; `<styles>` is global CSS in v1
+- **D12** [[DECISION-D12-TAILWIND-FIRST]] — Tailwind-first styling; `<style>` is global CSS in v1
 - **D13** [[DECISION-D13-CLI-DEV-BUILD]] — CLI v1 is `puzzle dev` + `puzzle build`; build defaults to production
 - **D14** [[DECISION-D14-TODOS-MILESTONE]] — the v1 milestone is the todos app, end-to-end
 - **D15** [[DECISION-D15-PLAIN-CLASS-VIEW]] — `PuzzleView` is a plain class, not a web component
@@ -84,12 +84,12 @@ slice-of-work view.
 - **D51** [[DECISION-D51-ROUTER-BASE-PATH]] — one `routerBase` applied at the path-shape boundary: pathname prefix (history), in-fragment prefix (hash), inert (memory) (v1.19 → [[FEATURE-ROUTER-BASE-PATH]])
 - **D52** [[DECISION-D52-SKELETON-ANTIFLASH]] — skeleton anti-flash: opt-in `min-duration` hold; the error slot resolves won't-build (v1.20 → [[FEATURE-SKELETON-FOLLOWUPS]])
 - **D53** [[DECISION-D53-NAMED-SLOTS]] — named slots: `<slot name>` with fallbacks, filled by `slot="…"` attributes on direct component children (v1.21 → [[FEATURE-NAMED-SLOTS]])
-- **D54** [[DECISION-D54-TYPESCRIPT-SCRIPTS]] — `<scripts lang="ts">` TypeScript, transpile-only via esbuild; `.pzl` stays the only extension (v1.22 → [[FEATURE-TYPESCRIPT-SCRIPTS]])
+- **D54** [[DECISION-D54-TYPESCRIPT-SCRIPTS]] — `<script lang="ts">` TypeScript, transpile-only via esbuild; `.pzl` stays the only extension (v1.22 → [[FEATURE-TYPESCRIPT-SCRIPTS]])
 - **D55** [[DECISION-D55-MORPH-TRANSITIONS]] — shared-element morph route transitions: `data-puzzle-morph` identity pairing + one router morph-handler slot; engine stays an optional peer (v1.23 → [[FEATURE-MORPH-TRANSITIONS]])
 - **D56** [[DECISION-D56-OVERLAP-TRANSITIONS]] — overlapping route transitions: opt-in `transitionMode: 'overlap'`, fixed-pin positioning keeps D28's no-wrapper rule (v1.24 → [[FEATURE-OVERLAPPING-TRANSITIONS]])
 - **D57** [[DECISION-D57-HMR-STATE-RELOAD]] — HMR as a state-preserving dev reload: snapshot/restore across the SSE reload, per-module swap explicitly not built (v1.25 → [[FEATURE-HMR]])
 - **D58** [[DECISION-D58-LIST-KEYING]] — list keying: pk-aware `ViewNode.keyOf` auto-key, explicit `key={…}` overrides instead of doubling, null keys warn once (v1.26 → [[FEATURE-V1-26-LIST-KEYING]])
-- **D59** [[DECISION-D59-SCOPED-STYLES]] — `<styles scoped>` via native `@scope` wrapping + one root-stamped attribute; the compiler still never parses CSS (v1.27 → [[FEATURE-SCOPED-STYLES]])
+- **D59** [[DECISION-D59-SCOPED-STYLES]] — `<style scoped>` via native `@scope` wrapping + one root-stamped attribute; the compiler still never parses CSS (v1.27 → [[FEATURE-SCOPED-STYLES]])
 - **D60** [[DECISION-D60-DROP-CONSOLE-OPT-OUT]] — production console-strip becomes opt-out: `build: { dropConsole: false }` in puzzle.config.js keeps user console calls; default (strip) unchanged, dev builds never strip
 - **D61** [[DECISION-D61-ATOMIC-LOCATION-COMMIT]] — URL/history/title commit atomically with the incoming mount, inside #swap's commit window after the out phase + token checks; restores D19's stated atomicity, closes the phantom-history-entry and URL/view-divergence holes (v1.28 → SPEC §30)
 - **D62** [[DECISION-D62-HANDLER-CACHING]] — data-independent `@event` handlers emit per-instance cached closures (`this.__h`); component callback props stop defeating shallowEqual, cached DOM listener sites stop rebinding per patch (v1.29 → [[FEATURE-V1-29-COMPOSITION-FIXES]], SPEC §31)

@@ -17,7 +17,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The selection bounding box. The outline itself is non-interactive
@@ -39,4 +39,4 @@ export default class SelectionOverlay extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>

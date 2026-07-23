@@ -15,7 +15,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class GalleryView extends PuzzleView {
@@ -40,9 +40,9 @@ export default class GalleryView extends PuzzleView {
     return {};
   }
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .view-gallery {
   background:
     radial-gradient(120% 120% at 15% 0%, rgba(251, 146, 60, 0.28), transparent 55%),
@@ -74,4 +74,4 @@ export default class GalleryView extends PuzzleView {
 .tile-4 { background: linear-gradient(135deg, #34d399, #059669); }
 .tile-5 { background: linear-gradient(135deg, #38bdf8, #0284c7); }
 .tile-6 { background: linear-gradient(135deg, #818cf8, #6d28d9); }
-</styles>
+</style>

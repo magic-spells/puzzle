@@ -22,7 +22,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // Routed overlay for a task's details — the leaf child of the board route
@@ -74,4 +74,4 @@ export default class TaskDialog extends PuzzleView {
     close: () => this._close(),
   };
 }
-</scripts>
+</script>

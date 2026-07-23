@@ -68,12 +68,12 @@ Input:
 
 ```html
 <puzzle-view><h1>{ title }</h1></puzzle-view>
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle'
 export default class Home extends PuzzleView {
   data() { return { title: 'Home' } }
 }
-</scripts>
+</script>
 ```
 
 Conceptual plugin output:

@@ -40,7 +40,7 @@
   <Slot/>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import PhotoCard from '../components/PhotoCard.pzl';
 import { albumSlug, groupAlbums } from '../albums.js';
@@ -64,4 +64,4 @@ export default class AlbumView extends PuzzleView {
     in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 240, easing: 'ease-out' },
   };
 }
-</scripts>
+</script>

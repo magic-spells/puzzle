@@ -33,10 +33,10 @@ func TestEmptyValueAttrEmission(t *testing.T) {
   <input value="" placeholder="name" autofocus />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if !strings.Contains(got, "value: '',") {
 		t.Errorf("value=\"\" should emit value: '' (explicit empty string)\n%s", got)
@@ -56,11 +56,11 @@ func TestEmptyValueComponentProp(t *testing.T) {
   <Child label="" />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Child from './Child.pzl';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if !strings.Contains(got, "new ViewNode(Child, { label: '' }, [])") {
 		t.Errorf("label=\"\" component prop should pass '', got:\n%s", got)

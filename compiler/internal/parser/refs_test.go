@@ -94,77 +94,77 @@ func TestParseRefErrors(t *testing.T) {
 	}{
 		{
 			"dynamic ref",
-			`<puzzle-view><div ref={ chart }></div></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view><div ref={ chart }></div></puzzle-view>` + "\n<script></script>",
 			"ref must be a static string name",
 		},
 		{
 			"interpolated ref",
-			`<puzzle-view><div ref="a{ x }"></div></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view><div ref="a{ x }"></div></puzzle-view>` + "\n<script></script>",
 			"ref must be a static string name",
 		},
 		{
 			"bare valueless ref",
-			`<puzzle-view><div ref></div></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view><div ref></div></puzzle-view>` + "\n<script></script>",
 			"ref requires a name",
 		},
 		{
 			"empty ref",
-			`<puzzle-view><div ref=""></div></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view><div ref=""></div></puzzle-view>` + "\n<script></script>",
 			"ref cannot be empty",
 		},
 		{
 			"hyphenated name",
-			`<puzzle-view><div ref="my-chart"></div></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view><div ref="my-chart"></div></puzzle-view>` + "\n<script></script>",
 			"must be a valid identifier",
 		},
 		{
 			"hyphenated name is named",
-			`<puzzle-view><div ref="my-chart"></div></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view><div ref="my-chart"></div></puzzle-view>` + "\n<script></script>",
 			"my-chart",
 		},
 		{
 			"dotted name",
-			`<puzzle-view><div ref="a.b"></div></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view><div ref="a.b"></div></puzzle-view>` + "\n<script></script>",
 			"must be a valid identifier",
 		},
 		{
 			"ref on component",
-			`<puzzle-view><Chart ref="c" /></puzzle-view>` + "\n<scripts>\nimport Chart from './Chart.pzl';\n</scripts>",
+			`<puzzle-view><Chart ref="c" /></puzzle-view>` + "\n<script>\nimport Chart from './Chart.pzl';\n</script>",
 			"@ready callback prop",
 		},
 		{
 			"ref on component names the tag",
-			`<puzzle-view><Chart ref="c" /></puzzle-view>` + "\n<scripts>\nimport Chart from './Chart.pzl';\n</scripts>",
+			`<puzzle-view><Chart ref="c" /></puzzle-view>` + "\n<script>\nimport Chart from './Chart.pzl';\n</script>",
 			"<Chart>",
 		},
 		{
 			"ref on bare slot",
-			`<puzzle-view><slot ref="x"></slot></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view><slot ref="x"></slot></puzzle-view>` + "\n<script></script>",
 			"ref cannot be placed on a <slot>",
 		},
 		{
 			"ref on capitalized Slot",
-			`<puzzle-view><Slot ref="x" /></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view><Slot ref="x" /></puzzle-view>` + "\n<script></script>",
 			"ref cannot be placed on a <Slot>",
 		},
 		{
 			"ref inside for block",
-			`<puzzle-view>{#for i in items}<span ref="x"></span>{/for}</puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view>{#for i in items}<span ref="x"></span>{/for}</puzzle-view>` + "\n<script></script>",
 			"not allowed inside a {#for}",
 		},
 		{
 			"ref nested deep inside for block",
-			`<puzzle-view>{#for i in items}<ul><li><b ref="x"></b></li></ul>{/for}</puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view>{#for i in items}<ul><li><b ref="x"></b></li></ul>{/for}</puzzle-view>` + "\n<script></script>",
 			"not allowed inside a {#for}",
 		},
 		{
 			"duplicate ref name",
-			`<puzzle-view><div ref="a"></div><span ref="a"></span></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view><div ref="a"></div><span ref="a"></span></puzzle-view>` + "\n<script></script>",
 			`duplicate ref name "a"`,
 		},
 		{
 			"ref on the puzzle-view root",
-			`<puzzle-view ref="root"><div>x</div></puzzle-view>` + "\n<scripts></scripts>",
+			`<puzzle-view ref="root"><div>x</div></puzzle-view>` + "\n<script></script>",
 			"root cannot carry a ref",
 		},
 	}
@@ -185,7 +185,7 @@ func TestParseRefErrors(t *testing.T) {
 // TestParseRefDuplicateNamesFirstPosition pins that the duplicate error points a
 // reader back to the FIRST declaration's line:col (the duplicate-slot shape).
 func TestParseRefDuplicateNamesFirstPosition(t *testing.T) {
-	src := `<puzzle-view><div ref="a"></div><span ref="a"></span></puzzle-view>` + "\n<scripts></scripts>"
+	src := `<puzzle-view><div ref="a"></div><span ref="a"></span></puzzle-view>` + "\n<script></script>"
 	_, err := Parse([]byte(src), "test.pzl")
 	if err == nil {
 		t.Fatal("expected a duplicate-ref error")
@@ -198,7 +198,7 @@ func TestParseRefDuplicateNamesFirstPosition(t *testing.T) {
 // TestParseRefInSkeleton pins the skeleton-body rejection, which flows through
 // ParseSkeleton rather than Parse.
 func TestParseRefInSkeleton(t *testing.T) {
-	src := `<puzzle-view><span>a</span></puzzle-view>` + "\n<puzzle-skeleton><div ref=\"x\"></div></puzzle-skeleton>\n<scripts></scripts>"
+	src := `<puzzle-view><span>a</span></puzzle-view>` + "\n<puzzle-skeleton><div ref=\"x\"></div></puzzle-skeleton>\n<script></script>"
 	sec, err := SplitSections(src, "test.pzl")
 	if err != nil {
 		t.Fatalf("split: %v", err)

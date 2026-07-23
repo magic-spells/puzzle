@@ -27,7 +27,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The top chrome bar: create buttons + a status hint. Creation is delegated to
@@ -44,4 +44,4 @@ export default class Toolbar extends PuzzleView {
     }
   };
 }
-</scripts>
+</script>

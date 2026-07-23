@@ -34,7 +34,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import ConversationItem from '../components/ConversationItem.pzl';
 
@@ -72,4 +72,4 @@ export default class Shell extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>

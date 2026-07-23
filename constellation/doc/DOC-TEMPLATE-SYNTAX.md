@@ -15,7 +15,7 @@ Part of the Puzzle docs — see [[DOC-SPEC]] for the frozen v1 contract.
 
 This is the complete reference for the template grammar inside a `<puzzle-view>` block. Everything on this page is supported in v1; anything deferred is collected in [Deferred syntax](#deferred-syntax-planned--not-in-v1) at the bottom. Examples are drawn from the canonical todos app (`examples/todos/app/views/Home.pzl` and `examples/todos/app/layouts/Default.pzl`).
 
-For the anatomy of a `.pzl` file (the `<puzzle-view>` / `<scripts>` / `<styles>` blocks), see [[DOC-PUZZLE-FILE]].
+For the anatomy of a `.pzl` file (the `<puzzle-view>` / `<script>` / `<style>` blocks), see [[DOC-PUZZLE-FILE]].
 
 ---
 
@@ -295,14 +295,14 @@ Handlers live in the `events` class field of the component (arrow functions only
 
 ## Component tags with props
 
-Capitalized tags render child components. The component must be imported inside the `<scripts>` block; props are passed as attributes, with braces for dynamic values:
+Capitalized tags render child components. The component must be imported inside the `<script>` block; props are passed as attributes, with braces for dynamic values:
 
 ```html
 <puzzle-view class="user-page">
   <UserProfile userId={selectedUserId} />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import UserProfile from '../components/UserProfile.pzl';
 
@@ -313,7 +313,7 @@ export default class UserPage extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>
 ```
 
 Props are fully reactive: when the parent's model changes a prop value, the child's `data(params, props)` re-runs with the new props. Inside a `{#for}` block you can pass the loop variable as a prop: `<TodoItem todo={todo} />`.

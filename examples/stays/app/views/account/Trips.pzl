@@ -62,7 +62,7 @@
   {/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Trips extends PuzzleView {
@@ -98,9 +98,9 @@ export default class Trips extends PuzzleView {
     out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 120, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 /* Per-row staggered fade-up. The framework animation system drives one animator
    per transition (the pane), so individual rows get their entrance from this
    keyframe, delayed inline by index. */
@@ -115,4 +115,4 @@ export default class Trips extends PuzzleView {
 @media (prefers-reduced-motion: reduce) {
   .trip-row { animation: none; opacity: 1; }
 }
-</styles>
+</style>

@@ -89,7 +89,7 @@ scripts and CI the flag defaults are used silently and nothing is prompted.`,
 
 		// --typescript (v1.22, D54): add a strict/noEmit tsconfig.json alongside the
 		// scaffold so editors type-check the app's .ts/.js files, with typed .pzl
-		// imports (the puzzle-env.d.ts shim). The .pzl `<scripts>` bodies themselves
+		// imports (the puzzle-env.d.ts shim). The .pzl `<script>` bodies themselves
 		// are transpile-only — the tsconfig include can't reach them and D54 never
 		// type-checks them. The build stays transpile-only; the default is plain JS.
 		// Either a tsconfig.json (--typescript) or a jsconfig.json — never both,
@@ -114,7 +114,7 @@ func init() {
 	initCmd.Flags().String("template", scaffold.DefaultTemplate,
 		fmt.Sprintf("Starter template (%s)", strings.Join(scaffold.Templates, "|")))
 	initCmd.Flags().String("dir", "", "Parent directory to create the app in (default: current directory)")
-	initCmd.Flags().Bool("typescript", false, "Add a strict tsconfig.json for editor type-checking of .ts/.js files (with typed .pzl imports; .pzl <scripts> bodies are transpile-only)")
+	initCmd.Flags().Bool("typescript", false, "Add a strict tsconfig.json for editor type-checking of .ts/.js files (with typed .pzl imports; .pzl <script> bodies are transpile-only)")
 	rootCmd.AddCommand(initCmd)
 }
 

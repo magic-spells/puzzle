@@ -93,7 +93,7 @@
 
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Home extends PuzzleView {
@@ -222,4 +222,4 @@ function markdownToHTML(src) {
   closeList();
   return out.join('\n');
 }
-</scripts>
+</script>

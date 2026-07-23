@@ -42,7 +42,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import OrreryCanvas from '../components/OrreryCanvas.pzl';
 import BodyRow from '../components/BodyRow.pzl';
@@ -115,4 +115,4 @@ export default class Home extends PuzzleView {
     },
   };
 }
-</scripts>
+</script>

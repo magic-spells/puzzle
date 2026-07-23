@@ -55,7 +55,7 @@ the local layer; formatter fail-soft (shared decimal clamp; invalid date/locale/
 Compiler: empty/Vue-dotted event names are positioned errors with did-you-mean
 (@click.prevent → @click:prevent; dotted custom events still legal); one-shot Build()
 stages into .dist-staging-* and swaps into dist/ only after esbuild+styles+public all
-succeed; scriptcollide.go warns when a template expression reads a <scripts>-imported
+succeed; scriptcollide.go warns when a template expression reads a <script>-imported
 name (LexSkip-aware textual import scan, out-of-band Result.Warnings); hasKeyAttr
 MixedAttr arm; classname extraction rewritten as a LexSkip state machine
 (findDefaultClass — comment/string/regex-aware, prevWasDot guard); {#svg} rejects

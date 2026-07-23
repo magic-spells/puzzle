@@ -11,7 +11,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A global wrapper component the layout forwards the routed page into
@@ -19,4 +19,4 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // router-filled content lands in THIS component's default slot — at build time
 // (prerender) and in the browser alike.
 export default class ContentCard extends PuzzleView {}
-</scripts>
+</script>

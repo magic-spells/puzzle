@@ -17,20 +17,20 @@ func TestPluginScopedStyles(t *testing.T) {
   <Button label="Hi" />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Button from '../components/Button.pzl';
 export default class Home extends PuzzleView {}
-</scripts>
+</script>
 
-<styles scoped>
+<style scoped>
 .home { color: red; }
-</styles>
+</style>
 `
 	root := writeApp(t, map[string]string{
 		"app/app.js":                "import Home from './views/Home.pzl';\nexport default Home;\n",
 		"app/views/Home.pzl":        scopedHome,
-		"app/components/Button.pzl": buttonPzl, // unscoped <styles>, from plugin_test.go
+		"app/components/Button.pzl": buttonPzl, // unscoped <style>, from plugin_test.go
 	})
 
 	res, pl := buildApp(t, root)
@@ -43,7 +43,7 @@ export default class Home extends PuzzleView {}
 	id := codegen.ScopeID("app/views/Home.pzl")
 	css := pl.CSS()
 
-	// The block is wrapped verbatim (the <styles> inner body keeps its own
+	// The block is wrapped verbatim (the <style> inner body keeps its own
 	// surrounding newlines) inside `@scope ([data-<id>]) { … }`.
 	openWrap := "@scope ([data-" + id + "]) {"
 	if !strings.Contains(css, openWrap) || !strings.Contains(css, ".home { color: red; }") {
@@ -81,14 +81,14 @@ func TestPluginScopedStylesWithSkeleton(t *testing.T) {
   <div class="bg-skeleton"></div>
 </puzzle-skeleton>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class Post extends PuzzleView {}
-</scripts>
+</script>
 
-<styles scoped>
+<style scoped>
 .post { padding: 1rem; }
-</styles>
+</style>
 `
 	root := writeApp(t, map[string]string{
 		"app/app.js":         "import Post from './views/Post.pzl';\nexport default Post;\n",

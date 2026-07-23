@@ -13,7 +13,7 @@
   </button>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { tone } from '../data/catalog.js';
 
@@ -48,4 +48,4 @@ export default class ListRow extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

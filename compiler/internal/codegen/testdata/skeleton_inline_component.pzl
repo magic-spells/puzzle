@@ -10,7 +10,7 @@
   </div>
 </puzzle-skeleton>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class SkeletonInlineComponent extends PuzzleView {
@@ -19,4 +19,4 @@ export default class SkeletonInlineComponent extends PuzzleView {
     return { user };
   }
 }
-</scripts>
+</script>

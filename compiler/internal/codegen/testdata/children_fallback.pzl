@@ -6,7 +6,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Panel extends PuzzleView {
@@ -14,4 +14,4 @@ export default class Panel extends PuzzleView {
     return { placeholder: 'add one' };
   }
 }
-</scripts>
+</script>

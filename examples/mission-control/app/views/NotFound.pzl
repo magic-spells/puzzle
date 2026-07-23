@@ -12,7 +12,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class NotFoundView extends PuzzleView {
@@ -25,4 +25,4 @@ export default class NotFoundView extends PuzzleView {
     out: { from: { opacity: 1 }, to: { opacity: 0 }, duration: 140, easing: 'ease-in' }
   };
 }
-</scripts>
+</script>

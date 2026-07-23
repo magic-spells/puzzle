@@ -2,7 +2,7 @@
 // (constellation/doc/DOC-DECISIONS.md D12/D26) and composing the final dist/styles.css.
 //
 // Composition (SPEC §3): the final stylesheet is the Tailwind output (when the
-// pipeline is enabled) followed by the collected <styles> blocks. index.html
+// pipeline is enabled) followed by the collected <style> blocks. index.html
 // links a single /styles.css, so both layers must land in one file with the
 // Tailwind utilities first and hand-written global CSS appended after.
 //
@@ -40,7 +40,7 @@ type RunOptions struct {
 }
 
 // Compose builds the final dist/styles.css contents: the Tailwind layer first,
-// then the collected <styles> blocks. Either part may be empty. A single
+// then the collected <style> blocks. Either part may be empty. A single
 // trailing newline is guaranteed when there is any content.
 func Compose(tailwindCSS, collected string) string {
 	tw := strings.TrimRight(tailwindCSS, "\n")

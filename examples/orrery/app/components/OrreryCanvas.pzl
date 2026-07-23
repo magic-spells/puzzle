@@ -11,7 +11,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { clamp, randomPlanetColor, randomSpeed, randomSize, nextPlanetName } from '../util.js';
 
@@ -262,4 +262,4 @@ export default class OrreryCanvas extends PuzzleView {
     g.fill();
   }
 }
-</scripts>
+</script>

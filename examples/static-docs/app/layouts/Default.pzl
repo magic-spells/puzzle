@@ -34,7 +34,7 @@
   </footer>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import ContentCard from '../components/ContentCard.pzl';
 
@@ -42,4 +42,4 @@ import ContentCard from '../components/ContentCard.pzl';
 // No data() — it holds no build-time state, so the prerenderer just serializes
 // its markup once per page. The <Slot/> is forwarded through ContentCard (D69).
 export default class DefaultLayout extends PuzzleView {}
-</scripts>
+</script>

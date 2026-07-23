@@ -19,7 +19,7 @@
   </aside>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 const GLYPHS = { frame: '▣', rect: '▭', ellipse: '◯', text: 'T' };
@@ -71,4 +71,4 @@ export default class LayersPanel extends PuzzleView {
     }
   };
 }
-</scripts>
+</script>

@@ -19,7 +19,7 @@
   </div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // A tiny lookup gives each stamp a slightly different tilt (cycled by index) so
@@ -65,4 +65,4 @@ export default class TravelStamp extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>

@@ -17,7 +17,7 @@
   </main>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class DefaultLayout extends PuzzleView {
@@ -26,9 +26,9 @@ export default class DefaultLayout extends PuzzleView {
     return {};
   }
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 /* Small global reset so the two embedded apps sit predictably in their columns. */
 .demo-layout *,
 .demo-layout *::before,
@@ -132,4 +132,4 @@ export default class DefaultLayout extends PuzzleView {
   line-height: 1.6;
   color: rgba(255, 255, 255, 0.78);
 }
-</styles>
+</style>

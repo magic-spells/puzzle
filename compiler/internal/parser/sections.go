@@ -8,8 +8,8 @@ import (
 // sections.go is the .pzl section splitter (constellation/doc/DOC-COMPILER-DESIGN.md §b step 1).
 // It carves a file into its <puzzle-view> (with attributes preserved for the
 // root vnode), the optional <puzzle-skeleton> loading template (v1.8, D39),
-// the opaque <scripts> body, and the optional <styles> body. The
-// <scripts>/<styles> bodies are returned verbatim and are NEVER scanned for
+// the opaque <script> body, and the optional <style> body. The
+// <script>/<style> bodies are returned verbatim and are NEVER scanned for
 // template syntax.
 
 // Sections is the result of splitting a .pzl file.
@@ -38,36 +38,36 @@ type Sections struct {
 	// absent (or 0) — that case emits byte-identically to v1.8.
 	SkeletonMinDuration int
 
-	// Scripts is the opaque, byte-for-byte body of <scripts>.
+	// Scripts is the opaque, byte-for-byte body of <script>.
 	Scripts    string
 	ScriptsPos Position
-	// ScriptsLang is the normalized `lang` attribute of <scripts> (v1.22, D54):
+	// ScriptsLang is the normalized `lang` attribute of <script> (v1.22, D54):
 	// "" for JavaScript (attribute absent, or lang="js") and "ts" for TypeScript
 	// (lang="ts"). It only selects the esbuild loader for the generated module;
 	// the Go compiler still treats the body as an opaque string and never parses
 	// it. Any other lang value (or a second attribute) is a compile error.
 	ScriptsLang string
 
-	// Styles is the body of <styles>; HasStyles reports whether one was present.
+	// Styles is the body of <style>; HasStyles reports whether one was present.
 	Styles    string
 	HasStyles bool
 	StylesPos Position
-	// StylesTagPos is the position of the opening '<styles'.
+	// StylesTagPos is the position of the opening '<style'.
 	StylesTagPos Position
-	// StylesScoped is the bare `scoped` attribute of <styles> (v1.27, D59): true
+	// StylesScoped is the bare `scoped` attribute of <style> (v1.27, D59): true
 	// opts the block into per-component scoping (the plugin wraps it in a native
 	// @scope rule and codegen stamps the template root). It is the ONLY attribute
-	// <styles> accepts; absent → false, emitting global CSS byte-identically to
+	// <style> accepts; absent → false, emitting global CSS byte-identically to
 	// pre-v1.27. Any other attribute, a valued/dynamic scoped, or a duplicate is a
 	// compile error.
 	StylesScoped bool
 }
 
-var sectionNames = []string{"puzzle-view", "puzzle-skeleton", "scripts", "styles"}
+var sectionNames = []string{"puzzle-view", "puzzle-skeleton", "script", "style"}
 
 // SplitSections splits src into its sections, tolerant of whitespace and order.
 // A missing <puzzle-view>, or more than one of any section, is an error with a
-// position (constellation/doc/DOC-COMPILER-DESIGN.md §b, §e). <scripts> is OPTIONAL
+// position (constellation/doc/DOC-COMPILER-DESIGN.md §b, §e). <script> is OPTIONAL
 // (DOC-SPEC.md §4): a template-only .pzl leaves Scripts == "" and codegen
 // synthesizes a PuzzleView subclass named from the filename.
 func SplitSections(src, filename string) (*Sections, error) {
@@ -78,7 +78,7 @@ func SplitSections(src, filename string) (*Sections, error) {
 	// Backstop tracking (see the strayContentErr call after the loop): the first
 	// byte of non-whitespace content that falls OUTSIDE every recognized section
 	// (silently skipped before this guard), plus the section that most recently
-	// closed before it — so a body truncated by a literal </scripts> inside a
+	// closed before it — so a body truncated by a literal </script> inside a
 	// comment/string surfaces loudly instead of dropping the rest of the file.
 	strayOff := -1
 	strayFollows := ""
@@ -99,10 +99,14 @@ func SplitSections(src, filename string) (*Sections, error) {
 			i = i + 4 + idx + 3
 			continue
 		}
+		if oldName, newName := renamedSectionTagAt(src, i); oldName != "" {
+			return nil, posErr(src, filename, i,
+				"<"+oldName+"> was renamed to <"+newName+"> in 0.2.0")
+		}
 		name, isClose := sectionTagAt(src, i)
 		if name == "" || isClose {
 			// A '<' opening neither a section nor a comment: stray markup, or an
-			// orphan close tag (e.g. a literal </scripts> that escaped its body).
+			// orphan close tag (e.g. a literal </script> that escaped its body).
 			// Record the first one for the backstop rather than silently skipping it.
 			if strayOff < 0 {
 				strayOff, strayFollows = i, lastClosed
@@ -124,9 +128,9 @@ func SplitSections(src, filename string) (*Sections, error) {
 		// scanner too. findTemplateClose keys off `name`'s own close tag.
 		var rel int
 		switch name {
-		case "scripts":
+		case "script":
 			rel = findScriptClose(src, afterOpen)
-		case "styles":
+		case "style":
 			rel = findStyleClose(src, afterOpen)
 		case "puzzle-view", "puzzle-skeleton":
 			rel = findTemplateClose(src, afterOpen, closeTag)
@@ -173,12 +177,12 @@ func SplitSections(src, filename string) (*Sections, error) {
 			sec.HasSkeleton = true
 			sec.SkeletonPos = posAt(src, contentStart)
 			sec.SkeletonTagPos = posAt(src, i)
-		case "scripts":
+		case "script":
 			nScripts++
 			if nScripts > 1 {
-				return nil, posErr(src, filename, i, "multiple <scripts> sections (only one allowed)")
+				return nil, posErr(src, filename, i, "multiple <script> sections (only one allowed)")
 			}
-			// The only attribute <scripts> accepts is `lang` (v1.22, D54); it
+			// The only attribute <script> accepts is `lang` (v1.22, D54); it
 			// selects the esbuild loader for the generated module. Absent → "" (JS).
 			lang, lerr := parseScriptsLang(attrsRaw, posAt(src, attrOffset), filename)
 			if lerr != nil {
@@ -187,15 +191,15 @@ func SplitSections(src, filename string) (*Sections, error) {
 			sec.ScriptsLang = lang
 			sec.Scripts = inner
 			sec.ScriptsPos = posAt(src, contentStart)
-		case "styles":
+		case "style":
 			nStyles++
 			if nStyles > 1 {
-				return nil, posErr(src, filename, i, "multiple <styles> sections (only one allowed)")
+				return nil, posErr(src, filename, i, "multiple <style> sections (only one allowed)")
 			}
-			// The only attribute <styles> accepts is `scoped` (v1.27, D59); a bare
+			// The only attribute <style> accepts is `scoped` (v1.27, D59); a bare
 			// `scoped` opts the block into per-component scoping. Absent → false
 			// (global CSS, byte-identical to pre-v1.27). Anything else is a compile
-			// error — previously attrs on <styles> were silently discarded.
+			// error — previously attrs on <style> were silently discarded.
 			scoped, serr := parseStylesScoped(attrsRaw, posAt(src, attrOffset), filename)
 			if serr != nil {
 				return nil, serr
@@ -214,13 +218,13 @@ func SplitSections(src, filename string) (*Sections, error) {
 		return nil, &ParseError{File: filename, Line: 1, Col: 1, Message: "missing <puzzle-view> section"}
 	}
 	// Backstop: any non-whitespace content left outside a recognized section is an
-	// error, not silently skipped. In practice this catches a <scripts>/<styles>
+	// error, not silently skipped. In practice this catches a <script>/<style>
 	// body truncated by a literal close tag inside a comment/string (the rest of
 	// the file then reads as stray content) and stray top-level markup.
 	if strayOff >= 0 {
 		return nil, strayContentErr(src, filename, strayOff, strayFollows)
 	}
-	// <scripts> is optional (DOC-SPEC.md §4): a scriptless .pzl is valid and
+	// <script> is optional (DOC-SPEC.md §4): a scriptless .pzl is valid and
 	// leaves Scripts == "".
 	return sec, nil
 }
@@ -273,23 +277,47 @@ func findTemplateClose(s string, from int, closeTag string) int {
 }
 
 // strayContentErr reports non-whitespace content that fell outside every
-// recognized section. When it directly follows a <scripts>/<styles> section, the
-// usual cause is a literal </scripts>/</styles> inside a comment or string that
+// recognized section. When it directly follows a <script>/<style> section, the
+// usual cause is a literal </script>/</style> inside a comment or string that
 // closed the body early, so the message points there; otherwise it is stray
 // top-level markup.
 func strayContentErr(src, filename string, off int, follows string) *ParseError {
-	if follows == "scripts" || follows == "styles" {
+	if follows == "script" || follows == "style" {
 		return posErr(src, filename, off,
 			"unexpected content after the <"+follows+"> section — a literal </"+follows+"> inside a comment or string may have closed the body early")
 	}
 	return posErr(src, filename, off,
-		"unexpected content outside a section — only <puzzle-view>, <puzzle-skeleton>, <scripts> and <styles> may appear at the top level")
+		"unexpected content outside a section — only <puzzle-view>, <puzzle-skeleton>, <script> and <style> may appear at the top level")
 }
 
-// findScriptClose scans a <scripts> body from `from` for its real </scripts>
+// renamedSectionTagAt recognizes the pre-0.2.0 names so the top-level scanner
+// can report the migration directly instead of falling through to the generic
+// stray-content error. A boundary is required so similarly prefixed custom
+// markup is still diagnosed as ordinary stray content.
+func renamedSectionTagAt(src string, i int) (oldName, newName string) {
+	for _, rename := range []struct {
+		old string
+		new string
+	}{
+		{old: "scripts", new: "script"},
+		{old: "styles", new: "style"},
+	} {
+		prefix := "<" + rename.old
+		if !strings.HasPrefix(src[i:], prefix) {
+			continue
+		}
+		after := i + len(prefix)
+		if after >= len(src) || isBoundary(src[after]) {
+			return rename.old, rename.new
+		}
+	}
+	return "", ""
+}
+
+// findScriptClose scans a <script> body from `from` for its real </script>
 // close tag, skipping JS strings, template literals, regex literals, and line/
 // block comments via the shared LexSkip scanner (lexskip.go — "one shared
-// scanner", scan.go) so a literal "</scripts>" inside a comment or string does
+// scanner", scan.go) so a literal "</script>" inside a comment or string does
 // not truncate the body. Returns the close tag's '<' index RELATIVE to `from`, or
 // -1 when none is found (the caller then reports a missing-close error).
 //
@@ -300,7 +328,7 @@ func strayContentErr(src, filename string, off int, follows string) *ParseError 
 func findScriptClose(s string, from int) int {
 	prevEndsExpr := false
 	for i := from; i < len(s); {
-		if strings.HasPrefix(s[i:], "</scripts>") {
+		if strings.HasPrefix(s[i:], "</script>") {
 			return i - from
 		}
 		if next, pee, consumed := LexSkip(s, i, prevEndsExpr); consumed {
@@ -314,16 +342,16 @@ func findScriptClose(s string, from int) int {
 	return -1
 }
 
-// findStyleClose scans a <styles> body from `from` for its real </styles> close
+// findStyleClose scans a <style> body from `from` for its real </style> close
 // tag, skipping CSS block comments (/* … */) and quoted strings ('…'/"…",
-// escape-aware) — the two places a literal "</styles>" can hide in CSS. CSS has
+// escape-aware) — the two places a literal "</style>" can hide in CSS. CSS has
 // no line comments or template literals, and its bare '/' (font: 12px/1.5,
 // url(/img.png)) would fool LexSkip's regex/division heuristic, so this stays a
 // small dedicated scan rather than reusing the JS path. Returns the close tag's
 // '<' index RELATIVE to `from`, or -1 when none is found.
 func findStyleClose(s string, from int) int {
 	for i := from; i < len(s); {
-		if strings.HasPrefix(s[i:], "</styles>") {
+		if strings.HasPrefix(s[i:], "</style>") {
 			return i - from
 		}
 		switch {
@@ -519,7 +547,7 @@ func parseSkeletonMinDuration(attrsRaw string, base Position, file string) (int,
 	}
 }
 
-// parseScriptsLang validates the ONLY attribute <scripts> accepts (v1.22, D54):
+// parseScriptsLang validates the ONLY attribute <script> accepts (v1.22, D54):
 // lang="ts" (TypeScript) or lang="js" (the explicit JS default). Empty attrs → ""
 // (JS, byte-identical to pre-v1.22). Any other attribute, a dynamic/interpolated
 // value, an empty value, or an unknown lang is a compile error (with a
@@ -530,17 +558,17 @@ func parseScriptsLang(attrsRaw string, base Position, file string) (string, *Par
 	if strings.TrimSpace(attrsRaw) == "" {
 		return "", nil
 	}
-	attrs, perr := parseAttrString(attrsRaw, base, file, "scripts")
+	attrs, perr := parseAttrString(attrsRaw, base, file, "script")
 	if perr != nil {
 		return "", perr
 	}
 	if len(attrs) != 1 {
-		return "", errAt(file, base, "the only attribute allowed on <scripts> is `lang`")
+		return "", errAt(file, base, "the only attribute allowed on <script> is `lang`")
 	}
 	switch a := attrs[0].(type) {
 	case *StaticAttr:
 		if a.Name != "lang" {
-			return "", errAt(file, a.Pos, "the only attribute allowed on <scripts> is `lang` (got %q)", a.Name)
+			return "", errAt(file, a.Pos, "the only attribute allowed on <script> is `lang` (got %q)", a.Name)
 		}
 		switch a.Value {
 		case "ts":
@@ -548,22 +576,22 @@ func parseScriptsLang(attrsRaw string, base Position, file string) (string, *Par
 		case "js":
 			return "", nil
 		case "":
-			return "", errAt(file, a.Pos, "`lang` on <scripts> requires a value — use lang=\"ts\" (TypeScript) or lang=\"js\" (JavaScript)")
+			return "", errAt(file, a.Pos, "`lang` on <script> requires a value — use lang=\"ts\" (TypeScript) or lang=\"js\" (JavaScript)")
 		default:
-			return "", errAt(file, a.Pos, "unknown <scripts> lang %q — expected \"ts\" (TypeScript) or \"js\" (JavaScript, the default)%s", a.Value, scriptsLangHint(a.Value))
+			return "", errAt(file, a.Pos, "unknown <script> lang %q — expected \"ts\" (TypeScript) or \"js\" (JavaScript, the default)%s", a.Value, scriptsLangHint(a.Value))
 		}
 	case *DynamicAttr:
 		if a.Name != "lang" {
-			return "", errAt(file, a.Pos, "the only attribute allowed on <scripts> is `lang` (got %q)", a.Name)
+			return "", errAt(file, a.Pos, "the only attribute allowed on <script> is `lang` (got %q)", a.Name)
 		}
-		return "", errAt(file, a.Pos, "`lang` on <scripts> must be a static \"ts\" or \"js\", not a dynamic {…} value")
+		return "", errAt(file, a.Pos, "`lang` on <script> must be a static \"ts\" or \"js\", not a dynamic {…} value")
 	case *MixedAttr:
 		if a.Name != "lang" {
-			return "", errAt(file, a.Pos, "the only attribute allowed on <scripts> is `lang` (got %q)", a.Name)
+			return "", errAt(file, a.Pos, "the only attribute allowed on <script> is `lang` (got %q)", a.Name)
 		}
-		return "", errAt(file, a.Pos, "`lang` on <scripts> must be a static \"ts\" or \"js\", not an interpolated value")
+		return "", errAt(file, a.Pos, "`lang` on <script> must be a static \"ts\" or \"js\", not an interpolated value")
 	default: // EventAttr etc. — never a valid scripts attribute
-		return "", errAt(file, base, "the only attribute allowed on <scripts> is `lang`")
+		return "", errAt(file, base, "the only attribute allowed on <script> is `lang`")
 	}
 }
 
@@ -579,49 +607,49 @@ func scriptsLangHint(v string) string {
 	return ""
 }
 
-// parseStylesScoped validates the ONLY attribute <styles> accepts (v1.27, D59):
+// parseStylesScoped validates the ONLY attribute <style> accepts (v1.27, D59):
 // a bare `scoped` that opts the block into per-component scoping. Empty attrs →
 // false (global emission, byte-identical to pre-v1.27). A valued scoped=…, a
 // dynamic/interpolated scoped, any other attribute, or a duplicate is a compile
 // error (with a did-you-mean where the attribute name is close). It reuses the
 // tag-mode attr lexer (parseAttrString) so multi-attribute and quoting cases
-// tokenize exactly like the <puzzle-view> root, <puzzle-skeleton>, and <scripts>
-// do — this is the first attribute ever parsed on <styles> (attrs were silently
+// tokenize exactly like the <puzzle-view> root, <puzzle-skeleton>, and <script>
+// do — this is the first attribute ever parsed on <style> (attrs were silently
 // discarded before v1.27).
 func parseStylesScoped(attrsRaw string, base Position, file string) (bool, *ParseError) {
 	if strings.TrimSpace(attrsRaw) == "" {
 		return false, nil
 	}
-	attrs, perr := parseAttrString(attrsRaw, base, file, "styles")
+	attrs, perr := parseAttrString(attrsRaw, base, file, "style")
 	if perr != nil {
 		return false, perr
 	}
 	if len(attrs) != 1 {
-		return false, errAt(file, base, "the only attribute allowed on <styles> is `scoped`")
+		return false, errAt(file, base, "the only attribute allowed on <style> is `scoped`")
 	}
 	switch a := attrs[0].(type) {
 	case *StaticAttr:
 		if a.Name != "scoped" {
-			return false, errAt(file, a.Pos, "the only attribute allowed on <styles> is `scoped` (got %q)%s", a.Name, stylesScopedHint(a.Name))
+			return false, errAt(file, a.Pos, "the only attribute allowed on <style> is `scoped` (got %q)%s", a.Name, stylesScopedHint(a.Name))
 		}
 		if !a.Valueless {
 			// scoped="", scoped="true", etc. — the attribute is bare-only (like
 			// `island`, D44), so any value is a mistake, not an on/off switch.
-			return false, errAt(file, a.Pos, "`scoped` on <styles> is a bare attribute — write <styles scoped>, not scoped=\"…\"")
+			return false, errAt(file, a.Pos, "`scoped` on <style> is a bare attribute — write <style scoped>, not scoped=\"…\"")
 		}
 		return true, nil
 	case *DynamicAttr:
 		if a.Name != "scoped" {
-			return false, errAt(file, a.Pos, "the only attribute allowed on <styles> is `scoped` (got %q)%s", a.Name, stylesScopedHint(a.Name))
+			return false, errAt(file, a.Pos, "the only attribute allowed on <style> is `scoped` (got %q)%s", a.Name, stylesScopedHint(a.Name))
 		}
-		return false, errAt(file, a.Pos, "`scoped` on <styles> is a bare attribute, not a dynamic {…} value — write <styles scoped>")
+		return false, errAt(file, a.Pos, "`scoped` on <style> is a bare attribute, not a dynamic {…} value — write <style scoped>")
 	case *MixedAttr:
 		if a.Name != "scoped" {
-			return false, errAt(file, a.Pos, "the only attribute allowed on <styles> is `scoped` (got %q)%s", a.Name, stylesScopedHint(a.Name))
+			return false, errAt(file, a.Pos, "the only attribute allowed on <style> is `scoped` (got %q)%s", a.Name, stylesScopedHint(a.Name))
 		}
-		return false, errAt(file, a.Pos, "`scoped` on <styles> is a bare attribute, not an interpolated value — write <styles scoped>")
+		return false, errAt(file, a.Pos, "`scoped` on <style> is a bare attribute, not an interpolated value — write <style scoped>")
 	default: // EventAttr etc. — never a valid styles attribute
-		return false, errAt(file, base, "the only attribute allowed on <styles> is `scoped`")
+		return false, errAt(file, base, "the only attribute allowed on <style> is `scoped`")
 	}
 }
 

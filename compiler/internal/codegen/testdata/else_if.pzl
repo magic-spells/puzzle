@@ -10,7 +10,7 @@
   {/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class ElseIf extends PuzzleView {
@@ -18,4 +18,4 @@ export default class ElseIf extends PuzzleView {
     return { state: 'loading' };
   }
 }
-</scripts>
+</script>

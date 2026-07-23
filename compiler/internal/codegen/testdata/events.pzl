@@ -6,7 +6,7 @@
   </form>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Events extends PuzzleView {
@@ -20,4 +20,4 @@ export default class Events extends PuzzleView {
     update: (event) => {},
   };
 }
-</scripts>
+</script>

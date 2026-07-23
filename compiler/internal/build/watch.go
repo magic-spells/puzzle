@@ -19,7 +19,7 @@ import (
 // public/ copy; the dev loop composes dist/styles.css itself (Tailwind comes
 // from the warm --watch child, not a one-shot per rebuild).
 //
-// The single Plugin instance lives for the context's lifetime, so its <styles>
+// The single Plugin instance lives for the context's lifetime, so its <style>
 // collector is shared across rebuilds — that is what makes CSS() reflect the
 // current graph (with the plugin's set-or-delete + deleted-file pruning keeping
 // it honest as files change; see plugin.CSS).
@@ -95,7 +95,7 @@ func (b *WatchBuilder) Rebuild() error {
 	}
 	// Prune CSS by the current module graph BEFORE the caller composes
 	// dist/styles.css: a since-un-imported (but still on-disk) .pzl's onLoad never
-	// re-runs, so only the metafile reveals that its <styles> must be dropped. A
+	// re-runs, so only the metafile reveals that its <style> must be dropped. A
 	// malformed/absent metafile is non-fatal — fall back to the os.Stat prune in
 	// CSS() rather than fail the rebuild.
 	if result.Metafile != "" {
@@ -154,7 +154,7 @@ func (b *WatchBuilder) ScanFormatters() error {
 	return scanFormatters(b.root, b.pl)
 }
 
-// CSS returns the collected <styles> blocks from the most recent rebuild.
+// CSS returns the collected <style> blocks from the most recent rebuild.
 func (b *WatchBuilder) CSS() string { return b.pl.CSS() }
 
 // Dispose releases the esbuild context. After Dispose the builder must not be

@@ -3,8 +3,8 @@ package generate
 // Stub templates. __NAME__ is the class/component name; __MODEL__ is the
 // lower-case model name (model template only). Each .pzl below is held to the
 // frozen grammar (constellation/doc/DOC-SPEC.md §6): single-brace interpolation,
-// a `<puzzle-view>` delimiter, `@event={ handler(event) }`, a `<scripts>` block
-// importing PuzzleView, and a `<styles>` block. generate_test.go compiles every
+// a `<puzzle-view>` delimiter, `@event={ handler(event) }`, a `<script>` block
+// importing PuzzleView, and a `<style>` block. generate_test.go compiles every
 // one of these through the repo's parser+codegen.
 
 // componentTemplate renders inline (D20): `<puzzle-view>` carries no attributes
@@ -17,7 +17,7 @@ const componentTemplate = `<puzzle-view>
   </button>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class __NAME__ extends PuzzleView {
@@ -35,14 +35,14 @@ export default class __NAME__ extends PuzzleView {
     }
   };
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .__NAME__ {
   display: inline-flex;
   align-items: center;
 }
-</styles>
+</style>
 `
 
 // viewTemplate compiles in view mode (D20): the `<puzzle-view>` root becomes a
@@ -52,7 +52,7 @@ const viewTemplate = `<puzzle-view class="__NAME__">
   <p>{ message }</p>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class __NAME__ extends PuzzleView {
@@ -63,13 +63,13 @@ export default class __NAME__ extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .__NAME__ {
   display: block;
 }
-</styles>
+</style>
 `
 
 // layoutTemplate is a view-mode file that hosts its routed child at <Slot/>
@@ -84,7 +84,7 @@ const layoutTemplate = `<puzzle-view class="__NAME__">
   </main>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class __NAME__ extends PuzzleView {
@@ -94,13 +94,13 @@ export default class __NAME__ extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>
 
-<styles>
+<style>
 .__NAME__ {
   display: block;
 }
-</styles>
+</style>
 `
 
 // modelTemplate mirrors examples/todos/app/models/todo.js (constellation/doc/DOC-MODELS.md).

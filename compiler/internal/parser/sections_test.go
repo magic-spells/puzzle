@@ -10,13 +10,13 @@ func TestSplitSectionsBasic(t *testing.T) {
   <p>hi</p>
 </puzzle-view>
 
-<scripts>
+<script>
 export default class Foo {}
-</scripts>
+</script>
 
-<styles>
+<style>
 .root { color: red; }
-</styles>
+</style>
 `
 	sec, err := SplitSections(src, "Foo.pzl")
 	if err != nil {
@@ -49,7 +49,7 @@ export default class Foo {}
 func TestSplitSectionsScriptsOpaque(t *testing.T) {
 	// The scripts body contains template-like syntax and '<' comparisons; none
 	// of it must be interpreted.
-	src := "<puzzle-view><p>x</p></puzzle-view><scripts>\nif (a < b) { c = `{#if}`; }\n</scripts>"
+	src := "<puzzle-view><p>x</p></puzzle-view><script>\nif (a < b) { c = `{#if}`; }\n</script>"
 	sec, err := SplitSections(src, "F.pzl")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -59,9 +59,40 @@ func TestSplitSectionsScriptsOpaque(t *testing.T) {
 	}
 }
 
-// TestSplitSectionsScriptless asserts <scripts> is optional (DOC-SPEC.md §4): a
+func TestSplitSectionsRenamedTags(t *testing.T) {
+	tests := []struct {
+		oldName string
+		newName string
+		attrs   string
+	}{
+		{oldName: "scripts", newName: "script", attrs: ` lang="ts"`},
+		{oldName: "styles", newName: "style", attrs: " scoped"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.oldName, func(t *testing.T) {
+			src := "<puzzle-view></puzzle-view>\n\n  <" + tc.oldName + tc.attrs + ">x</" + tc.oldName + ">"
+			_, err := SplitSections(src, "Renamed.pzl")
+			if err == nil {
+				t.Fatal("expected renamed-tag error")
+			}
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("error type = %T, want *ParseError", err)
+			}
+			wantMessage := "<" + tc.oldName + "> was renamed to <" + tc.newName + "> in 0.2.0"
+			if pe.Message != wantMessage {
+				t.Fatalf("message = %q, want %q", pe.Message, wantMessage)
+			}
+			if pe.Line != 3 || pe.Col != 3 {
+				t.Fatalf("position = %d:%d, want 3:3", pe.Line, pe.Col)
+			}
+		})
+	}
+}
+
+// TestSplitSectionsScriptless asserts <script> is optional (DOC-SPEC.md §4): a
 // template-only .pzl splits successfully and leaves Scripts == "". (Previously
-// this errored with "missing <scripts>".)
+// this errored with "missing <script>".)
 func TestSplitSectionsScriptless(t *testing.T) {
 	src := `<puzzle-view class="box"><p>hi</p></puzzle-view>`
 	sec, err := SplitSections(src, "Box.pzl")
@@ -136,9 +167,9 @@ func TestSplitSectionsSkeleton(t *testing.T) {
   <div class="bg-skeleton h-4"></div>
 </puzzle-skeleton>
 
-<scripts>
+<script>
 export default class Foo {}
-</scripts>
+</script>
 `
 	sec, err := SplitSections(src, "Foo.pzl")
 	if err != nil {
@@ -237,17 +268,17 @@ func TestSplitSectionsSkeletonMinDurationErrors(t *testing.T) {
 }
 
 // TestSplitSectionsScriptsLang covers the v1.22 (D54) `lang` attribute on
-// <scripts>: absent → "" (JS), lang="js" → "" (explicit JS), lang="ts" → "ts".
+// <script>: absent → "" (JS), lang="js" → "" (explicit JS), lang="ts" → "ts".
 func TestSplitSectionsScriptsLang(t *testing.T) {
 	tests := []struct {
 		name     string
 		scripts  string
 		wantLang string
 	}{
-		{"absent", "<scripts>export default class F {}</scripts>", ""},
-		{"js", "<scripts lang=\"js\">export default class F {}</scripts>", ""},
-		{"ts", "<scripts lang=\"ts\">export default class F {}</scripts>", "ts"},
-		{"ts single quotes", "<scripts lang='ts'>export default class F {}</scripts>", "ts"},
+		{"absent", "<script>export default class F {}</script>", ""},
+		{"js", "<script lang=\"js\">export default class F {}</script>", ""},
+		{"ts", "<script lang=\"ts\">export default class F {}</script>", "ts"},
+		{"ts single quotes", "<script lang='ts'>export default class F {}</script>", "ts"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -274,12 +305,12 @@ func TestSplitSectionsScriptsLangErrors(t *testing.T) {
 		scripts    string
 		wantSubstr string
 	}{
-		{"unknown lang", "<scripts lang=\"coffee\">x</scripts>", "unknown <scripts> lang"},
-		{"did-you-mean ts", "<scripts lang=\"typescript\">x</scripts>", "did you mean \"ts\"?"},
-		{"empty value", "<scripts lang=\"\">x</scripts>", "requires a value"},
-		{"dynamic value", "<scripts lang={x}>x</scripts>", "must be a static"},
-		{"other attr", "<scripts type=\"module\">x</scripts>", "the only attribute allowed on <scripts> is `lang`"},
-		{"lang plus extra", "<scripts lang=\"ts\" foo=\"bar\">x</scripts>", "the only attribute allowed on <scripts> is `lang`"},
+		{"unknown lang", "<script lang=\"coffee\">x</script>", "unknown <script> lang"},
+		{"did-you-mean ts", "<script lang=\"typescript\">x</script>", "did you mean \"ts\"?"},
+		{"empty value", "<script lang=\"\">x</script>", "requires a value"},
+		{"dynamic value", "<script lang={x}>x</script>", "must be a static"},
+		{"other attr", "<script type=\"module\">x</script>", "the only attribute allowed on <script> is `lang`"},
+		{"lang plus extra", "<script lang=\"ts\" foo=\"bar\">x</script>", "the only attribute allowed on <script> is `lang`"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -295,7 +326,7 @@ func TestSplitSectionsScriptsLangErrors(t *testing.T) {
 	}
 }
 
-// TestSplitSectionsScriptsCloseAware asserts a literal </scripts> inside a JS
+// TestSplitSectionsScriptsCloseAware asserts a literal </script> inside a JS
 // comment or string does NOT truncate the script body — the close scan skips
 // comments and string literals (FIX 1b) so the whole body is preserved.
 func TestSplitSectionsScriptsCloseAware(t *testing.T) {
@@ -307,28 +338,28 @@ func TestSplitSectionsScriptsCloseAware(t *testing.T) {
 	}{
 		{
 			name:     "literal in line comment",
-			scripts:  "// everything above the </scripts> tag\nexport default class Foo {}\n",
+			scripts:  "// everything above the </script> tag\nexport default class Foo {}\n",
 			wantTail: "class Foo",
 		},
 		{
 			name:     "literal in string",
-			scripts:  "const s = \"</scripts>\";\nexport default class Bar {}\n",
+			scripts:  "const s = \"</script>\";\nexport default class Bar {}\n",
 			wantTail: "class Bar",
 		},
 		{
 			name:     "literal in block comment",
-			scripts:  "/* close it </scripts> here */\nexport default class Baz {}\n",
+			scripts:  "/* close it </script> here */\nexport default class Baz {}\n",
 			wantTail: "class Baz",
 		},
 		{
 			name:     "literal in nested template interpolation",
-			scripts:  "const x = `x ${`</scripts>`}`;\nexport default class Nested {}\n",
+			scripts:  "const x = `x ${`</script>`}`;\nexport default class Nested {}\n",
 			wantTail: "class Nested",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view><p>x</p></puzzle-view>\n<scripts>" + tc.scripts + "</scripts>\n"
+			src := "<puzzle-view><p>x</p></puzzle-view>\n<script>" + tc.scripts + "</script>\n"
 			sec, err := SplitSections(src, "F.pzl")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -336,8 +367,8 @@ func TestSplitSectionsScriptsCloseAware(t *testing.T) {
 			if !strings.Contains(sec.Scripts, tc.wantTail) {
 				t.Fatalf("script body truncated at fake close; got %q", sec.Scripts)
 			}
-			if !strings.Contains(sec.Scripts, "</scripts>") {
-				t.Fatalf("the literal </scripts> should be preserved verbatim in the body; got %q", sec.Scripts)
+			if !strings.Contains(sec.Scripts, "</script>") {
+				t.Fatalf("the literal </script> should be preserved verbatim in the body; got %q", sec.Scripts)
 			}
 		})
 	}
@@ -425,19 +456,19 @@ func TestSplitSectionsSkeletonCloseAware(t *testing.T) {
 	}
 }
 
-// TestSplitSectionsStylesCloseAware asserts a literal </styles> inside a CSS
+// TestSplitSectionsStylesCloseAware asserts a literal </style> inside a CSS
 // comment or string does NOT truncate the styles body (FIX 1b, CSS scan).
 func TestSplitSectionsStylesCloseAware(t *testing.T) {
 	cases := []struct {
 		name   string
 		styles string
 	}{
-		{"literal in comment", "/* not a close </styles> */\n.root { color: red; }\n"},
-		{"literal in string", ".x::after { content: \"</styles>\"; }\n.root { color: red; }\n"},
+		{"literal in comment", "/* not a close </style> */\n.root { color: red; }\n"},
+		{"literal in string", ".x::after { content: \"</style>\"; }\n.root { color: red; }\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view><p>x</p></puzzle-view>\n<styles>" + tc.styles + "</styles>\n"
+			src := "<puzzle-view><p>x</p></puzzle-view>\n<style>" + tc.styles + "</style>\n"
 			sec, err := SplitSections(src, "F.pzl")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -445,8 +476,8 @@ func TestSplitSectionsStylesCloseAware(t *testing.T) {
 			if !sec.HasStyles || !strings.Contains(sec.Styles, "color: red") {
 				t.Fatalf("styles body truncated at fake close; got %q", sec.Styles)
 			}
-			if !strings.Contains(sec.Styles, "</styles>") {
-				t.Fatalf("the literal </styles> should be preserved verbatim; got %q", sec.Styles)
+			if !strings.Contains(sec.Styles, "</style>") {
+				t.Fatalf("the literal </style> should be preserved verbatim; got %q", sec.Styles)
 			}
 		})
 	}
@@ -464,20 +495,20 @@ func TestSplitSectionsStrayContent(t *testing.T) {
 	}{
 		{
 			name:       "stray markup between sections",
-			src:        "<puzzle-view></puzzle-view>\n<div>oops</div>\n<scripts></scripts>",
+			src:        "<puzzle-view></puzzle-view>\n<div>oops</div>\n<script></script>",
 			wantSubstr: "unexpected content outside a section",
 		},
 		{
 			name:       "stray text before puzzle-view",
-			src:        "garbage\n<puzzle-view></puzzle-view>\n<scripts></scripts>",
+			src:        "garbage\n<puzzle-view></puzzle-view>\n<script></script>",
 			wantSubstr: "unexpected content outside a section",
 		},
 		{
 			name: "orphan close tag after scripts hints at the cause",
-			// A stray </scripts> after the section: the same shape a
+			// A stray </script> after the section: the same shape a
 			// nested-template-literal truncation leaves behind. Points at the body.
-			src:        "<puzzle-view></puzzle-view>\n<scripts>const x = 1;</scripts>\nleftover</scripts>",
-			wantSubstr: "a literal </scripts> inside a comment or string",
+			src:        "<puzzle-view></puzzle-view>\n<script>const x = 1;</script>\nleftover</script>",
+			wantSubstr: "a literal </script> inside a comment or string",
 		},
 	}
 	for _, tc := range cases {
@@ -499,12 +530,12 @@ func TestSplitSectionsErrors(t *testing.T) {
 		src        string
 		wantSubstr string
 	}{
-		{"missing puzzle-view", "<scripts>x</scripts>", "missing <puzzle-view>"},
-		{"two puzzle-view", "<puzzle-view></puzzle-view><puzzle-view></puzzle-view><scripts></scripts>", "multiple <puzzle-view>"},
-		{"two scripts", "<puzzle-view></puzzle-view><scripts></scripts><scripts></scripts>", "multiple <scripts>"},
-		{"two styles", "<puzzle-view></puzzle-view><scripts></scripts><styles></styles><styles></styles>", "multiple <styles>"},
+		{"missing puzzle-view", "<script>x</script>", "missing <puzzle-view>"},
+		{"two puzzle-view", "<puzzle-view></puzzle-view><puzzle-view></puzzle-view><script></script>", "multiple <puzzle-view>"},
+		{"two scripts", "<puzzle-view></puzzle-view><script></script><script></script>", "multiple <script>"},
+		{"two styles", "<puzzle-view></puzzle-view><script></script><style></style><style></style>", "multiple <style>"},
 		{"unterminated puzzle-view tag", "<puzzle-view class=", "unterminated <puzzle-view> tag"},
-		{"missing close", "<puzzle-view><p></p><scripts></scripts>", "missing </puzzle-view>"},
+		{"missing close", "<puzzle-view><p></p><script></script>", "missing </puzzle-view>"},
 		{"two skeletons", "<puzzle-view></puzzle-view><puzzle-skeleton></puzzle-skeleton><puzzle-skeleton></puzzle-skeleton>", "multiple <puzzle-skeleton>"},
 		{"attrs on skeleton", "<puzzle-view></puzzle-view><puzzle-skeleton class=\"x\"></puzzle-skeleton>", "the only attribute allowed on <puzzle-skeleton> is `min-duration`"},
 		{"missing skeleton close", "<puzzle-view></puzzle-view><puzzle-skeleton><div></div>", "missing </puzzle-skeleton>"},
@@ -523,7 +554,7 @@ func TestSplitSectionsErrors(t *testing.T) {
 }
 
 // TestSplitSectionsStylesScoped covers the v1.27 (D59) `scoped` attribute on
-// <styles>: a bare `scoped` sets StylesScoped, and absence leaves it false with
+// <style>: a bare `scoped` sets StylesScoped, and absence leaves it false with
 // the block body preserved verbatim.
 func TestSplitSectionsStylesScoped(t *testing.T) {
 	tests := []struct {
@@ -531,8 +562,8 @@ func TestSplitSectionsStylesScoped(t *testing.T) {
 		styles     string
 		wantScoped bool
 	}{
-		{"absent", "<styles>.a{color:red}</styles>", false},
-		{"bare scoped", "<styles scoped>.a{color:red}</styles>", true},
+		{"absent", "<style>.a{color:red}</style>", false},
+		{"bare scoped", "<style scoped>.a{color:red}</style>", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -552,20 +583,20 @@ func TestSplitSectionsStylesScoped(t *testing.T) {
 }
 
 // TestSplitSectionsStylesScopedErrors covers the compile errors for a bad
-// <styles> attribute (v1.27, D59) — the first attribute ever validated on
-// <styles> (previously silently discarded).
+// <style> attribute (v1.27, D59) — the first attribute ever validated on
+// <style> (previously silently discarded).
 func TestSplitSectionsStylesScopedErrors(t *testing.T) {
 	tests := []struct {
 		name       string
 		styles     string
 		wantSubstr string
 	}{
-		{"valued scoped", "<styles scoped=\"true\">.a{}</styles>", "`scoped` on <styles> is a bare attribute"},
-		{"empty valued scoped", "<styles scoped=\"\">.a{}</styles>", "`scoped` on <styles> is a bare attribute"},
-		{"dynamic scoped", "<styles scoped={x}>.a{}</styles>", "not a dynamic {…} value"},
-		{"unknown attr", "<styles lang=\"css\">.a{}</styles>", "the only attribute allowed on <styles> is `scoped`"},
-		{"did-you-mean", "<styles scopped>.a{}</styles>", "did you mean `scoped`?"},
-		{"duplicate scoped", "<styles scoped scoped>.a{}</styles>", "the only attribute allowed on <styles> is `scoped`"},
+		{"valued scoped", "<style scoped=\"true\">.a{}</style>", "`scoped` on <style> is a bare attribute"},
+		{"empty valued scoped", "<style scoped=\"\">.a{}</style>", "`scoped` on <style> is a bare attribute"},
+		{"dynamic scoped", "<style scoped={x}>.a{}</style>", "not a dynamic {…} value"},
+		{"unknown attr", "<style lang=\"css\">.a{}</style>", "the only attribute allowed on <style> is `scoped`"},
+		{"did-you-mean", "<style scopped>.a{}</style>", "did you mean `scoped`?"},
+		{"duplicate scoped", "<style scoped scoped>.a{}</style>", "the only attribute allowed on <style> is `scoped`"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

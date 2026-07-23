@@ -21,10 +21,10 @@ func TestNoElseIfPadsWithPlaceholder(t *testing.T) {
   <input placeholder="name" />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if strings.Contains(got, ": []),") {
 		t.Errorf("no-else {#if} with content must NOT emit an empty else array (index-shift bug)\n%s", got)
@@ -42,10 +42,10 @@ func TestNoElseIfEmptyBranchStaysEmpty(t *testing.T) {
   {#if items.length}{#for x in items}<li>{ x }</li>{/for}{/if}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if !strings.Contains(got, ": []),") {
 		t.Errorf("a {#for}-only {#if} branch has static length 0 — the else must stay empty (no placeholder)\n%s", got)
@@ -67,10 +67,10 @@ func TestItemForDisablesIfPadding(t *testing.T) {
   <input placeholder="name" />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if strings.Contains(got, "new ViewNode('#')") {
 		t.Errorf("an item-form loop makes its {#if} branch unstable; emit no padding placeholders\n%s", got)
@@ -91,10 +91,10 @@ func TestSlotDisablesCasePadding(t *testing.T) {
   <input placeholder="name" />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if strings.Contains(got, "new ViewNode('#')") {
 		t.Errorf("a slot marker makes its {#case} branch unstable; emit every clause unpadded\n%s", got)
@@ -116,10 +116,10 @@ func TestRangeForKeepsIfPadding(t *testing.T) {
   <input placeholder="name" />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if n := strings.Count(got, "new ViewNode('#')"); n != 1 {
 		t.Errorf("a generated-key range loop must preserve padding for the static imbalance (want 1 placeholder, got %d)\n%s", n, got)
@@ -137,10 +137,10 @@ func TestExplicitKeyRangeForDisablesIfPadding(t *testing.T) {
   <input placeholder="name" />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if strings.Contains(got, "new ViewNode('#')") {
 		t.Errorf("an explicit range-row key makes the {#if} branch unstable; emit no padding placeholders\n%s", got)
@@ -164,10 +164,10 @@ func TestNestedItemForMakesOuterIfUnstable(t *testing.T) {
   <input placeholder="name" />
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if strings.Contains(got, "new ViewNode('#')") {
 		t.Errorf("an item-form loop must make both its nested {#if} and the outer {#if} unpadded\n%s", got)
@@ -188,10 +188,10 @@ func TestCaseUnevenBranchesPad(t *testing.T) {
   {/case}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	// maxLen is 2 (the 'a' clause). The 'b' clause and the {:else} (the no-match
 	// fallback) are each short by one → two placeholders total.
@@ -214,10 +214,10 @@ func TestNoElseCasePadsImplicitDefault(t *testing.T) {
   {/case}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if strings.Contains(got, ": []),") {
 		t.Errorf("no-else {#case} with a content clause must pad its implicit default (no empty array)\n%s", got)
@@ -238,10 +238,10 @@ func TestBalancedCaseNoPad(t *testing.T) {
   {/case}
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `)
 	if strings.Contains(got, "new ViewNode('#')") {
 		t.Errorf("a balanced {#case} must not emit any placeholder\n%s", got)

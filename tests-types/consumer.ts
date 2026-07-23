@@ -3,7 +3,7 @@
  *
  * Imports from the PUBLIC package root ('@magic-spells/puzzle') and the
  * '@magic-spells/puzzle/morph' subpath exactly as an app authored with
- * `<scripts lang="ts">` would. The package is NOT installed in this repo, so the
+ * `<script lang="ts">` would. The package is NOT installed in this repo, so the
  * fixture tsconfig maps both specifiers at ../types via `paths` — this still
  * type-checks the real exported declaration surface + its exports wiring.
  *

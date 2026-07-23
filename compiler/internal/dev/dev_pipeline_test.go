@@ -13,7 +13,7 @@ import (
 )
 
 // TestRecompose asserts the pipeline writes dist/styles.css = Tailwind layer
-// (from the private output file) + collected <styles>, Tailwind first.
+// (from the private output file) + collected <style>, Tailwind first.
 func TestRecompose(t *testing.T) {
 	dist := t.TempDir()
 	twFile := filepath.Join(t.TempDir(), "tw.css")
@@ -35,7 +35,7 @@ func TestRecompose(t *testing.T) {
 		t.Fatalf("styles.css missing a layer:\n%s", got)
 	}
 	if iTw > iBlock {
-		t.Errorf("Tailwind layer must precede collected <styles>; got:\n%s", got)
+		t.Errorf("Tailwind layer must precede collected <style>; got:\n%s", got)
 	}
 }
 

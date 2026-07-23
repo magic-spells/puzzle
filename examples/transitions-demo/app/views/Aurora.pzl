@@ -8,7 +8,7 @@
   <div class="aurora-orb"></div>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class AuroraView extends PuzzleView {
@@ -34,10 +34,10 @@ export default class AuroraView extends PuzzleView {
     return {};
   }
 }
-</scripts>
+</script>
 
-<styles>
-/* Shared .view / .view-title / .view-body base lives in the layout's <styles>. */
+<style>
+/* Shared .view / .view-title / .view-body base lives in the layout's <style>. */
 .view-aurora {
   background:
     radial-gradient(120% 120% at 80% 0%, rgba(129, 140, 248, 0.55), transparent 60%),
@@ -56,4 +56,4 @@ export default class AuroraView extends PuzzleView {
   filter: blur(2px);
   opacity: 0.75;
 }
-</styles>
+</style>

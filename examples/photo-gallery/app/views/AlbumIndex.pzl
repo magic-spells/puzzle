@@ -1,6 +1,6 @@
 <puzzle-view class="hidden"></puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // The album route's index child (path ''), rendered into AlbumView's <Slot/>
@@ -10,4 +10,4 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // keeps the grid, and its live morph <img>, mounted — the D55 live-pair shape,
 // exactly like kanban-morph's EmptyOverlay/TaskDialog pair).
 export default class AlbumIndex extends PuzzleView {}
-</scripts>
+</script>

@@ -4,7 +4,7 @@
   <footer><slot name="footer"/></footer>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class Card extends PuzzleView {
@@ -12,4 +12,4 @@ export default class Card extends PuzzleView {
     return {};
   }
 }
-</scripts>
+</script>

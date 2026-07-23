@@ -4,7 +4,7 @@
  * Pragmatic, not exhaustive: generics where they're cheap and useful
  * (`getData<T>()`), `any` where the framework's dynamic surface resists static
  * typing (the component model returned by `data()`, record fields, formatter
- * args). Targets `<scripts lang="ts">` authoring — useful autocomplete under
+ * args). Targets `<script lang="ts">` authoring — useful autocomplete under
  * `tsc --strict`, not full soundness.
  *
  * Source of truth: constellation/doc/DOC-SPEC.md and the client-runtime sources.

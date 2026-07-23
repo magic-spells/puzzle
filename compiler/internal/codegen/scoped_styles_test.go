@@ -47,9 +47,9 @@ func TestScopedStampCoversSkeleton(t *testing.T) {
   <div class="bg-skeleton"></div>
 </puzzle-skeleton>
 
-<styles scoped>
+<style scoped>
 .post { padding: 1rem; }
-</styles>
+</style>
 `
 	got := compileScoped(t, src, "Post.pzl", ModeView)
 	stamp := "'data-" + ScopeID("Post.pzl") + "': true"
@@ -74,9 +74,9 @@ func TestScopedStampComponentMode(t *testing.T) {
   <div class="badge">{ label }</div>
 </puzzle-view>
 
-<styles scoped>
+<style scoped>
 .badge { color: teal; }
-</styles>
+</style>
 `
 	got := compileScoped(t, src, "Badge.pzl", ModeComponent)
 	stamp := "'data-" + ScopeID("Badge.pzl") + "': true"
@@ -89,14 +89,14 @@ func TestScopedStampComponentMode(t *testing.T) {
 	}
 }
 
-// TestUnscopedNoStamp guards byte-identity: a <styles> block without `scoped`
+// TestUnscopedNoStamp guards byte-identity: a <style> block without `scoped`
 // (and a file with no styles at all) emits no data-pzl attribute.
 func TestUnscopedNoStamp(t *testing.T) {
 	src := `<puzzle-view class="x"><p>{ y }</p></puzzle-view>
-<styles>.x{color:red}</styles>
+<style>.x{color:red}</style>
 `
 	got := compileScoped(t, src, "X.pzl", ModeView)
 	if strings.Contains(got, "data-pzl-") {
-		t.Errorf("unscoped <styles> must not stamp a data-pzl attribute\n%s", got)
+		t.Errorf("unscoped <style> must not stamp a data-pzl attribute\n%s", got)
 	}
 }

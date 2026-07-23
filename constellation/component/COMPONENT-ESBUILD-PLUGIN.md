@@ -23,7 +23,7 @@ verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
 
 The `.pzl` onLoad plugin reads a file, splits/parses it, generates JavaScript,
 and returns positioned esbuild messages without writing intermediate modules.
-Scripts use JS or TS loader according to `<scripts lang>`; styles collect in a
+Scripts use JS or TS loader according to `<script lang>`; styles collect in a
 mutex-protected path map; inline SVG dependencies join esbuild's watch set.
 
 Build bundles `app/app.js` to staged `dist/app.js`, writes linked source maps

@@ -19,10 +19,10 @@ func compileWithSkeleton(t *testing.T, skeletonTag string) string {
   <div class="bg-skeleton"></div>
 </puzzle-skeleton>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView {}
-</scripts>
+</script>
 `
 	sec, err := parser.SplitSections(src, "T.pzl")
 	if err != nil {

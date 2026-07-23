@@ -9,7 +9,7 @@ import (
 // parsed <puzzle-view> root.
 func parseContent(t *testing.T, content string) *Element {
 	t.Helper()
-	src := "<puzzle-view>" + content + "</puzzle-view>\n<scripts></scripts>"
+	src := "<puzzle-view>" + content + "</puzzle-view>\n<script></script>"
 	root, err := Parse([]byte(src), "test.pzl")
 	if err != nil {
 		t.Fatalf("unexpected parse error: %v", err)
@@ -317,7 +317,7 @@ func TestParseForCounterErrors(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<scripts></scripts>"
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
 			_, err := Parse([]byte(src), "test.pzl")
 			if err == nil {
 				t.Fatalf("expected error, got nil")
@@ -341,7 +341,7 @@ func TestParseForReservedIdentifiers(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<scripts></scripts>"
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
 			_, err := Parse([]byte(src), "test.pzl")
 			if err == nil {
 				t.Fatal("expected a reserved loop identifier error")
@@ -374,7 +374,7 @@ func TestParseForItemIdentifier(t *testing.T) {
 	})
 
 	t.Run("hyphenated item is a positioned error", func(t *testing.T) {
-		src := "<puzzle-view>{#for todo-item in items}<div>x</div>{/for}</puzzle-view>\n<scripts></scripts>"
+		src := "<puzzle-view>{#for todo-item in items}<div>x</div>{/for}</puzzle-view>\n<script></script>"
 		_, err := Parse([]byte(src), "test.pzl")
 		if err == nil {
 			t.Fatal("expected an error for a non-identifier {#for} item")
@@ -508,7 +508,7 @@ func TestParseComment(t *testing.T) {
 	t.Run("comments work in a skeleton via ParseSkeleton", func(t *testing.T) {
 		mk := func(body string) *Element {
 			src := "<puzzle-view><span>a</span></puzzle-view>\n<puzzle-skeleton>" + body +
-				"</puzzle-skeleton>\n<scripts></scripts>"
+				"</puzzle-skeleton>\n<script></script>"
 			sec, err := SplitSections(src, "test.pzl")
 			if err != nil {
 				t.Fatalf("split: %v", err)
@@ -573,7 +573,7 @@ func TestParseCommentErrors(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<scripts></scripts>"
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
 			_, err := Parse([]byte(src), "test.pzl")
 			if err == nil {
 				t.Fatalf("expected error, got nil")
@@ -675,7 +675,7 @@ func TestParseElseIfErrors(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<scripts></scripts>"
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
 			_, err := Parse([]byte(src), "test.pzl")
 			if err == nil {
 				t.Fatalf("expected error, got nil")
@@ -719,7 +719,7 @@ func TestParseUnlessErrors(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<scripts></scripts>"
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
 			_, err := Parse([]byte(src), "test.pzl")
 			if err == nil {
 				t.Fatalf("expected error, got nil")
@@ -899,7 +899,7 @@ func TestParseCaseErrors(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<scripts></scripts>"
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
 			_, err := Parse([]byte(src), "test.pzl")
 			if err == nil {
 				t.Fatalf("expected error, got nil")
@@ -1030,7 +1030,7 @@ func TestParseChildrenMarkerD74(t *testing.T) {
 	})
 
 	t.Run("children marker forwards inside a component invocation", func(t *testing.T) {
-		if _, err := Parse([]byte(`<puzzle-view><Card><children/></Card></puzzle-view>`+"\n<scripts></scripts>"), "test.pzl"); err != nil {
+		if _, err := Parse([]byte(`<puzzle-view><Card><children/></Card></puzzle-view>`+"\n<script></script>"), "test.pzl"); err != nil {
 			t.Fatalf("<children/> inside an invocation should forward, got %v", err)
 		}
 	})
@@ -1042,47 +1042,47 @@ func TestParseChildrenMarkerD74(t *testing.T) {
 	}{
 		{ // (a) bare lowercase slot
 			name:       "bare lowercase slot is retired",
-			src:        `<puzzle-view><slot/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><slot/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "bare <slot/> was replaced in v1.41 (D74)",
 		},
 		{ // (b) bare lowercase slot with a body
 			name:       "bare lowercase slot with body is retired",
-			src:        `<puzzle-view><slot>fallback</slot></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><slot>fallback</slot></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "bare <slot/> was replaced in v1.41 (D74)",
 		},
 		{ // (c) name on capitalized Slot
 			name:       "name attribute on capitalized Slot",
-			src:        `<puzzle-view><Slot name="x"/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Slot name="x"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "named slots are spelled lowercase",
 		},
 		{ // Slot with children keeps the cannot-have-children error
 			name:       "capitalized Slot cannot have children",
-			src:        `<puzzle-view><Slot>fallback</Slot></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Slot>fallback</Slot></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "<Slot> cannot have children",
 		},
 		{ // (d) attribute on children marker
 			name:       "class attribute on children marker",
-			src:        `<puzzle-view><children class="x"/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><children class="x"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "<children> takes no attributes — call-site content needs no configuration",
 		},
 		{ // (e) name attribute on children marker
 			name:       "name attribute on children marker",
-			src:        `<puzzle-view><children name="x"/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><children name="x"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "<children> takes no attributes — call-site content needs no configuration",
 		},
 		{ // (f) reserved name="children" on a lowercase slot
 			name:       "reserved name children on lowercase slot",
-			src:        `<puzzle-view><slot name="children"/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><slot name="children"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: `<slot name="children"> is reserved — use <children/>`,
 		},
 		{ // (g) ref on children marker
 			name:       "ref on children marker",
-			src:        `<puzzle-view><children ref="x"/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><children ref="x"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "ref cannot be placed on a <children> — a children marker is a render target, not a real element",
 		},
 		{ // (h) duplicate default markers spelled <children/> + <Slot/>
 			name:       "duplicate default markers across spellings",
-			src:        `<puzzle-view><children/><Slot/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><children/><Slot/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "duplicate default marker (<children/>/<Slot/>)",
 		},
 	}
@@ -1109,37 +1109,37 @@ func TestParseNamedSlotErrors(t *testing.T) {
 	}{
 		{
 			name:       "dynamic name",
-			src:        `<puzzle-view><slot name={ x }/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><slot name={ x }/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "name must be a static string",
 		},
 		{
 			name:       "interpolated name",
-			src:        `<puzzle-view><slot name="a{ b }"/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><slot name="a{ b }"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "name must be a static string",
 		},
 		{
 			name:       "empty name",
-			src:        `<puzzle-view><slot name=""/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><slot name=""/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "cannot be empty",
 		},
 		{
 			name:       "reserved default name",
-			src:        `<puzzle-view><slot name="default"/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><slot name="default"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: `reserved`,
 		},
 		{
 			name:       "foreign attribute on slot",
-			src:        `<puzzle-view><slot class="x"/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><slot class="x"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "only takes a static name attribute",
 		},
 		{
 			name:       "duplicate slot name in one template",
-			src:        `<puzzle-view><slot name="a"/><slot name="a"/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><slot name="a"/><slot name="a"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "duplicate slot name",
 		},
 		{
 			name:       "duplicate default marker in one template",
-			src:        `<puzzle-view><children/><Slot/></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><children/><Slot/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "duplicate default marker",
 		},
 	}
@@ -1160,7 +1160,7 @@ func TestParseNamedSlotErrors(t *testing.T) {
 // named slot in the same template is legal — the duplicate-default guard keys on
 // "default" only, so it never collides with a named slot.
 func TestParseDefaultAndNamedSlotOK(t *testing.T) {
-	if _, err := Parse([]byte(`<puzzle-view><children/><slot name="header"/></puzzle-view>`+"\n<scripts></scripts>"), "test.pzl"); err != nil {
+	if _, err := Parse([]byte(`<puzzle-view><children/><slot name="header"/></puzzle-view>`+"\n<script></script>"), "test.pzl"); err != nil {
 		t.Fatalf("one default marker + one named slot should be legal, got %v", err)
 	}
 }
@@ -1177,19 +1177,19 @@ func TestParseSlotForwarding(t *testing.T) {
 	}{
 		{
 			name: "children marker inside a component invocation",
-			src:  `<puzzle-view><Card><children/></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:  `<puzzle-view><Card><children/></Card></puzzle-view>` + "\n<script></script>",
 		},
 		{
 			name: "children marker nested deeper inside call-site markup",
-			src:  `<puzzle-view><Card><div class="wrap"><children/></div></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:  `<puzzle-view><Card><div class="wrap"><children/></div></Card></puzzle-view>` + "\n<script></script>",
 		},
 		{
 			name: "named declaration outside plus default forwarding inside",
-			src:  `<puzzle-view><slot name="header"/><Card><children/></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:  `<puzzle-view><slot name="header"/><Card><children/></Card></puzzle-view>` + "\n<script></script>",
 		},
 		{
 			name: "capitalized Slot outlet forwarding inside an invocation",
-			src:  `<puzzle-view><Card><Slot/></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:  `<puzzle-view><Card><Slot/></Card></puzzle-view>` + "\n<script></script>",
 		},
 	}
 	for _, tc := range ok {
@@ -1207,32 +1207,32 @@ func TestParseSlotForwarding(t *testing.T) {
 	}{
 		{
 			name:       "named slot as a direct child of a component invocation",
-			src:        `<puzzle-view><Card><slot name="header"/></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card><slot name="header"/></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "inside a component invocation is not supported",
 		},
 		{
 			name:       "named slot nested in an element inside an invocation",
-			src:        `<puzzle-view><Card><div><slot name="header"/></div></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card><div><slot name="header"/></div></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "inside a component invocation is not supported",
 		},
 		{
 			name:       "named slot inside control flow inside an invocation",
-			src:        `<puzzle-view><Card>{#if a}<slot name="header"/>{/if}</Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card>{#if a}<slot name="header"/>{/if}</Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "inside a component invocation is not supported",
 		},
 		{
 			name:       "named slot inside a nested component invocation",
-			src:        `<puzzle-view><Card><Panel><slot name="header"/></Panel></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card><Panel><slot name="header"/></Panel></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "inside a component invocation is not supported",
 		},
 		{
 			name:       "default marker both inside and outside an invocation is still a duplicate",
-			src:        `<puzzle-view><children/><Card><children/></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><children/><Card><children/></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "duplicate default marker",
 		},
 		{
 			name:       "bare lowercase slot inside an invocation is the retired-spelling error",
-			src:        `<puzzle-view><Card><slot/></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card><slot/></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "bare <slot/> was replaced in v1.41 (D74)",
 		},
 	}
@@ -1291,32 +1291,32 @@ func TestParseCallSiteSlotErrors(t *testing.T) {
 	}{
 		{
 			name:       "dynamic slot on element child",
-			src:        `<puzzle-view><Card><h2 slot={ region }>Hi</h2></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card><h2 slot={ region }>Hi</h2></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "slot target must be a static string",
 		},
 		{
 			name:       "dynamic slot on component child",
-			src:        `<puzzle-view><Card><Button slot={ region }>Hi</Button></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card><Button slot={ region }>Hi</Button></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "slot target must be a static string",
 		},
 		{
 			name:       "interpolated slot target",
-			src:        `<puzzle-view><Card><h2 slot="a{ b }">Hi</h2></Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card><h2 slot="a{ b }">Hi</h2></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "slot target must be a static string",
 		},
 		{
 			name:       "slot inside #if block at direct-child level",
-			src:        `<puzzle-view><Card>{#if show}<h2 slot="header">Hi</h2>{/if}</Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card>{#if show}<h2 slot="header">Hi</h2>{/if}</Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "move the control-flow block inside the slotted element",
 		},
 		{
 			name:       "slot inside #for block at direct-child level",
-			src:        `<puzzle-view><Card>{#for x in xs}<li slot="footer">{ x }</li>{/for}</Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card>{#for x in xs}<li slot="footer">{ x }</li>{/for}</Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "move the control-flow block inside the slotted element",
 		},
 		{
 			name:       "slot inside #unless block at direct-child level",
-			src:        `<puzzle-view><Card>{#unless hide}<h2 slot="header">Hi</h2>{/unless}</Card></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Card>{#unless hide}<h2 slot="header">Hi</h2>{/unless}</Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "move the control-flow block inside the slotted element",
 		},
 	}
@@ -1345,7 +1345,7 @@ func TestParseCallSiteSlotPassthrough(t *testing.T) {
 		t.Errorf("passthrough slot attr: got %q ok=%v, want header", sa, ok)
 	}
 	// A dynamic slot on a plain element's child must NOT error (not a call site).
-	if _, err := Parse([]byte(`<puzzle-view><div><h2 slot={ x }>Hi</h2></div></puzzle-view>`+"\n<scripts></scripts>"), "test.pzl"); err != nil {
+	if _, err := Parse([]byte(`<puzzle-view><div><h2 slot={ x }>Hi</h2></div></puzzle-view>`+"\n<script></script>"), "test.pzl"); err != nil {
 		t.Errorf("dynamic slot on non-call-site child should not error, got %v", err)
 	}
 }
@@ -1432,37 +1432,37 @@ func TestParseErrors(t *testing.T) {
 	}{
 		{
 			name:       "unclosed if",
-			src:        "<puzzle-view>{#if a}<p>x</p></puzzle-view>\n<scripts></scripts>",
+			src:        "<puzzle-view>{#if a}<p>x</p></puzzle-view>\n<script></script>",
 			wantSubstr: "unclosed {#if}",
 		},
 		{
 			name:       "orphan else",
-			src:        "<puzzle-view>{:else}</puzzle-view>\n<scripts></scripts>",
+			src:        "<puzzle-view>{:else}</puzzle-view>\n<script></script>",
 			wantSubstr: "{:else} outside of {#if} block",
 		},
 		{
 			name:       "for inside attribute value",
-			src:        `<puzzle-view><div class="a {#for x in xs}b{/for}"></div></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><div class="a {#for x in xs}b{/for}"></div></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "{#for} is not allowed in attribute values",
 		},
 		{
 			name:       "element/block cross nesting: /if across div",
-			src:        "<puzzle-view>{#if a}<div>{/if}</puzzle-view>\n<scripts></scripts>",
+			src:        "<puzzle-view>{#if a}<div>{/if}</puzzle-view>\n<script></script>",
 			wantSubstr: "closes across unclosed <div>",
 		},
 		{
 			name:       "block/element cross nesting: close tag across if",
-			src:        "<puzzle-view><div>{#if a}</div>{/if}</div></puzzle-view>\n<scripts></scripts>",
+			src:        "<puzzle-view><div>{#if a}</div>{/if}</div></puzzle-view>\n<script></script>",
 			wantSubstr: "closes across unclosed {#if}",
 		},
 		{
 			name:       "mismatched closing tag",
-			src:        "<puzzle-view><div></span></puzzle-view>\n<scripts></scripts>",
+			src:        "<puzzle-view><div></span></puzzle-view>\n<script></script>",
 			wantSubstr: "does not match <div>",
 		},
 		{
 			name:       "unknown block",
-			src:        "<puzzle-view>{#each x}{/each}</puzzle-view>\n<scripts></scripts>",
+			src:        "<puzzle-view>{#each x}{/each}</puzzle-view>\n<script></script>",
 			wantSubstr: "unknown block {#each}",
 		},
 	}
@@ -1482,7 +1482,7 @@ func TestParseErrors(t *testing.T) {
 // TestParseErrorPositions checks a couple of errors report a specific position.
 func TestParseErrorPositions(t *testing.T) {
 	// {:else} on line 2, col 1
-	src := "<puzzle-view>\n{:else}</puzzle-view>\n<scripts></scripts>"
+	src := "<puzzle-view>\n{:else}</puzzle-view>\n<script></script>"
 	_, err := Parse([]byte(src), "Home.pzl")
 	pe, ok := err.(*ParseError)
 	if !ok {
@@ -1610,7 +1610,7 @@ func TestParseEventKeyFiltersBackspaceDelete(t *testing.T) {
 	}
 	for _, tc := range rejected {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<scripts></scripts>"
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
 			_, err := Parse([]byte(src), "test.pzl")
 			if err == nil {
 				t.Fatalf("expected error, got nil")
@@ -1686,51 +1686,51 @@ func TestParseIslandErrors(t *testing.T) {
 	}{
 		{
 			name:       "dynamic island",
-			src:        `<puzzle-view><div island={ on }>x</div></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><div island={ on }>x</div></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "island must be a static attribute",
 		},
 		{
 			// island="false" still freezes at runtime (key presence, not value) —
 			// D44 is bare-only, so a value is a compile error, not a silent island.
 			name:       "valued island",
-			src:        `<puzzle-view><div island="false">x</div></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><div island="false">x</div></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "island must be a bare attribute",
 		},
 		{
 			// island="" is VALUED too (Valueless=false), not bare — an explicit
 			// empty value is still a value, and only the bare spelling is legal.
 			name:       "empty-valued island",
-			src:        `<puzzle-view><div island="">x</div></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><div island="">x</div></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "island must be a bare attribute",
 		},
 		{
 			name:       "island on component tag",
-			src:        `<puzzle-view><Editor island>x</Editor></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><Editor island>x</Editor></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "island is not a component prop",
 		},
 		{
 			name:       "component inside island subtree",
-			src:        `<puzzle-view><div island><span><Editor/></span></div></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><div island><span><Editor/></span></div></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "<Editor> cannot appear inside an island element",
 		},
 		{
 			name:       "component inside island block body",
-			src:        `<puzzle-view><div island>{#if show}<Editor/>{/if}</div></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><div island>{#if show}<Editor/>{/if}</div></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "<Editor> cannot appear inside an island element",
 		},
 		{
 			name:       "children marker inside island subtree",
-			src:        `<puzzle-view><div island><children/></div></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><div island><children/></div></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "a composition marker (<children/>/<slot>/<Slot/>) cannot appear inside an island element",
 		},
 		{
 			name:       "named slot inside island subtree",
-			src:        `<puzzle-view><div island><slot name="x"/></div></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view><div island><slot name="x"/></div></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "a composition marker (<children/>/<slot>/<Slot/>) cannot appear inside an island element",
 		},
 		{
 			name:       "island on puzzle-view root",
-			src:        `<puzzle-view island><div>x</div></puzzle-view>` + "\n<scripts></scripts>",
+			src:        `<puzzle-view island><div>x</div></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "the <puzzle-view> root cannot be an island",
 		},
 	}
@@ -1775,7 +1775,7 @@ func TestParseEventNameValidation(t *testing.T) {
 	}
 	for _, tc := range rejected {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<scripts></scripts>"
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
 			_, err := Parse([]byte(src), "test.pzl")
 			if err == nil {
 				t.Fatalf("expected error, got nil")
@@ -1832,7 +1832,7 @@ func TestParseEventModifierErrors(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<scripts></scripts>"
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
 			_, err := Parse([]byte(src), "test.pzl")
 			if err == nil {
 				t.Fatalf("expected error, got nil")

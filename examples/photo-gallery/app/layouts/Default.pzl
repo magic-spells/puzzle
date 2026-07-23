@@ -56,7 +56,7 @@
   </main>
 </puzzle-view>
 
-<scripts>
+<script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { groupAlbums } from '../albums.js';
 
@@ -83,4 +83,4 @@ export default class DefaultLayout extends PuzzleView {
     };
   }
 }
-</scripts>
+</script>
