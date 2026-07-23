@@ -710,6 +710,26 @@ export class Router {
 	}
 
 	/**
+	 * Render-time inverse of the click interceptor / #currentPath parsing (v1.46,
+	 * D79): a path-shaped route in, a mode-encoded href out — history `base + path`,
+	 * hash `'#' + base + path`, memory the path unchanged (no URL carrier). The #base
+	 * is used exactly as stored (D51 already normalized it — no re-normalization). A
+	 * string NOT starting with '/' is returned unchanged: the deliberate pass-through
+	 * for external URLs, `mailto:`/`tel:`, bare `#anchor` fragments, an already-encoded
+	 * `'#/x'`, and `''`. Query strings and `#anchor` suffixes inside a path survive
+	 * for free — this is pure prefixing and never parses them.
+	 */
+	url(path) {
+		if (typeof path !== 'string') {
+			throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
+		}
+		if (path[0] !== '/') return path;
+		if (this.#mode === 'memory') return path;
+		if (this.#mode === 'hash') return '#' + this.#base + path;
+		return this.#base + path;
+	}
+
+	/**
 	 * Current route info: { path, route, params, chain } — null before the first
 	 * nav. `route` is the LEAF node (back-compat shape); `chain` is the full
 	 * root→leaf node list (v1.3 additive).

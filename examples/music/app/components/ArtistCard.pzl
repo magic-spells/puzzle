@@ -1,5 +1,5 @@
 <puzzle-view>
-  <a href="#/artist/{ artist.id }" class="group block text-center hover:no-underline">
+  <a href="{ '/artist/' + artist.id | link }" class="group block text-center hover:no-underline">
     <div
       data-puzzle-morph-trigger="artist-{ artist.id }"
       class="aspect-square rounded-full mb-3 flex items-center justify-center shadow-lg shadow-black/40 ring-1 ring-white/10 transition-transform duration-200 group-hover:scale-[1.04]"

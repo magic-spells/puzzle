@@ -14,7 +14,7 @@
       <div class="w-full flex items-start justify-between gap-4 mb-6">
         <div class="min-w-0">
           <h1 class="font-display text-2xl font-bold text-fg truncate">{ track.title }</h1>
-          <a href="#/artist/{ track.artistId }" class="text-muted hover:text-fg hover:no-underline">{ artistName }</a>
+          <a href="{ '/artist/' + track.artistId | link }" class="text-muted hover:text-fg hover:no-underline">{ artistName }</a>
         </div>
         <button
           class="shrink-0 transition-colors {#if track.liked}text-accent{:else}text-faint hover:text-fg{/if}"
@@ -62,7 +62,7 @@
   {:else}
     <div class="text-center text-muted">
       <p class="mb-4">Nothing is playing right now.</p>
-      <a href="#/" class="text-accent hover:no-underline">Go find something ♪</a>
+      <a href="{ '/' | link }" class="text-accent hover:no-underline">Go find something ♪</a>
     </div>
   {/if}
 </puzzle-view>

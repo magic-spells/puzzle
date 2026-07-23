@@ -104,7 +104,8 @@ second specification. Decision cards hold rationale and git holds chronology.
 - History, hash, and memory modes; nested relative children; index routes;
   catch-all routes; merged params; top-level layouts; route titles.
 - `push`, `go`, `back`, and `forward`; guarded same-origin link interception;
-  router base paths and anchors.
+  router base paths and anchors; `router.url()` + the built-in `link`
+  formatter for mode-agnostic path-shaped hrefs.
 - Load-then-commit navigation with chain-prefix reuse and atomic URL/title/view/
   scroll commit. Failed or superseded pushes leave committed state alone.
 - Scroll-to-top, pop restoration, session persistence, custom behavior, and

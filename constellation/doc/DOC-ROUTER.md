@@ -11,7 +11,7 @@ connections:
   - DOC-DATASTORE
 ---
 
-The full v1 routing surface: route definition shape, dynamic `:param` segments delivered to `data(params, props)`, layouts and the `<Slot/>` injection point, nested routes via `children` (v1.3), `router.push()` plus automatic link interception and `go()`/`back()`/`forward()` (v1.11), `meta.title` → `document.title`, the v1 route lifecycle (with v1.1 transition animations), window scroll management (v1.5; anchor targets + reload persistence v1.10), opt-in hash mode for static hosts (v1.6), URL-less memory mode for tests and embeds (v1.11), sub-path deploys via `routerBase` (v1.19), and the settled `path: '*'` catch-all 404 convention (D19).
+The full v1 routing surface: route definition shape, dynamic `:param` segments delivered to `data(params, props)`, layouts and the `<Slot/>` injection point, nested routes via `children` (v1.3), `router.push()` plus automatic link interception and `go()`/`back()`/`forward()` (v1.11), `meta.title` → `document.title`, the v1 route lifecycle (with v1.1 transition animations), window scroll management (v1.5; anchor targets + reload persistence v1.10), opt-in hash mode for static hosts (v1.6), URL-less memory mode for tests and embeds (v1.11), sub-path deploys via `routerBase` (v1.19), path-shaped hrefs via `router.url()` and the `link` formatter (v1.46), and the settled `path: '*'` catch-all 404 convention (D19).
 
 # Puzzle Router
 
@@ -438,9 +438,20 @@ Flip `routerMode` in that one config line and everything else — views, layouts
 
 ### Links
 
-- `<a href="#/about">` is a **route link** — intercepted and routed via `push` (full commit semantics).
+**Write links path-shaped with the `link` formatter (v1.46, D79)** — the portable spelling that works in every mode:
+
+```html
+<a href="{ '/about' | link }">About</a>
+<a href="{ '/user/' + user.id | link }">{ user.name }</a>
+```
+
+The formatter calls `router.url(path)` at render time: history mode renders `/about` (prefixed under a `routerBase`), hash mode renders `#/about`, memory mode leaves it unchanged. Strings not starting with `/` pass through untouched, so external URLs and `mailto:` links can be piped safely (or just not piped). Because the **attribute itself** is rewritten, cmd-click, open-in-new-tab, and copy-link all get the correct URL — something click interception alone could never fix. Flipping `routerMode` (or `routerBase`) is then truly a one-line change with zero template edits. `router.url()` is also public for script-land hrefs.
+
+How the interceptor treats hrefs in hash mode (unchanged by D79):
+
+- `<a href="#/about">` is a **route link** — intercepted and routed via `push` (full commit semantics). Hand-written hash hrefs remain valid; `| link` is the portable spelling.
 - A bare `<a href="#faq">` stays a **native in-page anchor** — the router leaves it to the browser.
-- A same-origin link with a **different pathname** falls through to the browser (a real navigation away from the app shell).
+- A same-origin link with a **different pathname** falls through to the browser (a real navigation away from the app shell) — deliberately *not* claimed, so plain-path escape-hatch links keep working; that's also why path-shaped route links must go through `| link`.
 
 > **Caveat (inherent to hash routing).** Clicking a bare in-page anchor (`#faq`) replaces the whole fragment, which clobbers the current route from the URL. The rendered view survives and **back** returns you to the route, but the URL no longer names it while you're on the anchor. This is true of hash routing everywhere, not a Puzzle quirk — hash-mode apps should avoid bare-anchor links.
 

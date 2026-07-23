@@ -22,7 +22,9 @@ verified_at: '2026-07-22T00:04:07.695Z'
 
 Route compiler and navigation state machine for history, hash, and memory
 modes. Public surface: `start`, `stop`, `push`, `go`, `back`, `forward`,
-`current`, and the narrow `setMorphHandler` integration seam.
+`current`, `url` (path-shaped route → mode-encoded href, the render-time
+inverse of the link interceptor; non-`/` strings pass through — D79), and the
+narrow `setMorphHandler` integration seam.
 
 Nested route definitions flatten to leaf matchers in declaration order.
 Children use relative paths; empty children are index routes; layouts are

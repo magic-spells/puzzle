@@ -226,6 +226,22 @@ export class PuzzleApp {
 		if (transitionMode !== undefined) routerOptions.transitionMode = transitionMode;
 		this.router = new Router(routes, routerOptions);
 		if (this.#morphHandler) this.router.setMorphHandler(this.#morphHandler);
+
+		// 4a. Built-in `link` formatter (v1.46, D79): the router-bound render-time
+		//     encoder — a path-shaped route in, a mode-correct href out via
+		//     router.url(). Registered ONLY if absent, so a user `link` in
+		//     config.formatters (step 3) wins — the if-absent posture of the
+		//     requiredBuiltins seed (formatters.js). The arrow reads `this.router`
+		//     lazily off the app, not a captured router, so unmount/re-mount never
+		//     strands a stale router in the closure. Fail-soft (never throws in
+		//     render): nullish → '' (builtin convention), else String()-coerced.
+		if (!this.formatters.getAll().link) {
+			this.formatters.register('link', (v) => {
+				if (v == null) return '';
+				const s = String(v);
+				return this.router ? this.router.url(s) : s;
+			});
+		}
 		this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
 
 		// Claim mounted BEFORE the async start(): the initial navigation may await a
