@@ -1,12 +1,12 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D81)
+name: DECISIONS.md — decision-log index (D1–D85)
 status: verified
 verified_at: '2026-07-22T00:04:05.457Z'
 connections:
   - DOC-SPEC
 ---
 
-Index of the ADR-lite decision log. Each decision D1–D81 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+Index of the ADR-lite decision log. Each decision D1–D85 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
 
 # Decision Log (index)
 
@@ -112,6 +112,10 @@ slice-of-work view.
 - **D79** [[DECISION-D79-LINK-FORMATTER]] — path-shaped template links: `router.url(path)` mode-encodes a path-shaped route into the href (`base + path` history, `'#' + base + path` hash, unchanged memory; non-`/` strings pass through), plus a built-in router-bound `link` formatter (`{ path | link }`) registered by PuzzleApp at mount **if absent** (user config wins); closes D34's `<a href>` seam and absorbs D51's history-mode base prefixing — runtime-only, no compiler or §2 config change; hash-mode interceptor deliberately does NOT claim plain `/x` hrefs (v1.46 → SPEC §6/§9/§15)
 - **D80** [[DECISION-D80-REGISTRY-ACCEPT-HEADER]] — registry fetch asks for `application/json`: npm 406s the abbreviated install-v1 format on version endpoints, so D76's specified header broke the update notice and `puzzle upgrade` in every release; test registry now emulates the 406 (fix → SPEC §41)
 - **D81** [[DECISION-D81-STATIC-PAGES-MODE]] — true static-pages output mode: `output: 'static'` / `--static` now emits per-route HTML with no router, no SPA takeover, and no `app.js` — each page ships a per-page `mountStatic` module importing only its own classes (keyed on new codegen `__pzlModule` stamps), shared runtime split into chunks, build-time data serialized into an inline island and rehydrated client-side; the D67 prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid`, byte-identical (v1.47 → SPEC §36 amendment, [[FEATURE-V1-47-STATIC-PAGES]])
+- **D82** [[DECISION-D82-A11Y-WARNINGS]] — compiler accessibility warnings: five conservative, positioned, non-fatal template diagnostics (img/input-image `alt`, iframe `title`, `a` `href`, static positive `tabindex`) on the existing `Result.Warnings` channel; any static/dynamic/mixed attr counts as present, template + skeleton scanned; no suppression syntax, no ARIA matrix, generated JS byte-identical (v1.48 → SPEC §43, [[FEATURE-V1-48-A11Y-WARNINGS]])
+- **D83** [[DECISION-D83-QUERY-REPLACE]] — router query snapshot + `replace()`: the route snapshot gains `pathname`/`query` (frozen null-proto, `URLSearchParams` decoding, repeated keys → arrays)/`hash`, parsed once per navigation; `replace(path)` mirrors `push()` through the same atomic-commit pipeline via one added boolean (`replaceState` keeping the scroll-entry key; memory `stack[index]` overwrite; scroll untouched by default) — the internal action-enum refactor explicitly rejected (v1.49 → SPEC §44, [[FEATURE-V1-49-QUERY-REPLACE]])
+- **D84** [[DECISION-D84-HEAD-MANAGEMENT]] — route head management: reserved `meta` fields `title`/`description`/`canonical`/`socialImage`, per-field leaf→root resolution (`null` suppresses), `data-puzzle-head`-marked managed tags rendered by SSG shell surgery AND the SPA commit path (identity adoption on takeover, memory mode no-op, title-only apps byte-identical); `robots`/`themeColor`, data-derived values, and per-network overrides deferred (v1.50 → SPEC §45, [[FEATURE-V1-50-HEAD-MANAGEMENT]])
+- **D85** [[DECISION-D85-FLIP-ATTRIBUTE]] — FLIP keyed-reorder animation via a `flip` directive ATTRIBUTE (bare or `flip={ {duration, easing} }`), joining `key`/`island`/`ref` in the directive strip lists — the `animate:flip` syntax namespace rejected for its grammar/tooling ripple; translation-only First/Last measurement around keyed reconciliation, visual-rect capture on rapid reorders, WeakMap-tracked Puzzle-owned animations, reduced-motion/no-WAAPI/no-flip fast paths free (v1.51 → SPEC §46, [[FEATURE-V1-51-FLIP]])
 
 ## Open questions (tracked, not yet decided)
 

@@ -906,7 +906,7 @@ An additive build OUTPUT mode that prerenders every static route to its own HTML
 
 **404 (v1.34):** the top-level catch-all route (`path: '*'`, D19) renders to `dist/404.html` — the file static hosts (GitHub Pages, Netlify, Render, Cloudflare) serve for unknown paths — with the same preload/serialize/title/marker treatment as any page (`prerender: false` on its chain writes the plain shell there instead). A build with NO catch-all emits an advisory warning that unknown URLs will get the host's default 404. In `hybrid` mode the live router additionally serves this view for unmatched client paths; in `static` mode there is no client router, so the file is what serves unknown URLs. The `puzzle init` templates (default and todos) ship a `NotFound.pzl` view wired as the catch-all.
 
-**Boundaries:** dynamic routes (`:param`, and any non-catch-all `*` pattern) are skipped with a build warning in both modes (a static build has no way to run them client-side either — dynamic content in static mode awaits `staticPaths()` or a `prerender: false` runtime-fetch island). `prerender: false` anywhere in a route chain writes the plain shell at that path — an SPA island in hybrid mode, a client-rendered island (data island + entry module, no marker) in static mode. Deferred on top: a `staticPaths()` enumeration hook, a head-management API (per-route meta/og), DOM-adoption hydration, a true zero-JS per-route opt-out for static mode, lazy route views + code splitting, `puzzle preview`, and flat `name.html` output as a config knob.
+**Boundaries:** dynamic routes (`:param`, and any non-catch-all `*` pattern) are skipped with a build warning in both modes (a static build has no way to run them client-side either — dynamic content in static mode awaits `staticPaths()` or a `prerender: false` runtime-fetch island). `prerender: false` anywhere in a route chain writes the plain shell at that path — an SPA island in hybrid mode, a client-rendered island (data island + entry module, no marker) in static mode. Deferred on top: a `staticPaths()` enumeration hook, ~~a head-management API (per-route meta/og)~~ (shipping in v1.50, §45/D84), DOM-adoption hydration, a true zero-JS per-route opt-out for static mode, lazy route views + code splitting, `puzzle preview`, and flat `name.html` output as a config knob.
 
 ## 37. Cross-view morphs — sibling-swap capture flights in `enableMorph` (v1.35)
 
@@ -1008,6 +1008,51 @@ Semver comparison is a minimal in-repo `x.y.z[-pre]` implementation (prerelease 
 - **Flags win:** an explicitly-passed flag is never re-asked, so `puzzle init my-app --template todos --typescript` stays fully scripted even on a TTY.
 - The scaffolded output for a given (name, template, typescript) triple is unchanged — prompts only gather inputs; scaffolding semantics stay §13's.
 
+## 43. Compiler accessibility warnings (v1.48)
+
+The compiler emits **positioned, non-fatal warnings** (never errors) for five template accessibility mistakes, on the same out-of-band diagnostics channel as the script-import collision warning — generated JavaScript is byte-identical whether or not a template warns (D82).
+
+- Rules: `<img>` without `alt`; `<input type="image">` without `alt` (only when `type` is statically `image`); `<iframe>` without `title`; `<a>` without `href`; a statically positive `tabindex`.
+- `alt=""` is valid (decorative images) and never warns. An attribute counts as **present** when any static, valueless, dynamic (`alt={expr}`), or mixed attribute carries the name — the rules never guess about runtime values, and a dynamic `type`/`tabindex` never warns.
+- Both the template and `<puzzle-skeleton>` are scanned, descending into `{#if}`/`{#for}`/`{#case}` bodies, component call-site children, and slot fallbacks.
+- No suppression syntax, no warning IDs, no ARIA role matrix, no click/keyboard heuristics — five reliable rules over a rules engine. Additions are SPEC amendments.
+
+## 44. Router query snapshot + `replace()` (v1.49)
+
+URL-backed transient state — filters, tabs, search, pagination — becomes first-class (D83). Additive to §9/§19; `path` is unchanged.
+
+**Snapshot fields.** The route snapshot (`router.current`, `this.route`) gains:
+
+- `pathname` — `path` minus query and hash (still base-free; trailing slash kept verbatim, matching unchanged).
+- `query` — a **frozen, null-prototype** object parsed with `URLSearchParams` decoding: a single value is a string; repeated keys become a frozen array in source order; a valueless key (`?debug`) is `''`. Malformed percent input never throws. Query values never merge into route `params`, and `data(params)` signatures are unchanged — views read `this.route.query`.
+- `hash` — `''` or the raw leading-`#` fragment.
+
+Parsing happens once per navigation; a query-only navigation to the same route runs the params-only refresh with the new snapshot, so `data()` reactivity composes with no new machinery.
+
+**`router.replace(path)`.** Push's no-history-entry sibling: the identical match/load/cancellation/atomic-commit pipeline (§30 holds — a failed or superseded replace commits nothing), the same same-path no-op guard, and the same commit-window deferral. At commit: history mode `history.replaceState` (hash mode replaces the fragment entry) with the **current scroll-entry key kept** — it is the same history entry; memory mode overwrites `stack[index]` in place. **Replace never touches scroll by default** (a filter keystroke must not jump the page); a custom `scrollBehavior` (§14) still runs and may override. Static output's router stub throws for `replace` like every navigation method.
+
+## 45. Route head management (v1.50)
+
+Route `meta` grows **reserved head fields** — `title` (existing), `description`, `canonical`, `socialImage` — resolved per-field and rendered as managed head tags by both prerender output and SPA navigation, with SSG as the authoritative delivery path (link-preview bots do not run the app). One contract, no second head DSL (D84).
+
+- **Resolution:** each reserved field resolves independently, nearest-defined walking the destination chain leaf → root (the `meta.title` walk); `undefined` inherits, `null` explicitly suppresses an inherited value. Values are static strings or `null` — no functions, view data, raw HTML, or tag arrays. Custom `meta` keys are untouched. Canonical values are emitted as provided (supply absolute URLs).
+- **Generated tags:** `title` → `<title>` + `og:title` + `twitter:title`; `description` → description + `og:description` + `twitter:description`; `canonical` → `<link rel="canonical">` + `og:url`; `socialImage` → `og:image` + `twitter:image` + `twitter:card=summary_large_image`. Every managed tag carries `data-puzzle-head="<field>"`; the framework only ever creates, updates, or removes tags bearing that marker.
+- **SSG:** the shell injection replaces same-identity managed tags and inserts the rest before `</head>` — escaped, deterministic string surgery (no HTML parser). Prerender results carry a resolved `head` beside the compatibility `title`.
+- **SPA:** managed nodes sync at the same commit point as the title today, so §30 atomicity covers the head — a failed or superseded navigation never touches it. On hybrid takeover, existing marker-bearing tags are **adopted** by identity, never duplicated. Title-only apps behave byte-identically: no resolved title anywhere leaves `document.title` alone, and memory mode performs no document work (§16 posture, D42).
+- Applications using managed fields should define root-route defaults so child routes cannot leave stale inherited values.
+
+## 46. FLIP keyed-reorder animation: the `flip` directive attribute (v1.51)
+
+A keyed `{#for}` row root may declare `flip` (bare) or `flip={ { duration, easing } }` to animate **retained** elements from their old visual position to their new one when keyed reconciliation moves them — First/Last/Invert/Play over the completed patch, so DOM order, accessibility order, and hit testing are already final while only the paint catches up (D85).
+
+- `flip` is a **framework directive** like `key`/`island`/`ref` — stripped from DOM attributes and SSG output, zero new template grammar.
+- Translation only (no width/height scaling); position deltas under 0.5 CSS px skip; a pre-existing base transform is composed under the correction and restored untouched; animation state is fully released on settle so author CSS stays authoritative.
+- Defaults: `250`ms, `cubic-bezier(0.2, 0, 0, 1)`; malformed options fall back to defaults; unknown keys are ignored.
+- A rapid re-reorder measures the element's current **visual** rectangle (mid-flight transform included), cancels the prior Puzzle-owned FLIP (foreign Web Animations are never touched), and animates from there.
+- Newly inserted rows keep the enter path (§12/§39); leaving rows keep the out-animation path and are never FLIP candidates. No wrapper elements; the loop key is the only identity system.
+- `prefers-reduced-motion` and missing Web Animations mean no measurement work at all; a list with no `flip` attributes (or unchanged order) costs nothing beyond a cheap scan. A `flip` on an unkeyed row warns once (positional-diff lists have no stable identity to animate).
+- Simultaneous author-controlled transform *animations* on the same element may conflict — documented; a wrapper element is the escape hatch.
+
 ## Deferred features (post-v1)
 
 Explicitly out of scope for v1. Docs may describe them only if marked **"Planned — not in v1"**.
@@ -1021,6 +1066,9 @@ Explicitly out of scope for v1. Docs may describe them only if marked **"Planned
 - Global event bus (`this.$events`), `ctx.utils`, devtools hook — re-rejected at the D60 triage (singleton store records are the bus; the 3-service ctx is a selling point; `window.__PUZZLE_APP__` covers dev introspection, D57)
 - Virtual scrolling
 - ~~HMR~~ — shipped in v1.25 as a state-preserving dev reload (§27, D57). Per-module hot swap (patching a changed component without a reload) remains deferred on top of it.
+- Element actions (`use:name` directives) — considered at the 2026-07 framework-gap review and deferred: D72 refs already deliver element-lifetime callbacks, view lifecycle covers document-listener patterns, and the native `popover`/`<dialog>` top layer covers the dominant dismiss-behavior cases. If real pressure appears, the intended shape is dynamic function refs (`ref={ expr }` on the §31 handler cache), not a new directive namespace.
+- `<Portal>` — considered at the same review and deferred: §26's containing-block contract already keeps `position: fixed` overlays reliable, the native top layer (`<dialog>.showModal()`, `popover`) covers modals/popovers on our ES2022 floor, and a portal entangles the one-animator transition, overlap pinning, morph scanning, and SSG inline serialization. Document the native pattern instead.
+- Lazy route views + code splitting + link preloading — real for large apps, but Puzzle bundles are small enough that the pressure is weak today, and it undercuts the §16 skeleton story (a skeleton cannot render before its module arrives). Deserves its own release; static mode's per-page splitting is the in-repo precedent. (Also listed at §36.)
 
 ## Open questions (tracked, not blocking)
 

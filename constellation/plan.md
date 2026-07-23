@@ -11,7 +11,7 @@ a reactive browser runtime, and a Go + esbuild compiler/CLI. Optional static
 generation prerenders routes without adding an SSR server or hydration layer.
 
 [[DOC-SPEC]] is the enforceable contract and wins all conflicts. Decisions
-D1-D81 in [[DOC-DECISIONS]] explain why the contract has its current shape.
+D1-D85 in [[DOC-DECISIONS]] explain why the contract has its current shape.
 [[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
 
 ## Current state
@@ -24,7 +24,13 @@ D1-D81 in [[DOC-DECISIONS]] explain why the contract has its current shape.
   `router.url()` + the built-in `link` formatter (D79/v1.46) — and the true
   static-pages output mode — `output: 'static'` / `--static` (D81/v1.47),
   with the D67 prerendered-SPA mode renamed `output: 'hybrid'` / `--hybrid`
-  (the breaking config rename is what makes this 0.2.0).
+  (the breaking config rename is what makes this 0.2.0). Also folding into
+  0.2.0 (2026-07 framework-gap review, in progress): compiler a11y warnings
+  (D82/v1.48), router query snapshot + `replace()` (D83/v1.49), route head
+  management (D84/v1.50), and FLIP keyed-reorder animation via a `flip`
+  attribute (D85/v1.51) — zero new template grammar across all four. Element
+  actions, `<Portal>`, and lazy routes were reviewed and deferred (SPEC
+  deferred list has the rationale).
 - Runtime, compiler, CLI, static generation (hybrid + static modes),
   state-preserving dev reload,
   TypeScript transpilation, model validation/relationships/write sync, nested
@@ -42,7 +48,6 @@ D1-D81 in [[DOC-DECISIONS]] explain why the contract has its current shape.
 Explicitly future or unshipped, not release blockers:
 
 - Tailwind standalone-binary support in the styles runner (consideration).
-- FLIP animations for keyed reorders.
 - D23 `setData` ergonomics papercut (`setData` re-running `data()` when it
   touches keys `data()` read; today pair `setData` with explicit `refresh()`).
 - Height animations need explicit px — WAAPI cannot animate to `auto`.
