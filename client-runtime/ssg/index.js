@@ -27,12 +27,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { ViewNode } from '../views/ViewNode.js';
 import { Store } from '../datastore/store.js';
 import { FormatterRegistry } from '../formatters.js';
 import { Router } from '../router/router.js';
 import builtinFormatters from '@magic-spells/puzzle/formatters/manifest';
 import { serialize } from './serialize.js';
+import { assembleChain } from './assemble.js';
 
 /**
  * Prerender every static route in `config` to an HTML content string + title.
@@ -40,15 +40,24 @@ import { serialize } from './serialize.js';
  * @param {object} config the PuzzleApp config (the default-exported app's
  *   `app.config`, or a bare config object) — { target, routes, models,
  *   formatters, apiURL, beforeMount, … }
- * @param {object} [opts] reserved for forward compatibility (unused in v1)
+ * @param {object} [opts]
+ * @param {'hybrid'|'static'} [opts.mode] `'hybrid'` (default) is the router-takeover
+ *   mode; `'static'` additionally captures each page's store snapshot (`data`), its
+ *   view/layout `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot
+ *   so prerenderToDir can emit true static pages (D79).
  * @returns {Promise<{
- *   pages: Array<{ path: string, html: string|null, title: string|null, prerender?: boolean }>,
+ *   pages: Array<{ path: string, html: string|null, title: string|null, prerender?: boolean,
+ *     data?: object, modules?: { views: string[], layout: string|null }, route?: object }>,
  *   skipped: Array<{ path: string, reason: string }>,
  *   warnings: string[]
  * }>} `html`/`title` are null for a `prerender: false` page (the shell is written
- *   verbatim at its path by prerenderToDir).
+ *   verbatim at its path by prerenderToDir). `data`/`modules`/`route` are present
+ *   only in static mode.
  */
 export async function prerender(config, opts = {}) {
+	const mode = opts.mode ?? 'hybrid';
+	const isStatic = mode === 'static';
+
 	// Fail fast on an unsupported target selector before doing any work (v1
 	// supports '#id' targets only — the shell surgery keys on the id).
 	parseTargetId(config.target);
@@ -87,10 +96,15 @@ export async function prerender(config, opts = {}) {
 		}
 
 		// Opt-out: a `prerender: false` anywhere in the chain writes the untouched
-		// shell at this path (an SPA-only island inside a static site).
+		// shell at this path (an SPA-only island inside a static site). In static
+		// mode the context is still built (beforeMount runs) and its store snapshot
+		// captured, so the page's per-page module can rehydrate + mount client-side
+		// into the empty target — html stays null (CONTRACT 3).
 		if (chain.some((route) => route.prerender === false)) {
-			await createPageContext();
-			pages.push({ path: fullPath, html: null, title: null, prerender: false });
+			const ctx = await createPageContext();
+			const page = { path: fullPath, html: null, title: null, prerender: false };
+			if (isStatic) attachStaticFields(page, entry, ctx);
+			pages.push(page);
 			continue;
 		}
 
@@ -104,7 +118,9 @@ export async function prerender(config, opts = {}) {
 				cause: err,
 			});
 		}
-		pages.push({ path: fullPath, html: rendered.html, title: rendered.title });
+		const page = { path: fullPath, html: rendered.html, title: rendered.title };
+		if (isStatic) attachStaticFields(page, entry, ctx);
+		pages.push(page);
 	}
 
 	// No catch-all → no 404.html: warn (a static host will serve its own default
@@ -135,10 +151,16 @@ export async function prerender(config, opts = {}) {
  * @param {object} options
  * @param {string} options.outDir directory to write the per-route files into
  * @param {string} options.shellPath the app shell HTML (the built index.html)
- * @returns {Promise<{ outDir: string, written: Array<{path,file,prerender:boolean}>,
- *   skipped: Array<{path,reason}>, warnings: string[], count: number }>}
+ * @param {'hybrid'|'static'} [options.mode] `'hybrid'` (default) is the current
+ *   router-takeover output, byte-identical to before D79. `'static'` emits true
+ *   static pages: the `/app.js` bundle tag is stripped, each page carries a
+ *   `data-puzzle-static` target + an inline JSON data island + a per-page module
+ *   script, and the summary gains the extra fields the Go static build needs.
+ * @returns {Promise<{ outDir: string, written: Array<object>, skipped: Array<{path,reason}>,
+ *   warnings: string[], count: number, mode?: string, target?: string,
+ *   apiURL?: string|null, hasFormatters?: boolean }>}
  */
-export async function prerenderToDir(config, { outDir, shellPath } = {}) {
+export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid' } = {}) {
 	if (!outDir) throw new Error('[puzzle] prerenderToDir requires an outDir');
 	if (!shellPath) throw new Error('[puzzle] prerenderToDir requires a shellPath');
 
@@ -150,7 +172,11 @@ export async function prerenderToDir(config, { outDir, shellPath } = {}) {
 
 	const targetId = parseTargetId(config.target);
 	const shell = fs.readFileSync(shellPath, 'utf8');
-	const { pages, skipped, warnings } = await prerender(config);
+	const { pages, skipped, warnings } = await prerender(config, { mode });
+
+	if (mode === 'static') {
+		return writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings });
+	}
 
 	const written = [];
 	for (const page of pages) {
@@ -165,6 +191,61 @@ export async function prerenderToDir(config, { outDir, shellPath } = {}) {
 	}
 
 	return { outDir, written, skipped, warnings, count: written.length };
+}
+
+/**
+ * The static-mode (D79) writer: strip the app-bundle tag once, then per page compute
+ * a collision-free slug, inject the static shell (content + `data-puzzle-static`
+ * marker, inline JSON data island, per-page module script), and collect the extended
+ * summary the Go static build consumes (per page: `entry`, `modules`, `route`; top
+ * level: `mode`, `target`, `apiURL`, `hasFormatters`).
+ */
+function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings }) {
+	// The app-bundle tag is stripped once (the shell is identical for every page) so
+	// a missing tag warns once, not per page.
+	const { shell: baseShell, found } = stripAppBundle(shell);
+	if (!found) {
+		warnings.push(
+			'[puzzle] static output: no <script src="/app.js"> found in the shell to strip — ' +
+				'a page referencing a nonstandard bundle name would 404 it at runtime'
+		);
+	}
+
+	const slugCounts = new Map();
+	const written = [];
+	for (const page of pages) {
+		const slug = uniqueSlug(computeSlug(page.path), slugCounts);
+		const html = injectStaticShell(baseShell, {
+			targetId,
+			content: page.html, // null for a prerender:false page → empty, unmarked target
+			title: page.title,
+			slug,
+			data: page.data ?? {},
+		});
+		const outPath = pageOutputPath(outDir, page.path);
+		fs.mkdirSync(path.dirname(outPath), { recursive: true });
+		fs.writeFileSync(outPath, html);
+		written.push({
+			path: page.path,
+			file: outPath,
+			prerender: page.prerender !== false,
+			entry: `_puzzle/${slug}.js`,
+			modules: page.modules,
+			route: page.route,
+		});
+	}
+
+	return {
+		outDir,
+		written,
+		skipped,
+		warnings,
+		count: written.length,
+		mode: 'static',
+		target: targetId,
+		apiURL: config.apiURL ?? null,
+		hasFormatters: Object.keys(config.formatters ?? {}).length > 0,
+	};
 }
 
 // ---- ctx wiring -------------------------------------------------------------
@@ -247,57 +328,14 @@ function joinPath(parentPath, childPath) {
 // ---- per-route render -------------------------------------------------------
 
 /**
- * Instantiate the layout+view chain for a static route, preload every instance
- * (created() + awaited data() with no DOM), assemble the nested keyed component
- * vnodes the way the Router's #navigate does (layout wrapping the view chain via
- * slot children, each `.instance` pinned), and serialize to an HTML string.
- * Returns the rendered content plus the resolved <title>.
+ * Assemble the layout+view chain for a static route (shared assembleChain: preload
+ * every instance created() + awaited data() with no DOM, build the nested keyed
+ * component vnodes the way the Router's #navigate does) and serialize to an HTML
+ * string. Returns the rendered content plus the resolved <title>.
  */
 async function renderRoute(entry, ctx) {
-	const { chain, layout: LayoutClass, fullPath } = entry;
-	const leaf = chain[chain.length - 1];
-
-	// Per-navigation route snapshot (v1.15, D47): SAME four keys + semantics as the
-	// Router builds at router.js:809 — `{ path, route, params, chain }`, frozen —
-	// threaded to every routed view/layout preload() so `this.route` is populated at
-	// build time exactly as in the browser. Views read `this.route.route.name` /
-	// `this.route.chain[0].name` / `this.route.route.meta`, so the top-level keys are
-	// `route` (the matched LEAF def) and `chain` (root → leaf defs), NOT bare
-	// name/meta. Static routes carry no params, so `params` is {}.
-	const route = Object.freeze({
-		path: fullPath,
-		route: leaf,
-		params: {},
-		chain,
-	});
-
-	// Preload each chain level's view (root → leaf), then the layout.
-	const instances = [];
-	for (const node of chain) {
-		const view = new node.view(ctx);
-		await view.preload({ params: {}, props: {}, route });
-		instances.push(view);
-	}
-
-	// Assemble the chain leaf-up into nested component vnodes, each adopting its
-	// preloaded instance (mirrors router.js #navigate ~945-958).
-	let childVnode = null;
-	for (let i = chain.length - 1; i >= 0; i--) {
-		const vnode = new ViewNode(chain[i].view, {}, childVnode ? [childVnode] : []);
-		vnode.instance = instances[i];
-		childVnode = vnode;
-	}
-	let topVnode = childVnode;
-
-	// A top-level layout wraps the whole chain, hosting it at its <Slot/>.
-	if (LayoutClass) {
-		const layout = new LayoutClass(ctx);
-		await layout.preload({ params: {}, props: {}, route });
-		const layoutVnode = new ViewNode(LayoutClass, {}, [topVnode]);
-		layoutVnode.instance = layout;
-		topVnode = layoutVnode;
-	}
-
+	const { chain } = entry;
+	const { topVnode } = await assembleChain(entry, ctx);
 	const html = await serialize(topVnode, { ctx });
 	const title = resolveTitle(chain);
 	return { html, title };
@@ -312,6 +350,67 @@ function resolveTitle(chain) {
 	return null;
 }
 
+// ---- static-mode per-page capture (D79) -------------------------------------
+
+/**
+ * Attach the static-mode fields to a rendered page (CONTRACT 3): the page's store
+ * snapshot (`data`, the same wire shape the HMR path uses — `_serializeAll()`), the
+ * chain's `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot the
+ * browser kernel zips its view classes onto. Mutates `page` in place.
+ */
+function attachStaticFields(page, entry, ctx) {
+	page.data = ctx.store._serializeAll();
+	page.modules = collectModules(entry);
+	page.route = serializeRouteJSON(entry);
+}
+
+/**
+ * Read the app-root-relative `__pzlModule` stamp (CONTRACT 2) from every chain view
+ * class and the layout class. A missing stamp means the route is built from a class
+ * that codegen did not emit (a hand-written PuzzleView subclass) — static output
+ * cannot ship a per-page module for it, so this is a build error naming the route
+ * and class.
+ */
+function collectModules(entry) {
+	const views = [];
+	for (const node of entry.chain) {
+		views.push(requireStamp(node.view, entry.fullPath, 'view'));
+	}
+	const layout = entry.layout ? requireStamp(entry.layout, entry.fullPath, 'layout') : null;
+	return { views, layout };
+}
+
+function requireStamp(Class, routePath, kind) {
+	const stamp = Class?.__pzlModule;
+	if (typeof stamp !== 'string') {
+		const name = Class?.name || '<anonymous>';
+		throw new Error(
+			`[puzzle] static output requires .pzl views/layouts — route "${routePath}" ${kind} ` +
+				`${name} has no __pzlModule stamp (compile it from a .pzl file)`
+		);
+	}
+	return stamp;
+}
+
+/**
+ * The plain-JSON route snapshot for the summary (CONTRACT 3): `{ path, params: {},
+ * chain: [{ path, name?, meta? }] }` — no classes, so it survives JSON.stringify to
+ * the browser kernel, which rebuilds the full `{ path, route, params, chain }` shape
+ * by zipping the page's view classes back on.
+ */
+function serializeRouteJSON(entry) {
+	return {
+		path: entry.fullPath,
+		params: {},
+		chain: entry.chain.map((def) => {
+			const out = { path: def.path };
+			if (def.name != null) out.name = def.name;
+			if (def.meta != null) out.meta = def.meta;
+			return out;
+		}),
+	};
+}
+
 // ---- shell injection --------------------------------------------------------
 
 /**
@@ -324,15 +423,8 @@ function resolveTitle(chain) {
  */
 export function injectShell(shell, { targetId, content, title }) {
 	// Match `<tag …id="targetId"…></tag>` with NOTHING (but whitespace) inside —
-	// the backreference \1 requires the same tag name to close. Both quote styles.
-	const idPattern = escapeRegExp(targetId);
-	// `(?<![-\w])id=` requires a real attribute boundary before `id=`. A plain `\b`
-	// matches after a hyphen too, so `data-id="app"`/`aria-id="app"` would falsely
-	// satisfy the id lookup — the lookbehind excludes a preceding hyphen or word char.
-	const elementRe = new RegExp(
-		'<(\\w+)([^>]*(?<![-\\w])id=["\']' + idPattern + '["\'][^>]*)>\\s*</\\1>'
-	);
-	const match = shell.match(elementRe);
+	// the backreference \1 requires the same tag name to close (targetElementRe).
+	const match = shell.match(targetElementRe(targetId));
 	if (!match) {
 		throw new Error(
 			`[puzzle] SSG target element not found or not empty — expected an EMPTY ` +
@@ -346,9 +438,108 @@ export function injectShell(shell, { targetId, content, title }) {
 	let out = shell.replace(full, () => rebuilt);
 
 	if (title != null) {
-		out = out.replace(/<title>[\s\S]*?<\/title>/, () => `<title>${escapeHtml(title)}</title>`);
+		out = replaceTitle(out, title);
 	}
 	return out;
+}
+
+// ---- static-mode shell surgery (D79) ----------------------------------------
+
+// Any `<script … src="/app.js" …></script>` — the SPA bundle tag. Static pages
+// have no router/app.js, so it is struck once (a missing tag warns; see
+// writeStaticDir). `\/?` tolerates a bare `app.js` too; the trailing group allows
+// attrs after src (type/defer/etc.) up to the tag close.
+const APP_BUNDLE_RE = /<script\b[^>]*\bsrc=["']\/?app\.js["'][^>]*><\/script>\s*/i;
+
+/** Strip the app-bundle `<script>` from the shell. `found` is false if none matched. */
+function stripAppBundle(shell) {
+	const found = APP_BUNDLE_RE.test(shell);
+	return { shell: found ? shell.replace(APP_BUNDLE_RE, '') : shell, found };
+}
+
+/**
+ * The static-mode shell surgery (CONTRACT 3). Unlike injectShell (which stamps the
+ * router's `data-puzzle-ssg` takeover marker), this:
+ *  - stamps `data-puzzle-static` (NEVER `data-puzzle-ssg` — the router must never
+ *    try to take these pages over) and drops the rendered content into the target,
+ *    UNLESS `content` is null (a prerender:false page) in which case the target is
+ *    left empty and unmarked;
+ *  - injects, immediately before `</body>` (or appended if none): an inline JSON
+ *    data island (`<` escaped to `<` so a `</script>` in a record can never
+ *    break out of the script) and the per-page ES module `<script>`;
+ *  - replaces the title as injectShell does.
+ * The caller has already stripped the app-bundle tag from `shell`.
+ */
+export function injectStaticShell(shell, { targetId, content, title, slug, data }) {
+	let out = shell;
+
+	// A prerender:false page keeps its empty, UNMARKED target (the kernel mounts into
+	// it client-side); only a rendered page rebuilds the target with content + marker.
+	if (content != null) {
+		const match = shell.match(targetElementRe(targetId));
+		if (!match) {
+			throw new Error(
+				`[puzzle] static target element not found or not empty — expected an EMPTY ` +
+					`<… id="${targetId}"></…> in the shell (config.target "#${targetId}")`
+			);
+		}
+		const [full, tag, attrs] = match;
+		const rebuilt = `<${tag}${attrs} data-puzzle-static>${content}</${tag}>`;
+		out = out.replace(full, () => rebuilt);
+	}
+
+	// `<` → `<` keeps the JSON valid (it only appears inside string values) while
+	// making a literal `</script>` in a record impossible to emit — so content cannot
+	// terminate the data island early.
+	const json = JSON.stringify(data ?? {}).replace(/</g, '\\u003c');
+	const scripts =
+		`<script type="application/json" data-puzzle-static-data>${json}</script>` +
+		`<script type="module" src="/_puzzle/${slug}.js"></script>`;
+	out = /<\/body>/i.test(out)
+		? out.replace(/<\/body>/i, () => `${scripts}</body>`)
+		: out + scripts;
+
+	if (title != null) out = replaceTitle(out, title);
+	return out;
+}
+
+/**
+ * Compute a page's entry slug from its route path (CONTRACT 3): `'/'` → `index`,
+ * `'*'` → `404`, otherwise strip leading/trailing `/` and replace each remaining
+ * `/` with `--` (`/guide/templates` → `guide--templates`).
+ */
+function computeSlug(routePath) {
+	if (routePath === '/') return 'index';
+	if (routePath === '*') return '404';
+	return routePath.replace(/^\/+/, '').replace(/\/+$/, '').replace(/\//g, '--');
+}
+
+/**
+ * Deduplicate a slug within one build: the first occurrence keeps the base, later
+ * collisions get `-2`, `-3`, … in enumeration order (CONTRACT 3). `counts` tracks
+ * how many times each base has been requested across the run.
+ */
+function uniqueSlug(base, counts) {
+	const n = (counts.get(base) ?? 0) + 1;
+	counts.set(base, n);
+	return n === 1 ? base : `${base}-${n}`;
+}
+
+/**
+ * The EMPTY-target element regex, shared by injectShell + injectStaticShell:
+ * `<tag …id="targetId"…></tag>` with only whitespace inside (`\1` closes the same
+ * tag). `(?<![-\w])id=` requires a real attribute boundary before `id=` — a plain
+ * `\b` matches after a hyphen too, so `data-id="app"`/`aria-id="app"` would falsely
+ * satisfy the id lookup; the lookbehind excludes a preceding hyphen or word char.
+ */
+function targetElementRe(targetId) {
+	const idPattern = escapeRegExp(targetId);
+	return new RegExp('<(\\w+)([^>]*(?<![-\\w])id=["\']' + idPattern + '["\'][^>]*)>\\s*</\\1>');
+}
+
+/** Replace the first `<title>…</title>` with an HTML-escaped title. */
+function replaceTitle(html, title) {
+	return html.replace(/<title>[\s\S]*?<\/title>/, () => `<title>${escapeHtml(title)}</title>`);
 }
 
 /**

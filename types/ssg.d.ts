@@ -43,6 +43,12 @@ export interface WrittenPage {
 	path: string;
 	file: string;
 	prerender: boolean;
+	/** The page's per-page module URL (`"_puzzle/<slug>.js"`) — static mode only. */
+	entry?: string;
+	/** The page's view/layout `__pzlModule` stamps — static mode only. */
+	modules?: { views: string[]; layout: string | null };
+	/** The page's plain-JSON route snapshot — static mode only. */
+	route?: object;
 }
 
 /** The summary returned by `prerenderToDir`. */
@@ -52,6 +58,14 @@ export interface PrerenderToDirResult {
 	skipped: SkippedRoute[];
 	warnings: string[];
 	count: number;
+	/** Present only in `mode: 'static'` output (D79). */
+	mode?: 'static';
+	/** The mount target id (e.g. `"app"`) — static mode only. */
+	target?: string;
+	/** The store's base API URL, or null — static mode only. */
+	apiURL?: string | null;
+	/** Whether the config registered any custom formatters — static mode only. */
+	hasFormatters?: boolean;
 }
 
 /** Options for `prerenderToDir`. */
@@ -60,6 +74,12 @@ export interface PrerenderToDirOptions {
 	outDir: string;
 	/** Path to the app shell HTML (the built index.html) to inject pages into. */
 	shellPath: string;
+	/**
+	 * Output mode (D79): `'hybrid'` (default) is the router-takeover output,
+	 * byte-identical to before. `'static'` emits true static pages (app.js stripped,
+	 * per-page data island + module script, extended summary fields).
+	 */
+	mode?: 'hybrid' | 'static';
 }
 
 /**
@@ -89,4 +109,22 @@ export declare function prerenderToDir(
 export declare function injectShell(
 	shell: string,
 	fields: { targetId: string; content: string; title: string | null }
+): string;
+
+/**
+ * Static-mode (D79) shell surgery: stamp `data-puzzle-static` on the target (unless
+ * `content` is null — a prerender:false page keeps an empty, unmarked target), inject
+ * the inline JSON data island (with `<` escaped so `</script>` can't break out) and
+ * the per-page `/_puzzle/<slug>.js` module script, and replace the title. The caller
+ * has already stripped the app-bundle `<script>` from `shell`.
+ */
+export declare function injectStaticShell(
+	shell: string,
+	fields: {
+		targetId: string;
+		content: string | null;
+		title: string | null;
+		slug: string;
+		data: object;
+	}
 ): string;

@@ -22,6 +22,10 @@
 			"types": "./types/ssg.d.ts",
 			"default": "./client-runtime/ssg/index.js"
 		},
+		"./static": {
+			"types": "./types/static.d.ts",
+			"default": "./client-runtime/static/index.js"
+		},
 		"./puzzle-env": {
 			"types": "./puzzle-env.d.ts"
 		},
