@@ -36,14 +36,17 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - Root exports: `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
   `PuzzleValidationError`, `PuzzleAdapterError`, and compiler support exports.
-- Subpaths: `@magic-spells/puzzle/morph`, `/ssg`, and `/puzzle-env`.
+- Subpaths: `@magic-spells/puzzle/morph`, `/ssg`, `/static`, and `/puzzle-env`.
+  (`/static` exports `mountStatic`, the per-page kernel for `output: 'static'`.)
 - `puzzle` binary shim selects an optional platform binary for macOS/Linux on
   arm64/x64. Unsupported systems get a Go-install fallback message.
 - App config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
   `scrollBehavior`, `routerMode`, `routerInitialPath`, `routerBase`,
   `transitionMode`, `beforeMount`, `mounted`, and `beforeUnmount`.
-- The app is SPA-first. Static output is build-time prerendered HTML replaced
-  by the SPA at navigation zero; there is no request-time SSR or hydration.
+- The app is SPA-first. Prerendered output comes in two modes (D67/D79), never a
+  request-time SSR server or hydration protocol: `output: 'hybrid'` ships
+  prerendered pages the SPA takes over at navigation zero; `output: 'static'`
+  ships true static pages with no router or `app.js` and a per-page mount module.
 
 ## `.pzl` files and templates
 
@@ -130,14 +133,19 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Dev reload snapshots store records and JSON-safe local view state to a
   short-lived one-shot session blob, then restores store before navigation and
   local state after mount. Production bundles eliminate this machinery.
-- `puzzle build --static` or `output: 'static'` prerenders static routes,
-  writes directory-style pages plus `404.html` for a catch-all, skips dynamic
-  routes, supports `prerender: false` SPA islands, and shares app.js/styles.css.
+- Prerendered builds (both modes) write directory-style pages plus `404.html`
+  for a catch-all, skip dynamic routes with a warning, and support
+  `prerender: false` islands. `--hybrid` (`output: 'hybrid'`, D67) shares one
+  `app.js` the router takes over; `--static` (`output: 'static'`, D79) ships no
+  `app.js`, stamping the target `data-puzzle-static` and emitting one per-page
+  `dist/_puzzle/<slug>.js` (mountStatic + that page's classes) with shared
+  runtime split into `dist/_puzzle/chunks/` and build-time data inlined as a
+  `data-puzzle-static-data` island.
 
 ## CLI
 
 - `puzzle init` (`default`/`todos`, optional TypeScript project config).
-- `puzzle dev`, `puzzle build`, and `puzzle build --static`.
+- `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
 - `puzzle generate` / `g` for components, views, layouts, and models.
 - `puzzle add tailwind` and `puzzle add piece` with local/HTTPS registries,
   dependency resolution, path-containment checks, and `pieces.lock` hashes.

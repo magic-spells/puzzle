@@ -1,12 +1,12 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D75)
+name: DECISIONS.md — decision-log index (D1–D79)
 status: verified
 verified_at: '2026-07-22T00:04:05.457Z'
 connections:
   - DOC-SPEC
 ---
 
-Index of the ADR-lite decision log. Each decision D1–D75 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+Index of the ADR-lite decision log. Each decision D1–D79 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
 
 # Decision Log (index)
 
@@ -55,7 +55,7 @@ field on the successor card.
 - **D31** [[DECISION-D31-FORMATTER-TREESHAKE]] — compile-time formatter tree-shaking: manifest-seeded registry
 - **D35** [[DECISION-D35-NO-SASS]] — no Sass support, ever
 
-## Shipped amendments (v1.1–v1.42)
+## Shipped amendments (v1.1–v1.46)
 
 Each shipped as an additive amendment; the corresponding FEATURE card is the
 slice-of-work view.
@@ -109,6 +109,7 @@ slice-of-work view.
 - **D76** [[DECISION-D76-CLI-UPGRADE]] — CLI update notification + `puzzle upgrade`: `build`/`dev` print a cache-first, never-blocking newer-release notice (TTY-only; `CI`/`PUZZLE_NO_UPDATE_CHECK` skip it); `upgrade` detects project/global/manual install context and drives the user's own package manager (lockfile-detected, dep-field preserved, result confirmed) — npm stays the owner of installation, the binary never self-replaces (v1.43 → SPEC §41)
 - **D77** [[DECISION-D77-INIT-PROMPTS]] — interactive `puzzle init`: TTY-gated template + TypeScript prompts when the flags are absent (name → template → TS, flags win, non-TTY byte-identical); widens D32's sole prompt exception now that the installed CLI is the only onboarding path — `create-puzzle-app` stays unpublished (v1.44 → SPEC §42)
 - **D78** [[DECISION-D78-AGENT-SKILL-DISTRIBUTION]] — agent-skill distribution: the app-builder AI skill lives in-repo (`skills/puzzle/SKILL.md`), is embedded into the binary, and `puzzle add skills` installs it into every detected Claude Code/Codex/Cursor config dir — huh checkbox multi-select on a TTY (all pre-selected), silent install-to-all otherwise, pieces-style `--overwrite`; also fixed `ui.IsTerminal` to a real isatty check (`/dev/null` no longer counts as a TTY) (v1.45 → SPEC §13 amendment)
+- **D79** [[DECISION-D79-STATIC-PAGES-MODE]] — true static-pages output mode: `output: 'static'` / `--static` now emits per-route HTML with no router, no SPA takeover, and no `app.js` — each page ships a per-page `mountStatic` module importing only its own classes (keyed on new codegen `__pzlModule` stamps), shared runtime split into chunks, build-time data serialized into an inline island and rehydrated client-side; the D67 prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid`, byte-identical (v1.46 → SPEC §36 amendment, [[FEATURE-V1-46-STATIC-PAGES]])
 
 ## Open questions (tracked, not yet decided)
 

@@ -53,7 +53,7 @@ npm install -D @magic-spells/puzzle
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
 - **Go-based compiler** for fast builds and state-preserving live reload (store and JSON-safe local view state survive edits)
-- **SPA-first output with optional static prerendering** — no request-time SSR server or hydration layer
+- **SPA-first output with two optional prerender modes** — `output: 'hybrid'` (prerendered pages the SPA takes over) and `output: 'static'` (true static pages, no router or `app.js`); no request-time SSR server or hydration layer
 
 > **Experimental in 0.1.0:** overlapping route transitions (`transitionMode:
 > 'overlap'`) and shared-element morph transitions (`@magic-spells/puzzle/morph`)
@@ -411,8 +411,11 @@ puzzle dev --port 3000
 # Production build (default)
 puzzle build
 
-# Static prerendered pages plus the SPA bundle
+# True static pages (no router, no app.js; per-page mount module)
 puzzle build --static
+
+# Prerendered pages plus the SPA bundle the router takes over
+puzzle build --hybrid
 
 # Upgrade the installed CLI, or only check what is available
 puzzle upgrade

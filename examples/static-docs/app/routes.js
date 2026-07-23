@@ -1,16 +1,15 @@
 import HomeView from './views/Home.pzl';
 import AboutView from './views/About.pzl';
 import PlaygroundView from './views/Playground.pzl';
-import TagView from './views/TagView.pzl';
 import NotFoundView from './views/NotFound.pzl';
 import GuideShell from './views/guide/GuideShell.pzl';
 import GuideIndex from './views/guide/GuideIndex.pzl';
 import GuideTemplates from './views/guide/GuideTemplates.pzl';
 import DefaultLayout from './layouts/Default.pzl';
 
-// Each route carries a `meta.title` (SPEC §2). Under SSG (D67) the prerenderer
+// Each route carries a `meta.title` (SPEC §2). In static mode (D79) the build
 // walks the matched layout+view chain leaf → root and injects the nearest-defined
-// title into the shell's <title> — the same walk the router's #setTitle does.
+// title into each page's <title> — the same walk the SPA router's #setTitle does.
 export default [
   {
     path: '/',
@@ -23,8 +22,8 @@ export default [
   },
 
   // Nested routes (v1.3, D30): the Guide shell renders its matched child pane at
-  // its own <Slot/>. Child paths are RELATIVE and JOIN onto /guide, so SSG emits
-  // dist/guide/index.html (the index child) and dist/guide/templates/index.html
+  // its own <Slot/>. Child paths are RELATIVE and JOIN onto /guide, so the build
+  // emits dist/guide/index.html (the index child) and dist/guide/templates/index.html
   // (the sibling). The index child defines no meta.title, so the leaf → root walk
   // falls through to the shell's "Guide · …" — demonstrating the title walk. The
   // sibling defines its own, so it wins at its own path.
@@ -57,24 +56,11 @@ export default [
     },
   },
 
-  // Dynamic route (v1 boundary, D67): a `:param` route cannot be prerendered
-  // without a `staticPaths()` enumeration (a documented follow-up), so `puzzle
-  // build --static` SKIPS it with a build warning and writes NO file. It still
-  // works as a normal SPA route once the app is live.
-  {
-    path: '/tags/:tag',
-    name: 'tag',
-    view: TagView,
-    layout: DefaultLayout,
-    meta: {
-      title: 'Tag · Puzzle Field Guide',
-    },
-  },
-
-  // SPA island (v1 boundary, D67): `prerender: false` opts this route OUT of
-  // prerendering. The build writes the plain SPA shell (no data-puzzle-ssg
-  // marker, no rendered markup) at /playground/, and the runtime renders it
-  // client-side like any SPA page — the escape hatch for interactive-only pages.
+  // Client-rendered island (D67/D79): `prerender: false` opts this route OUT of
+  // prerendering. In static mode the build writes an empty-target shell at
+  // /playground/ — no baked markup, `#app` unstamped — but still ships the page's
+  // data island and entry module, so the view renders entirely client-side. The
+  // escape hatch for routes that are pure interaction.
   {
     path: '/playground',
     name: 'playground',
@@ -86,11 +72,12 @@ export default [
     },
   },
 
-  // Catch-all (v1.33+, D67 · D19): the top-level `path: '*'` matches any URL no
-  // earlier route claims. Under SSG the prerenderer renders it to dist/404.html —
-  // the file static hosts (GitHub Pages/Netlify/Render/Cloudflare) serve for
-  // unknown paths — and once the SPA takes over the router shows this view for any
-  // unmatched client path. Must stay LAST: routes match in order.
+  // Catch-all (D67 · D19): the top-level `path: '*'` matches any URL no earlier
+  // route claims. In static mode the build renders it to dist/404.html — the file
+  // static hosts (GitHub Pages/Netlify/Render/Cloudflare) serve for unknown paths.
+  // Must stay LAST: routes match in order. (A dynamic `:param` route would be
+  // SKIPPED here with a build warning — the static build cannot enumerate its
+  // paths; a staticPaths() hook is the planned follow-up.)
   {
     path: '*',
     name: 'not-found',
