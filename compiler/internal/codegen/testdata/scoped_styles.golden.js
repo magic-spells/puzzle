@@ -25,3 +25,4 @@ Card.prototype.render = function () {
     ]),
   ]);
 };
+Card.__pzlModule = 'scoped_styles.pzl';

@@ -16,8 +16,8 @@
     <p class="mt-4">
       This is the <strong class="text-ink font-semibold">sibling child</strong>
       (<code>path: 'templates'</code>). It defines its own <code>meta.title</code>,
-      so at <code>/guide/templates</code> the SSG title walk stops here — check the
-      browser tab.
+      so at <code>/guide/templates</code> the static-build title walk stops here —
+      check the browser tab.
     </p>
   </div>
 </puzzle-view>
@@ -25,7 +25,7 @@
 <scripts>
 import { PuzzleView } from '@magic-spells/puzzle';
 
-// The sibling child. Defines meta.title in routes.js, so it wins the SSG title
-// walk at its own /guide/templates/ path.
+// The sibling child. Defines meta.title in routes.js, so it wins the static-build
+// title walk at its own /guide/templates/ path.
 export default class GuideTemplates extends PuzzleView {}
 </scripts>

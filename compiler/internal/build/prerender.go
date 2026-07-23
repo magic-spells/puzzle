@@ -1,13 +1,16 @@
-// Static (SSG) output for `puzzle build --static` (or `output: 'static'` in
-// puzzle.config.js). The Go compiler needs no new parser/codegen work — compiled
-// .pzl output is already pure ViewNode-tree data — so this is entirely a
-// downstream step: bundle a SECOND, node-platform esbuild pass whose entry
-// imports the app's default export plus the SSG runtime, run it under node to
-// emit one index.html per static route into the staging dir, then hand back a
-// summary. It slots into Build() after copyPublic and before the staging→dist
-// swap, so a prerender failure discards staging and leaves the last good dist/
-// exactly as it was (the same atomic-swap guarantee compile failures already
-// get).
+// Hybrid (SSG) output for `puzzle build --hybrid` (or `output: 'hybrid'` in
+// puzzle.config.js) — the prerender + SPA-takeover mode formerly spelled
+// 'static'. The Go compiler needs no new parser/codegen work — compiled .pzl
+// output is already pure ViewNode-tree data — so this is entirely a downstream
+// step: bundle a SECOND, node-platform esbuild pass whose entry imports the
+// app's default export plus the SSG runtime, run it under node to emit one
+// index.html per static route into the staging dir, then hand back a summary. It
+// slots into Build() after copyPublic and before the staging→dist swap, so a
+// prerender failure discards staging and leaves the last good dist/ exactly as
+// it was (the same atomic-swap guarantee compile failures already get).
+//
+// The true static-pages mode (`--static` / `output: 'static'`, D81) lives in
+// prerender_pages.go and reuses the shared bundle/exec helpers here.
 package build
 
 import (
@@ -59,39 +62,72 @@ type ssgSummary struct {
 	Warnings []string `json:"warnings"`
 }
 
-// prerenderStatic bundles and runs the SSG prerender step against the app rooted
-// at absRoot, writing per-route index.html files into staging (the temp build
-// dir before the atomic swap). staging/index.html is the SPA shell copyPublic
-// just produced — it is the injection template. On any failure the returned
-// error surfaces node's stderr/stdout and staging is discarded by Build's defer,
-// so the previous dist/ is untouched.
-func prerenderStatic(absRoot, staging string) error {
-	// A fresh .pzl plugin + formatter scan, exactly like the main bundle — the
-	// prerender entry pulls in the same views/layouts, so they must compile the
-	// same way. The CSS this plugin collects is discarded: styles.css was already
-	// composed from the main pass; this second pass only exists to run the app.
-	pl := plugin.New(absRoot)
-	if err := scanFormatters(absRoot, pl); err != nil {
-		return err
-	}
-
-	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")
-
+// prerenderHybrid bundles and runs the hybrid prerender step against the app
+// rooted at absRoot, writing per-route index.html files into staging (the temp
+// build dir before the atomic swap). staging/index.html is the SPA shell
+// copyPublic just produced — it is the injection template. On any failure the
+// returned error surfaces node's stderr/stdout and staging is discarded by
+// Build's defer, so the previous dist/ is untouched.
+func prerenderHybrid(absRoot, staging string) error {
 	// The generated prerender entry (the SSG contract): import the app's default
-	// export + prerenderToDir, run it against the outDir/shellPath passed on argv,
-	// and print the JSON summary behind the sentinel. The app entry path is
-	// JSON-encoded so a root with spaces/quotes stays a valid JS string literal.
-	entry, err := json.Marshal(filepath.ToSlash(filepath.Join(absRoot, "app", "app.js")))
+	// export + prerenderToDir, run it against the outDir/shellPath passed on argv
+	// in the 'hybrid' mode (passed explicitly so the JS side is unambiguous — it
+	// is also the JS default), and print the JSON summary behind the sentinel.
+	// The app entry path is JSON-encoded so a root with spaces/quotes stays a
+	// valid JS string literal.
+	entry, err := json.Marshal(appEntryPath(absRoot))
 	if err != nil {
 		return fmt.Errorf("encoding prerender entry path: %w", err)
 	}
 	stdin := fmt.Sprintf(
 		"import app from %s;\n"+
 			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
-			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3] });\n"+
+			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'hybrid' });\n"+
 			"process.stdout.write('\\n%s' + JSON.stringify(summary));\n",
 		string(entry), prerenderSentinel,
 	)
+
+	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")
+	if err := bundlePrerenderEntry(absRoot, stdin, outfile, "--hybrid"); err != nil {
+		return err
+	}
+
+	payload, err := runPrerender(outfile, staging, "--hybrid")
+	if err != nil {
+		return err
+	}
+	var summary ssgSummary
+	if err := json.Unmarshal([]byte(payload), &summary); err != nil {
+		return fmt.Errorf("puzzle build --hybrid: prerender summary was not readable JSON: %w", err)
+	}
+
+	printPrerenderSummary(summary)
+
+	// Drop the prerender bundle before the swap so it never ships in dist/.
+	if err := os.RemoveAll(filepath.Join(staging, prerenderDir)); err != nil {
+		return fmt.Errorf("puzzle build --hybrid: cleaning %s: %w", prerenderDir, err)
+	}
+	return nil
+}
+
+// appEntryPath is the app's default-export entry (app/app.js under absRoot),
+// forward-slashed for embedding in a generated JS import.
+func appEntryPath(absRoot string) string {
+	return filepath.ToSlash(filepath.Join(absRoot, "app", "app.js"))
+}
+
+// bundlePrerenderEntry runs the node-platform esbuild pass over the generated
+// stdin entry, writing the runnable bundle to outfile. It mirrors the main
+// bundle's .pzl plugin + runtime aliasing (the '@' app alias plus the in-repo
+// @magic-spells/puzzle + /ssg + /static aliases) so views/layouts compile the
+// same way. label names the mode in a bundle-failure error. The CSS the fresh
+// plugin collects is discarded — styles.css was already composed by the main
+// pass; this pass exists only to run the app under node.
+func bundlePrerenderEntry(absRoot, stdin, outfile, label string) error {
+	pl := plugin.New(absRoot)
+	if err := scanFormatters(absRoot, pl); err != nil {
+		return err
+	}
 
 	buildOpts := api.BuildOptions{
 		Stdin: &api.StdinOptions{
@@ -114,9 +150,6 @@ func prerenderStatic(absRoot, staging string) error {
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 	}
-	// Reuse the SAME resolution the main bundle uses — this is what wires the
-	// '@' app alias (§39) plus the @magic-spells/puzzle + /ssg aliases for the
-	// in-repo case (options.go).
 	configureRuntime(absRoot, &buildOpts, pl)
 
 	result := api.Build(buildOpts)
@@ -126,29 +159,19 @@ func prerenderStatic(absRoot, staging string) error {
 			Color:         ui.New(os.Stderr).Enabled(),
 			TerminalWidth: 0,
 		})
-		return fmt.Errorf("puzzle build --static: prerender bundle failed:\n%s", strings.Join(lines, "\n"))
-	}
-
-	summary, err := runPrerender(outfile, staging)
-	if err != nil {
-		return err
-	}
-
-	printPrerenderSummary(summary)
-
-	// Drop the prerender bundle before the swap so it never ships in dist/.
-	if err := os.RemoveAll(filepath.Join(staging, prerenderDir)); err != nil {
-		return fmt.Errorf("puzzle build --static: cleaning %s: %w", prerenderDir, err)
+		return fmt.Errorf("puzzle build %s: prerender bundle failed:\n%s", label, strings.Join(lines, "\n"))
 	}
 	return nil
 }
 
 // runPrerender executes the bundled prerender entry under node, passing the
-// staging dir (outDir) and the SPA shell (staging/index.html) on argv, and parses
-// the JSON summary that rides the stdout sentinel. A non-zero exit or a missing
-// sentinel fails the build with node's stderr/stdout surfaced. It follows the
-// node-execution + sentinel-parsing pattern of config.readConfigViaNode.
-func runPrerender(entryFile, staging string) (ssgSummary, error) {
+// staging dir (outDir) and the SPA shell (staging/index.html) on argv, and
+// returns the raw JSON summary that rides the stdout sentinel (the caller
+// unmarshals it into the mode's summary shape). A non-zero exit or a missing
+// sentinel fails the build with node's stderr/stdout surfaced. label names the
+// mode in error text. It follows the node-execution + sentinel-parsing pattern
+// of config.readConfigViaNode.
+func runPrerender(entryFile, staging, label string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), prerenderTimeout)
 	defer cancel()
 
@@ -161,40 +184,31 @@ func runPrerender(entryFile, staging string) (ssgSummary, error) {
 
 	if err := cmd.Run(); err != nil {
 		if errors.Is(err, exec.ErrNotFound) {
-			return ssgSummary{}, fmt.Errorf(
-				"puzzle build --static requires Node.js but `node` was not found on PATH",
+			return "", fmt.Errorf(
+				"puzzle build %s requires Node.js but `node` was not found on PATH", label,
 			)
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return ssgSummary{}, fmt.Errorf(
-				"puzzle build --static: prerendering timed out after %s — check for a hanging data() in a route",
-				prerenderTimeout,
+			return "", fmt.Errorf(
+				"puzzle build %s: prerendering timed out after %s — check for a hanging data() in a route",
+				label, prerenderTimeout,
 			)
 		}
-		return ssgSummary{}, fmt.Errorf(
-			"puzzle build --static: prerender failed:\n%s",
-			prerenderDetail(stderr.String(), stdout.String(), err),
+		return "", fmt.Errorf(
+			"puzzle build %s: prerender failed:\n%s",
+			label, prerenderDetail(stderr.String(), stdout.String(), err),
 		)
 	}
 
 	out := stdout.String()
 	idx := strings.LastIndex(out, prerenderSentinel)
 	if idx < 0 {
-		return ssgSummary{}, fmt.Errorf(
-			"puzzle build --static: prerender produced no summary (missing %s sentinel)\n%s",
-			prerenderSentinel, prerenderDetail(stderr.String(), out, nil),
+		return "", fmt.Errorf(
+			"puzzle build %s: prerender produced no summary (missing %s sentinel)\n%s",
+			label, prerenderSentinel, prerenderDetail(stderr.String(), out, nil),
 		)
 	}
-
-	var summary ssgSummary
-	payload := strings.TrimSpace(out[idx+len(prerenderSentinel):])
-	if err := json.Unmarshal([]byte(payload), &summary); err != nil {
-		return ssgSummary{}, fmt.Errorf(
-			"puzzle build --static: prerender summary was not readable JSON: %w",
-			err,
-		)
-	}
-	return summary, nil
+	return strings.TrimSpace(out[idx+len(prerenderSentinel):]), nil
 }
 
 // prerenderDetail picks the most useful diagnostic to surface: node's stderr,
@@ -233,7 +247,7 @@ func printPrerenderSummary(s ssgSummary) {
 	}
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintf(os.Stdout, "  %s %s\n",
-		out.Cyan(out.Bold("puzzle build · static")),
+		out.Cyan(out.Bold("puzzle build · hybrid")),
 		out.Dim(detail),
 	)
 	for _, w := range s.Warnings {

@@ -48,12 +48,12 @@ npm install -D @magic-spells/puzzle
 - **Reactive data** with automatic view updates
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and write sync
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
-- **Nested routing** with view slots — history, hash, and memory modes; scroll restoration; base paths; anchors
+- **Nested routing** with view slots — history, hash, and memory modes; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
 - **Virtual DOM** with efficient diffing and pk-aware list keying
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
 - **Go-based compiler** for fast builds and state-preserving live reload (store and JSON-safe local view state survive edits)
-- **SPA-first output with optional static prerendering** — no request-time SSR server or hydration layer
+- **SPA-first output with two optional prerender modes** — `output: 'hybrid'` (prerendered pages the SPA takes over) and `output: 'static'` (true static pages, no router or `app.js`); no request-time SSR server or hydration layer
 - **[Puzzle Pieces](https://github.com/magic-spells/puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magic-spells.github.io/puzzle-pieces/))
 
 > **Experimental in 0.1.0:** overlapping route transitions (`transitionMode:
@@ -425,8 +425,11 @@ puzzle dev --port 3000
 # Production build (default)
 puzzle build
 
-# Static prerendered pages plus the SPA bundle
+# True static pages (no router, no app.js; per-page mount module)
 puzzle build --static
+
+# Prerendered pages plus the SPA bundle the router takes over
+puzzle build --hybrid
 
 # Upgrade the installed CLI, or only check what is available
 puzzle upgrade

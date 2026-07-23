@@ -45,8 +45,11 @@ the runtime, collects styles and formatter use, and writes the output through
 the staged build path.
 
 Production builds are SPA bundles by default. [[COMPONENT-SSG]] can additionally
-execute the server-safe bundle and serialize eligible routes to static HTML.
-This is build-time rendering, not an SSR server and not hydration.
+execute the server-safe bundle and serialize eligible routes to static HTML, in
+two output modes: `output: 'hybrid'` (D67 — prerendered pages the SPA takes over
+at navigation zero) and `output: 'static'` (D81 — true static pages with no
+router or `app.js`, each waking its own components via a per-page module). Either
+is build-time rendering, not an SSR server and not hydration.
 
 Development uses the same compilation contract through
 [[COMPONENT-DEV-SERVER]], with incremental esbuild, recursive watching, warm

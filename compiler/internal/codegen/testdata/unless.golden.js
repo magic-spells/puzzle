@@ -44,3 +44,4 @@ Unless.prototype.render = function () {
         ]),
   ]);
 };
+Unless.__pzlModule = 'unless.pzl';

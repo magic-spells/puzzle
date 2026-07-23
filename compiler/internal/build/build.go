@@ -33,11 +33,12 @@ type Options struct {
 	// consulted when a config actually enables Tailwind.
 	Runner styles.Runner
 
-	// Static enables the SSG prerender step (per-route static index.html output),
-	// the `puzzle build --static` flag. The same step also runs when
-	// puzzle.config.js declares `output: 'static'` — this flag is the CLI
-	// equivalent, and either being set is enough.
-	Static bool
+	// Output is the prerender mode requested on the CLI: "" (no flag), "static"
+	// (the true static-pages mode, `--static`), or "hybrid" (prerender + SPA
+	// takeover, `--hybrid`). It is reconciled with puzzle.config.js `output` in
+	// Build: a flag and a *different* config value is an error; either one alone
+	// (or agreeing) selects the mode. Empty on both sides is the default SPA build.
+	Output string
 }
 
 // Build compiles the app rooted at root (the directory containing app/app.js)
@@ -155,13 +156,23 @@ func Build(root string, opts Options) error {
 		return fmt.Errorf("copying public assets: %w", err)
 	}
 
-	// Static (SSG) mode: prerender each route to its own index.html inside
-	// staging, AFTER the shell (public/index.html) has been copied in — the
-	// prerender injects into it — and BEFORE the swap, so a prerender failure
-	// discards staging and leaves the last good dist/ untouched (same guarantee
-	// as a compile failure). Enabled by the --static flag or output: 'static'.
-	if opts.Static || cfg.StaticOutput() {
-		if err := prerenderStatic(absRoot, staging); err != nil {
+	// Prerender modes (D67 hybrid / D81 static): render each route inside staging,
+	// AFTER the shell (public/index.html) has been copied in — the prerender
+	// injects into it — and BEFORE the swap, so a prerender failure discards
+	// staging and leaves the last good dist/ untouched (same guarantee as a
+	// compile failure). The effective mode reconciles the CLI flag with
+	// puzzle.config.js `output`.
+	mode, err := resolveOutputMode(opts.Output, cfg)
+	if err != nil {
+		return err
+	}
+	switch mode {
+	case "hybrid":
+		if err := prerenderHybrid(absRoot, staging); err != nil {
+			return err
+		}
+	case "static":
+		if err := prerenderStaticPages(absRoot, staging, cfg, opts.Development); err != nil {
 			return err
 		}
 	}
@@ -179,6 +190,25 @@ func Build(root string, opts Options) error {
 	swapped = true
 
 	return nil
+}
+
+// resolveOutputMode reconciles the CLI --static/--hybrid flag (flag ∈ {"",
+// "static", "hybrid"}) with puzzle.config.js `output`. A flag combined with a
+// DIFFERENT config value is a hard error naming both; otherwise the non-empty
+// side wins (they agree when both are set). Empty on both sides is the default
+// SPA build.
+func resolveOutputMode(flag string, cfg config.Config) (string, error) {
+	cfgOut := cfg.Output
+	if flag != "" && cfgOut != "" && flag != cfgOut {
+		return "", fmt.Errorf(
+			"puzzle build --%s conflicts with output: '%s' in %s — pass --%s, or change the config output key",
+			flag, cfgOut, config.ConfigFileName, cfgOut,
+		)
+	}
+	if flag != "" {
+		return flag, nil
+	}
+	return cfgOut, nil
 }
 
 // swapOutput durably replaces outdir with staging. An existing output is moved

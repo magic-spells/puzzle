@@ -4,6 +4,7 @@ status: verified
 verified_at: '2026-07-22T01:03:46.828Z'
 connections:
   - DECISION-D01-SPA-ONLY
+  - DECISION-D81-STATIC-PAGES-MODE
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-VIEW-MANAGER
@@ -11,6 +12,14 @@ connections:
   - DOC-SPEC
   - FEATURE-V1-33-SSG
 notes:
+  - kind: state
+    text: >-
+      RENAMED by D81 (v1.47). The mode this card describes — prerendered pages + the full
+      SPA bundle + router takeover at navigation #0 — is now spelled `output: 'hybrid'` /
+      `puzzle build --hybrid` (behavior byte-identical). `output: 'static'` / `--static`
+      now means a DIFFERENT true-static mode (no router, no app.js, per-page mount module):
+      see [[DECISION-D81-STATIC-PAGES-MODE]] and SPEC §36. Read every `output: 'static'` /
+      `--static` / `data-puzzle-ssg` reference below as the hybrid mode.
   - kind: state
     text: >-
       Two SSG runtime touch-ups from the July 2026 pre-release hardening. (1) beforeMount RECEIVER

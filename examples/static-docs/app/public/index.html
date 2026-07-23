@@ -12,9 +12,10 @@
   <link href="/styles.css" rel="stylesheet">
 </head>
 <body>
-  <!-- Empty '#id' mount element (required by SSG, D67). `puzzle build --static`
-       injects each route's markup here and stamps it data-puzzle-ssg; the router
-       takes it over at navigation #0. -->
+  <!-- Empty '#id' mount element (required by static/hybrid builds, D79/D67). In
+       static mode `puzzle build --static` injects each route's markup here and
+       stamps it data-puzzle-static, then swaps this /app.js tag for a small
+       per-page module — dist/ ships no app.js. -->
   <div id="app"></div>
   <script type="module" src="/app.js"></script>
 </body>

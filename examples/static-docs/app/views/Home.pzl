@@ -2,13 +2,13 @@
   <section class="max-w-2xl">
     <p class="font-mono text-[11px] uppercase tracking-[0.3em] text-accent mb-5">A small field guide</p>
     <h1 class="font-display text-5xl md:text-6xl leading-[1.05] text-ink">
-      Build the SPA. Ship the HTML.
+      Write components. Ship static HTML.
     </h1>
     <p class="mt-6 text-lg text-muted leading-relaxed">
       Puzzle is a single-file-component framework with a built-in store and router.
       With <code class="font-mono text-sm bg-surface-2 border border-line-2 rounded px-1.5 py-0.5">output: 'static'</code>
-      the very same app prerenders each content page to plain HTML, then wakes up
-      as a live SPA the instant it loads.
+      each page is prerendered to plain HTML and ships only the JavaScript it needs
+      to wake its own components up — no router, no SPA bundle, no page takeover.
     </p>
 
     <div class="mt-8 flex flex-wrap gap-3">
@@ -18,8 +18,8 @@
   </section>
 
   <!-- The interactive proof. This whole page is prerendered to static HTML — the
-       count below is baked in as "0". Once the SPA takes over at navigation #0,
-       the same button becomes live. Load the page, then click it. -->
+       count below is baked in as "0". This page's own small module (mountStatic)
+       then wires the same button up in place. Load the page, then click it. -->
   <section class="mt-16 rounded-2xl border border-line bg-surface p-7">
     <div class="flex items-center gap-2 mb-1">
       <span class="h-2 w-2 rounded-full bg-accent"></span>
@@ -27,7 +27,8 @@
     </div>
     <p class="text-muted mb-6">
       This card was written to disk as HTML — no JavaScript needed to see it. The
-      counter starts at its prerendered value and comes alive after takeover.
+      counter starts at its prerendered value and comes alive when the page's
+      module mounts over the very same markup, flash-free.
     </p>
 
     <div class="flex items-center gap-5">

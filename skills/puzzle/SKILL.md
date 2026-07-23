@@ -7,7 +7,7 @@ description: >
   puzzle.config.js. Covers app structure, .pzl anatomy, events, routing, the data
   layer, loading skeletons, morph transitions, static prerendering rules, and
   puzzle-pieces conventions.
-version: 1.1.0
+version: 1.2.0
 ---
 
 # Puzzle Framework — App-Builder Guide
@@ -24,9 +24,9 @@ the working example apps in `examples/` at https://github.com/magic-spells/puzzl
 
 ```
 my-app/
-├── puzzle.config.js       # { styles: { use: ['tailwindcss'] }, output: 'static' }
+├── puzzle.config.js       # { styles: { use: ['tailwindcss'] }, output: 'static' | 'hybrid' }
 └── app/
-    ├── app.js             # new PuzzleApp({ target: '#app', routes, models, formatters }); MUST `export default app` for SSG
+    ├── app.js             # new PuzzleApp({ target: '#app', routes, models, formatters }); MUST `export default app` for prerender modes
     ├── routes.js          # route table (see below)
     ├── public/index.html  # the shell: #app mount + <script type="module" src="/app.js">
     ├── styles/styles.css  # global entry; Tailwind v4 via the config's styles pipeline
@@ -38,7 +38,7 @@ my-app/
 
 CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
 `dev` (SSE live reload, state-preserving full-page refresh), `build` (`--static`,
-`--mode production|development`), `init`, `generate`, `add` (tailwind integration,
+`--hybrid`, `--mode production|development`), `init`, `generate`, `add` (tailwind integration,
 `piece <name…>`, `skills`), `upgrade`, `doctor`, `info`.
 
 Production builds default to ES2022, minification, and **console stripping** —
@@ -117,6 +117,12 @@ Rules that bite:
 - Navigation loads before commit: URL, title, history, mounted tree, and scroll
   save land atomically together — a failed or superseded navigation commits
   nothing.
+- Write template hrefs **path-shaped through the built-in `link` formatter**:
+  `href="{ '/todos/' + t.id | link }"`. It emits the mode-appropriate href
+  (plain path in history mode, base-prefixed under `routerBase`, `#/...` in
+  hash mode); strings not starting with `/` pass through (external URLs,
+  `mailto:`, `#anchor`). Hand-written `#/...` hrefs still work in hash mode,
+  but piped links are the portable spelling.
 
 ## Data layer
 
@@ -229,31 +235,56 @@ Rules that bite:
 
 Working example: `examples/kanban-morph` in the framework repo.
 
-## SSG / static export — THE RULES (bugs happen when these are missed)
+## Prerendered output — THE RULES (bugs happen when these are missed)
 
-Enable with `output: 'static'` in puzzle.config.js (or `puzzle build --static`).
-Emits `dist/<path>/index.html` per static route + shared `app.js`/`styles.css`;
-top-level `*` renders to `dist/404.html`. The route's `meta.title` is injected
-via a leaf→root walk. Then the SPA **takes over on load and re-renders** (not
-true DOM-adoption hydration).
+Two output modes, chosen in puzzle.config.js or by flag. Both emit
+`dist/<path>/index.html` per static route + `styles.css`; top-level `*` renders
+to `dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
 
-1. **`data()` and `beforeMount` run under Node at build time.** Guard every
-   browser global: `typeof document !== 'undefined'` before touching `document`,
-   `window`, `localStorage`, `matchMedia`. DOM behavior belongs in `mounted()`.
-2. **`:param` routes are SKIPPED by the prerenderer** (no `staticPaths()` hook
+- **`output: 'static'`** / `puzzle build --static` — a TRUE static site. No
+  router, no SPA, no `app.js` in `dist/`. Each page ships a small module
+  (`/_puzzle/<slug>.js`) that mounts only that page's components over the
+  prerendered markup, so `@event` handlers and local state work; navigation is
+  plain `<a href="/path/">` page loads. Pick this for docs/marketing/blogs.
+- **`output: 'hybrid'`** / `puzzle build --hybrid` — prerendered first paint,
+  then the full SPA bundle takes over on load and re-renders (not true
+  DOM-adoption hydration); all later navigation is client-side (transitions,
+  morphs work). Pick this for apps that want SEO'd entry pages.
+
+1. **`data()` and `beforeMount` run under Node at build time** (both modes).
+   Guard every browser global: `typeof document !== 'undefined'` before touching
+   `document`, `window`, `localStorage`, `matchMedia`. DOM behavior belongs in
+   `mounted()`.
+2. **In static mode `beforeMount` NEVER runs in the browser.** Its store seeds
+   (CMS fetches etc.) are serialized into an inline JSON island per page and
+   rehydrated before mount — so build-time credentials stay build-side, and
+   browser-only setup must not live in `beforeMount`.
+3. **`:param` routes are SKIPPED by the prerenderer** (no `staticPaths()` hook
    yet) — a warning is printed and no file is written. For content sites, every
    page must be an explicit static route. Treat any "skipped" in the build
    summary as a regression.
-3. **Inline `<script>` inside route markup is dead** — the takeover re-render
-   discards it. Only the shell (`app/public/index.html`) may carry inline
-   scripts (analytics, theme pre-paint). All other behavior: `mounted()` /
-   cleanup in `destroyed()` (components DO unmount on SPA navigation — leaked
-   window listeners are a real bug).
-4. `prerender: false` on a route = SPA island: emits the empty shell (invisible
-   to any static search indexer). Escape hatch for interactive-only pages.
-5. SSG output pairs with post-build tooling: Pagefind can index `dist/` (content
-   is baked into `#app`); sitemap/meta-OG injection needs your own Node script —
-   SSG only writes `<title>`.
+4. **Inline `<script>` inside route markup is dead in both modes** — the mount
+   over the prerendered markup discards it. Only the shell
+   (`app/public/index.html`) may carry inline scripts (analytics, theme
+   pre-paint). All other behavior: `mounted()` / cleanup in `destroyed()`.
+5. **Static mode has no router and emits only plain path hrefs.** Hash-style
+   `#/...` links are an SPA/hybrid concern (`routerMode: 'hash'`) with no
+   meaning on a static site — never hand-write them in templates that build
+   statically; path-shaped `| link` hrefs render as plain paths in static
+   output and as `#/...` in a hash-mode SPA, from the same template.
+   `ctx.router` methods throw; `push()` calls
+   are a bug — use plain links. Custom formatters must be exported from
+   `app/formatters.js` to exist client-side (formatters only in the app.js
+   config trigger a build warning); models are picked up from
+   `app/models/index.js`. The `link` formatter is absent client-side in static
+   output — its pass-through fallback still yields correct plain-path hrefs.
+6. `prerender: false` on a route emits an empty shell (invisible to any static
+   search indexer): in hybrid it's an SPA island; in static it still gets its
+   per-page module and renders fully client-side. Escape hatch for
+   interactive-only pages.
+7. Prerendered output pairs with post-build tooling: Pagefind can index `dist/`
+   (content is baked into `#app`); sitemap/meta-OG injection needs your own
+   Node script — the build only writes `<title>`.
 
 ## Styling
 
