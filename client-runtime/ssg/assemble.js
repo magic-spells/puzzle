@@ -34,15 +34,22 @@ export async function assembleChain(entry, ctx) {
 	const { chain, layout: LayoutClass, fullPath } = entry;
 	const leaf = chain[chain.length - 1];
 
-	// Per-navigation route snapshot (v1.15, D47): SAME four keys + semantics as the
-	// Router builds at router.js:809 — `{ path, route, params, chain }`, frozen —
-	// threaded to every routed view/layout preload() so `this.route` is populated
-	// exactly as in the browser. Views read `this.route.route.name` /
+	// Per-navigation route snapshot (v1.15, D47; parsed URL parts v1.49, D83):
+	// SAME keys + semantics as the Router's #navigate builds —
+	// `{ path, pathname, query, hash, route, params, chain }`, frozen — threaded
+	// to every routed view/layout preload() so `this.route` is populated exactly
+	// as in the browser. Views read `this.route.route.name` /
 	// `this.route.chain[0].name` / `this.route.route.meta`, so the top-level keys
 	// are `route` (the matched LEAF def) and `chain` (root → leaf defs), NOT bare
-	// name/meta. Static routes carry no params, so `params` is {}.
+	// name/meta. A prerendered route is a bare static path: no params, no query,
+	// no fragment — so `params` is {}, `pathname` is the full path itself, `query`
+	// is the same frozen null-prototype empty object the Router's parseLocation
+	// would yield, and `hash` is ''.
 	const route = Object.freeze({
 		path: fullPath,
+		pathname: fullPath,
+		query: Object.freeze(Object.create(null)),
+		hash: '',
 		route: leaf,
 		params: {},
 		chain,

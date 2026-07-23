@@ -811,6 +811,303 @@ describe('Router memory mode — superseded navigations never move the stack (D6
 	});
 });
 
+// ---- v1.49, D83: parsed URL state on the route snapshot ---------------------
+// Memory mode is the precise harness here: the raw path is exactly what push()
+// received (no URL round-trip), so the snapshot's pathname/query/hash must
+// decompose it byte-for-byte, and the in-memory stack makes replace()'s
+// no-growth invariant directly observable in the block after this one.
+describe('route snapshot — pathname/query/hash (v1.49, D83)', () => {
+	let seenRoute;
+	class ListView extends PuzzleView {
+		data() {
+			seenRoute = this.route;
+			return {};
+		}
+		render() {
+			return h('puzzle-view', { class: 'list' }, [text('LIST')]);
+		}
+	}
+	const routes = [
+		{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+		{ path: '/list', name: 'list', view: ListView, layout: DefaultLayout },
+	];
+
+	beforeEach(() => {
+		seenRoute = undefined;
+	});
+
+	it('single-value query: string values, pathname minus query, empty hash', async () => {
+		const { router } = await bootMemory(routes);
+		// A no-query navigation still carries the (empty) parsed parts.
+		expect(router.current.pathname).toBe('/');
+		expect(Object.keys(router.current.query)).toEqual([]);
+		expect(router.current.hash).toBe('');
+
+		await router.push('/list?tag=a&page=2');
+		expect(seenRoute.path).toBe('/list?tag=a&page=2');
+		expect(seenRoute.pathname).toBe('/list');
+		expect(seenRoute.query.tag).toBe('a');
+		expect(seenRoute.query.page).toBe('2');
+		expect(seenRoute.hash).toBe('');
+		// `current` carries the SAME parts, read off #state — never reparsed, so
+		// the query object is identical by reference to the gated snapshot's.
+		expect(router.current.pathname).toBe('/list');
+		expect(router.current.query).toBe(seenRoute.query);
+		expect(router.current.hash).toBe('');
+	});
+
+	it("repeated keys become a frozen array in source order; a valueless key is ''", async () => {
+		const { router } = await bootMemory(routes);
+		await router.push('/list?tag=a&debug&tag=b&tag=c');
+		expect(seenRoute.query.tag).toEqual(['a', 'b', 'c']);
+		expect(Object.isFrozen(seenRoute.query.tag)).toBe(true);
+		expect(seenRoute.query.debug).toBe('');
+	});
+
+	it("URLSearchParams decoding semantics: percent-escapes and '+' as space", async () => {
+		const { router } = await bootMemory(routes);
+		await router.push('/list?q=caf%C3%A9&t=a+b%20c');
+		expect(seenRoute.query.q).toBe('café');
+		expect(seenRoute.query.t).toBe('a b c');
+	});
+
+	it('malformed percent input never throws — undecodable bytes stay verbatim', async () => {
+		const { router } = await bootMemory(routes);
+		await expect(router.push('/list?bad=%zz&ok=1')).resolves.toBeUndefined();
+		expect(router.current.route.name).toBe('list'); // the navigation committed
+		expect(router.current.query.bad).toBe('%zz');
+		expect(router.current.query.ok).toBe('1');
+	});
+
+	it('the snapshot and its query are frozen; the query is null-prototype', async () => {
+		const { router } = await bootMemory(routes);
+		await router.push('/list?a=1');
+		const snap = seenRoute;
+		expect(Object.isFrozen(snap)).toBe(true);
+		expect(Object.isFrozen(snap.query)).toBe(true);
+		expect(Object.getPrototypeOf(snap.query)).toBeNull();
+		// Null prototype: absent keys are truly absent — nothing leaks from
+		// Object.prototype into `in` checks or template lookups.
+		expect('toString' in snap.query).toBe(false);
+		// Strict-mode mutation throws (ESM test modules are strict).
+		expect(() => {
+			snap.query.injected = 'x';
+		}).toThrow(TypeError);
+		expect(snap.query.injected).toBeUndefined();
+	});
+
+	it("a #fragment rides `hash` (leading '#' included) and never enters pathname/query", async () => {
+		const { router } = await bootMemory(routes);
+		await router.push('/list?a=1#section-2');
+		expect(seenRoute.pathname).toBe('/list');
+		expect(seenRoute.query.a).toBe('1');
+		expect(seenRoute.hash).toBe('#section-2');
+
+		// The hash splits FIRST: a '?' inside the fragment never starts a query.
+		await router.push('/list#frag?notquery=1');
+		expect(router.current.pathname).toBe('/list');
+		expect(Object.keys(router.current.query)).toEqual([]);
+		expect(router.current.hash).toBe('#frag?notquery=1');
+	});
+
+	it('pathname keeps a trailing slash byte-for-byte while matching still normalizes', async () => {
+		const { router } = await bootMemory(routes);
+		await router.push('/list/?a=1');
+		expect(router.current.route.name).toBe('list'); // stripTrailingSlash matching
+		expect(router.current.path).toBe('/list/?a=1');
+		expect(router.current.pathname).toBe('/list/'); // NOT normalized in the snapshot
+	});
+
+	it('a query-only navigation re-runs the params-only refresh and delivers the new snapshot', async () => {
+		let dataRuns = 0;
+		let latest = null;
+		let instances = new Set();
+		class FilterView extends PuzzleView {
+			data() {
+				dataRuns++;
+				latest = this.route;
+				instances.add(this);
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'filter' }, [text('FILTER')]);
+			}
+		}
+		const { router } = await bootMemory([
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{ path: '/filter', name: 'filter', view: FilterView, layout: DefaultLayout },
+		]);
+		await router.push('/filter?f=a');
+		expect(dataRuns).toBe(1);
+		expect(latest.query.f).toBe('a');
+
+		// Same route, new query: the params-only degenerate case (keep === chain
+		// length) — the SAME instance refreshes (no remount) and the new frozen
+		// snapshot reaches its gating data().
+		await router.push('/filter?f=b');
+		expect(dataRuns).toBe(2);
+		expect(instances.size).toBe(1);
+		expect(latest.query.f).toBe('b');
+		expect(router.current.path).toBe('/filter?f=b');
+
+		// Byte-identical query+hash: the sameNavKey no-op (unchanged by D83).
+		await router.push('/filter?f=b');
+		expect(dataRuns).toBe(2);
+	});
+});
+
+// ---- v1.49, D83: router.replace() -------------------------------------------
+// The same match/load/cancellation/atomic-commit pipeline as push(), but the
+// commit swaps the CURRENT stack entry in place: no truncate, no append, no
+// index move. The walks below (back/forward) are how the private stack's length
+// and position are observed.
+describe('router.replace() — memory mode (v1.49, D83)', () => {
+	const routes = [
+		{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+		{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+		{ path: '/todos', name: 'todos', view: TodosView, layout: DefaultLayout },
+	];
+
+	it('replaces the current entry in place: stack length + index constant, path updated', async () => {
+		const { router, el } = await bootMemory(routes);
+		await router.push('/about'); // [/, /about] @1
+
+		await router.replace('/todos'); // [/, /todos] @1 — no growth, no move
+		expect(router.current.path).toBe('/todos');
+		expect(el.querySelector('.todos')).not.toBeNull();
+		expect(el.querySelector('.about')).toBeNull();
+
+		// forward() is a no-op — the index still sits at the top of an
+		// unchanged-length stack.
+		await router.forward();
+		expect(router.current.path).toBe('/todos');
+
+		// back-after-replace lands on the PRE-replace previous entry, not '/about'.
+		await router.back();
+		expect(router.current.path).toBe('/');
+		expect(el.querySelector('.home')).not.toBeNull();
+
+		// forward returns to the REPLACED entry — the slot really was overwritten.
+		await router.forward();
+		expect(router.current.path).toBe('/todos');
+	});
+
+	it('a replace during a pending navigation supersedes it (token semantics like push)', async () => {
+		class SlowView extends PuzzleView {
+			async data() {
+				await delay(20);
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'slow' }, [text('SLOW')]);
+			}
+		}
+		const { router, el } = await bootMemory([
+			...routes,
+			{ path: '/slow', name: 'slow', view: SlowView, layout: DefaultLayout },
+		]);
+
+		const pSlow = router.push('/slow'); // starts loading, never commits
+		const pRepl = router.replace('/about'); // bumps the token — the push loses
+		await Promise.all([pSlow, pRepl]);
+
+		expect(router.current.path).toBe('/about');
+		expect(el.querySelector('.slow')).toBeNull();
+		// The superseded push added no entry and the replace overwrote entry 0 in
+		// place: [/about] @0 — nothing behind, nothing ahead.
+		await router.back();
+		expect(router.current.path).toBe('/about');
+		await router.forward();
+		expect(router.current.path).toBe('/about');
+	});
+
+	it('a failed replace commits nothing: view, current and stack untouched', async () => {
+		class BadView extends PuzzleView {
+			async data() {
+				throw new Error('boom');
+			}
+			render() {
+				return h('puzzle-view', { class: 'bad' }, [text('BAD')]);
+			}
+		}
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { router, el } = await bootMemory([
+			...routes,
+			{ path: '/bad', name: 'bad', view: BadView, layout: DefaultLayout },
+		]);
+		await router.push('/about'); // [/, /about] @1
+
+		await router.replace('/bad'); // data() rejects → never reaches the commit
+		errSpy.mockRestore();
+		expect(router.current.path).toBe('/about');
+		expect(el.querySelector('.about')).not.toBeNull();
+		expect(el.querySelector('.bad')).toBeNull();
+
+		// The stack still holds the ORIGINAL entry: back → '/', forward → '/about'.
+		await router.back();
+		expect(router.current.path).toBe('/');
+		await router.forward();
+		expect(router.current.path).toBe('/about');
+	});
+
+	it('a same-path replace is a no-op (no data() re-run); query compares byte-identically', async () => {
+		let dataRuns = 0;
+		class CountView extends PuzzleView {
+			data() {
+				dataRuns++;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'count' }, [text('COUNT')]);
+			}
+		}
+		const { router } = await bootMemory([
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{ path: '/x', name: 'x', view: CountView, layout: DefaultLayout },
+		]);
+		await router.push('/x?q=1');
+		expect(dataRuns).toBe(1);
+
+		await router.replace('/x?q=1'); // byte-identical → no-op
+		expect(dataRuns).toBe(1);
+		// A single trailing slash on the PATHNAME is insignificant, like push (D67).
+		await router.replace('/x/?q=1');
+		expect(dataRuns).toBe(1);
+		// A different query IS a real replace.
+		await router.replace('/x?q=2');
+		expect(dataRuns).toBe(2);
+		expect(router.current.path).toBe('/x?q=2');
+	});
+
+	it('a replace from mounted() defers through the commit window and replaces, not pushes', async () => {
+		let routerRef = null;
+		class LoginView extends PuzzleView {
+			mounted() {
+				routerRef.replace('/about'); // the auth-redirect idiom (D83)
+			}
+			render() {
+				return h('puzzle-view', { class: 'login' }, [text('LOGIN')]);
+			}
+		}
+		const { router, el } = await bootMemory([
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+			{ path: '/login', name: 'login', view: LoginView, layout: DefaultLayout },
+		]);
+		routerRef = router;
+
+		await router.push('/login'); // mounted() fires in the window → replace defers
+		await tick();
+		await tick();
+		expect(router.current.path).toBe('/about');
+		expect(el.querySelector('.about')).not.toBeNull();
+
+		// '/login' was REPLACED, not layered: [/, /about] @1 — back lands home.
+		await router.back();
+		expect(router.current.path).toBe('/');
+	});
+});
+
 describe('PuzzleApp — memory mode pass-through (D42)', () => {
 	let apps = [];
 	afterEach(() => {

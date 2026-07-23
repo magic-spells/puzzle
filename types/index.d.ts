@@ -43,7 +43,18 @@ export interface ScrollPosition {
 
 /** The current-route snapshot exposed by `router.current` and `view.route`. */
 export interface RouteSnapshot {
+	/** The raw path-shaped navigation target (base-free), query + hash included. */
 	path: string;
+	/** `path` minus query + hash (v1.49, D83) — base-free, trailing slash kept verbatim. */
+	pathname: string;
+	/**
+	 * The parsed query (v1.49, D83): a frozen, null-prototype object with
+	 * URLSearchParams decoding — a single value is a string, a repeated key a
+	 * frozen array in source order, a valueless key (`?debug`) `''`.
+	 */
+	query: Readonly<Record<string, string | readonly string[]>>;
+	/** `''`, or the raw fragment including the leading `#` (v1.49, D83). */
+	hash: string;
 	route: Route;
 	params: Record<string, string>;
 	chain: Route[];
@@ -170,6 +181,8 @@ export interface MorphHandler {
 export interface Router {
 	/** Navigate to a path (push a history entry). */
 	push(path: string): void | Promise<void>;
+	/** Navigate to a path REPLACING the current history entry — no new entry, scroll left alone by default (v1.49, D83). */
+	replace(path: string): void | Promise<void>;
 	/** Move `n` entries in history (negative = back). All modes (v1.11, D42). */
 	go(n: number): void | Promise<void>;
 	/** Go back one entry. */

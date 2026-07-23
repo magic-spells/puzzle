@@ -229,6 +229,40 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(() => captured.back()).toThrow(/no router/);
 	});
 
+	it('the kernel-mounted route snapshot carries the D83 pathname/query/hash parts', async () => {
+		// The serialized summary route ({ path, params, chain }) never carries the
+		// parsed parts — the shared assembleChain derives them when the kernel zips
+		// the view classes back on, so this.route matches the browser Router's shape.
+		let seen = null;
+		class SnapProbe extends PuzzleView {
+			data() {
+				seen = this.route;
+				return {};
+			}
+			render() {
+				return h('p', {}, [text('snap')]);
+			}
+		}
+		stamp(SnapProbe, 'app/views/SnapProbe.pzl');
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/guide', name: 'guide', view: SnapProbe }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		seedDocument({ content: pages[0].html, data: pages[0].data });
+		seen = null; // drop the build-time capture; assert the KERNEL's snapshot
+		await mountStatic({ target: '#app', views: [SnapProbe], route: pages[0].route });
+		await tick();
+
+		expect(seen.path).toBe('/guide');
+		expect(seen.pathname).toBe('/guide');
+		expect(seen.hash).toBe('');
+		expect(Object.keys(seen.query)).toEqual([]);
+		expect(Object.getPrototypeOf(seen.query)).toBeNull();
+		expect(Object.isFrozen(seen.query)).toBe(true);
+		expect(Object.isFrozen(seen)).toBe(true);
+	});
+
 	it('skips hydration silently when the data island is absent or empty', async () => {
 		class Plain extends PuzzleView {
 			render() {

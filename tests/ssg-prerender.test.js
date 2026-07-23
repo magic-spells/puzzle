@@ -520,8 +520,17 @@ describe('SSG prerender (M1)', () => {
 			// chain[0] is the root `settings` def; leaf is `settings-profile`.
 			expect(page.html).toContain('settings/settings-profile:Profile');
 
-			// Exactly the four D47 keys, and no bogus top-level name/meta.
-			expect(Object.keys(seen).sort()).toEqual(['chain', 'params', 'path', 'route']);
+			// Exactly the D47 keys plus the D83 parsed URL parts, and no bogus
+			// top-level name/meta.
+			expect(Object.keys(seen).sort()).toEqual([
+				'chain',
+				'hash',
+				'params',
+				'path',
+				'pathname',
+				'query',
+				'route',
+			]);
 			expect(seen.name).toBeUndefined();
 			expect(seen.meta).toBeUndefined();
 			// Correct semantics: path is the full path, route is the LEAF def, chain
@@ -530,6 +539,14 @@ describe('SSG prerender (M1)', () => {
 			expect(seen.route.name).toBe('settings-profile');
 			expect(seen.chain.map((r) => r.name)).toEqual(['settings', 'settings-profile']);
 			expect(seen.params).toEqual({});
+			// D83 parity: a prerendered route is a bare static path — pathname is the
+			// path itself, the query is the same frozen null-prototype empty object
+			// the Router's parseLocation yields, and there is no fragment.
+			expect(seen.pathname).toBe('/settings/profile');
+			expect(seen.hash).toBe('');
+			expect(Object.keys(seen.query)).toEqual([]);
+			expect(Object.getPrototypeOf(seen.query)).toBeNull();
+			expect(Object.isFrozen(seen.query)).toBe(true);
 			// Frozen like the Router's snapshot.
 			expect(Object.isFrozen(seen)).toBe(true);
 		});

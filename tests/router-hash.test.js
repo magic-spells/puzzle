@@ -397,3 +397,34 @@ describe('PuzzleApp — routerMode pass-through (D34)', () => {
 		expect(app.router.current.path).toBe('/about');
 	});
 });
+
+// ---- v1.49, D83: replace() writes the '#'-encoded URL in place --------------
+describe('router.replace() — hash mode (v1.49, D83)', () => {
+	const routes = [
+		{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+		{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+		{ path: '/todos', name: 'todos', view: TodosView, layout: DefaultLayout },
+	];
+
+	it("rewrites location.hash via replaceState (never pushState), history.length constant", async () => {
+		const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+		const { router, el } = await bootHash(routes);
+		await router.push('/about');
+		expect(location.hash).toBe('#/about');
+		const len = history.length;
+
+		const pushSpy = vi.spyOn(history, 'pushState');
+		await router.replace('/todos?f=1');
+
+		expect(location.hash).toBe('#/todos?f=1'); // same '#' + path encoding as push
+		expect(history.length).toBe(len);
+		expect(pushSpy).not.toHaveBeenCalled();
+		expect(el.querySelector('.todos')).not.toBeNull();
+		// The snapshot stays path-shaped and '#'-free; the in-fragment query parses.
+		expect(router.current.path).toBe('/todos?f=1');
+		expect(router.current.pathname).toBe('/todos');
+		expect(router.current.query.f).toBe('1');
+		pushSpy.mockRestore();
+		scrollSpy.mockRestore();
+	});
+});

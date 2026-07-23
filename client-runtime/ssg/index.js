@@ -395,8 +395,10 @@ function requireStamp(Class, routePath, kind) {
 /**
  * The plain-JSON route snapshot for the summary (CONTRACT 3): `{ path, params: {},
  * chain: [{ path, name?, meta? }] }` — no classes, so it survives JSON.stringify to
- * the browser kernel, which rebuilds the full `{ path, route, params, chain }` shape
- * by zipping the page's view classes back on.
+ * the browser kernel, which rebuilds the full `{ path, pathname, query, hash, route,
+ * params, chain }` shape by zipping the page's view classes back on and handing the
+ * entry to the shared assembleChain (which derives pathname/query/hash there, D83 —
+ * they are constants of a static path, so this summary never needs to carry them).
  */
 function serializeRouteJSON(entry) {
 	return {
