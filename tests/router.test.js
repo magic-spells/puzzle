@@ -1269,3 +1269,164 @@ describe('Router — a deferred redirect survives a synchronous commit throw (Fi
 		errSpy.mockRestore();
 	});
 });
+
+// ---- v1.49, D83: router.replace() + parsed query snapshot (history mode) ----
+// Memory mode (router-memory.test.js) proves the stack semantics precisely;
+// this block proves the HISTORY seams: replaceState (never pushState), a
+// constant history.length, the preserved __puzzleScrollKey entry identity, real
+// jsdom back-traversal after a replace, and the leave-scroll-alone default.
+describe('router.replace() — history mode (v1.49, D83)', () => {
+	class DocsView extends PuzzleView {
+		render() {
+			return h('puzzle-view', { class: 'docs' }, [text('DOCS')]);
+		}
+	}
+	const routes = [
+		{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+		{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+		{ path: '/docs', name: 'docs', view: DocsView, layout: DefaultLayout },
+	];
+
+	let scrollSpy;
+	beforeEach(() => {
+		scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+	});
+	afterEach(() => {
+		scrollSpy.mockRestore();
+	});
+
+	it('does not grow history: length constant, URL + view swap, pushState never called', async () => {
+		const { router, el } = await boot(routes);
+		await router.push('/about');
+		const len = history.length;
+
+		const pushSpy = vi.spyOn(history, 'pushState');
+		await router.replace('/docs');
+
+		expect(history.length).toBe(len); // replaceState adds no entry
+		expect(location.pathname).toBe('/docs');
+		expect(el.querySelector('.docs')).not.toBeNull();
+		expect(el.querySelector('.about')).toBeNull();
+		expect(router.current.path).toBe('/docs');
+		expect(pushSpy).not.toHaveBeenCalled();
+		pushSpy.mockRestore();
+	});
+
+	it('preserves the entry identity: the existing __puzzleScrollKey rides the replacement state', async () => {
+		const { router } = await boot(routes);
+		await router.push('/about'); // mints this entry's key
+		const keyBefore = history.state.__puzzleScrollKey;
+		expect(keyBefore).toBeTruthy();
+
+		await router.replace('/docs');
+		// Same key, no new mint — a later pop restores whatever position was saved
+		// under this entry as if it had never been rewritten (D83).
+		expect(history.state.__puzzleScrollKey).toBe(keyBefore);
+	});
+
+	it('back after replace lands on the pre-replace previous entry (real jsdom traversal)', async () => {
+		const { router, el } = await boot(routes);
+		await router.push('/about');
+		await router.replace('/docs'); // the '/about' entry now reads '/docs'
+
+		history.back(); // jsdom fires popstate asynchronously → the router pops
+		await delay(20);
+		expect(location.pathname).toBe('/');
+		expect(router.current.path).toBe('/');
+		expect(el.querySelector('.home')).not.toBeNull();
+	});
+
+	it('leaves scroll untouched by default (a push scrolls, the replace does not)', async () => {
+		const { router } = await boot(routes);
+		await router.push('/about'); // default push → top
+		expect(scrollSpy).toHaveBeenCalled();
+		scrollSpy.mockClear();
+
+		await router.replace('/docs');
+		expect(scrollSpy).not.toHaveBeenCalled(); // replace default: leave alone
+	});
+
+	it('a custom scrollBehavior still runs on replace (savedPosition null) and may override', async () => {
+		const behavior = vi.fn(() => ({ x: 5, y: 7 }));
+		const el = container();
+		const router = new Router(routes, { scrollBehavior: behavior });
+		routers.push(router);
+		await router.start(el, ctx());
+		behavior.mockClear();
+		scrollSpy.mockClear();
+
+		await router.replace('/docs');
+		expect(behavior).toHaveBeenCalledTimes(1);
+		const [to, , savedPosition] = behavior.mock.calls[0];
+		expect(to.path).toBe('/docs');
+		expect(savedPosition).toBeNull();
+		expect(scrollSpy).toHaveBeenCalledWith(5, 7);
+	});
+
+	it("an explicit #anchor on a replace target still resolves like push's (D41 composition)", async () => {
+		const { router } = await boot(routes);
+		await router.push('/about');
+		scrollSpy.mockClear();
+
+		// The anchor id is absent from the committed DOM → the D41 fallback lands
+		// at top {0,0}. The scrollTo CALL is the point: the anchor sentinel
+		// resolved instead of the plain-replace null (which never scrolls).
+		await router.replace('/docs#missing');
+		expect(scrollSpy).toHaveBeenCalledWith(0, 0);
+	});
+
+	it('a failed replace commits nothing: URL, view and history untouched', async () => {
+		class BadView extends PuzzleView {
+			async data() {
+				throw new Error('boom');
+			}
+			render() {
+				return h('puzzle-view', { class: 'bad' }, [text('BAD')]);
+			}
+		}
+		const { router, el } = await boot([
+			...routes,
+			{ path: '/bad', name: 'bad', view: BadView, layout: DefaultLayout },
+		]);
+		await router.push('/about');
+		const len = history.length;
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const replaceSpy = vi.spyOn(history, 'replaceState');
+
+		await router.replace('/bad');
+
+		expect(location.pathname).toBe('/about');
+		expect(router.current.path).toBe('/about');
+		expect(el.querySelector('.about')).not.toBeNull();
+		expect(el.querySelector('.bad')).toBeNull();
+		expect(replaceSpy).not.toHaveBeenCalled(); // never reached #commitLocation
+		expect(history.length).toBe(len);
+		expect(errSpy).toHaveBeenCalled();
+		errSpy.mockRestore();
+		replaceSpy.mockRestore();
+	});
+});
+
+describe('route snapshot query/hash — history mode (v1.49, D83)', () => {
+	const routes = [
+		{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+		{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+	];
+
+	it('a deep link with query decodes into the initial snapshot; push carries query into location.search', async () => {
+		history.replaceState({}, '', '/?q=hello%20world&debug');
+		const { router } = await boot(routes);
+		expect(router.current.pathname).toBe('/');
+		expect(router.current.query.q).toBe('hello world');
+		expect(router.current.query.debug).toBe('');
+		expect(router.current.hash).toBe('');
+
+		const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+		await router.push('/about?tab=2');
+		expect(location.pathname).toBe('/about');
+		expect(location.search).toBe('?tab=2');
+		expect(router.current.pathname).toBe('/about');
+		expect(router.current.query.tab).toBe('2');
+		scrollSpy.mockRestore();
+	});
+});

@@ -111,12 +111,25 @@ class TodoListView extends PuzzleView {
 		const snap: RouteSnapshot | null = this.route;
 		const routeName = snap?.route.name;
 
+		// parsed URL state on the snapshot (v1.49, D83).
+		const pathname: string | undefined = snap?.pathname;
+		const hash: string | undefined = snap?.hash;
+		const q: string | readonly string[] | undefined = snap?.query.tag;
+		if (typeof q !== 'string' && q !== undefined) {
+			// repeated keys narrow to the readonly array branch.
+			const first: string | undefined = q[0];
+			void first;
+		}
+		void pathname;
+		void hash;
+
 		return { todo, todos, openTitles, routeName, draft: '', filter: 'all', selectedId: null };
 	}
 
 	mounted(): void {
-		// router is on ctx; push/go are path-shaped in all modes.
+		// router is on ctx; push/go/replace are path-shaped in all modes.
 		this.ctx.router.push('/todos');
+		this.ctx.router.replace('/todos?tab=2'); // v1.49, D83
 		this.ctx.router.go(-1);
 
 		// element is Element | Comment | null (the anchor Comment during async data()).

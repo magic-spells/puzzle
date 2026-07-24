@@ -454,3 +454,32 @@ describe('PuzzleApp — routerBase pass-through (D51)', () => {
 		expect(location.pathname).toBe('/myapp/about');
 	});
 });
+
+// ---- v1.49, D83: replace() + parsed query compose with a base (D51) ---------
+describe('router.replace() + query snapshot under a base (v1.49, D83)', () => {
+	it('replace writes base + path (no new entry); the snapshot stays base-free, query parsed', async () => {
+		const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+		const { router } = await bootBase(baseRoutes, '/myapp');
+		await router.push('/about');
+		const len = history.length;
+
+		await router.replace('/docs?x=1');
+		expect(history.length).toBe(len); // replaced in place
+		expect(location.pathname).toBe('/myapp/docs'); // URL carries the base (write seam)
+		expect(location.search).toBe('?x=1');
+		// The app-facing snapshot never sees the base (D51) — pathname included.
+		expect(router.current.path).toBe('/docs?x=1');
+		expect(router.current.pathname).toBe('/docs');
+		expect(router.current.query.x).toBe('1');
+		expect(router.current.hash).toBe('');
+		scrollSpy.mockRestore();
+	});
+
+	it('a base-URL deep link with query lands base-stripped in pathname/query', async () => {
+		const { router } = await bootBase(baseRoutes, '/myapp/docs?page=3');
+		expect(router.current.route.name).toBe('docs');
+		expect(router.current.path).toBe('/docs?page=3');
+		expect(router.current.pathname).toBe('/docs');
+		expect(router.current.query.page).toBe('3');
+	});
+});

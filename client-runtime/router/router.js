@@ -39,11 +39,33 @@
  *   has already moved). Reused ancestors always gate.
  * - Route snapshot (v1.15, D47): every gated preload/refresh (and the layout's
  *   post-commit #refreshLogged) carries this navigation's frozen `to` object
- *   ({ path, route, params, chain } — the shape of `current`); views read it as
- *   `this.route`, giving data() the navigation it is GATING — the only route
- *   source that is correct pre-commit (current/location still hold the old
- *   route there) and in all three modes. A reused layout's post-commit refresh
- *   now runs AFTER #commitState, so it also reads a fresh `current`.
+ *   ({ path, pathname, query, hash, route, params, chain } — the shape of
+ *   `current`); views read it as `this.route`, giving data() the navigation it
+ *   is GATING — the only route source that is correct pre-commit
+ *   (current/location still hold the old route there) and in all three modes. A
+ *   reused layout's post-commit refresh now runs AFTER #commitState, so it also
+ *   reads a fresh `current`.
+ * - Parsed URL state + replace() (v1.49, D83): the snapshot adds `pathname`
+ *   (path minus query/hash — base-free, trailing slash kept byte-for-byte; the
+ *   MATCHING normalization stays on stripPath/stripTrailingSlash), `query` (a
+ *   FROZEN null-prototype object with URLSearchParams decoding semantics:
+ *   single value → string, repeated key → frozen array in source order, a
+ *   valueless key → ''), and `hash` ('' or the raw fragment INCLUDING the
+ *   leading '#'). Parsed ONCE per navigation (parseLocation) and stored on
+ *   #state at commit, so the `current` getter never reparses. Query never
+ *   merges into `params`; matching is untouched. `router.replace(path)` runs
+ *   the SAME match/load/cancellation/atomic-commit pipeline as push() — a
+ *   failed or superseded replace touches nothing — but #commitLocation swaps
+ *   the CURRENT entry in place: history.replaceState (hash mode '#'-encoded,
+ *   base-prefixed like push) with the existing __puzzleScrollKey preserved (no
+ *   #savePosition, no new entry key — the entry keeps its identity), or in
+ *   memory mode an in-place stack[#index] overwrite (no truncate, no append,
+ *   no index move). Default scroll on a replace is LEAVE-ALONE (a
+ *   filter-typing keystroke must not jump to top); an explicit `#anchor` on the
+ *   replace target still lands like push's, and a custom scrollBehavior
+ *   (savedPosition null) still overrides. The same-path no-op, the #committing
+ *   commit-window deferral (via the { path, replace } #pendingPush slot), and
+ *   pending-memory-pop supersession all mirror push() exactly.
  * - pushState fires for push()/link clicks ONLY, now via #commitLocation inside the
  *   synchronous commit window (D61) — never on the initial navigation or popstate
  *   (the browser already moved the URL).
@@ -267,7 +289,8 @@ export class Router {
 	// #navigate: it would read the stale #state as `cur`, compute its reuse
 	// prefix against the OLD chain, and double-mount the shared layout (the
 	// pyramid-puzzle redirect-from-mounted bug). Such a push is DEFERRED — its
-	// target recorded (last-wins, single slot) and run via #navigate the instant
+	// target recorded as { path, replace } (last-wins, single slot — a replace()
+	// arriving in the window shares the slot, D83) and re-dispatched the instant
 	// the in-flight commit completes and #state is consistent. No await runs
 	// inside the window, so only a synchronous reentrant push can land while the
 	// flag is set; a push arriving during the async LOAD or out-animation phases
@@ -625,7 +648,7 @@ export class Router {
 	 */
 	push(path) {
 		if (this.#committing) {
-			this.#pendingPush = path; // last-wins, single slot (no queue)
+			this.#pendingPush = { path, replace: false }; // last-wins, single slot (no queue)
 			return Promise.resolve();
 		}
 		// v-next same-path no-op: a push whose target matches the COMMITTED state's
@@ -649,22 +672,54 @@ export class Router {
 	}
 
 	/**
-	 * Run a push deferred during the commit window, now that #state/current are
-	 * consistent (the just-committed chain is recorded). Fire-and-forget: the
-	 * caller has already finished its own commit. Single slot — last writer wins.
+	 * Programmatic navigation that REPLACES the current history entry (v1.49,
+	 * D83). Runs the SAME match/load/cancellation/atomic-commit pipeline as
+	 * push() — a failed or superseded replace touches neither URL nor view nor
+	 * stack (D19/D61 inherited) — but #commitLocation swaps the entry in place:
+	 * history.replaceState (hash mode '#'-encoded, base-prefixed like push) with
+	 * the CURRENT entry's __puzzleScrollKey preserved, or in memory mode an
+	 * in-place stack overwrite (length + index unchanged). Scroll is left alone
+	 * by default (see #resolveScroll). Mirrors push()'s guards exactly: the
+	 * same-path no-op (byte-identical query+hash, trailing-slash-insensitive
+	 * pathname) and the commit-window deferral (a replace from a mounted() hook
+	 * — the auth-redirect case that must not leave the aborted page in history).
+	 */
+	replace(path) {
+		if (this.#committing) {
+			this.#pendingPush = { path, replace: true }; // last-wins, shared slot with push
+			return Promise.resolve();
+		}
+		// Same-path no-op, exactly push()'s guard: replacing the committed entry
+		// with itself would re-run data() and rewrite an identical URL for nothing.
+		if (this.#state && sameNavKey(path) === sameNavKey(this.#state.path)) {
+			return Promise.resolve();
+		}
+		return this.#navigate(path, { push: false, replace: true });
+	}
+
+	/**
+	 * Run a push/replace deferred during the commit window, now that
+	 * #state/current are consistent (the just-committed chain is recorded).
+	 * Fire-and-forget: the caller has already finished its own commit. Single
+	 * slot — last writer wins.
 	 */
 	#runPendingPush() {
 		if (this.#pendingPush == null) return;
-		const path = this.#pendingPush;
+		const { path, replace } = this.#pendingPush;
 		this.#pendingPush = null;
-		// Re-dispatch through push(), NOT straight into #navigate: by now the outer
-		// finally has cleared #committing and #commitState recorded the just-committed
-		// #state, so push() takes its normal path and applies the same-path no-op
-		// guard. Without this, an auth guard in mounted()/viewWillShow that redirects
-		// to the very path being committed (landing on '/login' and pushing '/login')
-		// would run a full redundant navigation + duplicate history entry. #pendingPush
-		// carries only a path (push's sole argument), so nothing is lost. Fire-and-forget.
-		this.push(path);
+		// Re-dispatch through push()/replace(), NOT straight into #navigate: by now
+		// the outer finally has cleared #committing and #commitState recorded the
+		// just-committed #state, so the normal entry point applies the same-path
+		// no-op guard. Without this, an auth guard in mounted()/viewWillShow that
+		// redirects to the very path being committed (landing on '/login' and
+		// pushing '/login') would run a full redundant navigation + duplicate
+		// history entry. #pendingPush carries { path, replace } (the sole argument
+		// plus which verb to re-dispatch, D83), so nothing is lost. Fire-and-forget.
+		if (replace) {
+			this.replace(path);
+		} else {
+			this.push(path);
+		}
 	}
 
 	/**
@@ -730,19 +785,32 @@ export class Router {
 	}
 
 	/**
-	 * Current route info: { path, route, params, chain } — null before the first
-	 * nav. `route` is the LEAF node (back-compat shape); `chain` is the full
-	 * root→leaf node list (v1.3 additive).
+	 * Current route info: { path, pathname, query, hash, route, params, chain }
+	 * — null before the first nav. `route` is the LEAF node (back-compat shape);
+	 * `chain` is the full root→leaf node list (v1.3 additive). `pathname`/
+	 * `query`/`hash` (v1.49, D83) are the parts parseLocation split off `path`
+	 * at navigation time — read straight off #state, never reparsed here.
 	 */
 	get current() {
 		if (!this.#state) return null;
-		const { path, entry, params } = this.#state;
-		return { path, route: entry.chain[entry.chain.length - 1], params, chain: entry.chain };
+		const { path, pathname, query, hash, entry, params } = this.#state;
+		return {
+			path,
+			pathname,
+			query,
+			hash,
+			route: entry.chain[entry.chain.length - 1],
+			params,
+			chain: entry.chain,
+		};
 	}
 
 	// ---- navigation pipeline (D19 / D30) ------------------------------------
 
-	async #navigate(rawPath, { push, pop = false, savedPosition = null, memoryIndex = null }) {
+	async #navigate(
+		rawPath,
+		{ push, pop = false, replace = false, savedPosition = null, memoryIndex = null }
+	) {
 		const matchPath = stripPath(rawPath);
 		const matched = this.#match(matchPath);
 
@@ -764,8 +832,10 @@ export class Router {
 		// entries (D42), so the pending pop target is moot — reset it here (at the
 		// point supersession becomes real) so a go() arriving before this push commits
 		// bases off #index, not a stale pop target. No-op in history/hash mode and for
-		// pops (which set #pendingIndex in go()). (Fix 3 / D42.)
-		if (push) this.#pendingIndex = null;
+		// pops (which set #pendingIndex in go()). (Fix 3 / D42.) A replace supersedes
+		// a pending pop the same way (D83) — it targets the CURRENT entry, not the
+		// pop's.
+		if (push || replace) this.#pendingIndex = null;
 		const from = this.current; // pre-commit snapshot for scrollBehavior (D33)
 		// Departure scroll, captured NOW — synchronously at navigation start, while
 		// the outgoing page still has its full height. #commitLocation persists this
@@ -836,9 +906,15 @@ export class Router {
 		// refresh so a gating data() sees the navigation it is gating — as
 		// `this.route` on the instance. Also the `to` handed to scrollBehavior
 		// (D33): one object, one truth. Frozen so no view can mutate the shared
-		// snapshot.
+		// snapshot. parseLocation (v1.49, D83) runs ONCE here — its parts ride
+		// `to`, thread through #commitState onto #state, and the anchor split
+		// below reuses its hash, so nothing downstream ever reparses rawPath.
+		const loc = parseLocation(rawPath);
 		const to = Object.freeze({
 			path: rawPath,
+			pathname: loc.pathname,
+			query: loc.query,
+			hash: loc.hash,
 			route: entry.chain[entry.chain.length - 1],
 			params,
 			chain: entry.chain,
@@ -953,11 +1029,10 @@ export class Router {
 
 		// Where the window should land once the new view is on screen (null =
 		// leave it alone). Resolved here, applied in #commitState. A `#anchor` suffix
-		// on the pushed path refines the default landing (D41): pulled from the RAW
-		// path (stripPath already dropped it for matching).
-		const hashIdx = rawPath.indexOf('#');
-		const anchor = hashIdx !== -1 ? rawPath.slice(hashIdx + 1) : null;
-		const scroll = this.#resolveScroll({ to, from, push, pop, savedPosition, anchor });
+		// on the pushed path refines the default landing (D41): read off the fragment
+		// parseLocation already split (D83 — stripPath dropped it for matching).
+		const anchor = loc.hash ? loc.hash.slice(1) : null;
+		const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
 
 		// Params-only degenerate case: keep === chain length ⇒ no fresh views, the
 		// whole chain was refreshed pre-commit. Just record state + refresh the
@@ -967,9 +1042,12 @@ export class Router {
 			// (D61) is just these two adjacent synchronous calls: location (URL/title/
 			// memory stack) immediately before #state. Timing is unchanged from the
 			// old inline commit block.
-			this.#commitLocation({ rawPath, entry, push, memoryIndex, departScroll });
+			this.#commitLocation({ rawPath, entry, push, replace, memoryIndex, departScroll });
 			this.#commitState({
 				rawPath,
+				pathname: loc.pathname,
+				query: loc.query,
+				hash: loc.hash,
 				entry,
 				params,
 				views,
@@ -1012,6 +1090,11 @@ export class Router {
 
 		await this.#swap(token, cur, {
 			rawPath,
+			// The parsed URL parts (v1.49, D83) — #commitState records them on
+			// #state so the `current` getter never reparses.
+			pathname: loc.pathname,
+			query: loc.query,
+			hash: loc.hash,
 			entry,
 			params,
 			views,
@@ -1024,10 +1107,12 @@ export class Router {
 			to,
 			// D61: #commitLocation (run as the first statement inside #swap's commit
 			// window) reads these to move the URL/memory stack; null memoryIndex on a
-			// push/initial nav, set only for a memory-mode go/back/forward pop.
+			// push/initial nav, set only for a memory-mode go/back/forward pop;
+			// replace (D83) selects the entry-swapping commit instead of a push.
 			// departScroll: the departure position captured at nav start, before the
 			// outgoing view's teardown collapsed the page (see #navigate).
 			push,
+			replace,
 			memoryIndex,
 			departScroll,
 		});
@@ -1052,10 +1137,15 @@ export class Router {
 	 * in-memory stack/index instead of the URL; the initial navigation and pops never
 	 * pushState but still set the title.
 	 *
-	 * @param {{ rawPath: string, entry: object, push: boolean, memoryIndex: ?number, departScroll: ?{x:number,y:number} }} next
+	 * On REPLACE (v1.49, D83) the current entry is swapped IN PLACE — see the
+	 * branch below: history.replaceState with the entry's identity (its
+	 * __puzzleScrollKey) preserved, or a memory-mode stack overwrite. No position
+	 * save, no new entry key, no stack growth or index move.
+	 *
+	 * @param {{ rawPath: string, entry: object, push: boolean, replace?: boolean, memoryIndex: ?number, departScroll: ?{x:number,y:number} }} next
 	 */
 	#commitLocation(next) {
-		const { rawPath, entry, push, memoryIndex } = next;
+		const { rawPath, entry, push, replace, memoryIndex } = next;
 		if (push) {
 			if (this.#mode === 'memory') {
 				// In-memory stack (D42): truncate any forward entries, append the new
@@ -1082,6 +1172,28 @@ export class Router {
 					history.pushState({ __puzzleScrollKey: this.#scrollKey }, '', url);
 				} else {
 					history.pushState({}, '', url);
+				}
+			}
+		} else if (replace) {
+			// replace() commit (v1.49, D83) — the D19/D61 atomicity is inherited: a
+			// failed or superseded replace never reaches here, so this only ever
+			// runs for the winning navigation, inside the commit window.
+			if (this.#mode === 'memory') {
+				// In-place overwrite of the current entry: NO truncate, NO append, NO
+				// index move — stack length and position are invariants of a replace.
+				this.#stack[this.#index] = { path: rawPath };
+			} else {
+				// The same URL encoding the push branch builds (base prefixed before
+				// the mode-specific form, D51/D34). The entry keeps its IDENTITY: no
+				// #savePosition, no #newEntryKey — the replacement state re-carries
+				// the existing __puzzleScrollKey, so a later pop restores whatever
+				// position was saved under this entry as if it were never rewritten.
+				const url =
+					this.#mode === 'hash' ? '#' + this.#base + rawPath : this.#base + rawPath;
+				if (this.#scrollEnabled()) {
+					history.replaceState({ __puzzleScrollKey: this.#scrollKey }, '', url);
+				} else {
+					history.replaceState({}, '', url);
 				}
 			}
 		} else if (this.#mode === 'memory' && memoryIndex != null) {
@@ -1454,6 +1566,11 @@ export class Router {
 	#commitState(next) {
 		this.#state = {
 			path: next.rawPath,
+			// The parsed URL parts (v1.49, D83), split ONCE by #navigate's
+			// parseLocation — the `current` getter reads these, never reparses.
+			pathname: next.pathname,
+			query: next.query,
+			hash: next.hash,
 			entry: next.entry,
 			params: next.params,
 			views: next.views,
@@ -1514,14 +1631,16 @@ export class Router {
 	 * scroll alone. Defaults: pop → the entry's saved position (top when none
 	 * survived, e.g. after a reload cleared the in-memory map); push → the
 	 * `#anchor` target when one is present (a { anchor } sentinel resolved after
-	 * mount in #commitState, D41), else top; initial navigation → untouched (the
-	 * browser owns first paint). A custom scrollBehavior(to, from, savedPosition)
-	 * overrides the defaults — including the anchor, which still rides in to.path;
-	 * a falsy return leaves scroll alone; errors are logged and treated as falsy.
+	 * mount in #commitState, D41), else top; replace → LEAVE ALONE unless the
+	 * target carries an explicit `#anchor` (v1.49, D83); initial navigation →
+	 * untouched (the browser owns first paint). A custom
+	 * scrollBehavior(to, from, savedPosition) overrides the defaults — including
+	 * the anchor, which still rides in to.path; a falsy return leaves scroll
+	 * alone; errors are logged and treated as falsy.
 	 */
-	#resolveScroll({ to, from, push, pop, savedPosition, anchor }) {
+	#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor }) {
 		if (!this.#scrollEnabled()) return null;
-		if (!push && !pop) return null; // initial navigation
+		if (!push && !pop && !replace) return null; // initial navigation
 
 		if (typeof this.#scrollBehavior === 'function') {
 			try {
@@ -1532,6 +1651,11 @@ export class Router {
 				return null;
 			}
 		}
+		// Replace (v1.49, D83): leave scroll alone by default — a query-tweaking
+		// replace (a filter keystroke rewriting `?q=`) must not jump the window to
+		// top. An EXPLICIT `#anchor` on the replace target is still a stated intent
+		// to land somewhere, so it resolves exactly like push's anchor sentinel.
+		if (replace) return anchor ? { anchor } : null;
 		// Pop restores a saved position and beats any anchor (the user is returning
 		// to where they were); the anchor refines PUSH landings only (D41). The
 		// element position cannot be computed until after mount, so hand back a
@@ -1989,6 +2113,48 @@ function normalizeBase(base) {
 function stripPath(rawPath) {
 	const path = rawPath.split('?')[0].split('#')[0];
 	return path || '/';
+}
+
+/**
+ * Split a raw path-shaped navigation target into the snapshot's URL parts
+ * (v1.49, D83): `pathname` (query + hash dropped; base-free like rawPath, any
+ * trailing slash kept BYTE-FOR-BYTE — matching alone normalizes, via
+ * stripPath/stripTrailingSlash), `query` (a FROZEN null-prototype object), and
+ * `hash` ('' or the raw fragment INCLUDING the leading '#'). The hash is split
+ * FIRST, so a '?' inside the fragment never starts a query — the same
+ * precedence stripPath's split order and the URL grammar give it.
+ *
+ * Query decoding is delegated to URLSearchParams (application/x-www-form-
+ * urlencoded semantics: '+' is a space, percent-escapes decode): a single
+ * value → string, a repeated key → a frozen array in source order, a valueless
+ * key (`?debug`) → ''. URLSearchParams never throws on malformed percent input
+ * (it leaves undecodable bytes verbatim), so navigation can never fail here.
+ * The null prototype keeps `'toString' in query` false for absent keys — and
+ * makes a hostile `?__proto__=x` key an ordinary own property.
+ */
+function parseLocation(rawPath) {
+	const hashIdx = rawPath.indexOf('#');
+	const hash = hashIdx === -1 ? '' : rawPath.slice(hashIdx);
+	const beforeHash = hashIdx === -1 ? rawPath : rawPath.slice(0, hashIdx);
+	const queryIdx = beforeHash.indexOf('?');
+	const pathname = queryIdx === -1 ? beforeHash : beforeHash.slice(0, queryIdx);
+	const query = Object.create(null);
+	if (queryIdx !== -1) {
+		for (const [key, value] of new URLSearchParams(beforeHash.slice(queryIdx + 1))) {
+			const prev = query[key];
+			if (prev === undefined) query[key] = value;
+			else if (Array.isArray(prev)) prev.push(value);
+			else query[key] = [prev, value];
+		}
+		// Freeze repeat-key arrays only after the collection loop finished growing
+		// them; the top-level object freezes last.
+		for (const key of Object.keys(query)) {
+			if (Array.isArray(query[key])) Object.freeze(query[key]);
+		}
+	}
+	// `'' || '/'` mirrors stripPath's empty-path fallback (a bare '?q' / '#f'
+	// target still names the root).
+	return { pathname: pathname || '/', query: Object.freeze(query), hash };
 }
 
 /**
