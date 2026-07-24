@@ -7,8 +7,8 @@ connections:
   - DECISION-D78-AGENT-SKILL-DISTRIBUTION
   - DECISION-D97-UPGRADE-SKILL-REFRESH
   - DECISION-D77-INIT-PROMPTS
-verified_at: '2026-07-24T21:37:57.425Z'
-verified_sha: b1bcbfa975096ce3d61b300340e54b53c46f0919
+verified_at: '2026-07-24T22:56:54.920Z'
+verified_sha: b64de21995a88b303d63bee37e8bc7f00cabb741
 notes:
   - kind: verified
     text: >-
@@ -19,6 +19,12 @@ notes:
       (TestConfirmSkillRefreshAnswers pins the real huh form); driving it through a pty was not
       reproducible from this harness.
     sha: b1bcbfa975096ce3d61b300340e54b53c46f0919
+  - kind: verified
+    text: >-
+      Re-verified at merged main (PR #24). Both suites green on the merged tree: go test ./... all
+      compiler packages, vitest 1223/1223 (the count grew from 1170 because D100's DevTools bridge
+      tests landed in the same merge).
+    sha: b64de21995a88b303d63bee37e8bc7f00cabb741
 ---
 
 # D99 — `puzzle add skills` asks instead of refusing, and `puzzle upgrade skills` (v1.62)
