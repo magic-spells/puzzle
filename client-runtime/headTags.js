@@ -1,7 +1,7 @@
 /**
  * Managed head-tag machinery (D84, v1.50 — constellation/doc/DOC-SPEC.md §45).
  *
- * Split out of head.js by D88 so a title-only app never bundles it. TWO
+ * Split out of head.js by D89 so a title-only app never bundles it. TWO
  * consumers of the shared MANAGED_TAGS table:
  *  - the SPA router's #syncHead calls `syncTags` behind the `__PUZZLE_HAS_HEAD_TAGS__`
  *    build gate — when the compiler proves no route defines
@@ -66,7 +66,7 @@ export const MANAGED_TAGS = [
 /**
  * Browser-only: sync the managed `document.head` tags to a resolved head. The
  * `<title>` is handled separately by head.js syncTitle — this is the tag half of
- * the old syncHead, called only when the app uses head tags (D88 gate).
+ * the old syncHead, called only when the app uses head tags (D89 gate).
  *
  * Per managed tag: adopt-by-identity. An existing `[data-puzzle-head="<id>"]`
  * element is UPDATED in place when its field resolves (this is how hybrid

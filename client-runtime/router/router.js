@@ -2050,7 +2050,7 @@ export class Router {
 		if (this.#mode === 'memory') return;
 		const resolved = resolveHead(entry.chain);
 		// Title is the always-in core (head.js). The managed-tag sync (headTags.js)
-		// is build-gated (D88): the inline `typeof __PUZZLE_HAS_HEAD_TAGS__ …` probe
+		// is build-gated (D89): the inline `typeof __PUZZLE_HAS_HEAD_TAGS__ …` probe
 		// folds to a dead branch when the compiler proves no route defines
 		// description/canonical/socialImage, dropping the syncTags import and
 		// headTags.js from the bundle. Undefined (vitest / no-compiler) ⇒ true, so

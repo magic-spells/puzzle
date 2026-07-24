@@ -13,7 +13,7 @@
  *    #setTitle occupied, inheriting D61 atomicity (a failed or superseded
  *    navigation never touches the head).
  *
- * MODULE SPLIT (D88): this file holds the always-present core — the resolver and
+ * MODULE SPLIT (D89): this file holds the always-present core — the resolver and
  * the one-line `document.title` sync (syncTitle) that EVERY routed app needs.
  * The managed-tag machinery (the MANAGED_TAGS table, the DOM sync loop, and the
  * SSG string builder's shared table) lives in ./headTags.js, imported by the
@@ -79,7 +79,7 @@ function resolveField(chain, field) {
  * Browser-only: sync `document.title` to a resolved head. This is the ALWAYS-IN
  * half of the old syncHead — every routed app assigns its tab title. The managed
  * head-tag sync (headTags.js `syncTags`) is a separate, build-gated call in the
- * router's #syncHead (D88).
+ * router's #syncHead (D89).
  *
  * `document.title` is assigned ONLY for a non-null resolved title — resolved
  * null (explicit suppression) and nothing-defined both leave it as-is (the

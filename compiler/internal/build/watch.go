@@ -36,6 +36,12 @@ type WatchBuilder struct {
 	// the incremental path keeps dist warm, so it prunes explicitly). nil before
 	// the first Rebuild — nothing is ever pruned on the first pass.
 	prevPublic map[string]bool
+
+	// Esbuild contexts freeze Define values when they are created. Track the
+	// usage bits baked into ctx so ScanUsage can replace the context only when a
+	// source edit changes one of the feature defines.
+	definedFlip     bool
+	definedHeadTags bool
 }
 
 // NewWatchBuilder creates the incremental builder for the app rooted at root
@@ -57,9 +63,10 @@ func NewWatchBuilder(root string) (*WatchBuilder, error) {
 	}
 
 	pl := plugin.New(absRoot)
-	if err := scanFormatters(absRoot, pl); err != nil {
+	if err := scanUsage(absRoot, pl); err != nil {
 		return nil, err
 	}
+	hasFlip, hasHeadTags := pl.Features()
 
 	// The watch builder is always development (§27, D57): __PUZZLE_DEV__ = true, so
 	// the HMR snapshot/restore hooks are live for `puzzle dev`.
@@ -73,7 +80,14 @@ func NewWatchBuilder(root string) (*WatchBuilder, error) {
 		return nil, fmt.Errorf("puzzle dev: creating esbuild context: %s", ctxErr.Error())
 	}
 
-	return &WatchBuilder{root: absRoot, outdir: outdir, pl: pl, ctx: ctx}, nil
+	return &WatchBuilder{
+		root:            absRoot,
+		outdir:          outdir,
+		pl:              pl,
+		ctx:             ctx,
+		definedFlip:     hasFlip,
+		definedHeadTags: hasHeadTags,
+	}, nil
 }
 
 // Rebuild runs one incremental esbuild pass (reusing caches) and re-copies the
@@ -149,9 +163,32 @@ func metafileInputs(metafileJSON string) (map[string]bool, error) {
 	return out, nil
 }
 
-// ScanFormatters refreshes the virtual formatter manifest's used built-ins.
-func (b *WatchBuilder) ScanFormatters() error {
-	return scanFormatters(b.root, b.pl)
+// ScanUsage refreshes the virtual formatter manifest and feature defines. The
+// formatter manifest reads plugin state during each Rebuild. Defines are frozen
+// into an esbuild context, so replace that context only when either boolean
+// changes; ordinary rebuilds keep the incremental graph warm.
+func (b *WatchBuilder) ScanUsage() error {
+	if err := scanUsage(b.root, b.pl); err != nil {
+		return err
+	}
+	hasFlip, hasHeadTags := b.pl.Features()
+	if hasFlip == b.definedFlip && hasHeadTags == b.definedHeadTags {
+		return nil
+	}
+
+	buildOpts := newBundleOptions(b.root, filepath.Join(b.root, "app", "app.js"), b.outdir, b.pl, true)
+	buildOpts.Metafile = true
+	next, err := api.Context(buildOpts)
+	if err != nil {
+		return fmt.Errorf("puzzle dev: refreshing esbuild context: %s", err.Error())
+	}
+	if b.ctx != nil {
+		b.ctx.Dispose()
+	}
+	b.ctx = next
+	b.definedFlip = hasFlip
+	b.definedHeadTags = hasHeadTags
+	return nil
 }
 
 // CSS returns the collected <style> blocks from the most recent rebuild.

@@ -1,6 +1,6 @@
 ---
 name: esbuild plugin and build pipeline
-status: verified
+status: built
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
@@ -46,17 +46,20 @@ Tailwind output, and scoped blocks wrap in `@scope ([data-<path-hash>])` using
 the same symlink-normalized app-relative name as codegen.
 
 Resolution aliases the root package, `/morph`, and `/ssg` for in-repo builds.
-The zero-config `@` key resolves `@/…` from `app/` in both browser and prerender
-bundles without capturing scoped packages. Relative and installed-package
-resolution remain normal esbuild behavior.
+The zero-config `@` key resolves `@/…` from `app/` in both browser and
+prerender bundles without capturing scoped packages. Relative and
+installed-package resolution remain normal esbuild behavior.
 
-Formatter tree-shaking scans project `.pzl` files for built-in use, intersects
-the embedded manifest, and serves a virtual module importing only needed
-functions. The scan errs toward inclusion; runtime missing-name handling is the
-fail-soft guard. Dev rescans on every rebuild. A suspected manifest-staleness bug
-across incremental rebuilds was disproven — esbuild re-runs a virtual module's
-`OnLoad` on every rebuild — and is regression-guarded by
-`TestFormatterManifestFreshAcrossIncrementalRebuilds`.
+Build-time usage tree-shaking walks first-party project sources with the same
+fail-soft, over-inclusive policy as D31: unreadable or unparseable files are
+skipped and generated/vendor trees are pruned. Parsed `.pzl` ASTs still seed
+the virtual formatter manifest from observed built-ins, while element attrs or
+component props named `flip` and raw `.js`/`.ts`/`.pzl` head-field tokens drive
+literal `__PUZZLE_HAS_FLIP__` and `__PUZZLE_HAS_HEAD_TAGS__` esbuild defines. Every
+one-shot, watch/dev, and per-page static bundle recomputes or receives the same
+usage so the runtime probes fold without risking a false-negative. Esbuild
+re-runs the formatter virtual module's `OnLoad` on every rebuild; this is
+regression-guarded by `TestFormatterManifestFreshAcrossIncrementalRebuilds`.
 
 Static output performs a second node-platform bundle and runs
 [[COMPONENT-SSG]] before the staging swap. A timeout or render failure preserves

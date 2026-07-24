@@ -429,6 +429,161 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+func TestScanUsageFlip(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		attr string
+		want bool
+	}{
+		{name: "bare", attr: " flip", want: true},
+		{name: "dynamic", attr: " flip={ flipOptions }", want: true},
+		{name: "absent"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeApp(t, map[string]string{
+				"app/views/Home.pzl": `<puzzle-view>
+  <div` + tt.attr + `>row</div>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`,
+			})
+
+			usage, err := ScanUsage(root)
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if usage.HasFlip != tt.want {
+				t.Errorf("HasFlip = %v, want %v", usage.HasFlip, tt.want)
+			}
+		})
+	}
+}
+
+// `flip` on a COMPONENT must be detected too. A component vnode's props ARE its
+// attrs (ViewNode `get props()` aliases `attrs`), so the runtime keyed patcher's
+// `'flip' in newChild.attrs` fast path fires for `<PostCard … flip>` exactly as
+// for a plain element — examples/blog relies on this. Missing it would emit
+// __PUZZLE_HAS_FLIP__=false, DCE flip.js, and silently kill the animation: the
+// false NEGATIVE the usage scan must never produce.
+func TestScanUsageFlipOnComponent(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		attr string
+		want bool
+	}{
+		{name: "bare on component", attr: " flip", want: true},
+		{name: "dynamic on component", attr: " flip={ flipOptions }", want: true},
+		{name: "absent on component"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeApp(t, map[string]string{
+				"app/views/Posts.pzl": `<puzzle-view>
+  <PostCard post={ post } index={ i }` + tt.attr + `></PostCard>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import PostCard from '../components/PostCard.pzl';
+export default class Posts extends PuzzleView {}
+</script>
+`,
+			})
+
+			usage, err := ScanUsage(root)
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if usage.HasFlip != tt.want {
+				t.Errorf("HasFlip = %v, want %v", usage.HasFlip, tt.want)
+			}
+		})
+	}
+}
+
+func TestScanUsageHeadTags(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		file string
+		body string
+	}{
+		{
+			name: "javascript route meta",
+			file: "app/routes.js",
+			body: "export default [{ meta: { description: 'A page' } }];\n",
+		},
+		{
+			name: "pzl script body",
+			file: "app/views/Home.pzl",
+			body: `<puzzle-view><h1>Home</h1></puzzle-view>
+<script>
+const socialImage = '/card.png';
+</script>
+`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeApp(t, map[string]string{tt.file: tt.body})
+			usage, err := ScanUsage(root)
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if !usage.HasHeadTags {
+				t.Error("HasHeadTags = false, want true")
+			}
+		})
+	}
+}
+
+func TestScanUsageAllAbsent(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/routes.ts": "export default [{ meta: { title: 'Home' } }];\n",
+		"app/views/Home.pzl": `<puzzle-view><h1>Home</h1></puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`,
+	})
+
+	usage, err := ScanUsage(root)
+	if err != nil {
+		t.Fatalf("ScanUsage: %v", err)
+	}
+	if usage.HasFlip {
+		t.Error("HasFlip = true without a flip attribute")
+	}
+	if usage.HasHeadTags {
+		t.Error("HasHeadTags = true without a managed-head token")
+	}
+}
+
+func TestScanUsageToleratesBrokenFileAndPrunesNodeModules(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/views/Home.pzl": `<puzzle-view><h1>Home</h1></puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`,
+		"app/components/Broken.pzl":  `<puzzle-view>{#if oops}<p>broken</p></puzzle-view>`,
+		"node_modules/pkg/Thing.pzl": `<puzzle-view><div flip>vendored</div></puzzle-view>`,
+		"node_modules/pkg/routes.js": `export default [{ meta: { canonical: '/vendored' } }];`,
+	})
+
+	usage, err := ScanUsage(root)
+	if err != nil {
+		t.Fatalf("ScanUsage must tolerate a broken .pzl, got error: %v", err)
+	}
+	if usage.HasFlip {
+		t.Error("ScanUsage walked node_modules and found a vendored flip attribute")
+	}
+	if usage.HasHeadTags {
+		t.Error("ScanUsage walked node_modules and found a vendored head token")
+	}
+}
+
 // A component imported from a sibling directory (outside app/) still ships its
 // formatters: the scan walks the whole project so `upcase` is seeded and the
 // generated render's guarded `(__f["upcase"] || __f.__missing("upcase"))(...)` call
@@ -635,8 +790,8 @@ export default class Home extends PuzzleView {}
 		// manifest import literal. The plugin's OnResolve still intercepts the
 		// manifest subpath (plugin resolvers run before external matching).
 		External: []string{"@magic-spells/puzzle", builtinsPath},
-		Plugins:     []api.Plugin{pl.ESBuild()},
-		LogLevel:    api.LogLevelSilent,
+		Plugins:  []api.Plugin{pl.ESBuild()},
+		LogLevel: api.LogLevelSilent,
 	})
 	if cerr != nil {
 		t.Fatalf("api.Context: %s", cerr.Error())

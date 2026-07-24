@@ -697,7 +697,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 	// map we already run. Lists without any `flip` attr never call into flip.js
 	// — zero measurements, zero extra passes.
 	//
-	// Build-time gate (D88): each flip touchpoint is wrapped in the inline
+	// Build-time gate (D89): each flip touchpoint is wrapped in the inline
 	// `typeof __PUZZLE_HAS_FLIP__ …` probe. When the compiler proves no template
 	// uses a `flip` attr it defines the flag false; MinifySyntax then folds every
 	// probe to a dead branch, `beginFlip`/`playFlip` go unreferenced, and flip.js
