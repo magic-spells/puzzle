@@ -1,0 +1,33 @@
+{
+	"manifest_version": 3,
+	"name": "Puzzle DevTools",
+	"version": "0.1.0",
+	"description": "Inspect Puzzle framework apps: view tree, store records, subscriptions, and routing.",
+	"minimum_chrome_version": "111",
+	"devtools_page": "devtools.html",
+	"background": {
+		"service_worker": "background.js",
+		"type": "module"
+	},
+	"icons": {
+		"16": "icons/icon16.png",
+		"48": "icons/icon48.png",
+		"128": "icons/icon128.png"
+	},
+	"content_scripts": [
+		{
+			"matches": ["<all_urls>"],
+			"js": ["page-hook.js"],
+			"run_at": "document_start",
+			"world": "MAIN",
+			"all_frames": false
+		},
+		{
+			"matches": ["<all_urls>"],
+			"js": ["content-script.js"],
+			"run_at": "document_start",
+			"world": "ISOLATED",
+			"all_frames": false
+		}
+	]
+}

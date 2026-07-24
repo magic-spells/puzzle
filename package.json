@@ -1,0 +1,23 @@
+{
+	"name": "@magic-spells/puzzle-devtools",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Chrome DevTools extension for the Puzzle framework — inspects views, store records, subscriptions, and routes through the dev-only runtime bridge",
+	"type": "module",
+	"license": "MIT",
+	"scripts": {
+		"build": "node scripts/build.mjs",
+		"build:zip": "node scripts/build.mjs --zip",
+		"serve:fixture": "node scripts/serve-fixture.mjs",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@magic-spells/puzzle": "file:../puzzle"
+	},
+	"devDependencies": {
+		"@tailwindcss/cli": "^4.3.2",
+		"jsdom": "^26.1.0",
+		"tailwindcss": "^4.3.2",
+		"vitest": "^3.2.4"
+	}
+}

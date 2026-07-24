@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>Puzzle DevTools — protocol fixture</title>
+		<style>
+			:root {
+				color-scheme: light dark;
+				--fg: #16181d;
+				--muted: #5f6368;
+				--line: #d8dade;
+				--surface: #f6f7f9;
+				--accent: #6b4ef0;
+			}
+			@media (prefers-color-scheme: dark) {
+				:root {
+					--fg: #e8eaed;
+					--muted: #9aa0a6;
+					--line: #3c4043;
+					--surface: #26282c;
+					--accent: #a48bff;
+				}
+			}
+			body {
+				margin: 0;
+				padding: 2.5rem 1.5rem;
+				font: 14px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+				color: var(--fg);
+			}
+			main {
+				max-width: 44rem;
+				margin: 0 auto;
+			}
+			h1 {
+				margin: 0 0 0.25rem;
+				font-size: 1.35rem;
+			}
+			p.lede {
+				margin: 0 0 1.5rem;
+				color: var(--muted);
+			}
+			section {
+				border: 1px solid var(--line);
+				border-radius: 8px;
+				background: var(--surface);
+				padding: 0.9rem 1rem;
+				margin-bottom: 1rem;
+			}
+			h2 {
+				margin: 0 0 0.6rem;
+				font-size: 0.72rem;
+				letter-spacing: 0.09em;
+				text-transform: uppercase;
+				color: var(--muted);
+			}
+			#status {
+				font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+				font-size: 0.8rem;
+			}
+			#log {
+				margin: 0;
+				padding: 0;
+				list-style: none;
+				max-height: 16rem;
+				overflow-y: auto;
+				font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+				font-size: 0.75rem;
+			}
+			#log li {
+				padding: 0.15rem 0;
+				border-bottom: 1px solid var(--line);
+			}
+			#log li:last-child {
+				border-bottom: 0;
+			}
+			#log .t {
+				color: var(--muted);
+			}
+			#log .k {
+				color: var(--accent);
+			}
+			.row {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 0.5rem;
+			}
+			button {
+				font: inherit;
+				font-size: 0.8rem;
+				padding: 0.3rem 0.7rem;
+				border: 1px solid var(--line);
+				border-radius: 5px;
+				background: transparent;
+				color: var(--fg);
+				cursor: pointer;
+			}
+			button:hover {
+				border-color: var(--accent);
+				color: var(--accent);
+			}
+			#target {
+				margin-top: 0.75rem;
+				padding: 1rem;
+				border: 1px dashed var(--line);
+				border-radius: 6px;
+				color: var(--muted);
+				font-size: 0.8rem;
+			}
+			code {
+				font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+			}
+		</style>
+	</head>
+	<body>
+		<main>
+			<h1>Puzzle DevTools protocol fixture</h1>
+			<p class="lede">
+				A synthetic stand-in for the framework's dev-only runtime bridge. It registers with
+				<code>window.__PUZZLE_DEVTOOLS_HOOK__</code> exactly the way
+				<code>client-runtime/devtools.js</code> does and answers every protocol&nbsp;v1 request
+				with canned data. Open DevTools → the <strong>Puzzle</strong> panel.
+			</p>
+
+			<section>
+				<h2>Hook</h2>
+				<div id="status">looking for the hook…</div>
+			</section>
+
+			<section>
+				<h2>Emit</h2>
+				<div class="row">
+					<button data-act="view-mounted">view-mounted</button>
+					<button data-act="view-destroyed">view-destroyed</button>
+					<button data-act="flush">flush</button>
+					<button data-act="route-commit">route-commit</button>
+					<button data-act="app-unmounted">app-unmounted</button>
+					<button data-act="app-mounted">app-mounted</button>
+				</div>
+				<div id="target">
+					Highlight target — <code>highlight:view { id: 2 }</code> outlines this box.
+				</div>
+			</section>
+
+			<section>
+				<h2>Traffic</h2>
+				<ul id="log"></ul>
+			</section>
+		</main>
+
+		<script>
+			/*
+			 * The fixture bridge. Mirrors client-runtime/devtools.js: same envelope,
+			 * same event order (hello → app-mounted → onRequest → view-mounted replay),
+			 * same response SHAPES — snapshot:views returns { roots }, snapshot:records
+			 * returns { types }, failures come back as an `{ error }` RESULT rather than
+			 * a throw. Keep those shapes in sync with SPEC §55 when it moves.
+			 */
+			(function () {
+				'use strict';
+
+				var PROTOCOL_VERSION = 1;
+				var FRAMEWORK_VERSION = '0.2.0-fixture';
+				var HOOK_KEY = '__PUZZLE_DEVTOOLS_HOOK__';
+				var OVERLAY_MARK = 'data-puzzle-devtools';
+
+				var statusEl = document.getElementById('status');
+				var logEl = document.getElementById('log');
+				var hook = null;
+				var overlay = null;
+				var nextViewId = 4;
+				var flushTick = 0;
+
+				/* ---- canned world ------------------------------------------------ */
+
+				var views = [
+					{ id: 1, name: 'FixtureLayout', module: 'layouts/Fixture.pzl' },
+					{ id: 2, name: 'FixtureHome', module: 'views/Home.pzl' },
+					{ id: 3, name: 'FixtureRow', module: 'components/Row.pzl' },
+				];
+
+				// The 3-node tree snapshot:views answers with: layout → home → row.
+				function viewTree() {
+					return [
+						{
+							id: 1,
+							name: 'FixtureLayout',
+							module: 'layouts/Fixture.pzl',
+							children: [
+								{
+									id: 2,
+									name: 'FixtureHome',
+									module: 'views/Home.pzl',
+									children: [
+										{
+											id: 3,
+											name: 'FixtureRow',
+											module: 'components/Row.pzl',
+											children: [],
+										},
+									],
+								},
+							],
+						},
+					];
+				}
+
+				var records = {
+					todo: [
+						{ id: 't1', text: 'Ship the bridge', completed: true, _synced: true },
+						{ id: 't2', text: 'Ship the panel', completed: false, _synced: true },
+						{ id: 't3', text: 'Write the fixture', completed: false, _synced: false },
+					],
+					user: [
+						{ id: 'u1', name: 'Ada', email: 'ada@example.com', _synced: true },
+						{ id: 'u2', name: 'Grace', email: 'grace@example.com', _synced: true },
+					],
+				};
+
+				var inspectable = {
+					1: {
+						name: 'FixtureLayout',
+						module: 'layouts/Fixture.pzl',
+						params: {},
+						props: {},
+						model: { title: 'Fixture' },
+						local: { navOpen: false },
+					},
+					2: {
+						name: 'FixtureHome',
+						module: 'views/Home.pzl',
+						params: { filter: 'active' },
+						props: {},
+						model: { todos: 3, activeTodos: 2 },
+						local: { newTodoText: '', currentFilter: 'active' },
+					},
+					3: {
+						name: 'FixtureRow',
+						module: 'components/Row.pzl',
+						params: {},
+						props: { todo: 't2' },
+						model: { label: 'Ship the panel' },
+						local: {},
+					},
+				};
+
+				function route() {
+					return {
+						path: '/todos?filter=active',
+						pathname: '/todos',
+						query: { filter: 'active' },
+						hash: '',
+						params: {},
+						route: '/todos',
+						routes: ['/todos'],
+						chain: ['FixtureLayout', 'FixtureHome'],
+						title: document.title,
+					};
+				}
+
+				/* ---- request handler (synchronous and total, like the real one) --- */
+
+				function handleRequest(message) {
+					try {
+						var type = message && message.type;
+						var payload = (message && message.payload) || {};
+						log('req', type);
+
+						switch (type) {
+							case 'snapshot:views':
+								return { roots: viewTree() };
+							case 'inspect:view': {
+								var info = inspectable[payload.id];
+								if (!info) return { error: 'no live view with id ' + JSON.stringify(payload.id) };
+								return info;
+							}
+							case 'snapshot:records': {
+								var types = {};
+								Object.keys(records).forEach(function (name) {
+									if (payload.type != null && payload.type !== name) return;
+									types[name] = records[name].map(function (row) {
+										return Object.assign({}, row);
+									});
+								});
+								return { types: types };
+							}
+							case 'snapshot:subscriptions':
+								return {
+									byKey: { todo: [2, 3], 'todo:t2': [3], user: ['fn'] },
+									byView: { 2: ['todo'], 3: ['todo', 'todo:t2'], fn: ['user'] },
+								};
+							case 'snapshot:route':
+								return route();
+							case 'edit:record': {
+								var bucket = records[payload.type];
+								if (!bucket) return { error: 'no such type ' + JSON.stringify(payload.type) };
+								var row = bucket.filter(function (r) {
+									return String(r.id) === String(payload.id);
+								})[0];
+								if (!row) {
+									return (
+										{ error: 'no ' + payload.type + ' record with id ' + JSON.stringify(payload.id) }
+									);
+								}
+								if (!payload.patch || typeof payload.patch !== 'object') {
+									return { error: 'edit:record requires an object patch' };
+								}
+								Object.assign(row, payload.patch);
+								emit('flush', { keys: [payload.type, payload.type + ':' + payload.id], notified: [2] });
+								return { ok: true };
+							}
+							case 'highlight:view':
+								return highlight(payload.id, payload.on);
+							case 'log:view':
+								window.$p = inspectable[payload.id] || null;
+								console.log('[fixture] view', payload.id, window.$p);
+								return { ok: true };
+							case 'log:record': {
+								var list = records[payload.type] || [];
+								var found = list.filter(function (r) {
+									return String(r.id) === String(payload.id);
+								})[0];
+								if (!found) {
+									return { error: 'no ' + payload.type + ' record with id ' + JSON.stringify(payload.id) };
+								}
+								window.$p = found;
+								console.log('[fixture] record ' + payload.type + '#' + payload.id, found);
+								return { ok: true };
+							}
+							default:
+								return { error: 'unknown devtools request "' + String(type) + '"' };
+						}
+					} catch (err) {
+						return { error: (err && err.message) || String(err) };
+					}
+				}
+
+				function highlight(id, on) {
+					if (on === false) {
+						removeOverlay();
+						return { ok: true };
+					}
+					var target = document.getElementById('target');
+					if (!target) return { ok: false };
+					if (!overlay || !overlay.isConnected) {
+						overlay = document.createElement('div');
+						overlay.setAttribute(OVERLAY_MARK, 'highlight');
+						overlay.style.position = 'fixed';
+						overlay.style.pointerEvents = 'none';
+						overlay.style.zIndex = '2147483647';
+						overlay.style.background = 'rgba(88, 132, 255, 0.28)';
+						overlay.style.outline = '1px solid rgba(88, 132, 255, 0.9)';
+						document.body.appendChild(overlay);
+					}
+					var rect = target.getBoundingClientRect();
+					overlay.style.left = rect.left + 'px';
+					overlay.style.top = rect.top + 'px';
+					overlay.style.width = rect.width + 'px';
+					overlay.style.height = rect.height + 'px';
+					return { ok: true, id: id };
+				}
+
+				function removeOverlay() {
+					if (overlay && overlay.remove) overlay.remove();
+					overlay = null;
+				}
+
+				/* ---- emission ----------------------------------------------------- */
+
+				function emit(type, payload) {
+					if (!hook) return;
+					hook.emit({ puzzle: 1, v: PROTOCOL_VERSION, type: type, payload: payload });
+					log('emit', type);
+				}
+
+				function log(kind, detail) {
+					var li = document.createElement('li');
+					var now = new Date();
+					var stamp =
+						String(now.getHours()).padStart(2, '0') +
+						':' +
+						String(now.getMinutes()).padStart(2, '0') +
+						':' +
+						String(now.getSeconds()).padStart(2, '0');
+					li.innerHTML =
+						'<span class="t">' +
+						stamp +
+						'</span> <span class="k">' +
+						kind +
+						'</span> ' +
+						String(detail);
+					logEl.appendChild(li);
+					logEl.scrollTop = logEl.scrollHeight;
+					while (logEl.children.length > 200) logEl.removeChild(logEl.firstChild);
+				}
+
+				/* ---- start -------------------------------------------------------- */
+
+				function start(found) {
+					hook = found;
+					statusEl.textContent =
+						'hook found — api v' +
+						(found.hookVersion ?? '?') +
+						', protocol v' +
+						(found.protocolVersion ?? '?');
+
+					// Same order as the real bridge's appMountedImpl.
+					emit('hello', {
+						protocolVersion: PROTOCOL_VERSION,
+						frameworkVersion: FRAMEWORK_VERSION,
+					});
+					emit('app-mounted', {});
+					hook.onRequest(handleRequest);
+					views.forEach(function (view) {
+						emit('view-mounted', view);
+					});
+
+					// A flush every 2s with rotating keys, and one route-commit at 5s.
+					setInterval(function () {
+						flushTick += 1;
+						var rotations = [
+							{ keys: ['todo'], notified: [2, 3] },
+							{ keys: ['todo:t2', 'todo'], notified: [3] },
+							{ keys: ['user'], notified: ['fn'] },
+						];
+						emit('flush', rotations[flushTick % rotations.length]);
+					}, 2000);
+
+					setTimeout(function () {
+						emit('route-commit', {
+							pathname: '/todos',
+							query: { filter: 'active' },
+							params: {},
+							chain: ['FixtureLayout', 'FixtureHome'],
+							title: document.title,
+						});
+					}, 5000);
+				}
+
+				document.addEventListener('click', function (event) {
+					var act = event.target && event.target.getAttribute('data-act');
+					if (!act) return;
+					if (act === 'view-mounted') {
+						var id = nextViewId++;
+						var view = { id: id, name: 'FixtureRow', module: 'components/Row.pzl' };
+						views.push(view);
+						inspectable[id] = {
+							name: view.name,
+							module: view.module,
+							params: {},
+							props: {},
+							model: {},
+							local: {},
+						};
+						emit('view-mounted', view);
+						return;
+					}
+					if (act === 'view-destroyed') {
+						var last = views[views.length - 1];
+						if (!last) return;
+						views.pop();
+						delete inspectable[last.id];
+						emit('view-destroyed', { id: last.id });
+						return;
+					}
+					if (act === 'flush') {
+						emit('flush', { keys: ['todo'], notified: [2] });
+						return;
+					}
+					if (act === 'route-commit') {
+						emit('route-commit', {
+							pathname: '/todos/' + Math.floor(Math.random() * 900 + 100),
+							query: {},
+							params: { id: 'x' },
+							chain: ['FixtureLayout', 'FixtureHome'],
+							title: document.title,
+						});
+						return;
+					}
+					if (act === 'app-unmounted') {
+						emit('app-unmounted', {});
+						return;
+					}
+					if (act === 'app-mounted') {
+						emit('app-mounted', {});
+					}
+				});
+
+				// The extension injects at document_start, so the hook is normally
+				// already there. Poll briefly anyway so a fixture opened without the
+				// extension reports the truth instead of hanging.
+				var waited = 0;
+				(function waitForHook() {
+					var found = window[HOOK_KEY];
+					if (found && typeof found.emit === 'function' && typeof found.onRequest === 'function') {
+						start(found);
+						return;
+					}
+					waited += 100;
+					if (waited > 3000) {
+						statusEl.textContent =
+							'no __PUZZLE_DEVTOOLS_HOOK__ — load the unpacked extension from dist-extension/ and reload';
+						return;
+					}
+					setTimeout(waitForHook, 100);
+				})();
+			})();
+		</script>
+	</body>
+</html>

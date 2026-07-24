@@ -1,0 +1,36 @@
+import Shell from './layouts/Shell.pzl';
+import ConnectionView from './views/Connection.pzl';
+import ViewsView from './views/Views.pzl';
+import StoreView from './views/Store.pzl';
+
+// Hash routing: the panel is loaded from chrome-extension://<id>/panel.html, so
+// pathname routing would push URLs Chrome cannot serve on reload.
+export default [
+	{
+		path: '/',
+		name: 'connection',
+		view: ConnectionView,
+		layout: Shell,
+		meta: { title: 'Puzzle · Connection' },
+	},
+	{
+		path: '/views',
+		name: 'views',
+		view: ViewsView,
+		layout: Shell,
+		meta: { title: 'Puzzle · Views' },
+	},
+	{
+		path: '/store',
+		name: 'store',
+		view: StoreView,
+		layout: Shell,
+		meta: { title: 'Puzzle · Store' },
+	},
+	{
+		path: '*',
+		name: 'not-found',
+		view: ConnectionView,
+		layout: Shell,
+	},
+];

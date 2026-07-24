@@ -1,0 +1,147 @@
+<puzzle-view class="block p-3">
+  {#if state === 'waiting'}
+    <section class="rounded border border-line bg-surface p-4">
+      <h1 class="m-0 text-[13px] font-semibold text-ink">No Puzzle app detected</h1>
+      <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">
+        This page has not opened a DevTools bridge. That is expected when the page is
+        not a Puzzle app, when it is a <strong class="font-medium text-ink">production build</strong>
+        (the bridge is compiled out entirely), or when the framework predates the
+        bridge.
+      </p>
+      <ul class="mt-2.5 mb-0 pl-4 text-[11px] text-muted leading-relaxed">
+        <li>Run the app with <code class="font-mono text-accent">puzzle dev</code>, or build with <code class="font-mono text-accent">--mode development</code>.</li>
+        <li>Reload the page with DevTools already open.</li>
+        <li>Requires puzzle <code class="font-mono text-accent">0.2.0</code> or newer.</li>
+      </ul>
+    </section>
+  {:else if state === 'version-mismatch'}
+    <section class="rounded border border-warn bg-surface p-4">
+      <h1 class="m-0 text-[13px] font-semibold text-ink">Protocol version mismatch</h1>
+      <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">
+        A Puzzle app is running, but it speaks a wire protocol this extension cannot
+        render. Nothing below would be trustworthy, so the panels stay closed.
+      </p>
+      <dl class="mt-3 mb-0 grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-[11px]">
+        <dt class="text-faint">app protocol</dt>
+        <dd class="m-0 font-mono text-danger">v{ protocolVersion }</dd>
+        <dt class="text-faint">extension supports</dt>
+        <dd class="m-0 font-mono text-ink">v{ supportedVersions }</dd>
+        <dt class="text-faint">framework</dt>
+        <dd class="m-0 font-mono text-ink">{ frameworkVersion }</dd>
+      </dl>
+    </section>
+  {:else}
+    <section class="rounded border border-line bg-surface p-4">
+      <h1 class="m-0 flex items-center gap-2 text-[13px] font-semibold text-ink">
+        <span class="h-2 w-2 rounded-full { appMounted ? 'bg-ok' : 'bg-faint' }"></span>
+        { appMounted ? 'Puzzle app connected' : 'Puzzle app unmounted' }
+      </h1>
+      <dl class="mt-3 mb-0 grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-[11px]">
+        <dt class="text-faint">framework</dt>
+        <dd class="m-0 font-mono text-ink">{ frameworkVersion }</dd>
+        <dt class="text-faint">protocol</dt>
+        <dd class="m-0 font-mono text-ink">v{ protocolVersion }</dd>
+        <dt class="text-faint">live views</dt>
+        <dd class="m-0 font-mono text-ink tabular-nums">{ liveViews }</dd>
+        <dt class="text-faint">route</dt>
+        <dd class="m-0 font-mono text-ink truncate">{ routePath }</dd>
+        <dt class="text-faint">last flush</dt>
+        <dd class="m-0 font-mono text-ink truncate">{ lastFlush }</dd>
+      </dl>
+
+      <div class="mt-3 flex items-center gap-2">
+        <button
+          type="button"
+          class="rounded border border-line bg-raised px-2 py-1 text-[11px] text-ink hover:border-accent hover:text-accent disabled:opacity-50"
+          disabled={ probing }
+          @click={ probe }>
+          { probing ? 'Requesting…' : 'Probe snapshot:views' }
+        </button>
+        {#if probeResult}
+          <span class="font-mono text-[11px] text-ok">{ probeResult }</span>
+        {/if}
+        {#if probeError}
+          <span class="font-mono text-[11px] text-danger">{ probeError }</span>
+        {/if}
+      </div>
+    </section>
+  {/if}
+
+  {#if portError}
+    <p class="mt-2 mb-0 rounded border border-danger px-3 py-2 font-mono text-[11px] text-danger">
+      { portError }
+    </p>
+  {/if}
+
+  <section class="mt-3 rounded border border-line bg-surface overflow-hidden">
+    <h2 class="m-0 px-3 py-1.5 border-b border-line text-[11px] font-semibold uppercase tracking-wide text-faint">
+      Recent protocol messages
+    </h2>
+    <EventList limit={ 14 } />
+  </section>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import EventList from '../components/EventList.pzl';
+import { CONNECTION_ID } from '../models/connection.js';
+import { SUPPORTED_PROTOCOL_VERSIONS } from '../../../protocol/constants.js';
+import { api } from '../bridge.js';
+
+export default class ConnectionView extends PuzzleView {
+  created() {
+    this.setData({ probing: false, probeResult: '', probeError: '' });
+  }
+
+  data() {
+    const store = this.ctx.store;
+    const connection = store.findOne('connection', CONNECTION_ID);
+    const local = this.getData();
+    const route = connection?.route ?? null;
+
+    return {
+      state: connection?.state ?? 'waiting',
+      appMounted: connection?.appMounted ?? false,
+      protocolVersion: connection?.protocolVersion ?? '?',
+      frameworkVersion: connection?.frameworkVersion ?? 'unknown',
+      supportedVersions: SUPPORTED_PROTOCOL_VERSIONS.join(', v'),
+      liveViews: store.findMany('pview').filter((view) => view.live).length,
+      routePath: route?.pathname ?? '—',
+      lastFlush: (connection?.lastFlushKeys ?? []).join(', ') || '—',
+      portError: connection?.port === 'disconnected' && connection?.state !== 'waiting'
+        ? 'Lost the connection to the inspected tab. Reopen DevTools to reconnect.'
+        : (connection?.error ?? ''),
+      probing: local.probing,
+      probeResult: local.probeResult,
+      probeError: local.probeError,
+    };
+  }
+
+  events = {
+    // Exercises the full request round-trip (panel → worker → content script →
+    // page hook → bridge handler and back) without needing the Views panel.
+    probe: async () => {
+      this.setData({ probing: true, probeResult: '', probeError: '' });
+      this.refresh();
+      try {
+        const result = await api.snapshotViews();
+        const roots = Array.isArray(result?.roots) ? result.roots : [];
+        this.setData({ probeResult: `${roots.length} root(s), ${countTree(roots)} view(s)` });
+      } catch (err) {
+        this.setData({ probeError: err?.message ?? String(err) });
+      } finally {
+        this.setData('probing', false);
+        this.refresh();
+      }
+    },
+  };
+}
+
+function countTree(nodes) {
+  let total = 0;
+  for (const node of nodes) {
+    total += 1 + countTree(Array.isArray(node?.children) ? node.children : []);
+  }
+  return total;
+}
+</script>

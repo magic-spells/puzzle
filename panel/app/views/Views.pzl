@@ -1,0 +1,45 @@
+<puzzle-view class="block p-3">
+  <div class="rounded border border-dashed border-line bg-surface p-4">
+    <h1 class="m-0 text-[13px] font-semibold text-ink">Views</h1>
+    <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">
+      The component tree, per-view inspector (params, props, model layer, local
+      layer) and page highlighting land here. This build ships the shell only —
+      what you see below is the raw mount/destroy feed the runtime has pushed so
+      far, not the real tree.
+    </p>
+  </div>
+
+  <section class="mt-3 rounded border border-line bg-surface overflow-hidden">
+    <h2 class="m-0 px-3 py-1.5 border-b border-line text-[11px] font-semibold uppercase tracking-wide text-faint">
+      Mounted views ({ liveCount } live / { views.length } seen)
+    </h2>
+
+    {#if views.length === 0}
+      <p class="px-3 py-2 m-0 text-[11px] text-faint">Nothing mounted yet.</p>
+    {:else}
+      <ul class="m-0 p-0 list-none">
+        {#for view in views}
+          <li class="flex items-baseline gap-2 px-3 py-1 border-b border-line last:border-b-0">
+            <span class="font-mono text-[10px] text-faint tabular-nums shrink-0">#{ view.id }</span>
+            <span class="text-[12px] { view.live ? 'text-ink' : 'text-faint line-through' }">{ view.name }</span>
+            <span class="ml-auto font-mono text-[10px] text-faint truncate">{ view.module }</span>
+          </li>
+        {/for}
+      </ul>
+    {/if}
+  </section>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class ViewsView extends PuzzleView {
+  data() {
+    const views = this.ctx.store.findMany('pview');
+    return {
+      views,
+      liveCount: views.filter((view) => view.live).length,
+    };
+  }
+}
+</script>
