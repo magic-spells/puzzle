@@ -108,6 +108,18 @@ work at any depth.
 
 ### Things this example exercises
 
+- **Route head metadata (v1.50, puzzle ≥ 0.2.0).** Beyond `title`, routes carry
+  the reserved `meta` head fields `description` and `socialImage` (plus
+  `canonical`, unused here) in [`routes.js`](./app/routes.js), and the static
+  build bakes the derived managed tags — description + `og:*`/`twitter:*`
+  mirrors, each stamped `data-puzzle-head` — into every page's HTML, visible to
+  crawlers and link unfurlers before any JavaScript runs. Each field resolves
+  independently leaf → root: `/guide`'s description is inherited by the index
+  child at `dist/guide/index.html`, while the templates sibling sets
+  `description: null` — explicit suppression — so
+  `dist/guide/templates/index.html` ships no description tags at all. Values
+  are static strings only; the same fields stay synced across SPA navigation in
+  hybrid/SPA builds.
 - **Nested routes + the title walk.** `/guide` is a shell view with a `<Slot/>`,
   an **index child** (`path: ''`, no `meta.title` → inherits the shell's *"Guide ·
   …"*) and a **sibling child** (`path: 'templates'`, its own title wins at

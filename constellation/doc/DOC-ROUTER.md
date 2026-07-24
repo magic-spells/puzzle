@@ -11,7 +11,7 @@ connections:
   - DOC-DATASTORE
 ---
 
-The full v1 routing surface: route definition shape, dynamic `:param` segments delivered to `data(params, props)`, layouts and the `<Slot/>` injection point, nested routes via `children` (v1.3), `router.push()` plus automatic link interception and `go()`/`back()`/`forward()` (v1.11), `meta.title` → `document.title`, the v1 route lifecycle (with v1.1 transition animations), window scroll management (v1.5; anchor targets + reload persistence v1.10), opt-in hash mode for static hosts (v1.6), URL-less memory mode for tests and embeds (v1.11), sub-path deploys via `routerBase` (v1.19), path-shaped hrefs via `router.url()` and the `link` formatter (v1.46), and the settled `path: '*'` catch-all 404 convention (D19).
+The full v1 routing surface: route definition shape, dynamic `:param` segments delivered to `data(params, props)`, layouts and the `<Slot/>` injection point, nested routes via `children` (v1.3), `router.push()` plus automatic link interception and `go()`/`back()`/`forward()` (v1.11), `router.replace()` and the parsed `query`/`pathname`/`hash` snapshot fields for URL-backed transient state (v1.49), `meta.title` → `document.title` plus the reserved head fields (`description`/`canonical`/`socialImage`) rendered as managed head tags (v1.50), the v1 route lifecycle (with v1.1 transition animations), window scroll management (v1.5; anchor targets + reload persistence v1.10), opt-in hash mode for static hosts (v1.6), URL-less memory mode for tests and embeds (v1.11), sub-path deploys via `routerBase` (v1.19), path-shaped hrefs via `router.url()` and the `link` formatter (v1.46), and the settled `path: '*'` catch-all 404 convention (D19).
 
 # Puzzle Router
 
@@ -70,7 +70,7 @@ app.mount();
 | `view` | PuzzleView class | The `.pzl` view rendered when the route matches. Imported at the top of `routes.js`. |
 | `layout` | PuzzleView class | The layout that wraps the view. The view renders at the layout's `<Slot/>`. **Top-level routes only** (v1.3) — nested children inherit the chain's layout; a `layout` on a child throws. |
 | `children` | array of route objects | Nested child routes with **relative** paths (v1.3). The parent's view renders its matched child at its own `<Slot/>`. See [Nested Routes](#nested-routes-v13). |
-| `meta.title` | string | Set as `document.title` on navigation. Optional. In a nested chain, resolved nearest-defined, leaf → root. |
+| `meta.title` `meta.description` `meta.canonical` `meta.socialImage` | string or `null` | The four **reserved head fields** (v1.50, D84). `title` is set as `document.title` on navigation; all four also render as managed head tags (`og:*`/`twitter:*` mirrors, `<link rel="canonical">`). **Static strings only** — no functions or data-derived values. Each field resolves **independently**, nearest-defined leaf → root in a nested chain; `undefined` inherits, `null` explicitly suppresses an inherited value. All optional. See [`meta.title` and head metadata](#metatitle-and-head-metadata-v150). |
 
 ### Dynamic segments
 
@@ -123,7 +123,7 @@ export default class UserView extends PuzzleView {
 
 ## The route snapshot: `this.route` (v1.15)
 
-**Settled (D47, SPEC §19).** Inside any routed `data()` run, `this.route` is `{ path, route, params, chain }` — the same shape as `router.current` — describing **the navigation this `data()` run belongs to**. Use it for anything derived from "where is the app navigating", most importantly active-nav highlighting:
+**Settled (D47, SPEC §19).** Inside any routed `data()` run, `this.route` is `{ path, pathname, query, hash, route, params, chain }` (the parsed `pathname`/`query`/`hash` fields joined in v1.49 — next section) — the same shape as `router.current` — describing **the navigation this `data()` run belongs to**. Use it for anything derived from "where is the app navigating", most importantly active-nav highlighting:
 
 ```js
 // AccountShell.pzl — parent view whose <Slot/> hosts Profile / Trips / Wishlist
@@ -142,6 +142,47 @@ Why not `window.location.pathname` or `ctx.router.current`? Both describe the **
 - Match on **route names** (`this.route.route.name`, or `this.route.chain[0].name` for section-level highlighting), not on `path` — `path` is the raw pushed path and can carry `?query` and `#anchor` suffixes (v1.10).
 - Store-change re-runs keep the snapshot; only the next navigation replaces it.
 - `this.route` is `null` in components the router doesn't manage — pass route-derived state down as props from the routed view.
+
+---
+
+## URL-backed transient state: `query`, `hash`, and `replace()` (v1.49)
+
+**Settled (D83, SPEC §44).** Filters, tabs, search terms, pagination — transient UI state that belongs in the URL so it's shareable, reload-safe, and deep-linkable. v1.49 gives it a read surface and a write surface.
+
+**Reading.** The route snapshot (`this.route`, `router.current`) carries three parsed fields alongside the raw `path`:
+
+- `pathname` — `path` minus query and hash (still base-free).
+- `query` — a **frozen, null-prototype object** parsed with `URLSearchParams` decoding: a single value is a string (`?q=cabin` → `{ q: 'cabin' }`), repeated keys become a frozen array in source order (`?tag=a&tag=b` → `{ tag: ['a', 'b'] }`), a valueless key is `''` (`?debug` → `{ debug: '' }`). Malformed percent input never throws.
+- `hash` — `''` or the raw fragment including the leading `#`.
+
+Query values **never merge into route `params`** — `data(params)` signatures are unchanged; views read `this.route.query`. Parsing happens once per navigation, so reading `query` is free.
+
+**Writing: `router.replace(path)`.** Push's no-history-entry sibling: the identical match/load/cancellation/atomic-commit pipeline (a failed or superseded replace commits nothing), the same same-path no-op guard. The differences are the point: it **replaces the current history entry** instead of minting one — fifty filter keystrokes are not fifty Back presses — and it **never touches scroll by default** (a keystroke must not jump the page; a custom `scrollBehavior` function still runs and may override). A query-only replace to the same route re-runs the view's `data()` with the new snapshot — no `refresh()` needed.
+
+The per-keystroke filter pattern:
+
+```html
+<input value={ q } placeholder="Filter…" @input={ updateFilter(event) } />
+```
+
+```js
+data() {
+  const q = this.route?.query?.q ?? '';
+  const needle = q.trim().toLowerCase();
+  const items = this.ctx.store.findMany('item')
+    .filter((it) => it.title.toLowerCase().includes(needle));
+  return { q, items };
+}
+
+events = {
+  updateFilter: (event) => {
+    const v = event.target.value;
+    this.ctx.router.replace(v ? '/items?q=' + encodeURIComponent(v) : '/items');
+  },
+};
+```
+
+Each keystroke replaces the URL in place, the snapshot updates, `data()` re-runs with the new `query`, and the list recomputes — and `/items?q=cabin` is now a shareable link that reproduces the filtered view on load. Use `push()` instead when the state change should be a Back-button stop (e.g. moving between wizard steps); use `replace()` for state a user churns through. In static output (`output: 'static'`) there is no router — `replace` throws like every navigation method (working example: `examples/stays`, the Search view's destination filter).
 
 ---
 
@@ -307,9 +348,13 @@ The router leaves links alone (letting the browser handle them normally) when th
 
 Modified clicks (Cmd/Ctrl-click to open in a new tab) also fall through to the browser.
 
-### `meta.title` → `document.title`
+### `meta.title` and head metadata (v1.50)
 
 On every successful navigation, the matched route's `meta.title` is written to `document.title`, so the browser tab reflects the current page. Routes without `meta.title` leave the title unchanged.
+
+**Settled (D84, SPEC §45).** `meta` also carries three more reserved head fields — `description`, `canonical`, `socialImage` — rendered as **managed head tags**: `title` derives `og:title` + `twitter:title`, `description` derives the standard description meta + `og:description`/`twitter:description`, `canonical` derives `<link rel="canonical">` + `og:url`, and `socialImage` derives `og:image` + `twitter:image` (+ `twitter:card`). Every managed tag carries a `data-puzzle-head` marker, and the framework only ever creates, updates, or removes marker-bearing tags — your hand-written head elements are never touched. Values are **static strings** (`null` to suppress an inherited value; no functions or data-derived values), each resolved independently leaf → root exactly like the title walk above.
+
+The head sync rides the **same atomic commit as the title** — a failed or superseded navigation touches neither — and both prerender output modes bake the same tags into each page's HTML, so crawlers and link-preview bots see them **before any JavaScript runs** (on hybrid takeover the SPA adopts the prerendered tags in place, no duplicates). Define root-route defaults for any field you use, so child routes can't leave a stale inherited value showing. Memory mode remains a full document no-op — an embedded app must not touch the host page's head.
 
 ---
 
@@ -550,11 +595,12 @@ The router is available in components as `this.ctx.router` (one of exactly three
 
 | Member | Signature | Description |
 | ------ | --------- | ----------- |
-| `push(path)` | `router.push('/user/123')` | Navigate to `path`, run the route lifecycle, update `document.title` from `meta.title` (history/hash modes). |
+| `push(path)` | `router.push('/user/123')` | Navigate to `path`, run the route lifecycle, update `document.title` (and managed head tags, v1.50) from `meta` (history/hash modes). |
+| `replace(path)` (v1.49) | `router.replace('/items?q=cabin')` | Like `push()` — same pipeline, same atomic commit — but **replaces the current history entry** and leaves scroll untouched by default. For URL-backed transient state; see [URL-backed transient state](#url-backed-transient-state-query-hash-and-replace-v149). |
 | `go(n)` (v1.11) | `router.go(-2)` | Move through history: delegates to `history.go(n)` in history/hash mode; moves the internal stack in memory mode. Out-of-range `n` is a silent no-op. |
 | `back()` / `forward()` (v1.11) | `router.back()` | Shorthands for `go(-1)` / `go(1)`. |
 
-And that's essentially it for components in v1 — `push()`, the v1.11 history methods, plus automatic link interception cover the intended navigation surface. A larger router API (named-route navigation, `replace`, guards) is not part of the v1 contract; anything beyond the above should be treated as **Planned — not in v1** (see [[DOC-SPEC]]). (Hash routing is available as of v1.6, memory mode as of v1.11 — see above.)
+And that's essentially it for components in v1 — `push()`/`replace()`, the v1.11 history methods, plus automatic link interception cover the intended navigation surface. A larger router API (named-route navigation, guards) is not part of the v1 contract; anything beyond the above should be treated as **Planned — not in v1** (see [[DOC-SPEC]]). (Hash routing is available as of v1.6, memory mode as of v1.11 — see above.)
 
 ---
 

@@ -50,6 +50,14 @@
     line-height: 1.6;
   }
 
+  /* <puzzle-view> is a custom element (defaults to display:inline). Make view
+     and component roots block-level: the post list's `flip` reorder animation
+     (v1.51) translates each row root, and CSS transforms only apply to
+     transformable (block-level) boxes — same rule mission-control and chat use. */
+  puzzle-view {
+    display: block;
+  }
+
   a { color: var(--color-brand); text-decoration: none; }
   a:hover { text-decoration: underline; }
 
