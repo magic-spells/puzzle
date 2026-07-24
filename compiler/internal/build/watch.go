@@ -26,8 +26,15 @@ import (
 type WatchBuilder struct {
 	root   string
 	outdir string
+	entry  string // app/app.js, or the generated --fixtures wrapper (D98)
 	pl     *plugin.Plugin
 	ctx    api.BuildContext
+
+	// fixtures is the generated --fixtures wrapper, zero when the flag is off. Its
+	// resolver plugin has to be re-registered every time a fresh esbuild context is
+	// built (see ScanUsage).
+	fixtures    fixturesWrapper
+	useFixtures bool
 
 	// prevPublic is the set of dist-relative paths copyPublic wrote on the
 	// PREVIOUS Rebuild. Diffing it against the current pass lets the dev loop
@@ -40,15 +47,25 @@ type WatchBuilder struct {
 	// Esbuild contexts freeze Define values when they are created. Track the
 	// usage bits baked into ctx so ScanUsage can replace the context only when a
 	// source edit changes one of the feature defines.
-	definedFlip     bool
-	definedHeadTags bool
+	defined plugin.Features
+}
+
+// WatchOptions configure the incremental dev builder.
+type WatchOptions struct {
+	// Fixtures bundles the generated `--fixtures` wrapper entry instead of
+	// app/app.js (D98), installing the fixtures/mock module before the app boots.
+	// The wrapper is generated ONCE here, at construction, and left in place for
+	// the process lifetime — it lives under <root>/.puzzle/, which is outside every
+	// watched directory and pruned from the usage scan, so writing it can never
+	// trigger a rebuild.
+	Fixtures bool
 }
 
 // NewWatchBuilder creates the incremental builder for the app rooted at root
 // (the directory containing app/app.js). It validates the entry point and
 // constructs (but does not yet run) the esbuild context. Always development
 // mode: readable, unminified output.
-func NewWatchBuilder(root string) (*WatchBuilder, error) {
+func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("resolving app root: %w", err)
@@ -56,6 +73,16 @@ func NewWatchBuilder(root string) (*WatchBuilder, error) {
 	entry := filepath.Join(absRoot, "app", "app.js")
 	if _, err := os.Stat(entry); err != nil {
 		return nil, fmt.Errorf("entry point not found: %s (expected app/app.js under %s)", entry, absRoot)
+	}
+	var fixtures fixturesWrapper
+	if opts.Fixtures {
+		// `puzzle dev` has no prerender mode, so the only --fixtures precondition
+		// left to check is the config file itself.
+		fixtures, err = prepareFixtures(absRoot, "")
+		if err != nil {
+			return nil, err
+		}
+		entry = fixtures.Entry
 	}
 	outdir := filepath.Join(absRoot, "dist")
 	if err := os.MkdirAll(outdir, 0o755); err != nil {
@@ -66,7 +93,6 @@ func NewWatchBuilder(root string) (*WatchBuilder, error) {
 	if err := scanUsage(absRoot, pl); err != nil {
 		return nil, err
 	}
-	hasFlip, hasHeadTags := pl.Features()
 
 	// The watch builder is always development (§27, D57): __PUZZLE_DEV__ = true, so
 	// the HMR snapshot/restore hooks are live for `puzzle dev`.
@@ -74,6 +100,9 @@ func NewWatchBuilder(root string) (*WatchBuilder, error) {
 	// Metafile carries the module graph's Inputs, used after each rebuild to prune
 	// CSS from files no longer imported (see Rebuild → plugin.PruneCSS).
 	buildOpts.Metafile = true
+	if opts.Fixtures {
+		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())
+	}
 
 	ctx, ctxErr := api.Context(buildOpts)
 	if ctxErr != nil {
@@ -81,12 +110,14 @@ func NewWatchBuilder(root string) (*WatchBuilder, error) {
 	}
 
 	return &WatchBuilder{
-		root:            absRoot,
-		outdir:          outdir,
-		pl:              pl,
-		ctx:             ctx,
-		definedFlip:     hasFlip,
-		definedHeadTags: hasHeadTags,
+		root:        absRoot,
+		outdir:      outdir,
+		entry:       entry,
+		pl:          pl,
+		ctx:         ctx,
+		defined:     pl.Features(),
+		fixtures:    fixtures,
+		useFixtures: opts.Fixtures,
 	}, nil
 }
 
@@ -165,19 +196,22 @@ func metafileInputs(metafileJSON string) (map[string]bool, error) {
 
 // ScanUsage refreshes the virtual formatter manifest and feature defines. The
 // formatter manifest reads plugin state during each Rebuild. Defines are frozen
-// into an esbuild context, so replace that context only when either boolean
+// into an esbuild context, so replace that context only when one of the booleans
 // changes; ordinary rebuilds keep the incremental graph warm.
 func (b *WatchBuilder) ScanUsage() error {
 	if err := scanUsage(b.root, b.pl); err != nil {
 		return err
 	}
-	hasFlip, hasHeadTags := b.pl.Features()
-	if hasFlip == b.definedFlip && hasHeadTags == b.definedHeadTags {
+	features := b.pl.Features()
+	if features == b.defined {
 		return nil
 	}
 
-	buildOpts := newBundleOptions(b.root, filepath.Join(b.root, "app", "app.js"), b.outdir, b.pl, true)
+	buildOpts := newBundleOptions(b.root, b.entry, b.outdir, b.pl, true)
 	buildOpts.Metafile = true
+	if b.useFixtures {
+		buildOpts.Plugins = append(buildOpts.Plugins, b.fixtures.Plugin())
+	}
 	next, err := api.Context(buildOpts)
 	if err != nil {
 		return fmt.Errorf("puzzle dev: refreshing esbuild context: %s", err.Error())
@@ -186,8 +220,7 @@ func (b *WatchBuilder) ScanUsage() error {
 		b.ctx.Dispose()
 	}
 	b.ctx = next
-	b.definedFlip = hasFlip
-	b.definedHeadTags = hasHeadTags
+	b.defined = features
 	return nil
 }
 

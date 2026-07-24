@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -121,7 +122,7 @@ func TestUpgradeCheckOnlyReports(t *testing.T) {
 	t.Cleanup(func() { update.CacheDir = oldCacheDir })
 
 	var stdout, stderr bytes.Buffer
-	if err := runUpgrade(&stdout, &stderr, plainPrinter(), t.TempDir(), "", true); err != nil {
+	if err := runUpgrade(&stdout, &stderr, plainPrinter(), t.TempDir(), "", true, emptyHomeEnvironment(t)); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(stdout.String(), "puzzle "+testLatest+" available (current "+version.Version+")") {
@@ -138,7 +139,7 @@ func TestUpgradeUpToDateOutput(t *testing.T) {
 	t.Cleanup(func() { fetchLatest = oldFetchLatest })
 
 	var stdout bytes.Buffer
-	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), t.TempDir(), "", true); err != nil {
+	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), t.TempDir(), "", true, emptyHomeEnvironment(t)); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := stdout.String(), "✓ puzzle "+version.Version+" is up to date\n"; got != want {
@@ -152,7 +153,7 @@ func TestUpgradeManualInstallInstructions(t *testing.T) {
 	t.Cleanup(func() { fetchLatest = oldFetchLatest })
 
 	var stdout bytes.Buffer
-	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), t.TempDir(), "/usr/local/bin/puzzle", false); err != nil {
+	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), t.TempDir(), "/usr/local/bin/puzzle", false, emptyHomeEnvironment(t)); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(stdout.String(), "go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest") {
@@ -231,7 +232,7 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			t.Cleanup(func() { update.CacheDir = oldCacheDir })
 
 			var stdout, stderr bytes.Buffer
-			if err := runUpgrade(&stdout, &stderr, plainPrinter(), project, filepath.Join(stubDir, "puzzle"), false); err != nil {
+			if err := runUpgrade(&stdout, &stderr, plainPrinter(), project, filepath.Join(stubDir, "puzzle"), false, emptyHomeEnvironment(t)); err != nil {
 				t.Fatalf("runUpgrade: %v\nstderr: %s", err, stderr.String())
 			}
 			gotArgs := readLines(t, argsPath)
@@ -256,6 +257,245 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 				t.Fatalf("cached latest = %q, want %q", cached.Latest, testLatest)
 			}
 		})
+	}
+}
+
+// emptyHomeEnvironment points the skill refresh at an empty home so upgrade
+// tests never read (or write) the real ~/.claude.
+func emptyHomeEnvironment(t *testing.T) upgradeEnvironment {
+	t.Helper()
+	home := t.TempDir()
+	return upgradeEnvironment{homeDir: func() (string, error) { return home, nil }}
+}
+
+// skillHome builds a home with a config dir per name, each already carrying an
+// installed skill directory.
+func skillHome(t *testing.T, names ...string) string {
+	t.Helper()
+	home := t.TempDir()
+	for _, name := range names {
+		if err := os.MkdirAll(filepath.Join(home, name, "skills", "puzzle"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return home
+}
+
+func TestUpgradeSkillRefreshNonInteractiveHint(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	home := skillHome(t, ".claude")
+	stdout := runUpgradeWithStubs(t, home, false, nil)
+
+	dest := filepath.Join(home, ".claude", "skills", "puzzle")
+	if !strings.Contains(stdout, dest) || !strings.Contains(stdout, "puzzle add skills --overwrite") {
+		t.Fatalf("non-TTY upgrade should print the manual skill hint, got:\n%s", stdout)
+	}
+}
+
+func TestUpgradeSkillRefreshLeavesSymlinkedInstall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	home := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(home, ".claude", "skills"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	checkout := t.TempDir()
+	dest := filepath.Join(home, ".claude", "skills", "puzzle")
+	if err := os.Symlink(checkout, dest); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout := runUpgradeWithStubs(t, home, false, nil)
+	if !strings.Contains(stdout, dest+" is a symlink") {
+		t.Fatalf("symlinked skill install should be reported, got:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "puzzle add skills --overwrite") {
+		t.Fatalf("a symlink-only home has nothing to refresh, got:\n%s", stdout)
+	}
+	// The link itself must survive untouched — writing through it would rewrite
+	// files in the linked checkout.
+	info, err := os.Lstat(dest)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("symlink replaced: info=%v err=%v", info, err)
+	}
+	if entries, err := os.ReadDir(checkout); err != nil || len(entries) != 0 {
+		t.Fatalf("linked checkout was written into: %v (err %v)", entries, err)
+	}
+}
+
+func TestUpgradeSkillRefreshRunsUpgradedBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	home := skillHome(t, ".claude", ".cursor")
+	skillArgs := filepath.Join(t.TempDir(), "skill-args")
+	t.Setenv("PUZZLE_TEST_SKILL_ARGS", skillArgs)
+
+	var asked []skillTarget
+	oldConfirm := confirmSkillUpdate
+	confirmSkillUpdate = func(_ io.Reader, _ io.Writer, targets []skillTarget, latest string) (bool, error) {
+		asked = targets
+		if latest != testLatest {
+			t.Errorf("prompt offered %q, want %q", latest, testLatest)
+		}
+		return true, nil
+	}
+	t.Cleanup(func() { confirmSkillUpdate = oldConfirm })
+
+	runUpgradeWithStubs(t, home, true, nil)
+
+	if len(asked) != 2 || asked[0].Root != filepath.Join(home, ".claude") || asked[1].Root != filepath.Join(home, ".cursor") {
+		t.Fatalf("prompt targets = %#v, want the two installed roots", asked)
+	}
+	want := []string{
+		"add", "skills", "--overwrite",
+		"--skill-root", filepath.Join(home, ".claude"),
+		"--skill-root", filepath.Join(home, ".cursor"),
+	}
+	if got := readLines(t, skillArgs); !reflect.DeepEqual(got, want) {
+		t.Fatalf("skill refresh argv = %#v, want %#v", got, want)
+	}
+}
+
+func TestUpgradeSkillRefreshDeclined(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	home := skillHome(t, ".claude")
+	skillArgs := filepath.Join(t.TempDir(), "skill-args")
+	t.Setenv("PUZZLE_TEST_SKILL_ARGS", skillArgs)
+
+	oldConfirm := confirmSkillUpdate
+	confirmSkillUpdate = func(io.Reader, io.Writer, []skillTarget, string) (bool, error) { return false, nil }
+	t.Cleanup(func() { confirmSkillUpdate = oldConfirm })
+
+	runUpgradeWithStubs(t, home, true, nil)
+	if fsFileExists(skillArgs) {
+		t.Fatal("declining the prompt still ran the skill install")
+	}
+}
+
+// TestUpgradeSkillRefreshSkipsStaleBinary covers the reason the refresh re-execs
+// at all: this process embeds the OLD skill, so a binary that does not report the
+// new version must never be used to install it.
+func TestUpgradeSkillRefreshSkipsStaleBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	home := skillHome(t, ".claude")
+	skillArgs := filepath.Join(t.TempDir(), "skill-args")
+	t.Setenv("PUZZLE_TEST_SKILL_ARGS", skillArgs)
+
+	oldConfirm := confirmSkillUpdate
+	confirmSkillUpdate = func(io.Reader, io.Writer, []skillTarget, string) (bool, error) { return true, nil }
+	t.Cleanup(func() { confirmSkillUpdate = oldConfirm })
+
+	stdout := runUpgradeWithStubs(t, home, true, func(project string) {
+		mustWriteExecutable(t, filepath.Join(project, "node_modules", ".bin", "puzzle"),
+			"#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo 'puzzle version 0.0.1'; exit 0; fi\n"+
+				"printf '%s\\n' \"$@\" > \"$PUZZLE_TEST_SKILL_ARGS\"\n")
+	})
+
+	if fsFileExists(skillArgs) {
+		t.Fatal("a stale binary was used to install the skill")
+	}
+	if !strings.Contains(stdout, "puzzle add skills --overwrite") {
+		t.Fatalf("expected a fallback hint when no upgraded binary is found, got:\n%s", stdout)
+	}
+}
+
+// runUpgradeWithStubs drives a full project upgrade against a stub npm and a stub
+// upgraded binary, returning everything printed. seedProject replaces the default
+// node_modules/.bin/puzzle stub when a test needs a different one.
+func runUpgradeWithStubs(t *testing.T, home string, interactive bool, seedProject func(project string)) string {
+	t.Helper()
+
+	oldFetchLatest := fetchLatest
+	fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
+	t.Cleanup(func() { fetchLatest = oldFetchLatest })
+
+	oldCacheDir := update.CacheDir
+	update.CacheDir = t.TempDir()
+	t.Cleanup(func() { update.CacheDir = oldCacheDir })
+
+	project := t.TempDir()
+	mustWrite(t, filepath.Join(project, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"0.1.0"}}`)
+	mustWrite(t, filepath.Join(project, "package-lock.json"), "")
+
+	stubDir := t.TempDir()
+	mustWriteExecutable(t, filepath.Join(stubDir, "npm"),
+		"#!/bin/sh\nmkdir -p \"$(dirname \"$PUZZLE_TEST_PACKAGE_JSON\")\"\n"+
+			"printf '{\"version\":\"%s\"}\\n' \"$PUZZLE_TEST_VERSION\" > \"$PUZZLE_TEST_PACKAGE_JSON\"\n")
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PUZZLE_TEST_PACKAGE_JSON", filepath.Join(project, "node_modules", "@magic-spells", "puzzle", "package.json"))
+	t.Setenv("PUZZLE_TEST_VERSION", testLatest)
+
+	if seedProject != nil {
+		seedProject(project)
+	} else {
+		mustWriteExecutable(t, filepath.Join(project, "node_modules", ".bin", "puzzle"),
+			"#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"puzzle version $PUZZLE_TEST_VERSION\"; exit 0; fi\n"+
+				"printf '%s\\n' \"$@\" > \"$PUZZLE_TEST_SKILL_ARGS\"\n")
+	}
+
+	var stdout, stderr bytes.Buffer
+	env := upgradeEnvironment{
+		homeDir:     func() (string, error) { return home, nil },
+		interactive: interactive,
+	}
+	if err := runUpgrade(&stdout, &stderr, plainPrinter(), project, filepath.Join(stubDir, "puzzle"), false, env); err != nil {
+		t.Fatalf("runUpgrade: %v\nstderr: %s", err, stderr.String())
+	}
+	return stdout.String()
+}
+
+func mustWriteExecutable(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestConfirmSkillRefreshAnswers pins the real prompt (the one confirmSkillUpdate
+// indirects) to the user's answer — the refresh must be a genuine gate, not a
+// form that reports its default whatever is typed.
+func TestConfirmSkillRefreshAnswers(t *testing.T) {
+	targets := []skillTarget{{Name: "Claude Code", Root: filepath.Join(t.TempDir(), ".claude")}}
+	for _, tt := range []struct {
+		input string
+		want  bool
+	}{{"y\n", true}, {"n\n", false}} {
+		got, err := confirmSkillRefresh(strings.NewReader(tt.input), io.Discard, targets, testLatest)
+		if err != nil {
+			t.Fatalf("confirm with %q: %v", tt.input, err)
+		}
+		if got != tt.want {
+			t.Errorf("confirm with %q = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestBinaryReportsVersionExactMatch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script stub")
+	}
+	bin := filepath.Join(t.TempDir(), "puzzle")
+	mustWriteExecutable(t, bin, "#!/bin/sh\necho 'puzzle version 0.2.10'\n")
+
+	if binaryReportsVersion(bin, "0.2.1") {
+		t.Error("0.2.10 must not satisfy a 0.2.1 check")
+	}
+	if !binaryReportsVersion(bin, "0.2.10") {
+		t.Error("exact version should match")
+	}
+	if binaryReportsVersion(filepath.Join(t.TempDir(), "missing"), "0.2.10") {
+		t.Error("a missing binary should not report a version")
 	}
 }
 

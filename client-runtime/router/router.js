@@ -199,6 +199,38 @@
  * try/catch-wrapped — quota, disabled storage, or file:// oddities degrade to the
  * v1.5 in-memory behavior. `scrollBehavior: false` touches no storage.
  *
+ * Focus management + route announcement (v1.56, D93): a client-side navigation
+ * destroys the element focus was sitting on, so focus silently falls back to
+ * <body> — keyboard users Tab from the top of the document again and screen
+ * readers say nothing at all. The router therefore MOVES FOCUS and ANNOUNCES the
+ * new route, in the SAME #commitState window scroll lands in (after mount, before
+ * paint) and immediately AFTER the scroll block, so the scroll landing is
+ * deterministic and unaffected. Default target: the committed LEAF view's root
+ * element, walking back up the chain when a leaf rendered no element (`.element`
+ * is legitimately null) and doing nothing when no level has one. The root is not
+ * natively focusable, so tabindex="-1" is stamped before focusing and removed on
+ * the element's blur — no permanent tab stop, no attribute debris. The focus()
+ * call ALWAYS passes { preventScroll: true }: without it the browser scrolls the
+ * element into view and fights the window.scrollTo above, breaking D33 restore
+ * and D41 anchor landings. Announcement is a single framework-owned
+ * <div aria-live="polite" aria-atomic="true">, created in start() and removed in
+ * stop(), visually hidden by the clip-rect pattern (display:none/visibility:hidden
+ * would remove it from the accessibility tree and suppress the announcement); on
+ * each committed navigation its textContent becomes document.title, READ not
+ * re-derived — #commitLocation (URL + title/head, D84) ran immediately before the
+ * mount + #commitState, so the document already carries this navigation's title.
+ * Skips mirror #scrollEnabled()/#resolveScroll exactly: memory mode is a full
+ * no-op (an embed shares the window with a host page — stealing its focus is
+ * strictly worse than stealing its scroll) and navigation #0 does nothing (the
+ * browser owns first paint; that includes nav #0 of an `output: 'hybrid'`
+ * takeover). push, replace AND pop all move focus — browsers do not restore focus
+ * for client-side history moves, so back/forward needs it as much as a push.
+ * Configure via `focusBehavior`: `false` disables everything including the live
+ * region (none is created); `(to, from) => Element|null|false` picks the target
+ * itself — it runs POST-mount so it may query the committed DOM, a falsy return
+ * skips focusing for that navigation (the announcement still fires), and a throw
+ * is logged and treated as falsy (the same posture a throwing scrollBehavior has).
+ *
  * Hash mode (v1.6, D34): opt in with `{ mode: 'hash' }` (default `'history'`) to
  * carry the route in `location.hash` (`/#/user/123`) instead of the pathname —
  * for static hosts with no server-side rewrite. It touches THREE seams only:
@@ -397,12 +429,30 @@ export class Router {
 	#keySeq = 0;
 	#prevScrollRestoration = null;
 
+	// ---- focus + route announcement (v1.56, D93) ----------------------------
+	// `false` disables focus management AND the live region entirely; a function
+	// `(to, from) => Element|null|false` picks the target itself (called POST-mount
+	// inside #commitState, so it can query the committed DOM); undefined = the
+	// default (focus the committed leaf view's root, announce document.title).
+	// Inert in memory mode, exactly like #scrollBehavior — see #focusEnabled().
+	#focusBehavior;
+	// The single framework-owned polite live region, appended to <body> in start()
+	// and removed in stop(). Null when focus management is off (or before start).
+	#liveRegion = null;
+
 	/**
 	 * @param {Array<{path,name,view,layout,meta,guard,transitionMode,children}>} routes route definitions
 	 * @param {object} [options]
 	 * @param {false|Function} [options.scrollBehavior] `false` to leave scroll
 	 *   alone; `(to, from, savedPosition) => {x,y}|null` to customize; omit for
 	 *   the default (top on push, saved position on back/forward). D33.
+	 * @param {false|Function} [options.focusBehavior] focus + route announcement
+	 *   (v1.56, D93): omit for the default (after each committed navigation focus
+	 *   the leaf view's root with `{ preventScroll: true }` and announce
+	 *   `document.title` in a framework-owned polite live region); `false` to
+	 *   disable both (no live region is created); `(to, from) => Element|null|false`
+	 *   to choose the target — called after mount, falsy = skip focusing for that
+	 *   navigation, a throw is logged and treated as falsy. Inert in memory mode.
 	 * @param {('history'|'hash'|'memory')} [options.mode] URL carrier: `'history'`
 	 *   (default, pathname), `'hash'` (`location.hash`, for static hosts, D34), or
 	 *   `'memory'` (router state only, no URL — for tests/embeds, D42).
@@ -424,7 +474,14 @@ export class Router {
 	 */
 	constructor(
 		routes = [],
-		{ scrollBehavior, mode = 'history', initialPath = null, base = '', transitionMode = 'sequential' } = {}
+		{
+			scrollBehavior,
+			focusBehavior,
+			mode = 'history',
+			initialPath = null,
+			base = '',
+			transitionMode = 'sequential',
+		} = {}
 	) {
 		if (mode !== 'history' && mode !== 'hash' && mode !== 'memory') {
 			throw new Error(
@@ -452,6 +509,7 @@ export class Router {
 		// '', '/', and a trailing '/' all collapse to the canonical form.
 		this.#base = normalizeBase(base);
 		this.#scrollBehavior = scrollBehavior;
+		this.#focusBehavior = focusBehavior;
 		// Compile each non-catch-all route: walkRouteTree (shared with the SSG
 		// prerenderer, routeTree.js) flattens the `children` tree to leaves by the
 		// single set of tree→leaf rules, appending makeEntry(chain, fullPaths) — the
@@ -511,6 +569,18 @@ export class Router {
 		if (this.#scrollEnabled()) {
 			this.#hydratePositions();
 			this.#scrollKey = this.#adoptEntryKey();
+		}
+
+		// Route announcement (v1.56, D93): ONE live region owned by the router for
+		// the whole mounted lifetime — created here, removed in stop(). Built once
+		// rather than per navigation because a live region only announces changes to
+		// a region the assistive tech was ALREADY observing; a node inserted and
+		// filled in the same task is routinely missed. Never created when focus
+		// management is off (`focusBehavior: false`) or in memory mode, where the
+		// router must not touch the host document at all (#focusEnabled()). The
+		// null-check keeps a double start() from stacking regions.
+		if (this.#focusEnabled() && !this.#liveRegion) {
+			this.#liveRegion = this.#createLiveRegion();
 		}
 
 		// Memory mode (D42): there is no URL to read. Seed the in-memory stack with
@@ -648,6 +718,13 @@ export class Router {
 		//    nulled after the restore).
 		document.removeEventListener('click', this.#onClick);
 		window.removeEventListener('popstate', this.#onPopState);
+		// Drop the announcement live region (v1.56, D93) — it is the router's only
+		// node outside the mount container, so leaving it would leak a stray element
+		// into <body> on every mount/unmount cycle. Idempotent on a second stop().
+		if (this.#liveRegion) {
+			this.#liveRegion.remove();
+			this.#liveRegion = null;
+		}
 		if (this.#prevScrollRestoration != null) {
 			history.scrollRestoration = this.#prevScrollRestoration;
 			this.#prevScrollRestoration = null;
@@ -1234,6 +1311,16 @@ export class Router {
 		const anchor = loc.hash ? loc.hash.slice(1) : null;
 		const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
 
+		// Whether this navigation moves focus + announces (v1.56, D93). Only the
+		// GATE is decided here — memory mode, `focusBehavior: false`, and nav #0 all
+		// resolve to null, exactly the shape #resolveScroll uses. The TARGET cannot
+		// be resolved off-DOM (the leaf's root element does not exist yet, and a
+		// custom focusBehavior wants to query the committed DOM), so the sentinel
+		// just carries the snapshots #commitState hands back to that function —
+		// the same pre-commit-sentinel/post-mount-resolution split D41's { anchor }
+		// scroll landing uses.
+		const focus = this.#resolveFocus({ to, from, push, pop, replace });
+
 		// Params-only degenerate case: keep === chain length ⇒ no fresh views, the
 		// whole chain was refreshed pre-commit. Just record state + refresh the
 		// reused layout (chrome). (Replaces the old dedicated params-only branch.)
@@ -1254,6 +1341,7 @@ export class Router {
 				keys: cur.keys,
 				layout,
 				scroll,
+				focus,
 			});
 			if (layout) this.#refreshLogged(layout, params, to);
 			return;
@@ -1304,6 +1392,7 @@ export class Router {
 			keep,
 			rootVnode,
 			scroll,
+			focus,
 			to,
 			// D61: #commitLocation (run as the first statement inside #swap's commit
 			// window) reads these to move the URL/memory stack; null memoryIndex on a
@@ -1798,6 +1887,13 @@ export class Router {
 					: next.scroll;
 			window.scrollTo(pos.x, pos.y);
 		}
+		// Focus + announcement land LAST (v1.56, D93) — strictly AFTER the scroll
+		// block so the window position is already final and deterministic; focus()
+		// then runs with { preventScroll: true } and cannot move it again. Same
+		// window, same reason: the new content is in the DOM and the browser has not
+		// painted yet. Null on nav #0, in memory mode, and under
+		// `focusBehavior: false` (#resolveFocus).
+		if (next.focus) this.#applyFocus(next.focus, next.views);
 	}
 
 	/**
@@ -1940,6 +2036,150 @@ export class Router {
 		const key = this.#newEntryKey();
 		history.replaceState({ ...(history.state || {}), __puzzleScrollKey: key }, '');
 		return key;
+	}
+
+	// ---- focus + route announcement (v1.56, D93) ----------------------------
+
+	/**
+	 * Whether the router manages focus at all — the exact shape of
+	 * #scrollEnabled(), for the exact reason. Memory mode is a full no-op: an embed
+	 * shares the window with a host page the router has no claim on, and STEALING
+	 * THE HOST'S FOCUS is strictly worse than stealing its scroll (it hijacks the
+	 * host's keyboard). `focusBehavior: false` is the explicit opt-out and also
+	 * suppresses the live region — there is nothing to announce if the app has
+	 * taken accessibility ownership itself.
+	 */
+	#focusEnabled() {
+		if (this.#mode === 'memory') return false;
+		return this.#focusBehavior !== false;
+	}
+
+	/**
+	 * Decide whether a committing navigation moves focus + announces; `null` = no.
+	 * Only the GATE — the target is resolved post-mount in #applyFocus. The
+	 * initial-navigation skip is #resolveScroll's precedent verbatim: the browser
+	 * owns first paint, moving focus there would fight normal page-load behavior
+	 * (and break the hybrid-output takeover, which IS nav #0). push, replace and
+	 * pop all pass: browsers never restore focus for a client-side history move, so
+	 * back/forward needs focus management just as much as a forward push.
+	 */
+	#resolveFocus({ to, from, push, pop, replace }) {
+		if (!this.#focusEnabled()) return null;
+		if (!push && !pop && !replace) return null; // initial navigation
+		return { to, from };
+	}
+
+	/**
+	 * Move focus into the freshly committed chain and announce the route. Called
+	 * from #commitState after the scroll landing, with the new content already in
+	 * the DOM and before the next paint.
+	 *
+	 * Order is focus-then-announce: a polite live-region update issued immediately
+	 * BEFORE a focus change is routinely dropped (the focus event resets the
+	 * assistive tech's speech queue), while one issued after is spoken behind the
+	 * focus announcement. A navigation with no focusable target — or a custom
+	 * focusBehavior that declined — still announces: the route DID change.
+	 */
+	#applyFocus(spec, views) {
+		const target = this.#resolveFocusTarget(spec, views);
+		if (target) this.#focusElement(target);
+		this.#announceRoute();
+	}
+
+	/**
+	 * The element focus should land on, or null. A custom focusBehavior runs HERE
+	 * (post-mount) so it can query the committed DOM; a falsy or non-focusable
+	 * return skips focusing for this navigation, and a throw is logged and treated
+	 * as falsy — the same posture a throwing scrollBehavior gets (D33): a broken
+	 * hook must never wedge a navigation that already committed.
+	 *
+	 * Default: the LEAF view's root element. `.element` is legitimately null for a
+	 * view that never mounted — a parent whose template has no <Slot/> preloads its
+	 * routed child and then has nowhere to put it, the exact case warnMissingSlots
+	 * reports — so walk back UP the chain to the nearest live root, and return null
+	 * (never throw) when no level has one.
+	 */
+	#resolveFocusTarget(spec, views) {
+		if (typeof this.#focusBehavior === 'function') {
+			let el = null;
+			try {
+				el = this.#focusBehavior(spec.to, spec.from);
+			} catch (err) {
+				console.error('[puzzle] focusBehavior failed:', err);
+				return null;
+			}
+			return el && typeof el.focus === 'function' ? el : null;
+		}
+		for (let i = views.length - 1; i >= 0; i--) {
+			const el = views[i]?.element;
+			if (el && typeof el.focus === 'function') return el;
+		}
+		return null;
+	}
+
+	/**
+	 * Focus an element that is probably not natively focusable (a <puzzle-view>
+	 * root never is). tabindex="-1" makes it a PROGRAMMATIC-only target — it is
+	 * focusable by script but never a Tab stop — and is taken back off at the
+	 * element's blur so the DOM accumulates no attribute debris across navigations
+	 * and the root cannot linger in anyone's mental model of the tab order. An
+	 * author-set tabindex is left completely alone (they already chose this
+	 * element's focus semantics), which also means we add no listener there.
+	 */
+	#focusElement(el) {
+		if (!el.hasAttribute('tabindex')) {
+			el.setAttribute('tabindex', '-1');
+			el.addEventListener('blur', () => el.removeAttribute('tabindex'), { once: true });
+		}
+		// preventScroll is LOAD-BEARING, not a nicety: the default focus() scrolls
+		// the element into view, which would immediately fight the window.scrollTo
+		// #commitState just ran and silently break D33 restore + D41 anchor landings.
+		el.focus({ preventScroll: true });
+	}
+
+	/**
+	 * Announce the committed route in the live region. document.title is READ, never
+	 * re-derived: #commitLocation (URL + memory stack + title/head, D84) runs
+	 * immediately before the mount + #commitState, so the document already carries
+	 * this navigation's resolved title — including the case where the route sets
+	 * none and the previous title deliberately stands.
+	 */
+	#announceRoute() {
+		if (!this.#liveRegion) return;
+		this.#liveRegion.textContent = document.title;
+	}
+
+	/**
+	 * Build the polite live region. Visually hidden by the CLIP-RECT pattern —
+	 * NOT display:none or visibility:hidden, which remove the node from the
+	 * accessibility tree entirely and would make every announcement silent. Inline
+	 * styles because the runtime ships no stylesheet of its own; the
+	 * `data-puzzle-live-region` attribute marks the node as framework-owned (the
+	 * router's only node outside the mount container) for debugging and teardown.
+	 */
+	#createLiveRegion() {
+		const el = document.createElement('div');
+		el.setAttribute('aria-live', 'polite');
+		el.setAttribute('aria-atomic', 'true');
+		el.setAttribute('data-puzzle-live-region', '');
+		const s = el.style;
+		s.position = 'absolute';
+		s.width = '1px';
+		s.height = '1px';
+		s.margin = '-1px';
+		s.padding = '0';
+		s.border = '0';
+		s.overflow = 'hidden';
+		// The comma form of `clip` on purpose: every CSS parser accepts
+		// `rect(0, 0, 0, 0)`, while the space-separated CSS3 form is silently dropped
+		// by stricter ones (jsdom's cssstyle among them). `clip` is the legacy
+		// fallback; `clip-path` is the modern one — the pair is the standard
+		// visually-hidden recipe.
+		s.clip = 'rect(0, 0, 0, 0)';
+		s.clipPath = 'inset(50%)';
+		s.whiteSpace = 'nowrap';
+		document.body.appendChild(el);
+		return el;
 	}
 
 	/**

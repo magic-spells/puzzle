@@ -24,6 +24,11 @@ Cobra command surface shipped by the platform binary:
   output flags are mutually exclusive and must agree with any `output` config
   value — and prints raw/gzip output plus prerender summaries.
 - `puzzle dev [dir] --port` starts [[COMPONENT-DEV-SERVER]].
+- `--fixtures` on both `build` and `dev` (D98) wires `app/fixtures.js` through
+  a generated two-module wrapper entry under `.puzzle/` so the `/fixtures`
+  module installs before the app entry runs; requires the file, is rejected
+  with `--static`/`--hybrid` (or a config `output`), and one-shot builds
+  remove `.puzzle/` afterward while dev keeps it for the process lifetime.
 - `puzzle init <name>` embeds `default` and `todos` app trees, with optional
   TypeScript editor config. On a TTY it prompts for whatever was not given —
   missing name, then template, then TypeScript y/N (D77; explicit flags are
@@ -41,14 +46,22 @@ Cobra command surface shipped by the platform binary:
   (`skills/puzzle/`, `go:embed`) into detected `~/.claude`/`~/.codex`/`~/.cursor`
   config dirs: huh checkbox multi-select on a TTY with all targets pre-selected,
   silent install-to-all on non-TTY, pieces-style all-or-nothing `--overwrite`
-  pre-flight, friendly no-op when nothing is detected.
+  pre-flight, friendly no-op when nothing is detected. `--skill-root` (D97,
+  repeatable) pins the config dirs, skipping both detection and the prompt; the
+  root must already exist.
 - `puzzle doctor`, `puzzle info`, and `puzzle --version` provide diagnostics and
   environment/project metadata.
 - `puzzle upgrade` (D76) checks the npm registry and upgrades via the user's
   own package manager — project installs get the lockfile-detected manager with
   the dependency field preserved, global installs get `npm -g`/`pnpm -g`,
   `go install` users get instructions; the installed version is confirmed
-  afterward. `--check` only reports. `build`/`dev` additionally print a passive
+  afterward. On that confirmed-success path only, it then offers (D97) to
+  refresh the agent skill wherever one is already installed, by re-execing the
+  newly installed binary — `--version`-gated, since this process embeds the old
+  skill — with `add skills --overwrite --skill-root …` for the confirmed roots;
+  symlinked installs are reported and skipped, non-TTY prints a hint instead,
+  and no failure here can fail the upgrade. `--check` only reports. `build`/`dev`
+  additionally print a passive
   cache-first update notice (`internal/update`: 24h cache under the user cache
   dir, background refresh, TTY-only, skipped under `CI` or
   `PUZZLE_NO_UPDATE_CHECK`, registry overridable via `PUZZLE_REGISTRY`).

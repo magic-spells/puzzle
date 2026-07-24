@@ -35,8 +35,7 @@ func (p *Plugin) SetUsage(usage Usage) {
 	defer p.mu.Unlock()
 
 	p.setFormattersLocked(usage.Formatters)
-	p.hasFlip = usage.HasFlip
-	p.hasHeadTags = usage.HasHeadTags
+	p.features = usage.features()
 }
 
 func (p *Plugin) setFormattersLocked(used map[string]bool) {
@@ -49,11 +48,12 @@ func (p *Plugin) setFormattersLocked(used map[string]bool) {
 	p.formatters = next
 }
 
-// Features returns the usage bits captured by the most recent SetUsage call.
-func (p *Plugin) Features() (hasFlip, hasHeadTags bool) {
+// Features returns the DCE define bits captured by the most recent SetUsage
+// call.
+func (p *Plugin) Features() Features {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.hasFlip, p.hasHeadTags
+	return p.features
 }
 
 func (p *Plugin) formatterManifest() (string, error) {

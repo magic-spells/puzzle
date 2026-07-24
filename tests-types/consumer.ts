@@ -2,8 +2,8 @@
  * Type-only consumer fixture (`npm run test:types`).
  *
  * Imports from the PUBLIC package root ('@magic-spells/puzzle') and the
- * '@magic-spells/puzzle/morph' + '@magic-spells/puzzle/ssg' subpaths exactly as
- * an app authored with `<script lang="ts">` would. The package is NOT installed
+ * '@magic-spells/puzzle/morph', '/ssg' and '/fixtures' subpaths exactly as an
+ * app authored with `<script lang="ts">` would. The package is NOT installed
  * in this repo, so the fixture tsconfig maps the specifiers at ../types via
  * `paths` — this still type-checks the real exported declaration surface + its
  * exports wiring.
@@ -30,7 +30,16 @@ import type {
 	Formatter,
 	ValidationResult,
 	MorphHandler,
+	BeforeRequestHook,
+	AdapterRequestContext,
+	AdapterMock,
+	AdapterMockRequest,
+	AdapterMockResult,
+	ModelAdapter,
+	FocusBehavior,
 } from '@magic-spells/puzzle';
+import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
+import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
 import { enableMorph } from '@magic-spells/puzzle/morph';
 import type { MorphEngine } from '@magic-spells/puzzle/morph';
 import { prerender, injectShell } from '@magic-spells/puzzle/ssg';
@@ -202,9 +211,27 @@ const scrollBehavior = (
 	return { x: 0, y: 0 };
 };
 
+// Router focus behavior (v1.56, D93): return an element to focus after the
+// committed navigation, or a falsy value to leave focus alone for that one.
+const focusBehavior: FocusBehavior = (to, from) => {
+	if (from && to.pathname === from.pathname) return null;
+	return document.querySelector('h1');
+};
+
 // ---------------------------------------------------------------------------
 // PuzzleApp config: all three lifecycle hooks + routerMode/scrollBehavior/transitionMode
 // ---------------------------------------------------------------------------
+
+// Adapter request hook (v1.55, D91): both documented shapes type-check — mutate
+// the init in place, or return a replacement.
+const attachAuth: BeforeRequestHook = (init, context) => {
+	const where: AdapterRequestContext = context;
+	void `${where.type} ${where.method} ${where.url}`;
+	init.headers = { ...(init.headers as Record<string, string>), Authorization: 'Bearer t' };
+};
+
+const replaceInit: BeforeRequestHook = (init) => ({ ...init, credentials: 'include' });
+void replaceInit;
 
 const config: PuzzleAppConfig = {
 	target: '#app',
@@ -212,11 +239,13 @@ const config: PuzzleAppConfig = {
 	models: { todo: Todo },
 	formatters: { upcase },
 	apiURL: '',
+	beforeRequest: attachAuth,
 	routerMode: 'history',
 	routerBase: '/app',
 	routerInitialPath: '/',
 	transitionMode: 'sequential',
 	scrollBehavior,
+	focusBehavior,
 	async beforeMount(app) {
 		// `this` is the PuzzleApp; store is live and awaited before nav #0 (§34).
 		const self: PuzzleApp = this;
@@ -244,6 +273,52 @@ app.mount().then((mounted) => {
 // store is readable off the constructed app too (typed non-null).
 const seeded = app.store.createRecord('todo', { title: 'a' });
 void seeded;
+
+// ---------------------------------------------------------------------------
+// fixtures subpath: installFixtures() attaches seed()/resetFixtureSeed() (D98)
+// ---------------------------------------------------------------------------
+
+const fixturesConfig: FixturesConfig = {
+	seed: 1234,
+	mock: { todo: { data: [{ id: '1', title: 'a' }], latency: [200, 600], failRate: 0.25 } },
+	async setup(setupApp) {
+		const self: PuzzleApp = this;
+		self.store.seed('todo', 3);
+		setupApp.store.seed('todo', [{ title: 'pinned' }]);
+	},
+};
+
+const uninstallFixtures: () => void = installFixtures(fixturesConfig);
+
+const fixtures: any[] = app.store.seed('todo', 5);
+const withOverrides: any[] = app.store.seed('todo', 3, { done: false });
+const explicitShapes: any[] = app.store.seed('todo', [{ title: 'a' }, { title: 'b' }]);
+app.store.resetFixtureSeed();
+app.store.resetFixtureSeed(1234);
+uninstallFixtures();
+void [fixtures, withOverrides, explicitShapes, DEFAULT_FIXTURE_SEED];
+
+const mockBlock: AdapterMock = { data: [{ id: '1' }], latency: 400, failRate: 0.25 };
+void mockBlock;
+
+class MockedTodo extends PuzzleModel {
+	static schema = { id: Puzzle.string().primary(), title: Puzzle.string().required() };
+	static adapter: ModelAdapter = {
+		endpoint: '/todos',
+		mock: {
+			data: [{ id: '1', title: 'seeded' }],
+			latency: [200, 600],
+			failRate: 0,
+			fail: false,
+			handler({ method, path, body, collection }: AdapterMockRequest): AdapterMockResult | null {
+				if (method !== 'POST' || !path.endsWith('/archive')) return null;
+				void body;
+				return { status: 200, body: { archived: collection.size } };
+			},
+		},
+	};
+}
+void MockedTodo;
 
 // ---------------------------------------------------------------------------
 // morph subpath: enableMorph returns a MorphEngine; handler shape is structural

@@ -84,7 +84,7 @@ func TestWatchBuilderIncrementalRebuild(t *testing.T) {
 	write(t, filepath.Join(root, "app", "app.js"),
 		"import Home from './views/Home.pzl';\nconsole.log(Home);\n")
 
-	b, err := NewWatchBuilder(root)
+	b, err := NewWatchBuilder(root, WatchOptions{})
 	if err != nil {
 		t.Fatalf("NewWatchBuilder: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestWatchBuilderCSSResetOnDelete(t *testing.T) {
 	write(t, appJS,
 		"import Home from './views/Home.pzl';\nimport Extra from './components/Extra.pzl';\nconsole.log(Home, Extra);\n")
 
-	b, err := NewWatchBuilder(root)
+	b, err := NewWatchBuilder(root, WatchOptions{})
 	if err != nil {
 		t.Fatalf("NewWatchBuilder: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestWatchBuilderCSSResetOnStyleRemoval(t *testing.T) {
 	write(t, filepath.Join(root, "app", "app.js"),
 		"import Home from './views/Home.pzl';\nconsole.log(Home);\n")
 
-	b, err := NewWatchBuilder(root)
+	b, err := NewWatchBuilder(root, WatchOptions{})
 	if err != nil {
 		t.Fatalf("NewWatchBuilder: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestWatchBuilderCSSPrunesUnimported(t *testing.T) {
 	withoutExtra := "import Home from './views/Home.pzl';\nconsole.log(Home);\n"
 	write(t, appJS, withExtra)
 
-	b, err := NewWatchBuilder(root)
+	b, err := NewWatchBuilder(root, WatchOptions{})
 	if err != nil {
 		t.Fatalf("NewWatchBuilder: %v", err)
 	}
@@ -297,7 +297,7 @@ func TestWatchBuilderFailedRebuildKeepsCSS(t *testing.T) {
 	appJS := filepath.Join(root, "app", "app.js")
 	write(t, appJS, "import Home from './views/Home.pzl';\nconsole.log(Home);\n")
 
-	b, err := NewWatchBuilder(root)
+	b, err := NewWatchBuilder(root, WatchOptions{})
 	if err != nil {
 		t.Fatalf("NewWatchBuilder: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestWatchBuilderInlineSVGRebuild(t *testing.T) {
 	write(t, filepath.Join(root, "app", "app.js"),
 		"import Home from './views/Home.pzl';\nconsole.log(Home);\n")
 
-	b, err := NewWatchBuilder(root)
+	b, err := NewWatchBuilder(root, WatchOptions{})
 	if err != nil {
 		t.Fatalf("NewWatchBuilder: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestWatchBuilderInlineSVGRecovery(t *testing.T) {
 	write(t, filepath.Join(root, "app", "app.js"),
 		"import Home from './views/Home.pzl';\nconsole.log(Home);\n")
 
-	b, err := NewWatchBuilder(root)
+	b, err := NewWatchBuilder(root, WatchOptions{})
 	if err != nil {
 		t.Fatalf("NewWatchBuilder: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestWatchBuilderMirrorsPublicDeletions(t *testing.T) {
 	asset := filepath.Join(root, "app", "public", "logo.txt")
 	write(t, asset, "LOGO")
 
-	b, err := NewWatchBuilder(root)
+	b, err := NewWatchBuilder(root, WatchOptions{})
 	if err != nil {
 		t.Fatalf("NewWatchBuilder: %v", err)
 	}

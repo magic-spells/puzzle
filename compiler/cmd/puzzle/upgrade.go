@@ -7,9 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/huh"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/compiler/internal/update"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
@@ -19,6 +21,10 @@ import (
 const puzzlePackage = "@magic-spells/puzzle"
 
 var fetchLatest = update.FetchLatest
+
+// confirmSkillUpdate is the skill-refresh prompt, indirected so tests can answer
+// it without driving a huh form.
+var confirmSkillUpdate = confirmSkillRefresh
 
 var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
@@ -31,7 +37,11 @@ var upgradeCmd = &cobra.Command{
 			return fmt.Errorf("getting current directory: %w", err)
 		}
 		executable, _ := os.Executable()
-		return runUpgrade(os.Stdout, os.Stderr, ui.New(os.Stdout), cwd, executable, check)
+		return runUpgrade(os.Stdout, os.Stderr, ui.New(os.Stdout), cwd, executable, check, upgradeEnvironment{
+			homeDir:     os.UserHomeDir,
+			input:       os.Stdin,
+			interactive: ui.IsTerminal(os.Stdin),
+		})
 	},
 }
 
@@ -57,7 +67,15 @@ type installContext struct {
 	packageJSON string
 }
 
-func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, cwd, executable string, check bool) error {
+// upgradeEnvironment carries what the post-upgrade skill refresh needs: where
+// agent config dirs live, and whether we may prompt.
+type upgradeEnvironment struct {
+	homeDir     func() (string, error)
+	input       io.Reader
+	interactive bool
+}
+
+func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, cwd, executable string, check bool, env upgradeEnvironment) error {
 	latest, err := fetchLatest(5 * time.Second)
 	if err != nil {
 		return fmt.Errorf("checking for updates: %w", err)
@@ -111,7 +129,154 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, cwd, executable strin
 
 	fmt.Fprintf(stdout, "%s upgraded %s → %s\n", out.Green("✓"), version.Version, latest)
 	_ = update.WriteCache(latest, time.Now())
+	refreshSkills(stdout, stderr, out, ctx, latest, env)
 	return nil
+}
+
+// refreshSkills offers to reinstall the agent skill wherever one is already
+// installed, and only after a version actually changed (D97). The skill payload
+// is go:embed-ed into the binary, so THIS process only holds the OLD skill — the
+// new bytes exist solely in the binary npm just installed. The refresh therefore
+// re-execs that binary, after confirming its --version really is the new one; a
+// binary we cannot find or cannot verify degrades to printing the command rather
+// than silently reinstalling the stale skill we are carrying.
+//
+// Nothing here can fail the upgrade: the package is already installed, and a
+// skill copy is a courtesy on top of it. Problems print and return.
+func refreshSkills(stdout, stderr io.Writer, out *ui.Printer, ctx installContext, latest string, env upgradeEnvironment) {
+	if env.homeDir == nil {
+		return
+	}
+	home, err := env.homeDir()
+	if err != nil {
+		return
+	}
+	targets, linked, err := installedSkillTargets(home)
+	if err != nil {
+		return
+	}
+	for _, dest := range linked {
+		fmt.Fprintf(stdout, "%s %s is a symlink — skill left as is.\n", out.Yellow("!"), dest)
+	}
+	if len(targets) == 0 {
+		return
+	}
+
+	if !env.interactive {
+		fmt.Fprintf(stdout, "%s Puzzle skill installed at %s — run %s to update it.\n",
+			out.Yellow("!"), skillDestinations(targets), out.Bold("puzzle add skills --overwrite"))
+		return
+	}
+	confirmed, err := confirmSkillUpdate(env.input, stdout, targets, latest)
+	if err != nil || !confirmed {
+		return
+	}
+
+	binary, err := upgradedBinary(ctx, latest)
+	if err != nil {
+		fmt.Fprintf(stdout, "%s Could not locate the upgraded CLI (%v) — run %s yourself.\n",
+			out.Yellow("!"), err, out.Bold("puzzle add skills --overwrite"))
+		return
+	}
+	args := []string{"add", "skills", "--overwrite"}
+	for _, target := range targets {
+		args = append(args, "--skill-root", target.Root)
+	}
+	command := exec.Command(binary, args...)
+	command.Stdout = stdout
+	command.Stderr = stderr
+	if err := command.Run(); err != nil {
+		fmt.Fprintf(stdout, "%s Skill update failed (%v) — run %s yourself.\n",
+			out.Yellow("!"), err, out.Bold("puzzle add skills --overwrite"))
+	}
+}
+
+func skillDestinations(targets []skillTarget) string {
+	paths := make([]string, 0, len(targets))
+	for _, target := range targets {
+		paths = append(paths, target.destination())
+	}
+	return strings.Join(paths, ", ")
+}
+
+func confirmSkillRefresh(input io.Reader, output io.Writer, targets []skillTarget, latest string) (bool, error) {
+	confirmed := true
+	field := huh.NewConfirm().
+		Title(fmt.Sprintf("Update the installed Puzzle skill to %s?", latest)).
+		Description(strings.Join(skillDestinationLines(targets), "\n")).
+		Affirmative("Yes").
+		Negative("No").
+		Value(&confirmed)
+	form := huh.NewForm(huh.NewGroup(field)).
+		WithInput(input).
+		WithOutput(output)
+	if err := form.Run(); err != nil {
+		return false, err
+	}
+	return confirmed, nil
+}
+
+func skillDestinationLines(targets []skillTarget) []string {
+	lines := make([]string, 0, len(targets))
+	for _, target := range targets {
+		lines = append(lines, fmt.Sprintf("%s (%s)", target.destination(), target.Name))
+	}
+	return lines
+}
+
+// upgradedBinary finds the puzzle binary npm just installed and proves it is the
+// new one before we run it. Candidates differ by install shape; each is checked
+// with --version, so a stale or mismatched path is skipped rather than trusted.
+func upgradedBinary(ctx installContext, latest string) (string, error) {
+	for _, candidate := range upgradedBinaryCandidates(ctx) {
+		if candidate == "" {
+			continue
+		}
+		if binaryReportsVersion(candidate, latest) {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("no binary on disk reports version %s", latest)
+}
+
+func upgradedBinaryCandidates(ctx installContext) []string {
+	if ctx.kind == installProject {
+		return []string{
+			// Hoisted layouts (npm/yarn/bun) expose the platform binary directly;
+			// pnpm keeps it in the store, so fall back to the package-manager shim.
+			filepath.Join(ctx.dir, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle"),
+			filepath.Join(ctx.dir, "node_modules", ".bin", "puzzle"),
+		}
+	}
+	var candidates []string
+	// A global install replaces the package behind the same PATH shim; pnpm's
+	// versioned store means the currently running path may still be the old one,
+	// which is exactly why every candidate is version-checked.
+	if path, err := exec.LookPath("puzzle"); err == nil {
+		candidates = append(candidates, path)
+	}
+	return append(candidates, ctx.executable)
+}
+
+// platformPackageName mirrors bin/puzzle.js: Node spells amd64 "x64".
+func platformPackageName() string {
+	arch := runtime.GOARCH
+	if arch == "amd64" {
+		arch = "x64"
+	}
+	return "puzzle-" + runtime.GOOS + "-" + arch
+}
+
+// binaryReportsVersion runs `<path> --version` and compares the trailing field
+// (cobra prints "puzzle version <v>"). Exact equality, not a prefix or substring
+// match: "0.2.1" must not accept a binary reporting 0.2.10.
+func binaryReportsVersion(path, want string) bool {
+	output, err := exec.Command(path, "--version").Output()
+	if err != nil {
+		return false
+	}
+	fields := strings.Fields(string(output))
+	return len(fields) > 0 && fields[len(fields)-1] == want
 }
 
 func detectInstallContext(cwd, executable string) (installContext, error) {

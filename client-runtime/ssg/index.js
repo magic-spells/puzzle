@@ -338,10 +338,15 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
  * PuzzleApp — documented) so a build-time store seed lands before the first data().
  */
 async function buildContext(config, { mode = 'hybrid', route = null } = {}) {
-	const { models = {}, formatters = {}, apiURL, storage } = config;
+	const { models = {}, formatters = {}, apiURL, storage, beforeRequest } = config;
 
 	const storeOptions = { apiURL };
 	if (storage !== undefined) storeOptions.storage = storage;
+	// The adapter request hook rides along (v1.55, D91) so a build-time beforeMount
+	// seed hits an authenticated API exactly the way the browser store would. (The
+	// static browser kernel cannot: its options are serialized into a generated
+	// per-page entry module by the Go build, and a function does not survive that.)
+	if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;
 	const store = new Store(models, storeOptions);
 	// Router facade parity (D81): HYBRID keeps a real, unstarted memory Router because
 	// the SPA boots and takes over on load (current becomes real then). STATIC has no

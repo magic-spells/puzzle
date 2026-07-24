@@ -37,7 +37,11 @@ static route to dist/<path>/index.html that the full SPA runtime takes over on
 load (the mode formerly spelled --static). Either flag has a puzzle.config.js
 equivalent (output: 'static' | 'hybrid'); passing a flag that disagrees with
 the config output value is an error. Dynamic (:id / *) routes are skipped with
-a warning.`,
+a warning.
+
+With --fixtures, wire app/fixtures.js (or .ts) through the fixtures/mock runtime
+module so the built app seeds and mocks itself. Without the flag nothing from
+that module reaches the bundle. It cannot be combined with --static/--hybrid.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := "."
@@ -53,6 +57,7 @@ a warning.`,
 		}
 		static, _ := cmd.Flags().GetBool("static")
 		hybrid, _ := cmd.Flags().GetBool("hybrid")
+		fixtures, _ := cmd.Flags().GetBool("fixtures")
 
 		output, err := outputFlag(static, hybrid)
 		if err != nil {
@@ -60,7 +65,11 @@ a warning.`,
 		}
 
 		start := time.Now()
-		if err := build.Build(dir, build.Options{Development: mode == "development", Output: output}); err != nil {
+		if err := build.Build(dir, build.Options{
+			Development: mode == "development",
+			Output:      output,
+			Fixtures:    fixtures,
+		}); err != nil {
 			return err
 		}
 		out := ui.New(os.Stdout)
@@ -76,7 +85,10 @@ var devCmd = &cobra.Command{
 	Short: "Start the dev server with live reload",
 	Long: `Run a development build, serve dist/ with history-API fallback, and
 rebuild + live-reload the browser on any change under app/. Builds are always
-development mode (no minification).`,
+development mode (no minification).
+
+With --fixtures, wire app/fixtures.js (or .ts) through the fixtures/mock runtime
+module so the served app seeds and mocks itself.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := "."
@@ -85,9 +97,11 @@ development mode (no minification).`,
 		}
 		port, _ := cmd.Flags().GetInt("port")
 		strictPort, _ := cmd.Flags().GetBool("strict-port")
+		fixtures, _ := cmd.Flags().GetBool("fixtures")
 		return dev.Serve(dir, dev.Options{
 			Port:       port,
 			StrictPort: strictPort,
+			Fixtures:   fixtures,
 			OnReady: func() {
 				printUpdateNotice(os.Stdout, ui.New(os.Stdout))
 			},
@@ -115,8 +129,10 @@ func init() {
 	buildCmd.Flags().String("mode", "production", "Build mode: production (minified) or development (readable)")
 	buildCmd.Flags().Bool("static", false, "Emit true static pages: per-route HTML + a per-page module bundle, no SPA takeover")
 	buildCmd.Flags().Bool("hybrid", false, "Prerender each static route to dist/<path>/index.html that the SPA runtime takes over")
+	buildCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module; not valid with --static/--hybrid")
 	devCmd.Flags().Int("port", 3000, "Port for the dev server (scans upward if busy)")
 	devCmd.Flags().Bool("strict-port", false, "Fail if --port is busy instead of scanning for a free one")
+	devCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module")
 
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(devCmd)

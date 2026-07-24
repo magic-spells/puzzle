@@ -67,15 +67,22 @@ const RELS_INSTALLED = Symbol('puzzleRelationshipsInstalled');
 export class Store {
 	/**
 	 * @param {object} models   type name → model class (from PuzzleApp config)
-	 * @param {object} options  { storage, storageKey, apiURL } — storage is any
-	 *   Storage-like object (getItem/setItem); pass window.localStorage to
-	 *   persist. apiURL is the base for the D21 server read path.
+	 * @param {object} options  { storage, storageKey, apiURL, beforeRequest } —
+	 *   storage is any Storage-like object (getItem/setItem); pass
+	 *   window.localStorage to persist. apiURL is the base for the D21 server read
+	 *   path. beforeRequest is the adapter request hook (v1.55, D91) — see _fetch.
 	 */
 	constructor(models = {}, options = {}) {
 		this.models = models;
 		this.storage = options.storage || null;
 		this.storageKey = options.storageKey || 'puzzle-store';
 		this.apiURL = options.apiURL || '';
+		// Adapter request hook (v1.55, D91). Stored ONLY when it is a function, so
+		// the overwhelmingly common no-hook path costs one truthiness check in
+		// _fetch() and nothing else — a non-function config value is simply absent
+		// rather than a per-request typeof.
+		this.beforeRequest =
+			typeof options.beforeRequest === 'function' ? options.beforeRequest : null;
 
 		this.recordsByType = new Map(); // type → Map(id → record)
 		this.subscribersByKey = new Map(); // key → Set(subscriber)
@@ -382,7 +389,11 @@ export class Store {
 
 	async _fetchAdapter(type, suffix) {
 		const endpoint = this._requireEndpoint(type);
-		const res = await fetch(this.apiURL + endpoint + suffix);
+		// An explicit `{ method: 'GET' }` rather than a bare fetch(url): identical on
+		// the wire, and it hands beforeRequest the same init shape every other verb
+		// passes, so a hook never has to special-case the read path (v1.55, D91).
+		const url = this.apiURL + endpoint + suffix;
+		const res = await this._fetch(url, { method: 'GET' }, { type, method: 'GET', url });
 		if (!res.ok) {
 			throw new Error(`[puzzle] load '${type}' failed: ${res.status} ${res.statusText}`);
 		}
@@ -421,6 +432,62 @@ export class Store {
 			);
 		}
 		return endpoint;
+	}
+
+	/**
+	 * The ONE adapter fetch (v1.55, D91). Every server call — the D21 read path
+	 * (loadAll/loadOne), the D50 write verbs (save/delete), and request() — goes
+	 * through here, so `beforeRequest` is the single place an app attaches auth
+	 * headers, `credentials`, or an AbortSignal to all of them at once.
+	 *
+	 * The hook is SYNCHRONOUS and may either mutate `init` in place or return a
+	 * replacement object; a truthy object return wins, otherwise the (possibly
+	 * mutated) original is used. Both shapes are supported on purpose — mutation
+	 * reads better for a header push, a return for a spread. `context` is frozen:
+	 * it is information about the request, not a second output channel.
+	 *
+	 * `method` and `body` are RE-STAMPED from the original init after the hook
+	 * runs. This is load-bearing, not defensive: the write path captures
+	 * `requestKey = record[pk]` before the await and reconciles against exactly
+	 * that key afterwards (§22, D50), so a hook that flipped POST→PUT or rewrote
+	 * the body would silently break identity re-checks, pk adoption, and the
+	 * synced-flag contract. The URL is a separate fetch argument, so it is out of
+	 * the hook's reach by construction. Everything else — headers, signal,
+	 * credentials, mode, cache — passes through untouched.
+	 *
+	 * A throwing hook is NOT caught: it is app code, and an auth error raised
+	 * there must reject the calling verb rather than ship an unauthenticated
+	 * request. Every caller is async, so the throw surfaces as a rejection.
+	 *
+	 * The network step itself is delegated to `_network` (D98), so dev/test
+	 * tooling can intercept a request AFTER the hook has run without this method
+	 * — or any verb above it — knowing such tooling exists.
+	 *
+	 * @param {string} url      the fully built request URL
+	 * @param {object} init     the fetch init this verb requires
+	 * @param {object} context  { type, method, url } — frozen before the hook sees it
+	 */
+	_fetch(url, init, context) {
+		if (!this.beforeRequest) return this._network(url, init, context);
+		const method = init.method;
+		const body = init.body;
+		const returned = this.beforeRequest(init, Object.freeze(context));
+		const final = returned && typeof returned === 'object' ? returned : init;
+		final.method = method;
+		if (body === undefined) delete final.body;
+		else final.body = body;
+		return this._network(url, final, context);
+	}
+
+	/**
+	 * The one place an adapter request touches the network (D98). Dev/test
+	 * tooling — the /fixtures module's mock adapter — replaces this method to
+	 * serve requests from memory; nothing else calls it. `context` is the same
+	 * frozen { type, method, url } _fetch built, so a replacement can dispatch
+	 * per model type without re-deriving anything.
+	 */
+	_network(url, init, context) {
+		return fetch(url, init);
 	}
 
 	/**
@@ -475,11 +542,16 @@ export class Store {
 		const url = wasSynced
 			? this.apiURL + endpoint + '/' + encodeURIComponent(record[pk])
 			: this.apiURL + endpoint;
-		const res = await fetch(url, {
-			method: wasSynced ? 'PUT' : 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(record.toJSON()),
-		});
+		const method = wasSynced ? 'PUT' : 'POST';
+		const res = await this._fetch(
+			url,
+			{
+				method,
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(record.toJSON()),
+			},
+			{ type, method, url }
+		);
 
 		// c. failure: reject; local state stays dirty, unchanged.
 		if (!res.ok) {
@@ -571,9 +643,8 @@ export class Store {
 		// post-response identity check reconciles against exactly this key.
 		const requestKey = record[pk];
 
-		const res = await fetch(this.apiURL + endpoint + '/' + encodeURIComponent(record[pk]), {
-			method: 'DELETE',
-		});
+		const url = this.apiURL + endpoint + '/' + encodeURIComponent(record[pk]);
+		const res = await this._fetch(url, { method: 'DELETE' }, { type, method: 'DELETE', url });
 		if (res.ok || res.status === 404) {
 			// Identity re-check (mirrors saveRecord's, constellation/doc/DOC-SPEC.md §22):
 			// while the DELETE was in flight, THIS record may have been destroyed locally
@@ -603,7 +674,8 @@ export class Store {
 			init.body = JSON.stringify(body);
 			init.headers['Content-Type'] = 'application/json';
 		}
-		const res = await fetch(this.apiURL + endpoint + path, init);
+		const url = this.apiURL + endpoint + path;
+		const res = await this._fetch(url, init, { type, method, url });
 		if (!res.ok) {
 			throw new PuzzleAdapterError(res.status, res.statusText, await readBody(res));
 		}

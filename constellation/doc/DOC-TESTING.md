@@ -17,6 +17,11 @@ Puzzle verifies contracts at the narrowest useful layer, then repeats critical
 paths end to end. Avoid fixed test counts in documentation; the suite output is
 the source of truth.
 
+**Two audiences.** Everything below covers testing **the framework** — the
+suites a contributor runs before claiming work complete. Testing **an app built
+with Puzzle** is a separate, shipped surface (see the last section). Never point
+app authors at `tests/helpers/`; those are internal and unpublished.
+
 ## Required release suites
 
 ```sh
@@ -86,3 +91,51 @@ release candidate.
 - Rejected features may have negative boundary tests; do not accidentally
   implement a second spec in tests.
 - Generated fixtures are build products, never hand-edited expectations.
+
+## Testing a Puzzle app (the shipped surface)
+
+App authors do **not** use anything in `tests/helpers/`. They import
+`@magic-spells/puzzle/testing` (D94, SPEC §53):
+
+```js
+import { mountView, createTestApp, settled, installFakeAnimate, installFakeObserver }
+  from '@magic-spells/puzzle/testing';
+
+const view = await mountView(TodoList, { props: { filter: 'open' }, store });
+await view.click('.toggle');
+
+const app = await createTestApp({ routes, models });
+await app.visit('/todos/42');
+await settled();
+```
+
+- `mountView` mounts one view against a detached container; the handle exposes
+  `element`/`find`/`findAll`/`click`/`setProps`/`destroy`.
+- `createTestApp` runs a real app in memory mode, so `visit()` drives the real
+  load-then-commit pipeline, guards, and lifecycle.
+- **`settled()` is the piece that matters.** It drains stores, rAF-scheduled
+  `setData` renders, and last-wins `data()`/navigation promises to a fixed point.
+  It is bounded (`settled({ maxPasses })`) and **throws** naming the churn source
+  rather than hanging, so a `data()` → store-write → `data()` cycle is diagnosed
+  instead of surfacing as a runner timeout.
+- **Know its non-guarantees** — it does not advance user timers or skeleton
+  `min-duration` holds, resolve promises `data()` never awaited, fire
+  IntersectionObserver callbacks, or finish fire-and-forget enter animations.
+- `installFakeAnimate` / `installFakeObserver` supply the WAAPI and
+  IntersectionObserver jsdom lacks; each returns `uninstall()`.
+
+For data, install the self-contained fixtures module first (D98, SPEC §52) —
+`const uninstall = installFixtures({ seed })` in setup, `uninstall()` in
+teardown (it is re-exported from `/testing`). Installing attaches
+`store.seed(type, n)` (schema-derived fixtures) and the mock adapter, which
+serves the adapter verbs offline from `static adapter = { mock: { latency,
+failRate, fail } }` and/or the install config's per-type `mock` entries — the
+latency and failure knobs are how skeleton timing and `data()`-rejection paths
+get exercised at all. In a running app the same module is wired by `puzzle dev
+--fixtures` / `puzzle build --fixtures` from `app/fixtures.js` (SPEC §54);
+without the flag none of it is bundled.
+
+**The framework's own suite dogfoods this surface.** `tests/testing-todos.test.js`
+ports canonical todos behavior onto the public helpers; keep it that way, because
+it is the only thing that catches the public API rotting relative to the
+internal one.

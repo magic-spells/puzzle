@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -456,6 +457,56 @@ func TestAddSkillsOverwriteRefusalAndSuccess(t *testing.T) {
 	}
 	if cursorSkill := filepath.Join(home, ".cursor", "skills", "puzzle", "SKILL.md"); !fsFileExists(cursorSkill) {
 		t.Errorf("--overwrite did not install the newly detected Cursor target at %s", cursorSkill)
+	}
+}
+
+func TestAddSkillsExplicitRootsSkipDetectionAndPrompt(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".claude")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	env := addEnvironment{
+		// A pinned root must not consult the home dir at all — a homeDir that
+		// fails proves detection was skipped.
+		homeDir:     func() (string, error) { return "", errors.New("home lookup should not happen") },
+		interactive: true, // and must not prompt either
+		skillRoots:  []string{root},
+	}
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+		t.Fatalf("add skills --skill-root: %v", err)
+	}
+
+	want, err := fs.ReadFile(embeddedskills.FS, "puzzle/SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(root, "skills", "puzzle", "SKILL.md"))
+	if err != nil {
+		t.Fatalf("read installed skill: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Error("pinned root did not receive the embedded SKILL.md")
+	}
+	if !strings.Contains(buf.String(), "Claude Code") {
+		t.Errorf("a known config dir should still be labelled by tool, got:\n%s", buf.String())
+	}
+}
+
+func TestAddSkillsExplicitRootMustExist(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "nope")
+	env := addEnvironment{
+		homeDir:    func() (string, error) { return t.TempDir(), nil },
+		skillRoots: []string{missing},
+	}
+	var buf bytes.Buffer
+	err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env)
+	if err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("expected a missing --skill-root to error, got %v", err)
+	}
+	if fsFileExists(filepath.Join(missing, "skills", "puzzle", "SKILL.md")) {
+		t.Error("a missing config dir must not be conjured")
 	}
 }
 

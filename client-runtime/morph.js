@@ -280,16 +280,25 @@ export function enableMorph(app, options = {}) {
 
 	// Snapshot the leaving subtree for a possible sibling-swap flight, and (if the
 	// click that started this nav landed inside it) pin a clone pre-fade so the
-	// clicked art holds still while the old view animates out.
-	const captureFromLeaving = (el) => {
+	// clicked art holds still while the old view animates out. `dismissed` is the
+	// live pair's target when this leave just ran the D55 path (fly-back OR broken
+	// round trip): that element's dismissal is already handled, so it must never be
+	// snapshotted or click-pinned here — a dialog's close button sits INSIDE the
+	// morph-marked shell, so the click hint resolves to the shell itself, and
+	// pinning it would leave a frozen ghost of the dialog behind the fly-back.
+	const captureFromLeaving = (el, dismissed = null) => {
 		// The previous navigation's capture never got claimed — drop it now.
 		discardCaptures();
 		disarmCrossFlight();
+
+		// The click that dismissed the pair is consumed unpinned.
+		if (dismissed && lastClicked && lastClicked.el === dismissed) lastClicked = null;
 
 		// Launch-eligible only (plain + trigger; targets never launch). Detached refs
 		// stay cloneable after the view is destroyed; first id wins.
 		const snapshots = new Map();
 		for (const e of launchElements(el)) {
+			if (e === dismissed) continue;
 			if (e.getClientRects().length === 0) continue;
 			const id = morphId(e);
 			if (snapshots.has(id)) {
@@ -456,9 +465,13 @@ export function enableMorph(app, options = {}) {
 			// whole-chain teardown takes the card with it — an instant close, not a
 			// morph into a dying element). Anything off → stop(), instant restore.
 			let result = null;
+			let dismissed = null;
 			if (pair && validEl) {
 				const { id, source, target } = pair;
 				pair = null;
+				// Whether the round trip is intact or not, this target is being
+				// dismissed by the D55 path — exclude it from the capture below.
+				dismissed = target;
 				const intact =
 					engine.state !== 'idle' &&
 					el.contains(target) &&
@@ -475,7 +488,7 @@ export function enableMorph(app, options = {}) {
 
 			// Capture the leaving subtree for a sibling-swap flight on the next enter
 			// (both push and pop reach here). Must not change what leave returns.
-			if (validEl && !reducedMotion()) captureFromLeaving(el);
+			if (validEl && !reducedMotion()) captureFromLeaving(el, dismissed);
 
 			return result;
 		},

@@ -206,7 +206,12 @@ describe('PuzzleApp — models & store wiring', () => {
 		await app.mount();
 
 		const records = await app.store.loadAll('todo');
-		expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/api/todos');
+		// The read path passes an explicit GET init (v1.55, D91) — wire-identical to
+		// a bare fetch(url), but the same init shape every other adapter verb hands
+		// to beforeRequest.
+		expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/api/todos', {
+			method: 'GET',
+		});
 		expect(records).toHaveLength(1);
 		expect(app.store.findOne('todo', 't1').text).toBe('from server');
 	});
