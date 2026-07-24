@@ -39,8 +39,8 @@ notes:
       probes post-reduction, detection covers component props) appended to this card's body — prior
       stamp (d9591d6) predated that paragraph.
     sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
-verified_at: '2026-07-24T06:55:23.302Z'
-verified_sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
+verified_at: '2026-07-24T23:40:00.000Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 # ViewManager and ViewNode
@@ -66,6 +66,19 @@ Component vnodes render inline with no wrapper. Same class+key reuses the
 instance; shallow-different props rerun `data()`, while slot-only changes only
 rerender. Async mounts use comment anchors and resolve insertion references from
 the live element to survive parent updates.
+
+`mountComponent` chains the enter animation onto the mount promise with a
+**two-argument** `then(onFulfilled, onRejected)`, not a trailing `.catch()`. The
+distinction is load-bearing: the rejection handler is the mount-failure recovery
+path (destroy the dead instance, leave a bare comment at the position, null the
+vnode's instance links so `patch()` mounts a fresh one — otherwise
+`patchComponent` reuses a broken instance forever, `mounted()` never fires and
+`setData()` is inert). A single trailing `.catch()` cannot tell that apart from a
+rejected `playIn()`, so a user `viewWillShow`/`viewDidShow` that threw tore down
+a component that had already mounted, painted, and subscribed. `playIn()` now
+carries its own `Promise.resolve(...).catch(log)` — the enter-side mirror of
+`destroyAnimated()`'s leave-hook guard, and the same idiom the router's
+`#playInLogged` uses.
 
 Composition uses `SLOT_TAG` and shared `expandSlots`: `<children/>` fills the
 default bucket, `<slot name>` fills named buckets with fallback, and `<Slot/>`

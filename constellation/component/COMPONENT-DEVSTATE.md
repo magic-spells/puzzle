@@ -7,11 +7,13 @@ connections:
   - COMPONENT-STORE
   - COMPONENT-DEV-SERVER
   - DECISION-D57-HMR-STATE-RELOAD
+  - DECISION-D100-DEVTOOLS-BRIDGE
   - FILE-DEVSTATE
+  - FILE-DEVTOOLS
   - FILE-PUZZLE-APP
   - FILE-DEV-SERVER
-verified_at: '2026-07-23T16:30:48.820Z'
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+verified_at: '2026-07-24T23:40:00.000Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 # Development reload state
@@ -22,4 +24,15 @@ Immediately before `location.reload()`, the injected dev client calls `PuzzleApp
 
 Restore is two-phase. After `beforeMount` but before navigation zero, Store records hydrate in identity-preserving replace mode so the first `data()` reads restored records. After the route chain mounts, saved local view state is applied with `setData()`. Blobs are deleted before parsing, expire after ten seconds, and every step fails soft to a cold start.
 
-All code is guarded by the inline `__PUZZLE_DEV__` define. Production uses a constant-false branch that esbuild removes; a build regression test proves the registry, serializer, key strings, and hooks do not remain in production output.
+This module also owns the **live-view registry**, which is why it grew a second
+consumer: the D100 DevTools bridge needs the same set of mounted instances and
+the same JSON-safe filter. Rather than have devstate import the bridge — a
+cycle, since the bridge already imports `safeState` and `liveViewList` from here
+— devstate holds one nullable `viewObserver` slot that [[FILE-DEVTOOLS]] fills
+at hook registration and clears at teardown. `registerView`/`unregisterView`
+call it after updating the set, so a mount/destroy becomes a live extension
+event; with no extension attached the slot is null and costs an optional-call
+check. `liveViewList()` returns the set as an array **in mount order**, which is
+what lets the bridge replay views that mounted before it registered.
+
+All code is guarded by the inline `__PUZZLE_DEV__` define. Production uses a constant-false branch that esbuild removes; a build regression test proves the registry, serializer, key strings, and hooks do not remain in production output. The gates are written as positive `if (DEV) { … }` blocks rather than an early `if (!DEV) return` — esbuild reliably eliminates a constant-false branch but does not strip statements after an unconditional return.

@@ -1,6 +1,6 @@
 ---
 name: D100 — DevTools runtime bridge + wire protocol; extension in its own repo (v1.63)
-status: built
+status: verified
 connections:
   - DECISION-D57-HMR-STATE-RELOAD
   - DECISION-D60-DROP-CONSOLE-OPT-OUT
@@ -11,6 +11,8 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-DEVSTATE
   - DOC-SPEC
+verified_at: '2026-07-24T23:40:00.000Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 Puzzle gets a Chrome DevTools extension. The framework ships only a dev-only

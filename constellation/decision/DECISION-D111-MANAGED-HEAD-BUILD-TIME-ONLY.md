@@ -1,12 +1,23 @@
 ---
 name: D111 — managed head tags are build-time only; the runtime sync and its usage gate are deleted (amends D89)
-status: built
+status: verified
 connections:
   - DECISION-D89-FEATURE-USAGE-TREESHAKE
   - DECISION-D84-HEAD-MANAGEMENT
   - COMPONENT-ROUTER
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-HEAD-TAGS
+verified_at: '2026-07-24T23:35:04.615Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+notes:
+  - kind: verified
+    text: >-
+      Verified end to end at merged main: headTags.js exports only MANAGED_TAGS with ssg/index.js as
+      its sole importer; router.js #syncHead is syncTitle(resolveHead(chain)); bundleDefines emits
+      __PUZZLE_HAS_FLIP__ alone; ScanUsage reads only .pzl; WatchBuilder tracks one define bit.
+      Follow-through applied this pass: SPEC §45 and DOC-RELEASE-SURFACE still described SPA-side
+      tag syncing.
+    sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 `syncTags` is gone from the browser. Managed head tags (`og:*`, `twitter:*`,

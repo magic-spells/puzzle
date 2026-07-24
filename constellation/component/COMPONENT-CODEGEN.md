@@ -7,7 +7,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
-verified_at: '2026-07-22T01:03:36.670Z'
+verified_at: '2026-07-24T23:40:00.000Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 # Render-function codegen
@@ -30,7 +31,10 @@ static positive `tabindex`); any static/dynamic/mixed attr counts as present,
 and generated JS stays byte-identical. The expression scanner
 disambiguates regex literals from division and must stay in lockstep with
 [[COMPONENT-TEMPLATE-PARSER]]'s scanner; otherwise `name.replace(/a/g,'b')`
-miscompiles to `__d.name.replace(/__d.a/__d.g,'b')`.
+miscompiles to `__d.name.replace(/__d.a/__d.g,'b')`. Both of this package's
+literal scanners clamp their `j += 2` escape skip at the input length, matching
+the parser's — an unterminated literal must end at exactly `len(expr)`, since
+the copy path slices `expr[i:j]`.
 
 Emission covers host/component vnodes, coalesced text/interpolation,
 formatters, dynamic/mixed attrs, events, slots, refs, islands, inline SVG,

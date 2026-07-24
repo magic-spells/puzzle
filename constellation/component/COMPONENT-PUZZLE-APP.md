@@ -17,8 +17,8 @@ notes:
       app.store throws before mount starts and after unmount. External wiring may
       call const pending = app.mount(); wire(app.store); await pending, or live in
       beforeMount.
-verified_at: '2026-07-23T16:30:49.759Z'
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+verified_at: '2026-07-24T23:40:00.000Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 # PuzzleApp
@@ -55,6 +55,18 @@ window between a mutation and the scheduled flush, and a reload or
 programmatic navigation inside that window would otherwise lose the write.
 `pagehide` fires on unload and bfcache entry (unlike `beforeunload`, reliable
 on mobile). Registered once `_mounted` is claimed; removed in teardown.
+
+Dev builds publish `window.__PUZZLE_APP__` and, in the same `__PUZZLE_DEV__`
+block, register with the D100 DevTools bridge ([[FILE-DEVTOOLS]]) — after the
+services are wired and before navigation zero, so the store/router are readable
+and every view mount arrives as a live event rather than a replay. Teardown
+unregisters **before** `router.stop()`, so `app-unmounted` is the last message
+the extension sees and the chain's teardown is implied by it instead of
+arriving as a burst of `view-destroyed` events for a dead app. The two gates are
+deliberately not shared: the publish also tests `__PUZZLE_APP__` identity, which
+a re-mount elsewhere may have moved off this instance, while the unregister must
+run for the instance that actually registered. Both are no-ops when no extension
+injected a hook.
 
 `setMorphHandler(handler)` stashes the router-agnostic integration before or
 after mount and forwards it to [[COMPONENT-ROUTER]]. `enableMorph(app)` uses

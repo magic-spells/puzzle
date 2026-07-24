@@ -2279,7 +2279,7 @@ export class Router {
 	 * note on explicit null).
 	 *
 	 * The managed og:/twitter:/description/canonical tags are deliberately NOT
-	 * synced here, in any output mode (D89 amendment). Crawlers and unfurlers
+	 * synced here, in any output mode (D111, amending D89). Crawlers and unfurlers
 	 * fetch each URL fresh from the server and never client-navigate, so the tags
 	 * the prerender baked into that page's HTML are always the ones they read; a
 	 * client-side rewrite would only ever be observed by something reading

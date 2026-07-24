@@ -17,8 +17,8 @@ connections:
   - FILE-STATIC-MOUNT
   - FILE-BUILD-PRERENDER
   - FILE-BUILD-PRERENDER-PAGES
-verified_at: '2026-07-24T05:49:11.347Z'
-verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
+verified_at: '2026-07-24T23:34:27.892Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 notes:
   - kind: state
     text: >-
@@ -33,6 +33,12 @@ notes:
       tests/static-prerender.test.js (facade parity, base-prefix, hybrid guard, storage warning),
       compiler static_pages_test.go.
     sha: d9591d6
+  - kind: verified
+    text: >-
+      Re-verified after the deep-review round. Added the ctx.router section (static stub vs hybrid's
+      url()-shadowed memory Router) and corrected the head prose: MANAGED_TAGS is now this pass's
+      sole consumer, and normalizeBase/encodeURL live in router.js rather than assemble.js.
+    sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 # Static generation runtime
@@ -41,7 +47,28 @@ Puzzle prerenders routes to static HTML at build time in **two output modes** �
 
 ## Shared prerender core
 
-`@magic-spells/puzzle/ssg` turns PuzzleApp config + compiled ViewNode trees into static HTML. `prerender()` is DOM/filesystem-free; `prerenderToDir()` writes output for the Go build's node-platform prerender bundle. The orchestrator builds Store/Router/Formatter services, calls `beforeMount` with one `{ store, config }` facade (receiver and argument), enumerates static route chains, and — via the shared `assembleChain` (`ssg/assemble.js`) — preloads each chain's layout/views (`created()` + awaited `data()`, `this.route` populated, no `mounted()`/animations) and builds the nested keyed component vnode tree exactly as the router's `#navigate` does — the frozen snapshot carries the D83 seven-key shape (`pathname` = the static path, empty frozen query, `''` hash). Head fields resolve leaf → root per field (D84, shared `head.js` resolver + `MANAGED_TAGS` table): pages carry `head` beside the compatibility `title`, and both shell injectors replace same-identity `data-puzzle-head` tags in place, remove suppressed ones, and insert the rest before `</head>` — escaped string surgery, no HTML parser; head-absent callers keep exact pre-D84 behavior. The serializer (`ssg/serialize.js`) mirrors ViewManager semantics: escaped text/attrs, controlled form initial state, inline components without wrappers, shared slot expansion, SVG string seeds verbatim, and framework attrs/events/keys/islands/refs omitted; conditional placeholder vnodes serialize to nothing. Static paths write directory-style `<path>/index.html`; a top-level catch-all writes `404.html`; dynamic parameter/splat routes are skipped with warnings; `prerender: false` writes the plain shell at that path. Route guards (D87) are SPA-runtime-only, so the orchestrator warns — never changes behavior: hybrid warns per rendered page whose chain declares a guard (its markup ships publicly; `prerender: false` routes stay quiet), and a static build warns once when any route declares a guard (no router — guards never run).
+`@magic-spells/puzzle/ssg` turns PuzzleApp config + compiled ViewNode trees into static HTML. `prerender()` is DOM/filesystem-free; `prerenderToDir()` writes output for the Go build's node-platform prerender bundle. The orchestrator builds Store/Router/Formatter services, calls `beforeMount` with one `{ store, config }` facade (receiver and argument), enumerates static route chains, and — via the shared `assembleChain` (`ssg/assemble.js`) — preloads each chain's layout/views (`created()` + awaited `data()`, `this.route` populated, no `mounted()`/animations) and builds the nested keyed component vnode tree exactly as the router's `#navigate` does — the frozen snapshot carries the D83 seven-key shape (`pathname` = the static path, empty frozen query, `''` hash). Head fields resolve leaf → root per field through the `head.js` resolver the router shares (D84); the `MANAGED_TAGS` table in `headTags.js` is **this pass's alone** — since D111 the browser syncs only `document.title`, so prerender is the one place managed tags are ever built. Pages carry `head` beside the compatibility `title`, and both shell injectors replace same-identity `data-puzzle-head` tags in place, remove suppressed ones, and insert the rest before `</head>` — escaped string surgery, no HTML parser; head-absent callers keep exact pre-D84 behavior. The serializer (`ssg/serialize.js`) mirrors ViewManager semantics: escaped text/attrs, controlled form initial state, inline components without wrappers, shared slot expansion, SVG string seeds verbatim, and framework attrs/events/keys/islands/refs omitted; conditional placeholder vnodes serialize to nothing. Static paths write directory-style `<path>/index.html`; a top-level catch-all writes `404.html`; dynamic parameter/splat routes are skipped with warnings; `prerender: false` writes the plain shell at that path. Route guards (D87) are SPA-runtime-only, so the orchestrator warns — never changes behavior: hybrid warns per rendered page whose chain declares a guard (its markup ships publicly; `prerender: false` routes stay quiet), and a static build warns once when any route declares a guard (no router — guards never run).
+
+### The prerender `ctx.router`
+
+Both modes need a `router` in `ctx` that answers `url()` and `current` exactly
+as the browser will, or a prerendered `href` (the `{ path | link }` formatter
+reads `router.url`) disagrees with the client's re-render. **Static** mode uses
+`makeRouterStub` over the page's route snapshot: every navigation method
+throws, `current` is the snapshot, and `url()` is the shared encoder. **Hybrid**
+keeps a real *unstarted memory-mode* `Router` — the SPA takeover needs the
+compiled route table and a working `current`, and the instance cannot be wrapped
+in a delegating facade because `current` reads private fields. But a memory
+router returns paths **unprefixed**, so `url()` alone is shadowed with the app's
+real `routerMode`/`routerBase`; without that, a `routerBase: '/docs'` app
+prerendered `href="/about"` where the live router renders `/docs/about` — a link
+that 404s for crawlers, no-JS visitors, and anyone clicking before takeover.
+
+All three call sites (`Router.url`, the stub, the hybrid shadow) run the single
+`encodeURL(path, mode, base)` exported from `router/router.js`, which also owns
+`normalizeBase`. They were previously three hand-kept copies and had drifted;
+one encoder is what makes prerender/client parity structural instead of
+maintained.
 
 ## Hybrid mode (`output: 'hybrid'`, D67)
 

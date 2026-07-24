@@ -300,7 +300,7 @@ func assertNoHeadTagMachinery(t *testing.T, label, js string) {
 	}
 }
 
-// TestBuildNeverBundlesHeadTagMachinery pins the D89 amendment: the managed
+// TestBuildNeverBundlesHeadTagMachinery pins D111 (amending D89): the managed
 // og:/twitter:/description/canonical tags are a BUILD-TIME product only. No
 // browser bundle, in ANY output mode, contains headTags.js — while the
 // prerendered HTML carries each page's own tags, which is the only place they

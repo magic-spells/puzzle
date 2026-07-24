@@ -16,7 +16,8 @@ notes:
       Keep raw source values and data()-derived display values under different
       keys. A successful data() replaces the model layer, so reusing one key for
       raw local state and a reshaped model value loses the raw value by design.
-verified_at: '2026-07-22T00:04:07.617Z'
+verified_at: '2026-07-24T23:40:00.000Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 # PuzzleView
@@ -51,6 +52,14 @@ Static `ref="name"` bindings use cached `__ref` callbacks. Replacements repoint
 the ref; removals and destroy clear it. Development builds register mounted
 views with [[COMPONENT-DEVSTATE]] so only JSON-safe local state crosses a live
 reload.
+
+Two underscore-prefixed **internal** readers exist for dev tooling and are not
+public API (never spelled in a template): `_modelState()` returns just the model
+layer — the DevTools bridge shows the two state layers separately, so the merged
+`getData()` will not do — and `_vnodeTree()` returns this instance's current
+vnode tree, which the bridge walks to find child instances and so build the live
+component forest without reaching into Router privates ([[FILE-DEVTOOLS]],
+D100). `_localState()` predates them and serves the same convention.
 
 Enter/leave specs and the four show/hide hooks delegate to
 [[COMPONENT-ANIMATIONS]]. Teardown catches leave-hook failures and still removes

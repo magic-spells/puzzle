@@ -1,12 +1,21 @@
 ---
 name: D110 — `dev.proxy` rejects a root prefix and duplicate routes at config load
-status: built
+status: verified
 connections:
   - COMPONENT-DEV-SERVER
   - FILE-CONFIG
   - FILE-DEV-SERVER
   - FEATURE-DEV-PROXY
   - DECISION-D08-MINIMAL-CONFIG
+verified_at: '2026-07-24T23:35:06.404Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+notes:
+  - kind: verified
+    text: >-
+      Verified at merged main: config.validate sorts prefixes, rejects a root proxy and a
+      duplicate-after-trim route, and dev.handler() keeps the registered-set guard as defense in
+      depth. Both suites green.
+    sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 `dev.proxy` now rejects two prefix shapes at config load: `/` (the root proxy)

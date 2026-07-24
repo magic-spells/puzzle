@@ -11,12 +11,19 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      A reused ancestor refresh mutates that instance before the final navigation
-      commit. If a later fresh descendant load fails, URL/current stay put but the
-      reused ancestor has seen the attempted params. This documented D19/D30 soft
-      edge is tracked by FEATURE-TRANSACTIONAL-ANCESTOR-REFRESH.
-verified_at: '2026-07-24T01:11:10.853Z'
-verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
+      A reused ancestor refresh mutates that instance before the final navigation commit. If a later
+      fresh descendant load fails, URL/current stay put but the reused ancestor has seen the
+      attempted params. This documented D19/D30 soft edge is tracked by
+      FEATURE-TRANSACTIONAL-ANCESTOR-REFRESH.
+  - kind: verified
+    text: >-
+      Re-verified after the 2026-07-24 deep-review round. Corrected two stale claims: the commit no
+      longer syncs managed head tags (D111 — #syncHead is syncTitle(resolveHead(chain)) and nothing
+      else), and url() now delegates to the exported encodeURL shared with both prerender paths.
+      Added the dev-only route-commit emit to the D100 bridge.
+    sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-24T23:34:26.285Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 # Router
@@ -28,6 +35,14 @@ overwrite, current scroll-entry key kept, scroll untouched by default; D83),
 `go`, `back`, `forward`, `current`, `url` (path-shaped route → mode-encoded
 href, the render-time inverse of the link interceptor; non-`/` strings pass
 through — D79), and the narrow `setMorphHandler` integration seam.
+
+`url()` is a thin call into the module-level `encodeURL(path, mode, base)`,
+which the module exports alongside `normalizeBase` precisely so the DOM-free
+prerender paths can reuse the *same* encoder without a live Router: the static
+router stub and the hybrid prerender ctx both call it ([[COMPONENT-SSG]]). That
+sharing is load-bearing rather than tidy — three hand-kept copies of the
+encoding had already drifted, emitting unprefixed hrefs from a based hybrid
+build.
 
 Nested route definitions flatten to leaf matchers in declaration order.
 Children use relative paths; empty children are index routes; layouts are
@@ -53,11 +68,17 @@ with one frozen
 per navigation by `parseLocation` — frozen null-proto query, repeated keys →
 frozen arrays, URLSearchParams decoding; D83), and abandons/destroys fresh
 work on failure or supersession. The winning swap commits
-location/history/title+managed-head (resolveHead/syncHead from head.js —
-per-field leaf→root meta resolution, `data-puzzle-head` identity adoption,
-memory mode document-untouched; D84), scroll bookkeeping, mounted tree, and
-`current` in one synchronous window.
-Same-path pushes are no-ops. Trailing `/` is insignificant for matching. The D39
+location/history/title (`resolveHead` + `syncTitle` from head.js — per-field
+leaf→root meta resolution, only a non-null resolved title assigns, memory mode
+document-untouched; D84), scroll bookkeeping, mounted tree, and `current` in
+one synchronous window. The managed `og:`/`twitter:`/description/canonical tags
+are **not** synced here, in any output mode: D111 made them build-time only, so
+`#syncHead` does exactly `syncTitle(resolveHead(entry.chain))` and
+`headTags.js` never enters a browser bundle.
+Dev builds emit the committed route to the D100 DevTools bridge
+([[FILE-DEVTOOLS]]) from `#commitState`, beside the existing `warnMissingSlots`
+walk — after `#commitLocation`, so the reported `document.title` is already this
+route's. Same-path pushes are no-ops. Trailing `/` is insignificant for matching. The D39
 skeleton gate must start all gated loads before any skeleton-exempt preload opens
 its tracking scope, or a store-connected layout's gated sync `data()` queues
 behind the skeleton view's fetch and nothing paints.

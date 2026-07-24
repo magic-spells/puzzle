@@ -1,24 +1,32 @@
 ---
 name: managed head-tag machinery
-status: built
+status: verified
 path: client-runtime/headTags.js
 language: javascript
 summary: >-
   Build-time-only managed head tags (og:/twitter:/description/canonical) and their per-tag
   data-puzzle-head identity.
 connections:
-  - COMPONENT-ROUTER
+  - COMPONENT-SSG
   - DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY
   - DECISION-D84-HEAD-MANAGEMENT
+verified_at: '2026-07-24T23:40:00.000Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the
 connected decision cards; this card anchors that plan to
 `client-runtime/headTags.js`.
 
-Created to resolve a dangling `FILE-HEAD-TAGS` reference in
-[[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]], which listed the handle in its
-connections before the card existed. The module itself is live — the SSG string
-injector imports `MANAGED_TAGS` at prerender time. Per D111 there is deliberately
-no browser-side counterpart; `<title>` is the separate always-on concern handled
-by `head.js` `syncTitle`.
+The module exports one thing: the `MANAGED_TAGS` table. Its **only** consumer is
+the SSG string injector (`ssg/index.js`), which reads it under Node at prerender
+time — hence the binding to [[COMPONENT-SSG]] rather than
+[[COMPONENT-ROUTER]], which imported the now-deleted `syncTags` until
+[[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]].
+
+Durable constraint: this file must stay DOM-free. It runs under Node, and its
+lack of a browser importer is exactly what keeps it out of every bundle — the
+deletion in D111 replaced a build define with plain tree-shaking, so re-adding a
+browser import would silently ship it again with no gate to notice. `<title>` is
+deliberately absent from the table; that is `head.js` `syncTitle`'s job and the
+one head concern the runtime still performs.

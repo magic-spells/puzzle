@@ -1,6 +1,6 @@
 ---
 name: esbuild plugin and build pipeline
-status: built
+status: verified
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
@@ -15,8 +15,8 @@ connections:
   - FILE-CONFIG
   - FILE-STYLES
   - FILE-STYLES-WATCH
-verified_at: '2026-07-23T16:30:49.295Z'
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+verified_at: '2026-07-24T23:40:00.000Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
 # esbuild plugin and build pipeline
@@ -40,7 +40,15 @@ public files and prune CSS for `.pzl` modules no longer in the esbuild metafile;
 failed rebuilds keep last-good assets/CSS.
 
 JavaScript `puzzle.config.js` loads once through a bounded Node process; Go
-never parses it. Styles support the Tailwind-first pipeline. Production runs a
+never parses it. Optional scalar keys (`build.dropConsole`, `build.sourceMap`,
+`output`) are decoded from `json.RawMessage`, and "was this key set?" is a
+shared `unset()` helper that treats **JSON `null` as unset**, not just an absent
+key. A length check alone is wrong: `null` decodes to a four-byte
+`RawMessage`, and `json.Unmarshal` of `null` into a scalar is a documented no-op
+that returns no error and leaves the zero value — so `dropConsole: null` read as
+an explicit `false` and silently flipped production from strip-console to
+keep-console, while `output: null` failed with the confusing `output "" is not
+supported`. Styles support the Tailwind-first pipeline. Production runs a
 one-shot CLI; dev maintains a warm watcher. Collected component CSS follows
 Tailwind output, and scoped blocks wrap in `@scope ([data-<path-hash>])` using
 the same symlink-normalized app-relative name as codegen.

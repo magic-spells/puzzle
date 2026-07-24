@@ -46,7 +46,7 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool
 // fact: plugin.ScanUsage reads the templates for the D85 `flip` attribute.
 //
 // There is deliberately no managed-head define. The browser never syncs og:/
-// twitter:/canonical tags in ANY output mode (D89 amendment): crawlers fetch
+// twitter:/canonical tags in ANY output mode (D111, amending D89): crawlers fetch
 // each URL fresh from the server and never client-navigate, so the tags the SSG
 // baked into that page's HTML are always the ones they read. The tab <title> is
 // a separate, always-in concern handled by head.js syncTitle.

@@ -139,9 +139,11 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - History, hash, and memory modes; nested relative children; index routes;
   catch-all routes; merged params; top-level layouts; route titles + managed
-  head metadata (`meta` title/description/canonical/socialImage → marked
-  `<head>` tags in SSG output and SPA navigation, per-field leaf→root
-  inheritance with explicit-null suppression, D84).
+  head metadata (`meta` title/description/canonical/socialImage, per-field
+  leaf→root inheritance with explicit-null suppression, D84). Delivery is
+  split: the browser syncs `document.title` on every navigation, while the
+  marked `<head>` tags are baked per page by the prerender and never touched
+  at runtime (D111) — so they are inert under `output: 'spa'`.
 - `push`, `replace` (no history entry, scroll untouched by default, D83),
   `go`, `back`, and `forward`; guarded same-origin link interception;
   router base paths and anchors; `router.url()` + the built-in `link`
@@ -177,8 +179,9 @@ second specification. Decision cards hold rationale and git holds chronology.
   render functions attach to the user class prototype.
 - Production: ES2022, minified, console calls stripped by default, tree-shaken
   formatter manifest, collected component CSS. The D89 usage scan also gates
-  whole modules — `flip` and managed head tags, each behind its own
-  `__PUZZLE_HAS_*__` define — so an app pays only for what it uses; the fixture
+  a whole module — `views/flip.js`, behind `__PUZZLE_HAS_FLIP__`, now the only
+  usage define (D111 retired the managed-head one, so the scan reads only
+  `.pzl`) — so an app pays only for what it uses; the fixture
   generator and mock adapter are excluded structurally instead (D98): nothing
   imports `/fixtures` unless `puzzle dev|build --fixtures` generates the wiring
   entry from `app/fixtures.js`. Source maps are **opt-in** —

@@ -13,8 +13,8 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-RUNTIME
   - FEATURE-V1-50-HEAD-MANAGEMENT
-verified_at: '2026-07-24T06:55:21.936Z'
-verified_sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
+verified_at: '2026-07-24T23:40:00.000Z'
+verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 notes:
   - kind: decision
     text: >-
