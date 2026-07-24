@@ -10,8 +10,9 @@
  * injects the markup + resolved <title> + managed head tags (D84, head.js —
  * description/canonical/social metadata crawlers must see without running JS)
  * into the app shell. The router takes over on load (see router.js #swap SSG
- * branch) so subsequent navigation stays SPA — and adopts the marker-bearing
- * head tags by identity at its own commits.
+ * branch) so subsequent navigation stays SPA. It does NOT touch the managed
+ * tags after that (D111): the browser only syncs <title>, so the values baked
+ * here are the ones every crawler reads — they are never re-derived at runtime.
  *
  * This module runs under Node only (it reads/writes files via node:fs). The Go
  * build (M3) bundles it beside the user's `app/app.js` default export and calls
@@ -656,13 +657,13 @@ function replaceTitle(html, title) {
  * the D84 contract, shared by injectShell and injectStaticShell. The `<title>`
  * goes through the pre-existing replaceTitle for a NON-NULL head.title (null or
  * never-resolved keeps the shell's title — the same leave-alone posture the SPA
- * applies to document.title). Then per managed tag identity (head.js
- * MANAGED_TAGS — the same table syncHead consumes, so the two delivery paths
- * can never emit different shapes or identities):
+ * applies to document.title). Then per managed tag identity (headTags.js
+ * MANAGED_TAGS — since D111 this is the table's ONLY consumer; the runtime
+ * syncTags that once shared it is deleted):
  *  - same-identity `data-puzzle-head` tags already in the shell are collapsed:
  *    the first is REPLACED in place and every stale duplicate is removed;
  *  - tags whose field no longer resolves are ALL REMOVED (the framework owns
- *    every marker-bearing tag — mirrors syncHead's removal);
+ *    every marker-bearing tag, so a shell carrying a stale one is corrected);
  *  - the rest are collected and inserted ONCE immediately before `</head>`
  *    (case-insensitive). No `</head>` (fragment/malformed shell) DEGRADES:
  *    ride after the first `</title>` instead, or warn + skip — never throw,
@@ -709,7 +710,8 @@ function applyHead(html, head) {
 }
 
 /**
- * One managed tag as an HTML string (the string twin of syncHead's DOM build).
+ * One managed tag as an HTML string. Since D111 this is the only place managed
+ * tags are ever built — there is no DOM twin at runtime to stay in step with.
  * `spec.id`/`spec.attr`/`spec.name` are framework constants (MANAGED_TAGS) and
  * need no escaping; the VALUE is author/route data and always escapes.
  */
