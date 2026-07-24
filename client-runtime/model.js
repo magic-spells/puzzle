@@ -527,5 +527,3 @@ export class PuzzleModel {
 		return { ...this };
 	}
 }
-
-export default PuzzleModel;
