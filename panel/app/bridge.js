@@ -21,8 +21,12 @@ import { CONNECTION_ID, CONNECTION_STATE } from './models/connection.js';
 /** Ring capacity for the `event` model. Oldest records are destroyed past this. */
 export const EVENT_LIMIT = 200;
 
+/** How long a re-rendered row stays lit after the flush that notified it. */
+export const PULSE_MS = 600;
+
 let store = null;
 let bridge = null;
+let pulseTimer = null;
 
 /**
  * The stand-in used when the panel runs outside DevTools (`puzzle dev`, tests).
@@ -150,23 +154,37 @@ function onViewMounted(payload) {
 		module: payload.module ?? null,
 		live: true,
 	});
+	bumpViewSeq();
 }
 
 function onViewDestroyed(payload) {
 	if (!payload || typeof payload.id !== 'number') return;
 	const view = store.findOne('pview', payload.id);
-	if (view) view.update({ live: false });
+	if (view) view.update({ live: false, childIds: [], parentId: null });
+	bumpViewSeq();
 }
 
 function markAllViewsDead() {
 	for (const view of store.findMany('pview')) {
-		if (view.live) view.update({ live: false });
+		if (view.live) view.update({ live: false, childIds: [], parentId: null });
 	}
+	bumpViewSeq();
+}
+
+/** The tree is stale — the Views panel debounces a `snapshot:views` off this. */
+function bumpViewSeq() {
+	const connection = store.findOne('connection', CONNECTION_ID);
+	patchConnection({ viewSeq: (connection?.viewSeq ?? 0) + 1 });
 }
 
 function onFlush(payload) {
 	const keys = Array.isArray(payload?.keys) ? payload.keys : [];
-	patchConnection({ lastFlushKeys: keys });
+	const notified = Array.isArray(payload?.notified) ? payload.notified : [];
+	const connection = store.findOne('connection', CONNECTION_ID);
+	patchConnection({
+		lastFlushKeys: keys,
+		flushSeq: (connection?.flushSeq ?? 0) + 1,
+	});
 
 	// Store keys are either a bare type ('todo') or 'type:id' — either way the
 	// segment before the first colon names the bucket whose snapshot went stale.
@@ -175,6 +193,122 @@ function onFlush(payload) {
 		const bucket = store.findOne('recordType', type);
 		if (bucket) bucket.update({ dirty: true });
 	}
+
+	pulseViews(notified);
+}
+
+/**
+ * Light up the views this flush actually re-rendered. `notified` carries view
+ * ids plus the literal 'fn' for function subscribers (SPEC §55) — the lookup
+ * simply misses on those.
+ *
+ * One shared timer clears every pulse: overlapping flushes extend the glow
+ * rather than each arming their own timeout, which keeps a chatty app from
+ * queueing hundreds of timers.
+ */
+function pulseViews(notified) {
+	const now = Date.now();
+	let lit = false;
+	for (const id of notified) {
+		const view = store.findOne('pview', id);
+		if (!view) continue;
+		view.update({ pulseAt: now });
+		lit = true;
+	}
+	if (!lit) return;
+	clearTimeout(pulseTimer);
+	pulseTimer = setTimeout(clearPulses, PULSE_MS);
+}
+
+function clearPulses() {
+	pulseTimer = null;
+	if (!store) return;
+	for (const view of store.findMany('pview')) {
+		if (view.pulseAt) view.update({ pulseAt: 0 });
+	}
+}
+
+/* -------------------------------------------------------------------------- */
+/* Snapshot → store                                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Fold a `snapshot:views` answer into the `pview` collection.
+ *
+ * The response is the recursive `{ id, name, module, children }` forest; the
+ * store keeps it flat, with `parentId`/`childIds`/`depth`/`order` reconstructing
+ * it. Flat is what the panel wants: rows are keyed by id, so an expand/collapse
+ * or a re-snapshot patches individual rows instead of replacing a nested list.
+ *
+ * The snapshot is authoritative about what is LIVE — the runtime only walks
+ * mounted views — so anything it does not name is marked dead here. That is the
+ * path a destroyed view takes when its `view-destroyed` event was dropped
+ * (buffer overflow, a panel attached mid-session).
+ *
+ * @returns {number} how many live views the snapshot described.
+ */
+export function applyViewSnapshot(roots) {
+	if (!store) return 0;
+	const seen = new Set();
+	let order = 0;
+
+	const walk = (nodes, parentId, depth) => {
+		for (const node of Array.isArray(nodes) ? nodes : []) {
+			if (!node || typeof node.id !== 'number') continue;
+			const children = Array.isArray(node.children) ? node.children : [];
+			store.upsert('pview', {
+				id: node.id,
+				name: node.name || 'View',
+				module: node.module ?? null,
+				parentId,
+				childIds: children.filter((c) => c && typeof c.id === 'number').map((c) => c.id),
+				depth,
+				order: order++,
+				live: true,
+			});
+			seen.add(node.id);
+			walk(children, node.id, depth + 1);
+		}
+	};
+	walk(roots, null, 0);
+
+	for (const view of store.findMany('pview')) {
+		if (seen.has(view.id)) continue;
+		if (view.live || view.childIds.length || view.parentId != null) {
+			view.update({ live: false, childIds: [], parentId: null });
+		}
+	}
+	return seen.size;
+}
+
+/**
+ * Fold a `snapshot:records` answer into the `recordType` collection. `type` is
+ * the filter that produced it: a filtered snapshot must not delete the buckets
+ * it deliberately left out.
+ */
+export function applyRecordSnapshot(result, type) {
+	if (!store) return [];
+	const buckets = result?.types ?? {};
+	const names = [];
+	for (const [name, records] of Object.entries(buckets)) {
+		const rows = Array.isArray(records) ? records : [];
+		store.upsert('recordType', {
+			id: name,
+			records: rows,
+			count: rows.length,
+			dirty: false,
+			snapshotAt: Date.now(),
+		});
+		names.push(name);
+	}
+	if (type == null) {
+		// An unfiltered snapshot is the whole store: a type that vanished from it
+		// no longer exists in the app.
+		for (const bucket of store.findMany('recordType')) {
+			if (!names.includes(bucket.id)) bucket.destroy();
+		}
+	}
+	return names;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -196,6 +330,8 @@ export function patchConnection(patch) {
 /** Drop everything the previous document told us and start listening again. */
 export function resetSession({ port = 'connected' } = {}) {
 	if (!store) return;
+	clearTimeout(pulseTimer);
+	pulseTimer = null;
 	for (const view of store.findMany('pview')) view.destroy();
 	for (const event of store.findMany('event')) event.destroy();
 	for (const bucket of store.findMany('recordType')) bucket.destroy();
@@ -210,6 +346,8 @@ export function resetSession({ port = 'connected' } = {}) {
 		appMounted: false,
 		route: null,
 		lastFlushKeys: [],
+		viewSeq: 0,
+		flushSeq: 0,
 		eventCount: 0,
 		lastEventAt: 0,
 		error: null,

@@ -118,3 +118,36 @@
 		border-radius: 6px;
 	}
 }
+
+/*
+ * The re-render pulse (Views panel). A `flush` naming a view in its `notified`
+ * list sets the row's `dt-pulse` class for ~600ms — the one thing in the panel
+ * that says "this view just re-rendered because of that store write".
+ *
+ * Deliberately UNLAYERED: Tailwind puts its utilities in a cascade layer, and
+ * unlayered author styles win over every layered one, so a row that also
+ * carries `hover:bg-raised` still flashes. (An animation would out-rank a
+ * normal declaration anyway; being unlayered means the class works the same way
+ * if it ever grows non-animated properties.)
+ */
+@keyframes dt-pulse {
+	0% {
+		background-color: var(--dt-accent-soft);
+		box-shadow: inset 2px 0 0 var(--dt-accent);
+	}
+	100% {
+		background-color: transparent;
+		box-shadow: inset 2px 0 0 transparent;
+	}
+}
+
+.dt-pulse {
+	animation: dt-pulse 600ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dt-pulse {
+		animation-duration: 1ms;
+		background-color: var(--dt-accent-soft);
+	}
+}

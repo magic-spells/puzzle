@@ -32,6 +32,14 @@ export default class Connection extends PuzzleModel {
 		/** Last `route-commit` payload: { pathname, query, params, chain, title }. */
 		route: Puzzle.object().default(() => null),
 		lastFlushKeys: Puzzle.array().default(() => []),
+		/**
+		 * Monotonic counters the panels watch instead of the events themselves.
+		 * `viewSeq` ticks on every view-mounted/view-destroyed, `flushSeq` on every
+		 * flush — a subscribed `data()` sees the change and schedules its own
+		 * debounced re-snapshot, without the bridge knowing which panel is open.
+		 */
+		viewSeq: Puzzle.number().default(0),
+		flushSeq: Puzzle.number().default(0),
 		eventCount: Puzzle.number().default(0),
 		lastEventAt: Puzzle.number().default(0),
 		/** Set when the panel's own request plumbing fails, so the UI can say so. */

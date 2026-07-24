@@ -81,13 +81,16 @@ describe('fixture page ↔ page hook', () => {
 		expect(window.document.getElementById('status').textContent).toMatch(/hook found/);
 	});
 
-	it('replays hello → app-mounted → three view-mounted, in order', () => {
+	it('replays hello → app-mounted → one view-mounted per live view, in order', () => {
 		attach();
 
 		const types = sent.filter((m) => m.message).map((m) => m.message.type);
 		expect(types).toEqual([
 			EVENTS.HELLO,
 			EVENTS.APP_MOUNTED,
+			EVENTS.VIEW_MOUNTED,
+			EVENTS.VIEW_MOUNTED,
+			EVENTS.VIEW_MOUNTED,
 			EVENTS.VIEW_MOUNTED,
 			EVENTS.VIEW_MOUNTED,
 			EVENTS.VIEW_MOUNTED,
@@ -103,7 +106,7 @@ describe('fixture page ↔ page hook', () => {
 		expect(typeof hello.payload.frameworkVersion).toBe('string');
 	});
 
-	it('identifies the three mounted views', () => {
+	it('identifies every mounted view, with no internal parent link on the wire', () => {
 		attach();
 		const mounted = sent
 			.filter((m) => m.message?.type === EVENTS.VIEW_MOUNTED)
@@ -112,18 +115,28 @@ describe('fixture page ↔ page hook', () => {
 			{ id: 1, name: 'FixtureLayout', module: 'layouts/Fixture.pzl' },
 			{ id: 2, name: 'FixtureHome', module: 'views/Home.pzl' },
 			{ id: 3, name: 'FixtureRow', module: 'components/Row.pzl' },
+			{ id: 4, name: 'FixtureRow', module: 'components/Row.pzl' },
+			{ id: 5, name: 'FixtureFilters', module: 'components/Filters.pzl' },
+			{ id: 6, name: 'FixtureNav', module: 'components/Nav.pzl' },
 		]);
 	});
 
-	it('answers snapshot:views with a three-node tree under one root', () => {
+	it('answers snapshot:views with a six-node, three-level tree under one root', () => {
 		const { result } = request(REQUESTS.SNAPSHOT_VIEWS);
 		expect(result.roots).toHaveLength(1);
 
 		const count = (nodes) =>
 			nodes.reduce((total, node) => total + 1 + count(node.children ?? []), 0);
-		expect(count(result.roots)).toBe(3);
+		const depth = (nodes) =>
+			nodes.reduce((deepest, node) => Math.max(deepest, 1 + depth(node.children ?? [])), 0);
+
+		expect(count(result.roots)).toBe(6);
+		expect(depth(result.roots)).toBe(3);
 		expect(result.roots[0].name).toBe('FixtureLayout');
 		expect(result.roots[0].children[0].children[0].name).toBe('FixtureRow');
+		// Siblings keep mount order, which is what the panel's tree relies on.
+		expect(result.roots[0].children.map((n) => n.name)).toEqual(['FixtureHome', 'FixtureNav']);
+		expect(result.roots[0].children[0].children.map((n) => n.id)).toEqual([3, 4, 5]);
 	});
 
 	it('answers inspect:view with the model and local layers reported separately', () => {
@@ -131,6 +144,15 @@ describe('fixture page ↔ page hook', () => {
 		expect(Object.keys(result).sort()).toEqual(['local', 'model', 'module', 'name', 'params', 'props']);
 		expect(result.model).toEqual({ todos: 3, activeTodos: 2 });
 		expect(result.local).toEqual({ newTodoText: '', currentFilter: 'active' });
+	});
+
+	it('reports a key that exists in BOTH layers with different values', () => {
+		// The whole reason the panel splits the two layers: `completed` is false in
+		// the last data() commit and true in the local layer that overrides it.
+		const { result } = request(REQUESTS.INSPECT_VIEW, { id: 3 });
+		expect(result.model.completed).toBe(false);
+		expect(result.local.completed).toBe(true);
+		expect(result.props).toEqual({ todo: 't2', index: 1 });
 	});
 
 	it('answers inspect:view for a missing id with an { error } result', () => {
@@ -144,6 +166,21 @@ describe('fixture page ↔ page hook', () => {
 		expect(result.types.todo).toHaveLength(3);
 		expect(result.types.user).toHaveLength(2);
 		expect(result.types.todo[0]).toHaveProperty('_synced');
+	});
+
+	it('carries a boolean and a number in every type, so the editor has both', () => {
+		const { result } = request(REQUESTS.SNAPSHOT_RECORDS);
+		const todo = result.types.todo[0];
+		const user = result.types.user[0];
+
+		// 5+ real fields per type, excluding the synthesized provenance flag.
+		expect(Object.keys(todo).filter((k) => k !== '_synced').length).toBeGreaterThanOrEqual(5);
+		expect(Object.keys(user).filter((k) => k !== '_synced').length).toBeGreaterThanOrEqual(5);
+
+		expect(typeof todo.completed).toBe('boolean');
+		expect(typeof todo.priority).toBe('number');
+		expect(typeof user.active).toBe('boolean');
+		expect(typeof user.loginCount).toBe('number');
 	});
 
 	it('filters snapshot:records by type', () => {
@@ -187,6 +224,65 @@ describe('fixture page ↔ page hook', () => {
 		expect(result.error).toMatch(/object patch/);
 	});
 
+	it('rejects an empty required string with the validation message', () => {
+		const { result } = request(REQUESTS.EDIT_RECORD, {
+			type: 'todo',
+			id: 't1',
+			patch: { text: '' },
+		});
+		expect(result).toEqual({ error: 'text cannot be empty' });
+
+		// Rejected means UNCHANGED — the row must not be half-written.
+		const { result: after } = request(REQUESTS.SNAPSHOT_RECORDS, { type: 'todo' });
+		expect(after.types.todo.find((r) => r.id === 't1').text).toBe('Ship the bridge');
+	});
+
+	it('rejects a primary-key change and an out-of-range number', () => {
+		expect(
+			request(REQUESTS.EDIT_RECORD, { type: 'todo', id: 't1', patch: { id: 'nope' } }).result.error
+		).toMatch(/primary key/);
+
+		expect(
+			request(REQUESTS.EDIT_RECORD, { type: 'todo', id: 't1', patch: { priority: 99 } }).result
+				.error
+		).toBe('priority must be between 1 and 5');
+
+		expect(
+			request(REQUESTS.EDIT_RECORD, { type: 'user', id: 'u1', patch: { email: 'nope' } }).result
+				.error
+		).toBe('email must contain @');
+	});
+
+	it('validates the whole patch before applying any of it', () => {
+		const { result } = request(REQUESTS.EDIT_RECORD, {
+			type: 'todo',
+			id: 't3',
+			patch: { text: 'renamed', priority: 42 },
+		});
+		expect(result.error).toMatch(/priority/);
+
+		const { result: after } = request(REQUESTS.SNAPSHOT_RECORDS, { type: 'todo' });
+		const row = after.types.todo.find((r) => r.id === 't3');
+		expect(row.text).toBe('Write the fixture');
+		expect(row.priority).toBe(3);
+	});
+
+	it('applies a valid multi-field edit to its canned collection', () => {
+		const { result } = request(REQUESTS.EDIT_RECORD, {
+			type: 'user',
+			id: 'u2',
+			patch: { role: 'admin', active: true, loginCount: 8 },
+		});
+		expect(result).toEqual({ ok: true });
+
+		const { result: after } = request(REQUESTS.SNAPSHOT_RECORDS, { type: 'user' });
+		expect(after.types.user.find((r) => r.id === 'u2')).toMatchObject({
+			role: 'admin',
+			active: true,
+			loginCount: 8,
+		});
+	});
+
 	it('draws and clears the highlight overlay', () => {
 		expect(request(REQUESTS.HIGHLIGHT_VIEW, { id: 2, on: true }).result.ok).toBe(true);
 		expect(window.document.querySelector('[data-puzzle-devtools]')).toBeTruthy();
@@ -214,6 +310,30 @@ describe('fixture page ↔ page hook', () => {
 		window.document.querySelector('[data-act="view-mounted"]').click();
 		expect(sent.length).toBe(before + 1);
 		expect(sent[sent.length - 1].message.type).toBe(EVENTS.VIEW_MOUNTED);
-		expect(sent[sent.length - 1].message.payload.id).toBe(4);
+		expect(sent[sent.length - 1].message.payload.id).toBe(7);
+	});
+
+	it('grows the tree when a view mounts at runtime', () => {
+		attach();
+		window.document.querySelector('[data-act="view-mounted"]').click();
+
+		const { result } = request(REQUESTS.SNAPSHOT_VIEWS);
+		const home = result.roots[0].children[0];
+		expect(home.name).toBe('FixtureHome');
+		// Appended under FixtureHome, after its existing children.
+		expect(home.children.map((n) => n.id)).toEqual([3, 4, 5, 7]);
+	});
+
+	it('emits one view-destroyed per instance when a subtree goes away', () => {
+		attach();
+		window.document.querySelector('[data-act="view-destroyed"]').click();
+
+		const destroyed = sent
+			.filter((m) => m.message?.type === EVENTS.VIEW_DESTROYED)
+			.map((m) => m.message.payload.id);
+		expect(destroyed).toEqual([6]);
+
+		const { result } = request(REQUESTS.SNAPSHOT_VIEWS);
+		expect(result.roots[0].children.map((n) => n.name)).toEqual(['FixtureHome']);
 	});
 });

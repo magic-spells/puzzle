@@ -9,9 +9,10 @@ import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
  * path) or null for a hand-written class.
  *
  * Records arrive from `view-mounted` events one at a time, and from a
- * `snapshot:views` response as a tree — `parentId`/`childIds`/`depth` are
- * filled in only by the snapshot path, so they are null/empty until the panel
- * asks for one.
+ * `snapshot:views` response as a tree — `parentId`/`childIds`/`depth`/`order`
+ * are filled in only by the snapshot path, so a view that mounted since the
+ * last snapshot is a depth-0 orphan until the next one lands (which the same
+ * event schedules).
  */
 export default class PView extends PuzzleModel {
 	static schema = {
@@ -21,8 +22,19 @@ export default class PView extends PuzzleModel {
 		parentId: Puzzle.number().default(() => null),
 		childIds: Puzzle.array().default(() => []),
 		depth: Puzzle.number().default(0),
-		/** false once `view-destroyed` arrives; the row greys out rather than vanishing. */
+		/**
+		 * Pre-order position in the last `snapshot:views`. The tree renders in this
+		 * order, which is the runtime's own mount order — so a re-snapshot never
+		 * shuffles rows that did not actually move.
+		 */
+		order: Puzzle.number().default(0),
+		/** false once `view-destroyed` arrives, or when a snapshot stops naming it. */
 		live: Puzzle.boolean().default(true),
+		/**
+		 * `Date.now()` of the last `flush` whose `notified` list named this view;
+		 * 0 once the pulse expires. Drives the Views panel's re-render flash.
+		 */
+		pulseAt: Puzzle.number().default(0),
 		/** The most recent `inspect:view` payload — { params, props, model, local }. */
 		inspected: Puzzle.object().default(() => null),
 		inspectedAt: Puzzle.number().default(0),

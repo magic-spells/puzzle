@@ -1,86 +1,488 @@
-<puzzle-view class="block p-3">
-  <div class="rounded border border-dashed border-line bg-surface p-4">
-    <h1 class="m-0 text-[13px] font-semibold text-ink">Store</h1>
-    <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">
-      Record browsing by type, inline editing through the real
-      <code class="font-mono text-accent">record.update()</code> path, and the
-      subscription graph land here. This build ships the shell only.
-    </p>
-  </div>
+<puzzle-view class="h-full flex min-h-0">
+  {#if disconnected}
+    <div class="flex-1 p-3">
+      <section class="rounded border border-dashed border-line bg-surface p-4">
+        <h1 class="m-0 text-[13px] font-semibold text-ink">{ emptyTitle }</h1>
+        <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">{ emptyHint }</p>
+      </section>
+    </div>
+  {:else}
+    <div class="w-40 shrink-0 flex flex-col min-h-0 border-r border-line bg-surface">
+      <header class="shrink-0 flex items-center gap-2 h-6 px-2 border-b border-line">
+        <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Types</span>
+        <button
+          type="button"
+          title="Re-request snapshot:records"
+          class="ml-auto rounded px-1 font-mono text-[10px] text-muted hover:bg-raised hover:text-accent"
+          @click={ reload }>
+          { loading ? '···' : '⟳' }
+        </button>
+      </header>
 
-  <section class="mt-3 rounded border border-line bg-surface overflow-hidden">
-    <h2 class="m-0 flex items-center gap-2 px-3 py-1.5 border-b border-line text-[11px] font-semibold uppercase tracking-wide text-faint">
-      Record types
-      <button
-        type="button"
-        class="ml-auto rounded border border-line bg-raised px-1.5 py-0.5 text-[10px] font-normal normal-case tracking-normal text-ink hover:border-accent hover:text-accent"
-        @click={ load }>
-        { loading ? 'Loading…' : 'Load snapshot' }
-      </button>
-    </h2>
+      {#if error}
+        <p class="m-0 px-2 py-1 font-mono text-[10px] text-danger break-all">{ error }</p>
+      {/if}
 
-    {#if error}
-      <p class="px-3 py-2 m-0 font-mono text-[11px] text-danger">{ error }</p>
-    {:else if types.length === 0}
-      <p class="px-3 py-2 m-0 text-[11px] text-faint">No snapshot loaded.</p>
-    {:else}
-      <ul class="m-0 p-0 list-none">
-        {#for type in types}
-          <li class="flex items-baseline gap-2 px-3 py-1 border-b border-line last:border-b-0">
-            <span class="font-mono text-[12px] text-ink">{ type.id }</span>
-            {#if type.dirty}
-              <span class="font-mono text-[10px] text-warn">stale</span>
+      <div class="flex-1 min-h-0 overflow-auto">
+        {#if types.length === 0}
+          <p class="m-0 px-2 py-2 text-[11px] text-faint">No record types.</p>
+        {:else}
+          <ul class="m-0 p-0 list-none">
+            {#for type in types}
+              <li key={ type.id }>
+                <div
+                  data-type="{ type.id }"
+                  class="flex items-baseline gap-1.5 h-[19px] px-2 cursor-default { type.rowClass }"
+                  @click={ selectType(type.id) }>
+                  <span class="font-mono text-[11px] truncate { type.nameClass }">{ type.id }</span>
+                  {#if type.dirty}
+                    <span class="font-mono text-[9px] text-warn" title="a flush named this type">•</span>
+                  {/if}
+                  <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ type.count }</span>
+                </div>
+              </li>
+            {/for}
+          </ul>
+        {/if}
+      </div>
+    </div>
+
+    <div class="flex-1 min-w-0 flex flex-col min-h-0">
+      {#if !activeType}
+        <div class="m-3 rounded border border-dashed border-line p-4">
+          <p class="m-0 text-[12px] text-muted">Select a record type to browse its rows.</p>
+        </div>
+      {:else}
+        <header class="shrink-0 flex items-baseline gap-2 px-3 h-7 border-b border-line bg-surface">
+          <span class="font-mono text-[12px] font-semibold text-ink">{ activeType }</span>
+          <span class="font-mono text-[10px] tabular-nums text-faint">{ rowCount } rows</span>
+          {#if hiddenColumns}
+            <span class="font-mono text-[10px] text-faint">+{ hiddenColumns } more columns in detail</span>
+          {/if}
+        </header>
+
+        <div class="flex-1 min-h-0 overflow-auto">
+          {#if rows.length === 0}
+            <p class="m-0 px-3 py-2 text-[11px] text-faint">No records of this type.</p>
+          {:else}
+            <table class="w-full border-collapse text-left">
+              <thead class="sticky top-0 bg-surface">
+                <tr>
+                  {#for column in columns}
+                    <th
+                      key={ column }
+                      class="px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide text-faint whitespace-nowrap">
+                      { column }
+                    </th>
+                  {/for}
+                  <th class="px-2 py-0.5 border-b border-line font-mono text-[10px] font-semibold uppercase tracking-wide text-faint">sync</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#for row in rows}
+                  <tr
+                    key={ row.key }
+                    data-row="{ row.key }"
+                    class="cursor-default { row.rowClass }"
+                    @click={ selectRow(row.key) }>
+                    {#for cell in row.cells}
+                      <td
+                        key={ cell.label }
+                        class="max-w-[16rem] truncate px-2 py-0.5 border-b border-line font-mono text-[11px] { cell.cls }">
+                        { cell.value }
+                      </td>
+                    {/for}
+                    <td class="px-2 py-0.5 border-b border-line">
+                      <span class="rounded px-1 font-mono text-[9px] uppercase tracking-wide { row.syncedClass }">{ row.syncedLabel }</span>
+                    </td>
+                  </tr>
+                {/for}
+              </tbody>
+            </table>
+          {/if}
+        </div>
+
+        {#if hasDetail}
+          <section class="shrink-0 max-h-[55%] flex flex-col min-h-0 border-t border-line bg-surface">
+            <header class="shrink-0 flex items-baseline gap-2 px-3 h-6 border-b border-line">
+              <span class="font-mono text-[11px] font-semibold text-ink">{ activeType } · { detailId }</span>
+              <span class="text-[10px] text-muted">edits go through the app's real record.update()</span>
+              <button
+                type="button"
+                data-apply="1"
+                class="ml-auto rounded border border-line bg-raised px-1.5 font-mono text-[10px] text-ink hover:border-accent hover:text-accent disabled:opacity-50"
+                disabled={ applying }
+                @click={ apply }>
+                { applying ? 'Applying…' : 'Apply' }
+              </button>
+              <button
+                type="button"
+                class="rounded px-1 font-mono text-[10px] text-faint hover:text-ink"
+                title="Close"
+                @click={ closeDetail }>×</button>
+            </header>
+
+            {#if editError}
+              <p class="m-0 px-3 py-1 border-b border-line font-mono text-[10px] text-danger break-words">{ editError }</p>
             {/if}
-            <span class="ml-auto font-mono text-[11px] text-muted tabular-nums">{ type.count }</span>
-          </li>
-        {/for}
-      </ul>
-    {/if}
-  </section>
+            {#if editOk}
+              <p class="m-0 px-3 py-1 border-b border-line font-mono text-[10px] text-ok">{ editOk }</p>
+            {/if}
+
+            <dl class="m-0 flex-1 min-h-0 overflow-auto">
+              {#for field in fields}
+                <div key={ field.label } data-field="{ field.label }" class="flex items-center gap-2 px-3 py-0.5 border-b border-line">
+                  <dt class="w-32 shrink-0 font-mono text-[11px] text-muted truncate">{ field.label }</dt>
+                  <dd class="m-0 flex-1 min-w-0">
+                    {#if field.kind === 'boolean'}
+                      <input
+                        type="checkbox"
+                        class="align-middle accent-accent"
+                        checked={ field.checked }
+                        @change={ editBool(field.label, event) } />
+                    {:else if field.editable}
+                      <input
+                        type="text"
+                        spellcheck="false"
+                        class="w-full rounded border border-line bg-canvas px-1 py-0 font-mono text-[11px] text-ink focus:border-accent focus:outline-none"
+                        value={ field.input }
+                        @input={ editField(field.label, event) } />
+                    {:else}
+                      <span class="block truncate font-mono text-[11px] text-faint">{ field.value }</span>
+                    {/if}
+                  </dd>
+                  <span class="w-14 shrink-0 text-right font-mono text-[9px] uppercase tracking-wide text-faint">{ field.kindLabel }</span>
+                </div>
+              {/for}
+            </dl>
+          </section>
+        {/if}
+      {/if}
+    </div>
+  {/if}
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import { api } from '../bridge.js';
+import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
+import { api, applyRecordSnapshot } from '../bridge.js';
+import { coerceInput, deriveColumns, inputValue, preview, valueKind } from '../values.js';
+
+/**
+ * The Store panel: record types on the left, a compact table of the active
+ * type's rows, and a detail card that edits primitive fields through
+ * `edit:record` — which the runtime applies with the app's real
+ * `record.update()`, so §20 schema validation answers back as `{ error }`.
+ *
+ * Rows are plain JSON snapshots, not live records (the inspected app's store
+ * lives in another realm). `flush` therefore does not update them; it bumps the
+ * connection's `flushSeq`, which schedules a debounced re-snapshot of whichever
+ * type is on screen.
+ */
+
+/** Flushes arrive one per store batch; re-snapshotting on each would thrash. */
+const FLUSH_DEBOUNCE_MS = 200;
+const OK_MS = 2000;
+
+const ROW_SELECTED = 'bg-accent-soft';
+const ROW_IDLE = 'hover:bg-raised';
 
 export default class StoreView extends PuzzleView {
   created() {
-    this.setData({ loading: false, error: '' });
+    this.setData({
+      activeType: null,
+      selectedRowId: null,
+      /** label -> raw input value, for the fields the user has touched. */
+      edits: {},
+      editError: '',
+      editOk: '',
+      applying: false,
+      loading: false,
+      error: '',
+    });
+
+    // `<connection state>#<flushSeq>` as of the last data() run — composite so a
+    // late `hello`, which does not touch flushSeq, still triggers a first load.
+    this._seenGeneration = null;
+    this._flushTimer = null;
+    this._okTimer = null;
+  }
+
+  mounted() {
+    // Tab activation: one unfiltered snapshot establishes the type list.
+    if (this.connected()) this.loadTypes();
+  }
+
+  destroyed() {
+    clearTimeout(this._flushTimer);
+    clearTimeout(this._okTimer);
   }
 
   data() {
+    const store = this.ctx.store;
+    const connection = store.findOne('connection', CONNECTION_ID);
+    const buckets = store.findMany('recordType');
     const local = this.getData();
+
+    const state = connection?.state ?? CONNECTION_STATE.WAITING;
+    const connected = state === CONNECTION_STATE.CONNECTED;
+
+    // Reading these subscribes us to them: a flush means the rows on screen are
+    // a stale copy of the app's store, and a `hello` means there is finally an
+    // app to ask. A page with no Puzzle app never gets a request.
+    const generation = `${state}#${connection?.flushSeq ?? 0}`;
+    if (generation !== this._seenGeneration) {
+      const first = this._seenGeneration === null;
+      this._seenGeneration = generation;
+      if (!connected) clearTimeout(this._flushTimer);
+      else if (!first) this.scheduleRefresh();
+    }
+
+    const activeType = local.activeType;
+    const bucket = activeType ? store.findOne('recordType', activeType) : null;
+    const records = bucket?.records ?? [];
+    const shape = deriveColumns(records);
+
+    const selectedRowId = local.selectedRowId;
+    const selectedRow = findRow(records, shape.pk, selectedRowId);
+
     return {
-      types: this.ctx.store.findMany('recordType'),
+      disconnected: !connected,
+      emptyTitle: state === CONNECTION_STATE.MISMATCH ? 'Protocol version mismatch' : 'No Puzzle app detected',
+      emptyHint:
+        state === CONNECTION_STATE.MISMATCH
+          ? 'The page speaks a wire protocol this extension cannot render. See the Connection panel.'
+          : 'Store records come from the dev-only runtime bridge. Run the app with `puzzle dev` (or build with --mode development) and reload the page with DevTools open.',
+
+      types: buckets.map((type) => ({
+        id: type.id,
+        count: type.count,
+        dirty: type.dirty,
+        rowClass: type.id === activeType ? ROW_SELECTED : ROW_IDLE,
+        nameClass: type.id === activeType ? 'text-accent font-semibold' : 'text-ink',
+      })),
+
+      activeType: activeType ?? '',
+      rowCount: records.length,
+      columns: shape.columns,
+      hiddenColumns: shape.hidden > 0 ? shape.hidden : 0,
+      rows: records.map((row) => this.toRow(row, shape, selectedRowId)),
+
+      hasDetail: !!selectedRow,
+      detailId: selectedRow ? String(selectedRow[shape.pk]) : '',
+      fields: this.toFields(selectedRow, shape.pk, local.edits),
+
+      editError: local.editError,
+      editOk: local.editOk,
+      applying: local.applying,
       loading: local.loading,
       error: local.error,
     };
   }
 
-  events = {
-    load: async () => {
-      this.setData({ loading: true, error: '' });
-      this.refresh();
-      try {
-        const result = await api.snapshotRecords();
-        const buckets = result?.types ?? {};
-        for (const [type, records] of Object.entries(buckets)) {
-          const rows = Array.isArray(records) ? records : [];
-          this.ctx.store.upsert('recordType', {
-            id: type,
-            records: rows,
-            count: rows.length,
-            dirty: false,
-            snapshotAt: Date.now(),
-          });
-        }
-      } catch (err) {
-        this.setData('error', err?.message ?? String(err));
-      } finally {
+  /* ---- projections ------------------------------------------------------- */
+
+  toRow(row, shape, selectedRowId) {
+    const key = String(row?.[shape.pk] ?? '');
+    const isSelected = key === String(selectedRowId ?? ' ');
+    return {
+      key,
+      rowClass: isSelected ? ROW_SELECTED : ROW_IDLE,
+      syncedLabel: row?._synced ? 'synced' : 'local',
+      syncedClass: row?._synced ? 'bg-accent-soft text-accent' : 'text-faint',
+      cells: shape.columns.map((column) => ({
+        label: column,
+        value: preview(row?.[column], 80),
+        cls: column === shape.pk ? 'text-ink' : 'text-muted',
+      })),
+    };
+  }
+
+  /**
+   * Every field of the selected row, in serialization order. The primary key and
+   * `_synced` are shown but never editable: the pk is immutable in the app's
+   * store (§20) and `_synced` is provenance the bridge synthesizes, not a field.
+   */
+  toFields(row, pk, edits) {
+    if (!row) return [];
+    return Object.keys(row).map((label) => {
+      const value = row[label];
+      const kind = valueKind(value);
+      const locked = label === pk || label === '_synced';
+      const editable = !locked && kind !== 'other';
+      const edited = Object.prototype.hasOwnProperty.call(edits, label);
+      return {
+        label,
+        kind: editable ? kind : 'locked',
+        kindLabel: locked ? 'read-only' : kind,
+        editable,
+        value: preview(value),
+        input: edited ? String(edits[label]) : inputValue(value),
+        checked: edited ? edits[label] === true || edits[label] === 'true' : value === true,
+      };
+    });
+  }
+
+  /* ---- requests ---------------------------------------------------------- */
+
+  /** True once `hello` landed with a protocol version this build renders. */
+  connected() {
+    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
+    return connection?.state === CONNECTION_STATE.CONNECTED;
+  }
+
+  scheduleRefresh() {
+    clearTimeout(this._flushTimer);
+    this._flushTimer = setTimeout(() => {
+      this._flushTimer = null;
+      const type = this.getData().activeType;
+      // Only the type on screen: re-snapshotting every bucket on every flush is
+      // the one thing that would make this panel slower than the app it watches.
+      if (type) this.loadTypes(type);
+      else this.loadTypes();
+    }, FLUSH_DEBOUNCE_MS);
+  }
+
+  async loadTypes(type) {
+    if (this.isDestroyed || !this.connected()) return;
+    this.setData({ loading: true, error: '' });
+    this.refresh();
+    try {
+      const result = await api.snapshotRecords(type);
+      if (this.isDestroyed) return;
+      const names = applyRecordSnapshot(result, type ?? null);
+      // First snapshot with nothing selected: land on something.
+      if (!this.getData().activeType && names.length) {
+        this.setData('activeType', names[0]);
+      }
+    } catch (err) {
+      if (this.isDestroyed) return;
+      this.setData('error', err?.message ?? String(err));
+    } finally {
+      if (!this.isDestroyed) {
         this.setData('loading', false);
         this.refresh();
       }
+    }
+  }
+
+  flashOk(message) {
+    clearTimeout(this._okTimer);
+    this.setData('editOk', message);
+    this._okTimer = setTimeout(() => {
+      this._okTimer = null;
+      if (this.isDestroyed) return;
+      this.setData('editOk', '');
+      this.refresh();
+    }, OK_MS);
+  }
+
+  events = {
+    selectType: (id) => {
+      if (this.getData().activeType === id) return;
+      this.setData({
+        activeType: id,
+        selectedRowId: null,
+        edits: {},
+        editError: '',
+        editOk: '',
+      });
+      this.refresh();
+    },
+
+    selectRow: (key) => {
+      const same = String(this.getData().selectedRowId ?? ' ') === String(key);
+      this.setData({
+        selectedRowId: same ? null : key,
+        edits: {},
+        editError: '',
+        editOk: '',
+      });
+      this.refresh();
+    },
+
+    closeDetail: () => {
+      this.setData({ selectedRowId: null, edits: {}, editError: '', editOk: '' });
+      this.refresh();
+    },
+
+    // No refresh() on keystroke: the input already holds what was typed, and
+    // re-rendering a focused controlled input is how you lose a caret position.
+    editField: (label, event) => {
+      const edits = { ...this.getData().edits };
+      edits[label] = event.target.value;
+      this.setData('edits', edits);
+    },
+
+    editBool: (label, event) => {
+      const edits = { ...this.getData().edits };
+      edits[label] = event.target.checked;
+      this.setData('edits', edits);
+    },
+
+    apply: async () => {
+      const local = this.getData();
+      const store = this.ctx.store;
+      const type = local.activeType;
+      const bucket = type ? store.findOne('recordType', type) : null;
+      const records = bucket?.records ?? [];
+      const shape = deriveColumns(records);
+      const row = findRow(records, shape.pk, local.selectedRowId);
+      if (!row) return;
+
+      const patch = {};
+      for (const [label, raw] of Object.entries(local.edits)) {
+        if (label === shape.pk || label === '_synced') continue;
+        const kind = valueKind(row[label]);
+        const parsed = coerceInput(raw, kind);
+        if (!parsed.ok) {
+          this.setData({ editError: `${label}: ${parsed.error}`, editOk: '' });
+          this.refresh();
+          return;
+        }
+        if (parsed.value !== row[label]) patch[label] = parsed.value;
+      }
+
+      if (Object.keys(patch).length === 0) {
+        this.setData({ editError: 'nothing changed', editOk: '' });
+        this.refresh();
+        return;
+      }
+
+      this.setData({ applying: true, editError: '', editOk: '' });
+      this.refresh();
+      try {
+        await api.editRecord(type, row[shape.pk], patch);
+        if (this.isDestroyed) return;
+        // The write succeeded in the app's store; re-read so the table shows what
+        // the app actually holds (defaults, coercions, adapter round-trips)
+        // rather than what we sent.
+        this.setData({ edits: {} });
+        this.flashOk('applied');
+        await this.loadTypes(type);
+      } catch (err) {
+        // A §20 validation failure arrives here: panel-glue turns an `{ error }`
+        // result into a rejection. The typed values stay in `edits` so the field
+        // can be corrected instead of retyped.
+        if (this.isDestroyed) return;
+        this.setData('editError', err?.message ?? String(err));
+      } finally {
+        if (!this.isDestroyed) {
+          this.setData('applying', false);
+          this.refresh();
+        }
+      }
+    },
+
+    reload: () => {
+      this.loadTypes();
     },
   };
+}
+
+/** Rows round-trip through JSON, so a numeric pk can arrive as either type. */
+function findRow(records, pk, id) {
+  if (id == null) return null;
+  return records.find((row) => String(row?.[pk]) === String(id)) ?? null;
 }
 </script>

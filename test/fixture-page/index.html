@@ -168,55 +168,174 @@
 				var logEl = document.getElementById('log');
 				var hook = null;
 				var overlay = null;
-				var nextViewId = 4;
+				var nextViewId = 7;
 				var flushTick = 0;
 
 				/* ---- canned world ------------------------------------------------ */
 
+				/*
+				 * The live view forest, kept FLAT with a `parent` link; snapshot:views
+				 * rebuilds the nested shape from it. Flat means a view mounted by the
+				 * buttons below appears in the tree without a second, hand-maintained
+				 * nested literal drifting out of sync with this one.
+				 *
+				 * Six nodes over three levels — layout → home → {row, row, filters},
+				 * with a nav sibling under the layout — so indentation, expand/collapse
+				 * and mount-order stability are all observable in the panel.
+				 */
 				var views = [
-					{ id: 1, name: 'FixtureLayout', module: 'layouts/Fixture.pzl' },
-					{ id: 2, name: 'FixtureHome', module: 'views/Home.pzl' },
-					{ id: 3, name: 'FixtureRow', module: 'components/Row.pzl' },
+					{ id: 1, name: 'FixtureLayout', module: 'layouts/Fixture.pzl', parent: null },
+					{ id: 2, name: 'FixtureHome', module: 'views/Home.pzl', parent: 1 },
+					{ id: 3, name: 'FixtureRow', module: 'components/Row.pzl', parent: 2 },
+					{ id: 4, name: 'FixtureRow', module: 'components/Row.pzl', parent: 2 },
+					{ id: 5, name: 'FixtureFilters', module: 'components/Filters.pzl', parent: 2 },
+					{ id: 6, name: 'FixtureNav', module: 'components/Nav.pzl', parent: 1 },
 				];
 
-				// The 3-node tree snapshot:views answers with: layout → home → row.
-				function viewTree() {
-					return [
-						{
-							id: 1,
-							name: 'FixtureLayout',
-							module: 'layouts/Fixture.pzl',
-							children: [
-								{
-									id: 2,
-									name: 'FixtureHome',
-									module: 'views/Home.pzl',
-									children: [
-										{
-											id: 3,
-											name: 'FixtureRow',
-											module: 'components/Row.pzl',
-											children: [],
-										},
-									],
-								},
-							],
-						},
-					];
+				/** The `view-mounted` payload shape — the `parent` link stays internal. */
+				function viewInfo(view) {
+					return { id: view.id, name: view.name, module: view.module };
 				}
 
+				/** Rebuild the recursive { id, name, module, children } forest. */
+				function viewTree() {
+					var byId = {};
+					var roots = [];
+					views.forEach(function (view) {
+						byId[view.id] = {
+							id: view.id,
+							name: view.name,
+							module: view.module,
+							children: [],
+						};
+					});
+					views.forEach(function (view) {
+						var node = byId[view.id];
+						var parent = view.parent != null ? byId[view.parent] : null;
+						if (parent) parent.children.push(node);
+						else roots.push(node);
+					});
+					return roots;
+				}
+
+				/** Ids under `id`, deepest first — what destroying it has to take along. */
+				function descendantsOf(id) {
+					var out = [];
+					views.forEach(function (view) {
+						if (view.parent !== id) return;
+						out = out.concat(descendantsOf(view.id));
+						out.push(view.id);
+					});
+					return out;
+				}
+
+				/*
+				 * Two record types wide enough to exercise the Store panel's column
+				 * derivation, each with a boolean and a number so the detail card has a
+				 * checkbox, a numeric field and plain strings to edit.
+				 */
 				var records = {
 					todo: [
-						{ id: 't1', text: 'Ship the bridge', completed: true, _synced: true },
-						{ id: 't2', text: 'Ship the panel', completed: false, _synced: true },
-						{ id: 't3', text: 'Write the fixture', completed: false, _synced: false },
+						{
+							id: 't1',
+							text: 'Ship the bridge',
+							completed: true,
+							priority: 1,
+							listId: 'l1',
+							_synced: true,
+						},
+						{
+							id: 't2',
+							text: 'Ship the panel',
+							completed: false,
+							priority: 2,
+							listId: 'l1',
+							_synced: true,
+						},
+						{
+							id: 't3',
+							text: 'Write the fixture',
+							completed: false,
+							priority: 3,
+							listId: 'l2',
+							_synced: false,
+						},
 					],
 					user: [
-						{ id: 'u1', name: 'Ada', email: 'ada@example.com', _synced: true },
-						{ id: 'u2', name: 'Grace', email: 'grace@example.com', _synced: true },
+						{
+							id: 'u1',
+							name: 'Ada',
+							email: 'ada@example.com',
+							role: 'admin',
+							active: true,
+							loginCount: 42,
+							_synced: true,
+						},
+						{
+							id: 'u2',
+							name: 'Grace',
+							email: 'grace@example.com',
+							role: 'editor',
+							active: false,
+							loginCount: 7,
+							_synced: true,
+						},
 					],
 				};
 
+				/*
+				 * Stand-in for §20 schema validation. The real bridge applies an edit
+				 * through the app's own `record.update()` and returns whatever the model
+				 * threw; these rules give the panel the same SHAPE of answer — an
+				 * `{ error }` result carrying a human message — so the inline
+				 * error path is exercised end to end without a Puzzle app.
+				 */
+				var VALIDATORS = {
+					todo: {
+						text: function (value) {
+							if (typeof value !== 'string' || value.trim() === '') return 'text cannot be empty';
+							return null;
+						},
+						completed: function (value) {
+							if (typeof value !== 'boolean') return 'completed must be a boolean';
+							return null;
+						},
+						priority: function (value) {
+							if (typeof value !== 'number' || !isFinite(value)) return 'priority must be a number';
+							if (value < 1 || value > 5) return 'priority must be between 1 and 5';
+							return null;
+						},
+					},
+					user: {
+						name: function (value) {
+							if (typeof value !== 'string' || value.trim() === '') return 'name cannot be empty';
+							return null;
+						},
+						email: function (value) {
+							if (typeof value !== 'string' || value.indexOf('@') === -1) {
+								return 'email must contain @';
+							}
+							return null;
+						},
+						active: function (value) {
+							if (typeof value !== 'boolean') return 'active must be a boolean';
+							return null;
+						},
+						loginCount: function (value) {
+							if (typeof value !== 'number' || !isFinite(value)) {
+								return 'loginCount must be a number';
+							}
+							return null;
+						},
+					},
+				};
+
+				/*
+				 * inspect:view payloads. Ids 3 and 5 deliberately carry the SAME key in
+				 * both layers with different values — precisely the situation the
+				 * panel's side-by-side split exists to expose: a later setData() is
+				 * winning over what the last data() commit returned.
+				 */
 				var inspectable = {
 					1: {
 						name: 'FixtureLayout',
@@ -238,9 +357,33 @@
 						name: 'FixtureRow',
 						module: 'components/Row.pzl',
 						params: {},
-						props: { todo: 't2' },
-						model: { label: 'Ship the panel' },
+						props: { todo: 't2', index: 1 },
+						model: { label: 'Ship the panel', completed: false },
+						local: { completed: true, draft: 'Ship the panel now' },
+					},
+					4: {
+						name: 'FixtureRow',
+						module: 'components/Row.pzl',
+						params: {},
+						props: { todo: 't3', index: 2 },
+						model: { label: 'Write the fixture', completed: false },
 						local: {},
+					},
+					5: {
+						name: 'FixtureFilters',
+						module: 'components/Filters.pzl',
+						params: { filter: 'active' },
+						props: { counts: { all: 3, active: 2 } },
+						model: { current: 'active', options: ['all', 'active', 'done'] },
+						local: { current: 'done', hovered: 'done' },
+					},
+					6: {
+						name: 'FixtureNav',
+						module: 'components/Nav.pzl',
+						params: {},
+						props: { compact: false },
+						model: { links: 3 },
+						local: { openMenu: null },
 					},
 				};
 
@@ -305,8 +448,31 @@
 								if (!payload.patch || typeof payload.patch !== 'object') {
 									return { error: 'edit:record requires an object patch' };
 								}
+
+								// Validate the WHOLE patch before touching the row: a partly
+								// applied edit is exactly what the real update() path never
+								// produces, so the double must not produce one either.
+								var rules = VALIDATORS[payload.type] || {};
+								var keys = Object.keys(payload.patch);
+								for (var i = 0; i < keys.length; i++) {
+									var field = keys[i];
+									if (field === 'id') return { error: 'cannot change the primary key "id"' };
+									if (field === '_synced') {
+										return { error: '_synced is bridge provenance, not a field' };
+									}
+									if (!Object.prototype.hasOwnProperty.call(row, field)) {
+										return { error: 'unknown field "' + field + '" on ' + payload.type };
+									}
+									var rule = rules[field];
+									var problem = rule ? rule(payload.patch[field]) : null;
+									if (problem) return { error: problem };
+								}
+
 								Object.assign(row, payload.patch);
-								emit('flush', { keys: [payload.type, payload.type + ':' + payload.id], notified: [2] });
+								emit('flush', {
+									keys: [payload.type, payload.type + ':' + payload.id],
+									notified: [2, 3],
+								});
 								return { ok: true };
 							}
 							case 'highlight:view':
@@ -412,7 +578,7 @@
 					emit('app-mounted', {});
 					hook.onRequest(handleRequest);
 					views.forEach(function (view) {
-						emit('view-mounted', view);
+						emit('view-mounted', viewInfo(view));
 					});
 
 					// A flush every 2s with rotating keys, and one route-commit at 5s.
@@ -442,25 +608,34 @@
 					if (!act) return;
 					if (act === 'view-mounted') {
 						var id = nextViewId++;
-						var view = { id: id, name: 'FixtureRow', module: 'components/Row.pzl' };
+						// Mounted UNDER FixtureHome, so the new row appears nested in the
+						// panel's tree rather than as another root.
+						var view = { id: id, name: 'FixtureRow', module: 'components/Row.pzl', parent: 2 };
 						views.push(view);
 						inspectable[id] = {
 							name: view.name,
 							module: view.module,
 							params: {},
-							props: {},
-							model: {},
+							props: { todo: 't' + id, index: id },
+							model: { label: 'Added at runtime #' + id, completed: false },
 							local: {},
 						};
-						emit('view-mounted', view);
+						emit('view-mounted', viewInfo(view));
 						return;
 					}
 					if (act === 'view-destroyed') {
 						var last = views[views.length - 1];
 						if (!last) return;
-						views.pop();
-						delete inspectable[last.id];
-						emit('view-destroyed', { id: last.id });
+						// Destroying a parent destroys its subtree; the runtime emits one
+						// event per instance, deepest first.
+						var doomed = descendantsOf(last.id).concat([last.id]);
+						doomed.forEach(function (doomedId) {
+							views = views.filter(function (view) {
+								return view.id !== doomedId;
+							});
+							delete inspectable[doomedId];
+							emit('view-destroyed', { id: doomedId });
+						});
 						return;
 					}
 					if (act === 'flush') {

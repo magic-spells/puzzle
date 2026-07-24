@@ -38,8 +38,8 @@ import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
 
 const NAV = [
   { path: '/', label: 'Connection', soon: false },
-  { path: '/views', label: 'Views', soon: true },
-  { path: '/store', label: 'Store', soon: true },
+  { path: '/views', label: 'Views', soon: false },
+  { path: '/store', label: 'Store', soon: false },
 ];
 
 const ACTIVE = 'bg-accent-soft text-accent font-medium';

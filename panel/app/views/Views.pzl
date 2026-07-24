@@ -1,45 +1,459 @@
-<puzzle-view class="block p-3">
-  <div class="rounded border border-dashed border-line bg-surface p-4">
-    <h1 class="m-0 text-[13px] font-semibold text-ink">Views</h1>
-    <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">
-      The component tree, per-view inspector (params, props, model layer, local
-      layer) and page highlighting land here. This build ships the shell only —
-      what you see below is the raw mount/destroy feed the runtime has pushed so
-      far, not the real tree.
-    </p>
-  </div>
+<puzzle-view class="h-full flex min-h-0">
+  {#if disconnected}
+    <div class="flex-1 p-3">
+      <section class="rounded border border-dashed border-line bg-surface p-4">
+        <h1 class="m-0 text-[13px] font-semibold text-ink">{ emptyTitle }</h1>
+        <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">{ emptyHint }</p>
+      </section>
+    </div>
+  {:else}
+    <div class="w-64 shrink-0 flex flex-col min-h-0 border-r border-line bg-surface">
+      <header class="shrink-0 flex items-center gap-2 h-6 px-2 border-b border-line">
+        <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Tree</span>
+        <span class="font-mono text-[10px] tabular-nums text-faint">{ liveCount }</span>
+        <button
+          type="button"
+          title="Re-request snapshot:views"
+          class="ml-auto rounded px-1 font-mono text-[10px] text-muted hover:bg-raised hover:text-accent"
+          @click={ reloadTree }>
+          { loadingTree ? '···' : '⟳' }
+        </button>
+      </header>
 
-  <section class="mt-3 rounded border border-line bg-surface overflow-hidden">
-    <h2 class="m-0 px-3 py-1.5 border-b border-line text-[11px] font-semibold uppercase tracking-wide text-faint">
-      Mounted views ({ liveCount } live / { views.length } seen)
-    </h2>
+      {#if treeError}
+        <p class="m-0 px-2 py-1 font-mono text-[10px] text-danger break-all">{ treeError }</p>
+      {/if}
 
-    {#if views.length === 0}
-      <p class="px-3 py-2 m-0 text-[11px] text-faint">Nothing mounted yet.</p>
-    {:else}
-      <ul class="m-0 p-0 list-none">
-        {#for view in views}
-          <li class="flex items-baseline gap-2 px-3 py-1 border-b border-line last:border-b-0">
-            <span class="font-mono text-[10px] text-faint tabular-nums shrink-0">#{ view.id }</span>
-            <span class="text-[12px] { view.live ? 'text-ink' : 'text-faint line-through' }">{ view.name }</span>
-            <span class="ml-auto font-mono text-[10px] text-faint truncate">{ view.module }</span>
-          </li>
-        {/for}
-      </ul>
-    {/if}
-  </section>
+      <div
+        class="flex-1 min-h-0 overflow-auto outline-none"
+        tabindex="0"
+        aria-label="View tree"
+        @keydown:up:prevent={ moveSelection(-1) }
+        @keydown:down:prevent={ moveSelection(1) }>
+        {#if rows.length === 0}
+          <p class="m-0 px-2 py-2 text-[11px] text-faint">No views mounted.</p>
+        {:else}
+          <ul class="m-0 p-0 list-none" role="tree">
+            {#for row in rows}
+              <li key={ row.id } role="treeitem">
+                <div
+                  data-view-id="{ row.id }"
+                  class="group flex items-center gap-1 h-[19px] pr-1 cursor-default { row.rowClass } { row.pulseClass }"
+                  style="padding-left:{ row.indent }"
+                  @click={ select(row.id) }
+                  @mouseenter={ hoverOn(row.id) }
+                  @mouseleave={ hoverOff(row.id) }>
+                  {#if row.hasChildren}
+                    <button
+                      type="button"
+                      data-twisty="{ row.id }"
+                      class="shrink-0 w-3 h-3 leading-none text-[8px] text-faint hover:text-ink"
+                      title="Expand or collapse"
+                      @click:stop={ toggle(row.id) }>{ row.twisty }</button>
+                  {:else}
+                    <span class="shrink-0 w-3"></span>
+                  {/if}
+
+                  <span class="shrink-0 font-mono text-[11px] { row.nameClass }">{ row.name }</span>
+                  <span class="min-w-0 truncate font-mono text-[10px] { row.moduleClass }">{ row.moduleLabel }</span>
+
+                  <button
+                    type="button"
+                    data-log="{ row.id }"
+                    title="log:view — binds the live instance to $p"
+                    class="ml-auto shrink-0 hidden group-hover:block rounded px-1 font-mono text-[9px] uppercase tracking-wide text-faint hover:bg-raised hover:text-accent"
+                    @click:stop={ logRow(row.id) }>log</button>
+                </div>
+              </li>
+            {/for}
+          </ul>
+        {/if}
+      </div>
+
+      {#if toast}
+        <p class="shrink-0 m-0 px-2 py-1 border-t border-line font-mono text-[10px] text-ok">{ toast }</p>
+      {/if}
+    </div>
+
+    <div class="flex-1 min-w-0 flex flex-col min-h-0 overflow-auto">
+      {#if !hasSelection}
+        <div class="m-3 rounded border border-dashed border-line p-4">
+          <p class="m-0 text-[12px] text-muted">Select a view to inspect its params, props and both state layers.</p>
+        </div>
+      {:else}
+        <header class="shrink-0 flex items-baseline gap-2 px-3 h-7 border-b border-line bg-surface">
+          <span class="font-mono text-[12px] font-semibold text-ink">{ detailName }</span>
+          <span class="font-mono text-[10px] text-faint truncate">{ detailModule }</span>
+          <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">#{ detailId }</span>
+        </header>
+
+        {#if inspectError}
+          <p class="m-3 mb-0 rounded border border-danger px-2 py-1 font-mono text-[11px] text-danger">{ inspectError }</p>
+        {/if}
+
+        {#if hasInspect}
+          <div class="p-3 grid gap-3">
+            <div class="grid gap-3 grid-cols-1 lg:grid-cols-2">
+              <StateGroup title="params" tone="plain" entries={ paramEntries } emptyLabel="no route params" />
+              <StateGroup title="props" tone="plain" entries={ propEntries } emptyLabel="no props" />
+            </div>
+
+            <section class="rounded border border-accent-soft">
+              <h2 class="m-0 px-2 py-1 text-[11px] font-semibold text-ink">
+                State layers
+                <span class="ml-1.5 font-normal text-[10px] text-muted">
+                  a later setData() wins until the next data() commit replaces the model layer
+                </span>
+              </h2>
+              <div class="p-2 pt-0 grid gap-2 grid-cols-1 lg:grid-cols-2">
+                <StateGroup
+                  title="data() model layer"
+                  tone="model"
+                  hint="Replaced wholesale on every data() commit."
+                  entries={ modelEntries }
+                  emptyLabel="data() returned nothing" />
+                <StateGroup
+                  title="setData() local layer"
+                  tone="local"
+                  hint="Persistent UI state; survives data() re-runs."
+                  entries={ localEntries }
+                  emptyLabel="no setData() state" />
+              </div>
+            </section>
+          </div>
+        {/if}
+      {/if}
+    </div>
+  {/if}
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
+import StateGroup from '../components/StateGroup.pzl';
+import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
+import { api, applyViewSnapshot } from '../bridge.js';
+import { entriesOf } from '../values.js';
+
+/**
+ * The Views panel: an Elements-style master/detail over the live component
+ * tree.
+ *
+ * The tree is a FLATTENED render of the `pview` collection (bridge.js folds
+ * `snapshot:views` into it), not a recursive component — one keyed list means a
+ * collapse or a re-snapshot patches individual rows instead of tearing down and
+ * rebuilding nested lists.
+ *
+ * Nothing here polls. `data()` subscribes to the connection singleton and the
+ * `pview` collection, so the monotonic `viewSeq`/`pulseAt` counters the bridge
+ * writes are what schedule the next request — see `scheduleTree` /
+ * `scheduleInspect`.
+ */
+
+/** view-mounted/destroyed arrive in bursts during a route change; coalesce them. */
+const TREE_DEBOUNCE_MS = 120;
+/** A flush that re-rendered the selected view re-inspects it, but not per keystroke. */
+const INSPECT_DEBOUNCE_MS = 150;
+const TOAST_MS = 2400;
+
+const ROW_SELECTED = 'bg-accent-soft';
+const ROW_IDLE = 'hover:bg-raised';
 
 export default class ViewsView extends PuzzleView {
+  created() {
+    this.setData({
+      // id -> true. Collapsed is the exception, so a view that appears while the
+      // panel is open shows up expanded rather than hidden inside a closed node.
+      closed: {},
+      selectedId: null,
+      inspect: null,
+      inspectError: '',
+      treeError: '',
+      loadingTree: false,
+      toast: '',
+    });
+
+    // `<connection state>#<viewSeq>` as of the last data() run. Null so the
+    // first run schedules the initial snapshot without a separate code path,
+    // and composite so a late `hello` — which does not touch viewSeq — still
+    // triggers the first fetch.
+    this._seenGeneration = null;
+    this._seenPulseAt = 0;
+    this._treeTimer = null;
+    this._inspectTimer = null;
+    this._toastTimer = null;
+    // The visible rows of the last render — what up/down arrow keys walk.
+    this._rows = [];
+  }
+
+  mounted() {
+    // Tab activation. `data()` has already scheduled a debounced snapshot; this
+    // collapses it into an immediate one so opening the panel is not laggy.
+    if (this.connected()) this.scheduleTree(0);
+  }
+
+  destroyed() {
+    clearTimeout(this._treeTimer);
+    clearTimeout(this._inspectTimer);
+    clearTimeout(this._toastTimer);
+  }
+
   data() {
-    const views = this.ctx.store.findMany('pview');
+    const store = this.ctx.store;
+    const connection = store.findOne('connection', CONNECTION_ID);
+    const views = store.findMany('pview');
+    const local = this.getData();
+
+    const state = connection?.state ?? CONNECTION_STATE.WAITING;
+    const connected = state === CONNECTION_STATE.CONNECTED;
+
+    // A mount or destroy since the last snapshot means the tree we are holding
+    // is stale; so does the handshake completing. Reading these here is what
+    // subscribes us to them. A page with no Puzzle app never gets a request.
+    const generation = `${state}#${connection?.viewSeq ?? 0}`;
+    if (generation !== this._seenGeneration) {
+      this._seenGeneration = generation;
+      if (connected) this.scheduleTree(TREE_DEBOUNCE_MS);
+      else clearTimeout(this._treeTimer);
+    }
+
+    const selectedId = local.selectedId;
+    const selectedRecord = selectedId == null ? null : store.findOne('pview', selectedId);
+
+    // The selected view was re-rendered by a flush — its model layer changed, so
+    // the detail pane is showing stale values until we ask again.
+    if (selectedRecord) {
+      const pulseAt = selectedRecord.pulseAt ?? 0;
+      if (pulseAt && pulseAt !== this._seenPulseAt) {
+        this._seenPulseAt = pulseAt;
+        this.scheduleInspect(selectedId, INSPECT_DEBOUNCE_MS);
+      }
+    }
+
+    const rows = this.buildRows(views, local.closed, selectedId);
+    this._rows = rows;
+
+    const inspect = local.inspect;
+
     return {
-      views,
+      disconnected: !connected,
+      emptyTitle: this.emptyTitle(state),
+      emptyHint: this.emptyHint(state),
+
+      rows,
       liveCount: views.filter((view) => view.live).length,
+      loadingTree: local.loadingTree,
+      treeError: local.treeError,
+      toast: local.toast,
+
+      // The pane opens on SELECTION, not on a successful answer — a failed
+      // inspect has to be able to say so somewhere.
+      hasSelection: selectedId != null,
+      hasInspect: inspect != null,
+      detailId: selectedId ?? '',
+      detailName: inspect?.name ?? selectedRecord?.name ?? 'View',
+      detailModule: inspect?.module ?? selectedRecord?.module ?? '—',
+      inspectError: local.inspectError,
+
+      paramEntries: entriesOf(inspect?.params),
+      propEntries: entriesOf(inspect?.props),
+      modelEntries: entriesOf(inspect?.model),
+      localEntries: entriesOf(inspect?.local),
     };
   }
+
+  /* ---- tree ------------------------------------------------------------- */
+
+  /**
+   * Depth-first flatten of the live forest into the visible rows, honouring the
+   * collapse map. `childIds` is the snapshot's own child order (mount order), so
+   * siblings never shuffle; orphans — views whose parent is gone, or that
+   * mounted since the last snapshot — surface as roots rather than disappearing.
+   */
+  buildRows(views, closed, selectedId) {
+    const byId = new Map();
+    for (const view of views) {
+      if (view.live) byId.set(view.id, view);
+    }
+
+    const roots = [...byId.values()]
+      .filter((view) => view.parentId == null || !byId.has(view.parentId))
+      .sort((a, b) => a.order - b.order || a.id - b.id);
+
+    const rows = [];
+    const seen = new Set();
+
+    const walk = (record, depth) => {
+      if (seen.has(record.id)) return;
+      seen.add(record.id);
+
+      const children = (record.childIds ?? []).map((id) => byId.get(id)).filter(Boolean);
+      const hasChildren = children.length > 0;
+      const isClosed = closed[record.id] === true;
+      const isSelected = record.id === selectedId;
+
+      rows.push({
+        id: record.id,
+        name: record.name,
+        moduleLabel: record.module ?? '—',
+        hasChildren,
+        twisty: hasChildren ? (isClosed ? '▸' : '▾') : '',
+        // 8px gutter + 12px per level, matching the Elements panel's feel.
+        indent: `${8 + depth * 12}px`,
+        rowClass: isSelected ? ROW_SELECTED : ROW_IDLE,
+        nameClass: isSelected ? 'text-accent font-semibold' : 'text-ink',
+        moduleClass: isSelected ? 'text-accent' : 'text-faint',
+        pulseClass: record.pulseAt ? 'dt-pulse' : '',
+      });
+
+      if (hasChildren && !isClosed) {
+        for (const child of children) walk(child, depth + 1);
+      }
+    };
+
+    for (const root of roots) walk(root, 0);
+    return rows;
+  }
+
+  /** True once `hello` landed with a protocol version this build renders. */
+  connected() {
+    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
+    return connection?.state === CONNECTION_STATE.CONNECTED;
+  }
+
+  /** Coalesce tree refreshes onto one timer; `delay` 0 is "as soon as possible". */
+  scheduleTree(delay) {
+    clearTimeout(this._treeTimer);
+    this._treeTimer = setTimeout(() => {
+      this._treeTimer = null;
+      this.loadTree();
+    }, delay);
+  }
+
+  async loadTree() {
+    if (this.isDestroyed || !this.connected()) return;
+    this.setData({ loadingTree: true, treeError: '' });
+    this.refresh();
+    try {
+      const result = await api.snapshotViews();
+      if (this.isDestroyed) return;
+      applyViewSnapshot(result?.roots);
+    } catch (err) {
+      if (this.isDestroyed) return;
+      this.setData('treeError', err?.message ?? String(err));
+    } finally {
+      if (!this.isDestroyed) {
+        this.setData('loadingTree', false);
+        this.refresh();
+      }
+    }
+  }
+
+  /* ---- selection + inspection ------------------------------------------- */
+
+  scheduleInspect(id, delay) {
+    clearTimeout(this._inspectTimer);
+    this._inspectTimer = setTimeout(() => {
+      this._inspectTimer = null;
+      this.loadInspect(id);
+    }, delay);
+  }
+
+  async loadInspect(id) {
+    if (this.isDestroyed) return;
+    try {
+      const result = await api.inspectView(id);
+      if (this.isDestroyed) return;
+      // A slow answer for a view the user already navigated away from must not
+      // overwrite the pane.
+      if (this.getData().selectedId !== id) return;
+      this.setData({ inspect: result ?? null, inspectError: '' });
+      const record = this.ctx.store.findOne('pview', id);
+      if (record) record.update({ inspected: result ?? null, inspectedAt: Date.now() });
+    } catch (err) {
+      if (this.isDestroyed || this.getData().selectedId !== id) return;
+      this.setData({ inspect: null, inspectError: err?.message ?? String(err) });
+    } finally {
+      if (!this.isDestroyed) this.refresh();
+    }
+  }
+
+  flash(message) {
+    clearTimeout(this._toastTimer);
+    this.setData('toast', message);
+    this.refresh();
+    this._toastTimer = setTimeout(() => {
+      this._toastTimer = null;
+      if (this.isDestroyed) return;
+      this.setData('toast', '');
+      this.refresh();
+    }, TOAST_MS);
+  }
+
+  emptyTitle(state) {
+    if (state === CONNECTION_STATE.MISMATCH) return 'Protocol version mismatch';
+    return 'No Puzzle app detected';
+  }
+
+  emptyHint(state) {
+    if (state === CONNECTION_STATE.MISMATCH) {
+      return 'The page speaks a wire protocol this extension cannot render, so the tree would not be trustworthy. See the Connection panel.';
+    }
+    return 'The view tree comes from the dev-only runtime bridge. Run the app with `puzzle dev` (or build with --mode development) and reload the page with DevTools open.';
+  }
+
+  events = {
+    select: (id) => {
+      const previous = this.getData().selectedId;
+      if (previous === id) return;
+      // Selection change clears any hover outline the old row left on the page.
+      if (previous != null) api.highlightView(previous, false).catch(noop);
+      clearTimeout(this._inspectTimer);
+      this._seenPulseAt = 0;
+      this.setData({ selectedId: id, inspect: null, inspectError: '' });
+      this.refresh();
+      this.loadInspect(id);
+    },
+
+    toggle: (id) => {
+      const closed = { ...this.getData().closed };
+      if (closed[id]) delete closed[id];
+      else closed[id] = true;
+      this.setData('closed', closed);
+      this.refresh();
+    },
+
+    hoverOn: (id) => {
+      api.highlightView(id, true).catch(noop);
+    },
+
+    hoverOff: (id) => {
+      api.highlightView(id, false).catch(noop);
+    },
+
+    logRow: (id) => {
+      api.logView(id).then(
+        () => this.flash(`#${id} logged as $p`),
+        (err) => this.flash(err?.message ?? String(err))
+      );
+    },
+
+    reloadTree: () => {
+      this.scheduleTree(0);
+    },
+
+    // Nice-to-have keyboard walk over the visible rows. It works because the
+    // list is flat: there is no nested focus to fight the patcher over.
+    moveSelection: (delta) => {
+      const rows = this._rows;
+      if (rows.length === 0) return;
+      const current = rows.findIndex((row) => row.id === this.getData().selectedId);
+      const next = current === -1 ? (delta > 0 ? 0 : rows.length - 1) : current + delta;
+      if (next < 0 || next >= rows.length) return;
+      this.events.select(rows[next].id);
+    },
+  };
 }
+
+/** Highlight is best-effort decoration — a dropped request must not surface. */
+function noop() {}
 </script>

@@ -1,0 +1,76 @@
+<puzzle-view>
+  <section class="min-w-0 flex flex-col rounded border border-line bg-canvas overflow-hidden">
+    <header class="shrink-0 flex items-baseline gap-2 px-2 py-1 border-b border-line { headerClass }">
+      <h3 class="m-0 font-mono text-[10px] font-semibold uppercase tracking-wider { titleClass }">{ title }</h3>
+      <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">{ count }</span>
+    </header>
+
+    {#if hint}
+      <p class="m-0 px-2 py-1 border-b border-line text-[10px] leading-snug text-muted">{ hint }</p>
+    {/if}
+
+    {#if isEmpty}
+      <p class="m-0 px-2 py-1.5 text-[11px] italic text-faint">{ emptyLabel }</p>
+    {:else}
+      <dl class="m-0 flex-1 min-h-0 overflow-auto">
+        {#for entry in entries}
+          <div key={ entry.label } class="flex items-baseline gap-2 px-2 py-0.5 border-b border-line last:border-b-0">
+            <dt class="shrink-0 font-mono text-[11px] text-muted">{ entry.label }</dt>
+            <dd class="m-0 ml-auto font-mono text-[11px] text-right break-all { valueClass }">{ entry.value }</dd>
+          </div>
+        {/for}
+      </dl>
+    {/if}
+  </section>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+/**
+ * One labelled group of key/value rows — the unit the view inspector is built
+ * from (params, props, and the two state layers) and the record detail card
+ * reuses.
+ *
+ * Props: `title`, `entries` ([{ label, value }] from values.js `entriesOf`),
+ * `hint` (one-line explainer, optional), `emptyLabel`, and `tone`, which tints
+ * the header so the two STATE LAYERS read as a matched pair distinct from the
+ * inputs above them.
+ */
+const TONES = {
+  model: {
+    headerClass: 'bg-accent-soft',
+    titleClass: 'text-accent',
+    valueClass: 'text-ink',
+  },
+  local: {
+    headerClass: 'bg-accent-soft',
+    titleClass: 'text-accent',
+    valueClass: 'text-ink',
+  },
+  plain: {
+    headerClass: 'bg-surface',
+    titleClass: 'text-faint',
+    valueClass: 'text-muted',
+  },
+};
+
+export default class StateGroup extends PuzzleView {
+  data(params, props) {
+    const entries = Array.isArray(props.entries) ? props.entries : [];
+    const tone = TONES[props.tone] ?? TONES.plain;
+
+    return {
+      title: props.title ?? '',
+      hint: props.hint ?? '',
+      emptyLabel: props.emptyLabel ?? 'empty',
+      entries,
+      count: entries.length,
+      isEmpty: entries.length === 0,
+      headerClass: tone.headerClass,
+      titleClass: tone.titleClass,
+      valueClass: tone.valueClass,
+    };
+  }
+}
+</script>

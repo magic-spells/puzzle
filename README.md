@@ -9,8 +9,22 @@ bridge registers into. There are no production bytes on either side: a productio
 compiles the bridge away entirely, and a page with no bridge simply reports
 "No Puzzle app detected".
 
-> **Status: skeleton.** The transport, the protocol plumbing, the panel shell and the
-> Connection view are built and tested. The Views and Store panels are placeholders.
+> **Status: v1 panels.** The transport, the protocol plumbing, and all three panels —
+> Connection, Views and Store — are built and tested. `snapshot:subscriptions` and
+> `snapshot:route` are answered by the bridge but not yet surfaced in a panel.
+
+## The panels
+
+| Panel | What it shows |
+| ----- | ------------- |
+| **Connection** | Handshake state, framework/protocol versions, the last route commit, and a live ring of recent protocol messages. |
+| **Views** | Elements-style master/detail over the live component tree. Expand/collapse per node, hover to highlight the view on the page, per-row `log:view` (binds `$p`), and a re-render pulse on rows a `flush` notified. Selecting a row inspects it: params, props, and **the two state layers side by side** — the `data()` model layer and the `setData()` local layer, which is the split the panel exists for. |
+| **Store** | Record types with counts, a compact table of the active type (pk first, `_synced` as a badge), and a detail card that edits primitive fields through `edit:record` — applied by the runtime with the app's real `record.update()`, so §20 validation failures come back and render inline. |
+
+Neither panel polls. The bridge writes monotonic counters into the panel's own store
+(`connection.viewSeq` / `connection.flushSeq`, `pview.pulseAt`); a subscribed `data()`
+sees them move and schedules its own debounced request. A page with no Puzzle app never
+gets a request at all.
 
 ## Architecture
 
@@ -170,16 +184,24 @@ unless the user grants file access.
 What it does on load:
 
 - waits for `__PUZZLE_DEVTOOLS_HOOK__`, reports what it found in the page;
-- emits `hello` → `app-mounted`, registers its request handler, then replays three
-  `view-mounted` events;
+- emits `hello` → `app-mounted`, registers its request handler, then replays one
+  `view-mounted` per live view;
 - emits a `flush` every 2s with rotating keys, and one `route-commit` at 5s;
-- answers all nine request types — `snapshot:views` returns a three-node tree,
-  `snapshot:records` two types, and unknown types come back as `{ error }`;
+- answers all nine request types — `snapshot:views` returns a **six-node, three-level**
+  tree rebuilt from a flat parent-linked list (so views added at runtime appear in it),
+  `snapshot:records` two types of five-plus fields each including a boolean and a number,
+  and unknown types come back as `{ error }`;
+- **validates `edit:record`** before applying it, the way §20 does: an empty required
+  string answers `{ error: 'text cannot be empty' }`, a primary-key change and an
+  out-of-range number are refused, and a patch that fails anywhere is applied nowhere;
 - offers buttons to emit each event on demand, and a box that `highlight:view` outlines.
 
 Expected panel behavior: the Connection view flips from "No Puzzle app detected" to
 "Puzzle app connected", the message list fills, and **Probe snapshot:views** answers
-"1 root(s), 3 view(s)".
+"1 root(s), 6 view(s)". The **Views** panel shows the tree with FixtureRow #3's
+`completed` differing between the two state layers; the **Store** panel lists `todo` and
+`user`, and typing an empty `text` into a todo and pressing Apply renders the validation
+message inline.
 
 ## Tests
 
@@ -193,8 +215,8 @@ npx vitest run
 | `page-hook.test.js`    | Buffering, ordered replay, the 500-event cap, request/response id correlation, error paths, same-window filtering. |
 | `panel-glue.test.js`   | Port naming, envelope construction, id correlation under out-of-order answers, the request timeout, `{ error }`-result unwrapping, status events. |
 | `background.test.js`   | Port pairing by tab id, both routing directions, the replayed `listening` control, stale-port replacement, rejection of malformed ports. |
-| `fixture-page.test.js` | The real page hook driving the real fixture script: the event stream and every request's response shape. |
-| `panel-app.test.js`    | The compiled panel bundle booting against a stub bridge — all three connection states, view tracking, the event ring. Skipped when `panel/dist/app.js` has not been built. |
+| `fixture-page.test.js` | The real page hook driving the real fixture script: the event stream, every request's response shape, and the `edit:record` validation paths. |
+| `panel-app.test.js`    | The compiled panel bundle booting against a stub bridge that reproduces panel-glue's `{ error }`-to-rejection contract. Three suites: the shell (connection states, view tracking, the event ring), the **Views** panel (tree render, indentation, expand/collapse, selection → both state layers, flush pulse, debounced re-snapshot, highlight/log requests, arrow keys), and the **Store** panel (type list, table shape, detail card, edit success, validation error, flush-driven re-snapshot). Skipped when `panel/dist/app.js` has not been built. |
 
 There is no Chrome automation in this phase; loading the unpacked extension is a manual
 smoke test.
