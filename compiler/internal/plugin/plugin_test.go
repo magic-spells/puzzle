@@ -514,6 +514,15 @@ func TestScanUsageHeadTags(t *testing.T) {
 			body: "export default [{ meta: { description: 'A page' } }];\n",
 		},
 		{
+			// A title-only route is head-tag usage: `meta.title` resolves
+			// og:title/twitter:title, which the SSG injects into every prerendered
+			// page. Gating them off leaves those tags stale forever once the SPA
+			// takes over — the false negative this probe exists to prevent.
+			name: "title-only route meta",
+			file: "app/routes.js",
+			body: "export default [{ meta: { title: 'Home' } }];\n",
+		},
+		{
 			name: "pzl script body",
 			file: "app/views/Home.pzl",
 			body: `<puzzle-view><h1>Home</h1></puzzle-view>
@@ -536,9 +545,12 @@ const socialImage = '/card.png';
 	}
 }
 
+// "All absent" means an app that names NO managed-head field — including
+// `title`, which is itself head-tag usage (og:title/twitter:title). The .ts
+// route module keeps TypeScript source in the scan's path.
 func TestScanUsageAllAbsent(t *testing.T) {
 	root := writeApp(t, map[string]string{
-		"app/routes.ts": "export default [{ meta: { title: 'Home' } }];\n",
+		"app/routes.ts": "export default [{ path: '/' }];\n",
 		"app/views/Home.pzl": `<puzzle-view><h1>Home</h1></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';

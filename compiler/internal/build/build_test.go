@@ -151,16 +151,20 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 		}
 
 		flipAttr := ""
-		routeMeta := "meta: { title: 'Home' }"
+		// The without-usage fixture declares NO meta at all. `meta.title` alone is
+		// head-tag usage — it resolves og:title/twitter:title — so the usage scan
+		// probes for it and a title-bearing route would legitimately keep
+		// headTags.js in the bundle.
+		routeMeta := ""
 		if withUsage {
 			flipAttr = " flip"
-			routeMeta = "meta: { title: 'Home', description: 'Fixture page' }"
+			routeMeta = ", meta: { title: 'Home', description: 'Fixture page' }"
 		}
 		appJS := `import { PuzzleApp } from '@magic-spells/puzzle';
 import Home from './views/Home.pzl';
 const app = new PuzzleApp({
   target: '#app',
-  routes: [{ path: '/', view: Home, ` + routeMeta + ` }],
+  routes: [{ path: '/', view: Home` + routeMeta + ` }],
 });
 app.mount();
 export default app;
