@@ -51,9 +51,10 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool
 // baked into that page's HTML are always the ones they read. The tab <title> is
 // a separate, always-in concern handled by head.js syncTitle.
 func bundleDefines(pl *plugin.Plugin, dev bool) map[string]string {
+	f := pl.Features()
 	return map[string]string{
 		"__PUZZLE_DEV__":      strconv.FormatBool(dev),
-		"__PUZZLE_HAS_FLIP__": strconv.FormatBool(pl.Features()),
+		"__PUZZLE_HAS_FLIP__": strconv.FormatBool(f.Flip),
 	}
 }
 
@@ -109,6 +110,12 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 		// file may be absent in an older checkout, and only a `puzzle build
 		// --static` page entry imports it, so esbuild errs only then.
 		buildOpts.Alias["@magic-spells/puzzle/static"] = filepath.Join(filepath.Dir(runtime), "static", "index.js")
+		// The detachable fixtures/mock module (D98) resolves the same way — only
+		// the `--fixtures` wrapper entry imports it, so esbuild errs only when the
+		// flag is set and the file is genuinely missing. A PUBLISHED app needs no
+		// alias at all: the generated wrapper lives under <appRoot>/.puzzle/, so
+		// node_modules resolution walks up to the project root on its own.
+		buildOpts.Alias["@magic-spells/puzzle/fixtures"] = filepath.Join(filepath.Dir(runtime), "fixtures", "index.js")
 		pl.SetRuntimeDir(filepath.Dir(runtime))
 		return
 	}

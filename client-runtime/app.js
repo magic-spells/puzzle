@@ -6,8 +6,9 @@
  * storage }, amended by v1.5 with { scrollBehavior } (D33), v1.6 with
  * { routerMode } (D34), v1.11 with { routerInitialPath } (memory mode only,
  * D42), v1.19 with { routerBase } (sub-path deploys, D51), v1.24 with
- * { transitionMode } (overlapping route transitions, D56), and v1.31 with
- * { beforeMount, mounted, beforeUnmount } (app lifecycle hooks, D66).
+ * { transitionMode } (overlapping route transitions, D56), v1.31 with
+ * { beforeMount, mounted, beforeUnmount } (app lifecycle hooks, D66), and v1.56
+ * with { focusBehavior } (router focus + route announcement, D93).
  * Everything else (app-level settings/computed/events/methods) stays deferred
  * post-v1 (re-rejected at the D66 triage — SPEC §34).
  *
@@ -68,10 +69,28 @@ export class PuzzleApp {
 	 * @param {object} [config.formatters] app-level template formatters (override built-ins)
 	 * @param {string} [config.apiURL] base URL for the D21 server read path
 	 * @param {object} [config.storage] Storage-like object for persistence (opt-in)
+	 * @param {Function} [config.beforeRequest] adapter request hook (v1.55, D91):
+	 *   `beforeRequest(init, { type, method, url })`, called SYNCHRONOUSLY before
+	 *   every adapter fetch (`loadAll`/`loadOne`, `save()`, `delete()`,
+	 *   `request()`). Mutate `init` in place or return a replacement object to
+	 *   attach auth headers, `credentials`, or an AbortSignal; the context arg is
+	 *   frozen, and `method`/`body` are re-stamped by the Store (a hook cannot
+	 *   change the verb or payload, which the D50 write path depends on). A throw
+	 *   rejects the calling verb — no request is sent
 	 * @param {false|Function} [config.scrollBehavior] router scroll handling
 	 *   (v1.5, D33): omit for the default (top on push, restore on back/forward);
 	 *   `false` to leave scroll alone; `(to, from, savedPosition) => {x,y}|null`
 	 *   to customize per navigation
+	 * @param {false|Function} [config.focusBehavior] router focus management +
+	 *   route announcement (v1.56, D93): omit for the default (after every
+	 *   committed navigation, focus the leaf view's root with
+	 *   `{ preventScroll: true }` and announce the committed `document.title` in a
+	 *   framework-owned visually-hidden `aria-live="polite"` region); `false` to
+	 *   disable both — no focus move and no live region at all;
+	 *   `(to, from) => Element|null|false` to choose the target, called after the
+	 *   new content is mounted so it may query the committed DOM (a falsy return
+	 *   skips focusing for that navigation, a throw is logged and treated as
+	 *   falsy). Inert in memory mode, like `scrollBehavior`
 	 * @param {('history'|'hash'|'memory')} [config.routerMode] router URL carrier
 	 *   (v1.6, D34; v1.11, D42): omit/`'history'` for pathname routing, `'hash'` for
 	 *   `location.hash` routing on static hosts, `'memory'` for URL-less routing in
@@ -177,7 +196,9 @@ export class PuzzleApp {
 			formatters = {},
 			apiURL,
 			storage,
+			beforeRequest,
 			scrollBehavior,
+			focusBehavior,
 			routerMode,
 			routerInitialPath,
 			routerBase,
@@ -191,9 +212,11 @@ export class PuzzleApp {
 		this._container = el;
 
 		// 2. Store: models registry in; pass storage through only when provided so
-		//    the Store's own default (no persistence) stands otherwise.
+		//    the Store's own default (no persistence) stands otherwise. The adapter
+		//    request hook (v1.55, D91) rides the same conditional convention.
 		const storeOptions = { apiURL };
 		if (storage !== undefined) storeOptions.storage = storage;
+		if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;
 		this.#store = new Store(models, storeOptions);
 
 		// 3. Formatters: shared built-in/custom wiring plus the live-router-backed
@@ -208,6 +231,10 @@ export class PuzzleApp {
 		//    ('history') stands otherwise — mirroring how `storage` is conditionally
 		//    passed to the Store above (D34).
 		const routerOptions = { scrollBehavior };
+		// focusBehavior → Router `focusBehavior`, passed through ONLY when set so the
+		// Router's own default (focus the committed leaf root + announce the title)
+		// stands otherwise (v1.56, D93) — mirroring the conditional passthroughs below.
+		if (focusBehavior !== undefined) routerOptions.focusBehavior = focusBehavior;
 		if (routerMode !== undefined) routerOptions.mode = routerMode;
 		// routerInitialPath → Router `initialPath`, passed through ONLY when set so
 		// the Router's own default ('/') stands otherwise and the memory-only throw

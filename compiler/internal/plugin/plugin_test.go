@@ -533,6 +533,34 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+// SetUsage → Features is the whole handoff to esbuild's Define map: every scan
+// bit must arrive, or a feature silently ships (or silently vanishes) regardless
+// of what the scan found.
+func TestPluginFeaturesCarryEveryUsageBit(t *testing.T) {
+	pl := New(t.TempDir())
+	if got := (pl.Features()); got != (Features{}) {
+		t.Errorf("fresh plugin Features() = %+v, want all false", got)
+	}
+	pl.SetUsage(Usage{
+		Formatters: map[string]bool{"upcase": true},
+		HasFlip:    true,
+	})
+	want := Features{Flip: true}
+	if got := pl.Features(); got != want {
+		t.Errorf("Features() = %+v, want %+v", got, want)
+	}
+
+	// Flip is the only define bit since D111 retired the managed-head gate, so
+	// there is no cross-wiring left to catch here. What still matters is that a
+	// later SetUsage REPLACES the bits rather than accumulating them: a stale
+	// true would keep a module in the bundle after the edit that removed its
+	// last use, which is the same silent-divergence failure this test guards.
+	pl.SetUsage(Usage{Formatters: map[string]bool{}})
+	if got := pl.Features(); got != (Features{}) {
+		t.Errorf("Features() = %+v after a flip-free rescan, want all false", got)
+	}
+}
+
 func TestScanUsageToleratesBrokenFileAndPrunesNodeModules(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view><h1>Home</h1></puzzle-view>

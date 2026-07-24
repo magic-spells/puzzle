@@ -391,7 +391,8 @@ export function runTodosSuite({ TodoHome, DefaultLayout, Todo, label }) {
 			await app.store.loadAll('todo');
 			await settle(app);
 
-			expect(fetchMock).toHaveBeenCalledWith('https://api.test/api/todos');
+			// Explicit GET init (v1.55, D91): wire-identical to a bare fetch(url).
+			expect(fetchMock).toHaveBeenCalledWith('https://api.test/api/todos', { method: 'GET' });
 			expect(texts(el).sort()).toEqual(['server one', 'server two']);
 			expect(stats(el)).toEqual({ active: 1, completed: 1, total: 2 });
 

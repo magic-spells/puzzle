@@ -308,6 +308,70 @@ describe('cross-view capture flights (v1.35, D68)', () => {
 		await closing;
 	});
 
+	it('closing a live pair via a click INSIDE the dialog pins no ghost clone', async () => {
+		// The ghost-dialog bug: a dialog's ✕ button sits inside the morph-marked
+		// shell, so the capture-phase click listener resolves the click to the shell
+		// itself. The close navigation then runs the D55 fly-back AND (pre-fix) the
+		// capture path pinned a frozen full-dialog clone that sat on document.body
+		// for the 2s TTL. The dismissed pair target must never be pinned or
+		// snapshotted.
+		const Board = class extends PuzzleView {
+			render() {
+				return h('puzzle-view', { class: 'board' }, [
+					h('div', { 'data-puzzle-morph': 'art-1', class: 'card' }, [text('CARD')]),
+					h('main', {}, [slot()]),
+				]);
+			}
+		};
+		const Dialog = class extends PuzzleView {
+			render() {
+				return h('puzzle-view', { class: 'dialog' }, [
+					h('div', { 'data-puzzle-morph': 'art-1', class: 'shell' }, [
+						h('button', { class: 'close' }, [text('X')]),
+					]),
+				]);
+			}
+		};
+		const routes = [
+			{
+				path: '/',
+				name: 'board',
+				view: Board,
+				children: [
+					{ path: '', name: 'board-index', view: bareLeaf('empty') },
+					{ path: 'task/:taskId', name: 'task', view: Dialog },
+				],
+			},
+		];
+		const { app, engine } = await mountApp(routes, '/');
+
+		await app.router.push('/task/7');
+		expect(engine.shows).toHaveLength(1);
+
+		// The click that closes the dialog — inside the shell, so the click hint
+		// resolves to the shell (the live pair's target).
+		document.querySelector('.close').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+		const closing = app.router.push('/');
+		await tick();
+		// The fly-back runs...
+		expect(engine.hides).toHaveLength(1);
+		// ...and NO fixed ghost clone of the shell is pinned to document.body.
+		const pinned = [...document.body.children].find((c) => c.style && c.style.position === 'fixed');
+		expect(pinned).toBeUndefined();
+		engine.hides[0].resolve(true);
+		await closing;
+
+		// The dismissed shell is not capture-eligible either: a same-id receive
+		// element appearing late in the entering view must not pull a clone flight
+		// from the dead dialog.
+		const late = document.createElement('div');
+		late.setAttribute('data-puzzle-morph', 'art-1');
+		document.querySelector('.empty').appendChild(late);
+		await new Promise((r) => setTimeout(r, 80));
+		expect(engine.shows).toHaveLength(1); // still only the opening flight
+	});
+
 	it('deferred target: a morph element that mounts late is caught by the observer', async () => {
 		const LateB = class extends PuzzleView {
 			mounted() {
@@ -706,6 +770,58 @@ describe('cross-view capture flights (v1.35, D68)', () => {
 			// Source is the real surviving card; destination is the `-target` entering element.
 			expect(engine.shows[0].opts.from).toBe(card);
 			expect(engine.shows[0].opts.to).toBe(document.querySelector('.dialog-marked'));
+		});
+
+		it('a -target live-pair target still flies BACK on close (stored pair, no rescan)', async () => {
+			// The receive-only dialog shape (a launch-eligible button growing into a
+			// `-target` shell): the reverse flight rides the pair stored at show(), and
+			// leave()'s intact check reads the id through the -target attribute — so
+			// receive-only must not cost the fly-back. Clicking the ✕ INSIDE such a
+			// shell also pins nothing (it isn't launch-eligible, so the click hint
+			// never records it).
+			const Board = class extends PuzzleView {
+				render() {
+					return h('puzzle-view', { class: 'board' }, [
+						h('div', { 'data-puzzle-morph': 'art-1', class: 'card' }, [text('CARD')]),
+						h('main', {}, [slot()]),
+					]);
+				}
+			};
+			const Dialog = class extends PuzzleView {
+				render() {
+					return h('puzzle-view', { class: 'dialog' }, [
+						h('div', { 'data-puzzle-morph-target': 'art-1', class: 'shell' }, [
+							h('button', { class: 'close' }, [text('X')]),
+						]),
+					]);
+				}
+			};
+			const routes = [
+				{
+					path: '/',
+					name: 'board',
+					view: Board,
+					children: [
+						{ path: '', name: 'board-index', view: bareLeaf('empty') },
+						{ path: 'task/:taskId', name: 'task', view: Dialog },
+					],
+				},
+			];
+			const { app, engine } = await mountApp(routes, '/');
+
+			await app.router.push('/task/7');
+			expect(engine.shows).toHaveLength(1);
+			expect(engine.shows[0].opts.to).toBe(document.querySelector('.shell'));
+
+			document.querySelector('.close').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+			const closing = app.router.push('/');
+			await tick();
+			expect(engine.hides).toHaveLength(1);
+			const pinned = [...document.body.children].find((c) => c.style && c.style.position === 'fixed');
+			expect(pinned).toBeUndefined();
+			engine.hides[0].resolve(true);
+			await closing;
 		});
 
 		it('a click on a -trigger pins a clone that becomes the show() from', async () => {

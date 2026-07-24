@@ -32,7 +32,7 @@ type Plugin struct {
 	mu         sync.Mutex
 	css        map[string]string // keyed by absolute file path for deterministic ordering
 	formatters map[string]bool
-	hasFlip    bool
+	features   Features // DCE define bits from the most recent SetUsage
 	runtimeDir string
 }
 

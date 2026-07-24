@@ -50,6 +50,21 @@ type Usage struct {
 	HasFlip    bool
 }
 
+// Features are the build-wide DCE bits — one boolean per gated runtime module —
+// handed to esbuild as literal defines. Kept as a comparable struct so
+// WatchBuilder can decide with one == whether the Define set frozen into its
+// esbuild context went stale.
+type Features struct {
+	Flip bool
+}
+
+// features projects the scan result onto the define bits.
+func (u Usage) features() Features {
+	return Features{
+		Flip: u.HasFlip,
+	}
+}
+
 // ScanUsage walks scanRoot for first-party source usage that controls runtime
 // tree-shaking: it parses .pzl templates for formatter chains and flip
 // attributes. Both are template facts, so only .pzl files are read.

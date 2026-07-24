@@ -61,6 +61,14 @@ throw `PuzzleAdapterError` for adapter failures. Confirmed delete accepts 2xx or
 and confirmed `delete()`, so stale references delete idempotently and can never
 `save()` a resurrected copy.
 
+Every adapter request funnels through private `_fetch` (the D91 `beforeRequest`
+hook runs there), which delegates the actual network call to `_network(url,
+init, context)` — a trivial `fetch` passthrough that exists as the ONE
+sanctioned interception seam (D98): the `/fixtures` module's mock adapter
+replaces it at install time, strictly after the hook has shaped the init. The
+store itself knows nothing about fixtures — `seed()`/`resetFixtureSeed()` are
+prototype-attached by `installFixtures()` and absent otherwise.
+
 Relationship getters are installed on model prototypes at Store construction.
 Their queries use the same tracking path as explicit Store calls.
 

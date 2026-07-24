@@ -398,7 +398,7 @@ The scaffolding and diagnostics commands SPEC §11 left for later. Shipped in v1
 - **`puzzle generate <component|view|layout|model> <Name> [--path <dir>] [--force]`** (alias `g`) — writes a stub into `app/components|views|layouts|models`, finding the project root by walking up for `package.json`/`puzzle.config.js`. `.pzl` type names are PascalCase, model names lowercase.
 - **`puzzle add tailwind`** — writes the canonical `puzzle.config.js` + `app/styles/styles.css` when absent.
 - **`puzzle add piece <name…> [--registry <path|url>] [--overwrite] [--dir]`** (D32 amendment, 2026-07-17) — copies copy-in UI pieces from the puzzle-pieces registry into the app: resolves `registry.json`, pulls `registryDependencies` transitively (piece names and `lib/*.js` utils), copies files VERBATIM to each manifest's `targetDir` (default `app/components/ui/`; libs to `app/lib/`), refuses existing files unless `--overwrite` (all-or-nothing pre-flight), records sha256 content hashes in `pieces.lock` (the version story — enables a future `diff`/`update`), auto-copies the registry theme to `app/styles/pieces.css` when the app lacks it (locked like a piece), and PRINTS the accumulated `npm install` line + the one-line `@import './pieces.css';` advisory rather than running/rewriting anything (styles.css is user-owned — D3). Registry source: `--registry` flag → `PUZZLE_PIECES_REGISTRY` env → the published GitHub raw URL.
-- **`puzzle add skills [--overwrite]`** (alias `skill`; D78, 2026-07-22) — installs the CLI's embedded Puzzle agent skill (`skills/puzzle/` in-repo, `go:embed` at build time so the payload always matches the CLI version) into every detected agent config dir: a target is offered iff `~/.claude` / `~/.codex` / `~/.cursor` exists, destination `<root>/skills/puzzle/` (created as needed). On a TTY: huh checkbox multi-select, all targets pre-selected; non-TTY installs to all detected targets silently (never prompts, never hangs). Existing installations refuse without `--overwrite` (all-or-nothing pre-flight). No detected targets is a friendly no-op, exit 0.
+- **`puzzle add skills [--overwrite]`** (alias `skill`; D78, 2026-07-22) — installs the CLI's embedded Puzzle agent skill (`skills/puzzle/` in-repo, `go:embed` at build time so the payload always matches the CLI version) into every detected agent config dir: a target is offered iff `~/.claude` / `~/.codex` / `~/.cursor` exists, destination `<root>/skills/puzzle/` (created as needed). On a TTY: huh checkbox multi-select, all targets pre-selected; non-TTY installs to all detected targets silently (never prompts, never hangs). Existing installations refuse without `--overwrite` (all-or-nothing pre-flight). No detected targets is a friendly no-op, exit 0. `--skill-root <dir>` (repeatable; D97, 2026-07-24) pins the config dirs instead of detecting them and skips the target prompt even on a TTY — the root must already exist (a missing one is an error, never created). `puzzle upgrade` uses it to hand the freshly installed binary the exact roots the user confirmed (§41).
 - **`puzzle doctor [dir]`** — ✓/✘/! checks (node on PATH, `app/app.js`, `index.html`, config loads, Tailwind CLI resolves, runtime package present); exits 1 on any failure. **`puzzle info [dir]`** — prints puzzle version, platform, node version, project root, source/output dirs, and the declared styles pipeline. `puzzle --version` reports the CLI version.
 
 **No-JS-rewriting rule (D3).** `add` and `generate` never parse or rewrite the user's JavaScript: `generate model` does not edit `app/models/index.js`, and `add tailwind` never rewrites an existing `puzzle.config.js`. When wiring is needed they **print the exact snippet** (registration line / config block + install command) for the author to paste. Generated `.pzl` stubs are compile-checked against the compiler in tests, so they cannot drift from the grammar.
@@ -997,6 +997,13 @@ The CLI reports newer published releases and can upgrade itself through the user
 - The exact fetched version is installed (`@magic-spells/puzzle@<latest>`, not the `latest` tag), child output streams through, and a non-zero exit propagates with the failed command named. The platform binaries follow automatically — they are exact-pinned `optionalDependencies` of the root package (§35).
 - Success is **confirmed**, not assumed: the installed `node_modules/@magic-spells/puzzle/package.json` version must equal the target, then `✓ upgraded <old> → <new>` prints and the update cache is written so the passive notice does not re-fire.
 
+**Agent-skill refresh (D97, 2026-07-24)** — reached only on that success path, never from `--check`, the up-to-date short-circuit, or the manual/`go install` branch:
+- **Refresh, not first install**: a target qualifies iff `<root>/skills/puzzle/` already exists as a real directory under a detected config dir (§13). Config dirs without a skill are left to `puzzle add skills`. No qualifying target is a silent no-op.
+- A **symlinked** `<root>/skills/puzzle` is a dev-checkout link: one `!` line names it and nothing is written through it.
+- On a TTY: a huh yes/no confirm (default yes) listing the exact destinations. On a non-TTY: one `!` hint line naming them plus `puzzle add skills --overwrite`, and no writes — the never-prompt/never-hang rule from §13.
+- The install is performed by **re-executing the binary npm just installed**, not by this process: the skill payload is `go:embed`-ed, so the running binary holds only the OLD skill. Candidates are tried per install shape (project: `node_modules/@magic-spells/puzzle-<platform>/bin/puzzle`, then `node_modules/.bin/puzzle`; global: `PATH` lookup, then the running executable) and each must answer `--version` with **exactly** the target version before it is used. If none verifies, the manual command is printed instead — a stale skill is never installed.
+- The child is invoked as `add skills --overwrite --skill-root <root>…` with the confirmed roots, so what runs matches what was asked. Nothing in this step can fail the upgrade: the package is already installed, so every error prints and exits 0.
+
 Semver comparison is a minimal in-repo `x.y.z[-pre]` implementation (prerelease sorts before its release, dot-separated identifiers per SemVer §11) — no new Go dependencies.
 
 ## 42. Interactive `puzzle init` prompts (v1.44)
@@ -1077,6 +1084,98 @@ Client-side navigation middleware (D87). Any route node — root, child, or the 
 - **Output modes:** guards are SPA-runtime behavior and a UX affordance, **not a security boundary** — prerendered files are public bytes and data must be authorized server-side. The hybrid prerender pass warns per rendered page whose chain declares a guard (its markup ships publicly; `prerender: false` anywhere in the chain is the quiet opt-out); a static build (§36) warns once when any route declares a guard — there is no router, so guards never run. Warnings only; no build behavior changes.
 - **Idioms (documented, not new API):** restore sessions in `beforeMount(app)` (§34 — awaited before navigation #0) so guards can be synchronous store reads; async guards remain supported. Redirect-after-login: the guard returns `'/login?redirect=' + encodeURIComponent(to.path)`, and the login view reads `this.route.query.redirect` (§44) and `router.replace()`s it after sign-in.
 
+## 49. Adapter request hook: `beforeRequest` (v1.55)
+
+One optional app-config function shapes the `fetch` init for **every** adapter call (D91). This is where an app attaches auth headers, `credentials`, or an `AbortSignal` — previously impossible on the read path, which was a bare `fetch(url)` with no init object at all, so a token-authenticated app could not use §8's `loadAll`/`loadOne` and had to route around the adapter design entirely.
+
+```js
+new PuzzleApp({
+  apiURL: '/api',
+  beforeRequest(init, { type, method, url }) {
+    init.headers = { ...init.headers, Authorization: `Bearer ${token()}` };
+  },
+});
+```
+
+- **One seam.** Every server call — the D21 read path, the D50 write verbs (`save`/`delete`), and `store.request()` — routes through a single private `Store._fetch(url, init, context)`. The read path now sends an explicit `{ method: 'GET' }` (wire-identical to a bare fetch) so a hook never has to special-case a missing init.
+- **Synchronous.** The hook may mutate `init` in place **or** return a replacement object; a truthy object return wins, otherwise the possibly-mutated original is used. An async hook is deferred — see the cut list.
+- **`method` and `body` are re-stamped from the original init after the hook runs**, and the URL is a separate `fetch` argument. A hook can change *how* a request is sent, never *what* it is. This is load-bearing: §22's write path captures `requestKey = record[pk]` before the await and reconciles against exactly that key afterwards, so a hook that flipped POST→PUT or rewrote the body would silently break identity re-checks, pk adoption, and the `_synced` contract.
+- **The context argument is frozen** — information about the request, not a second output channel.
+- **A throwing hook is not caught.** It is app code; an auth error raised there rejects the calling verb rather than shipping an unauthenticated request.
+- **The network step is delegated** (v1.61, D98): after the hook runs, `_fetch` calls `Store._network(url, final, context)` — a trivial `fetch` passthrough that is the single sanctioned interception point for dev/test tooling (§52's mock adapter replaces it). Interception there runs strictly *after* `beforeRequest`, so a hook still fires in mock mode.
+- **Replacement means replacement.** Returning a bare `{}` from a write drops `Content-Type: application/json`; the idiom is `return { ...init, headers: … }`. Merging was rejected — it would make removing a header impossible.
+- **Config threading** follows the established conditional-passthrough convention (§2): passed to the Store only when set, so its own default (`null`) stands otherwise. A non-function value is ignored rather than stored.
+- **Output modes:** the prerender path carries the hook (`ssg/index.js` `buildContext`), so a build-time `beforeMount` seed hits an authenticated API the way the browser store would. **`output: 'static'` structurally cannot** — `mountStatic`'s options are serialized into a Go-generated per-page entry module and a function does not survive that boundary, so true-static pages get no hook on their client-side store.
+
+## 50. Dev build-error reporting (v1.55)
+
+A failed `puzzle dev` build is reported **in the browser**, not only on the terminal (D92). Dev-server only — `puzzle build` and both prerender paths are untouched, matching how `dev.proxy` is scoped.
+
+- **Typed reload events.** The SSE channel that already drives §27's state-preserving reload now carries `reload`, `builderror`, and `clear`. Client buffers stay size-1 and non-blocking (a slow client never blocks a rebuild) but are **last-write-wins**: a newer message replaces a stale pending one, because an error arriving behind a queued reload must supersede it. Payloads are **JSON-encoded** — SSE `data:` fields cannot carry raw newlines and every real diagnostic is multi-line.
+- **`builderror` is never coalesced.** The D27 reload debounce (one `.pzl` edit → esbuild rebuild + Tailwind rescan → one reload) does not apply to errors; they broadcast immediately.
+- **Retained state.** The server holds the current build error and replays it to each client on connect, so refreshing or opening a new tab while the build is broken still shows the error. The SSE handler registers with the hub **before** reading the retained error, so a build transition racing a new connection can duplicate a frame but never drop one.
+- **First-run shell.** When the index path would 404 **and** an error is retained (no `dist/index.html` has ever been written), the server answers **503** with a self-contained shell: the diagnostic HTML-escaped and rendered server-side, the reload client injected so the page self-heals on the next successful build, and the overlay node adopted by id by the client script so the SSE replay does not stack a second overlay. With no retained error the 404 path is byte-identical.
+- **Diagnostics pass through verbatim.** Positioned `.pzl` compiler errors and esbuild messages are already the high-quality artifact; the transport does not reformat them.
+
+## 51. Router focus management + route announcement: `focusBehavior` (v1.56)
+
+After every committed navigation the router moves focus to the incoming view and announces the new title (D93) — the runtime half of the accessibility story §43 started at compile time. `focusBehavior` mirrors `scrollBehavior` (§14): omit for the default, `false` to opt out entirely, a function to choose the target.
+
+- **Where it runs.** In `#commitState`, the same synchronous post-mount / pre-paint window that owns scroll, and **strictly after** the scroll block so the window position is final first.
+- **`focus({ preventScroll: true })` is mandatory.** A default `focus()` scrolls the element into view and would fight the `window.scrollTo` immediately above it, silently breaking §14 restoration and §22-era anchor landings (D41).
+- **`tabindex="-1"` is transient** — stamped before focusing, removed on the element's `blur`. A `<puzzle-view>` root is not natively focusable, but it must not become a permanent tab stop. **An author-set `tabindex` is never touched.**
+- **One framework-owned live region**, created at `start()` and removed at `stop()`: `aria-live="polite"`, `aria-atomic="true"`, visually hidden by clip-rect (`display:none`/`visibility:hidden` would suppress announcement). It receives `document.title`, which §45's commit path has already updated — read, never re-derived.
+- **Resolution is split.** The *gate* (does focus apply at all) resolves pre-commit; the *target* resolves post-mount, because a custom function returns an element and the incoming chain is not in the DOM until commit. This is the same shape D41's `{ anchor }` sentinel already uses.
+- **Skips:** memory mode is a full no-op (an embed shares the window with a host page — same reasoning as §14's scroll gate); navigation #0 does nothing, the browser owns first paint. Failed or superseded navigations never reach the commit point.
+- **`push`, `replace`, and `pop` all move focus.** Browsers do not restore focus for client-side navigation.
+- **A custom function that declines focus still announces** — the route changed. Focus is applied before the announcement, because a polite update issued immediately before a focus change is routinely dropped by assistive tech. A throw is logged and treated as falsy, matching §14's posture.
+- **Output modes:** `output: 'static'` pages have no router (§36), so they get neither focus management nor a live region.
+
+## 52. Schema-driven fixtures + the mock adapter (v1.57; self-contained module v1.61)
+
+Two development/test affordances on the data layer (D95). Since D98 they live **entirely** in `@magic-spells/puzzle/fixtures` — a self-contained module that is never referenced by the core runtime. It enters an app bundle only through the §54 `--fixtures` build switch, or a direct import in tests (also re-exported from `/testing`). Core carries exactly one seam for it: `Store._network(url, init, context)`, the single place an adapter request touches `fetch`, called by §49's `_fetch` **after** `beforeRequest` runs.
+
+**Installation.** `installFixtures(config)` attaches the system from outside: it adds `seed()`/`resetFixtureSeed()` to `Store.prototype`, replaces `_network` with mock interception, and wraps `mount` so the config's optional `setup(app)` runs at §34 beforeMount timing (after the author's own hook, before navigation #0 — the sanctioned seeding window). All PRNG/mock state lives in a module `WeakMap` keyed by store — **zero fields on the Store**. It returns `uninstall()`, matching the `installFakeAnimate`/`installFakeObserver` convention; uninstall restores the true originals and deletes the added methods.
+
+Config shape — in an app this is the default export of `app/fixtures.js` (§54); in tests it is passed directly:
+
+- `seed` — the deterministic PRNG seed (replaces v1.57's `fixtureSeed` app/Store option, which is **removed**).
+- `mock` — per-type mock config, merged per key **over** the model's `static adapter.mock`; either side alone activates the mock for that type. Heavy `data` arrays belong here, not in model files that ship to production.
+- `setup(app)` — seeding hook; `app.store.seed(…)` lands before the first `data()`.
+
+**Fixtures.** `store.seed(type, countOrArray, overrides)` generates records from the schema alone — no extra declaration. Generation reads the §7 descriptors: `.default()` wins first (left absent so `applyDefaults` resolves it, preserving function-default and deep-clone semantics), `.oneOf()`/`.min()`/`.max()` are never violated, and records go through the normal `createRecord` path so §20 validation and pk assignment behave exactly as at runtime. A `belongsTo` FK wires to a real existing parent when one exists and is left unset otherwise. Determinism comes from the install seed driving **two** derived PRNG streams — one for values, one for mock rolls, so seeding more records never perturbs which requests fail. `resetFixtureSeed()` resets both. **The auto-generated primary key is the one non-deterministic field** (`_genId` uses `Math.random()`/`Date.now()`); an author-supplied `.primary().required()` key is fully deterministic.
+
+**Mock adapter.** `static adapter = { endpoint, mock: { data, latency, failRate, fail, handler } }` — and/or the install config's `mock[type]` — serves the adapter verbs from an in-memory collection.
+
+- **Interception replaces §52's `_network` seam** and returns a Response-shaped object, so `loadAll`/`loadOne`/`save`/`delete`/`request` run **completely unmodified** and the real §22 write path is exercised rather than a parallel one. The collection is deep-cloned from `mock.data` on first use.
+- Default CRUD: `GET` endpoint → array; `GET endpoint/:id` → object or 404; `POST` → insert (201); `PUT endpoint/:id` → merge (200); `DELETE endpoint/:id` → 204. `handler({ method, url, path, body, collection })` overrides any of it and is how `request()`'s arbitrary paths get mocked; a falsy return falls through.
+- `latency` (number or `[min, max]`) is what makes §16 skeletons and their `min-duration` hold developable at all. `failRate`/`fail` produce **non-ok responses**, so failures flow through the real error paths (`PuzzleAdapterError` on writes, the §8 throw on reads) — this is the supported way to exercise the `data()`-rejection handling §16 asks authors to write.
+- §49's `beforeRequest` still runs in mock mode; no network call happens.
+- A one-time `console.warn` per model class fires on first interception. It is unconditional and dev-visible: `build.dropConsole` strips all `console.*` in production by default, so gating it would be theater.
+- **Without `installFixtures`, a model-declared `mock` block is inert data and requests reach the real endpoint.** That is the documented meaning of building without `--fixtures` — an explicit switch, not a heuristic, so there is no compiled-out state to defend with stubs (D96's refuse-throw is gone).
+
+## 53. App-author test utilities: `@magic-spells/puzzle/testing` (v1.58)
+
+A fifth export subpath (D94) — `mountView`, `createTestApp`, `settled`, `installFakeAnimate`, `installFakeObserver`.
+
+- **`mountView(ViewClass, opts)`** mounts one view against a detached container with the three-service ctx; the handle exposes `element`/`find`/`findAll`/`click`/`setProps`/`destroy`. **`createTestApp(config)`** runs a real app in `routerMode: 'memory'` (§15's stated purpose) so `visit(path)` drives the real load-then-commit pipeline, guards, and lifecycle.
+- **`settled()`** drains to a fixed point: stores through the public idempotent `flush()`, rAF-scheduled `setData` renders, and the current last-wins `data()`/navigation promises — repeating until two microtask-stable passes add no work (two, so work created by a promise continuation is caught without depending on rAF or §31's fallback timer).
+- **It is bounded** (`settled({ maxPasses })`, default 100) and **throws** on exhaustion, naming the churn sources. Unbounded, a `data()` → store-write → `data()` cycle hangs until the runner's global timeout and reports nothing.
+- **Its boundaries are contract, not omission.** `settled()` does not advance arbitrary user timers or `min-duration` holds, resolve promises `data()`/navigation never awaited, fire IntersectionObserver callbacks, or finish CSS/fire-and-forget enter animations. An outgoing animation *is* part of an awaited navigation, so that navigation stays unsettled until the test finishes or cancels it.
+- The shipped module **must not import `vitest`** — a published package cannot depend on a test runner.
+- `/testing` also re-exports `installFixtures` from the §52 module (v1.61, D98), so a test file needs one import for helpers *and* fixtures; the canonical pairing is `const uninstall = installFixtures({ seed })` in setup, `uninstall()` in teardown.
+
+## 54. The `--fixtures` build switch (v1.61)
+
+`puzzle dev --fixtures` and `puzzle build --fixtures` (D98) wire §52's module into the bundle; without the flag **nothing references it**, so exclusion holds by construction with any compiler version. (This replaces v1.59's `__PUZZLE_HAS_FIXTURES__`/`__PUZZLE_HAS_MOCK__` usage-scan defines — D96, superseded. The D89 scan mechanism itself is unchanged and still gates flip/head-tags.)
+
+- The flag requires `app/fixtures.js` (or `.ts`); missing is a clear error. Its default export is §52's install config: `{ seed, mock, setup }`.
+- The compiler generates a **two-module wrapper entry** under `<root>/.puzzle/` and swaps the esbuild entry point: a wiring module (`installFixtures(config)` in its body) imported **before** the real `app/app.js`. Two modules because static imports hoist — only a dependency module's body is guaranteed to run before the app entry constructs and mounts. The wrapper keeps the `dist/app.js` output name.
+- `.puzzle/` is a generated dot-directory (the usage scan already prunes dot-dirs); it is removed after one-shot builds and kept for the life of a `puzzle dev` process.
+- The flag is constant per process, so watch rebuilds never re-decide it — none of the define-staleness machinery applies.
+- `--fixtures` with `--static`/`--hybrid` (or a config `output`) is **rejected**; prerender + fixtures interplay is deferred. A `puzzle.config.js` equivalent of the flag is also deferred — the explicit CLI switch *is* the dev-vs-real-API toggle.
+- Use cases: `puzzle dev` against the real API, `puzzle dev --fixtures` against fakes, `puzzle build --fixtures` for a shareable preview with baked-in data.
+
 ## Deferred features (post-v1)
 
 Explicitly out of scope for v1. Docs may describe them only if marked **"Planned — not in v1"**.
@@ -1092,9 +1191,11 @@ Explicitly out of scope for v1. Docs may describe them only if marked **"Planned
 - ~~HMR~~ — shipped in v1.25 as a state-preserving dev reload (§27, D57). Per-module hot swap (patching a changed component without a reload) remains deferred on top of it.
 - Element actions (`use:name` directives) — considered at the 2026-07 framework-gap review and deferred: D72 refs already deliver element-lifetime callbacks, view lifecycle covers document-listener patterns, and the dominant dismiss-behavior case shipped as the `@event:outside` modifier (v1.52, §47/D86) — which further narrows what an action system would add. If real pressure appears, the intended shape is dynamic function refs (`ref={ expr }` on the §31 handler cache), not a new directive namespace.
 - `<Portal>` — considered at the same review and deferred: §26's containing-block contract already keeps `position: fixed` overlays reliable, the native top layer (`<dialog>.showModal()`, `popover`) covers modals/popovers on our ES2022 floor, and a portal entangles the one-animator transition, overlap pinning, morph scanning, and SSG inline serialization. Document the native pattern instead.
+- A **`puzzle dev` mock API server** (`dev: { mock: … }`, the long-standing open question below) — considered alongside D95 and deferred once the client-side mock adapter shipped. The adapter intercepts at the Store's fetch seam, so it needs no server and behaves **identically in `puzzle dev` and in Vitest**, which a dev-server mock structurally cannot. Shipping both would mean two overlapping mechanisms with different reach. The case a server uniquely serves — mocking plain `fetch` calls that never go through an adapter, and seeing the traffic in the network tab — is real but thin. Revisit if it comes up; `dev.proxy`'s config block and handler-chain registration are the seam it would use.
+- An **async `beforeRequest`** (§49, D91) — the obvious next ask is inline token refresh, but awaiting the hook puts an `await` in front of every adapter call and needs a story for coalescing concurrent refreshes against the §22 per-record save chain. Refresh arguably belongs in a wrapper around the verb. Widening sync→async later is compatible; narrowing is not. A whole-`fetch` override (`options.fetch`) is deferred on the same grounds — strictly more powerful, but it hands the app the entire request contract and lets a bad implementation break the §22 guards silently.
 - Lazy route views + code splitting + link preloading — real for large apps, but Puzzle bundles are small enough that the pressure is weak today, and it undercuts the §16 skeleton story (a skeleton cannot render before its module arrives). Deserves its own release; static mode's per-page splitting is the in-repo precedent. (Also listed at §36.)
 
 ## Open questions (tracked, not blocking)
 
 - `Puzzle.string()` vs a dedicated `t.string()`/`field.string()` namespace if `Puzzle` ever needs app-level statics. Starting with `Puzzle.*`.
-- Whether `puzzle dev` should also serve `/api` mocks for adapter development (post-v1 concern).
+- ~~Whether `puzzle dev` should also serve `/api` mocks for adapter development~~ — answered by D95: the client-side mock adapter needs no server and works identically in dev and Vitest. A dev-server mock stays deferred (see the cut list).
