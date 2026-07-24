@@ -30,7 +30,22 @@ export interface Route {
 	name?: string;
 	view: any;
 	layout?: any;
-	meta?: { title?: string; [key: string]: any };
+	/**
+	 * Route metadata. Four RESERVED head fields (v1.50, D84 —
+	 * constellation/doc/DOC-SPEC.md §45): each resolves independently,
+	 * nearest-defined walking the destination chain leaf→root; `undefined`
+	 * inherits from a parent, `null` explicitly suppresses an inherited value.
+	 * Static strings only (no functions/HTML). Rendered as managed
+	 * `data-puzzle-head` tags by both prerender output and SPA navigation;
+	 * custom keys are untouched by the framework.
+	 */
+	meta?: {
+		title?: string | null;
+		description?: string | null;
+		canonical?: string | null;
+		socialImage?: string | null;
+		[key: string]: any;
+	};
 	children?: Route[];
 	[key: string]: any;
 }

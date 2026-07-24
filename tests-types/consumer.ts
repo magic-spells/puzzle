@@ -2,10 +2,11 @@
  * Type-only consumer fixture (`npm run test:types`).
  *
  * Imports from the PUBLIC package root ('@magic-spells/puzzle') and the
- * '@magic-spells/puzzle/morph' subpath exactly as an app authored with
- * `<script lang="ts">` would. The package is NOT installed in this repo, so the
- * fixture tsconfig maps both specifiers at ../types via `paths` — this still
- * type-checks the real exported declaration surface + its exports wiring.
+ * '@magic-spells/puzzle/morph' + '@magic-spells/puzzle/ssg' subpaths exactly as
+ * an app authored with `<script lang="ts">` would. The package is NOT installed
+ * in this repo, so the fixture tsconfig maps the specifiers at ../types via
+ * `paths` — this still type-checks the real exported declaration surface + its
+ * exports wiring.
  *
  * Nothing here runs. `tsc --noEmit --strict` failing is the whole test: it
  * guards that the declared surface stays usable (and catches a declaration that
@@ -31,6 +32,8 @@ import type {
 } from '@magic-spells/puzzle';
 import { enableMorph } from '@magic-spells/puzzle/morph';
 import type { MorphEngine } from '@magic-spells/puzzle/morph';
+import { prerender, injectShell } from '@magic-spells/puzzle/ssg';
+import type { PrerenderResult, ResolvedRouteHead } from '@magic-spells/puzzle/ssg';
 
 // ---------------------------------------------------------------------------
 // PuzzleModel + schema builders (§7, §20–§22)
@@ -153,7 +156,14 @@ const routes: Route[] = [
 		path: '/',
 		name: 'home',
 		view: TodoListView,
-		meta: { title: 'Todos' },
+		// Reserved head fields (v1.50, D84): static strings, plus custom keys.
+		meta: {
+			title: 'Todos',
+			description: 'All the todos',
+			canonical: 'https://example.com/',
+			socialImage: 'https://example.com/og.png',
+			section: 'app',
+		},
 		// per-route transition override (v1.30, D65) — Route allows extra keys.
 		transitionMode: 'overlap',
 	},
@@ -161,6 +171,8 @@ const routes: Route[] = [
 		path: '/todos/:id',
 		name: 'todo',
 		view: TodoListView,
+		// `null` explicitly suppresses an inherited head value (D84).
+		meta: { title: null, description: null },
 		children: [{ path: 'edit', name: 'todo-edit', view: TodoListView }],
 	},
 ];
@@ -240,6 +252,30 @@ const handler: MorphHandler = {
 };
 app.setMorphHandler(handler);
 app.setMorphHandler(null);
+
+// ---------------------------------------------------------------------------
+// ssg subpath: prerendered pages carry the resolved head beside the
+// compatibility title (v1.50, D84); injectShell accepts it.
+// ---------------------------------------------------------------------------
+
+prerender(config).then((result: PrerenderResult) => {
+	const page = result.pages[0];
+	// `head` is per-field string|null (ResolvedRouteHead), or null for prerender:false.
+	const head: ResolvedRouteHead | null = page.head;
+	if (head) {
+		const description: string | null = head.description;
+		const canonical: string | null = head.canonical;
+		void description;
+		void canonical;
+	}
+	// title kept beside head for compatibility; head is optional on injectShell.
+	return injectShell('<html><head></head><body><div id="app"></div></body></html>', {
+		targetId: 'app',
+		content: page.html ?? '',
+		title: page.title,
+		head,
+	});
+});
 
 // ---------------------------------------------------------------------------
 // Error shapes (§20, §22)

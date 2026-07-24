@@ -10,14 +10,28 @@
  * (the config surface is the same `any`-tolerant shape PuzzleApp accepts).
  */
 
-/** A prerendered page. `html`/`title` are null for a `prerender: false` route. */
+/**
+ * The resolved reserved head fields for a route (v1.50, D84 — SPEC §45): each
+ * field is the nearest-defined `meta` value walking the chain leaf→root
+ * (`undefined` inherits, `null` suppresses), or null when nothing resolves.
+ */
+export interface ResolvedRouteHead {
+	title: string | null;
+	description: string | null;
+	canonical: string | null;
+	socialImage: string | null;
+}
+
+/** A prerendered page. `html`/`title`/`head` are null for a `prerender: false` route. */
 export interface PrerenderedPage {
 	/** The route's full path (`/`, `/components/panel-stack`, …). */
 	path: string;
 	/** The rendered content markup, or null for a `prerender: false` page. */
 	html: string | null;
-	/** The resolved `<title>` (nearest meta.title leaf→root), or null. */
+	/** The resolved `<title>` (=== `head.title`, kept for compatibility), or null. */
 	title: string | null;
+	/** The D84 per-field head resolution, or null for a `prerender: false` page. */
+	head: ResolvedRouteHead | null;
 	/** Present and `false` when the route opted out with `prerender: false`. */
 	prerender?: boolean;
 }
@@ -102,13 +116,20 @@ export declare function prerenderToDir(
 ): Promise<PrerenderToDirResult>;
 
 /**
- * Inject rendered markup + a resolved title into an app shell by string surgery.
- * Stamps `data-puzzle-ssg` on the target element; throws if it is missing or
- * non-empty.
+ * Inject rendered markup + a resolved title/head into an app shell by string
+ * surgery. Stamps `data-puzzle-ssg` on the target element; throws if it is
+ * missing or non-empty. With a resolved `head` (D84) the managed
+ * `data-puzzle-head` tags are replaced/inserted/removed alongside the title;
+ * with only a bare `title` the pre-D84 title-only path runs (no managed tags).
  */
 export declare function injectShell(
 	shell: string,
-	fields: { targetId: string; content: string; title: string | null }
+	fields: {
+		targetId: string;
+		content: string;
+		title: string | null;
+		head?: ResolvedRouteHead | null;
+	}
 ): string;
 
 /**
@@ -124,6 +145,7 @@ export declare function injectStaticShell(
 		targetId: string;
 		content: string | null;
 		title: string | null;
+		head?: ResolvedRouteHead | null;
 		slug: string;
 		data: object;
 	}
