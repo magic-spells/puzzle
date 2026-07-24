@@ -12,8 +12,8 @@ connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
   - DOC-TESTING
-verified_at: '2026-07-24T18:54:01.754Z'
-verified_sha: 599b1a987c7c81068d50570cfe8bd1cd7ffbfcee
+verified_at: '2026-07-24T20:06:12.576Z'
+verified_sha: a72c1eb93fd8d536a9c270b0b3513c96c363705c
 notes:
   - kind: verified
     text: >-
@@ -23,6 +23,12 @@ notes:
       real-browser smoke of `puzzle dev --fixtures` rendered 4 explicit + 3 schema-generated seeded
       todos with a clean console.
     sha: 599b1a987c7c81068d50570cfe8bd1cd7ffbfcee
+  - kind: verified
+    text: >-
+      Post-merge re-verify on main (PR #22 merge + morph bug fix): 64 files / 1170 Vitest and 14 Go
+      packages green in a clean worktree at this sha (compiled-fixture pretest run first — fresh
+      checkouts need it).
+    sha: a72c1eb93fd8d536a9c270b0b3513c96c363705c
 ---
 
 The D95 fixture/mock system moves out of the core store into a self-contained
