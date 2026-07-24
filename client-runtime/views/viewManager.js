@@ -313,38 +313,52 @@ function mountComponent(vnode, parent, ref, ctx) {
 	vnode.component = child;
 	child
 		.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded })
-		// ENTER animation (constellation/doc/DOC-SPEC.md §12): once the first
-		// real render has landed (mount() resolved → this.element is the rendered
-		// root, not the anchor), run the child's playIn(). Chained here so it
-		// never blocks the synchronous patcher.
-		.then(() => {
-			// The async render has landed: the child's real root replaced the anchor
-			// placeholder, so refresh the cached vnode.el off the now-live element. This
-			// keeps the cached reference connected for a later reconciliation on this
-			// position (patch()'s replace path resolves from the live element too, but
-			// keeping vnode.el fresh avoids relying on the fallback).
-			vnode.el = child.element;
-			return child.playIn();
-		})
-		.catch((err) => {
-			console.error('[puzzle] child mount failed:', err);
-			// The instance never reached mounted() (data()/render() threw on the first
-			// mount). Left as-is, patchComponent would REUSE this dead instance on every
-			// later render without ever re-mounting it, so a render that no longer throws
-			// still gets a permanently-broken component: mounted() never fires and
-			// setData() re-renders are inert. Tear it down and leave a bare comment
-			// holding the position, then clear the vnode's instance links so patch()
-			// mounts a FRESH instance here on the next render (see patch()).
-			const anchor = child.element; // the comment placeholder — render never landed
-			const placeholder =
-				anchor && anchor.parentNode
-					? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
-					: null;
-			child.destroy(); // release any partial subscriptions; removes the child's own anchor
-			if (placeholder) vnode.el = placeholder;
-			vnode.component = null;
-			vnode.instance = null;
-		});
+		// Two-arg then(): the recovery handler below is attached to the MOUNT step
+		// ONLY. A single trailing .catch() could not tell a failed mount from a
+		// rejected playIn(), so a user enter hook that threw tore down a component
+		// that had already mounted and painted.
+		.then(
+			// ENTER animation (constellation/doc/DOC-SPEC.md §12): once the first
+			// real render has landed (mount() resolved → this.element is the rendered
+			// root, not the anchor), run the child's playIn(). Chained here so it
+			// never blocks the synchronous patcher.
+			() => {
+				// The async render has landed: the child's real root replaced the anchor
+				// placeholder, so refresh the cached vnode.el off the now-live element. This
+				// keeps the cached reference connected for a later reconciliation on this
+				// position (patch()'s replace path resolves from the live element too, but
+				// keeping vnode.el fresh avoids relying on the fallback).
+				vnode.el = child.element;
+				// playIn() runs viewWillShow()/viewDidShow() unguarded, so a throwing user
+				// hook rejects here — with the child mounted, painted, and subscribed. Log
+				// and leave the live tree alone: a rejected enter must never tear down a
+				// component that mounted successfully (the enter-side mirror of
+				// PuzzleView.destroyAnimated()'s leave-hook guard, and what router.js
+				// #playInLogged already does for router-mounted animators).
+				return Promise.resolve(child.playIn()).catch((err) =>
+					console.error('[puzzle] child enter animation failed:', err)
+				);
+			},
+			(err) => {
+				console.error('[puzzle] child mount failed:', err);
+				// The instance never reached mounted() (data()/render() threw on the first
+				// mount). Left as-is, patchComponent would REUSE this dead instance on every
+				// later render without ever re-mounting it, so a render that no longer throws
+				// still gets a permanently-broken component: mounted() never fires and
+				// setData() re-renders are inert. Tear it down and leave a bare comment
+				// holding the position, then clear the vnode's instance links so patch()
+				// mounts a FRESH instance here on the next render (see patch()).
+				const anchor = child.element; // the comment placeholder — render never landed
+				const placeholder =
+					anchor && anchor.parentNode
+						? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
+						: null;
+				child.destroy(); // release any partial subscriptions; removes the child's own anchor
+				if (placeholder) vnode.el = placeholder;
+				vnode.component = null;
+				vnode.instance = null;
+			}
+		);
 	vnode.el = child.element;
 	return vnode.el;
 }
