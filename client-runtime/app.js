@@ -23,9 +23,8 @@
  */
 
 import { Store } from './datastore/store.js';
-import { FormatterRegistry } from './formatters.js';
+import { makeFormatterRegistry } from './formatters.js';
 import { Router } from './router/router.js';
-import builtinFormatters from '@magic-spells/puzzle/formatters/manifest';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 
 // Dev HMR guard (constellation/doc/DOC-SPEC.md §27, D57): gates the state-preserving reload
@@ -197,13 +196,12 @@ export class PuzzleApp {
 		if (storage !== undefined) storeOptions.storage = storage;
 		this.#store = new Store(models, storeOptions);
 
-		// 3. Formatters: built-ins first, then config formatters registered over
-		//    them — register() overwrites by name, so a user formatter of the same
-		//    name as a built-in wins.
-		this.formatters = new FormatterRegistry(builtinFormatters);
-		for (const [name, fn] of Object.entries(formatters)) {
-			this.formatters.register(name, fn);
-		}
+		// 3. Formatters: shared built-in/custom wiring plus the live-router-backed
+		//    `link` encoder. The closure reads this.router lazily so a re-mount never
+		//    keeps a stale Router, and a custom `link` formatter still wins.
+		this.formatters = makeFormatterRegistry(formatters, (path) =>
+			this.router ? this.router.url(path) : path
+		);
 
 		// 4. Router + the shared context object injected into every view. Pass
 		//    `mode` through only when routerMode is set, so the Router's own default
@@ -227,21 +225,6 @@ export class PuzzleApp {
 		this.router = new Router(routes, routerOptions);
 		if (this.#morphHandler) this.router.setMorphHandler(this.#morphHandler);
 
-		// 4a. Built-in `link` formatter (v1.46, D79): the router-bound render-time
-		//     encoder — a path-shaped route in, a mode-correct href out via
-		//     router.url(). Registered ONLY if absent, so a user `link` in
-		//     config.formatters (step 3) wins — the if-absent posture of the
-		//     requiredBuiltins seed (formatters.js). The arrow reads `this.router`
-		//     lazily off the app, not a captured router, so unmount/re-mount never
-		//     strands a stale router in the closure. Fail-soft (never throws in
-		//     render): nullish → '' (builtin convention), else String()-coerced.
-		if (!this.formatters.getAll().link) {
-			this.formatters.register('link', (v) => {
-				if (v == null) return '';
-				const s = String(v);
-				return this.router ? this.router.url(s) : s;
-			});
-		}
 		this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
 
 		// Claim mounted BEFORE the async start(): the initial navigation may await a
@@ -399,6 +382,11 @@ export class PuzzleApp {
 			window.__PUZZLE_APP__ = null;
 		}
 		this.router?.stop();
+		// Morph teardown (v1.23, D55): if enableMorph wired a handler, drop its
+		// document click listener and release any pinned/in-flight morph state so an
+		// unmounted app leaks neither. The handler object carries `dispose` (morph.js);
+		// stubs and the null-unregister case have none, hence the optional call.
+		this.#morphHandler?.dispose?.();
 		// Land any batched storage write before dropping the store (persistence is
 		// deferred into Store.flush() — a mutation just before unmount would
 		// otherwise only reach storage when the armed timer fires, and never at all

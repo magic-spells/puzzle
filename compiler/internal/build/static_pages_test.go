@@ -89,6 +89,10 @@ func cannedSummary() staticSummary {
 		Mode:          "static",
 		Target:        "app",
 		APIURL:        json.RawMessage(`"https://api.example.com"`),
+		Storage:       json.RawMessage(`{"kind":"local"}`),
+		RouterBase:    json.RawMessage(`"/docs"`),
+		RouterMode:    json.RawMessage(`"hash"`),
+		HasModels:     true,
 		HasFormatters: true,
 		Written: []staticPage{
 			{
@@ -114,7 +118,13 @@ func cannedSummary() staticSummary {
 func TestStaticEntrySourceFull(t *testing.T) {
 	root := "/abs/app-root"
 	s := cannedSummary()
-	src, err := staticEntrySource(root, s.Written[0], s.Target, s.APIURL, true, true)
+	src, err := staticEntrySource(
+		root,
+		s.Written[0],
+		s,
+		"app/models/index.ts",
+		"app/formatters.ts",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,8 +132,8 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		`import { mountStatic } from '@magic-spells/puzzle/static';`,
 		`import V0 from "/abs/app-root/app/views/Home.pzl";`,
 		`import L0 from "/abs/app-root/app/layouts/Default.pzl";`,
-		`import models from "/abs/app-root/app/models/index.js";`,
-		`import formatters from "/abs/app-root/app/formatters.js";`,
+		`import models from "/abs/app-root/app/models/index.ts";`,
+		`import formatters from "/abs/app-root/app/formatters.ts";`,
 		`target: "#app",`,
 		`views: [V0],`,
 		`layout: L0,`,
@@ -131,6 +141,9 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		`models,`,
 		`formatters,`,
 		`apiURL: "https://api.example.com",`,
+		`storage: {"kind":"local"},`,
+		`routerMode: "hash",`,
+		`routerBase: "/docs",`,
 	}
 	for _, w := range wants {
 		if !strings.Contains(src, w) {
@@ -146,7 +159,11 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 	root := "/abs/app-root"
 	s := cannedSummary()
 	page := s.Written[1]
-	src, err := staticEntrySource(root, page, s.Target, nil, false, false)
+	s.APIURL = nil
+	s.Storage = nil
+	s.RouterMode = nil
+	s.RouterBase = nil
+	src, err := staticEntrySource(root, page, s, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,10 +180,44 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 		}
 	}
 	// No layout import, and no models/formatters imports or shorthands.
-	for _, absent := range []string{"import L0", "import models", "import formatters", "\n  models,", "\n  formatters,"} {
+	for _, absent := range []string{
+		"import L0",
+		"import models",
+		"import formatters",
+		"\n  models,",
+		"\n  formatters,",
+		"\n  storage:",
+		"\n  routerMode:",
+		"\n  routerBase:",
+	} {
 		if strings.Contains(src, absent) {
 			t.Errorf("generated minimal entry should not contain %q\n---\n%s", absent, src)
 		}
+	}
+}
+
+func TestFindStaticModuleSupportsTypeScriptAndPrefersJavaScript(t *testing.T) {
+	root := t.TempDir()
+	modelsDir := filepath.Join(root, "app", "models")
+	if err := os.MkdirAll(modelsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tsPath := filepath.Join(modelsDir, "index.ts")
+	if err := os.WriteFile(tsPath, []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	candidates := []string{"app/models/index.js", "app/models/index.ts"}
+	if got := findStaticModule(root, candidates...); got != "app/models/index.ts" {
+		t.Fatalf("TypeScript-only module = %q, want app/models/index.ts", got)
+	}
+
+	jsPath := filepath.Join(modelsDir, "index.js")
+	if err := os.WriteFile(jsPath, []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := findStaticModule(root, candidates...); got != "app/models/index.js" {
+		t.Fatalf("JS+TS module = %q, want JavaScript precedence", got)
 	}
 }
 

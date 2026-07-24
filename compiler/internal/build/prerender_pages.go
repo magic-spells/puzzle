@@ -24,6 +24,7 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
+	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
 
@@ -35,7 +36,7 @@ const staticPagesDir = "_puzzle"
 // staticSummary mirrors the JSON the SSG runtime's prerenderToDir prints after
 // the sentinel in `mode: 'static'`. It extends the hybrid summary (prerender.go
 // ssgSummary) with the per-page module/entry/route facts and the top-level
-// mode/target/apiURL/hasFormatters the per-page entry generation needs.
+// mode/target/store/router wiring facts the per-page entry generation needs.
 type staticSummary struct {
 	Written []staticPage `json:"written"`
 	Skipped []struct {
@@ -53,6 +54,16 @@ type staticSummary struct {
 	// APIURL is the app's configured apiURL, embedded verbatim into each entry's
 	// mountStatic call. Kept raw (string or null) so it round-trips exactly.
 	APIURL json.RawMessage `json:"apiURL"`
+	// Storage, RouterBase, and RouterMode preserve the corresponding app config
+	// values for the browser-side static context. A missing JSON field stays nil,
+	// so the generated mount call can preserve app.js's conditional passthrough.
+	Storage    json.RawMessage `json:"storage"`
+	RouterBase json.RawMessage `json:"routerBase"`
+	RouterMode json.RawMessage `json:"routerMode"`
+	// HasModels/HasFormatters report config registrations. The build uses them
+	// only for warnings when no conventional module can reproduce that wiring in
+	// the per-page browser graph.
+	HasModels bool `json:"hasModels"`
 	// HasFormatters is true when the app config registered custom formatters; the
 	// build warns when they exist but app/formatters.js does not (they would be
 	// missing client-side in static mode).
@@ -92,7 +103,7 @@ func prerenderStaticPages(absRoot, staging string, cfg config.Config, dev bool) 
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
 	// collision is observable here, before the splitting pass writes anything.
-	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || fileExists(pagesOut) {
+	if pagesOut := filepath.Join(staging, staticPagesDir); dirExists(pagesOut) || FileExists(pagesOut) {
 		return fmt.Errorf(
 			"public asset would overwrite compiler output dist/%s (a reserved output name in static mode); rename or remove it",
 			staticPagesDir,
@@ -131,8 +142,8 @@ func prerenderStaticPages(absRoot, staging string, cfg config.Config, dev bool) 
 	// 2. Generate one mountStatic entry file per written page. Whether the app
 	//    ships a models registry / a formatters module is a build-wide fact, so
 	//    resolve it once.
-	hasModels := fileExists(filepath.Join(absRoot, "app", "models", "index.js"))
-	hasFormatters := fileExists(filepath.Join(absRoot, "app", "formatters.js"))
+	modelsModule := findStaticModule(absRoot, "app/models/index.js", "app/models/index.ts")
+	formattersModule := findStaticModule(absRoot, "app/formatters.js", "app/formatters.ts")
 
 	entriesDir := filepath.Join(staging, prerenderDir, "entries")
 	if err := os.MkdirAll(entriesDir, 0o755); err != nil {
@@ -144,7 +155,7 @@ func prerenderStaticPages(absRoot, staging string, cfg config.Config, dev bool) 
 		if err != nil {
 			return err
 		}
-		src, err := staticEntrySource(absRoot, page, summary.Target, summary.APIURL, hasModels, hasFormatters)
+		src, err := staticEntrySource(absRoot, page, summary, modelsModule, formattersModule)
 		if err != nil {
 			return err
 		}
@@ -155,12 +166,16 @@ func prerenderStaticPages(absRoot, staging string, cfg config.Config, dev bool) 
 		entryFiles = append(entryFiles, file)
 	}
 
-	// 3. Warn when the app registered custom formatters (in app.js) but has no
-	//    app/formatters.js — those formatters do not exist in the per-page graph.
-	if summary.HasFormatters && !hasFormatters {
-		out := ui.New(os.Stdout)
+	// 3. Warn when app.js registered services that have no conventional module
+	//    the per-page browser graph can import.
+	out := ui.New(os.Stdout)
+	if summary.HasModels && modelsModule == "" {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"),
-			"custom formatters registered in app.js will not exist client-side in static mode — export them from app/formatters.js")
+			"models registered in app.js will not exist client-side in static mode — export them from app/models/index.js or app/models/index.ts")
+	}
+	if summary.HasFormatters && formattersModule == "" {
+		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"),
+			"custom formatters registered in app.js will not exist client-side in static mode — export them from app/formatters.js or app/formatters.ts")
 	}
 
 	// 4. Splitting esbuild pass over all entries → staging/_puzzle. Shared chunks
@@ -205,8 +220,8 @@ func slugFromEntry(entry string) (string, error) {
 // specifiers and embedded values are JSON-encoded (space/quote safe, forward
 // slashes). The models/formatters imports (and their shorthand call properties)
 // are emitted only when the source files exist — an absent binding must never be
-// referenced. route + apiURL are embedded verbatim from the summary.
-func staticEntrySource(absRoot string, page staticPage, target string, apiURL json.RawMessage, hasModels, hasFormatters bool) (string, error) {
+// referenced. route + service options are embedded verbatim from the summary.
+func staticEntrySource(absRoot string, page staticPage, summary staticSummary, modelsModule, formattersModule string) (string, error) {
 	var b strings.Builder
 	b.WriteString("import { mountStatic } from '@magic-spells/puzzle/static';\n")
 
@@ -231,22 +246,22 @@ func staticEntrySource(absRoot string, page staticPage, target string, apiURL js
 		layoutExpr = "L0"
 	}
 
-	if hasModels {
-		spec, err := json.Marshal(absModuleImport(absRoot, "app/models/index.js"))
+	if modelsModule != "" {
+		spec, err := json.Marshal(absModuleImport(absRoot, modelsModule))
 		if err != nil {
 			return "", err
 		}
 		fmt.Fprintf(&b, "import models from %s;\n", spec)
 	}
-	if hasFormatters {
-		spec, err := json.Marshal(absModuleImport(absRoot, "app/formatters.js"))
+	if formattersModule != "" {
+		spec, err := json.Marshal(absModuleImport(absRoot, formattersModule))
 		if err != nil {
 			return "", err
 		}
 		fmt.Fprintf(&b, "import formatters from %s;\n", spec)
 	}
 
-	targetJSON, err := json.Marshal("#" + target)
+	targetJSON, err := json.Marshal("#" + summary.Target)
 	if err != nil {
 		return "", err
 	}
@@ -255,8 +270,8 @@ func staticEntrySource(absRoot string, page staticPage, target string, apiURL js
 		routeJSON = string(page.Route)
 	}
 	apiURLJSON := "null"
-	if len(apiURL) > 0 {
-		apiURLJSON = string(apiURL)
+	if len(summary.APIURL) > 0 {
+		apiURLJSON = string(summary.APIURL)
 	}
 
 	b.WriteString("mountStatic({\n")
@@ -264,15 +279,35 @@ func staticEntrySource(absRoot string, page staticPage, target string, apiURL js
 	fmt.Fprintf(&b, "  views: [%s],\n", strings.Join(viewIdents, ", "))
 	fmt.Fprintf(&b, "  layout: %s,\n", layoutExpr)
 	fmt.Fprintf(&b, "  route: %s,\n", routeJSON)
-	if hasModels {
+	if modelsModule != "" {
 		b.WriteString("  models,\n")
 	}
-	if hasFormatters {
+	if formattersModule != "" {
 		b.WriteString("  formatters,\n")
 	}
 	fmt.Fprintf(&b, "  apiURL: %s,\n", apiURLJSON)
+	if len(summary.Storage) > 0 {
+		fmt.Fprintf(&b, "  storage: %s,\n", summary.Storage)
+	}
+	if len(summary.RouterMode) > 0 {
+		fmt.Fprintf(&b, "  routerMode: %s,\n", summary.RouterMode)
+	}
+	if len(summary.RouterBase) > 0 {
+		fmt.Fprintf(&b, "  routerBase: %s,\n", summary.RouterBase)
+	}
 	b.WriteString("});\n")
 	return b.String(), nil
+}
+
+// findStaticModule returns the first conventional app module that exists,
+// preferring JavaScript when both JavaScript and TypeScript variants are present.
+func findStaticModule(absRoot string, candidates ...string) string {
+	for _, candidate := range candidates {
+		if FileExists(filepath.Join(absRoot, filepath.FromSlash(candidate))) {
+			return candidate
+		}
+	}
+	return ""
 }
 
 // absModuleImport joins an app-relative POSIX module path (a __pzlModule stamp,
@@ -353,11 +388,11 @@ func printStaticSummary(s staticSummary, bundleCount int) {
 	empties := len(s.Written) - prerendered
 
 	out := ui.New(os.Stdout)
-	detail := fmt.Sprintf("· %d page%s prerendered", prerendered, plural(prerendered))
+	detail := fmt.Sprintf("· %d page%s prerendered", prerendered, textutil.Plural(prerendered))
 	if empties > 0 {
 		// `prerender: false` pages get an empty, unmarked target the per-page
 		// script fills client-side.
-		detail += fmt.Sprintf(" (+%d empty island%s)", empties, plural(empties))
+		detail += fmt.Sprintf(" (+%d empty island%s)", empties, textutil.Plural(empties))
 	}
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintf(os.Stdout, "  %s %s\n",
@@ -365,7 +400,7 @@ func printStaticSummary(s staticSummary, bundleCount int) {
 		out.Dim(detail),
 	)
 	fmt.Fprintf(os.Stdout, "  %s\n",
-		out.Dim(fmt.Sprintf("· %d page bundle%s", bundleCount, plural(bundleCount))),
+		out.Dim(fmt.Sprintf("· %d page bundle%s", bundleCount, textutil.Plural(bundleCount))),
 	)
 	for _, w := range s.Warnings {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), w)

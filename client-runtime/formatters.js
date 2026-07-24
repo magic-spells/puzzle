@@ -111,4 +111,27 @@ export class FormatterRegistry {
 	}
 }
 
+/**
+ * Build the application formatter registry in one place: manifest-selected
+ * built-ins first, app formatters over them, then the router-backed `link`
+ * formatter only when the app did not provide its own implementation.
+ *
+ * @param {object} [customFormatters] name → formatter function
+ * @param {(path: string) => string} [url] mode-aware route URL encoder
+ * @returns {FormatterRegistry}
+ */
+export function makeFormatterRegistry(customFormatters = {}, url) {
+	const registry = new FormatterRegistry();
+	for (const [name, fn] of Object.entries(customFormatters)) {
+		registry.register(name, fn);
+	}
+	if (!registry.getAll().link && typeof url === 'function') {
+		registry.register('link', (value) => {
+			if (value == null) return '';
+			return url(String(value));
+		});
+	}
+	return registry;
+}
+
 export default FormatterRegistry;

@@ -384,14 +384,17 @@ func copyPublic(root, outdir string) (map[string]bool, error) {
 	return copied, err
 }
 
-// findRuntime walks up from start looking for the in-repo runtime: a directory
+// FindRuntime walks up from start looking for the in-repo runtime: a directory
 // holding client-runtime/index.js whose package.json is named
 // "@magic-spells/puzzle". Returns the absolute path to index.js, or "" if none.
-func findRuntime(start string) string {
-	dir := start
+func FindRuntime(start string) string {
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		dir = start
+	}
 	for {
 		idx := filepath.Join(dir, "client-runtime", "index.js")
-		if fileExists(idx) && pkgIsPuzzle(filepath.Join(dir, "package.json")) {
+		if fsutil.FileExists(idx) && PkgIsPuzzle(filepath.Join(dir, "package.json")) {
 			return idx
 		}
 		parent := filepath.Dir(dir)
@@ -402,11 +405,16 @@ func findRuntime(start string) string {
 	}
 }
 
-func findInstalledRuntime(start string) string {
-	dir := start
+// FindInstalledRuntime walks up from start for an installed Puzzle runtime and
+// returns the absolute path to its client-runtime/index.js, or "" if absent.
+func FindInstalledRuntime(start string) string {
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		dir = start
+	}
 	for {
 		idx := filepath.Join(dir, "node_modules", "@magic-spells", "puzzle", "client-runtime", "index.js")
-		if fileExists(idx) {
+		if fsutil.FileExists(idx) {
 			return idx
 		}
 		parent := filepath.Dir(dir)
@@ -417,7 +425,9 @@ func findInstalledRuntime(start string) string {
 	}
 }
 
-func pkgIsPuzzle(pkgPath string) bool {
+// PkgIsPuzzle reports whether pkgPath is a package.json for
+// "@magic-spells/puzzle".
+func PkgIsPuzzle(pkgPath string) bool {
 	data, err := os.ReadFile(pkgPath)
 	if err != nil {
 		return false
@@ -431,9 +441,10 @@ func pkgIsPuzzle(pkgPath string) bool {
 	return pkg.Name == "@magic-spells/puzzle"
 }
 
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
+// FileExists exposes the build package's historical file probe while sharing
+// its implementation with the rest of the compiler.
+func FileExists(path string) bool {
+	return fsutil.FileExists(path)
 }
 
 func dirExists(path string) bool {

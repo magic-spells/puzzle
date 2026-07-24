@@ -26,6 +26,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
+	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
 
@@ -240,10 +241,10 @@ func printPrerenderSummary(s ssgSummary) {
 	shells := len(s.Written) - prerendered
 
 	out := ui.New(os.Stdout)
-	detail := fmt.Sprintf("· %d page%s prerendered", prerendered, plural(prerendered))
+	detail := fmt.Sprintf("· %d page%s prerendered", prerendered, textutil.Plural(prerendered))
 	if shells > 0 {
 		// `prerender: false` islands get the plain SPA shell — written, not rendered.
-		detail += fmt.Sprintf(" (+%d SPA shell%s)", shells, plural(shells))
+		detail += fmt.Sprintf(" (+%d SPA shell%s)", shells, textutil.Plural(shells))
 	}
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintf(os.Stdout, "  %s %s\n",
@@ -260,11 +261,4 @@ func printPrerenderSummary(s ssgSummary) {
 			fmt.Sprintf("%s (%s)", sk.Path, sk.Reason),
 		)
 	}
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }

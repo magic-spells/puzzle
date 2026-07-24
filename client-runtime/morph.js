@@ -72,6 +72,12 @@ const CAPTURE_TTL_MS = 2000;
 // Fade duration for discarding an unclaimed clone.
 const FADE_MS = 150;
 
+// app → its live teardown, so a second enableMorph on the same app disposes the
+// first (never stacking a duplicate document click listener), and app.unmount()
+// can reach the teardown through the handler object. WeakMap: a discarded app and
+// its teardown closure GC together.
+const installedMorphs = new WeakMap();
+
 /**
  * Create a MorphEngine and register it as the app router's morph handler.
  * Call once, after `new PuzzleApp(...)` — before or after mount() both work
@@ -84,6 +90,10 @@ const FADE_MS = 150;
  * @returns {MorphEngine} the engine, for live tuning and events
  */
 export function enableMorph(app, options = {}) {
+	// Double-install guard: tear down any prior enableMorph on this same app first,
+	// so calling it twice never leaves a duplicate document click listener behind.
+	installedMorphs.get(app)?.();
+
 	const { attribute = ATTRIBUTE, ...engineOptions } = options;
 	// One id namespace, three roles derived from the base (D69): plain launches AND
 	// receives; `-trigger` launches only (never a landing); `-target` receives only
@@ -327,22 +337,18 @@ export function enableMorph(app, options = {}) {
 	// leave() can pin exactly it. Only plain + trigger elements are candidates — a
 	// clicked `-target` records nothing. Clicks that never navigate cost nothing.
 	// Guarded for SSG — enableMorph runs under node during prerender, no document.
-	if (typeof document !== 'undefined') {
-		document.addEventListener(
-			'click',
-			(event) => {
-				const t = event.target;
-				if (!t || t.nodeType !== 1) return;
-				let candidate = t.closest(launchSelector);
-				if (!candidate) {
-					const trigger = t.closest('a, button, [role="button"]');
-					candidate = trigger ? trigger.querySelector(launchSelector) : null;
-				}
-				if (candidate) lastClicked = { el: candidate, time: now() };
-			},
-			true
-		);
-	}
+	const onDocumentClick = (event) => {
+		const t = event.target;
+		if (!t || t.nodeType !== 1) return;
+		let candidate = t.closest(launchSelector);
+		if (!candidate) {
+			const trigger = t.closest('a, button, [role="button"]');
+			candidate = trigger ? trigger.querySelector(launchSelector) : null;
+		}
+		if (candidate) lastClicked = { el: candidate, time: now() };
+	};
+	const hasDocument = typeof document !== 'undefined';
+	if (hasDocument) document.addEventListener('click', onDocumentClick, true);
 
 	// Measurable launch-eligible (plain + trigger) elements OUTSIDE `excludeRoot`,
 	// first-per-id — the live-pair SOURCE candidates. Targets are absent from the
@@ -362,6 +368,27 @@ export function enableMorph(app, options = {}) {
 		}
 		return map;
 	};
+
+	// Teardown: drop the document click listener, release the (possibly detached)
+	// lastClicked ref, cancel any in-flight capture / deferred-target observer /
+	// engine work, and forget this app. Idempotent. Reached two ways: app.unmount()
+	// calls it through the handler's `dispose` below, and a second enableMorph on
+	// this app calls it via the double-install guard. engine.stop() (not destroy())
+	// leaves the engine reusable; re-enabling morph after unmount means calling
+	// enableMorph again, which is safe.
+	let disposed = false;
+	const dispose = () => {
+		if (disposed) return;
+		disposed = true;
+		if (hasDocument) document.removeEventListener('click', onDocumentClick, true);
+		lastClicked = null;
+		discardCaptures();
+		disarmCrossFlight();
+		if (engine.state !== 'idle') engine.stop();
+		installedMorphs.delete(app);
+	};
+	engine.dispose = dispose;
+	installedMorphs.set(app, dispose);
 
 	app.setMorphHandler({
 		enter(el, { initial }) {
@@ -439,6 +466,10 @@ export function enableMorph(app, options = {}) {
 
 			return result;
 		},
+
+		// Carried on the handler so app.unmount() can tear morph down (the router
+		// only reads enter/leave — this extra field is inert to it).
+		dispose,
 	});
 
 	return engine;

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 )
 
 // ResolvedCLI is one runnable Tailwind CLI invocation: an executable plus the
@@ -81,7 +83,7 @@ func findV4CLI(appRoot string) string {
 		return ""
 	}
 	script := filepath.Join(pkgDir, filepath.FromSlash(binRel))
-	if !fileExists(script) {
+	if !fsutil.FileExists(script) {
 		return ""
 	}
 	return script
@@ -91,7 +93,7 @@ func findV4CLI(appRoot string) string {
 // (Tailwind v3's CLI entry) and returns its absolute path, or "".
 func findV3Bin(appRoot string) string {
 	bin := findUp(appRoot, filepath.Join("node_modules", ".bin", "tailwindcss"))
-	if bin == "" || !fileExists(bin) {
+	if bin == "" || !fsutil.FileExists(bin) {
 		return ""
 	}
 	return bin
@@ -148,9 +150,4 @@ func findUp(start, rel string) string {
 		}
 		dir = parent
 	}
-}
-
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }

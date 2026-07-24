@@ -80,7 +80,7 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 	// package IS installed (a real, published app), no such ancestor exists and
 	// we leave resolution to esbuild's node_modules walk. Phase 3/publishing
 	// revisits this.
-	if runtime := findRuntime(absRoot); runtime != "" {
+	if runtime := FindRuntime(absRoot); runtime != "" {
 		buildOpts.Alias["@magic-spells/puzzle"] = runtime
 		// Subpath exports need their own entries — the bare alias points at a
 		// FILE, so prefix substitution would produce index.js/morph. Longest
@@ -100,7 +100,7 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 		return
 	}
 
-	if runtime := findInstalledRuntime(absRoot); runtime != "" {
+	if runtime := FindInstalledRuntime(absRoot); runtime != "" {
 		pl.SetRuntimeDir(filepath.Dir(runtime))
 	}
 }

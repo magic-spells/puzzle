@@ -800,8 +800,11 @@ function removeAttr(el, name) {
 }
 
 // Event-modifier key filters: modifier name → the KeyboardEvent.key it gates on
-// (SPEC event modifiers). Mirrors the compiler's eventKeyFilters table.
-const KEY_FILTERS = {
+// (SPEC event modifiers). Hand-mirrors the compiler's eventKeyFilters table
+// (compiler/internal/parser/parser.go); tests/event-key-filters-parity.test.js
+// asserts the two stay byte-identical. Exported for that test only — a named
+// export tree-shakes when unused.
+export const KEY_FILTERS = {
 	enter: 'Enter',
 	escape: 'Escape',
 	tab: 'Tab',

@@ -144,7 +144,9 @@ export function join(arr, sep = ', ') {
 
 export function reverse(v) {
 	if (Array.isArray(v)) return [...v].reverse();
-	if (typeof v === 'string') return v.split('').reverse().join('');
+	// Spread iterates by code POINT, not UTF-16 code unit — `split('')` would tear
+	// a surrogate pair (emoji) into two lone surrogates and reorder them wrong.
+	if (typeof v === 'string') return [...v].reverse().join('');
 	return v;
 }
 

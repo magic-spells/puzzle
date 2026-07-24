@@ -25,10 +25,9 @@
  */
 
 import { Store } from '../datastore/store.js';
-import { FormatterRegistry } from '../formatters.js';
-import builtinFormatters from '@magic-spells/puzzle/formatters/manifest';
+import { makeFormatterRegistry } from '../formatters.js';
 import { mount } from '../views/viewManager.js';
-import { assembleChain } from '../ssg/assemble.js';
+import { assembleChain, makeRouteSnapshot } from '../ssg/assemble.js';
 
 // The router methods a static page might reach for. Each throws — a static page has
 // no history/router, so any programmatic navigation is a coding error the message
@@ -49,6 +48,10 @@ const ROUTER_METHODS = ['push', 'replace', 'back', 'forward', 'go', 'start', 'st
  * @param {object} [options.models] the app models map
  * @param {object} [options.formatters] the app custom formatters map
  * @param {string} [options.apiURL] the store's base API URL
+ * @param {object} [options.storage] Storage-like persistence object
+ * @param {'history'|'hash'|'memory'} [options.routerMode] URL carrier used by
+ *   `ctx.router.url()` (history by default)
+ * @param {string} [options.routerBase] normalized route URL prefix
  * @returns {Promise<void>}
  */
 export async function mountStatic({
@@ -59,6 +62,9 @@ export async function mountStatic({
 	models,
 	formatters,
 	apiURL,
+	storage,
+	routerMode,
+	routerBase,
 } = {}) {
 	const targetEl = document.querySelector(target);
 	if (!targetEl) {
@@ -67,20 +73,28 @@ export async function mountStatic({
 		);
 	}
 
-	const ctx = buildStaticContext({ models, formatters, apiURL });
-
-	// Rehydrate the store from the inline data island (the same wire shape the HMR
-	// snapshot uses). Absent or empty island → a cold store (a page whose data() hits
-	// no records, or a prerender:false page that seeded nothing). Silent on absence.
-	hydrateStore(ctx.store);
-
 	// Rebuild the chain defs by zipping each view class back onto its serialized route
 	// def, then hand the assembled entry to the SHARED assembleChain — the exact
 	// assembly the prerenderer ran, so the client tree matches the prerendered markup.
 	const chain = route.chain.map((def, i) => ({ ...def, view: views[i] }));
 	const entry = { fullPath: route.path, chain, layout };
+	const routeSnapshot = makeRouteSnapshot(entry);
+	const ctx = buildStaticContext({
+		models,
+		formatters,
+		apiURL,
+		storage,
+		routerMode,
+		routerBase,
+		route: routeSnapshot,
+	});
 
-	const { topVnode, instances } = await assembleChain(entry, ctx);
+	// Rehydrate the store from the inline data island (the same wire shape the HMR
+	// snapshot uses). Absent, empty, or corrupt island → continue with the store's
+	// configured persistence state (or a cold store). Silent only on absence/empty.
+	hydrateStore(ctx.store);
+
+	const { topVnode, instances } = await assembleChain(entry, ctx, routeSnapshot);
 
 	// Initial paint must NOT animate — the content is already on screen (same posture
 	// as the SSG takeover: skipEnter every preloaded instance).
@@ -99,25 +113,66 @@ export async function mountStatic({
  * config formatters — EXCEPT `ctx.router` is a throwing stub (no Router import in
  * this module graph). `beforeMount` is NOT run (build-time only in static mode).
  */
-function buildStaticContext({ models = {}, formatters = {}, apiURL }) {
-	const store = new Store(models, { apiURL });
+function buildStaticContext({
+	models = {},
+	formatters = {},
+	apiURL,
+	storage,
+	routerMode,
+	routerBase,
+	route,
+}) {
+	const storeOptions = { apiURL };
+	if (storage !== undefined) storeOptions.storage = storage;
+	const store = new Store(models, storeOptions);
 
-	const registry = new FormatterRegistry(builtinFormatters);
-	for (const [name, fn] of Object.entries(formatters)) {
-		registry.register(name, fn);
-	}
+	const router = makeRouterStub(route, { mode: routerMode, base: routerBase });
+	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 
-	return { store, router: makeRouterStub(), formatters: registry };
+	return { store, router, formatters: registry };
 }
 
-/** A router-shaped stub whose every navigation method throws (CONTRACT 4). */
-function makeRouterStub() {
+/**
+ * Router-shaped static stub: navigation throws, url() keeps Router.url's exact
+ * validation/pass-through/prefix semantics, and current is the page snapshot.
+ */
+function makeRouterStub(route, { mode = 'history', base = '' } = {}) {
+	if (mode !== 'history' && mode !== 'hash' && mode !== 'memory') {
+		throw new Error(
+			`[puzzle] unknown router mode: "${mode}" (expected 'history', 'hash', or 'memory')`
+		);
+	}
+	const normalizedBase = normalizeBase(base);
 	const stub = {};
 	const throwNoRouter = () => {
 		throw new Error('[puzzle] static output has no router — use plain links');
 	};
 	for (const method of ROUTER_METHODS) stub[method] = throwNoRouter;
+	stub.url = (path) => {
+		if (typeof path !== 'string') {
+			throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
+		}
+		if (path[0] !== '/') return path;
+		if (mode === 'memory') return path;
+		if (mode === 'hash') return '#' + normalizedBase + path;
+		return normalizedBase + path;
+	};
+	Object.defineProperty(stub, 'current', {
+		enumerable: true,
+		get: () => route,
+	});
 	return stub;
+}
+
+/** Keep Router's D51 base normalization/validation semantics without importing it. */
+function normalizeBase(base) {
+	if (!base) return '';
+	if (base.includes('#') || base.includes('?')) {
+		throw new Error(`[puzzle] router base must not contain "#" or "?": "${base}"`);
+	}
+	let normalized = base[0] === '/' ? base : '/' + base;
+	normalized = normalized.replace(/\/+$/, '');
+	return normalized;
 }
 
 /**
@@ -130,8 +185,15 @@ function hydrateStore(store) {
 	if (!el) return;
 	const raw = el.textContent;
 	if (!raw || !raw.trim()) return;
-	const blob = JSON.parse(raw);
-	store._hydrateAll(blob, { replace: true });
+	try {
+		const blob = JSON.parse(raw);
+		store._hydrateAll(blob, { replace: true });
+	} catch (err) {
+		console.error(
+			'[puzzle] static data island is corrupt — mounting with the available store state',
+			err
+		);
+	}
 }
 
 export default mountStatic;
