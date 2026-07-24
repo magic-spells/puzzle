@@ -815,13 +815,7 @@ export class Router {
 	 * for free — this is pure prefixing and never parses them.
 	 */
 	url(path) {
-		if (typeof path !== 'string') {
-			throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
-		}
-		if (path[0] !== '/') return path;
-		if (this.#mode === 'memory') return path;
-		if (this.#mode === 'hash') return '#' + this.#base + path;
-		return this.#base + path;
+		return encodeURL(path, this.#mode, this.#base);
 	}
 
 	/**
@@ -2346,7 +2340,7 @@ function validateGuard(value, label) {
  * constructor throw (config-error posture, like an unknown mode) — those
  * characters would corrupt the mode-specific URL encoding.
  */
-function normalizeBase(base) {
+export function normalizeBase(base) {
 	if (!base) return '';
 	if (base.includes('#') || base.includes('?')) {
 		throw new Error(`[puzzle] router base must not contain "#" or "?": "${base}"`);
@@ -2354,6 +2348,25 @@ function normalizeBase(base) {
 	let b = base[0] === '/' ? base : '/' + base;
 	b = b.replace(/\/+$/, ''); // trim trailing slash(es); '/' → ''
 	return b;
+}
+
+/**
+ * The one render-time URL encoder (v1.46, D79) behind Router.url() — see its doc
+ * comment for the contract. Exported as a pure function because the DOM-free
+ * prerender paths need the SAME encoding without a live Router: the static router
+ * stub (ssg/assemble.js) and the hybrid prerender ctx (ssg/index.js) both call it,
+ * so a prerendered `href` and the client's re-render can never disagree. `base` is
+ * an ALREADY-normalized base (normalizeBase above); `mode` is already validated by
+ * whoever holds it.
+ */
+export function encodeURL(path, mode, base) {
+	if (typeof path !== 'string') {
+		throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
+	}
+	if (path[0] !== '/') return path;
+	if (mode === 'memory') return path;
+	if (mode === 'hash') return '#' + base + path;
+	return base + path;
 }
 
 /** Reduce a full path to the pathname used for matching (drop query + hash). */
