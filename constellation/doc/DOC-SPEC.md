@@ -1179,6 +1179,48 @@ A fifth export subpath (D94) — `mountView`, `createTestApp`, `settled`, `insta
 - `--fixtures` with `--static`/`--hybrid` (or a config `output`) is **rejected**; prerender + fixtures interplay is deferred. A `puzzle.config.js` equivalent of the flag is also deferred — the explicit CLI switch *is* the dev-vs-real-API toggle.
 - Use cases: `puzzle dev` against the real API, `puzzle dev --fixtures` against fakes, `puzzle build --fixtures` for a shareable preview with baked-in data.
 
+## 55. The DevTools bridge and wire protocol (v1.63)
+
+The Puzzle DevTools Chrome extension lives in its own repo
+(`magic-spells/puzzle-devtools`); the framework ships only a **dev-only runtime
+bridge** (D100), and this section is the contract between the two. This is NOT
+the D60-rejected app-config devtools hook: there is zero config surface and
+zero production bytes — the extension injects `window.__PUZZLE_DEVTOOLS_HOOK__`
+at `document_start`, and the bridge registers into it when present. No hook →
+every touchpoint is a no-op. Production build → the bridge does not exist
+(`__PUZZLE_DEV__` DCE, pinned by the same build test as `__PUZZLE_APP__`).
+
+**Envelope.** Every message is `{ puzzle: 1, v: <protocolVersion>, type,
+payload }`. Protocol version 1. Versions are exchanged in `hello`; the
+extension supports a range and must show a clear mismatch state rather than
+misrender.
+
+**Events (runtime → extension, via `hook.emit`):** `hello { protocolVersion,
+frameworkVersion }` · `app-mounted` / `app-unmounted` · `view-mounted { id,
+name, module }` / `view-destroyed { id }` · `flush { keys, notified }` (one
+per store flush batch — rides D63's scheduling, no extra throttling) ·
+`route-commit { pathname, query, params, chain, title }` (emitted in the same
+post-mount pre-paint window as scroll/focus).
+
+**Requests (extension → runtime, via `hook.onRequest` handler):**
+`snapshot:views` (recursive `{ id, name, module, children }` tree; roots
+derived by walking live views' vnode trees — never the router's private
+state) · `inspect:view { id }` → `{ name, module, params, props, model,
+local }` with the **model layer and `setData()` local layer reported
+separately**, JSON-safe filtered · `snapshot:records { type? }` ·
+`snapshot:subscriptions` (both directions, view ids; function subscribers
+labeled `'fn'` — one merged bucket, no per-function identity) ·
+`snapshot:route` → a JSON-safe projection `{ pathname, query, params, chain,
+routes, route }` (view names + path patterns — never the live entry objects) ·
+`edit:record { type, id, patch }` —
+applied through the real `record.update()`, so §20 validation applies and a
+throw returns `{ error }` · `highlight:view { id, on }` (page overlay) ·
+`log:view` / `log:record` (logs the live object and binds `window.$p`).
+
+**Identity.** View ids are session-scoped integers (WeakMap-assigned); `name`
+is the compiled class name (dev builds are unminified), `module` is the
+codegen `__pzlModule` stamp (app-relative `.pzl` path).
+
 ## Deferred features (post-v1)
 
 Explicitly out of scope for v1. Docs may describe them only if marked **"Planned — not in v1"**.
@@ -1189,7 +1231,7 @@ Explicitly out of scope for v1. Docs may describe them only if marked **"Planned
 - ~~Schema validation enforcement, relationships~~ — both shipped: validation enforcement in v1.16 (§20, D48), `hasMany`/`belongsTo` resolution in v1.17 (§21, D49)
 - ~~Adapter write sync, custom adapter methods~~ — shipped in v1.18 (§22, D50: `save()`/`delete()`/`store.request()`). Query fault-in remains deferred (re-affirmed in D50).
 - App-level `settings`, `computed`, global `events`, `methods` — re-rejected at the D60 triage (module constants / singleton store records / view-scoped listeners cover the observed demand). ~~App lifecycle hooks~~ — shipped in v1.28 (§30, D60: `beforeMount`/`mounted`/`beforeUnmount` on the config).
-- Global event bus (`this.$events`), `ctx.utils`, devtools hook — re-rejected at the D60 triage (singleton store records are the bus; the 3-service ctx is a selling point; `window.__PUZZLE_APP__` covers dev introspection, D57)
+- Global event bus (`this.$events`), `ctx.utils`, devtools hook — re-rejected at the D60 triage (singleton store records are the bus; the 3-service ctx is a selling point; `window.__PUZZLE_APP__` covers dev introspection, D57). The D60 rejection was of an **app-config** hook and still stands; the D100 DevTools bridge (§55) is a different object — a dev-only wire protocol with no config surface and no production bytes.
 - Virtual scrolling
 - ~~HMR~~ — shipped in v1.25 as a state-preserving dev reload (§27, D57). Per-module hot swap (patching a changed component without a reload) remains deferred on top of it.
 - Element actions (`use:name` directives) — considered at the 2026-07 framework-gap review and deferred: D72 refs already deliver element-lifetime callbacks, view lifecycle covers document-listener patterns, and the dominant dismiss-behavior case shipped as the `@event:outside` modifier (v1.52, §47/D86) — which further narrows what an action system would add. If real pressure appears, the intended shape is dynamic function refs (`ref={ expr }` on the §31 handler cache), not a new directive namespace.

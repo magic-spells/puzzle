@@ -198,6 +198,11 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Dev reload snapshots store records and JSON-safe local view state to a
   short-lived one-shot session blob, then restores store before navigation and
   local state after mount. Production bundles eliminate this machinery.
+- The DevTools bridge (D100, SPEC §55) registers into an extension-injected
+  `window.__PUZZLE_DEVTOOLS_HOOK__` and speaks the versioned wire protocol the
+  `magic-spells/puzzle-devtools` extension consumes. Dev-only, no-op without
+  the hook; production bundles eliminate it entirely (same DCE pin as
+  `__PUZZLE_APP__`).
 - Prerendered builds (both modes) write directory-style pages plus `404.html`
   for a catch-all, skip dynamic routes with a warning, and support
   `prerender: false` islands. `--hybrid` (`output: 'hybrid'`, D67) shares one

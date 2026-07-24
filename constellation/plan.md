@@ -111,10 +111,17 @@ current?" a fact rather than an inference from the CLI version. `puzzle upgrade
 skills` refreshes existing installs from the running binary — no registry check
 and no re-exec, since nothing was upgraded.
 
-Identified and **not** scheduled, roughly by value: a DevTools browser extension
-(the store's `subscribersByKey`/`keysBySubscriber` pair already answers "which
-views re-render when this record changes" — a question React and Svelte users
-answer by guessing); error boundaries + an app `onError` hook; dynamic
+The DevTools browser extension is now IN PROGRESS (D100, 2026-07-24): the
+framework ships a dev-only bridge speaking SPEC §55's wire protocol on
+`feat/devtools-bridge`; the extension lives in its own public repo
+`magic-spells/puzzle-devtools` (MV3, panel UI dogfooded as a Puzzle app;
+v1 = Views + Store panels). The store's `subscribersByKey`/`keysBySubscriber`
+pair is the asset — it answers "which views re-render when this record
+changes" exactly, which React and Svelte users answer by guessing; the
+subscriptions-graph panel that exploits it follows v1.
+
+Identified and **not** scheduled, roughly by value: error boundaries + an app
+`onError` hook; dynamic
 components (`<component is={}>`); `<KeepAlive>`-style view-state retention on
 back-navigation; two-way `bind` sugar plus a schema-derived forms helper;
 `<svelte:window>`-style global event bindings; per-subtree provide/inject;
@@ -126,6 +133,10 @@ collections; and a WASM playground.
 
 1. Keep README, CLAUDE, [[DOC-RELEASE-SURFACE]], and current-state component
    cards aligned with HEAD.
+1a. Bump `FRAMEWORK_VERSION` in `client-runtime/devtools.js` alongside
+   package.json — it is a hardcoded literal (no version constant exists in the
+   runtime and the ESM bundle cannot import package.json), and the DevTools
+   extension displays it and keys protocol compatibility on it (D100).
 1b. Re-verify `skills/puzzle/SKILL.md` against the public surface. It is
    `go:embed`-ed, so a release ships whatever it says as the agent's picture of
    the framework — [[DECISION-D78-AGENT-SKILL-DISTRIBUTION]] called it

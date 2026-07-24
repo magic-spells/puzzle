@@ -150,6 +150,27 @@ export class PuzzleView {
 	}
 
 	/**
+	 * The MODEL layer only (the last data() commit), as a fresh shallow copy.
+	 * INTERNAL — not public API: the DevTools bridge (constellation/doc/DOC-SPEC.md
+	 * §27, D100) shows the two state layers SEPARATELY, so it needs this alongside
+	 * _localState() rather than the merged getData(). Same underscore-prefixed
+	 * internal convention, never spelled in a template.
+	 */
+	_modelState() {
+		return { ...this.#model };
+	}
+
+	/**
+	 * This instance's current vnode tree, or null before the first render.
+	 * INTERNAL dev reader for devstate/devtools (D100): the DevTools bridge walks
+	 * it to discover child component instances (`vnode.component`) and so builds
+	 * the live component forest without reaching into Router privates.
+	 */
+	_vnodeTree() {
+		return this.#vm?.currentTree ?? null;
+	}
+
+	/**
 	 * Reference-stable derived value (v1.29, D64; constellation/doc/DOC-SPEC.md §32).
 	 * Per-instance cache keyed by `key`: returns the previously cached value while
 	 * `deps` (an array) matches the prior call for that key positionally by
