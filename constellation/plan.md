@@ -1,7 +1,16 @@
 ---
 name: Puzzle
-verified_at: '2026-07-22T00:04:04.329Z'
+verified_at: '2026-07-24T23:38:10.493Z'
 status: verified
+verified_sha: 35e8fd092a8e4559269fd8578a419e69e8371f6c
+notes:
+  - kind: verified
+    text: >-
+      Current-state section rewritten: it ran out at D90/v1.54 and still called D100 "IN PROGRESS"
+      on a branch. Now reads through D111, splits published vs working 0.2.0, and records that the
+      DevTools framework bridge is merged while the extension repo is unstarted. Added the
+      deep-review-round paragraph and the SKILL.md refresh as the named pre-0.2.0 blocker.
+    sha: 35e8fd092a8e4559269fd8578a419e69e8371f6c
 ---
 
 # Puzzle project map
