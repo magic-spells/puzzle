@@ -26,6 +26,14 @@
 			"types": "./types/static.d.ts",
 			"default": "./client-runtime/static/index.js"
 		},
+		"./testing": {
+			"types": "./types/testing.d.ts",
+			"default": "./client-runtime/testing/index.js"
+		},
+		"./fixtures": {
+			"types": "./types/fixtures.d.ts",
+			"default": "./client-runtime/fixtures/index.js"
+		},
 		"./puzzle-env": {
 			"types": "./puzzle-env.d.ts"
 		},

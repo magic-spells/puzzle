@@ -227,6 +227,10 @@ export interface Store {
 	loadOne(type: string, id: any): Promise<any>;
 	/** Custom-endpoint escape hatch (v1.18, D50). */
 	request(type: string, path?: string, options?: RequestOptions): Promise<any>;
+	// `seed()` and `resetFixtureSeed()` are NOT declared here: the core Store does
+	// not have them (D98). They are attached by `installFixtures()` and declared
+	// through module augmentation in types/fixtures.d.ts, so they type-check only
+	// where `@magic-spells/puzzle/fixtures` is actually imported.
 	[key: string]: any;
 }
 
@@ -405,9 +409,54 @@ export declare class PuzzleView {
 // PuzzleModel + schema builders (constellation/doc/DOC-SPEC.md §7, §20–§22)
 // ----------------------------------------------------------------------------
 
+/**
+ * The request handed to an `adapter.mock.handler` (v1.57, D95). `path` is
+ * relative to `apiURL + endpoint` (`''` for the collection), `body` is the parsed
+ * request body, and `collection` is the mock's LIVE state — a `Map` keyed by
+ * primary key, so a handler can read and mutate it.
+ */
+export interface AdapterMockRequest {
+	method: string;
+	url: string;
+	path: string;
+	body: any;
+	collection: Map<any, any>;
+}
+
+/** What an `adapter.mock.handler` returns to serve a request (v1.57, D95). */
+export interface AdapterMockResult {
+	/** HTTP status (default 200). */
+	status?: number;
+	/** Response body; omit for an empty (204-style) response. */
+	body?: any;
+}
+
+/**
+ * Development/test mock for a model's adapter (v1.57, D95). Declared on the
+ * model; served only when `@magic-spells/puzzle/fixtures` is installed (D98),
+ * which replaces the Store's one network seam. `loadAll` / `loadOne` / `save()` /
+ * `delete()` / `request()` are unchanged and the real read and write paths still
+ * run. `beforeRequest` still fires; no network call does. Without the fixtures
+ * module this block is inert data — the request goes to the real endpoint.
+ */
+export interface AdapterMock {
+	/** Initial collection; deep-cloned on first use, then owned by the Store. */
+	data?: Record<string, any>[];
+	/** Delay in ms, or a `[min, max]` range picked from the seeded PRNG. */
+	latency?: number | [number, number];
+	/** 0..1 failure probability, rolled against the seeded PRNG. */
+	failRate?: number;
+	/** Force EVERY request to fail with a 500 — a deterministic rejection. */
+	fail?: boolean;
+	/** Custom routes; a falsy return falls through to the default CRUD. */
+	handler?: (request: AdapterMockRequest) => AdapterMockResult | null | undefined | false | void;
+}
+
 /** A model's API adapter descriptor. */
 export interface ModelAdapter {
 	endpoint: string;
+	/** Development/test mock served in place of the network (v1.57, D95). */
+	mock?: AdapterMock;
 	[key: string]: any;
 }
 

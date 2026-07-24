@@ -63,6 +63,57 @@ Explicitly future or unshipped, not release blockers:
 - D23 `setData` ergonomics papercut (`setData` re-running `data()` when it
   touches keys `data()` read; today pair `setData` with explicit `refresh()`).
 - Height animations need explicit px — WAAPI cannot animate to `auto`.
+- An async `beforeRequest` (D91) — inline token refresh. Deferred because
+  awaiting the hook puts an `await` in front of every adapter call and needs a
+  concurrent-refresh coalescing story. Widening sync→async stays compatible.
+- A `puzzle dev` mock API server — deferred once D95's client-side mock adapter
+  shipped: the adapter needs no server and behaves identically in `puzzle dev`
+  and in Vitest, which a dev-server mock structurally cannot.
+- **`output: 'static'` carries neither `beforeRequest` (D91) nor focus
+  management / route announcement (D93).** Those pages ship no router, and
+  `mountStatic`'s options are serialized into a generated per-page module, so a
+  function cannot survive the boundary. Structural limits of the output mode,
+  not bugs.
+
+## Framework-gap review (2026-07-24)
+
+A survey against React, Vue, Svelte, Ember, Angular, and Astro found the core
+runtime broadly at parity — the remaining gaps sit in the layer *around* it
+(tooling, testing, mocking, error handling, adoption surface), which is where
+the mature frameworks actually differentiate.
+
+Landed on `feat/framework-gaps`: D91 adapter `beforeRequest`, D92 dev build
+errors in the browser, D93 router focus + route announcement, D94
+`@magic-spells/puzzle/testing`, D95 schema-driven fixtures + mock adapter, and
+D98 — the fixtures/mock system as a fully self-contained
+`@magic-spells/puzzle/fixtures` module attached via `installFixtures()` and the
+`puzzle dev|build --fixtures` flag (wired from `app/fixtures.js` through a
+generated wrapper entry; core keeps only the ~5-line `Store._network` seam).
+
+Two intermediate states were built and replaced on the branch: D95's original
+integration baked ~154 lines into `store.js`, and D96 tree-shook it back out
+with usage-scanned defines. D96 is SUPERSEDED by D98 — the defines were
+fail-safe (a pre-D96 compiler shipped the whole runtime: measured 23025 vs
+20702 gzip on `examples/todos`), and the conservative token scan compiled an
+app's own `store.seed()` seeding into production. With D98, exclusion holds by
+construction: nothing references the module without the flag.
+
+Also on the branch: D97 — `puzzle upgrade` offers to refresh the installed agent
+skill after it installs a new version, closing D78's manual "upgrade + re-run"
+loop. Because the payload is `go:embed`-ed, the refresh re-execs the binary npm
+just installed (`--version`-gated) rather than writing the old skill this
+process carries.
+
+Identified and **not** scheduled, roughly by value: a DevTools browser extension
+(the store's `subscribersByKey`/`keysBySubscriber` pair already answers "which
+views re-render when this record changes" — a question React and Svelte users
+answer by guessing); error boundaries + an app `onError` hook; dynamic
+components (`<component is={}>`); `<KeepAlive>`-style view-state retention on
+back-navigation; two-way `bind` sugar plus a schema-derived forms helper;
+`<svelte:window>`-style global event bindings; per-subtree provide/inject;
+`puzzle check` / an LSP over the compiler's existing positioned diagnostics;
+i18n; `build --analyze`; `puzzle preview`; deploy presets; Astro-style content
+collections; and a WASM playground.
 
 ## Release checklist
 

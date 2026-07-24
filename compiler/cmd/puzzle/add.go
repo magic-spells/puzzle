@@ -82,6 +82,8 @@ Agent skill:
                                checkbox list; scripts install to all without prompting.
                                Existing skill directories require --overwrite.
                                "skill" is accepted as an alias.
+                               --skill-root <dir> (repeatable) pins the config dirs
+                               instead of detecting them, and skips the prompt.
 
 The registry source is --registry, else $PUZZLE_PIECES_REGISTRY, else the public
 puzzle-pieces registry; it may be a local directory or an http(s) URL.`,
@@ -95,8 +97,14 @@ puzzle-pieces registry; it may be a local directory or an http(s) URL.`,
 		if dir == "" {
 			dir = "."
 		}
+		skillRoots, _ := cmd.Flags().GetStringArray("skill-root")
 		out := ui.New(os.Stdout)
-		return runAdd(os.Stdout, out, dir, args, registry, overwrite)
+		return runAddWithEnvironment(os.Stdout, out, dir, args, registry, overwrite, addEnvironment{
+			homeDir:     os.UserHomeDir,
+			input:       os.Stdin,
+			interactive: ui.IsTerminal(os.Stdin),
+			skillRoots:  skillRoots,
+		})
 	},
 }
 
@@ -104,6 +112,7 @@ func init() {
 	addCmd.Flags().String("registry", "", "Piece registry source: a local directory or http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the public registry)")
 	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces or skills")
 	addCmd.Flags().String("dir", "", "App root to add pieces into (default: walk up from the current directory for package.json/puzzle.config.js)")
+	addCmd.Flags().StringArray("skill-root", nil, "Config dir to install the skill into (repeatable); skips detection and the target prompt")
 	rootCmd.AddCommand(addCmd)
 }
 
@@ -111,6 +120,8 @@ func init() {
 // "tailwind"/"tailwindcss" wire the Tailwind pipeline (unchanged); "piece"
 // copies the remaining args as piece names from the registry; "skills"/"skill"
 // installs the embedded Puzzle agent skill into detected tool config dirs.
+// runAdd is runAddWithEnvironment under the default environment: real home
+// directory, real stdin, no pinned skill roots.
 func runAdd(w io.Writer, out *ui.Printer, dir string, args []string, registry string, overwrite bool) error {
 	return runAddWithEnvironment(w, out, dir, args, registry, overwrite, addEnvironment{
 		homeDir:     os.UserHomeDir,

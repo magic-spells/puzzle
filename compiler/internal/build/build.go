@@ -39,6 +39,14 @@ type Options struct {
 	// Build: a flag and a *different* config value is an error; either one alone
 	// (or agreeing) selects the mode. Empty on both sides is the default SPA build.
 	Output string
+
+	// Fixtures wires the app's app/fixtures.js (or .ts) through the detachable
+	// fixtures/mock runtime module (`--fixtures`, D98): the build bundles a
+	// generated wrapper entry that installs the module before the app boots,
+	// instead of bundling app/app.js directly. Off, nothing about the output
+	// changes — the module is simply never imported, which is the whole
+	// tree-shake. Unsupported alongside either prerender output mode.
+	Fixtures bool
 }
 
 // Build compiles the app rooted at root (the directory containing app/app.js)
@@ -64,6 +72,31 @@ func Build(root string, opts Options) error {
 	cfg, err := config.LoadConfig(absRoot)
 	if err != nil {
 		return err
+	}
+
+	// The effective prerender mode reconciles the CLI flag with puzzle.config.js
+	// `output`. Resolved HERE, before any work, so both a flag/config disagreement
+	// and the --fixtures conflict below fail fast instead of after a full bundle
+	// pass. The prerender switch near the end of the build reuses this value.
+	mode, err := resolveOutputMode(opts.Output, cfg)
+	if err != nil {
+		return err
+	}
+
+	// --fixtures (D98): validate and generate the wrapper entry that installs the
+	// fixtures module ahead of the app module. Checking mode (not opts.Output)
+	// catches a prerender selected by the CONFIG file too.
+	var fixtures fixturesWrapper
+	if opts.Fixtures {
+		var ferr error
+		fixtures, ferr = prepareFixtures(absRoot, mode)
+		// The scratch dir is removed on failure as well as success, so a rejected
+		// build leaves the app tree exactly as it found it.
+		defer cleanupFixturesWorkDir(absRoot, fixtures.CreatedWorkDir)
+		if ferr != nil {
+			return ferr
+		}
+		entry = fixtures.Entry
 	}
 
 	// Reject a public/ tree that would clobber compiler output BEFORE touching
@@ -108,6 +141,9 @@ func Build(root string, opts Options) error {
 	}
 
 	buildOpts := newBundleOptions(absRoot, entry, staging, pl, opts.Development)
+	if opts.Fixtures {
+		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())
+	}
 	// Salvaged from the prototype's BuildOptions block (compiler.go): the same
 	// minify toggles, flipped to on-by-default (production) with --mode
 	// development turning them off.
@@ -165,12 +201,7 @@ func Build(root string, opts Options) error {
 	// AFTER the shell (public/index.html) has been copied in — the prerender
 	// injects into it — and BEFORE the swap, so a prerender failure discards
 	// staging and leaves the last good dist/ untouched (same guarantee as a
-	// compile failure). The effective mode reconciles the CLI flag with
-	// puzzle.config.js `output`.
-	mode, err := resolveOutputMode(opts.Output, cfg)
-	if err != nil {
-		return err
-	}
+	// compile failure). mode was resolved up front, before any work.
 	switch mode {
 	case "hybrid":
 		if err := prerenderHybrid(absRoot, staging); err != nil {

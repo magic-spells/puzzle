@@ -559,6 +559,36 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+// SetUsage → Features is the whole handoff to esbuild's Define map: every scan
+// bit must arrive, or a feature silently ships (or silently vanishes) regardless
+// of what the scan found.
+func TestPluginFeaturesCarryEveryUsageBit(t *testing.T) {
+	pl := New(t.TempDir())
+	if got := (pl.Features()); got != (Features{}) {
+		t.Errorf("fresh plugin Features() = %+v, want all false", got)
+	}
+	pl.SetUsage(Usage{
+		Formatters:  map[string]bool{"upcase": true},
+		HasFlip:     true,
+		HasHeadTags: true,
+	})
+	want := Features{Flip: true, HeadTags: true}
+	if got := pl.Features(); got != want {
+		t.Errorf("Features() = %+v, want %+v", got, want)
+	}
+
+	// Each bit must travel on its own — a struct field wired to the wrong source
+	// would pass the all-true case above.
+	pl.SetUsage(Usage{Formatters: map[string]bool{}, HasFlip: true})
+	if got, want := pl.Features(), (Features{Flip: true}); got != want {
+		t.Errorf("Features() = %+v, want %+v", got, want)
+	}
+	pl.SetUsage(Usage{Formatters: map[string]bool{}, HasHeadTags: true})
+	if got, want := pl.Features(), (Features{HeadTags: true}); got != want {
+		t.Errorf("Features() = %+v, want %+v", got, want)
+	}
+}
+
 func TestScanUsageToleratesBrokenFileAndPrunesNodeModules(t *testing.T) {
 	root := writeApp(t, map[string]string{
 		"app/views/Home.pzl": `<puzzle-view><h1>Home</h1></puzzle-view>

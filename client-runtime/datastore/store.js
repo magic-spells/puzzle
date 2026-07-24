@@ -459,12 +459,16 @@ export class Store {
 	 * there must reject the calling verb rather than ship an unauthenticated
 	 * request. Every caller is async, so the throw surfaces as a rejection.
 	 *
+	 * The network step itself is delegated to `_network` (D98), so dev/test
+	 * tooling can intercept a request AFTER the hook has run without this method
+	 * — or any verb above it — knowing such tooling exists.
+	 *
 	 * @param {string} url      the fully built request URL
 	 * @param {object} init     the fetch init this verb requires
 	 * @param {object} context  { type, method, url } — frozen before the hook sees it
 	 */
 	_fetch(url, init, context) {
-		if (!this.beforeRequest) return fetch(url, init);
+		if (!this.beforeRequest) return this._network(url, init, context);
 		const method = init.method;
 		const body = init.body;
 		const returned = this.beforeRequest(init, Object.freeze(context));
@@ -472,7 +476,18 @@ export class Store {
 		final.method = method;
 		if (body === undefined) delete final.body;
 		else final.body = body;
-		return fetch(url, final);
+		return this._network(url, final, context);
+	}
+
+	/**
+	 * The one place an adapter request touches the network (D98). Dev/test
+	 * tooling — the /fixtures module's mock adapter — replaces this method to
+	 * serve requests from memory; nothing else calls it. `context` is the same
+	 * frozen { type, method, url } _fetch built, so a replacement can dispatch
+	 * per model type without re-deriving anything.
+	 */
+	_network(url, init, context) {
+		return fetch(url, init);
 	}
 
 	/**

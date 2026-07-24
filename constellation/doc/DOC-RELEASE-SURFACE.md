@@ -37,8 +37,13 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - Root exports: `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
   `PuzzleValidationError`, `PuzzleAdapterError`, and compiler support exports.
-- Subpaths: `@magic-spells/puzzle/morph`, `/ssg`, `/static`, and `/puzzle-env`.
-  (`/static` exports `mountStatic`, the per-page kernel for `output: 'static'`.)
+- Subpaths: `@magic-spells/puzzle/morph`, `/ssg`, `/static`, `/testing`,
+  `/fixtures`, and `/puzzle-env`. (`/static` exports `mountStatic`, the
+  per-page kernel for `output: 'static'`; `/testing` exports the app-author
+  test utilities — `mountView`, `createTestApp`, `settled`,
+  `installFakeAnimate`, `installFakeObserver`, D94 — and re-exports
+  `installFixtures`; `/fixtures` is the self-contained fixtures + mock-adapter
+  module, D98, bundled into an app only by the `--fixtures` flag.)
 - `puzzle` binary shim selects an optional platform binary for macOS/Linux on
   arm64/x64. Unsupported systems get a Go-install fallback message.
 - App config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
@@ -112,6 +117,19 @@ second specification. Decision cards hold rationale and git holds chronology.
   `method`/`body`/URL are not the hook's to change. Carried by the prerender
   path; structurally unavailable under `output: 'static'`.
 - Relationships are lazy store-backed getters and participate in tracking.
+- Development/test affordances (D95, reshaped by D98): `installFixtures(config)`
+  from `/fixtures` attaches `store.seed(type, n, overrides)` — records generated
+  from the schema alone, deterministic via the install `seed` and two derived
+  PRNG streams; the auto-generated pk is the one non-deterministic field — and
+  the mock adapter: `static adapter = { mock: { data, latency, failRate, fail,
+  handler } }` and/or the install config's per-type `mock` entries (fixtures
+  file wins per key) serve the verbs from an in-memory collection by replacing
+  the core's one `_network` seam, so every adapter verb runs unmodified and
+  `beforeRequest` still fires. `latency` makes skeletons developable;
+  `failRate`/`fail` are the supported way to exercise a `data()` rejection.
+  Nothing in core references the module — it ships only under `--fixtures`
+  (wired from `app/fixtures.js`) or a direct test import, and `uninstall()`
+  detaches it.
 - Optional Storage hydration/persistence is fail-soft. Persistence serializes
   once per flush and is forced during app teardown.
 - JSON/server assignment rejects prototype-pollution keys and protected record
@@ -158,7 +176,12 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Go parser/codegen feeds an esbuild `.pzl` plugin; scripts stay untouched and
   render functions attach to the user class prototype.
 - Production: ES2022, minified, console calls stripped by default, tree-shaken
-  formatter manifest, collected component CSS. Source maps are **opt-in** —
+  formatter manifest, collected component CSS. The D89 usage scan also gates
+  whole modules — `flip` and managed head tags, each behind its own
+  `__PUZZLE_HAS_*__` define — so an app pays only for what it uses; the fixture
+  generator and mock adapter are excluded structurally instead (D98): nothing
+  imports `/fixtures` unless `puzzle dev|build --fixtures` generates the wiring
+  entry from `app/fixtures.js`. Source maps are **opt-in** —
   `build.sourceMap` (default off) emits linked maps for SPA + true-static prod
   bundles; dev keeps linked maps regardless (D88).
 - Tailwind-first style pipeline; scoped blocks wrapped in native `@scope`.
@@ -191,6 +214,10 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - `puzzle init` (`default`/`todos`, optional TypeScript project config).
 - `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
+- `puzzle dev --fixtures` / `puzzle build --fixtures` (D98): wire
+  `app/fixtures.js` through a generated wrapper entry so the `/fixtures`
+  module installs before the app entry runs; rejected alongside
+  `--static`/`--hybrid`. Without the flag no fixture bytes can ship.
 - `puzzle generate` / `g` for components, views, layouts, and models.
 - `puzzle add tailwind` and `puzzle add piece` with local/HTTPS registries,
   dependency resolution, path-containment checks, and `pieces.lock` hashes.

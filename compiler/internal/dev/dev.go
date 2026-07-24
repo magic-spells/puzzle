@@ -133,6 +133,11 @@ type Options struct {
 	// Open, when true, best-effort opens the app in the default browser once
 	// the server is listening.
 	Open bool
+	// Fixtures wires the app's app/fixtures.js (or .ts) through the detachable
+	// fixtures/mock runtime module (`--fixtures`, D98). The wrapper entry is
+	// generated once, at builder construction, and lives under <root>/.puzzle/ —
+	// outside every watched directory, so it cannot feed a rebuild loop.
+	Fixtures bool
 	// OnReady, when set, runs after the server's ready banner is printed.
 	OnReady func()
 
@@ -205,7 +210,7 @@ func Serve(root string, opts Options) error {
 
 	tailwindEnabled := cfgErr == nil && cfg.TailwindEnabled()
 
-	builder, builderErr := build.NewWatchBuilder(absRoot)
+	builder, builderErr := build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures})
 	if builderErr != nil {
 		// No incremental context: degrade fully to the non-incremental one-shot
 		// build.Build per change (slower, but correct — including its own Tailwind).
@@ -320,7 +325,7 @@ func Serve(root string, opts Options) error {
 				err = pl.recompose()
 			}
 		} else {
-			err = build.Build(absRoot, build.Options{Development: true})
+			err = build.Build(absRoot, build.Options{Development: true, Fixtures: opts.Fixtures})
 		}
 		if err != nil {
 			logBuildFailure(stderr, err)
