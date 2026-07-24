@@ -299,6 +299,33 @@ describe('Router base — hash mode (D51)', () => {
 		expect(el.querySelector('.home')).not.toBeNull();
 	});
 
+	it("keeps a query placed directly after the base ('#/myapp?tab=2' → root '/?tab=2')", async () => {
+		// Regression (Fix 3): '#' + base + '?...' with no trailing slash matched neither
+		// the exact-base nor base+'/' branch, so #currentPath returned null and start()
+		// fell back to '/', dropping the query. It must route the app root WITH the query,
+		// mirroring history mode (pathname === base keeps location.search).
+		const { router, el } = await bootBase(baseRoutes, '/#/myapp?tab=2', '/myapp', {
+			mode: 'hash',
+		});
+		expect(router.current.path).toBe('/?tab=2');
+		expect(router.current.pathname).toBe('/');
+		expect(router.current.query.tab).toBe('2');
+		expect(el.querySelector('.home')).not.toBeNull();
+	});
+
+	it("handles a popstate to '#/myapp?tab=3' (root + query) instead of ignoring it", async () => {
+		const { router } = await bootBase(baseRoutes, '/#/myapp/about', '/myapp', { mode: 'hash' });
+		expect(router.current.path).toBe('/about');
+
+		// simulate a back/forward landing on the bare-base + query fragment
+		history.replaceState({}, '', '/#/myapp?tab=3');
+		window.dispatchEvent(new PopStateEvent('popstate'));
+		await tick();
+
+		expect(router.current.path).toBe('/?tab=3');
+		expect(router.current.query.tab).toBe('3');
+	});
+
 	it("intercepts a '#/myapp/...' link but leaves a bare '#anchor' and a non-base '#/other' alone", async () => {
 		const { router, el } = await bootBase(baseRoutes, '/', '/myapp', { mode: 'hash' });
 		const pushSpy = vi.spyOn(router, 'push');

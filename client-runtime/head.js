@@ -71,19 +71,23 @@ export const MANAGED_TAGS = [
 /**
  * Resolve the four reserved fields from a route chain (root→leaf order, as the
  * router and SSG both hold it). EACH FIELD RESOLVES INDEPENDENTLY, nearest-
- * defined walking leaf→root — the exact walk the router's old #setTitle did for
- * `meta.title` alone: `undefined` (absent) inherits from a parent, `null`
- * explicitly STOPS the walk and suppresses an inherited value. Values are
- * static strings or null by contract (no functions/HTML/arrays — SPEC §45).
+ * defined walking leaf→root, but the null posture SPLITS by field:
+ *  - `title` keeps the exact walk the router's old #setTitle did — BOTH
+ *    `undefined` (absent) and explicit `null` inherit from a parent (`meta.title
+ *    != null`), so a child that clears its title still shows the parent's;
+ *  - the three D84-new fields (`description`, `canonical`, `socialImage`) treat
+ *    `undefined` as inherit and an explicit `null` as a DEFINED value that STOPS
+ *    the walk and suppresses an inherited value.
+ * Values are static strings or null by contract (no functions/HTML/arrays —
+ * SPEC §45).
  *
  * Returns `{ title, description, canonical, socialImage }`, each `string|null`.
  * "Resolved null" and "nothing defined anywhere" are deliberately NOT
  * distinguished: for managed tags both mean absent/removed, and for
- * `document.title` both mean leave-it-alone (see syncHead). The one semantic
- * asymmetry lives in `title`: an explicit `null` suppresses the derived
- * og:title/twitter:title tags but does NOT clear `document.title` — clearing
- * it would show a blank tab, and pre-D84 a never-resolving title also left
- * `document.title` untouched, so null keeps that posture.
+ * `document.title` both mean leave-it-alone (see syncHead) — a resolved-null
+ * title never clears `document.title` (clearing it would show a blank tab, and
+ * pre-D84 a never-resolving title also left it untouched, so null keeps that
+ * posture).
  *
  * @param {Array<object>} chain route defs root→leaf (entry.chain)
  * @returns {{ title: string|null, description: string|null, canonical: string|null, socialImage: string|null }}
@@ -98,11 +102,18 @@ export function resolveHead(chain) {
 
 /** Nearest-defined `meta[field]` leaf→root; `undefined` keeps walking, `null` stops it. */
 function resolveField(chain, field) {
+	// `title` alone keeps its pre-D84 walk: an explicit `null` INHERITS (keeps
+	// climbing), matching the old router #setTitle / ssg resolveTitle (`meta.title
+	// != null`) so a child that clears its title still shows the parent/layout one.
+	// The three D84-new fields (description, canonical, socialImage) never had that
+	// posture — for them an explicit null is a DEFINED value that terminates the
+	// walk as suppression (the D84 null-suppresses-an-inherited-tag semantics).
+	const inheritsOnNull = field === 'title';
 	for (let i = chain.length - 1; i >= 0; i--) {
 		const meta = chain[i].meta;
-		// `!== undefined` (not `!= null`): an explicit null is a DEFINED value here
-		// — it terminates the walk as suppression (D84). Absent/undefined inherits.
-		if (meta && meta[field] !== undefined) return meta[field];
+		if (!meta) continue;
+		const value = meta[field];
+		if (inheritsOnNull ? value != null : value !== undefined) return value;
 	}
 	return null;
 }

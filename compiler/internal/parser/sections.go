@@ -3,6 +3,8 @@ package parser
 import (
 	"strconv"
 	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 )
 
 // sections.go is the .pzl section splitter (constellation/doc/DOC-COMPILER-DESIGN.md §b step 1).
@@ -657,49 +659,10 @@ func parseStylesScoped(attrsRaw string, base Position, file string) (bool, *Pars
 // distance ≤ 2, e.g. scopped/scopd/scope), empty otherwise.
 func stylesScopedHint(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
-	if n != "scoped" && editDistance(n, "scoped") <= 2 {
+	if n != "scoped" && textutil.EditDistance(n, "scoped") <= 2 {
 		return " — did you mean `scoped`?"
 	}
 	return ""
-}
-
-// editDistance is the Levenshtein distance between a and b (ASCII, small
-// inputs), used only for attribute-name did-you-mean hints.
-func editDistance(a, b string) int {
-	la, lb := len(a), len(b)
-	if la == 0 {
-		return lb
-	}
-	if lb == 0 {
-		return la
-	}
-	prev := make([]int, lb+1)
-	curr := make([]int, lb+1)
-	for j := 0; j <= lb; j++ {
-		prev[j] = j
-	}
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		for j := 1; j <= lb; j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			del := prev[j] + 1
-			ins := curr[j-1] + 1
-			sub := prev[j-1] + cost
-			m := del
-			if ins < m {
-				m = ins
-			}
-			if sub < m {
-				m = sub
-			}
-			curr[j] = m
-		}
-		prev, curr = curr, prev
-	}
-	return prev[lb]
 }
 
 // parseUnsignedIntStr accepts a non-empty run of ASCII digits only ("300", "0"),

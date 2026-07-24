@@ -98,6 +98,21 @@ describe('resolveHead (D84) — per-field leaf→root resolution', () => {
 		expect(head.socialImage).toBe('/root.png');
 	});
 
+	it('title alone INHERITS on an explicit null (pre-D84 posture), unlike the other fields', () => {
+		// A child (or layout) that sets `title: null` must still show the parent's
+		// title — the pre-D84 #setTitle / ssg resolveTitle walk used `meta.title !=
+		// null`, so null meant "inherit", never "suppress". D84's per-field walk must
+		// keep that for title while the three new fields treat null as suppression.
+		const chain = [
+			{ path: '/docs', meta: { title: 'Docs', description: 'Docs desc' } },
+			// title: null → inherit 'Docs'; description: null → suppress the inherited desc.
+			{ path: 'intro', meta: { title: null, description: null } },
+		];
+		const head = resolveHead(chain);
+		expect(head.title).toBe('Docs'); // inherited past the null
+		expect(head.description).toBe(null); // suppressed by the null
+	});
+
 	it('resolves all-null for a chain with no meta at all', () => {
 		expect(resolveHead([{ path: '/' }, { path: 'a' }])).toEqual(EMPTY_HEAD);
 	});

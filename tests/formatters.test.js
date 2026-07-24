@@ -160,6 +160,14 @@ describe('FormatterRegistry', () => {
 			expect(input).toEqual([2, 10, 1]); // original untouched
 			expect(out).not.toBe(input);
 		});
+
+		it('reverse reverses arrays and strings by CODE POINT (no surrogate mangling)', () => {
+			expect(f.reverse([1, 2, 3])).toEqual([3, 2, 1]);
+			expect(f.reverse('abc')).toBe('cba');
+			// The emoji is a surrogate pair — code-unit reversal would split it into
+			// two lone surrogates; code-point reversal keeps it intact and whole.
+			expect(f.reverse('ab😀')).toBe('😀ba');
+		});
 	});
 
 	describe('date formatters', () => {

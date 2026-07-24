@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -9,7 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/spf13/cobra"
@@ -103,9 +104,9 @@ func runDoctor(w io.Writer, out *ui.Printer, dir string) int {
 
 	// Runtime package (warning): the installed package, or the in-repo fallback.
 	switch {
-	case findInstalledRuntime(dir) != "":
+	case build.FindInstalledRuntime(dir) != "":
 		pass("runtime package", "@magic-spells/puzzle installed")
-	case findRepoRuntime(dir) != "":
+	case build.FindRuntime(dir) != "":
 		pass("runtime package", "@magic-spells/puzzle (in-repo runtime)")
 	default:
 		warn("runtime package", "@magic-spells/puzzle not installed — run npm install")
@@ -134,62 +135,6 @@ func nodeVersion() (string, bool) {
 	return strings.TrimSpace(string(out)), true
 }
 
-// findInstalledRuntime mirrors build.findInstalledRuntime: walk up for
-// node_modules/@magic-spells/puzzle/client-runtime/index.js.
-func findInstalledRuntime(start string) string {
-	dir, err := filepath.Abs(start)
-	if err != nil {
-		dir = start
-	}
-	for {
-		idx := filepath.Join(dir, "node_modules", "@magic-spells", "puzzle", "client-runtime", "index.js")
-		if fsFileExists(idx) {
-			return idx
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-}
-
-// findRepoRuntime mirrors build.findRuntime: the in-repo runtime is a directory
-// holding client-runtime/index.js whose package.json is "@magic-spells/puzzle".
-func findRepoRuntime(start string) string {
-	dir, err := filepath.Abs(start)
-	if err != nil {
-		dir = start
-	}
-	for {
-		idx := filepath.Join(dir, "client-runtime", "index.js")
-		if fsFileExists(idx) && pkgIsPuzzle(filepath.Join(dir, "package.json")) {
-			return idx
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return ""
-		}
-		dir = parent
-	}
-}
-
-func pkgIsPuzzle(pkgPath string) bool {
-	data, err := os.ReadFile(pkgPath)
-	if err != nil {
-		return false
-	}
-	var pkg struct {
-		Name string `json:"name"`
-	}
-	if err := json.Unmarshal(data, &pkg); err != nil {
-		return false
-	}
-	return pkg.Name == "@magic-spells/puzzle"
-}
-
-// fsFileExists reports whether path is an existing regular file.
-func fsFileExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
-}
+// Keep the command package's established helper name for its other commands and
+// tests while sharing the one filesystem implementation.
+var fsFileExists = fsutil.FileExists

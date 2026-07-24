@@ -487,8 +487,9 @@ describe('Router — route guards (D87)', () => {
 		errSpy.mockRestore();
 	});
 
-	it('leaves a blocked browser pop on the committed view without URL resync', async () => {
+	it('restores the committed URL when a browser pop is blocked, keeping URL and tree consistent', async () => {
 		let allowed = true;
+		let guardRuns = 0;
 		const routes = [
 			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
 			{
@@ -497,6 +498,7 @@ describe('Router — route guards (D87)', () => {
 				view: AboutView,
 				layout: DefaultLayout,
 				guard() {
+					guardRuns++;
 					return allowed;
 				},
 			},
@@ -506,13 +508,48 @@ describe('Router — route guards (D87)', () => {
 		await router.push('/private');
 		await router.push('/after');
 		allowed = false;
+		guardRuns = 0;
 
 		history.back();
 		await delay(20);
 
-		// The browser already moved before popstate. D87 deliberately shares the
-		// existing data()-failure asymmetry: no URL rewrite, but nothing commits.
-		expect(location.pathname).toBe('/private');
+		// The browser moved to /private before the guard ran; the guard refused, so
+		// nothing commits AND the URL is rewound to the committed route — URL and the
+		// mounted tree stay in sync (D87). The replaceState rewind fires no echo
+		// popstate, so the guard runs exactly once for the blocked attempt.
+		expect(location.pathname).toBe('/after');
+		expect(router.current.path).toBe('/after');
+		expect(el.querySelector('.home')).not.toBeNull();
+		expect(guardRuns).toBe(1);
+	});
+
+	it('restores the committed URL when a redirected browser pop no-ops (redirect targets the current route)', async () => {
+		let redirect = false;
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/private',
+				name: 'private',
+				view: AboutView,
+				layout: DefaultLayout,
+				// Redirect back to the CURRENTLY committed route: replace('/after') is a
+				// same-path no-op, so nothing commits and the URL would otherwise be stuck
+				// on the guarded /private the browser popped to.
+				guard() {
+					return redirect ? '/after' : undefined;
+				},
+			},
+			{ path: '/after', name: 'after', view: HomeView, layout: DefaultLayout },
+		];
+		const { router, el } = await boot(routes);
+		await router.push('/private');
+		await router.push('/after');
+		redirect = true;
+
+		history.back();
+		await delay(20);
+
+		expect(location.pathname).toBe('/after');
 		expect(router.current.path).toBe('/after');
 		expect(el.querySelector('.home')).not.toBeNull();
 	});
@@ -544,6 +581,56 @@ describe('Router — route guards (D87)', () => {
 		expect(location.pathname).toBe('/login');
 		expect(router.current.path).toBe('/login');
 		expect(el.querySelector('.home')).not.toBeNull();
+	});
+
+	it('logs an actionable error when the INITIAL navigation is blocked, mounts nothing, and stays usable', async () => {
+		let constructed = 0;
+		class DeniedView extends PuzzleView {
+			constructor(...args) {
+				super(...args);
+				constructed++;
+			}
+			render() {
+				return h('puzzle-view', { class: 'denied' }, [text('DENIED')]);
+			}
+		}
+		// The router boots at '/', whose guard refuses — nav #0 has nothing to fall
+		// back to, so the container stays empty. That must be loud, not silent.
+		const routes = [
+			{ path: '/', name: 'home', view: DeniedView, layout: DefaultLayout, guard: () => false },
+			{ path: '/open', name: 'open', view: AboutView, layout: DefaultLayout },
+		];
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		const { router, el } = await boot(routes); // must not throw
+
+		expect(constructed).toBe(0);
+		expect(el.children.length).toBe(0); // container left empty
+		expect(router.current).toBeNull();
+		expect(errSpy).toHaveBeenCalledTimes(1);
+		expect(errSpy.mock.calls[0][0]).toMatch(/entry guard blocked the initial navigation/i);
+		expect(errSpy.mock.calls[0][0]).toMatch(/redirect path/i);
+
+		// The router is still usable: an unguarded push commits and mounts normally.
+		await router.push('/open');
+		expect(router.current.path).toBe('/open');
+		expect(el.querySelector('.about')).not.toBeNull();
+
+		errSpy.mockRestore();
+	});
+
+	it('an ordinary blocked push stays put and does NOT log an error', async () => {
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { router, el } = await boot(guardedRoutes(() => false));
+
+		await router.push('/private');
+
+		expect(router.current.path).toBe('/'); // stayed on the working page
+		expect(location.pathname).toBe('/');
+		expect(el.querySelector('.home')).not.toBeNull();
+		expect(errSpy).not.toHaveBeenCalled(); // silent stay-put is correct (D87)
+
+		errSpy.mockRestore();
 	});
 
 	it('rejects non-function guards at construction, including child and catch-all routes', () => {
@@ -727,6 +814,136 @@ describe('Router — same-path push is a no-op (v-next)', () => {
 		expect(seen).toBe('2');
 		expect(el.textContent).toContain('user 2');
 		expect(router.current.path).toBe('/user/2');
+	});
+});
+
+describe('Router — same-path push WHILE in flight (double-click, Fix 1)', () => {
+	// A held data() lets a second click land on the active link before the first
+	// navigation commits. The committed #state still names the OLD route there, so
+	// only the in-flight-target guard (#pendingNavPath) can catch the double-click.
+	it('two rapid pushes to the same path run exactly one navigation / one data()', async () => {
+		let release;
+		const held = new Promise((r) => {
+			release = r;
+		});
+		let dataRuns = 0;
+		let constructed = 0;
+		class SlowView extends PuzzleView {
+			constructor(...args) {
+				super(...args);
+				constructed++;
+			}
+			async data() {
+				dataRuns++;
+				await held;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'slow' }, [text('SLOW')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{ path: '/slow', name: 'slow', view: SlowView, layout: DefaultLayout },
+		];
+		const { router, el } = await boot(routes);
+
+		const p1 = router.push('/slow');
+		await tick(); // data() has started but is held; nothing committed yet
+		expect(dataRuns).toBe(1);
+		expect(router.current.path).toBe('/'); // still on home mid-flight
+
+		const pushSpy = vi.spyOn(history, 'pushState');
+		const p2 = router.push('/slow'); // double-click on the active nav → no-op
+		release();
+		await Promise.all([p1, p2]);
+
+		expect(dataRuns).toBe(1); // data() ran once — the second push did NOT supersede
+		expect(constructed).toBe(1); // one view instance
+		expect(pushSpy).toHaveBeenCalledTimes(1); // only the first nav wrote history
+		expect(router.current.path).toBe('/slow');
+		expect(el.querySelector('.slow')).not.toBeNull();
+		pushSpy.mockRestore();
+	});
+
+	it('a push to a DIFFERENT path mid-flight still supersedes', async () => {
+		let release;
+		const held = new Promise((r) => {
+			release = r;
+		});
+		class SlowView extends PuzzleView {
+			async data() {
+				await held;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'slow' }, [text('SLOW')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{ path: '/slow', name: 'slow', view: SlowView, layout: DefaultLayout },
+			{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+		];
+		const { router, el } = await boot(routes);
+
+		const p1 = router.push('/slow');
+		await tick();
+		const p2 = router.push('/about'); // different nav key → supersede the /slow load
+		release();
+		await Promise.all([p1, p2]);
+
+		expect(router.current.path).toBe('/about');
+		expect(el.querySelector('.about')).not.toBeNull();
+		expect(el.querySelector('.slow')).toBeNull();
+	});
+});
+
+describe('Router — guard-redirect budget resets per navigation (Fix 2, D87)', () => {
+	it('a guard redirecting to the current path never trips the limit across many navigations', async () => {
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{ path: '/login', name: 'login', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/admin',
+				name: 'admin',
+				view: AboutView,
+				layout: DefaultLayout,
+				guard: () => '/login', // always bounce to the (already current) /login
+			},
+		];
+		const { router } = await boot(routes);
+		await router.push('/login'); // sit on /login
+		expect(router.current.path).toBe('/login');
+
+		// Each click redirects /admin → /login, a same-path replace() no-op that never
+		// commits. Without the per-nav reset the count would accumulate and trip on the
+		// 11th click; here every click starts a fresh budget.
+		for (let i = 0; i < 12; i++) {
+			await router.push('/admin');
+			expect(router.current.path).toBe('/login');
+		}
+		expect(errSpy).not.toHaveBeenCalled();
+		errSpy.mockRestore();
+	});
+
+	it('a genuine redirect cycle (A→B, B→A) within ONE navigation still trips the limit at 10', async () => {
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{ path: '/a', name: 'a', view: HomeView, layout: DefaultLayout, guard: () => '/b' },
+			{ path: '/b', name: 'b', view: AboutView, layout: DefaultLayout, guard: () => '/a' },
+		];
+		const { router } = await boot(routes);
+
+		await router.push('/a'); // /a→/b→/a→… ten redirects, then the eleventh errors
+
+		expect(errSpy).toHaveBeenCalledWith(
+			'[puzzle] navigation guard redirect limit exceeded (10) — staying on the current route'
+		);
+		expect(router.current.path).toBe('/'); // nothing committed — stayed put
+		errSpy.mockRestore();
 	});
 });
 

@@ -323,3 +323,63 @@ describe('PuzzleModel.validate() / createRecord() parity (D48)', () => {
 		]);
 	});
 });
+
+describe('PuzzleModel.validate() — explicit .required() on a user-supplied primary key', () => {
+	// A model whose primary key is authored by the user (a slug), explicitly marked
+	// required. `.primary().required()` must NOT get the auto-generatable-primary
+	// exemption: a blank slug is a real error so a create form's pre-check blocks
+	// submission instead of letting the Store silently auto-generate a random pk.
+	class Page extends PuzzleModel {
+		static schema = {
+			slug: Puzzle.string().primary().required('slug is required'),
+			title: Puzzle.string().required(),
+		};
+	}
+
+	// Same shape, but WITHOUT the explicit .required() — `.primary()` alone.
+	class AutoIdPage extends PuzzleModel {
+		static schema = {
+			slug: Puzzle.string().primary(),
+			title: Puzzle.string().required(),
+		};
+	}
+
+	it('reports the required error when an explicitly-required primary is blank', () => {
+		for (const bad of [undefined, null, '']) {
+			const { valid, errors } = Page.validate({ slug: bad, title: 'Home' });
+			expect(valid, JSON.stringify(bad)).toBe(false);
+			expect(errors).toContainEqual({
+				field: 'slug',
+				rule: 'required',
+				message: 'slug is required',
+			});
+		}
+	});
+
+	it('passes when the user supplies the explicitly-required primary', () => {
+		expect(Page.validate({ slug: 'home', title: 'Home' })).toEqual({ valid: true, errors: [] });
+	});
+
+	it('exempts a blank primary when .primary() alone implies required (no explicit .required())', () => {
+		// createRecord auto-generates the slug, so the pre-check mirrors that acceptance.
+		expect(AutoIdPage.validate({ title: 'Home' })).toEqual({ valid: true, errors: [] });
+		expect(AutoIdPage.validate({ slug: null, title: 'Home' })).toEqual({ valid: true, errors: [] });
+		// but '' is not auto-generatable (Store only fills null/undefined), so it stays invalid.
+		expect(AutoIdPage.validate({ slug: '', title: 'Home' }).valid).toBe(false);
+	});
+
+	it('records the explicit-required intent on the field descriptor, order-independently', () => {
+		expect(Puzzle.string().primary().required().def).toMatchObject({
+			primary: true,
+			required: true,
+			explicitRequired: true,
+		});
+		expect(Puzzle.string().required().primary().def).toMatchObject({
+			primary: true,
+			required: true,
+			explicitRequired: true,
+		});
+		// .primary() alone must NOT set the explicit flag.
+		expect(Puzzle.string().primary().def.explicitRequired).toBeUndefined();
+	});
+});

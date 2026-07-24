@@ -23,6 +23,9 @@ import { ViewNode } from '../views/ViewNode.js';
  * @param {object} entry an enumerated route entry — { fullPath, chain (root→leaf
  *   route defs, each with a `.view` class), layout (LayoutClass|null) }
  * @param {object} ctx the { store, router, formatters } passed to every preload
+ * @param {object} [route] an already-built static route snapshot. The static
+ *   browser kernel supplies this so `ctx.router.current` and `this.route` share
+ *   the exact same object during preload.
  * @returns {Promise<{ topVnode: import('../views/ViewNode.js').ViewNode,
  *   route: object, instances: object[] }>} `topVnode` is the assembled tree (the
  *   layout vnode when a layout wraps the chain, else the root view vnode);
@@ -30,30 +33,8 @@ import { ViewNode } from '../views/ViewNode.js';
  *   preloaded view/layout instances (root→leaf, layout last) so the caller can
  *   e.g. skipEnter() each one.
  */
-export async function assembleChain(entry, ctx) {
-	const { chain, layout: LayoutClass, fullPath } = entry;
-	const leaf = chain[chain.length - 1];
-
-	// Per-navigation route snapshot (v1.15, D47; parsed URL parts v1.49, D83):
-	// SAME keys + semantics as the Router's #navigate builds —
-	// `{ path, pathname, query, hash, route, params, chain }`, frozen — threaded
-	// to every routed view/layout preload() so `this.route` is populated exactly
-	// as in the browser. Views read `this.route.route.name` /
-	// `this.route.chain[0].name` / `this.route.route.meta`, so the top-level keys
-	// are `route` (the matched LEAF def) and `chain` (root → leaf defs), NOT bare
-	// name/meta. A prerendered route is a bare static path: no params, no query,
-	// no fragment — so `params` is {}, `pathname` is the full path itself, `query`
-	// is the same frozen null-prototype empty object the Router's parseLocation
-	// would yield, and `hash` is ''.
-	const route = Object.freeze({
-		path: fullPath,
-		pathname: fullPath,
-		query: Object.freeze(Object.create(null)),
-		hash: '',
-		route: leaf,
-		params: {},
-		chain,
-	});
+export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)) {
+	const { chain, layout: LayoutClass } = entry;
 
 	// Preload each chain level's view (root → leaf), then the layout.
 	const instances = [];
@@ -84,6 +65,23 @@ export async function assembleChain(entry, ctx) {
 	}
 
 	return { topVnode, route, instances };
+}
+
+/**
+ * Build the frozen D83 route snapshot shared by static prerender and mount.
+ * Static paths carry no params/query/fragment, so their pathname is the full
+ * path and the query object is a frozen null-prototype empty map.
+ */
+export function makeRouteSnapshot({ chain, fullPath }) {
+	return Object.freeze({
+		path: fullPath,
+		pathname: fullPath,
+		query: Object.freeze(Object.create(null)),
+		hash: '',
+		route: chain[chain.length - 1],
+		params: {},
+		chain,
+	});
 }
 
 export default assembleChain;

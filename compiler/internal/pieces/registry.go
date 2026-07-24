@@ -10,6 +10,8 @@ package pieces
 import (
 	"fmt"
 	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 )
 
 // Registry is the parsed registry.json index.
@@ -113,50 +115,10 @@ func suggest(reg *Registry, name string) string {
 	best := ""
 	bestDist := suggestMaxDistance + 1
 	for _, p := range reg.Pieces {
-		d := editDistance(name, p.Name)
+		d := textutil.EditDistance(name, p.Name)
 		if d < bestDist {
 			bestDist, best = d, p.Name
 		}
 	}
 	return best
-}
-
-// editDistance is the Levenshtein distance between a and b (ASCII, small inputs).
-// A local copy rather than importing the parser's unexported helper — the two
-// packages have no dependency edge and this keeps pieces self-contained.
-func editDistance(a, b string) int {
-	la, lb := len(a), len(b)
-	if la == 0 {
-		return lb
-	}
-	if lb == 0 {
-		return la
-	}
-	prev := make([]int, lb+1)
-	curr := make([]int, lb+1)
-	for j := 0; j <= lb; j++ {
-		prev[j] = j
-	}
-	for i := 1; i <= la; i++ {
-		curr[0] = i
-		for j := 1; j <= lb; j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			del := prev[j] + 1
-			ins := curr[j-1] + 1
-			sub := prev[j-1] + cost
-			m := del
-			if ins < m {
-				m = ins
-			}
-			if sub < m {
-				m = sub
-			}
-			curr[j] = m
-		}
-		prev, curr = curr, prev
-	}
-	return prev[lb]
 }

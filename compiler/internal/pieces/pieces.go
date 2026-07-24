@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
 
@@ -430,7 +431,7 @@ func RenderSummary(w io.Writer, out *ui.Printer, res *Result) {
 	for _, u := range res.Units {
 		n := len(u.Files)
 		fmt.Fprintf(w, "  %s %s %s\n",
-			out.Green("✓"), out.Bold(u.Name), out.Dim(fmt.Sprintf("· %d file%s", n, plural(n))))
+			out.Green("✓"), out.Bold(u.Name), out.Dim(fmt.Sprintf("· %d file%s", n, textutil.Plural(n))))
 	}
 
 	if len(res.NpmDeps) == 0 && res.Theme == "" {
@@ -443,11 +444,4 @@ func RenderSummary(w io.Writer, out *ui.Printer, res *Result) {
 	if res.Theme != "" {
 		fmt.Fprintf(w, "    %s %s\n", out.Yellow("→"), res.Theme)
 	}
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }

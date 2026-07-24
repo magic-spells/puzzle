@@ -27,6 +27,11 @@ class FieldBuilder {
 
 	required(message) {
 		this.def.required = true;
+		// Record that required was asked for BY THE AUTHOR, distinct from the
+		// `required` that `.primary()` implies. fieldErrors reads this to keep the
+		// auto-generatable-primary exemption from swallowing an explicit
+		// `.primary().required()` on a user-supplied key (e.g. a slug pk).
+		this.def.explicitRequired = true;
 		if (message) this.def.requiredMessage = message;
 		return this;
 	}
@@ -127,7 +132,15 @@ function fieldErrors(field, def, value) {
 	// enforcing D48, so the public pre-check must accept the same input. Keep ''
 	// invalid because the Store only generates for null/undefined — real parity,
 	// not a broader relaxation of `.primary()`'s required contract.
-	const autoGeneratablePrimary = def.primary && (value === undefined || value === null);
+	//
+	// The exemption applies ONLY to `.primary()`'s IMPLIED required, not to an
+	// explicit `.primary().required()`. When the author chains `.required()`, a
+	// user-supplied pk (e.g. `slug: string().primary().required()`) is contractually
+	// mandatory: a blank value must surface the required error so a create form's
+	// pre-check blocks submission instead of letting the Store silently auto-generate
+	// a random key. See constellation/feature/FEATURE-VALIDATE-PK-PARITY.md.
+	const autoGeneratablePrimary =
+		def.primary && !def.explicitRequired && (value === undefined || value === null);
 	if (def.required && missing && !autoGeneratablePrimary) {
 		errors.push({
 			field,

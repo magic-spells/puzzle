@@ -31,10 +31,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { Store } from '../datastore/store.js';
-import { FormatterRegistry } from '../formatters.js';
+import { makeFormatterRegistry } from '../formatters.js';
 import { Router } from '../router/router.js';
-import builtinFormatters from '@magic-spells/puzzle/formatters/manifest';
-import { serialize } from './serialize.js';
+import { serialize, escapeText, escapeAttr } from './serialize.js';
 import { assembleChain } from './assemble.js';
 import { resolveHead, MANAGED_TAGS } from '../head.js';
 
@@ -277,6 +276,10 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 		mode: 'static',
 		target: targetId,
 		apiURL: config.apiURL ?? null,
+		storage: config.storage,
+		routerBase: config.routerBase,
+		routerMode: config.routerMode,
+		hasModels: Object.keys(config.models ?? {}).length > 0,
 		hasFormatters: Object.keys(config.formatters ?? {}).length > 0,
 	};
 }
@@ -292,16 +295,13 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
  * PuzzleApp — documented) so a build-time store seed lands before the first data().
  */
 async function buildContext(config) {
-	const { models = {}, formatters = {}, apiURL } = config;
+	const { models = {}, formatters = {}, apiURL, storage } = config;
 
-	const store = new Store(models, { apiURL });
-
-	const registry = new FormatterRegistry(builtinFormatters);
-	for (const [name, fn] of Object.entries(formatters)) {
-		registry.register(name, fn);
-	}
-
+	const storeOptions = { apiURL };
+	if (storage !== undefined) storeOptions.storage = storage;
+	const store = new Store(models, storeOptions);
 	const router = new Router(config.routes ?? [], { mode: 'memory' });
+	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 
 	const ctx = { store, router, formatters: registry };
 
@@ -584,7 +584,10 @@ function targetElementRe(targetId) {
 
 /** Replace the first `<title>…</title>` with an HTML-escaped title. */
 function replaceTitle(html, title) {
-	return html.replace(/<title>[\s\S]*?<\/title>/, () => `<title>${escapeHtml(title)}</title>`);
+	return html.replace(
+		/<title>[\s\S]*?<\/title>/,
+		() => `<title>${escapeText(String(title))}</title>`
+	);
 }
 
 // ---- managed head surgery (D84) ---------------------------------------------
@@ -597,12 +600,10 @@ function replaceTitle(html, title) {
  * applies to document.title). Then per managed tag identity (head.js
  * MANAGED_TAGS — the same table syncHead consumes, so the two delivery paths
  * can never emit different shapes or identities):
- *  - a same-identity `data-puzzle-head` tag already in the shell is REPLACED in
- *    place (the regex keys on the marker attribute, element-shape-agnostic —
- *    managed <meta>/<link> are void elements, so replacing the open tag
- *    replaces the whole thing);
- *  - a tag whose field no longer resolves is REMOVED (the framework owns every
- *    marker-bearing tag — mirrors syncHead's removal);
+ *  - same-identity `data-puzzle-head` tags already in the shell are collapsed:
+ *    the first is REPLACED in place and every stale duplicate is removed;
+ *  - tags whose field no longer resolves are ALL REMOVED (the framework owns
+ *    every marker-bearing tag — mirrors syncHead's removal);
  *  - the rest are collected and inserted ONCE immediately before `</head>`
  *    (case-insensitive). No `</head>` (fragment/malformed shell) DEGRADES:
  *    ride after the first `</title>` instead, or warn + skip — never throw,
@@ -622,9 +623,13 @@ function applyHead(html, head) {
 			continue;
 		}
 		const tagHtml = buildHeadTag(spec, value);
-		if (markerRe.test(out)) {
-			out = out.replace(markerRe, () => tagHtml);
-		} else {
+		let replaced = false;
+		out = out.replace(markerRe, () => {
+			if (replaced) return '';
+			replaced = true;
+			return tagHtml;
+		});
+		if (!replaced) {
 			inserts.push(tagHtml);
 		}
 	}
@@ -659,13 +664,14 @@ function buildHeadTag(spec, value) {
 }
 
 /**
- * Match ONE element open tag by its `data-puzzle-head` identity. The lookbehind
+ * Match every element open tag by its `data-puzzle-head` identity. The lookbehind
  * mirrors targetElementRe's id= handling: a plain \b would let a hypothetical
  * `x-data-puzzle-head=` attribute satisfy the match.
  */
 function managedTagRe(id) {
 	return new RegExp(
-		'<[^>]*(?<![-\\w])data-puzzle-head=["\']' + escapeRegExp(id) + '["\'][^>]*>'
+		'<[^>]*(?<![-\\w])data-puzzle-head=["\']' + escapeRegExp(id) + '["\'][^>]*>',
+		'g'
 	);
 }
 
@@ -706,21 +712,6 @@ function parseTargetId(target) {
 		);
 	}
 	return target.slice(1);
-}
-
-/** Escape the three characters that would break HTML text content (for <title>). */
-function escapeHtml(s) {
-	return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-/** Escape a double-quoted attribute value (mirrors serialize.js escapeAttr). */
-function escapeAttr(s) {
-	return String(s)
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#39;');
 }
 
 /** Escape every regex metacharacter so an id matches literally in the shell regex. */

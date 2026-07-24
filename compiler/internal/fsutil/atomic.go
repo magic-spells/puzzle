@@ -6,6 +6,12 @@ import (
 	"path/filepath"
 )
 
+// FileExists reports whether path is an existing non-directory filesystem entry.
+func FileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
 // WriteFileAtomic writes data to a temporary file in the same directory as path
 // and then renames it over path. Because os.Rename within a directory is atomic
 // on POSIX (and replaces the destination on Windows via MoveFileEx), a concurrent

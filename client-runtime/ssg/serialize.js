@@ -51,12 +51,12 @@ function stringify(v) {
 }
 
 /** Escape a text node's content: the three characters that would break HTML text. */
-function escapeText(s) {
+export function escapeText(s) {
 	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /** Escape a double-quoted attribute value (adds the quote characters over text). */
-function escapeAttr(s) {
+export function escapeAttr(s) {
 	return s
 		.replace(/&/g, '&amp;')
 		.replace(/</g, '&lt;')

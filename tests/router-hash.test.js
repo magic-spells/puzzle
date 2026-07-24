@@ -339,6 +339,44 @@ describe('Router hash mode — popstate (D34)', () => {
 		expect(warnSpy).not.toHaveBeenCalled();
 		warnSpy.mockRestore();
 	});
+
+	it('restores the committed hash when a guarded pop is blocked (D87)', async () => {
+		let allowed = true;
+		let guardRuns = 0;
+		const guarded = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/private',
+				name: 'private',
+				view: AboutView,
+				layout: DefaultLayout,
+				guard() {
+					guardRuns++;
+					return allowed;
+				},
+			},
+			{ path: '/after', name: 'after', view: TodosView, layout: DefaultLayout },
+		];
+		const { router, el } = await bootHash(guarded, '/');
+		await router.push('/private');
+		await router.push('/after');
+		expect(location.hash).toBe('#/after');
+		allowed = false;
+		guardRuns = 0;
+
+		// simulate back to '#/private': the browser moves the hash, THEN popstate fires
+		history.replaceState({}, '', '/#/private');
+		window.dispatchEvent(new PopStateEvent('popstate'));
+		await tick();
+
+		// Guard refused → nothing commits AND the hash is rewound to the committed
+		// route, so URL and tree stay consistent. The replaceState rewind fires no
+		// echo popstate, so the guard runs exactly once.
+		expect(location.hash).toBe('#/after');
+		expect(router.current.path).toBe('/after');
+		expect(el.querySelector('.todos')).not.toBeNull();
+		expect(guardRuns).toBe(1);
+	});
 });
 
 describe('route snapshot (v1.15, D47)', () => {

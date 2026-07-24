@@ -267,12 +267,29 @@ export class Router {
 	// { path, entry, params, views: [v0..vN], layout, layoutClass } | null
 	#state = null;
 	#token = 0;
+	// The rawPath of the navigation that currently owns the token and has NOT yet
+	// committed or terminated (null when idle). push() reads it so a SECOND click on
+	// the active link WHILE its navigation is still in flight (data() slow) is a
+	// same-nav-key no-op instead of a supersession: the committed #state still names
+	// the OLD route pre-commit, so #state alone can't catch the double-click. Set at
+	// #navigate's token bump, cleared at #commitState (commit) and in
+	// #recoverFailedNavigation (block/failure); a newer navigation to a DIFFERENT path
+	// overwrites it and still supersedes normally.
+	#pendingNavPath = null;
 	// Guard redirects re-enter the normal pipeline through replace(), so every
 	// destination gets its own inherited guard chain and the denied URL never
 	// commits. A bad pair/cycle could otherwise recurse forever without reaching
-	// #commitState; count consecutive guard-owned redirects and reset only when a
-	// navigation actually commits (D87).
+	// #commitState; count guard-owned redirects and reset at the START of each
+	// externally-initiated navigation — NOT only at commit, because a redirect to the
+	// already-current path is a same-path replace() no-op that never commits, so a
+	// commit-only reset would let the count accumulate across INDEPENDENT user
+	// navigations and spuriously trip the limit (D87).
 	#guardRedirectCount = 0;
+	// True only for the synchronous entry of a #navigate that is a guard-redirect
+	// re-entry (set around the replace() call in #navigate's redirect branch, consumed
+	// at #navigate's token bump). Distinguishes those re-entries from externally-
+	// initiated navigations so the #guardRedirectCount reset skips them.
+	#guardRedirecting = false;
 	// The instance an in-flight transition is currently animating OUT (or null).
 	// A newer navigation reads this to cancel the running out and proceed
 	// immediately (constellation/doc/DOC-SPEC.md §12 interruption rule).
@@ -539,6 +556,15 @@ export class Router {
 			if (hash === '' || hash === '#') return '/';
 			if (this.#base) {
 				if (hash === '#' + this.#base) return '/';
+				// A query directly after the base with no trailing slash ('#'+base+'?...')
+				// is the app ROOT carrying that query — mirror history mode below, where
+				// pathname===base returns '/'+location.search. Without this branch the
+				// fragment matched neither the exact-base nor the base+'/' case and fell
+				// to null, so #currentPath dropped the query (start() → '/', popstate
+				// ignored). D51/D83.
+				if (hash.startsWith('#' + this.#base + '?')) {
+					return '/' + hash.slice(1 + this.#base.length);
+				}
 				if (hash.startsWith('#' + this.#base + '/')) return hash.slice(1 + this.#base.length);
 				return null; // '#/...' outside the base is a non-route fragment (D51)
 			}
@@ -616,6 +642,8 @@ export class Router {
 		this.#index = -1;
 		this.#pendingIndex = null;
 		this.#guardRedirectCount = 0;
+		this.#guardRedirecting = false;
+		this.#pendingNavPath = null;
 		this.#positions.clear();
 		this.#scrollKey = null;
 		// Drop any deferred push and clear the commit-window flag (defensive: the
@@ -675,7 +703,18 @@ export class Router {
 		// committed, so it never moves this reference, and a DIFFERENT path on the
 		// same route (`/user/1` → `/user/2`) still runs its params-only refresh.
 		// Memory mode shares the semantics (#state.path is set there too).
-		if (this.#state && sameNavKey(path) === sameNavKey(this.#state.path)) {
+		const key = sameNavKey(path);
+		if (this.#state && key === sameNavKey(this.#state.path)) {
+			return Promise.resolve();
+		}
+		// In-flight double-click guard: the COMMITTED #state check above misses a
+		// second click on the active link WHILE its navigation is still loading — the
+		// old route is still committed there. Without this, that second push bumps the
+		// token and SUPERSEDES the first: fresh view instances, data() runs twice, the
+		// first nav discarded. #pendingNavPath names the target of the navigation that
+		// owns the token but has not committed, so a same-key push here no-ops; a push
+		// to a DIFFERENT path mid-flight has a different key and still supersedes.
+		if (this.#pendingNavPath != null && key === sameNavKey(this.#pendingNavPath)) {
 			return Promise.resolve();
 		}
 		return this.#navigate(path, { push: true });
@@ -874,6 +913,46 @@ export class Router {
 			cancelAnimations(stalled.element);
 		}
 		this.#pendingIndex = null;
+		// This navigation terminated without committing (guard block/failure, data
+		// failure, or a same-path redirect no-op) and still owns the token: clear the
+		// in-flight target so a later push to that path is not wrongly no-op'd.
+		this.#pendingNavPath = null;
+	}
+
+	/**
+	 * Restore the committed URL after a guard refused a POPSTATE (D87). The browser
+	 * had already moved the address bar to the guarded entry before the guard ran,
+	 * but the mounted tree stayed on the committed route — a share/bookmark would
+	 * capture the wrong URL, violating the router's "URL and mounted tree commit
+	 * together" invariant. Rewrite the entry the browser popped to back to `path`.
+	 *
+	 * We do NOT history.go(delta) back to the pre-pop entry: history/hash mode keeps
+	 * no browser-history index (only memory mode tracks #index/#stack), so the delta
+	 * is unknowable. replaceState instead COLLAPSES the guarded entry — trading the
+	 * exact back/forward stack shape for the URL/tree invariant (the guarded forward
+	 * entry is lost). Because replaceState fires no popstate there is no echo
+	 * navigation to suppress and the guard cannot re-run — the very reason a
+	 * history.go revert (which would echo a popstate targeting `path`) was avoided.
+	 * The URL is re-encoded exactly as #commitLocation writes it (shared #encodedUrl:
+	 * base prefix, plain in history mode / '#'-encoded in hash mode); history.state rides through
+	 * untouched so the entry keeps whatever __puzzleScrollKey #handlePopState settled
+	 * on it. Memory mode has no browser URL (and no popstate listener); its #index
+	 * already stayed on the committed entry (the blocked pop cleared #pendingIndex
+	 * without moving #index), so there is nothing to repair.
+	 */
+	#restoreCommittedUrl(path) {
+		if (this.#mode === 'memory') return;
+		history.replaceState(history.state, '', this.#encodedUrl(path));
+	}
+
+	/**
+	 * The one write-side URL encoder: base prefixed before the mode-specific
+	 * encoding (v1.19, D51), then plain in history mode / '#'-prefixed in hash
+	 * mode (D34). Every writer (#commitLocation, #restoreCommittedUrl) must go
+	 * through here so committed and restored URLs stay byte-identical.
+	 */
+	#encodedUrl(path) {
+		return this.#mode === 'hash' ? '#' + this.#base + path : this.#base + path;
 	}
 
 	async #navigate(
@@ -897,6 +976,22 @@ export class Router {
 		// up. Nothing above reads the token (stripPath/#match/current are pure over
 		// their inputs), so the bump commutes down safely.
 		const token = ++this.#token;
+		// This navigation is now REAL (matched) and owns the token: record its target
+		// so a same-key push() arriving mid-flight no-ops instead of superseding (the
+		// double-click guard in push()), and reset the guard-redirect budget UNLESS
+		// this #navigate is itself a guard redirect re-entering via replace() — that
+		// re-entry continues one logical navigation and must keep the count (D87). The
+		// flag is consumed here so it only tags the immediately-following re-entry.
+		//
+		// Track the target ONLY for genuine pushes: the double-click guard must NOT
+		// suppress a push that SUPERSEDES an in-flight pop/replace to the same path —
+		// memory-mode back()-then-push('/same') is push-vs-pop (truncate+append vs
+		// index move), a real navigation despite the shared path. A pop/replace/initial
+		// nav starting here clears the slot for that reason.
+		this.#pendingNavPath = push ? rawPath : null;
+		const guardReentry = this.#guardRedirecting;
+		this.#guardRedirecting = false;
+		if (!guardReentry) this.#guardRedirectCount = 0;
 		// A real push supersedes any in-flight memory pop and truncates forward
 		// entries (D42), so the pending pop target is moot — reset it here (at the
 		// point supersession becomes real) so a go() arriving before this push commits
@@ -950,6 +1045,26 @@ export class Router {
 			if (token !== this.#token || guardVerdict === null) return;
 			if (guardVerdict === false) {
 				this.#recoverFailedNavigation(token);
+				if (cur == null) {
+					// Initial navigation refused with nothing yet committed (D87): there is
+					// no prior route to fall back to, so the app container stays empty — a
+					// silent blank page. There is deliberately no 404 surface, so KEEP the
+					// no-mount outcome but make it loud and actionable — an entry guard that
+					// blocks first paint should redirect, not dead-end.
+					console.error(
+						`[puzzle] an entry guard blocked the initial navigation to "${rawPath}" by ` +
+							'returning false, so nothing was rendered — the app container is empty. ' +
+							"Entry guards should return a redirect path (e.g. '/login') instead of " +
+							'false so first paint always has a route to render.'
+					);
+				} else if (pop) {
+					// A blocked POPSTATE: the browser already moved the address bar to the
+					// guarded entry before the guard ran, but the tree stayed on `cur`. Put
+					// the URL back so URL and mounted tree stay consistent. A plain push never
+					// moved the URL (pushState fires only at commit) and staying silently put
+					// is its correct outcome (D87), so only pops repair here.
+					this.#restoreCommittedUrl(cur.path);
+				}
 				return;
 			}
 			if (typeof guardVerdict === 'string') {
@@ -958,8 +1073,20 @@ export class Router {
 				// centralized. Await it so awaiting the denied navigation observes the
 				// final redirect commit. If replace was a same-path/unmatched no-op, no
 				// newer token owns cleanup, so restore a transition we superseded.
+				// Mark the re-entry so replace()'s #navigate keeps the redirect budget
+				// (Fix 2); clear unconditionally after the await in case replace() was a
+				// no-op that never re-entered #navigate to consume the flag.
+				this.#guardRedirecting = true;
 				const redirected = await this.replace(guardVerdict);
+				this.#guardRedirecting = false;
 				this.#recoverFailedNavigation(token);
+				// A redirect that no-op'd (its target is already the committed route, or is
+				// unmatched) left #state and the URL untouched, so after a POPSTATE the
+				// browser still sits on the guarded entry — repair it exactly like the block
+				// case. A redirect that COMMITTED already rewrote the URL through
+				// #commitLocation (#state moved off `cur`), and a push never moved the URL,
+				// so both skip this. `cur` is non-null on any pop (pops follow a commit).
+				if (pop && cur && this.#state === cur) this.#restoreCommittedUrl(cur.path);
 				return redirected;
 			}
 		}
@@ -1228,6 +1355,11 @@ export class Router {
 	 */
 	#commitLocation(next) {
 		const { rawPath, entry, push, replace, memoryIndex } = next;
+		// The URL written for this path (#encodedUrl — the write half of the
+		// path-shape boundary). rawPath stays path-shaped (base-free) for
+		// #state/current either way. Unused in memory mode (no URL carrier);
+		// shared by push + replace.
+		const url = this.#encodedUrl(rawPath);
 		if (push) {
 			if (this.#mode === 'memory') {
 				// In-memory stack (D42): truncate any forward entries, append the new
@@ -1238,13 +1370,6 @@ export class Router {
 				this.#stack.push({ path: rawPath });
 				this.#index = this.#stack.length - 1;
 			} else {
-				// The URL written for this path: the base is prefixed BEFORE the
-				// mode-specific encoding (v1.19, D51 — the write half of the path-shape
-				// boundary), then plain in history mode / '#'-prefixed in hash mode
-				// (D34). rawPath stays path-shaped (base-free) for #state/current either
-				// way. No base ⇒ '' prefix ⇒ byte-identical to today.
-				const url =
-					this.#mode === 'hash' ? '#' + this.#base + rawPath : this.#base + rawPath;
 				if (this.#scrollEnabled()) {
 					// Persist the position captured at nav start (#navigate's departScroll):
 					// at commit time the outgoing view is already destroyed and the collapsed
@@ -1265,13 +1390,10 @@ export class Router {
 				// index move — stack length and position are invariants of a replace.
 				this.#stack[this.#index] = { path: rawPath };
 			} else {
-				// The same URL encoding the push branch builds (base prefixed before
-				// the mode-specific form, D51/D34). The entry keeps its IDENTITY: no
-				// #savePosition, no #newEntryKey — the replacement state re-carries
-				// the existing __puzzleScrollKey, so a later pop restores whatever
-				// position was saved under this entry as if it were never rewritten.
-				const url =
-					this.#mode === 'hash' ? '#' + this.#base + rawPath : this.#base + rawPath;
+				// The entry keeps its IDENTITY on a replace: no #savePosition, no
+				// #newEntryKey — the replacement state re-carries the existing
+				// __puzzleScrollKey, so a later pop restores whatever position was saved
+				// under this entry as if it were never rewritten (v1.49, D83).
 				if (this.#scrollEnabled()) {
 					history.replaceState({ __puzzleScrollKey: this.#scrollKey }, '', url);
 				} else {
@@ -1663,6 +1785,9 @@ export class Router {
 		// A real commit ends any redirect chain. Blocks, failures, unmatched
 		// targets, and same-path redirect no-ops intentionally do not reset it.
 		this.#guardRedirectCount = 0;
+		// The in-flight navigation just committed (only the token owner reaches
+		// #commitState): clear its pending target — #state now names it.
+		this.#pendingNavPath = null;
 		this.#warnMissingSlots(next.views);
 		// Scroll lands here — synchronously after the new content is in the DOM
 		// (every #commitState call site mounts/patches first) and before the next
@@ -1979,6 +2104,38 @@ export class Router {
 	}
 
 	/**
+	 * hash-mode click interception, shared by #handleClick's relative-href and
+	 * absolute-URL branches (D34/D51): given the fragment to test (a relative href
+	 * starting with '#', or an absolute same-page URL's `.hash`), route it if it
+	 * names an in-app fragment and return true. With a base the fragment must be
+	 * exactly '#' + base (→ '/') or under '#' + base + '/'; base-less, any '#/...'
+	 * is a route. A bare '#anchor' matches nothing → returns false (browser handles
+	 * it). preventDefault is called HERE, before push (its placement in the original
+	 * inlined cascades), so the return value is advisory.
+	 */
+	#tryHashFragment(fragment, e) {
+		if (this.#base) {
+			if (fragment === '#' + this.#base) {
+				e.preventDefault();
+				this.push('/');
+				return true;
+			}
+			if (fragment.startsWith('#' + this.#base + '/')) {
+				e.preventDefault();
+				this.push(fragment.slice(1 + this.#base.length));
+				return true;
+			}
+			return false;
+		}
+		if (fragment.startsWith('#/')) {
+			e.preventDefault();
+			this.push(fragment.slice(1));
+			return true;
+		}
+		return false;
+	}
+
+	/**
 	 * Intercept in-app <a> clicks. Falls through to the browser for anything that
 	 * isn't a plain left-click on a same-origin navigational link (D19).
 	 */
@@ -2001,20 +2158,7 @@ export class Router {
 			// '#' + base (→ '/') and '#' + base + '/...' fragments are routes (push
 			// base-stripped, symmetric with #currentPath); any other '#/...' falls
 			// through to the browser like a non-route fragment.
-			if (this.#mode === 'hash') {
-				if (this.#base) {
-					if (href === '#' + this.#base) {
-						e.preventDefault();
-						this.push('/');
-					} else if (href.startsWith('#' + this.#base + '/')) {
-						e.preventDefault();
-						this.push(href.slice(1 + this.#base.length));
-					}
-				} else if (href.startsWith('#/')) {
-					e.preventDefault();
-					this.push(href.slice(1));
-				}
-			}
+			if (this.#mode === 'hash') this.#tryHashFragment(href, e);
 			return;
 		}
 		if (href.startsWith('mailto:') || href.startsWith('tel:')) return;
@@ -2033,20 +2177,7 @@ export class Router {
 			// shell — never push its pathname. Fall through to the browser otherwise.
 			// With a base (D51) the fragment must be the exact '#' + base (→ '/') or
 			// under '#' + base + '/', mirroring the relative-href branch above.
-			if (url.pathname === location.pathname) {
-				if (this.#base) {
-					if (url.hash === '#' + this.#base) {
-						e.preventDefault();
-						this.push('/');
-					} else if (url.hash.startsWith('#' + this.#base + '/')) {
-						e.preventDefault();
-						this.push(url.hash.slice(1 + this.#base.length));
-					}
-				} else if (url.hash.startsWith('#/')) {
-					e.preventDefault();
-					this.push(url.hash.slice(1));
-				}
-			}
+			if (url.pathname === location.pathname) this.#tryHashFragment(url.hash, e);
 			return;
 		}
 
