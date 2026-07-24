@@ -1,10 +1,10 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D87)
+name: DECISIONS.md — decision-log index (D1–D88)
 status: verified
-verified_at: '2026-07-24T01:11:18.558Z'
+verified_at: '2026-07-24T05:49:35.947Z'
 connections:
   - DOC-SPEC
-verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
+verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
 Index of the ADR-lite decision log. Each decision D1–D87 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
@@ -57,6 +57,7 @@ field on the successor card.
 - **D35** [[DECISION-D35-NO-SASS]] — no Sass support, ever
 
 ## Shipped amendments (v1.1–v1.47)
+
 
 Each shipped as an additive amendment; the corresponding FEATURE card is the
 slice-of-work view.
@@ -119,6 +120,7 @@ slice-of-work view.
 - **D85** [[DECISION-D85-FLIP-ATTRIBUTE]] — FLIP keyed-reorder animation via a `flip` directive ATTRIBUTE (bare, or `flip={ flipOptions }` — the object built in data(), inline literals not being template expressions), joining `key`/`island`/`ref` in the directive strip lists — the `animate:flip` syntax namespace rejected for its grammar/tooling ripple; translation-only First/Last measurement around keyed reconciliation, visual-rect capture on rapid reorders, WeakMap-tracked Puzzle-owned animations, reduced-motion/no-WAAPI/no-flip fast paths free (v1.51 → SPEC §46, [[FEATURE-V1-51-FLIP]])
 - **D86** [[DECISION-D86-OUTSIDE-MODIFIER]] — the `outside` event modifier: `@event:outside={ handler }` attaches to `document` (CAPTURE phase — immune to unrelated `stopPropagation`, and the opening interaction can never self-dismiss) and gates on `el.contains(event.target)` before every other modifier step; framework-owned cleanup on every removal shape via the D72 `releaseSubtree` walk; event-generic (`@pointerdown:outside`, `@focusin:outside`), one `eventGenericMods` table entry, zero grammar/tooling ripple — retires the hand-rolled pattern 16 puzzle-pieces carry (32 removeEventListener sites); `use:` actions deferral reinforced (v1.52 → SPEC §5/§47, [[FEATURE-V1-52-OUTSIDE-MODIFIER]])
 - **D87** [[DECISION-D87-ROUTE-GUARDS]] — route guards: an inherited `guard` route field (`({ to, from, ctx }) => verdict`, any depth — guard the top-level route to lock its layout subtree; children may add stricter guards), run root→leaf sequentially in `#navigate` before any view construction or the D19 load gate, re-run on every matched navigation (params/query-only included), token-checked across awaits; verdicts are return values — `false` blocks, a string path redirects through public `replace()` (denied URL never in history, ten-redirect cycle cap reset on commit), throws follow the data()-failure posture; prerender interplay is warnings-only (hybrid: guarded markup ships publicly, `prerender: false` opts out; static: guards never run) — global `beforeEach`+`meta.requiresAuth`, root-only placement, throw-based redirects, the `auth` field name, and hard prerender enforcement all rejected (v1.53 → SPEC §48, [[FEATURE-V1-53-ROUTE-GUARDS]])
+- **D88** [[DECISION-D88-SOURCEMAP-OPT-OUT]] — `build.sourceMap`: production linked source maps become opt-in (default off) for SPA + true-static bundles; dev and the temporary Node prerender bundle keep their maps, the static bundle is stripped by a post-pass; mirrors D60's `build.*` opt-out precedent (0.2.0 hardening → SPEC §36 / build config)
 
 ## Open questions (tracked, not yet decided)
 

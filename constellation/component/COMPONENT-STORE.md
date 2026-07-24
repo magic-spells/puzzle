@@ -10,12 +10,24 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      Synchronous tracking scopes may nest and always run inline. Truly async
-      tracking evaluations serialize because the Store has one mutable tracking
-      scope. A sync-shaped function that returns a Promise while another async
-      scope is active is retried; data() must remain safe to rerun.
-verified_at: '2026-07-23T16:30:44.396Z'
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+      Synchronous tracking scopes may nest and always run inline. Truly async tracking evaluations
+      serialize because the Store has one mutable tracking scope. A sync-shaped function that
+      returns a Promise while another async scope is active is retried; data() must remain safe to
+      rerun.
+  - kind: state
+    text: >-
+      createRecord ↔ Model.validate() primary-key parity (2026-07-24, FEATURE-VALIDATE-PK-PARITY).
+      Store._instantiate auto-generated a missing pk BEFORE §20 validation, so a blank
+      `.primary().required()` key was silently filled and never rejected — even though
+      Model.validate() rejects it (model.js explicitRequired). Fix: skip pk auto-generation when the
+      pk field def is explicitRequired AND validate is true (i.e. createRecord), letting the D48
+      validation throw the required error exactly as validate() does. Hydration (_load) and server
+      upserts (_upsert) keep validate=false and STILL auto-generate a missing pk (fail-soft /
+      server-authoritative — must not crash on a missing key). Plain `.primary()` still
+      auto-generates. Tests: tests/validation.test.js 'createRecord primary-key parity'.
+    sha: d9591d6
+verified_at: '2026-07-24T05:49:11.891Z'
+verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
 # Store

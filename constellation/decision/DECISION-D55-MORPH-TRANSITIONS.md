@@ -1,7 +1,7 @@
 ---
 name: "D55 — Shared-element morph route transitions: data-puzzle-morph pairing + a single router morph-handler slot (v1.23)"
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-07-24T05:49:34.855Z'
 connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
@@ -10,6 +10,20 @@ connections:
   - FEATURE-MORPH-TRANSITIONS
   - DOC-ROUTER
   - DOC-SPEC
+notes:
+  - kind: state
+    text: >-
+      Morph handler re-arm across a remount (2026-07-24). enableMorph's teardown `dispose()`
+      (removes the capture-phase document click listener, sets disposed=true) had no inverse, so
+      after app.unmount() a later app.mount() re-applied the SAME handler to the new router but its
+      click-pin machinery stayed dead. Added a symmetric `arm()` (re-attaches the listener, clears
+      disposed, re-registers in the installedMorphs WeakMap) carried on the handler object;
+      PuzzleApp.mount() calls `this.#morphHandler.arm?.()` when re-applying the stashed handler.
+      arm() is idempotent (no-op while still armed → never stacks a second listener); dispose()
+      still clears all other state so re-arming starts clean. Net: mount→unmount→remount leaves
+      exactly ONE live listener with working morphs. Tests: tests/morph-teardown.test.js.
+    sha: d9591d6
+verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
 # D55 — Shared-element morph route transitions: `data-puzzle-morph` pairing + a single router morph-handler slot (v1.23)

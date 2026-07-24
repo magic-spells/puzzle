@@ -59,6 +59,10 @@ type Build struct {
 	// was absent (default behavior), a non-nil pointer is the explicit user
 	// value. The pointer lets "unset" be distinguished from an explicit false.
 	DropConsole *bool
+
+	// SourceMap is the build.sourceMap setting. It defaults to false, so
+	// production builds emit no linked source map unless explicitly enabled.
+	SourceMap bool
 }
 
 // Dev mirrors the `dev` block of puzzle.config.js.
@@ -87,31 +91,17 @@ func (c Config) DropConsole() bool {
 	return *c.Build.DropConsole
 }
 
-// StaticOutput reports whether the app declares the true static-pages output
-// mode via `output: 'static'`. Absent (or no config file) reports false — the
-// default SPA build. The `puzzle build --static` flag enables the same mode
-// without touching the config.
-func (c Config) StaticOutput() bool {
-	return c.Output == "static"
-}
-
-// HybridOutput reports whether the app declares the hybrid (prerender +
-// SPA-takeover) output mode via `output: 'hybrid'` — the behavior formerly
-// spelled 'static'. The `puzzle build --hybrid` flag enables the same mode.
-func (c Config) HybridOutput() bool {
-	return c.Output == "hybrid"
-}
-
 // rawConfig is the permissive shape used to decode the JSON that node prints.
 // styles.use entries are kept as raw messages so object entries (deferred) can
-// be distinguished from strings and reported precisely; build.dropConsole is
-// raw so a non-boolean value can be named precisely in the rejection message.
+// be distinguished from strings and reported precisely; build booleans are raw
+// so invalid values can be named precisely in rejection messages.
 type rawConfig struct {
 	Styles struct {
 		Use []json.RawMessage `json:"use"`
 	} `json:"styles"`
 	Build struct {
 		DropConsole json.RawMessage `json:"dropConsole"`
+		SourceMap   json.RawMessage `json:"sourceMap"`
 	} `json:"build"`
 	Dev Dev `json:"dev"`
 	// Output is kept raw so a non-string or unsupported value can be named
@@ -259,6 +249,17 @@ func validate(raw rawConfig) (Config, error) {
 			)
 		}
 		cfg.Build.DropConsole = &drop
+	}
+
+	// build.sourceMap: production builds omit linked source maps by default; an
+	// explicit true enables them. Anything non-boolean is rejected.
+	if len(raw.Build.SourceMap) > 0 {
+		if err := json.Unmarshal(raw.Build.SourceMap, &cfg.Build.SourceMap); err != nil {
+			return Config{}, fmt.Errorf(
+				"%s: build.sourceMap must be a boolean; got %s",
+				ConfigFileName, strings.TrimSpace(string(raw.Build.SourceMap)),
+			)
+		}
 	}
 
 	// dev.proxy is consumed only by puzzle dev. Prefixes stay intact when

@@ -156,48 +156,34 @@ func TestObjectLiteralRejected(t *testing.T) {
 	}
 }
 
-func TestMatchParen(t *testing.T) {
+func TestMatchBalanced(t *testing.T) {
 	cases := []struct {
-		name string
-		s    string
-		open int
-		want int
+		name       string
+		s          string
+		open       int
+		openDelim  byte
+		closeDelim byte
+		want       int
 	}{
-		{"simple", "(a, b)", 0, 5},
-		{"regex with close paren in class", "(/[)]/)", 0, 6},
-		{"regex literal arg", "(/a|b/)", 0, 6},
-		{"paren inside string", "('a)b')", 0, 6},
-		{"paren inside line comment", "(a // )\n)", 0, 8},
-		{"nested parens", "(f(x))", 0, 5},
-		{"division not regex", "(a / b)", 0, 6},
-		{"unbalanced", "(a", 0, -1},
+		{"simple parens", "(a, b)", 0, '(', ')', 5},
+		{"regex with close paren in class", "(/[)]/)", 0, '(', ')', 6},
+		{"regex literal arg", "(/a|b/)", 0, '(', ')', 6},
+		{"paren inside string", "('a)b')", 0, '(', ')', 6},
+		{"paren inside line comment", "(a // )\n)", 0, '(', ')', 8},
+		{"nested parens", "(f(x))", 0, '(', ')', 5},
+		{"division not regex", "(a / b)", 0, '(', ')', 6},
+		{"unbalanced parens", "(a", 0, '(', ')', -1},
+		{"simple braces", "{a: 1}", 0, '{', '}', 5},
+		{"regex with close brace", "{/}/.test(x)}", 0, '{', '}', 12},
+		{"brace inside string", "{'}'}", 0, '{', '}', 4},
+		{"nested object", "{a: {b: 1}}", 0, '{', '}', 10},
+		{"unbalanced braces", "{a", 0, '{', '}', -1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := matchParen(tc.s, tc.open); got != tc.want {
-				t.Errorf("matchParen(%q, %d) = %d, want %d", tc.s, tc.open, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestMatchBrace(t *testing.T) {
-	cases := []struct {
-		name string
-		s    string
-		open int
-		want int
-	}{
-		{"simple", "{a: 1}", 0, 5},
-		{"regex with close brace", "{/}/.test(x)}", 0, 12},
-		{"brace inside string", "{'}'}", 0, 4},
-		{"nested object", "{a: {b: 1}}", 0, 10},
-		{"unbalanced", "{a", 0, -1},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := matchBrace(tc.s, tc.open); got != tc.want {
-				t.Errorf("matchBrace(%q, %d) = %d, want %d", tc.s, tc.open, got, tc.want)
+			if got := matchBalanced(tc.s, tc.open, tc.openDelim, tc.closeDelim); got != tc.want {
+				t.Errorf("matchBalanced(%q, %d, %q, %q) = %d, want %d",
+					tc.s, tc.open, tc.openDelim, tc.closeDelim, got, tc.want)
 			}
 		})
 	}
@@ -226,7 +212,7 @@ func TestCompileEventValue(t *testing.T) {
 		// output, just misses the cache (the substring guard is conservative).
 		{"string literal false negative", "h('__d.')", nil, "(event) => this.events.h('__d.')", false, false},
 		// A regex arg with a ')' inside a [...] class must not close the call
-		// early — matchParen has to skip the regex literal.
+		// early — matchBalanced has to skip the regex literal.
 		{"call with regex arg closing paren in class", "handle(/[)]/)", nil, "(event) => this.events.handle(/[)]/)", true, false},
 		{"call with regex arg brace in class", "handle(/[}]/)", nil, "(event) => this.events.handle(/[}]/)", true, false},
 		{"member callee is error", "obj.method()", nil, "", false, true},

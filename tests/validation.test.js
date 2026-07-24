@@ -297,6 +297,68 @@ describe('createRecord enforcement (SPEC §20)', () => {
 	});
 });
 
+// createRecord ↔ Model.validate() primary-key parity (FEATURE-VALIDATE-PK-PARITY):
+// the Store auto-generates a missing pk BEFORE §20 validation, which would let a
+// blank `.primary().required()` slip through even though Model.validate() rejects
+// it. createRecord must reject it identically — but ONLY under validation; the
+// fail-soft hydration/upsert paths (validate=false) must still auto-generate.
+describe('createRecord primary-key parity (SPEC §20, D48)', () => {
+	class RequiredSlug extends PuzzleModel {
+		static schema = {
+			slug: Puzzle.string().primary().required('slug is required'),
+			title: Puzzle.string().required(),
+		};
+	}
+	class PlainSlug extends PuzzleModel {
+		static schema = {
+			slug: Puzzle.string().primary(),
+			title: Puzzle.string().required(),
+		};
+	}
+
+	it('rejects a blank explicit-required primary instead of auto-generating it', () => {
+		const store = new Store({ post: RequiredSlug });
+		for (const blank of [undefined, null, '']) {
+			const data = blank === undefined ? { title: 'T' } : { slug: blank, title: 'T' };
+			let thrown;
+			try {
+				store.createRecord('post', data);
+			} catch (e) {
+				thrown = e;
+			}
+			expect(thrown).toBeInstanceOf(PuzzleValidationError);
+			expect(thrown.errors.find((e) => e.field === 'slug').rule).toBe('required');
+		}
+		expect(store.findMany('post')).toHaveLength(0); // nothing created
+	});
+
+	it('still creates when the explicit-required primary IS supplied', () => {
+		const store = new Store({ post: RequiredSlug });
+		const rec = store.createRecord('post', { slug: 'hello', title: 'T' });
+		expect(rec.slug).toBe('hello');
+		expect(store.findOne('post', 'hello')).toBe(rec);
+	});
+
+	it('plain .primary() (implied required) still auto-generates a blank primary', () => {
+		const store = new Store({ post: PlainSlug });
+		const rec = store.createRecord('post', { title: 'T' });
+		expect(typeof rec.slug).toBe('string');
+		expect(rec.slug.length).toBeGreaterThan(0);
+		expect(store.findMany('post')).toHaveLength(1);
+	});
+
+	it('hydration (validate=false) still auto-generates a missing explicit-required primary — fail-soft', () => {
+		const data = new Map();
+		const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v) };
+		storage.setItem('puzzle-store', JSON.stringify({ post: [{ title: 'seeded, no slug' }] }));
+		const store = new Store({ post: RequiredSlug }, { storage });
+		const recs = store.findMany('post');
+		expect(recs).toHaveLength(1); // hydrated, not dropped or crashed
+		expect(typeof recs[0].slug).toBe('string');
+		expect(recs[0].slug.length).toBeGreaterThan(0);
+	});
+});
+
 describe('update enforcement (SPEC §20)', () => {
 	it('throws and leaves the record untouched on an invalid patch', () => {
 		const store = makeStore();

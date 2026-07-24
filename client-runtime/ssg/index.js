@@ -35,7 +35,7 @@ import { makeFormatterRegistry } from '../formatters.js';
 import { Router } from '../router/router.js';
 import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr } from './serialize.js';
-import { assembleChain } from './assemble.js';
+import { assembleChain, makeRouteSnapshot, makeRouterStub, normalizeBase } from './assemble.js';
 import { resolveHead, MANAGED_TAGS } from '../head.js';
 
 /**
@@ -67,6 +67,21 @@ export async function prerender(config, opts = {}) {
 	const mode = opts.mode ?? 'hybrid';
 	const isStatic = mode === 'static';
 
+	// Hybrid output is history-mode ONLY. A hybrid page emits path-shaped files the
+	// SPA takes over at navigation zero — but a hash or memory router boots at '/'
+	// and renders the HOME route over whatever prerendered page loaded, so every
+	// deep-linked page would flash home. `routerMode` is PuzzleApp runtime config the
+	// Go build can't inspect, so the guard lives here (throws → fails the build). A
+	// non-history app must use output: 'static' (no router) instead.
+	if (!isStatic && (config.routerMode === 'hash' || config.routerMode === 'memory')) {
+		throw new Error(
+			`[puzzle] hybrid prerender output requires history routing, but routerMode is ` +
+				`"${config.routerMode}" — a hash/memory router boots at "/" and would render the ` +
+				`home route over every prerendered page. Use output: 'static' for a non-history ` +
+				`app, or switch to history routing.`
+		);
+	}
+
 	// Fail fast on an unsupported target selector before doing any work (v1
 	// supports '#id' targets only — the shell surgery keys on the id).
 	parseTargetId(config.target);
@@ -84,9 +99,14 @@ export async function prerender(config, opts = {}) {
 		warnings.push(warning);
 		console.warn(warning);
 	}
-	const createPageContext = async () => {
+	const createPageContext = async (entry) => {
 		builtContext = true;
-		return buildContext(config);
+		// Static mode threads the page's route snapshot into the router stub so the
+		// prerender ctx's router.current / url() match the client kernel's (facade
+		// parity). Hybrid ignores it (real memory Router). The beforeMount-only
+		// fallback below has no entry — it never renders, so a null route is fine.
+		const route = isStatic && entry ? makeRouteSnapshot(entry) : null;
+		return buildContext(config, { mode, route });
 	};
 
 	for (const entry of entries) {
@@ -116,7 +136,7 @@ export async function prerender(config, opts = {}) {
 		// captured, so the page's per-page module can rehydrate + mount client-side
 		// into the empty target — html stays null (CONTRACT 3).
 		if (chain.some((route) => route.prerender === false)) {
-			const ctx = await createPageContext();
+			const ctx = await createPageContext(entry);
 			const page = { path: fullPath, html: null, title: null, head: null, prerender: false };
 			if (isStatic) attachStaticFields(page, entry, ctx);
 			pages.push(page);
@@ -135,7 +155,7 @@ export async function prerender(config, opts = {}) {
 			console.warn(warning);
 		}
 
-		const ctx = await createPageContext();
+		const ctx = await createPageContext(entry);
 		let rendered;
 		try {
 			rendered = await renderRoute(entry, ctx);
@@ -243,12 +263,31 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 		);
 	}
 
+	// Static output has no persistence layer: a live Storage object can't cross the
+	// build→client boundary (it JSON-serializes to a dead `{}`), so a static build
+	// never threads `config.storage`. Warn when it's set so the missing persistence
+	// isn't a silent surprise (records won't survive a page load). A direct
+	// mountStatic({storage}) caller can still wire real persistence by hand.
+	if (config.storage != null) {
+		warnings.push(
+			'[puzzle] static output ignores `storage` — a static page has no persistence layer, ' +
+				"so records won't persist across page loads. Remove `storage` from the config, or use " +
+				"output: 'hybrid' if you need the SPA store."
+		);
+	}
+
+	// Normalized route base ('' for a root deploy) — prefixes each page's module href
+	// so a subpath deploy resolves it (item B5). Validated the same way the Router /
+	// the client stub validate it, so a malformed base fails the build here.
+	const base = normalizeBase(config.routerBase);
+
 	const slugCounts = new Map();
 	const written = [];
 	for (const page of pages) {
 		const slug = uniqueSlug(computeSlug(page.path), slugCounts);
 		const html = injectStaticShell(baseShell, {
 			targetId,
+			base,
 			content: page.html, // null for a prerender:false page → empty, unmarked target
 			title: page.title,
 			head: page.head, // null for prerender:false → no head injection (D84)
@@ -277,7 +316,6 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 		mode: 'static',
 		target: targetId,
 		apiURL: config.apiURL ?? null,
-		storage: config.storage,
 		routerBase: config.routerBase,
 		routerMode: config.routerMode,
 		hasModels: Object.keys(config.models ?? {}).length > 0,
@@ -290,18 +328,31 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 /**
  * Wire the build-time ctx the way PuzzleApp.mount() does (app.js §mount): a Store
  * over the models + apiURL, a FormatterRegistry seeded with the built-ins then the
- * config formatters registered over them, and an UNSTARTED memory-mode Router so
- * `ctx.router` has full fidelity (no URL/DOM side effects — it is never started).
+ * config formatters registered over them, and a router facade. In HYBRID mode that
+ * facade is an UNSTARTED memory-mode Router (full fidelity, no URL/DOM side effects
+ * — the SPA takes over on load); in STATIC mode it is the base/mode-aware
+ * makeRouterStub over the page's route snapshot, byte-matching the client kernel so
+ * url()/current never diverge between prerender and rehydration.
  * `config.beforeMount` is awaited with a `{ store, config }` facade (not a real
  * PuzzleApp — documented) so a build-time store seed lands before the first data().
  */
-async function buildContext(config) {
+async function buildContext(config, { mode = 'hybrid', route = null } = {}) {
 	const { models = {}, formatters = {}, apiURL, storage } = config;
 
 	const storeOptions = { apiURL };
 	if (storage !== undefined) storeOptions.storage = storage;
 	const store = new Store(models, storeOptions);
-	const router = new Router(config.routes ?? [], { mode: 'memory' });
+	// Router facade parity (D81): HYBRID keeps a real, unstarted memory Router because
+	// the SPA boots and takes over on load (current becomes real then). STATIC has no
+	// client router — the browser kernel (static/index.js) wires the base/mode-aware
+	// makeRouterStub — so the prerender ctx uses that SAME stub over the SAME per-page
+	// snapshot here, or router.url()/current would differ between the prerendered HTML
+	// and the client re-render for any hash-mode or based app (the `{ path | link }`
+	// formatter reads router.url; a view may read router.current).
+	const router =
+		mode === 'static' && route
+			? makeRouterStub(route, { mode: config.routerMode, base: config.routerBase })
+			: new Router(config.routes ?? [], { mode: 'memory' });
 	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 
 	const ctx = { store, router, formatters: registry };
@@ -495,7 +546,7 @@ function stripAppBundle(shell) {
  *    applyHead with managed D84 tags; bare `title` → pre-D84 title-only path).
  * The caller has already stripped the app-bundle tag from `shell`.
  */
-export function injectStaticShell(shell, { targetId, content, title, head, slug, data }) {
+export function injectStaticShell(shell, { targetId, content, title, head, slug, data, base = '' }) {
 	let out = shell;
 
 	// A prerender:false page keeps its empty, UNMARKED target (the kernel mounts into
@@ -517,9 +568,13 @@ export function injectStaticShell(shell, { targetId, content, title, head, slug,
 	// making a literal `</script>` in a record impossible to emit — so content cannot
 	// terminate the data island early.
 	const json = JSON.stringify(data ?? {}).replace(/</g, '\\u003c');
+	// Base-prefix the per-page module href so a subpath deploy (routerBase set) resolves
+	// it instead of 404ing at the domain root. `base` is the already-normalized prefix
+	// ('' for a root deploy → unchanged `/_puzzle/…`). The shell's own asset hrefs
+	// (styles.css, favicon) stay the app author's responsibility under a base.
 	const scripts =
 		`<script type="application/json" data-puzzle-static-data>${json}</script>` +
-		`<script type="module" src="/_puzzle/${slug}.js"></script>`;
+		`<script type="module" src="${base}/_puzzle/${slug}.js"></script>`;
 	out = /<\/body>/i.test(out)
 		? out.replace(/<\/body>/i, () => `${scripts}</body>`)
 		: out + scripts;

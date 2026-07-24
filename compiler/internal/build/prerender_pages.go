@@ -54,10 +54,12 @@ type staticSummary struct {
 	// APIURL is the app's configured apiURL, embedded verbatim into each entry's
 	// mountStatic call. Kept raw (string or null) so it round-trips exactly.
 	APIURL json.RawMessage `json:"apiURL"`
-	// Storage, RouterBase, and RouterMode preserve the corresponding app config
-	// values for the browser-side static context. A missing JSON field stays nil,
-	// so the generated mount call can preserve app.js's conditional passthrough.
-	Storage    json.RawMessage `json:"storage"`
+	// RouterBase and RouterMode preserve the corresponding app config values for the
+	// browser-side static context. A missing JSON field stays nil, so the generated
+	// mount call preserves app.js's conditional passthrough. (Storage is deliberately
+	// NOT carried: a live Storage object serializes to a dead `{}` across this JSON
+	// boundary, so a static build never threads it — the JS side warns instead. A
+	// direct mountStatic({storage}) caller still passes a real Storage object.)
 	RouterBase json.RawMessage `json:"routerBase"`
 	RouterMode json.RawMessage `json:"routerMode"`
 	// HasModels/HasFormatters report config registrations. The build uses them
@@ -286,9 +288,6 @@ func staticEntrySource(absRoot string, page staticPage, summary staticSummary, m
 		b.WriteString("  formatters,\n")
 	}
 	fmt.Fprintf(&b, "  apiURL: %s,\n", apiURLJSON)
-	if len(summary.Storage) > 0 {
-		fmt.Fprintf(&b, "  storage: %s,\n", summary.Storage)
-	}
 	if len(summary.RouterMode) > 0 {
 		fmt.Fprintf(&b, "  routerMode: %s,\n", summary.RouterMode)
 	}

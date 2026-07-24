@@ -17,8 +17,22 @@ connections:
   - FILE-STATIC-MOUNT
   - FILE-BUILD-PRERENDER
   - FILE-BUILD-PRERENDER-PAGES
-verified_at: '2026-07-24T01:11:11.777Z'
-verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
+verified_at: '2026-07-24T05:49:11.347Z'
+verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
+notes:
+  - kind: state
+    text: >-
+      Static/hybrid coherence pass (2026-07-24, see [[DECISION-D81-STATIC-PAGES-MODE]] notes).
+      makeRouterStub + normalizeBase moved OUT of static/index.js into the shared ssg/assemble.js;
+      static-mode buildContext builds ctx.router from that stub over the per-page snapshot
+      (url()/current parity with the client kernel), hybrid keeps the real unstarted memory Router.
+      injectStaticShell base-prefixes the injected `/_puzzle/<slug>.js` module by normalized
+      routerBase (writeStaticDir threads it). prerender() throws for hybrid + hash|memory
+      routerMode. The dead `storage` placeholder was removed from the static summary (+ Go
+      staticSummary struct + staticEntrySource emission + a static+storage build warning). Tests:
+      tests/static-prerender.test.js (facade parity, base-prefix, hybrid guard, storage warning),
+      compiler static_pages_test.go.
+    sha: d9591d6
 ---
 
 # Static generation runtime

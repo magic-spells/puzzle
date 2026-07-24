@@ -13,8 +13,26 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-RUNTIME
   - FEATURE-V1-50-HEAD-MANAGEMENT
-verified_at: '2026-07-24T00:26:44.790Z'
-verified_sha: df909f7f5581b312acbbc45a58cbd2b5e681a2a8
+verified_at: '2026-07-24T05:49:33.414Z'
+verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
+notes:
+  - kind: decision
+    text: >-
+      Title-null suppression re-affirmed in code (2026-07-24). A 0.2.0 pre-release hardening pass
+      briefly regressed `meta.title: null` back to INHERIT (a review verifier checked git history,
+      not §45); reverted so all four reserved head fields share ONE uniform posture —
+      `undefined`/omit inherits, explicit `null` STOPS the walk and suppresses (head.js
+      resolveField: `value !== undefined`). A resolved-null title still leaves document.title / the
+      shell <title> as-is (leave-alone, never blank). MIGRATION 0.1.x→0.2.0: pre-D84 #setTitle used
+      `meta.title != null`, so a child/layout `title: null` INHERITED the parent title; under D84 it
+      now SUPPRESSES. Apps relying on the old inherit-on-null must switch to `undefined`/omit.
+    sha: d9591d6
+  - kind: verified
+    text: >-
+      Title-null uniform suppression re-verified in head.js at d9591d6 (the batch-1 inherit
+      regression is reverted); tests/ssg-head.test.js asserts suppression + the undefined-inherits
+      case.
+    sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
 # D84 — Route head management: reserved `meta` fields, SSG-first (v1.50)

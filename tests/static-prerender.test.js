@@ -381,3 +381,134 @@ describe('static prerender (D81)', () => {
 		});
 	});
 });
+
+// A view that reads the build-time router facade the way the `link` formatter and a
+// path-aware view do, so its serialized output reveals url()/current at prerender.
+class Linked extends PuzzleView {
+	render() {
+		const cur = this.ctx.router.current;
+		return h('a', { href: this.ctx.router.url('/next') }, [text(cur ? cur.path : 'NULL')]);
+	}
+}
+stamp(Linked, 'app/views/Linked.pzl');
+
+describe('static prerender router facade parity (D81, item B4)', () => {
+	it('static mode prefixes url() by routerMode + routerBase (hash + base) — matching the client stub', async () => {
+		const cfg = {
+			target: '#app',
+			routerMode: 'hash',
+			routerBase: '/app',
+			routes: [{ path: '/', name: 'home', view: Linked }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		expect(pages[0].html).toContain('href="#/app/next"');
+	});
+
+	it('static mode with no mode/base falls back to history semantics (unprefixed) — matching the client default', async () => {
+		const cfg = { target: '#app', routes: [{ path: '/', name: 'home', view: Linked }] };
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		expect(pages[0].html).toContain('href="/next"');
+	});
+
+	it('static prerender router.current is the page snapshot, not null (a view can read current.path)', async () => {
+		const cfg = { target: '#app', routes: [{ path: '/', name: 'home', view: Linked }] };
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		expect(pages[0].html).toContain('>/</a>'); // current.path === '/', not 'NULL'
+	});
+
+	it('hybrid mode still uses the unstarted memory router — url() unprefixed, current null', async () => {
+		const cfg = { target: '#app', routes: [{ path: '/', name: 'home', view: Linked }] };
+		const { pages } = await prerender(cfg); // hybrid default, history-mode
+		expect(pages[0].html).toContain('href="/next"');
+		expect(pages[0].html).toContain('>NULL</a>'); // memory router unstarted → current null
+	});
+});
+
+describe('static page module href is base-prefixed (D81, item B5)', () => {
+	it('prefixes the per-page module with a normalized routerBase', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-base-'));
+		const shellPath = writeShell(outDir);
+		const cfg = {
+			target: '#app',
+			routerBase: '/app/', // trailing slash normalizes away
+			routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+		};
+		const index = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' }).then(() =>
+			fs.readFileSync(path.join(outDir, 'index.html'), 'utf8')
+		);
+		expect(index).toContain('<script type="module" src="/app/_puzzle/index.js"></script>');
+		expect(index).not.toContain('src="/_puzzle/index.js"');
+	});
+
+	it('no routerBase → root-absolute module href (unchanged default)', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-nobase-'));
+		const shellPath = writeShell(outDir);
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+		};
+		const index = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' }).then(() =>
+			fs.readFileSync(path.join(outDir, 'index.html'), 'utf8')
+		);
+		expect(index).toContain('<script type="module" src="/_puzzle/index.js"></script>');
+	});
+});
+
+describe('hybrid × hash/memory guard (D81, item B6)', () => {
+	const cfg = (routerMode) => ({
+		target: '#app',
+		routerMode,
+		routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+	});
+
+	it('hybrid + hash rejects (a hash router would render home over every prerendered page)', async () => {
+		await expect(prerender(cfg('hash'))).rejects.toThrow(/hybrid prerender output requires history routing/);
+	});
+
+	it('hybrid + memory rejects', async () => {
+		await expect(prerender(cfg('memory'))).rejects.toThrow(/history routing/);
+	});
+
+	it('hybrid + history (or unset) is allowed', async () => {
+		expect((await prerender(cfg('history'))).pages).toHaveLength(1);
+		expect((await prerender(cfg(undefined))).pages).toHaveLength(1);
+	});
+
+	it('static + hash is allowed (static has no router — the kernel is base/mode-aware)', async () => {
+		const { pages } = await prerender(cfg('hash'), { mode: 'static' });
+		expect(pages).toHaveLength(1);
+	});
+
+	it('prerenderToDir hybrid + hash rejects — fails the Go build', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-hybrid-hash-'));
+		const shellPath = writeShell(outDir);
+		await expect(prerenderToDir(cfg('hash'), { outDir, shellPath })).rejects.toThrow(/history routing/);
+	});
+});
+
+describe('static output ignores storage with a warning (D81, item B3)', () => {
+	it('warns when a static build config sets storage; the summary carries no dead placeholder', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-storage-'));
+		const shellPath = writeShell(outDir);
+		const cfg = {
+			target: '#app',
+			storage: { getItem: () => null, setItem: () => {} }, // a live Storage-like object
+			routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+		};
+		const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+		expect(summary.warnings.some((w) => w.includes('static output ignores `storage`'))).toBe(true);
+		// No `storage` field rides the summary → the Go build can never emit a dead `{}`.
+		expect('storage' in summary).toBe(false);
+	});
+
+	it('no storage configured → no warning', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-nostorage-'));
+		const shellPath = writeShell(outDir);
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } }],
+		};
+		const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+		expect(summary.warnings.some((w) => w.includes('ignores `storage`'))).toBe(false);
+	});
+});

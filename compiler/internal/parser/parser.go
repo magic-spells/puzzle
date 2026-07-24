@@ -130,7 +130,7 @@ func ParseSkeleton(sec *Sections, filename string) (*Element, error) {
 }
 
 // ParsedFile is the full result of parsing a .pzl file: the template root plus
-// the opaque <script> body and optional <style> body (used by Step 3).
+// the opaque <script> body and optional <style> body.
 type ParsedFile struct {
 	Root      *Element
 	Scripts   string

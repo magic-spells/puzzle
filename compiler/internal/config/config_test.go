@@ -53,6 +53,9 @@ func TestLoadConfigNoFile(t *testing.T) {
 	if len(cfg.Styles.Use) != 0 {
 		t.Errorf("expected empty Styles.Use, got %v", cfg.Styles.Use)
 	}
+	if cfg.Build.SourceMap {
+		t.Error("expected build.sourceMap disabled with no config file")
+	}
 }
 
 func TestLoadConfigValidTailwind(t *testing.T) {
@@ -241,6 +244,30 @@ func TestLoadConfigDropConsoleNonBooleanRejected(t *testing.T) {
 	}
 }
 
+func TestLoadConfigSourceMap(t *testing.T) {
+	requireNode(t)
+	root := writeConfig(t, "export default { build: { sourceMap: true } };\n")
+	cfg, err := LoadConfig(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.Build.SourceMap {
+		t.Error("expected build.sourceMap enabled")
+	}
+}
+
+func TestLoadConfigSourceMapNonBooleanRejected(t *testing.T) {
+	requireNode(t)
+	root := writeConfig(t, "export default { build: { sourceMap: 'yes' } };\n")
+	_, err := LoadConfig(root)
+	if err == nil {
+		t.Fatal("expected an error for a non-boolean build.sourceMap")
+	}
+	if !strings.Contains(err.Error(), "build.sourceMap") || !strings.Contains(err.Error(), "must be a boolean") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestLoadConfigDevProxy(t *testing.T) {
 	requireNode(t)
 	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };\n")
@@ -279,31 +306,27 @@ func TestLoadConfigDevProxyTargetMustBeAbsoluteHTTPURL(t *testing.T) {
 
 func TestLoadConfigOutputStatic(t *testing.T) {
 	requireNode(t)
-	// output: 'static' resolves to StaticOutput() == true.
+	// output: 'static' is preserved for the build-mode resolver.
 	root := writeConfig(t, "export default { output: 'static' };\n")
 	cfg, err := LoadConfig(root)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cfg.StaticOutput() {
-		t.Fatalf("expected StaticOutput()==true for output:'static', got Output=%q", cfg.Output)
+	if cfg.Output != "static" {
+		t.Fatalf("Output = %q, want %q", cfg.Output, "static")
 	}
 }
 
 func TestLoadConfigOutputHybrid(t *testing.T) {
 	requireNode(t)
-	// output: 'hybrid' resolves to HybridOutput() == true (and StaticOutput()
-	// false) — the prerender + SPA-takeover mode formerly spelled 'static'.
+	// output: 'hybrid' is preserved for the build-mode resolver.
 	root := writeConfig(t, "export default { output: 'hybrid' };\n")
 	cfg, err := LoadConfig(root)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cfg.HybridOutput() {
-		t.Fatalf("expected HybridOutput()==true for output:'hybrid', got Output=%q", cfg.Output)
-	}
-	if cfg.StaticOutput() {
-		t.Error("expected StaticOutput()==false for output:'hybrid'")
+	if cfg.Output != "hybrid" {
+		t.Fatalf("Output = %q, want %q", cfg.Output, "hybrid")
 	}
 }
 
@@ -323,14 +346,14 @@ func TestLoadConfigOutputInvalidNamesBothModes(t *testing.T) {
 
 func TestLoadConfigOutputAbsentDefaultsSPA(t *testing.T) {
 	requireNode(t)
-	// No output key: the default SPA build — StaticOutput() is false.
+	// No output key: the empty value selects the default SPA build.
 	root := writeConfig(t, "export default {};\n")
 	cfg, err := LoadConfig(root)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.StaticOutput() {
-		t.Error("expected StaticOutput()==false when output is absent")
+	if cfg.Output != "" {
+		t.Fatalf("Output = %q, want empty default", cfg.Output)
 	}
 }
 

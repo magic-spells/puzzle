@@ -1,7 +1,7 @@
 ---
 name: "D81 — True static-pages output mode; old mode renamed 'hybrid'"
 status: verified
-verified_at: '2026-07-23T00:00:00.000Z'
+verified_at: '2026-07-24T05:49:33.869Z'
 connections:
   - DECISION-D67-SSG-STATIC-BUILD
   - DECISION-D01-SPA-ONLY
@@ -12,6 +12,34 @@ connections:
   - FILE-STATIC-MOUNT
   - FILE-SSG-ASSEMBLE
   - FILE-BUILD-PRERENDER-PAGES
+notes:
+  - kind: decision
+    text: >-
+      Prerender/hydration router-facade parity + base-prefix (2026-07-24). The static-mode prerender
+      ctx.router was an unstarted no-base memory Router (current=null, url() unprefixed) while the
+      client kernel used a base/mode-aware stub — so `{ path | link }` rendered DIFFERENT hrefs at
+      build vs client for any hash-mode or based app. Fix: makeRouterStub + normalizeBase MOVED to
+      the shared ssg/assemble.js; static-mode buildContext now builds ctx.router from that SAME stub
+      over the per-page route snapshot, so router.url()/current byte-match both phases. Hybrid keeps
+      the real unstarted memory Router (the SPA boots and takes over). Also: injectStaticShell now
+      prefixes the injected `/_puzzle/<slug>.js` script with the normalized routerBase so a subpath
+      deploy resolves it (the shell's own asset hrefs — styles.css, favicon — stay the app author's
+      responsibility under a base).
+    sha: d9591d6
+  - kind: decision
+    text: >-
+      Two more static/hybrid policies (2026-07-24). (1) HYBRID IS HISTORY-MODE ONLY: hybrid
+      prerenders path-shaped files, but a hash/memory router boots at '/' and renders the home route
+      over every prerendered page. routerMode is PuzzleApp runtime config the Go build can't
+      inspect, so prerender() now THROWS for mode==='hybrid' with routerMode 'hash'|'memory' (fails
+      the Go build) — a non-history app must use output:'static'. (2) STATIC IGNORES STORAGE:
+      config.storage is a live object that JSON-serializes to a dead `{}` across the build→summary
+      boundary; the Store then treats `{}` as truthy and its persistence calls no-op silently. So a
+      static build no longer threads storage (dropped from the summary + the Go staticSummary struct
+      + staticEntrySource) and WARNS when config.storage is set. A direct mountStatic({storage})
+      caller still gets real persistence (the param stays on mountStatic/buildStaticContext).
+    sha: d9591d6
+verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
 # D81 — True static-pages output mode; old mode renamed 'hybrid'

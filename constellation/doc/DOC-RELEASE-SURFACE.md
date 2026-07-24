@@ -23,8 +23,8 @@ connections:
   - COMPONENT-DEV-SERVER
   - FLOW-BUILD
   - FLOW-REACTIVITY
-verified_at: '2026-07-24T01:11:19.045Z'
-verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
+verified_at: '2026-07-24T05:49:35.856Z'
+verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
 # Puzzle 0.1 release surface
@@ -86,6 +86,8 @@ second specification. Decision cards hold rationale and git holds chronology.
   `this.refs`, `this.memo()`, `getData()`, `setData()`, and `refresh()` are live.
 - The vnode manager handles inline components, slots, SVG namespaces, controlled
   form properties, events/modifiers, keyed moves, islands, refs, and teardown.
+  Keyed identity is the `(tag, key)` pair by SameValueZero, so type-distinct
+  keys never collide; a first-mount failure is torn down and re-mounted fresh.
 - Conditional branches are arity-stabilized with invisible placeholder vnodes,
   preventing unrelated trailing siblings from remounting on a toggle.
 
@@ -95,7 +97,9 @@ second specification. Decision cards hold rationale and git holds chronology.
   hasMany; defaults, primary keys, required/min/max/oneOf/custom validation.
 - Records are model-class instances with getters/methods, immutable primary
   keys, local update/destroy, non-throwing validation reports, and throwing
-  write-boundary validation.
+  write-boundary validation. `createRecord` rejects a blank explicit-required
+  primary key exactly as `validate()` does (auto-generation is skipped for a
+  `.primary().required()` field; hydration/upsert stay fail-soft).
 - Store queries auto-subscribe inside `data()`. Collection and record keys are
   batched, hidden-tab safe, isolated per subscriber, and torn down with views.
 - Reads: `loadAll`/`loadOne` through model adapters with identity-preserving
@@ -134,14 +138,17 @@ second specification. Decision cards hold rationale and git holds chronology.
 - WAAPI enter/leave animations are failure-safe and reduced-motion aware.
   `trigger: 'visible'`, offset, and ancestor anchors use shared observers.
 - Optional morph integration supports coexisting pairs, cross-view captures,
-  skeleton-delayed targets, and symmetric/trigger/target roles.
+  skeleton-delayed targets, and symmetric/trigger/target roles; a re-mounted
+  app re-arms its morph click listener.
 
 ## Build, dev, and static output
 
 - Go parser/codegen feeds an esbuild `.pzl` plugin; scripts stay untouched and
   render functions attach to the user class prototype.
-- Production: ES2022, minified, console calls stripped by default, linked
-  source maps, tree-shaken formatter manifest, collected component CSS.
+- Production: ES2022, minified, console calls stripped by default, tree-shaken
+  formatter manifest, collected component CSS. Source maps are **opt-in** —
+  `build.sourceMap` (default off) emits linked maps for SPA + true-static prod
+  bundles; dev keeps linked maps regardless (D88).
 - Tailwind-first style pipeline; scoped blocks wrapped in native `@scope`.
 - Public assets copied with generated-name collision checks. One-shot builds
   stage and atomically swap `dist`, preserving the last good build on failure.
@@ -157,7 +164,10 @@ second specification. Decision cards hold rationale and git holds chronology.
   `app.js`, stamping the target `data-puzzle-static` and emitting one per-page
   `dist/_puzzle/<slug>.js` (mountStatic + that page's classes) with shared
   runtime split into `dist/_puzzle/chunks/` and build-time data inlined as a
-  `data-puzzle-static-data` island.
+  `data-puzzle-static-data` island. Hybrid requires history routing (a
+  hash/memory router would render home over every prerendered page — the build
+  rejects it); static ignores `storage` with a warning (no persistence layer),
+  and base-prefixes each page's module href under `routerBase` (D81).
 
 ## CLI
 

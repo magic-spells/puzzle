@@ -11,14 +11,30 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      Leaving animated nodes remain temporarily in the DOM. Move guards skip
-      them when locating the next persistent sibling, so a fade-out cannot
-      reorder surviving keyed rows.
+      Leaving animated nodes remain temporarily in the DOM. Move guards skip them when locating the
+      next persistent sibling, so a fade-out cannot reorder surviving keyed rows.
   - kind: gotcha
     text: >-
-      Edit-time trap: the keyed-map separator must be the `\x00` escape sequence in
-      source, not a literal NUL byte — a literal NUL makes the file binary to git.
-verified_at: '2026-07-22T00:04:08.069Z'
+      Edit-time trap: the keyed-map separator must be the `\x00` escape sequence in source, not a
+      literal NUL byte — a literal NUL makes the file binary to git.
+  - kind: state
+    text: >-
+      Keyed reconciliation + failed-mount hardening (2026-07-24). (1) Keyed identity is now the
+      (tag,key) pair compared by NATIVE SameValueZero via tag-partitioned nested Maps (oldKeyed:
+      Map<tag,Map<rawKey,child>>, seenNewKeys: Map<tag,Set<rawKey>>), replacing the `child.tag +
+      '\x00' + child.key` string concat. Concatenation collapsed keys differing only by type (`1` vs
+      `"1"`, `NaN`, `true` vs `"true"`) and stringified component class tags to their source —
+      unmounting a live row, aliasing two logical rows onto one DOM node, and false-positiving
+      warnDuplicateKey. (2) sameNode() also uses SameValueZero (`a.key===b.key || (a.key!==a.key &&
+      b.key!==b.key)`) so a NaN key self-matches instead of being replaced every render. (3) Failed
+      FIRST mount: mountComponent's .catch now destroys the dead instance, leaves a bare comment
+      placeholder at the position, and nulls vnode.component/instance; patch() mounts a FRESH
+      instance when oldVnode.component==null; unmount drops the leftover placeholder. Prevents a
+      broken instance being reused forever (mounted() never firing, setData() inert). Tests:
+      tests/keyed-reconciliation.test.js.
+    sha: d9591d6
+verified_at: '2026-07-24T05:49:10.358Z'
+verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
 # ViewManager and ViewNode

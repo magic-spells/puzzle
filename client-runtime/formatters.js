@@ -19,7 +19,10 @@ import { escape, raw, noescape } from './formatters/builtins.js';
 const requiredBuiltins = { escape, raw, noescape };
 
 // Levenshtein edit distance — tight two-row DP, no dependency. Powers the
-// did-you-mean suggestion in the unknown-formatter guard (D43).
+// did-you-mean suggestion in the unknown-formatter guard (D43). Module-level (not a
+// method) and referenced ONLY from behind the `__PUZZLE_DEV__` guard in __missing,
+// so a production build (where __PUZZLE_DEV__ folds to false) DCE's that branch and
+// tree-shakes both this and nearestFormatter out — ~0.5 KB that no longer ships dead.
 function editDistance(a, b) {
 	const m = a.length;
 	const n = b.length;
@@ -39,6 +42,23 @@ function editDistance(a, b) {
 		curr = tmp;
 	}
 	return prev[n];
+}
+
+// Nearest registered formatter name within edit distance ≤ 2, or null when nothing
+// is close (D43 did-you-mean). First match wins on ties. Module-level for the same
+// tree-shaking reason as editDistance above.
+function nearestFormatter(formatters, name) {
+	let best = null;
+	let bestDist = 3; // strictly-less-than test below accepts ≤ 2
+	for (const key of Object.keys(formatters)) {
+		if (key === '__missing') continue;
+		const d = editDistance(name, key);
+		if (d < bestDist) {
+			bestDist = d;
+			best = key;
+		}
+	}
+	return best;
 }
 
 export class FormatterRegistry {
@@ -66,13 +86,20 @@ export class FormatterRegistry {
 		// distance ≤ 2) and return a pass-through formatter, so a display-only typo
 		// renders the raw value instead of taking down the render loop. See §6.
 		this.formatters.__missing = (name) => {
-			if (!this._warnedMissing.has(name)) {
-				this._warnedMissing.add(name);
-				const suggestion = this._nearestFormatter(name);
-				const hint = suggestion ? ` (did you mean "${suggestion}"?)` : '';
-				console.error(
-					`[puzzle] unknown formatter "${name}" — value passed through unchanged${hint}`,
-				);
+			// Dev-only: report the typo ONCE (with a did-you-mean). Wrapped in the
+			// __PUZZLE_DEV__ guard so a production build DCE's the whole block — and with
+			// it nearestFormatter + editDistance (the warn-once ledger only exists to
+			// dedupe this console output, which prod strips anyway). Undefined guard →
+			// treat as dev (tests / bare node run without the define).
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				if (!this._warnedMissing.has(name)) {
+					this._warnedMissing.add(name);
+					const suggestion = nearestFormatter(this.formatters, name);
+					const hint = suggestion ? ` (did you mean "${suggestion}"?)` : '';
+					console.error(
+						`[puzzle] unknown formatter "${name}" — value passed through unchanged${hint}`,
+					);
+				}
 			}
 			return (v) => v;
 		};
@@ -80,22 +107,6 @@ export class FormatterRegistry {
 
 	register(name, fn) {
 		this.formatters[name] = fn;
-	}
-
-	// Nearest registered formatter name within edit distance ≤ 2, or null when
-	// nothing is close (D43 did-you-mean). First match wins on ties.
-	_nearestFormatter(name) {
-		let best = null;
-		let bestDist = 3; // strictly-less-than test below accepts ≤ 2
-		for (const key of Object.keys(this.formatters)) {
-			if (key === '__missing') continue;
-			const d = editDistance(name, key);
-			if (d < bestDist) {
-				bestDist = d;
-				best = key;
-			}
-		}
-		return best;
 	}
 
 	get(name) {
