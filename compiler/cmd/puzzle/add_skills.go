@@ -10,10 +10,22 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 	embeddedskills "github.com/magic-spells/puzzle/skills"
 )
 
 const embeddedPuzzleSkillRoot = "puzzle"
+
+// skillVersionFile records which CLI wrote an installed skill. The payload is
+// go:embed-ed, so "which CLI wrote it" IS the skill's version — without the stamp
+// the CLI can only ask whether a directory exists, never whether it is current
+// (D99). Dotfile so it does not read as skill content to the agent loading it.
+const skillVersionFile = ".puzzle-skill-version"
+
+// confirmSkillUpdate is the skill-refresh prompt, indirected so tests can answer
+// it without driving a huh form. Shared by `add skills`, `upgrade skills`, and the
+// post-upgrade offer — one prompt, one seam.
+var confirmSkillUpdate = confirmSkillRefresh
 
 type addEnvironment struct {
 	homeDir     func() (string, error)
@@ -44,6 +56,10 @@ var supportedSkillTargets = []struct {
 	{name: "Cursor", config: ".cursor"},
 }
 
+// addSkills installs the embedded skill into the resolved targets. Re-running the
+// command after a CLI upgrade is the normal way to refresh an install, so an
+// existing destination asks rather than refusing (D99): the refusal only survives
+// on a non-TTY, where a script must name the clobber with --overwrite.
 func addSkills(w io.Writer, out *ui.Printer, overwrite bool, env addEnvironment) error {
 	selected, err := resolveSkillTargets(w, out, env)
 	if err != nil {
@@ -54,20 +70,56 @@ func addSkills(w io.Writer, out *ui.Printer, overwrite bool, env addEnvironment)
 		return nil
 	}
 
-	if !overwrite {
-		conflicts, err := existingSkillDestinations(selected)
+	// --overwrite is explicit intent: write every selected target, symlinked
+	// destinations included (the D97 upgrade path relies on exactly this).
+	if overwrite {
+		return installSkills(w, out, selected)
+	}
+
+	plan, err := classifySkillTargets(selected)
+	if err != nil {
+		return err
+	}
+	for _, dest := range plan.linked {
+		fmt.Fprintf(w, "%s %s is a symlink — skill left as is.\n", out.Yellow("!"), dest)
+	}
+	for _, target := range plan.current {
+		fmt.Fprintf(w, "%s %s already has skill %s — up to date.\n",
+			out.Green("✓"), target.destination(), version.Version)
+	}
+
+	install := append([]skillTarget(nil), plan.fresh...)
+	if len(plan.stale) > 0 {
+		if !env.interactive {
+			return fmt.Errorf("refusing to overwrite existing skill installation(s) (use --overwrite to replace):\n  %s",
+				strings.Join(skillDestinationPaths(plan.stale), "\n  "))
+		}
+		confirmed, err := confirmSkillUpdate(env.input, w, plan.stale, version.Version)
 		if err != nil {
 			return err
 		}
-		if len(conflicts) > 0 {
-			return fmt.Errorf("refusing to overwrite existing skill installation(s) (use --overwrite to replace):\n  %s",
-				strings.Join(conflicts, "\n  "))
+		if confirmed {
+			install = append(install, plan.stale...)
+		} else {
+			fmt.Fprintf(w, "%s Left as is: %s\n", out.Yellow("!"), skillDestinations(plan.stale))
 		}
 	}
 
-	for _, target := range selected {
+	if len(install) == 0 {
+		// Everything selected was already current: say how to force a reinstall,
+		// which is also how you re-copy an edited payload without bumping the version.
+		if len(plan.current) > 0 && len(plan.stale) == 0 {
+			fmt.Fprintf(w, "Run %s to reinstall anyway.\n", out.Bold("puzzle add skills --overwrite"))
+		}
+		return nil
+	}
+	return installSkills(w, out, install)
+}
+
+func installSkills(w io.Writer, out *ui.Printer, targets []skillTarget) error {
+	for _, target := range targets {
 		dest := target.destination()
-		if err := copySkillTree(embeddedskills.FS, embeddedPuzzleSkillRoot, dest); err != nil {
+		if err := installSkillTree(dest); err != nil {
 			return fmt.Errorf("installing Puzzle skill for %s: %w", target.Name, err)
 		}
 		fmt.Fprintf(w, "%s Installed Puzzle skill for %s: %s\n",
@@ -217,21 +269,133 @@ func promptSkillTargets(input io.Reader, output io.Writer, targets []skillTarget
 	return selected, nil
 }
 
-func existingSkillDestinations(targets []skillTarget) ([]string, error) {
-	var conflicts []string
+// skillPlan splits selected targets by what is already sitting at their
+// destination. Only `stale` needs the user's consent: a missing destination is a
+// plain install, a matching stamp has nothing to replace, and a symlink is a dev
+// checkout link we refuse to write through without --overwrite (D97's rule,
+// applied to `add` in D99).
+type skillPlan struct {
+	fresh   []skillTarget
+	current []skillTarget
+	stale   []skillTarget
+	linked  []string
+}
+
+func classifySkillTargets(targets []skillTarget) (skillPlan, error) {
+	var plan skillPlan
 	for _, target := range targets {
 		dest := target.destination()
-		_, err := os.Lstat(dest)
+		info, err := os.Lstat(dest)
 		switch {
-		case err == nil:
-			conflicts = append(conflicts, dest)
 		case os.IsNotExist(err):
-			continue
+			plan.fresh = append(plan.fresh, target)
+		case err != nil:
+			return skillPlan{}, fmt.Errorf("checking %s: %w", dest, err)
+		case info.Mode()&os.ModeSymlink != 0:
+			plan.linked = append(plan.linked, dest)
 		default:
-			return nil, fmt.Errorf("checking %s: %w", dest, err)
+			// A non-directory here is junk in the destination slot, not an install:
+			// it has no stamp, so it lands in `stale` and gets replaced on consent.
+			if installed, ok := installedSkillVersion(dest); ok && installed == version.Version {
+				plan.current = append(plan.current, target)
+				continue
+			}
+			plan.stale = append(plan.stale, target)
 		}
 	}
-	return conflicts, nil
+	return plan, nil
+}
+
+// installedSkillVersion reads the CLI version stamped into an installed skill. A
+// missing or unreadable stamp is "unknown", never an error: the stamp only phrases
+// a prompt, and every install written before D99 legitimately has none — those read
+// as stale, which is the right default.
+func installedSkillVersion(dest string) (string, bool) {
+	data, err := os.ReadFile(filepath.Join(dest, skillVersionFile))
+	if err != nil {
+		return "", false
+	}
+	stamped := strings.TrimSpace(string(data))
+	if stamped == "" {
+		return "", false
+	}
+	return stamped, true
+}
+
+// installSkillTree replaces the skill at dest with this binary's embedded copy and
+// stamps the CLI version beside it.
+//
+// A real destination is REMOVED first: copySkillTree merges, so a file the new
+// payload dropped would linger and keep telling an agent something the current
+// release contradicts — the staleness D97 exists to prevent, one level down.
+//
+// A symlinked destination is written THROUGH, never removed: os.RemoveAll on a
+// symlink deletes the link itself, quietly converting a dev checkout link into a
+// real directory. Only --overwrite reaches here with a symlink.
+func installSkillTree(dest string) error {
+	info, err := os.Lstat(dest)
+	switch {
+	case err == nil && info.Mode()&os.ModeSymlink == 0:
+		if err := os.RemoveAll(dest); err != nil {
+			return fmt.Errorf("removing %s: %w", dest, err)
+		}
+	case err != nil && !os.IsNotExist(err):
+		return fmt.Errorf("checking %s: %w", dest, err)
+	}
+
+	if err := copySkillTree(embeddedskills.FS, embeddedPuzzleSkillRoot, dest); err != nil {
+		return err
+	}
+	stamp := filepath.Join(dest, skillVersionFile)
+	if err := os.WriteFile(stamp, []byte(version.Version+"\n"), 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", stamp, err)
+	}
+	return nil
+}
+
+func confirmSkillRefresh(input io.Reader, output io.Writer, targets []skillTarget, latest string) (bool, error) {
+	confirmed := true
+	field := huh.NewConfirm().
+		Title(fmt.Sprintf("Update the installed Puzzle skill to %s?", latest)).
+		Description(strings.Join(skillDestinationLines(targets), "\n")).
+		Affirmative("Yes").
+		Negative("No").
+		Value(&confirmed)
+	form := huh.NewForm(huh.NewGroup(field)).
+		WithInput(input).
+		WithOutput(output)
+	if err := form.Run(); err != nil {
+		return false, err
+	}
+	return confirmed, nil
+}
+
+// skillDestinationLines describes each destination for the confirm prompt, naming
+// what is installed there so the user is answering about a version delta rather
+// than about a path.
+func skillDestinationLines(targets []skillTarget) []string {
+	lines := make([]string, 0, len(targets))
+	for _, target := range targets {
+		dest := target.destination()
+		if installed, ok := installedSkillVersion(dest); ok {
+			lines = append(lines, fmt.Sprintf("%s (%s) — installed %s", dest, target.Name, installed))
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("%s (%s) — version unknown", dest, target.Name))
+	}
+	return lines
+}
+
+func skillDestinationPaths(targets []skillTarget) []string {
+	paths := make([]string, 0, len(targets))
+	for _, target := range targets {
+		paths = append(paths, target.destination())
+	}
+	return paths
+}
+
+func skillDestinations(targets []skillTarget) string {
+	return strings.Join(skillDestinationPaths(targets), ", ")
 }
 
 func copySkillTree(source fs.FS, sourceRoot, destination string) error {

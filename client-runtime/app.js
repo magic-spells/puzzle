@@ -27,6 +27,7 @@ import { Store } from './datastore/store.js';
 import { makeFormatterRegistry } from './formatters.js';
 import { Router } from './router/router.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
+import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 
 // Dev HMR guard (constellation/doc/DOC-SPEC.md §27, D57): gates the state-preserving reload
 // hooks on the __PUZZLE_DEV__ build define — "false" in production, where
@@ -284,6 +285,11 @@ export class PuzzleApp {
 		// without a DOM); cleared in unmount().
 		if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && typeof window !== 'undefined') {
 			window.__PUZZLE_APP__ = this;
+			// DevTools bridge (constellation/doc/DOC-SPEC.md §27, D100): register with the
+			// extension hook when one is installed. Here — services wired, navigation
+			// #0 not yet run — so the store/router are readable and every view mount
+			// arrives as a live event. A no-op when no extension is present.
+			devtoolsAppMounted(this);
 		}
 
 		// App lifecycle: beforeMount (v1.31, SPEC §34, D66). The three ctx services
@@ -414,6 +420,13 @@ export class PuzzleApp {
 		if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && typeof window !== 'undefined' && window.__PUZZLE_APP__ === this) {
 			window.__PUZZLE_APP__ = null;
 		}
+		// DevTools bridge (D100): unregister BEFORE router.stop(), so app-unmounted
+		// is the LAST event the extension sees — the chain's teardown is implied by
+		// it, not replayed as a burst of view-destroyed events for a dead app. The
+		// bridge's own guard drops this call when this instance never registered.
+		// Separate gate from the publish above: that one also tests __PUZZLE_APP__
+		// identity, which a re-mount elsewhere may have moved off this instance.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devtoolsAppUnmounted(this);
 		this.router?.stop();
 		// Morph teardown (v1.23, D55): if enableMorph wired a handler, drop its
 		// document click listener and release any pinned/in-flight morph state so an

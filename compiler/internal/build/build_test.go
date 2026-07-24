@@ -110,6 +110,9 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if !strings.Contains(string(devJS), "__PUZZLE_APP__") {
 		t.Errorf("dev bundle should publish window.__PUZZLE_APP__ (__PUZZLE_DEV__ define = true)")
 	}
+	if !strings.Contains(string(devJS), "__PUZZLE_DEVTOOLS_HOOK__") {
+		t.Errorf("dev bundle should retain the DevTools bridge hook global (__PUZZLE_DEV__ define = true)")
+	}
 
 	// Production: DCE strips every DEV-guarded branch — no __puzzleHMR reaches
 	// the bundle (zero production cost).
@@ -130,6 +133,12 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	// __devSnapshot METHOD may remain (removing a method changes the class API).
 	if strings.Contains(string(prodJS), "__PUZZLE_APP__") {
 		t.Errorf("production bundle must DCE the window.__PUZZLE_APP__ publish — inline the __PUZZLE_DEV__ probe, do not hoist it into a const")
+	}
+	// The DevTools bridge (D100) must vanish the same way: its call sites in
+	// app.js/store.js/router.js fold away, devtools.js loses its last importer,
+	// and the whole module — hook global included — tree-shakes out.
+	if strings.Contains(string(prodJS), "__PUZZLE_DEVTOOLS_HOOK__") {
+		t.Errorf("production bundle must DCE the DevTools bridge — found the __PUZZLE_DEVTOOLS_HOOK__ global present")
 	}
 }
 

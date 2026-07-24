@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/huh"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/compiler/internal/update"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
@@ -21,10 +20,6 @@ import (
 const puzzlePackage = "@magic-spells/puzzle"
 
 var fetchLatest = update.FetchLatest
-
-// confirmSkillUpdate is the skill-refresh prompt, indirected so tests can answer
-// it without driving a huh form.
-var confirmSkillUpdate = confirmSkillRefresh
 
 var upgradeCmd = &cobra.Command{
 	Use:   "upgrade",
@@ -45,9 +40,83 @@ var upgradeCmd = &cobra.Command{
 	},
 }
 
+// upgradeSkillsCmd refreshes the agent skill from THIS binary — the mirror image
+// of the post-upgrade offer below. There, a newer binary exists on disk and the
+// running process holds a stale payload, so the install must be re-exec'd; here
+// nothing was upgraded, so the running CLI is the correct source and re-execing
+// anything would be theatre. That is why it is its own path, not a shortcut into
+// runUpgrade (D99).
+var upgradeSkillsCmd = &cobra.Command{
+	Use:   "skills",
+	Short: "Reinstall this CLI's agent skill wherever one is already installed",
+	Long: `Refresh the Puzzle agent skill from this binary's embedded copy.
+
+Nothing is downloaded and no version is checked: the skill ships inside the CLI, so
+the running binary already holds the payload that matches it.
+
+Only config dirs that already carry a skill are refreshed — first installs belong to
+` + "`puzzle add skills`" + `. A symlinked installation is a dev checkout link: it is
+reported and left alone. On a non-TTY the refresh runs without prompting, because the
+command names the intent; ` + "`puzzle add skills`" + ` still requires --overwrite there,
+where clobbering would be a side effect rather than the request.`,
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runUpgradeSkills(os.Stdout, ui.New(os.Stdout), upgradeEnvironment{
+			homeDir:     os.UserHomeDir,
+			input:       os.Stdin,
+			interactive: ui.IsTerminal(os.Stdin),
+		})
+	},
+}
+
 func init() {
 	upgradeCmd.Flags().Bool("check", false, "Report the current and latest versions without upgrading")
+	upgradeCmd.AddCommand(upgradeSkillsCmd)
 	rootCmd.AddCommand(upgradeCmd)
+}
+
+func runUpgradeSkills(w io.Writer, out *ui.Printer, env upgradeEnvironment) error {
+	home, err := env.homeDir()
+	if err != nil {
+		return fmt.Errorf("finding home directory: %w", err)
+	}
+	targets, linked, err := installedSkillTargets(home)
+	if err != nil {
+		return err
+	}
+	for _, dest := range linked {
+		fmt.Fprintf(w, "%s %s is a symlink — skill left as is.\n", out.Yellow("!"), dest)
+	}
+	if len(targets) == 0 {
+		// Symlinks were already reported; only a genuinely empty result needs saying.
+		if len(linked) == 0 {
+			fmt.Fprintf(w, "%s No installed Puzzle skill found — run %s to install one.\n",
+				out.Yellow("!"), out.Bold("puzzle add skills"))
+		}
+		return nil
+	}
+
+	stale := make([]skillTarget, 0, len(targets))
+	for _, target := range targets {
+		if installed, ok := installedSkillVersion(target.destination()); ok && installed == version.Version {
+			fmt.Fprintf(w, "%s %s already has skill %s — up to date.\n",
+				out.Green("✓"), target.destination(), version.Version)
+			continue
+		}
+		stale = append(stale, target)
+	}
+	if len(stale) == 0 {
+		fmt.Fprintf(w, "Run %s to reinstall anyway.\n", out.Bold("puzzle add skills --overwrite"))
+		return nil
+	}
+
+	if env.interactive {
+		confirmed, err := confirmSkillUpdate(env.input, w, stale, version.Version)
+		if err != nil || !confirmed {
+			return err
+		}
+	}
+	return installSkills(w, out, stale)
 }
 
 type installKind int
@@ -164,7 +233,7 @@ func refreshSkills(stdout, stderr io.Writer, out *ui.Printer, ctx installContext
 
 	if !env.interactive {
 		fmt.Fprintf(stdout, "%s Puzzle skill installed at %s — run %s to update it.\n",
-			out.Yellow("!"), skillDestinations(targets), out.Bold("puzzle add skills --overwrite"))
+			out.Yellow("!"), skillDestinations(targets), out.Bold("puzzle upgrade skills"))
 		return
 	}
 	confirmed, err := confirmSkillUpdate(env.input, stdout, targets, latest)
@@ -175,7 +244,7 @@ func refreshSkills(stdout, stderr io.Writer, out *ui.Printer, ctx installContext
 	binary, err := upgradedBinary(ctx, latest)
 	if err != nil {
 		fmt.Fprintf(stdout, "%s Could not locate the upgraded CLI (%v) — run %s yourself.\n",
-			out.Yellow("!"), err, out.Bold("puzzle add skills --overwrite"))
+			out.Yellow("!"), err, out.Bold("puzzle upgrade skills"))
 		return
 	}
 	args := []string{"add", "skills", "--overwrite"}
@@ -187,41 +256,8 @@ func refreshSkills(stdout, stderr io.Writer, out *ui.Printer, ctx installContext
 	command.Stderr = stderr
 	if err := command.Run(); err != nil {
 		fmt.Fprintf(stdout, "%s Skill update failed (%v) — run %s yourself.\n",
-			out.Yellow("!"), err, out.Bold("puzzle add skills --overwrite"))
+			out.Yellow("!"), err, out.Bold("puzzle upgrade skills"))
 	}
-}
-
-func skillDestinations(targets []skillTarget) string {
-	paths := make([]string, 0, len(targets))
-	for _, target := range targets {
-		paths = append(paths, target.destination())
-	}
-	return strings.Join(paths, ", ")
-}
-
-func confirmSkillRefresh(input io.Reader, output io.Writer, targets []skillTarget, latest string) (bool, error) {
-	confirmed := true
-	field := huh.NewConfirm().
-		Title(fmt.Sprintf("Update the installed Puzzle skill to %s?", latest)).
-		Description(strings.Join(skillDestinationLines(targets), "\n")).
-		Affirmative("Yes").
-		Negative("No").
-		Value(&confirmed)
-	form := huh.NewForm(huh.NewGroup(field)).
-		WithInput(input).
-		WithOutput(output)
-	if err := form.Run(); err != nil {
-		return false, err
-	}
-	return confirmed, nil
-}
-
-func skillDestinationLines(targets []skillTarget) []string {
-	lines := make([]string, 0, len(targets))
-	for _, target := range targets {
-		lines = append(lines, fmt.Sprintf("%s (%s)", target.destination(), target.Name))
-	}
-	return lines
 }
 
 // upgradedBinary finds the puzzle binary npm just installed and proves it is the

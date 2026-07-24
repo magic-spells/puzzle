@@ -41,6 +41,14 @@ const DROP = Symbol('drop');
 // key derivation lives here so PuzzleView stays minimal.
 const liveViews = new Set();
 
+// A single optional observer of the registry, filled by devtools.js while a
+// DevTools extension is attached (D100) and cleared when it detaches. This slot
+// exists so devstate never has to IMPORT devtools: the dependency runs one way
+// (devtools → devstate, for safeState + liveViewList), and the mount/destroy
+// push travels back through this callback instead of a second import edge.
+// Null — and therefore free — whenever no extension is listening.
+let viewObserver = null;
+
 // The gates below are all written as positive `if (DEV) { … }` blocks, not
 // `if (!DEV) return; …`: esbuild eliminates a constant-false `if` branch
 // reliably, but does NOT strip statements after an unconditional `return`, so
@@ -49,12 +57,36 @@ const liveViews = new Set();
 
 /** Register a newly-mounted view (no-op in production). */
 export function registerView(view) {
-	if (DEV) liveViews.add(view);
+	if (DEV) {
+		liveViews.add(view);
+		viewObserver?.(view, true);
+	}
 }
 
 /** Drop a destroyed view from the registry (no-op in production). */
 export function unregisterView(view) {
-	if (DEV) liveViews.delete(view);
+	if (DEV) {
+		liveViews.delete(view);
+		viewObserver?.(view, false);
+	}
+}
+
+/**
+ * Install (or clear, with null) the registry observer — `fn(view, mounted)`.
+ * Dev-internal, called only by devtools.js at hook registration/teardown.
+ * No-op in production.
+ */
+export function setViewObserver(fn) {
+	if (DEV) viewObserver = typeof fn === 'function' ? fn : null;
+}
+
+/**
+ * The live mounted views in mount order, as a plain array snapshot. The
+ * dev-internal reader devtools.js uses to replay pre-registration mounts and to
+ * walk the component forest. Empty in production.
+ */
+export function liveViewList() {
+	return DEV ? [...liveViews] : [];
 }
 
 /**

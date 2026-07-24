@@ -286,6 +286,7 @@ import { ViewNode } from '../views/ViewNode.js';
 import { cancelAnimations } from '../views/animate.js';
 import { resolveHead, syncTitle } from '../head.js';
 import { walkRouteTree } from './routeTree.js';
+import { devtoolsRouteCommit } from '../devtools.js';
 
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
 // { entryKey: {x,y} } under a single key; capped so a long session can't grow it
@@ -1865,6 +1866,11 @@ export class Router {
 		// per-commit walk) DCEs away in production (§27 define pattern).
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			warnMissingSlots(next.views);
+			// DevTools bridge (D100): the committed route. #commitLocation — head
+			// sync included — ran immediately before, so the document.title the
+			// bridge reports is already this route's (memory mode excepted, where
+			// #syncHead is a deliberate no-op, D42/D84).
+			devtoolsRouteCommit(next);
 		}
 		// Scroll lands here — synchronously after the new content is in the DOM
 		// (every #commitState call site mounts/patches first) and before the next

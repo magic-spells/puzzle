@@ -398,7 +398,10 @@ The scaffolding and diagnostics commands SPEC §11 left for later. Shipped in v1
 - **`puzzle generate <component|view|layout|model> <Name> [--path <dir>] [--force]`** (alias `g`) — writes a stub into `app/components|views|layouts|models`, finding the project root by walking up for `package.json`/`puzzle.config.js`. `.pzl` type names are PascalCase, model names lowercase.
 - **`puzzle add tailwind`** — writes the canonical `puzzle.config.js` + `app/styles/styles.css` when absent.
 - **`puzzle add piece <name…> [--registry <path|url>] [--overwrite] [--dir]`** (D32 amendment, 2026-07-17) — copies copy-in UI pieces from the puzzle-pieces registry into the app: resolves `registry.json`, pulls `registryDependencies` transitively (piece names and `lib/*.js` utils), copies files VERBATIM to each manifest's `targetDir` (default `app/components/ui/`; libs to `app/lib/`), refuses existing files unless `--overwrite` (all-or-nothing pre-flight), records sha256 content hashes in `pieces.lock` (the version story — enables a future `diff`/`update`), auto-copies the registry theme to `app/styles/pieces.css` when the app lacks it (locked like a piece), and PRINTS the accumulated `npm install` line + the one-line `@import './pieces.css';` advisory rather than running/rewriting anything (styles.css is user-owned — D3). Registry source: `--registry` flag → `PUZZLE_PIECES_REGISTRY` env → the published GitHub raw URL.
-- **`puzzle add skills [--overwrite]`** (alias `skill`; D78, 2026-07-22) — installs the CLI's embedded Puzzle agent skill (`skills/puzzle/` in-repo, `go:embed` at build time so the payload always matches the CLI version) into every detected agent config dir: a target is offered iff `~/.claude` / `~/.codex` / `~/.cursor` exists, destination `<root>/skills/puzzle/` (created as needed). On a TTY: huh checkbox multi-select, all targets pre-selected; non-TTY installs to all detected targets silently (never prompts, never hangs). Existing installations refuse without `--overwrite` (all-or-nothing pre-flight). No detected targets is a friendly no-op, exit 0. `--skill-root <dir>` (repeatable; D97, 2026-07-24) pins the config dirs instead of detecting them and skips the target prompt even on a TTY — the root must already exist (a missing one is an error, never created). `puzzle upgrade` uses it to hand the freshly installed binary the exact roots the user confirmed (§41).
+- **`puzzle add skills [--overwrite]`** (alias `skill`; D78, 2026-07-22) — installs the CLI's embedded Puzzle agent skill (`skills/puzzle/` in-repo, `go:embed` at build time so the payload always matches the CLI version) into every detected agent config dir: a target is offered iff `~/.claude` / `~/.codex` / `~/.cursor` exists, destination `<root>/skills/puzzle/` (created as needed). On a TTY: huh checkbox multi-select, all targets pre-selected; non-TTY installs to all detected targets silently (never prompts, never hangs). No detected targets is a friendly no-op, exit 0. `--skill-root <dir>` (repeatable; D97, 2026-07-24) pins the config dirs instead of detecting them and skips the target prompt even on a TTY — the root must already exist (a missing one is an error, never created). `puzzle upgrade` uses it to hand the freshly installed binary the exact roots the user confirmed (§41).
+
+  **Existing destinations (D99, 2026-07-24)** — re-running the command after a CLI upgrade IS the refresh mechanism (the payload is embedded), so an existing install asks rather than aborting. Every install writes `<dest>/.puzzle-skill-version` holding the CLI version; missing or blank reads as *unknown*, never an error. Selected targets classify four ways: **missing** → installed; **stamp matches this CLI** → skipped as up to date; **real but stale/unstamped** → a huh yes/no confirm (default yes) whose lines name the version delta; **symlink** → one `!` line, never offered and never written through (a dev-checkout link, per §41). Declining skips only the conflicts — targets with no skill are still installed, since the pre-flight was all-or-nothing only because it produced an *error*. On a **non-TTY a stale destination still refuses** with the `--overwrite` message and writes nothing; an up-to-date one is no longer a conflict, so `puzzle add skills` is idempotent in CI. `--overwrite` bypasses the whole classification and writes every selected target, symlinks included. Reinstalling **replaces** the destination tree (removed, then copied) so a file the newer payload dropped cannot linger and contradict the current release — except through a symlink, which is written through in place because `os.RemoveAll` on a link deletes the link itself.
+- **`puzzle upgrade skills`** (D99, 2026-07-24) — refreshes the agent skill from THIS binary's embedded payload: no registry check, no re-exec, since nothing was upgraded and the running CLI already holds the matching bytes (the mirror image of §41's post-upgrade path, which must re-exec precisely because its process holds the OLD skill). Refreshes only config dirs that already carry a skill — first installs belong to `add skills` — reports and skips symlinked ones, and prints the `--overwrite` hint when everything is already current. Unlike `add skills`, a **non-TTY installs without prompting**: the command names the clobber, so it is the request rather than a side effect.
 - **`puzzle doctor [dir]`** — ✓/✘/! checks (node on PATH, `app/app.js`, `index.html`, config loads, Tailwind CLI resolves, runtime package present); exits 1 on any failure. **`puzzle info [dir]`** — prints puzzle version, platform, node version, project root, source/output dirs, and the declared styles pipeline. `puzzle --version` reports the CLI version.
 
 **No-JS-rewriting rule (D3).** `add` and `generate` never parse or rewrite the user's JavaScript: `generate model` does not edit `app/models/index.js`, and `add tailwind` never rewrites an existing `puzzle.config.js`. When wiring is needed they **print the exact snippet** (registration line / config block + install command) for the author to paste. Generated `.pzl` stubs are compile-checked against the compiler in tests, so they cannot drift from the grammar.
@@ -1000,7 +1003,7 @@ The CLI reports newer published releases and can upgrade itself through the user
 **Agent-skill refresh (D97, 2026-07-24)** — reached only on that success path, never from `--check`, the up-to-date short-circuit, or the manual/`go install` branch:
 - **Refresh, not first install**: a target qualifies iff `<root>/skills/puzzle/` already exists as a real directory under a detected config dir (§13). Config dirs without a skill are left to `puzzle add skills`. No qualifying target is a silent no-op.
 - A **symlinked** `<root>/skills/puzzle` is a dev-checkout link: one `!` line names it and nothing is written through it.
-- On a TTY: a huh yes/no confirm (default yes) listing the exact destinations. On a non-TTY: one `!` hint line naming them plus `puzzle add skills --overwrite`, and no writes — the never-prompt/never-hang rule from §13.
+- On a TTY: a huh yes/no confirm (default yes) listing the exact destinations. On a non-TTY: one `!` hint line naming them plus `puzzle upgrade skills` (D99; was `puzzle add skills --overwrite`), and no writes — the never-prompt/never-hang rule from §13.
 - The install is performed by **re-executing the binary npm just installed**, not by this process: the skill payload is `go:embed`-ed, so the running binary holds only the OLD skill. Candidates are tried per install shape (project: `node_modules/@magic-spells/puzzle-<platform>/bin/puzzle`, then `node_modules/.bin/puzzle`; global: `PATH` lookup, then the running executable) and each must answer `--version` with **exactly** the target version before it is used. If none verifies, the manual command is printed instead — a stale skill is never installed.
 - The child is invoked as `add skills --overwrite --skill-root <root>…` with the confirmed roots, so what runs matches what was asked. Nothing in this step can fail the upgrade: the package is already installed, so every error prints and exits 0.
 
@@ -1176,6 +1179,48 @@ A fifth export subpath (D94) — `mountView`, `createTestApp`, `settled`, `insta
 - `--fixtures` with `--static`/`--hybrid` (or a config `output`) is **rejected**; prerender + fixtures interplay is deferred. A `puzzle.config.js` equivalent of the flag is also deferred — the explicit CLI switch *is* the dev-vs-real-API toggle.
 - Use cases: `puzzle dev` against the real API, `puzzle dev --fixtures` against fakes, `puzzle build --fixtures` for a shareable preview with baked-in data.
 
+## 55. The DevTools bridge and wire protocol (v1.63)
+
+The Puzzle DevTools Chrome extension lives in its own repo
+(`magic-spells/puzzle-devtools`); the framework ships only a **dev-only runtime
+bridge** (D100), and this section is the contract between the two. This is NOT
+the D60-rejected app-config devtools hook: there is zero config surface and
+zero production bytes — the extension injects `window.__PUZZLE_DEVTOOLS_HOOK__`
+at `document_start`, and the bridge registers into it when present. No hook →
+every touchpoint is a no-op. Production build → the bridge does not exist
+(`__PUZZLE_DEV__` DCE, pinned by the same build test as `__PUZZLE_APP__`).
+
+**Envelope.** Every message is `{ puzzle: 1, v: <protocolVersion>, type,
+payload }`. Protocol version 1. Versions are exchanged in `hello`; the
+extension supports a range and must show a clear mismatch state rather than
+misrender.
+
+**Events (runtime → extension, via `hook.emit`):** `hello { protocolVersion,
+frameworkVersion }` · `app-mounted` / `app-unmounted` · `view-mounted { id,
+name, module }` / `view-destroyed { id }` · `flush { keys, notified }` (one
+per store flush batch — rides D63's scheduling, no extra throttling) ·
+`route-commit { pathname, query, params, chain, title }` (emitted in the same
+post-mount pre-paint window as scroll/focus).
+
+**Requests (extension → runtime, via `hook.onRequest` handler):**
+`snapshot:views` (recursive `{ id, name, module, children }` tree; roots
+derived by walking live views' vnode trees — never the router's private
+state) · `inspect:view { id }` → `{ name, module, params, props, model,
+local }` with the **model layer and `setData()` local layer reported
+separately**, JSON-safe filtered · `snapshot:records { type? }` ·
+`snapshot:subscriptions` (both directions, view ids; function subscribers
+labeled `'fn'` — one merged bucket, no per-function identity) ·
+`snapshot:route` → a JSON-safe projection `{ pathname, query, params, chain,
+routes, route }` (view names + path patterns — never the live entry objects) ·
+`edit:record { type, id, patch }` —
+applied through the real `record.update()`, so §20 validation applies and a
+throw returns `{ error }` · `highlight:view { id, on }` (page overlay) ·
+`log:view` / `log:record` (logs the live object and binds `window.$p`).
+
+**Identity.** View ids are session-scoped integers (WeakMap-assigned); `name`
+is the compiled class name (dev builds are unminified), `module` is the
+codegen `__pzlModule` stamp (app-relative `.pzl` path).
+
 ## Deferred features (post-v1)
 
 Explicitly out of scope for v1. Docs may describe them only if marked **"Planned — not in v1"**.
@@ -1186,7 +1231,7 @@ Explicitly out of scope for v1. Docs may describe them only if marked **"Planned
 - ~~Schema validation enforcement, relationships~~ — both shipped: validation enforcement in v1.16 (§20, D48), `hasMany`/`belongsTo` resolution in v1.17 (§21, D49)
 - ~~Adapter write sync, custom adapter methods~~ — shipped in v1.18 (§22, D50: `save()`/`delete()`/`store.request()`). Query fault-in remains deferred (re-affirmed in D50).
 - App-level `settings`, `computed`, global `events`, `methods` — re-rejected at the D60 triage (module constants / singleton store records / view-scoped listeners cover the observed demand). ~~App lifecycle hooks~~ — shipped in v1.28 (§30, D60: `beforeMount`/`mounted`/`beforeUnmount` on the config).
-- Global event bus (`this.$events`), `ctx.utils`, devtools hook — re-rejected at the D60 triage (singleton store records are the bus; the 3-service ctx is a selling point; `window.__PUZZLE_APP__` covers dev introspection, D57)
+- Global event bus (`this.$events`), `ctx.utils`, devtools hook — re-rejected at the D60 triage (singleton store records are the bus; the 3-service ctx is a selling point; `window.__PUZZLE_APP__` covers dev introspection, D57). The D60 rejection was of an **app-config** hook and still stands; the D100 DevTools bridge (§55) is a different object — a dev-only wire protocol with no config surface and no production bytes.
 - Virtual scrolling
 - ~~HMR~~ — shipped in v1.25 as a state-preserving dev reload (§27, D57). Per-module hot swap (patching a changed component without a reload) remains deferred on top of it.
 - Element actions (`use:name` directives) — considered at the 2026-07 framework-gap review and deferred: D72 refs already deliver element-lifetime callbacks, view lifecycle covers document-listener patterns, and the dominant dismiss-behavior case shipped as the `@event:outside` modifier (v1.52, §47/D86) — which further narrows what an action system would add. If real pressure appears, the intended shape is dynamic function refs (`ref={ expr }` on the §31 handler cache), not a new directive namespace.

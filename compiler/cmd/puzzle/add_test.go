@@ -3,16 +3,19 @@ package main
 import (
 	"bytes"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 	embeddedskills "github.com/magic-spells/puzzle/skills"
 )
 
@@ -417,6 +420,11 @@ func TestAddSkillsOverwriteRefusalAndSuccess(t *testing.T) {
 	if err := os.WriteFile(skillPath, custom, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// Drop the stamp so the install reads as stale, the way a pre-D99 CLI wrote it.
+	// A stamp matching this binary would be "up to date" and never reach the refusal.
+	if err := os.Remove(filepath.Join(home, ".claude", "skills", "puzzle", skillVersionFile)); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Mkdir(filepath.Join(home, ".cursor"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -507,6 +515,351 @@ func TestAddSkillsExplicitRootMustExist(t *testing.T) {
 	}
 	if fsFileExists(filepath.Join(missing, "skills", "puzzle", "SKILL.md")) {
 		t.Error("a missing config dir must not be conjured")
+	}
+}
+
+// stubSkillConfirm replaces the shared confirm prompt for the duration of a test
+// and reports how many times it was consulted.
+func stubSkillConfirm(t *testing.T, answer bool) *int {
+	t.Helper()
+	calls := 0
+	previous := confirmSkillUpdate
+	confirmSkillUpdate = func(io.Reader, io.Writer, []skillTarget, string) (bool, error) {
+		calls++
+		return answer, nil
+	}
+	t.Cleanup(func() { confirmSkillUpdate = previous })
+	return &calls
+}
+
+// staleSkillInstall writes an install that a previous CLI version produced.
+func staleSkillInstall(t *testing.T, root, body string) string {
+	t.Helper()
+	dest := filepath.Join(root, "skills", "puzzle")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dest, "SKILL.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dest, skillVersionFile), []byte("0.0.1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dest
+}
+
+func embeddedSkill(t *testing.T) []byte {
+	t.Helper()
+	want, err := fs.ReadFile(embeddedskills.FS, "puzzle/SKILL.md")
+	if err != nil {
+		t.Fatalf("read embedded skill: %v", err)
+	}
+	return want
+}
+
+func TestAddSkillsPromptConfirmedReplacesStaleInstall(t *testing.T) {
+	home := t.TempDir()
+	if err := os.Mkdir(filepath.Join(home, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := staleSkillInstall(t, filepath.Join(home, ".codex"), "old release\n")
+	calls := stubSkillConfirm(t, true)
+
+	var buf bytes.Buffer
+	env := addEnvironment{
+		homeDir:     func() (string, error) { return home, nil },
+		input:       strings.NewReader(""),
+		interactive: true,
+		skillRoots:  []string{filepath.Join(home, ".codex")},
+	}
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+		t.Fatalf("add skills: %v", err)
+	}
+	if *calls != 1 {
+		t.Fatalf("confirm prompt called %d times, want 1", *calls)
+	}
+
+	got, err := os.ReadFile(filepath.Join(dest, "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, embeddedSkill(t)) {
+		t.Error("confirmed prompt did not install the embedded SKILL.md")
+	}
+	stamped, ok := installedSkillVersion(dest)
+	if !ok || stamped != version.Version {
+		t.Errorf("stamp = %q (found %v), want %q", stamped, ok, version.Version)
+	}
+}
+
+// Declining leaves existing installs alone but still installs where there is
+// nothing to clobber — the whole point of dropping the all-or-nothing pre-flight.
+func TestAddSkillsPromptDeclinedKeepsExistingAndInstallsFresh(t *testing.T) {
+	home := t.TempDir()
+	for _, name := range []string{".codex", ".cursor"} {
+		if err := os.Mkdir(filepath.Join(home, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	existing := staleSkillInstall(t, filepath.Join(home, ".codex"), "old release\n")
+	stubSkillConfirm(t, false)
+
+	var buf bytes.Buffer
+	// Roots are pinned so the target multi-select is skipped; the overwrite confirm
+	// under test runs either way.
+	env := addEnvironment{
+		homeDir:     func() (string, error) { return "", errors.New("home lookup should not happen") },
+		input:       strings.NewReader(""),
+		interactive: true,
+		skillRoots:  []string{filepath.Join(home, ".codex"), filepath.Join(home, ".cursor")},
+	}
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+		t.Fatalf("add skills: %v", err)
+	}
+
+	kept, err := os.ReadFile(filepath.Join(existing, "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(kept) != "old release\n" {
+		t.Errorf("declined prompt overwrote the existing install: %q", kept)
+	}
+	fresh := filepath.Join(home, ".cursor", "skills", "puzzle", "SKILL.md")
+	if !fsFileExists(fresh) {
+		t.Errorf("declining should not block the target with no skill (%s)", fresh)
+	}
+	if out := buf.String(); !strings.Contains(out, "Left as is: "+existing) {
+		t.Errorf("output should name what was left alone, got:\n%s", out)
+	}
+}
+
+// A stamp matching this binary means there is nothing to replace: no prompt, no
+// write, and a hint for the reinstall-anyway case.
+func TestAddSkillsUpToDateInstallIsSkippedWithoutPrompting(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(home, ".codex")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := addEnvironment{
+		homeDir:     func() (string, error) { return "", errors.New("home lookup should not happen") },
+		input:       strings.NewReader(""),
+		interactive: true,
+		skillRoots:  []string{root},
+	}
+
+	var buf bytes.Buffer
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+		t.Fatalf("initial add skills: %v", err)
+	}
+	dest := filepath.Join(root, "skills", "puzzle")
+	marker := []byte("edited between installs\n")
+	if err := os.WriteFile(filepath.Join(dest, "SKILL.md"), marker, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := stubSkillConfirm(t, true)
+	buf.Reset()
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+		t.Fatalf("second add skills: %v", err)
+	}
+	if *calls != 0 {
+		t.Errorf("an up-to-date install must not prompt, called %d times", *calls)
+	}
+	got, err := os.ReadFile(filepath.Join(dest, "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, marker) {
+		t.Error("an up-to-date install was rewritten")
+	}
+	out := buf.String()
+	if !strings.Contains(out, "up to date") {
+		t.Errorf("expected an up-to-date line, got:\n%s", out)
+	}
+	if !strings.Contains(out, "puzzle add skills --overwrite") {
+		t.Errorf("expected the reinstall-anyway hint, got:\n%s", out)
+	}
+
+	// --overwrite is the documented escape, and must not need a version bump.
+	buf.Reset()
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", true, env); err != nil {
+		t.Fatalf("add skills --overwrite: %v", err)
+	}
+	restored, err := os.ReadFile(filepath.Join(dest, "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(restored, embeddedSkill(t)) {
+		t.Error("--overwrite did not reinstall over an up-to-date install")
+	}
+}
+
+// A symlinked destination is a dev checkout link. Writing through it would rewrite
+// files in someone's working tree, so it is reported and skipped — and never
+// removed, since RemoveAll on a symlink deletes the link itself.
+func TestAddSkillsSkipsSymlinkedDestination(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs elevation on Windows")
+	}
+	home := t.TempDir()
+	root := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(filepath.Join(root, "skills"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	checkout := filepath.Join(t.TempDir(), "puzzle")
+	if err := os.MkdirAll(checkout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	source := []byte("canonical in-repo skill\n")
+	if err := os.WriteFile(filepath.Join(checkout, "SKILL.md"), source, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(root, "skills", "puzzle")
+	if err := os.Symlink(checkout, dest); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := stubSkillConfirm(t, true)
+	var buf bytes.Buffer
+	env := addEnvironment{
+		homeDir:     func() (string, error) { return "", errors.New("home lookup should not happen") },
+		input:       strings.NewReader(""),
+		interactive: true,
+		skillRoots:  []string{root},
+	}
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+		t.Fatalf("add skills: %v", err)
+	}
+	if *calls != 0 {
+		t.Errorf("a symlinked destination must never be offered in the prompt, called %d times", *calls)
+	}
+	if out := buf.String(); !strings.Contains(out, "is a symlink") {
+		t.Errorf("expected the symlink notice, got:\n%s", out)
+	}
+	got, err := os.ReadFile(filepath.Join(checkout, "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, source) {
+		t.Error("the linked checkout was rewritten")
+	}
+	if info, err := os.Lstat(dest); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the symlink itself must survive (mode %v, err %v)", info.Mode(), err)
+	}
+}
+
+// --overwrite still writes through a symlink: explicit intent, and D97's upgrade
+// re-exec depends on this shape. It must merge rather than prune, or the link
+// would be replaced by a real directory.
+func TestAddSkillsOverwriteWritesThroughSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs elevation on Windows")
+	}
+	root := filepath.Join(t.TempDir(), ".claude")
+	if err := os.MkdirAll(filepath.Join(root, "skills"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	checkout := filepath.Join(t.TempDir(), "puzzle")
+	if err := os.MkdirAll(checkout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(checkout, "SKILL.md"), []byte("stale\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(root, "skills", "puzzle")
+	if err := os.Symlink(checkout, dest); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	env := addEnvironment{
+		homeDir:     func() (string, error) { return "", errors.New("home lookup should not happen") },
+		interactive: false,
+		skillRoots:  []string{root},
+	}
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", true, env); err != nil {
+		t.Fatalf("add skills --overwrite: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(checkout, "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, embeddedSkill(t)) {
+		t.Error("--overwrite did not write through the symlink")
+	}
+	if info, err := os.Lstat(dest); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("--overwrite must write through the link, not replace it (mode %v, err %v)", info.Mode(), err)
+	}
+}
+
+// Reinstalling replaces the tree rather than merging into it: a file the newer
+// payload dropped must not survive to contradict the current release.
+func TestAddSkillsOverwritePrunesFilesTheEmbeddedTreeDropped(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".codex")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dest := staleSkillInstall(t, root, "old release\n")
+	orphan := filepath.Join(dest, "references", "removed-in-this-release.md")
+	if err := os.MkdirAll(filepath.Dir(orphan), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(orphan, []byte("contradicts the current release\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	env := addEnvironment{
+		homeDir:     func() (string, error) { return "", errors.New("home lookup should not happen") },
+		interactive: false,
+		skillRoots:  []string{root},
+	}
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", true, env); err != nil {
+		t.Fatalf("add skills --overwrite: %v", err)
+	}
+	if fsFileExists(orphan) {
+		t.Errorf("%s survived a reinstall", orphan)
+	}
+	if !fsFileExists(filepath.Join(dest, "SKILL.md")) {
+		t.Error("prune removed the destination without reinstalling it")
+	}
+}
+
+func TestInstalledSkillVersionTreatsMissingStampAsUnknown(t *testing.T) {
+	dest := t.TempDir()
+	if _, ok := installedSkillVersion(dest); ok {
+		t.Error("a destination with no stamp must read as unknown")
+	}
+	if err := os.WriteFile(filepath.Join(dest, skillVersionFile), []byte("  \n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := installedSkillVersion(dest); ok {
+		t.Error("a blank stamp must read as unknown, not as version \"\"")
+	}
+	if err := os.WriteFile(filepath.Join(dest, skillVersionFile), []byte("0.1.2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := installedSkillVersion(dest)
+	if !ok || got != "0.1.2" {
+		t.Errorf("installedSkillVersion = %q, %v; want 0.1.2, true", got, ok)
+	}
+}
+
+func TestSkillDestinationLinesNameTheInstalledVersion(t *testing.T) {
+	root := filepath.Join(t.TempDir(), ".codex")
+	if err := os.Mkdir(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	staleSkillInstall(t, root, "old release\n")
+	stamped := skillDestinationLines([]skillTarget{{Name: "Codex", Root: root}})
+	if len(stamped) != 1 || !strings.Contains(stamped[0], "installed 0.0.1") {
+		t.Errorf("prompt line should name the installed version, got %q", stamped)
+	}
+
+	unstamped := skillDestinationLines([]skillTarget{{Name: "Cursor", Root: t.TempDir()}})
+	if len(unstamped) != 1 || !strings.Contains(unstamped[0], "version unknown") {
+		t.Errorf("an unstamped install should read as unknown, got %q", unstamped)
 	}
 }
 

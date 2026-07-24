@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -289,7 +290,7 @@ func TestUpgradeSkillRefreshNonInteractiveHint(t *testing.T) {
 	stdout := runUpgradeWithStubs(t, home, false, nil)
 
 	dest := filepath.Join(home, ".claude", "skills", "puzzle")
-	if !strings.Contains(stdout, dest) || !strings.Contains(stdout, "puzzle add skills --overwrite") {
+	if !strings.Contains(stdout, dest) || !strings.Contains(stdout, "puzzle upgrade skills") {
 		t.Fatalf("non-TTY upgrade should print the manual skill hint, got:\n%s", stdout)
 	}
 }
@@ -312,7 +313,7 @@ func TestUpgradeSkillRefreshLeavesSymlinkedInstall(t *testing.T) {
 	if !strings.Contains(stdout, dest+" is a symlink") {
 		t.Fatalf("symlinked skill install should be reported, got:\n%s", stdout)
 	}
-	if strings.Contains(stdout, "puzzle add skills --overwrite") {
+	if strings.Contains(stdout, "puzzle upgrade skills") {
 		t.Fatalf("a symlink-only home has nothing to refresh, got:\n%s", stdout)
 	}
 	// The link itself must survive untouched — writing through it would rewrite
@@ -402,9 +403,158 @@ func TestUpgradeSkillRefreshSkipsStaleBinary(t *testing.T) {
 	if fsFileExists(skillArgs) {
 		t.Fatal("a stale binary was used to install the skill")
 	}
-	if !strings.Contains(stdout, "puzzle add skills --overwrite") {
+	if !strings.Contains(stdout, "puzzle upgrade skills") {
 		t.Fatalf("expected a fallback hint when no upgraded binary is found, got:\n%s", stdout)
 	}
+}
+
+// forbidFetchLatest fails the test if anything reaches the registry. `upgrade
+// skills` refreshes from THIS binary's embedded payload, so there is nothing to
+// check for and no reason to be offline-hostile.
+func forbidFetchLatest(t *testing.T) {
+	t.Helper()
+	previous := fetchLatest
+	fetchLatest = func(time.Duration) (string, error) {
+		t.Error("upgrade skills must not check the registry")
+		return "", errors.New("unexpected network call")
+	}
+	t.Cleanup(func() { fetchLatest = previous })
+}
+
+func TestUpgradeSkillsRefreshesInstalledTargetsOnly(t *testing.T) {
+	home := skillHome(t, ".claude", ".cursor")
+	// A config dir with no skill is a first install, which `add skills` owns.
+	if err := os.Mkdir(filepath.Join(home, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	forbidFetchLatest(t)
+
+	var asked []skillTarget
+	oldConfirm := confirmSkillUpdate
+	confirmSkillUpdate = func(_ io.Reader, _ io.Writer, targets []skillTarget, latest string) (bool, error) {
+		asked = targets
+		if latest != version.Version {
+			t.Errorf("prompt offered %q, want this binary's version %q", latest, version.Version)
+		}
+		return true, nil
+	}
+	t.Cleanup(func() { confirmSkillUpdate = oldConfirm })
+
+	var buf bytes.Buffer
+	env := upgradeEnvironment{homeDir: func() (string, error) { return home, nil }, interactive: true}
+	if err := runUpgradeSkills(&buf, plainPrinter(), env); err != nil {
+		t.Fatalf("upgrade skills: %v", err)
+	}
+
+	if len(asked) != 2 {
+		t.Fatalf("prompt targets = %#v, want the two installed roots", asked)
+	}
+	for _, name := range []string{".claude", ".cursor"} {
+		dest := filepath.Join(home, name, "skills", "puzzle")
+		if !fsFileExists(filepath.Join(dest, "SKILL.md")) {
+			t.Errorf("%s was not refreshed", dest)
+		}
+		if stamped, ok := installedSkillVersion(dest); !ok || stamped != version.Version {
+			t.Errorf("%s stamp = %q (found %v), want %q", dest, stamped, ok, version.Version)
+		}
+	}
+	if codex := filepath.Join(home, ".codex", "skills", "puzzle"); fsFileExists(codex) {
+		t.Errorf("upgrade skills must not perform a first install at %s", codex)
+	}
+}
+
+// The command names the intent, so a non-TTY refreshes rather than hinting — the
+// opposite of `add skills`, where clobbering would be a side effect.
+func TestUpgradeSkillsNonInteractiveInstallsWithoutPrompting(t *testing.T) {
+	home := skillHome(t, ".claude")
+	forbidFetchLatest(t)
+
+	oldConfirm := confirmSkillUpdate
+	confirmSkillUpdate = func(io.Reader, io.Writer, []skillTarget, string) (bool, error) {
+		t.Error("a non-TTY must never prompt")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmSkillUpdate = oldConfirm })
+
+	var buf bytes.Buffer
+	env := upgradeEnvironment{homeDir: func() (string, error) { return home, nil }, interactive: false}
+	if err := runUpgradeSkills(&buf, plainPrinter(), env); err != nil {
+		t.Fatalf("upgrade skills: %v", err)
+	}
+	if !fsFileExists(filepath.Join(home, ".claude", "skills", "puzzle", "SKILL.md")) {
+		t.Error("non-TTY upgrade skills should have refreshed the install")
+	}
+}
+
+func TestUpgradeSkillsUpToDateAndSymlinkAndEmptyHomes(t *testing.T) {
+	forbidFetchLatest(t)
+	oldConfirm := confirmSkillUpdate
+	confirmSkillUpdate = func(io.Reader, io.Writer, []skillTarget, string) (bool, error) {
+		t.Error("nothing here should prompt")
+		return false, nil
+	}
+	t.Cleanup(func() { confirmSkillUpdate = oldConfirm })
+
+	t.Run("up to date", func(t *testing.T) {
+		home := skillHome(t, ".claude")
+		dest := filepath.Join(home, ".claude", "skills", "puzzle")
+		if err := os.WriteFile(filepath.Join(dest, skillVersionFile), []byte(version.Version+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		env := upgradeEnvironment{homeDir: func() (string, error) { return home, nil }, interactive: true}
+		if err := runUpgradeSkills(&buf, plainPrinter(), env); err != nil {
+			t.Fatalf("upgrade skills: %v", err)
+		}
+		out := buf.String()
+		if !strings.Contains(out, "up to date") || !strings.Contains(out, "puzzle add skills --overwrite") {
+			t.Errorf("expected an up-to-date line and the reinstall hint, got:\n%s", out)
+		}
+		if fsFileExists(filepath.Join(dest, "SKILL.md")) {
+			t.Error("an up-to-date install was rewritten")
+		}
+	})
+
+	t.Run("symlink", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation needs elevation on Windows")
+		}
+		home := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(home, ".claude", "skills"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		checkout := t.TempDir()
+		dest := filepath.Join(home, ".claude", "skills", "puzzle")
+		if err := os.Symlink(checkout, dest); err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		env := upgradeEnvironment{homeDir: func() (string, error) { return home, nil }, interactive: true}
+		if err := runUpgradeSkills(&buf, plainPrinter(), env); err != nil {
+			t.Fatalf("upgrade skills: %v", err)
+		}
+		if !strings.Contains(buf.String(), "is a symlink") {
+			t.Errorf("expected the symlink notice, got:\n%s", buf.String())
+		}
+		if entries, err := os.ReadDir(checkout); err != nil || len(entries) != 0 {
+			t.Errorf("linked checkout was written into: %v (err %v)", entries, err)
+		}
+	})
+
+	t.Run("nothing installed", func(t *testing.T) {
+		home := t.TempDir()
+		if err := os.Mkdir(filepath.Join(home, ".claude"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		var buf bytes.Buffer
+		env := upgradeEnvironment{homeDir: func() (string, error) { return home, nil }, interactive: true}
+		if err := runUpgradeSkills(&buf, plainPrinter(), env); err != nil {
+			t.Fatalf("upgrade skills: %v", err)
+		}
+		if !strings.Contains(buf.String(), "puzzle add skills") {
+			t.Errorf("expected a pointer to the first-install command, got:\n%s", buf.String())
+		}
+	})
 }
 
 // runUpgradeWithStubs drives a full project upgrade against a stub npm and a stub

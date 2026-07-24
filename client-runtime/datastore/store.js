@@ -18,6 +18,7 @@
  */
 
 import { PuzzleModel, PuzzleValidationError, safeMerge } from '../model.js';
+import { devtoolsFlush } from '../devtools.js';
 
 const REC_SEP = ' '; // never appears in a type name
 const noop = () => {}; // swallows a chained save()'s rejection (§22, D50)
@@ -979,6 +980,15 @@ export class Store {
 					console.error('[puzzle] store subscriber failed:', err);
 				}
 			}
+		}
+
+		// DevTools bridge (constellation/doc/DOC-SPEC.md §27, D100): report the batch
+		// once BOTH halves are final — `keys` was snapshotted above and `notified`
+		// only stops growing after the delivery loop. The probe is spelled INLINE
+		// (never hoisted into a shared const) so production DCE folds the whole
+		// statement and the devtools import tree-shakes away — see the note in app.js.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devtoolsFlush(this, keys, notified);
 		}
 	}
 
