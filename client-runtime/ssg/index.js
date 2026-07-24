@@ -32,10 +32,10 @@ import path from 'node:path';
 
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
-import { Router } from '../router/router.js';
+import { Router, encodeURL, normalizeBase } from '../router/router.js';
 import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr } from './serialize.js';
-import { assembleChain, makeRouteSnapshot, makeRouterStub, normalizeBase } from './assemble.js';
+import { assembleChain, makeRouteSnapshot, makeRouterStub } from './assemble.js';
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
 
@@ -331,7 +331,8 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
  * over the models + apiURL, a FormatterRegistry seeded with the built-ins then the
  * config formatters registered over them, and a router facade. In HYBRID mode that
  * facade is an UNSTARTED memory-mode Router (full fidelity, no URL/DOM side effects
- * — the SPA takes over on load); in STATIC mode it is the base/mode-aware
+ * — the SPA takes over on load) whose url() is shadowed to encode with the app's real
+ * routerMode/routerBase; in STATIC mode it is the base/mode-aware
  * makeRouterStub over the page's route snapshot, byte-matching the client kernel so
  * url()/current never diverge between prerender and rehydration.
  * `config.beforeMount` is awaited with a `{ store, config }` facade (not a real
@@ -355,10 +356,23 @@ async function buildContext(config, { mode = 'hybrid', route = null } = {}) {
 	// snapshot here, or router.url()/current would differ between the prerendered HTML
 	// and the client re-render for any hash-mode or based app (the `{ path | link }`
 	// formatter reads router.url; a view may read router.current).
-	const router =
-		mode === 'static' && route
-			? makeRouterStub(route, { mode: config.routerMode, base: config.routerBase })
-			: new Router(config.routes ?? [], { mode: 'memory' });
+	let router;
+	if (mode === 'static' && route) {
+		router = makeRouterStub(route, { mode: config.routerMode, base: config.routerBase });
+	} else {
+		router = new Router(config.routes ?? [], { mode: 'memory' });
+		// …but a memory router carries no URL, so its url() returns paths UNPREFIXED: a
+		// based app would prerender `/about` where the live app renders `/docs/about` —
+		// a broken href for crawlers, no-JS visitors, and anyone clicking before
+		// takeover. So url() ALONE is shadowed with the app's real mode/base, through
+		// the same encoder Router.url() and the static stub use; `current` and the
+		// compiled route table stay the real memory Router the takeover expects.
+		// (Wrapping the instance is not an option: `current` reads private fields, so a
+		// delegating facade would throw.)
+		const base = normalizeBase(config.routerBase);
+		const routerMode = config.routerMode ?? 'history';
+		router.url = (path) => encodeURL(path, routerMode, base);
+	}
 	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 
 	const ctx = { store, router, formatters: registry };

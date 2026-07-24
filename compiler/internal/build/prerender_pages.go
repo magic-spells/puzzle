@@ -294,6 +294,13 @@ func staticEntrySource(absRoot string, page staticPage, summary staticSummary, m
 	if len(summary.RouterBase) > 0 {
 		fmt.Fprintf(&b, "  routerBase: %s,\n", summary.RouterBase)
 	}
+	// mountStatic is async, and nothing awaits it here — a missing target, a
+	// throwing data() during rehydration, or a corrupt chain would otherwise
+	// surface only as an unobserved rejection. The prerendered markup is still on
+	// screen at that point (replaceChildren has not run), so the page LOOKS right
+	// while nothing is interactive. Log it like every other entry point does.
+	b.WriteString("}).catch((err) => {\n")
+	b.WriteString("  console.error('[puzzle] static page mount failed:', err);\n")
 	b.WriteString("});\n")
 	return b.String(), nil
 }
@@ -312,7 +319,17 @@ func findStaticModule(absRoot string, candidates ...string) string {
 // absModuleImport joins an app-relative POSIX module path (a __pzlModule stamp,
 // or a conventional app/… path) onto absRoot and returns a forward-slashed
 // absolute specifier for a generated import.
+//
+// An ALREADY-absolute path passes through untouched: plugin.relName falls back
+// to the absolute path whenever a .pzl resolves outside the app root (symlinked
+// node_modules, monorepo layouts), and that value reaches here as the module
+// stamp. Joining it onto absRoot would yield <absRoot>/Users/… — a file that
+// does not exist, failing the per-page esbuild pass with "Could not resolve"
+// against a staging path the deferred cleanup has already removed.
 func absModuleImport(absRoot, rel string) string {
+	if filepath.IsAbs(filepath.FromSlash(rel)) {
+		return filepath.ToSlash(rel)
+	}
 	return filepath.ToSlash(filepath.Join(absRoot, filepath.FromSlash(rel)))
 }
 

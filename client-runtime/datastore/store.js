@@ -105,7 +105,15 @@ export class Store {
 	// ---- model plumbing ----------------------------------------------------
 
 	modelFor(type) {
-		return this.models[type] || PuzzleModel;
+		// OWN properties only: `models` is a plain object literal, so a bare
+		// `this.models[type]` also resolves the Object prototype — a persisted blob
+		// keyed "constructor" would hand back Object (truthy) as the "model class"
+		// and the caller's Model.primaryKey() would throw on a hydration path that
+		// must stay fail-soft.
+		const own = Object.prototype.hasOwnProperty.call(this.models, type)
+			? this.models[type]
+			: null;
+		return own || PuzzleModel;
 	}
 
 	// ---- relationships (constellation/doc/DOC-SPEC.md §21, D49) ---------------
@@ -1036,7 +1044,19 @@ export class Store {
 		} catch {
 			return;
 		}
-		this._hydrateAll(data);
+		// Hydration is inside the guard too: _load() runs from the constructor, so
+		// anything it throws escapes PuzzleApp construction and leaves a permanently
+		// blank page — the bad blob is still in storage, so a reload crashes again.
+		// _hydrateAll's own fail-soft guards only cover shapes it can recognise
+		// (non-object data, per-record garbage); this catches the rest. Whatever
+		// hydrated before the failure is kept; the rest of the blob is dropped.
+		// The HMR restore path calls _hydrateAll directly and still propagates —
+		// that one is developer-facing.
+		try {
+			this._hydrateAll(data);
+		} catch (err) {
+			console.warn('[puzzle] ignoring corrupt persisted store:', err);
+		}
 	}
 
 	/**

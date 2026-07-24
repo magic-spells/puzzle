@@ -46,9 +46,8 @@ func builtinAllowlist() (map[string]bool, error) {
 
 // Usage is the build-wide feature set discovered by ScanUsage.
 type Usage struct {
-	Formatters  map[string]bool
-	HasFlip     bool
-	HasHeadTags bool
+	Formatters map[string]bool
+	HasFlip    bool
 }
 
 // Features are the build-wide DCE bits — one boolean per gated runtime module —
@@ -56,22 +55,19 @@ type Usage struct {
 // WatchBuilder can decide with one == whether the Define set frozen into its
 // esbuild context went stale.
 type Features struct {
-	Flip     bool
-	HeadTags bool
+	Flip bool
 }
 
 // features projects the scan result onto the define bits.
 func (u Usage) features() Features {
 	return Features{
-		Flip:     u.HasFlip,
-		HeadTags: u.HasHeadTags,
+		Flip: u.HasFlip,
 	}
 }
 
 // ScanUsage walks scanRoot for first-party source usage that controls runtime
-// tree-shaking. It parses .pzl templates for formatter chains and flip
-// attributes, and searches raw .js/.ts/.pzl bytes for the tokens of the
-// JavaScript-configured features — the managed-head fields (see scanRawTokens).
+// tree-shaking: it parses .pzl templates for formatter chains and flip
+// attributes. Both are template facts, so only .pzl files are read.
 //
 // The scan deliberately errs toward OVER-inclusion: it walks the whole project
 // (not just app/) so a component imported from a sibling directory still
@@ -104,8 +100,7 @@ func ScanUsage(scanRoot string) (Usage, error) {
 			}
 			return nil
 		}
-		ext := filepath.Ext(path)
-		if ext != ".js" && ext != ".ts" && ext != ".pzl" {
+		if filepath.Ext(path) != ".pzl" {
 			return nil
 		}
 
@@ -114,11 +109,7 @@ func ScanUsage(scanRoot string) (Usage, error) {
 			return nil // unreadable file: skip, don't fail the scan
 		}
 		raw := string(src)
-		scanRawTokens(raw, &usage)
-		if ext != ".pzl" {
-			return nil
-		}
-		if strings.TrimSpace(string(src)) == "" {
+		if strings.TrimSpace(raw) == "" {
 			return nil
 		}
 		name := filepath.ToSlash(path)
@@ -161,30 +152,6 @@ func ScanFormatters(scanRoot string) (map[string]bool, error) {
 		return nil, err
 	}
 	return usage.Formatters, nil
-}
-
-// scanRawTokens applies the raw-byte half of the usage scan to one file's
-// source. Managed head tags (D84/D89) are configured in JavaScript the compiler
-// NEVER parses — a plain `.js`/`.ts` routes file, or the opaque `<script>` body
-// of a `.pzl` — so there is no AST to match on and a substring is all we get.
-// The caller runs this on every scanned .js/.ts/.pzl file, which is exactly why
-// plain routes files are covered: only the .pzl-specific template parsing below
-// is extension-gated.
-//
-// The tokens are deliberately LOOSE, because the two error directions are not
-// symmetric:
-//
-//   - a FALSE POSITIVE leaves an unused module in the bundle — a couple of KB;
-//   - a FALSE NEGATIVE compiles a feature the app really uses out of the bundle.
-//
-// So: when in doubt, INCLUDE.
-func scanRawTokens(raw string, usage *Usage) {
-	// D84/D89 managed head tags.
-	if strings.Contains(raw, "description") ||
-		strings.Contains(raw, "canonical") ||
-		strings.Contains(raw, "socialImage") {
-		usage.HasHeadTags = true
-	}
 }
 
 // skipScanDir reports whether a directory should be pruned from the usage scan:

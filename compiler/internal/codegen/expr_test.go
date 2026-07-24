@@ -88,11 +88,48 @@ func TestResolveExpr(t *testing.T) {
 		{"spread after member chain", "fn(...obj.list)", nil, "__d.fn(...__d.obj.list)"},
 		{"spread of loop var stays", "[...list]", scope("list"), "[...list]"},
 		{"member access untouched by spread fix", "a.b.c", nil, "__d.a.b.c"},
+		// A literal left open by a trailing backslash is copied verbatim, not
+		// scanned past the end of the expression (the escape skip is clamped).
+		// Unreachable through the parser today — a group whose literal never closes
+		// fails as "unclosed '{'" first — but resolveExpr must not panic on it.
+		{"unterminated string trailing backslash", `'a\`, nil, `'a\`},
+		{"unterminated double-quoted trailing backslash", "\"a\\", nil, "\"a\\"},
+		{"unterminated regex trailing backslash", `/a\`, nil, `/a\`},
+		{"unterminated template literal trailing backslash", "`a\\", nil, "`a\\"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := resolveExpr(tc.expr, tc.scope); got != tc.want {
 				t.Errorf("resolveExpr(%q)\n  got  %q\n  want %q", tc.expr, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestScanRegexLiteralUnterminated pins the doc-comment contract shared with the
+// parser's lexScanRegexLiteral twin: an unterminated literal returns len(s)
+// EXACTLY. A trailing backslash used to skip its escape pair PAST the end and
+// return len(s)+1, which made resolveExpr slice expr[i:len(expr)+1].
+func TestScanRegexLiteralUnterminated(t *testing.T) {
+	cases := []struct {
+		name string
+		s    string
+		want int
+	}{
+		{"trailing backslash", `/a\`, 3},
+		{"trailing backslash after body", `/abc\`, 5},
+		{"trailing backslash in class", `/[a\`, 4},
+		{"bare slash at eof", `/`, 1},
+		{"unterminated class", `/[ab`, 4},
+		// Terminated literals are unaffected: body + flags, escaped slash, class.
+		{"closed with flags", `/ab/gi`, 6},
+		{"closed with escaped slash", `/a\/b/`, 6},
+		{"closed with class", `/[/]/`, 5},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := scanRegexLiteral(tc.s, 0); got != tc.want {
+				t.Errorf("scanRegexLiteral(%q) = %d, want %d (len %d)", tc.s, got, tc.want, len(tc.s))
 			}
 		})
 	}

@@ -277,6 +277,89 @@ func TestDevProxy(t *testing.T) {
 	}
 }
 
+// TestProxyPrefixShapesDoNotPanic covers the two proxy maps that used to take
+// `puzzle dev` down with a raw http.ServeMux panic — an empty pattern from a "/"
+// prefix, and a repeated pattern from two prefixes that normalize to the same
+// route. Nothing on the Serve path recovers a panic, so the handler must come up
+// for both. config.LoadConfig now rejects these shapes outright; the guards here
+// are the backstop for a map the loader never saw.
+func TestProxyPrefixShapesDoNotPanic(t *testing.T) {
+	// A closed httptest server leaves a real port nothing listens on: every proxied
+	// request is refused and answered 502 by the proxy's ErrorHandler, which
+	// separates "the proxy owns this path" from the static SPA fallback without
+	// standing up a backend.
+	closed := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	down := closed.URL
+	closed.Close()
+
+	dist := writeDist(t)
+	tests := []struct {
+		name           string
+		proxies        map[string]string
+		proxiedPath    string
+		wantRootStatus int
+	}{
+		{
+			name:           "single prefix",
+			proxies:        map[string]string{"/api": down},
+			proxiedPath:    "/api/todos",
+			wantRootStatus: http.StatusOK, // the SPA shell still owns /
+		},
+		{
+			name:           "duplicate after normalization",
+			proxies:        map[string]string{"/api": down, "/api/": down},
+			proxiedPath:    "/api/todos",
+			wantRootStatus: http.StatusOK,
+		},
+		{
+			name:           "root prefix",
+			proxies:        map[string]string{"/": down},
+			proxiedPath:    "/anything",
+			wantRootStatus: http.StatusBadGateway, // the proxy owns everything
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			srv := newServer(dist, ctx, tt.proxies)
+			srv.proxyLog = io.Discard
+			handler := srv.handler() // must not panic
+
+			proxied := httptest.NewRecorder()
+			handler.ServeHTTP(proxied, httptest.NewRequest(http.MethodGet, "http://puzzle.test"+tt.proxiedPath, nil))
+			if proxied.Code != http.StatusBadGateway {
+				t.Fatalf("GET %s status = %d, want %d (proxied to a dead backend)", tt.proxiedPath, proxied.Code, http.StatusBadGateway)
+			}
+
+			root := httptest.NewRecorder()
+			handler.ServeHTTP(root, httptest.NewRequest(http.MethodGet, "http://puzzle.test/", nil))
+			if root.Code != tt.wantRootStatus {
+				t.Fatalf("GET / status = %d, want %d", root.Code, tt.wantRootStatus)
+			}
+			if tt.wantRootStatus == http.StatusOK && !strings.Contains(root.Body.String(), `id="app"`) {
+				t.Fatalf("GET / no longer serves the SPA shell: %q", root.Body.String())
+			}
+		})
+	}
+}
+
+// TestConfigFallbackWarningNamesProxy pins the honesty of the dev warning: a
+// puzzle.config.js that fails to load drops dev.proxy along with the Tailwind
+// pipeline, and a message naming only styles leaves the developer chasing a JSON
+// parse error in the browser.
+func TestConfigFallbackWarningNamesProxy(t *testing.T) {
+	msg := configFallbackWarning(errors.New("puzzle.config.js: unexpected token"))
+	if !strings.Contains(msg, "puzzle.config.js: unexpected token") {
+		t.Errorf("warning drops the underlying load error: %q", msg)
+	}
+	for _, want := range []string{"dev.proxy", "Tailwind", "SPA shell"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("warning should mention %q, got: %q", want, msg)
+		}
+	}
+}
+
 // TestReloadClientSnapshotsBeforeReload proves the injected live-reload client
 // calls the dev-published __devSnapshot() before reloading (the state-preserving
 // HMR reload, constellation/doc/DOC-SPEC.md §27, D57). A production bundle has no

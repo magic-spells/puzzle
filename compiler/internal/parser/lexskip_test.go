@@ -33,6 +33,11 @@ func TestScanBraceGroupRegex(t *testing.T) {
 		{"close tag", "{/if}", "/if", 5, false},
 		{"block open unaffected", "{#if a}", "#if a", 7, false},
 		{"unclosed", "{ a ", "", 0, true},
+		// A literal left open by a trailing backslash at EOF must still report the
+		// unclosed group, not run its scanner past the end of the source.
+		{"unterminated regex at eof", `{/a\`, "", 0, true},
+		{"unterminated string at eof", `{ 'a\`, "", 0, true},
+		{"unterminated template literal at eof", "{ `a\\", "", 0, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -173,6 +178,68 @@ func TestLexSkip(t *testing.T) {
 			if next != tc.wantNext || pee != tc.wantPEE || consumed != tc.wantConsumed {
 				t.Errorf("LexSkip(%q, %d, %v) = (%d, %v, %v), want (%d, %v, %v)",
 					tc.s, tc.i, tc.prevEndsExpr, next, pee, consumed, tc.wantNext, tc.wantPEE, tc.wantConsumed)
+			}
+		})
+	}
+}
+
+// TestLexScanRegexLiteralUnterminated pins the doc-comment contract: an
+// unterminated literal returns len(s) EXACTLY. A trailing backslash used to skip
+// its escape pair PAST the end and return len(s)+1, which made
+// lexRegexLiteralClosed index s[len(s)].
+func TestLexScanRegexLiteralUnterminated(t *testing.T) {
+	cases := []struct {
+		name string
+		s    string
+		want int
+	}{
+		{"trailing backslash", `/a\`, 3},
+		{"trailing backslash after body", `/abc\`, 5},
+		{"trailing backslash in class", `/[a\`, 4},
+		{"bare slash at eof", `/`, 1},
+		{"unterminated class", `/[ab`, 4},
+		// Terminated literals are unaffected: body + flags, escaped slash, class.
+		{"closed with flags", `/ab/gi`, 6},
+		{"closed with escaped slash", `/a\/b/`, 6},
+		{"closed with class", `/[/]/`, 5},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := lexScanRegexLiteral(tc.s, 0); got != tc.want {
+				t.Errorf("lexScanRegexLiteral(%q) = %d, want %d (len %d)", tc.s, got, tc.want, len(tc.s))
+			}
+		})
+	}
+}
+
+// TestParseTrailingBackslashPositionedError is the end-to-end guard for the same
+// overshoot: a .pzl whose template ends inside a literal opened by a trailing
+// backslash must fail with a POSITIONED "unclosed '{'" parse error — the author
+// needs a file/line for the typo — rather than dying in an index-out-of-range
+// panic with a raw Go stack trace.
+func TestParseTrailingBackslashPositionedError(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+	}{
+		{"regex-shaped closer", `<puzzle-view>{/a\</puzzle-view>`},
+		{"regex-shaped closer with script", `<puzzle-view><div>{/a\</puzzle-view>` + "\n<script></script>"},
+		{"string literal", `<puzzle-view>{ 'a\</puzzle-view>`},
+		{"template literal", "<puzzle-view>{ `a\\</puzzle-view>"},
+		{"interpolation ending in backslash", `<puzzle-view>{ a\`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse([]byte(tc.src), "test.pzl")
+			if err == nil {
+				t.Fatalf("expected a parse error, got nil")
+			}
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected *ParseError, got %T (%v)", err, err)
+			}
+			if pe.Line < 1 || pe.Col < 1 {
+				t.Errorf("error is not positioned: %d:%d (%s)", pe.Line, pe.Col, pe.Message)
 			}
 		})
 	}

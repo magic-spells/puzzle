@@ -10,11 +10,12 @@
  * the Router's #navigate does (layout wrapping the view chain via slot children,
  * each `.instance` pinned), and freezes the per-navigation route snapshot.
  *
- * It imports nothing DOM-shaped (only ViewNode), so it runs unchanged under Node
- * (the prerender pass) and in the browser (the kernel).
+ * It imports nothing DOM-shaped (ViewNode, plus the Router's pure URL helpers), so
+ * it runs unchanged under Node (the prerender pass) and in the browser (the kernel).
  */
 
 import { ViewNode } from '../views/ViewNode.js';
+import { encodeURL, normalizeBase } from '../router/router.js';
 
 /**
  * Instantiate + preload the layout+view chain for one route and assemble it into
@@ -93,8 +94,8 @@ const ROUTER_METHODS = ['push', 'replace', 'back', 'forward', 'go', 'start', 'st
  * Router-shaped static stub, DOM-free and shared by BOTH the true-static browser
  * kernel (static/index.js) and the static-mode prerender ctx (ssg/index.js) so
  * `url()` and `current` are byte-identical between the prerendered HTML and the
- * client re-render. Navigation throws; `url()` keeps Router.url's exact
- * validation/pass-through/prefix semantics; `current` is the page snapshot.
+ * client re-render. Navigation throws; `url()` IS Router.url's encoder (the shared
+ * encodeURL), so the two can never drift; `current` is the page snapshot.
  *
  * @param {object} route the D83 route snapshot (makeRouteSnapshot output)
  * @param {{ mode?: 'history'|'hash'|'memory', base?: string }} [opts]
@@ -112,31 +113,12 @@ export function makeRouterStub(route, { mode = 'history', base = '' } = {}) {
 		throw new Error('[puzzle] static output has no router — use plain links');
 	};
 	for (const method of ROUTER_METHODS) stub[method] = throwNoRouter;
-	stub.url = (path) => {
-		if (typeof path !== 'string') {
-			throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
-		}
-		if (path[0] !== '/') return path;
-		if (mode === 'memory') return path;
-		if (mode === 'hash') return '#' + normalizedBase + path;
-		return normalizedBase + path;
-	};
+	stub.url = (path) => encodeURL(path, mode, normalizedBase);
 	Object.defineProperty(stub, 'current', {
 		enumerable: true,
 		get: () => route,
 	});
 	return stub;
-}
-
-/** Keep Router's D51 base normalization/validation semantics without importing it. */
-export function normalizeBase(base) {
-	if (!base) return '';
-	if (base.includes('#') || base.includes('?')) {
-		throw new Error(`[puzzle] router base must not contain "#" or "?": "${base}"`);
-	}
-	let normalized = base[0] === '/' ? base : '/' + base;
-	normalized = normalized.replace(/\/+$/, '');
-	return normalized;
 }
 
 export default assembleChain;

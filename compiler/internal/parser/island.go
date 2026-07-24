@@ -67,6 +67,14 @@ func walkIslands(nodes []Node, file string) *ParseError {
 			if perr := walkIslands(node.Children, file); perr != nil {
 				return perr
 			}
+		case *Slot:
+			// A marker's fallback children (<children>…</children>,
+			// <slot name="x">…</slot>) are ordinary nodes that render when the slot
+			// goes unfilled, so an island — or a component inside one — declared
+			// there is just as real as anywhere else and must be validated.
+			if perr := walkIslands(node.Children, file); perr != nil {
+				return perr
+			}
 		case *If:
 			if perr := walkIslands(node.Then, file); perr != nil {
 				return perr

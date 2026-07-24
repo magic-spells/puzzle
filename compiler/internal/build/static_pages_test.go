@@ -142,6 +142,7 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		`apiURL: "https://api.example.com",`,
 		`routerMode: "hash",`,
 		`routerBase: "/docs",`,
+		`}).catch((err) => {`,
 	}
 	for _, w := range wants {
 		if !strings.Contains(src, w) {
@@ -195,6 +196,43 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 		if strings.Contains(src, absent) {
 			t.Errorf("generated minimal entry should not contain %q\n---\n%s", absent, src)
 		}
+	}
+}
+
+// mountStatic is async and nothing awaits it, so the generated entry must
+// observe its rejection. Without the .catch the prerendered markup stays on
+// screen (replaceChildren never ran) looking correct while nothing is
+// interactive, and the only signal is an uncaught rejection.
+func TestStaticEntrySourceObservesMountRejection(t *testing.T) {
+	s := cannedSummary()
+	for _, page := range s.Written {
+		src, err := staticEntrySource("/abs/app-root", page, s, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(src, "}).catch((err) => {") {
+			t.Errorf("entry for %s does not observe the mountStatic rejection\n---\n%s", page.Path, src)
+		}
+		// A greppable, prefixed message — the one signal a broken static page gives.
+		if !strings.Contains(src, "console.error('[puzzle] static page mount failed:', err);") {
+			t.Errorf("entry for %s missing the [puzzle] mount-failure log\n---\n%s", page.Path, src)
+		}
+	}
+}
+
+// plugin.relName falls back to the ABSOLUTE path when a .pzl resolves outside
+// the app root (symlinked node_modules, monorepo layouts), and that value
+// arrives here as the module stamp. Joining it onto absRoot would emit an import
+// of <absRoot>/Users/… and fail the per-page bundle with "Could not resolve".
+func TestAbsModuleImportKeepsAbsolutePaths(t *testing.T) {
+	root := filepath.FromSlash("/abs/app-root")
+	abs := filepath.ToSlash(filepath.Join(string(filepath.Separator), "elsewhere", "pkg", "Docs.pzl"))
+	if got := absModuleImport(root, abs); got != abs {
+		t.Errorf("absModuleImport(%q, %q) = %q, want the path unchanged", root, abs, got)
+	}
+	// Relative stamps still join onto the app root.
+	if got, want := absModuleImport(root, "app/views/Home.pzl"), "/abs/app-root/app/views/Home.pzl"; got != want {
+		t.Errorf("absModuleImport(%q, %q) = %q, want %q", root, "app/views/Home.pzl", got, want)
 	}
 }
 

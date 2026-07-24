@@ -2,25 +2,22 @@
  * Route head management — resolver + title core (D84, v1.50 — constellation/doc/DOC-SPEC.md §45).
  *
  * ONE resolver, TWO consumers: route `meta` carries four RESERVED head fields —
- * `title` (delivered via the pre-D84 document.title / textual-<title> path),
- * `description`, `canonical`, `socialImage` — and both delivery paths consume
- * the same resolution (all four share the uniform null-suppression walk):
+ * `title`, `description`, `canonical`, `socialImage` — resolved by one uniform
+ * null-suppression walk, then delivered by two DISJOINT paths:
  *
- *  - the SSG shell injection (ssg/index.js) string-injects the derived tags so
- *    crawlers/unfurlers see them before any JS runs (the authoritative path —
- *    link-preview bots do not run the app);
- *  - the SPA router syncs the same tags at the #commitLocation point the old
- *    #setTitle occupied, inheriting D61 atomicity (a failed or superseded
- *    navigation never touches the head).
+ *  - the SSG shell injection (ssg/index.js) string-injects the derived og:/
+ *    twitter:/description/canonical tags at build time, so crawlers/unfurlers
+ *    see them before any JS runs. This is the ONLY path that emits those tags —
+ *    link-preview bots fetch each URL fresh and never run the app;
+ *  - the browser router assigns `document.title` at the #commitLocation point the
+ *    old #setTitle occupied, inheriting D61 atomicity (a failed or superseded
+ *    navigation never touches it).
  *
- * MODULE SPLIT (D89): this file holds the always-present core — the resolver and
- * the one-line `document.title` sync (syncTitle) that EVERY routed app needs.
- * The managed-tag machinery (the MANAGED_TAGS table, the DOM sync loop, and the
- * SSG string builder's shared table) lives in ./headTags.js, imported by the
- * router only behind the `__PUZZLE_HAS_HEAD_TAGS__` build gate and by ssg/index.js
- * unconditionally (build-time). A title-only app (no route defines
- * description/canonical/socialImage) never pulls headTags.js into its bundle and
- * never runs the ~10 per-navigation querySelector probes the tag sync performs.
+ * MODULE SPLIT (D89, amended): this file holds the resolver and the one-line
+ * `document.title` sync (syncTitle) that EVERY routed app needs. The managed-tag
+ * table lives in ./headTags.js and is imported ONLY by ssg/index.js — build
+ * time, under Node. No browser bundle in any output mode contains it, and the
+ * router performs no per-navigation head-tag DOM work at all.
  *
  * This module is DOM-free except syncTitle (browser-only by contract): the
  * resolver runs under Node for the prerender pass.
@@ -76,10 +73,10 @@ function resolveField(chain, field) {
 }
 
 /**
- * Browser-only: sync `document.title` to a resolved head. This is the ALWAYS-IN
- * half of the old syncHead — every routed app assigns its tab title. The managed
- * head-tag sync (headTags.js `syncTags`) is a separate, build-gated call in the
- * router's #syncHead (D89).
+ * Browser-only: sync `document.title` to a resolved head. This is the ONLY head
+ * work the runtime performs — every routed app assigns its tab title, and the
+ * managed og:/twitter:/description/canonical tags are emitted exclusively at
+ * build time by the SSG injector (see headTags.js).
  *
  * `document.title` is assigned ONLY for a non-null resolved title — resolved
  * null (explicit suppression) and nothing-defined both leave it as-is (the

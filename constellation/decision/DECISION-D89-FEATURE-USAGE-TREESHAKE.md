@@ -8,6 +8,7 @@ connections:
   - DECISION-D57-HMR-STATE-RELOAD
   - DECISION-D84-HEAD-MANAGEMENT
   - DECISION-D85-FLIP-ATTRIBUTE
+  - DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY
   - FILE-BUILD-OPTIONS
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
@@ -43,7 +44,7 @@ Probe only what holds an import alive. In `patchKeyedChildren` that is exactly t
 **Compiler — one scan, two signal qualities.** `ScanFormatters` generalizes to `ScanUsage`, keeping D31's fail-soft, over-inclusive policy (unreadable/unparseable files skipped; `node_modules`/`dist`/`build`/`vendor`/dot-dirs pruned):
 
 - **flip — exact.** AST match on a `flip` attribute across element attrs, component props, and slot children. Component props are load-bearing: a component vnode's props *are* its attrs (`ViewNode` `get props()`), so the keyed patcher's `'flip' in newChild.attrs` fires for `<PostCard … flip>`. The first implementation checked elements only, which emitted `HAS_FLIP=false` for `examples/blog` and silently killed its animation — the false negative this scan must never produce. Guarded by `TestScanUsageFlipOnComponent`.
-- **head tags — deliberately coarse.** Route `meta` lives in `app/routes.js`, user JavaScript the compiler never parses (`.pzl` `<script>` bodies are likewise opaque). So this is a raw substring scan of `.js`/`.ts`/`.pzl` for `description`/`canonical`/`socialImage`. See the honest limitation under Consequences.
+- **head tags — RETIRED, see [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]].** This half of the scan no longer exists. It was a raw substring scan of `.js`/`.ts`/`.pzl` for `description`/`canonical`/`socialImage`, and it was wrong in both directions: it never probed `title`, so a title-only hybrid app stranded the SSG's `og:title` un-updatable (a real shipped bug), while `description` as an ordinary English word turned the bit on for apps emitting no managed tags at all. D111 deleted the runtime `syncTags` outright rather than keep guessing when to ship it. With no browser importer left, ordinary tree-shaking handles it and no define is needed. `ScanUsage` now reads only `.pzl` files — the head-tag grep was its sole reason to ever open a `.js`/`.ts`.
 
 Defines are recomputed for one-shot, watch/dev, prerender, and per-page static bundles. esbuild **freezes `Define` when a context is created**, so `WatchBuilder` tracks the baked-in bits and replaces the context only when one flips — otherwise a mid-session edit adding `flip` would build against stale defines while the incremental graph stayed warm.
 

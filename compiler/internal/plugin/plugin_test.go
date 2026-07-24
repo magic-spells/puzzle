@@ -502,43 +502,14 @@ export default class Posts extends PuzzleView {}
 	}
 }
 
-func TestScanUsageHeadTags(t *testing.T) {
-	for _, tt := range []struct {
-		name string
-		file string
-		body string
-	}{
-		{
-			name: "javascript route meta",
-			file: "app/routes.js",
-			body: "export default [{ meta: { description: 'A page' } }];\n",
-		},
-		{
-			name: "pzl script body",
-			file: "app/views/Home.pzl",
-			body: `<puzzle-view><h1>Home</h1></puzzle-view>
-<script>
-const socialImage = '/card.png';
-</script>
-`,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			root := writeApp(t, map[string]string{tt.file: tt.body})
-			usage, err := ScanUsage(root)
-			if err != nil {
-				t.Fatalf("ScanUsage: %v", err)
-			}
-			if !usage.HasHeadTags {
-				t.Error("HasHeadTags = false, want true")
-			}
-		})
-	}
-}
-
-func TestScanUsageAllAbsent(t *testing.T) {
+// The scan reads .pzl templates ONLY. Managed-head field names in plain .js/.ts
+// modules used to flip a HasHeadTags bit here; that bit is gone — the managed
+// tags are emitted exclusively by the build-time SSG injector, so there is no
+// runtime module left to gate. Route meta must therefore leave the scan's
+// remaining bits alone, and a JS/TS module can never contribute usage at all.
+func TestScanUsageIgnoresNonTemplateSource(t *testing.T) {
 	root := writeApp(t, map[string]string{
-		"app/routes.ts": "export default [{ meta: { title: 'Home' } }];\n",
+		"app/routes.ts": "export default [{ path: '/', meta: { title: 'Home', description: 'A page', canonical: '/', socialImage: '/card.png' } }];\n",
 		"app/views/Home.pzl": `<puzzle-view><h1>Home</h1></puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -554,8 +525,11 @@ export default class Home extends PuzzleView {}
 	if usage.HasFlip {
 		t.Error("HasFlip = true without a flip attribute")
 	}
-	if usage.HasHeadTags {
-		t.Error("HasHeadTags = true without a managed-head token")
+	// escape is the always-seeded safety default; nothing else may appear.
+	for name := range usage.Formatters {
+		if name != "escape" {
+			t.Errorf("Formatters seeded %q from a source file with no formatter chain", name)
+		}
 	}
 }
 
@@ -568,24 +542,22 @@ func TestPluginFeaturesCarryEveryUsageBit(t *testing.T) {
 		t.Errorf("fresh plugin Features() = %+v, want all false", got)
 	}
 	pl.SetUsage(Usage{
-		Formatters:  map[string]bool{"upcase": true},
-		HasFlip:     true,
-		HasHeadTags: true,
+		Formatters: map[string]bool{"upcase": true},
+		HasFlip:    true,
 	})
-	want := Features{Flip: true, HeadTags: true}
+	want := Features{Flip: true}
 	if got := pl.Features(); got != want {
 		t.Errorf("Features() = %+v, want %+v", got, want)
 	}
 
-	// Each bit must travel on its own — a struct field wired to the wrong source
-	// would pass the all-true case above.
-	pl.SetUsage(Usage{Formatters: map[string]bool{}, HasFlip: true})
-	if got, want := pl.Features(), (Features{Flip: true}); got != want {
-		t.Errorf("Features() = %+v, want %+v", got, want)
-	}
-	pl.SetUsage(Usage{Formatters: map[string]bool{}, HasHeadTags: true})
-	if got, want := pl.Features(), (Features{HeadTags: true}); got != want {
-		t.Errorf("Features() = %+v, want %+v", got, want)
+	// Flip is the only define bit since D111 retired the managed-head gate, so
+	// there is no cross-wiring left to catch here. What still matters is that a
+	// later SetUsage REPLACES the bits rather than accumulating them: a stale
+	// true would keep a module in the bundle after the edit that removed its
+	// last use, which is the same silent-divergence failure this test guards.
+	pl.SetUsage(Usage{Formatters: map[string]bool{}})
+	if got := pl.Features(); got != (Features{}) {
+		t.Errorf("Features() = %+v after a flip-free rescan, want all false", got)
 	}
 }
 
@@ -599,7 +571,6 @@ export default class Home extends PuzzleView {}
 `,
 		"app/components/Broken.pzl":  `<puzzle-view>{#if oops}<p>broken</p></puzzle-view>`,
 		"node_modules/pkg/Thing.pzl": `<puzzle-view><div flip>vendored</div></puzzle-view>`,
-		"node_modules/pkg/routes.js": `export default [{ meta: { canonical: '/vendored' } }];`,
 	})
 
 	usage, err := ScanUsage(root)
@@ -608,9 +579,6 @@ export default class Home extends PuzzleView {}
 	}
 	if usage.HasFlip {
 		t.Error("ScanUsage walked node_modules and found a vendored flip attribute")
-	}
-	if usage.HasHeadTags {
-		t.Error("ScanUsage walked node_modules and found a vendored head token")
 	}
 }
 

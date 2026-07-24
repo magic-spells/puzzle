@@ -52,8 +52,11 @@ threads `cfg.Dev.Proxy` into `newServer`; `(*server).handler()` registers each
 prefix on the mux before the catch-all static handler, backed by
 `httputil.NewSingleHostReverseProxy`. Prefixes register in both `/api` and
 `/api/` forms (ServeMux treats exact and subtree patterns separately), sorted
-for deterministic order; a trailing-`/` prefix is normalized, and a `/` prefix
-proxies the root and replaces the static handler entirely. The default director
+for deterministic order; a trailing-`/` prefix is normalized. A `/` prefix and
+two prefixes that normalize to the same route are both config errors
+([[DECISION-D110-DEV-PROXY-PREFIX-VALIDATION]]) — the first because proxying the
+root leaves the dev server nothing of its own to serve, the second because it
+panicked `ServeMux`. The default director
 would prepend a path carried by the target URL, so a wrapped director restores
 the browser's path/rawPath/query byte-for-byte — `dev.proxy` has no rewrite
 semantics; only scheme, host, and forwarding headers come from the target.

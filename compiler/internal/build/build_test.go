@@ -1,6 +1,7 @@
 package build
 
 import (
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -132,43 +133,47 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	}
 }
 
-// TestBuildUsageDefinesDCE proves the project usage scan drives the two runtime
-// feature probes end to end. A production app with neither feature drops both
-// modules; a readable development build with both usages keeps their distinctive
-// symbols/strings.
-func TestBuildUsageDefinesDCE(t *testing.T) {
-	writeFixture := func(t *testing.T, withUsage bool) string {
-		t.Helper()
-		root, err := os.MkdirTemp(repoRoot(t), ".usage-dce-*")
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { os.RemoveAll(root) })
-		for _, dir := range []string{"app/views", "app/public"} {
-			if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
-				t.Fatal(err)
-			}
-		}
+// definesFixture parameterizes the throwaway one-route app the runtime-probe DCE
+// tests build. flipAttr is appended to the keyed <li>; routeMeta is appended to
+// the route object literal; extraFiles adds sibling modules.
+type definesFixture struct {
+	flipAttr   string
+	routeMeta  string
+	extraFiles map[string]string
+}
 
-		flipAttr := ""
-		routeMeta := "meta: { title: 'Home' }"
-		if withUsage {
-			flipAttr = " flip"
-			routeMeta = "meta: { title: 'Home', description: 'Fixture page' }"
+// writeDefinesFixture materializes a minimal app that imports the runtime (so the
+// guarded runtime code is genuinely reachable) INSIDE the repo, where the
+// '@magic-spells/puzzle' alias's walk-up can find client-runtime. The shell has
+// an #app target and the /app.js tag, so the same fixture also builds under the
+// prerender modes.
+func writeDefinesFixture(t *testing.T, fx definesFixture) string {
+	t.Helper()
+	root, err := os.MkdirTemp(repoRoot(t), ".usage-dce-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(root) })
+
+	imports := ""
+	for rel := range fx.extraFiles {
+		if strings.HasPrefix(rel, "app/") && strings.HasSuffix(rel, ".js") {
+			imports += "import './" + strings.TrimPrefix(rel, "app/") + "';\n"
 		}
-		appJS := `import { PuzzleApp } from '@magic-spells/puzzle';
+	}
+	appJS := `import { PuzzleApp } from '@magic-spells/puzzle';
 import Home from './views/Home.pzl';
-const app = new PuzzleApp({
+` + imports + `const app = new PuzzleApp({
   target: '#app',
-  routes: [{ path: '/', view: Home, ` + routeMeta + ` }],
+  routes: [{ path: '/', view: Home` + fx.routeMeta + ` }],
 });
 app.mount();
 export default app;
 `
-		view := `<puzzle-view>
+	view := `<puzzle-view>
   <ul>
     {#for item in items}
-      <li key={ item.id }` + flipAttr + `>{ item.label }</li>
+      <li key={ item.id }` + fx.flipAttr + `>{ item.label }</li>
     {/for}
   </ul>
 </puzzle-view>
@@ -179,22 +184,50 @@ export default class Home extends PuzzleView {
 }
 </script>
 `
-		index := `<!doctype html><html><head><title>Fixture</title></head>
+	index := `<!doctype html><html><head><title>Fixture</title></head>
 <body><div id="app"></div><script type="module" src="/app.js"></script></body></html>`
-		for rel, body := range map[string]string{
-			"app/app.js":            appJS,
-			"app/views/Home.pzl":    view,
-			"app/public/index.html": index,
-		} {
-			path := filepath.Join(root, filepath.FromSlash(rel))
-			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-				t.Fatal(err)
-			}
-		}
-		return root
-	}
 
-	without := writeFixture(t, false)
+	files := map[string]string{
+		"app/app.js":            appJS,
+		"app/views/Home.pzl":    view,
+		"app/public/index.html": index,
+	}
+	for rel, body := range fx.extraFiles {
+		files[rel] = body
+	}
+	for rel, body := range files {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+// flipEasing is flip.js's DEFAULT_EASING — a string literal unique to that
+// module, so it survives minification and its ABSENCE is real evidence the module
+// tree-shook away (an identifier like `beginFlip` mangles to a single letter in a
+// production build, so asserting its absence would pass vacuously).
+const flipEasing = "cubic-bezier(0.2, 0, 0, 1)"
+
+// headTagMarker is the `data-puzzle-head` attribute the SSG stamps on every
+// managed tag — the same kind of minification-proof literal as flipEasing. It
+// must appear in PRERENDERED HTML and never in a browser bundle.
+const headTagMarker = "data-puzzle-head"
+
+// TestBuildUsageDefinesDCE proves the project usage SCAN drives the
+// __PUZZLE_HAS_FLIP__ runtime probe end to end: a production app with no `flip`
+// attribute drops flip.js entirely, while a readable development build that uses
+// it keeps the module's distinctive literal AND identifier (proving it is
+// genuinely linked in, not merely that a string survived).
+//
+// It is the only build-wide feature probe. Managed head tags are no longer gated
+// by one — see TestBuildNeverBundlesHeadTagMachinery.
+func TestBuildUsageDefinesDCE(t *testing.T) {
+	without := writeDefinesFixture(t, definesFixture{})
 	if err := Build(without, Options{Development: false}); err != nil {
 		t.Fatalf("Build without feature usage failed: %v", err)
 	}
@@ -202,24 +235,11 @@ export default class Home extends PuzzleView {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The two directions need DIFFERENT markers, because the two builds differ in
-	// minification.
-	//
-	// ABSENCE (this production build) may only assert on string LITERALS.
-	// Minification mangles `beginFlip`/`MANAGED_TAGS` to single letters, so
-	// asserting those are absent would pass vacuously even if the modules were
-	// fully bundled — no proof at all. `cubic-bezier(0.2, 0, 0, 1)` is flip.js's
-	// DEFAULT_EASING (unique to that module) and `data-puzzle-head` is
-	// headTags.js's marker attribute; both survive minification, so their absence
-	// is real evidence the module tree-shook away.
-	absenceMarkers := []string{"cubic-bezier(0.2, 0, 0, 1)", "data-puzzle-head"}
-	for _, marker := range absenceMarkers {
-		if strings.Contains(string(withoutJS), marker) {
-			t.Errorf("bundle without feature usage retained %q", marker)
-		}
+	if strings.Contains(string(withoutJS), flipEasing) {
+		t.Errorf("bundle without a flip attribute retained %q", flipEasing)
 	}
 
-	with := writeFixture(t, true)
+	with := writeDefinesFixture(t, definesFixture{flipAttr: " flip"})
 	if err := Build(with, Options{Development: true}); err != nil {
 		t.Fatalf("Build with feature usage failed: %v", err)
 	}
@@ -227,16 +247,155 @@ export default class Home extends PuzzleView {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// PRESENCE (a development build, unminified) can assert on both: the literals
-	// AND the original identifiers, since nothing is mangled here. Checking the
-	// identifiers too proves the modules are genuinely linked in, not merely that
-	// some string survived.
-	presenceMarkers := append(append([]string{}, absenceMarkers...), "beginFlip", "MANAGED_TAGS")
-	for _, marker := range presenceMarkers {
+	for _, marker := range []string{flipEasing, "beginFlip"} {
 		if !strings.Contains(string(withJS), marker) {
-			t.Errorf("bundle with feature usage should retain %q", marker)
+			t.Errorf("bundle with a flip attribute should retain %q", marker)
 		}
 	}
+}
+
+// headTagBundleMarkers are literals unique to headTags.js that survive
+// minification: the marker attribute the table stamps, and the one fixed content
+// value in MANAGED_TAGS. Either one appearing in a BROWSER bundle means the
+// table (and with it any runtime head-tag machinery) was linked in.
+var headTagBundleMarkers = []string{headTagMarker, "summary_large_image"}
+
+// headMetaSSGFixture is baseSSGFixture with the home route declaring ALL FOUR
+// reserved head fields, so a prerender's injected og:/twitter:/description/
+// canonical tags are observable in the emitted HTML. /about keeps its title-only
+// meta, which is what makes the per-page assertions meaningful.
+func headMetaSSGFixture() ssgFixtureFiles {
+	files := baseSSGFixture()
+	files["app/routes.js"] = strings.Replace(
+		files["app/routes.js"],
+		"meta: { title: 'Home Page' }",
+		"meta: { title: 'Home Page', description: 'The home page', "+
+			"canonical: 'https://example.com/', socialImage: 'https://example.com/og.png' }",
+		1,
+	)
+	return files
+}
+
+// assertNoHeadTagMachinery fails if a browser bundle contains any headTags.js
+// literal. Absence is asserted on PRODUCTION builds only: minification mangles
+// identifiers, so only these string literals make an absence check real evidence.
+func assertNoHeadTagMachinery(t *testing.T, label, js string) {
+	t.Helper()
+	for _, marker := range headTagBundleMarkers {
+		if strings.Contains(js, marker) {
+			t.Errorf("%s retained %q — headTags.js must never reach a browser bundle", label, marker)
+		}
+	}
+	if strings.Contains(js, "__PUZZLE_HAS_HEAD_TAGS__") {
+		t.Errorf("%s still references the deleted __PUZZLE_HAS_HEAD_TAGS__ define", label)
+	}
+}
+
+// TestBuildNeverBundlesHeadTagMachinery pins the D89 amendment: the managed
+// og:/twitter:/description/canonical tags are a BUILD-TIME product only. No
+// browser bundle, in ANY output mode, contains headTags.js — while the
+// prerendered HTML carries each page's own tags, which is the only place they
+// were ever load-bearing (crawlers fetch every URL fresh from the server and
+// never client-navigate, so they read the served markup, never a DOM the router
+// rewrote).
+func TestBuildNeverBundlesHeadTagMachinery(t *testing.T) {
+	// SPA: a route resolving every reserved field, plus the false positive the
+	// deleted byte-scan produced — a MODEL field named `description`. Neither may
+	// pull the table into app.js.
+	t.Run("spa app.js", func(t *testing.T) {
+		root := writeDefinesFixture(t, definesFixture{
+			routeMeta: ", meta: { title: 'Home', description: 'Fixture page', " +
+				"canonical: 'https://example.com/', socialImage: '/og.png' }",
+			extraFiles: map[string]string{
+				"app/models/post.js": `export const Post = {
+  name: 'post',
+  fields: { title: 'string', description: 'string', canonical: 'string' },
+};
+`,
+			},
+		})
+		if err := Build(root, Options{Development: false}); err != nil {
+			t.Fatalf("SPA Build failed: %v", err)
+		}
+		assertNoHeadTagMachinery(t, "SPA bundle", readFile(t, filepath.Join(root, "dist", "app.js")))
+	})
+
+	// Hybrid: the mode that both bakes tags AND ships a client router. The baked
+	// tags must be correct PER PAGE; the router still must not carry the table.
+	t.Run("hybrid bakes tags into HTML but not into app.js", func(t *testing.T) {
+		requireSSGRuntime(t)
+		root := writeSSGFixture(t, headMetaSSGFixture())
+		if err := Build(root, Options{Development: false, Output: "hybrid"}); err != nil {
+			t.Fatalf("hybrid Build failed: %v", err)
+		}
+		dist := filepath.Join(root, "dist")
+		assertNoHeadTagMachinery(t, "hybrid bundle", readFile(t, filepath.Join(dist, "app.js")))
+
+		home := readFile(t, filepath.Join(dist, "index.html"))
+		for _, want := range []string{
+			`<meta property="og:title" content="Home Page" data-puzzle-head="og:title">`,
+			`<meta name="description" content="The home page" data-puzzle-head="description">`,
+			`<link rel="canonical" href="https://example.com/" data-puzzle-head="canonical">`,
+			`<meta property="og:image" content="https://example.com/og.png" data-puzzle-head="og:image">`,
+		} {
+			if !strings.Contains(home, want) {
+				t.Errorf("prerendered dist/index.html missing %s\n%s", want, home)
+			}
+		}
+
+		// /about resolves title only — its page must carry ITS title and none of
+		// home's fields (per-page tags, not a shared shell).
+		about := readFile(t, filepath.Join(dist, "about", "index.html"))
+		if !strings.Contains(about, `<meta property="og:title" content="About Page" data-puzzle-head="og:title">`) {
+			t.Errorf("prerendered dist/about/index.html missing its own og:title\n%s", about)
+		}
+		if strings.Contains(about, `data-puzzle-head="canonical"`) {
+			t.Errorf("dist/about/index.html leaked home's canonical — tags must resolve per page\n%s", about)
+		}
+	})
+
+	// Static: no app.js at all, and the per-page kernel bundles are equally clean.
+	t.Run("static bakes tags into HTML but not into the page bundles", func(t *testing.T) {
+		requireStaticRuntime(t)
+		root := writeSSGFixture(t, headMetaSSGFixture())
+		if err := Build(root, Options{Development: false, Output: "static"}); err != nil {
+			t.Fatalf("static Build failed: %v", err)
+		}
+		dist := filepath.Join(root, "dist")
+		if _, err := os.Stat(filepath.Join(dist, "app.js")); !os.IsNotExist(err) {
+			t.Errorf("dist/app.js must be absent in static mode (err=%v)", err)
+		}
+
+		pages := filepath.Join(dist, staticPagesDir)
+		bundles := 0
+		if err := filepath.WalkDir(pages, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || filepath.Ext(path) != ".js" {
+				return nil
+			}
+			bundles++
+			assertNoHeadTagMachinery(t, "static page bundle "+d.Name(), readFile(t, path))
+			return nil
+		}); err != nil {
+			t.Fatalf("walking dist/%s: %v", staticPagesDir, err)
+		}
+		if bundles == 0 {
+			t.Fatalf("no per-page bundles found under dist/%s — nothing was asserted", staticPagesDir)
+		}
+
+		home := readFile(t, filepath.Join(dist, "index.html"))
+		for _, want := range []string{
+			`<meta property="og:title" content="Home Page" data-puzzle-head="og:title">`,
+			`<meta name="description" content="The home page" data-puzzle-head="description">`,
+			`<link rel="canonical" href="https://example.com/" data-puzzle-head="canonical">`,
+		} {
+			if !strings.Contains(home, want) {
+				t.Errorf("static dist/index.html missing %s\n%s", want, home)
+			}
+		}
+	})
 }
 
 // writeConsoleFixture writes a minimal throwaway app whose entry contains a
