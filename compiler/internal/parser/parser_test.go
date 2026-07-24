@@ -1523,6 +1523,18 @@ func TestParseEventModifiers(t *testing.T) {
 			wantName: "click",
 			wantMods: []string{"stop", "once"},
 		},
+		{
+			name:     "outside is event-generic (v1.52, D86)",
+			content:  `<div @click:outside={ close }>x</div>`,
+			wantName: "click",
+			wantMods: []string{"outside"},
+		},
+		{
+			name:     "outside composes with a key filter",
+			content:  `<div @keydown:escape:outside={ close }>x</div>`,
+			wantName: "keydown",
+			wantMods: []string{"escape", "outside"},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1823,6 +1835,11 @@ func TestParseEventModifierErrors(t *testing.T) {
 			name:       "duplicate modifier",
 			content:    `<button @click:stop:stop={ go }>x</button>`,
 			wantSubstr: "duplicate event modifier :stop",
+		},
+		{
+			name:       "duplicate outside modifier (D86)",
+			content:    `<div @click:outside:outside={ close }>x</div>`,
+			wantSubstr: "duplicate event modifier :outside",
 		},
 		{
 			name:       "more than one key filter",

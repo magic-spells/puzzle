@@ -526,11 +526,15 @@ var eventKeyFilters = map[string]string{
 	"delete":    "Delete",
 }
 
-// eventGenericMods are the modifiers valid on any event.
+// eventGenericMods are the modifiers valid on any event. `outside` (v1.52, D86)
+// is event-generic by design: the runtime's containment gate is event-agnostic
+// (@pointerdown:outside, @focusin:outside), so restricting it would only grow
+// the compile-error matrix with no corresponding failure mode.
 var eventGenericMods = map[string]bool{
 	"prevent": true,
 	"stop":    true,
 	"once":    true,
+	"outside": true,
 }
 
 // eventKeyboardEvents are the events on which key-filter modifiers are allowed.

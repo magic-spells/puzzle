@@ -37,6 +37,11 @@ const LISTENERS = Symbol('puzzle-listeners');
 // per-patch handler swap; it is cleared only when the listener is actually removed.
 const ONCE_SPENT = '\x00once';
 
+// `outside`-modifier (v1.52, D86) listeners attach to document in the CAPTURE
+// phase. One shared options object so add and remove always pass the same
+// capture flag — a mismatched remove silently leaves the document listener live.
+const OUTSIDE_OPTS = { capture: true };
+
 export class ViewManager {
 	/**
 	 * @param {Element} container host element this manager renders into
@@ -492,7 +497,8 @@ function unmount(vnode) {
 
 /**
  * Tear down an element vnode subtree that is being removed: fire element-ref
- * removals (v1.39, D72) and synchronously destroy every nested component instance
+ * removals (v1.39, D72), detach `outside`-modifier document listeners (v1.52,
+ * D86), and synchronously destroy every nested component instance
  * (constellation/doc/DOC-SPEC.md §12 — only the directly-removed component vnode
  * animates its leave; descendants tear down instantly with their ancestor).
  *
@@ -508,6 +514,23 @@ function unmount(vnode) {
 function releaseSubtree(vnode) {
 	const ref = vnode.attrs.ref;
 	if (typeof ref === 'function') ref(null, vnode.el);
+	// `outside` (D86): the listener lives on DOCUMENT, so discarding the element
+	// does NOT detach it — sweep this element's outside-flagged LISTENERS entries
+	// here, the walk that already covers every removal shape (conditional toggle,
+	// keyed-row removal, parent-subtree teardown, full view destroy). Plain
+	// element listeners die with the element and need no sweep. The map is the
+	// authoritative record of what is attached; skip the '\x00once' spent flags.
+	const listeners = vnode.el?.[LISTENERS];
+	if (listeners) {
+		for (const key of Object.keys(listeners)) {
+			if (key.endsWith(ONCE_SPENT)) continue;
+			const [event, ...mods] = key.slice(1).split(':');
+			if (!mods.includes('outside')) continue;
+			document.removeEventListener(event, listeners[key], OUTSIDE_OPTS);
+			delete listeners[key];
+			delete listeners[key + ONCE_SPENT];
+		}
+	}
 	// Inline-SVG seed (v1.14, D46): string children are inert markup, never vnodes
 	// — no refs or component instances hide inside them.
 	if (typeof vnode.children === 'string') return;
@@ -705,11 +728,21 @@ function setAttr(el, name, value) {
 		// addEventListener; the LISTENERS map keys by the FULL modified name so a
 		// plain and a modified binding on the same event never collide.
 		const [event, ...mods] = name.slice(1).split(':');
+		// `outside` (D86): the listener lives on document, CAPTURE phase — capture
+		// so an unrelated bubble-phase stopPropagation can't swallow the event, and
+		// so a panel mounted synchronously mid-dispatch attaches AFTER document's
+		// capture phase already passed (the open interaction can't instantly close
+		// it). The element only anchors the containment gate (withModifiers).
+		const target = mods.includes('outside') ? document : el;
+		const opts = target === el ? undefined : OUTSIDE_OPTS;
 		const listeners = (el[LISTENERS] ??= {});
-		if (listeners[name]) el.removeEventListener(event, listeners[name]);
+		if (listeners[name]) target.removeEventListener(event, listeners[name], opts);
 		if (typeof value === 'function') {
-			const handler = mods.length ? withModifiers(name, mods, value, listeners) : value;
-			el.addEventListener(event, handler);
+			// An outside binding always wraps (mods is non-empty by construction —
+			// 'outside' itself is a modifier), so the gate below never needs a
+			// separate no-other-mods path.
+			const handler = mods.length ? withModifiers(name, mods, value, listeners, el) : value;
+			target.addEventListener(event, handler, opts);
 			listeners[name] = handler;
 		} else {
 			// Value nulled via an inline-if — the listener is actually REMOVED, so drop
@@ -745,10 +778,13 @@ function removeAttr(el, name) {
 	if (name.startsWith('@')) {
 		// Split the same way setAttr does so the correct DOM event type detaches
 		// even when the key carries modifiers ('@event:mod' → event 'event').
-		const event = name.slice(1).split(':')[0];
+		const [event, ...mods] = name.slice(1).split(':');
 		const listeners = el[LISTENERS];
 		if (listeners?.[name]) {
-			el.removeEventListener(event, listeners[name]);
+			// `outside` (D86) listeners live on document/capture — mirror setAttr's
+			// target + options exactly or removeEventListener silently misses.
+			if (mods.includes('outside')) document.removeEventListener(event, listeners[name], OUTSIDE_OPTS);
+			else el.removeEventListener(event, listeners[name]);
 			delete listeners[name];
 			// The listener is gone — drop its once-spent marker too (D38), else a later
 			// patch that re-adds this @event:once would read the stale flag and never fire.
@@ -781,22 +817,28 @@ const KEY_FILTERS = {
 /**
  * Wrap a compiled handler with its event modifiers. Canonical execution order,
  * independent of written order:
- *   1. key filter — a non-matching key returns BEFORE preventDefault so the
+ *   1. outside-gate (v1.52, D86) — the listener sits on document/capture; an
+ *      event targeting INSIDE the bound element returns before every other
+ *      step, so an inside event spends no `once` and preventDefaults nothing;
+ *   2. key filter — a non-matching key returns BEFORE preventDefault so the
  *      browser's native behaviour for other keys is preserved;
- *   2. `once` — spend/detach: fires once EVER. The "spent" flag lives on the
+ *   3. `once` — spend/detach: fires once EVER. The "spent" flag lives on the
  *      element's LISTENERS object keyed by the full attr name, so it survives
  *      the per-patch handler swap (a fresh closure is bound every render);
- *   3. preventDefault;
- *   4. stopPropagation;
- *   5. the handler.
+ *   4. preventDefault;
+ *   5. stopPropagation;
+ *   6. the handler.
  * @param {string} fullName the '@event:mod…' attr name (LISTENERS key)
  * @param {string[]} mods modifiers in written order
  * @param {Function} handler the compiled listener
  * @param {object} listeners the element's LISTENERS object (holds the spent flag)
+ * @param {Element} el the bound element — the outside-gate's containment anchor
  */
-function withModifiers(fullName, mods, handler, listeners) {
+function withModifiers(fullName, mods, handler, listeners, el) {
 	const spentKey = fullName + ONCE_SPENT;
+	const outside = mods.includes('outside');
 	return (event) => {
+		if (outside && el.contains(event.target)) return;
 		for (const m of mods) {
 			const key = KEY_FILTERS[m];
 			if (key !== undefined && event.key !== key) return;

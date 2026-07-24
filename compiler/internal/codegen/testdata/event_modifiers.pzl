@@ -4,6 +4,7 @@
   </form>
   <button @click:stop:once={ handleOnce }>Once</button>
   <button @click={ plain }>Plain</button>
+  <div class="panel" @click:outside={ closePanel } @click={ plain }>Panel</div>
 </puzzle-view>
 
 <script>
@@ -19,6 +20,7 @@ export default class EventMods extends PuzzleView {
     cancel: (event) => {},
     handleOnce: (event) => {},
     plain: (event) => {},
+    closePanel: (event) => {},
   };
 }
 </script>
