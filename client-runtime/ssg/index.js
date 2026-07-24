@@ -33,6 +33,7 @@ import path from 'node:path';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { Router } from '../router/router.js';
+import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr } from './serialize.js';
 import { assembleChain } from './assemble.js';
 import { resolveHead, MANAGED_TAGS } from '../head.js';
@@ -321,15 +322,22 @@ async function buildContext(config) {
 // ---- route enumeration ------------------------------------------------------
 
 /**
- * Flatten the routes array into one entry PER LEAF (mirrors the Router's flatten):
- * a node WITH children is not a leaf — each child recurses with the joined path;
- * a node WITHOUT children emits `{ fullPath, chain (root→leaf defs), layout }`.
- * The layout is the top-level route's `layout` (children inherit it).
+ * Flatten the routes array into one entry PER LEAF via walkRouteTree — the shared
+ * tree→leaf walk (routeTree.js) the Router compiles its matcher table from, so a
+ * navigable route and its prerendered page can never disagree on the leaf set or
+ * composed path. The SSG-only bit is what each leaf carries: `{ fullPath, chain
+ * (root→leaf defs), layout }`, where the layout is the top-level route's `layout`
+ * (children inherit it). Exported for the drift-guard test.
  */
-function enumerateRoutes(routes) {
+export function enumerateRoutes(routes) {
 	const entries = [];
+	const makeLeaf = (chain, fullPaths) => ({
+		fullPath: fullPaths[fullPaths.length - 1],
+		chain,
+		layout: chain[0].layout ?? null,
+	});
 	for (const route of routes) {
-		walkRoute(route, [], null, entries);
+		walkRouteTree(route, entries, makeLeaf);
 	}
 	return entries;
 }
@@ -339,30 +347,6 @@ function hasGuard(routes) {
 	return routes.some(
 		(route) => typeof route.guard === 'function' || (route.children && hasGuard(route.children))
 	);
-}
-
-function walkRoute(node, ancestors, parentPath, entries) {
-	const isRoot = ancestors.length === 0;
-	const fullPath = isRoot ? node.path : joinPath(parentPath, node.path);
-	const chain = [...ancestors, node];
-
-	if (node.children && node.children.length) {
-		for (const child of node.children) {
-			walkRoute(child, chain, fullPath, entries);
-		}
-	} else {
-		entries.push({ fullPath, chain, layout: chain[0].layout ?? null });
-	}
-}
-
-/**
- * Join a parent path pattern with a relative child path (mirrors the Router's
- * joinPath): an index child (`''`) composes to exactly the parent path; otherwise
- * a single '/' joins them with the parent's trailing slash trimmed.
- */
-function joinPath(parentPath, childPath) {
-	if (childPath === '') return parentPath;
-	return parentPath.replace(/\/$/, '') + '/' + childPath;
 }
 
 // ---- per-route render -------------------------------------------------------
