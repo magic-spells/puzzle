@@ -5,8 +5,9 @@
  * constellation/doc/DOC-VIEW-LIFECYCLE.md §4, constellation/doc/DOC-APP-ANATOMY.md §5) generalized from a
  * flat "one view + optional layout" model to a **route CHAIN of arbitrary depth**.
  *
- * Route compilation (flatten()): route definitions may nest via `children`; the
- * tree is flattened at construction into one Entry PER LEAF —
+ * Route compilation: route definitions may nest via `children`; the tree is
+ * flattened at construction (walkRouteTree, the shared routeTree.js walk the SSG
+ * prerenderer also uses) into one Entry PER LEAF —
  *   { chain: [node0..nodeN], fullPaths, regex, paramNames, layout } —
  * where `chain` is the root→leaf list of definition objects, `fullPaths[i]` is
  * the accumulated path PATTERN at level i (used as the vnode KEY at that level),
@@ -252,6 +253,7 @@
 import { ViewNode } from '../views/ViewNode.js';
 import { cancelAnimations } from '../views/animate.js';
 import { resolveHead, syncHead } from '../head.js';
+import { walkRouteTree } from './routeTree.js';
 
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
 // { entryKey: {x,y} } under a single key; capped so a long session can't grow it
@@ -459,6 +461,10 @@ export class Router {
 		// '', '/', and a trailing '/' all collapse to the canonical form.
 		this.#base = normalizeBase(base);
 		this.#scrollBehavior = scrollBehavior;
+		// Compile each non-catch-all route: walkRouteTree (shared with the SSG
+		// prerenderer, routeTree.js) flattens the `children` tree to leaves by the
+		// single set of tree→leaf rules, appending makeEntry(chain, fullPaths) — the
+		// router-only chain validation + matcher compilation — to this.#routes.
 		for (const route of routes) {
 			if (route.path === '*') {
 				// catch-all: a flat single-node chain, matched last regardless of
@@ -475,7 +481,7 @@ export class Router {
 				};
 				continue;
 			}
-			flatten(route, [], [], this.#routes);
+			walkRouteTree(route, this.#routes, makeEntry);
 		}
 		// Bind once so start()/stop() add and remove the SAME reference — the
 		// prototype bound at addEventListener time and leaked (CODE_REVIEW §2.5).
@@ -2210,54 +2216,45 @@ export class Router {
 // ---- route compilation (nested → flat leaf Entries) -------------------------
 
 /**
- * Depth-first flatten of a route node into one Entry PER LEAF, appended to
- * `entries` in declaration order. `ancestors`/`fullPaths` are the root→parent
- * node list and their accumulated path patterns. A node WITH children is not a
- * leaf itself — each child recurses (an index child `path:''` re-matches the
- * parent's exact path); a node without children emits an Entry.
+ * The nested-tree → per-leaf flatten lives in routeTree.js (walkRouteTree),
+ * shared with the SSG prerenderer so both agree on the leaf set and composed
+ * paths. The walk is deliberately validation-free; makeEntry is the Router-side
+ * consumer that both validates the leaf's chain and compiles it into a matcher
+ * Entry.
  *
  * Fail-fast config errors (throw at construction): a child path with a leading
  * '/', a `layout` on a non-root node, `path:'*'` inside children, a duplicate
- * `:param` name within one chain, an unknown `transitionMode` value (D65), and
- * a non-function `guard` (D87) on any node (root or child).
+ * `:param` name within one chain, an unknown `transitionMode` value (D65), and a
+ * non-function `guard` (D87) on any node (root or child).
+ *
+ * Build a leaf Entry: validate the chain, then compile the leaf's full path to a
+ * matcher + merged params.
  */
-function flatten(node, ancestors, fullPaths, entries) {
-	const isRoot = ancestors.length === 0;
-
-	if (!isRoot) {
-		if (typeof node.path === 'string' && node.path.startsWith('/')) {
-			throw new Error(
-				`[puzzle] child route path must be relative (no leading "/"): "${node.path}"`
-			);
-		}
-		if (node.layout != null) {
-			throw new Error(
-				`[puzzle] "layout" is only allowed on a top-level route (found on child "${node.path}")`
-			);
-		}
-		if (node.path === '*') {
-			throw new Error('[puzzle] "*" catch-all is not allowed inside children');
-		}
-	}
-	validateTransitionMode(node.transitionMode, `route "${node.path}"`);
-	validateGuard(node.guard, `route "${node.path}"`);
-
-	const parentPath = isRoot ? null : fullPaths[fullPaths.length - 1];
-	const fullPath = isRoot ? node.path : joinPath(parentPath, node.path);
-	const chain = [...ancestors, node];
-	const paths = [...fullPaths, fullPath];
-
-	if (node.children && node.children.length) {
-		for (const child of node.children) {
-			flatten(child, chain, paths, entries);
-		}
-	} else {
-		entries.push(makeEntry(chain, paths));
-	}
-}
-
-/** Build a leaf Entry: compile the leaf's full path to a matcher + merged params. */
 function makeEntry(chain, fullPaths) {
+	// Validate every node in the chain (index 0 is the root — the only node the
+	// child-only checks skip). walkRouteTree hands us only leaf chains, so a shared
+	// ancestor is re-checked once per leaf beneath it; the checks are idempotent
+	// and route trees are tiny, and a bad node still throws the same error the
+	// first time DFS reaches a leaf under it.
+	chain.forEach((node, index) => {
+		if (index) {
+			if (typeof node.path === 'string' && node.path.startsWith('/')) {
+				throw new Error(
+					`[puzzle] child route path must be relative (no leading "/"): "${node.path}"`
+				);
+			}
+			if (node.layout != null) {
+				throw new Error(
+					`[puzzle] "layout" is only allowed on a top-level route (found on child "${node.path}")`
+				);
+			}
+			if (node.path === '*') {
+				throw new Error('[puzzle] "*" catch-all is not allowed inside children');
+			}
+		}
+		validateTransitionMode(node.transitionMode, `route "${node.path}"`);
+		validateGuard(node.guard, `route "${node.path}"`);
+	});
 	const leafPath = fullPaths[fullPaths.length - 1];
 	const paramNames = [];
 	// Compile ONE '/'-segment at a time: a segment that is a complete `:name`
@@ -2266,7 +2263,7 @@ function makeEntry(chain, fullPaths) {
 	// …) matches LITERALLY (`/docs.v1` matches only `/docs.v1`, not `/docsXv1`).
 	// The '/' separators are structural, re-joined below — never escaped. The
 	// top-level catch-all '*' never reaches here (handled in the constructor; a '*'
-	// inside children throws in flatten), so '*' is escaped like any other literal.
+	// inside children throws above), so '*' is escaped like any other literal.
 	const regexPath = leafPath
 		.split('/')
 		.map((seg) => {
@@ -2310,17 +2307,6 @@ function validateGuard(value, label) {
 	if (value != null && typeof value !== 'function') {
 		throw new Error(`[puzzle] guard on ${label} must be a function (got ${typeof value})`);
 	}
-}
-
-/**
- * Join a parent path pattern with a relative child path. An index child (`''`)
- * composes to exactly the parent path; otherwise a single '/' joins them
- * (parent's trailing slash trimmed): '/' + 'a' → '/a', '/settings' + 'x' →
- * '/settings/x'.
- */
-function joinPath(parentPath, childPath) {
-	if (childPath === '') return parentPath;
-	return parentPath.replace(/\/$/, '') + '/' + childPath;
 }
 
 /**

@@ -20,6 +20,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { PLATFORM_PACKAGES, injectPins } from './inject-platform-pins.mjs';
 
 // The public entry points that MUST ship — a missing one is a packaging regression
 // just as much as an unexpected extra file.
@@ -31,7 +32,9 @@ const REQUIRED = [
 ];
 
 // The per-platform CLI binaries ship as optionalDependencies, each pinned EXACTLY
-// to the root version so `npm install` never resolves a skewed binary.
+// to the root version so `npm install` never resolves a skewed binary. The pins
+// are injected at pack time (scripts/inject-platform-pins.mjs via prepack) so the
+// repo manifest stays lockfile-clean between a version bump and the publish.
 const PLATFORM_DEPS = [
 	'@magic-spells/puzzle-darwin-arm64',
 	'@magic-spells/puzzle-darwin-x64',
@@ -55,25 +58,42 @@ function isAllowed(p) {
 }
 
 // --- optionalDependencies pinning check (independent of the packed file list) ---
+// Validates the manifest AS PUBLISHED: the repo manifest must carry NO pins (they
+// would desync package-lock.json against unpublished versions and break npm ci),
+// and the prepack injection must produce all four, pinned exactly to the root
+// version.
 {
 	const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-	const optional = pkg.optionalDependencies ?? {};
 	const problems = [];
+	if (pkg.optionalDependencies) {
+		problems.push(
+			'repo package.json declares optionalDependencies — platform pins must only ' +
+				'be injected at pack time (scripts/inject-platform-pins.mjs)'
+		);
+	}
+	const injected = injectPins(pkg).optionalDependencies;
 	for (const dep of PLATFORM_DEPS) {
-		if (!(dep in optional)) {
-			problems.push(`missing optionalDependency: ${dep}`);
-		} else if (optional[dep] !== pkg.version) {
+		if (!(dep in injected)) {
+			problems.push(`missing optionalDependency after injection: ${dep}`);
+		} else if (injected[dep] !== pkg.version) {
 			problems.push(
-				`optionalDependency ${dep} is "${optional[dep]}", expected root version "${pkg.version}"`
+				`optionalDependency ${dep} is "${injected[dep]}", expected root version "${pkg.version}"`
 			);
 		}
+	}
+	const strays = Object.keys(injected).filter((dep) => !PLATFORM_DEPS.includes(dep));
+	for (const dep of strays) {
+		problems.push(`unexpected injected optionalDependency: ${dep}`);
+	}
+	if (PLATFORM_PACKAGES.length !== PLATFORM_DEPS.length) {
+		problems.push('inject-platform-pins PLATFORM_PACKAGES and verify-pack PLATFORM_DEPS disagree');
 	}
 	if (problems.length > 0) {
 		console.error('verify-pack: FAIL — platform optionalDependencies are wrong:');
 		for (const m of problems) console.error(`  - ${m}`);
 		console.error(
-			'\nEach @magic-spells/puzzle-<platform>-<arch> must be declared and pinned ' +
-				'EXACTLY to the root package version.'
+			'\nEach @magic-spells/puzzle-<platform>-<arch> must be injected at pack time and ' +
+				'pinned EXACTLY to the root package version.'
 		);
 		process.exit(1);
 	}

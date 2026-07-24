@@ -6,8 +6,10 @@ map.
 
 ## Source of truth
 
-1. `constellation/doc/DOC-SPEC.md` is the frozen contract. It wins every
-   conflict. A SPEC change requires a new numbered decision card and a new
+1. `constellation/doc/DOC-SPEC.md` is the source of truth; keep it current.
+   When code and SPEC disagree, decide on the merits — usually the SPEC is
+   right, but sometimes the SPEC should change to match a code decision.
+   Either way, a SPEC change requires a new numbered decision card and a new
    entry in `constellation/doc/DOC-DECISIONS.md`.
 2. Read the relevant component, feature, decision, flow, and test cards before
    changing covered code. Update those cards as part of the same change.

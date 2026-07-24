@@ -65,6 +65,8 @@
 		"test:e2e-pack": "node scripts/e2e-pack.mjs",
 		"verify:pack": "node scripts/verify-pack.mjs",
 		"prepublishOnly": "node scripts/release-prep.mjs",
+		"prepack": "node scripts/inject-platform-pins.mjs inject",
+		"postpack": "node scripts/inject-platform-pins.mjs restore",
 		"release:prep": "node scripts/release-prep.mjs"
 	},
 	"license": "MIT",
@@ -78,12 +80,6 @@
 	},
 	"bugs": {
 		"url": "https://github.com/magic-spells/puzzle/issues"
-	},
-	"optionalDependencies": {
-		"@magic-spells/puzzle-darwin-arm64": "0.2.0",
-		"@magic-spells/puzzle-darwin-x64": "0.2.0",
-		"@magic-spells/puzzle-linux-arm64": "0.2.0",
-		"@magic-spells/puzzle-linux-x64": "0.2.0"
 	},
 	"peerDependencies": {
 		"@magic-spells/morph-engine": ">=0.1.0"
