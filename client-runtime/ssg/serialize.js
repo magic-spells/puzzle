@@ -12,8 +12,8 @@
  * browser would mount from the identical tree (the router takes over on load —
  * see router.js #swap SSG branch):
  * - text nodes stringify attrs.value the way ViewManager's stringify() does;
- * - attribute handling mirrors setAttr(): `key`/`island`/`@event` directives are
- *   dropped, controlled value is emitted as real HTML for each form element
+ * - attribute handling mirrors setAttr(): `key`/`island`/`ref`/`flip`/`@event`
+ *   directives are dropped, controlled value is emitted as real HTML for each form element
  *   (`input value`, `textarea` text, selected `<option>`), truthy boolean props
  *   and `true` become bare attrs, `false`/null/undefined omit, everything else is
  *   an escaped string;
@@ -67,14 +67,16 @@ function escapeAttr(s) {
 
 /**
  * One element's attributes as a string (each emitted attr is space-prefixed).
- * `key`/`island`/`ref` (D72)/`@event` are framework directives, never markup. Controlled
- * `select`/`textarea` values are represented by descendants/text instead of a
- * dead value attr; other values keep the normal setAttr-compatible emission.
+ * `key`/`island`/`ref` (D72)/`flip` (D85)/`@event` are framework directives, never
+ * markup. Controlled `select`/`textarea` values are represented by
+ * descendants/text instead of a dead value attr; other values keep the normal
+ * setAttr-compatible emission.
  */
 function serializeAttrs(tag, attrs, { selected = false, controlledSelect = false } = {}) {
 	let out = '';
 	for (const [name, value] of Object.entries(attrs)) {
-		if (name === 'key' || name === 'island' || name === 'ref' || name.startsWith('@')) continue;
+		if (name === 'key' || name === 'island' || name === 'ref' || name === 'flip' || name.startsWith('@'))
+			continue;
 		if (name === 'value' && (tag === 'select' || tag === 'textarea')) continue;
 		if (name === 'selected' && controlledSelect && tag === 'option') continue;
 		if (name === 'value') {
