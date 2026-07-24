@@ -45,10 +45,20 @@ Cobra command surface shipped by the platform binary:
 - `puzzle add skills` (alias `skill`; D78) installs the embedded agent skill
   (`skills/puzzle/`, `go:embed`) into detected `~/.claude`/`~/.codex`/`~/.cursor`
   config dirs: huh checkbox multi-select on a TTY with all targets pre-selected,
-  silent install-to-all on non-TTY, pieces-style all-or-nothing `--overwrite`
-  pre-flight, friendly no-op when nothing is detected. `--skill-root` (D97,
-  repeatable) pins the config dirs, skipping both detection and the prompt; the
-  root must already exist.
+  silent install-to-all on non-TTY, friendly no-op when nothing is detected.
+  `--skill-root` (D97, repeatable) pins the config dirs, skipping both detection
+  and the prompt; the root must already exist. Existing destinations classify
+  against the `.puzzle-skill-version` stamp each install writes (D99): a matching
+  stamp is skipped as up to date, a stale or unstamped one prompts on a TTY
+  (declining skips only that target, so fresh ones still install) and keeps the
+  all-or-nothing refusal on a non-TTY, and a symlinked destination is reported
+  and skipped unless `--overwrite` is given. Installing removes a real
+  destination first so a dropped payload file cannot linger; a symlink is
+  written through instead, since removing it would delete the link.
+- `puzzle upgrade skills` (D99) runs that same refresh from the running binary —
+  no registry check and no re-exec, because nothing was upgraded — over installs
+  that already exist, and unlike `add skills` it installs on a non-TTY without
+  prompting.
 - `puzzle doctor`, `puzzle info`, and `puzzle --version` provide diagnostics and
   environment/project metadata.
 - `puzzle upgrade` (D76) checks the npm registry and upgrades via the user's

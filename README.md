@@ -434,6 +434,10 @@ puzzle build --hybrid
 # Upgrade the installed CLI, or only check what is available
 puzzle upgrade
 puzzle upgrade --check
+
+# Install the Puzzle agent skill for your coding tools, or refresh it later
+puzzle add skills
+puzzle upgrade skills
 ```
 
 Both commands are built and verified today. `puzzle build` compiles `.pzl` files and produces a working bundle; `puzzle dev` watches `app/`, rebuilds on change, and delivers full-page live reload over SSE (the reload client is injected into `index.html` at serve time). Both run the declared style pipeline automatically — `styles: { use: ['tailwindcss'] }` in `puzzle.config.js` (tailwindcss-only in v1) — so Tailwind output is included in the served/built `styles.css`.
@@ -444,6 +448,30 @@ disable it; the check is skipped automatically when `CI` is set.
 
 `puzzle upgrade` updates a project or global package-manager install;
 `puzzle upgrade --check` only reports the current and latest versions.
+
+### Agent skill
+
+`puzzle add skills` installs the Puzzle agent skill — how to write `.pzl` files,
+routing, the data layer, static output — into every Claude Code, Codex, and
+Cursor config directory it finds (`~/.claude`, `~/.codex`, `~/.cursor`). On an
+interactive terminal you pick the targets from a checklist; scripts install to
+all of them.
+
+The skill is compiled into the CLI binary, so it always matches the version that
+wrote it. Each install records which version that was, so re-running the command
+is how you refresh it:
+
+- An install matching your current CLI is skipped as up to date.
+- An older one asks before it is replaced. Declining leaves it alone but still
+  installs anywhere that has no skill yet.
+- On a non-interactive terminal an older install is refused rather than asked
+  about, and needs `--overwrite`.
+- A symlinked install (a dev checkout linked into your config dir) is reported
+  and left alone unless you pass `--overwrite`.
+
+`puzzle upgrade skills` refreshes only the installs you already have, and
+`puzzle upgrade` offers the same refresh automatically after it installs a new
+version.
 
 The full CLI surface (see [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §13): `init`, `generate`, `add`, `doctor`, and `info` join `dev` and `build`.
 
@@ -457,6 +485,7 @@ puzzle generate component UserCard --path components/ui/
 # Wire up Tailwind, install a piece (see Puzzle Pieces above), or run diagnostics
 puzzle add tailwind
 puzzle add piece <name>
+puzzle add skills
 puzzle doctor
 ```
 

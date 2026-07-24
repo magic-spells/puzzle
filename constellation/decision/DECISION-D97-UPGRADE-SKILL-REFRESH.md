@@ -57,8 +57,10 @@ rather than reinstall the stale skill we are carrying.
 skill copy is a courtesy on top. Every failure prints and returns nil.
 
 **Non-TTY prints a hint, never writes.** One `!` line naming the installed
-destinations and `puzzle add skills --overwrite`, preserving the D32/D77/D78
-never-prompt-never-hang rule.
+destinations and the command to run, preserving the D32/D77/D78
+never-prompt-never-hang rule. *(The hint named `puzzle add skills --overwrite`
+until [[DECISION-D99-SKILL-REFRESH-PROMPT]] added `puzzle upgrade skills`, which
+says the same thing without the flag.)*
 
 **`--skill-root <dir>` (repeatable) is the parent→child contract.** The prompt
 lists exact destinations, so the child must install to exactly those; explicit
@@ -96,7 +98,10 @@ public, not hidden: pinning a project-local `.claude` is a legitimate manual use
 - The re-exec spawns `--version` plus the install (two child processes; via
   `node_modules/.bin/puzzle` those go through the node shim).
 - `puzzle add skills --overwrite` is unchanged for direct users, symlinked
-  destinations included — the skip is upgrade-path policy, not a new `add`
-  semantic.
+  destinations included — the skip was upgrade-path policy, not a new `add`
+  semantic. *(Superseded in part by [[DECISION-D99-SKILL-REFRESH-PROMPT]]: `add
+  skills` WITHOUT `--overwrite` now reports and skips symlinks too. The
+  `--overwrite` behavior this bullet pins is unchanged, and the re-exec above
+  depends on it.)*
 - `confirmSkillUpdate` is a package-level indirection so tests answer the prompt
   without driving a huh form; the real form is separately pinned to y/n input.

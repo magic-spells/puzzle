@@ -221,9 +221,19 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `puzzle generate` / `g` for components, views, layouts, and models.
 - `puzzle add tailwind` and `puzzle add piece` with local/HTTPS registries,
   dependency resolution, path-containment checks, and `pieces.lock` hashes.
+- `puzzle add skills` (alias `skill`, D78): installs the `go:embed`-ed agent
+  skill into detected `~/.claude` / `~/.codex` / `~/.cursor` config dirs;
+  `--skill-root <dir>` (repeatable, D97) pins them instead. Installs carry a
+  `.puzzle-skill-version` stamp (D99): a matching one is skipped as up to date,
+  a stale one prompts on a TTY and still refuses without `--overwrite` on a
+  non-TTY, and a symlinked destination is reported and skipped unless
+  `--overwrite` is given. Reinstalling replaces the tree rather than merging.
 - `puzzle doctor`, `puzzle info`, and `puzzle --version`.
 - `puzzle upgrade` / `upgrade --check`, plus a passive TTY-only update notice
   on `dev`/`build` (opt out with `PUZZLE_NO_UPDATE_CHECK=1`; skipped in CI).
+  A successful upgrade offers to refresh installed skills by re-execing the
+  newly installed binary (D97). `puzzle upgrade skills` does the same refresh
+  from the running binary with no registry check (D99).
 - `pzlc` is the internal/test-facing single-file compiler.
 
 ## Deliberately not shipped

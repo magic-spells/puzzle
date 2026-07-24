@@ -80,10 +80,17 @@ Agent skill:
                                detected Claude Code, Codex, and Cursor config dir.
                                On a TTY, all detected targets are pre-selected in a
                                checkbox list; scripts install to all without prompting.
-                               Existing skill directories require --overwrite.
-                               "skill" is accepted as an alias.
+                               An install already carrying this CLI's skill is skipped
+                               as up to date; an older one asks before being replaced
+                               (declining still installs the targets that have none).
+                               On a non-TTY an older install is refused, not asked, and
+                               still requires --overwrite. A symlinked destination is a
+                               dev checkout link: reported and skipped unless
+                               --overwrite is given. "skill" is accepted as an alias.
                                --skill-root <dir> (repeatable) pins the config dirs
-                               instead of detecting them, and skips the prompt.
+                               instead of detecting them, and skips the target prompt.
+                               See also: puzzle upgrade skills, which refreshes only
+                               the installs that already exist.
 
 The registry source is --registry, else $PUZZLE_PIECES_REGISTRY, else the public
 puzzle-pieces registry; it may be a local directory or an http(s) URL.`,

@@ -98,11 +98,18 @@ fail-safe (a pre-D96 compiler shipped the whole runtime: measured 23025 vs
 app's own `store.seed()` seeding into production. With D98, exclusion holds by
 construction: nothing references the module without the flag.
 
-Also on the branch: D97 — `puzzle upgrade` offers to refresh the installed agent
+D97 — `puzzle upgrade` offers to refresh the installed agent
 skill after it installs a new version, closing D78's manual "upgrade + re-run"
 loop. Because the payload is `go:embed`-ed, the refresh re-execs the binary npm
 just installed (`--version`-gated) rather than writing the old skill this
 process carries.
+
+D99 finishes the thought on the `add` side: re-running `puzzle add skills` after
+an upgrade IS the refresh mechanism, so an existing install now asks instead of
+aborting, and installs carry a `.puzzle-skill-version` stamp that makes "is this
+current?" a fact rather than an inference from the CLI version. `puzzle upgrade
+skills` refreshes existing installs from the running binary — no registry check
+and no re-exec, since nothing was upgraded.
 
 Identified and **not** scheduled, roughly by value: a DevTools browser extension
 (the store's `subscribersByKey`/`keysBySubscriber` pair already answers "which
@@ -119,6 +126,12 @@ collections; and a WASM playground.
 
 1. Keep README, CLAUDE, [[DOC-RELEASE-SURFACE]], and current-state component
    cards aligned with HEAD.
+1b. Re-verify `skills/puzzle/SKILL.md` against the public surface. It is
+   `go:embed`-ed, so a release ships whatever it says as the agent's picture of
+   the framework — [[DECISION-D78-AGENT-SKILL-DISTRIBUTION]] called it
+   release-checklist surface and nothing enforced it, so it silently drifted
+   past D91/D93/D94/D95/D98. [[DECISION-D99-SKILL-REFRESH-PROMPT]] makes
+   refreshing easy, which makes shipping a stale payload more costly, not less.
 2. Run Vitest and all Go package tests; run type/package/example checks where
    the changed surface calls for them.
 3. Verify the npm tarball and platform-package metadata.
