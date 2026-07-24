@@ -1064,6 +1064,18 @@ A keyed `{#for}` row root may declare `flip` (bare) or `flip={ flipOptions }` �
 - `@click` and `@click:outside` on one element are independent bindings. Existing §5 compile errors are unchanged (`outside` on a component callback prop is rejected like every modifier).
 - **Documented limitations:** events inside an `<iframe>` never reach the parent document; on touch, `pointerdown` fires at scroll-start — prefer `@click:outside` where scroll tolerance matters. The event choice is the author's.
 
+## 48. Route guards: the `guard` route field (v1.53)
+
+Client-side navigation middleware (D87). Any route node — root, child, or the catch-all — may declare `guard: fn`, a plain function `({ to, from, ctx }) => verdict`. A navigation's effective chain is every declared guard along the matched root → leaf chain, run **sequentially in that order**, short-circuiting on the first non-allow verdict — so guarding a top-level route locks its entire layout subtree with one declaration, and a child may add a stricter check of its own on top.
+
+- **Placement in the pipeline:** guards run once per **matched** navigation — push, replace, popstate, params-only, query-only, and navigation #0 — after matching and the cancellation-token bump, before any view/layout construction and before the D19 load gate. A denied navigation commits nothing (§30: URL, history, title, tree, and scroll all untouched) and has no fresh instances to tear down. The same-path no-op (§44) means a push to the committed path never reaches guards at all.
+- **Arguments:** `to` and `from` are the frozen route snapshots (§19/§44 shape); `from` is `null` on navigation #0. `ctx` is the app context (`store`, `router`, `formatters`).
+- **Verdicts:** `undefined`/`true` allows. `false` blocks — stay put. A string path redirects: the **router** performs it with `replace()` semantics (§44), so the denied URL never enters history and the destination's own guards run normally through the standard pipeline. Guards may be async — the router awaits each one, and the cancellation token makes a superseded guarded navigation abandon silently. A guard that throws follows the data()-failure posture: logged, stay put.
+- **Loop safety:** a guard redirect to the committed path is the §44 same-path no-op. At most ten guard redirects may run without an intervening commit; the next is treated as a cycle — `console.error`, stay put. A successful commit resets the counter.
+- **Validation:** a `guard` that is present but not a function throws at construction (root, child, and catch-all alike).
+- **Output modes:** guards are SPA-runtime behavior and a UX affordance, **not a security boundary** — prerendered files are public bytes and data must be authorized server-side. The hybrid prerender pass warns per rendered page whose chain declares a guard (its markup ships publicly; `prerender: false` anywhere in the chain is the quiet opt-out); a static build (§36) warns once when any route declares a guard — there is no router, so guards never run. Warnings only; no build behavior changes.
+- **Idioms (documented, not new API):** restore sessions in `beforeMount(app)` (§34 — awaited before navigation #0) so guards can be synchronous store reads; async guards remain supported. Redirect-after-login: the guard returns `'/login?redirect=' + encodeURIComponent(to.path)`, and the login view reads `this.route.query.redirect` (§44) and `router.replace()`s it after sign-in.
+
 ## Deferred features (post-v1)
 
 Explicitly out of scope for v1. Docs may describe them only if marked **"Planned — not in v1"**.

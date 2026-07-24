@@ -78,6 +78,12 @@ export async function prerender(config, opts = {}) {
 	const warnings = [];
 	let hasCatchAll = false;
 	let builtContext = false;
+	if (isStatic && hasGuard(config.routes ?? [])) {
+		const warning =
+			'[puzzle] static output declares route guards, but guards never run in static output (no router)';
+		warnings.push(warning);
+		console.warn(warning);
+	}
 	const createPageContext = async () => {
 		builtContext = true;
 		return buildContext(config);
@@ -115,6 +121,18 @@ export async function prerender(config, opts = {}) {
 			if (isStatic) attachStaticFields(page, entry, ctx);
 			pages.push(page);
 			continue;
+		}
+
+		// Guards are a browser-router gate, never a secrecy boundary: hybrid
+		// prerendering still emits the route's markup into public HTML. Warn once
+		// per rendered leaf whose effective root→leaf chain contains a guard;
+		// `prerender: false` above is the explicit opt-out and therefore stays quiet.
+		if (!isStatic && chain.some((route) => route.guard)) {
+			const warning =
+				`[puzzle] route "${fullPath}" has a guard, but its hybrid-prerendered markup ` +
+				'ships publicly — set prerender: false anywhere in its route chain to exclude it';
+			warnings.push(warning);
+			console.warn(warning);
 		}
 
 		const ctx = await createPageContext();
@@ -314,6 +332,13 @@ function enumerateRoutes(routes) {
 		walkRoute(route, [], null, entries);
 	}
 	return entries;
+}
+
+/** Whether any route definition at any depth declares a guard. */
+function hasGuard(routes) {
+	return routes.some(
+		(route) => typeof route.guard === 'function' || (route.children && hasGuard(route.children))
+	);
 }
 
 function walkRoute(node, ancestors, parentPath, entries) {

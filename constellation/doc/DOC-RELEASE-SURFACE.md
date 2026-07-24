@@ -117,6 +117,10 @@ second specification. Decision cards hold rationale and git holds chronology.
   `go`, `back`, and `forward`; guarded same-origin link interception;
   router base paths and anchors; `router.url()` + the built-in `link`
   formatter for mode-agnostic path-shaped hrefs.
+- Route guards (D87): an inherited `guard` route field runs root→leaf before
+  views construct or load — allow / block / redirect (replace semantics,
+  loop-capped). SPA-runtime only; hybrid/static prerender passes warn on
+  guarded routes.
 - The route snapshot carries `path`, `pathname`, parsed frozen `query`
   (repeated keys → arrays), and `hash` (D83); query never merges into params.
 - Load-then-commit navigation with chain-prefix reuse and atomic
@@ -168,7 +172,7 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 ## Deliberately not shipped
 
-No SSR server, hydration, lazy route/code splitting, navigation guards,
+No SSR server, hydration, lazy route/code splitting,
 named-route navigation, scoped slots, array refs, built-in virtual list,
 per-module hot swap, Sass pipeline, event bus, global keyboard API, app-level
 computed/settings/methods, devtools hook, or automatic query fault-in.

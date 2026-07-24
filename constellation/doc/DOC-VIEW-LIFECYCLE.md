@@ -88,6 +88,11 @@ created ──▶ loading ──▶ rendered ──▶ mounted ⇄ updating ─�
 IDLE ──▶ MATCH route (fail → catch-all `*` route, else warn + stay, URL untouched)
                  │
                  ▼
+         GUARDS (v1.53 — D87): matched chain's guards run root → leaf,
+               before any view exists; false/throw → stay put, string →
+               redirect via replace() (this navigation ends here)
+                 │  (awaited guards re-check the nav token)
+                 ▼
          LOAD: diff old vs new route chain → keep = shared-prefix length;
                instantiate fresh views [keep..N] (+ layout if changed);
                await every fresh + reused-ancestor data(params)

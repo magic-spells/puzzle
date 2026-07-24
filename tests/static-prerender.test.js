@@ -4,7 +4,7 @@
 // suffixing, static shell surgery (app.js tag stripped, data + entry scripts
 // injected, `</script>` in a record cannot break the JSON island, data-puzzle-static
 // marker), and the extended summary fields. Node env: prerender is DOM-free.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -96,6 +96,21 @@ function writeShell(dir, shell = SHELL) {
 
 describe('static prerender (D81)', () => {
 	describe('per-page store snapshot capture', () => {
+		it('warns once when any static route declares a guard', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const cfg = staticConfig();
+			cfg.routes[1].children[0].guard = () => true;
+
+			const { warnings } = await prerender(cfg, { mode: 'static' });
+			const guardWarnings = warnings.filter((warning) =>
+				warning.includes('guards never run in static output')
+			);
+
+			expect(guardWarnings).toHaveLength(1);
+			expect(warn).toHaveBeenCalledWith(guardWarnings[0]);
+			warn.mockRestore();
+		});
+
 		it('captures each page`s store snapshot as `data` (wire shape)', async () => {
 			class Seeded extends PuzzleView {
 				created() {

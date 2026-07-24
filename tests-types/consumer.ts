@@ -25,6 +25,7 @@ import type {
 	PuzzleAppConfig,
 	Route,
 	RouteSnapshot,
+	GuardFn,
 	ScrollPosition,
 	Formatter,
 	ValidationResult,
@@ -151,6 +152,17 @@ class TodoListView extends PuzzleView {
 // Routes + scroll behavior + formatters
 // ---------------------------------------------------------------------------
 
+const requireAuth: GuardFn = ({ to, from, ctx }) => {
+	const sessions = ctx.store.findMany('session');
+	if (from?.pathname === '/login' || sessions.length > 0) return true;
+	return '/login?redirect=' + encodeURIComponent(to.path);
+};
+
+const requireAdmin: GuardFn = async ({ ctx }) => {
+	await Promise.resolve();
+	return ctx.store.findMany('admin').length > 0;
+};
+
 const routes: Route[] = [
 	{
 		path: '/',
@@ -173,7 +185,8 @@ const routes: Route[] = [
 		view: TodoListView,
 		// `null` explicitly suppresses an inherited head value (D84).
 		meta: { title: null, description: null },
-		children: [{ path: 'edit', name: 'todo-edit', view: TodoListView }],
+		guard: requireAuth,
+		children: [{ path: 'edit', name: 'todo-edit', view: TodoListView, guard: requireAdmin }],
 	},
 ];
 

@@ -30,6 +30,8 @@ export interface Route {
 	name?: string;
 	view: any;
 	layout?: any;
+	/** Route-entry guard (v1.53, D87), inherited root → leaf and run before views load. */
+	guard?: GuardFn;
 	/**
 	 * Route metadata. Four RESERVED head fields (v1.50, D84 —
 	 * constellation/doc/DOC-SPEC.md §45): each resolves independently,
@@ -49,6 +51,13 @@ export interface Route {
 	children?: Route[];
 	[key: string]: any;
 }
+
+/** A route guard (v1.53, D87): allow, block, or redirect before navigation loads. */
+export type GuardFn = (nav: {
+	to: RouteSnapshot;
+	from: RouteSnapshot | null;
+	ctx: PuzzleContext;
+}) => void | boolean | string | Promise<void | boolean | string>;
 
 /** A window scroll position. */
 export interface ScrollPosition {

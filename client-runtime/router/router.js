@@ -267,6 +267,12 @@ export class Router {
 	// { path, entry, params, views: [v0..vN], layout, layoutClass } | null
 	#state = null;
 	#token = 0;
+	// Guard redirects re-enter the normal pipeline through replace(), so every
+	// destination gets its own inherited guard chain and the denied URL never
+	// commits. A bad pair/cycle could otherwise recurse forever without reaching
+	// #commitState; count consecutive guard-owned redirects and reset only when a
+	// navigation actually commits (D87).
+	#guardRedirectCount = 0;
 	// The instance an in-flight transition is currently animating OUT (or null).
 	// A newer navigation reads this to cancel the running out and proceed
 	// immediately (constellation/doc/DOC-SPEC.md §12 interruption rule).
@@ -382,7 +388,7 @@ export class Router {
 	#prevScrollRestoration = null;
 
 	/**
-	 * @param {Array<{path,name,view,layout,meta,transitionMode,children}>} routes route definitions
+	 * @param {Array<{path,name,view,layout,meta,guard,transitionMode,children}>} routes route definitions
 	 * @param {object} [options]
 	 * @param {false|Function} [options.scrollBehavior] `false` to leave scroll
 	 *   alone; `(to, from, savedPosition) => {x,y}|null` to customize; omit for
@@ -441,12 +447,14 @@ export class Router {
 				// catch-all: a flat single-node chain, matched last regardless of
 				// position (D19). Its fullPaths key '*' is unique and never a regex.
 				validateTransitionMode(route.transitionMode, 'the catch-all route');
+				validateGuard(route.guard, 'the catch-all route');
 				this.#catchAll = {
 					chain: [route],
 					fullPaths: ['*'],
 					regex: null,
 					paramNames: [],
 					layout: route.layout ?? null,
+					guards: route.guard ? [route.guard] : [],
 				};
 				continue;
 			}
@@ -607,6 +615,7 @@ export class Router {
 		this.#stack = null;
 		this.#index = -1;
 		this.#pendingIndex = null;
+		this.#guardRedirectCount = 0;
 		this.#positions.clear();
 		this.#scrollKey = null;
 		// Drop any deferred push and clear the commit-window flag (defensive: the
@@ -808,6 +817,65 @@ export class Router {
 
 	// ---- navigation pipeline (D19 / D30) ------------------------------------
 
+	/**
+	 * Run the destination's inherited guard chain root→leaf, sequentially (D87).
+	 * Every guard is awaited even when it returns synchronously, then the token is
+	 * checked BEFORE another guard may observe a superseded navigation. No view or
+	 * layout exists yet, so a losing guard phase has no fresh instance teardown.
+	 *
+	 * @returns {Promise<true|false|string|null>} allow, block/failure, redirect,
+	 *   or superseded (`null`)
+	 */
+	async #runGuards(entry, to, from, token) {
+		for (const guard of entry.guards) {
+			let verdict;
+			try {
+				verdict = await guard({ to, from, ctx: this.#ctx });
+			} catch (err) {
+				// Rejection is still the completion of an await: a newer
+				// navigation makes it stale and therefore silent.
+				if (token !== this.#token) return null;
+				console.error('[puzzle] navigation guard failed:', err);
+				return false;
+			}
+
+			// A newer navigation owns the router now. Stop before the next ancestor/
+			// child guard; the caller also checks after awaiting this method.
+			if (token !== this.#token) return null;
+			if (verdict === false) return false;
+			if (typeof verdict === 'string') {
+				// Ten redirects may run without a commit; the eleventh is the cycle
+				// boundary. Same-path replace remains its normal no-op, but still
+				// counts because the guard initiated it and no commit reset occurred.
+				if (this.#guardRedirectCount >= 10) {
+					console.error(
+						'[puzzle] navigation guard redirect limit exceeded (10) — staying on the current route'
+					);
+					return false;
+				}
+				this.#guardRedirectCount++;
+				return verdict;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * A latest navigation that stops before #swap must restore any older
+	 * transition it superseded and clear a memory-pop target, exactly like the
+	 * data()-failure path. Guard blocks/failures use this before any fresh view
+	 * exists; data failures call it after destroying their fresh instances.
+	 */
+	#recoverFailedNavigation(token) {
+		if (token !== this.#token) return;
+		if (this.#pendingOut) {
+			const stalled = this.#pendingOut;
+			this.#pendingOut = null;
+			cancelAnimations(stalled.element);
+		}
+		this.#pendingIndex = null;
+	}
+
 	async #navigate(
 		rawPath,
 		{ push, pop = false, replace = false, savedPosition = null, memoryIndex = null }
@@ -837,7 +905,10 @@ export class Router {
 		// a pending pop the same way (D83) — it targets the CURRENT entry, not the
 		// pop's.
 		if (push || replace) this.#pendingIndex = null;
-		const from = this.current; // pre-commit snapshot for scrollBehavior (D33)
+		const current = this.current;
+		// Guard `from` is the same top-level-frozen route snapshot shape as `to`;
+		// nav #0 has no committed route and therefore receives null (D87).
+		const from = current == null ? null : Object.freeze(current);
 		// Departure scroll, captured NOW — synchronously at navigation start, while
 		// the outgoing page still has its full height. #commitLocation persists this
 		// captured value instead of reading window.scrollY at commit time: by then
@@ -854,6 +925,44 @@ export class Router {
 
 		const { entry, params } = matched;
 		const cur = this.#state;
+
+		// The route snapshot for THIS navigation (v1.15, D47): same shape as
+		// `current`, built pre-commit and threaded through guards, every gated
+		// preload/refresh, and scrollBehavior. Frozen so no consumer can mutate the
+		// shared snapshot. parseLocation (v1.49, D83) runs ONCE here — before guard
+		// execution and, critically, before any view/layout construction (D87).
+		const loc = parseLocation(rawPath);
+		const to = Object.freeze({
+			path: rawPath,
+			pathname: loc.pathname,
+			query: loc.query,
+			hash: loc.hash,
+			route: entry.chain[entry.chain.length - 1],
+			params,
+			chain: entry.chain,
+		});
+
+		// Preserve the old unguarded pipeline's synchronous path to construction:
+		// an empty chain adds no await/microtask. Guarded routes await each guard.
+		if (entry.guards.length) {
+			const guardVerdict = await this.#runGuards(entry, to, from, token);
+			// Supersession is silent: no fresh view exists to destroy.
+			if (token !== this.#token || guardVerdict === null) return;
+			if (guardVerdict === false) {
+				this.#recoverFailedNavigation(token);
+				return;
+			}
+			if (typeof guardVerdict === 'string') {
+				// Re-enter through the public replace() seam: same-path no-op,
+				// commit-window behavior, matching, guards, and D61 atomicity all stay
+				// centralized. Await it so awaiting the denied navigation observes the
+				// final redirect commit. If replace was a same-path/unmatched no-op, no
+				// newer token owns cleanup, so restore a transition we superseded.
+				const redirected = await this.replace(guardVerdict);
+				this.#recoverFailedNavigation(token);
+				return redirected;
+			}
+		}
 
 		// keep = shared chain PREFIX length by node object identity. Reused
 		// ancestors keep their instances; everything from `keep` down is fresh.
@@ -901,25 +1010,6 @@ export class Router {
 			: entry.layout
 				? new entry.layout(this.#ctx)
 				: null;
-
-		// The route snapshot for THIS navigation (v1.15, D47): same shape as
-		// `current`, built pre-commit and threaded through every gated preload/
-		// refresh so a gating data() sees the navigation it is gating — as
-		// `this.route` on the instance. Also the `to` handed to scrollBehavior
-		// (D33): one object, one truth. Frozen so no view can mutate the shared
-		// snapshot. parseLocation (v1.49, D83) runs ONCE here — its parts ride
-		// `to`, thread through #commitState onto #state, and the anchor split
-		// below reuses its hash, so nothing downstream ever reparses rawPath.
-		const loc = parseLocation(rawPath);
-		const to = Object.freeze({
-			path: rawPath,
-			pathname: loc.pathname,
-			query: loc.query,
-			hash: loc.hash,
-			route: entry.chain[entry.chain.length - 1],
-			params,
-			chain: entry.chain,
-		});
 
 		// LOAD (pre-commit, parallel, D19 gate). Fresh views preload (created +
 		// data off-DOM); reused ancestors refresh with the new params and are
@@ -997,16 +1087,7 @@ export class Router {
 			// clamp + #swap skipOut path. The restored unit's playOut memo stays
 			// spent: a later navigation away swaps it out instantly, no second out
 			// animation.
-			if (token === this.#token && this.#pendingOut) {
-				const stalled = this.#pendingOut;
-				this.#pendingOut = null;
-				cancelAnimations(stalled.element);
-			}
-			// A FAILED memory pop leaves #index put (never committed, D19) — but its
-			// #pendingIndex target must not linger, or a later go() would base off the
-			// failed target. Clear it only when WE are still latest; a newer nav already
-			// owns #pendingIndex (a newer pop overwrote it; a newer push reset it). (Fix 3.)
-			if (token === this.#token) this.#pendingIndex = null;
+			this.#recoverFailedNavigation(token);
 			return; // stay put, no history entry (reused ancestors kept — soft-violation)
 		}
 
@@ -1579,6 +1660,9 @@ export class Router {
 			layout: next.layout,
 			layoutClass: next.entry.layout,
 		};
+		// A real commit ends any redirect chain. Blocks, failures, unmatched
+		// targets, and same-path redirect no-ops intentionally do not reset it.
+		this.#guardRedirectCount = 0;
 		this.#warnMissingSlots(next.views);
 		// Scroll lands here — synchronously after the new content is in the DOM
 		// (every #commitState call site mounts/patches first) and before the next
@@ -2003,8 +2087,8 @@ export class Router {
  *
  * Fail-fast config errors (throw at construction): a child path with a leading
  * '/', a `layout` on a non-root node, `path:'*'` inside children, a duplicate
- * `:param` name within one chain, and an unknown `transitionMode` value (D65)
- * on any node (root or child).
+ * `:param` name within one chain, an unknown `transitionMode` value (D65), and
+ * a non-function `guard` (D87) on any node (root or child).
  */
 function flatten(node, ancestors, fullPaths, entries) {
 	const isRoot = ancestors.length === 0;
@@ -2025,6 +2109,7 @@ function flatten(node, ancestors, fullPaths, entries) {
 		}
 	}
 	validateTransitionMode(node.transitionMode, `route "${node.path}"`);
+	validateGuard(node.guard, `route "${node.path}"`);
 
 	const parentPath = isRoot ? null : fullPaths[fullPaths.length - 1];
 	const fullPath = isRoot ? node.path : joinPath(parentPath, node.path);
@@ -2071,6 +2156,7 @@ function makeEntry(chain, fullPaths) {
 		regex: new RegExp('^' + regexPath + '$'),
 		paramNames,
 		layout: chain[0].layout ?? null,
+		guards: chain.map((node) => node.guard).filter(Boolean),
 	};
 }
 
@@ -2085,6 +2171,13 @@ function validateTransitionMode(value, label) {
 		throw new Error(
 			`[puzzle] unknown transitionMode: "${value}" on ${label} (expected 'sequential' or 'overlap')`
 		);
+	}
+}
+
+/** Fail fast (D87) when an optional route guard is present but not callable. */
+function validateGuard(value, label) {
+	if (value != null && typeof value !== 'function') {
+		throw new Error(`[puzzle] guard on ${label} must be a function (got ${typeof value})`);
 	}
 }
 

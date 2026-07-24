@@ -123,10 +123,26 @@ Rules that bite:
 
 ## Routing
 
-`app/routes.js` exports an array of `{ path, name, view, layout, meta, children }`.
+`app/routes.js` exports an array of `{ path, name, view, layout, guard, meta, children }`.
 
 - Nested routes: `children` with **relative** paths render at the parent view's
   `<Slot/>`; `layout` is top-level-only; params merge down the chain.
+- **Route guards** (puzzle ≥ 0.2.0): `guard: ({ to, from, ctx }) => verdict` on
+  any route covers that node AND all its children — guard the top-level route
+  once to lock the whole layout subtree; a child may add its own stricter
+  guard (they run root→leaf, first failure wins). Verdicts: `undefined`/`true`
+  allow; `false` blocks (stay put, nothing commits); a path string redirects
+  via `replace()` semantics (denied URL never enters history). Guards run
+  before views construct or `data()` runs, on every navigation including
+  params-only and nav #0 (`from === null` there); async guards are awaited.
+  Restore sessions in the app-config `beforeMount(app)` hook (awaited before
+  nav #0) so guards stay synchronous store reads. Redirect-after-login idiom:
+  guard returns `'/login?redirect=' + encodeURIComponent(to.path)`; the login
+  view reads `this.route.query.redirect` and `router.replace()`s it. Guards
+  are UX, not security — the server must authorize independently; prerendered
+  (hybrid) pages with guards warn at build (markup ships publicly; set
+  `prerender: false`), and static output warns too (no router — guards never
+  run there).
 - `:param` and `*` supported; `*` catch-all must stay **last** (routes match in
   order). Route views/layouts must be **statically imported** in routes.js.
 - **Head metadata lives on `meta`** (puzzle ≥ 0.2.0): `title`, `description`,

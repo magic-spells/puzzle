@@ -226,6 +226,354 @@ describe('Router — cancellation (D19, monotonic token)', () => {
 	});
 });
 
+describe('Router — route guards (D87)', () => {
+	const guardedRoutes = (guard) => [
+		{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+		{ path: '/private', name: 'private', view: AboutView, layout: DefaultLayout, guard },
+		{ path: '/login', name: 'login', view: HomeView, layout: DefaultLayout },
+	];
+
+	it('allows undefined/true verdicts and passes frozen { to, from, ctx } snapshots', async () => {
+		const seen = [];
+		const ctxObj = ctx();
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/account',
+				name: 'account',
+				view: DefaultLayout,
+				layout: DefaultLayout,
+				guard(nav) {
+					seen.push(nav);
+				},
+				children: [
+					{
+						path: 'profile',
+						name: 'profile',
+						view: AboutView,
+						guard() {
+							return true;
+						},
+					},
+				],
+			},
+		];
+		const { router, el } = await boot(routes, ctxObj);
+
+		await router.push('/account/profile');
+
+		expect(router.current.path).toBe('/account/profile');
+		expect(el.querySelector('.about')).not.toBeNull();
+		expect(seen).toHaveLength(1);
+		expect(seen[0].ctx).toBe(ctxObj);
+		expect(seen[0].to.path).toBe('/account/profile');
+		expect(seen[0].from.path).toBe('/');
+		expect(Object.isFrozen(seen[0].to)).toBe(true);
+		expect(Object.isFrozen(seen[0].from)).toBe(true);
+	});
+
+	it('blocks without constructing the denied view or committing URL/history/state', async () => {
+		let constructed = 0;
+		class DeniedView extends PuzzleView {
+			constructor(...args) {
+				super(...args);
+				constructed++;
+			}
+			render() {
+				return h('puzzle-view', { class: 'denied' }, [text('DENIED')]);
+			}
+		}
+		const routes = guardedRoutes(() => false);
+		routes[1].view = DeniedView;
+		const { router, el } = await boot(routes);
+		const pushSpy = vi.spyOn(history, 'pushState');
+
+		await router.push('/private');
+
+		expect(constructed).toBe(0);
+		expect(location.pathname).toBe('/');
+		expect(router.current.path).toBe('/');
+		expect(el.querySelector('.home')).not.toBeNull();
+		expect(el.querySelector('.denied')).toBeNull();
+		expect(pushSpy).not.toHaveBeenCalled();
+		pushSpy.mockRestore();
+	});
+
+	it('redirects through replace(), so the denied URL never becomes a history entry', async () => {
+		const { router, el } = await boot(guardedRoutes(() => '/login'));
+		const length = history.length;
+		const pushSpy = vi.spyOn(history, 'pushState');
+		const replaceSpy = vi.spyOn(history, 'replaceState');
+
+		await router.push('/private');
+
+		expect(router.current.path).toBe('/login');
+		expect(location.pathname).toBe('/login');
+		expect(el.querySelector('.home')).not.toBeNull();
+		expect(history.length).toBe(length);
+		expect(pushSpy).not.toHaveBeenCalled();
+		expect(replaceSpy).toHaveBeenCalledTimes(1);
+		expect(replaceSpy.mock.calls[0][2]).toBe('/login');
+		pushSpy.mockRestore();
+		replaceSpy.mockRestore();
+	});
+
+	it('composes parent auth then child admin guards in root→leaf order', async () => {
+		const order = [];
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/account',
+				name: 'account',
+				view: DefaultLayout,
+				layout: DefaultLayout,
+				guard() {
+					order.push('auth');
+				},
+				children: [
+					{
+						path: 'admin',
+						name: 'admin',
+						view: AboutView,
+						guard() {
+							order.push('admin');
+						},
+					},
+				],
+			},
+		];
+		const { router } = await boot(routes);
+
+		await router.push('/account/admin');
+
+		expect(order).toEqual(['auth', 'admin']);
+		expect(router.current.route.name).toBe('admin');
+	});
+
+	it('short-circuits the inherited chain on the first blocking guard', async () => {
+		const order = [];
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/account',
+				name: 'account',
+				view: DefaultLayout,
+				layout: DefaultLayout,
+				guard() {
+					order.push('auth');
+					return false;
+				},
+				children: [
+					{
+						path: 'admin',
+						name: 'admin',
+						view: AboutView,
+						guard() {
+							order.push('admin');
+						},
+					},
+				],
+			},
+		];
+		const { router } = await boot(routes);
+
+		await router.push('/account/admin');
+
+		expect(order).toEqual(['auth']);
+		expect(router.current.path).toBe('/');
+	});
+
+	it('awaits an async guard, then silently abandons it when a newer navigation wins', async () => {
+		let release;
+		const held = new Promise((resolve) => {
+			release = resolve;
+		});
+		let constructed = 0;
+		class SlowGuardView extends PuzzleView {
+			constructor(...args) {
+				super(...args);
+				constructed++;
+			}
+			render() {
+				return h('puzzle-view', { class: 'slow-guard' }, [text('SLOW')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/slow',
+				name: 'slow',
+				view: SlowGuardView,
+				layout: DefaultLayout,
+				async guard() {
+					await held;
+				},
+			},
+			{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+		];
+		const { router, el } = await boot(routes);
+
+		const slow = router.push('/slow');
+		await tick();
+		expect(constructed).toBe(0);
+		const newer = router.push('/about');
+		release();
+		await Promise.all([slow, newer]);
+
+		expect(router.current.path).toBe('/about');
+		expect(el.querySelector('.about')).not.toBeNull();
+		expect(el.querySelector('.slow-guard')).toBeNull();
+		expect(constructed).toBe(0);
+	});
+
+	it('redirects on navigation #0 with from === null', async () => {
+		history.replaceState({}, '', '/private');
+		let seenFrom = 'unset';
+		let seenTo = null;
+		const routes = guardedRoutes(({ to, from }) => {
+			seenFrom = from;
+			seenTo = to;
+			return '/login';
+		});
+
+		const { router } = await boot(routes);
+
+		expect(seenFrom).toBeNull();
+		expect(seenTo.path).toBe('/private');
+		expect(Object.isFrozen(seenTo)).toBe(true);
+		expect(router.current.path).toBe('/login');
+		expect(location.pathname).toBe('/login');
+	});
+
+	it('re-runs guards on params-only navigation', async () => {
+		history.replaceState({}, '', '/user/1');
+		const ids = [];
+		const routes = [
+			{
+				path: '/user/:id',
+				name: 'user',
+				view: AboutView,
+				layout: DefaultLayout,
+				guard({ to }) {
+					ids.push(to.params.id);
+				},
+			},
+		];
+		const { router } = await boot(routes);
+
+		await router.push('/user/2');
+
+		expect(ids).toEqual(['1', '2']);
+		expect(router.current.params.id).toBe('2');
+	});
+
+	it('treats a thrown guard like a data() failure: logs and stays put', async () => {
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { router, el } = await boot(
+			guardedRoutes(() => {
+				throw new Error('nope');
+			})
+		);
+
+		await router.push('/private');
+
+		expect(router.current.path).toBe('/');
+		expect(location.pathname).toBe('/');
+		expect(el.querySelector('.home')).not.toBeNull();
+		expect(errSpy).toHaveBeenCalledWith(
+			'[puzzle] navigation guard failed:',
+			expect.objectContaining({ message: 'nope' })
+		);
+		errSpy.mockRestore();
+	});
+
+	it('leaves a blocked browser pop on the committed view without URL resync', async () => {
+		let allowed = true;
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/private',
+				name: 'private',
+				view: AboutView,
+				layout: DefaultLayout,
+				guard() {
+					return allowed;
+				},
+			},
+			{ path: '/after', name: 'after', view: HomeView, layout: DefaultLayout },
+		];
+		const { router, el } = await boot(routes);
+		await router.push('/private');
+		await router.push('/after');
+		allowed = false;
+
+		history.back();
+		await delay(20);
+
+		// The browser already moved before popstate. D87 deliberately shares the
+		// existing data()-failure asymmetry: no URL rewrite, but nothing commits.
+		expect(location.pathname).toBe('/private');
+		expect(router.current.path).toBe('/after');
+		expect(el.querySelector('.home')).not.toBeNull();
+	});
+
+	it('self-heals a redirected browser pop because replace() rewrites the moved entry', async () => {
+		let redirect = false;
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/private',
+				name: 'private',
+				view: AboutView,
+				layout: DefaultLayout,
+				guard() {
+					return redirect ? '/login' : undefined;
+				},
+			},
+			{ path: '/after', name: 'after', view: AboutView, layout: DefaultLayout },
+			{ path: '/login', name: 'login', view: HomeView, layout: DefaultLayout },
+		];
+		const { router, el } = await boot(routes);
+		await router.push('/private');
+		await router.push('/after');
+		redirect = true;
+
+		history.back();
+		await delay(20);
+
+		expect(location.pathname).toBe('/login');
+		expect(router.current.path).toBe('/login');
+		expect(el.querySelector('.home')).not.toBeNull();
+	});
+
+	it('rejects non-function guards at construction, including child and catch-all routes', () => {
+		expect(
+			() =>
+				new Router([
+					{ path: '/', name: 'bad', view: HomeView, layout: DefaultLayout, guard: 'nope' },
+				])
+		).toThrow(/guard on route "\/" must be a function/);
+		expect(
+			() =>
+				new Router([
+					{
+						path: '/parent',
+						name: 'parent',
+						view: HomeView,
+						layout: DefaultLayout,
+						children: [{ path: 'child', name: 'child', view: AboutView, guard: false }],
+					},
+				])
+		).toThrow(/guard on route "child" must be a function/);
+		expect(
+			() =>
+				new Router([
+					{ path: '*', name: 'bad-catch', view: HomeView, layout: DefaultLayout, guard: {} },
+				])
+		).toThrow(/guard on the catch-all route must be a function/);
+	});
+});
+
 describe('Router — same-path push is a no-op (v-next)', () => {
 	it('a push byte-identical to the committed path adds no history entry and does not re-run data()', async () => {
 		let dataRuns = 0;

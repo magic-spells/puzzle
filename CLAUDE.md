@@ -39,8 +39,12 @@ run.
   `router.url()` + the `link` formatter (D79/v1.46) and the true static-pages
   output mode (`output: 'static'` / `--static`, D81/v1.47); the D67
   prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid` — the config
-  rename is why this is 0.2.0, not 0.1.3.
-- Product line: v1 through v1.47, decisions D1-D81, plus the July 21
+  rename is why this is 0.2.0, not 0.1.3. Also in 0.2.0: compiler a11y
+  warnings (D82/v1.48), router query snapshot + `replace()` (D83/v1.49),
+  route head management (D84/v1.50), the `flip` attribute (D85/v1.51), the
+  `@event:outside` modifier (D86/v1.52), and route guards — the inherited
+  `guard` route field (D87/v1.53).
+- Product line: v1 through v1.53, decisions D1-D87, plus the July 21
   pre-release correctness/performance hardening pass.
 - Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`,
   `./static`, and `./puzzle-env` exports plus a `puzzle` binary shim and four

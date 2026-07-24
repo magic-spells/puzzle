@@ -2,7 +2,7 @@
 // route enumeration (nested children), the meta.title leaf→root walk, dynamic-route
 // skipping, the `prerender: false` shell copy, shell injection + title replacement,
 // and the missing-target error. Node env: prerender is DOM-free and writes files.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -123,6 +123,43 @@ describe('SSG prerender (M1)', () => {
 		const { pages } = await prerender(config());
 		const spa = pages.find((p) => p.path === '/app');
 		expect(spa).toMatchObject({ path: '/app', html: null, title: null, prerender: false });
+	});
+
+	it('warns once per hybrid-prerendered route with a guard in its chain', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const guard = () => true;
+		const cfg = {
+			target: '#app',
+			routes: [
+				{
+					path: '/account',
+					view: SettingsShell,
+					layout: Layout,
+					guard,
+					children: [
+						{ path: '', view: SettingsIndex },
+						{ path: 'profile', view: Profile },
+					],
+				},
+				{
+					path: '/private',
+					view: SpaOnly,
+					layout: Layout,
+					guard,
+					prerender: false,
+				},
+			],
+		};
+
+		const { warnings } = await prerender(cfg);
+		const guardWarnings = warnings.filter((warning) => warning.includes('ships publicly'));
+
+		expect(guardWarnings).toHaveLength(2);
+		expect(guardWarnings[0]).toContain('route "/account"');
+		expect(guardWarnings[1]).toContain('route "/account/profile"');
+		expect(guardWarnings.some((warning) => warning.includes('/private'))).toBe(false);
+		expect(warn).toHaveBeenCalledTimes(2);
+		warn.mockRestore();
 	});
 
 	it('fails loudly, naming the route, on a data() rejection', async () => {

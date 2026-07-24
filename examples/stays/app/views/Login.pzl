@@ -1,0 +1,35 @@
+<puzzle-view>
+  <section class="max-w-md mx-auto py-16 text-center">
+    <div class="text-5xl">🧳</div>
+    <h1 class="font-display text-3xl font-bold text-fg mt-5">Welcome back</h1>
+    <p class="text-muted mt-2">Sign in to see your profile, trips, and wishlist.</p>
+    <button
+      type="button"
+      class="mt-7 inline-flex px-6 py-3 rounded-xl bg-accent text-accent-ink font-semibold hover:bg-accent-2 transition-colors"
+      @click={ signIn }>
+      Sign in as Cory
+    </button>
+  </section>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class Login extends PuzzleView {
+  data() {
+    const redirect = this.route.query.redirect;
+    return {
+      redirect: typeof redirect === 'string' ? redirect : '/account',
+    };
+  }
+
+  events = {
+    signIn: () => {
+      if (this.ctx.store.findMany('session').length === 0) {
+        this.ctx.store.createRecord('session', { id: 'me' });
+      }
+      this.ctx.router.replace(this.getData().redirect);
+    }
+  };
+}
+</script>

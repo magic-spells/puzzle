@@ -11,7 +11,7 @@ a reactive browser runtime, and a Go + esbuild compiler/CLI. Optional static
 generation prerenders routes without adding an SSR server or hydration layer.
 
 [[DOC-SPEC]] is the enforceable contract and wins all conflicts. Decisions
-D1-D86 in [[DOC-DECISIONS]] explain why the contract has its current shape.
+D1-D87 in [[DOC-DECISIONS]] explain why the contract has its current shape.
 [[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
 
 ## Current state
@@ -35,7 +35,9 @@ D1-D86 in [[DOC-DECISIONS]] explain why the contract has its current shape.
   grammar across all five. Element actions, `<Portal>`, and lazy routes
   were reviewed and deferred (SPEC deferred list has the rationale). Pieces
   migration to `@event:outside` is queued for AFTER 0.2.0 ships (older
-  compilers reject unknown modifiers).
+  compilers reject unknown modifiers). Route guards followed (D87/v1.53 —
+  the inherited `guard` route field; guard a top-level route to lock its
+  layout subtree; suites + example verified, awaiting merge).
 - Runtime, compiler, CLI, static generation (hybrid + static modes),
   state-preserving dev reload,
   TypeScript transpilation, model validation/relationships/write sync, nested

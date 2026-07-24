@@ -33,11 +33,22 @@ Nested route definitions flatten to leaf matchers in declaration order.
 Children use relative paths; empty children are index routes; layouts are
 top-level only; merged params reach every view; nearest leaf metadata wins for
 title and transition settings. Top-level `*` is the catch-all. Duplicate params,
-absolute child paths, nested catch-alls/layouts, invalid transition modes, and
-invalid base/memory config fail at construction.
+absolute child paths, nested catch-alls/layouts, invalid transition modes,
+non-function guards, and invalid base/memory config fail at construction. Each
+leaf entry compiles its inherited guard chain (`entry.guards`, root→leaf,
+catch-all included; D87).
 
-Navigation is load-then-commit. The router computes the shared route-node
-prefix, preloads fresh views, refreshes reused ancestors with one frozen
+Navigation is guard-then-load-then-commit. Guards run in `#navigate` after the
+token bump and before any view/layout construction — sequentially root→leaf on
+every matched navigation (params/query-only included, `{ to, from, ctx }` with
+frozen snapshots, `from` null on nav #0), token-rechecked across awaits.
+`false`/throw = stay put through the shared failed-navigation recovery helper;
+a string verdict redirects through public `replace()` (denied URL never enters
+history; ten guard redirects without a commit trip the cycle cap, reset in
+`#commitState`). An empty guard chain adds no await — unguarded navigation
+keeps its synchronous path to construction. The router then computes the
+shared route-node prefix, preloads fresh views, refreshes reused ancestors
+with one frozen
 `{ path, pathname, query, hash, route, params, chain }` snapshot (parsed once
 per navigation by `parseLocation` — frozen null-proto query, repeated keys →
 frozen arrays, URLSearchParams decoding; D83), and abandons/destroys fresh

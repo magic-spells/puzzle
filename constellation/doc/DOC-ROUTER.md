@@ -11,7 +11,11 @@ connections:
   - DOC-DATASTORE
 ---
 
+<<<<<<< Updated upstream
 The full v1 routing surface: route definition shape, dynamic `:param` segments delivered to `data(params, props)`, layouts and the `<Slot/>` injection point, nested routes via `children` (v1.3), `router.push()` plus automatic link interception and `go()`/`back()`/`forward()` (v1.11), `router.replace()` and the parsed `query`/`pathname`/`hash` snapshot fields for URL-backed transient state (v1.49), `meta.title` → `document.title` plus the reserved head fields (`description`/`canonical`/`socialImage`) rendered as managed head tags (v1.50), the v1 route lifecycle (with v1.1 transition animations), window scroll management (v1.5; anchor targets + reload persistence v1.10), opt-in hash mode for static hosts (v1.6), URL-less memory mode for tests and embeds (v1.11), sub-path deploys via `routerBase` (v1.19), path-shaped hrefs via `router.url()` and the `link` formatter (v1.46), and the settled `path: '*'` catch-all 404 convention (D19).
+=======
+The full v1 routing surface: route definition shape, dynamic `:param` segments delivered to `data(params, props)`, layouts and the `<Slot/>` injection point, nested routes via `children` (v1.3), `router.push()` plus automatic link interception and `go()`/`back()`/`forward()` (v1.11), `meta.title` → `document.title`, the v1 route lifecycle (with v1.1 transition animations), window scroll management (v1.5; anchor targets + reload persistence v1.10), opt-in hash mode for static hosts (v1.6), URL-less memory mode for tests and embeds (v1.11), sub-path deploys via `routerBase` (v1.19), path-shaped hrefs via `router.url()` and the `link` formatter (v1.46), `router.replace()` and the query/hash snapshot (v1.49), route guards via the inherited `guard` route field (v1.53), and the settled `path: '*'` catch-all 404 convention (D19).
+>>>>>>> Stashed changes
 
 # Puzzle Router
 
@@ -70,7 +74,12 @@ app.mount();
 | `view` | PuzzleView class | The `.pzl` view rendered when the route matches. Imported at the top of `routes.js`. |
 | `layout` | PuzzleView class | The layout that wraps the view. The view renders at the layout's `<Slot/>`. **Top-level routes only** (v1.3) — nested children inherit the chain's layout; a `layout` on a child throws. |
 | `children` | array of route objects | Nested child routes with **relative** paths (v1.3). The parent's view renders its matched child at its own `<Slot/>`. See [Nested Routes](#nested-routes-v13). |
+<<<<<<< Updated upstream
 | `meta.title` `meta.description` `meta.canonical` `meta.socialImage` | string or `null` | The four **reserved head fields** (v1.50, D84). `title` is set as `document.title` on navigation; all four also render as managed head tags (`og:*`/`twitter:*` mirrors, `<link rel="canonical">`). **Static strings only** — no functions or data-derived values. Each field resolves **independently**, nearest-defined leaf → root in a nested chain; `undefined` inherits, `null` explicitly suppresses an inherited value. All optional. See [`meta.title` and head metadata](#metatitle-and-head-metadata-v150). |
+=======
+| `guard` | function | Navigation guard (v1.53). Runs before the route loads or commits; covers this node **and every child**. Allow, block, or redirect. See [Route guards](#route-guards-v153). |
+| `meta.title` | string | Set as `document.title` on navigation. Optional. In a nested chain, resolved nearest-defined, leaf → root. |
+>>>>>>> Stashed changes
 
 ### Dynamic segments
 
@@ -280,6 +289,8 @@ The `SettingsShell` view just drops a `<Slot/>` where the active pane should ren
 
 `layout` is a **top-level-route field**. Layouts are root shells (an auth wall, the app chrome), so children inherit the chain's layout and never declare their own — a `layout` on a child throws. A layout only ever swaps when the chain diverges at its very first segment.
 
+Route guards (v1.53) make the auth wall literal: a `guard` on the top-level route locks the layout's whole subtree with one declaration — see [Route guards](#route-guards-v153).
+
 Other config errors that throw at construction: `path: '*'` inside a `children` array, and a duplicated `:param` name within one chain (e.g. `:id` at two levels).
 
 ### Params merge down the chain
@@ -358,6 +369,88 @@ The head sync rides the **same atomic commit as the title** — a failed or supe
 
 ---
 
+## Route guards (v1.53)
+
+**Settled (D87, SPEC §48).** Any route can declare a `guard` — a function that runs **before** the navigation constructs views, loads data, or commits anything, and decides whether the user may go there. The canonical use is an auth wall:
+
+```js
+// routes.js
+const requireAuth = ({ to, ctx }) => {
+  if (ctx.store.findMany('session').length === 0) {
+    return '/login?redirect=' + encodeURIComponent(to.path);
+  }
+};
+
+export default [
+  { path: '/login', name: 'login', view: LoginView, layout: MainLayout },
+  {
+    path: '/account',
+    name: 'account',
+    view: AccountShell,
+    layout: MainLayout,
+    guard: requireAuth,        // locks /account and every child below it
+    children: [
+      { path: '',      name: 'account-profile', view: ProfileView },
+      { path: 'trips', name: 'account-trips',   view: TripsView },
+    ],
+  },
+];
+```
+
+### Guard the parent — the subtree is covered
+
+A guard covers its own node **and every descendant**: children never repeat it. Because `layout` is a top-level field, a guard on a top-level route is exactly "this layout is locked down." A child may additionally declare its own guard for a stricter sub-section — the navigation runs every guard along the matched chain **root → leaf, sequentially, first failure wins**:
+
+```js
+{
+  path: '/account',
+  guard: requireAuth,                    // runs first, covers everything below
+  children: [
+    { path: '',      view: ProfileView },                       // requireAuth
+    { path: 'admin', view: AdminView, guard: requireAdmin },    // requireAuth, then requireAdmin
+  ],
+}
+```
+
+Guards re-run on **every** matched navigation — pushes, link clicks, back/forward, params-only changes (`/user/1` → `/user/2`), query-only changes, and the initial navigation (where `from` is `null`).
+
+### The guard function and its verdicts
+
+`guard({ to, from, ctx })` — `to`/`from` are frozen route snapshots (the `router.current` shape: `path`, `pathname`, `query`, `hash`, `route`, `params`, `chain`); `ctx` is the same three-service context views get (`store`, `router`, `formatters`).
+
+| Return | Effect |
+| ------ | ------ |
+| `undefined` / `true` | Allow — the next guard in the chain runs, then the normal load-then-commit pipeline. |
+| `false` | Block — stay put. Nothing commits: no URL, history, title, tree, or scroll change. |
+| a path string | Redirect — the **router** performs it with `replace()` semantics, so the denied URL never becomes a history entry. The destination's own guards run normally. |
+
+Guards may be `async`; the router awaits each one before proceeding, and a navigation superseded during the await abandons silently. A guard that **throws** is treated like a failed `data()`: the error is logged and the app stays put. Redirect loops are capped (ten guard redirects without a commit log an error and stay put); a guard redirect to the path you're already on is the normal same-path no-op.
+
+### Denied means nothing happened
+
+Guards run before the D19 load gate, so a blocked or redirected navigation never constructs the denied view, never runs its `data()`, and never touches the URL — there is no flash of protected content and no partial commit. This also means guards are cheap to run on every navigation: a synchronous store read costs nothing.
+
+### Sessions and redirect-after-login
+
+Restore any persisted session in the app-level `beforeMount(app)` hook (v1.31, D66) — it is awaited **before** the initial navigation, so guards can be synchronous store reads. For returning the user to the page they were denied, the guard encodes it in the query (as in `requireAuth` above) and the login view reads it back:
+
+```js
+// Login.pzl <script> — after a successful sign-in
+const redirect = this.route.query.redirect;
+this.ctx.router.replace(typeof redirect === 'string' ? redirect : '/');
+```
+
+`replace()` keeps `/login` itself out of the back stack. See `examples/stays` for the full working flow.
+
+### Guards are UX, not security
+
+A client-side guard gates **rendering and navigation** — your API must authorize every request independently. Two build-time reminders exist (warnings only, no behavior change):
+
+- **Hybrid output** warns for each prerendered page whose chain declares a guard — its markup ships publicly in `dist/`. Set `prerender: false` on the guarded route to exclude it (that's the quiet opt-out).
+- **Static output** warns when any route declares a guard — static pages have no router, so guards never run there.
+
+---
+
 ## Route Lifecycle in v1
 
 What happens on navigation, in order:
@@ -367,17 +460,20 @@ router.push('/user/42')  (or intercepted link click, or back/forward)
       ↓
 1. Route matched against the routes array (params extracted)
       ↓
-2. New view created()          — initialize local state with setData()
+2. Route guards run root → leaf (v1.53) — a block or redirect ends the
+                                 navigation here; nothing below happens
       ↓
-3. New view data(params) runs  — awaited if async; store queries auto-subscribe
+3. New view created()          — initialize local state with setData()
       ↓
-4. render()                    — view rendered into the layout's <Slot/>;
+4. New view data(params) runs  — awaited if async; store queries auto-subscribe
+      ↓
+5. render()                    — view rendered into the layout's <Slot/>;
                                  document.title set from meta.title
       ↓
-5. New view mounted()          — DOM is live; old view is destroyed()
+6. New view mounted()          — DOM is live; old view is destroyed()
 ```
 
-If only params changed on the *same* route (`/user/42` → `/user/7`), the view is not recreated — its `data()` re-runs with the new params (step 3 onward).
+If only params changed on the *same* route (`/user/42` → `/user/7`), the view is not recreated — its `data()` re-runs with the new params (step 4 onward, guards included).
 
 **Route transition animations (v1.1).** When a view declares an `animations` class field, navigation plays it: the old view runs its `out` animation and is destroyed, then — atomically with the new view mounting (v1.28, D61) — the URL/title commit and the new view runs its `in` animation — **sequentially** (not overlapping). A navigation superseded or failed during the `out` phase commits nothing. Four lifecycle hooks bracket the phases (`viewWillHide`/`viewDidHide` around `out`, `viewWillShow`/`viewDidShow` around `in`) and fire even for views without an `animations` field. One animator per transition: a view swapped inside a **reused** layout animates alone; a **layout swap** animates the layout as the unit. Full contract: [[DOC-SPEC]] §12 and [[DOC-DECISIONS]] D28. Cross-fade/overlapping transitions shipped in v1.24 — next paragraph.
 
@@ -595,12 +691,22 @@ The router is available in components as `this.ctx.router` (one of exactly three
 
 | Member | Signature | Description |
 | ------ | --------- | ----------- |
+<<<<<<< Updated upstream
 | `push(path)` | `router.push('/user/123')` | Navigate to `path`, run the route lifecycle, update `document.title` (and managed head tags, v1.50) from `meta` (history/hash modes). |
 | `replace(path)` (v1.49) | `router.replace('/items?q=cabin')` | Like `push()` — same pipeline, same atomic commit — but **replaces the current history entry** and leaves scroll untouched by default. For URL-backed transient state; see [URL-backed transient state](#url-backed-transient-state-query-hash-and-replace-v149). |
+=======
+| `push(path)` | `router.push('/user/123')` | Navigate to `path`, run the route lifecycle, update `document.title` from `meta.title` (history/hash modes). |
+| `replace(path)` (v1.49) | `router.replace('/login')` | Same pipeline as `push()` but **replaces** the current history entry — no new entry, scroll left alone. The redirect verb (auth redirects, post-action redirects). |
+>>>>>>> Stashed changes
 | `go(n)` (v1.11) | `router.go(-2)` | Move through history: delegates to `history.go(n)` in history/hash mode; moves the internal stack in memory mode. Out-of-range `n` is a silent no-op. |
 | `back()` / `forward()` (v1.11) | `router.back()` | Shorthands for `go(-1)` / `go(1)`. |
+| `url(path)` (v1.46) | `router.url('/about')` | Encode a base-free path as a mode-correct href (`/about`, `#/about`, …). Templates should use the `link` formatter, which calls this. |
 
+<<<<<<< Updated upstream
 And that's essentially it for components in v1 — `push()`/`replace()`, the v1.11 history methods, plus automatic link interception cover the intended navigation surface. A larger router API (named-route navigation, guards) is not part of the v1 contract; anything beyond the above should be treated as **Planned — not in v1** (see [[DOC-SPEC]]). (Hash routing is available as of v1.6, memory mode as of v1.11 — see above.)
+=======
+And that's essentially it for components — `push()`/`replace()`, the v1.11 history methods, `url()`, plus automatic link interception cover the intended navigation surface. Declarative route protection is the `guard` field (v1.53 — see [Route guards](#route-guards-v153)), not a method. Named-route navigation remains **Planned — not shipped** (see [[DOC-SPEC]]). (Hash routing is available as of v1.6, memory mode as of v1.11 — see above.)
+>>>>>>> Stashed changes
 
 ---
 
