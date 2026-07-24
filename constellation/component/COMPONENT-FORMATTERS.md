@@ -1,7 +1,7 @@
 ---
 name: Formatter registry
 status: verified
-verified_at: '2026-07-17T23:33:30.500Z'
+verified_at: '2026-07-24T05:49:12.276Z'
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-CODEGEN
@@ -11,6 +11,20 @@ connections:
   - FILE-FORMATTER-REGISTRY
   - FILE-FORMATTER-BUILTINS
   - FILE-FORMATTER-ALL
+notes:
+  - kind: state
+    text: >-
+      Dev-only did-you-mean machinery is now tree-shaken from prod (2026-07-24). The D43 __missing
+      typo-guard computed its Levenshtein suggestion OUTSIDE the (dropConsole-stripped)
+      console.error, so ~0.5 KB of dead code shipped in production. editDistance + the nearest-match
+      search (now a module-level `nearestFormatter` function, no longer a class method) plus the
+      whole warn block are wrapped in `if (typeof __PUZZLE_DEV__ === 'undefined' ||
+      __PUZZLE_DEV__)`; production folds __PUZZLE_DEV__ to false, DCEs the branch, and tree-shakes
+      both functions out. Verified: the "did you mean"/"unknown formatter" strings and the DP loop
+      are ABSENT from a prod examples/todos app.js. Dev/test behavior (warn-once with suggestion)
+      unchanged. Does NOT touch D31 manifest tree-shaking or the D43 pass-through contract.
+    sha: d9591d6
+verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
 # Formatter registry
