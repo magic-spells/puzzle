@@ -103,7 +103,7 @@ func Build(root string, opts Options) error {
 	}()
 
 	pl := plugin.New(absRoot)
-	if err := scanFormatters(absRoot, pl); err != nil {
+	if err := scanUsage(absRoot, pl); err != nil {
 		return err
 	}
 

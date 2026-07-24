@@ -126,7 +126,7 @@ func appEntryPath(absRoot string) string {
 // pass; this pass exists only to run the app under node.
 func bundlePrerenderEntry(absRoot, stdin, outfile, label string) error {
 	pl := plugin.New(absRoot)
-	if err := scanFormatters(absRoot, pl); err != nil {
+	if err := scanUsage(absRoot, pl); err != nil {
 		return err
 	}
 
@@ -147,7 +147,7 @@ func bundlePrerenderEntry(absRoot, stdin, outfile, label string) error {
 		// throw back to the user's .pzl/.js without a sidecar file in staging.
 		Sourcemap: api.SourceMapInline,
 		// Build-time render: the runtime's dev-only HMR machinery folds away.
-		Define:   map[string]string{"__PUZZLE_DEV__": "false"},
+		Define:   bundleDefines(pl, false),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 	}

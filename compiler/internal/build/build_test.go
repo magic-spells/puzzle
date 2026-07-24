@@ -132,6 +132,113 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	}
 }
 
+// TestBuildUsageDefinesDCE proves the project usage scan drives the two runtime
+// feature probes end to end. A production app with neither feature drops both
+// modules; a readable development build with both usages keeps their distinctive
+// symbols/strings.
+func TestBuildUsageDefinesDCE(t *testing.T) {
+	writeFixture := func(t *testing.T, withUsage bool) string {
+		t.Helper()
+		root, err := os.MkdirTemp(repoRoot(t), ".usage-dce-*")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.RemoveAll(root) })
+		for _, dir := range []string{"app/views", "app/public"} {
+			if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		flipAttr := ""
+		routeMeta := "meta: { title: 'Home' }"
+		if withUsage {
+			flipAttr = " flip"
+			routeMeta = "meta: { title: 'Home', description: 'Fixture page' }"
+		}
+		appJS := `import { PuzzleApp } from '@magic-spells/puzzle';
+import Home from './views/Home.pzl';
+const app = new PuzzleApp({
+  target: '#app',
+  routes: [{ path: '/', view: Home, ` + routeMeta + ` }],
+});
+app.mount();
+export default app;
+`
+		view := `<puzzle-view>
+  <ul>
+    {#for item in items}
+      <li key={ item.id }` + flipAttr + `>{ item.label }</li>
+    {/for}
+  </ul>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {
+  data() { return { items: [{ id: 1, label: 'one' }] }; }
+}
+</script>
+`
+		index := `<!doctype html><html><head><title>Fixture</title></head>
+<body><div id="app"></div><script type="module" src="/app.js"></script></body></html>`
+		for rel, body := range map[string]string{
+			"app/app.js":            appJS,
+			"app/views/Home.pzl":    view,
+			"app/public/index.html": index,
+		} {
+			path := filepath.Join(root, filepath.FromSlash(rel))
+			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return root
+	}
+
+	without := writeFixture(t, false)
+	if err := Build(without, Options{Development: false}); err != nil {
+		t.Fatalf("Build without feature usage failed: %v", err)
+	}
+	withoutJS, err := os.ReadFile(filepath.Join(without, "dist", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The two directions need DIFFERENT markers, because the two builds differ in
+	// minification.
+	//
+	// ABSENCE (this production build) may only assert on string LITERALS.
+	// Minification mangles `beginFlip`/`MANAGED_TAGS` to single letters, so
+	// asserting those are absent would pass vacuously even if the modules were
+	// fully bundled — no proof at all. `cubic-bezier(0.2, 0, 0, 1)` is flip.js's
+	// DEFAULT_EASING (unique to that module) and `data-puzzle-head` is
+	// headTags.js's marker attribute; both survive minification, so their absence
+	// is real evidence the module tree-shook away.
+	absenceMarkers := []string{"cubic-bezier(0.2, 0, 0, 1)", "data-puzzle-head"}
+	for _, marker := range absenceMarkers {
+		if strings.Contains(string(withoutJS), marker) {
+			t.Errorf("bundle without feature usage retained %q", marker)
+		}
+	}
+
+	with := writeFixture(t, true)
+	if err := Build(with, Options{Development: true}); err != nil {
+		t.Fatalf("Build with feature usage failed: %v", err)
+	}
+	withJS, err := os.ReadFile(filepath.Join(with, "dist", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// PRESENCE (a development build, unminified) can assert on both: the literals
+	// AND the original identifiers, since nothing is mangled here. Checking the
+	// identifiers too proves the modules are genuinely linked in, not merely that
+	// some string survived.
+	presenceMarkers := append(append([]string{}, absenceMarkers...), "beginFlip", "MANAGED_TAGS")
+	for _, marker := range presenceMarkers {
+		if !strings.Contains(string(withJS), marker) {
+			t.Errorf("bundle with feature usage should retain %q", marker)
+		}
+	}
+}
+
 // writeConsoleFixture writes a minimal throwaway app whose entry contains a
 // distinctive top-level console.log, so a production build's console-strip
 // behavior can be asserted from dist/app.js. No runtime import (so the

@@ -324,13 +324,8 @@ func absModuleImport(absRoot, rel string) string {
 // fresh plugin collects is discarded — styles.css was composed by the main pass.
 func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool) error {
 	pl := plugin.New(absRoot)
-	if err := scanFormatters(absRoot, pl); err != nil {
+	if err := scanUsage(absRoot, pl); err != nil {
 		return err
-	}
-
-	devLiteral := "false"
-	if dev {
-		devLiteral = "true"
 	}
 
 	buildOpts := api.BuildOptions{
@@ -345,7 +340,7 @@ func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg c
 		Sourcemap:   api.SourceMapLinked,
 		EntryNames:  "[name]",
 		ChunkNames:  "chunks/[name]-[hash]",
-		Define:      map[string]string{"__PUZZLE_DEV__": devLiteral},
+		Define:      bundleDefines(pl, dev),
 		Plugins:     []api.Plugin{pl.ESBuild()},
 		LogLevel:    api.LogLevelSilent,
 	}

@@ -696,6 +696,21 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 	// FLIP fast path (D85): one property check per new child during the pairing
 	// map we already run. Lists without any `flip` attr never call into flip.js
 	// — zero measurements, zero extra passes.
+	//
+	// Build-time gate (D89): the two touchpoints that REFERENCE flip.js — the
+	// beginFlip and playFlip calls below — are wrapped in the inline
+	// `typeof __PUZZLE_HAS_FLIP__ …` probe. When the compiler proves no template
+	// uses a `flip` attr it defines the flag false; MinifySyntax folds both probes
+	// to dead branches, `beginFlip`/`playFlip` go unreferenced, and flip.js
+	// tree-shakes out entirely. Undefined (vitest / no-compiler) ⇒ probe is true,
+	// so behavior is identical. The probe MUST be inlined at each site — a named
+	// const or helper is not constant-propagated by esbuild and would keep the
+	// import alive.
+	//
+	// The detection below is deliberately NOT probe-wrapped: it references no
+	// import, so gating it buys no tree-shaking — only skipping one `in` check per
+	// child, which is exactly the check that already runs today. Leaving it bare
+	// keeps the hot pairing loop readable at zero cost.
 	let hasFlip = false;
 
 	// First pass: pair every new child with its old counterpart (or none)
@@ -730,7 +745,10 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 	// rects NOW — before removals reflow the survivors and before the move pass.
 	// beginFlip bails candidate-free / reduced-motion / no-WAAPI lists before
 	// any measurement.
-	const flip = hasFlip ? beginFlip(pairs) : null;
+	const flip =
+		(typeof __PUZZLE_HAS_FLIP__ === 'undefined' || __PUZZLE_HAS_FLIP__) && hasFlip
+			? beginFlip(pairs)
+			: null;
 
 	// Remove old children that found no new counterpart
 	for (const child of oldChildren) {
@@ -758,7 +776,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 
 	// FLIP Last + Play (D85): every retained element is patched and in final
 	// position — measure again and animate the moved rows from where they were.
-	if (flip) playFlip(flip);
+	if ((typeof __PUZZLE_HAS_FLIP__ === 'undefined' || __PUZZLE_HAS_FLIP__) && flip) playFlip(flip);
 }
 
 /** The next sibling that is not a leaving (mid-out-animation) element. */

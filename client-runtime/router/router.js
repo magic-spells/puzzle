@@ -252,7 +252,8 @@
 
 import { ViewNode } from '../views/ViewNode.js';
 import { cancelAnimations } from '../views/animate.js';
-import { resolveHead, syncHead } from '../head.js';
+import { resolveHead, syncTitle } from '../head.js';
+import { syncTags } from '../headTags.js';
 import { walkRouteTree } from './routeTree.js';
 
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
@@ -2047,7 +2048,18 @@ export class Router {
 		// rename the host page's tab or edit the host <head> — document-level side
 		// effects like the URL.
 		if (this.#mode === 'memory') return;
-		syncHead(resolveHead(entry.chain));
+		const resolved = resolveHead(entry.chain);
+		// Title is the always-in core (head.js). The managed-tag sync (headTags.js)
+		// is build-gated (D89): the inline `typeof __PUZZLE_HAS_HEAD_TAGS__ …` probe
+		// folds to a dead branch when the compiler proves no route defines
+		// description/canonical/socialImage, dropping the syncTags import and
+		// headTags.js from the bundle. Undefined (vitest / no-compiler) ⇒ true, so
+		// behavior is identical. Inline probe required — a named const is not
+		// constant-propagated by esbuild (see viewManager.js flip gate).
+		syncTitle(resolved);
+		if (typeof __PUZZLE_HAS_HEAD_TAGS__ === 'undefined' || __PUZZLE_HAS_HEAD_TAGS__) {
+			syncTags(resolved);
+		}
 	}
 
 	#handlePopState() {

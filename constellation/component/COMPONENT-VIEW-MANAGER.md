@@ -85,6 +85,13 @@ WeakMap — never `getAnimations()`), patches unchanged, then Last-measures and
 plays a no-fill translate to rest. Reduced motion, missing WAAPI, flip-free
 lists, and unchanged order cost no measurements; unkeyed `flip` warns once.
 
+`flip.js` is bundled only when used (D89): the `beginFlip` and `playFlip` call
+sites — the two that reference the import — sit behind an inlined
+`typeof __PUZZLE_HAS_FLIP__ …` probe the compiler folds when no template carries
+a `flip` attr, dropping the module. The `'flip' in attrs` detection itself is
+intentionally un-probed (it holds no import alive, so gating it would only skip
+an `in` check). Detection covers component props too, not just element attrs.
+
 Teardown destroys nested component instances, unsubscribes views, removes
 listeners/refs, and tolerates failing leave hooks. All DOM links transfer to the
 next vnode tree so repeated patches remain live.

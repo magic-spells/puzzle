@@ -3,23 +3,17 @@ package build
 import (
 	"fmt"
 	"path/filepath"
+	"strconv"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 )
 
-// newBundleOptions assembles the shared esbuild BuildOptions. `dev` selects the
-// __PUZZLE_DEV__ define: "true" for development builds (the watch/dev loop is
-// always dev), "false" for production, where MinifySyntax DCEs every guarded
-// branch so the runtime's HMR machinery costs zero production bytes (§27, D57).
+// newBundleOptions assembles the shared esbuild BuildOptions. All runtime probes
+// receive boolean literal defines so esbuild can constant-fold their guarded
+// branches; `dev` selects __PUZZLE_DEV__, while the Plugin carries the two
+// build-wide usage bits discovered before this call.
 func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool) api.BuildOptions {
-	// The runtime reads __PUZZLE_DEV__ through a `typeof` probe, so the define
-	// must be a boolean literal expression esbuild can constant-fold + DCE.
-	devLiteral := "false"
-	if dev {
-		devLiteral = "true"
-	}
-
 	buildOpts := api.BuildOptions{
 		EntryPoints: []string{entry},
 		Bundle:      true,
@@ -32,10 +26,9 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool
 		// floor: Chrome 84 / Safari 14.1 / Firefox 90 — all comfortably below our
 		// SPA-only target.
 		Target: api.ES2022,
-		// Dev-flag define for the state-preserving HMR reload (§27, D57). Production
-		// (dev=false) folds it to `false`; the runtime's `if (DEV)` branches then
-		// minify away entirely.
-		Define:   map[string]string{"__PUZZLE_DEV__": devLiteral},
+		// Literal defines for state-preserving HMR (§27/D57) and usage-driven
+		// runtime modules. Production MinifySyntax drops false-probed branches.
+		Define:   bundleDefines(pl, dev),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 	}
@@ -49,15 +42,24 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool
 	return buildOpts
 }
 
-func scanFormatters(absRoot string, pl *plugin.Plugin) error {
-	// Scan the whole project, not just app/, so a .pzl imported from a sibling
-	// directory still contributes its formatters (the scan errs toward
-	// over-inclusion; see plugin.ScanFormatters).
-	used, err := plugin.ScanFormatters(absRoot)
-	if err != nil {
-		return fmt.Errorf("scanning template formatters: %w", err)
+func bundleDefines(pl *plugin.Plugin, dev bool) map[string]string {
+	hasFlip, hasHeadTags := pl.Features()
+	return map[string]string{
+		"__PUZZLE_DEV__":           strconv.FormatBool(dev),
+		"__PUZZLE_HAS_FLIP__":      strconv.FormatBool(hasFlip),
+		"__PUZZLE_HAS_HEAD_TAGS__": strconv.FormatBool(hasHeadTags),
 	}
-	pl.SetFormatters(used)
+}
+
+func scanUsage(absRoot string, pl *plugin.Plugin) error {
+	// Scan the whole project, not just app/, so a .pzl imported from a sibling
+	// directory still contributes its usage (the scan errs toward
+	// over-inclusion; see plugin.ScanUsage).
+	usage, err := plugin.ScanUsage(absRoot)
+	if err != nil {
+		return fmt.Errorf("scanning project usage: %w", err)
+	}
+	pl.SetUsage(usage)
 	return nil
 }
 

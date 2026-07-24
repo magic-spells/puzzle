@@ -29,10 +29,12 @@ type Plugin struct {
 	appRoot   string
 	assetsDir string // <appRoot>/app/assets — {#svg} paths resolve from here (D46)
 
-	mu         sync.Mutex
-	css        map[string]string // keyed by absolute file path for deterministic ordering
-	formatters map[string]bool
-	runtimeDir string
+	mu          sync.Mutex
+	css         map[string]string // keyed by absolute file path for deterministic ordering
+	formatters  map[string]bool
+	hasFlip     bool
+	hasHeadTags bool
+	runtimeDir  string
 }
 
 // New creates a Plugin rooted at the app directory (the directory containing

@@ -1,5 +1,5 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D88)
+name: DECISIONS.md — decision-log index (D1–D89)
 status: verified
 verified_at: '2026-07-24T05:49:35.947Z'
 connections:
@@ -7,7 +7,7 @@ connections:
 verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
-Index of the ADR-lite decision log. Each decision D1–D87 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+Index of the ADR-lite decision log. Each decision D1–D89 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
 
 # Decision Log (index)
 
@@ -121,6 +121,8 @@ slice-of-work view.
 - **D86** [[DECISION-D86-OUTSIDE-MODIFIER]] — the `outside` event modifier: `@event:outside={ handler }` attaches to `document` (CAPTURE phase — immune to unrelated `stopPropagation`, and the opening interaction can never self-dismiss) and gates on `el.contains(event.target)` before every other modifier step; framework-owned cleanup on every removal shape via the D72 `releaseSubtree` walk; event-generic (`@pointerdown:outside`, `@focusin:outside`), one `eventGenericMods` table entry, zero grammar/tooling ripple — retires the hand-rolled pattern 16 puzzle-pieces carry (32 removeEventListener sites); `use:` actions deferral reinforced (v1.52 → SPEC §5/§47, [[FEATURE-V1-52-OUTSIDE-MODIFIER]])
 - **D87** [[DECISION-D87-ROUTE-GUARDS]] — route guards: an inherited `guard` route field (`({ to, from, ctx }) => verdict`, any depth — guard the top-level route to lock its layout subtree; children may add stricter guards), run root→leaf sequentially in `#navigate` before any view construction or the D19 load gate, re-run on every matched navigation (params/query-only included), token-checked across awaits; verdicts are return values — `false` blocks, a string path redirects through public `replace()` (denied URL never in history, ten-redirect cycle cap reset on commit), throws follow the data()-failure posture; prerender interplay is warnings-only (hybrid: guarded markup ships publicly, `prerender: false` opts out; static: guards never run) — global `beforeEach`+`meta.requiresAuth`, root-only placement, throw-based redirects, the `auth` field name, and hard prerender enforcement all rejected (v1.53 → SPEC §48, [[FEATURE-V1-53-ROUTE-GUARDS]])
 - **D88** [[DECISION-D88-SOURCEMAP-OPT-OUT]] — `build.sourceMap`: production linked source maps become opt-in (default off) for SPA + true-static bundles; dev and the temporary Node prerender bundle keep their maps, the static bundle is stripped by a post-pass; mirrors D60's `build.*` opt-out precedent (0.2.0 hardening → SPEC §36 / build config)
+
+- **D89** [[DECISION-D89-FEATURE-USAGE-TREESHAKE]] — pay-for-what-you-use runtime: a build-time usage scan emits `__PUZZLE_HAS_FLIP__` / `__PUZZLE_HAS_HEAD_TAGS__` esbuild defines that fold inlined runtime probes, so `views/flip.js` and the new `headTags.js` ship only to apps that use them; generalizes D31's per-app inclusion to whole modules via D57's define+DCE mechanism, and splits `head.js` into title core + managed-tag machinery (0.2.0 hardening → SPEC §45 / build pipeline)
 
 ## Open questions (tracked, not yet decided)
 

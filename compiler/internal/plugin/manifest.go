@@ -24,6 +24,22 @@ func (p *Plugin) SetFormatters(used map[string]bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	p.setFormattersLocked(used)
+}
+
+// SetUsage stores every build-wide usage bit discovered by ScanUsage. Formatter
+// manifest behavior stays identical; the booleans feed esbuild's literal DCE
+// defines.
+func (p *Plugin) SetUsage(usage Usage) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.setFormattersLocked(usage.Formatters)
+	p.hasFlip = usage.HasFlip
+	p.hasHeadTags = usage.HasHeadTags
+}
+
+func (p *Plugin) setFormattersLocked(used map[string]bool) {
 	next := map[string]bool{"escape": true}
 	for name, ok := range used {
 		if ok {
@@ -31,6 +47,13 @@ func (p *Plugin) SetFormatters(used map[string]bool) {
 		}
 	}
 	p.formatters = next
+}
+
+// Features returns the usage bits captured by the most recent SetUsage call.
+func (p *Plugin) Features() (hasFlip, hasHeadTags bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.hasFlip, p.hasHeadTags
 }
 
 func (p *Plugin) formatterManifest() (string, error) {

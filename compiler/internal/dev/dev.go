@@ -266,7 +266,7 @@ func Serve(root string, opts Options) error {
 		}
 		var err error
 		if builder != nil {
-			if err = builder.ScanFormatters(); err == nil {
+			if err = builder.ScanUsage(); err == nil {
 				err = builder.Rebuild()
 			}
 			if err == nil {

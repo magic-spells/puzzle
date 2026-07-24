@@ -36,7 +36,8 @@ import { Router } from '../router/router.js';
 import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr } from './serialize.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub, normalizeBase } from './assemble.js';
-import { resolveHead, MANAGED_TAGS } from '../head.js';
+import { resolveHead } from '../head.js';
+import { MANAGED_TAGS } from '../headTags.js';
 
 /**
  * Prerender every static route in `config` to an HTML content string + title.
