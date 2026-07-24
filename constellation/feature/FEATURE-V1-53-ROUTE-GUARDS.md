@@ -1,6 +1,6 @@
 ---
 name: v1.53 — route guards (D87)
-status: built
+status: verified
 connections:
   - DECISION-D87-ROUTE-GUARDS
   - COMPONENT-ROUTER
@@ -8,6 +8,14 @@ connections:
   - DOC-SPEC
   - DOC-ROUTER
   - FILE-ROUTER
+verified_at: '2026-07-24T01:11:10.487Z'
+verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
+notes:
+  - kind: verified
+    text: >-
+      Merged and verified per the card's Verification section: full suite 957 green, go test,
+      test:types, stays build. Browser smoke pending.
+    sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
 ---
 
 # v1.53 — route guards (D87)

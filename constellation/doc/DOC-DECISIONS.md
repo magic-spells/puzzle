@@ -1,9 +1,10 @@
 ---
 name: DECISIONS.md — decision-log index (D1–D87)
 status: verified
-verified_at: '2026-07-22T00:04:05.457Z'
+verified_at: '2026-07-24T01:11:18.558Z'
 connections:
   - DOC-SPEC
+verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
 ---
 
 Index of the ADR-lite decision log. Each decision D1–D87 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.

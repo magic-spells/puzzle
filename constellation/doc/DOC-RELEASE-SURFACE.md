@@ -23,7 +23,8 @@ connections:
   - COMPONENT-DEV-SERVER
   - FLOW-BUILD
   - FLOW-REACTIVITY
-verified_at: '2026-07-22T00:04:05.875Z'
+verified_at: '2026-07-24T01:11:19.045Z'
+verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
 ---
 
 # Puzzle 0.1 release surface

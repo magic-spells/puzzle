@@ -1,10 +1,11 @@
 ---
 name: SPEC.md — the frozen v1 contract
 status: verified
-verified_at: '2026-07-17T23:27:11.833Z'
+verified_at: '2026-07-24T01:11:17.639Z'
 connections:
   - DOC-VIEW-LIFECYCLE
   - DOC-DECISIONS
+verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
 ---
 
 The enforceable v1 contract: exports/naming, config surface, .pzl anatomy, real-JS scripts rule, event conventions, template grammar, models/store/router surfaces, and the deferred-features cut list. When docs conflict, SPEC.md wins.

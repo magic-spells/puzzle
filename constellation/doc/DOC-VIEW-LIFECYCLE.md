@@ -1,7 +1,7 @@
 ---
 name: VIEW_LIFECYCLE.md — frontend runtime map
 status: verified
-verified_at: '2026-07-22T00:04:06.267Z'
+verified_at: '2026-07-24T01:11:19.213Z'
 connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-VIEW-MANAGER
@@ -10,6 +10,7 @@ connections:
   - DOC-SPEC
   - DOC-DECISIONS
   - DOC-ROUTER
+verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
 ---
 
 > The consolidated map of how the frontend works end to end (settling D17–D19): the vdom rendering model, per-node event listeners, the component and navigation state machines, and the complete re-render trigger table. Acceptance spec for [[COMPONENT-PUZZLE-VIEW]] and the router's navigation pipeline.

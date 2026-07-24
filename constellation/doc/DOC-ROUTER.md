@@ -1,7 +1,7 @@
 ---
 name: ROUTER.md — routing reference
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-07-24T01:11:18.110Z'
 connections:
   - COMPONENT-ROUTER
   - DOC-SPEC
@@ -9,6 +9,7 @@ connections:
   - DOC-VIEW-LIFECYCLE
   - DOC-MODELS
   - DOC-DATASTORE
+verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
 ---
 
 The full v1 routing surface: route definition shape, dynamic `:param` segments delivered to `data(params, props)`, layouts and the `<Slot/>` injection point, nested routes via `children` (v1.3), `router.push()` plus automatic link interception and `go()`/`back()`/`forward()` (v1.11), `router.replace()` and the parsed `query`/`pathname`/`hash` snapshot fields for URL-backed transient state (v1.49), `meta.title` → `document.title` plus the reserved head fields (`description`/`canonical`/`socialImage`) rendered as managed head tags (v1.50), the v1 route lifecycle (with v1.1 transition animations), window scroll management (v1.5; anchor targets + reload persistence v1.10), opt-in hash mode for static hosts (v1.6), URL-less memory mode for tests and embeds (v1.11), sub-path deploys via `routerBase` (v1.19), path-shaped hrefs via `router.url()` and the `link` formatter (v1.46), route guards via the inherited `guard` route field (v1.53), and the settled `path: '*'` catch-all 404 convention (D19).

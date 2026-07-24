@@ -15,8 +15,8 @@ notes:
       commit. If a later fresh descendant load fails, URL/current stay put but the
       reused ancestor has seen the attempted params. This documented D19/D30 soft
       edge is tracked by FEATURE-TRANSACTIONAL-ANCESTOR-REFRESH.
-verified_at: '2026-07-23T16:30:50.260Z'
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+verified_at: '2026-07-24T01:11:10.853Z'
+verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
 ---
 
 # Router

@@ -6,8 +6,8 @@ language: javascript
 summary: Route compilation, guards, navigation, commit, transitions, scroll, and SSG takeover.
 connections:
   - COMPONENT-ROUTER
-verified_at: '2026-07-23T16:30:55.036Z'
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+verified_at: '2026-07-24T01:11:11.630Z'
+verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `client-runtime/router/router.js`.
