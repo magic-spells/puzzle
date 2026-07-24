@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -94,6 +95,91 @@ func TestServeTimeInjection(t *testing.T) {
 	}
 	if strings.Contains(string(onDisk), "EventSource") {
 		t.Fatalf("dist/index.html on disk was mutated with the reload client")
+	}
+}
+
+func TestMissingIndexWithRetainedErrorServesBuildErrorShell(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := newServer(t.TempDir(), ctx, nil)
+	want := "app/views/Home.pzl:4:9: unexpected token\n  4 | {name\n    |      ^"
+	srv.rememberBuildError(want)
+
+	response := httptest.NewRecorder()
+	srv.handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "http://puzzle.test/", nil))
+
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("missing index with build error status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+	if got := response.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Fatalf("build-error shell content-type = %q, want text/html", got)
+	}
+	body := response.Body.String()
+	for _, marker := range []string{
+		"Puzzle build error",
+		want,
+		`style="` + buildErrorStyle + `"`,
+		"EventSource",
+		"location.reload",
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("build-error shell missing %q; body=%q", marker, body)
+		}
+	}
+}
+
+func TestMissingIndexWithoutRetainedErrorKeepsExisting404(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := newServer(t.TempDir(), ctx, nil)
+
+	response := httptest.NewRecorder()
+	srv.handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "http://puzzle.test/", nil))
+
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("missing index without build error status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+	const want = "puzzle dev: dist/index.html not found (build may have failed)\n"
+	if got := response.Body.String(); got != want {
+		t.Fatalf("missing-index 404 body changed:\ngot  %q\nwant %q", got, want)
+	}
+	if strings.Contains(response.Body.String(), "EventSource") {
+		t.Fatalf("ordinary missing-index 404 unexpectedly received the reload client: %q", response.Body.String())
+	}
+}
+
+func TestBuildErrorShellStopsAfterSuccessfulBuild(t *testing.T) {
+	dist := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := newServer(dist, ctx, nil)
+	handler := srv.handler()
+
+	srv.rememberBuildError("first build failed")
+	failed := httptest.NewRecorder()
+	handler.ServeHTTP(failed, httptest.NewRequest(http.MethodGet, "http://puzzle.test/", nil))
+	if failed.Code != http.StatusServiceUnavailable {
+		t.Fatalf("failed build status = %d, want %d", failed.Code, http.StatusServiceUnavailable)
+	}
+
+	index := `<!doctype html><html><body><main id="app">ready</main></body></html>`
+	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte(index), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv.rememberBuildError("")
+	srv.hub.broadcast(hubMessage{event: clearEvent})
+
+	recovered := httptest.NewRecorder()
+	handler.ServeHTTP(recovered, httptest.NewRequest(http.MethodGet, "http://puzzle.test/", nil))
+	if recovered.Code != http.StatusOK {
+		t.Fatalf("successful build status = %d, want %d", recovered.Code, http.StatusOK)
+	}
+	body := recovered.Body.String()
+	if !strings.Contains(body, `id="app"`) || !strings.Contains(body, "EventSource") {
+		t.Fatalf("successful build did not serve the real injected app shell: %q", body)
+	}
+	if strings.Contains(body, `<div id="__puzzle-build-error"`) {
+		t.Fatalf("successful build still served the server-rendered error shell: %q", body)
 	}
 }
 
@@ -212,6 +298,23 @@ func TestReloadClientSnapshotsBeforeReload(t *testing.T) {
 	if iReload < 0 || iReload < iSnap {
 		t.Fatalf("location.reload must follow the snapshot attempt; body=%q", body)
 	}
+
+	for _, marker := range []string{
+		`addEventListener("builderror"`,
+		"JSON.parse(event.data)",
+		`document.getElementById("__puzzle-build-error")`,
+		"Puzzle build error",
+		"position:fixed",
+		"z-index:2147483647",
+		"overflow:auto",
+		"white-space:pre-wrap",
+		`event.key === "Escape"`,
+		`addEventListener("clear"`,
+	} {
+		if !strings.Contains(body, marker) {
+			t.Fatalf("injected reload client missing build-error overlay behavior %q; body=%q", marker, body)
+		}
+	}
 }
 
 // TestNestedIndexServedVerbatim proves an EXISTING nested index.html
@@ -261,6 +364,70 @@ func TestNestedIndexServedVerbatim(t *testing.T) {
 	}
 }
 
+func TestHubBroadcastsTypedMessages(t *testing.T) {
+	h := newHub()
+	ch := h.add()
+	defer h.remove(ch)
+
+	messages := []hubMessage{
+		{event: reloadEvent, payload: "1"},
+		{event: buildErrorEvent, payload: "app/views/Home.pzl:4:9: unexpected token"},
+	}
+	for _, want := range messages {
+		h.broadcast(want)
+		if got := waitHubMessage(t, ch, "typed hub message"); got != want {
+			t.Fatalf("hub message = %+v, want %+v", got, want)
+		}
+	}
+}
+
+func TestHubLastWriteWinsWhenClientBufferIsFull(t *testing.T) {
+	h := newHub()
+	ch := h.add()
+	defer h.remove(ch)
+
+	h.broadcast(hubMessage{event: reloadEvent, payload: "1"})
+	want := hubMessage{event: buildErrorEvent, payload: "latest failure"}
+	h.broadcast(want)
+
+	if got := waitHubMessage(t, ch, "replacement hub message"); got != want {
+		t.Fatalf("full-buffer message = %+v, want latest %+v", got, want)
+	}
+	select {
+	case extra := <-ch:
+		t.Fatalf("stale message remained buffered after replacement: %+v", extra)
+	default:
+	}
+}
+
+func TestBuildErrorBypassesReloadCoalescer(t *testing.T) {
+	h := newHub()
+	ch := h.add()
+	defer h.remove(ch)
+
+	const delay = 50 * time.Millisecond
+	coalescer := newReloadCoalescer(delay, h.broadcast)
+	coalescer.request()
+	coalescer.request()
+
+	wantError := hubMessage{event: buildErrorEvent, payload: "compile failed"}
+	h.broadcast(wantError)
+	if got := waitHubMessage(t, ch, "immediate build error"); got != wantError {
+		t.Fatalf("first message = %+v, want immediate build error %+v", got, wantError)
+	}
+
+	wantReload := hubMessage{event: reloadEvent, payload: "1"}
+	if got := waitHubMessage(t, ch, "coalesced reload"); got != wantReload {
+		t.Fatalf("message after debounce = %+v, want reload %+v", got, wantReload)
+	}
+
+	select {
+	case extra := <-ch:
+		t.Fatalf("reload requests were not coalesced; extra message = %+v", extra)
+	case <-time.After(2 * delay):
+	}
+}
+
 func TestSSEBroadcast(t *testing.T) {
 	dist := writeDist(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -296,7 +463,7 @@ func TestSSEBroadcast(t *testing.T) {
 		}
 	}()
 
-	srv.hub.broadcast()
+	srv.hub.broadcast(hubMessage{event: reloadEvent, payload: "1"})
 
 	select {
 	case ev := <-events:
@@ -305,6 +472,116 @@ func TestSSEBroadcast(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("timed out waiting for reload event")
+	}
+}
+
+func TestSSEMultilinePayloadIsJSONEncodedOnOneDataLine(t *testing.T) {
+	dist := writeDist(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := newServer(dist, ctx, nil)
+	ts := httptest.NewServer(srv.handler())
+	defer ts.Close()
+
+	reqCtx, reqCancel := context.WithCancel(context.Background())
+	defer reqCancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, ts.URL+reloadPath, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	waitFor(t, 2*time.Second, func() bool { return srv.hub.clientCount() == 1 })
+
+	frames := make(chan sseFrame, 1)
+	readErrs := make(chan error, 1)
+	go func() {
+		frame, err := readSSEFrame(resp.Body)
+		if err != nil {
+			readErrs <- err
+			return
+		}
+		frames <- frame
+	}()
+
+	want := "app/views/Home.pzl:4:9: unexpected token\n  4 | {name\n    |      ^\ntry closing the expression"
+	srv.hub.broadcast(hubMessage{event: buildErrorEvent, payload: want})
+
+	select {
+	case err := <-readErrs:
+		t.Fatalf("reading SSE frame: %v", err)
+	case frame := <-frames:
+		if frame.event != buildErrorEvent {
+			t.Fatalf("SSE event = %q, want %q", frame.event, buildErrorEvent)
+		}
+		if len(frame.data) != 1 {
+			t.Fatalf("SSE data fields = %d, want one JSON-encoded line: %q", len(frame.data), frame.data)
+		}
+		var got string
+		if err := json.Unmarshal([]byte(frame.data[0]), &got); err != nil {
+			t.Fatalf("SSE data is not valid JSON: %q: %v", frame.data[0], err)
+		}
+		if got != want {
+			t.Fatalf("decoded SSE payload = %q, want %q", got, want)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for build-error SSE frame")
+	}
+}
+
+func TestSSEReplaysRetainedBuildErrorOnConnect(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := newServer("", ctx, nil)
+
+	want := "initial build failed\napp/views/Home.pzl:4:9: unexpected token"
+	srv.rememberBuildError(want)
+	// The initial build runs before the listener exists, so this fan-out reaches
+	// zero clients. Retained state must still reach the later connection (D92).
+	srv.hub.broadcast(hubMessage{event: buildErrorEvent, payload: want})
+
+	body := connectSSE(t, srv)
+	frame, err := readSSEFrame(strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("reading replayed SSE frame: %v", err)
+	}
+	if frame.event != buildErrorEvent {
+		t.Fatalf("replayed SSE event = %q, want %q; body=%q", frame.event, buildErrorEvent, body)
+	}
+	if len(frame.data) != 1 {
+		t.Fatalf("replayed SSE data fields = %d, want one JSON line: %q", len(frame.data), frame.data)
+	}
+	var got string
+	if err := json.Unmarshal([]byte(frame.data[0]), &got); err != nil {
+		t.Fatalf("replayed SSE data is not valid JSON: %q: %v", frame.data[0], err)
+	}
+	if got != want {
+		t.Fatalf("replayed SSE payload = %q, want %q", got, want)
+	}
+}
+
+func TestSSEDoesNotReplayClearedBuildError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := newServer("", ctx, nil)
+
+	srv.rememberBuildError("stale failure")
+	srv.hub.broadcast(hubMessage{event: buildErrorEvent, payload: "stale failure"})
+	// A subsequent successful build clears retained state before broadcasting
+	// clear, matching the rebuild success ordering (D92).
+	srv.rememberBuildError("")
+	srv.hub.broadcast(hubMessage{event: clearEvent})
+
+	body := connectSSE(t, srv)
+	if strings.Contains(body, "event: "+buildErrorEvent) {
+		t.Fatalf("new SSE client received a stale build error after success: %q", body)
+	}
+	if !strings.Contains(body, ": connected\n\n") {
+		t.Fatalf("SSE connection preamble missing: %q", body)
 	}
 }
 
@@ -527,6 +804,63 @@ func TestWithinDirResolvedSymlinkEscape(t *testing.T) {
 	if !withinDirResolved(root, real) {
 		t.Fatalf("legitimate in-root file wrongly rejected: %s", real)
 	}
+}
+
+type sseFrame struct {
+	event string
+	data  []string
+}
+
+func readSSEFrame(r io.Reader) (sseFrame, error) {
+	var frame sseFrame
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case line == "":
+			if frame.event != "" {
+				return frame, nil
+			}
+		case strings.HasPrefix(line, "event:"):
+			frame.event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		case strings.HasPrefix(line, "data:"):
+			frame.data = append(frame.data, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
+		}
+	}
+	return frame, scanner.Err()
+}
+
+func connectSSE(t *testing.T, srv *server) string {
+	t.Helper()
+	reqCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "http://puzzle.test"+reloadPath, nil).WithContext(reqCtx)
+	response := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		srv.serveSSE(response, req)
+		close(done)
+	}()
+
+	waitFor(t, 2*time.Second, func() bool { return srv.hub.clientCount() == 1 })
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("SSE handler did not stop after client cancellation")
+	}
+	return response.Body.String()
+}
+
+func waitHubMessage(t *testing.T, ch <-chan hubMessage, what string) hubMessage {
+	t.Helper()
+	select {
+	case msg := <-ch:
+		return msg
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+	return hubMessage{}
 }
 
 func get(t *testing.T, url string) (body, contentType string) {

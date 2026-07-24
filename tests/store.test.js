@@ -866,7 +866,9 @@ describe('Store — server read path (D21)', () => {
 		const store = apiStore();
 
 		const records = await store.loadAll('todo');
-		expect(fetchSpy).toHaveBeenCalledWith('https://x.test/v1/api/todos');
+		// Explicit GET init (v1.55, D91): wire-identical to a bare fetch(url), and
+		// the shape beforeRequest sees on the read path.
+		expect(fetchSpy).toHaveBeenCalledWith('https://x.test/v1/api/todos', { method: 'GET' });
 		expect(records).toHaveLength(2);
 		expect(store.findOne('todo', 't1')).toBeInstanceOf(ApiTodo);
 		expect(store.findOne('todo', 't2').completed).toBe(false); // schema default applied
@@ -902,7 +904,7 @@ describe('Store — server read path (D21)', () => {
 		const store = apiStore();
 
 		const record = await store.loadOne('todo', 't9');
-		expect(fetchSpy).toHaveBeenCalledWith('https://x.test/v1/api/todos/t9');
+		expect(fetchSpy).toHaveBeenCalledWith('https://x.test/v1/api/todos/t9', { method: 'GET' });
 		expect(record.text).toBe('just one');
 		expect(store.findOne('todo', 't9')).toBe(record);
 		vi.unstubAllGlobals();

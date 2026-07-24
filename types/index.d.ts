@@ -94,6 +94,18 @@ export type ScrollBehavior = (
 	savedPosition: ScrollPosition | null
 ) => ScrollPosition | null | undefined | false;
 
+/**
+ * Custom router focus behavior (v1.56, D93): return the element focus should land
+ * on after a committed navigation, or a falsy value to leave focus alone for that
+ * navigation. Called AFTER the incoming chain is mounted, so it may query the
+ * freshly committed DOM; a throw is logged and treated as falsy. The route
+ * announcement still fires either way.
+ */
+export type FocusBehavior = (
+	to: RouteSnapshot,
+	from: RouteSnapshot | null
+) => Element | null | undefined | false;
+
 /** A single enter/leave animation spec (constellation/doc/DOC-SPEC.md §12). */
 export interface AnimationSpec {
 	from: object;
@@ -159,6 +171,42 @@ export interface RequestOptions {
 	method?: string;
 	body?: any;
 	headers?: Record<string, string>;
+}
+
+/**
+ * The frozen, read-only context handed to `beforeRequest` (v1.55, D91): the model
+ * type the request belongs to, the HTTP verb, and the fully built URL.
+ */
+export interface AdapterRequestContext {
+	readonly type: string;
+	readonly method: string;
+	readonly url: string;
+}
+
+/**
+ * Adapter request hook (v1.55, D91). Called synchronously before every adapter
+ * fetch — `loadAll`/`loadOne` (D21), `save()`/`delete()` and `request()` (D50).
+ * Mutate `init` in place or return a replacement object (a truthy object return
+ * wins) to attach auth headers, `credentials`, or an `AbortSignal`. `method` and
+ * `body` are re-stamped by the Store afterwards, and the URL is not reachable —
+ * a hook cannot change what the request IS, only how it is sent. A throw rejects
+ * the calling verb without sending anything.
+ */
+export type BeforeRequestHook = (
+	init: RequestInit,
+	context: AdapterRequestContext
+) => RequestInit | void;
+
+/** Store construction options (wired by `PuzzleApp` from its config). */
+export interface StoreOptions {
+	/** Storage-like object for opt-in persistence. */
+	storage?: any;
+	/** Persistence key (default `'puzzle-store'`). */
+	storageKey?: string;
+	/** Base URL for the server read/write path. */
+	apiURL?: string;
+	/** Adapter request hook (v1.55, D91). */
+	beforeRequest?: BeforeRequestHook;
 }
 
 /**
@@ -487,8 +535,24 @@ export interface PuzzleAppConfig {
 	apiURL?: string;
 	/** Storage-like object for opt-in persistence. */
 	storage?: any;
+	/**
+	 * Adapter request hook (v1.55, D91): `beforeRequest(init, { type, method, url })`,
+	 * called synchronously before every adapter fetch. Mutate `init` or return a
+	 * replacement to attach auth headers, `credentials`, or an `AbortSignal`.
+	 */
+	beforeRequest?: BeforeRequestHook;
 	/** Router scroll handling (v1.5, D33): `false`, or a custom function. */
 	scrollBehavior?: false | ScrollBehavior;
+	/**
+	 * Router focus management + route announcement (v1.56, D93). Omit for the
+	 * default: after every committed navigation focus the leaf view's root
+	 * (`tabindex="-1"` stamped and removed on blur) with `{ preventScroll: true }`,
+	 * and announce the committed `document.title` in a framework-owned
+	 * visually-hidden `aria-live="polite"` region. `false` disables both — no focus
+	 * move and no live region is ever created. A function chooses the target
+	 * element itself. Inert in memory mode; navigation #0 never moves focus.
+	 */
+	focusBehavior?: false | FocusBehavior;
 	/** Router URL carrier (v1.6/v1.11): pathname, hash, or in-memory. */
 	routerMode?: 'history' | 'hash' | 'memory';
 	/** Memory-mode initial route (v1.11, D42). */

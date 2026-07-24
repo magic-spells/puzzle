@@ -42,8 +42,9 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `puzzle` binary shim selects an optional platform binary for macOS/Linux on
   arm64/x64. Unsupported systems get a Go-install fallback message.
 - App config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
-  `scrollBehavior`, `routerMode`, `routerInitialPath`, `routerBase`,
-  `transitionMode`, `beforeMount`, `mounted`, and `beforeUnmount`.
+  `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode`,
+  `routerInitialPath`, `routerBase`, `transitionMode`, `beforeMount`, `mounted`,
+  and `beforeUnmount`.
 - The app is SPA-first. Prerendered output comes in two modes (D67/D81), never a
   request-time SSR server or hydration protocol: `output: 'hybrid'` ships
   prerendered pages the SPA takes over at navigation zero; `output: 'static'`
@@ -105,6 +106,11 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Reads: `loadAll`/`loadOne` through model adapters with identity-preserving
   upsert. Writes: `save`, `delete`, and custom `request`, with POST/PUT sync
   provenance, collision/destroy guards, and typed adapter errors.
+- Every adapter call routes through one internal fetch seam, so the optional
+  `beforeRequest(init, { type, method, url })` config hook attaches auth headers,
+  `credentials`, or an `AbortSignal` to all of them (D91). Synchronous;
+  `method`/`body`/URL are not the hook's to change. Carried by the prerender
+  path; structurally unavailable under `output: 'static'`.
 - Relationships are lazy store-backed getters and participate in tracking.
 - Optional Storage hydration/persistence is fail-soft. Persistence serializes
   once per flush and is forced during app teardown.
@@ -133,6 +139,12 @@ second specification. Decision cards hold rationale and git holds chronology.
   committed state alone.
 - Scroll-to-top, pop restoration, session persistence, custom behavior, and
   opt-out.
+- Focus management + route announcement (D93): every committed navigation moves
+  focus to the incoming view root with `preventScroll` (strictly after the scroll
+  commit) under a transient `tabindex="-1"`, and sets a framework-owned
+  visually-hidden `aria-live` region to the committed title. `focusBehavior`
+  mirrors `scrollBehavior` — omit / `false` / function. Memory mode and
+  navigation #0 are no-ops; static output has no router and so gets neither.
 - Sequential route transitions by default. Optional overlapping transitions
   resolve destination-first at route, view/layout, then app level.
 - WAAPI enter/leave animations are failure-safe and reduced-motion aware.
@@ -154,6 +166,12 @@ second specification. Decision cards hold rationale and git holds chronology.
   stage and atomically swap `dist`, preserving the last good build on failure.
 - `puzzle dev` uses incremental esbuild, recursive watch, warm Tailwind watch,
   a localhost static server, SPA fallback, SSE reload, and graceful shutdown.
+- Build failures reach the browser, not just the terminal (D92): the SSE channel
+  carries typed `reload`/`builderror`/`clear` frames with JSON payloads and
+  last-write-wins client buffers, the server retains the current error and
+  replays it to late-connecting clients, and a 404 with a retained error serves a
+  503 self-healing shell so a first-ever failed build shows the diagnostic
+  instead of "404 page not found". Dev-server only.
 - Dev reload snapshots store records and JSON-safe local view state to a
   short-lived one-shot session blob, then restores store before navigation and
   local state after mount. Production bundles eliminate this machinery.

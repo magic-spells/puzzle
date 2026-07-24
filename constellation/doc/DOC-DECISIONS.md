@@ -1,5 +1,5 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D89)
+name: DECISIONS.md — decision-log index (D1–D93)
 status: verified
 verified_at: '2026-07-24T05:49:35.947Z'
 connections:
@@ -7,7 +7,7 @@ connections:
 verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
-Index of the ADR-lite decision log. Each decision D1–D89 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+Index of the ADR-lite decision log. Each decision D1–D93 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
 
 # Decision Log (index)
 
@@ -125,6 +125,12 @@ slice-of-work view.
 - **D89** [[DECISION-D89-FEATURE-USAGE-TREESHAKE]] — pay-for-what-you-use runtime: a build-time usage scan emits `__PUZZLE_HAS_FLIP__` / `__PUZZLE_HAS_HEAD_TAGS__` esbuild defines that fold inlined runtime probes, so `views/flip.js` and the new `headTags.js` ship only to apps that use them; generalizes D31's per-app inclusion to whole modules via D57's define+DCE mechanism, and splits `head.js` into title core + managed-tag machinery (0.2.0 hardening → SPEC §45 / build pipeline)
 
 - **D90** [[DECISION-D90-DEV-PORT-SCAN]] — `puzzle dev` scans upward from `--port` for the first free loopback port (bounded at 10 candidates) instead of failing on a busy one, prints a warning line when it moves, and reads the BOUND port for the banner URL / browser-open / `httpSrv.Addr` (also fixing `--port 0`, which printed `localhost:0`); the scan advances on any bind failure and surfaces the FIRST error when exhausted rather than inspecting errno (Windows reports `WSAEADDRINUSE`, and a non-in-use failure fails on every candidate anyway); `--strict-port` restores bind-or-fail for pinned ports — silent relocation, a `puzzle.config.js` key, and an unbounded scan rejected (v1.54, [[FEATURE-V1-54-DEV-PORT-SCAN]])
+
+- **D91** [[DECISION-D91-ADAPTER-REQUEST-HOOK]] — `beforeRequest`: every adapter fetch routes through one private `Store._fetch(url, init, context)`, and an optional synchronous config hook shapes the `init` before it goes out (auth headers, `credentials`, `AbortSignal`) — closing the hole where `loadAll`/`loadOne` were a bare `fetch(url)` with no init at all, so token-authenticated apps could not use the D21 read path; `method`/`body` are re-stamped after the hook because the D50 write path reconciles against a `requestKey` captured before the await, the context arg is frozen, and a throwing hook rejects the verb rather than shipping an unauthenticated request; the prerender path carries it, `output: 'static'` structurally cannot (functions do not survive serialization into the generated per-page module); an async variant, method/URL rewriting, merge-instead-of-replace, and a whole-`fetch` override all rejected (v1.55 → SPEC §8/§22)
+
+- **D92** [[DECISION-D92-DEV-ERROR-OVERLAY]] — dev build errors reach the browser instead of only the terminal: the SSE reload channel carries typed `hubMessage{event,payload}` frames (`reload`/`builderror`/`clear`) with last-write-wins on the size-1 client buffers (the original non-blocking send dropped the NEW message, backwards once messages carry meaning) and JSON-encoded payloads (SSE `data:` cannot carry the raw newlines every real diagnostic has); the server retains `lastError` and `serveSSE` registers with the hub BEFORE reading it, so a racing build duplicates a frame rather than dropping one — fixing both refresh-while-broken and the zero-client initial failure; and a 404 with a retained error serves a 503 self-healing error shell (HTML-escaped, reload script injected, overlay node adopted by id so the SSE replay does not stack a second one) so a first-ever failed build shows the diagnostic instead of "404 page not found"; `builderror` bypasses the D27 reload coalescer, dev-server only (v1.55 → SPEC §50)
+
+- **D93** [[DECISION-D93-ROUTER-FOCUS-MANAGEMENT]] — router focus management + route announcement: after every committed navigation `#commitState` moves focus to the incoming view root and sets a framework-owned visually-hidden `aria-live="polite"` region to the already-committed `document.title` (D84), landing STRICTLY after the scroll block with `focus({ preventScroll: true })` — load-bearing, since a default `focus()` scrolls and would silently break D33 restore + D41 anchor landings; `tabindex="-1"` is transient (removed on blur, author-set values never clobbered); the gate resolves pre-commit but the TARGET resolves post-mount because a custom `focusBehavior` returns an element and the incoming chain is not in the DOM until commit (the D41 `{ anchor }` sentinel split); `focusBehavior` mirrors D33's shape (omit / `false` / function, throws logged and treated as falsy), memory mode and navigation #0 are no-ops, `pop` moves focus like `push`/`replace` (browsers do not restore focus for client-side nav), a declining custom function still announces, and `output: 'static'` gets nothing (no router); permanent tabindex, `display:none` regions, and announce-before-focus all rejected (v1.56 → SPEC §51)
 
 ## Open questions (tracked, not yet decided)
 

@@ -30,6 +30,9 @@ import type {
 	Formatter,
 	ValidationResult,
 	MorphHandler,
+	BeforeRequestHook,
+	AdapterRequestContext,
+	FocusBehavior,
 } from '@magic-spells/puzzle';
 import { enableMorph } from '@magic-spells/puzzle/morph';
 import type { MorphEngine } from '@magic-spells/puzzle/morph';
@@ -202,9 +205,27 @@ const scrollBehavior = (
 	return { x: 0, y: 0 };
 };
 
+// Router focus behavior (v1.56, D93): return an element to focus after the
+// committed navigation, or a falsy value to leave focus alone for that one.
+const focusBehavior: FocusBehavior = (to, from) => {
+	if (from && to.pathname === from.pathname) return null;
+	return document.querySelector('h1');
+};
+
 // ---------------------------------------------------------------------------
 // PuzzleApp config: all three lifecycle hooks + routerMode/scrollBehavior/transitionMode
 // ---------------------------------------------------------------------------
+
+// Adapter request hook (v1.55, D91): both documented shapes type-check — mutate
+// the init in place, or return a replacement.
+const attachAuth: BeforeRequestHook = (init, context) => {
+	const where: AdapterRequestContext = context;
+	void `${where.type} ${where.method} ${where.url}`;
+	init.headers = { ...(init.headers as Record<string, string>), Authorization: 'Bearer t' };
+};
+
+const replaceInit: BeforeRequestHook = (init) => ({ ...init, credentials: 'include' });
+void replaceInit;
 
 const config: PuzzleAppConfig = {
 	target: '#app',
@@ -212,11 +233,13 @@ const config: PuzzleAppConfig = {
 	models: { todo: Todo },
 	formatters: { upcase },
 	apiURL: '',
+	beforeRequest: attachAuth,
 	routerMode: 'history',
 	routerBase: '/app',
 	routerInitialPath: '/',
 	transitionMode: 'sequential',
 	scrollBehavior,
+	focusBehavior,
 	async beforeMount(app) {
 		// `this` is the PuzzleApp; store is live and awaited before nav #0 (§34).
 		const self: PuzzleApp = this;

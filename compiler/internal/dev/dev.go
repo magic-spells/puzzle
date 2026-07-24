@@ -26,7 +26,9 @@ package dev
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -57,8 +59,14 @@ import (
 // formatters) into a single rebuild. 150ms sits in the plan's 100–200ms window.
 const debounceInterval = 150 * time.Millisecond
 
-// reloadScript is injected into served index.html (never onto disk). It opens
-// an EventSource to the SSE endpoint and full-page reloads on a `reload` event.
+// buildErrorStyle is shared by the client-drawn overlay and the first-build
+// fallback shell so SSE connection timing never changes what the error looks
+// like (D92).
+const buildErrorStyle = "position:fixed;inset:0;z-index:2147483647;background:#111;color:#fff;padding:24px;box-sizing:border-box;overflow:auto;font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap"
+
+// reloadScript is injected into served HTML shells (never onto disk). It opens
+// an EventSource to the SSE endpoint, reports build failures in-page (D92), and
+// full-page reloads on a `reload` event.
 //
 // Before reloading it asks the running app to snapshot its state to
 // sessionStorage (constellation/doc/DOC-SPEC.md §27, D57): the dev-published
@@ -69,6 +77,30 @@ const debounceInterval = 150 * time.Millisecond
 const reloadScript = `<script>
 (function () {
   var es = new EventSource("/__puzzle/reload");
+  var overlay = document.getElementById("__puzzle-build-error");
+  function clearError() {
+    if (!overlay) return;
+    overlay.remove();
+    overlay = null;
+  }
+  es.addEventListener("builderror", function (event) {
+    try {
+      var message = JSON.parse(event.data);
+      clearError();
+      overlay = document.createElement("div");
+      overlay.id = "__puzzle-build-error";
+      overlay.style.cssText = "` + buildErrorStyle + `";
+      var heading = document.createElement("strong");
+      heading.textContent = "Puzzle build error";
+      overlay.appendChild(heading);
+      overlay.appendChild(document.createTextNode("\n\n" + message));
+      document.body.appendChild(overlay);
+    } catch (e) {}
+  });
+  es.addEventListener("clear", clearError);
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") clearError();
+  });
   es.addEventListener("reload", function () {
     try {
       var a = window.__PUZZLE_APP__;
@@ -81,6 +113,12 @@ const reloadScript = `<script>
 
 // reloadPath is the SSE endpoint the injected client subscribes to.
 const reloadPath = "/__puzzle/reload"
+
+const (
+	reloadEvent     = "reload"
+	buildErrorEvent = "builderror"
+	clearEvent      = "clear"
+)
 
 // Options configure Serve.
 type Options struct {
@@ -265,6 +303,9 @@ func Serve(root string, opts Options) error {
 		// runs must surface as a visible build error, not a silent clobber.
 		if err := build.ValidatePublic(absRoot); err != nil {
 			logBuildFailure(stderr, err)
+			message := err.Error()
+			srv.rememberBuildError(message)
+			srv.hub.broadcast(hubMessage{event: buildErrorEvent, payload: message})
 			if opts.onRebuild != nil {
 				opts.onRebuild(err)
 			}
@@ -283,6 +324,9 @@ func Serve(root string, opts Options) error {
 		}
 		if err != nil {
 			logBuildFailure(stderr, err)
+			message := err.Error()
+			srv.rememberBuildError(message)
+			srv.hub.broadcast(hubMessage{event: buildErrorEvent, payload: message})
 			if opts.onRebuild != nil {
 				opts.onRebuild(err)
 			}
@@ -291,6 +335,10 @@ func Serve(root string, opts Options) error {
 		if logSuccess {
 			logRebuild(stdout, absRoot, changed, time.Since(start))
 		}
+		// Clear the last failure immediately; only the subsequent reload remains
+		// debounced with Tailwind's companion update (D27, D92).
+		srv.rememberBuildError("")
+		srv.hub.broadcast(hubMessage{event: clearEvent})
 		coalescer.request()
 		if opts.onRebuild != nil {
 			opts.onRebuild(nil)
@@ -399,6 +447,10 @@ type server struct {
 	hub      *hub
 	proxies  map[string]string
 	proxyLog io.Writer
+	// Unlike the fan-out hub, this is retained state for clients that connect
+	// after a failed build or refresh while it remains broken (D92).
+	buildErrorMu sync.Mutex
+	lastError    string
 	// ctx is cancelled on shutdown; SSE handlers watch it so http.Server.Shutdown
 	// does not hang on their long-lived streams (constellation/doc/DOC-BUILD-PLAN.md Phase 3
 	// risk: "SSE + http.Server.Shutdown").
@@ -407,6 +459,18 @@ type server struct {
 
 func newServer(dist string, ctx context.Context, proxies map[string]string) *server {
 	return &server{dist: dist, hub: newHub(), proxies: proxies, proxyLog: os.Stderr, ctx: ctx}
+}
+
+func (s *server) rememberBuildError(message string) {
+	s.buildErrorMu.Lock()
+	s.lastError = message
+	s.buildErrorMu.Unlock()
+}
+
+func (s *server) currentBuildError() string {
+	s.buildErrorMu.Lock()
+	defer s.buildErrorMu.Unlock()
+	return s.lastError
 }
 
 func (s *server) handler() http.Handler {
@@ -514,6 +578,12 @@ func (s *server) serveStatic(w http.ResponseWriter, r *http.Request) {
 func (s *server) serveIndex(w http.ResponseWriter, r *http.Request) {
 	data, err := os.ReadFile(filepath.Join(s.dist, "index.html"))
 	if err != nil {
+		if message := s.currentBuildError(); message != "" {
+			s.serveBuildErrorShell(w, message)
+			return
+		}
+		// Keep the no-build-error response byte-for-byte identical: callers that
+		// genuinely requested a missing dev path still get the existing 404.
 		http.Error(w, "puzzle dev: dist/index.html not found (build may have failed)", http.StatusNotFound)
 		return
 	}
@@ -521,6 +591,29 @@ func (s *server) serveIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(injectReload(data))
+}
+
+// serveBuildErrorShell replaces an otherwise-unhelpful missing-index 404 only
+// while a build is known to be broken. The injected client makes the 503 page
+// self-heal as soon as the next successful rebuild broadcasts reload (D92).
+func (s *server) serveBuildErrorShell(w http.ResponseWriter, message string) {
+	page := `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Puzzle build error</title>
+</head>
+<body>
+<div id="__puzzle-build-error" style="` + buildErrorStyle + `"><strong>Puzzle build error</strong>
+
+` + html.EscapeString(message) + `</div>
+</body>
+</html>`
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = w.Write(injectReload([]byte(page)))
 }
 
 // serveRawHTML writes an on-disk .html file verbatim, with NO live-reload
@@ -540,9 +633,9 @@ func (s *server) serveRawHTML(w http.ResponseWriter, path string) {
 	_, _ = w.Write(data)
 }
 
-// serveSSE streams reload events. It registers a client with the hub and blocks
-// until either the client disconnects (r.Context) or the server shuts down
-// (s.ctx), so shutdown never hangs on the open stream.
+// serveSSE streams typed dev events. It registers a client with the hub and
+// blocks until either the client disconnects (r.Context) or the server shuts
+// down (s.ctx), so shutdown never hangs on the open stream.
 func (s *server) serveSSE(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -553,12 +646,23 @@ func (s *server) serveSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
+
+	// Register before reading retained state: a concurrent build transition must
+	// reach this client through either replay or the hub, never fall between them
+	// (D92). A duplicate is harmless because the later event self-corrects.
+	ch := s.hub.add()
+	defer s.hub.remove(ch)
+
 	// Flush headers so the EventSource opens immediately.
 	fmt.Fprint(w, ": connected\n\n")
 	flusher.Flush()
 
-	ch := s.hub.add()
-	defer s.hub.remove(ch)
+	if message := s.currentBuildError(); message != "" {
+		if err := writeSSEFrame(w, hubMessage{event: buildErrorEvent, payload: message}); err != nil {
+			return
+		}
+		flusher.Flush()
+	}
 
 	for {
 		select {
@@ -566,46 +670,73 @@ func (s *server) serveSSE(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-r.Context().Done():
 			return
-		case <-ch:
-			fmt.Fprint(w, "event: reload\ndata: 1\n\n")
+		case msg := <-ch:
+			if err := writeSSEFrame(w, msg); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}
 }
 
-// hub is the reload broadcaster: a registry of connected SSE clients. Each
-// client owns a buffered (size 1) channel; broadcast does a non-blocking send
-// so a slow client is coalesced rather than blocking the rebuild.
+// writeSSEFrame is shared by retained-state replay and live hub delivery so a
+// multi-line compiler diagnostic always uses identical JSON-safe framing (D92).
+func writeSSEFrame(w io.Writer, msg hubMessage) error {
+	payload, err := json.Marshal(msg.payload)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", msg.event, payload)
+	return err
+}
+
+// hub is the dev-event broadcaster: a registry of connected SSE clients. Each
+// client owns a buffered (size 1) channel; broadcast stays non-blocking, but a
+// newer message replaces any stale pending one so the browser sees the latest
+// build state (D92).
+type hubMessage struct {
+	event   string
+	payload string
+}
+
 type hub struct {
 	mu      sync.Mutex
-	clients map[chan struct{}]struct{}
+	clients map[chan hubMessage]struct{}
 }
 
 func newHub() *hub {
-	return &hub{clients: make(map[chan struct{}]struct{})}
+	return &hub{clients: make(map[chan hubMessage]struct{})}
 }
 
-func (h *hub) add() chan struct{} {
-	ch := make(chan struct{}, 1)
+func (h *hub) add() chan hubMessage {
+	ch := make(chan hubMessage, 1)
 	h.mu.Lock()
 	h.clients[ch] = struct{}{}
 	h.mu.Unlock()
 	return ch
 }
 
-func (h *hub) remove(ch chan struct{}) {
+func (h *hub) remove(ch chan hubMessage) {
 	h.mu.Lock()
 	delete(h.clients, ch)
 	h.mu.Unlock()
 }
 
-func (h *hub) broadcast() {
+func (h *hub) broadcast(msg hubMessage) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for ch := range h.clients {
 		select {
-		case ch <- struct{}{}:
-		default: // a reload is already pending for this client; coalesce.
+		case ch <- msg:
+		default:
+			select {
+			case <-ch:
+			default:
+			}
+			select {
+			case ch <- msg:
+			default:
+			}
 		}
 	}
 }
@@ -872,13 +1003,13 @@ func (p *pipeline) recompose() error {
 // yield one reload.
 type reloadCoalescer struct {
 	delay time.Duration
-	fire  func()
+	fire  func(hubMessage)
 
 	mu    sync.Mutex
 	timer *time.Timer
 }
 
-func newReloadCoalescer(delay time.Duration, fire func()) *reloadCoalescer {
+func newReloadCoalescer(delay time.Duration, fire func(hubMessage)) *reloadCoalescer {
 	return &reloadCoalescer{delay: delay, fire: fire}
 }
 
@@ -886,7 +1017,9 @@ func (r *reloadCoalescer) request() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.timer == nil {
-		r.timer = time.AfterFunc(r.delay, r.fire)
+		r.timer = time.AfterFunc(r.delay, func() {
+			r.fire(hubMessage{event: reloadEvent, payload: "1"})
+		})
 		return
 	}
 	r.timer.Reset(r.delay)
