@@ -293,6 +293,8 @@ record.destroy();
 
 Any query made inside `data()` auto-subscribes the component; changes to matching records re-run `data()`.
 
+**Record identity is number/string-insensitive (D112).** The store indexes number primary keys by their string form, so `findOne('todo', id)` returns the same record whether `id` is `7` or `'7'` — route params are always strings while JSON payloads usually carry numbers. Only numbers normalize: `null`/objects keep strict identity, and there is no numeric parsing (`'01'` ≠ `1`). The record's own pk field keeps its original type; a type-variant duplicate pk is a duplicate (`createRecord` throws, `upsert` updates in place).
+
 ## 9. Router (v1 surface)
 
 ```js
@@ -635,7 +637,7 @@ static schema = {
 };
 ```
 
-- **Resolution is a lazy store query.** `post.author` ⇒ `findOne('user', post.authorId)` (`null` on miss/no store); `post.comments` ⇒ `findMany('comment', { filter: c => c.postId === post.id })` (`[]` when store-less; store insertion order — sort in `data()`). No materialization, no caching: always the live store.
+- **Resolution is a lazy store query.** `post.author` ⇒ `findOne('user', post.authorId)` (`null` on miss/no store); `post.comments` ⇒ `findMany('comment', { filter: c => c.postId === post.id })` (`[]` when store-less; store insertion order — sort in `data()`). No materialization, no caching: always the live store. FK-to-pk comparison uses the same number/string-insensitive identity as `findOne` (§8, D112) — a string FK resolves a numeric pk and vice versa.
 - **Reactivity rides the existing tracking:** a traversal inside `data()` auto-subscribes exactly like the manual join it replaces. Template-only access reads without subscribing — return traversals from `data()`.
 - **FK convention, overridable via `{ key: '...' }`:** `belongsTo` → `<relationshipName>Id`; `hasMany` → `<ownerTypeName>Id` (the owner's model-registry key).
 - **Relationship entries are not fields:** excluded from defaults, primary-key lookup, and §20 validation; not serialized by `toJSON()` (records serialize the FK, never the resolved graph). Getters are installed by the Store constructor for registered models.
@@ -1045,12 +1047,12 @@ Parsing happens once per navigation; a query-only navigation to the same route r
 
 ## 45. Route head management (v1.50)
 
-Route `meta` grows **reserved head fields** — `title` (existing), `description`, `canonical`, `socialImage` — resolved per-field and rendered as managed head tags by both prerender output and SPA navigation, with SSG as the authoritative delivery path (link-preview bots do not run the app). One contract, no second head DSL (D84).
+Route `meta` grows **reserved head fields** — `title` (existing), `description`, `canonical`, `socialImage` — resolved per-field by one shared resolver, then delivered by two **disjoint** paths: the browser assigns `document.title` on every navigation, and the prerender bakes the managed `og:`/`twitter:`/description/canonical tags into each page's HTML at build time. One contract, no second head DSL (D84, amended by D111).
 
 - **Resolution:** each reserved field resolves independently, nearest-defined walking the destination chain leaf → root (the `meta.title` walk); `undefined` inherits, `null` explicitly suppresses an inherited value. Values are static strings or `null` — no functions, view data, raw HTML, or tag arrays. Custom `meta` keys are untouched. Canonical values are emitted as provided (supply absolute URLs).
-- **Generated tags:** `title` → `<title>` + `og:title` + `twitter:title`; `description` → description + `og:description` + `twitter:description`; `canonical` → `<link rel="canonical">` + `og:url`; `socialImage` → `og:image` + `twitter:image` + `twitter:card=summary_large_image`. Every managed tag carries `data-puzzle-head="<field>"`; the framework only ever creates, updates, or removes tags bearing that marker.
-- **SSG:** the shell injection replaces same-identity managed tags and inserts the rest before `</head>` — escaped, deterministic string surgery (no HTML parser). Prerender results carry a resolved `head` beside the compatibility `title`.
-- **SPA:** managed nodes sync at the same commit point as the title today, so §30 atomicity covers the head — a failed or superseded navigation never touches it. On hybrid takeover, existing marker-bearing tags are **adopted** by identity, never duplicated. Title-only apps behave byte-identically: no resolved title anywhere leaves `document.title` alone, and memory mode performs no document work (§16 posture, D42).
+- **Generated tags:** `title` → `<title>` + `og:title` + `twitter:title`; `description` → description + `og:description` + `twitter:description`; `canonical` → `<link rel="canonical">` + `og:url`; `socialImage` → `og:image` + `twitter:image` + `twitter:card=summary_large_image`. Every managed tag carries `data-puzzle-head="<field>"`, marking it as framework-owned in the served HTML; unmarked head elements in the shell are never touched.
+- **SSG (the only managed-tag path):** the shell injection replaces same-identity managed tags, removes ones whose field no longer resolves, and inserts the rest before `</head>` — escaped, deterministic string surgery (no HTML parser). Prerender results carry a resolved `head` beside the compatibility `title`. Because crawlers and unfurlers GET each URL fresh and never client-navigate, the tags baked into that page are always the copy they read.
+- **SPA:** the browser syncs **`document.title` only**, at the same commit point as before, so §30 atomicity covers it — a failed or superseded navigation never touches it. Only a non-null resolved title assigns; no resolved title anywhere leaves `document.title` alone, and memory mode performs no document work (§16 posture, D42). The runtime does **not** sync managed tags in any output mode (D111): the browser-side `syncTags` is deleted, so `headTags.js` is build-time only and enters no browser bundle. Under `output: 'spa'` — which has no prerender pass — `description`/`canonical`/`socialImage` are therefore accepted but inert.
 - Applications using managed fields should define root-route defaults so child routes cannot leave stale inherited values.
 
 ## 46. FLIP keyed-reorder animation: the `flip` directive attribute (v1.51)
@@ -1170,7 +1172,7 @@ A fifth export subpath (D94) — `mountView`, `createTestApp`, `settled`, `insta
 
 ## 54. The `--fixtures` build switch (v1.61)
 
-`puzzle dev --fixtures` and `puzzle build --fixtures` (D98) wire §52's module into the bundle; without the flag **nothing references it**, so exclusion holds by construction with any compiler version. (This replaces v1.59's `__PUZZLE_HAS_FIXTURES__`/`__PUZZLE_HAS_MOCK__` usage-scan defines — D96, superseded. The D89 scan mechanism itself is unchanged and still gates flip/head-tags.)
+`puzzle dev --fixtures` and `puzzle build --fixtures` (D98) wire §52's module into the bundle; without the flag **nothing references it**, so exclusion holds by construction with any compiler version. (This replaces v1.59's `__PUZZLE_HAS_FIXTURES__`/`__PUZZLE_HAS_MOCK__` usage-scan defines — D96, superseded. The D89 scan mechanism itself is unchanged, but `__PUZZLE_HAS_FLIP__` is now its only define: D111 retired the managed-head half, so the scan reads only `.pzl` files.)
 
 - The flag requires `app/fixtures.js` (or `.ts`); missing is a clear error. Its default export is §52's install config: `{ seed, mock, setup }`.
 - The compiler generates a **two-module wrapper entry** under `<root>/.puzzle/` and swaps the esbuild entry point: a wiring module (`installFixtures(config)` in its body) imported **before** the real `app/app.js`. Two modules because static imports hoist — only a dependency module's body is guaranteed to run before the app entry constructs and mounts. The wrapper keeps the `dist/app.js` output name.
@@ -1210,8 +1212,9 @@ local }` with the **model layer and `setData()` local layer reported
 separately**, JSON-safe filtered · `snapshot:records { type? }` ·
 `snapshot:subscriptions` (both directions, view ids; function subscribers
 labeled `'fn'` — one merged bucket, no per-function identity) ·
-`snapshot:route` → a JSON-safe projection `{ pathname, query, params, chain,
-routes, route }` (view names + path patterns — never the live entry objects) ·
+`snapshot:route` → a JSON-safe projection `{ path, pathname, query, hash,
+params, route, routes, chain, title }` — `route`/`routes` are path PATTERNS and
+`chain` is the committed view NAMES, never the live entry objects ·
 `edit:record { type, id, patch }` —
 applied through the real `record.update()`, so §20 validation applies and a
 throw returns `{ error }` · `highlight:view { id, on }` (page overlay) ·
