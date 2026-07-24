@@ -11,11 +11,7 @@ connections:
   - DOC-DATASTORE
 ---
 
-<<<<<<< Updated upstream
-The full v1 routing surface: route definition shape, dynamic `:param` segments delivered to `data(params, props)`, layouts and the `<Slot/>` injection point, nested routes via `children` (v1.3), `router.push()` plus automatic link interception and `go()`/`back()`/`forward()` (v1.11), `router.replace()` and the parsed `query`/`pathname`/`hash` snapshot fields for URL-backed transient state (v1.49), `meta.title` → `document.title` plus the reserved head fields (`description`/`canonical`/`socialImage`) rendered as managed head tags (v1.50), the v1 route lifecycle (with v1.1 transition animations), window scroll management (v1.5; anchor targets + reload persistence v1.10), opt-in hash mode for static hosts (v1.6), URL-less memory mode for tests and embeds (v1.11), sub-path deploys via `routerBase` (v1.19), path-shaped hrefs via `router.url()` and the `link` formatter (v1.46), and the settled `path: '*'` catch-all 404 convention (D19).
-=======
-The full v1 routing surface: route definition shape, dynamic `:param` segments delivered to `data(params, props)`, layouts and the `<Slot/>` injection point, nested routes via `children` (v1.3), `router.push()` plus automatic link interception and `go()`/`back()`/`forward()` (v1.11), `meta.title` → `document.title`, the v1 route lifecycle (with v1.1 transition animations), window scroll management (v1.5; anchor targets + reload persistence v1.10), opt-in hash mode for static hosts (v1.6), URL-less memory mode for tests and embeds (v1.11), sub-path deploys via `routerBase` (v1.19), path-shaped hrefs via `router.url()` and the `link` formatter (v1.46), `router.replace()` and the query/hash snapshot (v1.49), route guards via the inherited `guard` route field (v1.53), and the settled `path: '*'` catch-all 404 convention (D19).
->>>>>>> Stashed changes
+The full v1 routing surface: route definition shape, dynamic `:param` segments delivered to `data(params, props)`, layouts and the `<Slot/>` injection point, nested routes via `children` (v1.3), `router.push()` plus automatic link interception and `go()`/`back()`/`forward()` (v1.11), `router.replace()` and the parsed `query`/`pathname`/`hash` snapshot fields for URL-backed transient state (v1.49), `meta.title` → `document.title` plus the reserved head fields (`description`/`canonical`/`socialImage`) rendered as managed head tags (v1.50), the v1 route lifecycle (with v1.1 transition animations), window scroll management (v1.5; anchor targets + reload persistence v1.10), opt-in hash mode for static hosts (v1.6), URL-less memory mode for tests and embeds (v1.11), sub-path deploys via `routerBase` (v1.19), path-shaped hrefs via `router.url()` and the `link` formatter (v1.46), route guards via the inherited `guard` route field (v1.53), and the settled `path: '*'` catch-all 404 convention (D19).
 
 # Puzzle Router
 
@@ -74,12 +70,8 @@ app.mount();
 | `view` | PuzzleView class | The `.pzl` view rendered when the route matches. Imported at the top of `routes.js`. |
 | `layout` | PuzzleView class | The layout that wraps the view. The view renders at the layout's `<Slot/>`. **Top-level routes only** (v1.3) — nested children inherit the chain's layout; a `layout` on a child throws. |
 | `children` | array of route objects | Nested child routes with **relative** paths (v1.3). The parent's view renders its matched child at its own `<Slot/>`. See [Nested Routes](#nested-routes-v13). |
-<<<<<<< Updated upstream
-| `meta.title` `meta.description` `meta.canonical` `meta.socialImage` | string or `null` | The four **reserved head fields** (v1.50, D84). `title` is set as `document.title` on navigation; all four also render as managed head tags (`og:*`/`twitter:*` mirrors, `<link rel="canonical">`). **Static strings only** — no functions or data-derived values. Each field resolves **independently**, nearest-defined leaf → root in a nested chain; `undefined` inherits, `null` explicitly suppresses an inherited value. All optional. See [`meta.title` and head metadata](#metatitle-and-head-metadata-v150). |
-=======
 | `guard` | function | Navigation guard (v1.53). Runs before the route loads or commits; covers this node **and every child**. Allow, block, or redirect. See [Route guards](#route-guards-v153). |
-| `meta.title` | string | Set as `document.title` on navigation. Optional. In a nested chain, resolved nearest-defined, leaf → root. |
->>>>>>> Stashed changes
+| `meta.title` `meta.description` `meta.canonical` `meta.socialImage` | string or `null` | The four **reserved head fields** (v1.50, D84). `title` is set as `document.title` on navigation; all four also render as managed head tags (`og:*`/`twitter:*` mirrors, `<link rel="canonical">`). **Static strings only** — no functions or data-derived values. Each field resolves **independently**, nearest-defined leaf → root in a nested chain; `undefined` inherits, `null` explicitly suppresses an inherited value. All optional. See [`meta.title` and head metadata](#metatitle-and-head-metadata-v150). |
 
 ### Dynamic segments
 
@@ -691,22 +683,13 @@ The router is available in components as `this.ctx.router` (one of exactly three
 
 | Member | Signature | Description |
 | ------ | --------- | ----------- |
-<<<<<<< Updated upstream
 | `push(path)` | `router.push('/user/123')` | Navigate to `path`, run the route lifecycle, update `document.title` (and managed head tags, v1.50) from `meta` (history/hash modes). |
-| `replace(path)` (v1.49) | `router.replace('/items?q=cabin')` | Like `push()` — same pipeline, same atomic commit — but **replaces the current history entry** and leaves scroll untouched by default. For URL-backed transient state; see [URL-backed transient state](#url-backed-transient-state-query-hash-and-replace-v149). |
-=======
-| `push(path)` | `router.push('/user/123')` | Navigate to `path`, run the route lifecycle, update `document.title` from `meta.title` (history/hash modes). |
-| `replace(path)` (v1.49) | `router.replace('/login')` | Same pipeline as `push()` but **replaces** the current history entry — no new entry, scroll left alone. The redirect verb (auth redirects, post-action redirects). |
->>>>>>> Stashed changes
+| `replace(path)` (v1.49) | `router.replace('/items?q=cabin')` | Like `push()` — same pipeline, same atomic commit — but **replaces the current history entry** and leaves scroll untouched by default. For URL-backed transient state (see [URL-backed transient state](#url-backed-transient-state-query-hash-and-replace-v149)) — and the redirect verb (auth/guard redirects, post-action redirects). |
 | `go(n)` (v1.11) | `router.go(-2)` | Move through history: delegates to `history.go(n)` in history/hash mode; moves the internal stack in memory mode. Out-of-range `n` is a silent no-op. |
 | `back()` / `forward()` (v1.11) | `router.back()` | Shorthands for `go(-1)` / `go(1)`. |
 | `url(path)` (v1.46) | `router.url('/about')` | Encode a base-free path as a mode-correct href (`/about`, `#/about`, …). Templates should use the `link` formatter, which calls this. |
 
-<<<<<<< Updated upstream
-And that's essentially it for components in v1 — `push()`/`replace()`, the v1.11 history methods, plus automatic link interception cover the intended navigation surface. A larger router API (named-route navigation, guards) is not part of the v1 contract; anything beyond the above should be treated as **Planned — not in v1** (see [[DOC-SPEC]]). (Hash routing is available as of v1.6, memory mode as of v1.11 — see above.)
-=======
 And that's essentially it for components — `push()`/`replace()`, the v1.11 history methods, `url()`, plus automatic link interception cover the intended navigation surface. Declarative route protection is the `guard` field (v1.53 — see [Route guards](#route-guards-v153)), not a method. Named-route navigation remains **Planned — not shipped** (see [[DOC-SPEC]]). (Hash routing is available as of v1.6, memory mode as of v1.11 — see above.)
->>>>>>> Stashed changes
 
 ---
 
