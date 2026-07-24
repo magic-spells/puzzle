@@ -10,7 +10,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { prerender, prerenderToDir, injectShell, injectStaticShell } from '../client-runtime/ssg/index.js';
-import { resolveHead, MANAGED_TAGS, HEAD_FIELDS } from '../client-runtime/head.js';
+import { resolveHead, HEAD_FIELDS } from '../client-runtime/head.js';
+import { MANAGED_TAGS } from '../client-runtime/headTags.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 
