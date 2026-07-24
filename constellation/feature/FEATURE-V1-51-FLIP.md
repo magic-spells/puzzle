@@ -19,6 +19,17 @@ notes:
       animations or inline transforms after settle, flip absent from DOM/SSG. SPEC §46 example
       corrected: options via data() object (inline literals are not template expressions).
     sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+  - kind: gotcha
+    text: >-
+      An enter animation on the same element is only safe if its properties are DISJOINT from
+      `transform`. `animations.in` fills until it finishes, so a still-playing
+      `scale()`/`translate()` is the computed base transform that playFlip composes its correction
+      over — the row then animates *to* the half-played value and holds there until the enter
+      releases. Hit while migrating examples/kanban: a `scale(0.96)` placeholder enter produced flip
+      keyframes ending in `matrix(0.96, …)`. Opacity-only enters sidestep it entirely. This is the
+      D85 "simultaneous author-controlled transform animations can conflict" consequence in its most
+      likely concrete form, since inserts and reorders interleave naturally in any list a user is
+      manipulating.
 ---
 
 # v1.51 — FLIP keyed-reorder animation (D85)

@@ -84,8 +84,14 @@ const reloadPath = "/__puzzle/reload"
 
 // Options configure Serve.
 type Options struct {
-	// Port is the TCP port the static/SSE server listens on.
+	// Port is the TCP port the static/SSE server listens on. A busy port is not
+	// fatal: Serve scans upward for the next free one (see portScanLimit) unless
+	// StrictPort is set.
 	Port int
+	// StrictPort, when true, binds Port or fails. Pinned ports exist on purpose
+	// — container mappings, OAuth redirect URIs, proxy configs — and silently
+	// moving to a neighbour breaks whatever depends on the number.
+	StrictPort bool
 	// Open, when true, best-effort opens the app in the default browser once
 	// the server is listening.
 	Open bool
@@ -294,21 +300,25 @@ func Serve(root string, opts Options) error {
 	// Initial build: keep serving even if it fails (retry on next change).
 	rebuild(nil, false)
 
-	// Bind loopback only: the dev server (and its live-reload SSE endpoint) is a
-	// local convenience, not a LAN service. The banner prints localhost, so the
-	// bind must match. No host config option in v1.
-	addr := fmt.Sprintf("127.0.0.1:%d", opts.Port)
-	httpSrv := &http.Server{
-		Addr:    addr,
-		Handler: srv.handler(),
-	}
-
-	// Bind synchronously BEFORE the ready banner: a failed bind (port already in
-	// use) must surface as a clean error, with no false "ready" line printed and
-	// no browser opened on a dead port.
-	ln, err := net.Listen("tcp", addr)
+	// Bind synchronously BEFORE the ready banner: a failed bind must surface as a
+	// clean error, with no false "ready" line printed and no browser opened on a
+	// dead port. A port already in use is not a failure — listenDev scans upward
+	// for a free one — but an exhausted scan still lands here.
+	ln, err := listenDev(opts.Port, opts.StrictPort)
 	if err != nil {
 		return fmt.Errorf("dev server: %w", err)
+	}
+	// Everything downstream (banner, browser-open) must report the port actually
+	// BOUND, not the one requested: they differ whenever the scan moved on, and
+	// `--port 0` never had a real number to begin with.
+	port := boundPort(ln, opts.Port)
+	if port != opts.Port && opts.Port != 0 {
+		logWarning(stderr, "port %d in use — serving on %d instead", opts.Port, port)
+	}
+
+	httpSrv := &http.Server{
+		Addr:    ln.Addr().String(),
+		Handler: srv.handler(),
 	}
 
 	serverErr := make(chan error, 1)
@@ -343,7 +353,7 @@ func Serve(root string, opts Options) error {
 		quitCh = listenKeys(ctx, os.Stdin)
 	}
 
-	url := fmt.Sprintf("http://localhost:%d/", opts.Port)
+	url := fmt.Sprintf("http://localhost:%d/", port)
 	printReady(stdout, url, watchLabel(absRoot, appDir), stylesStatus, time.Since(serveStart), quitCh != nil)
 	if opts.OnReady != nil {
 		opts.OnReady()
@@ -910,6 +920,57 @@ func pollFile(ctx context.Context, path string, interval time.Duration, onChange
 			}
 		}
 	}
+}
+
+// portScanLimit is how many consecutive ports listenDev tries before giving up.
+// A busy default port is a papercut, not a failure (the same posture as Vite,
+// Next, and Astro), but the scan is bounded so a wedged machine reports a real
+// error instead of walking the port space.
+const portScanLimit = 10
+
+// listenDev binds the first free loopback port at or above `port`, returning the
+// listener. With strict set, only `port` itself is tried.
+//
+// Loopback only: the dev server (and its live-reload SSE endpoint) is a local
+// convenience, not a LAN service. The banner prints localhost, so the bind must
+// match. No host config option in v1.
+//
+// Any bind failure advances the scan, and the FIRST error is what surfaces once
+// the range is exhausted — it belongs to the port the user actually asked for.
+// Testing for EADDRINUSE specifically would need per-OS errno handling (Windows
+// reports WSAEADDRINUSE), and it buys nothing: a failure that is not "in use"
+// (permission, unavailable interface) fails identically on every candidate, so
+// the scan costs a few syscalls and still reports the right error.
+//
+// Port 0 is passed through untouched — the kernel picks a free port and the one
+// attempt always succeeds, so there is nothing to scan.
+func listenDev(port int, strict bool) (net.Listener, error) {
+	const maxPort = 65535
+
+	var firstErr error
+	for candidate := port; candidate <= maxPort; candidate++ {
+		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))
+		if err == nil {
+			return ln, nil
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+		if strict || port == 0 || candidate-port >= portScanLimit-1 {
+			break
+		}
+	}
+	return nil, firstErr
+}
+
+// boundPort reports the port a listener actually bound, falling back to fallback
+// for a non-TCP address that could never occur through listenDev but should not
+// panic a type assertion if it ever did.
+func boundPort(ln net.Listener, fallback int) int {
+	if tcp, ok := ln.Addr().(*net.TCPAddr); ok {
+		return tcp.Port
+	}
+	return fallback
 }
 
 func printReady(p *ui.Printer, url, watching, stylesText string, elapsed time.Duration, showQuitHint bool) {

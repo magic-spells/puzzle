@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -571,4 +573,108 @@ func containsPath(paths []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// --- port scanning -----------------------------------------------------------
+
+// occupy binds a loopback port and returns it plus a closer, so a test can make
+// a specific port genuinely busy rather than mocking the bind.
+func occupy(t *testing.T) (int, net.Listener) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("occupying a port: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	return ln.Addr().(*net.TCPAddr).Port, ln
+}
+
+func TestListenDevUsesRequestedPortWhenFree(t *testing.T) {
+	// Take a port, release it: the number is known-good and almost certainly
+	// still free, without racing a hardcoded constant against the machine.
+	want, held := occupy(t)
+	held.Close()
+
+	ln, err := listenDev(want, false)
+	if err != nil {
+		t.Fatalf("listenDev: %v", err)
+	}
+	defer ln.Close()
+
+	if got := boundPort(ln, 0); got != want {
+		t.Errorf("bound port = %d, want the requested %d", got, want)
+	}
+}
+
+func TestListenDevScansPastBusyPort(t *testing.T) {
+	busy, _ := occupy(t)
+
+	ln, err := listenDev(busy, false)
+	if err != nil {
+		t.Fatalf("listenDev should have scanned past a busy port: %v", err)
+	}
+	defer ln.Close()
+
+	got := boundPort(ln, 0)
+	if got == busy {
+		t.Fatalf("bound the busy port %d", busy)
+	}
+	if got <= busy || got >= busy+portScanLimit {
+		t.Errorf("bound port = %d, want one in (%d, %d)", got, busy, busy+portScanLimit)
+	}
+}
+
+func TestListenDevStrictPortFailsOnBusyPort(t *testing.T) {
+	busy, _ := occupy(t)
+
+	ln, err := listenDev(busy, true)
+	if err == nil {
+		ln.Close()
+		t.Fatalf("strict mode bound port %d, want an error", boundPort(ln, 0))
+	}
+	if !strings.Contains(err.Error(), "address already in use") {
+		t.Errorf("error should name the bind failure, got: %v", err)
+	}
+}
+
+func TestListenDevExhaustedScanReportsRequestedPort(t *testing.T) {
+	// Fill the whole scan window so the range is genuinely exhausted, then check
+	// the surfaced error names the port the user asked for — not the last one
+	// tried, which the user never mentioned.
+	first, _ := occupy(t)
+	var held []net.Listener
+	for offset := 1; offset < portScanLimit; offset++ {
+		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", first+offset))
+		if err != nil {
+			// Something else already owns it — equally "busy" for our purposes.
+			continue
+		}
+		held = append(held, ln)
+	}
+	defer func() {
+		for _, ln := range held {
+			ln.Close()
+		}
+	}()
+
+	ln, err := listenDev(first, false)
+	if err == nil {
+		ln.Close()
+		t.Fatalf("exhausted scan bound port %d, want an error", boundPort(ln, 0))
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("%d", first)) {
+		t.Errorf("error should name the requested port %d, got: %v", first, err)
+	}
+}
+
+func TestListenDevPortZeroTakesAnyFreePort(t *testing.T) {
+	ln, err := listenDev(0, false)
+	if err != nil {
+		t.Fatalf("listenDev(0): %v", err)
+	}
+	defer ln.Close()
+
+	if got := boundPort(ln, 0); got == 0 {
+		t.Error("port 0 should resolve to a kernel-assigned port")
+	}
 }

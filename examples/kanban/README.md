@@ -33,8 +33,8 @@ mouse + touch + pen. Note: Puzzle's event system would support native DnD fine
 
 | File | Responsibility |
 |---|---|
-| `app/views/Board.pzl` | **All drag logic**: state machine, document listeners, ghost, hit-testing, FLIP hooks, drop commit |
-| `app/components/TaskCard.pzl` | One card; renders placeholder mode when `task.__placeholder`; forwards `pointerdown` up via callback prop |
+| `app/views/Board.pzl` | **All drag logic**: state machine, document listeners, ghost, hit-testing, drop commit |
+| `app/components/TaskCard.pzl` | One card; renders placeholder mode when `task.__placeholder`; forwards `pointerdown` up via callback prop; fades the placeholder in |
 | `app/models/task.js` | `Task` model: `id` (string, primary), `title`, `status: 'todo'\|'doing'\|'done'`, `order` (number) |
 | `app/app.js` | `PuzzleApp` config; seeds 8 tasks after `app.mount()` resolves |
 | `app/styles/styles.css` | Theme + `.kanban-card { touch-action:none; user-select:none }`, `.kanban-placeholder`, `.kanban-ghost` |
@@ -73,13 +73,19 @@ DnD possible with **zero framework changes**:
    re-render of the *old* model. If `data()` derives anything from local state (it does
    here — the placeholder position), you must call `this.refresh()` after `setData()`.
    `refresh()` re-runs `data()` **synchronously** when `data()` is sync, then patches.
-7. **`beforeUpdate()` / `afterUpdate()` wrap every patch synchronously** (not the first
-   mount): `beforeUpdate → patch → afterUpdate` in one tick (`PuzzleView._render`).
-   This is exactly the FLIP contract — measure before, measure after, animate the delta.
-8. **`{#for}` bodies are auto-keyed by `item.id`** — no key syntax exists; the codegen
-   prepends `key: item.id` to the single root. **The body must be exactly ONE root
+7. **The runtime owns FLIP** (v1.51, D85). A `flip` attribute on a keyed row root
+   animates retained rows from their old visual position to their new one — measured
+   before the patch, played after it, inside `patchKeyedChildren`. This board used to
+   hand-roll it from `beforeUpdate()` / `afterUpdate()`, which still wrap every patch
+   synchronously (`beforeUpdate → patch → afterUpdate` in one tick, `PuzzleView._render`)
+   and are still the right hooks for measurements the framework does *not* do for you.
+   Position-on-reorder is no longer one of them.
+8. **`{#for}` bodies are auto-keyed** — the codegen prepends `key: ViewNode.keyOf(item)`
+   (record primary key, else `item.id`) to the single root, with an explicit
+   `key={ … }` on that root as the override. **The body must be exactly ONE root
    element or component**, and `{#if}` may NOT be that root (codegen rejects it — see
-   "Placeholder" below for the workaround).
+   "Placeholder" below for the workaround). Keying is what `flip` animates against: a
+   `flip` on a row with no usable key warns once and animates nothing.
 9. **Keyed reconciliation is per-parent.** The differ matches/moves nodes by
    `(tag, key)` *within one parent's child list* (`viewManager.js` `patchKeyedChildren`).
    A card moving between two column containers is unmounted from A and freshly mounted
@@ -96,7 +102,7 @@ DnD possible with **zero framework changes**:
   never appears in FLIP measurements.
 - **Slow lane (only when the target slot actually changes):** `setData({ targetCol,
   targetIndex }) + refresh()` → `data()` recomposes column arrays → keyed patch moves
-  the placeholder → FLIP hooks animate every card that shifted.
+  the placeholder → the rows' `flip` attribute animates every card that shifted.
 
 Running ghost movement through `setData` would re-patch the board 60×/sec. Don't.
 
@@ -205,28 +211,47 @@ Bonuses of this shape:
 
 ## FLIP shift animation
 
+One attribute on the row root (v1.51, D85). The options object is built in `data()` —
+template expressions do not admit inline object literals:
+
+```html
+{#for task in todoTasks}
+  <TaskCard task={ task } flip={ flipOpts } @grab={ startDrag(event, task.id) } />
+{/for}
+```
+
 ```js
-beforeUpdate() {                       // fires synchronously before every patch
-  this._rects = snapshot of getBoundingClientRect for all [data-task-id] els, by id;
-}
-afterUpdate() {                        // fires synchronously after the patch
-  for each [data-task-id] el:
-    no previous rect?  → entering (placeholder appeared): fade/scale-in ~140ms
-    rect moved >0.5px? → el.animate(
-        [{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }],
-        { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' })
-}
+const FLIP = { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' };  // module scope
+// data() returns { flipOpts: FLIP, … }
 ```
 
 - Works for *every* cause of movement: placeholder relocation mid-drag, the drop
-  settling, and the cancel snap-back — they're all just patches.
+  settling, and the cancel snap-back — they're all just keyed patches. The placeholder
+  is a keyed row too, so **it** slides between slots as well.
+- Defaults are `250ms` / `cubic-bezier(0.2, 0, 0, 1)`. Bare `flip` takes them; the
+  180ms above is a deliberate override — cards getting out of the way should read as a
+  reaction to the pointer, not an animation you wait on.
+- `flip` never reaches the DOM. It is a framework directive like `key`/`island`/`ref`,
+  stripped in `setAttr`/`removeAttr` and in the SSG serializer.
 - **Keep cards free of CSS `transform`/`transition` (incl. Tailwind `hover:scale-*`)**
-  — stylesheet transforms fight the WAAPI animation.
-- The ghost lives on `document.body`, outside `this.element`, so the querySelectorAll
-  sweeps never see it.
-- This only works because `refresh()` patches synchronously between the two hooks
-  (fact #7). Cross-column-moved cards remount as new nodes (fact #9) and simply appear
-  — only their *neighbors* animate. Fine in practice; the ghost covers the moment.
+  — stylesheet transforms fight the WAAPI animation. A *static* transform is fine: FLIP
+  reads the computed base and composes its correction over it.
+- Only **retained** rows FLIP. Rows that enter keep their own enter animation, and rows
+  that leave keep the leave path — the framework never double-drives them. Cross-column
+  moves remount the card as a new node (fact #9), so it enters rather than sliding; only
+  its neighbors animate. Fine in practice — the ghost covers the moment.
+
+### What this replaced
+
+Earlier revisions of this demo hand-rolled the same effect: `beforeUpdate()` snapshotting
+`getBoundingClientRect()` for every `[data-task-id]` into a Map, `afterUpdate()` diffing
+that Map and calling `el.animate()` on whatever had moved, plus a `_snapshotRects()`
+helper and an `_firstRects` field. It worked, and it is a fair illustration of the two
+hooks — but the runtime now does it with better edge-case behavior than the sweep had
+(mid-flight re-measurement on rapid reorder, cancellation scoped to Puzzle's own
+animations via WeakMap, zero measurement cost under `prefers-reduced-motion`). If you
+are reading this for the general recipe: **use the attribute.** `examples/kanban-morph`
+still carries the manual version if you want to see the long form.
 
 ## Drop commit — the store-sync story
 
@@ -266,8 +291,14 @@ targetTasks.forEach((t, i) => t.update({ status: targetCol, order: i }));
 - [ ] `cleanup()` from `destroyed()` too — navigation mid-drag must not strand a ghost
       or document listeners.
 - [ ] Restore `body.userSelect` / `body.cursor` to their *saved prior values*, not `''`.
-- [ ] No `animations = { in, out }` field on the card component — the source card must
-      vanish instantly under the ghost, and enter/leave animations would fight the FLIP.
+- [ ] **No `animations.out` on the card component** — an `out` animation defers DOM
+      removal, so the dragged card would still be on screen while the ghost is already
+      following the cursor. `animations.in` is fine (only the placeholder declares one)
+      because entering rows are never FLIP candidates.
+- [ ] Keep that enter animation's properties **disjoint from `transform`** — it fills
+      until it finishes, and a half-played `scale()` still on the element becomes the
+      base transform the placeholder's next FLIP composes over, so the row animates *to*
+      the scaled state. Opacity-only sidesteps it. (This is the conflict D85 documents.)
 - [ ] Ghost gets `pointer-events:none` — otherwise it hit-tests against itself.
 - [ ] `{#for}` keys are always `item.id` — records need stable string ids for keyed
       moves to work.
@@ -278,8 +309,9 @@ targetTasks.forEach((t, i) => t.update({ status: targetCol, order: i }));
 2. One owner view holds all drag logic; item components forward `@pointerdown` up via a
    callback prop with the item id: `@grab={ startDrag(event, item.id) }`.
 3. Copy the state machine (IDLE → PENDING → DRAGGING → DROP/CANCEL), the two-lane rule,
-   the hit-test-excluding-placeholder, the FLIP hooks, and the cleanup discipline from
-   `app/views/Board.pzl` — they're all in one file on purpose.
+   the hit-test-excluding-placeholder, and the cleanup discipline from
+   `app/views/Board.pzl` — they're all in one file on purpose. Put `flip` on the rows
+   and let the runtime handle the shift animation.
 4. Drop = a handful of `record.update()` calls; the store's rAF batching and
    type-level subscriptions do the rest.
 

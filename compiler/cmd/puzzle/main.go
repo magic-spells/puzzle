@@ -84,8 +84,10 @@ development mode (no minification).`,
 			dir = args[0]
 		}
 		port, _ := cmd.Flags().GetInt("port")
+		strictPort, _ := cmd.Flags().GetBool("strict-port")
 		return dev.Serve(dir, dev.Options{
-			Port: port,
+			Port:       port,
+			StrictPort: strictPort,
 			OnReady: func() {
 				printUpdateNotice(os.Stdout, ui.New(os.Stdout))
 			},
@@ -113,7 +115,8 @@ func init() {
 	buildCmd.Flags().String("mode", "production", "Build mode: production (minified) or development (readable)")
 	buildCmd.Flags().Bool("static", false, "Emit true static pages: per-route HTML + a per-page module bundle, no SPA takeover")
 	buildCmd.Flags().Bool("hybrid", false, "Prerender each static route to dist/<path>/index.html that the SPA runtime takes over")
-	devCmd.Flags().Int("port", 3000, "Port for the dev server")
+	devCmd.Flags().Int("port", 3000, "Port for the dev server (scans upward if busy)")
+	devCmd.Flags().Bool("strict-port", false, "Fail if --port is busy instead of scanning for a free one")
 
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(devCmd)

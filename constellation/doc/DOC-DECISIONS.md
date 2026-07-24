@@ -124,6 +124,8 @@ slice-of-work view.
 
 - **D89** [[DECISION-D89-FEATURE-USAGE-TREESHAKE]] — pay-for-what-you-use runtime: a build-time usage scan emits `__PUZZLE_HAS_FLIP__` / `__PUZZLE_HAS_HEAD_TAGS__` esbuild defines that fold inlined runtime probes, so `views/flip.js` and the new `headTags.js` ship only to apps that use them; generalizes D31's per-app inclusion to whole modules via D57's define+DCE mechanism, and splits `head.js` into title core + managed-tag machinery (0.2.0 hardening → SPEC §45 / build pipeline)
 
+- **D90** [[DECISION-D90-DEV-PORT-SCAN]] — `puzzle dev` scans upward from `--port` for the first free loopback port (bounded at 10 candidates) instead of failing on a busy one, prints a warning line when it moves, and reads the BOUND port for the banner URL / browser-open / `httpSrv.Addr` (also fixing `--port 0`, which printed `localhost:0`); the scan advances on any bind failure and surfaces the FIRST error when exhausted rather than inspecting errno (Windows reports `WSAEADDRINUSE`, and a non-in-use failure fails on every candidate anyway); `--strict-port` restores bind-or-fail for pinned ports — silent relocation, a `puzzle.config.js` key, and an unbounded scan rejected (v1.54, [[FEATURE-V1-54-DEV-PORT-SCAN]])
+
 ## Open questions (tracked, not yet decided)
 
 - `Puzzle.*` vs dedicated builder namespace (see [[DECISION-D05-SCHEMA-BUILDERS]]).

@@ -1,5 +1,5 @@
 ---
-status: built
+status: verified
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-VIEW-MANAGER
@@ -11,6 +11,17 @@ connections:
   - FILE-BUILD-OPTIONS
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
+verified_at: '2026-07-24T06:55:07.397Z'
+verified_sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
+notes:
+  - kind: verified
+    text: >-
+      Verified at 1400ec6 (post-merge, PR #21): ScanUsage/hasFlipAttr(node.Props) in
+      compiler/internal/plugin/scan.go, syncTitle/syncTags split across head.js/headTags.js, 2
+      inlined __PUZZLE_HAS_FLIP__ probes in viewManager.js (post probe-reduction commit) all
+      confirmed present. 1016 vitest + full Go suite green; todos/music drop both modules, blog
+      retains flip.js, static-docs retains head tags across 5 prerendered pages.
+    sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
 ---
 
 # D89 — pay-for-what-you-use runtime: feature-usage scan drives DCE defines

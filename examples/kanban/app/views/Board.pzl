@@ -5,9 +5,14 @@
         <h2 class="text-sm font-semibold text-fg">Todo</h2>
         <span class="font-mono text-[11px] tabular-nums text-faint">{ todoCount }</span>
       </header>
+      <!-- `flip` (v1.51, D85) on the row root: every reorder in this list — the
+           placeholder relocating mid-drag, the drop settling, the cancel snapping
+           back — is a keyed MOVE, so each retained card slides from where it was
+           to where it now is. Options come from data(); template expressions do
+           not admit inline object literals. -->
       <div class="kanban-cards p-3" data-column="todo">
         {#for task in todoTasks}
-          <TaskCard task={ task } @grab={ startDrag(event, task.id) } />
+          <TaskCard task={ task } flip={ flipOpts } @grab={ startDrag(event, task.id) } />
         {/for}
       </div>
     </section>
@@ -19,7 +24,7 @@
       </header>
       <div class="kanban-cards p-3" data-column="doing">
         {#for task in doingTasks}
-          <TaskCard task={ task } @grab={ startDrag(event, task.id) } />
+          <TaskCard task={ task } flip={ flipOpts } @grab={ startDrag(event, task.id) } />
         {/for}
       </div>
     </section>
@@ -31,7 +36,7 @@
       </header>
       <div class="kanban-cards p-3" data-column="done">
         {#for task in doneTasks}
-          <TaskCard task={ task } @grab={ startDrag(event, task.id) } />
+          <TaskCard task={ task } flip={ flipOpts } @grab={ startDrag(event, task.id) } />
         {/for}
       </div>
     </section>
@@ -45,6 +50,11 @@ import TaskCard from '../components/TaskCard.pzl';
 const DRAG_THRESHOLD = 5;
 const STATUSES = ['todo', 'doing', 'done'];
 
+// Passed to every row's `flip` attribute (v1.51, D85). A shade quicker than the
+// 250ms default: cards shifting out of the way should read as a reaction to the
+// pointer, not an animation the user waits on.
+const FLIP = { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' };
+
 export default class BoardView extends PuzzleView {
   created() {
     this.columns = [
@@ -54,7 +64,6 @@ export default class BoardView extends PuzzleView {
     ];
 
     this._drag = null;
-    this._firstRects = new Map();
     this._storedUserSelect = '';
     this._storedCursor = '';
     this._onPointerMove = (event) => this._handlePointerMove(event);
@@ -103,6 +112,7 @@ export default class BoardView extends PuzzleView {
 
     return {
       columns: this.columns,
+      flipOpts: FLIP,
       todoTasks: buckets.todo,
       doingTasks: buckets.doing,
       doneTasks: buckets.done,
@@ -152,44 +162,12 @@ export default class BoardView extends PuzzleView {
     }
   };
 
-  beforeUpdate() {
-    this._firstRects = this._snapshotRects();
-  }
-
-  afterUpdate() {
-    if (!this.element || !this._firstRects) return;
-
-    this.element.querySelectorAll('[data-task-id]').forEach((element) => {
-      const id = element.dataset.taskId;
-      const first = this._firstRects.get(id);
-      const last = element.getBoundingClientRect();
-
-      if (!first) {
-        if (id === '__ph__' && element.animate) {
-          element.animate(
-            [
-              { opacity: 0, transform: 'scale(0.96)' },
-              { opacity: 1, transform: 'scale(1)' },
-            ],
-            { duration: 140, easing: 'ease-out' }
-          );
-        }
-        return;
-      }
-
-      const dx = first.left - last.left;
-      const dy = first.top - last.top;
-      if ((Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) && element.animate) {
-        element.animate(
-          [
-            { transform: `translate(${dx}px, ${dy}px)` },
-            { transform: 'translate(0, 0)' },
-          ],
-          { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' }
-        );
-      }
-    });
-  }
+  // No beforeUpdate/afterUpdate rect bookkeeping: the `flip` attribute on the
+  // rows owns the shift animation. It measures before the patch and plays after
+  // it — the same First/Last/Invert/Play this view used to hand-roll — but only
+  // for RETAINED keyed rows, so entering rows (the placeholder appearing, a card
+  // landing after a cross-column move) keep TaskCard's own enter animation
+  // instead of being fought over by two systems.
 
   destroyed() {
     this._cleanup(false);
@@ -369,17 +347,6 @@ export default class BoardView extends PuzzleView {
     });
 
     if (shouldRefresh) this.refresh();
-  }
-
-  _snapshotRects() {
-    const rects = new Map();
-    if (!this.element) return rects;
-
-    this.element.querySelectorAll('[data-task-id]').forEach((element) => {
-      rects.set(element.dataset.taskId, element.getBoundingClientRect());
-    });
-
-    return rects;
   }
 
   _findTaskElement(taskId) {

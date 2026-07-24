@@ -37,7 +37,12 @@ D1-D87 in [[DOC-DECISIONS]] explain why the contract has its current shape.
   migration to `@event:outside` is queued for AFTER 0.2.0 ships (older
   compilers reject unknown modifiers). Route guards followed (D87/v1.53 —
   the inherited `guard` route field; guard a top-level route to lock its
-  layout subtree; suites + example verified, awaiting merge).
+  layout subtree; suites + example verified, awaiting merge), then the dev
+  server port scan (D90/v1.54 — `puzzle dev` takes the next free port
+  instead of failing on a busy one, `--strict-port` to opt out).
+  `examples/kanban` now drives its drag-shift animation from the `flip`
+  attribute rather than hand-rolled `beforeUpdate`/`afterUpdate` rect
+  snapshots; `examples/kanban-morph` still carries the manual version.
 - Runtime, compiler, CLI, static generation (hybrid + static modes),
   state-preserving dev reload,
   TypeScript transpilation, model validation/relationships/write sync, nested

@@ -11,8 +11,8 @@ jobs:
     name: Go (compiler)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - run: go vet ./...
@@ -23,14 +23,14 @@ jobs:
     name: JS (runtime)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Go is needed because `npm test` runs `build:example-modules` (pretest),
       # which compiles examples/todos's .pzl files with the real compiler so the
       # compiled-variant integration suite runs against fresh compiler output.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -45,14 +45,14 @@ jobs:
     name: E2E (packed tarball)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Go builds the compiler (run via `go run`); Node packs + installs the
       # tarball and drives the app build. Proves the SHIPPED package resolves and
       # builds a real app from node_modules, not the in-repo esbuild alias.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -63,12 +63,12 @@ jobs:
     name: Browser smoke (Playwright)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Go runs the two example dev servers Playwright's webServer starts.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm

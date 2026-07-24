@@ -14,6 +14,29 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class TaskCard extends PuzzleView {
+  // The drop placeholder fades in; real cards appear instantly.
+  //
+  // `animations` is normally a class field, but the choice depends on props, and
+  // props are assigned before created() runs — so this is the same instance
+  // property, just set conditionally.
+  //
+  // Two deliberate constraints:
+  // - `in` only. An `out` animation DEFERS DOM removal, and the dragged card has
+  //   to vanish the instant the ghost takes over or you see both at once.
+  // - OPACITY only, no scale. Enter animations fill until they finish, so a
+  //   transform here would still be on the element when the placeholder's own
+  //   `flip` fires on the next pointermove — and FLIP composes its correction
+  //   over the computed base transform, animating *to* the half-played scale.
+  //   That is the transform conflict D85 documents; keeping the two properties
+  //   disjoint sidesteps it entirely.
+  created() {
+    if (this.props.task.__placeholder) {
+      this.animations = {
+        in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 140, easing: 'ease-out' },
+      };
+    }
+  }
+
   data(params, props) {
     return { task: props.task };
   }
