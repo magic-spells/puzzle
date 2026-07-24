@@ -141,7 +141,7 @@ func Serve(root string, opts Options) error {
 
 	cfg, cfgErr := config.LoadConfig(absRoot)
 	if cfgErr != nil {
-		logWarning(stderr, "%v (styles: continuing without the Tailwind pipeline)", cfgErr)
+		logWarning(stderr, "%s", configFallbackWarning(cfgErr))
 	}
 
 	srv := newServer(dist, ctx, cfg.Dev.Proxy)
@@ -422,11 +422,21 @@ func (s *server) handler() http.Handler {
 	}
 	sort.Strings(prefixes)
 	rootProxied := false
+	registered := make(map[string]bool, len(prefixes))
 	for _, configuredPrefix := range prefixes {
 		prefix := strings.TrimRight(configuredPrefix, "/")
 		if prefix == "" {
 			prefix = "/"
 		}
+		// config.LoadConfig rejects both a root proxy and two prefixes that
+		// normalize to the same route, so neither shape reaches a real dev run. The
+		// guards stay because ServeMux PANICS on an empty or already-registered
+		// pattern and nothing on the Serve path recovers: a config the loader never
+		// saw must not be able to kill the server with a Go stack trace.
+		if registered[prefix] {
+			continue
+		}
+		registered[prefix] = true
 		proxy := s.reverseProxy(prefix, s.proxies[configuredPrefix])
 		mux.Handle(prefix, proxy)
 		if prefix == "/" {
@@ -1028,6 +1038,23 @@ func logBuildFailure(p *ui.Printer, err error) {
 		p.Dim(ui.Clock()),
 		p.Bold(p.Cyan("[puzzle]")),
 		p.Bold(p.Red("✘ build failed")),
+		err,
+	)
+}
+
+// configFallbackWarning is the message printed when puzzle.config.js is present
+// but fails to load. Dev keeps serving from the zero Config — a broken config
+// must never stop the loop — but that Config drops EVERY key the file would have
+// carried, not just styles. dev.proxy is the one that misleads: with no proxy
+// registered the SPA history fallback answers /api/* with index.html, so the app
+// reports a JSON parse error on "<!doctype html>" with nothing tying it back to
+// the config. Both losses are named so cause and effect connect.
+//
+// LoadConfig returns no error when there is no config file at all, so a
+// zero-config app never sees this warning.
+func configFallbackWarning(err error) string {
+	return fmt.Sprintf(
+		"%v — continuing with defaults: no Tailwind pipeline and no dev.proxy (proxied paths will fall through to the SPA shell); fix the config and restart",
 		err,
 	)
 }

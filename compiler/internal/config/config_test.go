@@ -280,6 +280,75 @@ func TestLoadConfigDevProxy(t *testing.T) {
 	}
 }
 
+func TestLoadConfigNullBehavesAsUnset(t *testing.T) {
+	requireNode(t)
+	// A JSON null is "the key was not set", not "the key was set to the zero
+	// value": json.Unmarshal of null into a scalar is a no-op that returns no
+	// error, so a null used to leave dropConsole pointing at false (shipping every
+	// console call) and output at the unsupported "".
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "dropConsole null",
+			body: "export default { build: { dropConsole: null } };\n",
+		},
+		{
+			name: "sourceMap null",
+			body: "export default { build: { sourceMap: null } };\n",
+		},
+		{
+			name: "output null",
+			body: "export default { output: null };\n",
+		},
+		{
+			name: "all three null",
+			body: "export default { build: { dropConsole: null, sourceMap: null }, output: null };\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := LoadConfig(writeConfig(t, tt.body))
+			if err != nil {
+				t.Fatalf("a null value should be treated as unset, got error: %v", err)
+			}
+			if !cfg.DropConsole() {
+				t.Error("DropConsole() = false, want the unset default true")
+			}
+			if cfg.Build.DropConsole != nil {
+				t.Errorf("Build.DropConsole = %v, want nil (unset)", *cfg.Build.DropConsole)
+			}
+			if cfg.Build.SourceMap {
+				t.Error("Build.SourceMap = true, want the unset default false")
+			}
+			if cfg.Output != "" {
+				t.Errorf("Output = %q, want the unset default \"\"", cfg.Output)
+			}
+		})
+	}
+}
+
+func TestLoadConfigExplicitBooleansStillWinOverNull(t *testing.T) {
+	requireNode(t)
+	// The null handling must not swallow explicit values: false stays false and
+	// true stays true, alongside a null sibling.
+	root := writeConfig(t, "export default { build: { dropConsole: false, sourceMap: true }, output: null };\n")
+	cfg, err := LoadConfig(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.DropConsole() {
+		t.Error("DropConsole() = true, want the explicit false")
+	}
+	if !cfg.Build.SourceMap {
+		t.Error("Build.SourceMap = false, want the explicit true")
+	}
+	if cfg.Output != "" {
+		t.Errorf("Output = %q, want the unset default \"\"", cfg.Output)
+	}
+}
+
 func TestLoadConfigDevProxyPrefixMustStartWithSlash(t *testing.T) {
 	requireNode(t)
 	root := writeConfig(t, "export default { dev: { proxy: { api: 'http://localhost:3091' } } };\n")
@@ -301,6 +370,62 @@ func TestLoadConfigDevProxyTargetMustBeAbsoluteHTTPURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `dev.proxy target for "/api" must be an absolute http or https URL`) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadConfigDevProxyRootPrefixRejected(t *testing.T) {
+	requireNode(t)
+	// A root proxy hands the whole origin to the backend — app shell, bundles, and
+	// the live-reload stream included — and used to reach http.ServeMux as the
+	// empty pattern "", panicking `puzzle dev`. It is rejected here instead.
+	for _, prefix := range []string{"/", "//"} {
+		t.Run(prefix, func(t *testing.T) {
+			root := writeConfig(t, "export default { dev: { proxy: { '"+prefix+"': 'http://localhost:3091' } } };\n")
+			_, err := LoadConfig(root)
+			if err == nil {
+				t.Fatal("expected an error for a root dev.proxy prefix")
+			}
+			if !strings.Contains(err.Error(), "would proxy every request") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !strings.Contains(err.Error(), `"`+prefix+`"`) {
+				t.Fatalf("error should name the offending prefix, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadConfigDevProxyDuplicateAfterNormalizationRejected(t *testing.T) {
+	requireNode(t)
+	// '/api' and '/api/' name the same subtree; dev registers one normalized
+	// pattern per prefix, and the second registration would panic the ServeMux.
+	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'http://localhost:3091', '/api/': 'http://localhost:3092' } } };\n")
+	_, err := LoadConfig(root)
+	if err == nil {
+		t.Fatal("expected an error for two dev.proxy prefixes that normalize to the same route")
+	}
+	if !strings.Contains(err.Error(), "are the same route") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(err.Error(), `"/api"`) || !strings.Contains(err.Error(), `"/api/"`) {
+		t.Fatalf("error should name both offending prefixes, got: %v", err)
+	}
+}
+
+func TestLoadConfigDevProxyTrailingSlashAndSiblingsAccepted(t *testing.T) {
+	requireNode(t)
+	// A single trailing-slash prefix is fine, and distinct prefixes that merely
+	// share a parent are not duplicates.
+	root := writeConfig(t, "export default { dev: { proxy: { '/api/': 'http://localhost:3091', '/api-v2': 'http://localhost:3092', '/auth': 'https://auth.test' } } };\n")
+	cfg, err := LoadConfig(root)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := cfg.Dev.Proxy["/api/"]; got != "http://localhost:3091" {
+		t.Fatalf("Dev.Proxy[/api/] = %q, want http://localhost:3091", got)
+	}
+	if len(cfg.Dev.Proxy) != 3 {
+		t.Fatalf("Dev.Proxy = %v, want all three prefixes preserved", cfg.Dev.Proxy)
 	}
 }
 

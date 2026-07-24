@@ -126,6 +126,8 @@ slice-of-work view.
 
 - **D90** [[DECISION-D90-DEV-PORT-SCAN]] — `puzzle dev` scans upward from `--port` for the first free loopback port (bounded at 10 candidates) instead of failing on a busy one, prints a warning line when it moves, and reads the BOUND port for the banner URL / browser-open / `httpSrv.Addr` (also fixing `--port 0`, which printed `localhost:0`); the scan advances on any bind failure and surfaces the FIRST error when exhausted rather than inspecting errno (Windows reports `WSAEADDRINUSE`, and a non-in-use failure fails on every candidate anyway); `--strict-port` restores bind-or-fail for pinned ports — silent relocation, a `puzzle.config.js` key, and an unbounded scan rejected (v1.54, [[FEATURE-V1-54-DEV-PORT-SCAN]])
 
+- **D110** [[DECISION-D110-DEV-PROXY-PREFIX-VALIDATION]] — `dev.proxy` rejects a `/` prefix (a root proxy leaves the dev server nothing of its own to serve; the feature's shape is "carve out the paths the backend owns") and rejects two prefixes that normalize to the same route after trailing-slash trimming (which previously panicked `ServeMux` and killed `puzzle dev` with a Go stack trace); both validate in `config.validate` alongside the existing leading-slash and target-URL rules, so `puzzle build` rejects them too, and the `handler()` guards stay as defense in depth because `Serve` is fail-soft on config errors; silent normalization and dev-path-only enforcement rejected (removes documented `/` behavior, unpublished)
+
 ## Open questions (tracked, not yet decided)
 
 - `Puzzle.*` vs dedicated builder namespace (see [[DECISION-D05-SCHEMA-BUILDERS]]).

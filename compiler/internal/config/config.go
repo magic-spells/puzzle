@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -211,6 +212,17 @@ func readConfigViaNode(configPath string) ([]byte, error) {
 	return []byte(strings.TrimSpace(out[idx+len(configSentinel):])), nil
 }
 
+// unset reports whether a raw JSON value was omitted entirely or written as
+// null. Both mean "the key was not set": json.Unmarshal of `null` into a scalar
+// is a documented no-op that returns no error and leaves the destination at its
+// zero value, so a bare `len(raw) > 0` presence check would read
+// `dropConsole: null` as an explicit false (silently shipping console calls) and
+// `output: null` as the unsupported value "".
+func unset(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	return trimmed == "" || trimmed == "null"
+}
+
 // validate turns the permissive raw config into a validated Config, rejecting
 // every v1-deferred style entry with a message that names it.
 func validate(raw rawConfig) (Config, error) {
@@ -240,7 +252,7 @@ func validate(raw rawConfig) (Config, error) {
 	// Anything non-boolean is rejected with a message naming the key. Other keys
 	// inside `build` are ignored, matching the loader's permissive posture toward
 	// unknown top-level keys.
-	if len(raw.Build.DropConsole) > 0 {
+	if !unset(raw.Build.DropConsole) {
 		var drop bool
 		if err := json.Unmarshal(raw.Build.DropConsole, &drop); err != nil {
 			return Config{}, fmt.Errorf(
@@ -253,7 +265,7 @@ func validate(raw rawConfig) (Config, error) {
 
 	// build.sourceMap: production builds omit linked source maps by default; an
 	// explicit true enables them. Anything non-boolean is rejected.
-	if len(raw.Build.SourceMap) > 0 {
+	if !unset(raw.Build.SourceMap) {
 		if err := json.Unmarshal(raw.Build.SourceMap, &cfg.Build.SourceMap); err != nil {
 			return Config{}, fmt.Errorf(
 				"%s: build.sourceMap must be a boolean; got %s",
@@ -265,13 +277,47 @@ func validate(raw rawConfig) (Config, error) {
 	// dev.proxy is consumed only by puzzle dev. Prefixes stay intact when
 	// forwarded, so each key must be an absolute request path prefix and each
 	// target must name an http(s) backend origin.
-	for prefix, target := range raw.Dev.Proxy {
+	//
+	// Two further rules exist because dev registers each prefix with a
+	// http.ServeMux, and ServeMux PANICS on a bad or repeated pattern — a panic on
+	// the Serve path nothing recovers, so `puzzle dev` would die with a Go stack
+	// trace instead of a config error. A trailing slash is not significant
+	// ('/api' and '/api/' name the same subtree), so prefixes are compared after
+	// trimming it; and a prefix that trims to nothing is the root proxy, rejected
+	// below. Keys are checked in sorted order so a rejection message is stable
+	// across runs.
+	prefixes := make([]string, 0, len(raw.Dev.Proxy))
+	for prefix := range raw.Dev.Proxy {
+		prefixes = append(prefixes, prefix)
+	}
+	sort.Strings(prefixes)
+	routes := make(map[string]string, len(prefixes))
+	for _, prefix := range prefixes {
+		target := raw.Dev.Proxy[prefix]
 		if !strings.HasPrefix(prefix, "/") {
 			return Config{}, fmt.Errorf(
 				"%s: dev.proxy prefix %q must start with '/'",
 				ConfigFileName, prefix,
 			)
 		}
+		route := strings.TrimRight(prefix, "/")
+		if route == "" {
+			// A root proxy swallows everything — the app shell, app.js, styles.css,
+			// the live-reload stream — leaving dev with nothing of its own to serve.
+			// That is a config mistake every time, so name it instead of silently
+			// handing the whole origin to the backend.
+			return Config{}, fmt.Errorf(
+				"%s: dev.proxy prefix %q would proxy every request, including the app shell and dev assets; proxy a specific prefix such as '/api' instead",
+				ConfigFileName, prefix,
+			)
+		}
+		if first, dup := routes[route]; dup {
+			return Config{}, fmt.Errorf(
+				"%s: dev.proxy prefixes %q and %q are the same route (a trailing slash is not significant); keep only one",
+				ConfigFileName, first, prefix,
+			)
+		}
+		routes[route] = prefix
 		parsed, err := url.Parse(target)
 		if err != nil || !parsed.IsAbs() || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
 			return Config{}, fmt.Errorf(
@@ -287,7 +333,7 @@ func validate(raw rawConfig) (Config, error) {
 	// (prerender + SPA takeover, the old 'static'). A non-string, or any other
 	// string, is rejected with a message naming both allowed values — the grammar
 	// is recognized so the door stays open for future modes.
-	if len(raw.Output) > 0 {
+	if !unset(raw.Output) {
 		var out string
 		if err := json.Unmarshal(raw.Output, &out); err != nil {
 			return Config{}, fmt.Errorf(
