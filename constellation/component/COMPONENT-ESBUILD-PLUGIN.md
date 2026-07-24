@@ -58,10 +58,12 @@ Build-time usage tree-shaking walks first-party project sources with the same
 fail-soft, over-inclusive policy as D31: unreadable or unparseable files are
 skipped and generated/vendor trees are pruned. Parsed `.pzl` ASTs still seed
 the virtual formatter manifest from observed built-ins, while element attrs or
-component props named `flip` and raw `.js`/`.ts`/`.pzl` head-field tokens drive
-literal `__PUZZLE_HAS_FLIP__` and `__PUZZLE_HAS_HEAD_TAGS__` esbuild defines. Every
-one-shot, watch/dev, and per-page static bundle recomputes or receives the same
-usage so the runtime probes fold without risking a false-negative. Esbuild
+component props named `flip` drive the literal `__PUZZLE_HAS_FLIP__` esbuild
+define. Since [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]] that is the ONLY
+usage define: the managed-head gate and its raw `.js`/`.ts` token scan are gone,
+so the walk reads only `.pzl` files. Every one-shot, watch/dev, and per-page
+static bundle recomputes or receives the same usage so the runtime probes fold
+without risking a false-negative. Esbuild
 re-runs the formatter virtual module's `OnLoad` on every rebuild; this is
 regression-guarded by `TestFormatterManifestFreshAcrossIncrementalRebuilds`.
 

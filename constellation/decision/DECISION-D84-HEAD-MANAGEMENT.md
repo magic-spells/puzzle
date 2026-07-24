@@ -134,3 +134,19 @@ The gate's signal is deliberately coarse (a raw substring scan for
 `description`/`canonical`/`socialImage`, since route `meta` lives in user JS the
 compiler never parses). It is fail-safe — a false positive only leaves the module
 in the bundle — and measured correct on all three real examples.
+
+## Amended again by D111 — the runtime half is gone
+
+[[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]] deleted `syncTags`,
+`setTagValue`, the router call site, and the `__PUZZLE_HAS_HEAD_TAGS__` gate
+(with its scan) outright. **The browser no longer touches managed tags in any
+output mode.** `#syncHead` now does exactly one thing:
+`syncTitle(resolveHead(entry.chain))`.
+
+So of the D89 split above, only the `head.js` half remains a runtime concern.
+`headTags.js` survives as a build-time-only module whose sole consumer is
+`ssg/index.js`, and the coarse-signal caveat is moot — there is no gate left to
+be coarse about. Everything this card says about resolution, null suppression,
+and the leaf→root walk still holds; only the delivery changed, and there is now
+exactly one delivery path: tags baked into prerendered HTML, which is the copy
+crawlers actually fetch.
