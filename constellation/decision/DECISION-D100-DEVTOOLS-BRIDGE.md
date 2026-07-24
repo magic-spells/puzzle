@@ -1,6 +1,6 @@
 ---
 name: D100 — DevTools runtime bridge + wire protocol; extension in its own repo (v1.63)
-status: planned
+status: built
 connections:
   - DECISION-D57-HMR-STATE-RELOAD
   - DECISION-D60-DROP-CONSOLE-OPT-OUT
