@@ -89,11 +89,26 @@ Rules that bite:
   its children untouched by patching after mount (for third-party DOM widgets);
   the element's own attrs/listeners still patch. Components, slots, and view
   roots cannot be islands.
+- **`flip` animates keyed reorders** (puzzle ≥ 0.2.0). On a keyed `{#for}` row
+  root, `flip` (bare) makes retained rows SLIDE to their new position when the
+  list is sorted/filtered/reordered — inserts and removes keep their normal
+  enter/leave animations. Options via an object from `data()`:
+  `flip={ flipOpts }` with `flipOpts: { duration: 400, easing: '...' }`
+  (inline object literals are not valid template expressions). Respects
+  reduced motion; never write `flip` on an unkeyed row.
 
 ## Events
 
 - On DOM elements, `@click={ handler }` attaches a real, patch-managed listener.
   Modifiers stack: `@click:prevent:stop`, `@keydown:enter`, `@click:once`.
+- **Outside-dismiss is one modifier** (puzzle ≥ 0.2.0): `@pointerdown:outside={ close }`
+  fires only when the event lands OUTSIDE the bound element. Put it on the
+  panel root inside `{#if open}` (listener lifetime tracks the panel), or on
+  an always-mounted root as `@pointerdown:outside={ open ? close : null }`.
+  The listener lives on `document` (capture phase) and Puzzle removes it on
+  unmount — never hand-roll `document.addEventListener` for dismissal again.
+  Works on any event: `@click:outside`, `@focusin:outside` (focus left the
+  widget).
 - On COMPONENT tags, `@save={ savePost }` is NOT a DOM event — it's a **callback
   prop**. The child invokes it as `this.props.save(...)`. There is no `$emit`
   and no event bubbling between components; child→parent communication is
@@ -108,15 +123,29 @@ Rules that bite:
 
 ## Routing
 
-`app/routes.js` exports an array of `{ path, name, view, layout, meta: { title }, children }`.
+`app/routes.js` exports an array of `{ path, name, view, layout, meta, children }`.
 
 - Nested routes: `children` with **relative** paths render at the parent view's
   `<Slot/>`; `layout` is top-level-only; params merge down the chain.
 - `:param` and `*` supported; `*` catch-all must stay **last** (routes match in
   order). Route views/layouts must be **statically imported** in routes.js.
-- Navigation loads before commit: URL, title, history, mounted tree, and scroll
-  save land atomically together — a failed or superseded navigation commits
-  nothing.
+- **Head metadata lives on `meta`** (puzzle ≥ 0.2.0): `title`, `description`,
+  `canonical`, `socialImage` — static strings, each inherited leaf→root
+  independently (`null` suppresses an inherited value). They render as
+  `<title>` + og/twitter/canonical tags in prerendered HTML AND stay synced
+  across SPA navigation. Define root-route defaults so child routes never
+  show stale values. Values are static only — no functions or per-record
+  titles.
+- **Query state is on the route snapshot** (puzzle ≥ 0.2.0): `this.route.query`
+  is a parsed, frozen object (`?q=x&tag=a&tag=b` → `{ q: 'x', tag: ['a','b'] }`);
+  `this.route.pathname`/`hash` split the raw `path`. Query never merges into
+  params. For transient URL state (filters, search, tabs) update with
+  `this.ctx.router.replace('/list?q=' + encodeURIComponent(v))` — same
+  pipeline as `push()` but NO new history entry and scroll stays put; a
+  query-only change re-runs `data()` with the new snapshot.
+- Navigation loads before commit: URL, title/head, history, mounted tree, and
+  scroll save land atomically together — a failed or superseded navigation
+  commits nothing.
 - Write template hrefs **path-shaped through the built-in `link` formatter**:
   `href="{ '/todos/' + t.id | link }"`. It emits the mode-appropriate href
   (plain path in history mode, base-prefixed under `routerBase`, `#/...` in
@@ -283,8 +312,9 @@ to `dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
    per-page module and renders fully client-side. Escape hatch for
    interactive-only pages.
 7. Prerendered output pairs with post-build tooling: Pagefind can index `dist/`
-   (content is baked into `#app`); sitemap/meta-OG injection needs your own
-   Node script — the build only writes `<title>`.
+   (content is baked into `#app`). Since puzzle 0.2.0 the build writes
+   `<title>` PLUS og/twitter/canonical tags from the route `meta` head fields
+   (see Routing) — sitemap generation still needs your own Node script.
 
 ## Styling
 
