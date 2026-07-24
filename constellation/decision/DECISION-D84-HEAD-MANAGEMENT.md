@@ -1,6 +1,6 @@
 ---
 name: 'D84 — Route head management: reserved `meta` fields, SSG-first (v1.50)'
-status: planned
+status: verified
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-SSG
@@ -13,6 +13,8 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-RUNTIME
   - FEATURE-V1-50-HEAD-MANAGEMENT
+verified_at: '2026-07-24T00:26:44.790Z'
+verified_sha: df909f7f5581b312acbbc45a58cbd2b5e681a2a8
 ---
 
 # D84 — Route head management: reserved `meta` fields, SSG-first (v1.50)

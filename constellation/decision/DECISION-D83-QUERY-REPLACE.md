@@ -1,6 +1,6 @@
 ---
 name: 'D83 — Router query snapshot + `router.replace()` (v1.49)'
-status: planned
+status: verified
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-SSG
@@ -13,6 +13,8 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-ASSEMBLE
   - FEATURE-V1-49-QUERY-REPLACE
+verified_at: '2026-07-24T00:26:43.838Z'
+verified_sha: df909f7f5581b312acbbc45a58cbd2b5e681a2a8
 ---
 
 # D83 — Router query snapshot + `router.replace()` (v1.49)

@@ -1,6 +1,6 @@
 ---
 name: 'D86 — the `outside` event modifier: `@event:outside` declarative outside-dismiss (v1.52)'
-status: planned
+status: verified
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-TEMPLATE-PARSER
@@ -11,6 +11,8 @@ connections:
   - FILE-VIEW-MANAGER
   - FILE-PARSER
   - FEATURE-V1-52-OUTSIDE-MODIFIER
+verified_at: '2026-07-24T00:26:45.343Z'
+verified_sha: df909f7f5581b312acbbc45a58cbd2b5e681a2a8
 ---
 
 # D86 — the `outside` event modifier: `@event:outside` declarative outside-dismiss (v1.52)

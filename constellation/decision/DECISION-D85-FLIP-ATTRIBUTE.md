@@ -1,6 +1,6 @@
 ---
 name: 'D85 — FLIP keyed-reorder animation via a `flip` directive attribute (v1.51)'
-status: planned
+status: verified
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ANIMATIONS
@@ -11,6 +11,8 @@ connections:
   - FILE-ANIMATE
   - FILE-SSG-SERIALIZER
   - FEATURE-V1-51-FLIP
+verified_at: '2026-07-24T00:26:45.246Z'
+verified_sha: df909f7f5581b312acbbc45a58cbd2b5e681a2a8
 ---
 
 # D85 — FLIP keyed-reorder animation via a `flip` directive attribute (v1.51)

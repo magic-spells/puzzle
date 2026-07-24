@@ -1,12 +1,14 @@
 ---
 name: 'D82 — Compiler accessibility warnings: five conservative template diagnostics (v1.48)'
-status: planned
+status: verified
 connections:
   - COMPONENT-CODEGEN
   - COMPONENT-TEMPLATE-PARSER
   - DOC-SPEC
   - FILE-CODEGEN
   - FEATURE-V1-48-A11Y-WARNINGS
+verified_at: '2026-07-24T00:26:43.400Z'
+verified_sha: df909f7f5581b312acbbc45a58cbd2b5e681a2a8
 ---
 
 # D82 — Compiler accessibility warnings: five conservative template diagnostics (v1.48)
