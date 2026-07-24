@@ -1759,6 +1759,59 @@ func TestParseIslandErrors(t *testing.T) {
 	}
 }
 
+// TestParseIslandInSlotFallback covers island validation INSIDE a composition
+// marker's fallback children. Fallback content renders whenever the slot goes
+// unfilled, so an island declared there is a real island and the D44 rules apply
+// exactly as they do anywhere else — walkIslands must descend into *Slot the way
+// every other walker in the package does. wantCol is derived from the source
+// (each Pos points at the construct's opening token) so it is not hand-counted.
+func TestParseIslandInSlotFallback(t *testing.T) {
+	tests := []struct {
+		name       string
+		src        string
+		marker     string // substring whose start column the error must point at
+		wantSubstr string
+	}{
+		{
+			name:       "component inside island in named-slot fallback",
+			src:        `<puzzle-view><slot name="aside"><div island><Chart/></div></slot></puzzle-view>` + "\n<script></script>",
+			marker:     "<Chart",
+			wantSubstr: "<Chart> cannot appear inside an island element opened at 1:38",
+		},
+		{
+			name:       "dynamic island in named-slot fallback",
+			src:        `<puzzle-view><slot name="aside"><div island={ on }>x</div></slot></puzzle-view>` + "\n<script></script>",
+			marker:     "island={",
+			wantSubstr: "island must be a static attribute",
+		},
+		{
+			name:       "component inside island in children fallback",
+			src:        `<puzzle-view><children><div island><Chart/></div></children></puzzle-view>` + "\n<script></script>",
+			marker:     "<Chart",
+			wantSubstr: "<Chart> cannot appear inside an island element",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse([]byte(tc.src), "test.pzl")
+			if err == nil {
+				t.Fatalf("expected error, got nil")
+			}
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected *ParseError, got %T (%v)", err, err)
+			}
+			if !strings.Contains(pe.Message, tc.wantSubstr) {
+				t.Fatalf("error %q does not contain %q", pe.Message, tc.wantSubstr)
+			}
+			wantCol := strings.Index(tc.src, tc.marker) + 1
+			if pe.Line != 1 || pe.Col != wantCol {
+				t.Errorf("position: got %d:%d, want 1:%d (at %q)", pe.Line, pe.Col, wantCol, tc.marker)
+			}
+		})
+	}
+}
+
 // TestParseEventNameValidation covers the event-name segment checks (before the
 // first ':'): an empty name is rejected, a Vue-style dotted modifier
 // (@click.prevent) is rejected with a did-you-mean, and a genuine custom event

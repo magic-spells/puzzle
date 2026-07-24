@@ -62,6 +62,11 @@ func LexSkip(s string, i int, prevEndsExpr bool) (next int, pee bool, consumed b
 		for j < len(s) {
 			if s[j] == '\\' {
 				j += 2
+				if j > len(s) {
+					// A trailing backslash must not push past EOF — an unterminated
+					// string ends AT len(s), and callers slice/index on the result.
+					j = len(s)
+				}
 				continue
 			}
 			if s[j] == c {
@@ -175,6 +180,11 @@ func lexScanRegexLiteral(s string, i int) int {
 		c := s[j]
 		if c == '\\' {
 			j += 2
+			if j > n {
+				// A trailing backslash must not push past EOF: the unterminated
+				// result is len(s), and lexRegexLiteralClosed indexes s[end-1].
+				j = n
+			}
 			continue
 		}
 		if inClass {

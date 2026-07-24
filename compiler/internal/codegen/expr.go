@@ -144,6 +144,12 @@ func resolveExpr(expr string, scope map[string]bool) string {
 			for j < n {
 				if expr[j] == '\\' {
 					j += 2
+					if j > n {
+						// A trailing backslash must not push past EOF — an
+						// unterminated string ends AT len(expr), and the copy below
+						// slices expr[i:j].
+						j = n
+					}
 					continue
 				}
 				if expr[j] == c {
@@ -310,6 +316,11 @@ func scanRegexLiteral(s string, i int) int {
 		c := s[j]
 		if c == '\\' {
 			j += 2
+			if j > n {
+				// A trailing backslash must not push past EOF: the unterminated
+				// result is len(s), and callers slice s[i:end] / index s[end-1].
+				j = n
+			}
 			continue
 		}
 		if inClass {
