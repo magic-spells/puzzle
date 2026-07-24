@@ -44,7 +44,14 @@ puzzle dev examples/stays        # from the repo root: go run ./compiler/cmd/puz
 - **Home.pzl** — hero, category chips filtering the grid via local
   `setData` + `refresh` (no store round-trip), guest-favorites rail.
 - **Search.pzl** — five stacking filters (query, guests, price bucket, type,
-  amenities) computed in `data()` from local state.
+  amenities) computed in `data()`. The free-text destination filter is the
+  **URL-backed transient state showcase (v1.49, puzzle ≥ 0.2.0)**: `data()`
+  reads `this.route?.query?.q ?? ''` and each keystroke writes it back with
+  `this.ctx.router.replace('/search?q=' + encodeURIComponent(v))` — no history
+  entry per keystroke, scroll untouched, and the query-only change re-runs
+  `data()` with the new snapshot (no `refresh()`), so `/search?q=cabin` is a
+  shareable deep link. The other four controls stay local `setData` +
+  `refresh()` state for contrast.
 - **Listing.pzl** — route param join (`listing` + `host` + `reviews`), local
   `checkIn`/`checkOut` state that survives `data()` re-runs, and the
   reserve flow: create a trip record, `router.push('/account/trips')`.

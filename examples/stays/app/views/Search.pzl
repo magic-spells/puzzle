@@ -6,9 +6,14 @@
     </p>
   </header>
 
-  <!-- Filter bar. Every control writes to LOCAL state and calls refresh(), so
-       data() re-runs and recomputes `results` (setData alone won't re-run it,
-       SPEC §4). No store writes, no navigation — pure client-side browsing. -->
+  <!-- Filter bar. The free-text search is URL-BACKED transient state (v1.49,
+       D83): data() reads this.route.query.q and the input handler writes it
+       back with router.replace() — no history entry per keystroke, scroll
+       untouched, and the query-only change re-runs data() with the new
+       snapshot, so /search?q=cabin is a shareable, reload-safe link. Every
+       other control writes to LOCAL state and calls refresh(), so data()
+       re-runs and recomputes `results` (setData alone won't re-run it,
+       SPEC §4). No store writes anywhere — pure client-side browsing. -->
   <div class="rounded-2xl ring-1 ring-line bg-bg p-5 sm:p-6 mb-8 space-y-5">
     <!-- Free-text destination search: matched against title/city/country. -->
     <input
@@ -123,10 +128,10 @@ const PRICE_BUCKETS = [
 ];
 
 export default class SearchView extends PuzzleView {
-  // Initialize every filter to its neutral value before the first data() run.
+  // Initialize every LOCAL filter to its neutral value before the first data()
+  // run. The free-text query is deliberately absent: it lives in the URL.
   created() {
     this.setData({
-      query: '',
       guests: 1,
       price: 'any',
       type: '',
@@ -137,7 +142,10 @@ export default class SearchView extends PuzzleView {
   data(params, props) {
     const store = this.ctx.store;
     const state = this.getData();
-    const query = state.query || '';
+    // The destination text comes from the parsed route snapshot (v1.49, D83) —
+    // this.route.query is frozen, query values never merge into params — so a
+    // deep link like /search?q=cabin lands pre-filtered.
+    const query = this.route?.query?.q ?? '';
     const guests = state.guests || 1;
     const priceBucket = state.price || 'any';
     const typeFilter = state.type || '';
@@ -191,12 +199,16 @@ export default class SearchView extends PuzzleView {
   }
 
   events = {
-    // Each control mirrors into local state then refresh()es so data() recomputes
-    // the result set (setData does not re-run data(), SPEC §4).
+    // The destination text is URL state: write it with router.replace() (v1.49,
+    // D83) — the same atomic pipeline as push(), but NO history entry per
+    // keystroke and scroll stays put. The query-only change re-runs data() with
+    // the new snapshot, so there is no refresh() here.
     updateQuery: (event) => {
-      this.setData('query', event.target.value);
-      this.refresh();
+      const value = event.target.value;
+      this.ctx.router.replace(value ? '/search?q=' + encodeURIComponent(value) : '/search');
     },
+    // Each remaining control mirrors into local state then refresh()es so data()
+    // recomputes the result set (setData does not re-run data(), SPEC §4).
     decGuests: () => {
       this.setData('guests', Math.max(1, (this.getData().guests || 1) - 1));
       this.refresh();
@@ -223,8 +235,12 @@ export default class SearchView extends PuzzleView {
       this.refresh();
     },
     clearAll: () => {
-      this.setData({ query: '', guests: 1, price: 'any', type: '', amenities: [] });
+      this.setData({ guests: 1, price: 'any', type: '', amenities: [] });
       this.refresh();
+      // Clearing ?q is a URL change, not a setData: replace() re-runs data()
+      // with the empty query snapshot (and is a same-path no-op when ?q is
+      // already absent).
+      this.ctx.router.replace('/search');
     },
   };
 

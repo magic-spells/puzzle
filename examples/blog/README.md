@@ -32,6 +32,14 @@ build-time CSS pipeline).
   posts via `<PostCard>` with an `{#if}/{:else}` empty state.
 - **Posts.pzl** — tag-filter tabs using `findMany({ filter })` plus the
   `setData` + `this.refresh()` derived-list pattern; `pluralize` formatter.
+  Also the **`flip` showcase (v1.51, puzzle ≥ 0.2.0)**: the sort control
+  (Newest / Oldest / A–Z) reorders the keyed post list, and the bare `flip`
+  attribute on the `<PostCard>` row root makes every retained card slide to its
+  new position (options ride an object from `data()` — `flip={ flipOpts }` —
+  never an inline literal). Fresh cards keep PostCard's staggered enter and
+  filtered-out cards its leave animation; only *moves* are FLIP-animated. The
+  stylesheet's `puzzle-view { display: block }` rule is load-bearing here:
+  transforms don't apply to inline boxes.
 - **PostDetail.pzl** — `findOne(params.id)`, the post's author, and its comments;
   a comment form (one-way `value={}` + manual `@input`, then `createRecord`);
   `<CommentItem @remove={ removeComment(comment) }>`; `byline`/`date`/`timeago`

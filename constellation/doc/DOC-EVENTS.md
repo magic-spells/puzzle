@@ -339,6 +339,7 @@ A DOM event binding can carry `:modifier` suffixes that adjust dispatch declarat
 | `prevent` | `event.preventDefault()` | any event |
 | `stop` | `event.stopPropagation()` | any event |
 | `once` | handler fires **once ever** for this binding | any event |
+| `outside` *(v1.52, D86)* | the listener attaches to **`document` (capture phase)** and the handler runs only when the event target is **outside** the bound element — declarative outside-dismiss; the framework owns the document-listener cleanup (see [Outside-dismiss](#outside-dismiss-outside-v152-d86) below) | any event |
 | key filter | handler runs only when the key matches (see map below) | `keydown` / `keyup` / `keypress` only |
 
 **Key-filter map** (`event.key`):
@@ -366,15 +367,56 @@ A DOM event binding can carry `:modifier` suffixes that adjust dispatch declarat
 
 **Canonical execution order** — modifiers stack, and dispatch always runs them in this order **regardless of how they are written**:
 
-1. **key-gate** — a non-matching key bails immediately, *before* `preventDefault` (so native behavior for other keys is preserved) and *without* spending `once`
-2. **once-spend** — mark the binding spent
-3. **`preventDefault`**
-4. **`stopPropagation`**
-5. **handler**
+1. **outside-gate** *(v1.52)* — an event landing *inside* the bound element bails immediately: nothing later runs, and no `once` is spent
+2. **key-gate** — a non-matching key bails immediately, *before* `preventDefault` (so native behavior for other keys is preserved) and *without* spending `once`
+3. **once-spend** — mark the binding spent
+4. **`preventDefault`**
+5. **`stopPropagation`**
+6. **handler**
 
 **Once semantics:** `once` fires once *ever* for that binding — the spent-marker survives the per-patch handler swaps the ViewManager performs on re-render (a compile-time wrapper couldn't express this, which is why the wrapping lives in the runtime `withModifiers` path, D18). The marker clears only when the binding is actually removed (attr removed, or nulled via an inline-if), so a later re-add of the same `@event:once` starts fresh.
 
 **Compile errors (not warnings):** unknown modifier, a key filter on a non-keyboard event, a duplicate modifier, more than one key filter, or **any modifier on a component callback prop** (component-tag `@name={...}`, D16 — modifiers apply to DOM events only).
+
+## Outside-dismiss: `:outside` (v1.52, D86)
+
+`@pointerdown:outside={ close }` is declarative outside-dismiss for popovers, dropdowns, and dialogs. Unlike every other modifier, `outside` changes *where the listener lives*: it attaches to **`document` in the capture phase**, and the handler runs only when `el.contains(event.target)` is false for the element carrying the binding. Both placement choices are load-bearing:
+
+- **Capture** means an unrelated component's `stopPropagation()` can never swallow your outside event — bubble listeners on `document` might never hear it; capture always does.
+- **Capture also** means the interaction that *opens* a panel can't instantly close it: a panel mounted synchronously mid-event attaches its listener after document's capture phase for that event has already passed.
+
+**The framework owns the cleanup.** A document listener doesn't die with its element, so Puzzle detaches it on every removal shape — conditional toggle, keyed-row removal, subtree teardown, full view destroy — and on the inline-null toggle. Never hand-roll `document.addEventListener` + `element.contains()` + `removeEventListener`-in-`destroyed()` for dismissal again; that pattern (and its leak-on-forgotten-teardown footgun) is exactly what this modifier retires.
+
+**Two idioms.** The idiomatic form puts the binding on the panel root **inside `{#if open}`**, so the listener's lifetime tracks the panel automatically. A worked dropdown:
+
+```html
+<div class="relative">
+  <button @click={ toggleMenu }>Options ▾</button>
+  {#if menuOpen}
+    <div class="menu-panel" @pointerdown:outside={ closeMenu }>
+      <button @click={ pick('rename') }>Rename</button>
+      <button @click={ pick('delete') }>Delete</button>
+    </div>
+  {/if}
+</div>
+```
+
+```js
+events = {
+  toggleMenu: () => this.setData('menuOpen', !this.getData().menuOpen),
+  closeMenu: () => this.setData('menuOpen', false),
+  pick: (action) => {
+    // … act on `action` …
+    this.setData('menuOpen', false);
+  },
+};
+```
+
+The panel mounts → the document listener attaches; a press anywhere outside the panel closes it; the panel unmounts → Puzzle detaches the listener. No `mounted()`/`destroyed()` bookkeeping anywhere. The alternative, for an **always-mounted** root, is the null-toggle form — `@pointerdown:outside={ menuOpen ? closeMenu : null }` — where the falsy branch detaches the listener while the element stays mounted.
+
+**Event-generic**, like `prevent`/`stop`/`once`: `@pointerdown:outside` dismisses on press, `@click:outside` on completed click, and `@focusin:outside` detects focus leaving a widget (the other pattern dropdown components hand-roll). `@click` and `@click:outside` on the same element are independent bindings.
+
+**Caveats** (documented, not solved): events inside an `<iframe>` never reach the parent document — true of every outside-click implementation; and on touch, `pointerdown` fires at scroll-start, so prefer `@click:outside` where scroll tolerance matters. The event choice is yours by construction. Full contract: [[DOC-SPEC]] §47 and [[DECISION-D86-OUTSIDE-MODIFIER]].
 
 ## Deferred event features
 

@@ -6,7 +6,7 @@
     </p>
   </header>
 
-  <div class="flex flex-wrap gap-2 mb-6">
+  <div class="flex flex-wrap gap-2 mb-3">
     <button
       class="border rounded-full py-1.5 px-3.5 text-[0.85rem] font-medium cursor-pointer capitalize transition-colors {#if activeTag === 'all'}bg-brand border-brand text-white{:else}bg-surface text-body border-border-soft hover:border-brand hover:text-brand{/if}"
       type="button"
@@ -23,10 +23,37 @@
     {/for}
   </div>
 
+  <!-- Sort control: reordering the list is a pure permutation of RETAINED keyed
+       rows, which is exactly what the `flip` attribute below animates (v1.51). -->
+  <div class="flex flex-wrap items-center gap-2 mb-6">
+    <span class="text-[0.8rem] text-muted">Sort</span>
+    <button
+      class="border rounded-full py-1 px-3 text-[0.8rem] font-medium cursor-pointer transition-colors {#if sortBy === 'newest'}bg-brand border-brand text-white{:else}bg-surface text-body border-border-soft hover:border-brand hover:text-brand{/if}"
+      type="button"
+      @click={ setSort('newest') }>
+      Newest
+    </button>
+    <button
+      class="border rounded-full py-1 px-3 text-[0.8rem] font-medium cursor-pointer transition-colors {#if sortBy === 'oldest'}bg-brand border-brand text-white{:else}bg-surface text-body border-border-soft hover:border-brand hover:text-brand{/if}"
+      type="button"
+      @click={ setSort('oldest') }>
+      Oldest
+    </button>
+    <button
+      class="border rounded-full py-1 px-3 text-[0.8rem] font-medium cursor-pointer transition-colors {#if sortBy === 'title'}bg-brand border-brand text-white{:else}bg-surface text-body border-border-soft hover:border-brand hover:text-brand{/if}"
+      type="button"
+      @click={ setSort('title') }>
+      A–Z
+    </button>
+  </div>
+
   {#if posts.length > 0}
     <div class="flex flex-col gap-4">
+      <!-- `flip` (v1.51, D85): when a sort or tag change REORDERS the keyed rows,
+           each retained card slides from its old position to its new one; fresh
+           cards keep PostCard's staggered enter and dropped cards its leave. -->
       {#for post in posts, i}
-        <PostCard post={ post } index={ i }></PostCard>
+        <PostCard post={ post } index={ i } flip></PostCard>
       {/for}
     </div>
   {:else}
@@ -40,16 +67,26 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import PostCard from '../components/PostCard.pzl';
 
+// Comparators for the sort control. Sorting happens in data() — display logic
+// never lives in templates — and the `flip` attribute on the PostCard rows
+// animates the resulting reorder (v1.51, D85).
+const SORTS = {
+  newest: (a, b) => b.publishedDate - a.publishedDate,
+  oldest: (a, b) => a.publishedDate - b.publishedDate,
+  title: (a, b) => a.title.localeCompare(b.title),
+};
+
 export default class PostsView extends PuzzleView {
   created() {
-    this.setData('activeTag', 'all');
+    this.setData({ activeTag: 'all', sortBy: 'newest' });
   }
 
   // data() derives the tag list and the filtered, sorted posts from the store.
-  // The active tag is local UI state read back from getData().
+  // The active tag and sort order are local UI state read back from getData().
   data(params, props) {
     const store = this.ctx.store;
     const activeTag = this.getData().activeTag;
+    const sortBy = this.getData().sortBy || 'newest';
 
     const allPosts = store.findMany('post');
     const tags = [...new Set(allPosts.flatMap((post) => post.tags))].sort();
@@ -59,7 +96,7 @@ export default class PostsView extends PuzzleView {
         ? allPosts
         : store.findMany('post', { filter: (post) => post.tags.includes(activeTag) });
 
-    const posts = [...matching].sort((a, b) => b.publishedDate - a.publishedDate);
+    const posts = [...matching].sort(SORTS[sortBy] || SORTS.newest);
 
     return {
       // The template loops with `{#for post in posts, i}` (D29, v1.2) and passes
@@ -69,7 +106,8 @@ export default class PostsView extends PuzzleView {
       // `<loopvar>.id`, so filter changes reconcile correctly).
       posts,
       tags,
-      activeTag
+      activeTag,
+      sortBy
     };
   }
 
@@ -78,6 +116,10 @@ export default class PostsView extends PuzzleView {
       // D23 derived-list pattern: setData() updates local state but does not
       // re-run data(), so refresh() recomputes the filtered list from it.
       this.setData('activeTag', tag);
+      this.refresh();
+    },
+    setSort: (sortBy) => {
+      this.setData('sortBy', sortBy);
       this.refresh();
     }
   };
