@@ -1,34 +1,33 @@
 /**
  * Managed head-tag machinery (D84, v1.50 — constellation/doc/DOC-SPEC.md §45).
  *
- * Split out of head.js by D89 so a title-only app never bundles it. TWO
- * consumers of the shared MANAGED_TAGS table:
- *  - the SPA router's #syncHead calls `syncTags` behind the `__PUZZLE_HAS_HEAD_TAGS__`
- *    build gate — when the compiler proves no route defines
- *    description/canonical/socialImage, the call folds away and this whole module
- *    tree-shakes out of the browser bundle;
- *  - the SSG string injector (ssg/index.js) imports MANAGED_TAGS directly at
- *    build time (unconditional — the prerender always emits whatever resolved),
- *    so crawlers/unfurlers see the tags before any JS runs.
+ * BUILD-TIME ONLY. The single consumer is the SSG string injector
+ * (ssg/index.js), which imports MANAGED_TAGS at prerender time so
+ * crawlers/unfurlers see each page's tags in the served HTML before any JS runs.
+ *
+ * There is deliberately no browser-side counterpart. The runtime never syncs
+ * og:/twitter:/description/canonical tags in ANY output mode: crawlers fetch
+ * every URL fresh from the server and never client-navigate, so they always read
+ * the tags baked into that page. Only an in-page consumer reading
+ * `document.querySelector('meta[property="og:title"]')` AFTER a client
+ * navigation would notice, and that is explicitly not supported. (The browser tab
+ * `<title>` is a separate, always-in concern — head.js syncTitle keeps it current
+ * on every navigation.)
  *
  * Every generated tag carries `data-puzzle-head="<id>"` with a PER-TAG identity
- * (e.g. "og:title", "description", "canonical") that is IDENTICAL between the SSG
- * injector and syncTags below — that identity match is what makes hybrid takeover
- * ADOPT the prerendered tags in place instead of duplicating them. The framework
- * only ever creates, updates, or removes marker-bearing tags; every unmanaged
- * head element is left alone. (`<title>` is NOT here — it is the title core's
- * job, see head.js syncTitle.)
+ * (e.g. "og:title", "description", "canonical"), so a prerendered page's managed
+ * tags are identifiable and never confused with hand-authored head elements in
+ * the shell. (`<title>` is NOT here — it is the title core's job, see head.js.)
  *
- * DOM-free except syncTags (browser-only by contract): the tag table runs under
- * Node for the prerender pass.
+ * DOM-free: this module runs under Node for the prerender pass.
  */
 
 /**
  * The managed-tag table — the single source of truth for WHAT each resolved
- * field derives, shared by the SSG string injector and the browser sync so the
- * two paths can never drift apart. Each entry is one generated tag:
- *  - `id`: its `data-puzzle-head` identity (stable across SSG and SPA — the
- *    adoption key);
+ * field derives, consumed by the SSG string injector. Each entry is one
+ * generated tag:
+ *  - `id`: its `data-puzzle-head` identity — the key injectShell replaces or
+ *    removes a same-identity shell tag by;
  *  - `field`: which resolved field feeds it;
  *  - `tag`/`attr`/`name`: `<meta property|name="…" content=value>` shape, or
  *    the one `<link rel="canonical" href=value>` exception;
@@ -36,6 +35,11 @@
  *    resolves, independent of the field's value.
  * og:* uses `property=` and twitter:* uses `name=` per each network's
  * convention. `<title>` is intentionally absent (see head.js).
+ *
+ * `id` remains part of the emitted markup (`data-puzzle-head`) even though
+ * nothing reads it back at runtime any more: it labels the framework's own tags
+ * in the served HTML so a later pass — or a human reading View Source — can tell
+ * them apart from the shell's hand-authored head.
  */
 export const MANAGED_TAGS = [
 	{ id: 'og:title', field: 'title', tag: 'meta', attr: 'property', name: 'og:title' },
@@ -62,53 +66,3 @@ export const MANAGED_TAGS = [
 		fixed: 'summary_large_image',
 	},
 ];
-
-/**
- * Browser-only: sync the managed `document.head` tags to a resolved head. The
- * `<title>` is handled separately by head.js syncTitle — this is the tag half of
- * the old syncHead, called only when the app uses head tags (D89 gate).
- *
- * Per managed tag: adopt-by-identity. An existing `[data-puzzle-head="<id>"]`
- * element is UPDATED in place when its field resolves (this is how hybrid
- * takeover adopts the SSG-emitted tags — same identities, so navigation #0 and
- * every later commit find them instead of appending duplicates), CREATED and
- * appended to <head> when missing, and REMOVED when the field no longer resolves
- * (navigating to a route that suppresses or never defines it must not leave a
- * stale description/canonical behind). Unmanaged head elements are never touched.
- *
- * @param {{ title: string|null, description: string|null, canonical: string|null, socialImage: string|null }} resolved
- */
-export function syncTags(resolved) {
-	const head = document.head;
-	for (const spec of MANAGED_TAGS) {
-		const value = resolved[spec.field];
-		const existing = head.querySelector(`[data-puzzle-head="${spec.id}"]`);
-
-		if (value == null) {
-			if (existing) existing.remove();
-			continue;
-		}
-
-		// twitter:card is a constant flag of "a social image exists", not a value carrier.
-		const content = spec.fixed ?? String(value);
-
-		if (existing && existing.tagName.toLowerCase() === spec.tag) {
-			setTagValue(existing, spec, content);
-		} else {
-			// A marker-bearing element of the WRONG element kind (hand-edited shell)
-			// can't be updated meaningfully — rebuild it under the same identity.
-			if (existing) existing.remove();
-			const el = document.createElement(spec.tag);
-			el.setAttribute('data-puzzle-head', spec.id);
-			if (spec.tag === 'link') el.setAttribute('rel', 'canonical');
-			else el.setAttribute(spec.attr, spec.name);
-			setTagValue(el, spec, content);
-			head.appendChild(el);
-		}
-	}
-}
-
-/** Write the value-carrying attribute: `href` for the canonical link, `content` for metas. */
-function setTagValue(el, spec, content) {
-	el.setAttribute(spec.tag === 'link' ? 'href' : 'content', content);
-}

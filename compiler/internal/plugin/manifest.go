@@ -36,7 +36,6 @@ func (p *Plugin) SetUsage(usage Usage) {
 
 	p.setFormattersLocked(usage.Formatters)
 	p.hasFlip = usage.HasFlip
-	p.hasHeadTags = usage.HasHeadTags
 }
 
 func (p *Plugin) setFormattersLocked(used map[string]bool) {
@@ -49,11 +48,12 @@ func (p *Plugin) setFormattersLocked(used map[string]bool) {
 	p.formatters = next
 }
 
-// Features returns the usage bits captured by the most recent SetUsage call.
-func (p *Plugin) Features() (hasFlip, hasHeadTags bool) {
+// Features returns the source-scanned usage bits captured by the most recent
+// SetUsage call. `flip` is the only build-wide feature probe today.
+func (p *Plugin) Features() (hasFlip bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.hasFlip, p.hasHeadTags
+	return p.hasFlip
 }
 
 func (p *Plugin) formatterManifest() (string, error) {

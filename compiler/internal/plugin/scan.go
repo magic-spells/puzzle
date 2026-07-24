@@ -46,14 +46,13 @@ func builtinAllowlist() (map[string]bool, error) {
 
 // Usage is the build-wide feature set discovered by ScanUsage.
 type Usage struct {
-	Formatters  map[string]bool
-	HasFlip     bool
-	HasHeadTags bool
+	Formatters map[string]bool
+	HasFlip    bool
 }
 
 // ScanUsage walks scanRoot for first-party source usage that controls runtime
-// tree-shaking. It parses .pzl templates for formatter chains and flip
-// attributes, and searches raw .js/.ts/.pzl bytes for managed-head field names.
+// tree-shaking: it parses .pzl templates for formatter chains and flip
+// attributes. Both are template facts, so only .pzl files are read.
 //
 // The scan deliberately errs toward OVER-inclusion: it walks the whole project
 // (not just app/) so a component imported from a sibling directory still
@@ -86,8 +85,7 @@ func ScanUsage(scanRoot string) (Usage, error) {
 			}
 			return nil
 		}
-		ext := filepath.Ext(path)
-		if ext != ".js" && ext != ".ts" && ext != ".pzl" {
+		if filepath.Ext(path) != ".pzl" {
 			return nil
 		}
 
@@ -96,40 +94,7 @@ func ScanUsage(scanRoot string) (Usage, error) {
 			return nil // unreadable file: skip, don't fail the scan
 		}
 		raw := string(src)
-		// Managed-head usage (the D89 __PUZZLE_HAS_HEAD_TAGS__ gate): probe for
-		// EVERY field headTags.js MANAGED_TAGS derives a tag from, `title`
-		// included. `<title>` itself belongs to the ungated title core (head.js
-		// syncTitle), but a route declaring only `meta: { title }` still resolves
-		// og:title and twitter:title — which the SSG injects into every
-		// prerendered page unconditionally. With the bit false the router folds
-		// syncTags away, so those injected tags can never be updated or removed
-		// again: a title-only hybrid/static app carries navigation zero's og:title
-		// for the life of the session. That false negative outlives the build,
-		// which is why title is probed here.
-		//
-		// The byte scan is the weak link, and `title` widens it: this is a raw
-		// substring grep over first-party .js/.ts/.pzl source, so a model field
-		// named `description`, or any stray `title`, turns the bit on for an app
-		// that emits no managed tags at all. That costs headTags.js plus ~10
-		// head.querySelector probes per navigation — the over-inclusion direction
-		// this scan is explicitly allowed to fail in, so correctness wins and
-		// D89's shake now only pays off for apps that mention none of these words.
-		// Deriving the bit from the resolved route table's `meta` keys would close
-		// both directions, but that table is not knowable here: routes live in
-		// app/app.js, which only the hybrid/static prerender pass evaluates (under
-		// node, after the bundle defines are already fixed). puzzle.config.js —
-		// the one file the Go side reads via node — carries no routes, and a plain
-		// SPA build or a dev/watch rebuild never runs node at all.
-		if strings.Contains(raw, "title") ||
-			strings.Contains(raw, "description") ||
-			strings.Contains(raw, "canonical") ||
-			strings.Contains(raw, "socialImage") {
-			usage.HasHeadTags = true
-		}
-		if ext != ".pzl" {
-			return nil
-		}
-		if strings.TrimSpace(string(src)) == "" {
+		if strings.TrimSpace(raw) == "" {
 			return nil
 		}
 		name := filepath.ToSlash(path)

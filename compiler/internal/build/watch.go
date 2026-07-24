@@ -37,11 +37,10 @@ type WatchBuilder struct {
 	// the first Rebuild — nothing is ever pruned on the first pass.
 	prevPublic map[string]bool
 
-	// Esbuild contexts freeze Define values when they are created. Track the
-	// usage bits baked into ctx so ScanUsage can replace the context only when a
-	// source edit changes one of the feature defines.
-	definedFlip     bool
-	definedHeadTags bool
+	// Esbuild contexts freeze Define values when they are created. Track the usage
+	// bit baked into ctx so ScanUsage can replace the context only when a source
+	// edit changes the feature define.
+	definedFlip bool
 }
 
 // NewWatchBuilder creates the incremental builder for the app rooted at root
@@ -66,7 +65,7 @@ func NewWatchBuilder(root string) (*WatchBuilder, error) {
 	if err := scanUsage(absRoot, pl); err != nil {
 		return nil, err
 	}
-	hasFlip, hasHeadTags := pl.Features()
+	hasFlip := pl.Features()
 
 	// The watch builder is always development (§27, D57): __PUZZLE_DEV__ = true, so
 	// the HMR snapshot/restore hooks are live for `puzzle dev`.
@@ -81,12 +80,11 @@ func NewWatchBuilder(root string) (*WatchBuilder, error) {
 	}
 
 	return &WatchBuilder{
-		root:            absRoot,
-		outdir:          outdir,
-		pl:              pl,
-		ctx:             ctx,
-		definedFlip:     hasFlip,
-		definedHeadTags: hasHeadTags,
+		root:        absRoot,
+		outdir:      outdir,
+		pl:          pl,
+		ctx:         ctx,
+		definedFlip: hasFlip,
 	}, nil
 }
 
@@ -165,14 +163,14 @@ func metafileInputs(metafileJSON string) (map[string]bool, error) {
 
 // ScanUsage refreshes the virtual formatter manifest and feature defines. The
 // formatter manifest reads plugin state during each Rebuild. Defines are frozen
-// into an esbuild context, so replace that context only when either boolean
-// changes; ordinary rebuilds keep the incremental graph warm.
+// into an esbuild context, so replace that context only when the scanned flip
+// bit changes; ordinary rebuilds keep the incremental graph warm.
 func (b *WatchBuilder) ScanUsage() error {
 	if err := scanUsage(b.root, b.pl); err != nil {
 		return err
 	}
-	hasFlip, hasHeadTags := b.pl.Features()
-	if hasFlip == b.definedFlip && hasHeadTags == b.definedHeadTags {
+	hasFlip := b.pl.Features()
+	if hasFlip == b.definedFlip {
 		return nil
 	}
 
@@ -187,7 +185,6 @@ func (b *WatchBuilder) ScanUsage() error {
 	}
 	b.ctx = next
 	b.definedFlip = hasFlip
-	b.definedHeadTags = hasHeadTags
 	return nil
 }
 

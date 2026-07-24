@@ -11,8 +11,8 @@ import (
 
 // newBundleOptions assembles the shared esbuild BuildOptions. All runtime probes
 // receive boolean literal defines so esbuild can constant-fold their guarded
-// branches; `dev` selects __PUZZLE_DEV__, while the Plugin carries the two
-// build-wide usage bits discovered before this call.
+// branches; `dev` selects __PUZZLE_DEV__, while the Plugin carries the
+// build-wide usage bit discovered before this call.
 func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool) api.BuildOptions {
 	buildOpts := api.BuildOptions{
 		EntryPoints: []string{entry},
@@ -42,12 +42,18 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool
 	return buildOpts
 }
 
+// bundleDefines builds the literal define map. __PUZZLE_HAS_FLIP__ is a SOURCE
+// fact: plugin.ScanUsage reads the templates for the D85 `flip` attribute.
+//
+// There is deliberately no managed-head define. The browser never syncs og:/
+// twitter:/canonical tags in ANY output mode (D89 amendment): crawlers fetch
+// each URL fresh from the server and never client-navigate, so the tags the SSG
+// baked into that page's HTML are always the ones they read. The tab <title> is
+// a separate, always-in concern handled by head.js syncTitle.
 func bundleDefines(pl *plugin.Plugin, dev bool) map[string]string {
-	hasFlip, hasHeadTags := pl.Features()
 	return map[string]string{
-		"__PUZZLE_DEV__":           strconv.FormatBool(dev),
-		"__PUZZLE_HAS_FLIP__":      strconv.FormatBool(hasFlip),
-		"__PUZZLE_HAS_HEAD_TAGS__": strconv.FormatBool(hasHeadTags),
+		"__PUZZLE_DEV__":      strconv.FormatBool(dev),
+		"__PUZZLE_HAS_FLIP__": strconv.FormatBool(pl.Features()),
 	}
 }
 

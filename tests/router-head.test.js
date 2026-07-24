@@ -1,13 +1,19 @@
 // @vitest-environment jsdom
 //
-// Route head management, SPA half (D84, v1.50 — constellation/doc/DOC-SPEC.md §45):
-// the router's #syncHead runs inside #commitLocation, so managed head tags +
-// document.title move at the atomic commit point (D61 — a failed/superseded
-// navigation touches neither), memory mode performs NO document work (D42), and
-// hybrid takeover ADOPTS SSG-emitted marker tags by identity — same node updated
-// in place, never duplicated. Title semantics stay pre-D84-compatible: only a
-// non-null resolved title assigns document.title; explicit null suppresses the
-// derived og/twitter tags but leaves the tab title alone.
+// Route head management, BROWSER half (D84, v1.50 — constellation/doc/DOC-SPEC.md §45,
+// amended by the D89 follow-up): the router's #syncHead runs inside
+// #commitLocation and does exactly ONE thing — assign document.title at the
+// atomic commit point (D61: a failed/superseded navigation never touches it).
+// Memory mode performs NO document work at all (D42).
+//
+// The managed og:/twitter:/description/canonical tags are emitted EXCLUSIVELY at
+// build time by the SSG injector (covered by ssg-head.test.js). The runtime never
+// creates, updates, or removes them in any output mode: crawlers fetch each URL
+// fresh from the server and never client-navigate, so they always read the tags
+// baked into that page's HTML. These tests pin the negative — the router must
+// leave `[data-puzzle-head]` strictly alone, including tags a prerendered page
+// arrived with. Title semantics stay pre-D84-compatible: only a non-null resolved
+// title assigns document.title.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
@@ -28,6 +34,8 @@ const ctx = () => ({ store: null, router: null, formatters: null });
 
 const headTag = (id) => document.head.querySelector(`[data-puzzle-head="${id}"]`);
 const headTags = (id) => document.head.querySelectorAll(`[data-puzzle-head="${id}"]`);
+/** Every framework-managed tag currently in the document head. */
+const allHeadTags = () => document.head.querySelectorAll('[data-puzzle-head]');
 
 class DefaultLayout extends PuzzleView {
 	render() {
@@ -75,8 +83,8 @@ async function boot(routes, options) {
 beforeEach(() => {
 	history.replaceState({}, '', '/');
 	document.title = '';
-	// Managed tags persist on the jsdom document across tests — clear them so
-	// every test starts from an unmanaged head.
+	// Marker tags persist on the jsdom document across tests — clear them so every
+	// test starts from an unmanaged head.
 	document.head.querySelectorAll('[data-puzzle-head]').forEach((el) => el.remove());
 });
 
@@ -86,31 +94,20 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-describe('Router head sync (D84) — managed tags at the commit point', () => {
-	it('creates every derived tag in <head> + sets document.title on the initial navigation', async () => {
+describe('Router head sync (D84) — title at the commit point, and nothing else', () => {
+	it('sets document.title on the initial navigation and derives NO managed tags', async () => {
 		await boot([{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout, meta: HOME_META }]);
 
 		expect(document.title).toBe('Home Page');
-		expect(headTag('og:title')?.getAttribute('content')).toBe('Home Page');
-		expect(headTag('og:title')?.getAttribute('property')).toBe('og:title');
-		expect(headTag('twitter:title')?.getAttribute('name')).toBe('twitter:title');
-		expect(headTag('description')?.getAttribute('content')).toBe('The home page');
-		expect(headTag('og:description')?.getAttribute('content')).toBe('The home page');
-		expect(headTag('twitter:description')?.getAttribute('content')).toBe('The home page');
-		expect(headTag('canonical')?.tagName.toLowerCase()).toBe('link');
-		expect(headTag('canonical')?.getAttribute('rel')).toBe('canonical');
-		expect(headTag('canonical')?.getAttribute('href')).toBe('https://example.com/');
-		expect(headTag('og:url')?.getAttribute('content')).toBe('https://example.com/');
-		expect(headTag('og:image')?.getAttribute('content')).toBe('https://example.com/og.png');
-		expect(headTag('twitter:image')?.getAttribute('content')).toBe('https://example.com/og.png');
-		expect(headTag('twitter:card')?.getAttribute('content')).toBe('summary_large_image');
-		// exactly one node per identity, all in <head>
+		// A route resolving ALL FOUR reserved fields still produces zero DOM tags:
+		// the og:/twitter:/description/canonical set is a build-time product only.
+		expect(allHeadTags()).toHaveLength(0);
 		for (const spec of MANAGED_TAGS) {
-			expect(headTags(spec.id)).toHaveLength(1);
+			expect(headTag(spec.id)).toBeNull();
 		}
 	});
 
-	it('navigation updates the managed tags + title; fields the target does not resolve are REMOVED', async () => {
+	it('navigation updates document.title; no tag is created for fields the target resolves', async () => {
 		const routes = [
 			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout, meta: HOME_META },
 			{
@@ -118,26 +115,19 @@ describe('Router head sync (D84) — managed tags at the commit point', () => {
 				name: 'about',
 				view: AboutView,
 				layout: DefaultLayout,
-				// only title + description resolve here — canonical/socialImage must not go stale
 				meta: { title: 'About Us', description: 'About page' },
 			},
 		];
 		const { router } = await boot(routes);
-		expect(headTag('canonical')).not.toBeNull();
+		expect(document.title).toBe('Home Page');
+		expect(allHeadTags()).toHaveLength(0);
 
 		await router.push('/about');
 		expect(document.title).toBe('About Us');
-		expect(headTag('og:title')?.getAttribute('content')).toBe('About Us');
-		expect(headTag('description')?.getAttribute('content')).toBe('About page');
-		// stale tags removed, not left pointing at the previous route
-		expect(headTag('canonical')).toBeNull();
-		expect(headTag('og:url')).toBeNull();
-		expect(headTag('og:image')).toBeNull();
-		expect(headTag('twitter:image')).toBeNull();
-		expect(headTag('twitter:card')).toBeNull();
+		expect(allHeadTags()).toHaveLength(0);
 	});
 
-	it('resolves per-field leaf→root through a nested chain; explicit null suppresses inheritance', async () => {
+	it('resolves title leaf→root through a nested chain (per-field walk, no DOM tags)', async () => {
 		const routes = [
 			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout, meta: HOME_META },
 			{
@@ -147,32 +137,26 @@ describe('Router head sync (D84) — managed tags at the commit point', () => {
 				layout: DefaultLayout,
 				meta: { title: 'Docs', description: 'Docs desc', socialImage: '/docs.png' },
 				children: [
+					// index child defines no meta — inherits the parent's title
 					{ path: '', name: 'docs-index', view: IntroView },
-					// leaf: fresh title, description SUPPRESSED, socialImage inherited
 					{ path: 'intro', name: 'intro', view: IntroView, meta: { title: 'Intro', description: null } },
 				],
 			},
 		];
 		const { router } = await boot(routes);
 
-		await router.push('/docs'); // index child inherits everything from /docs
+		await router.push('/docs');
 		expect(document.title).toBe('Docs');
-		expect(headTag('description')?.getAttribute('content')).toBe('Docs desc');
-		expect(headTag('og:image')?.getAttribute('content')).toBe('/docs.png');
 
 		await router.push('/docs/intro');
 		expect(document.title).toBe('Intro');
-		expect(headTag('og:title')?.getAttribute('content')).toBe('Intro');
-		// the leaf's `description: null` beat the parent's value — tags gone
-		expect(headTag('description')).toBeNull();
-		expect(headTag('og:description')).toBeNull();
-		expect(headTag('twitter:description')).toBeNull();
-		// socialImage still inherited from /docs
-		expect(headTag('og:image')?.getAttribute('content')).toBe('/docs.png');
-		expect(headTag('twitter:card')?.getAttribute('content')).toBe('summary_large_image');
+		// The full per-field resolution (including `description: null` suppression)
+		// is head.js resolveHead's contract and is covered by ssg-head.test.js —
+		// only the title reaches the DOM from here.
+		expect(allHeadTags()).toHaveLength(0);
 	});
 
-	it('an explicit title:null removes og/twitter title tags but leaves document.title alone (pre-D84 posture)', async () => {
+	it('an explicit title:null leaves document.title alone (pre-D84 posture)', async () => {
 		const routes = [
 			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout, meta: HOME_META },
 			{ path: '/bare', name: 'bare', view: AboutView, layout: DefaultLayout, meta: { title: null } },
@@ -181,30 +165,26 @@ describe('Router head sync (D84) — managed tags at the commit point', () => {
 		expect(document.title).toBe('Home Page');
 
 		await router.push('/bare');
-		// suppressed: no managed title tags…
-		expect(headTag('og:title')).toBeNull();
-		expect(headTag('twitter:title')).toBeNull();
-		// …but the tab title is NOT cleared (a blank tab would be worse than a stale one,
+		// The tab title is NOT cleared (a blank tab would be worse than a stale one,
 		// and pre-D84 an unresolved title also left document.title untouched).
 		expect(document.title).toBe('Home Page');
+		expect(allHeadTags()).toHaveLength(0);
 	});
 
-	it('title-only apps now derive og:title/twitter:title — and nothing else (intended D84 behavior)', async () => {
+	it('a title-only app syncs the tab title without touching document.head', async () => {
 		const routes = [
 			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout, meta: { title: 'Solo' } },
 		];
 		await boot(routes);
 
 		expect(document.title).toBe('Solo');
-		expect(headTag('og:title')?.getAttribute('content')).toBe('Solo');
-		expect(headTag('twitter:title')?.getAttribute('content')).toBe('Solo');
-		for (const spec of MANAGED_TAGS) {
-			if (spec.field === 'title') continue;
-			expect(headTag(spec.id)).toBeNull();
-		}
+		// og:title/twitter:title ARE derived from meta.title — but by the SSG, into
+		// the served HTML. Nothing derives them here.
+		expect(headTags('og:title')).toHaveLength(0);
+		expect(headTags('twitter:title')).toHaveLength(0);
 	});
 
-	it('a failed navigation (rejecting data()) leaves the head untouched (D61 atomicity)', async () => {
+	it('a failed navigation (rejecting data()) leaves the title untouched (D61 atomicity)', async () => {
 		class BadView extends PuzzleView {
 			async data() {
 				throw new Error('boom');
@@ -225,16 +205,13 @@ describe('Router head sync (D84) — managed tags at the commit point', () => {
 		];
 		const { router } = await boot(routes);
 		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-		const homeDescription = headTag('description');
 
 		await router.push('/bad');
 
 		expect(errSpy).toHaveBeenCalled();
+		// the losing navigation never reached #commitLocation
 		expect(document.title).toBe('Home Page');
-		// same NODE, same value — the losing navigation never reached #commitLocation
-		expect(headTag('description')).toBe(homeDescription);
-		expect(headTag('description')?.getAttribute('content')).toBe('The home page');
-		expect(headTag('canonical')?.getAttribute('href')).toBe('https://example.com/');
+		expect(allHeadTags()).toHaveLength(0);
 	});
 
 	it('leaves unmanaged head elements alone', async () => {
@@ -265,16 +242,16 @@ describe('Router head sync (D84) — memory mode performs no document work (D42)
 		const { router } = await boot(routes, { mode: 'memory' });
 
 		expect(document.title).toBe('');
-		expect(document.head.querySelectorAll('[data-puzzle-head]')).toHaveLength(0);
+		expect(allHeadTags()).toHaveLength(0);
 
 		await router.push('/about');
 		expect(document.title).toBe('');
-		expect(document.head.querySelectorAll('[data-puzzle-head]')).toHaveLength(0);
+		expect(allHeadTags()).toHaveLength(0);
 	});
 });
 
-describe('Router head sync (D84) — hybrid takeover adoption', () => {
-	/** Seed document.head the way the SSG injector leaves it (same identities/shape). */
+describe('Router head sync (D84) — hybrid takeover leaves prerendered tags intact', () => {
+	/** Seed document.head the way the SSG injector leaves a prerendered page. */
 	function seedSsgHead() {
 		document.head.insertAdjacentHTML(
 			'beforeend',
@@ -283,8 +260,9 @@ describe('Router head sync (D84) — hybrid takeover adoption', () => {
 				'<meta name="description" content="The home page" data-puzzle-head="description">' +
 				'<meta property="og:description" content="The home page" data-puzzle-head="og:description">' +
 				'<meta name="twitter:description" content="The home page" data-puzzle-head="twitter:description">' +
-				// a field the app's routes do NOT resolve — must be cleaned up at takeover
-				'<link rel="canonical" href="https://stale.dev/" data-puzzle-head="canonical">'
+				// a field the app's routes do NOT resolve — the runtime still must not
+				// touch it; the served HTML for THIS url is what a crawler reads
+				'<link rel="canonical" href="https://prerendered.dev/" data-puzzle-head="canonical">'
 		);
 	}
 
@@ -298,10 +276,10 @@ describe('Router head sync (D84) — hybrid takeover adoption', () => {
 		return el;
 	}
 
-	it('adopts SSG-emitted marker tags by identity — same nodes updated, zero duplicates, stale ones removed', async () => {
+	it('takeover and later navigations never rewrite, remove, or duplicate SSG marker tags', async () => {
 		seedSsgHead();
-		const seededOgTitle = headTag('og:title');
-		const seededDescription = headTag('description');
+		const seeded = [...allHeadTags()];
+		const before = seeded.map((el) => el.outerHTML);
 
 		const el = ssgContainer('<puzzle-view class="home">HOME</puzzle-view>');
 		const routes = [
@@ -317,28 +295,22 @@ describe('Router head sync (D84) — hybrid takeover adoption', () => {
 		routers.push(router);
 		await router.start(el, ctx());
 
-		// navigation #0 adopted the prerendered tags: SAME nodes, no new ones
-		expect(headTag('og:title')).toBe(seededOgTitle);
-		expect(headTag('description')).toBe(seededDescription);
-		for (const spec of MANAGED_TAGS) {
-			expect(headTags(spec.id).length).toBeLessThanOrEqual(1);
-		}
-		// the prerendered canonical resolves to nothing in this app — removed
-		expect(headTag('canonical')).toBeNull();
+		// navigation #0 left the prerendered head byte-identical…
+		expect([...allHeadTags()]).toEqual(seeded);
+		expect([...allHeadTags()].map((n) => n.outerHTML)).toEqual(before);
+		// …including the canonical this app's routes do not resolve
+		expect(headTag('canonical')?.getAttribute('href')).toBe('https://prerendered.dev/');
 
-		// a later SPA navigation still updates the adopted nodes in place
+		// A later client navigation moves the TAB TITLE only. The prerendered tags
+		// intentionally keep describing the entry page: a crawler asking for /about
+		// gets /about's own prerendered HTML and never sees this document.
 		await router.push('/about');
 		expect(document.title).toBe('About Us');
-		expect(headTag('og:title')).toBe(seededOgTitle);
-		expect(headTag('og:title')?.getAttribute('content')).toBe('About Us');
+		expect([...allHeadTags()].map((n) => n.outerHTML)).toEqual(before);
 		expect(headTags('og:title')).toHaveLength(1);
-		expect(headTags('description')).toHaveLength(1);
-
-		// and back again — never a duplicate, no matter how many commits
-		await router.push('/');
 		expect(headTag('og:title')?.getAttribute('content')).toBe('Home Page');
-		for (const spec of MANAGED_TAGS) {
-			expect(headTags(spec.id).length).toBeLessThanOrEqual(1);
-		}
+
+		await router.push('/');
+		expect([...allHeadTags()].map((n) => n.outerHTML)).toEqual(before);
 	});
 });

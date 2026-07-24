@@ -253,7 +253,6 @@
 import { ViewNode } from '../views/ViewNode.js';
 import { cancelAnimations } from '../views/animate.js';
 import { resolveHead, syncTitle } from '../head.js';
-import { syncTags } from '../headTags.js';
 import { walkRouteTree } from './routeTree.js';
 
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
@@ -2024,36 +2023,29 @@ export class Router {
 	}
 
 	/**
-	 * Managed head sync (D84, v1.50 — subsumes the pre-D84 #setTitle): resolve
-	 * the four reserved meta fields (title/description/canonical/socialImage)
-	 * from the destination chain — head.js resolveHead, the same nearest-defined
-	 * leaf→root walk #setTitle performed for meta.title alone — and sync
-	 * document.title + the `data-puzzle-head`-marked tags (head.js syncHead:
-	 * update in place / create / remove-when-unresolved). Runs inside
-	 * #commitLocation, so D61 atomicity covers the head exactly as it covered the
-	 * title: a failed or superseded navigation never touches it. On hybrid
-	 * takeover the SSG-emitted tags carry the SAME identities, so navigation #0
-	 * adopts them in place — never duplicates. Title semantics stay byte-
-	 * compatible: only a non-null resolved title assigns document.title (see
-	 * resolveHead's asymmetry note on explicit null).
+	 * Title sync (D84, v1.50 — subsumes the pre-D84 #setTitle): resolve the
+	 * reserved meta fields from the destination chain — head.js resolveHead, the
+	 * same nearest-defined leaf→root walk #setTitle performed for meta.title
+	 * alone — and assign document.title. Runs inside #commitLocation, so D61
+	 * atomicity covers it exactly as it covered the title: a failed or superseded
+	 * navigation never touches it. Title semantics stay byte-compatible: only a
+	 * non-null resolved title assigns document.title (see resolveHead's asymmetry
+	 * note on explicit null).
+	 *
+	 * The managed og:/twitter:/description/canonical tags are deliberately NOT
+	 * synced here, in any output mode (D89 amendment). Crawlers and unfurlers
+	 * fetch each URL fresh from the server and never client-navigate, so the tags
+	 * the prerender baked into that page's HTML are always the ones they read; a
+	 * client-side rewrite would only ever be observed by something reading
+	 * document.head after an in-page navigation, which is explicitly out of scope.
+	 * headTags.js is therefore build-time only and never enters a browser bundle.
 	 */
 	#syncHead(entry) {
 		// Memory mode performs NO document work (D42): an embedded widget must not
 		// rename the host page's tab or edit the host <head> — document-level side
 		// effects like the URL.
 		if (this.#mode === 'memory') return;
-		const resolved = resolveHead(entry.chain);
-		// Title is the always-in core (head.js). The managed-tag sync (headTags.js)
-		// is build-gated (D89): the inline `typeof __PUZZLE_HAS_HEAD_TAGS__ …` probe
-		// folds to a dead branch when the compiler proves no route defines
-		// description/canonical/socialImage, dropping the syncTags import and
-		// headTags.js from the bundle. Undefined (vitest / no-compiler) ⇒ true, so
-		// behavior is identical. Inline probe required — a named const is not
-		// constant-propagated by esbuild (see viewManager.js flip gate).
-		syncTitle(resolved);
-		if (typeof __PUZZLE_HAS_HEAD_TAGS__ === 'undefined' || __PUZZLE_HAS_HEAD_TAGS__) {
-			syncTags(resolved);
-		}
+		syncTitle(resolveHead(entry.chain));
 	}
 
 	#handlePopState() {
