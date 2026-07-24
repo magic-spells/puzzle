@@ -33,8 +33,14 @@ notes:
       broken instance being reused forever (mounted() never firing, setData() inert). Tests:
       tests/keyed-reconciliation.test.js.
     sha: d9591d6
-verified_at: '2026-07-24T05:49:10.358Z'
-verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
+  - kind: verified
+    text: >-
+      Re-verified at 1400ec6 to cover the D89 paragraph (flip.js bundled only when used, 2 inlined
+      probes post-reduction, detection covers component props) appended to this card's body — prior
+      stamp (d9591d6) predated that paragraph.
+    sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
+verified_at: '2026-07-24T06:55:23.302Z'
+verified_sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
 ---
 
 # ViewManager and ViewNode

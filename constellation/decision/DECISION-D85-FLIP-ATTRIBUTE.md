@@ -11,8 +11,15 @@ connections:
   - FILE-ANIMATE
   - FILE-SSG-SERIALIZER
   - FEATURE-V1-51-FLIP
-verified_at: '2026-07-24T00:26:45.246Z'
-verified_sha: df909f7f5581b312acbbc45a58cbd2b5e681a2a8
+verified_at: '2026-07-24T06:55:20.417Z'
+verified_sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
+notes:
+  - kind: verified
+    text: >-
+      Re-verified at 1400ec6 to cover the D89 amendment (per-app flip.js inclusion via
+      component-props-aware AST scan) appended to this card's body — prior stamp (df909f7) predated
+      that section.
+    sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
 ---
 
 # D85 — FLIP keyed-reorder animation via a `flip` directive attribute (v1.51)

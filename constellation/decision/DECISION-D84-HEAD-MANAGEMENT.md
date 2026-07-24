@@ -13,8 +13,8 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-RUNTIME
   - FEATURE-V1-50-HEAD-MANAGEMENT
-verified_at: '2026-07-24T05:49:33.414Z'
-verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
+verified_at: '2026-07-24T06:55:21.936Z'
+verified_sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
 notes:
   - kind: decision
     text: >-
@@ -33,6 +33,12 @@ notes:
       regression is reverted); tests/ssg-head.test.js asserts suppression + the undefined-inherits
       case.
     sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
+  - kind: verified
+    text: >-
+      Re-verified at 1400ec6 to cover the D89 amendment (head.js/headTags.js module split, syncTitle
+      always-in + syncTags gated) appended to this card's body — prior stamp (d9591d6) predated that
+      section. Confirmed syncTitle/syncTags exist as described.
+    sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
 ---
 
 # D84 — Route head management: reserved `meta` fields, SSG-first (v1.50)
