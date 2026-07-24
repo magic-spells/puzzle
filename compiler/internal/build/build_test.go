@@ -202,14 +202,18 @@ export default class Home extends PuzzleView {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Markers MUST be string literals, never identifiers: a production build
-	// minifies `beginFlip`/`MANAGED_TAGS` to single letters, so asserting their
-	// ABSENCE would pass vacuously even if the modules were still bundled.
-	// `cubic-bezier(0.2, 0, 0, 1)` is flip.js's DEFAULT_EASING (unique to that
-	// module) and `data-puzzle-head` is headTags.js's marker attribute — both
-	// survive minification, so their absence is real proof the module tree-shook.
-	featureMarkers := []string{"cubic-bezier(0.2, 0, 0, 1)", "data-puzzle-head"}
-	for _, marker := range featureMarkers {
+	// The two directions need DIFFERENT markers, because the two builds differ in
+	// minification.
+	//
+	// ABSENCE (this production build) may only assert on string LITERALS.
+	// Minification mangles `beginFlip`/`MANAGED_TAGS` to single letters, so
+	// asserting those are absent would pass vacuously even if the modules were
+	// fully bundled — no proof at all. `cubic-bezier(0.2, 0, 0, 1)` is flip.js's
+	// DEFAULT_EASING (unique to that module) and `data-puzzle-head` is
+	// headTags.js's marker attribute; both survive minification, so their absence
+	// is real evidence the module tree-shook away.
+	absenceMarkers := []string{"cubic-bezier(0.2, 0, 0, 1)", "data-puzzle-head"}
+	for _, marker := range absenceMarkers {
 		if strings.Contains(string(withoutJS), marker) {
 			t.Errorf("bundle without feature usage retained %q", marker)
 		}
@@ -223,7 +227,12 @@ export default class Home extends PuzzleView {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range featureMarkers {
+	// PRESENCE (a development build, unminified) can assert on both: the literals
+	// AND the original identifiers, since nothing is mangled here. Checking the
+	// identifiers too proves the modules are genuinely linked in, not merely that
+	// some string survived.
+	presenceMarkers := append(append([]string{}, absenceMarkers...), "beginFlip", "MANAGED_TAGS")
+	for _, marker := range presenceMarkers {
 		if !strings.Contains(string(withJS), marker) {
 			t.Errorf("bundle with feature usage should retain %q", marker)
 		}
