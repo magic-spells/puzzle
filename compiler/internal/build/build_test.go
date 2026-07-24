@@ -155,6 +155,103 @@ func writeConsoleFixture(t *testing.T) string {
 	return root
 }
 
+func assertSourceMapArtifacts(t *testing.T, outdir string, want bool) {
+	t.Helper()
+	var maps, comments []string
+	err := filepath.WalkDir(outdir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(outdir, path)
+		if err != nil {
+			return err
+		}
+		if strings.HasSuffix(entry.Name(), ".map") {
+			maps = append(maps, rel)
+		}
+		if filepath.Ext(entry.Name()) == ".js" {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			if strings.Contains(string(data), "//# sourceMappingURL=") {
+				comments = append(comments, rel)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want {
+		if len(maps) == 0 {
+			t.Error("expected at least one linked source-map file")
+		}
+		if len(comments) == 0 {
+			t.Error("expected at least one sourceMappingURL comment")
+		}
+		return
+	}
+	if len(maps) > 0 {
+		t.Errorf("expected no source-map files, got %v", maps)
+	}
+	if len(comments) > 0 {
+		t.Errorf("expected no sourceMappingURL comments, got %v", comments)
+	}
+}
+
+func TestBuildDefaultOmitsSourceMap(t *testing.T) {
+	root := writeConsoleFixture(t)
+	if err := Build(root, Options{Development: false}); err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	assertSourceMapArtifacts(t, filepath.Join(root, "dist"), false)
+}
+
+func TestBuildSourceMapTrueEmitsLinkedMap(t *testing.T) {
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not on PATH")
+	}
+	root := writeConsoleFixture(t)
+	if err := os.WriteFile(filepath.Join(root, "puzzle.config.js"),
+		[]byte("export default { build: { sourceMap: true } };\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Build(root, Options{Development: false}); err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	assertSourceMapArtifacts(t, filepath.Join(root, "dist"), true)
+}
+
+func TestBuildStaticSourceMapSetting(t *testing.T) {
+	requireStaticRuntime(t)
+	for _, tt := range []struct {
+		name      string
+		sourceMap bool
+	}{
+		{name: "default omits maps"},
+		{name: "enabled emits linked maps", sourceMap: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeSSGFixture(t, baseSSGFixture())
+			if tt.sourceMap {
+				if err := os.WriteFile(filepath.Join(root, "puzzle.config.js"),
+					[]byte("export default { build: { sourceMap: true } };\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := Build(root, Options{Development: false, Output: "static"}); err != nil {
+				t.Fatalf("static Build failed: %v", err)
+			}
+			assertSourceMapArtifacts(t, filepath.Join(root, "dist", staticPagesDir), tt.sourceMap)
+		})
+	}
+}
+
 // TestBuildDefaultStripsConsole confirms the unchanged default: a production
 // build with no puzzle.config.js drops console.* (api.DropConsole), so the
 // distinctive marker vanishes from the bundle.

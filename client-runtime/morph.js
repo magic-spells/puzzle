@@ -374,8 +374,8 @@ export function enableMorph(app, options = {}) {
 	// engine work, and forget this app. Idempotent. Reached two ways: app.unmount()
 	// calls it through the handler's `dispose` below, and a second enableMorph on
 	// this app calls it via the double-install guard. engine.stop() (not destroy())
-	// leaves the engine reusable; re-enabling morph after unmount means calling
-	// enableMorph again, which is safe.
+	// leaves the engine reusable, so a later app.mount() re-arms this same handler
+	// (see arm() below); calling enableMorph again is also safe.
 	let disposed = false;
 	const dispose = () => {
 		if (disposed) return;
@@ -386,6 +386,19 @@ export function enableMorph(app, options = {}) {
 		disarmCrossFlight();
 		if (engine.state !== 'idle') engine.stop();
 		installedMorphs.delete(app);
+	};
+
+	// Re-arm a disposed handler: re-attach the capture-phase document click listener
+	// and re-register in the double-install map. PuzzleApp.mount() calls this so a
+	// mount → unmount (which disposes) → re-mount cycle restores the click-pin
+	// machinery on the SAME handler object (the router already re-reads enter/leave).
+	// Idempotent — a no-op while still armed, so it never stacks a second listener;
+	// dispose() clears every other bit of state, so re-arming starts clean.
+	const arm = () => {
+		if (!disposed) return;
+		disposed = false;
+		if (hasDocument) document.addEventListener('click', onDocumentClick, true);
+		installedMorphs.set(app, dispose);
 	};
 	engine.dispose = dispose;
 	installedMorphs.set(app, dispose);
@@ -467,9 +480,11 @@ export function enableMorph(app, options = {}) {
 			return result;
 		},
 
-		// Carried on the handler so app.unmount() can tear morph down (the router
-		// only reads enter/leave — this extra field is inert to it).
+		// Carried on the handler so app.unmount() can tear morph down and app.mount()
+		// can re-arm it across a remount (the router only reads enter/leave — these
+		// extra fields are inert to it).
 		dispose,
+		arm,
 	});
 
 	return engine;

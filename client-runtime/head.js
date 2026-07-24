@@ -2,8 +2,9 @@
  * Route head management (D84, v1.50 — constellation/doc/DOC-SPEC.md §45).
  *
  * ONE resolver, TWO consumers: route `meta` carries four RESERVED head fields —
- * `title` (pre-D84 behavior preserved), `description`, `canonical`,
- * `socialImage` — and both delivery paths consume the same resolution:
+ * `title` (delivered via the pre-D84 document.title / textual-<title> path),
+ * `description`, `canonical`, `socialImage` — and both delivery paths consume
+ * the same resolution (all four share the uniform null-suppression walk):
  *
  *  - the SSG shell injection (ssg/index.js) string-injects the derived tags so
  *    crawlers/unfurlers see them before any JS runs (the authoritative path —
@@ -71,13 +72,11 @@ export const MANAGED_TAGS = [
 /**
  * Resolve the four reserved fields from a route chain (root→leaf order, as the
  * router and SSG both hold it). EACH FIELD RESOLVES INDEPENDENTLY, nearest-
- * defined walking leaf→root, but the null posture SPLITS by field:
- *  - `title` keeps the exact walk the router's old #setTitle did — BOTH
- *    `undefined` (absent) and explicit `null` inherit from a parent (`meta.title
- *    != null`), so a child that clears its title still shows the parent's;
- *  - the three D84-new fields (`description`, `canonical`, `socialImage`) treat
- *    `undefined` as inherit and an explicit `null` as a DEFINED value that STOPS
- *    the walk and suppresses an inherited value.
+ * defined walking leaf→root, with ONE uniform null posture for every field:
+ * `undefined` (absent) inherits from a parent, an explicit `null` is a DEFINED
+ * value that STOPS the walk and suppresses any inherited value. (This corrects
+ * a 0.2.0 pre-release divergence where `title` alone inherited on null; §45 /
+ * D84 make suppression uniform — see the 0.1.x→0.2.0 migration note.)
  * Values are static strings or null by contract (no functions/HTML/arrays —
  * SPEC §45).
  *
@@ -86,8 +85,8 @@ export const MANAGED_TAGS = [
  * distinguished: for managed tags both mean absent/removed, and for
  * `document.title` both mean leave-it-alone (see syncHead) — a resolved-null
  * title never clears `document.title` (clearing it would show a blank tab, and
- * pre-D84 a never-resolving title also left it untouched, so null keeps that
- * posture).
+ * a never-resolving title also leaves it untouched, so an explicitly-suppressed
+ * title keeps that same leave-alone posture rather than blanking the tab).
  *
  * @param {Array<object>} chain route defs root→leaf (entry.chain)
  * @returns {{ title: string|null, description: string|null, canonical: string|null, socialImage: string|null }}
@@ -100,20 +99,18 @@ export function resolveHead(chain) {
 	return out;
 }
 
-/** Nearest-defined `meta[field]` leaf→root; `undefined` keeps walking, `null` stops it. */
+/** Nearest-defined `meta[field]` leaf→root; `undefined` keeps walking, `null` stops it (suppression). */
 function resolveField(chain, field) {
-	// `title` alone keeps its pre-D84 walk: an explicit `null` INHERITS (keeps
-	// climbing), matching the old router #setTitle / ssg resolveTitle (`meta.title
-	// != null`) so a child that clears its title still shows the parent/layout one.
-	// The three D84-new fields (description, canonical, socialImage) never had that
-	// posture — for them an explicit null is a DEFINED value that terminates the
-	// walk as suppression (the D84 null-suppresses-an-inherited-tag semantics).
-	const inheritsOnNull = field === 'title';
+	// Uniform for ALL reserved fields (title included): `undefined`/absent keeps
+	// climbing toward the root (inherit), an explicit `null` is a DEFINED value
+	// that TERMINATES the walk and suppresses any inherited value (D84 §45). A
+	// suppressed title resolves to null → syncHead / the SSG injector leave the
+	// current tab title / shell <title> untouched (see resolveHead + syncHead).
 	for (let i = chain.length - 1; i >= 0; i--) {
 		const meta = chain[i].meta;
 		if (!meta) continue;
 		const value = meta[field];
-		if (inheritsOnNull ? value != null : value !== undefined) return value;
+		if (value !== undefined) return value;
 	}
 	return null;
 }
@@ -133,8 +130,9 @@ function resolveField(chain, field) {
  * never touched.
  *
  * `document.title` is assigned ONLY for a non-null resolved title — resolved
- * null (explicit suppression) and nothing-defined both leave it as-is
- * (byte-compatible with the pre-D84 #setTitle; see resolveHead).
+ * null (explicit suppression) and nothing-defined both leave it as-is (the
+ * assignment mechanism is the pre-D84 #setTitle; only the null posture is now
+ * uniform suppression rather than title-inherits — see resolveHead).
  *
  * @param {{ title: string|null, description: string|null, canonical: string|null, socialImage: string|null }} resolved
  */

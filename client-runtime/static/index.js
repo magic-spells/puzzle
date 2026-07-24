@@ -27,12 +27,7 @@
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { mount } from '../views/viewManager.js';
-import { assembleChain, makeRouteSnapshot } from '../ssg/assemble.js';
-
-// The router methods a static page might reach for. Each throws — a static page has
-// no history/router, so any programmatic navigation is a coding error the message
-// points at plain links (CONTRACT 4). Kept in sync with the Router's public surface.
-const ROUTER_METHODS = ['push', 'replace', 'back', 'forward', 'go', 'start', 'stop'];
+import { assembleChain, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
 
 /**
  * Mount a prerendered static page's interactive layer.
@@ -130,49 +125,6 @@ function buildStaticContext({
 	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 
 	return { store, router, formatters: registry };
-}
-
-/**
- * Router-shaped static stub: navigation throws, url() keeps Router.url's exact
- * validation/pass-through/prefix semantics, and current is the page snapshot.
- */
-function makeRouterStub(route, { mode = 'history', base = '' } = {}) {
-	if (mode !== 'history' && mode !== 'hash' && mode !== 'memory') {
-		throw new Error(
-			`[puzzle] unknown router mode: "${mode}" (expected 'history', 'hash', or 'memory')`
-		);
-	}
-	const normalizedBase = normalizeBase(base);
-	const stub = {};
-	const throwNoRouter = () => {
-		throw new Error('[puzzle] static output has no router — use plain links');
-	};
-	for (const method of ROUTER_METHODS) stub[method] = throwNoRouter;
-	stub.url = (path) => {
-		if (typeof path !== 'string') {
-			throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
-		}
-		if (path[0] !== '/') return path;
-		if (mode === 'memory') return path;
-		if (mode === 'hash') return '#' + normalizedBase + path;
-		return normalizedBase + path;
-	};
-	Object.defineProperty(stub, 'current', {
-		enumerable: true,
-		get: () => route,
-	});
-	return stub;
-}
-
-/** Keep Router's D51 base normalization/validation semantics without importing it. */
-function normalizeBase(base) {
-	if (!base) return '';
-	if (base.includes('#') || base.includes('?')) {
-		throw new Error(`[puzzle] router base must not contain "#" or "?": "${base}"`);
-	}
-	let normalized = base[0] === '/' ? base : '/' + base;
-	normalized = normalized.replace(/\/+$/, '');
-	return normalized;
 }
 
 /**

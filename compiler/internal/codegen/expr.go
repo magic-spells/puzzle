@@ -174,7 +174,7 @@ func resolveExpr(expr string, scope map[string]bool) string {
 					break
 				}
 				if expr[j] == '$' && j+1 < n && expr[j+1] == '{' {
-					end := matchBrace(expr, j+1)
+					end := matchBalanced(expr, j+1, '{', '}')
 					if end < 0 {
 						// unbalanced — copy the rest verbatim
 						b.WriteString(expr[j:])
@@ -392,11 +392,11 @@ func scanNumber(s string, i int) int {
 	return j
 }
 
-// matchBrace returns the index of the '}' matching the '{' at open, or -1. open
-// must point at '{'. It routes through parser.LexSkip so strings, regex
+// matchBalanced returns the index of the close delimiter matching the open
+// delimiter at open, or -1. It routes through parser.LexSkip so strings, regex
 // literals, and comments in the scanned JS are skipped exactly as the parser's
-// balanced scanners do — a '}' inside `${/}/}` no longer closes early.
-func matchBrace(s string, open int) int {
+// balanced scanners do.
+func matchBalanced(s string, open int, openDelim, closeDelim byte) int {
 	depth := 0
 	prevEndsExpr := false
 	for i := open; i < len(s); {
@@ -406,38 +406,9 @@ func matchBrace(s string, open int) int {
 			continue
 		}
 		c := s[i]
-		switch c {
-		case '{':
+		if c == openDelim {
 			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-		prevEndsExpr = parser.LexPlainEndsExpr(c, prevEndsExpr)
-		i++
-	}
-	return -1
-}
-
-// matchParen returns the index of the ')' matching the '(' at open, or -1. Like
-// matchBrace it routes through parser.LexSkip, so a ')' inside a regex character
-// class (e.g. the event handler `handle(/[)]/)`) does not close the group early.
-func matchParen(s string, open int) int {
-	depth := 0
-	prevEndsExpr := false
-	for i := open; i < len(s); {
-		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
-			prevEndsExpr = pee
-			i = next
-			continue
-		}
-		c := s[i]
-		switch c {
-		case '(':
-			depth++
-		case ')':
+		} else if c == closeDelim {
 			depth--
 			if depth == 0 {
 				return i
@@ -486,7 +457,7 @@ func compileEventValue(expr string, scope map[string]bool) (string, bool, error)
 	if !isJSIdentifier(callee) {
 		return "", false, fmt.Errorf("event handler callee must be a plain method name (got %q)", callee)
 	}
-	closeParen := matchParen(expr, op)
+	closeParen := matchBalanced(expr, op, '(', ')')
 	if closeParen != len(expr)-1 {
 		return "", false, fmt.Errorf("event handler must be a single call expression (got %q)", expr)
 	}

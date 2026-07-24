@@ -328,6 +328,22 @@ function mountComponent(vnode, parent, ref, ctx) {
 		})
 		.catch((err) => {
 			console.error('[puzzle] child mount failed:', err);
+			// The instance never reached mounted() (data()/render() threw on the first
+			// mount). Left as-is, patchComponent would REUSE this dead instance on every
+			// later render without ever re-mounting it, so a render that no longer throws
+			// still gets a permanently-broken component: mounted() never fires and
+			// setData() re-renders are inert. Tear it down and leave a bare comment
+			// holding the position, then clear the vnode's instance links so patch()
+			// mounts a FRESH instance here on the next render (see patch()).
+			const anchor = child.element; // the comment placeholder — render never landed
+			const placeholder =
+				anchor && anchor.parentNode
+					? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
+					: null;
+			child.destroy(); // release any partial subscriptions; removes the child's own anchor
+			if (placeholder) vnode.el = placeholder;
+			vnode.component = null;
+			vnode.instance = null;
 		});
 	vnode.el = child.element;
 	return vnode.el;
@@ -356,6 +372,18 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 	}
 
 	if (newVnode.isComponent) {
+		// A component whose FIRST mount threw was torn down: its instance was
+		// destroyed and cleared, with a bare comment left holding the position
+		// (mountComponent's catch). There is no live instance to update — mount a
+		// FRESH one at the placeholder so a render that no longer throws yields a
+		// fully working component (mounted() fires, setData() re-renders), then drop
+		// the placeholder.
+		if (oldVnode.component == null) {
+			const placeholder = oldVnode.el;
+			mount(newVnode, parent, placeholder, ctx);
+			placeholder?.remove();
+			return;
+		}
 		patchComponent(oldVnode, newVnode);
 		return;
 	}
@@ -432,7 +460,10 @@ function patchComponent(oldVnode, newVnode) {
 }
 
 function sameNode(a, b) {
-	return a.tag === b.tag && a.key === b.key;
+	// (tag, key) identity by SameValueZero — the same comparison the keyed map in
+	// patchKeyedChildren uses, so a `NaN` key matches itself (a bare `===` reads
+	// NaN !== NaN and would needlessly replace the row on every render).
+	return a.tag === b.tag && (a.key === b.key || (a.key !== a.key && b.key !== b.key));
 }
 
 function shallowEqual(a, b) {
@@ -466,6 +497,13 @@ const leavingEls = new WeakSet();
 function unmount(vnode) {
 	if (vnode.isComponent) {
 		const child = vnode.component;
+		// A first-mount-failed component was already torn down, leaving only a comment
+		// placeholder (mountComponent's catch nulled `component`). No instance to
+		// destroy — just drop the placeholder node so it doesn't linger in the DOM.
+		if (!child) {
+			vnode.el?.remove();
+			return;
+		}
 		// LEAVE animation (constellation/doc/DOC-SPEC.md §12): when the leaving
 		// instance declares `animations.out`, defer DOM removal + destroy() until
 		// the out-animation finishes (destroyAnimated). The element stays in place
@@ -618,10 +656,11 @@ function patchIndexedChildren(el, oldChildren, newChildren, ctx) {
 	}
 }
 
-// Duplicate keys silently collapse (the (tag,key) Map keeps only the last), which
-// surfaces as mystifying DOM churn — the older sibling never matches and gets
-// unmounted. There is no dev/prod flag in the runtime, so warn at most once per
-// session (a bounded global, like animate.js's malformed-spec warning).
+// Two siblings with the SAME tag and SAME key silently collapse (the per-tag Map
+// keeps only the last), which surfaces as mystifying DOM churn — the older sibling
+// never matches and gets unmounted. There is no dev/prod flag in the runtime, so
+// warn at most once per session (a bounded global, like animate.js's malformed-spec
+// warning).
 let warnedDuplicateKey = false;
 function warnDuplicateKey(key) {
 	if (warnedDuplicateKey) return;
@@ -633,15 +672,27 @@ function warnDuplicateKey(key) {
 }
 
 function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
-	const oldKeyed = new Map();
+	// Keyed identity is the pair (tag, key), with BOTH sides compared by native
+	// SameValueZero — never string concatenation. Partition by raw `tag` (a
+	// component's class object by identity, an element's tag string) into a nested
+	// Map keyed by the raw `key`. This keeps distinct-type keys distinct (`1` vs
+	// `"1"`, `true` vs `"true"`), lets `NaN` self-match (SameValueZero), and never
+	// stringifies a component tag to its class source. Old `tag + '\x00' + key`
+	// concatenation collapsed all of these, unmounting a live row and aliasing two
+	// logical rows onto one DOM node while falsely warning about duplicate keys.
+	const oldKeyed = new Map(); // tag -> Map<rawKey, child>
 	for (const child of oldChildren) {
-		if (child.key != null) oldKeyed.set(child.tag + '\x00' + child.key, child);
+		if (child.key != null) {
+			let byKey = oldKeyed.get(child.tag);
+			if (!byKey) oldKeyed.set(child.tag, (byKey = new Map()));
+			byKey.set(child.key, child);
+		}
 	}
 
 	const matched = new Set();
 	let oldUnkeyed = oldChildren.filter((c) => c.key == null);
 	let unkeyedIdx = 0;
-	const seenNewKeys = new Set();
+	const seenNewKeys = new Map(); // tag -> Set<rawKey>
 	// FLIP fast path (D85): one property check per new child during the pairing
 	// map we already run. Lists without any `flip` attr never call into flip.js
 	// — zero measurements, zero extra passes.
@@ -651,10 +702,12 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 	const pairs = newChildren.map((newChild) => {
 		if (!hasFlip && 'flip' in newChild.attrs) hasFlip = true;
 		if (newChild.key != null) {
-			const mapKey = newChild.tag + '\x00' + newChild.key;
-			if (seenNewKeys.has(mapKey)) warnDuplicateKey(newChild.key);
-			else seenNewKeys.add(mapKey);
-			const match = oldKeyed.get(mapKey);
+			let seen = seenNewKeys.get(newChild.tag);
+			if (!seen) seenNewKeys.set(newChild.tag, (seen = new Set()));
+			if (seen.has(newChild.key)) warnDuplicateKey(newChild.key);
+			else seen.add(newChild.key);
+			const byKey = oldKeyed.get(newChild.tag);
+			const match = byKey ? byKey.get(newChild.key) : undefined;
 			if (match) matched.add(match);
 			return [match ?? null, newChild];
 		}

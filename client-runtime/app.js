@@ -223,7 +223,13 @@ export class PuzzleApp {
 		// otherwise (v1.24, D56) — mirroring the conditional passthroughs above.
 		if (transitionMode !== undefined) routerOptions.transitionMode = transitionMode;
 		this.router = new Router(routes, routerOptions);
-		if (this.#morphHandler) this.router.setMorphHandler(this.#morphHandler);
+		if (this.#morphHandler) {
+			// Re-arm a handler disposed by a prior unmount() so a mount → unmount →
+			// re-mount cycle restores morph's document click listener (morph.js arm()
+			// is a no-op on a still-armed handler / a stub without it).
+			this.#morphHandler.arm?.();
+			this.router.setMorphHandler(this.#morphHandler);
+		}
 
 		this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
 

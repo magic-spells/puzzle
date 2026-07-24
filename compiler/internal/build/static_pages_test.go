@@ -89,7 +89,6 @@ func cannedSummary() staticSummary {
 		Mode:          "static",
 		Target:        "app",
 		APIURL:        json.RawMessage(`"https://api.example.com"`),
-		Storage:       json.RawMessage(`{"kind":"local"}`),
 		RouterBase:    json.RawMessage(`"/docs"`),
 		RouterMode:    json.RawMessage(`"hash"`),
 		HasModels:     true,
@@ -141,7 +140,6 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		`models,`,
 		`formatters,`,
 		`apiURL: "https://api.example.com",`,
-		`storage: {"kind":"local"},`,
 		`routerMode: "hash",`,
 		`routerBase: "/docs",`,
 	}
@@ -149,6 +147,11 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		if !strings.Contains(src, w) {
 			t.Errorf("generated entry missing %q\n---\n%s", w, src)
 		}
+	}
+	// Storage is never emitted: a live Storage serializes to a dead `{}`, so static
+	// output drops it (the JS build warns instead). Guard it even in the full case.
+	if strings.Contains(src, "storage:") {
+		t.Errorf("generated entry must not emit storage\n---\n%s", src)
 	}
 }
 
@@ -160,7 +163,6 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 	s := cannedSummary()
 	page := s.Written[1]
 	s.APIURL = nil
-	s.Storage = nil
 	s.RouterMode = nil
 	s.RouterBase = nil
 	src, err := staticEntrySource(root, page, s, "", "")

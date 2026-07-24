@@ -120,4 +120,52 @@ describe('enableMorph teardown + double-install guard', () => {
 		app.unmount();
 		expect(clickCaptureCalls(removeSpy)).toBe(removedBefore + 1);
 	});
+
+	it('exposes handler.arm; arm() is a no-op while armed and re-attaches exactly once after dispose', () => {
+		const app = {
+			setMorphHandler(handler) {
+				this.handler = handler;
+			},
+		};
+		enableMorph(app);
+		expect(typeof app.handler.arm).toBe('function');
+		expect(clickCaptureCalls(addSpy)).toBe(1);
+
+		// Arming while still armed must NOT stack a second listener.
+		app.handler.arm();
+		expect(clickCaptureCalls(addSpy)).toBe(1);
+
+		// After dispose, arm() re-attaches exactly one listener — and stays idempotent.
+		app.handler.dispose();
+		expect(clickCaptureCalls(removeSpy)).toBe(1);
+		app.handler.arm();
+		expect(clickCaptureCalls(addSpy)).toBe(2);
+		app.handler.arm();
+		expect(clickCaptureCalls(addSpy)).toBe(2);
+	});
+
+	it('mount → unmount → re-mount re-arms morph — exactly one live click listener across the cycle', async () => {
+		const app = new PuzzleApp({
+			target: container(),
+			routes: [{ path: '/', name: 'home', view: Leaf }],
+			routerMode: 'memory',
+			routerInitialPath: '/',
+		});
+		enableMorph(app);
+		const live = () => clickCaptureCalls(addSpy) - clickCaptureCalls(removeSpy);
+
+		await app.mount(); // handler applied; arm() no-ops (still armed from enableMorph)
+		expect(clickCaptureCalls(addSpy)).toBe(1);
+		expect(live()).toBe(1);
+
+		app.unmount(); // dispose → listener removed
+		expect(live()).toBe(0);
+
+		await app.mount(); // re-arm restores the listener (this is the fix)
+		expect(clickCaptureCalls(addSpy)).toBe(2);
+		expect(live()).toBe(1); // one live listener, not zero (dead) and not two (stacked)
+
+		app.unmount();
+		expect(live()).toBe(0); // still tears down cleanly
+	});
 });

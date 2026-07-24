@@ -26,7 +26,7 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool
 		Outdir:      outdir,
 		Write:       true,
 		Format:      api.FormatESModule, // index.html loads the bundle as <script type="module">
-		Sourcemap:   api.SourceMapLinked,
+		Sourcemap:   api.SourceMapNone,
 		// ES2022 lets esbuild emit private class fields natively instead of
 		// lowering them to WeakMap helpers (~870 B gzip saved per bundle). Browser
 		// floor: Chrome 84 / Safari 14.1 / Firefox 90 — all comfortably below our
@@ -38,6 +38,11 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool
 		Define:   map[string]string{"__PUZZLE_DEV__": devLiteral},
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
+	}
+	if dev {
+		// Keep development builds byte-for-byte on their existing linked-map
+		// behavior. Production enables linked maps only through build.sourceMap.
+		buildOpts.Sourcemap = api.SourceMapLinked
 	}
 
 	configureRuntime(absRoot, &buildOpts, pl)

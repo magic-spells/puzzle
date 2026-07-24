@@ -115,6 +115,11 @@ func Build(root string, opts Options) error {
 		buildOpts.MinifyWhitespace = true
 		buildOpts.MinifyIdentifiers = true
 		buildOpts.MinifySyntax = true
+		// Linked source maps are an explicit production opt-in. Development
+		// retains the shared options' existing linked-map behavior.
+		if cfg.Build.SourceMap {
+			buildOpts.Sourcemap = api.SourceMapLinked
+		}
 		// Strip console.* diagnostics from production bundles only (~570 B gzip),
 		// unless puzzle.config.js opts out with build.dropConsole: false. The
 		// framework's runtime advisory warnings are dev-mode-only by design — dev
@@ -175,6 +180,11 @@ func Build(root string, opts Options) error {
 		if err := prerenderStaticPages(absRoot, staging, cfg, opts.Development); err != nil {
 			return err
 		}
+		if !opts.Development && !cfg.Build.SourceMap {
+			if err := removeStaticSourceMaps(filepath.Join(staging, staticPagesDir)); err != nil {
+				return fmt.Errorf("disabling static source maps: %w", err)
+			}
+		}
 	}
 
 	// Everything succeeded — swap staging in for dist/. Guard the replace so only
@@ -209,6 +219,46 @@ func resolveOutputMode(flag string, cfg config.Config) (string, error) {
 		return flag, nil
 	}
 	return cfgOut, nil
+}
+
+// removeStaticSourceMaps removes linked-map sidecars and their trailing
+// sourceMappingURL comments from the true-static browser output tree. Applying
+// the production opt-out after that separate browser pass keeps development
+// behavior and the temporary inline-mapped Node prerender bundle unchanged.
+func removeStaticSourceMaps(outdir string) error {
+	if _, err := os.Stat(outdir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	const sourceMapComment = "\n//# sourceMappingURL="
+	return filepath.WalkDir(outdir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(entry.Name(), ".js.map") {
+			return os.Remove(path)
+		}
+		if filepath.Ext(entry.Name()) != ".js" {
+			return nil
+		}
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		js := string(data)
+		idx := strings.LastIndex(js, sourceMapComment)
+		if idx < 0 {
+			return nil
+		}
+		return os.WriteFile(path, []byte(js[:idx+1]), 0o644)
+	})
 }
 
 // swapOutput durably replaces outdir with staging. An existing output is moved

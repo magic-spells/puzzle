@@ -222,7 +222,15 @@ export class Store {
 		const pk = Model.primaryKey();
 
 		const withDefaults = Model.applyDefaults(data);
-		if (withDefaults[pk] == null) withDefaults[pk] = this._genId(map);
+		// A blank primary key auto-generates — EXCEPT an explicit `.primary().required()`
+		// under validation (createRecord, validate=true), which must FAIL D48 below
+		// exactly as Model.validate() does rather than be silently filled with a random
+		// id (constellation/feature/FEATURE-VALIDATE-PK-PARITY.md). Hydration (_load) and
+		// server upserts (_upsert) leave validate=false and still auto-generate: those
+		// paths are fail-soft / server-authoritative and must not crash on a missing pk.
+		const pkDef = Model.normalizedSchema()[pk];
+		const autoGeneratePk = !(validate && pkDef && pkDef.explicitRequired);
+		if (withDefaults[pk] == null && autoGeneratePk) withDefaults[pk] = this._genId(map);
 
 		// Local write boundary: validate after defaults + pk generation, before
 		// the record is constructed or inserted (constellation/doc/DOC-SPEC.md §20).
@@ -373,12 +381,7 @@ export class Store {
 	}
 
 	async _fetchAdapter(type, suffix) {
-		const endpoint = this.modelFor(type).adapter?.endpoint;
-		if (!endpoint) {
-			throw new Error(
-				`[puzzle] no adapter declared for '${type}' — add static adapter = { endpoint: '/api/...' } to the model`
-			);
-		}
+		const endpoint = this._requireEndpoint(type);
 		const res = await fetch(this.apiURL + endpoint + suffix);
 		if (!res.ok) {
 			throw new Error(`[puzzle] load '${type}' failed: ${res.status} ${res.statusText}`);
@@ -406,8 +409,9 @@ export class Store {
 
 	/**
 	 * Resolve a model's adapter endpoint or throw the D21 no-adapter message.
-	 * The write verbs are async, so this throw becomes a rejected promise —
-	 * never a sync throw at the call site.
+	 * Shared by the read path (_fetchAdapter) and the write verbs; every caller
+	 * is async, so this throw becomes a rejected promise — never a sync throw
+	 * at the call site.
 	 */
 	_requireEndpoint(type) {
 		const endpoint = this.modelFor(type).adapter?.endpoint;
@@ -1020,5 +1024,3 @@ export class Store {
 		}
 	}
 }
-
-export default Store;

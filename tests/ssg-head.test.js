@@ -98,19 +98,27 @@ describe('resolveHead (D84) — per-field leaf→root resolution', () => {
 		expect(head.socialImage).toBe('/root.png');
 	});
 
-	it('title alone INHERITS on an explicit null (pre-D84 posture), unlike the other fields', () => {
-		// A child (or layout) that sets `title: null` must still show the parent's
-		// title — the pre-D84 #setTitle / ssg resolveTitle walk used `meta.title !=
-		// null`, so null meant "inherit", never "suppress". D84's per-field walk must
-		// keep that for title while the three new fields treat null as suppression.
+	it('title suppresses on an explicit null, uniformly with the other fields (§45/D84)', () => {
+		// Every reserved field shares ONE null posture: an explicit `null` STOPS the
+		// walk and suppresses any inherited value. A resolved-null title then leaves
+		// document.title / the shell <title> untouched (leave-alone, not blank) — see
+		// syncHead. `undefined`/omit is the way to inherit. (This corrects a 0.2.0
+		// pre-release divergence where title alone inherited on null.)
 		const chain = [
 			{ path: '/docs', meta: { title: 'Docs', description: 'Docs desc' } },
-			// title: null → inherit 'Docs'; description: null → suppress the inherited desc.
+			// title: null → suppress (resolves null); description: null → suppress too.
 			{ path: 'intro', meta: { title: null, description: null } },
 		];
 		const head = resolveHead(chain);
-		expect(head.title).toBe('Docs'); // inherited past the null
+		expect(head.title).toBe(null); // suppressed, NOT inherited
 		expect(head.description).toBe(null); // suppressed by the null
+
+		// undefined/omit still inherits the parent title.
+		const inheriting = resolveHead([
+			{ path: '/docs', meta: { title: 'Docs' } },
+			{ path: 'intro', meta: { description: 'x' } },
+		]);
+		expect(inheriting.title).toBe('Docs');
 	});
 
 	it('resolves all-null for a chain with no meta at all', () => {

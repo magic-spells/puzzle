@@ -349,11 +349,6 @@ export class Router {
 	// #swap out/in sequencing — every other path (matching, commit, interruption,
 	// failure recovery) is shared.
 	#defaultTransitionMode = 'sequential';
-	// One-shot-per-class warn guard for an invalid view/layout-level transitionMode
-	// (D65) — a bad value there warns and falls through to the next resolution tier
-	// rather than throwing, so one misconfigured view can't crash navigation.
-	#warnedBadViewTransitionMode = new Set();
-
 	// ---- base path (v1.19, D51) ---------------------------------------------
 	// Serve the app under a sub-path. Normalized to '' (no base) or a leading-'/'
 	// no-trailing-'/' prefix. Applied at the SAME path-shape boundary as the mode
@@ -365,11 +360,6 @@ export class Router {
 	// it. Inert in memory mode (no URL exists), like scrollBehavior. '' ⇒ every
 	// seam is byte-identical to the base-less router.
 	#base;
-	// One-shot guard for the "loaded outside the configured base" warning (D51):
-	// history mode passes a non-base pathname through un-stripped (→ catch-all,
-	// visible not silent) but warns only ONCE per router instance so a noisy path
-	// can't spam the console on every #currentPath read.
-	#warnedOutsideBase = false;
 
 	// ---- in-memory history (v1.11, D42) -------------------------------------
 	// Memory mode only. #stack is the entry list ({ path } each) and #index the
@@ -585,20 +575,14 @@ export class Router {
 			}
 			// Loaded outside the configured base (D51): pass the pathname through
 			// un-stripped (→ catch-all) and warn once so a misconfigured deploy is
-			// debuggable rather than silently misrouting.
-			this.#warnOutsideBaseOnce(pathname);
+			// debuggable rather than silently misrouting. Dev-only (module helper +
+			// its once-state DCE away in production, §27 define pattern).
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				warnOutsideBaseOnce(pathname, this.#base);
+			}
 			return pathname + location.search;
 		}
 		return pathname + location.search;
-	}
-
-	/** One-shot "loaded outside the configured base" warning (D51). */
-	#warnOutsideBaseOnce(pathname) {
-		if (this.#warnedOutsideBase) return;
-		this.#warnedOutsideBase = true;
-		console.warn(
-			`[puzzle] path "${pathname}" is outside the configured router base "${this.#base}" — passing it through un-stripped`
-		);
 	}
 
 	/**
@@ -1794,7 +1778,11 @@ export class Router {
 		// The in-flight navigation just committed (only the token owner reaches
 		// #commitState): clear its pending target — #state now names it.
 		this.#pendingNavPath = null;
-		this.#warnMissingSlots(next.views);
+		// Dev-only missing-<Slot/> diagnostic — the module helper (and this whole
+		// per-commit walk) DCEs away in production (§27 define pattern).
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			warnMissingSlots(next.views);
+		}
 		// Scroll lands here — synchronously after the new content is in the DOM
 		// (every #commitState call site mounts/patches first) and before the next
 		// paint, so restore/top never flashes the old offset (D33). An { anchor }
@@ -1882,11 +1870,6 @@ export class Router {
 	}
 
 	/**
-	 * Save the CURRENT window position under the entry key the window shows, then
-	 * mirror the map to sessionStorage (D41). Delete-then-set so a re-saved key
-	 * moves to newest in insertion order; evict the oldest past the cap.
-	 */
-	/**
 	 * Record the outgoing entry's scroll position. `captured` (when given) is the
 	 * position measured at navigation start, BEFORE the outgoing view's teardown
 	 * collapsed the page — reading window live at commit time yields a clamped
@@ -1956,25 +1939,6 @@ export class Router {
 		const key = this.#newEntryKey();
 		history.replaceState({ ...(history.state || {}), __puzzleScrollKey: key }, '');
 		return key;
-	}
-
-	/**
-	 * Dev aid (D30 edge): a non-leaf view whose routed child never landed has no
-	 * <Slot/> in its template. Its child was preloaded but never mounted, so the
-	 * child instance has no ViewManager and reports a null element. A parent
-	 * still showing its skeleton (v1.8, D39 — not `loaded` yet) is skipped: its
-	 * child legitimately mounts later, when the real template (and its <Slot/>)
-	 * lands.
-	 */
-	#warnMissingSlots(views) {
-		for (let i = 0; i < views.length - 1; i++) {
-			if (views[i] && !views[i].loaded) continue;
-			if (views[i + 1] && views[i + 1].element == null) {
-				console.warn(
-					'[puzzle] a routed child did not mount — does the parent view template include a <Slot/>?'
-				);
-			}
-		}
 	}
 
 	/**
@@ -2054,12 +2018,11 @@ export class Router {
 		const viewMode = newAnimator?.transitionMode;
 		if (viewMode != null) {
 			if (viewMode === 'sequential' || viewMode === 'overlap') return viewMode;
-			const label = newAnimator.constructor?.name ?? '(anonymous view)';
-			if (!this.#warnedBadViewTransitionMode.has(label)) {
-				this.#warnedBadViewTransitionMode.add(label);
-				console.warn(
-					`[puzzle] ${label}: unknown transitionMode "${viewMode}" (expected 'sequential' or 'overlap') — falling back to the app default`
-				);
+			// Dev-only invalid-mode diagnostic — helper + once-state DCE away in
+			// production (§27 define pattern); the fall-through itself is real D65
+			// behavior and stays.
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				warnBadViewTransitionMode(newAnimator, viewMode);
 			}
 		}
 		return this.#defaultTransitionMode;
@@ -2288,6 +2251,59 @@ function makeEntry(chain, fullPaths) {
 	};
 }
 
+// ---- dev-only warnings ------------------------------------------------------
+// Module-level (not #methods) ON PURPOSE: every call site sits behind the
+// __PUZZLE_DEV__ probe (§27, D57 pattern), so production DCE drops the calls,
+// which makes these helpers AND their once-state unreferenced — esbuild then
+// tree-shakes all of it. Unreferenced private #methods/#fields are NOT removed
+// by esbuild, so the class-member form would ship dead warning scaffolding.
+// Once-state is per-module (per page load), not per-router-instance — fine for
+// a dev diagnostic, and vitest isolates module state per test file.
+
+/** One-shot "loaded outside the configured base" warning (D51). */
+let warnedOutsideBase = false;
+function warnOutsideBaseOnce(pathname, base) {
+	if (warnedOutsideBase) return;
+	warnedOutsideBase = true;
+	console.warn(
+		`[puzzle] path "${pathname}" is outside the configured router base "${base}" — passing it through un-stripped`
+	);
+}
+
+/**
+ * Dev aid (D30 edge): a non-leaf view whose routed child never landed has no
+ * <Slot/> in its template. Its child was preloaded but never mounted, so the
+ * child instance has no ViewManager and reports a null element. A parent
+ * still showing its skeleton (v1.8, D39 — not `loaded` yet) is skipped: its
+ * child legitimately mounts later, when the real template (and its <Slot/>)
+ * lands.
+ */
+function warnMissingSlots(views) {
+	for (let i = 0; i < views.length - 1; i++) {
+		if (views[i] && !views[i].loaded) continue;
+		if (views[i + 1] && views[i + 1].element == null) {
+			console.warn(
+				'[puzzle] a routed child did not mount — does the parent view template include a <Slot/>?'
+			);
+		}
+	}
+}
+
+/**
+ * One-shot-per-class warning for an invalid view/layout-level transitionMode
+ * (D65) — a bad value there warns and falls through to the next resolution
+ * tier rather than throwing, so one misconfigured view can't crash navigation.
+ */
+const warnedBadViewTransitionMode = new Set();
+function warnBadViewTransitionMode(newAnimator, viewMode) {
+	const label = newAnimator.constructor?.name ?? '(anonymous view)';
+	if (warnedBadViewTransitionMode.has(label)) return;
+	warnedBadViewTransitionMode.add(label);
+	console.warn(
+		`[puzzle] ${label}: unknown transitionMode "${viewMode}" (expected 'sequential' or 'overlap') — falling back to the app default`
+	);
+}
+
 /** Escape every regex metacharacter so a static path segment matches literally. */
 function escapeRegExp(str) {
 	return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2400,5 +2416,3 @@ function sameNavKey(rawPath) {
 	if (cut === -1) return stripTrailingSlash(rawPath);
 	return stripTrailingSlash(rawPath.slice(0, cut)) + rawPath.slice(cut);
 }
-
-export default Router;
