@@ -22,7 +22,12 @@ Mode comes from the app-relative path. Views/layouts preserve the
 a wrapper. Scope-aware expression rewriting prefixes model identifiers while
 leaving loop bindings, `event`, `this`, JS keywords/globals, numeric literals,
 and template-literal static text intact. Reads of names imported by the script
-emit a warning because imports are not template scope. The expression scanner
+emit a warning because imports are not template scope. A second out-of-band
+diagnostic family (D82, `a11y.go`) walks the fresh template + skeleton ASTs
+before `{#svg}` resolution and warns — never errors — on five conservative
+accessibility mistakes (img/input-image `alt`, iframe `title`, `a` `href`,
+static positive `tabindex`); any static/dynamic/mixed attr counts as present,
+and generated JS stays byte-identical. The expression scanner
 disambiguates regex literals from division and must stay in lockstep with
 [[COMPONENT-TEMPLATE-PARSER]]'s scanner; otherwise `name.replace(/a/g,'b')`
 miscompiles to `__d.name.replace(/__d.a/__d.g,'b')`.

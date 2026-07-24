@@ -37,8 +37,10 @@ lockstep with [[COMPONENT-CODEGEN]]'s expression scanner; a mismatch splits
 `{ /a|b/.test(name) }` at the regex's `|` as a formatter pipe.
 
 Attributes are static, dynamic, mixed, event, or valueless-static values.
-Parser helpers enforce event/modifier grammar, static islands, literal inline
-SVG roots/paths, list identifiers/keys, and unique static refs.
+Parser helpers enforce event/modifier grammar (generic modifiers: `prevent`,
+`stop`, `once`, and since D86 `outside` — valid on any event; key filters stay
+keyboard-only), static islands, literal inline SVG roots/paths, list
+identifiers/keys, and unique static refs.
 
 Composition grammar is current D74: `<children/>` is the default marker and may
 carry fallback children; `<slot name="x">` is named-only; `<Slot/>` is a bare

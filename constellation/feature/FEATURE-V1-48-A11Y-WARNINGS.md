@@ -1,11 +1,19 @@
 ---
 name: v1.48 — Compiler accessibility warnings (D82)
-status: building
+status: verified
 connections:
   - DECISION-D82-A11Y-WARNINGS
   - COMPONENT-CODEGEN
   - DOC-SPEC
   - FILE-CODEGEN
+verified_at: '2026-07-24T00:26:21.569Z'
+verified_sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+notes:
+  - kind: verified
+    text: >-
+      Merged (PR #12) and verified: 27-case a11y_test.go green, goldens byte-identical, positioned
+      warnings confirmed via pzlc smoke; all example fixtures compile warning-free.
+    sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
 ---
 
 # v1.48 — Compiler accessibility warnings (D82)

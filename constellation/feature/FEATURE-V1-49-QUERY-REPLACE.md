@@ -1,6 +1,6 @@
 ---
 name: v1.49 — Router query snapshot + replace() (D83)
-status: building
+status: verified
 connections:
   - DECISION-D83-QUERY-REPLACE
   - COMPONENT-ROUTER
@@ -10,6 +10,15 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-ASSEMBLE
   - FILE-STATIC-MOUNT
+verified_at: '2026-07-24T00:26:22.886Z'
+verified_sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+notes:
+  - kind: verified
+    text: >-
+      Merged (PR #14) and verified: +25 tests across memory/history/hash/base suites; real-Chrome
+      check — replace() per keystroke with zero history growth, back-after-replace lands on the
+      rewritten entry, this.route.query live in data().
+    sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
 ---
 
 # v1.49 — Router query snapshot + replace() (D83)

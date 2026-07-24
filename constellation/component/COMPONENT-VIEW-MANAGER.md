@@ -55,6 +55,19 @@ Host behavior includes SVG namespaces/`foreignObject`, per-node listener
 installation and removal, event modifiers with once-spend persistence, ref
 callbacks, boolean attrs/properties, and island children seeded once then never
 patched. Inline SVG uses the same island path with verbatim string children.
+The `outside` modifier (D86) attaches its listener to `document` in the
+CAPTURE phase (one shared options object for add/remove so the capture flags
+can't mismatch); the containment gate runs before every other modifier step,
+and `releaseSubtree` sweeps outside-flagged LISTENERS entries on every removal
+shape — the map is the authoritative record, so double-detach is impossible.
+
+Keyed reorders FLIP-animate (D85, `views/flip.js`): a `flip` directive attr
+(stripped like `key`/`island`/`ref`) marks row roots; `patchKeyedChildren`
+First-measures retained candidates before its removal pass (rects capture
+mid-flight transforms; prior Puzzle-owned flips cancel AFTER measuring, via a
+WeakMap — never `getAnimations()`), patches unchanged, then Last-measures and
+plays a no-fill translate to rest. Reduced motion, missing WAAPI, flip-free
+lists, and unchanged order cost no measurements; unkeyed `flip` warns once.
 
 Teardown destroys nested component instances, unsubscribes views, removes
 listeners/refs, and tolerates failing leave hooks. All DOM links transfer to the

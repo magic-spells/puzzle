@@ -59,13 +59,17 @@ second specification. Decision cards hold rationale and git holds chronology.
   controlled `value`, `checked`, `disabled`, and `selected` properties.
 - `{#if}` with `{:else if}`/`{:else}`, `{#unless}`, `{#case}` with `{:when}`,
   item/range `{#for}` with optional counters, template comments, and inline SVG.
-- DOM events support bare/call handlers, `prevent`, `stop`, `once`, and keyboard
-  filters. Component event attributes compile to callback props.
+- DOM events support bare/call handlers, `prevent`, `stop`, `once`, `outside`
+  (document-capture outside-dismiss, D86), and keyboard filters. Component
+  event attributes compile to callback props.
 - Composition: `<children/>` default content with fallback, named
   `<slot name="…">`, `<Slot/>` router outlets, and default-slot forwarding
   through component invocations.
 - `key` overrides list auto-keying; `ref="name"` binds `this.refs`; `island`
-  makes element children browser-owned after mount.
+  makes element children browser-owned after mount; `flip` FLIP-animates keyed
+  reorders (translation-only, reduced-motion aware, D85).
+- The compiler warns (never errors) on five template a11y mistakes with exact
+  source positions (D82); generated JS is unaffected.
 - `@/…` imports resolve from the app directory in browser and prerender bundles.
 
 ## Component runtime
@@ -105,12 +109,19 @@ second specification. Decision cards hold rationale and git holds chronology.
 ## Routing and motion
 
 - History, hash, and memory modes; nested relative children; index routes;
-  catch-all routes; merged params; top-level layouts; route titles.
-- `push`, `go`, `back`, and `forward`; guarded same-origin link interception;
+  catch-all routes; merged params; top-level layouts; route titles + managed
+  head metadata (`meta` title/description/canonical/socialImage → marked
+  `<head>` tags in SSG output and SPA navigation, per-field leaf→root
+  inheritance with explicit-null suppression, D84).
+- `push`, `replace` (no history entry, scroll untouched by default, D83),
+  `go`, `back`, and `forward`; guarded same-origin link interception;
   router base paths and anchors; `router.url()` + the built-in `link`
   formatter for mode-agnostic path-shaped hrefs.
-- Load-then-commit navigation with chain-prefix reuse and atomic URL/title/view/
-  scroll commit. Failed or superseded pushes leave committed state alone.
+- The route snapshot carries `path`, `pathname`, parsed frozen `query`
+  (repeated keys → arrays), and `hash` (D83); query never merges into params.
+- Load-then-commit navigation with chain-prefix reuse and atomic
+  URL/title/head/view/scroll commit. Failed or superseded pushes leave
+  committed state alone.
 - Scroll-to-top, pop restoration, session persistence, custom behavior, and
   opt-out.
 - Sequential route transitions by default. Optional overlapping transitions

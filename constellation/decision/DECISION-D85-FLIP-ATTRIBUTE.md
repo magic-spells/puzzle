@@ -16,8 +16,9 @@ connections:
 # D85 — FLIP keyed-reorder animation via a `flip` directive attribute (v1.51)
 
 Keyed list rows opt into FLIP (First, Last, Invert, Play) position animation
-with a plain `flip` attribute — bare, or `flip={ { duration, easing } }` —
-on the keyed row root. Retained elements that MOVE during keyed
+with a plain `flip` attribute — bare, or `flip={ flipOptions }` with the
+options object built in `data()` (template expressions do not admit inline
+object literals, SPEC §6) — on the keyed row root. Retained elements that MOVE during keyed
 reconciliation animate from their old visual position to their new one;
 inserts and removes keep their existing enter/leave paths. Closes the
 "FLIP animations for keyed reorders" entry on the project's deferred list.

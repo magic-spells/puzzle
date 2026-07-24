@@ -1,6 +1,6 @@
 ---
 name: v1.51 — FLIP keyed-reorder animation (D85)
-status: building
+status: verified
 connections:
   - DECISION-D85-FLIP-ATTRIBUTE
   - COMPONENT-VIEW-MANAGER
@@ -9,11 +9,22 @@ connections:
   - FILE-VIEW-MANAGER
   - FILE-ANIMATE
   - FILE-SSG-SERIALIZER
+verified_at: '2026-07-24T00:26:27.589Z'
+verified_sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+notes:
+  - kind: verified
+    text: >-
+      Merged (PR #13) and verified: +17 tests; real-Chrome check — 4/5 rows animated on sort
+      (unmoved row skipped), options object honored (450ms), translate→none keyframes, zero
+      animations or inline transforms after settle, flip absent from DOM/SSG. SPEC §46 example
+      corrected: options via data() object (inline literals are not template expressions).
+    sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
 ---
 
 # v1.51 — FLIP keyed-reorder animation (D85)
 
-A `flip` directive attribute (bare or `flip={ { duration, easing } }`) on
+A `flip` directive attribute (bare, or `flip={ flipOptions }` with the object
+built in `data()` — inline object literals are not template expressions) on
 keyed row roots animates retained elements from their old visual position to
 their new one when keyed reconciliation moves them. Zero new template
 grammar — `flip` joins `key`/`island`/`ref` in the directive strip lists.

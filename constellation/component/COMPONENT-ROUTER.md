@@ -22,10 +22,12 @@ verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
 # Router
 
 Route compiler and navigation state machine for history, hash, and memory
-modes. Public surface: `start`, `stop`, `push`, `go`, `back`, `forward`,
-`current`, `url` (path-shaped route → mode-encoded href, the render-time
-inverse of the link interceptor; non-`/` strings pass through — D79), and the
-narrow `setMorphHandler` integration seam.
+modes. Public surface: `start`, `stop`, `push`, `replace` (push's
+no-history-entry sibling — same pipeline, `replaceState`/in-place memory-stack
+overwrite, current scroll-entry key kept, scroll untouched by default; D83),
+`go`, `back`, `forward`, `current`, `url` (path-shaped route → mode-encoded
+href, the render-time inverse of the link interceptor; non-`/` strings pass
+through — D79), and the narrow `setMorphHandler` integration seam.
 
 Nested route definitions flatten to leaf matchers in declaration order.
 Children use relative paths; empty children are index routes; layouts are
@@ -36,9 +38,14 @@ invalid base/memory config fail at construction.
 
 Navigation is load-then-commit. The router computes the shared route-node
 prefix, preloads fresh views, refreshes reused ancestors with one frozen
-`{ path, route, params, chain }` snapshot, and abandons/destroys fresh work on
-failure or supersession. The winning swap commits location/history/title,
-scroll bookkeeping, mounted tree, and `current` in one synchronous window.
+`{ path, pathname, query, hash, route, params, chain }` snapshot (parsed once
+per navigation by `parseLocation` — frozen null-proto query, repeated keys →
+frozen arrays, URLSearchParams decoding; D83), and abandons/destroys fresh
+work on failure or supersession. The winning swap commits
+location/history/title+managed-head (resolveHead/syncHead from head.js —
+per-field leaf→root meta resolution, `data-puzzle-head` identity adoption,
+memory mode document-untouched; D84), scroll bookkeeping, mounted tree, and
+`current` in one synchronous window.
 Same-path pushes are no-ops. Trailing `/` is insignificant for matching. The D39
 skeleton gate must start all gated loads before any skeleton-exempt preload opens
 its tracking scope, or a store-connected layout's gated sync `data()` queues

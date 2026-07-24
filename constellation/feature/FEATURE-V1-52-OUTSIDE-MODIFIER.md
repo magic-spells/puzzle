@@ -1,6 +1,6 @@
 ---
 name: v1.52 — @event:outside modifier (D86)
-status: planned
+status: verified
 connections:
   - DECISION-D86-OUTSIDE-MODIFIER
   - COMPONENT-VIEW-MANAGER
@@ -9,6 +9,15 @@ connections:
   - DOC-EVENTS
   - FILE-VIEW-MANAGER
   - FILE-PARSER
+verified_at: '2026-07-24T00:26:29.176Z'
+verified_sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+notes:
+  - kind: verified
+    text: >-
+      Merged (PR #16) and verified: +12 tests with listener-spy accounting; real-Chrome check —
+      panel survives its own opening interaction (capture race), inside pointerdown/click never
+      dismisses, outside pointerdown closes; golden pins '@click' + '@click:outside' coexisting.
+    sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
 ---
 
 # v1.52 — @event:outside modifier (D86)

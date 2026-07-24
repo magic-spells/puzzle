@@ -1,6 +1,6 @@
 ---
 name: v1.50 — Route head management (D84)
-status: planned
+status: verified
 connections:
   - DECISION-D84-HEAD-MANAGEMENT
   - COMPONENT-ROUTER
@@ -9,6 +9,16 @@ connections:
   - DOC-ROUTER
   - FILE-ROUTER
   - FILE-SSG-RUNTIME
+verified_at: '2026-07-24T00:26:25.226Z'
+verified_sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+notes:
+  - kind: verified
+    text: >-
+      Merged (PR #15) and verified: +29 tests; hybrid + static builds carry data-puzzle-head tags
+      pre-JS; real-Chrome check — 8 managed tags on load, navigation removes suppressed fields and
+      restores on back, adoption never duplicates. Note the D84 semantic delta: explicit title:null
+      now suppresses (pre-D84 inherited).
+    sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
 ---
 
 # v1.50 — Route head management (D84)

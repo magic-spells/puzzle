@@ -1044,7 +1044,7 @@ Route `meta` grows **reserved head fields** — `title` (existing), `description
 
 ## 46. FLIP keyed-reorder animation: the `flip` directive attribute (v1.51)
 
-A keyed `{#for}` row root may declare `flip` (bare) or `flip={ { duration, easing } }` to animate **retained** elements from their old visual position to their new one when keyed reconciliation moves them — First/Last/Invert/Play over the completed patch, so DOM order, accessibility order, and hit testing are already final while only the paint catches up (D85).
+A keyed `{#for}` row root may declare `flip` (bare) or `flip={ flipOptions }` — the options object built in `data()` or script scope, since §6 template expressions do not admit inline object literals — to animate **retained** elements from their old visual position to their new one when keyed reconciliation moves them — First/Last/Invert/Play over the completed patch, so DOM order, accessibility order, and hit testing are already final while only the paint catches up (D85).
 
 - `flip` is a **framework directive** like `key`/`island`/`ref` — stripped from DOM attributes and SSG output, zero new template grammar.
 - Translation only (no width/height scaling); position deltas under 0.5 CSS px skip; a pre-existing base transform is composed under the correction and restored untouched; animation state is fully released on settle so author CSS stays authoritative.
