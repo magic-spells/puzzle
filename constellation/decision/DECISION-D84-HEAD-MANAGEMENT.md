@@ -108,3 +108,23 @@ resolution rules and identity-marked managed tags.**
   derived-tag mapping covers the 95% case.
 - Arbitrary raw head HTML — an escaping/injection footgun with no resolution
   semantics.
+
+## Amended by D89 — module split, title core vs managed tags
+
+[[DECISION-D89-FEATURE-USAGE-TREESHAKE]] splits this feature across two modules
+on a real seam. `head.js` keeps the pure resolver (`resolveHead`/`resolveField`,
+the uniform null-suppression walk above) plus a one-line `syncTitle`;
+`headTags.js` owns `MANAGED_TAGS`, the DOM `syncTags` loop, and `setTagValue`.
+The router calls `syncTitle` unconditionally and `syncTags` behind
+`__PUZZLE_HAS_HEAD_TAGS__`.
+
+Two consequences beyond bundle size: a title-only app no longer runs ~10 no-op
+`querySelector` probes per navigation (the tag loop previously ran for every
+field, removing nothing), and the SSG string injector is unaffected — it imports
+`MANAGED_TAGS` from `headTags.js` directly at build time, so prerendered head
+tags are emitted regardless of the browser-side gate.
+
+The gate's signal is deliberately coarse (a raw substring scan for
+`description`/`canonical`/`socialImage`, since route `meta` lives in user JS the
+compiler never parses). It is fail-safe — a false positive only leaves the module
+in the bundle — and measured correct on all three real examples.

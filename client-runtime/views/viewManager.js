@@ -697,24 +697,25 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 	// map we already run. Lists without any `flip` attr never call into flip.js
 	// — zero measurements, zero extra passes.
 	//
-	// Build-time gate (D89): each flip touchpoint is wrapped in the inline
+	// Build-time gate (D89): the two touchpoints that REFERENCE flip.js — the
+	// beginFlip and playFlip calls below — are wrapped in the inline
 	// `typeof __PUZZLE_HAS_FLIP__ …` probe. When the compiler proves no template
-	// uses a `flip` attr it defines the flag false; MinifySyntax then folds every
-	// probe to a dead branch, `beginFlip`/`playFlip` go unreferenced, and flip.js
+	// uses a `flip` attr it defines the flag false; MinifySyntax folds both probes
+	// to dead branches, `beginFlip`/`playFlip` go unreferenced, and flip.js
 	// tree-shakes out entirely. Undefined (vitest / no-compiler) ⇒ probe is true,
 	// so behavior is identical. The probe MUST be inlined at each site — a named
 	// const or helper is not constant-propagated by esbuild and would keep the
 	// import alive.
+	//
+	// The detection below is deliberately NOT probe-wrapped: it references no
+	// import, so gating it buys no tree-shaking — only skipping one `in` check per
+	// child, which is exactly the check that already runs today. Leaving it bare
+	// keeps the hot pairing loop readable at zero cost.
 	let hasFlip = false;
 
 	// First pass: pair every new child with its old counterpart (or none)
 	const pairs = newChildren.map((newChild) => {
-		if (
-			(typeof __PUZZLE_HAS_FLIP__ === 'undefined' || __PUZZLE_HAS_FLIP__) &&
-			!hasFlip &&
-			'flip' in newChild.attrs
-		)
-			hasFlip = true;
+		if (!hasFlip && 'flip' in newChild.attrs) hasFlip = true;
 		if (newChild.key != null) {
 			let seen = seenNewKeys.get(newChild.tag);
 			if (!seen) seenNewKeys.set(newChild.tag, (seen = new Set()));

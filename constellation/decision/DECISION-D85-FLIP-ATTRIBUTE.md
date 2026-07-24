@@ -90,3 +90,17 @@ reconciliation path):
   be a second place to look.
 - FLIP for inserts/leavers — both already have owned animation paths (§12);
   double-driving them is how frameworks get ghost elements.
+
+## Amended by D89 — per-app inclusion
+
+[[DECISION-D89-FEATURE-USAGE-TREESHAKE]] makes `flip.js` conditional: the
+compiler's usage scan matches a `flip` attribute in the template AST and emits
+`__PUZZLE_HAS_FLIP__`, so an app with no `flip` anywhere never bundles the
+module. Detection spans element attrs, **component props**, and slot children —
+a component vnode's props ARE its attrs (`ViewNode` `get props()`), so
+`<PostCard … flip>` is a real flip row (examples/blog) and an element-only scan
+would silently drop the module and kill the animation.
+
+D85's "zero compiler change" property is what makes this safe: `flip` is a
+framework directive that never reaches the DOM, so it is visible in the template
+AST and nowhere else — an exact static signal, not a heuristic.
