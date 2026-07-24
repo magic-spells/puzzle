@@ -36,14 +36,32 @@ Reactive record registry for the configured model classes. `createRecord`
 applies defaults, generates/honors the model primary key, validates, rejects
 duplicates, indexes the instance, and schedules notifications. `findOne` and
 `findMany` support identity lookup and collection filtering; record
-`update()`/`destroy()` call back into the Store.
+`update()`/`destroy()` call back into the Store. Record identity is
+number/string-insensitive ([[DECISION-D112-STORE-ID-KEY-NORMALIZATION]]):
+every id-keyed access to the record index — and both sides of `hasMany`'s FK
+filter — normalizes number ids to their string form via one `recordKey`
+helper, matching the string identity the subscription keys and adapter URLs
+always had. Record fields keep their original type; only numbers normalize
+(`null`/objects stay SameValueZero, `'01'` ≠ `1`), and `save()`'s response-pk
+comparison uses the same rule so a numeric echo of a string-keyed id merges
+instead of warning.
 
 `withTracking(subscriber, fn, expectsAsync)` records collection and record-key
 queries performed by `data()`. Retracking replaces subscriptions; destroying a
 view unsubscribes it. `flush()` snapshots affected subscribers, notifies each
 once in isolation, observes thenable failures, and continues after a throwing
 subscriber. Scheduling uses rAF when visible plus a 220ms fallback, and timers
-directly in hidden/non-DOM contexts.
+directly in hidden/non-DOM contexts. In dev builds `flush()` closes by reporting
+the batch to the D100 DevTools bridge ([[FILE-DEVTOOLS]]) — the changed keys and
+the exact subscriber set notified — placed after the delivery loop because only
+then are both halves final. The probe is spelled inline so production DCE folds
+the statement and the import tree-shakes away.
+
+`modelFor(type)` resolves **own properties only**. `models` is a plain object
+literal, so a bare index also reaches `Object.prototype`: a persisted blob keyed
+`"constructor"` would return `Object` — truthy, so it wins over the
+`PuzzleModel` fallback — and the caller's `primaryKey()` would throw on a path
+that must stay fail-soft.
 
 Adapter reads (`loadAll`, `loadOne`) shape-check before mutation and upsert by
 primary key while preserving record identity. Public `upsert(type, objectOrArray)`
@@ -72,8 +90,16 @@ prototype-attached by `installFixtures()` and absent otherwise.
 Relationship getters are installed on model prototypes at Store construction.
 Their queries use the same tracking path as explicit Store calls.
 
-Optional Storage hydration is fail-soft. The persisted wire shape includes an
-out-of-band `__synced` marker while record JSON remains clean. Mutations only
+Optional Storage hydration is fail-soft, and that guarantee has to cover the
+hydration walk itself, not just the read+parse: `_load()` runs from the
+constructor, so anything escaping it escapes `PuzzleApp` construction too and
+leaves a permanently blank page — one that survives reload, because the bad blob
+is still in storage. `_hydrateAll`'s own guards only cover shapes it recognises,
+so the call sits inside the same try/catch; whatever hydrated before the failure
+is kept and the rest of the blob is dropped with a warning. The HMR restore path
+calls `_hydrateAll` directly and still propagates — that one is developer-facing.
+The persisted wire shape includes an out-of-band `__synced` marker while record
+JSON remains clean. Mutations only
 mark persistence dirty; the O(store) serialization/write runs once after
 subscriber delivery in `flush()`. `PuzzleApp` forces a final flush after router
 teardown and holds a window `pagehide` listener that flushes while mounted, so

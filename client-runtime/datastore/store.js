@@ -24,6 +24,20 @@ const REC_SEP = ' '; // never appears in a type name
 const noop = () => {}; // swallows a chained save()'s rejection (§22, D50)
 
 /**
+ * Normalize the RECORD-MAP key only — never a record's fields (D112).
+ *
+ * Subscription keys (`type + REC_SEP + id`) and adapter URLs already string-coerce
+ * identity, so the record Map was the only type-sensitive index in the datastore: a
+ * string route param (`findOne('post', '1')`) missed the record a numeric-id JSON
+ * payload created, while the subscription still fired.
+ *
+ * ONLY numbers convert. null/undefined/objects pass through untouched, which keeps
+ * belongsTo's null-FK short-circuit intact and stops String(null) from colliding
+ * with a real 'null' string id. Record fields keep whatever type the server sent.
+ */
+const recordKey = (id) => (typeof id === 'number' ? String(id) : id);
+
+/**
  * Thrown by the write verbs — saveRecord/deleteRecord/request — when the server
  * responds non-OK (constellation/doc/DOC-SPEC.md §22, D50). `.status`/`.statusText`
  * echo the HTTP response; `.body` is the parsed JSON when the body parses as JSON,
@@ -175,8 +189,10 @@ export class Store {
 				// hasMany: filter the related collection by the owner's primary key.
 				if (!this._store) return [];
 				const ownerPk = this.constructor.primaryKey();
-				const ownerId = this[ownerPk];
-				return this._store.findMany(def.type, { filter: (r) => r[fkKey] === ownerId });
+				const ownerKey = recordKey(this[ownerPk]);
+				return this._store.findMany(def.type, {
+					filter: (r) => recordKey(r[fkKey]) === ownerKey,
+				});
 			},
 			set() {
 				// Reserved name: an embedded server payload (`{ author: {...} }`)
@@ -255,12 +271,12 @@ export class Store {
 			if (errors.length) throw new PuzzleValidationError(errors);
 		}
 
-		if (map.has(withDefaults[pk])) {
+		if (map.has(recordKey(withDefaults[pk]))) {
 			if (onDuplicate === 'skip') {
 				console.warn(
 					`[puzzle] duplicate primary key ${JSON.stringify(withDefaults[pk])} for model "${type}" during hydration — keeping the first record, skipping the rest`
 				);
-				return map.get(withDefaults[pk]);
+				return map.get(recordKey(withDefaults[pk]));
 			}
 			throw new Error(
 				`[puzzle] duplicate primary key ${JSON.stringify(withDefaults[pk])} for model "${type}" — a record with that ${pk} already exists`
@@ -275,13 +291,13 @@ export class Store {
 			configurable: true,
 		});
 
-		map.set(record[pk], record);
+		map.set(recordKey(record[pk]), record);
 		return record;
 	}
 
 	findOne(type, id) {
 		this._subscribe(type + REC_SEP + id);
-		return this._typeMap(type).get(id) ?? null;
+		return this._typeMap(type).get(recordKey(id)) ?? null;
 	}
 
 	/** @param {object} [options] { filter: (record) => boolean } */
@@ -307,7 +323,7 @@ export class Store {
 		const type = record._type;
 		if (!type) return;
 		const id = record[this.modelFor(type).primaryKey()];
-		this._typeMap(type).delete(id);
+		this._typeMap(type).delete(recordKey(id));
 		// One removed-instance state for both local destroy() and D50's confirmed
 		// delete: stale references can delete idempotently and can never save() a
 		// resurrected copy. Set before detaching so lifecycle guards see a coherent
@@ -412,7 +428,7 @@ export class Store {
 	/** Create or update-in-place by primary key; notifies either way. Public callers use upsert(). */
 	_upsert(type, data) {
 		const pk = this.modelFor(type).primaryKey();
-		const existing = data?.[pk] != null ? this._typeMap(type).get(data[pk]) : null;
+		const existing = data?.[pk] != null ? this._typeMap(type).get(recordKey(data[pk])) : null;
 		if (existing) {
 			safeMerge(existing, data);
 			existing._synced = true; // came from the server (constellation/doc/DOC-SPEC.md §22, D50)
@@ -547,7 +563,7 @@ export class Store {
 		// Capture the key the record is indexed under NOW, before the await — the
 		// post-response identity check reconciles against exactly this key.
 		const wasSynced = record._synced;
-		const requestKey = record[pk];
+		const requestKey = recordKey(record[pk]);
 		const url = wasSynced
 			? this.apiURL + endpoint + '/' + encodeURIComponent(record[pk])
 			: this.apiURL + endpoint;
@@ -582,7 +598,10 @@ export class Store {
 		const isObject = body != null && typeof body === 'object' && !Array.isArray(body);
 		if (isObject) {
 			const responsePk = body[pk];
-			const pkDiffers = responsePk != null && responsePk !== record[pk];
+			// Same normalization the index uses: a server echoing numeric 1 for a record
+			// keyed '1' is NOT a pk change — it merges normally and the map key is
+			// identical either way (the field still adopts the server's type).
+			const pkDiffers = responsePk != null && recordKey(responsePk) !== recordKey(record[pk]);
 			if (pkDiffers && !wasSynced) {
 				// e. server pk adoption on a first save — the one sanctioned pk change,
 				// performed by the store. Re-key atomically: assign the new pk DIRECTLY
@@ -591,16 +610,16 @@ export class Store {
 				// reject with a plain Error — the HTTP request SUCCEEDED, only local
 				// reconciliation failed, so NOT a PuzzleAdapterError — and leave both
 				// records + the map untouched (the delete rides the success path only).
-				const occupant = map.get(responsePk);
+				const occupant = map.get(recordKey(responsePk));
 				if (occupant && occupant !== record) {
 					throw new Error(
 						`[puzzle] save() response for '${type}' assigned primary key ${JSON.stringify(responsePk)}, which already belongs to a different record — refusing to overwrite it`
 					);
 				}
 				const oldId = record[pk];
-				map.delete(oldId);
+				map.delete(recordKey(oldId));
 				safeMerge(record, body); // includes the new pk
-				map.set(record[pk], record);
+				map.set(recordKey(record[pk]), record);
 				record._synced = true;
 				this._notify(type, oldId); // old key: subscribers of the gone id
 				this._notify(type, record[pk]); // new key + collection
@@ -650,7 +669,7 @@ export class Store {
 
 		// Capture the key the record is indexed under NOW, before the await — the
 		// post-response identity check reconciles against exactly this key.
-		const requestKey = record[pk];
+		const requestKey = recordKey(record[pk]);
 
 		const url = this.apiURL + endpoint + '/' + encodeURIComponent(record[pk]);
 		const res = await this._fetch(url, { method: 'DELETE' }, { type, method: 'DELETE', url });
@@ -1109,7 +1128,7 @@ export class Store {
 				const syncedTo = hasMarker ? marker === true : true;
 
 				const id = fields[pk];
-				const existing = id != null ? this._typeMap(type).get(id) : null;
+				const existing = id != null ? this._typeMap(type).get(recordKey(id)) : null;
 				if (existing && replace) {
 					// Overwrite in place — preserve identity (mirror _upsert's update
 					// branch), silent, no dup warning (replacing is the intent here).
