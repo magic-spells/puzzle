@@ -66,8 +66,11 @@ export function registerView(view) {
 /** Drop a destroyed view from the registry (no-op in production). */
 export function unregisterView(view) {
 	if (DEV) {
-		liveViews.delete(view);
-		viewObserver?.(view, false);
+		// Notify ONLY when this view was actually registered: destroying a
+		// constructed-but-never-mounted view would otherwise emit a mounted:false
+		// with no preceding mounted:true, which the DevTools bridge reads as an
+		// unbalanced destroy (D100).
+		if (liveViews.delete(view)) viewObserver?.(view, false);
 	}
 }
 

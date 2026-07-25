@@ -527,7 +527,16 @@ export class PuzzleView {
 		// teardown removals above leave this.refs pointing at now-detached DOM;
 		// clear them here so a torn-down instance never hands out stale elements.
 		for (const key of Object.keys(this.refs)) this.refs[key] = null;
-		this.destroyed();
+		// A USER hook must never wedge the teardown cascade — a throw here would
+		// propagate up through the parent's #vm.clear(), router.stop(), and
+		// PuzzleApp.#teardown(), leaving the app half-torn-down. Same
+		// logged/never-wedges posture as app.js's beforeUnmount guard. Stays
+		// synchronous: a returned promise is not awaited (destroy() is sync).
+		try {
+			this.destroyed();
+		} catch (err) {
+			console.error('[puzzle] destroyed hook error:', err);
+		}
 	}
 
 	// ---- hooks & overridables (SPEC §4 class contract) ---------------------------
