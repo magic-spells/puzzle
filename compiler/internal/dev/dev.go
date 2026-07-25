@@ -1095,6 +1095,10 @@ const portScanLimit = 10
 func listenDev(port int, strict bool) (net.Listener, error) {
 	const maxPort = 65535
 
+	if port < 0 || port > maxPort {
+		return nil, fmt.Errorf("invalid port %d: must be between 0 and %d", port, maxPort)
+	}
+
 	var firstErr error
 	for candidate := port; candidate <= maxPort; candidate++ {
 		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))

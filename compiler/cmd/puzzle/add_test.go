@@ -349,6 +349,27 @@ func TestDetectSkillTargetsUsesExistingConfigDirs(t *testing.T) {
 	}
 }
 
+func TestPromptSkillTargetsUsesInjectedInputUnderDumbTerminal(t *testing.T) {
+	t.Setenv("TERM", "dumb")
+	targets := []skillTarget{
+		{Name: "Claude Code", Root: filepath.Join(t.TempDir(), ".claude")},
+		{Name: "Codex", Root: filepath.Join(t.TempDir(), ".codex")},
+	}
+
+	selected, err := promptSkillTargets(strings.NewReader("\r"), io.Discard, targets)
+	if err != nil {
+		t.Fatalf("prompt skill targets: %v", err)
+	}
+	if len(selected) != len(targets) {
+		t.Fatalf("selected targets = %#v, want all defaults selected", selected)
+	}
+	for i := range targets {
+		if selected[i] != targets[i] {
+			t.Errorf("selected target %d = %#v, want %#v", i, selected[i], targets[i])
+		}
+	}
+}
+
 func TestAddSkillsNoDetectedTargetsIsFriendlyNoOp(t *testing.T) {
 	home := t.TempDir()
 	var buf bytes.Buffer

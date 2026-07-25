@@ -616,6 +616,7 @@ func mustWriteExecutable(t *testing.T, path, body string) {
 // indirects) to the user's answer — the refresh must be a genuine gate, not a
 // form that reports its default whatever is typed.
 func TestConfirmSkillRefreshAnswers(t *testing.T) {
+	t.Setenv("TERM", "dumb")
 	targets := []skillTarget{{Name: "Claude Code", Root: filepath.Join(t.TempDir(), ".claude")}}
 	for _, tt := range []struct {
 		input string
