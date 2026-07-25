@@ -2,7 +2,7 @@
 name: >-
   D112 — record identity is number/string-insensitive: the id index keys number ids by their string
   form
-status: built
+status: verified
 connections:
   - DECISION-D21-ADAPTER-READ-PATH
   - DECISION-D48-SCHEMA-VALIDATION
@@ -10,8 +10,17 @@ connections:
   - DECISION-D50-ADAPTER-WRITE-SYNC
   - COMPONENT-STORE
   - FILE-STORE
+verified_at: '2026-07-25T00:00:48.098Z'
+verified_sha: 11f64be1b6828318f5085a5dc16ebe8f53ebfbd4
+notes:
+  - kind: verified
+    text: >-
+      Merged to main via PR #26 and re-verified at merged main: full vitest suite (69 files / 1236
+      tests incl. the 13-test tests/store-id-coercion.test.js matrix) and all 14 Go packages green.
+      10 of the 13 new tests fail against pre-fix HEAD, pinning the bug; the other 3 pin behavior
+      the fix must not change ('01' ≠ 1, null-FK short-circuit).
+    sha: 11f64be1b6828318f5085a5dc16ebe8f53ebfbd4
 ---
-
 
 The record Map (`type → Map(id → record)`) keys **number** primary keys by
 their string form, via one module-scope helper (`recordKey`) applied at every

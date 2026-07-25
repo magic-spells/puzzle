@@ -26,8 +26,13 @@ notes:
       server-authoritative — must not crash on a missing key). Plain `.primary()` still
       auto-generates. Tests: tests/validation.test.js 'createRecord primary-key parity'.
     sha: d9591d6
-verified_at: '2026-07-24T05:49:11.891Z'
-verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
+  - kind: verified
+    text: >-
+      Re-verified after D112: recordKey index normalization reviewed line-by-line against the card's
+      identity-rule paragraph; store suites + full runs green at merged main.
+    sha: 11f64be1b6828318f5085a5dc16ebe8f53ebfbd4
+verified_at: '2026-07-25T00:00:49.373Z'
+verified_sha: 11f64be1b6828318f5085a5dc16ebe8f53ebfbd4
 ---
 
 # Store
