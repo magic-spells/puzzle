@@ -45,6 +45,7 @@ import DropzoneDoc from './views/components/DropzoneDoc.pzl';
 import EmojiPickerDoc from './views/components/EmojiPickerDoc.pzl';
 import EmojiPickerSimpleDoc from './views/components/EmojiPickerSimpleDoc.pzl';
 import EmptyDoc from './views/components/EmptyDoc.pzl';
+import FaderDoc from './views/components/FaderDoc.pzl';
 import FieldDoc from './views/components/FieldDoc.pzl';
 import HoverCardDoc from './views/components/HoverCardDoc.pzl';
 import InputGroupDoc from './views/components/InputGroupDoc.pzl';
@@ -414,6 +415,13 @@ export default [
 		view: EmptyDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Empty — Puzzle Pieces' },
+	},
+	{
+		path: '/components/fader',
+		name: 'fader',
+		view: FaderDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Fader — Puzzle Pieces' },
 	},
 	{
 		path: '/components/field',

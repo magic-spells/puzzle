@@ -10,7 +10,7 @@
         </p>
         <div class="mt-6 flex flex-wrap gap-3">
           <Button variant="primary" @press={ browse }>Browse components</Button>
-          <Badge variant="outline">85 pieces</Badge>
+          <Badge variant="outline">89 pieces</Badge>
         </div>
       </header>
 

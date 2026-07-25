@@ -8219,6 +8219,12 @@ var SECTIONS = [
         description: "Lightweight emoji picker popover \u2014 bottom category tabs instead of search (skips the keyword data file), one category rendered at a time, keyboard grid nav, optional-controlled open, and optional morph"
       },
       {
+        name: "fader",
+        title: "Fader",
+        path: "/components/fader",
+        description: "Full-width fill slider \u2014 a flat, dial-style parameter control with an inline label, right-aligned value readout, interior ticks, and a bar handle"
+      },
+      {
         name: "field",
         title: "Field",
         path: "/components/field",
@@ -8294,7 +8300,7 @@ var SECTIONS = [
         name: "slider",
         title: "Slider",
         path: "/components/slider",
-        description: "Touch-friendly single-value or dual-thumb range slider with gesture arming, keyboard support, and optional form inputs"
+        description: "Touch-friendly single-value or dual-thumb range slider with gesture arming, keyboard support, tick marks and labels, and optional form inputs"
       },
       {
         name: "split-button",
@@ -15151,7 +15157,7 @@ Introduction.prototype.render = function() {
               new ViewNode("text", { value: "Browse components" })
             ]),
             new ViewNode(Badge, { variant: "outline" }, [
-              new ViewNode("text", { value: "85 pieces" })
+              new ViewNode("text", { value: "89 pieces" })
             ])
           ])
         ]),
@@ -15241,7 +15247,7 @@ ComponentsIndex.prototype.render = function() {
             new ViewNode("text", { value: "Components" })
           ]),
           new ViewNode("p", { class: "mt-2 text-body" }, [
-            new ViewNode("text", { value: "All 85 pieces in the registry. Every one is a native Puzzle component you copy into your app \u2014 click through for live examples and usage." })
+            new ViewNode("text", { value: "All 89 pieces in the registry. Every one is a native Puzzle component you copy into your app \u2014 click through for live examples and usage." })
           ])
         ]),
         new ViewNode(
@@ -18197,11 +18203,11 @@ var BASE5 = "relative w-full";
 var WRAPPER = "absolute inset-0 [&>*]:size-full [&>img]:object-cover [&>video]:object-cover";
 var AspectRatio = class extends PuzzleView {
   data(params, props) {
-    const ratio = Number(props.ratio) > 0 ? Number(props.ratio) : 1;
+    const ratio2 = Number(props.ratio) > 0 ? Number(props.ratio) : 1;
     return {
       classes: [BASE5, props.class || ""].join(" "),
       wrapperClass: WRAPPER,
-      padStyle: `padding-bottom:${1 / ratio * 100}%`
+      padStyle: `padding-bottom:${1 / ratio2 * 100}%`
     };
   }
 };
@@ -22487,7 +22493,7 @@ var PieChart = class extends PuzzleView {
       const id = `slice-${i2}`;
       const dim = hoveredId != null && hoveredId !== id;
       const cls = `${FILL4[i2 % 8]} transition-opacity ${dim ? "opacity-60" : "opacity-100"}`;
-      const percent = pctStr(frac);
+      const percent2 = pctStr(frac);
       const value = String(fmt2(d.value));
       if (a1 > a0) {
         slicePaths(cx, cy, rOuter, rInner, a0, a1).forEach((dPath, p) => {
@@ -22498,7 +22504,7 @@ var PieChart = class extends PuzzleView {
             class: cls,
             tipLabel: d.label,
             tipValue: value,
-            tipPercent: percent
+            tipPercent: percent2
           });
         });
       }
@@ -22508,7 +22514,7 @@ var PieChart = class extends PuzzleView {
         value,
         swatchClass: `inline-block size-3 shrink-0 rounded-sm ${SWATCH4[i2 % 8]}`
       });
-      tableRows.push({ key: `tr-${i2}`, label: d.label, value, percent });
+      tableRows.push({ key: `tr-${i2}`, label: d.label, value, percent: percent2 });
     });
     const showTotal = donut && !!props.totalLabel;
     const tip = local.tip || {
@@ -22538,14 +22544,14 @@ var PieChart = class extends PuzzleView {
       tipClass: TIP_CLASS2
     };
   }
-  _tipFromEvent(event, label, value, percent) {
+  _tipFromEvent(event, label, value, percent2) {
     const plot = this.element?.querySelector("[data-plot]");
     if (!plot)
       return null;
     const rect = plot.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    return { visible: true, x, y, flipX: x > rect.width / 2, label, value, percent };
+    return { visible: true, x, y, flipX: x > rect.width / 2, label, value, percent: percent2 };
   }
   events = {
     onHover: (mark, event) => {
@@ -45245,11 +45251,1041 @@ EmptyDoc.prototype.render = function() {
 };
 EmptyDoc.__pzlModule = "app/views/components/EmptyDoc.pzl";
 
+// app/lib/slider-math.js
+var AUTO_TICK_TARGET = 25;
+var MAX_TICKS = 200;
+var NICE_MULTIPLES = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1e3];
+function decimalsOf(raw2) {
+  if (raw2 == null)
+    return 0;
+  const s2 = String(raw2);
+  const dot = s2.indexOf(".");
+  return dot === -1 ? 0 : Math.min(s2.length - dot - 1, 6);
+}
+function configFrom(props) {
+  const min = Number.isFinite(Number(props.min)) ? Number(props.min) : 0;
+  const max = Number.isFinite(Number(props.max)) ? Number(props.max) : 100;
+  const stepAny = props.step === "any";
+  const stepNum = Number(props.step);
+  const step = stepAny ? "any" : Number.isFinite(stepNum) && stepNum > 0 ? stepNum : 1;
+  const dec = stepAny ? 2 : Math.max(decimalsOf(props.step), decimalsOf(props.min));
+  return { min, max, step, dec };
+}
+function quantize(v, cfg) {
+  if (cfg.step === "any")
+    return v;
+  return cfg.min + Math.round((v - cfg.min) / cfg.step) * cfg.step;
+}
+function clampBounds(v, cfg) {
+  return Math.max(cfg.min, Math.min(v, cfg.max));
+}
+function round2(v, cfg) {
+  return parseFloat(v.toFixed(cfg.dec));
+}
+function normalize2(value, thumb, cfg, committed) {
+  let v = Number.isFinite(value) ? value : cfg.min;
+  v = clampBounds(quantize(v, cfg), cfg);
+  if (thumb === "min")
+    v = Math.min(v, committed.valueMax);
+  if (thumb === "max")
+    v = Math.max(v, committed.valueMin);
+  return round2(v, cfg);
+}
+function valueToPercent(value, cfg) {
+  const range2 = cfg.max - cfg.min;
+  if (range2 <= 0)
+    return 0;
+  const pct = (value - cfg.min) / range2 * 100;
+  return Math.round(Math.max(0, Math.min(100, pct)) * 1e3) / 1e3;
+}
+function percentToValue(percent2, cfg) {
+  return cfg.min + percent2 / 100 * (cfg.max - cfg.min);
+}
+function autoTickStep(span, base, target) {
+  if (!(span > 0))
+    return 1;
+  if (!(base > 0))
+    return span / target;
+  for (const m of NICE_MULTIPLES) {
+    if (span / (base * m) <= target)
+      return base * m;
+  }
+  return span / target;
+}
+function tickValues(cfg, spec, tickStep) {
+  if (!spec)
+    return [];
+  if (Array.isArray(spec)) {
+    const byValue = /* @__PURE__ */ new Map();
+    for (const raw2 of spec) {
+      const entry = raw2 && typeof raw2 === "object" ? raw2 : { value: raw2 };
+      const value = Number(entry.value);
+      if (!Number.isFinite(value))
+        continue;
+      if (value < cfg.min || value > cfg.max)
+        continue;
+      const prev = byValue.get(value) || { value };
+      if (entry.label !== void 0)
+        prev.label = entry.label;
+      if (entry.class !== void 0)
+        prev.class = entry.class;
+      if (entry.labelClass !== void 0)
+        prev.labelClass = entry.labelClass;
+      byValue.set(value, prev);
+    }
+    return [...byValue.values()].sort((a2, b2) => a2.value - b2.value);
+  }
+  const span = cfg.max - cfg.min;
+  if (!(span > 0))
+    return [{ value: cfg.min }];
+  const base = cfg.step === "any" ? span / AUTO_TICK_TARGET : cfg.step;
+  let interval = Number(tickStep);
+  if (!Number.isFinite(interval) || interval <= 0) {
+    interval = autoTickStep(span, base, AUTO_TICK_TARGET);
+  } else if (span / interval > MAX_TICKS) {
+    interval = autoTickStep(span, interval, MAX_TICKS);
+  }
+  const dec = Math.min(Math.max(cfg.dec, decimalsOf(interval)), 6);
+  const snap2 = (v) => parseFloat(v.toFixed(dec));
+  const out = [];
+  const count = Math.floor(span / interval + 1e-9);
+  for (let i2 = 0; i2 <= count; i2++)
+    out.push({ value: snap2(cfg.min + i2 * interval) });
+  if (out[out.length - 1].value < cfg.max - 1e-9)
+    out.push({ value: snap2(cfg.max) });
+  return out;
+}
+function edgeShift(percent2) {
+  if (percent2 <= 0)
+    return "0%";
+  if (percent2 >= 100)
+    return "-100%";
+  return "-50%";
+}
+
+// app/components/ui/Fader.pzl
+var DRAG_THRESHOLD2 = 3;
+var NO_PAIR = Object.freeze({});
+function flipShift(shift) {
+  return shift === "0%" ? "0%" : shift.slice(1);
+}
+var ROOT_BASE5 = "relative flex select-none items-center overflow-hidden rounded-lg border border-border bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2";
+var TICK_COLOR = "bg-faint";
+var AXIS = {
+  horizontal: {
+    main: (e2) => e2.clientX,
+    cross: (e2) => e2.clientY,
+    extent: (r2) => r2.width,
+    origin: (r2) => r2.left,
+    invert: false,
+    // The cross axis IS the page-scroll axis, so leave panning to the browser.
+    touch: "touch-pan-y",
+    yieldsToScroll: true,
+    size: "h-10 w-full",
+    cursor: "cursor-ew-resize",
+    ariaOrientation: "horizontal",
+    fillClass: "absolute inset-y-0 left-0 bg-brand/25",
+    fillStyle: (p) => `width:${p}%`,
+    fillTrans: "transition-[width] duration-150 ease-out",
+    handleClass: "absolute inset-y-1 w-[3px] rounded-full bg-brand",
+    handleStyle: (p) => `left:${p}%;translate:${edgeShift(p)} 0`,
+    handleTrans: "transition-[left,translate] duration-150 ease-out",
+    tickBase: "absolute top-1/2 h-2 w-px",
+    tickStyle: (p) => `left:${p}%;translate:${edgeShift(p)} -50%`,
+    textRow: "pointer-events-none relative flex w-full items-center gap-3 px-3",
+    labelClass: "min-w-0 flex-1 truncate text-sm font-medium text-ink",
+    valueClass: "shrink-0 text-sm tabular-nums text-ink"
+  },
+  vertical: {
+    main: (e2) => e2.clientY,
+    cross: (e2) => e2.clientX,
+    extent: (r2) => r2.height,
+    origin: (r2) => r2.top,
+    // Measured downward from rect.top, but the BOTTOM of the strip is min.
+    invert: true,
+    // Nothing to yield: this fader owns the vertical axis. See the header note.
+    touch: "touch-none",
+    yieldsToScroll: false,
+    size: "h-40 w-14 flex-col",
+    cursor: "cursor-ns-resize",
+    ariaOrientation: "vertical",
+    fillClass: "absolute inset-x-0 bottom-0 bg-brand/25",
+    fillStyle: (p) => `height:${p}%`,
+    fillTrans: "transition-[height] duration-150 ease-out",
+    handleClass: "absolute inset-x-1 h-[3px] rounded-full bg-brand",
+    handleStyle: (p) => `bottom:${p}%;translate:0 ${flipShift(edgeShift(p))}`,
+    handleTrans: "transition-[bottom,translate] duration-150 ease-out",
+    tickBase: "absolute left-1/2 h-px w-2",
+    tickStyle: (p) => `bottom:${p}%;translate:-50% ${flipShift(edgeShift(p))}`,
+    // column-reverse puts the readout on top and the label at the bottom, the
+    // classic channel-strip order, without reordering the DOM.
+    textRow: "pointer-events-none relative flex h-full w-full flex-col-reverse items-center justify-between gap-2 px-2 py-2",
+    labelClass: "max-w-full truncate text-xs font-medium text-ink",
+    valueClass: "shrink-0 text-xs tabular-nums text-ink"
+  }
+};
+var Fader = class extends PuzzleView {
+  created() {
+    this._resetDrag();
+    this._suppressClick = false;
+    this._overlayTimer = null;
+    this._listening = false;
+    this._tickCache = null;
+    this._onWinMove = (e2) => this._pointerMove(e2);
+    this._onWinEnd = (e2) => this._pointerEnd(e2);
+    this._onTouchMove = (e2) => {
+      if (this._drag.dragging && e2.cancelable)
+        e2.preventDefault();
+    };
+    this.setData({ dragging: false, draftValue: null });
+  }
+  destroyed() {
+    this._removeWindowListeners();
+    if (this._overlayTimer)
+      clearTimeout(this._overlayTimer);
+  }
+  data(params, props) {
+    const cfg = configFrom(props);
+    const axis = this._axis(props);
+    const committed = this._committed(props, cfg);
+    const d = this.getData();
+    const dragging = !!d.dragging;
+    const renderValue = d.draftValue === null ? committed : d.draftValue;
+    const percent2 = valueToPercent(renderValue, cfg);
+    const disabled = !!props.disabled;
+    const labelText = props.label == null ? "" : String(props.label);
+    const readout = this._format(renderValue, props);
+    const valueStr = String(renderValue);
+    return {
+      rootId: props.id || false,
+      rootClass: [
+        ROOT_BASE5,
+        axis.size,
+        axis.touch,
+        disabled ? "cursor-not-allowed opacity-50" : axis.cursor,
+        props.class || ""
+      ].filter(Boolean).join(" "),
+      ticks: this._ticks(props, cfg, axis),
+      fillClass: `${axis.fillClass} ${dragging ? "transition-none" : axis.fillTrans}`,
+      fillStyle: axis.fillStyle(percent2),
+      handleClass: `${axis.handleClass} ${dragging ? "transition-none" : axis.handleTrans}`,
+      handleStyle: axis.handleStyle(percent2),
+      textRowClass: axis.textRow,
+      labelClass: axis.labelClass,
+      valueClass: axis.valueClass,
+      labelText,
+      readout,
+      showValue: props.showValue !== false,
+      tabindex: disabled ? "-1" : "0",
+      ariaOrientation: axis.ariaOrientation,
+      ariaLabel: labelText || "Value",
+      ariaDisabled: disabled ? "true" : false,
+      // aria-valuetext REPLACES the announced number, so only send it when the
+      // readout actually says something the raw value doesn't. `false` omits it.
+      ariaValueText: readout && readout !== valueStr ? readout : false,
+      minStr: String(cfg.min),
+      maxStr: String(cfg.max),
+      valueStr,
+      name: props.name || false
+    };
+  }
+  // Once props reflect the committed draft, drop the overlay silently (no visual
+  // change). Deferred out of the render stack to avoid afterUpdate re-entrancy.
+  afterUpdate() {
+    const d = this.getData();
+    if (this._pendingClearCheck || d.dragging || d.draftValue === null)
+      return;
+    const cfg = configFrom(this.props);
+    if (this._committed(this.props, cfg) !== d.draftValue)
+      return;
+    this._pendingClearCheck = true;
+    queueMicrotask(() => {
+      this._pendingClearCheck = false;
+      const now = this.getData();
+      if (now.draftValue !== null && !now.dragging) {
+        this.setData({ draftValue: null });
+        this.refresh();
+      }
+    });
+  }
+  // --- config / committed-state derivation -----------------------------------
+  _axis(props) {
+    return props.orientation === "vertical" ? AXIS.vertical : AXIS.horizontal;
+  }
+  // The committed value straight from props, normalized.
+  _committed(props, cfg) {
+    const raw2 = Number(props.value);
+    return round2(clampBounds(quantize(Number.isFinite(raw2) ? raw2 : cfg.min, cfg), cfg), cfg);
+  }
+  _format(value, props) {
+    const fn = props.formatValue;
+    if (typeof fn === "function") {
+      const out = fn(value);
+      return out == null ? "" : String(out);
+    }
+    return props.unit ? `${value}${props.unit}` : String(value);
+  }
+  // Ticks are static geometry — unlike Slider's they carry no active/inactive
+  // state (the translucent fill lets them show THROUGH rather than occluding
+  // them), so the whole list is cached by identity and rebuilt only when the
+  // spec, the bounds or the orientation actually change. Identity, never
+  // JSON.stringify: stringifying the array every frame of a drag would cost
+  // more than everything else in data() combined.
+  _ticks(props, cfg, axis) {
+    const cache = this._tickCache;
+    if (cache && cache.spec === props.ticks && cache.tickStep === props.tickStep && cache.min === cfg.min && cache.max === cfg.max && cache.step === cfg.step && cache.axis === axis) {
+      return cache.list;
+    }
+    const list = tickValues(cfg, props.ticks, props.tickStep).map((t2, i2) => ({
+      key: `t${i2}`,
+      // A custom class REPLACES the piece's colour instead of appending to it.
+      class: `${axis.tickBase} ${t2.class ? t2.class : TICK_COLOR}`,
+      style: axis.tickStyle(valueToPercent(t2.value, cfg))
+    }));
+    this._tickCache = {
+      spec: props.ticks,
+      tickStep: props.tickStep,
+      min: cfg.min,
+      max: cfg.max,
+      step: cfg.step,
+      axis,
+      list
+    };
+    return list;
+  }
+  // --- geometry --------------------------------------------------------------
+  _percentFromEvent(event, axis) {
+    const track = this.element && this.element.querySelector("[data-slider-track]");
+    if (!track)
+      return 0;
+    const rect = track.getBoundingClientRect();
+    const extent2 = axis.extent(rect);
+    if (!extent2)
+      return 0;
+    const raw2 = (axis.main(event) - axis.origin(rect)) / extent2 * 100;
+    const pct = axis.invert ? 100 - raw2 : raw2;
+    return Math.max(0, Math.min(100, pct));
+  }
+  // --- gesture bookkeeping (transient — never setData, must not re-render) ----
+  _resetDrag() {
+    this._drag = {
+      pointerId: null,
+      armed: false,
+      dragging: false,
+      startMain: 0,
+      startCross: 0,
+      startValue: 0
+    };
+  }
+  _teardownGesture() {
+    this._resetDrag();
+    this._removeWindowListeners();
+  }
+  _addWindowListeners() {
+    if (this._listening || typeof window === "undefined")
+      return;
+    this._listening = true;
+    window.addEventListener("pointermove", this._onWinMove);
+    window.addEventListener("pointerup", this._onWinEnd);
+    window.addEventListener("pointercancel", this._onWinEnd);
+    window.addEventListener("lostpointercapture", this._onWinEnd);
+    window.addEventListener("touchmove", this._onTouchMove, { passive: false });
+  }
+  _removeWindowListeners() {
+    if (!this._listening || typeof window === "undefined")
+      return;
+    this._listening = false;
+    window.removeEventListener("pointermove", this._onWinMove);
+    window.removeEventListener("pointerup", this._onWinEnd);
+    window.removeEventListener("pointercancel", this._onWinEnd);
+    window.removeEventListener("lostpointercapture", this._onWinEnd);
+    window.removeEventListener("touchmove", this._onTouchMove, { passive: false });
+  }
+  _capturePointer(event) {
+    if (event.pointerType === "touch")
+      return;
+    try {
+      this.element.setPointerCapture(event.pointerId);
+    } catch (_) {
+    }
+  }
+  _releasePointer(event) {
+    try {
+      if (this.element && this.element.hasPointerCapture && this.element.hasPointerCapture(event.pointerId)) {
+        this.element.releasePointerCapture(event.pointerId);
+      }
+    } catch (_) {
+    }
+  }
+  _emit(type, value) {
+    const fn = this.props[type];
+    if (typeof fn === "function")
+      fn(value);
+  }
+  // Keep the draft overlaid until props reflect the commit (afterUpdate drops it
+  // when they match); this fallback reverts to the committed value if the parent
+  // never applies the change (uncontrolled usage).
+  _scheduleOverlayClear() {
+    if (this._overlayTimer)
+      clearTimeout(this._overlayTimer);
+    this._overlayTimer = setTimeout(() => {
+      this._overlayTimer = null;
+      const d = this.getData();
+      if (d.draftValue !== null && !d.dragging) {
+        this.setData({ draftValue: null });
+        this.refresh();
+      }
+    }, 90);
+  }
+  // --- pointer flow (move/end run off window listeners during a gesture) ------
+  _pointerMove(event) {
+    const drag = this._drag;
+    if (drag.pointerId !== event.pointerId)
+      return;
+    if (event.pointerType !== "touch" && event.buttons === 0) {
+      this._pointerEnd(event);
+      return;
+    }
+    const props = this.props;
+    const cfg = configFrom(props);
+    const axis = this._axis(props);
+    if (!drag.dragging) {
+      const deltaMain = Math.abs(axis.main(event) - drag.startMain);
+      const deltaCross = Math.abs(axis.cross(event) - drag.startCross);
+      if (axis.yieldsToScroll && deltaCross > deltaMain) {
+        this._teardownGesture();
+        return;
+      }
+      if (deltaMain <= DRAG_THRESHOLD2)
+        return;
+      drag.startValue = this._committed(props, cfg);
+      drag.dragging = true;
+      this._suppressClick = true;
+      this._capturePointer(event);
+    }
+    const raw2 = percentToValue(this._percentFromEvent(event, axis), cfg);
+    const nv = normalize2(raw2, "single", cfg, NO_PAIR);
+    const d = this.getData();
+    if (d.draftValue !== nv || !d.dragging) {
+      this.setData({ dragging: true, draftValue: nv });
+      this.refresh();
+      this._emit("input", nv);
+    }
+  }
+  _pointerEnd(event) {
+    const drag = this._drag;
+    if (drag.pointerId !== event.pointerId)
+      return;
+    this._releasePointer(event);
+    const armed = drag.armed;
+    const dragging = drag.dragging;
+    const startValue = drag.startValue;
+    const props = this.props;
+    const cfg = configFrom(props);
+    const axis = this._axis(props);
+    const committed = this._committed(props, cfg);
+    this._teardownGesture();
+    if (dragging) {
+      const finalValue = this.getData().draftValue;
+      this.setData({ dragging: false });
+      this.refresh();
+      if (finalValue !== startValue)
+        this._emit("change", finalValue);
+      this._scheduleOverlayClear();
+    } else if (armed && event.type === "pointerup") {
+      const nv = normalize2(percentToValue(this._percentFromEvent(event, axis), cfg), "single", cfg, NO_PAIR);
+      this._suppressClick = true;
+      if (nv !== committed) {
+        this.setData({ dragging: false, draftValue: nv });
+        this.refresh();
+        this._emit("input", nv);
+        this._emit("change", nv);
+        this._scheduleOverlayClear();
+      }
+      if (this.element && this.element.focus)
+        this.element.focus({ preventScroll: true });
+    }
+  }
+  events = {
+    onPointerDown: (event) => {
+      this._suppressClick = false;
+      if (this.props.disabled)
+        return;
+      if (event.pointerType === "mouse" && event.button !== 0)
+        return;
+      if (this._drag.pointerId !== null) {
+        if (this._drag.dragging)
+          return;
+        this._teardownGesture();
+      }
+      if (this._overlayTimer) {
+        clearTimeout(this._overlayTimer);
+        this._overlayTimer = null;
+      }
+      const axis = this._axis(this.props);
+      this._drag = {
+        pointerId: event.pointerId,
+        armed: true,
+        dragging: false,
+        startMain: axis.main(event),
+        startCross: axis.cross(event),
+        startValue: 0
+      };
+      this._addWindowListeners();
+    },
+    onKeyDown: (event) => {
+      if (this.props.disabled)
+        return;
+      const cfg = configFrom(this.props);
+      const current = this._committed(this.props, cfg);
+      const stepSize = cfg.step === "any" ? (cfg.max - cfg.min) / 100 : cfg.step;
+      const pageSize = stepSize * 10;
+      let next = null;
+      switch (event.key) {
+        case "ArrowRight":
+        case "ArrowUp":
+          next = current + stepSize;
+          break;
+        case "ArrowLeft":
+        case "ArrowDown":
+          next = current - stepSize;
+          break;
+        case "PageUp":
+          next = current + pageSize;
+          break;
+        case "PageDown":
+          next = current - pageSize;
+          break;
+        case "Home":
+          next = cfg.min;
+          break;
+        case "End":
+          next = cfg.max;
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      const nv = normalize2(next, "single", cfg, NO_PAIR);
+      if (nv === current)
+        return;
+      this.setData({ dragging: false, draftValue: nv });
+      this.refresh();
+      this._emit("input", nv);
+      this._emit("change", nv);
+      this._scheduleOverlayClear();
+    },
+    onClick: (event) => {
+      if (!this._suppressClick)
+        return;
+      this._suppressClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  };
+};
+Fader.prototype.render = function() {
+  const __d = this.getData();
+  const __f = this.ctx.formatters.getAll();
+  return new ViewNode("div", {
+    class: __d.rootClass,
+    id: __d.rootId,
+    role: "slider",
+    "data-thumb": "single",
+    tabindex: __d.tabindex,
+    "aria-orientation": __d.ariaOrientation,
+    "aria-label": __d.ariaLabel,
+    "aria-valuemin": __d.minStr,
+    "aria-valuemax": __d.maxStr,
+    "aria-valuenow": __d.valueStr,
+    "aria-valuetext": __d.ariaValueText,
+    "aria-disabled": __d.ariaDisabled,
+    "@pointerdown": (this.__h ??= {})[0] ??= (event) => this.events.onPointerDown(event),
+    "@keydown": (this.__h ??= {})[1] ??= (event) => this.events.onKeyDown(event),
+    "@click": (this.__h ??= {})[2] ??= (event) => this.events.onClick(event)
+  }, [
+    new ViewNode("div", {
+      class: "absolute inset-0",
+      "data-slider-track": true
+    }, [
+      ...__d.ticks.map(
+        (tick) => new ViewNode("span", {
+          class: tick.class,
+          style: tick.style,
+          key: tick.key
+        }, [])
+      ),
+      new ViewNode("div", {
+        class: __d.fillClass,
+        style: __d.fillStyle
+      }, []),
+      new ViewNode("div", {
+        class: __d.handleClass,
+        style: __d.handleStyle
+      }, [])
+    ]),
+    new ViewNode("div", {
+      class: __d.textRowClass,
+      "aria-hidden": "true"
+    }, [
+      new ViewNode("span", { class: __d.labelClass }, [
+        new ViewNode("text", { value: String(__d.labelText) })
+      ]),
+      ...__d.showValue ? [
+        new ViewNode("span", { class: __d.valueClass }, [
+          new ViewNode("text", { value: String(__d.readout) })
+        ])
+      ] : [
+        new ViewNode("#")
+      ]
+    ]),
+    ...__d.name ? [
+      new ViewNode("input", {
+        type: "hidden",
+        name: __d.name,
+        value: __d.valueStr
+      }, [])
+    ] : [
+      new ViewNode("#")
+    ]
+  ]);
+};
+Fader.__pzlModule = "app/components/ui/Fader.pzl";
+
+// app/views/components/FaderDoc.pzl
+var thresholdTicks = [0, 25, 50, 75, { value: 90, class: "bg-danger" }];
+var ratio = (v) => v + ":1";
+var gainText = (v) => v <= -60 ? "Off" : v + " dB";
+var oneDp = (v) => v.toFixed(1);
+var installCmd36 = "puzzle add piece fader";
+var usageImport36 = `import Fader from '@/components/ui/Fader.pzl';`;
+var usageMarkup36 = `<Fader label="Feather" value={ feather } min={ 0 } max={ 20 } step={ 0.5 } unit="px"
+  @input={ setFeather } @change={ setFeather } />`;
+var codeHero36 = `<Fader label="Rest" value={ rest } min={ 0 } max={ 100 } unit="%" @input={ setRest } @change={ setRest } />
+<Fader label="Arc" value={ arc } min={ 0 } max={ 360 } unit="\xB0" @input={ setArc } @change={ setArc } />
+<Fader label="Feather" value={ feather } min={ 0 } max={ 20 } step={ 0.5 } unit="px"
+  @input={ setFeather } @change={ setFeather } />
+
+// parent \u2014 @input fires live during drag, @change on release
+events = {
+  setRest: (v) => this.setData('rest', v),
+};`;
+var codeSteps = `// a numeric step quantizes to a detent. Matching tickStep to step puts a mark on
+// every reachable value, which is how you get a fader that visibly snaps.
+<Fader label="Quality" value={ stepped } min={ 0 } max={ 100 } step={ 10 }
+  ticks={ true } tickStep={ 10 } unit="%" @change={ setStepped } />
+
+// step="any" is continuous \u2014 format the readout so it does not run to 15 decimals
+const oneDp = (v) => v.toFixed(1);
+
+<Fader label="Blend" value={ fine } min={ 0 } max={ 100 } step="any" formatValue={ oneDp }
+  @change={ setFine } />`;
+var codeVertical = `// orientation="vertical" flips every bit of geometry: the fill grows upward,
+// the readout sits above the strip and the label below. h-40 w-14 by default \u2014
+// override through class.
+<Fader orientation="vertical" label="Low" value={ low } min={ -24 } max={ 24 } unit=" dB"
+  @input={ setLow } @change={ setLow } />
+
+// A vertical fader owns the vertical touch axis (touch-action: none), so a touch
+// that starts on it will not scroll the page. Put vertical faders in a fixed
+// panel or channel strip, not mid-way down a long scrolling page.`;
+var codeTicks = `// ticks={ true } generates a grid, auto-coarsened so a 0-100 step-1 fader gets
+// 21 marks instead of 101
+<Fader label="Density" value={ density } ticks={ true } @change={ setDensity } />
+
+// or list them \u2014 plain numbers and per-tick objects can be mixed freely.
+// A tick class REPLACES the default colour, so use one semantic token.
+const thresholdTicks = [0, 25, 50, 75, { value: 90, class: 'bg-danger' }];
+
+<Fader label="Threshold" value={ threshold } ticks={ thresholdTicks } @change={ setThreshold } />`;
+var codeFormatting = `// unit is appended verbatim \u2014 pass a leading space when you want one
+<Fader label="Corner radius" value={ corner } min={ 0 } max={ 64 } unit="px" @change={ setCorner } />
+
+// formatValue takes over the readout entirely, which is how you get
+// value-specific text like "Off" at the bottom of the range
+const gainText = (v) => (v <= -60 ? 'Off' : v + ' dB');
+
+<Fader label="Gain" value={ gain } min={ -60 } max={ 12 } formatValue={ gainText } @change={ setGain } />
+
+// showValue={ false } drops the readout and leaves the label alone
+<Fader label="Mix" value={ mix } showValue={ false } @change={ setMix } />`;
+var codeDisabled5 = `<Fader label="Locked" value={ 40 } unit="%" disabled />`;
+var FaderDoc = class extends PuzzleView {
+  created() {
+    this.setData({
+      rest: 40,
+      arc: 128,
+      feather: 6.5,
+      radius: 18,
+      aspect: 1.6,
+      stepped: 40,
+      fine: 33,
+      low: 6,
+      mid: -3,
+      high: 2,
+      density: 55,
+      threshold: 72,
+      corner: 24,
+      gain: -6,
+      mix: 65
+    });
+  }
+  data(params, props) {
+    return {
+      ...this.getData(),
+      thresholdTicks,
+      ratio,
+      gainText,
+      oneDp,
+      installCmd: installCmd36,
+      usageImport: usageImport36,
+      usageMarkup: usageMarkup36,
+      codeHero: codeHero36,
+      codeSteps,
+      codeVertical,
+      codeTicks,
+      codeFormatting,
+      codeDisabled: codeDisabled5,
+      toc: [
+        { label: "Installation", href: "#installation" },
+        { label: "Usage", href: "#usage" },
+        { label: "Steps", href: "#steps" },
+        { label: "Vertical", href: "#vertical" },
+        { label: "Ticks", href: "#ticks" },
+        { label: "Formatting", href: "#formatting" },
+        { label: "Disabled", href: "#disabled" }
+      ]
+    };
+  }
+  events = {
+    setRest: (v) => {
+      this.setData("rest", v);
+      this.refresh();
+    },
+    setArc: (v) => {
+      this.setData("arc", v);
+      this.refresh();
+    },
+    setFeather: (v) => {
+      this.setData("feather", v);
+      this.refresh();
+    },
+    setRadius: (v) => {
+      this.setData("radius", v);
+      this.refresh();
+    },
+    setAspect: (v) => {
+      this.setData("aspect", v);
+      this.refresh();
+    },
+    setStepped: (v) => {
+      this.setData("stepped", v);
+      this.refresh();
+    },
+    setFine: (v) => {
+      this.setData("fine", v);
+      this.refresh();
+    },
+    setLow: (v) => {
+      this.setData("low", v);
+      this.refresh();
+    },
+    setMid: (v) => {
+      this.setData("mid", v);
+      this.refresh();
+    },
+    setHigh: (v) => {
+      this.setData("high", v);
+      this.refresh();
+    },
+    setDensity: (v) => {
+      this.setData("density", v);
+      this.refresh();
+    },
+    setThreshold: (v) => {
+      this.setData("threshold", v);
+      this.refresh();
+    },
+    setCorner: (v) => {
+      this.setData("corner", v);
+      this.refresh();
+    },
+    setGain: (v) => {
+      this.setData("gain", v);
+      this.refresh();
+    },
+    setMix: (v) => {
+      this.setData("mix", v);
+      this.refresh();
+    }
+  };
+};
+FaderDoc.prototype.render = function() {
+  const __d = this.getData();
+  const __f = this.ctx.formatters.getAll();
+  return new ViewNode("puzzle-view", { class: "w-full" }, [
+    new ViewNode("div", { class: "flex gap-12" }, [
+      new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
+        new ViewNode("header", { class: "mb-8" }, [
+          new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Fader" })
+          ]),
+          new ViewNode("p", { class: "mt-2 text-body" }, [
+            new ViewNode("text", { value: "A tall filled parameter row, the kind a DAW, Blender, or After Effects puts next to every numeric setting: an inline label on the left, a right-aligned readout on the right, faint interior ticks, and a thin bar handle. Same semantics as a slider \u2014 it just reads as a flat dial you turn up rather than a scale you pick a point on. Press anywhere in the row to jump the value, then drag." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-body" }, [
+            new ViewNode("text", { value: "It is controlled \u2014 the parent owns the value and reads it back from" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "@input" })
+            ]),
+            new ViewNode("text", { value: "(live during drag) and" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "@change" })
+            ]),
+            new ViewNode("text", { value: "(on commit). Arrow keys, PageUp / PageDown, and Home / End work on the focused row. Fader is single-value only: need two thumbs? Use the " }),
+            new ViewNode("a", {
+              href: "#/components/slider",
+              class: "text-brand hover:underline"
+            }, [
+              new ViewNode("text", { value: "Slider" })
+            ]),
+            new ViewNode("text", { value: "." })
+          ])
+        ]),
+        new ViewNode(ExampleBox, { code: __d.codeHero }, [
+          new ViewNode("div", { class: "w-full max-w-sm space-y-1.5" }, [
+            new ViewNode(Fader, {
+              label: "Rest",
+              value: __d.rest,
+              min: 0,
+              max: 100,
+              unit: "%",
+              input: (this.__h ??= {})[0] ??= (event) => this.events.setRest(event),
+              change: (this.__h ??= {})[1] ??= (event) => this.events.setRest(event)
+            }, []),
+            new ViewNode(Fader, {
+              label: "Arc",
+              value: __d.arc,
+              min: 0,
+              max: 360,
+              unit: "\xB0",
+              input: (this.__h ??= {})[2] ??= (event) => this.events.setArc(event),
+              change: (this.__h ??= {})[3] ??= (event) => this.events.setArc(event)
+            }, []),
+            new ViewNode(Fader, {
+              label: "Feather",
+              value: __d.feather,
+              min: 0,
+              max: 20,
+              step: 0.5,
+              unit: "px",
+              input: (this.__h ??= {})[4] ??= (event) => this.events.setFeather(event),
+              change: (this.__h ??= {})[5] ??= (event) => this.events.setFeather(event)
+            }, []),
+            new ViewNode(Fader, {
+              label: "Radius",
+              value: __d.radius,
+              min: 0,
+              max: 64,
+              unit: "px",
+              input: (this.__h ??= {})[6] ??= (event) => this.events.setRadius(event),
+              change: (this.__h ??= {})[7] ??= (event) => this.events.setRadius(event)
+            }, []),
+            new ViewNode(Fader, {
+              label: "Aspect",
+              value: __d.aspect,
+              min: 0.25,
+              max: 4,
+              step: 0.05,
+              formatValue: __d.ratio,
+              input: (this.__h ??= {})[8] ??= (event) => this.events.setAspect(event),
+              change: (this.__h ??= {})[9] ??= (event) => this.events.setAspect(event)
+            }, [])
+          ])
+        ]),
+        new ViewNode("section", {
+          id: "installation",
+          class: "mt-12 scroll-mt-20"
+        }, [
+          new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Installation" })
+          ]),
+          new ViewNode("p", { class: "mb-3 text-sm text-body" }, [
+            new ViewNode("text", { value: "Copy the piece into your app \u2014 it compiles with your build and the code is yours:" })
+          ]),
+          new ViewNode(CodeBlock, { code: __d.installCmd }, []),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "Pulls in the shared value math at app/lib/slider-math.js. Requires the pieces.css tokens merged into your app styles (see Introduction)." })
+          ])
+        ]),
+        new ViewNode("section", {
+          id: "usage",
+          class: "mt-12 scroll-mt-20"
+        }, [
+          new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Usage" })
+          ]),
+          new ViewNode(CodeBlock, { code: __d.usageImport }, []),
+          new ViewNode(CodeBlock, {
+            code: __d.usageMarkup,
+            class: "mt-3"
+          }, [])
+        ]),
+        new ViewNode("div", { class: "mt-12 space-y-12" }, [
+          new ViewNode(ExampleBox, {
+            id: "steps",
+            title: "Steps",
+            code: __d.codeSteps
+          }, [
+            new ViewNode("div", { class: "w-full max-w-sm space-y-4" }, [
+              new ViewNode(Fader, {
+                label: "Quality",
+                value: __d.stepped,
+                min: 0,
+                max: 100,
+                step: 10,
+                ticks: true,
+                tickStep: 10,
+                unit: "%",
+                input: (this.__h ??= {})[10] ??= (event) => this.events.setStepped(event),
+                change: (this.__h ??= {})[11] ??= (event) => this.events.setStepped(event)
+              }, []),
+              new ViewNode(Fader, {
+                label: "Blend",
+                value: __d.fine,
+                min: 0,
+                max: 100,
+                step: "any",
+                formatValue: __d.oneDp,
+                input: (this.__h ??= {})[12] ??= (event) => this.events.setFine(event),
+                change: (this.__h ??= {})[13] ??= (event) => this.events.setFine(event)
+              }, [])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "vertical",
+            title: "Vertical",
+            code: __d.codeVertical
+          }, [
+            new ViewNode("div", { class: "flex items-end gap-4" }, [
+              new ViewNode(Fader, {
+                orientation: "vertical",
+                label: "Low",
+                value: __d.low,
+                min: -24,
+                max: 24,
+                unit: " dB",
+                input: (this.__h ??= {})[14] ??= (event) => this.events.setLow(event),
+                change: (this.__h ??= {})[15] ??= (event) => this.events.setLow(event)
+              }, []),
+              new ViewNode(Fader, {
+                orientation: "vertical",
+                label: "Mid",
+                value: __d.mid,
+                min: -24,
+                max: 24,
+                unit: " dB",
+                input: (this.__h ??= {})[16] ??= (event) => this.events.setMid(event),
+                change: (this.__h ??= {})[17] ??= (event) => this.events.setMid(event)
+              }, []),
+              new ViewNode(Fader, {
+                orientation: "vertical",
+                label: "High",
+                value: __d.high,
+                min: -24,
+                max: 24,
+                unit: " dB",
+                input: (this.__h ??= {})[18] ??= (event) => this.events.setHigh(event),
+                change: (this.__h ??= {})[19] ??= (event) => this.events.setHigh(event)
+              }, [])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "ticks",
+            title: "Ticks",
+            code: __d.codeTicks
+          }, [
+            new ViewNode("div", { class: "w-full max-w-sm space-y-4" }, [
+              new ViewNode(Fader, {
+                label: "Density",
+                value: __d.density,
+                ticks: true,
+                input: (this.__h ??= {})[20] ??= (event) => this.events.setDensity(event),
+                change: (this.__h ??= {})[21] ??= (event) => this.events.setDensity(event)
+              }, []),
+              new ViewNode(Fader, {
+                label: "Threshold",
+                value: __d.threshold,
+                ticks: __d.thresholdTicks,
+                input: (this.__h ??= {})[22] ??= (event) => this.events.setThreshold(event),
+                change: (this.__h ??= {})[23] ??= (event) => this.events.setThreshold(event)
+              }, [])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "formatting",
+            title: "Formatting",
+            code: __d.codeFormatting
+          }, [
+            new ViewNode("div", { class: "w-full max-w-sm space-y-4" }, [
+              new ViewNode(Fader, {
+                label: "Corner radius",
+                value: __d.corner,
+                min: 0,
+                max: 64,
+                unit: "px",
+                input: (this.__h ??= {})[24] ??= (event) => this.events.setCorner(event),
+                change: (this.__h ??= {})[25] ??= (event) => this.events.setCorner(event)
+              }, []),
+              new ViewNode(Fader, {
+                label: "Gain",
+                value: __d.gain,
+                min: -60,
+                max: 12,
+                formatValue: __d.gainText,
+                input: (this.__h ??= {})[26] ??= (event) => this.events.setGain(event),
+                change: (this.__h ??= {})[27] ??= (event) => this.events.setGain(event)
+              }, []),
+              new ViewNode(Fader, {
+                label: "Mix",
+                value: __d.mix,
+                showValue: false,
+                input: (this.__h ??= {})[28] ??= (event) => this.events.setMix(event),
+                change: (this.__h ??= {})[29] ??= (event) => this.events.setMix(event)
+              }, [])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "disabled",
+            title: "Disabled",
+            code: __d.codeDisabled,
+            tall: false
+          }, [
+            new ViewNode("div", { class: "w-full max-w-sm" }, [
+              new ViewNode(Fader, {
+                label: "Locked",
+                value: 40,
+                unit: "%",
+                disabled: true
+              }, [])
+            ])
+          ])
+        ])
+      ]),
+      new ViewNode(Toc, {
+        class: "sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block",
+        items: __d.toc
+      }, [])
+    ])
+  ]);
+};
+FaderDoc.__pzlModule = "app/views/components/FaderDoc.pzl";
+
 // app/views/components/FieldDoc.pzl
-var installCmd36 = "puzzle add piece field";
-var usageImport36 = `import Field from '@/components/ui/Field.pzl';`;
-var usageMarkup36 = `<Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />`;
-var codeHero36 = `<Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />
+var installCmd37 = "puzzle add piece field";
+var usageImport37 = `import Field from '@/components/ui/Field.pzl';`;
+var usageMarkup37 = `<Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />`;
+var codeHero37 = `<Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />
 
 // parent
 events = {
@@ -45257,7 +46293,7 @@ events = {
 };`;
 var codeHint2 = `<Field label="Company" hint="As it appears on your invoice" placeholder="Acme Inc." />`;
 var codeError5 = `<Field label="Email" value="taken@example.com" error="That address is already in use" />`;
-var codeDisabled5 = `<Field label="Read-only" value="Locked field" disabled />`;
+var codeDisabled6 = `<Field label="Read-only" value="Locked field" disabled />`;
 var FieldDoc = class extends PuzzleView {
   created() {
     this.setData({ name: "" });
@@ -45265,13 +46301,13 @@ var FieldDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd36,
-      usageImport: usageImport36,
-      usageMarkup: usageMarkup36,
-      codeHero: codeHero36,
+      installCmd: installCmd37,
+      usageImport: usageImport37,
+      usageMarkup: usageMarkup37,
+      codeHero: codeHero37,
       codeHint: codeHint2,
       codeError: codeError5,
-      codeDisabled: codeDisabled5,
+      codeDisabled: codeDisabled6,
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
@@ -45635,10 +46671,10 @@ HoverCard.prototype.render = function() {
 HoverCard.__pzlModule = "app/components/ui/HoverCard.pzl";
 
 // app/views/components/HoverCardDoc.pzl
-var installCmd37 = "puzzle add piece hover-card";
-var usageImport37 = `import HoverCard from '@/components/ui/HoverCard.pzl';`;
-var usageMarkup37 = `<HoverCard></HoverCard>`;
-var codeHero37 = `<HoverCard>
+var installCmd38 = "puzzle add piece hover-card";
+var usageImport38 = `import HoverCard from '@/components/ui/HoverCard.pzl';`;
+var usageMarkup38 = `<HoverCard></HoverCard>`;
+var codeHero38 = `<HoverCard>
   <a slot="trigger" href="/u/ada" class="\u2026">@ada</a>
   <div class="flex items-start gap-3">
     <span class="\u2026">A</span>
@@ -45677,10 +46713,10 @@ var HoverCardDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd37,
-      usageImport: usageImport37,
-      usageMarkup: usageMarkup37,
-      codeHero: codeHero37,
+      installCmd: installCmd38,
+      usageImport: usageImport38,
+      usageMarkup: usageMarkup38,
+      codeHero: codeHero38,
       codeDelays,
       codeControlled: codeControlled5,
       codeA11y,
@@ -46051,10 +47087,10 @@ InputGroup.prototype.render = function() {
 InputGroup.__pzlModule = "app/components/ui/InputGroup.pzl";
 
 // app/views/components/InputGroupDoc.pzl
-var installCmd38 = "puzzle add piece input-group";
-var usageImport38 = `import InputGroup from '@/components/ui/InputGroup.pzl';`;
-var usageMarkup38 = `<InputGroup label="Website" value={ site } @change={ setSite }></InputGroup>`;
-var codeHero38 = `<InputGroup label="Website" value={ site } @change={ setSite }>
+var installCmd39 = "puzzle add piece input-group";
+var usageImport39 = `import InputGroup from '@/components/ui/InputGroup.pzl';`;
+var usageMarkup39 = `<InputGroup label="Website" value={ site } @change={ setSite }></InputGroup>`;
+var codeHero39 = `<InputGroup label="Website" value={ site } @change={ setSite }>
   <span slot="prefix">https://</span>
   <span slot="suffix">.com</span>
 </InputGroup>
@@ -46080,10 +47116,10 @@ var InputGroupDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd38,
-      usageImport: usageImport38,
-      usageMarkup: usageMarkup38,
-      codeHero: codeHero38,
+      installCmd: installCmd39,
+      usageImport: usageImport39,
+      usageMarkup: usageMarkup39,
+      codeHero: codeHero39,
       codeButton,
       codeKbd,
       codeError: codeError6,
@@ -46523,10 +47559,10 @@ InputOtp.prototype.render = function() {
 InputOtp.__pzlModule = "app/components/ui/InputOtp.pzl";
 
 // app/views/components/InputOtpDoc.pzl
-var installCmd39 = "puzzle add piece input-otp";
-var usageImport39 = `import InputOtp from '@/components/ui/InputOtp.pzl';`;
-var usageMarkup39 = `<InputOtp value={ code } @change={ setCode } />`;
-var codeHero39 = `<InputOtp value={ code } @change={ setCode } />
+var installCmd40 = "puzzle add piece input-otp";
+var usageImport40 = `import InputOtp from '@/components/ui/InputOtp.pzl';`;
+var usageMarkup40 = `<InputOtp value={ code } @change={ setCode } />`;
+var codeHero40 = `<InputOtp value={ code } @change={ setCode } />
 
 // parent
 events = {
@@ -46553,10 +47589,10 @@ var InputOtpDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd39,
-      usageImport: usageImport39,
-      usageMarkup: usageMarkup39,
-      codeHero: codeHero39,
+      installCmd: installCmd40,
+      usageImport: usageImport40,
+      usageMarkup: usageMarkup40,
+      codeHero: codeHero40,
       codeGroups: codeGroups4,
       codeAlnum,
       codeError: codeError7,
@@ -46800,10 +47836,10 @@ InputOtpDoc.prototype.render = function() {
 InputOtpDoc.__pzlModule = "app/views/components/InputOtpDoc.pzl";
 
 // app/views/components/KanbanDoc.pzl
-var installCmd40 = "puzzle add piece kanban";
-var usageImport40 = `import Kanban from '@/components/ui/Kanban.pzl';`;
-var usageMarkup40 = `<Kanban columns={ columns } @move={ onMove } label="Sprint board"/>`;
-var codeHero40 = `const columns = [
+var installCmd41 = "puzzle add piece kanban";
+var usageImport41 = `import Kanban from '@/components/ui/Kanban.pzl';`;
+var usageMarkup41 = `<Kanban columns={ columns } @move={ onMove } label="Sprint board"/>`;
+var codeHero41 = `const columns = [
   { id: 'todo', title: 'To do', cards: [
     { id: 'c1', title: 'Design empty states', badge: 'Design', assignee: 'Ada Lovelace' },
     { id: 'c2', title: 'Fix drag on Safari', badge: 'Bug', badgeVariant: 'danger', meta: 'Due Fri' },
@@ -46850,7 +47886,7 @@ var codeData = `columns: [
     ],
   },
 ]`;
-var codeDisabled6 = `// disabled blocks every drag + keyboard move; cards stay focusable and readable.
+var codeDisabled7 = `// disabled blocks every drag + keyboard move; cards stay focusable and readable.
 <Kanban columns={ columns } disabled label="Read-only board"/>`;
 var INITIAL_BOARD = [
   {
@@ -46897,12 +47933,12 @@ var KanbanDoc = class extends PuzzleView {
       ...d,
       board: d.board || INITIAL_BOARD,
       staticBoard: STATIC_BOARD,
-      installCmd: installCmd40,
-      usageImport: usageImport40,
-      usageMarkup: usageMarkup40,
-      codeHero: codeHero40,
+      installCmd: installCmd41,
+      usageImport: usageImport41,
+      usageMarkup: usageMarkup41,
+      codeHero: codeHero41,
       codeData,
-      codeDisabled: codeDisabled6,
+      codeDisabled: codeDisabled7,
       lastMove: d.lastMove || "none",
       toc: [
         { label: "Installation", href: "#installation" },
@@ -47233,10 +48269,10 @@ KanbanDoc.prototype.render = function() {
 KanbanDoc.__pzlModule = "app/views/components/KanbanDoc.pzl";
 
 // app/views/components/KbdDoc.pzl
-var installCmd41 = "puzzle add piece kbd";
-var usageImport41 = `import Kbd from '@/components/ui/Kbd.pzl';`;
-var usageMarkup41 = `<Kbd>\u2318</Kbd>`;
-var codeHero41 = `<span><Kbd>\u2318</Kbd> <Kbd>K</Kbd> Command palette</span>
+var installCmd42 = "puzzle add piece kbd";
+var usageImport42 = `import Kbd from '@/components/ui/Kbd.pzl';`;
+var usageMarkup42 = `<Kbd>\u2318</Kbd>`;
+var codeHero42 = `<span><Kbd>\u2318</Kbd> <Kbd>K</Kbd> Command palette</span>
 <span><Kbd>\u2318</Kbd> <Kbd>S</Kbd> Save</span>
 <span><Kbd>Esc</Kbd> Close</span>`;
 var codeProse = `<p>
@@ -47247,10 +48283,10 @@ var KbdDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd41,
-      usageImport: usageImport41,
-      usageMarkup: usageMarkup41,
-      codeHero: codeHero41,
+      installCmd: installCmd42,
+      usageImport: usageImport42,
+      usageMarkup: usageMarkup42,
+      codeHero: codeHero42,
       codeProse,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -47397,10 +48433,10 @@ Label.prototype.render = function() {
 Label.__pzlModule = "app/components/ui/Label.pzl";
 
 // app/views/components/LabelDoc.pzl
-var installCmd42 = "puzzle add piece label";
-var usageImport42 = `import Label from '@/components/ui/Label.pzl';`;
-var usageMarkup42 = `<Label for="email">Email address</Label>`;
-var codeHero42 = `<Label for="email">Email address</Label>
+var installCmd43 = "puzzle add piece label";
+var usageImport43 = `import Label from '@/components/ui/Label.pzl';`;
+var usageMarkup43 = `<Label for="email">Email address</Label>`;
+var codeHero43 = `<Label for="email">Email address</Label>
 <input id="email" type="email" placeholder="you@example.com" />`;
 var codeWithPieces = `<Label for="site-search">Search</Label>
 <SearchField id="site-search" value={ query } @change={ setQuery } />
@@ -47416,10 +48452,10 @@ var LabelDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd42,
-      usageImport: usageImport42,
-      usageMarkup: usageMarkup42,
-      codeHero: codeHero42,
+      installCmd: installCmd43,
+      usageImport: usageImport43,
+      usageMarkup: usageMarkup43,
+      codeHero: codeHero43,
       codeWithPieces,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -47521,11 +48557,11 @@ LabelDoc.prototype.render = function() {
 LabelDoc.__pzlModule = "app/views/components/LabelDoc.pzl";
 
 // app/views/components/LineChartDoc.pzl
-var installCmd43 = "puzzle add piece line-chart";
-var usageImport43 = `import LineChart from '@/components/ui/LineChart.pzl';`;
-var usageMarkup43 = `<LineChart data={ data } xKey="month" series={ series } />`;
+var installCmd44 = "puzzle add piece line-chart";
+var usageImport44 = `import LineChart from '@/components/ui/LineChart.pzl';`;
+var usageMarkup44 = `<LineChart data={ data } xKey="month" series={ series } />`;
 var money2 = (n2) => "$" + Number(n2).toLocaleString();
-var codeHero43 = `const data = [
+var codeHero44 = `const data = [
   { month: 'Jan', revenue: 42000, target: 40000 },
   { month: 'Feb', revenue: 45000, target: 44000 },
   { month: 'Mar', revenue: 48000, target: 46000 },
@@ -47541,7 +48577,7 @@ var codeSingle = `// One series \u2192 no legend (there is only one color).
 const series = [{ key: 'revenue', label: 'Revenue' }];
 
 <LineChart data={ data } xKey="month" series={ series } />`;
-var codeFormatting = `// height sets the plot height in px; formatValue formats tooltip + table values.
+var codeFormatting2 = `// height sets the plot height in px; formatValue formats tooltip + table values.
 const money = (n) => '$' + n.toLocaleString();
 
 <LineChart
@@ -47573,13 +48609,13 @@ var LineChartDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd43,
-      usageImport: usageImport43,
-      usageMarkup: usageMarkup43,
+      installCmd: installCmd44,
+      usageImport: usageImport44,
+      usageMarkup: usageMarkup44,
       money: money2,
-      codeHero: codeHero43,
+      codeHero: codeHero44,
       codeSingle,
-      codeFormatting,
+      codeFormatting: codeFormatting2,
       revenueData,
       revenueSeries,
       singleSeries,
@@ -47744,10 +48780,10 @@ LineChartDoc.prototype.render = function() {
 LineChartDoc.__pzlModule = "app/views/components/LineChartDoc.pzl";
 
 // app/views/components/MarqueeDoc.pzl
-var installCmd44 = "puzzle add piece marquee";
-var usageImport44 = `import Marquee from '@/components/ui/Marquee.pzl';`;
-var usageMarkup44 = `<Marquee class="w-full rounded-xl border border-border bg-surface py-4"></Marquee>`;
-var codeHero44 = `// Items are the default-slot children \u2014 the piece clones them to loop.
+var installCmd45 = "puzzle add piece marquee";
+var usageImport45 = `import Marquee from '@/components/ui/Marquee.pzl';`;
+var usageMarkup45 = `<Marquee class="w-full rounded-xl border border-border bg-surface py-4"></Marquee>`;
+var codeHero45 = `// Items are the default-slot children \u2014 the piece clones them to loop.
 <Marquee class="w-full rounded-xl border border-border bg-surface py-4">
   <span class="px-4 text-lg font-semibold text-ink">Acme</span>
   <span class="px-4 text-lg font-semibold text-ink">Globex</span>
@@ -47778,10 +48814,10 @@ var codeSpeed = `// speed is pixels per second (default 40; larger = faster).
 var MarqueeDoc = class extends PuzzleView {
   data(params, props) {
     return {
-      installCmd: installCmd44,
-      usageImport: usageImport44,
-      usageMarkup: usageMarkup44,
-      codeHero: codeHero44,
+      installCmd: installCmd45,
+      usageImport: usageImport45,
+      usageMarkup: usageMarkup45,
+      codeHero: codeHero45,
       codeDirection,
       codeAnnouncement,
       codePause,
@@ -48153,10 +49189,10 @@ Masonry.prototype.render = function() {
 Masonry.__pzlModule = "app/components/ui/Masonry.pzl";
 
 // app/views/components/MasonryDoc.pzl
-var installCmd45 = "puzzle add piece masonry";
-var usageImport45 = `import Masonry from '@/components/ui/Masonry.pzl';`;
-var usageMarkup45 = `<Masonry columns={ 3 } gap={ 4 }></Masonry>`;
-var codeHero45 = `<Masonry columns={ 3 } gap={ 4 }>
+var installCmd46 = "puzzle add piece masonry";
+var usageImport46 = `import Masonry from '@/components/ui/Masonry.pzl';`;
+var usageMarkup46 = `<Masonry columns={ 3 } gap={ 4 }></Masonry>`;
+var codeHero46 = `<Masonry columns={ 3 } gap={ 4 }>
   <div class="rounded-lg border border-border bg-surface p-4">\u2026short card\u2026</div>
   <div class="rounded-lg border border-border bg-surface p-4">\u2026taller card\u2026</div>
   <div class="rounded-lg border border-border bg-surface p-4">\u2026card\u2026</div>
@@ -48183,10 +49219,10 @@ var MasonryDoc = class extends PuzzleView {
     return {
       ...this.getData(),
       responsiveCols: { base: 1, sm: 2, lg: 3 },
-      installCmd: installCmd45,
-      usageImport: usageImport45,
-      usageMarkup: usageMarkup45,
-      codeHero: codeHero45,
+      installCmd: installCmd46,
+      usageImport: usageImport46,
+      usageMarkup: usageMarkup46,
+      codeHero: codeHero46,
       codeResponsive,
       codeGap,
       codeColumns,
@@ -48885,10 +49921,10 @@ Menubar.prototype.render = function() {
 Menubar.__pzlModule = "app/components/ui/Menubar.pzl";
 
 // app/views/components/MenubarDoc.pzl
-var installCmd46 = "puzzle add piece menubar";
-var usageImport46 = `import Menubar from '@/components/ui/Menubar.pzl';`;
-var usageMarkup46 = `<Menubar menus={ appMenus } @select={ onSelect } />`;
-var codeHero46 = `<Menubar menus={ appMenus } @select={ onSelect } />
+var installCmd47 = "puzzle add piece menubar";
+var usageImport47 = `import Menubar from '@/components/ui/Menubar.pzl';`;
+var usageMarkup47 = `<Menubar menus={ appMenus } @select={ onSelect } />`;
+var codeHero47 = `<Menubar menus={ appMenus } @select={ onSelect } />
 
 // menus: an array of { label, items }. Items are leaf actions, { divider }
 // separators, and optional { group } headings. @select is value-first.
@@ -48954,10 +49990,10 @@ var MenubarDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd46,
-      usageImport: usageImport46,
-      usageMarkup: usageMarkup46,
-      codeHero: codeHero46,
+      installCmd: installCmd47,
+      usageImport: usageImport47,
+      usageMarkup: usageMarkup47,
+      codeHero: codeHero47,
       codeShortcuts,
       codeStates: codeStates2,
       codeKeyboard: codeKeyboard4,
@@ -49207,10 +50243,10 @@ MenubarDoc.prototype.render = function() {
 MenubarDoc.__pzlModule = "app/views/components/MenubarDoc.pzl";
 
 // app/views/components/MeterDoc.pzl
-var installCmd47 = "puzzle add piece meter";
-var usageImport47 = `import Meter from '@/components/ui/Meter.pzl';`;
-var usageMarkup47 = `<Meter value={ disk } low={ 60 } high={ 85 } optimum={ 0 } label="Disk usage" valueText={ \`\${disk}% used\` }/>`;
-var codeHero47 = `<Meter
+var installCmd48 = "puzzle add piece meter";
+var usageImport48 = `import Meter from '@/components/ui/Meter.pzl';`;
+var usageMarkup48 = `<Meter value={ disk } low={ 60 } high={ 85 } optimum={ 0 } label="Disk usage" valueText={ \`\${disk}% used\` }/>`;
+var codeHero48 = `<Meter
   value={ disk }
   low={ 60 }
   high={ 85 }
@@ -49259,10 +50295,10 @@ var MeterDoc = class extends PuzzleView {
     return {
       ...this.getData(),
       diskText: `${disk}% used`,
-      installCmd: installCmd47,
-      usageImport: usageImport47,
-      usageMarkup: usageMarkup47,
-      codeHero: codeHero47,
+      installCmd: installCmd48,
+      usageImport: usageImport48,
+      usageMarkup: usageMarkup48,
+      codeHero: codeHero48,
       codeBands,
       codeCustomRange,
       codeValueText,
@@ -50279,10 +51315,10 @@ MultiSelect.prototype.render = function() {
 MultiSelect.__pzlModule = "app/components/ui/MultiSelect.pzl";
 
 // app/views/components/MultiSelectDoc.pzl
-var installCmd48 = "puzzle add piece multi-select";
-var usageImport48 = `import MultiSelect from '@/components/ui/MultiSelect.pzl';`;
-var usageMarkup48 = `<MultiSelect options={ frameworks } value={ picks } @change={ setPicks } />`;
-var codeHero48 = `const frameworks = [
+var installCmd49 = "puzzle add piece multi-select";
+var usageImport49 = `import MultiSelect from '@/components/ui/MultiSelect.pzl';`;
+var usageMarkup49 = `<MultiSelect options={ frameworks } value={ picks } @change={ setPicks } />`;
+var codeHero49 = `const frameworks = [
   { value: 'next', label: 'Next.js' },
   { value: 'svelte', label: 'SvelteKit' },
   { value: 'nuxt', label: 'Nuxt' },
@@ -50351,10 +51387,10 @@ var MultiSelectDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd48,
-      usageImport: usageImport48,
-      usageMarkup: usageMarkup48,
-      codeHero: codeHero48,
+      installCmd: installCmd49,
+      usageImport: usageImport49,
+      usageMarkup: usageMarkup49,
+      codeHero: codeHero49,
       codeBasic,
       codeGroups: codeGroups5,
       codeError: codeError8,
@@ -50987,10 +52023,10 @@ NavigationMenu.prototype.render = function() {
 NavigationMenu.__pzlModule = "app/components/ui/NavigationMenu.pzl";
 
 // app/views/components/NavigationMenuDoc.pzl
-var installCmd49 = "puzzle add piece navigation-menu";
-var usageImport49 = `import NavigationMenu from '@/components/ui/NavigationMenu.pzl';`;
-var usageMarkup49 = `<NavigationMenu items={ nav } />`;
-var codeHero49 = `const nav = [
+var installCmd50 = "puzzle add piece navigation-menu";
+var usageImport50 = `import NavigationMenu from '@/components/ui/NavigationMenu.pzl';`;
+var usageMarkup50 = `<NavigationMenu items={ nav } />`;
+var codeHero50 = `const nav = [
   {
     label: 'Products',
     children: [
@@ -51032,10 +52068,10 @@ var codeKeyboard6 = `<NavigationMenu items={ nav } />`;
 var NavigationMenuDoc = class extends PuzzleView {
   data(params, props) {
     return {
-      installCmd: installCmd49,
-      usageImport: usageImport49,
-      usageMarkup: usageMarkup49,
-      codeHero: codeHero49,
+      installCmd: installCmd50,
+      usageImport: usageImport50,
+      usageMarkup: usageMarkup50,
+      codeHero: codeHero50,
       codeActive,
       codeSingle: codeSingle2,
       codeKeyboard: codeKeyboard6,
@@ -51257,10 +52293,10 @@ NavigationMenuDoc.prototype.render = function() {
 NavigationMenuDoc.__pzlModule = "app/views/components/NavigationMenuDoc.pzl";
 
 // app/views/components/NumberFieldDoc.pzl
-var installCmd50 = "puzzle add piece number-field";
-var usageImport50 = `import NumberField from '@/components/ui/NumberField.pzl';`;
-var usageMarkup50 = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />`;
-var codeHero50 = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />
+var installCmd51 = "puzzle add piece number-field";
+var usageImport51 = `import NumberField from '@/components/ui/NumberField.pzl';`;
+var usageMarkup51 = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />`;
+var codeHero51 = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />
 
 // parent \u2014 @change emits a number, or null when the field is cleared
 events = {
@@ -51273,7 +52309,7 @@ var codeBounds4 = `// buttons disable at the bounds; typing past them clamps on 
 var codeEmpty = `// no min/max \u2014 the field may be left blank and emits null
 <NumberField label="Discount (optional)" placeholder="No discount" value={ discount } @change={ setDiscount } />`;
 var codeError9 = `<NumberField label="Age" value={ 15 } min={ 18 } error="Must be 18 or older" />`;
-var codeDisabled7 = `<NumberField label="Seats" value={ 4 } disabled />`;
+var codeDisabled8 = `<NumberField label="Seats" value={ 4 } disabled />`;
 var codeKeyboard7 = `<NumberField label="Level" value={ level } min={ 0 } max={ 100 } step={ 5 } largeStep={ 25 } @change={ setLevel } />`;
 var show = (v) => v == null ? "null" : String(v);
 var NumberFieldDoc = class extends PuzzleView {
@@ -51289,15 +52325,15 @@ var NumberFieldDoc = class extends PuzzleView {
       ratingLabel: show(state.rating),
       discountLabel: show(state.discount),
       levelLabel: show(state.level),
-      installCmd: installCmd50,
-      usageImport: usageImport50,
-      usageMarkup: usageMarkup50,
-      codeHero: codeHero50,
+      installCmd: installCmd51,
+      usageImport: usageImport51,
+      usageMarkup: usageMarkup51,
+      codeHero: codeHero51,
       codeDecimals,
       codeBounds: codeBounds4,
       codeEmpty,
       codeError: codeError9,
-      codeDisabled: codeDisabled7,
+      codeDisabled: codeDisabled8,
       codeKeyboard: codeKeyboard7,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -51603,10 +52639,10 @@ NumberFieldDoc.prototype.render = function() {
 NumberFieldDoc.__pzlModule = "app/views/components/NumberFieldDoc.pzl";
 
 // app/views/components/PaginationDoc.pzl
-var installCmd51 = "puzzle add piece pagination";
-var usageImport51 = `import Pagination from '@/components/ui/Pagination.pzl';`;
-var usageMarkup51 = `<Pagination page={ page } count={ 12 } @change={ setPage } />`;
-var codeHero51 = `<Pagination page={ page } count={ 12 } @change={ setPage } />
+var installCmd52 = "puzzle add piece pagination";
+var usageImport52 = `import Pagination from '@/components/ui/Pagination.pzl';`;
+var usageMarkup52 = `<Pagination page={ page } count={ 12 } @change={ setPage } />`;
+var codeHero52 = `<Pagination page={ page } count={ 12 } @change={ setPage } />
 <p>Page { page } of 12</p>
 
 // parent
@@ -51626,10 +52662,10 @@ var PaginationDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd51,
-      usageImport: usageImport51,
-      usageMarkup: usageMarkup51,
-      codeHero: codeHero51,
+      installCmd: installCmd52,
+      usageImport: usageImport52,
+      usageMarkup: usageMarkup52,
+      codeHero: codeHero52,
       codeWindowing,
       codeSmall,
       toc: [
@@ -51936,10 +52972,10 @@ function panelInert(stack, handle) {
 }
 
 // app/views/components/PanelStackDoc.pzl
-var installCmd52 = "puzzle add piece panel-stack";
-var usageImport52 = `import PanelStack from '@/components/ui/PanelStack.pzl';`;
-var usageMarkup52 = `<PanelStack stack={ stack } @change={ setStack }></PanelStack>`;
-var codeHero52 = `import PanelStack from '@/components/ui/PanelStack.pzl';
+var installCmd53 = "puzzle add piece panel-stack";
+var usageImport53 = `import PanelStack from '@/components/ui/PanelStack.pzl';`;
+var usageMarkup53 = `<PanelStack stack={ stack } @change={ setStack }></PanelStack>`;
+var codeHero53 = `import PanelStack from '@/components/ui/PanelStack.pzl';
 import { panelClass, panelInert } from '@/lib/panel-stack.js';
 
 <div class="h-[360px] rounded-2xl">
@@ -52010,10 +53046,10 @@ var PanelStackDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd52,
-      usageImport: usageImport52,
-      usageMarkup: usageMarkup52,
-      codeHero: codeHero52,
+      installCmd: installCmd53,
+      usageImport: usageImport53,
+      usageMarkup: usageMarkup53,
+      codeHero: codeHero53,
       codeStack,
       codeDialog,
       panelClasses: panelClass,
@@ -52530,10 +53566,10 @@ PasswordField.prototype.render = function() {
 PasswordField.__pzlModule = "app/components/ui/PasswordField.pzl";
 
 // app/views/components/PasswordFieldDoc.pzl
-var installCmd53 = "puzzle add piece password-field";
-var usageImport53 = `import PasswordField from '@/components/ui/PasswordField.pzl';`;
-var usageMarkup53 = `<PasswordField label="Password" value={ password } @change={ setPassword } />`;
-var codeHero53 = `<PasswordField label="Password" value={ password } @change={ setPassword } />
+var installCmd54 = "puzzle add piece password-field";
+var usageImport54 = `import PasswordField from '@/components/ui/PasswordField.pzl';`;
+var usageMarkup54 = `<PasswordField label="Password" value={ password } @change={ setPassword } />`;
+var codeHero54 = `<PasswordField label="Password" value={ password } @change={ setPassword } />
 
 // parent
 events = {
@@ -52548,10 +53584,10 @@ var PasswordFieldDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd53,
-      usageImport: usageImport53,
-      usageMarkup: usageMarkup53,
-      codeHero: codeHero53,
+      installCmd: installCmd54,
+      usageImport: usageImport54,
+      usageMarkup: usageMarkup54,
+      codeHero: codeHero54,
       codeHint: codeHint3,
       codeError: codeError10,
       toc: [
@@ -52660,10 +53696,10 @@ PasswordFieldDoc.prototype.render = function() {
 PasswordFieldDoc.__pzlModule = "app/views/components/PasswordFieldDoc.pzl";
 
 // app/views/components/PieChartDoc.pzl
-var installCmd54 = "puzzle add piece pie-chart";
-var usageImport54 = `import PieChart from '@/components/ui/PieChart.pzl';`;
-var usageMarkup54 = `<PieChart data={ trafficData } label="Traffic by source" totalLabel="Sessions" />`;
-var codeHero54 = `const trafficData = [
+var installCmd55 = "puzzle add piece pie-chart";
+var usageImport55 = `import PieChart from '@/components/ui/PieChart.pzl';`;
+var usageMarkup55 = `<PieChart data={ trafficData } label="Traffic by source" totalLabel="Sessions" />`;
+var codeHero55 = `const trafficData = [
   { label: 'Organic', value: 4200 },
   { label: 'Direct', value: 3100 },
   { label: 'Referral', value: 1900 },
@@ -52694,10 +53730,10 @@ var PieChartDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd54,
-      usageImport: usageImport54,
-      usageMarkup: usageMarkup54,
-      codeHero: codeHero54,
+      installCmd: installCmd55,
+      usageImport: usageImport55,
+      usageMarkup: usageMarkup55,
+      codeHero: codeHero55,
       codePlain: codePlain2,
       codeFolding,
       trafficData: [
@@ -52831,10 +53867,10 @@ PieChartDoc.prototype.render = function() {
 PieChartDoc.__pzlModule = "app/views/components/PieChartDoc.pzl";
 
 // app/views/components/PopconfirmDoc.pzl
-var installCmd55 = "puzzle add piece popconfirm";
-var usageImport55 = `import Popconfirm from '@/components/ui/Popconfirm.pzl';`;
-var usageMarkup55 = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }></Popconfirm>`;
-var codeHero55 = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }>
+var installCmd56 = "puzzle add piece popconfirm";
+var usageImport56 = `import Popconfirm from '@/components/ui/Popconfirm.pzl';`;
+var usageMarkup56 = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }></Popconfirm>`;
+var codeHero56 = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }>
   <button slot="trigger" class="\u2026">Delete item</button>
 </Popconfirm>
 
@@ -52884,10 +53920,10 @@ var PopconfirmDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd55,
-      usageImport: usageImport55,
-      usageMarkup: usageMarkup55,
-      codeHero: codeHero55,
+      installCmd: installCmd56,
+      usageImport: usageImport56,
+      usageMarkup: usageMarkup56,
+      codeHero: codeHero56,
       codeDanger: codeDanger2,
       codePlacement: codePlacement2,
       codeControlled: codeControlled7,
@@ -53241,10 +54277,10 @@ Popover.prototype.render = function() {
 Popover.__pzlModule = "app/components/ui/Popover.pzl";
 
 // app/views/components/PopoverDoc.pzl
-var installCmd56 = "puzzle add piece popover";
-var usageImport56 = `import Popover from '@/components/ui/Popover.pzl';`;
-var usageMarkup56 = `<Popover align="start"></Popover>`;
-var codeHero56 = `<Popover align="start">
+var installCmd57 = "puzzle add piece popover";
+var usageImport57 = `import Popover from '@/components/ui/Popover.pzl';`;
+var usageMarkup57 = `<Popover align="start"></Popover>`;
+var codeHero57 = `<Popover align="start">
   <span slot="trigger" class="\u2026">Show details</span>
   <div class="space-y-2">
     <p class="font-medium text-ink">Dimensions</p>
@@ -53262,10 +54298,10 @@ var PopoverDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd56,
-      usageImport: usageImport56,
-      usageMarkup: usageMarkup56,
-      codeHero: codeHero56,
+      installCmd: installCmd57,
+      usageImport: usageImport57,
+      usageMarkup: usageMarkup57,
+      codeHero: codeHero57,
       codePlacement: codePlacement3,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -53398,10 +54434,10 @@ PopoverDoc.prototype.render = function() {
 PopoverDoc.__pzlModule = "app/views/components/PopoverDoc.pzl";
 
 // app/views/components/ProgressDoc.pzl
-var installCmd57 = "puzzle add piece progress";
-var usageImport57 = `import Progress from '@/components/ui/Progress.pzl';`;
-var usageMarkup57 = `<Progress value={ pct } max={ 100 } label="Uploading" showValue />`;
-var codeHero57 = `<Progress value={ pct } max={ 100 } label="Uploading" showValue />
+var installCmd58 = "puzzle add piece progress";
+var usageImport58 = `import Progress from '@/components/ui/Progress.pzl';`;
+var usageMarkup58 = `<Progress value={ pct } max={ 100 } label="Uploading" showValue />`;
+var codeHero58 = `<Progress value={ pct } max={ 100 } label="Uploading" showValue />
 
 // parent
 events = {
@@ -53419,10 +54455,10 @@ var ProgressDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd57,
-      usageImport: usageImport57,
-      usageMarkup: usageMarkup57,
-      codeHero: codeHero57,
+      installCmd: installCmd58,
+      usageImport: usageImport58,
+      usageMarkup: usageMarkup58,
+      codeHero: codeHero58,
       codeIndeterminate,
       codeSizes: codeSizes8,
       toc: [
@@ -53556,10 +54592,10 @@ ProgressDoc.prototype.render = function() {
 ProgressDoc.__pzlModule = "app/views/components/ProgressDoc.pzl";
 
 // app/views/components/ProgressRingDoc.pzl
-var installCmd58 = "puzzle add piece progress-ring";
-var usageImport58 = `import ProgressRing from '@/components/ui/ProgressRing.pzl';`;
-var usageMarkup58 = `<ProgressRing value={ 73 } />`;
-var codeHero58 = `<ProgressRing value={ 73 } />`;
+var installCmd59 = "puzzle add piece progress-ring";
+var usageImport59 = `import ProgressRing from '@/components/ui/ProgressRing.pzl';`;
+var usageMarkup59 = `<ProgressRing value={ 73 } />`;
+var codeHero59 = `<ProgressRing value={ 73 } />`;
 var codeSizes9 = `// size is a px diameter or a preset: sm/md/lg = 48/96/128.
 <ProgressRing value={ 66 } size="sm" />
 <ProgressRing value={ 66 } size="md" />
@@ -53586,10 +54622,10 @@ var ProgressRingDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd58,
-      usageImport: usageImport58,
-      usageMarkup: usageMarkup58,
-      codeHero: codeHero58,
+      installCmd: installCmd59,
+      usageImport: usageImport59,
+      usageMarkup: usageMarkup59,
+      codeHero: codeHero59,
       codeSizes: codeSizes9,
       codeColors: codeColors2,
       codeThickness,
@@ -53806,10 +54842,10 @@ ProgressRingDoc.prototype.render = function() {
 ProgressRingDoc.__pzlModule = "app/views/components/ProgressRingDoc.pzl";
 
 // app/views/components/QuantityInputDoc.pzl
-var installCmd59 = "puzzle add piece quantity-input";
-var usageImport59 = `import QuantityInput from '@/components/ui/QuantityInput.pzl';`;
-var usageMarkup59 = `<QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />`;
-var codeHero59 = `<QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />
+var installCmd60 = "puzzle add piece quantity-input";
+var usageImport60 = `import QuantityInput from '@/components/ui/QuantityInput.pzl';`;
+var usageMarkup60 = `<QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />`;
+var codeHero60 = `<QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />
 
 // parent
 events = {
@@ -53824,10 +54860,10 @@ var QuantityInputDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd59,
-      usageImport: usageImport59,
-      usageMarkup: usageMarkup59,
-      codeHero: codeHero59,
+      installCmd: installCmd60,
+      usageImport: usageImport60,
+      usageMarkup: usageMarkup60,
+      codeHero: codeHero60,
       codeBounds: codeBounds5,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -54022,10 +55058,10 @@ RadioGroup.prototype.render = function() {
 RadioGroup.__pzlModule = "app/components/ui/RadioGroup.pzl";
 
 // app/views/components/RadioGroupDoc.pzl
-var installCmd60 = "puzzle add piece radio-group";
-var usageImport60 = `import RadioGroup from '@/components/ui/RadioGroup.pzl';`;
-var usageMarkup60 = `<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />`;
-var codeHero60 = `<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />
+var installCmd61 = "puzzle add piece radio-group";
+var usageImport61 = `import RadioGroup from '@/components/ui/RadioGroup.pzl';`;
+var usageMarkup61 = `<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />`;
+var codeHero61 = `<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />
 
 // parent
 data() {
@@ -54058,10 +55094,10 @@ var RadioGroupDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd60,
-      usageImport: usageImport60,
-      usageMarkup: usageMarkup60,
-      codeHero: codeHero60,
+      installCmd: installCmd61,
+      usageImport: usageImport61,
+      usageMarkup: usageMarkup61,
+      codeHero: codeHero61,
       codeHorizontal,
       codeHints,
       planOptions: [
@@ -54194,10 +55230,10 @@ RadioGroupDoc.prototype.render = function() {
 RadioGroupDoc.__pzlModule = "app/views/components/RadioGroupDoc.pzl";
 
 // app/views/components/RatingDoc.pzl
-var installCmd61 = "puzzle add piece rating";
-var usageImport61 = `import Rating from '@/components/ui/Rating.pzl';`;
-var usageMarkup61 = `<Rating value={ score } size="lg" @change={ setScore } />`;
-var codeHero61 = `<Rating value={ score } size="lg" @change={ setScore } />
+var installCmd62 = "puzzle add piece rating";
+var usageImport62 = `import Rating from '@/components/ui/Rating.pzl';`;
+var usageMarkup62 = `<Rating value={ score } size="lg" @change={ setScore } />`;
+var codeHero62 = `<Rating value={ score } size="lg" @change={ setScore } />
 
 // parent \u2014 input mode commits whole-star values
 events = {
@@ -54227,10 +55263,10 @@ var RatingDoc = class extends PuzzleView {
     const d = this.getData();
     return {
       ...d,
-      installCmd: installCmd61,
-      usageImport: usageImport61,
-      usageMarkup: usageMarkup61,
-      codeHero: codeHero61,
+      installCmd: installCmd62,
+      usageImport: usageImport62,
+      usageMarkup: usageMarkup62,
+      codeHero: codeHero62,
       codeDisplay,
       codeSizes: codeSizes10,
       codeColors: codeColors3,
@@ -54818,10 +55854,10 @@ ScrollArea.prototype.render = function() {
 ScrollArea.__pzlModule = "app/components/ui/ScrollArea.pzl";
 
 // app/views/components/ScrollAreaDoc.pzl
-var installCmd62 = "puzzle add piece scroll-area";
-var usageImport62 = `import ScrollArea from '@/components/ui/ScrollArea.pzl';`;
-var usageMarkup62 = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface"></ScrollArea>`;
-var codeHero62 = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface">
+var installCmd63 = "puzzle add piece scroll-area";
+var usageImport63 = `import ScrollArea from '@/components/ui/ScrollArea.pzl';`;
+var usageMarkup63 = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface"></ScrollArea>`;
+var codeHero63 = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface">
   <ul class="divide-y divide-border">
     {#for item in ingredients}
       <li class="px-4 py-3 text-sm text-body">{ item }</li>
@@ -54849,10 +55885,10 @@ var ScrollAreaDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd62,
-      usageImport: usageImport62,
-      usageMarkup: usageMarkup62,
-      codeHero: codeHero62,
+      installCmd: installCmd63,
+      usageImport: usageImport63,
+      usageMarkup: usageMarkup63,
+      codeHero: codeHero63,
       codeHorizontal: codeHorizontal2,
       codeBoth,
       ingredients: [
@@ -55100,10 +56136,10 @@ ScrollAreaDoc.prototype.render = function() {
 ScrollAreaDoc.__pzlModule = "app/views/components/ScrollAreaDoc.pzl";
 
 // app/views/components/SearchFieldDoc.pzl
-var installCmd63 = "puzzle add piece search-field";
-var usageImport63 = `import SearchField from '@/components/ui/SearchField.pzl';`;
-var usageMarkup63 = `<SearchField value={ query } placeholder="Filter results\u2026" @change={ setQuery } />`;
-var codeHero63 = `<SearchField value={ query } placeholder="Filter results\u2026" @change={ setQuery } />
+var installCmd64 = "puzzle add piece search-field";
+var usageImport64 = `import SearchField from '@/components/ui/SearchField.pzl';`;
+var usageMarkup64 = `<SearchField value={ query } placeholder="Filter results\u2026" @change={ setQuery } />`;
+var codeHero64 = `<SearchField value={ query } placeholder="Filter results\u2026" @change={ setQuery } />
 <p>Query: { query }</p>
 
 // parent
@@ -55124,10 +56160,10 @@ var SearchFieldDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd63,
-      usageImport: usageImport63,
-      usageMarkup: usageMarkup63,
-      codeHero: codeHero63,
+      installCmd: installCmd64,
+      usageImport: usageImport64,
+      usageMarkup: usageMarkup64,
+      codeHero: codeHero64,
       codeSubmit,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -55234,10 +56270,10 @@ SearchFieldDoc.prototype.render = function() {
 SearchFieldDoc.__pzlModule = "app/views/components/SearchFieldDoc.pzl";
 
 // app/views/components/SelectDoc.pzl
-var installCmd64 = "puzzle add piece select";
-var usageImport64 = `import Select from '@/components/ui/Select.pzl';`;
-var usageMarkup64 = `<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />`;
-var codeHero64 = `const fruitOptions = [
+var installCmd65 = "puzzle add piece select";
+var usageImport65 = `import Select from '@/components/ui/Select.pzl';`;
+var usageMarkup65 = `<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />`;
+var codeHero65 = `const fruitOptions = [
   { value: 'apple', label: 'Apple' },
   { value: 'banana', label: 'Banana' },
   { value: 'cherry', label: 'Cherry' },
@@ -55276,10 +56312,10 @@ var SelectDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd64,
-      usageImport: usageImport64,
-      usageMarkup: usageMarkup64,
-      codeHero: codeHero64,
+      installCmd: installCmd65,
+      usageImport: usageImport65,
+      usageMarkup: usageMarkup65,
+      codeHero: codeHero65,
       codeGroups: codeGroups6,
       codeMorph: codeMorph5,
       codePosition,
@@ -55530,10 +56566,10 @@ SelectDoc.prototype.render = function() {
 SelectDoc.__pzlModule = "app/views/components/SelectDoc.pzl";
 
 // app/views/components/SeparatorDoc.pzl
-var installCmd65 = "puzzle add piece separator";
-var usageImport65 = `import Separator from '@/components/ui/Separator.pzl';`;
-var usageMarkup65 = `<Separator class="my-3" />`;
-var codeHero65 = `<p>Save your work often.</p>
+var installCmd66 = "puzzle add piece separator";
+var usageImport66 = `import Separator from '@/components/ui/Separator.pzl';`;
+var usageMarkup66 = `<Separator class="my-3" />`;
+var codeHero66 = `<p>Save your work often.</p>
 <Separator class="my-3" />
 <p>Publishing makes it public.</p>
 <Separator class="my-3" />
@@ -55555,10 +56591,10 @@ var SeparatorDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd65,
-      usageImport: usageImport65,
-      usageMarkup: usageMarkup65,
-      codeHero: codeHero65,
+      installCmd: installCmd66,
+      usageImport: usageImport66,
+      usageMarkup: usageMarkup66,
+      codeHero: codeHero66,
       codeOrientation,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -56085,10 +57121,10 @@ Sheet.prototype.render = function() {
 Sheet.__pzlModule = "app/components/ui/Sheet.pzl";
 
 // app/views/components/SheetDoc.pzl
-var installCmd66 = "puzzle add piece sheet";
-var usageImport66 = `import Sheet from '@/components/ui/Sheet.pzl';`;
-var usageMarkup66 = `<Sheet open={ sheetOpen } title="Terms of service" @close={ closeSheet }></Sheet>`;
-var codeHero66 = `<Button variant="outline" @press={ openSheet }>Open sheet</Button>
+var installCmd67 = "puzzle add piece sheet";
+var usageImport67 = `import Sheet from '@/components/ui/Sheet.pzl';`;
+var usageMarkup67 = `<Sheet open={ sheetOpen } title="Terms of service" @close={ closeSheet }></Sheet>`;
+var codeHero67 = `<Button variant="outline" @press={ openSheet }>Open sheet</Button>
 <Sheet open={ sheetOpen } title="Terms of service" @close={ closeSheet }>
   <p>\u2026scrollable content\u2026</p>
 </Sheet>
@@ -56105,10 +57141,10 @@ var SheetDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd66,
-      usageImport: usageImport66,
-      usageMarkup: usageMarkup66,
-      codeHero: codeHero66,
+      installCmd: installCmd67,
+      usageImport: usageImport67,
+      usageMarkup: usageMarkup67,
+      codeHero: codeHero67,
       paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
       toc: [
         { label: "Installation", href: "#installation" },
@@ -56214,9 +57250,9 @@ SheetDoc.prototype.render = function() {
 SheetDoc.__pzlModule = "app/views/components/SheetDoc.pzl";
 
 // app/views/components/SidebarDoc.pzl
-var installCmd67 = "puzzle add piece sidebar";
-var usageImport67 = `import Sidebar from '@/components/ui/Sidebar.pzl';`;
-var usageMarkup67 = `<Sidebar items={ items } activePath="/reports/overview" label="Main"></Sidebar>`;
+var installCmd68 = "puzzle add piece sidebar";
+var usageImport68 = `import Sidebar from '@/components/ui/Sidebar.pzl';`;
+var usageMarkup68 = `<Sidebar items={ items } activePath="/reports/overview" label="Main"></Sidebar>`;
 var icons = {
   home: "M3 12l9-7 9 7M5 10v10h14V10",
   chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
@@ -56249,7 +57285,7 @@ var shortItems = [
   { label: "Inbox", href: "/inbox", icon: icons.inbox, badge: "12" },
   { label: "Team", href: "/team", icon: icons.users }
 ];
-var codeHero67 = `const items = [
+var codeHero68 = `const items = [
   { group: 'Overview' },
   { label: 'Home', href: '/home', icon: 'M3 12l9-7 9 7M5 10v10h14V10' },
   {
@@ -56308,10 +57344,10 @@ var SidebarDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd67,
-      usageImport: usageImport67,
-      usageMarkup: usageMarkup67,
-      codeHero: codeHero67,
+      installCmd: installCmd68,
+      usageImport: usageImport68,
+      usageMarkup: usageMarkup68,
+      codeHero: codeHero68,
       codeCollapsed,
       codeSubmenus,
       codeSlots,
@@ -56645,10 +57681,10 @@ Skeleton.prototype.render = function() {
 Skeleton.__pzlModule = "app/components/ui/Skeleton.pzl";
 
 // app/views/components/SkeletonDoc.pzl
-var installCmd68 = "puzzle add piece skeleton";
-var usageImport68 = `import Skeleton from '@/components/ui/Skeleton.pzl';`;
-var usageMarkup68 = `<Skeleton variant="circle" class="size-10" />`;
-var codeHero68 = `<div class="space-y-4 rounded-xl border border-border bg-surface p-5">
+var installCmd69 = "puzzle add piece skeleton";
+var usageImport69 = `import Skeleton from '@/components/ui/Skeleton.pzl';`;
+var usageMarkup69 = `<Skeleton variant="circle" class="size-10" />`;
+var codeHero69 = `<div class="space-y-4 rounded-xl border border-border bg-surface p-5">
   <div class="flex items-center gap-3">
     <Skeleton variant="circle" class="size-10" />
     <div class="flex-1 space-y-2">
@@ -56668,10 +57704,10 @@ var codeShapes = `<Skeleton variant="text" class="w-2/3" />
 var SkeletonDoc = class extends PuzzleView {
   data(params, props) {
     return {
-      installCmd: installCmd68,
-      usageImport: usageImport68,
-      usageMarkup: usageMarkup68,
-      codeHero: codeHero68,
+      installCmd: installCmd69,
+      usageImport: usageImport69,
+      usageMarkup: usageMarkup69,
+      codeHero: codeHero69,
       codeShapes,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -56800,43 +57836,81 @@ SkeletonDoc.prototype.render = function() {
 SkeletonDoc.__pzlModule = "app/views/components/SkeletonDoc.pzl";
 
 // app/components/ui/Slider.pzl
-var DRAG_THRESHOLD2 = 3;
-function decimalsOf(raw2) {
-  if (raw2 == null)
-    return 0;
-  const s2 = String(raw2);
-  const dot = s2.indexOf(".");
-  return dot === -1 ? 0 : Math.min(s2.length - dot - 1, 6);
+var DRAG_THRESHOLD3 = 3;
+var EPS = 1e-9;
+var MAX_LABELS = 11;
+var ROOT_BASE6 = "relative flex w-full min-h-11 touch-pan-y select-none items-center";
+var THUMB_BASE = "absolute top-1/2 z-10 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border-strong bg-surface shadow focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
+var TRACK_WRAP = "relative w-full";
+var WRAP_PAD = {
+  below: { labels: "pb-6", bare: "pb-4" },
+  above: { labels: "pt-6", bare: "pt-4" },
+  inside: { labels: "pb-6", bare: "" }
+};
+var MARK_LAYER = {
+  below: "pointer-events-none absolute inset-x-0 top-3.5 h-1",
+  above: "pointer-events-none absolute inset-x-0 bottom-3.5 h-1",
+  inside: "pointer-events-none absolute inset-x-0 top-0 h-1.5 overflow-hidden rounded-full"
+};
+var LABEL_LAYER = {
+  below: "pointer-events-none absolute inset-x-0 top-5",
+  above: "pointer-events-none absolute inset-x-0 bottom-5",
+  inside: "pointer-events-none absolute inset-x-0 top-5"
+};
+var MARK_BASE = {
+  inside: "absolute top-0 h-full w-0.5",
+  gutter: "absolute top-0 h-full w-0.5 rounded-full"
+};
+var MARK_CLASS = {
+  // ON the bar: the mark reads as a notch CUT through the track.
+  inside: {
+    on: `${MARK_BASE.inside} bg-brand-ink`,
+    off: `${MARK_BASE.inside} bg-surface`
+  },
+  // In the gutter: foreground marks echoing the track's two states.
+  gutter: {
+    on: `${MARK_BASE.gutter} bg-brand`,
+    off: `${MARK_BASE.gutter} bg-faint`
+  }
+};
+var LABEL_BASE2 = {
+  below: "absolute top-0 whitespace-nowrap text-xs tabular-nums",
+  above: "absolute bottom-0 whitespace-nowrap text-xs tabular-nums",
+  inside: "absolute top-0 whitespace-nowrap text-xs tabular-nums"
+};
+var LABEL_CLASS = {
+  below: `${LABEL_BASE2.below} text-muted`,
+  above: `${LABEL_BASE2.above} text-muted`,
+  inside: `${LABEL_BASE2.inside} text-muted`
+};
+function tickStyle(percent2) {
+  return `left:${percent2}%;translate:${edgeShift(percent2)} 0`;
 }
-function quantize(v, cfg) {
-  if (cfg.step === "any")
-    return v;
-  return cfg.min + Math.round((v - cfg.min) / cfg.step) * cfg.step;
+function thinLabels(list, marks, labelFn, position) {
+  const n2 = list.length;
+  if (!n2)
+    return [];
+  const stride = n2 > MAX_LABELS ? Math.ceil((n2 - 1) / (MAX_LABELS - 1)) : 1;
+  const keep = [];
+  for (let i2 = 0; i2 < n2; i2++)
+    if (i2 % stride === 0)
+      keep.push(i2);
+  if (keep[keep.length - 1] !== n2 - 1) {
+    if (n2 - 1 - keep[keep.length - 1] < Math.ceil(stride / 2))
+      keep.pop();
+    keep.push(n2 - 1);
+  }
+  return keep.map((i2) => {
+    const t2 = list[i2];
+    const own = typeof t2.label === "string" && t2.label !== "";
+    return {
+      key: marks[i2].key,
+      style: marks[i2].style,
+      class: typeof t2.labelClass === "string" && t2.labelClass ? `${LABEL_BASE2[position]} ${t2.labelClass}` : LABEL_CLASS[position],
+      label: own ? t2.label : labelFn ? String(labelFn(t2.value, t2)) : String(t2.value)
+    };
+  });
 }
-function clampBounds(v, cfg) {
-  return Math.max(cfg.min, Math.min(v, cfg.max));
-}
-function round2(v, cfg) {
-  return parseFloat(v.toFixed(cfg.dec));
-}
-function normalize2(value, thumb, cfg, committed) {
-  let v = Number.isFinite(value) ? value : cfg.min;
-  v = clampBounds(quantize(v, cfg), cfg);
-  if (thumb === "min")
-    v = Math.min(v, committed.valueMax);
-  if (thumb === "max")
-    v = Math.max(v, committed.valueMin);
-  return round2(v, cfg);
-}
-function valueToPercent(value, cfg) {
-  const range2 = cfg.max - cfg.min;
-  if (range2 <= 0)
-    return 0;
-  const pct = (value - cfg.min) / range2 * 100;
-  return Math.round(Math.max(0, Math.min(100, pct)) * 1e3) / 1e3;
-}
-var ROOT_BASE5 = "relative flex w-full min-h-11 touch-pan-y select-none items-center";
-var THUMB_BASE = "absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-border-strong bg-surface shadow focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
 var Slider = class extends PuzzleView {
   created() {
     this._resetDrag();
@@ -56857,7 +57931,7 @@ var Slider = class extends PuzzleView {
       clearTimeout(this._overlayTimer);
   }
   data(params, props) {
-    const cfg = this._cfg(props);
+    const cfg = configFrom(props);
     const range2 = this._isRange(props);
     const committed = this._committed(props, cfg);
     const d = this.getData();
@@ -56883,20 +57957,37 @@ var Slider = class extends PuzzleView {
       fillStyle = `left:0%;width:${p}%`;
       thumbSingleStyle = `left:${p}%`;
     }
+    const ticks = this._tickModel(props, cfg);
+    const lo = range2 ? renderMin : cfg.min;
+    const hi = range2 ? renderMax : renderValue;
+    const onClass = MARK_CLASS[ticks.kind].on;
+    const offClass = MARK_CLASS[ticks.kind].off;
+    const tickMarks = ticks.marks.map((m) => ({
+      key: m.key,
+      style: m.style,
+      class: m.custom || (m.value >= lo - EPS && m.value <= hi + EPS ? onClass : offClass)
+    }));
     return {
       range: range2,
       rootId: props.id || false,
       rootClass: [
-        ROOT_BASE5,
+        ROOT_BASE6,
         disabled ? "opacity-50 cursor-not-allowed" : "",
         props.class || ""
       ].filter(Boolean).join(" "),
+      trackWrapClass: ticks.wrapClass,
       fillClass: `absolute inset-y-0 rounded-full bg-brand ${trans}`,
       thumbClass: `${THUMB_BASE} ${thumbTrans} ${disabled ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"}`,
       fillStyle,
       thumbSingleStyle,
       thumbMinStyle,
       thumbMaxStyle,
+      hasTicks: tickMarks.length > 0,
+      tickMarks,
+      tickMarkLayerClass: ticks.markLayerClass,
+      hasTickLabels: ticks.labels.length > 0,
+      tickLabelList: ticks.labels,
+      tickLabelLayerClass: ticks.labelLayerClass,
       thumbTabindex: disabled ? "-1" : "0",
       ariaDisabled: disabled ? "true" : false,
       label: props.label || "Value",
@@ -56907,6 +57998,9 @@ var Slider = class extends PuzzleView {
       valueStr: String(renderValue),
       valueMinStr: String(renderMin),
       valueMaxStr: String(renderMax),
+      valueText: ticks.texts.get(renderValue) || false,
+      valueMinText: ticks.texts.get(renderMin) || false,
+      valueMaxText: ticks.texts.get(renderMax) || false,
       name: props.name || false,
       nameMin: props.name ? `${props.name}-min` : false,
       nameMax: props.name ? `${props.name}-max` : false
@@ -56918,7 +58012,7 @@ var Slider = class extends PuzzleView {
     const d = this.getData();
     if (this._pendingClearCheck || d.dragging || d.draftThumb == null)
       return;
-    const cfg = this._cfg(this.props);
+    const cfg = configFrom(this.props);
     const committed = this._committed(this.props, cfg);
     if (this._channel(committed, d.draftThumb) !== d.draftValue)
       return;
@@ -56935,15 +58029,6 @@ var Slider = class extends PuzzleView {
   // --- config / committed-state derivation -----------------------------------
   _isRange(props) {
     return props.valueMin !== void 0 || props.valueMax !== void 0;
-  }
-  _cfg(props) {
-    const min = Number.isFinite(Number(props.min)) ? Number(props.min) : 0;
-    const max = Number.isFinite(Number(props.max)) ? Number(props.max) : 100;
-    const stepAny = props.step === "any";
-    const stepNum = Number(props.step);
-    const step = stepAny ? "any" : Number.isFinite(stepNum) && stepNum > 0 ? stepNum : 1;
-    const dec = stepAny ? 2 : Math.max(decimalsOf(props.step), decimalsOf(props.min));
-    return { min, max, step, dec };
   }
   // The committed value(s) straight from props, normalized. Range values are
   // each clamped to bounds first, then the pair is de-crossed (min<=max).
@@ -56963,6 +58048,58 @@ var Slider = class extends PuzzleView {
   _channel(state, thumb) {
     return thumb === "min" ? state.valueMin : thumb === "max" ? state.valueMax : state.value;
   }
+  // --- ticks -----------------------------------------------------------------
+  // Everything about a tick except its active state is fixed by the props, so it
+  // is built once and cached by IDENTITY on `props.ticks` (never JSON.stringify —
+  // stringifying a 100-entry array every drag frame would cost more than the rest
+  // of the render combined). data() then does one pass picking a frozen class.
+  _tickModel(props, cfg) {
+    const c2 = this._ticks;
+    if (c2 && c2.spec === props.ticks && c2.tickStep === props.tickStep && c2.tickLabels === props.tickLabels && c2.tickPosition === props.tickPosition && c2.min === cfg.min && c2.max === cfg.max && c2.step === cfg.step && c2.dec === cfg.dec) {
+      return c2;
+    }
+    const position = MARK_LAYER[props.tickPosition] ? props.tickPosition : "below";
+    const kind = position === "inside" ? "inside" : "gutter";
+    const list = tickValues(cfg, props.ticks, props.tickStep);
+    const marks = list.map((t2, i2) => ({
+      key: `t${i2}`,
+      value: t2.value,
+      // A custom class REPLACES the piece's color; see the Ticks note above.
+      custom: typeof t2.class === "string" && t2.class ? `${MARK_BASE[kind]} ${t2.class}` : "",
+      style: tickStyle(valueToPercent(t2.value, cfg))
+    }));
+    const labels = props.tickLabels ? thinLabels(list, marks, typeof props.tickLabels === "function" ? props.tickLabels : null, position) : [];
+    const texts = /* @__PURE__ */ new Map();
+    for (const t2 of list) {
+      if (typeof t2.label !== "string" || t2.label === "")
+        continue;
+      if (Number.isFinite(Number(t2.label)))
+        continue;
+      texts.set(t2.value, t2.label);
+    }
+    const pad = marks.length ? WRAP_PAD[position][labels.length ? "labels" : "bare"] : "";
+    const model = {
+      spec: props.ticks,
+      tickStep: props.tickStep,
+      tickLabels: props.tickLabels,
+      tickPosition: props.tickPosition,
+      min: cfg.min,
+      max: cfg.max,
+      step: cfg.step,
+      dec: cfg.dec,
+      kind,
+      marks,
+      labels,
+      texts,
+      // No ticks → the bare frozen TRACK_WRAP, i.e. a 6px-tall box exactly the
+      // size of the track: existing sliders lay out byte-for-byte as before.
+      wrapClass: pad ? `${TRACK_WRAP} ${pad}` : TRACK_WRAP,
+      markLayerClass: MARK_LAYER[position],
+      labelLayerClass: LABEL_LAYER[position]
+    };
+    this._ticks = model;
+    return model;
+  }
   // --- geometry --------------------------------------------------------------
   _percentFromClientX(clientX) {
     const track = this.element && this.element.querySelector("[data-slider-track]");
@@ -56973,18 +58110,15 @@ var Slider = class extends PuzzleView {
       return 0;
     return Math.max(0, Math.min(100, (clientX - rect.left) / rect.width * 100));
   }
-  _percentToValue(percent, cfg) {
-    return cfg.min + percent / 100 * (cfg.max - cfg.min);
-  }
-  _nearestThumb(percent, committed, cfg) {
+  _nearestThumb(percent2, committed, cfg) {
     if (!this._isRange(this.props))
       return "single";
     const pMin = valueToPercent(committed.valueMin, cfg);
     const pMax = valueToPercent(committed.valueMax, cfg);
-    const dMin = Math.abs(percent - pMin);
-    const dMax = Math.abs(percent - pMax);
+    const dMin = Math.abs(percent2 - pMin);
+    const dMax = Math.abs(percent2 - pMax);
     if (dMin === dMax)
-      return percent < pMin ? "min" : "max";
+      return percent2 < pMin ? "min" : "max";
     return dMin < dMax ? "min" : "max";
   }
   // --- gesture bookkeeping (transient — never setData, must not re-render) ----
@@ -57080,7 +58214,7 @@ var Slider = class extends PuzzleView {
       this._pointerEnd(event);
       return;
     }
-    const cfg = this._cfg(this.props);
+    const cfg = configFrom(this.props);
     const committed = this._committed(this.props, cfg);
     if (!drag.dragging) {
       const deltaX = Math.abs(event.clientX - drag.startX);
@@ -57089,7 +58223,7 @@ var Slider = class extends PuzzleView {
         this._teardownGesture();
         return;
       }
-      if (deltaX <= DRAG_THRESHOLD2)
+      if (deltaX <= DRAG_THRESHOLD3)
         return;
       drag.thumb = this._nearestThumb(this._percentFromClientX(event.clientX), committed, cfg);
       drag.startValue = this._channel(committed, drag.thumb);
@@ -57106,9 +58240,9 @@ var Slider = class extends PuzzleView {
       if (el)
         el.focus({ preventScroll: true });
     }
-    if (Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD2)
+    if (Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD3)
       this._suppressClick = true;
-    const raw2 = this._percentToValue(this._percentFromClientX(event.clientX), cfg);
+    const raw2 = percentToValue(this._percentFromClientX(event.clientX), cfg);
     const nv = normalize2(raw2, drag.thumb, cfg, committed);
     const d = this.getData();
     if (d.draftThumb !== drag.thumb || d.draftValue !== nv || !d.dragging) {
@@ -57123,7 +58257,7 @@ var Slider = class extends PuzzleView {
       return;
     this._releasePointer(event);
     const { armed, dragging, thumb, startValue } = drag;
-    const cfg = this._cfg(this.props);
+    const cfg = configFrom(this.props);
     const committed = this._committed(this.props, cfg);
     this._teardownGesture();
     if (dragging && thumb) {
@@ -57135,10 +58269,10 @@ var Slider = class extends PuzzleView {
       }
       this._scheduleOverlayClear();
     } else if (armed && event.type === "pointerup") {
-      const percent = this._percentFromClientX(event.clientX);
-      const tapThumb = this._nearestThumb(percent, committed, cfg);
+      const percent2 = this._percentFromClientX(event.clientX);
+      const tapThumb = this._nearestThumb(percent2, committed, cfg);
       this._suppressClick = true;
-      const nv = normalize2(this._percentToValue(percent, cfg), tapThumb, cfg, committed);
+      const nv = normalize2(percentToValue(percent2, cfg), tapThumb, cfg, committed);
       if (nv !== this._channel(committed, tapThumb)) {
         this.setData({ dragging: false, draftThumb: tapThumb, draftValue: nv });
         this.refresh();
@@ -57167,7 +58301,7 @@ var Slider = class extends PuzzleView {
         clearTimeout(this._overlayTimer);
         this._overlayTimer = null;
       }
-      const cfg = this._cfg(this.props);
+      const cfg = configFrom(this.props);
       const committed = this._committed(this.props, cfg);
       const range2 = this._isRange(this.props);
       const thumbEl = event.target.closest && event.target.closest("[data-thumb]");
@@ -57192,7 +58326,7 @@ var Slider = class extends PuzzleView {
           thumbEl.focus({ preventScroll: true });
         this._capturePointer(event);
         this._addWindowListeners();
-      } else if (event.target === this.element || event.target.closest && event.target.closest("[data-slider-track]")) {
+      } else if (this.element.contains(event.target)) {
         this._drag = {
           pointerId: event.pointerId,
           thumb: null,
@@ -57213,7 +58347,7 @@ var Slider = class extends PuzzleView {
       if (!thumbEl)
         return;
       const thumb = thumbEl.dataset.thumb;
-      const cfg = this._cfg(this.props);
+      const cfg = configFrom(this.props);
       const committed = this._committed(this.props, cfg);
       const current = this._channel(committed, thumb);
       const stepSize = cfg.step === "any" ? (cfg.max - cfg.min) / 100 : cfg.step;
@@ -57272,55 +58406,98 @@ Slider.prototype.render = function() {
     "@keydown": (this.__h ??= {})[1] ??= (event) => this.events.onKeyDown(event),
     "@click": (this.__h ??= {})[2] ??= (event) => this.events.onClick(event)
   }, [
-    new ViewNode("div", {
-      class: "relative h-1.5 w-full rounded-full bg-faint",
-      "data-slider-track": true
-    }, [
+    new ViewNode("div", { class: __d.trackWrapClass }, [
       new ViewNode("div", {
-        class: __d.fillClass,
-        style: __d.fillStyle
-      }, []),
-      ...__d.range ? [
+        class: "relative h-1.5 w-full rounded-full bg-faint",
+        "data-slider-track": true
+      }, [
         new ViewNode("div", {
-          class: __d.thumbClass,
-          style: __d.thumbMinStyle,
-          "data-thumb": "min",
-          role: "slider",
-          tabindex: __d.thumbTabindex,
-          "aria-orientation": "horizontal",
-          "aria-label": __d.labelMin,
-          "aria-valuemin": __d.minStr,
-          "aria-valuemax": __d.valueMaxStr,
-          "aria-valuenow": __d.valueMinStr,
-          "aria-disabled": __d.ariaDisabled
+          class: __d.fillClass,
+          style: __d.fillStyle
         }, []),
-        new ViewNode("div", {
-          class: __d.thumbClass,
-          style: __d.thumbMaxStyle,
-          "data-thumb": "max",
-          role: "slider",
-          tabindex: __d.thumbTabindex,
-          "aria-orientation": "horizontal",
-          "aria-label": __d.labelMax,
-          "aria-valuemin": __d.valueMinStr,
-          "aria-valuemax": __d.maxStr,
-          "aria-valuenow": __d.valueMaxStr,
-          "aria-disabled": __d.ariaDisabled
-        }, [])
+        ...__d.range ? [
+          new ViewNode("div", {
+            class: __d.thumbClass,
+            style: __d.thumbMinStyle,
+            "data-thumb": "min",
+            role: "slider",
+            tabindex: __d.thumbTabindex,
+            "aria-orientation": "horizontal",
+            "aria-label": __d.labelMin,
+            "aria-valuemin": __d.minStr,
+            "aria-valuemax": __d.valueMaxStr,
+            "aria-valuenow": __d.valueMinStr,
+            "aria-valuetext": __d.valueMinText,
+            "aria-disabled": __d.ariaDisabled
+          }, []),
+          new ViewNode("div", {
+            class: __d.thumbClass,
+            style: __d.thumbMaxStyle,
+            "data-thumb": "max",
+            role: "slider",
+            tabindex: __d.thumbTabindex,
+            "aria-orientation": "horizontal",
+            "aria-label": __d.labelMax,
+            "aria-valuemin": __d.valueMinStr,
+            "aria-valuemax": __d.maxStr,
+            "aria-valuenow": __d.valueMaxStr,
+            "aria-valuetext": __d.valueMaxText,
+            "aria-disabled": __d.ariaDisabled
+          }, [])
+        ] : [
+          new ViewNode("div", {
+            class: __d.thumbClass,
+            style: __d.thumbSingleStyle,
+            "data-thumb": "single",
+            role: "slider",
+            tabindex: __d.thumbTabindex,
+            "aria-orientation": "horizontal",
+            "aria-label": __d.label,
+            "aria-valuemin": __d.minStr,
+            "aria-valuemax": __d.maxStr,
+            "aria-valuenow": __d.valueStr,
+            "aria-valuetext": __d.valueText,
+            "aria-disabled": __d.ariaDisabled
+          }, []),
+          new ViewNode("#")
+        ]
+      ]),
+      ...__d.hasTicks ? [
+        new ViewNode(
+          "div",
+          {
+            class: __d.tickMarkLayerClass,
+            "aria-hidden": "true"
+          },
+          __d.tickMarks.map(
+            (t2) => new ViewNode("span", {
+              class: t2.class,
+              style: t2.style,
+              key: t2.key
+            }, [])
+          )
+        )
       ] : [
-        new ViewNode("div", {
-          class: __d.thumbClass,
-          style: __d.thumbSingleStyle,
-          "data-thumb": "single",
-          role: "slider",
-          tabindex: __d.thumbTabindex,
-          "aria-orientation": "horizontal",
-          "aria-label": __d.label,
-          "aria-valuemin": __d.minStr,
-          "aria-valuemax": __d.maxStr,
-          "aria-valuenow": __d.valueStr,
-          "aria-disabled": __d.ariaDisabled
-        }, []),
+        new ViewNode("#")
+      ],
+      ...__d.hasTickLabels ? [
+        new ViewNode(
+          "div",
+          {
+            class: __d.tickLabelLayerClass,
+            "aria-hidden": "true"
+          },
+          __d.tickLabelList.map(
+            (t2) => new ViewNode("span", {
+              class: t2.class,
+              style: t2.style,
+              key: t2.key
+            }, [
+              new ViewNode("text", { value: String(t2.label) })
+            ])
+          )
+        )
+      ] : [
         new ViewNode("#")
       ]
     ]),
@@ -57353,10 +58530,14 @@ Slider.prototype.render = function() {
 Slider.__pzlModule = "app/components/ui/Slider.pzl";
 
 // app/views/components/SliderDoc.pzl
-var installCmd69 = "puzzle add piece slider";
-var usageImport69 = `import Slider from '@/components/ui/Slider.pzl';`;
-var usageMarkup69 = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />`;
-var codeHero69 = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />
+var installCmd70 = "puzzle add piece slider";
+var usageImport70 = `import Slider from '@/components/ui/Slider.pzl';`;
+var usageMarkup70 = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />`;
+var quarterTicks = [0, 25, 50, 75, 100];
+var redlineTicks = [0, 25, 50, 75, { value: 90, class: "bg-danger", labelClass: "text-danger" }, 100];
+var modeTicks = [{ value: 0, label: "Off" }, 25, 50, 75, { value: 100, label: "Max" }];
+var percent = (v) => v + "%";
+var codeHero70 = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />
 
 // parent \u2014 @input fires live during drag, @change on release
 events = {
@@ -57370,12 +58551,69 @@ var codeRange = `// the presence of valueMin / valueMax switches to dual-thumb r
 events = {
   setPrice: ({ valueMin, valueMax }) => this.setData({ priceMin: valueMin, priceMax: valueMax }),
 };`;
-var codeSteps = `// a numeric step quantizes to a detent
+var codeSteps2 = `// a numeric step quantizes to a detent
 <Slider value={ stepped } min={ 0 } max={ 100 } step={ 10 } @change={ setStepped } />
 
 // step="any" is continuous
 <Slider value={ fine } min={ 0 } max={ 100 } step="any" @change={ setFine } />`;
-var codeDisabled8 = `<Slider value={ 40 } disabled />`;
+var codeTicks2 = `// ticks={ true } generates a grid and auto-coarsens it: a 0\u2013100 step-1 slider
+// gets 21 marks, not 101.
+<Slider value={ autoTicked } min={ 0 } max={ 100 } ticks={ true } @change={ setAutoTicked } />
+
+// an array places exactly the marks you list (bare numbers and objects may mix)
+const quarterTicks = [0, 25, 50, 75, 100];
+
+<Slider value={ quarter } min={ 0 } max={ 100 } step={ 25 } ticks={ quarterTicks }
+  @change={ setQuarter } />
+
+// tickStep sets the generated interval. Marks are decoration, not detents \u2014 set
+// step to the same number and the thumb lands on every mark.
+<Slider value={ stepTen } min={ 0 } max={ 100 } step={ 10 } ticks={ true } tickStep={ 10 }
+  @change={ setStepTen } />`;
+var codeTickLabels = `// tickLabels renders the label row; tickLabels={ true } prints each tick's own
+// value. Labels thin to at most 11, but the first and last always survive.
+<Slider value={ labeled } min={ 0 } max={ 100 } step={ 20 }
+  ticks={ true } tickStep={ 20 } tickLabels={ true } @change={ setLabeled } />
+
+// pass a formatter instead \u2014 (value, tick) => string. Keep it at module scope so
+// the prop identity stays stable across re-renders.
+const percent = (v) => v + '%';
+
+<Slider value={ zoom } min={ 0 } max={ 200 } step={ 25 }
+  ticks={ true } tickStep={ 50 } tickLabels={ percent } @change={ setZoom } />`;
+var codeTickPosition = `// 'below' (default) \u2014 marks and labels sit in the gutter under the track
+<Slider value={ a } ticks={ true } tickStep={ 25 } tickLabels={ true } @change={ setA } />
+
+// 'above' \u2014 the whole tick row moves over the track
+<Slider value={ b } ticks={ true } tickStep={ 25 } tickLabels={ true }
+  tickPosition="above" @change={ setB } />
+
+// 'inside' \u2014 marks are cut through the bar itself; labels stay below
+<Slider value={ c } ticks={ true } tickStep={ 25 } tickLabels={ true }
+  tickPosition="inside" @change={ setC } />`;
+var codeCustomTicks = `// A per-tick class REPLACES that mark's color (its positioning is kept), so one
+// mark can stand out. Use semantic tokens \u2014 bg-danger, never bg-red-500.
+const redlineTicks = [
+  0, 25, 50, 75,
+  { value: 90, class: 'bg-danger', labelClass: 'text-danger' },
+  100,
+];
+
+<Slider value={ redline } min={ 0 } max={ 100 } step={ 5 }
+  ticks={ redlineTicks } tickLabels={ true } @change={ setRedline } />
+
+// A per-tick label supplies that mark's TEXT. A non-numeric one also feeds
+// aria-valuetext, so a screen reader announces "Off" rather than "0" at value 0 \u2014
+// that still works with tickLabels={ false }, when no label row renders at all.
+const modeTicks = [
+  { value: 0, label: 'Off' },
+  25, 50, 75,
+  { value: 100, label: 'Max' },
+];
+
+<Slider value={ mode } min={ 0 } max={ 100 } step={ 25 }
+  ticks={ modeTicks } tickLabels={ true } @change={ setMode } />`;
+var codeDisabled9 = `<Slider value={ 40 } disabled />`;
 var SliderDoc = class extends PuzzleView {
   created() {
     this.setData({
@@ -57383,24 +58621,46 @@ var SliderDoc = class extends PuzzleView {
       priceMin: 200,
       priceMax: 800,
       stepped: 40,
-      fine: 33
+      fine: 33,
+      autoTicked: 45,
+      quarter: 50,
+      stepTen: 30,
+      labeled: 60,
+      zoom: 100,
+      posBelow: 25,
+      posAbove: 50,
+      posInside: 75,
+      redline: 70,
+      mode: 0
     });
   }
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd69,
-      usageImport: usageImport69,
-      usageMarkup: usageMarkup69,
-      codeHero: codeHero69,
+      installCmd: installCmd70,
+      usageImport: usageImport70,
+      usageMarkup: usageMarkup70,
+      quarterTicks,
+      redlineTicks,
+      modeTicks,
+      percent,
+      codeHero: codeHero70,
       codeRange,
-      codeSteps,
-      codeDisabled: codeDisabled8,
+      codeSteps: codeSteps2,
+      codeTicks: codeTicks2,
+      codeTickLabels,
+      codeTickPosition,
+      codeCustomTicks,
+      codeDisabled: codeDisabled9,
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
         { label: "Range", href: "#range" },
         { label: "Steps", href: "#steps" },
+        { label: "Ticks", href: "#ticks" },
+        { label: "Tick labels", href: "#tick-labels" },
+        { label: "Tick position", href: "#tick-position" },
+        { label: "Custom ticks", href: "#custom-ticks" },
         { label: "Disabled", href: "#disabled" }
       ]
     };
@@ -57420,6 +58680,46 @@ var SliderDoc = class extends PuzzleView {
     },
     setFine: (v) => {
       this.setData("fine", v);
+      this.refresh();
+    },
+    setAutoTicked: (v) => {
+      this.setData("autoTicked", v);
+      this.refresh();
+    },
+    setQuarter: (v) => {
+      this.setData("quarter", v);
+      this.refresh();
+    },
+    setStepTen: (v) => {
+      this.setData("stepTen", v);
+      this.refresh();
+    },
+    setLabeled: (v) => {
+      this.setData("labeled", v);
+      this.refresh();
+    },
+    setZoom: (v) => {
+      this.setData("zoom", v);
+      this.refresh();
+    },
+    setPosBelow: (v) => {
+      this.setData("posBelow", v);
+      this.refresh();
+    },
+    setPosAbove: (v) => {
+      this.setData("posAbove", v);
+      this.refresh();
+    },
+    setPosInside: (v) => {
+      this.setData("posInside", v);
+      this.refresh();
+    },
+    setRedline: (v) => {
+      this.setData("redline", v);
+      this.refresh();
+    },
+    setMode: (v) => {
+      this.setData("mode", v);
       this.refresh();
     }
   };
@@ -57564,6 +58864,227 @@ SliderDoc.prototype.render = function() {
             ])
           ]),
           new ViewNode(ExampleBox, {
+            id: "ticks",
+            title: "Ticks",
+            code: __d.codeTicks
+          }, [
+            new ViewNode("div", { class: "w-full max-w-sm space-y-6" }, [
+              new ViewNode("div", { class: "space-y-2" }, [
+                new ViewNode("div", { class: "flex items-center justify-between" }, [
+                  new ViewNode(Label, {}, [
+                    new ViewNode("text", { value: "Auto grid" })
+                  ]),
+                  new ViewNode("p", { class: "text-sm text-muted" }, [
+                    new ViewNode("text", { value: String(__d.autoTicked) })
+                  ])
+                ]),
+                new ViewNode(Slider, {
+                  value: __d.autoTicked,
+                  min: 0,
+                  max: 100,
+                  ticks: true,
+                  input: (this.__h ??= {})[8] ??= (event) => this.events.setAutoTicked(event),
+                  change: (this.__h ??= {})[9] ??= (event) => this.events.setAutoTicked(event)
+                }, [])
+              ]),
+              new ViewNode("div", { class: "space-y-2" }, [
+                new ViewNode("div", { class: "flex items-center justify-between" }, [
+                  new ViewNode(Label, {}, [
+                    new ViewNode("text", { value: "Explicit values" })
+                  ]),
+                  new ViewNode("p", { class: "text-sm text-muted" }, [
+                    new ViewNode("text", { value: String(__d.quarter) })
+                  ])
+                ]),
+                new ViewNode(Slider, {
+                  value: __d.quarter,
+                  min: 0,
+                  max: 100,
+                  step: 25,
+                  ticks: __d.quarterTicks,
+                  input: (this.__h ??= {})[10] ??= (event) => this.events.setQuarter(event),
+                  change: (this.__h ??= {})[11] ??= (event) => this.events.setQuarter(event)
+                }, [])
+              ]),
+              new ViewNode("div", { class: "space-y-2" }, [
+                new ViewNode("div", { class: "flex items-center justify-between" }, [
+                  new ViewNode(Label, {}, [
+                    new ViewNode("text", { value: "Every 10, snapping" })
+                  ]),
+                  new ViewNode("p", { class: "text-sm text-muted" }, [
+                    new ViewNode("text", { value: String(__d.stepTen) })
+                  ])
+                ]),
+                new ViewNode(Slider, {
+                  value: __d.stepTen,
+                  min: 0,
+                  max: 100,
+                  step: 10,
+                  ticks: true,
+                  tickStep: 10,
+                  input: (this.__h ??= {})[12] ??= (event) => this.events.setStepTen(event),
+                  change: (this.__h ??= {})[13] ??= (event) => this.events.setStepTen(event)
+                }, [])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "tick-labels",
+            title: "Tick labels",
+            code: __d.codeTickLabels
+          }, [
+            new ViewNode("div", { class: "w-full max-w-sm space-y-6" }, [
+              new ViewNode("div", { class: "space-y-2" }, [
+                new ViewNode("div", { class: "flex items-center justify-between" }, [
+                  new ViewNode(Label, {}, [
+                    new ViewNode("text", { value: "Labelled grid" })
+                  ]),
+                  new ViewNode("p", { class: "text-sm text-muted" }, [
+                    new ViewNode("text", { value: String(__d.labeled) })
+                  ])
+                ]),
+                new ViewNode(Slider, {
+                  value: __d.labeled,
+                  min: 0,
+                  max: 100,
+                  step: 20,
+                  ticks: true,
+                  tickStep: 20,
+                  tickLabels: true,
+                  input: (this.__h ??= {})[14] ??= (event) => this.events.setLabeled(event),
+                  change: (this.__h ??= {})[15] ??= (event) => this.events.setLabeled(event)
+                }, [])
+              ]),
+              new ViewNode("div", { class: "space-y-2" }, [
+                new ViewNode("div", { class: "flex items-center justify-between" }, [
+                  new ViewNode(Label, {}, [
+                    new ViewNode("text", { value: "Formatted" })
+                  ]),
+                  new ViewNode("p", { class: "text-sm text-muted" }, [
+                    new ViewNode("text", { value: String(__d.zoom) + "%" })
+                  ])
+                ]),
+                new ViewNode(Slider, {
+                  value: __d.zoom,
+                  min: 0,
+                  max: 200,
+                  step: 25,
+                  ticks: true,
+                  tickStep: 50,
+                  tickLabels: __d.percent,
+                  input: (this.__h ??= {})[16] ??= (event) => this.events.setZoom(event),
+                  change: (this.__h ??= {})[17] ??= (event) => this.events.setZoom(event)
+                }, [])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "tick-position",
+            title: "Tick position",
+            code: __d.codeTickPosition
+          }, [
+            new ViewNode("div", { class: "w-full max-w-sm space-y-8" }, [
+              new ViewNode("div", { class: "space-y-2" }, [
+                new ViewNode(Label, {}, [
+                  new ViewNode("text", { value: "Below (default)" })
+                ]),
+                new ViewNode(Slider, {
+                  value: __d.posBelow,
+                  min: 0,
+                  max: 100,
+                  step: 25,
+                  ticks: true,
+                  tickStep: 25,
+                  tickLabels: true,
+                  input: (this.__h ??= {})[18] ??= (event) => this.events.setPosBelow(event),
+                  change: (this.__h ??= {})[19] ??= (event) => this.events.setPosBelow(event)
+                }, [])
+              ]),
+              new ViewNode("div", { class: "space-y-2" }, [
+                new ViewNode(Label, {}, [
+                  new ViewNode("text", { value: "Above" })
+                ]),
+                new ViewNode(Slider, {
+                  value: __d.posAbove,
+                  min: 0,
+                  max: 100,
+                  step: 25,
+                  ticks: true,
+                  tickStep: 25,
+                  tickLabels: true,
+                  tickPosition: "above",
+                  input: (this.__h ??= {})[20] ??= (event) => this.events.setPosAbove(event),
+                  change: (this.__h ??= {})[21] ??= (event) => this.events.setPosAbove(event)
+                }, [])
+              ]),
+              new ViewNode("div", { class: "space-y-2" }, [
+                new ViewNode(Label, {}, [
+                  new ViewNode("text", { value: "Inside" })
+                ]),
+                new ViewNode(Slider, {
+                  value: __d.posInside,
+                  min: 0,
+                  max: 100,
+                  step: 25,
+                  ticks: true,
+                  tickStep: 25,
+                  tickLabels: true,
+                  tickPosition: "inside",
+                  input: (this.__h ??= {})[22] ??= (event) => this.events.setPosInside(event),
+                  change: (this.__h ??= {})[23] ??= (event) => this.events.setPosInside(event)
+                }, [])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "custom-ticks",
+            title: "Custom ticks",
+            code: __d.codeCustomTicks
+          }, [
+            new ViewNode("div", { class: "w-full max-w-sm space-y-6" }, [
+              new ViewNode("div", { class: "space-y-2" }, [
+                new ViewNode("div", { class: "flex items-center justify-between" }, [
+                  new ViewNode(Label, {}, [
+                    new ViewNode("text", { value: "Redline at 90" })
+                  ]),
+                  new ViewNode("p", { class: "text-sm text-muted" }, [
+                    new ViewNode("text", { value: String(__d.redline) })
+                  ])
+                ]),
+                new ViewNode(Slider, {
+                  value: __d.redline,
+                  min: 0,
+                  max: 100,
+                  step: 5,
+                  ticks: __d.redlineTicks,
+                  tickLabels: true,
+                  input: (this.__h ??= {})[24] ??= (event) => this.events.setRedline(event),
+                  change: (this.__h ??= {})[25] ??= (event) => this.events.setRedline(event)
+                }, [])
+              ]),
+              new ViewNode("div", { class: "space-y-2" }, [
+                new ViewNode("div", { class: "flex items-center justify-between" }, [
+                  new ViewNode(Label, {}, [
+                    new ViewNode("text", { value: "Named endpoints" })
+                  ]),
+                  new ViewNode("p", { class: "text-sm text-muted" }, [
+                    new ViewNode("text", { value: String(__d.mode) })
+                  ])
+                ]),
+                new ViewNode(Slider, {
+                  value: __d.mode,
+                  min: 0,
+                  max: 100,
+                  step: 25,
+                  ticks: __d.modeTicks,
+                  tickLabels: true,
+                  input: (this.__h ??= {})[26] ??= (event) => this.events.setMode(event),
+                  change: (this.__h ??= {})[27] ??= (event) => this.events.setMode(event)
+                }, [])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
             id: "disabled",
             title: "Disabled",
             code: __d.codeDisabled,
@@ -57591,10 +59112,10 @@ SliderDoc.prototype.render = function() {
 SliderDoc.__pzlModule = "app/views/components/SliderDoc.pzl";
 
 // app/views/components/SparklineDoc.pzl
-var installCmd70 = "puzzle add piece sparkline";
-var usageImport70 = `import Sparkline from '@/components/ui/Sparkline.pzl';`;
-var usageMarkup70 = `<Sparkline data={ data } width={ 160 } height={ 40 } />`;
-var codeHero70 = `const data = [4, 6, 5, 8, 7, 10, 9, 12];
+var installCmd71 = "puzzle add piece sparkline";
+var usageImport71 = `import Sparkline from '@/components/ui/Sparkline.pzl';`;
+var usageMarkup71 = `<Sparkline data={ data } width={ 160 } height={ 40 } />`;
+var codeHero71 = `const data = [4, 6, 5, 8, 7, 10, 9, 12];
 
 <Sparkline data={ data } width={ 160 } height={ 40 } />`;
 var codeBasic2 = `// Defaults to 120\xD732 and text-chart-1. Nulls in the data become gaps.
@@ -57610,10 +59131,10 @@ var SparklineDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd70,
-      usageImport: usageImport70,
-      usageMarkup: usageMarkup70,
-      codeHero: codeHero70,
+      installCmd: installCmd71,
+      usageImport: usageImport71,
+      usageMarkup: usageMarkup71,
+      codeHero: codeHero71,
       codeBasic: codeBasic2,
       codeArea,
       codeColor,
@@ -57775,10 +59296,10 @@ Spinner.prototype.render = function() {
 Spinner.__pzlModule = "app/components/ui/Spinner.pzl";
 
 // app/views/components/SpinnerDoc.pzl
-var installCmd71 = "puzzle add piece spinner";
-var usageImport71 = `import Spinner from '@/components/ui/Spinner.pzl';`;
-var usageMarkup71 = `<Spinner size="sm" />`;
-var codeHero71 = `<Spinner size="sm" />
+var installCmd72 = "puzzle add piece spinner";
+var usageImport72 = `import Spinner from '@/components/ui/Spinner.pzl';`;
+var usageMarkup72 = `<Spinner size="sm" />`;
+var codeHero72 = `<Spinner size="sm" />
 <Spinner size="md" />
 <Spinner size="lg" />`;
 var codeInButton = `<Button variant="primary" loading={ saving }>Saving</Button>
@@ -57796,10 +59317,10 @@ var SpinnerDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd71,
-      usageImport: usageImport71,
-      usageMarkup: usageMarkup71,
-      codeHero: codeHero71,
+      installCmd: installCmd72,
+      usageImport: usageImport72,
+      usageMarkup: usageMarkup72,
+      codeHero: codeHero72,
       codeInButton,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -57905,9 +59426,9 @@ SpinnerDoc.prototype.render = function() {
 SpinnerDoc.__pzlModule = "app/views/components/SpinnerDoc.pzl";
 
 // app/views/components/SplitButtonDoc.pzl
-var installCmd72 = "puzzle add piece split-button";
-var usageImport72 = `import SplitButton from '@/components/ui/SplitButton.pzl';`;
-var usageMarkup72 = `<SplitButton label="Save" actions={ saveActions } @press={ onPress } @select={ onSelect }/>`;
+var installCmd73 = "puzzle add piece split-button";
+var usageImport73 = `import SplitButton from '@/components/ui/SplitButton.pzl';`;
+var usageMarkup73 = `<SplitButton label="Save" actions={ saveActions } @press={ onPress } @select={ onSelect }/>`;
 var saveActions = [
   { label: "Save as\u2026", value: "save-as" },
   { label: "Save and close", value: "save-close" },
@@ -57919,7 +59440,7 @@ var exportActions = [
   { divider: true },
   { label: "Delete export", value: "delete", danger: true }
 ];
-var codeHero72 = `<SplitButton label="Save" actions={ saveActions } @press={ onPress } @select={ onSelect }/>
+var codeHero73 = `<SplitButton label="Save" actions={ saveActions } @press={ onPress } @select={ onSelect }/>
 
 // @press fires for the primary button; @select(value) for a menu item.
 data() {
@@ -57951,21 +59472,21 @@ exportActions: [
   { divider: true },
   { label: 'Delete export', value: 'delete', danger: true },
 ];`;
-var codeDisabled9 = `// disabled greys out and inertly locks BOTH the primary button and the caret.
+var codeDisabled10 = `// disabled greys out and inertly locks BOTH the primary button and the caret.
 <SplitButton disabled label="Save" actions={ actions } @press={ p } @select={ s }/>`;
 var SplitButtonDoc = class extends PuzzleView {
   data(params, props) {
     return {
       saveActions,
       exportActions,
-      installCmd: installCmd72,
-      usageImport: usageImport72,
-      usageMarkup: usageMarkup72,
-      codeHero: codeHero72,
+      installCmd: installCmd73,
+      usageImport: usageImport73,
+      usageMarkup: usageMarkup73,
+      codeHero: codeHero73,
       codeVariants: codeVariants5,
       codeSizes: codeSizes11,
       codeDanger: codeDanger3,
-      codeDisabled: codeDisabled9,
+      codeDisabled: codeDisabled10,
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
@@ -58202,7 +59723,7 @@ SplitButtonDoc.__pzlModule = "app/views/components/SplitButtonDoc.pzl";
 
 // app/components/ui/SplitPanel.pzl
 var STORAGE_PREFIX = "split-panel:";
-var ROOT_BASE6 = "flex w-full min-w-0 min-h-0";
+var ROOT_BASE7 = "flex w-full min-w-0 min-h-0";
 var PANE_BASE = "min-w-0 min-h-0 overflow-auto";
 var DIVIDER_BASE = "group relative z-10 flex flex-none select-none touch-none items-center justify-center outline-ring focus-visible:outline-2 focus-visible:outline-offset-2";
 function roundShare(value) {
@@ -58290,7 +59811,7 @@ var SplitPanel = class extends PuzzleView {
     return {
       rootId: props.id || false,
       rootClass: [
-        ROOT_BASE6,
+        ROOT_BASE7,
         vertical ? "flex-col" : "flex-row",
         dragging ? vertical ? "cursor-row-resize" : "cursor-col-resize" : "",
         props.class || ""
@@ -58806,17 +60327,17 @@ SplitPanel.prototype.render = function() {
 SplitPanel.__pzlModule = "app/components/ui/SplitPanel.pzl";
 
 // app/views/components/SplitPanelDoc.pzl
-var installCmd73 = "puzzle add piece split-panel";
-var usageImport73 = `import SplitPanel from '@/components/ui/SplitPanel.pzl';`;
-var usageMarkup73 = `<SplitPanel defaultSizes={ [35, 65] }>
+var installCmd74 = "puzzle add piece split-panel";
+var usageImport74 = `import SplitPanel from '@/components/ui/SplitPanel.pzl';`;
+var usageMarkup74 = `<SplitPanel defaultSizes={ [35, 65] }>
   <div slot="first">Navigation</div>
   <main slot="second">Content</main>
 </SplitPanel>`;
-var codeHero73 = `<SplitPanel class="h-56" defaultSizes={ [35, 65] }>
+var codeHero74 = `<SplitPanel class="h-56" defaultSizes={ [35, 65] }>
   <div slot="first">Navigation</div>
   <main slot="second">Content</main>
 </SplitPanel>`;
-var codeVertical = `<SplitPanel direction="vertical" class="h-72" defaultSizes={ [40, 60] }>
+var codeVertical2 = `<SplitPanel direction="vertical" class="h-72" defaultSizes={ [40, 60] }>
   <div slot="first">Preview</div>
   <div slot="second">Timeline</div>
 </SplitPanel>`;
@@ -58886,11 +60407,11 @@ var SplitPanelDoc = class extends PuzzleView {
     return {
       snapFirst: Math.round(snapSizes[0]),
       snapSecond: Math.round(snapSizes[1]),
-      installCmd: installCmd73,
-      usageImport: usageImport73,
-      usageMarkup: usageMarkup73,
-      codeHero: codeHero73,
-      codeVertical,
+      installCmd: installCmd74,
+      usageImport: usageImport74,
+      usageMarkup: usageMarkup74,
+      codeHero: codeHero74,
+      codeVertical: codeVertical2,
       codeConstraints,
       codeFade,
       codeSnap,
@@ -59184,10 +60705,10 @@ SplitPanelDoc.prototype.render = function() {
 SplitPanelDoc.__pzlModule = "app/views/components/SplitPanelDoc.pzl";
 
 // app/views/components/StatCardDoc.pzl
-var installCmd74 = "puzzle add piece stat-card";
-var usageImport74 = `import StatCard from '@/components/ui/StatCard.pzl';`;
-var usageMarkup74 = `<StatCard label="Revenue" value="$48,120" delta={ 12.4 } deltaLabel="vs last month" />`;
-var codeHero74 = `<StatCard label="Revenue" value="$48,120" delta={ 12.4 } deltaLabel="vs last month" />
+var installCmd75 = "puzzle add piece stat-card";
+var usageImport75 = `import StatCard from '@/components/ui/StatCard.pzl';`;
+var usageMarkup75 = `<StatCard label="Revenue" value="$48,120" delta={ 12.4 } deltaLabel="vs last month" />`;
+var codeHero75 = `<StatCard label="Revenue" value="$48,120" delta={ 12.4 } deltaLabel="vs last month" />
 <StatCard label="Active users" value="8,540" delta={ 3.2 } deltaLabel="vs last week" />
 <StatCard label="Churn rate" value="2.1%" delta={ 0.4 } goodWhen="down" deltaLabel="vs last month" />
 <StatCard label="Avg order value" value="$86.40" delta={ -1.8 } deltaLabel="vs last month" />`;
@@ -59206,10 +60727,10 @@ var StatCardDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd74,
-      usageImport: usageImport74,
-      usageMarkup: usageMarkup74,
-      codeHero: codeHero74,
+      installCmd: installCmd75,
+      usageImport: usageImport75,
+      usageMarkup: usageMarkup75,
+      codeHero: codeHero75,
       codeGoodWhen,
       codeSparklines,
       codeNoDelta,
@@ -59398,7 +60919,7 @@ var DISC_STATE = {
   upcoming: "bg-surface text-muted border-border"
 };
 var DISC_INTERACTIVE = "cursor-pointer hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
-var LABEL_BASE2 = "text-sm leading-tight";
+var LABEL_BASE3 = "text-sm leading-tight";
 var Stepper = class extends PuzzleView {
   created() {
     this.setData({ uncontrolledCurrent: 0 });
@@ -59457,7 +60978,7 @@ var Stepper = class extends PuzzleView {
         ].join(" "),
         labelWrapClass: horizontal ? "mt-2 pr-4" : "pt-1 " + (isLast ? "pb-1" : "pb-8"),
         labelClass: [
-          LABEL_BASE2,
+          LABEL_BASE3,
           upcoming ? "text-muted" : "text-ink",
           isCurrent ? "font-semibold" : "font-medium"
         ].join(" "),
@@ -59587,10 +61108,10 @@ Stepper.prototype.render = function() {
 Stepper.__pzlModule = "app/components/ui/Stepper.pzl";
 
 // app/views/components/StepperDoc.pzl
-var installCmd75 = "puzzle add piece stepper";
-var usageImport75 = `import Stepper from '@/components/ui/Stepper.pzl';`;
-var usageMarkup75 = `<Stepper steps={ checkout } value={ 1 } />`;
-var codeHero75 = `const checkout = [
+var installCmd76 = "puzzle add piece stepper";
+var usageImport76 = `import Stepper from '@/components/ui/Stepper.pzl';`;
+var usageMarkup76 = `<Stepper steps={ checkout } value={ 1 } />`;
+var codeHero76 = `const checkout = [
   { label: 'Cart' },
   { label: 'Details' },
   { label: 'Payment' },
@@ -59599,7 +61120,7 @@ var codeHero75 = `const checkout = [
 
 // value is the current step index \u2014 the parent owns it.
 <Stepper steps={ checkout } value={ 1 } />`;
-var codeVertical2 = `const onboarding = [
+var codeVertical3 = `const onboarding = [
   { label: 'Create account', description: 'Your name and a password.' },
   { label: 'Verify email', description: 'Confirm the link we sent.' },
   { label: 'Invite team', description: 'Add teammates by email.' },
@@ -59625,11 +61146,11 @@ var StepperDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd75,
-      usageImport: usageImport75,
-      usageMarkup: usageMarkup75,
-      codeHero: codeHero75,
-      codeVertical: codeVertical2,
+      installCmd: installCmd76,
+      usageImport: usageImport76,
+      usageMarkup: usageMarkup76,
+      codeHero: codeHero76,
+      codeVertical: codeVertical3,
       codeClickable,
       codeStates: codeStates3,
       checkout: [
@@ -59830,10 +61351,10 @@ StepperDoc.prototype.render = function() {
 StepperDoc.__pzlModule = "app/views/components/StepperDoc.pzl";
 
 // app/views/components/SwitchDoc.pzl
-var installCmd76 = "puzzle add piece switch";
-var usageImport76 = `import Switch from '@/components/ui/Switch.pzl';`;
-var usageMarkup76 = `<Switch label="Wi-Fi" checked={ wifi } @change={ setWifi } />`;
-var codeHero76 = `<div class="divide-y divide-border">
+var installCmd77 = "puzzle add piece switch";
+var usageImport77 = `import Switch from '@/components/ui/Switch.pzl';`;
+var usageMarkup77 = `<Switch label="Wi-Fi" checked={ wifi } @change={ setWifi } />`;
+var codeHero77 = `<div class="divide-y divide-border">
   <div class="pb-3">
     <Switch label="Wi-Fi" checked={ wifi } @change={ setWifi } />
   </div>
@@ -59846,7 +61367,7 @@ var codeHint4 = `<Switch
   hint="Daily digest at 9am"
   checked={ notify }
   @change={ setNotify } />`;
-var codeDisabled10 = `<Switch label="Roaming" hint="Unavailable on this plan" checked={ false } disabled />`;
+var codeDisabled11 = `<Switch label="Roaming" hint="Unavailable on this plan" checked={ false } disabled />`;
 var SwitchDoc = class extends PuzzleView {
   created() {
     this.setData({ wifi: true, notify: false });
@@ -59854,12 +61375,12 @@ var SwitchDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd76,
-      usageImport: usageImport76,
-      usageMarkup: usageMarkup76,
-      codeHero: codeHero76,
+      installCmd: installCmd77,
+      usageImport: usageImport77,
+      usageMarkup: usageMarkup77,
+      codeHero: codeHero77,
       codeHint: codeHint4,
-      codeDisabled: codeDisabled10,
+      codeDisabled: codeDisabled11,
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
@@ -60107,10 +61628,10 @@ Table.prototype.render = function() {
 Table.__pzlModule = "app/components/ui/Table.pzl";
 
 // app/views/components/TableDoc.pzl
-var installCmd77 = "puzzle add piece table";
-var usageImport77 = `import Table from '@/components/ui/Table.pzl';`;
-var usageMarkup77 = `<Table columns={ columns } rows={ rows } caption="Invoices billed this quarter" />`;
-var codeHero77 = `const columns = [
+var installCmd78 = "puzzle add piece table";
+var usageImport78 = `import Table from '@/components/ui/Table.pzl';`;
+var usageMarkup78 = `<Table columns={ columns } rows={ rows } caption="Invoices billed this quarter" />`;
+var codeHero78 = `const columns = [
   { key: 'invoice', label: 'Invoice' },
   { key: 'client', label: 'Client' },
   { key: 'status', label: 'Status' },
@@ -60137,10 +61658,10 @@ var TableDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd77,
-      usageImport: usageImport77,
-      usageMarkup: usageMarkup77,
-      codeHero: codeHero77,
+      installCmd: installCmd78,
+      usageImport: usageImport78,
+      usageMarkup: usageMarkup78,
+      codeHero: codeHero78,
       codeAlignment: codeAlignment2,
       codeEmpty: codeEmpty2,
       invoiceColumns: [
@@ -60273,10 +61794,10 @@ TableDoc.prototype.render = function() {
 TableDoc.__pzlModule = "app/views/components/TableDoc.pzl";
 
 // app/views/components/TabsDoc.pzl
-var installCmd78 = "puzzle add piece tabs";
-var usageImport78 = `import Tabs from '@/components/ui/Tabs.pzl';`;
-var usageMarkup78 = `<Tabs id="acct" tabs={ tabs } value={ tab } @change={ setTab }/>`;
-var codeHero78 = `const tabs = [
+var installCmd79 = "puzzle add piece tabs";
+var usageImport79 = `import Tabs from '@/components/ui/Tabs.pzl';`;
+var usageMarkup79 = `<Tabs id="acct" tabs={ tabs } value={ tab } @change={ setTab }/>`;
+var codeHero79 = `const tabs = [
   { value: 'account', label: 'Account' },
   { value: 'password', label: 'Password' },
   { value: 'members', label: 'Members' },
@@ -60301,7 +61822,7 @@ var codePills = `const tabs = [
 ];
 
 <Tabs id="proj" variant="pills" tabs={ tabs } value={ tab } @change={ setTab }/>`;
-var codeDisabled11 = `const tabs = [
+var codeDisabled12 = `const tabs = [
   { value: 'active', label: 'Active' },
   { value: 'archived', label: 'Archived' },
   { value: 'deleted', label: 'Deleted', disabled: true },
@@ -60316,12 +61837,12 @@ var TabsDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd78,
-      usageImport: usageImport78,
-      usageMarkup: usageMarkup78,
-      codeHero: codeHero78,
+      installCmd: installCmd79,
+      usageImport: usageImport79,
+      usageMarkup: usageMarkup79,
+      codeHero: codeHero79,
       codePills,
-      codeDisabled: codeDisabled11,
+      codeDisabled: codeDisabled12,
       acctTabs: [
         { value: "account", label: "Account" },
         { value: "password", label: "Password" },
@@ -60536,10 +62057,10 @@ TabsDoc.prototype.render = function() {
 TabsDoc.__pzlModule = "app/views/components/TabsDoc.pzl";
 
 // app/views/components/TagsInputDoc.pzl
-var installCmd79 = "puzzle add piece tags-input";
-var usageImport79 = `import TagsInput from '@/components/ui/TagsInput.pzl';`;
-var usageMarkup79 = `<TagsInput value={ tags } @change={ setTags } />`;
-var codeHero79 = `// value is a string ARRAY; @change fires with the NEXT array on add or remove.
+var installCmd80 = "puzzle add piece tags-input";
+var usageImport80 = `import TagsInput from '@/components/ui/TagsInput.pzl';`;
+var usageMarkup80 = `<TagsInput value={ tags } @change={ setTags } />`;
+var codeHero80 = `// value is a string ARRAY; @change fires with the NEXT array on add or remove.
 setTags(next) {
   this.setData('tags', next);
   this.refresh();
@@ -60584,10 +62105,10 @@ var TagsInputDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd79,
-      usageImport: usageImport79,
-      usageMarkup: usageMarkup79,
-      codeHero: codeHero79,
+      installCmd: installCmd80,
+      usageImport: usageImport80,
+      usageMarkup: usageMarkup80,
+      codeHero: codeHero80,
       codeBasic: codeBasic3,
       codeMax,
       codeDupes,
@@ -60852,10 +62373,10 @@ TagsInputDoc.prototype.render = function() {
 TagsInputDoc.__pzlModule = "app/views/components/TagsInputDoc.pzl";
 
 // app/views/components/TextareaDoc.pzl
-var installCmd80 = "puzzle add piece textarea";
-var usageImport80 = `import Textarea from '@/components/ui/Textarea.pzl';`;
-var usageMarkup80 = `<Textarea label="Bio" rows={ 4 } value={ bio } @change={ setBio } />`;
-var codeHero80 = `<Textarea label="Bio" rows={ 4 } value={ bio } @change={ setBio } />
+var installCmd81 = "puzzle add piece textarea";
+var usageImport81 = `import Textarea from '@/components/ui/Textarea.pzl';`;
+var usageMarkup81 = `<Textarea label="Bio" rows={ 4 } value={ bio } @change={ setBio } />`;
+var codeHero81 = `<Textarea label="Bio" rows={ 4 } value={ bio } @change={ setBio } />
 
 // parent
 events = {
@@ -60870,10 +62391,10 @@ var TextareaDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd80,
-      usageImport: usageImport80,
-      usageMarkup: usageMarkup80,
-      codeHero: codeHero80,
+      installCmd: installCmd81,
+      usageImport: usageImport81,
+      usageMarkup: usageMarkup81,
+      codeHero: codeHero81,
       codeHint: codeHint5,
       codeError: codeError12,
       toc: [
@@ -61572,10 +63093,10 @@ TimePicker.prototype.render = function() {
 TimePicker.__pzlModule = "app/components/ui/TimePicker.pzl";
 
 // app/views/components/TimePickerDoc.pzl
-var installCmd81 = "puzzle add piece time-picker";
-var usageImport81 = `import TimePicker from '@/components/ui/TimePicker.pzl';`;
-var usageMarkup81 = `<TimePicker label="Meeting time" hint="24-hour clock." value={ meeting } @change={ setMeeting } />`;
-var codeHero81 = `<TimePicker
+var installCmd82 = "puzzle add piece time-picker";
+var usageImport82 = `import TimePicker from '@/components/ui/TimePicker.pzl';`;
+var usageMarkup82 = `<TimePicker label="Meeting time" hint="24-hour clock." value={ meeting } @change={ setMeeting } />`;
+var codeHero82 = `<TimePicker
   label="Meeting time"
   hint="24-hour clock."
   value={ meeting }
@@ -61629,10 +63150,10 @@ var TimePickerDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd81,
-      usageImport: usageImport81,
-      usageMarkup: usageMarkup81,
-      codeHero: codeHero81,
+      installCmd: installCmd82,
+      usageImport: usageImport82,
+      usageMarkup: usageMarkup82,
+      codeHero: codeHero82,
       codeTwelve,
       codeSeconds,
       codeStep,
@@ -61850,9 +63371,9 @@ TimePickerDoc.prototype.render = function() {
 TimePickerDoc.__pzlModule = "app/views/components/TimePickerDoc.pzl";
 
 // app/views/components/TimelineDoc.pzl
-var installCmd82 = "puzzle add piece timeline";
-var usageImport82 = `import Timeline from '@/components/ui/Timeline.pzl';`;
-var usageMarkup82 = `<Timeline items={ feed }/>`;
+var installCmd83 = "puzzle add piece timeline";
+var usageImport83 = `import Timeline from '@/components/ui/Timeline.pzl';`;
+var usageMarkup83 = `<Timeline items={ feed }/>`;
 var itemShape = "{ title, time?, description?, status?, icon?, number? }";
 var feed = [
   {
@@ -61956,7 +63477,7 @@ var compactFeed = [
   { title: "Tests passed", time: "12:04", status: "success" },
   { title: "Deployed", time: "12:05", status: "success" }
 ];
-var codeHero82 = `<Timeline items={ feed }/>
+var codeHero83 = `<Timeline items={ feed }/>
 
 // feed = [
 //   { title: 'Order placed', time: '9:41 AM',
@@ -62022,9 +63543,9 @@ var TimelineDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd82,
-      usageImport: usageImport82,
-      usageMarkup: usageMarkup82,
+      installCmd: installCmd83,
+      usageImport: usageImport83,
+      usageMarkup: usageMarkup83,
       itemShape,
       feed,
       statusFeed,
@@ -62032,7 +63553,7 @@ var TimelineDoc = class extends PuzzleView {
       stepFeed,
       mixedFeed,
       compactFeed,
-      codeHero: codeHero82,
+      codeHero: codeHero83,
       codeStatus,
       codeIcons,
       codeNumbered,
@@ -62177,10 +63698,10 @@ TimelineDoc.prototype.render = function() {
 TimelineDoc.__pzlModule = "app/views/components/TimelineDoc.pzl";
 
 // app/views/components/ToastDoc.pzl
-var installCmd83 = "puzzle add piece toast";
-var usageImport83 = `import { toast } from '@/components/ui/toast.js';`;
-var usageMarkup83 = `toast('Your draft was saved.');`;
-var codeHero83 = `import { toast } from '@/components/ui/toast.js';
+var installCmd84 = "puzzle add piece toast";
+var usageImport84 = `import { toast } from '@/components/ui/toast.js';`;
+var usageMarkup84 = `toast('Your draft was saved.');`;
+var codeHero84 = `import { toast } from '@/components/ui/toast.js';
 
 toast('Your draft was saved.');
 toast({ title: 'Published', message: 'The post is now live.', variant: 'success' });
@@ -62201,10 +63722,10 @@ toast('Saved!');`;
 var ToastDoc = class extends PuzzleView {
   data(params, props) {
     return {
-      installCmd: installCmd83,
-      usageImport: usageImport83,
-      usageMarkup: usageMarkup83,
-      codeHero: codeHero83,
+      installCmd: installCmd84,
+      usageImport: usageImport84,
+      usageMarkup: usageMarkup84,
+      codeHero: codeHero84,
       codeSticky,
       setupCode,
       toc: [
@@ -62404,10 +63925,10 @@ Toggle.prototype.render = function() {
 Toggle.__pzlModule = "app/components/ui/Toggle.pzl";
 
 // app/views/components/ToggleDoc.pzl
-var installCmd84 = "puzzle add piece toggle";
-var usageImport84 = `import Toggle from '@/components/ui/Toggle.pzl';`;
-var usageMarkup84 = `<Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>`;
-var codeHero84 = `<Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>
+var installCmd85 = "puzzle add piece toggle";
+var usageImport85 = `import Toggle from '@/components/ui/Toggle.pzl';`;
+var usageMarkup85 = `<Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>`;
+var codeHero85 = `<Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>
 <Toggle variant="outline" pressed={ italic } @change={ setItalic }>I</Toggle>
 
 // parent \u2014 owns each pressed boolean, flips it from @change
@@ -62435,10 +63956,10 @@ var ToggleDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd84,
-      usageImport: usageImport84,
-      usageMarkup: usageMarkup84,
-      codeHero: codeHero84,
+      installCmd: installCmd85,
+      usageImport: usageImport85,
+      usageMarkup: usageMarkup85,
+      codeHero: codeHero85,
       codeVariants: codeVariants6,
       codeSizes: codeSizes12,
       toc: [
@@ -62673,10 +64194,10 @@ ToggleGroup.prototype.render = function() {
 ToggleGroup.__pzlModule = "app/components/ui/ToggleGroup.pzl";
 
 // app/views/components/ToggleGroupDoc.pzl
-var installCmd85 = "puzzle add piece toggle-group";
-var usageImport85 = `import ToggleGroup from '@/components/ui/ToggleGroup.pzl';`;
-var usageMarkup85 = `<ToggleGroup items={ aligns } value={ align } @change={ setAlign } label="Text alignment"/>`;
-var codeHero85 = `const aligns = [
+var installCmd86 = "puzzle add piece toggle-group";
+var usageImport86 = `import ToggleGroup from '@/components/ui/ToggleGroup.pzl';`;
+var usageMarkup86 = `<ToggleGroup items={ aligns } value={ align } @change={ setAlign } label="Text alignment"/>`;
+var codeHero86 = `const aligns = [
   { value: 'left', label: 'Left' },
   { value: 'center', label: 'Center' },
   { value: 'right', label: 'Right' },
@@ -62714,10 +64235,10 @@ var ToggleGroupDoc = class extends PuzzleView {
     const { marks } = this.getData();
     return {
       ...this.getData(),
-      installCmd: installCmd85,
-      usageImport: usageImport85,
-      usageMarkup: usageMarkup85,
-      codeHero: codeHero85,
+      installCmd: installCmd86,
+      usageImport: usageImport86,
+      usageMarkup: usageMarkup86,
+      codeHero: codeHero86,
       codeMultiple: codeMultiple3,
       codeIcon: codeIcon2,
       marksLabel: marks && marks.length ? marks.join(", ") : "none",
@@ -62853,9 +64374,9 @@ ToggleGroupDoc.prototype.render = function() {
 ToggleGroupDoc.__pzlModule = "app/views/components/ToggleGroupDoc.pzl";
 
 // app/views/components/ToolbarDoc.pzl
-var installCmd86 = "puzzle add piece toolbar";
-var usageImport86 = `import Toolbar from '@/components/ui/Toolbar.pzl';`;
-var usageMarkup86 = `<Toolbar label="Text formatting" @toggle={ setMark } @press={ act } items={[ { type: 'toggle', value: 'bold', label: 'Bold', icon: BOLD, iconOnly: true, pressed: marks.bold }, { type: 'toggle', value: 'italic', label: 'Italic', icon: ITALIC, iconOnly: true, pressed: marks.italic }, { type: 'toggle', value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true, pressed: marks.underline }, { type: 'separator' }, { type: 'button', value: 'left', label: 'Align left', icon: ALIGN_LEFT, iconOnly: true }, { type: 'button', value: 'center', label: 'Align center', icon: ALIGN_CENTER, iconOnly: true }, { type: 'button', value: 'right', label: 'Align right', icon: ALIGN_RIGHT, iconOnly: true }, ]}/>`;
+var installCmd87 = "puzzle add piece toolbar";
+var usageImport87 = `import Toolbar from '@/components/ui/Toolbar.pzl';`;
+var usageMarkup87 = `<Toolbar label="Text formatting" @toggle={ setMark } @press={ act } items={[ { type: 'toggle', value: 'bold', label: 'Bold', icon: BOLD, iconOnly: true, pressed: marks.bold }, { type: 'toggle', value: 'italic', label: 'Italic', icon: ITALIC, iconOnly: true, pressed: marks.italic }, { type: 'toggle', value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true, pressed: marks.underline }, { type: 'separator' }, { type: 'button', value: 'left', label: 'Align left', icon: ALIGN_LEFT, iconOnly: true }, { type: 'button', value: 'center', label: 'Align center', icon: ALIGN_CENTER, iconOnly: true }, { type: 'button', value: 'right', label: 'Align right', icon: ALIGN_RIGHT, iconOnly: true }, ]}/>`;
 var BOLD2 = "M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8";
 var ITALIC2 = "M19 4h-9 M14 20H5 M15 4 9 20";
 var UNDERLINE2 = "M6 4v6a6 6 0 0 0 12 0V4 M4 20h16";
@@ -62867,7 +64388,7 @@ var REDO = "M21 7v6h-6 M21 13a9 9 0 1 1-3-7.7L21 8";
 var ZOOM_IN = "M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16 M21 21l-4.35-4.35 M11 8v6 M8 11h6";
 var ZOOM_OUT = "M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16 M21 21l-4.35-4.35 M8 11h6";
 var GRID = "M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z";
-var codeHero86 = `const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
+var codeHero87 = `const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
 // \u2026ITALIC, UNDERLINE, ALIGN_* path strings\u2026
 
 <Toolbar label="Text formatting" @toggle={ setMark } @press={ act } items={[
@@ -62891,7 +64412,7 @@ var codeMixed2 = `// Buttons fire @press; the toggle fires @toggle({ value, pres
   { type: 'separator' },
   { type: 'toggle', value: 'wrap', label: 'Wrap text', pressed: wrap },
 ]}/>`;
-var codeVertical3 = `// orientation="vertical" switches the arrow-key axis to Up/Down and stacks the controls.
+var codeVertical4 = `// orientation="vertical" switches the arrow-key axis to Up/Down and stacks the controls.
 <Toolbar orientation="vertical" label="Canvas tools" @press={ act } @toggle={ setGrid } items={[
   { type: 'button', value: 'zoom-in',  label: 'Zoom in',  icon: ZOOM_IN,  iconOnly: true },
   { type: 'button', value: 'zoom-out', label: 'Zoom out', icon: ZOOM_OUT, iconOnly: true },
@@ -62910,12 +64431,12 @@ var ToolbarDoc = class extends PuzzleView {
     const { marks, wrap, grid } = this.getData();
     return {
       ...this.getData(),
-      installCmd: installCmd86,
-      usageImport: usageImport86,
-      usageMarkup: usageMarkup86,
-      codeHero: codeHero86,
+      installCmd: installCmd87,
+      usageImport: usageImport87,
+      usageMarkup: usageMarkup87,
+      codeHero: codeHero87,
       codeMixed: codeMixed2,
-      codeVertical: codeVertical3,
+      codeVertical: codeVertical4,
       formatItems: [
         { type: "toggle", value: "bold", label: "Bold", icon: BOLD2, iconOnly: true, pressed: marks.bold },
         { type: "toggle", value: "italic", label: "Italic", icon: ITALIC2, iconOnly: true, pressed: marks.italic },
@@ -63211,10 +64732,10 @@ ToolbarDoc.prototype.render = function() {
 ToolbarDoc.__pzlModule = "app/views/components/ToolbarDoc.pzl";
 
 // app/views/components/TooltipDoc.pzl
-var installCmd87 = "puzzle add piece tooltip";
-var usageImport87 = `import Tooltip from '@/components/ui/Tooltip.pzl';`;
-var usageMarkup87 = `<Tooltip text="Save your changes"><Button variant="outline">Save</Button></Tooltip>`;
-var codeHero87 = `<Tooltip text="Save your changes"><Button variant="outline">Save</Button></Tooltip>
+var installCmd88 = "puzzle add piece tooltip";
+var usageImport88 = `import Tooltip from '@/components/ui/Tooltip.pzl';`;
+var usageMarkup88 = `<Tooltip text="Save your changes"><Button variant="outline">Save</Button></Tooltip>`;
+var codeHero88 = `<Tooltip text="Save your changes"><Button variant="outline">Save</Button></Tooltip>
 <Tooltip text="Copy to clipboard"><Button variant="outline">Copy</Button></Tooltip>
 <Tooltip text="Delete permanently"><Button variant="destructive">Delete</Button></Tooltip>`;
 var codePlacement4 = `<Tooltip text="Appears above" side="top"><Button variant="outline">Top</Button></Tooltip>
@@ -63234,10 +64755,10 @@ var TooltipDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd87,
-      usageImport: usageImport87,
-      usageMarkup: usageMarkup87,
-      codeHero: codeHero87,
+      installCmd: installCmd88,
+      usageImport: usageImport88,
+      usageMarkup: usageMarkup88,
+      codeHero: codeHero88,
       codePlacement: codePlacement4,
       codeDelay,
       toc: [
@@ -63384,9 +64905,9 @@ TooltipDoc.prototype.render = function() {
 TooltipDoc.__pzlModule = "app/views/components/TooltipDoc.pzl";
 
 // app/views/components/TreeDoc.pzl
-var installCmd88 = "puzzle add piece tree";
-var usageImport88 = `import Tree from '@/components/ui/Tree.pzl';`;
-var usageMarkup88 = `<Tree nodes={ nodes } value={ selected } expanded={ expanded } label="Project files" @select={ onSelect } @toggle={ onToggle } />`;
+var installCmd89 = "puzzle add piece tree";
+var usageImport89 = `import Tree from '@/components/ui/Tree.pzl';`;
+var usageMarkup89 = `<Tree nodes={ nodes } value={ selected } expanded={ expanded } label="Project files" @select={ onSelect } @toggle={ onToggle } />`;
 var folder = "M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2z";
 var file = "M14 3v4a1 1 0 001 1h4M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z";
 var user = "M17 20v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2M10 10a3 3 0 100-6 3 3 0 000 6";
@@ -63434,7 +64955,7 @@ var disabledTree = [
   ] },
   { id: "sol", label: "Sol Byrne", icon: user }
 ];
-var codeHero88 = `const folder = 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2z';
+var codeHero89 = `const folder = 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2z';
 const file   = 'M14 3v4a1 1 0 001 1h4M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z';
 
 const nodes = [
@@ -63465,7 +64986,7 @@ events = {
   expandAll: () => this.setData({ expanded: allParentIds(nodes) }),
   collapseAll: () => this.setData({ expanded: [] }),
 };`;
-var codeDisabled12 = `// A node with disabled: true is aria-disabled \u2014 no select/toggle from
+var codeDisabled13 = `// A node with disabled: true is aria-disabled \u2014 no select/toggle from
 // pointer, but still focusable by keyboard so it is announced.
 const nodes = [
   { id: 'engineering', label: 'Engineering', icon: folder, children: [
@@ -63508,12 +65029,12 @@ var TreeDoc = class extends PuzzleView {
     const d = this.getData();
     return {
       ...d,
-      installCmd: installCmd88,
-      usageImport: usageImport88,
-      usageMarkup: usageMarkup88,
-      codeHero: codeHero88,
+      installCmd: installCmd89,
+      usageImport: usageImport89,
+      usageMarkup: usageMarkup89,
+      codeHero: codeHero89,
       codeControlled: codeControlled9,
-      codeDisabled: codeDisabled12,
+      codeDisabled: codeDisabled13,
       fileTree,
       disabledTree,
       keys,
@@ -64139,6 +65660,13 @@ var routes_default = [
     view: EmptyDoc,
     layout: DefaultLayout,
     meta: { title: "Empty \u2014 Puzzle Pieces" }
+  },
+  {
+    path: "/components/fader",
+    name: "fader",
+    view: FaderDoc,
+    layout: DefaultLayout,
+    meta: { title: "Fader \u2014 Puzzle Pieces" }
   },
   {
     path: "/components/field",

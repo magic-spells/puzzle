@@ -1,8 +1,8 @@
 {
   "name": "slider",
-  "description": "Touch-friendly single-value or dual-thumb range slider with gesture arming, keyboard support, and optional form inputs",
+  "description": "Touch-friendly single-value or dual-thumb range slider with gesture arming, keyboard support, tick marks and labels, and optional form inputs",
   "files": ["Slider.pzl"],
-  "registryDependencies": [],
+  "registryDependencies": ["lib/slider-math.js"],
   "dependencies": [],
   "targetDir": "app/components/ui"
 }

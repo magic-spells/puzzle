@@ -6,47 +6,68 @@
     @keydown={ onKeyDown(event) }
     @click={ onClick(event) }>
 
-    <div class="relative h-1.5 w-full rounded-full bg-faint" data-slider-track>
-      <div class={ fillClass } style={ fillStyle }></div>
+    <div class={ trackWrapClass }>
+      <div class="relative h-1.5 w-full rounded-full bg-faint" data-slider-track>
+        <div class={ fillClass } style={ fillStyle }></div>
 
-      {#if range}
-        <div
-          class={ thumbClass }
-          style={ thumbMinStyle }
-          data-thumb="min"
-          role="slider"
-          tabindex={ thumbTabindex }
-          aria-orientation="horizontal"
-          aria-label={ labelMin }
-          aria-valuemin={ minStr }
-          aria-valuemax={ valueMaxStr }
-          aria-valuenow={ valueMinStr }
-          aria-disabled={ ariaDisabled }></div>
-        <div
-          class={ thumbClass }
-          style={ thumbMaxStyle }
-          data-thumb="max"
-          role="slider"
-          tabindex={ thumbTabindex }
-          aria-orientation="horizontal"
-          aria-label={ labelMax }
-          aria-valuemin={ valueMinStr }
-          aria-valuemax={ maxStr }
-          aria-valuenow={ valueMaxStr }
-          aria-disabled={ ariaDisabled }></div>
-      {:else}
-        <div
-          class={ thumbClass }
-          style={ thumbSingleStyle }
-          data-thumb="single"
-          role="slider"
-          tabindex={ thumbTabindex }
-          aria-orientation="horizontal"
-          aria-label={ label }
-          aria-valuemin={ minStr }
-          aria-valuemax={ maxStr }
-          aria-valuenow={ valueStr }
-          aria-disabled={ ariaDisabled }></div>
+        {#if range}
+          <div
+            class={ thumbClass }
+            style={ thumbMinStyle }
+            data-thumb="min"
+            role="slider"
+            tabindex={ thumbTabindex }
+            aria-orientation="horizontal"
+            aria-label={ labelMin }
+            aria-valuemin={ minStr }
+            aria-valuemax={ valueMaxStr }
+            aria-valuenow={ valueMinStr }
+            aria-valuetext={ valueMinText }
+            aria-disabled={ ariaDisabled }></div>
+          <div
+            class={ thumbClass }
+            style={ thumbMaxStyle }
+            data-thumb="max"
+            role="slider"
+            tabindex={ thumbTabindex }
+            aria-orientation="horizontal"
+            aria-label={ labelMax }
+            aria-valuemin={ valueMinStr }
+            aria-valuemax={ maxStr }
+            aria-valuenow={ valueMaxStr }
+            aria-valuetext={ valueMaxText }
+            aria-disabled={ ariaDisabled }></div>
+        {:else}
+          <div
+            class={ thumbClass }
+            style={ thumbSingleStyle }
+            data-thumb="single"
+            role="slider"
+            tabindex={ thumbTabindex }
+            aria-orientation="horizontal"
+            aria-label={ label }
+            aria-valuemin={ minStr }
+            aria-valuemax={ maxStr }
+            aria-valuenow={ valueStr }
+            aria-valuetext={ valueText }
+            aria-disabled={ ariaDisabled }></div>
+        {/if}
+      </div>
+
+      {#if hasTicks}
+        <div class={ tickMarkLayerClass } aria-hidden="true">
+          {#for t in tickMarks}
+            <span class={ t.class } style={ t.style } key={ t.key }></span>
+          {/for}
+        </div>
+      {/if}
+
+      {#if hasTickLabels}
+        <div class={ tickLabelLayerClass } aria-hidden="true">
+          {#for t in tickLabelList}
+            <span class={ t.class } style={ t.style } key={ t.key }>{ t.label }</span>
+          {/for}
+        </div>
       {/if}
     </div>
 
@@ -63,6 +84,17 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
+import {
+  configFrom,
+  quantize,
+  clampBounds,
+  round,
+  normalize,
+  valueToPercent,
+  percentToValue,
+  tickValues,
+  edgeShift,
+} from '../../lib/slider-math.js';
 
 // Slider — a touch-friendly single-value or dual-thumb range slider, ported
 // from the @magic-spells/range-slider web component. A CONTROLLED component:
@@ -86,6 +118,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   disabled              boolean — blocks pointer + keyboard interaction
 //   label                 string  — single thumb aria-label (default 'Value')
 //   labelMin / labelMax   string  — range thumb aria-labels (defaults 'Minimum'/'Maximum value')
+//   ticks                 boolean | number[] | {value,label?,class?,labelClass?}[]
+//                                 — tick marks along the track (see Ticks below)
+//   tickStep              number  — grid interval when ticks={ true }
+//   tickLabels            boolean | (value, tick) => string  — render the label row
+//   tickPosition          string  — 'below' (default) | 'above' | 'inside'
 //   name                  string  — emits hidden input(s) for form posts:
 //                                   {name} single, {name}-min + {name}-max range
 //   class                 string  — extra utilities merged onto the root
@@ -112,60 +149,144 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //      transition-none so drags track the pointer raw, while a track TAP (armed,
 //      no move) and keyboard steps animate the thumb across (transitions on).
 //
+// Ticks (opt-in — a slider with no `ticks` prop renders exactly as it always has)
+//   - `ticks={ true }` draws a generated grid. `tickStep` sets the interval;
+//     WITHOUT it the step auto-coarsens toward ~25 intervals, so a 0–100 step-1
+//     slider draws 21 marks rather than 101. An explicit `tickStep` is honoured
+//     literally, up to a hard 200-mark ceiling.
+//   - `ticks={[0, 25, 50]}` places explicit marks instead. Entries may be bare
+//     numbers or objects ({ value, label, class, labelClass }) and the two forms
+//     mix freely in one array; out-of-bounds values are dropped, repeats merge.
+//   - `tickLabels` decides whether the LABEL ROW RENDERS; a per-tick `label`
+//     supplies that mark's TEXT. `tickLabels={ true }` labels each tick with its
+//     value; pass (value, tick) => string to format them. Labels thin to at most
+//     11, always keeping the first and last — marks themselves NEVER thin, since
+//     a mark is a claim about the value grid. With `tickLabels={ false }` a
+//     { value: 0, label: 'Off' } still reaches aria-valuetext.
+//   - A per-tick `class` REPLACES the mark's color rather than appending to it —
+//     'bg-brand bg-danger' on one element resolves by CSS SOURCE order, not
+//     attribute order, so the winner would be non-deterministic. The positioning
+//     base is kept, so `{ value: 90, class: 'bg-danger' }` is all a redline needs
+//     and the mark stops tracking the fill. `labelClass` works the same way.
+//   - Ticks are decoration, not detents — they do not snap on their own. Set
+//     `step` to the same number as `tickStep` (or list `ticks` on a matching step
+//     grid) and the thumb lands on every mark.
+//
 // Ported from @magic-spells/range-slider; DELIBERATELY DROPPED (Puzzle handles
 // them at the parent, or they're deferred):
 //   - data-content-* bound number-inputs and live value bubbles (Puzzle
 //     reactivity makes value display a parent concern — read @input/@change)
-//   - tick marks, tick-step, and show-labels (deferred; add `ticks` later)
 //   - form-reset default restoration (parent-owned state resets naturally)
 //   - RTL layout
 
 const DRAG_THRESHOLD = 3;
 
-// --- pure value math (all take a cfg: { min, max, step, dec }) ---------------
+// Tick values drift (0.1 + 0.2), so the active test needs slack at both ends.
+const EPS = 1e-9;
 
-function decimalsOf(raw) {
-  if (raw == null) return 0;
-  const s = String(raw);
-  const dot = s.indexOf('.');
-  return dot === -1 ? 0 : Math.min(s.length - dot - 1, 6);
-}
-
-function quantize(v, cfg) {
-  if (cfg.step === 'any') return v;
-  return cfg.min + Math.round((v - cfg.min) / cfg.step) * cfg.step;
-}
-
-function clampBounds(v, cfg) {
-  return Math.max(cfg.min, Math.min(v, cfg.max));
-}
-
-function round(v, cfg) {
-  return parseFloat(v.toFixed(cfg.dec));
-}
-
-// Quantize → clamp to bounds → crossover-clamp against the opposing thumb →
-// round. Deterministic: normalize(normalize(x)) === normalize(x).
-function normalize(value, thumb, cfg, committed) {
-  let v = Number.isFinite(value) ? value : cfg.min;
-  v = clampBounds(quantize(v, cfg), cfg);
-  if (thumb === 'min') v = Math.min(v, committed.valueMax);
-  if (thumb === 'max') v = Math.max(v, committed.valueMin);
-  return round(v, cfg);
-}
-
-function valueToPercent(value, cfg) {
-  const range = cfg.max - cfg.min;
-  if (range <= 0) return 0;
-  const pct = ((value - cfg.min) / range) * 100;
-  return Math.round(Math.max(0, Math.min(100, pct)) * 1000) / 1000;
-}
+// Labels crowd long before marks do; 11 is the most that stays readable on a
+// narrow track.
+const MAX_LABELS = 11;
 
 const ROOT_BASE = 'relative flex w-full min-h-11 touch-pan-y select-none items-center';
 const THUMB_BASE =
-  'absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full ' +
+  'absolute top-1/2 z-10 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full ' +
   'border border-border-strong bg-surface shadow ' +
   'focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring';
+
+// A layout-neutral wrapper sits between the root and the track. With no ticks it
+// is exactly as tall as the track, so existing sliders render unchanged; ticks
+// grow it through PADDING (never root padding — border-box would collapse the
+// pressable band — and never flex-col on the root, whose axis `props.class` is
+// merged against).
+const TRACK_WRAP = 'relative w-full';
+const WRAP_PAD = {
+  below: { labels: 'pb-6', bare: 'pb-4' },
+  above: { labels: 'pt-6', bare: 'pt-4' },
+  inside: { labels: 'pb-6', bare: '' },
+};
+// Both layers mount as SIBLINGS after the track, including `inside` — nesting it
+// in the track would let its overflow-hidden clip the thumbs. Painting after the
+// thumbs is why THUMB_BASE carries z-10.
+const MARK_LAYER = {
+  below: 'pointer-events-none absolute inset-x-0 top-3.5 h-1',
+  above: 'pointer-events-none absolute inset-x-0 bottom-3.5 h-1',
+  inside: 'pointer-events-none absolute inset-x-0 top-0 h-1.5 overflow-hidden rounded-full',
+};
+const LABEL_LAYER = {
+  below: 'pointer-events-none absolute inset-x-0 top-5',
+  above: 'pointer-events-none absolute inset-x-0 bottom-5',
+  inside: 'pointer-events-none absolute inset-x-0 top-5',
+};
+// Geometry base + color, kept apart so a per-tick `class` can swap the COLOR
+// without a caller having to restate the positioning. Built once at module load:
+// the per-frame attribute diff is then a pointer compare, and Tailwind's scanner
+// still sees every utility literally.
+const MARK_BASE = {
+  inside: 'absolute top-0 h-full w-0.5',
+  gutter: 'absolute top-0 h-full w-0.5 rounded-full',
+};
+const MARK_CLASS = {
+  // ON the bar: the mark reads as a notch CUT through the track.
+  inside: {
+    on: `${MARK_BASE.inside} bg-brand-ink`,
+    off: `${MARK_BASE.inside} bg-surface`,
+  },
+  // In the gutter: foreground marks echoing the track's two states.
+  gutter: {
+    on: `${MARK_BASE.gutter} bg-brand`,
+    off: `${MARK_BASE.gutter} bg-faint`,
+  },
+};
+// The label span sets only `left`, so it grows from whichever edge anchors it.
+// `below`/`inside` hang DOWN off the layer; `above` must grow UP — anchored to the
+// layer's top it would render straight over its own tick marks.
+const LABEL_BASE = {
+  below: 'absolute top-0 whitespace-nowrap text-xs tabular-nums',
+  above: 'absolute bottom-0 whitespace-nowrap text-xs tabular-nums',
+  inside: 'absolute top-0 whitespace-nowrap text-xs tabular-nums',
+};
+const LABEL_CLASS = {
+  below: `${LABEL_BASE.below} text-muted`,
+  above: `${LABEL_BASE.above} text-muted`,
+  inside: `${LABEL_BASE.inside} text-muted`,
+};
+
+// Marks and labels carry NO Tailwind translate utility — Tailwind writes the CSS
+// `translate` property too, so a utility plus an inline shift would compose and
+// double-shift the endpoints. All shifting goes through `edgeShift`.
+function tickStyle(percent) {
+  return `left:${percent}%;translate:${edgeShift(percent)} 0`;
+}
+
+// Labels thin freely, but the FIRST and LAST always survive: on a slider, losing
+// the "100" defeats the point of labelling at all (LineChart's plain `i % step`
+// can drop its last label — here that is not acceptable).
+function thinLabels(list, marks, labelFn, position) {
+  const n = list.length;
+  if (!n) return [];
+  const stride = n > MAX_LABELS ? Math.ceil((n - 1) / (MAX_LABELS - 1)) : 1;
+  const keep = [];
+  for (let i = 0; i < n; i++) if (i % stride === 0) keep.push(i);
+  if (keep[keep.length - 1] !== n - 1) {
+    // a strided label landing right beside the forced endpoint reads as a collision
+    if (n - 1 - keep[keep.length - 1] < Math.ceil(stride / 2)) keep.pop();
+    keep.push(n - 1);
+  }
+  return keep.map((i) => {
+    const t = list[i];
+    const own = typeof t.label === 'string' && t.label !== '';
+    return {
+      key: marks[i].key,
+      style: marks[i].style,
+      class:
+        typeof t.labelClass === 'string' && t.labelClass
+          ? `${LABEL_BASE[position]} ${t.labelClass}`
+          : LABEL_CLASS[position],
+      label: own ? t.label : labelFn ? String(labelFn(t.value, t)) : String(t.value),
+    };
+  });
+}
 
 export default class Slider extends PuzzleView {
   created() {
@@ -191,7 +312,7 @@ export default class Slider extends PuzzleView {
   }
 
   data(params, props) {
-    const cfg = this._cfg(props);
+    const cfg = configFrom(props);
     const range = this._isRange(props);
     const committed = this._committed(props, cfg);
     const d = this.getData();
@@ -224,6 +345,20 @@ export default class Slider extends PuzzleView {
       thumbSingleStyle = `left:${p}%`;
     }
 
+    // Ticks: the geometry is cached (see _tickModel) and only the active/inactive
+    // class is picked per frame. The test MIRRORS fillStyle above and reads the
+    // same draft-overlaid values, so a mark can never disagree with the fill.
+    const ticks = this._tickModel(props, cfg);
+    const lo = range ? renderMin : cfg.min;
+    const hi = range ? renderMax : renderValue;
+    const onClass = MARK_CLASS[ticks.kind].on;
+    const offClass = MARK_CLASS[ticks.kind].off;
+    const tickMarks = ticks.marks.map((m) => ({
+      key: m.key,
+      style: m.style,
+      class: m.custom || (m.value >= lo - EPS && m.value <= hi + EPS ? onClass : offClass),
+    }));
+
     return {
       range,
       rootId: props.id || false,
@@ -234,12 +369,19 @@ export default class Slider extends PuzzleView {
       ]
         .filter(Boolean)
         .join(' '),
+      trackWrapClass: ticks.wrapClass,
       fillClass: `absolute inset-y-0 rounded-full bg-brand ${trans}`,
       thumbClass: `${THUMB_BASE} ${thumbTrans} ${disabled ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}`,
       fillStyle,
       thumbSingleStyle,
       thumbMinStyle,
       thumbMaxStyle,
+      hasTicks: tickMarks.length > 0,
+      tickMarks,
+      tickMarkLayerClass: ticks.markLayerClass,
+      hasTickLabels: ticks.labels.length > 0,
+      tickLabelList: ticks.labels,
+      tickLabelLayerClass: ticks.labelLayerClass,
       thumbTabindex: disabled ? '-1' : '0',
       ariaDisabled: disabled ? 'true' : false,
       label: props.label || 'Value',
@@ -250,6 +392,9 @@ export default class Slider extends PuzzleView {
       valueStr: String(renderValue),
       valueMinStr: String(renderMin),
       valueMaxStr: String(renderMax),
+      valueText: ticks.texts.get(renderValue) || false,
+      valueMinText: ticks.texts.get(renderMin) || false,
+      valueMaxText: ticks.texts.get(renderMax) || false,
       name: props.name || false,
       nameMin: props.name ? `${props.name}-min` : false,
       nameMax: props.name ? `${props.name}-max` : false,
@@ -261,7 +406,7 @@ export default class Slider extends PuzzleView {
   afterUpdate() {
     const d = this.getData();
     if (this._pendingClearCheck || d.dragging || d.draftThumb == null) return;
-    const cfg = this._cfg(this.props);
+    const cfg = configFrom(this.props);
     const committed = this._committed(this.props, cfg);
     if (this._channel(committed, d.draftThumb) !== d.draftValue) return;
     this._pendingClearCheck = true;
@@ -279,16 +424,6 @@ export default class Slider extends PuzzleView {
 
   _isRange(props) {
     return props.valueMin !== undefined || props.valueMax !== undefined;
-  }
-
-  _cfg(props) {
-    const min = Number.isFinite(Number(props.min)) ? Number(props.min) : 0;
-    const max = Number.isFinite(Number(props.max)) ? Number(props.max) : 100;
-    const stepAny = props.step === 'any';
-    const stepNum = Number(props.step);
-    const step = stepAny ? 'any' : Number.isFinite(stepNum) && stepNum > 0 ? stepNum : 1;
-    const dec = stepAny ? 2 : Math.max(decimalsOf(props.step), decimalsOf(props.min));
-    return { min, max, step, dec };
   }
 
   // The committed value(s) straight from props, normalized. Range values are
@@ -310,6 +445,77 @@ export default class Slider extends PuzzleView {
     return thumb === 'min' ? state.valueMin : thumb === 'max' ? state.valueMax : state.value;
   }
 
+  // --- ticks -----------------------------------------------------------------
+
+  // Everything about a tick except its active state is fixed by the props, so it
+  // is built once and cached by IDENTITY on `props.ticks` (never JSON.stringify —
+  // stringifying a 100-entry array every drag frame would cost more than the rest
+  // of the render combined). data() then does one pass picking a frozen class.
+  _tickModel(props, cfg) {
+    const c = this._ticks;
+    if (
+      c &&
+      c.spec === props.ticks &&
+      c.tickStep === props.tickStep &&
+      c.tickLabels === props.tickLabels &&
+      c.tickPosition === props.tickPosition &&
+      c.min === cfg.min &&
+      c.max === cfg.max &&
+      c.step === cfg.step &&
+      c.dec === cfg.dec
+    ) {
+      return c;
+    }
+
+    const position = MARK_LAYER[props.tickPosition] ? props.tickPosition : 'below';
+    const kind = position === 'inside' ? 'inside' : 'gutter';
+    const list = tickValues(cfg, props.ticks, props.tickStep);
+    const marks = list.map((t, i) => ({
+      key: `t${i}`,
+      value: t.value,
+      // A custom class REPLACES the piece's color; see the Ticks note above.
+      custom: typeof t.class === 'string' && t.class ? `${MARK_BASE[kind]} ${t.class}` : '',
+      style: tickStyle(valueToPercent(t.value, cfg)),
+    }));
+    const labels = props.tickLabels
+      ? thinLabels(list, marks, typeof props.tickLabels === 'function' ? props.tickLabels : null, position)
+      : [];
+
+    // aria-valuetext comes ONLY from an explicit, non-numeric per-tick label, so
+    // { value: 0, label: 'Off' } announces "Off". It REPLACES the announced
+    // value, so a formatted numeric label ('1.2k') must never feed it — that
+    // would override a perfectly correct aria-valuenow of 1200.
+    const texts = new Map();
+    for (const t of list) {
+      if (typeof t.label !== 'string' || t.label === '') continue;
+      if (Number.isFinite(Number(t.label))) continue;
+      texts.set(t.value, t.label);
+    }
+
+    const pad = marks.length ? WRAP_PAD[position][labels.length ? 'labels' : 'bare'] : '';
+    const model = {
+      spec: props.ticks,
+      tickStep: props.tickStep,
+      tickLabels: props.tickLabels,
+      tickPosition: props.tickPosition,
+      min: cfg.min,
+      max: cfg.max,
+      step: cfg.step,
+      dec: cfg.dec,
+      kind,
+      marks,
+      labels,
+      texts,
+      // No ticks → the bare frozen TRACK_WRAP, i.e. a 6px-tall box exactly the
+      // size of the track: existing sliders lay out byte-for-byte as before.
+      wrapClass: pad ? `${TRACK_WRAP} ${pad}` : TRACK_WRAP,
+      markLayerClass: MARK_LAYER[position],
+      labelLayerClass: LABEL_LAYER[position],
+    };
+    this._ticks = model;
+    return model;
+  }
+
   // --- geometry --------------------------------------------------------------
 
   _percentFromClientX(clientX) {
@@ -318,10 +524,6 @@ export default class Slider extends PuzzleView {
     const rect = track.getBoundingClientRect();
     if (!rect.width) return 0;
     return Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
-  }
-
-  _percentToValue(percent, cfg) {
-    return cfg.min + (percent / 100) * (cfg.max - cfg.min);
   }
 
   _nearestThumb(percent, committed, cfg) {
@@ -437,7 +639,7 @@ export default class Slider extends PuzzleView {
       return;
     }
 
-    const cfg = this._cfg(this.props);
+    const cfg = configFrom(this.props);
     const committed = this._committed(this.props, cfg);
 
     if (!drag.dragging) {
@@ -467,7 +669,7 @@ export default class Slider extends PuzzleView {
 
     if (Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD) this._suppressClick = true;
 
-    const raw = this._percentToValue(this._percentFromClientX(event.clientX), cfg);
+    const raw = percentToValue(this._percentFromClientX(event.clientX), cfg);
     const nv = normalize(raw, drag.thumb, cfg, committed);
     const d = this.getData();
     if (d.draftThumb !== drag.thumb || d.draftValue !== nv || !d.dragging) {
@@ -483,7 +685,7 @@ export default class Slider extends PuzzleView {
     this._releasePointer(event);
 
     const { armed, dragging, thumb, startValue } = drag;
-    const cfg = this._cfg(this.props);
+    const cfg = configFrom(this.props);
     const committed = this._committed(this.props, cfg);
     this._teardownGesture();
 
@@ -503,7 +705,7 @@ export default class Slider extends PuzzleView {
       const percent = this._percentFromClientX(event.clientX);
       const tapThumb = this._nearestThumb(percent, committed, cfg);
       this._suppressClick = true;
-      const nv = normalize(this._percentToValue(percent, cfg), tapThumb, cfg, committed);
+      const nv = normalize(percentToValue(percent, cfg), tapThumb, cfg, committed);
       if (nv !== this._channel(committed, tapThumb)) {
         this.setData({ dragging: false, draftThumb: tapThumb, draftValue: nv });
         this.refresh();
@@ -531,7 +733,7 @@ export default class Slider extends PuzzleView {
         this._overlayTimer = null;
       }
 
-      const cfg = this._cfg(this.props);
+      const cfg = configFrom(this.props);
       const committed = this._committed(this.props, cfg);
       const range = this._isRange(this.props);
       const thumbEl = event.target.closest && event.target.closest('[data-thumb]');
@@ -559,10 +761,11 @@ export default class Slider extends PuzzleView {
         if (thumbEl.focus) thumbEl.focus({ preventScroll: true });
         this._capturePointer(event);
         this._addWindowListeners();
-      } else if (
-        event.target === this.element ||
-        (event.target.closest && event.target.closest('[data-slider-track]'))
-      ) {
+      } else if (this.element.contains(event.target)) {
+        // Anything in the root that ISN'T a thumb arms a track press: the track, the
+        // fill, the tick wrapper's padding, the tick layers. closest('[data-slider-track]')
+        // walks UP, so a SIBLING of the track matched neither arm of the old test.
+        //
         // a track press only ARMS — it may still become a page scroll
         this._drag = {
           pointerId: event.pointerId,
@@ -583,7 +786,7 @@ export default class Slider extends PuzzleView {
       const thumbEl = event.target.closest && event.target.closest('[data-thumb]');
       if (!thumbEl) return;
       const thumb = thumbEl.dataset.thumb;
-      const cfg = this._cfg(this.props);
+      const cfg = configFrom(this.props);
       const committed = this._committed(this.props, cfg);
       const current = this._channel(committed, thumb);
       const stepSize = cfg.step === 'any' ? (cfg.max - cfg.min) / 100 : cfg.step;
