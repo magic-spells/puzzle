@@ -11,8 +11,12 @@
 // static router stub (ssg/assemble.js) call.
 //
 // Hash apps cannot reach hybrid at all (the history-only guard rejects them — a
-// hash router boots at '/' and would render home over every page), so the hash
-// encoding is asserted through static output and the encodeURL parity table below.
+// hash router boots at '/' and would render home over every page). They CAN reach
+// static output, but static output ignores `routerMode` entirely: a static page has
+// no router and no click interception, so a prerendered `#/about` on a page living
+// at /about/index.html would be a dead link (P2.1). Static therefore forces
+// history-style hrefs on both sides — prerender and kernel — and warns; the hash
+// encoding itself is asserted through the encodeURL parity table below.
 import { describe, it, expect } from 'vitest';
 import { prerender } from '../client-runtime/ssg/index.js';
 import { Router, encodeURL, normalizeBase } from '../client-runtime/router/router.js';
@@ -106,26 +110,64 @@ describe('hybrid prerender — default (no base, history) is unchanged', () => {
 	});
 });
 
-describe('hash apps: rejected by hybrid, encoded by static output', () => {
+describe('hash apps: rejected by hybrid, flattened to history by static output (P2.1)', () => {
 	it('hybrid + hash is rejected before any page renders', async () => {
 		await expect(prerender(config({ routerMode: 'hash' }))).rejects.toThrow(
 			/hybrid prerender output requires history routing/
 		);
 	});
 
-	it("static output of a hash app emits '#/'-prefixed hrefs", async () => {
-		const html = await homeHtml(config({ routerMode: 'hash' }), { mode: 'static' });
-		expect(html).toContain('href="#/about"');
+	it('hybrid + memory is rejected the same way', async () => {
+		await expect(prerender(config({ routerMode: 'memory' }))).rejects.toThrow(
+			/hybrid prerender output requires history routing/
+		);
 	});
 
-	it('static output of a based hash app carries the base ahead of the fragment', async () => {
+	it('static output of a hash app emits PATH-shaped hrefs, never "#/"', async () => {
+		const html = await homeHtml(config({ routerMode: 'hash' }), { mode: 'static' });
+		expect(html).toContain('href="/about"');
+		expect(html).not.toContain('href="#/about"');
+		expect(html).not.toContain('#/');
+	});
+
+	it('static output of a hash app warns that routerMode is ignored', async () => {
+		const { warnings } = await prerender(config({ routerMode: 'hash' }), { mode: 'static' });
+		expect(warnings.some((w) => w.includes('ignores `routerMode: "hash"`'))).toBe(true);
+		expect(warnings.some((w) => w.includes('links are emitted history-style'))).toBe(true);
+	});
+
+	it("static output of a memory app is flattened + warned identically", async () => {
+		const cfg = config({ routerMode: 'memory' });
+		const { pages, warnings } = await prerender(cfg, { mode: 'static' });
+		expect(pages[0].html).toContain('href="/about"');
+		expect(warnings.some((w) => w.includes('ignores `routerMode: "memory"`'))).toBe(true);
+	});
+
+	it('static output of a based hash app keeps the base and stays path-shaped', async () => {
 		const cfg = config({ routerMode: 'hash', routerBase: '/docs' });
-		expect(await homeHtml(cfg, { mode: 'static' })).toContain('href="#/docs/about"');
+		const html = await homeHtml(cfg, { mode: 'static' });
+		expect(html).toContain('href="/docs/about"');
+		expect(html).not.toContain('#/docs/about');
 	});
 
 	it('static output of a based history app prefixes the base', async () => {
 		const cfg = config({ routerBase: '/docs' });
 		expect(await homeHtml(cfg, { mode: 'static' })).toContain('href="/docs/about"');
+	});
+
+	it("static output with routerMode 'history' (or unset) warns about nothing new", async () => {
+		for (const cfg of [config({ routerMode: 'history' }), config()]) {
+			const { warnings } = await prerender(cfg, { mode: 'static' });
+			expect(warnings.some((w) => w.includes('routerMode'))).toBe(false);
+		}
+	});
+
+	it('a hash app renders the SAME href in static prerender and in the SPA it is not', async () => {
+		// The regression in one line: the live hash SPA renders '#/about', the static
+		// build renders '/about' — because a static page is a document, not an SPA.
+		const cfg = config({ routerMode: 'hash' });
+		expect(new Router([], { mode: 'hash' }).url('/about')).toBe('#/about');
+		expect(await homeHtml(cfg, { mode: 'static' })).toContain('href="/about"');
 	});
 });
 

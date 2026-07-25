@@ -229,6 +229,88 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(() => captured.back()).toThrow(/no router/);
 	});
 
+	it('ctx.router.url() ignores routerMode — hash config, path-shaped hrefs, byte-equal to the prerender (P2.1)', async () => {
+		// The generated per-page entry still passes the app's configured routerMode into
+		// mountStatic (the Go build echoes summary.routerMode verbatim), so the KERNEL is
+		// what has to ignore it — otherwise the client re-render would rewrite every href
+		// to '#/…' over prerendered '/…' markup, and those links go nowhere on a page with
+		// no router. Both stubs force history, so the two outputs are byte-identical.
+		let captured = null;
+		class LinkProbe extends PuzzleView {
+			created() {
+				captured = this.ctx.router;
+			}
+			render() {
+				const __f = this.ctx.formatters.getAll();
+				return h('a', { href: __f.link('/about') }, [text('About')]);
+			}
+		}
+		stamp(LinkProbe, 'app/views/LinkProbe.pzl');
+		const cfg = {
+			target: '#app',
+			routerMode: 'hash', // a hash-configured app built to static output
+			routes: [{ path: '/', name: 'home', view: LinkProbe }],
+		};
+		const { pages, warnings } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+		expect(page.html).toContain('href="/about"');
+		expect(warnings.some((w) => w.includes('ignores `routerMode: "hash"`'))).toBe(true);
+
+		const el = seedDocument({ content: page.html, data: page.data });
+		const prerendered = el.innerHTML;
+		captured = null; // drop the build-time capture; assert the KERNEL's stub
+		await mountStatic({
+			target: '#app',
+			views: [LinkProbe],
+			route: page.route,
+			routerMode: 'hash', // what the generated entry passes
+		});
+		await tick();
+
+		// Byte-equality of the two stubs' output for the same route/config.
+		expect(el.innerHTML).toBe(prerendered);
+		expect(el.querySelector('a').getAttribute('href')).toBe('/about');
+		expect(captured.url('/about')).toBe('/about');
+		expect(captured.url('/about')).not.toContain('#');
+	});
+
+	it('ctx.router.url() still honours routerBase under a hash config (base yes, mode no)', async () => {
+		let captured = null;
+		class BasedProbe extends PuzzleView {
+			created() {
+				captured = this.ctx.router;
+			}
+			render() {
+				return h('a', { href: this.ctx.router.url('/about') }, [text('About')]);
+			}
+		}
+		stamp(BasedProbe, 'app/views/BasedProbe.pzl');
+		const cfg = {
+			target: '#app',
+			routerMode: 'hash',
+			routerBase: '/docs',
+			routes: [{ path: '/', name: 'home', view: BasedProbe }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+		expect(page.html).toContain('href="/docs/about"');
+
+		const el = seedDocument({ content: page.html, data: page.data });
+		const prerendered = el.innerHTML;
+		captured = null;
+		await mountStatic({
+			target: '#app',
+			views: [BasedProbe],
+			route: page.route,
+			routerMode: 'hash',
+			routerBase: '/docs',
+		});
+		await tick();
+
+		expect(el.innerHTML).toBe(prerendered);
+		expect(captured.url('/about')).toBe('/docs/about');
+	});
+
 	it('the kernel-mounted route snapshot carries the D83 pathname/query/hash parts', async () => {
 		// The serialized summary route ({ path, params, chain }) never carries the
 		// parsed parts — the shared assembleChain derives them when the kernel zips
