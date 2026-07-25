@@ -34,6 +34,25 @@ export interface PrerenderedPage {
 	head: ResolvedRouteHead | null;
 	/** Present and `false` when the route opted out with `prerender: false`. */
 	prerender?: boolean;
+	/**
+	 * The page's store snapshot (`Store._serializeAll()` — type name → serialized
+	 * records) that rides into the inline data island — static mode only.
+	 */
+	data?: Record<string, any[]>;
+	/** The page's view/layout `__pzlModule` stamps — static mode only. */
+	modules?: { views: string[]; layout: string | null };
+	/** The page's plain-JSON route snapshot — static mode only. */
+	route?: object;
+}
+
+/** One leaf entry from `enumerateRoutes` — the prerenderer's per-page unit. */
+export interface RouteEntry {
+	/** The leaf's composed full path (`/`, `/todos/:id`, `*`, …). */
+	fullPath: string;
+	/** The route defs root → leaf. */
+	chain: any[];
+	/** The top-level route's `layout` (children inherit it), or null. */
+	layout: any | null;
 }
 
 /**
@@ -78,6 +97,15 @@ export interface PrerenderToDirResult {
 	target?: string;
 	/** The store's base API URL, or null — static mode only. */
 	apiURL?: string | null;
+	/** The app's normalized route URL prefix — static mode only. */
+	routerBase?: string;
+	/**
+	 * The app's configured router mode — static mode only. Reported for summary
+	 * fidelity; the static kernel always emits history-style hrefs (D117).
+	 */
+	routerMode?: 'history' | 'hash' | 'memory';
+	/** Whether the config registered any models — static mode only. */
+	hasModels?: boolean;
 	/** Whether the config registered any custom formatters — static mode only. */
 	hasFormatters?: boolean;
 }
@@ -105,6 +133,14 @@ export interface PrerenderToDirOptions {
  * exists an advisory warning is pushed (no 404.html will be emitted).
  */
 export declare function prerender(config: any, opts?: object): Promise<PrerenderResult>;
+
+/**
+ * Flatten a routes array into one entry PER LEAF via the shared route-tree walk
+ * (routeTree.js) the Router compiles its matcher table from, so a navigable route
+ * and its prerendered page can never disagree on the leaf set or composed path.
+ * Exported for the drift-guard test.
+ */
+export declare function enumerateRoutes(routes: any[]): RouteEntry[];
 
 /**
  * Prerender and write one directory-style `index.html` per route into `outDir`,
@@ -148,5 +184,11 @@ export declare function injectStaticShell(
 		head?: ResolvedRouteHead | null;
 		slug: string;
 		data: object;
+		/**
+		 * The already-normalized route base prefix (`''` for a root deploy) prepended
+		 * to the per-page `/_puzzle/<slug>.js` module href so a sub-path deploy
+		 * resolves it instead of 404ing at the domain root.
+		 */
+		base?: string;
 	}
 ): string;
