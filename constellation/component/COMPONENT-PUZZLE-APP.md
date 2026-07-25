@@ -49,6 +49,13 @@ Lifecycle order:
    flushes pending Store persistence (including mutations from destroyed
    hooks), clears the container, and drops services. It is idempotent.
 
+Every `mount()` attempt claims a private generation epoch (`#mountEpoch`),
+burned by any teardown: a continuation resuming after either await proves it
+still owns the app before proceeding, so unmount+remount around an awaited
+`beforeMount`/`router.start()` can neither double-start the router, double-fire
+`mounted`, nor let the stale abort path tear down the replacement cycle (D118).
+The `_mounted` boolean stays the "is anything mounted" question only.
+
 While mounted, the app holds a window `pagehide` listener that calls
 `store.flush()`: batched persistence ([[COMPONENT-STORE]]) leaves a dirty
 window between a mutation and the scheduled flush, and a reload or

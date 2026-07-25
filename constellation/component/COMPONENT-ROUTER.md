@@ -78,7 +78,12 @@ are **not** synced here, in any output mode: D111 made them build-time only, so
 Dev builds emit the committed route to the D100 DevTools bridge
 ([[FILE-DEVTOOLS]]) from `#commitState`, beside the existing `warnMissingSlots`
 walk — after `#commitLocation`, so the reported `document.title` is already this
-route's. Same-path pushes are no-ops. Trailing `/` is insignificant for matching. The D39
+route's. Committed-same-path pushes are no-ops; a same-path push while that navigation
+is still IN FLIGHT returns the in-flight navigation's own promise, so both
+callers settle at commit (D119). The route announcement reads `document.title`
+but falls back to the committed route's name (then path) when the title didn't
+move — aria-live announces on change only (D119). Trailing `/` is
+insignificant for matching. The D39
 skeleton gate must start all gated loads before any skeleton-exempt preload opens
 its tracking scope, or a store-connected layout's gated sync `data()` queues
 behind the skeleton view's fetch and nothing paints.

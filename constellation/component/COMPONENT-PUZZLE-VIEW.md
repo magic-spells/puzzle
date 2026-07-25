@@ -63,5 +63,10 @@ D100). `_localState()` predates them and serves the same convention.
 
 Enter/leave specs and the four show/hide hooks delegate to
 [[COMPONENT-ANIMATIONS]]. Teardown catches leave-hook failures and still removes
-the subtree. The compiler attaches `render()` to the prototype after the user
-class and reads class-field `events` lazily at render time.
+the subtree, and the `destroyed()` hook itself is guarded — a throw is logged
+and never wedges the surrounding cascade (parent destroys, `Router.stop()`,
+`PuzzleApp.unmount()`; D118). A hand-written `render()` returning null after a
+tree clears the DOM and re-anchors its position — compiled templates always
+emit a root, so this is authored-view territory (D118). The compiler attaches
+`render()` to the prototype after the user class and reads class-field `events`
+lazily at render time.
