@@ -94,7 +94,7 @@ import { COMPONENTS } from '../docs/nav.js';
 
 const SCHEMES = [
   { label: 'Default', value: 'default' },
-  { label: 'Claw', value: 'claw' },
+  { label: 'Warm', value: 'warm' },
   { label: 'Void', value: 'void' },
   { label: 'Dim', value: 'dim' },
 ];
@@ -126,7 +126,7 @@ export default class DefaultLayout extends PuzzleView {
     const explicitScheme =
       typeof document !== 'undefined' && document.documentElement.dataset.scheme;
     const scheme =
-      explicitScheme === 'claw' || explicitScheme === 'void' || explicitScheme === 'dim'
+      explicitScheme === 'warm' || explicitScheme === 'void' || explicitScheme === 'dim'
         ? explicitScheme
         : 'default';
     return {
@@ -148,7 +148,7 @@ export default class DefaultLayout extends PuzzleView {
     },
     setScheme: (scheme) => {
       const next =
-        scheme === 'claw' || scheme === 'void' || scheme === 'dim' ? scheme : 'default';
+        scheme === 'warm' || scheme === 'void' || scheme === 'dim' ? scheme : 'default';
       if (typeof document !== 'undefined') {
         if (next === 'default') delete document.documentElement.dataset.scheme;
         else document.documentElement.dataset.scheme = next;

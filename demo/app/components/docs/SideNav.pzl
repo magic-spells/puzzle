@@ -45,10 +45,15 @@ const ACTIVE = `${LINK} bg-surface-sunken font-medium text-ink`;
 export default class SideNav extends PuzzleView {
   data(params, props) {
     const path = props.path || '/';
+    // The demo pages live under /examples/* but have no nav entry of their own,
+    // so keep the /demos index lit while you are inside one — otherwise nothing
+    // in the sidebar reflects where you are.
+    const isActive = (item) =>
+      item.path === path || (item.path === '/demos' && path.startsWith('/examples/'));
     const mark = (items) =>
       items.map((item) => ({
         ...item,
-        class: item.path === path ? ACTIVE : IDLE,
+        class: isActive(item) ? ACTIVE : IDLE,
       }));
     return {
       started: mark(GETTING_STARTED),

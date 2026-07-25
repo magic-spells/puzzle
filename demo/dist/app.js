@@ -8728,9 +8728,10 @@ var ACTIVE = `${LINK} bg-surface-sunken font-medium text-ink`;
 var SideNav = class extends PuzzleView {
   data(params, props) {
     const path = props.path || "/";
+    const isActive = (item) => item.path === path || item.path === "/demos" && path.startsWith("/examples/");
     const mark = (items) => items.map((item) => ({
       ...item,
-      class: item.path === path ? ACTIVE : IDLE
+      class: isActive(item) ? ACTIVE : IDLE
     }));
     return {
       started: mark(GETTING_STARTED),
@@ -11823,7 +11824,7 @@ SearchDialog.__pzlModule = "app/components/docs/SearchDialog.pzl";
 // app/layouts/Default.pzl
 var SCHEMES = [
   { label: "Default", value: "default" },
-  { label: "Claw", value: "claw" },
+  { label: "Warm", value: "warm" },
   { label: "Void", value: "void" },
   { label: "Dim", value: "dim" }
 ];
@@ -11837,7 +11838,7 @@ var DefaultLayout = class extends PuzzleView {
     const explicit = document.documentElement.dataset.theme;
     const darkMode = explicit ? explicit === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
     const explicitScheme = typeof document !== "undefined" && document.documentElement.dataset.scheme;
-    const scheme = explicitScheme === "claw" || explicitScheme === "void" || explicitScheme === "dim" ? explicitScheme : "default";
+    const scheme = explicitScheme === "warm" || explicitScheme === "void" || explicitScheme === "dim" ? explicitScheme : "default";
     return {
       path,
       pieceCount: COMPONENTS.length,
@@ -11855,7 +11856,7 @@ var DefaultLayout = class extends PuzzleView {
       this.refresh();
     },
     setScheme: (scheme) => {
-      const next = scheme === "claw" || scheme === "void" || scheme === "dim" ? scheme : "default";
+      const next = scheme === "warm" || scheme === "void" || scheme === "dim" ? scheme : "default";
       if (typeof document !== "undefined") {
         if (next === "default")
           delete document.documentElement.dataset.scheme;
@@ -12039,134 +12040,6 @@ DefaultLayout.prototype.render = function() {
   ]);
 };
 DefaultLayout.__pzlModule = "app/layouts/Default.pzl";
-
-// app/layouts/AppShell.pzl
-var AppShell = class extends PuzzleView {
-  data(params, props) {
-    const explicit = document.documentElement.dataset.theme;
-    const darkMode = explicit ? explicit === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-    return {
-      darkMode,
-      lightMode: !darkMode,
-      themeLabel: darkMode ? "Switch to light mode" : "Switch to dark mode"
-    };
-  }
-  events = {
-    toggleTheme: () => {
-      const root = document.documentElement;
-      const dark = root.dataset.theme ? root.dataset.theme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
-      const next = dark ? "light" : "dark";
-      root.dataset.theme = next;
-      try {
-        localStorage.setItem("pieces-theme", next);
-      } catch (e2) {
-      }
-      this.refresh();
-    }
-  };
-};
-AppShell.prototype.render = function() {
-  const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
-  return new ViewNode("puzzle-view", { class: "min-h-screen bg-page text-body" }, [
-    new ViewNode("header", { class: "sticky top-0 z-40 border-b border-border bg-page/85 backdrop-blur" }, [
-      new ViewNode("div", { class: "flex h-14 w-full items-center justify-between px-6" }, [
-        new ViewNode("a", {
-          href: "#/",
-          class: "flex items-center gap-2 rounded-md text-[15px] font-semibold tracking-tight text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
-        }, [
-          new ViewNode("svg", {
-            class: "size-4 text-muted",
-            viewBox: "0 0 20 20",
-            fill: "none",
-            stroke: "currentColor",
-            "stroke-width": "2",
-            "stroke-linecap": "round",
-            "stroke-linejoin": "round",
-            "aria-hidden": "true"
-          }, [
-            new ViewNode("path", { d: "M12 4l-5 6 5 6" }, [])
-          ]),
-          new ViewNode("text", { value: "Puzzle Pieces" })
-        ]),
-        new ViewNode("div", { class: "flex items-center gap-4" }, [
-          new ViewNode("span", { class: "hidden text-xs text-muted sm:inline" }, [
-            new ViewNode("text", { value: "Example \xB7 built from pieces" })
-          ]),
-          new ViewNode("button", {
-            type: "button",
-            "aria-label": __d.themeLabel,
-            "@click": (this.__h ??= {})[0] ??= (event) => this.events.toggleTheme(event),
-            class: "cursor-pointer rounded-md p-1.5 text-muted transition-colors hover:bg-surface-sunken hover:text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          }, [
-            ...__d.darkMode ? [
-              new ViewNode("svg", {
-                class: "size-4.5",
-                viewBox: "0 0 24 24",
-                fill: "none",
-                stroke: "currentColor",
-                "stroke-width": "2",
-                "stroke-linecap": "round",
-                "stroke-linejoin": "round",
-                "aria-hidden": "true"
-              }, [
-                new ViewNode("path", { d: "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" }, [])
-              ])
-            ] : [
-              new ViewNode("#")
-            ],
-            ...__d.lightMode ? [
-              new ViewNode("svg", {
-                class: "size-4.5",
-                viewBox: "0 0 24 24",
-                fill: "none",
-                stroke: "currentColor",
-                "stroke-width": "2",
-                "stroke-linecap": "round",
-                "stroke-linejoin": "round",
-                "aria-hidden": "true"
-              }, [
-                new ViewNode("circle", {
-                  cx: "12",
-                  cy: "12",
-                  r: "4"
-                }, []),
-                new ViewNode("path", {
-                  d: "M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
-                }, [])
-              ])
-            ] : [
-              new ViewNode("#")
-            ]
-          ]),
-          new ViewNode("a", {
-            href: "https://github.com/magic-spells/puzzle-pieces",
-            target: "_blank",
-            rel: "noreferrer",
-            "aria-label": "GitHub repository",
-            class: "rounded-md p-1.5 text-muted transition-colors hover:bg-surface-sunken hover:text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          }, [
-            new ViewNode("svg", {
-              class: "size-4.5",
-              viewBox: "0 0 16 16",
-              fill: "currentColor",
-              "aria-hidden": "true"
-            }, [
-              new ViewNode("path", {
-                d: "M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
-              }, [])
-            ])
-          ])
-        ])
-      ])
-    ]),
-    new ViewNode("main", { class: "w-full px-4 py-6 sm:px-6" }, [
-      new ViewNode(SLOT_TAG)
-    ]),
-    new ViewNode(Toaster, { position: "bottom-right" }, [])
-  ]);
-};
-AppShell.__pzlModule = "app/layouts/AppShell.pzl";
 
 // app/components/ui/Button.pzl
 var BASE2 = "inline-flex items-center justify-center gap-2 whitespace-nowrap select-none rounded-lg font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none";
@@ -15617,7 +15490,7 @@ Theming.prototype.render = function() {
             new ViewNode("text", { value: "Schemes" })
           ]),
           new ViewNode("p", { class: "max-w-2xl text-sm/relaxed text-body" }, [
-            new ViewNode("text", { value: "Puzzle Pieces includes four schemes: Default, Claw, Void, and Dim. The variants live in" }),
+            new ViewNode("text", { value: "Puzzle Pieces includes four schemes: Default, Warm, Void, and Dim. The variants live in" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
               new ViewNode("text", { value: "registry/theme/*.css" })
             ]),
@@ -19570,6 +19443,44 @@ DescriptionList.prototype.render = function() {
 };
 DescriptionList.__pzlModule = "app/components/ui/DescriptionList.pzl";
 
+// app/components/docs/DemoHeader.pzl
+var DemoHeader = class extends PuzzleView {
+  data(params, props) {
+    return { title: props.title || "" };
+  }
+};
+DemoHeader.prototype.render = function() {
+  const __d = this.getData();
+  const __f = this.ctx.formatters.getAll();
+  return new ViewNode("header", { class: "mb-8" }, [
+    new ViewNode("a", {
+      href: "#/demos",
+      class: "-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm text-muted transition-colors hover:text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    }, [
+      new ViewNode("svg", {
+        class: "size-4",
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "2",
+        "stroke-linecap": "round",
+        "stroke-linejoin": "round",
+        "aria-hidden": "true"
+      }, [
+        new ViewNode("path", { d: "M15 18l-6-6 6-6" }, [])
+      ]),
+      new ViewNode("text", { value: "Demos" })
+    ]),
+    new ViewNode("h1", { class: "mt-2 text-3xl font-semibold tracking-tight text-ink" }, [
+      new ViewNode("text", { value: String(__d.title) })
+    ]),
+    new ViewNode("p", { class: "mt-2 max-w-3xl text-body" }, [
+      new ViewNode(SLOT_TAG)
+    ])
+  ]);
+};
+DemoHeader.__pzlModule = "app/components/docs/DemoHeader.pzl";
+
 // app/views/AdminDemo.pzl
 var ICON_HOME = "M3 11.5 12 4l9 7.5M5.5 10v9.5h13V10";
 var ICON_ORDERS = "M6 8h12l-1 11H7L6 8zM9 8V6a3 3 0 0 1 6 0v2";
@@ -19964,13 +19875,8 @@ AdminDemo.prototype.render = function() {
   const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
-      new ViewNode("header", { class: "mb-8" }, [
-        new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Commerce Admin" })
-        ]),
-        new ViewNode("p", { class: "mt-2 text-body" }, [
-          new ViewNode("text", { value: "A back-office admin shell built entirely from pieces \u2014 a collapsible nav rail, a searchable products table with bulk-select, sort, and pagination, filter controls, collections, and a full settings form. Everything below is live: switch sections, filter and sort the table, run bulk actions, and save settings." })
-        ])
+      new ViewNode(DemoHeader, { title: "Commerce Admin" }, [
+        new ViewNode("text", { value: "A back-office admin shell built entirely from pieces \u2014 a collapsible nav rail, a searchable products table with bulk-select, sort, and pagination, filter controls, collections, and a full settings form. Everything below is live: switch sections, filter and sort the table, run bulk actions, and save settings." })
       ]),
       new ViewNode("div", { class: "flex items-stretch rounded-xl border border-border bg-surface" }, [
         new ViewNode(Sidebar, {
@@ -22861,14 +22767,9 @@ AnalyticsDemo.prototype.render = function() {
   const __d = this.getData();
   const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
-    new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-6xl" }, [
-      new ViewNode("header", { class: "mb-8" }, [
-        new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Analytics" })
-        ]),
-        new ViewNode("p", { class: "mt-2 text-body" }, [
-          new ViewNode("text", { value: "Every chart piece working together \u2014 stat cards, line, area, bar, and pie charts, and a progress ring, all fed static demo data. Hover any plot for details." })
-        ])
+    new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
+      new ViewNode(DemoHeader, { title: "Analytics" }, [
+        new ViewNode("text", { value: "Every chart piece working together \u2014 stat cards, line, area, bar, and pie charts, and a progress ring, all fed static demo data. Hover any plot for details." })
       ]),
       new ViewNode("section", {
         "aria-label": "Key metrics",
@@ -25525,13 +25426,8 @@ BankingDemo.prototype.render = function() {
   const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
-      new ViewNode("header", { class: "mb-8" }, [
-        new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Banking dashboard" })
-        ]),
-        new ViewNode("p", { class: "mt-2 text-body" }, [
-          new ViewNode("text", { value: 'A Mercury-style fintech app screen built entirely from pieces \u2014 a collapsible nav rail, balance stat cards, a cash-flow area chart, a sortable and paginated transactions table with a date-range filter, budget meters, and a live "Send money" transfer flow. Everything is interactive: switch tabs, sort and page the table, filter by date, and send a transfer to fire a toast.' })
-        ])
+      new ViewNode(DemoHeader, { title: "Banking dashboard" }, [
+        new ViewNode("text", { value: 'A Mercury-style fintech app screen built entirely from pieces \u2014 a collapsible nav rail, balance stat cards, a cash-flow area chart, a sortable and paginated transactions table with a date-range filter, budget meters, and a live "Send money" transfer flow. Everything is interactive: switch tabs, sort and page the table, filter by date, and send a transfer to fire a toast.' })
       ]),
       new ViewNode("div", { class: "overflow-visible rounded-2xl border border-border bg-page shadow-sm" }, [
         new ViewNode("div", { class: "flex min-h-[46rem] items-stretch" }, [
@@ -26624,16 +26520,13 @@ ChatDemo.prototype.render = function() {
   const __d = this.getData();
   const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
-    new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-2xl" }, [
-      new ViewNode("header", { class: "mb-8" }, [
-        new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Chat" })
-        ]),
-        new ViewNode("p", { class: "mt-2 text-body" }, [
-          new ViewNode("text", { value: "The chat pieces working together \u2014 Chat Scroller, Chat Message, and Chat Attachment, plus a live composer. Send a message and a teammate replies; scroll up mid-conversation to see the jump-to-latest pill take over." })
-        ])
+    new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
+      new ViewNode(DemoHeader, { title: "Chat" }, [
+        new ViewNode("text", { value: "The chat pieces working together \u2014 Chat Scroller, Chat Message, and Chat Attachment, plus a live composer. Send a message and a teammate replies; scroll up mid-conversation to see the jump-to-latest pill take over." })
       ]),
-      new ViewNode("section", { class: "mb-12 overflow-hidden rounded-xl border border-border bg-surface shadow-sm" }, [
+      new ViewNode("section", {
+        class: "mb-12 max-w-2xl overflow-hidden rounded-xl border border-border bg-surface shadow-sm"
+      }, [
         new ViewNode("div", { class: "flex items-center gap-3 border-b border-border px-4 py-3" }, [
           new ViewNode("span", {
             class: "flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-tint text-sm font-semibold text-brand"
@@ -28213,13 +28106,8 @@ ProjectDemo.prototype.render = function() {
   const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
-      new ViewNode("header", { class: "mb-8" }, [
-        new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Project board" })
-        ]),
-        new ViewNode("p", { class: "mt-2 text-body" }, [
-          new ViewNode("text", { value: "A Linear-style project-management screen built entirely from pieces \u2014 a team nav rail with a projects tree, a filterable board toolbar, live metrics, and a real Kanban board at its center. Drag cards between columns with the pointer, or focus a card and press Space then the arrow keys \u2014 either way the board reorders, the metrics recount, and the completion bar moves. Switch tabs for a List and an Activity feed, spin up issues from the New issue menu, and archive with a confirm." })
-        ])
+      new ViewNode(DemoHeader, { title: "Project board" }, [
+        new ViewNode("text", { value: "A Linear-style project-management screen built entirely from pieces \u2014 a team nav rail with a projects tree, a filterable board toolbar, live metrics, and a real Kanban board at its center. Drag cards between columns with the pointer, or focus a card and press Space then the arrow keys \u2014 either way the board reorders, the metrics recount, and the completion bar moves. Switch tabs for a List and an Activity feed, spin up issues from the New issue menu, and archive with a confirm." })
       ]),
       new ViewNode("div", { class: "overflow-visible rounded-2xl border border-border bg-page shadow-sm" }, [
         new ViewNode("div", { class: "flex min-h-[46rem] items-stretch" }, [
@@ -30097,14 +29985,9 @@ StorefrontDemo.prototype.render = function() {
   const __d = this.getData();
   const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
-    new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-6xl" }, [
-      new ViewNode("header", { class: "mb-6" }, [
-        new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Storefront" })
-        ]),
-        new ViewNode("p", { class: "mt-2 text-body" }, [
-          new ViewNode("text", { value: "A customer-facing product page composed entirely from pieces \u2014 promo ticker, breadcrumb, an image gallery, variant pickers, a quantity stepper, tabbed details, and a paginated review list. Everything below is live: change a variant, the quantity, the tab, or the review page and watch the state flow." })
-        ])
+    new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
+      new ViewNode(DemoHeader, { title: "Storefront" }, [
+        new ViewNode("text", { value: "A customer-facing product page composed entirely from pieces \u2014 promo ticker, breadcrumb, an image gallery, variant pickers, a quantity stepper, tabbed details, and a paginated review list. Everything below is live: change a variant, the quantity, the tab, or the review page and watch the state flow." })
       ]),
       new ViewNode(
         Marquee,
@@ -65392,21 +65275,21 @@ var routes_default = [
     path: "/examples/banking",
     name: "banking-demo",
     view: BankingDemo,
-    layout: AppShell,
+    layout: DefaultLayout,
     meta: { title: "Banking Dashboard \u2014 Puzzle Pieces" }
   },
   {
     path: "/examples/admin",
     name: "admin-demo",
     view: AdminDemo,
-    layout: AppShell,
+    layout: DefaultLayout,
     meta: { title: "Admin Dashboard \u2014 Puzzle Pieces" }
   },
   {
     path: "/examples/project",
     name: "project-demo",
     view: ProjectDemo,
-    layout: AppShell,
+    layout: DefaultLayout,
     meta: { title: "Project Board \u2014 Puzzle Pieces" }
   },
   {

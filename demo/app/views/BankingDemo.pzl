@@ -1,15 +1,12 @@
 <puzzle-view class="w-full">
   <article class="mx-auto w-full min-w-0 max-w-7xl">
-    <header class="mb-8">
-      <h1 class="text-3xl font-semibold tracking-tight text-ink">Banking dashboard</h1>
-      <p class="mt-2 text-body">
-        A Mercury-style fintech app screen built entirely from pieces — a collapsible nav
-        rail, balance stat cards, a cash-flow area chart, a sortable and paginated
-        transactions table with a date-range filter, budget meters, and a live
-        "Send money" transfer flow. Everything is interactive: switch tabs, sort and page
-        the table, filter by date, and send a transfer to fire a toast.
-      </p>
-    </header>
+    <DemoHeader title="Banking dashboard">
+      A Mercury-style fintech app screen built entirely from pieces — a collapsible nav
+      rail, balance stat cards, a cash-flow area chart, a sortable and paginated
+      transactions table with a date-range filter, budget meters, and a live
+      "Send money" transfer flow. Everything is interactive: switch tabs, sort and page
+      the table, filter by date, and send a transfer to fire a toast.
+    </DemoHeader>
 
     <!-- APP FRAME. No overflow-hidden anywhere on this shell: it would clip the Select,
          SplitButton, and DateRangePicker popovers. The frame canvas is bg-page; the
@@ -338,6 +335,7 @@ import Tabs from '../components/ui/Tabs.pzl';
 import Button from '../components/ui/Button.pzl';
 import Separator from '../components/ui/Separator.pzl';
 import Tooltip from '../components/ui/Tooltip.pzl';
+import DemoHeader from '../components/docs/DemoHeader.pzl';
 import { toast } from '../components/ui/toast.js';
 
 // BankingDemo — a flagship composition page. It owns ALL interactive state in view

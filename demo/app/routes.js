@@ -1,5 +1,4 @@
 import DefaultLayout from './layouts/Default.pzl';
-import AppShell from './layouts/AppShell.pzl';
 import Introduction from './views/Introduction.pzl';
 import ComponentsIndex from './views/ComponentsIndex.pzl';
 import Demos from './views/Demos.pzl';
@@ -147,21 +146,21 @@ export default [
 		path: '/examples/banking',
 		name: 'banking-demo',
 		view: BankingDemo,
-		layout: AppShell,
+		layout: DefaultLayout,
 		meta: { title: 'Banking Dashboard — Puzzle Pieces' },
 	},
 	{
 		path: '/examples/admin',
 		name: 'admin-demo',
 		view: AdminDemo,
-		layout: AppShell,
+		layout: DefaultLayout,
 		meta: { title: 'Admin Dashboard — Puzzle Pieces' },
 	},
 	{
 		path: '/examples/project',
 		name: 'project-demo',
 		view: ProjectDemo,
-		layout: AppShell,
+		layout: DefaultLayout,
 		meta: { title: 'Project Board — Puzzle Pieces' },
 	},
 	{

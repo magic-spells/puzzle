@@ -1,6 +1,6 @@
 /*
  * puzzle-pieces design tokens (Tailwind v4 @theme).
- * Scheme: Claw — Anthropic-inspired warm ivory and Claude-chat greys.
+ * Scheme: Warm — warm greys and ivory with a clay-orange accent.
  *
  * Merge this into your app's `app/styles/styles.css`, after `@import "tailwindcss";`.
  * Every puzzle-pieces component styles itself exclusively through the semantic

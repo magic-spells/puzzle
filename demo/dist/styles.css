@@ -584,6 +584,9 @@
   .mb-12 {
     margin-bottom: calc(var(--spacing) * 12);
   }
+  .-ml-1 {
+    margin-left: calc(var(--spacing) * -1);
+  }
   .-ml-2 {
     margin-left: calc(var(--spacing) * -2);
   }
@@ -3388,7 +3391,7 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 }
-:root[data-scheme='claw'] {
+:root[data-scheme='warm'] {
   --color-ink: light-dark(#191919, #F0EFEA);
   --color-body: light-dark(#40403E, #BDBBB2);
   --color-muted: light-dark(#666663, #91918D);

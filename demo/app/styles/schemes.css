@@ -3,7 +3,7 @@
  * The registry files are the source of truth; keep these values byte-equal.
  */
 
-:root[data-scheme='claw'] {
+:root[data-scheme='warm'] {
   --color-ink: light-dark(#191919, #F0EFEA);
   --color-body: light-dark(#40403E, #BDBBB2);
   --color-muted: light-dark(#666663, #91918D);

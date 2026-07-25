@@ -8,9 +8,9 @@
       "description": "Balanced cool neutrals with an indigo accent."
     },
     {
-      "name": "claw",
-      "file": "theme/claw.css",
-      "description": "Anthropic-inspired warm ivory and Claude-chat greys."
+      "name": "warm",
+      "file": "theme/warm.css",
+      "description": "Warm greys and ivory with a clay-orange accent."
     },
     {
       "name": "void",

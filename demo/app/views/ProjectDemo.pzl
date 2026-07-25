@@ -1,16 +1,13 @@
 <puzzle-view class="w-full">
   <article class="mx-auto w-full min-w-0 max-w-7xl">
-    <header class="mb-8">
-      <h1 class="text-3xl font-semibold tracking-tight text-ink">Project board</h1>
-      <p class="mt-2 text-body">
-        A Linear-style project-management screen built entirely from pieces — a team nav
-        rail with a projects tree, a filterable board toolbar, live metrics, and a real
-        Kanban board at its center. Drag cards between columns with the pointer, or focus a
-        card and press Space then the arrow keys — either way the board reorders, the
-        metrics recount, and the completion bar moves. Switch tabs for a List and an
-        Activity feed, spin up issues from the New issue menu, and archive with a confirm.
-      </p>
-    </header>
+    <DemoHeader title="Project board">
+      A Linear-style project-management screen built entirely from pieces — a team nav
+      rail with a projects tree, a filterable board toolbar, live metrics, and a real
+      Kanban board at its center. Drag cards between columns with the pointer, or focus a
+      card and press Space then the arrow keys — either way the board reorders, the
+      metrics recount, and the completion bar moves. Switch tabs for a List and an
+      Activity feed, spin up issues from the New issue menu, and archive with a confirm.
+    </DemoHeader>
 
     <!-- APP FRAME. No overflow-hidden anywhere on this shell: it would clip the
          DropdownMenu, SplitButton menu, Popconfirm, and Tooltip popovers. The Kanban
@@ -296,6 +293,7 @@ import DropdownMenu from '../components/ui/DropdownMenu.pzl';
 import Popconfirm from '../components/ui/Popconfirm.pzl';
 import Separator from '../components/ui/Separator.pzl';
 import Tooltip from '../components/ui/Tooltip.pzl';
+import DemoHeader from '../components/docs/DemoHeader.pzl';
 import { toast } from '../components/ui/toast.js';
 
 // ProjectDemo — a flagship composition page centered on the Kanban board. The view

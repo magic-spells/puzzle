@@ -1,14 +1,11 @@
 <puzzle-view class="w-full">
-  <article class="mx-auto w-full min-w-0 max-w-6xl">
-    <header class="mb-6">
-      <h1 class="text-3xl font-semibold tracking-tight text-ink">Storefront</h1>
-      <p class="mt-2 text-body">
-        A customer-facing product page composed entirely from pieces — promo ticker,
-        breadcrumb, an image gallery, variant pickers, a quantity stepper, tabbed
-        details, and a paginated review list. Everything below is live: change a
-        variant, the quantity, the tab, or the review page and watch the state flow.
-      </p>
-    </header>
+  <article class="mx-auto w-full min-w-0 max-w-7xl">
+    <DemoHeader title="Storefront">
+      A customer-facing product page composed entirely from pieces — promo ticker,
+      breadcrumb, an image gallery, variant pickers, a quantity stepper, tabbed
+      details, and a paginated review list. Everything below is live: change a
+      variant, the quantity, the tab, or the review page and watch the state flow.
+    </DemoHeader>
 
     <!-- Promo announcement ticker -->
     <Marquee gap={ 8 } class="mb-6 rounded-lg border border-border bg-brand-tint py-2 text-brand">
@@ -256,6 +253,7 @@ import Accordion from '../components/ui/Accordion.pzl';
 import Pagination from '../components/ui/Pagination.pzl';
 import Avatar from '../components/ui/Avatar.pzl';
 import Separator from '../components/ui/Separator.pzl';
+import DemoHeader from '../components/docs/DemoHeader.pzl';
 
 // Storefront showcase — a realistic product page wiring many pieces together.
 // All product data is static mock data; the interactive bits (gallery index,

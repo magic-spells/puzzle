@@ -1,14 +1,11 @@
 <puzzle-view class="w-full">
   <article class="mx-auto w-full min-w-0 max-w-7xl">
-    <header class="mb-8">
-      <h1 class="text-3xl font-semibold tracking-tight text-ink">Commerce Admin</h1>
-      <p class="mt-2 text-body">
-        A back-office admin shell built entirely from pieces — a collapsible nav rail, a
-        searchable products table with bulk-select, sort, and pagination, filter controls,
-        collections, and a full settings form. Everything below is live: switch sections,
-        filter and sort the table, run bulk actions, and save settings.
-      </p>
-    </header>
+    <DemoHeader title="Commerce Admin">
+      A back-office admin shell built entirely from pieces — a collapsible nav rail, a
+      searchable products table with bulk-select, sort, and pagination, filter controls,
+      collections, and a full settings form. Everything below is live: switch sections,
+      filter and sort the table, run bulk actions, and save settings.
+    </DemoHeader>
 
     <div class="flex items-stretch rounded-xl border border-border bg-surface">
       <Sidebar
@@ -351,6 +348,7 @@ import TagsInput from '../components/ui/TagsInput.pzl';
 import Textarea from '../components/ui/Textarea.pzl';
 import DescriptionList from '../components/ui/DescriptionList.pzl';
 import Button from '../components/ui/Button.pzl';
+import DemoHeader from '../components/docs/DemoHeader.pzl';
 import { toast } from '../components/ui/toast.js';
 
 // AdminDemo — a Shopify-style back-office admin composed from pieces. All state

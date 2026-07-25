@@ -1,12 +1,9 @@
 <puzzle-view class="w-full">
-  <article class="mx-auto w-full min-w-0 max-w-6xl">
-    <header class="mb-8">
-      <h1 class="text-3xl font-semibold tracking-tight text-ink">Analytics</h1>
-      <p class="mt-2 text-body">
-        Every chart piece working together — stat cards, line, area, bar, and pie charts,
-        and a progress ring, all fed static demo data. Hover any plot for details.
-      </p>
-    </header>
+  <article class="mx-auto w-full min-w-0 max-w-7xl">
+    <DemoHeader title="Analytics">
+      Every chart piece working together — stat cards, line, area, bar, and pie charts,
+      and a progress ring, all fed static demo data. Hover any plot for details.
+    </DemoHeader>
 
     <section aria-label="Key metrics" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard label="Revenue" value="$128,430" delta={ 12.4 } deltaLabel="vs last quarter" sparkline={ revenueSpark } />
@@ -60,6 +57,7 @@ import AreaChart from '../components/ui/AreaChart.pzl';
 import BarChart from '../components/ui/BarChart.pzl';
 import PieChart from '../components/ui/PieChart.pzl';
 import ProgressRing from '../components/ui/ProgressRing.pzl';
+import DemoHeader from '../components/docs/DemoHeader.pzl';
 
 // Static, deterministic demo data so the dashboard always renders the same.
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

@@ -1,15 +1,14 @@
 <puzzle-view class="w-full">
-  <article class="mx-auto w-full min-w-0 max-w-2xl">
-    <header class="mb-8">
-      <h1 class="text-3xl font-semibold tracking-tight text-ink">Chat</h1>
-      <p class="mt-2 text-body">
-        The chat pieces working together — Chat Scroller, Chat Message, and Chat Attachment,
-        plus a live composer. Send a message and a teammate replies; scroll up mid-conversation
-        to see the jump-to-latest pill take over.
-      </p>
-    </header>
+  <article class="mx-auto w-full min-w-0 max-w-7xl">
+    <DemoHeader title="Chat">
+      The chat pieces working together — Chat Scroller, Chat Message, and Chat Attachment,
+      plus a live composer. Send a message and a teammate replies; scroll up mid-conversation
+      to see the jump-to-latest pill take over.
+    </DemoHeader>
 
-    <section class="mb-12 overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
+    <!-- The conversation itself stays a comfortable reading column; the page
+         header above spans the full demo width like every other demo. -->
+    <section class="mb-12 max-w-2xl overflow-hidden rounded-xl border border-border bg-surface shadow-sm">
       <div class="flex items-center gap-3 border-b border-border px-4 py-3">
         <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-tint text-sm font-semibold text-brand">PT</span>
         <div class="min-w-0 flex-1">
@@ -68,6 +67,7 @@ import ChatScroller from '../components/ui/ChatScroller.pzl';
 import ChatMessage from '../components/ui/ChatMessage.pzl';
 import ChatAttachment from '../components/ui/ChatAttachment.pzl';
 import Button from '../components/ui/Button.pzl';
+import DemoHeader from '../components/docs/DemoHeader.pzl';
 
 // Seeded conversation. align/variant/showMeta are derived in data() so the
 // message data stays clean (showMeta drops when the previous row shares the

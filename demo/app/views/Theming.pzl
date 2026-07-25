@@ -45,7 +45,7 @@
       <section id="schemes" class="mt-14 scroll-mt-20">
         <h2 class="mb-2 text-xl font-semibold tracking-tight text-ink">Schemes</h2>
         <p class="max-w-2xl text-sm/relaxed text-body">
-          Puzzle Pieces includes four schemes: Default, Claw, Void, and Dim. The variants
+          Puzzle Pieces includes four schemes: Default, Warm, Void, and Dim. The variants
           live in
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">registry/theme/*.css</code>
           as drop-in replacements for
