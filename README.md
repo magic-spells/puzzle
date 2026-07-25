@@ -9,19 +9,20 @@ bridge registers into. There are no production bytes on either side: a productio
 compiles the bridge away entirely, and a page with no bridge simply reports
 "No Puzzle app detected".
 
-> **Status: v1 panels.** The transport, the protocol plumbing, and all three panels —
-> Connection, Views and Store — are built and tested. `snapshot:subscriptions` and
-> `snapshot:route` are answered by the bridge but not yet surfaced in a panel.
+**Requires Puzzle 0.3.1+** running a **development** build (`puzzle dev`). The bridge
+is compiled out of production bundles, so a production page correctly reports no app.
 
 ## The panels
 
 | Panel | What it shows |
 | ----- | ------------- |
 | **Connection** | Handshake state, framework/protocol versions, the last route commit, and a live ring of recent protocol messages. |
-| **Views** | Elements-style master/detail over the live component tree. Expand/collapse per node, hover to highlight the view on the page, per-row `log:view` (binds `$p`), and a re-render pulse on rows a `flush` notified. Selecting a row inspects it: params, props, and **the two state layers side by side** — the `data()` model layer and the `setData()` local layer, which is the split the panel exists for. |
-| **Store** | Record types with counts, a compact table of the active type (pk first, `_synced` as a badge), and a detail card that edits primitive fields through `edit:record` — applied by the runtime with the app's real `record.update()`, so §20 validation failures come back and render inline. |
+| **Views** | Elements-style master/detail over the live component tree. Expand/collapse per node, hover to highlight the view on the page, per-row `log:view` (binds `$p`), and a re-render pulse on rows a `flush` notified. Selecting a row inspects it: params, props, the view's store subscriptions, and **the two state layers side by side** — the `data()` model layer and the `setData()` local layer, which is the split the panel exists for. |
+| **Store** | Record types with counts, a compact table of the active type (pk first, `_synced` as a badge), and a detail card that edits primitive fields through `edit:record` — applied by the runtime with the app's real `record.update()`, so §20 validation failures come back and render inline. An open card also keeps a per-flush change history (`field: old → new`). |
+| **Subscriptions** | The store's reverse index as a panel: subscription keys grouped into collections (`todo`) and records (`todo t2`), and for the selected key, **every view that re-renders when it changes** — the blast radius of a write. Click a subscriber to land on it in Views. This is the panel other frameworks structurally cannot build: it is a lookup, not an inference. |
+| **Router** | The live route card — pathname, route pattern, params, the frozen query snapshot — over the matched chain root→leaf, and a navigation history feed rebuilt from the event ring. |
 
-Neither panel polls. The bridge writes monotonic counters into the panel's own store
+No panel polls. The bridge writes monotonic counters into the panel's own store
 (`connection.viewSeq` / `connection.flushSeq`, `pview.pulseAt`); a subscribed `data()`
 sees them move and schedules its own debounced request. A page with no Puzzle app never
 gets a request at all.
@@ -111,33 +112,20 @@ misrendering.
 
 ## Development setup
 
-The framework is not published at the version this extension needs, so the panel is
-built against a **sibling checkout**:
-
-```
-Code/@magic-spells/
-  puzzle/            ← framework checkout (provides the runtime AND the compiler binary)
-  puzzle-devtools/   ← this repo
-```
-
 ```bash
 npm install
 ```
 
-`package.json` depends on `"@magic-spells/puzzle": "file:../puzzle"`, which npm resolves
-to a symlink at `node_modules/@magic-spells/puzzle`. If your npm version chokes on it,
-create the link by hand — the build only needs the directory to exist:
+That is the whole setup. `@magic-spells/puzzle` comes from npm, and its `puzzle` shim
+lands at `node_modules/.bin/puzzle` — which is what compiles the panel. Nothing outside
+this repo is required.
+
+To build the panel against an **unpublished framework checkout** instead (developing the
+bridge and the panel together), point `PUZZLE_BIN` at a compiler you built:
 
 ```bash
-mkdir -p node_modules/@magic-spells
-ln -s ../../../puzzle node_modules/@magic-spells/puzzle
-```
-
-The compiler is invoked as a **binary**, not through the `puzzle` npm shim: that shim
-resolves per-platform packages which are unpublished at 0.2.0.
-
-```bash
-export PUZZLE_BIN=/path/to/puzzle/puzzle    # defaults to ../puzzle/puzzle
+cd /path/to/puzzle/compiler && go build -o ../puzzle ./cmd/puzzle
+PUZZLE_BIN=/path/to/puzzle/puzzle npm run build
 ```
 
 ## Build
@@ -150,7 +138,8 @@ node scripts/build.mjs --dev   # unminified panel with a sourcemap
 
 `scripts/build.mjs`:
 
-1. runs `$PUZZLE_BIN build` in `panel/`, producing `panel/dist/{app.js,styles.css}`;
+1. runs the puzzle compiler's `build` in `panel/`, producing
+   `panel/dist/{app.js,styles.css}`;
 2. assembles `dist-extension/` = everything in `extension/` plus the panel bundle under
    `dist-extension/panel/`, matching the `src`/`href` paths in `panel.html`;
 3. verifies every file the manifest and `panel.html` reference actually exists — Chrome
@@ -171,8 +160,8 @@ injected at `document_start` and a live page never gets a second chance.
 
 `test/fixture-page/index.html` is the permanent protocol test double: an inline script
 that plays the runtime bridge — same envelope, same event order, same response shapes as
-`client-runtime/devtools.js` — with canned data. It is the end-to-end target while the
-framework bridge is still in flight.
+`client-runtime/devtools.js` — with canned data. It exercises the whole pipe without a
+framework app, which is what keeps the suite honest about protocol shapes.
 
 ```bash
 npm run serve:fixture     # http://localhost:5177/
@@ -216,10 +205,10 @@ npx vitest run
 | `panel-glue.test.js`   | Port naming, envelope construction, id correlation under out-of-order answers, the request timeout, `{ error }`-result unwrapping, status events. |
 | `background.test.js`   | Port pairing by tab id, both routing directions, the replayed `listening` control, stale-port replacement, rejection of malformed ports. |
 | `fixture-page.test.js` | The real page hook driving the real fixture script: the event stream, every request's response shape, and the `edit:record` validation paths. |
-| `panel-app.test.js`    | The compiled panel bundle booting against a stub bridge that reproduces panel-glue's `{ error }`-to-rejection contract. Three suites: the shell (connection states, view tracking, the event ring), the **Views** panel (tree render, indentation, expand/collapse, selection → both state layers, flush pulse, debounced re-snapshot, highlight/log requests, arrow keys), and the **Store** panel (type list, table shape, detail card, edit success, validation error, flush-driven re-snapshot). Skipped when `panel/dist/app.js` has not been built. |
+| `panel-app.test.js`    | The compiled panel bundle booting against a stub bridge that reproduces panel-glue's `{ error }`-to-rejection contract: the shell (connection states, view tracking, the event ring), **Views** (tree render, indentation, expand/collapse, selection → both state layers, subscriptions group, flush pulse, debounced re-snapshot, highlight/log requests, arrow keys), **Store** (type list, table shape, detail card, edit success, validation error, change history), **Subscriptions** (rail grouping, subscriber lists, cross-tab hand-off), and **Router** (card, chain, history feed). Skipped when `panel/dist/app.js` has not been built. |
+| `values.test.js`       | The pure projection helpers with no DOM: view-kind derivation, module-label redundancy rules, subscription-key parsing (the `type id` **space** separator — a colon regression fails here), the record differ, and history capping. |
 
-There is no Chrome automation in this phase; loading the unpacked extension is a manual
-smoke test.
+There is no Chrome automation; loading the unpacked extension is a manual smoke test.
 
 ## Layout
 

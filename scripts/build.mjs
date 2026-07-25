@@ -6,10 +6,10 @@
  *   node scripts/build.mjs --dev      development panel (unminified, sourcemap)
  *   node scripts/build.mjs --zip      also emit puzzle-devtools-<version>.zip
  *
- * The panel is compiled by the puzzle CLI binary, NOT by the `puzzle` npm shim:
- * the framework is unpublished at the version this extension needs, so the
- * platform binary packages the shim resolves do not exist yet. Point PUZZLE_BIN
- * at a compiler binary; it defaults to the one in the sibling framework checkout.
+ * The panel is compiled by the `puzzle` CLI that `npm install` provides —
+ * node_modules/.bin/puzzle, the shim that resolves this platform's compiler
+ * binary. Nothing outside the repo is required. PUZZLE_BIN overrides it, which
+ * is how you build the panel against an unpublished framework checkout.
  *
  * Layout produced:
  *
@@ -38,7 +38,7 @@ const PANEL_DIST = join(PANEL_DIR, 'dist');
 const EXTENSION_DIR = join(ROOT, 'extension');
 const OUT_DIR = join(ROOT, 'dist-extension');
 
-const DEFAULT_PUZZLE_BIN = '/Users/coryschulz/Code/@magic-spells/puzzle/puzzle';
+const DEFAULT_PUZZLE_BIN = join(ROOT, 'node_modules', '.bin', 'puzzle');
 const PUZZLE_BIN = process.env.PUZZLE_BIN || DEFAULT_PUZZLE_BIN;
 
 const args = process.argv.slice(2);
@@ -61,7 +61,8 @@ function buildPanel() {
 	if (!existsSync(PUZZLE_BIN)) {
 		fail(
 			`puzzle compiler not found at ${PUZZLE_BIN}\n` +
-				`Set PUZZLE_BIN to a puzzle binary (the framework checkout builds one at its repo root).`
+				`Run \`npm install\` first, or set PUZZLE_BIN to a puzzle binary (a framework ` +
+				`checkout builds one with: cd compiler && go build -o ../puzzle ./cmd/puzzle).`
 		);
 	}
 
