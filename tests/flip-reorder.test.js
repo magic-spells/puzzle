@@ -373,3 +373,39 @@ describe('flip is a framework directive — never markup (D85)', () => {
 		expect(html).not.toContain('flip');
 	});
 });
+
+describe('compiled-out flip warning (D89 amendment, D118 round)', () => {
+	// The D89 usage scan prunes node_modules/dist/vendor/dot-dirs, so a `flip`
+	// attr arriving from an installed .pzl component compiles the runtime OUT
+	// while the attr is still present at patch time. That degrade was silent —
+	// the formatter half of the same scan errors loudly (D43). The runtime now
+	// warns once, dev-only. The define is a bare global identifier in tests, so
+	// stub it on globalThis (typeof-guarded in the source) and clean up.
+	afterEach(() => {
+		delete globalThis.__PUZZLE_HAS_FLIP__;
+	});
+
+	it('warns exactly once when a flip attr is present but the define is false', () => {
+		globalThis.__PUZZLE_HAS_FLIP__ = false;
+		stubs = installStubs();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const { vm, list } = mountList(['a', 'b', 'c'], (item) => ({ key: item, flip: '' }));
+
+		vm.render(list(['c', 'a', 'b']));
+		expect(stubs.animations).toHaveLength(0); // compiled out — no animation ran
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain('flip support was compiled out');
+
+		vm.render(list(['b', 'c', 'a']));
+		expect(warn).toHaveBeenCalledTimes(1); // once per session, like duplicate-key
+	});
+
+	it('stays silent when the list carries no flip attr', () => {
+		globalThis.__PUZZLE_HAS_FLIP__ = false;
+		stubs = installStubs();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const { vm, list } = mountList(['a', 'b']);
+		vm.render(list(['b', 'a']));
+		expect(warn).not.toHaveBeenCalled();
+	});
+});

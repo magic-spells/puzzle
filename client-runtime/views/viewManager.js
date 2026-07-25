@@ -721,6 +721,23 @@ function warnDuplicateKey(key) {
 	);
 }
 
+// D89's usage scan prunes node_modules/dist/vendor/dot-dirs, so a `flip` attr
+// arriving from an INSTALLED .pzl component is invisible to it: the define lands
+// false, flip.js tree-shakes out, and the reorder animation silently never plays.
+// The formatter half of the same scan degrades LOUDLY (D43's unknown-formatter
+// error) — this is flip's equivalent, dev-only and once per session.
+let warnedFlipCompiledOut = false;
+function warnFlipCompiledOut() {
+	if (warnedFlipCompiledOut) return;
+	warnedFlipCompiledOut = true;
+	console.warn(
+		'[puzzle] a `flip` attribute is present at runtime, but flip support was compiled out — ' +
+			'the build scan found no `flip` in project templates (it does not scan node_modules or ' +
+			'build output), so the reorder animation will not play. Use `flip` on an element in ' +
+			'project source to keep the runtime in, or remove the attribute.'
+	);
+}
+
 function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 	// Keyed identity is the pair (tag, key), with BOTH sides compared by native
 	// SameValueZero — never string concatenation. Partition by raw `tag` (a
@@ -799,6 +816,17 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 		(typeof __PUZZLE_HAS_FLIP__ === 'undefined' || __PUZZLE_HAS_FLIP__) && hasFlip
 			? beginFlip(pairs)
 			: null;
+	// Dev-only diagnostic for the compiled-out-but-present case (see the helper).
+	// The __PUZZLE_DEV__ probe folds this whole branch dead in production, so the
+	// helper goes unreferenced and minifies away with it.
+	if (
+		(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
+		typeof __PUZZLE_HAS_FLIP__ !== 'undefined' &&
+		!__PUZZLE_HAS_FLIP__ &&
+		hasFlip
+	) {
+		warnFlipCompiledOut();
+	}
 
 	// Remove old children that found no new counterpart
 	for (const child of oldChildren) {
