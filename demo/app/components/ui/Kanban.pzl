@@ -16,31 +16,12 @@
                 {#if item.placeholder}
                   <div class="rounded-lg border-2 border-dashed border-brand bg-brand-tint/50" style={ item.placeholderStyle } aria-hidden="true"></div>
                 {:else}
-                  <div
-                    class={ item.cardClass }
-                    data-kb-card={ item.id }
-                    role="button"
-                    aria-roledescription="Draggable card"
-                    aria-grabbed={ item.grabbed }
-                    tabindex={ item.tabindex }
+                  <KanbanCard
+                    card={ item.card }
+                    grabbed={ item.grabbed }
+                    disabled={ disabled }
                     @pointerdown={ onCardPointerDown(column.id, item.id, event) }
-                    @keydown={ onCardKey(column.id, item.id, event) }>
-                    <div class="flex items-start justify-between gap-2">
-                      <p class="text-sm font-medium text-ink">{ item.title }</p>
-                      {#if item.badge}
-                        <span class={ item.badgeClass }>{ item.badge }</span>
-                      {/if}
-                    </div>
-                    {#if item.meta}
-                      <p class="mt-1 text-xs text-muted">{ item.meta }</p>
-                    {/if}
-                    {#if item.assignee}
-                      <div class="mt-2 flex items-center gap-1.5">
-                        <span class="inline-flex size-5 items-center justify-center rounded-full text-[10px] font-medium text-white" style={ item.avatarStyle }>{ item.initials }</span>
-                        <span class="text-xs text-muted">{ item.assignee }</span>
-                      </div>
-                    {/if}
-                  </div>
+                    @keydown={ onCardKey(column.id, item.id, event) }/>
                 {/if}
               </li>
             {/for}
@@ -51,23 +32,7 @@
 
     {#if dragging}
       <div class="pointer-events-none fixed left-0 top-0 z-50 will-change-transform" data-kb-ghost style={ ghostStyle } aria-hidden="true">
-        <div class="rotate-2 rounded-lg border border-border bg-surface p-3 text-left shadow-xl ring-1 ring-brand">
-          <div class="flex items-start justify-between gap-2">
-            <p class="text-sm font-medium text-ink">{ ghost.title }</p>
-            {#if ghost.badge}
-              <span class={ ghost.badgeClass }>{ ghost.badge }</span>
-            {/if}
-          </div>
-          {#if ghost.meta}
-            <p class="mt-1 text-xs text-muted">{ ghost.meta }</p>
-          {/if}
-          {#if ghost.assignee}
-            <div class="mt-2 flex items-center gap-1.5">
-              <span class="inline-flex size-5 items-center justify-center rounded-full text-[10px] font-medium text-white" style={ ghost.avatarStyle }>{ ghost.initials }</span>
-              <span class="text-xs text-muted">{ ghost.assignee }</span>
-            </div>
-          {/if}
-        </div>
+        <KanbanCard card={ ghost } variant="ghost"/>
       </div>
     {/if}
   </div>
@@ -75,6 +40,7 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
+import KanbanCard from './KanbanCard.pzl';
 
 // Kanban — a config-first, controlled Kanban board: horizontal columns, each a
 // vertical list of cards, with pointer drag-and-drop and full keyboard move
@@ -118,6 +84,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //           assignee: 'Ada Lovelace', // optional name → initials disc
 //         },
 //       ],
+//
+// CARD RENDERING lives in the sibling KanbanCard.pzl, not here. The board hands
+// it the raw card object and keeps only the drag state; edit that file to change
+// what a card looks like or to read extra fields off your own card objects. The
+// board renders it in both places a card appears — the column row and the
+// floating drag ghost — so the two can't drift.
 //     },
 //   ]
 //
@@ -167,40 +139,8 @@ const DRAG_THRESHOLD = 5;
 // literals, so this rides through data() as `flipOpts`.
 const FLIP = { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' };
 
-const CARD_BASE =
-  'block w-full rounded-lg border border-border bg-surface p-3 text-left shadow-sm ' +
-  'select-none transition-shadow hover:shadow-md ' +
-  'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2';
-
-const BADGE_BASE =
-  'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap';
-const BADGE_VARIANT = {
-  default: 'bg-surface-sunken text-body',
-  brand: 'bg-brand-tint text-brand',
-  danger: 'bg-danger-tint text-danger',
-  outline: 'border border-border bg-transparent text-body',
-};
-
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(v, hi));
-}
-
-// First letters of the first and last words, uppercased; a single word gives its
-// first two letters (ported from Avatar / pyramid's format.js).
-function initials(label) {
-  const parts = String(label || '').trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-function avatarStyle(name) {
-  const hue = [...String(name)].reduce((s, ch) => s + ch.charCodeAt(0), 0) % 360;
-  return `background:hsl(${hue} 45% 45%)`;
-}
-
-function badgeClass(variant) {
-  return `${BADGE_BASE} ${BADGE_VARIANT[variant] || BADGE_VARIANT.default}`;
 }
 
 export default class Kanban extends PuzzleView {
@@ -254,36 +194,18 @@ export default class Kanban extends PuzzleView {
     const targetIndex = dragging ? d.targetIndex : -1;
     const grabbedId = d.grabbedId || null;
 
-    const cardView = (card) => {
-      const grabbed = grabbedId
-        ? grabbedId === card.id
-          ? 'true'
-          : 'false'
-        : false;
-      const cardClass = [
-        CARD_BASE,
-        disabled ? 'cursor-default' : 'cursor-grab',
-        grabbedId === card.id ? 'ring-2 ring-brand shadow-md' : '',
-      ]
-        .filter(Boolean)
-        .join(' ');
-      const assignee = card.assignee || '';
-      return {
-        id: card.id,
-        key: card.id,
-        placeholder: false,
-        title: card.title || '',
-        badge: card.badge || '',
-        badgeClass: badgeClass(card.badgeVariant),
-        meta: card.meta || '',
-        assignee,
-        initials: assignee ? initials(assignee) : '',
-        avatarStyle: assignee ? avatarStyle(assignee) : '',
-        grabbed,
-        tabindex: '0',
-        cardClass,
-      };
-    };
+    // Drag bookkeeping only — everything visual about a card lives in
+    // KanbanCard, which receives the raw card object untouched. `grabbed` is the
+    // exception that has to be decided here: whether ANY card is grabbed is
+    // board-wide knowledge, and it selects between omitting aria-grabbed
+    // entirely and stating true/false on every card.
+    const cardView = (card) => ({
+      id: card.id,
+      key: card.id,
+      placeholder: false,
+      card,
+      grabbed: grabbedId ? (grabbedId === card.id ? 'true' : 'false') : false,
+    });
 
     const viewColumns = cols.map((col) => {
       const rawCards = Array.isArray(col.cards) ? col.cards : [];
@@ -324,8 +246,10 @@ export default class Kanban extends PuzzleView {
       boardLabel: props.label || 'Board',
       viewColumns,
       flipOpts: FLIP,
+      disabled,
       dragging,
-      ghost: ghostCard ? cardView(ghostCard) : { title: '', badge: '', meta: '', assignee: '' },
+      // The raw card, straight through — KanbanCard's ghost variant styles it.
+      ghost: ghostCard || {},
       ghostStyle: dragging ? `width:${d.ghostW || 288}px` : false,
       announce: d.announce || '',
     };

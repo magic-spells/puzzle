@@ -26974,10 +26974,10 @@ Tree.prototype.render = function() {
 };
 Tree.__pzlModule = "app/components/ui/Tree.pzl";
 
-// app/components/ui/Kanban.pzl
-var DRAG_THRESHOLD = 5;
-var FLIP = { duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" };
-var CARD_BASE = "block w-full rounded-lg border border-border bg-surface p-3 text-left shadow-sm select-none transition-shadow hover:shadow-md outline-ring focus-visible:outline-2 focus-visible:outline-offset-2";
+// app/components/ui/KanbanCard.pzl
+var SURFACE = "rounded-lg border border-border bg-surface p-3 text-left";
+var CARD_BASE = SURFACE + " block w-full shadow-sm select-none transition-shadow hover:shadow-md outline-ring focus-visible:outline-2 focus-visible:outline-offset-2";
+var GHOST_BASE = SURFACE + " rotate-2 shadow-xl ring-1 ring-brand";
 var BADGE_BASE = "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap";
 var BADGE_VARIANT = {
   default: "bg-surface-sunken text-body",
@@ -26985,9 +26985,6 @@ var BADGE_VARIANT = {
   danger: "bg-danger-tint text-danger",
   outline: "border border-border bg-transparent text-body"
 };
-function clamp2(v, lo, hi) {
-  return Math.max(lo, Math.min(v, hi));
-}
 function initials3(label) {
   const parts = String(label || "").trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0)
@@ -27000,8 +26997,98 @@ function avatarStyle(name) {
   const hue = [...String(name)].reduce((s2, ch) => s2 + ch.charCodeAt(0), 0) % 360;
   return `background:hsl(${hue} 45% 45%)`;
 }
-function badgeClass(variant) {
-  return `${BADGE_BASE} ${BADGE_VARIANT[variant] || BADGE_VARIANT.default}`;
+var KanbanCard = class extends PuzzleView {
+  data(params, props) {
+    const card = props.card || {};
+    const ghost = props.variant === "ghost";
+    const grabbed = ghost ? false : props.grabbed || false;
+    const assignee = card.assignee || "";
+    const rootClass = [
+      ghost ? GHOST_BASE : CARD_BASE,
+      ghost ? "" : props.disabled ? "cursor-default" : "cursor-grab",
+      grabbed === "true" ? "ring-2 ring-brand shadow-md" : "",
+      props.class || ""
+    ].filter(Boolean).join(" ");
+    return {
+      rootClass,
+      // The ghost carries no identity: it sits outside the columns and the
+      // board hit-tests on [data-kb-card], so leaving it unmarked keeps it out
+      // of every query by construction rather than by luck of placement.
+      cardId: ghost ? false : card.id,
+      role: ghost ? false : "button",
+      roleDescription: ghost ? false : "Draggable card",
+      tabindex: ghost ? false : "0",
+      grabbed,
+      title: card.title || "",
+      badge: card.badge || "",
+      badgeClass: `${BADGE_BASE} ${BADGE_VARIANT[card.badgeVariant] || BADGE_VARIANT.default}`,
+      meta: card.meta || "",
+      assignee,
+      initials: assignee ? initials3(assignee) : "",
+      avatarStyle: assignee ? avatarStyle(assignee) : ""
+    };
+  }
+  events = {
+    down: (event) => this.props.pointerdown?.(event),
+    key: (event) => this.props.keydown?.(event)
+  };
+};
+KanbanCard.prototype.render = function() {
+  const __d = this.getData();
+  const __f = this.ctx.formatters.getAll();
+  return new ViewNode("div", {
+    class: __d.rootClass,
+    "data-kb-card": __d.cardId,
+    role: __d.role,
+    "aria-roledescription": __d.roleDescription,
+    "aria-grabbed": __d.grabbed,
+    tabindex: __d.tabindex,
+    "@pointerdown": (this.__h ??= {})[0] ??= (event) => this.events.down(event),
+    "@keydown": (this.__h ??= {})[1] ??= (event) => this.events.key(event)
+  }, [
+    new ViewNode("div", { class: "flex items-start justify-between gap-2" }, [
+      new ViewNode("p", { class: "text-sm font-medium text-ink" }, [
+        new ViewNode("text", { value: String(__d.title) })
+      ]),
+      ...__d.badge ? [
+        new ViewNode("span", { class: __d.badgeClass }, [
+          new ViewNode("text", { value: String(__d.badge) })
+        ])
+      ] : [
+        new ViewNode("#")
+      ]
+    ]),
+    ...__d.meta ? [
+      new ViewNode("p", { class: "mt-1 text-xs text-muted" }, [
+        new ViewNode("text", { value: String(__d.meta) })
+      ])
+    ] : [
+      new ViewNode("#")
+    ],
+    ...__d.assignee ? [
+      new ViewNode("div", { class: "mt-2 flex items-center gap-1.5" }, [
+        new ViewNode("span", {
+          class: "inline-flex size-5 items-center justify-center rounded-full text-[10px] font-medium text-white",
+          style: __d.avatarStyle
+        }, [
+          new ViewNode("text", { value: String(__d.initials) })
+        ]),
+        new ViewNode("span", { class: "text-xs text-muted" }, [
+          new ViewNode("text", { value: String(__d.assignee) })
+        ])
+      ])
+    ] : [
+      new ViewNode("#")
+    ]
+  ]);
+};
+KanbanCard.__pzlModule = "app/components/ui/KanbanCard.pzl";
+
+// app/components/ui/Kanban.pzl
+var DRAG_THRESHOLD = 5;
+var FLIP = { duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" };
+function clamp2(v, lo, hi) {
+  return Math.max(lo, Math.min(v, hi));
 }
 var Kanban = class extends PuzzleView {
   created() {
@@ -27051,30 +27138,13 @@ var Kanban = class extends PuzzleView {
     const hoveredColId = dragging ? d.hoveredColId : null;
     const targetIndex = dragging ? d.targetIndex : -1;
     const grabbedId = d.grabbedId || null;
-    const cardView = (card) => {
-      const grabbed = grabbedId ? grabbedId === card.id ? "true" : "false" : false;
-      const cardClass = [
-        CARD_BASE,
-        disabled ? "cursor-default" : "cursor-grab",
-        grabbedId === card.id ? "ring-2 ring-brand shadow-md" : ""
-      ].filter(Boolean).join(" ");
-      const assignee = card.assignee || "";
-      return {
-        id: card.id,
-        key: card.id,
-        placeholder: false,
-        title: card.title || "",
-        badge: card.badge || "",
-        badgeClass: badgeClass(card.badgeVariant),
-        meta: card.meta || "",
-        assignee,
-        initials: assignee ? initials3(assignee) : "",
-        avatarStyle: assignee ? avatarStyle(assignee) : "",
-        grabbed,
-        tabindex: "0",
-        cardClass
-      };
-    };
+    const cardView = (card) => ({
+      id: card.id,
+      key: card.id,
+      placeholder: false,
+      card,
+      grabbed: grabbedId ? grabbedId === card.id ? "true" : "false" : false
+    });
     const viewColumns = cols.map((col) => {
       const rawCards = Array.isArray(col.cards) ? col.cards : [];
       const kept = rawCards.filter((c2) => !(dragging && c2.id === dragCardId));
@@ -27107,8 +27177,10 @@ var Kanban = class extends PuzzleView {
       boardLabel: props.label || "Board",
       viewColumns,
       flipOpts: FLIP,
+      disabled,
       dragging,
-      ghost: ghostCard ? cardView(ghostCard) : { title: "", badge: "", meta: "", assignee: "" },
+      // The raw card, straight through — KanbanCard's ghost variant styles it.
+      ghost: ghostCard || {},
       ghostStyle: dragging ? `width:${d.ghostW || 288}px` : false,
       announce: d.announce || ""
     };
@@ -27540,51 +27612,13 @@ Kanban.prototype.render = function() {
                     "aria-hidden": "true"
                   }, [])
                 ] : [
-                  new ViewNode("div", {
-                    class: item.cardClass,
-                    "data-kb-card": item.id,
-                    role: "button",
-                    "aria-roledescription": "Draggable card",
-                    "aria-grabbed": item.grabbed,
-                    tabindex: item.tabindex,
-                    "@pointerdown": (event) => this.events.onCardPointerDown(column.id, item.id, event),
-                    "@keydown": (event) => this.events.onCardKey(column.id, item.id, event)
-                  }, [
-                    new ViewNode("div", { class: "flex items-start justify-between gap-2" }, [
-                      new ViewNode("p", { class: "text-sm font-medium text-ink" }, [
-                        new ViewNode("text", { value: String(item.title) })
-                      ]),
-                      ...item.badge ? [
-                        new ViewNode("span", { class: item.badgeClass }, [
-                          new ViewNode("text", { value: String(item.badge) })
-                        ])
-                      ] : [
-                        new ViewNode("#")
-                      ]
-                    ]),
-                    ...item.meta ? [
-                      new ViewNode("p", { class: "mt-1 text-xs text-muted" }, [
-                        new ViewNode("text", { value: String(item.meta) })
-                      ])
-                    ] : [
-                      new ViewNode("#")
-                    ],
-                    ...item.assignee ? [
-                      new ViewNode("div", { class: "mt-2 flex items-center gap-1.5" }, [
-                        new ViewNode("span", {
-                          class: "inline-flex size-5 items-center justify-center rounded-full text-[10px] font-medium text-white",
-                          style: item.avatarStyle
-                        }, [
-                          new ViewNode("text", { value: String(item.initials) })
-                        ]),
-                        new ViewNode("span", { class: "text-xs text-muted" }, [
-                          new ViewNode("text", { value: String(item.assignee) })
-                        ])
-                      ])
-                    ] : [
-                      new ViewNode("#")
-                    ]
-                  ])
+                  new ViewNode(KanbanCard, {
+                    card: item.card,
+                    grabbed: item.grabbed,
+                    disabled: __d.disabled,
+                    pointerdown: (event) => this.events.onCardPointerDown(column.id, item.id, event),
+                    keydown: (event) => this.events.onCardKey(column.id, item.id, event)
+                  }, [])
                 ]
               ])
             )
@@ -27599,44 +27633,10 @@ Kanban.prototype.render = function() {
         style: __d.ghostStyle,
         "aria-hidden": "true"
       }, [
-        new ViewNode("div", {
-          class: "rotate-2 rounded-lg border border-border bg-surface p-3 text-left shadow-xl ring-1 ring-brand"
-        }, [
-          new ViewNode("div", { class: "flex items-start justify-between gap-2" }, [
-            new ViewNode("p", { class: "text-sm font-medium text-ink" }, [
-              new ViewNode("text", { value: String(__d.ghost.title) })
-            ]),
-            ...__d.ghost.badge ? [
-              new ViewNode("span", { class: __d.ghost.badgeClass }, [
-                new ViewNode("text", { value: String(__d.ghost.badge) })
-              ])
-            ] : [
-              new ViewNode("#")
-            ]
-          ]),
-          ...__d.ghost.meta ? [
-            new ViewNode("p", { class: "mt-1 text-xs text-muted" }, [
-              new ViewNode("text", { value: String(__d.ghost.meta) })
-            ])
-          ] : [
-            new ViewNode("#")
-          ],
-          ...__d.ghost.assignee ? [
-            new ViewNode("div", { class: "mt-2 flex items-center gap-1.5" }, [
-              new ViewNode("span", {
-                class: "inline-flex size-5 items-center justify-center rounded-full text-[10px] font-medium text-white",
-                style: __d.ghost.avatarStyle
-              }, [
-                new ViewNode("text", { value: String(__d.ghost.initials) })
-              ]),
-              new ViewNode("span", { class: "text-xs text-muted" }, [
-                new ViewNode("text", { value: String(__d.ghost.assignee) })
-              ])
-            ])
-          ] : [
-            new ViewNode("#")
-          ]
-        ])
+        new ViewNode(KanbanCard, {
+          card: __d.ghost,
+          variant: "ghost"
+        }, [])
       ])
     ] : [
       new ViewNode("#")
@@ -46991,6 +46991,17 @@ KanbanDoc.prototype.render = function() {
           new ViewNode(CodeBlock, { code: __d.installCmd }, []),
           new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
             new ViewNode("text", { value: "No registry or npm dependencies. Requires the pieces.css tokens merged into your app styles (see Introduction)." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "Two files land in your app: " }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "Kanban.pzl" })
+            ]),
+            new ViewNode("text", { value: " owns the columns and all the drag-and-drop, and " }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "KanbanCard.pzl" })
+            ]),
+            new ViewNode("text", { value: " owns what a single card looks like. Edit the card file to change card content or read extra fields off your own objects \u2014 the board renders it both as the row in a column and as the ghost that follows your pointer, so the two never drift apart." })
           ])
         ]),
         new ViewNode("section", {

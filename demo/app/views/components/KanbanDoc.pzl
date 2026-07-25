@@ -36,6 +36,13 @@
         <p class="mt-3 text-sm text-muted">
           No registry or npm dependencies. Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
+        <p class="mt-3 text-sm text-muted">
+          Two files land in your app: <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">Kanban.pzl</code> owns
+          the columns and all the drag-and-drop, and <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">KanbanCard.pzl</code> owns
+          what a single card looks like. Edit the card file to change card content or read extra
+          fields off your own objects — the board renders it both as the row in a column and as the
+          ghost that follows your pointer, so the two never drift apart.
+        </p>
       </section>
 
       <section id="usage" class="mt-12 scroll-mt-20">

@@ -1,0 +1,139 @@
+<puzzle-view>
+  <div
+    class={ rootClass }
+    data-kb-card={ cardId }
+    role={ role }
+    aria-roledescription={ roleDescription }
+    aria-grabbed={ grabbed }
+    tabindex={ tabindex }
+    @pointerdown={ down(event) }
+    @keydown={ key(event) }>
+    <div class="flex items-start justify-between gap-2">
+      <p class="text-sm font-medium text-ink">{ title }</p>
+      {#if badge}
+        <span class={ badgeClass }>{ badge }</span>
+      {/if}
+    </div>
+    {#if meta}
+      <p class="mt-1 text-xs text-muted">{ meta }</p>
+    {/if}
+    {#if assignee}
+      <div class="mt-2 flex items-center gap-1.5">
+        <span class="inline-flex size-5 items-center justify-center rounded-full text-[10px] font-medium text-white" style={ avatarStyle }>{ initials }</span>
+        <span class="text-xs text-muted">{ assignee }</span>
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// KanbanCard — the visual body of a single Kanban card. Presentational only: it
+// owns every pixel of a card and none of the drag logic. Kanban renders it twice
+// per dragged card — once as the row in a column, once as the floating ghost that
+// follows the pointer — so the two can never drift apart. THIS is the file to edit
+// when you want different card content (a due date, a cover image, a label row);
+// both renderings pick the change up for free.
+//
+//   <KanbanCard card={ card } grabbed={ grabbed } disabled={ disabled }
+//               @pointerdown={ onDown(card.id, event) }
+//               @keydown={ onKey(card.id, event) }/>
+//
+// Props
+//   card      the raw card object: { id, title, badge, badgeVariant, meta, assignee }.
+//   variant   'card' (default) — an interactive row — or 'ghost', the tilted
+//             copy that rides the pointer mid-drag (no role, no tabindex, no
+//             data-kb-card, so the board's geometry queries never see it).
+//   grabbed   the aria-grabbed VALUE, decided by the board, not derived here:
+//             'true' | 'false' while some card is keyboard-grabbed, or false to
+//             omit the attribute entirely when none is. Whether a board has a
+//             grabbed card is board-level knowledge; the ring styling that
+//             follows from it is card-level, so that part lives here.
+//   disabled  drops the grab cursor (the card stays focusable and readable).
+//   class     merged onto the root.
+// Callbacks — real DOM events, forwarded verbatim. On a component tag `@x` is a
+// callback prop, not a listener, so the listeners live here on the root and hand
+// the untouched event up. The forward is synchronous, which is what lets the
+// board still read `event.currentTarget.getBoundingClientRect()` off it.
+//   @pointerdown(event)  pointerdown on the card root
+//   @keydown(event)      keydown on the card root
+
+// The surface both renderings share — one edit point for the card's shape.
+const SURFACE = 'rounded-lg border border-border bg-surface p-3 text-left';
+
+const CARD_BASE =
+  SURFACE +
+  ' block w-full shadow-sm select-none transition-shadow hover:shadow-md ' +
+  'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2';
+
+// The ghost sets the independent `rotate` property (Tailwind v4), so the tilt
+// composes with the imperative `transform` translate the board writes on the
+// wrapper above it rather than overwriting it.
+const GHOST_BASE = SURFACE + ' rotate-2 shadow-xl ring-1 ring-brand';
+
+const BADGE_BASE =
+  'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap';
+const BADGE_VARIANT = {
+  default: 'bg-surface-sunken text-body',
+  brand: 'bg-brand-tint text-brand',
+  danger: 'bg-danger-tint text-danger',
+  outline: 'border border-border bg-transparent text-body',
+};
+
+// First letters of the first and last words, uppercased; a single word gives its
+// first two letters (ported from Avatar / pyramid's format.js).
+function initials(label) {
+  const parts = String(label || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function avatarStyle(name) {
+  const hue = [...String(name)].reduce((s, ch) => s + ch.charCodeAt(0), 0) % 360;
+  return `background:hsl(${hue} 45% 45%)`;
+}
+
+export default class KanbanCard extends PuzzleView {
+  data(params, props) {
+    const card = props.card || {};
+    const ghost = props.variant === 'ghost';
+    const grabbed = ghost ? false : props.grabbed || false;
+    const assignee = card.assignee || '';
+
+    const rootClass = [
+      ghost ? GHOST_BASE : CARD_BASE,
+      ghost ? '' : props.disabled ? 'cursor-default' : 'cursor-grab',
+      grabbed === 'true' ? 'ring-2 ring-brand shadow-md' : '',
+      props.class || '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    return {
+      rootClass,
+      // The ghost carries no identity: it sits outside the columns and the
+      // board hit-tests on [data-kb-card], so leaving it unmarked keeps it out
+      // of every query by construction rather than by luck of placement.
+      cardId: ghost ? false : card.id,
+      role: ghost ? false : 'button',
+      roleDescription: ghost ? false : 'Draggable card',
+      tabindex: ghost ? false : '0',
+      grabbed,
+      title: card.title || '',
+      badge: card.badge || '',
+      badgeClass: `${BADGE_BASE} ${BADGE_VARIANT[card.badgeVariant] || BADGE_VARIANT.default}`,
+      meta: card.meta || '',
+      assignee,
+      initials: assignee ? initials(assignee) : '',
+      avatarStyle: assignee ? avatarStyle(assignee) : '',
+    };
+  }
+
+  events = {
+    down: (event) => this.props.pointerdown?.(event),
+    key: (event) => this.props.keydown?.(event),
+  };
+}
+</script>
