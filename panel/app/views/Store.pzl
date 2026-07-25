@@ -7,7 +7,14 @@
       </section>
     </div>
   {:else}
-    <div class="w-40 shrink-0 flex flex-col min-h-0 border-r border-line bg-surface">
+    <SplitPanel
+      class="flex-1 min-h-0"
+      direction="horizontal"
+      defaultSizes={ [25, 75] }
+      min={ ['140px', '280px'] }
+      storageKey="puzzle-devtools:store-split">
+
+    <div slot="first" class="h-full flex flex-col min-h-0 overflow-hidden border-r border-line bg-surface">
       <header class="shrink-0 flex items-center gap-2 h-6 px-2 border-b border-line">
         <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Types</span>
         <button
@@ -47,7 +54,7 @@
       </div>
     </div>
 
-    <div class="flex-1 min-w-0 flex flex-col min-h-0">
+    <div slot="second" class="h-full flex flex-col min-h-0 overflow-hidden">
       {#if !activeType}
         <div class="m-3 rounded border border-dashed border-line p-4">
           <p class="m-0 text-[12px] text-muted">Select a record type to browse its rows.</p>
@@ -162,11 +169,13 @@
         {/if}
       {/if}
     </div>
+    </SplitPanel>
   {/if}
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
+import SplitPanel from '../components/ui/SplitPanel.pzl';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
 import { api, applyRecordSnapshot } from '../bridge.js';
 import { coerceInput, deriveColumns, inputValue, preview, valueKind } from '../values.js';

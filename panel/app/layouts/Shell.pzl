@@ -1,35 +1,25 @@
 <puzzle-view class="h-full flex flex-col bg-canvas text-ink">
-  <header class="shrink-0 flex items-center gap-2 h-8 px-2 border-b border-line bg-surface">
-    <span class="font-mono text-[11px] font-semibold tracking-wider text-accent">PUZZLE</span>
-    <span class="h-3 w-px bg-line"></span>
-    <span class="inline-flex items-center gap-1.5 text-[11px] text-muted">
-      <span class="h-1.5 w-1.5 rounded-full { statusDotClass }"></span>
-      { statusLabel }
-    </span>
-    <span class="ml-auto font-mono text-[10px] text-faint tabular-nums">
-      { eventCount } msg
-    </span>
-  </header>
+  <header class="shrink-0 flex items-center gap-3 min-h-9 px-3 py-1 border-b border-line bg-surface">
+    <span class="shrink-0 font-mono text-[11px] font-semibold tracking-wider text-accent">PUZZLE</span>
 
-  <div class="flex-1 flex min-h-0">
-    <nav class="w-32 shrink-0 border-r border-line bg-surface overflow-y-auto py-1" aria-label="Panels">
+    <nav class="flex items-center gap-1" aria-label="Panels">
       {#for item in nav}
         <a
           key={ item.path }
-          class="flex items-baseline gap-1.5 px-2.5 py-1.5 text-[12px] no-underline { item.cls }"
-          href="{ item.path | link }">
-          <span>{ item.label }</span>
-          {#if item.soon}
-            <span class="ml-auto font-mono text-[9px] uppercase tracking-wide text-faint">soon</span>
-          {/if}
-        </a>
+          class="rounded px-2.5 py-1 text-[12px] no-underline { item.cls }"
+          href="{ item.path | link }">{ item.label }</a>
       {/for}
     </nav>
 
-    <main class="flex-1 min-w-0 overflow-y-auto">
-      <Slot/>
-    </main>
-  </div>
+    <span class="ml-auto inline-flex items-center gap-1.5 text-[11px] text-muted">
+      <span class="h-1.5 w-1.5 rounded-full { statusDotClass }"></span>
+      { statusLabel }
+    </span>
+  </header>
+
+  <main class="flex-1 min-w-0 min-h-0 overflow-y-auto">
+    <Slot/>
+  </main>
 </puzzle-view>
 
 <script>
@@ -59,7 +49,6 @@ export default class Shell extends PuzzleView {
       })),
       statusLabel: this.statusLabel(connection),
       statusDotClass: this.statusDotClass(connection),
-      eventCount: connection?.eventCount ?? 0,
     };
   }
 

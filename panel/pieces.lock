@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "registry": "/Users/coryschulz/Code/@magic-spells/puzzle-pieces/registry",
+  "pieces": {
+    "split-panel": {
+      "files": {
+        "app/components/ui/SplitPanel.pzl": "sha256:21623f0311737ff1a39d5b3214a2803095956f5682f99259201abfd34383656a"
+      }
+    },
+    "theme/pieces.css": {
+      "files": {
+        "app/styles/pieces.css": "sha256:84290f1d7ca1312dc611be673440bafa1a2652ebefc6d9abe5c42b52c2b0f211"
+      }
+    }
+  }
+}

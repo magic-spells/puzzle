@@ -29,6 +29,24 @@
 	--color-warn: var(--dt-warn);
 	--color-danger: var(--dt-danger);
 
+	/*
+	 * Bridge for pieces from the puzzle-pieces registry (currently SplitPanel).
+	 * Pieces are written against the registry's own palette; the four token-backed
+	 * utilities SplitPanel uses — bg-brand, bg-border, bg-border-strong,
+	 * outline-ring — are aliased onto the panel's --dt-* tiers here.
+	 *
+	 * `app/styles/pieces.css` (installed alongside the piece, hash-tracked in
+	 * pieces.lock) is deliberately NOT imported: it declares a full competing
+	 * palette including --color-surface / --color-ink / --color-line, which are
+	 * exactly the names this block already owns. Importing it would fight the
+	 * data-theme switch. Four aliases keep the panel on ONE palette, and the
+	 * piece file itself stays verbatim so `puzzle add piece` can re-verify it.
+	 */
+	--color-brand: var(--dt-accent);
+	--color-border: var(--dt-line);
+	--color-border-strong: var(--dt-faint);
+	--color-ring: var(--dt-accent);
+
 	--font-sans: var(--dt-font-sans);
 	--font-mono: var(--dt-font-mono);
 }

@@ -168,6 +168,9 @@ async function boot(bridge) {
 	window.history.replaceState(null, '', '/');
 	document.body.innerHTML = '<div id="app"></div>';
 	document.documentElement.setAttribute('data-theme', 'dark');
+	// SplitPanel persists committed sizes under `split-panel:<storageKey>`; a
+	// leftover from an earlier test would decide the next boot's pane widths.
+	window.localStorage?.clear?.();
 	window.__PUZZLE_DEVTOOLS_PANEL__ = bridge;
 	vi.resetModules();
 	const mod = await import(/* @vite-ignore */ BUNDLE);
@@ -221,6 +224,10 @@ function groupFor(title) {
 		?.closest('section');
 }
 
+/** The SplitPanel piece's own structure: two named panes around one separator. */
+const splitPane = (which) => document.querySelector(`[data-split-pane="${which}"]`);
+const splitDivider = () => document.querySelector('[data-split-divider]');
+
 function type(input, value) {
 	input.value = value;
 	input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -240,6 +247,42 @@ describe.skipIf(!built)('panel app (compiled bundle)', () => {
 		expect(document.body.textContent).toContain('Connection');
 		expect(document.body.textContent).toContain('Views');
 		expect(document.body.textContent).toContain('Store');
+	});
+
+	it('puts the nav and the status chip in one top bar', async () => {
+		const app = await boot(bridge);
+
+		// Nav lives IN the header now, not in a left sidebar.
+		const header = document.querySelector('header');
+		const nav = header.querySelector('nav[aria-label="Panels"]');
+		expect(nav).toBeTruthy();
+		expect([...nav.querySelectorAll('a')].map((a) => a.textContent.trim())).toEqual([
+			'Connection',
+			'Views',
+			'Store',
+		]);
+
+		// The status chip is the last child of the bar and pushed right by ml-auto.
+		const chip = header.lastElementChild;
+		expect(chip.className).toContain('ml-auto');
+		expect(chip.textContent).toContain('no app');
+		expect(chip.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+
+		bridge.emit('hello', { protocolVersion: 1, frameworkVersion: '0.2.0' });
+		bridge.emit('app-mounted');
+		await settle(app);
+		expect(document.querySelector('header').lastElementChild.textContent).toContain('connected');
+	});
+
+	it('marks the active panel in the top-bar nav', async () => {
+		const app = await boot(bridge);
+		await connect(bridge, app);
+		await open(app, '/views');
+
+		const active = [...document.querySelectorAll('nav a')].filter((a) =>
+			a.className.includes('bg-accent-soft')
+		);
+		expect(active.map((a) => a.textContent.trim())).toEqual(['Views']);
 	});
 
 	it('writes hash-mode nav hrefs, so panel.html stays loadable on reload', async () => {
@@ -359,6 +402,34 @@ describe.skipIf(!built)('Views panel', () => {
 		app = await boot(bridge);
 		await connect(bridge, app);
 		await open(app, '/views');
+	});
+
+	it('lays the panes out in a resizable SplitPanel', () => {
+		const first = splitPane('first');
+		const second = splitPane('second');
+		expect(first).toBeTruthy();
+		expect(second).toBeTruthy();
+
+		// Tree on the left, inspector on the right — the piece's named slots.
+		expect(first.contains(treeRow('1'))).toBe(true);
+		expect(first.textContent).toContain('Tree');
+		expect(second.textContent).toContain('Select a view to inspect');
+
+		const divider = splitDivider();
+		expect(divider.getAttribute('role')).toBe('separator');
+		// A horizontal split has a vertically-oriented separator.
+		expect(divider.getAttribute('aria-orientation')).toBe('vertical');
+		expect(divider.getAttribute('aria-disabled')).toBe('false');
+		expect(divider.getAttribute('tabindex')).toBe('0');
+		expect(Number(divider.getAttribute('aria-valuenow'))).toBe(30); // defaultSizes[0]
+
+		// Exactly one scrolling element per pane: the slot root clips, so the
+		// piece's own overflow-auto pane never gets a second scrollbar.
+		expect(first.firstElementChild.className).toContain('overflow-hidden');
+		expect(second.firstElementChild.className).toContain('overflow-hidden');
+
+		// The old fixed-width rail is gone; width is the piece's business now.
+		expect(document.querySelector('.w-64')).toBeNull();
 	});
 
 	it('renders the tree from a snapshot:views transcript, indented by depth', () => {
@@ -597,6 +668,26 @@ describe.skipIf(!built)('Store panel', () => {
 		app = await boot(bridge);
 		await connect(bridge, app);
 		await open(app, '/store');
+	});
+
+	it('lays the rail and the table out in a resizable SplitPanel', () => {
+		const first = splitPane('first');
+		const second = splitPane('second');
+		expect(first).toBeTruthy();
+		expect(second).toBeTruthy();
+
+		expect(first.textContent).toContain('Types');
+		expect(first.querySelector('[data-type="todo"]')).toBeTruthy();
+		expect(second.querySelector('[data-row="t1"]')).toBeTruthy();
+
+		const divider = splitDivider();
+		expect(divider.getAttribute('role')).toBe('separator');
+		expect(divider.getAttribute('aria-orientation')).toBe('vertical');
+		expect(Number(divider.getAttribute('aria-valuenow'))).toBe(25); // defaultSizes[0]
+
+		expect(first.firstElementChild.className).toContain('overflow-hidden');
+		expect(second.firstElementChild.className).toContain('overflow-hidden');
+		expect(document.querySelector('.w-40')).toBeNull();
 	});
 
 	it('lists record types with counts and auto-selects the first', () => {
