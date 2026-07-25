@@ -80,6 +80,17 @@ carries its own `Promise.resolve(...).catch(log)` — the enter-side mirror of
 `destroyAnimated()`'s leave-hook guard, and the same idiom the router's
 `#playInLogged` uses.
 
+Since [[DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT]], that recovery keys off
+the **instance**, not the mount-time vnode: the handler runs in a microtask, so
+a same-turn parent re-render can already have transferred the instance to a new
+vnode via `patchComponent` — the handler stashes its placeholder on the
+instance (`__failedPlaceholder`), and `patch()`'s recovery test is
+`component == null || component.isDestroyed` (the getter, never the
+always-truthy `destroyed` hook method) with an attached-only insertion-ref
+guard. Router-preloaded instances are exempt from the teardown entirely — the
+Router owns that lifetime and expects a failed committed view to stand until
+the next navigation replaces it.
+
 Composition uses `SLOT_TAG` and shared `expandSlots`: `<children/>` fills the
 default bucket, `<slot name>` fills named buckets with fallback, and `<Slot/>`
 is the router outlet by convention. Buckets are null-prototype objects and

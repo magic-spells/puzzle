@@ -341,20 +341,44 @@ function mountComponent(vnode, parent, ref, ctx) {
 			},
 			(err) => {
 				console.error('[puzzle] child mount failed:', err);
-				// The instance never reached mounted() (data()/render() threw on the first
-				// mount). Left as-is, patchComponent would REUSE this dead instance on every
-				// later render without ever re-mounting it, so a render that no longer throws
-				// still gets a permanently-broken component: mounted() never fires and
-				// setData() re-renders are inert. Tear it down and leave a bare comment
-				// holding the position, then clear the vnode's instance links so patch()
-				// mounts a FRESH instance here on the next render (see patch()).
-				const anchor = child.element; // the comment placeholder — render never landed
+				// A ROUTER-PRELOADED instance (`vnode.instance`, pinned by router.js) is not
+				// ours to tear down: the Router owns that lifetime, committed the view
+				// SYNCHRONOUSLY, and its own #observeMount logs a post-commit mount failure
+				// EXPECTING the failed view to stay committed until the next navigation
+				// replaces and destroys it. Destroying it here would leave router.current
+				// pointing at a dead, unrefreshable view the Router knows nothing about — and
+				// would swap the committed markup for a comment behind its back. Log only;
+				// the instance and the vnode's links are left exactly as they are.
+				if (preloaded) return;
+				// The instance never reached a working mounted state (data()/render()/
+				// mounted() threw on the first mount). Left as-is, patchComponent would REUSE
+				// this dead instance on every later render without ever re-mounting it, so a
+				// render that no longer throws still gets a permanently-broken component:
+				// mounted() never fires and setData() re-renders are inert. Tear it down and
+				// leave a bare comment holding the position, so patch() mounts a FRESH
+				// instance here on the next render (see patch()).
+				//
+				// Recovery keys off the INSTANCE, not this vnode. mount() is async, so this
+				// handler runs in a MICROTASK — a parent re-render in the SAME turn (a store
+				// flush, a setData() from the parent's mounted()) can already have patched
+				// this position, and patchComponent copied `child` onto a NEW vnode that is
+				// now the live tree node. `vnode` is an orphan by the time we get here, so
+				// nulling its links recovers nothing: the live vnode still points at the
+				// instance we are about to destroy, and its recovery test would never fire.
+				// The destroyed instance is the one thing both vnodes share — stash the
+				// placeholder on it so patch() finds it through WHICHEVER vnode holds the
+				// component. The vnode nulls below stay: they are correct (and the cheaper
+				// path) whenever nothing raced.
+				const anchor = child.element; // the child's current root — its anchor comment unless a render landed
 				const placeholder =
 					anchor && anchor.parentNode
 						? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
 						: null;
 				child.destroy(); // release any partial subscriptions; removes the child's own anchor
-				if (placeholder) vnode.el = placeholder;
+				if (placeholder) {
+					vnode.el = placeholder;
+					child.__failedPlaceholder = placeholder;
+				}
 				vnode.component = null;
 				vnode.instance = null;
 			}
@@ -387,14 +411,26 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 
 	if (newVnode.isComponent) {
 		// A component whose FIRST mount threw was torn down: its instance was
-		// destroyed and cleared, with a bare comment left holding the position
-		// (mountComponent's catch). There is no live instance to update — mount a
-		// FRESH one at the placeholder so a render that no longer throws yields a
-		// fully working component (mounted() fires, setData() re-renders), then drop
-		// the placeholder.
-		if (oldVnode.component == null) {
-			const placeholder = oldVnode.el;
-			mount(newVnode, parent, placeholder, ctx);
+		// destroyed, with a bare comment left holding the position (mountComponent's
+		// rejection handler). There is no live instance to update — mount a FRESH one
+		// at the placeholder so a render that no longer throws yields a fully working
+		// component (mounted() fires, setData() re-renders), then drop the placeholder.
+		//
+		// TWO shapes reach here, because that handler runs in a microtask. Normally it
+		// nulled the links on the vnode that is still the tree node (`component ==
+		// null`, `el` = the placeholder). But if a parent re-render RACED the microtask,
+		// patchComponent had already copied the instance onto this newer vnode, whose
+		// links the handler never saw — so the destroyed INSTANCE is the only witness
+		// both vnodes share. Hence `isDestroyed` (the getter — NOT `destroyed`, which is
+		// the always-truthy lifecycle hook METHOD and would remount every component on
+		// every render), and hence the placeholder read off the instance: this vnode's
+		// own `el` is the child's now-detached anchor.
+		const dead = oldVnode.component;
+		if (dead == null || dead.isDestroyed) {
+			const placeholder = dead?.__failedPlaceholder ?? oldVnode.el;
+			// Only an ATTACHED node is a usable insertion ref — insertBefore against a
+			// detached one throws NotFoundError and empties the container.
+			mount(newVnode, parent, placeholder?.parentNode === parent ? placeholder : null, ctx);
 			placeholder?.remove();
 			return;
 		}
