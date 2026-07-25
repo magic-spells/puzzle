@@ -38,12 +38,20 @@ Cobra command surface shipped by the platform binary:
   npm-name validated and must be empty.
 - `puzzle generate` / `g` creates component/view/layout/model stubs. `.pzl`
   templates compile in tests, and model generation prints registry wiring
-  instead of rewriting user JavaScript.
+  instead of rewriting user JavaScript. The `--path` containment guard resolves
+  symlinks before comparing (root fully; the destination via its nearest
+  existing ancestor — the same `evalSymlinksAllowMissing` pattern as pieces,
+  kept in deliberate lockstep), so an in-project symlink pointing outside the
+  root is refused; a purely lexical check let it escape.
 - `puzzle add tailwind` writes missing canonical files or prints the exact
   integration snippet when user-owned config already exists.
 - `puzzle add piece` resolves local/HTTPS registries, transitive dependencies,
   did-you-mean names, all-or-nothing overwrite checks, theme/dependency next
-  steps, and sha256 `pieces.lock` entries.
+  steps, and sha256 `pieces.lock` entries. Everything that can fail —
+  the theme fetch (`planTheme`) and the existing-lock parse — completes after
+  the conflict pre-flight but BEFORE the first destination write, so a missing
+  theme or malformed lock leaves the app tree untouched instead of a partial
+  install with no lock.
 - `puzzle add skills` (alias `skill`; D78) installs the embedded agent skill
   (`skills/puzzle/`, `go:embed`) into detected `~/.claude`/`~/.codex`/`~/.cursor`
   config dirs: huh checkbox multi-select on a TTY with all targets pre-selected,

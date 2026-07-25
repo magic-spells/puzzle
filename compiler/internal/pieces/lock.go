@@ -56,14 +56,11 @@ func readLock(path string) (*Lock, error) {
 	return &lock, nil
 }
 
-// updateLock merges the just-copied units into pieces.lock, preserving entries
-// for pieces added in earlier runs. Re-adding a piece REPLACES its entry (the
-// files/hashes are now current); other keys are untouched.
-func updateLock(path, source string, units []Unit) error {
-	lock, err := readLock(path)
-	if err != nil {
-		return err
-	}
+// updateLock merges the just-copied units into the preflight-parsed pieces.lock,
+// preserving entries for pieces added in earlier runs. Re-adding a piece
+// REPLACES its entry (the files/hashes are now current); other keys are
+// untouched.
+func updateLock(path string, lock *Lock, source string, units []Unit) error {
 	lock.Version = 1
 	lock.Registry = source
 	for _, u := range units {

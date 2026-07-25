@@ -503,6 +503,27 @@ func TestAddThemeCopiesWhenStylesMissing(t *testing.T) {
 	}
 }
 
+func TestAddMissingThemeWritesNothing(t *testing.T) {
+	reg := buildRegistry(t, singlePieceRegistry,
+		fixtureFile{"ui/button/Button.pzl", "BUTTON\n"},
+	)
+	app := newApp(t, false)
+
+	_, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
+	if err == nil {
+		t.Fatal("expected the missing registry theme to fail")
+	}
+	if fileExists(filepath.Join(app, "app", "components", "ui", "Button.pzl")) {
+		t.Error("component file should not be written when the theme fetch fails")
+	}
+	if fileExists(filepath.Join(app, "app", "styles", "pieces.css")) {
+		t.Error("theme file should not be written when its fetch fails")
+	}
+	if fileExists(filepath.Join(app, LockFileName)) {
+		t.Error("pieces.lock should not be written when the theme fetch fails")
+	}
+}
+
 // State (a) via the manual-merge marker — quiet, and no pieces.css written.
 func TestAddThemeQuietWhenMarkerPresent(t *testing.T) {
 	reg := themeFixture(t)
@@ -686,12 +707,20 @@ func TestAddMalformedLockErrors(t *testing.T) {
 		fixtureFile{"theme/pieces.css", "/* puzzle-pieces design tokens */\n"},
 	)
 	app := newApp(t, true)
-	if err := os.WriteFile(filepath.Join(app, LockFileName), []byte("{ not json"), 0o644); err != nil {
+	lockPath := filepath.Join(app, LockFileName)
+	const malformed = "{ not json"
+	if err := os.WriteFile(lockPath, []byte(malformed), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err := Add(Options{AppRoot: app, Names: []string{"button"}, Fetcher: NewFetcher(reg)})
 	if err == nil || !strings.Contains(err.Error(), "malformed") {
 		t.Fatalf("expected a malformed-lock error, got: %v", err)
+	}
+	if fileExists(filepath.Join(app, "app", "components", "ui", "Button.pzl")) {
+		t.Error("component file should not be written when pieces.lock is malformed")
+	}
+	if got, readErr := os.ReadFile(lockPath); readErr != nil || string(got) != malformed {
+		t.Errorf("malformed lock should be left untouched: got %q, err=%v", got, readErr)
 	}
 }
 
