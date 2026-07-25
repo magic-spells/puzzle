@@ -102,6 +102,11 @@ run.
     rebuilding the platform binaries; a JS-only republish will not carry it.
   - `examples/*/package.json` — kept at the current version so the examples
     install against what is actually published.
+  - `client-runtime/devtools.js` `FRAMEWORK_VERSION` — a literal that SHIPS in
+    the runtime and is reported to the DevTools extension (D100); the ESM bundle
+    cannot import package.json. `release:prep` now asserts it matches, because
+    the "bump it at every release" comment did not stop it sitting at `0.3.0`
+    through the `0.3.1` bump.
   Check with `rg -n '"@magic-spells/puzzle":' examples/*/package.json
   compiler/internal/scaffold/templates/*/package.json`. Leave each template's
   own `"version"` field alone; that is the scaffolded app's starting version.
