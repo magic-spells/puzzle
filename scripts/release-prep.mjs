@@ -16,7 +16,10 @@
 //   4. Copy LICENSE.txt (MIT) into each platform package dir.
 //   5. Host smoke test — run the binary built for THIS platform with --version and
 //      assert it reports the expected version.
-//   6. Summary — print the exact `npm publish` commands in the REQUIRED order
+//   6. Pack the ROOT tarball for publishing, and assert the manifest INSIDE it
+//      carries the four platform pins (D120 — the root package must be published
+//      as this .tgz, never as a directory; see the note on step 7).
+//   7. Summary — print the exact `npm publish` commands in the REQUIRED order
 //      (platform packages first, root LAST so its optionalDependencies resolve).
 //
 // Node builtins only. Any failure exits non-zero with a clear message.
@@ -90,6 +93,23 @@ if (goMatch[1] !== version) {
 	fail(`version.go Version is "${goMatch[1]}", expected "${version}"`);
 }
 console.log(`  OK  version.go Version = ${goMatch[1]}`);
+
+// The DevTools bridge reports a hardcoded framework version to the extension
+// (D100) — the ESM bundle cannot import package.json, so it is a literal that
+// ships in client-runtime/. A comment told the releaser to bump it and that was
+// not enough: it sat at 0.3.0 through the 0.3.1 bump. Assert it instead.
+const devtoolsJS = readFileSync(join(repoRoot, 'client-runtime/devtools.js'), 'utf8');
+const dtMatch = devtoolsJS.match(/^const FRAMEWORK_VERSION = '(.*)';$/m);
+if (!dtMatch) {
+	fail("could not find `const FRAMEWORK_VERSION = '...'` in client-runtime/devtools.js");
+}
+if (dtMatch[1] !== version) {
+	fail(
+		`client-runtime/devtools.js FRAMEWORK_VERSION is "${dtMatch[1]}", expected "${version}" ` +
+			'(it ships in the runtime and is reported to the DevTools extension)'
+	);
+}
+console.log(`  OK  client-runtime/devtools.js FRAMEWORK_VERSION = ${dtMatch[1]}`);
 
 // Each platform manifest must pin the same version.
 for (const { pkg } of MATRIX) {
@@ -171,7 +191,61 @@ if (!hostPkg) {
 	console.log(`  OK  ${hostPkg} --version → ${out.trim()}`);
 }
 
-// --- 6. Summary ------------------------------------------------------------
+// --- 6. Pack the root tarball that will actually be published ----------------
+// D120: `npm publish` on a DIRECTORY does not send the tarball's manifest to the
+// registry. It re-reads package.json from disk AFTER packing
+// (lib/commands/publish.js: pack() at ~L111, then getManifest() again at ~L124) —
+// and by then postpack has already stripped the injected pins. The tarball ships
+// correct while the registry metadata carries NO optionalDependencies, so every
+// install resolves zero platform binaries. That is exactly how 0.3.0 shipped
+// broken: a correct .tgz behind a pin-less packument.
+//
+// Publishing the FILE instead makes npm read the manifest out of the tarball, so
+// the injected pins reach the registry. This step produces that file and proves
+// its manifest is right, so the artifact named in the summary is the verified one.
+console.log('\nrelease-prep: packing the root tarball for publishing...');
+let rootTarball;
+try {
+	const packJSON = execFileSync('npm', ['pack', '--json', '--pack-destination', repoRoot], {
+		cwd: repoRoot,
+		encoding: 'utf8',
+	});
+	const packed = JSON.parse(packJSON);
+	rootTarball = (Array.isArray(packed) ? packed[0] : packed)?.filename;
+} catch (err) {
+	fail(`could not pack the root package: ${err.message}`);
+}
+if (!rootTarball) fail('`npm pack` reported no tarball filename for the root package');
+
+// Read the pins back out of the bytes that will be uploaded — not out of the
+// worktree manifest, which postpack has already restored to its pin-free state.
+{
+	let packedManifest;
+	try {
+		packedManifest = JSON.parse(
+			execFileSync('tar', ['-xOzf', rootTarball, 'package/package.json'], {
+				cwd: repoRoot,
+				encoding: 'utf8',
+				maxBuffer: 64 * 1024 * 1024,
+			})
+		);
+	} catch (err) {
+		fail(`could not read package/package.json out of ${rootTarball}: ${err.message}`);
+	}
+	const pins = packedManifest.optionalDependencies ?? {};
+	const missing = MATRIX.map(({ pkg }) => `@magic-spells/${pkg}`).filter(
+		(dep) => pins[dep] !== version
+	);
+	if (missing.length > 0) {
+		fail(
+			`${rootTarball} does not pin the platform packages at ${version}: ${missing.join(', ')}\n` +
+				'  prepack (scripts/inject-platform-pins.mjs inject) did not run or did not match.'
+		);
+	}
+	console.log(`  OK  ${rootTarball} pins ${MATRIX.length} platform packages at ${version}`);
+}
+
+// --- 7. Summary ------------------------------------------------------------
 console.log('\n' + '='.repeat(70));
 console.log(`release-prep: OK — all four CLI binaries built and staged for ${version}`);
 console.log('='.repeat(70));
@@ -180,7 +254,12 @@ console.log('already exist on the registry before the root package resolves):\n'
 for (const { pkg } of MATRIX) {
 	console.log(`  npm publish ./npm/${pkg} --access public`);
 }
-console.log('  npm publish --access public   # root package — MUST go last\n');
+console.log(`  npm publish ./${rootTarball} --access public   # root — MUST go last\n`);
+console.log('Publish the root as THAT TARBALL, not as `npm publish` in this directory:');
+console.log('a directory publish sends a manifest with NO platform pins (D120), which');
+console.log('is how 0.3.0 shipped with no working CLI.\n');
+console.log('Then confirm the registry actually got the pins:');
+console.log('  npm run verify:published\n');
 console.log('Reminder: run the full suites first if you have not already:');
 console.log('  npm test');
 console.log('  cd compiler && go test ./...\n');

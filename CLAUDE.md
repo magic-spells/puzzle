@@ -34,13 +34,19 @@ run.
 ## Current release state
 
 - Published: `0.1.0` (2026-07-21), `0.1.1` (2026-07-22, D77 init prompts),
-  `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), and
-  **`0.2.0` (2026-07-24, the current `latest`)** are live on npm (all five
-  packages, MIT, manual publish via `npm run release:prep` — there is no CI
-  publish). Everything from D88 onward landed AFTER the 0.2.0 publish and is
-  unreleased **`0.3.0`** — minor, not patch: two new export subpaths
-  (`./testing`, `./fixtures`) plus breaking changes in D110/D111/D112. Do not
-  describe 0.2.0 as unpublished; that error sat in these files for a day.
+  `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), `0.2.0`
+  (2026-07-24), `0.3.0` (2026-07-25), and **`0.3.1` (2026-07-25, the current
+  `latest`)** are live on npm (all five packages, MIT, manual publish via
+  `npm run release:prep` — there is no CI publish). Everything from D88 onward
+  shipped in `0.3.0` — minor, not patch: two new export subpaths (`./testing`,
+  `./fixtures`) plus breaking changes in D110/D111/D112. **`0.3.0` is published
+  but BROKEN and deprecated** — its registry metadata carries no
+  `optionalDependencies`, so it installs the CLI shim with no platform binary
+  and `puzzle` exits 1 on every machine (D120). `0.3.1` is the same feature set,
+  correctly published; never recommend `0.3.0`. Do not describe `0.2.0` or
+  `0.3.0` as unpublished; each error sat in these files for a day after the fact
+  — check `npm view @magic-spells/puzzle versions` before trusting this
+  paragraph.
   `0.2.0` adds path-shaped links via
   `router.url()` + the `link` formatter (D79/v1.46) and the true static-pages
   output mode (`output: 'static'` / `--static`, D81/v1.47); the D67
@@ -78,6 +84,32 @@ run.
   `scripts/inject-platform-pins.mjs` (`prepack` injects, `postpack` restores),
   and `npm run verify:pack` fails if the repo manifest carries them. Then run
   `npm run release:prep`, publish the four platform packages, then the root.
+  **The root is published as the packed tarball it prints — `npm publish
+  ./magic-spells-puzzle-<version>.tgz` — never as `npm publish` in the repo
+  directory** (D120): a directory publish re-reads the manifest after `postpack`
+  strips the pins, so the registry gets no `optionalDependencies` and the CLI
+  installs with no binary behind it. That is how 0.3.0 shipped broken.
+  `prepublishOnly` now refuses a directory publish outright. After publishing,
+  run `npm run verify:published` — it is the only check that inspects the
+  registry metadata npm actually resolves against.
+- Before every release, sweep the `@magic-spells/puzzle` dependency ranges that
+  are NOT bumped by the version scripts and point them at the version being
+  published:
+  - `compiler/internal/scaffold/templates/{default,todos}/package.json` — these
+    are `go:embed`ed into the binary, so a stale range ships a broken
+    `puzzle init`: caret ranges do not cross 0.x minors, so `^0.1.0` installs
+    `0.1.x` into an app scaffolded by a `0.3.0` binary. Fixing this requires
+    rebuilding the platform binaries; a JS-only republish will not carry it.
+  - `examples/*/package.json` — kept at the current version so the examples
+    install against what is actually published.
+  - `client-runtime/devtools.js` `FRAMEWORK_VERSION` — a literal that SHIPS in
+    the runtime and is reported to the DevTools extension (D100); the ESM bundle
+    cannot import package.json. `release:prep` now asserts it matches, because
+    the "bump it at every release" comment did not stop it sitting at `0.3.0`
+    through the `0.3.1` bump.
+  Check with `rg -n '"@magic-spells/puzzle":' examples/*/package.json
+  compiler/internal/scaffold/templates/*/package.json`. Leave each template's
+  own `"version"` field alone; that is the scaffolded app's starting version.
 
 ## Architecture at a glance
 
