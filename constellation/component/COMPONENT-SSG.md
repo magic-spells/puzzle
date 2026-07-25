@@ -17,8 +17,8 @@ connections:
   - FILE-STATIC-MOUNT
   - FILE-BUILD-PRERENDER
   - FILE-BUILD-PRERENDER-PAGES
-verified_at: '2026-07-24T23:34:27.892Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T01:47:05.818Z'
+verified_sha: bf351981a2ed01bf1e9c21f30acc529959247221
 notes:
   - kind: state
     text: >-
@@ -39,6 +39,11 @@ notes:
       url()-shadowed memory Router) and corrected the head prose: MANAGED_TAGS is now this pass's
       sole consumer, and normalizeBase/encodeURL live in router.js rather than assemble.js.
     sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+  - kind: verified
+    text: >-
+      Re-verified after D113: RAWTEXT branch + escapeScriptJson reviewed against the card's
+      serializer prose; ssg suites and full runs green at merged main.
+    sha: bf351981a2ed01bf1e9c21f30acc529959247221
 ---
 
 # Static generation runtime
