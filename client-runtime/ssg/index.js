@@ -35,7 +35,7 @@ import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { Router, encodeURL, normalizeBase } from '../router/router.js';
 import { walkRouteTree } from '../router/routeTree.js';
-import { serialize, escapeText, escapeAttr } from './serialize.js';
+import { serialize, escapeText, escapeAttr, escapeScriptJson } from './serialize.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub } from './assemble.js';
 import { resolveHead } from '../head.js';
 import { MANAGED_TAGS } from '../headTags.js';
@@ -585,10 +585,10 @@ export function injectStaticShell(shell, { targetId, content, title, head, slug,
 		out = out.replace(full, () => rebuilt);
 	}
 
-	// `<` → `<` keeps the JSON valid (it only appears inside string values) while
-	// making a literal `</script>` in a record impossible to emit — so content cannot
-	// terminate the data island early.
-	const json = JSON.stringify(data ?? {}).replace(/</g, '\\u003c');
+	// The shared JSON-in-script rule (serialize.js): keeps the JSON valid (the escape
+	// only appears inside string values) while making a literal `</script>` in a record
+	// impossible to emit — so content cannot terminate the data island early.
+	const json = escapeScriptJson(JSON.stringify(data ?? {}));
 	// Base-prefix the per-page module href so a subpath deploy (routerBase set) resolves
 	// it instead of 404ing at the domain root. `base` is the already-normalized prefix
 	// ('' for a root deploy → unchanged `/_puzzle/…`). The shell's own asset hrefs
