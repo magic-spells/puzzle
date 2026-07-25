@@ -2,11 +2,25 @@
 name: >-
   D120 — the root package is published as a packed tarball, because a directory publish sends a
   manifest with no platform pins
-status: built
+status: verified
 connections:
   - DECISION-D116-PACK-TIME-PIN-INJECTION
   - FEATURE-V1-32-RELEASE-HARDENING
   - FILE-PACKAGE
+verified_at: '2026-07-25T07:15:55.373Z'
+verified_sha: d6d6b659166337cc54e2909e116efce20faf45c7
+notes:
+  - kind: verified
+    text: >-
+      Proven end-to-end by the 0.3.1 release. 0.3.0 (directory publish) shipped a pin-perfect
+      tarball behind a packument with no optionalDependencies; 0.3.1 published as
+      ./magic-spells-puzzle-0.3.1.tgz carried all four pins to the registry. `npm run
+      verify:published` passed every step INCLUDING the real temp-dir install (`installed puzzle
+      --version → puzzle version 0.3.1`), and its negative case was exercised against 0.3.0 (fails
+      at the metadata step, exit 1) and its positive case against 0.2.0 (full pass incl. install).
+      `npm publish --dry-run` from the repo directory is refused by the prepublishOnly guard. 0.3.0
+      is deprecated on npm. Global install verified: /opt/homebrew/bin/puzzle → 0.3.1.
+    sha: d6d6b659166337cc54e2909e116efce20faf45c7
 ---
 
 `npm publish` is never run against the repo directory for the root package. The
