@@ -48,7 +48,9 @@ function transcript() {
 				module: 'views/Home.pzl',
 				params: { filter: 'active' },
 				props: {},
-				model: { todos: 3, activeTodos: 2 },
+				// `note` is longer than PREVIEW_MAX, so its cell is elided — the full
+				// value then has to survive somewhere reachable. See the title test.
+				model: { todos: 3, activeTodos: 2, note: 'n'.repeat(240) },
 				local: { newTodoText: 'half typed', currentFilter: 'active' },
 			},
 			// `completed` lives in BOTH layers with different values — the split the
@@ -427,6 +429,44 @@ describe.skipIf(!built)('Views panel', () => {
 		);
 	});
 
+	it('lets the value win the width fight against the key', async () => {
+		treeRow('3').click();
+		await settle(app, 60);
+
+		const key = [...groupFor('props').querySelectorAll('dt')].find(
+			(dt) => dt.textContent.trim() === 'todo'
+		);
+		const value = key.nextElementSibling;
+
+		// The bug this pins: with a `shrink-0` key and no basis on the value, the
+		// key took whatever it wanted and the value was left with zero effective
+		// width — rendering as nothing but its ellipsis in a half-width card.
+		expect(key.className).toContain('max-w-[40%]');
+		expect(key.className).toContain('truncate');
+		expect(value.className).toContain('flex-1'); // basis 0 → takes the remainder
+		expect(value.className).toContain('min-w-0'); // ...and may shrink below content
+		expect(value.className).toContain('truncate');
+	});
+
+	it('keeps the full value reachable when the cell elides it', async () => {
+		treeRow('2').click();
+		await settle(app, 60);
+
+		const key = [...groupFor('data() model layer').querySelectorAll('dt')].find(
+			(dt) => dt.textContent.trim() === 'note'
+		);
+		const value = key.nextElementSibling;
+
+		expect(value.textContent.trim().endsWith('…')).toBe(true);
+		expect(value.textContent.trim().length).toBeLessThan(200);
+		// Truncation is presentational only — hover still yields the whole thing.
+		expect(value.getAttribute('title')).toBe(`"${'n'.repeat(240)}"`);
+
+		// Short values get a title too, so hover is never a guess about length.
+		const short = [...groupFor('props').querySelectorAll('dd')];
+		expect(short.every((dd) => dd.hasAttribute('title'))).toBe(true);
+	});
+
 	it('reports an inspect:view failure inline instead of blanking the pane', async () => {
 		// No transcript entry for id 5 → the bridge answers { error }, which
 		// panel-glue turns into a rejection.
@@ -599,6 +639,14 @@ describe.skipIf(!built)('Store panel', () => {
 		expect(document.querySelector('[data-field="_synced"] input')).toBeNull();
 		expect(document.querySelector('[data-field="completed"] input').type).toBe('checkbox');
 		expect(document.querySelector('[data-field="text"] input').value).toBe('Ship the panel');
+
+		// Same width discipline as the inspector: bounded key, value takes the rest,
+		// full text on hover for the read-only fields that truncate.
+		const key = document.querySelector('[data-field="text"] dt');
+		expect(key.className).toContain('max-w-[35%]');
+		expect(key.className).toContain('truncate');
+		expect(document.querySelector('[data-field="_synced"] span[title]')).toBeTruthy();
+		expect(document.querySelector('[data-row="t1"] td[title]')).toBeTruthy();
 	});
 
 	it('applies an edit through edit:record and re-snapshots the type', async () => {

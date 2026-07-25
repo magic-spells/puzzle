@@ -14,9 +14,13 @@
     {:else}
       <dl class="m-0 flex-1 min-h-0 overflow-auto">
         {#for entry in entries}
-          <div key={ entry.label } class="flex items-baseline gap-2 px-2 py-0.5 border-b border-line last:border-b-0">
-            <dt class="shrink-0 font-mono text-[11px] text-muted">{ entry.label }</dt>
-            <dd class="m-0 ml-auto font-mono text-[11px] text-right break-all { valueClass }">{ entry.value }</dd>
+          <div key={ entry.label } class="flex items-baseline gap-2 min-h-[19px] px-2 py-1 border-b border-line last:border-b-0">
+            <dt
+              class="shrink-0 max-w-[40%] truncate font-mono text-[11px] leading-[1.35] text-muted"
+              title="{ entry.label }">{ entry.label }</dt>
+            <dd
+              class="m-0 flex-1 min-w-0 truncate text-right font-mono text-[11px] leading-[1.35] { valueClass }"
+              title="{ entry.full }">{ entry.value }</dd>
           </div>
         {/for}
       </dl>

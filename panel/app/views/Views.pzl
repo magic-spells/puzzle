@@ -55,7 +55,9 @@
                   {/if}
 
                   <span class="shrink-0 font-mono text-[11px] { row.nameClass }">{ row.name }</span>
-                  <span class="min-w-0 truncate font-mono text-[10px] { row.moduleClass }">{ row.moduleLabel }</span>
+                  <span
+                    class="min-w-0 truncate font-mono text-[10px] { row.moduleClass }"
+                    title="{ row.moduleLabel }">{ row.moduleLabel }</span>
 
                   <button
                     type="button"
@@ -81,10 +83,10 @@
           <p class="m-0 text-[12px] text-muted">Select a view to inspect its params, props and both state layers.</p>
         </div>
       {:else}
-        <header class="shrink-0 flex items-baseline gap-2 px-3 h-7 border-b border-line bg-surface">
-          <span class="font-mono text-[12px] font-semibold text-ink">{ detailName }</span>
-          <span class="font-mono text-[10px] text-faint truncate">{ detailModule }</span>
-          <span class="ml-auto font-mono text-[10px] tabular-nums text-faint">#{ detailId }</span>
+        <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
+          <span class="shrink-0 font-mono text-[12px] font-semibold text-ink">{ detailName }</span>
+          <span class="min-w-0 truncate font-mono text-[10px] text-faint" title="{ detailModule }">{ detailModule }</span>
+          <span class="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">#{ detailId }</span>
         </header>
 
         {#if inspectError}

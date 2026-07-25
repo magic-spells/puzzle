@@ -77,6 +77,11 @@ export function coerceInput(raw, kind) {
  * `{ key: value }` → the row shape the inspector groups and the record detail
  * card both render. Insertion order is preserved (it is the order the runtime
  * serialized the layer in, which reads better than alphabetical).
+ *
+ * `value` is the elided one-liner the cell prints; `full` is the same value
+ * uncapped, for the row's `title`. In a half-width card at a short dock height
+ * the printed form is almost always clipped, so hover has to be able to show
+ * the whole thing.
  */
 export function entriesOf(object, max = PREVIEW_MAX) {
 	if (!object || typeof object !== 'object') return [];
@@ -85,6 +90,7 @@ export function entriesOf(object, max = PREVIEW_MAX) {
 		return {
 			label,
 			value: preview(value, max),
+			full: preview(value, Infinity),
 			kind: valueKind(value),
 			raw: value,
 		};

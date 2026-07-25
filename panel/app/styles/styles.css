@@ -37,51 +37,70 @@
 	--dt-font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 	--dt-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-	/* Light — Chrome DevTools "default" theme values, near enough to blend in. */
+	/*
+	 * Contrast budget (WCAG 2.1, computed against all THREE background tiers —
+	 * canvas, surface and raised — because `hover:bg-raised` puts otherwise-
+	 * canvas text on the lightest one):
+	 *
+	 *   ink   >= 7:1    primary text
+	 *   muted >= 4.5:1  secondary text
+	 *   faint >= 4.5:1  labels and module paths, at 9-11px
+	 *
+	 * The three tiers must stay ordered ink > muted > faint; that hierarchy is
+	 * what makes a dense panel scannable. Any token edit here needs the ratios
+	 * re-checked against every tier, not just canvas.
+	 */
+
+	/* Light — Chrome DevTools "default" theme, darkened to clear the budget. */
 	--dt-canvas: #ffffff;
 	--dt-surface: #f5f5f5;
 	--dt-raised: #ebebeb;
-	--dt-ink: #1f1f1f;
-	--dt-muted: #5f6368;
-	--dt-faint: #9aa0a6;
+	--dt-ink: #1a1a1a; /* 17.40 / 15.96 / 14.60 */
+	--dt-muted: #55595e; /*  7.05 /  6.47 /  5.92 */
+	--dt-faint: #64696e; /*  5.54 /  5.09 /  4.65 */
 	--dt-line: #d7d7d7;
-	--dt-accent: #6b4ef0;
-	--dt-accent-soft: rgba(107, 78, 240, 0.12);
-	--dt-ok: #17803d;
-	--dt-warn: #a16207;
-	--dt-danger: #b3261e;
+	--dt-accent: #5b3ce0; /*  6.63 /  6.08 /  5.56 */
+	--dt-accent-soft: rgba(91, 60, 224, 0.13);
+	--dt-ok: #146c34; /*  6.51 /  5.97 /  5.46 */
+	--dt-warn: #8a5300; /*  6.33 /  5.81 /  5.31 */
+	--dt-danger: #a3211a; /*  7.53 /  6.90 /  6.31 */
 }
 
+/*
+ * Dark — backgrounds a step deeper AND text a step whiter than Chrome's own
+ * palette. Chrome's #202124/#e8eaed pair reads fine at its 12-13px body size;
+ * this panel runs at 10-11px, where the same ratios feel washed out.
+ */
 :root[data-theme="dark"] {
-	--dt-canvas: #202124;
-	--dt-surface: #292a2d;
-	--dt-raised: #35363a;
-	--dt-ink: #e8eaed;
-	--dt-muted: #9aa0a6;
-	--dt-faint: #6f7378;
-	--dt-line: #3c4043;
-	--dt-accent: #a48bff;
-	--dt-accent-soft: rgba(164, 139, 255, 0.16);
-	--dt-ok: #81c995;
-	--dt-warn: #fdd663;
-	--dt-danger: #f28b82;
+	--dt-canvas: #17181a;
+	--dt-surface: #1f2023;
+	--dt-raised: #2b2d31;
+	--dt-ink: #f4f6f7; /* 16.39 / 15.03 / 12.72 */
+	--dt-muted: #b6bcc2; /*  9.27 /  8.50 /  7.20 */
+	--dt-faint: #959ca3; /*  6.40 /  5.87 /  4.97 */
+	--dt-line: #34363b;
+	--dt-accent: #b9a4ff; /*  8.31 /  7.62 /  6.45 */
+	--dt-accent-soft: rgba(185, 164, 255, 0.18);
+	--dt-ok: #8fd3a2; /* 10.16 /  9.31 /  7.89 */
+	--dt-warn: #ffd970; /* 13.04 / 11.95 / 10.12 */
+	--dt-danger: #ff958c; /*  8.40 /  7.70 /  6.52 */
 }
 
 /* Standalone `puzzle dev` (no panel-glue, so no data-theme) follows the OS. */
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme]) {
-		--dt-canvas: #202124;
-		--dt-surface: #292a2d;
-		--dt-raised: #35363a;
-		--dt-ink: #e8eaed;
-		--dt-muted: #9aa0a6;
-		--dt-faint: #6f7378;
-		--dt-line: #3c4043;
-		--dt-accent: #a48bff;
-		--dt-accent-soft: rgba(164, 139, 255, 0.16);
-		--dt-ok: #81c995;
-		--dt-warn: #fdd663;
-		--dt-danger: #f28b82;
+		--dt-canvas: #17181a;
+		--dt-surface: #1f2023;
+		--dt-raised: #2b2d31;
+		--dt-ink: #f4f6f7;
+		--dt-muted: #b6bcc2;
+		--dt-faint: #959ca3;
+		--dt-line: #34363b;
+		--dt-accent: #b9a4ff;
+		--dt-accent-soft: rgba(185, 164, 255, 0.18);
+		--dt-ok: #8fd3a2;
+		--dt-warn: #ffd970;
+		--dt-danger: #ff958c;
 	}
 }
 

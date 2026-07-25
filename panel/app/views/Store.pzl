@@ -88,11 +88,12 @@
                     {#for cell in row.cells}
                       <td
                         key={ cell.label }
-                        class="max-w-[16rem] truncate px-2 py-0.5 border-b border-line font-mono text-[11px] { cell.cls }">
+                        title="{ cell.full }"
+                        class="max-w-[16rem] truncate px-2 py-1 border-b border-line font-mono text-[11px] { cell.cls }">
                         { cell.value }
                       </td>
                     {/for}
-                    <td class="px-2 py-0.5 border-b border-line">
+                    <td class="px-2 py-1 border-b border-line">
                       <span class="rounded px-1 font-mono text-[9px] uppercase tracking-wide { row.syncedClass }">{ row.syncedLabel }</span>
                     </td>
                   </tr>
@@ -104,9 +105,9 @@
 
         {#if hasDetail}
           <section class="shrink-0 max-h-[55%] flex flex-col min-h-0 border-t border-line bg-surface">
-            <header class="shrink-0 flex items-baseline gap-2 px-3 h-6 border-b border-line">
-              <span class="font-mono text-[11px] font-semibold text-ink">{ activeType } · { detailId }</span>
-              <span class="text-[10px] text-muted">edits go through the app's real record.update()</span>
+            <header class="shrink-0 flex items-baseline gap-2 min-h-8 px-3 py-1.5 leading-relaxed border-b border-line">
+              <span class="shrink-0 font-mono text-[11px] font-semibold text-ink">{ activeType } · { detailId }</span>
+              <span class="min-w-0 truncate text-[10px] text-muted">edits go through the app's real record.update()</span>
               <button
                 type="button"
                 data-apply="1"
@@ -131,8 +132,10 @@
 
             <dl class="m-0 flex-1 min-h-0 overflow-auto">
               {#for field in fields}
-                <div key={ field.label } data-field="{ field.label }" class="flex items-center gap-2 px-3 py-0.5 border-b border-line">
-                  <dt class="w-32 shrink-0 font-mono text-[11px] text-muted truncate">{ field.label }</dt>
+                <div key={ field.label } data-field="{ field.label }" class="flex items-center gap-2 min-h-[24px] px-3 py-1 border-b border-line">
+                  <dt
+                    class="w-24 max-w-[35%] shrink-0 truncate font-mono text-[11px] leading-[1.35] text-muted"
+                    title="{ field.label }">{ field.label }</dt>
                   <dd class="m-0 flex-1 min-w-0">
                     {#if field.kind === 'boolean'}
                       <input
@@ -148,7 +151,7 @@
                         value={ field.input }
                         @input={ editField(field.label, event) } />
                     {:else}
-                      <span class="block truncate font-mono text-[11px] text-faint">{ field.value }</span>
+                      <span class="block truncate font-mono text-[11px] text-faint" title="{ field.full }">{ field.value }</span>
                     {/if}
                   </dd>
                   <span class="w-14 shrink-0 text-right font-mono text-[9px] uppercase tracking-wide text-faint">{ field.kindLabel }</span>
@@ -292,7 +295,9 @@ export default class StoreView extends PuzzleView {
       syncedClass: row?._synced ? 'bg-accent-soft text-accent' : 'text-faint',
       cells: shape.columns.map((column) => ({
         label: column,
+        // Cells are single-line and truncated; `full` is what hover reveals.
         value: preview(row?.[column], 80),
+        full: preview(row?.[column], Infinity),
         cls: column === shape.pk ? 'text-ink' : 'text-muted',
       })),
     };
@@ -317,6 +322,7 @@ export default class StoreView extends PuzzleView {
         kindLabel: locked ? 'read-only' : kind,
         editable,
         value: preview(value),
+        full: preview(value, Infinity),
         input: edited ? String(edits[label]) : inputValue(value),
         checked: edited ? edits[label] === true || edits[label] === 'true' : value === true,
       };
