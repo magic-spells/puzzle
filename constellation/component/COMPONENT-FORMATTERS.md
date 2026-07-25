@@ -38,3 +38,11 @@ Built-ins are pure named exports. A JSON name manifest is embedded by the Go bui
 One built-in is not a pure export: `link` (D79) needs the live router, so PuzzleApp registers it at mount after constructing the router — only if absent, so a user `link` from config wins. It delegates to `router.url()` (nullish → `''`, non-strings coerced, non-`/` strings pass through). The tree-shake scanner ignores the name (not on the allowlist), the same handling as any custom formatter.
 
 All built-ins fail soft on nullish or invalid display input. Numeric precision normalizes to an integer in the `toFixed` range; date/locale/time-zone failures fall back to a string; sort copies before comparing and treats numeric arrays numerically. `raw`/`noescape` only skip formatter escaping—they do not inject HTML into text vnodes.
+
+The date family (`date`/`time`/`datetime`/`timeago`/`in_timezone`) treats a
+bare `YYYY-MM-DD` string as a **calendar date**
+([[DECISION-D114-CALENDAR-DATE-FORMATTERS]]): one shared `parseDateInput`
+constructs it as local midnight so it displays as written in every timezone,
+with a round-trip check that sends rollover components back to the
+Invalid-Date fail-soft path. The `iso` preset is idempotent on such inputs;
+Date instances, timestamps, and full ISO datetimes parse exactly as before.
