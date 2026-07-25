@@ -66,8 +66,13 @@ backslash paths.
 esbuild model: bin/puzzle.js shim in @magic-spells/puzzle resolves
 @magic-spells/puzzle-{darwin-arm64,darwin-x64,linux-x64,linux-arm64} from pinned
 optionalDependencies and execs the binary; npm/ holds the four manifests (binaries
-release-built, gitignored). Releases are published BY HAND: scripts/release-prep.mjs
-asserts package.json==version.go==manifests, runs verify-pack, cross-compiles with
+release-built, gitignored). The pins are NOT tracked — they are injected into
+package.json at pack time (prepack) and removed after (postpack), and verify-pack
+validates the mechanism against a real packed tarball; see
+[[DECISION-D116-PACK-TIME-PIN-INJECTION]] for the flow, the abort window, and its
+mitigation. Releases are published BY HAND: scripts/release-prep.mjs first restores
+a clean manifest (a previously-aborted pack may have left pins behind), asserts
+package.json==version.go==manifests, runs verify-pack, cross-compiles with
 -ldflags version stamping, and prints the publish commands (platform packages BEFORE
 the root). There is no CI publish workflow — the tag-triggered release.yml was removed
 pre-0.1.0 in favor of manual publishing. No postinstall. Windows:
