@@ -53,8 +53,9 @@ run.
   framework-gap round (D91-D98: adapter `beforeRequest`, dev build errors in
   the browser, router focus + route announcement, `/testing`, `/fixtures` +
   mock adapter), agent-skill upgrade ergonomics (D97/D99), the DevTools
-  runtime bridge (D100 — framework half only; the extension is a separate,
-  unstarted repo), and a deep-review hardening round (D110 `dev.proxy` prefix
+  runtime bridge (D100 — the extension's v1 is built and smoke-verified in its
+  separate public repo `magic-spells/puzzle-devtools`), and a deep-review
+  hardening round (D110 `dev.proxy` prefix
   validation, D111 managed head tags build-time only).
 - Product line: v1 through v1.63, plus the July 21 pre-release
   correctness/performance hardening pass and the July 24 deep-review round.

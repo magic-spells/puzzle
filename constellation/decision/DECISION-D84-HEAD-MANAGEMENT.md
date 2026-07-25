@@ -117,6 +117,11 @@ resolution rules and identity-marked managed tags.**
 
 ## Amended by D89 — module split, title core vs managed tags
 
+> **Superseded in part by D111 (next section).** The runtime half described
+> below — the DOM `syncTags` loop, `setTagValue`, the router call site, and the
+> `__PUZZLE_HAS_HEAD_TAGS__` gate — was deleted outright. Only the `head.js`
+> resolver + `syncTitle` half survives at runtime; read this section as history.
+
 [[DECISION-D89-FEATURE-USAGE-TREESHAKE]] splits this feature across two modules
 on a real seam. `head.js` keeps the pure resolver (`resolveHead`/`resolveField`,
 the uniform null-suppression walk above) plus a one-line `syncTitle`;
