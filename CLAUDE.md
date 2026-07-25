@@ -71,8 +71,11 @@ run.
 - Canonical app: `examples/todos`. Other examples are acceptance cases for
   routing, data, TypeScript, morphs, static output, DOM islands, canvas, and
   virtual scrolling.
-- Releases are published by hand: bump versions everywhere (package.json +
-  optionalDependencies pins, four platform manifests, version.go), run
+- Releases are published by hand: bump versions in package.json, the four
+  platform manifests, and version.go. The repo manifest must **not** declare
+  `optionalDependencies` — the platform pins are injected at pack time by
+  `scripts/inject-platform-pins.mjs` (`prepack` injects, `postpack` restores),
+  and `npm run verify:pack` fails if the repo manifest carries them. Then run
   `npm run release:prep`, publish the four platform packages, then the root.
 
 ## Architecture at a glance
