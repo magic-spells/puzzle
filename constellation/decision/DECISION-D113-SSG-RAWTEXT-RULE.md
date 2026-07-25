@@ -2,7 +2,7 @@
 name: >-
   D113 — prerender RAWTEXT rule: JSON scripts escape < as \u003c; other script/style emit raw behind a
   breakout guard
-status: built
+status: verified
 connections:
   - DECISION-D22-NO-ESCAPE-BY-DEFAULT
   - DECISION-D67-SSG-STATIC-BUILD
@@ -10,6 +10,16 @@ connections:
   - DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY
   - COMPONENT-SSG
   - FILE-SSG-SERIALIZER
+verified_at: '2026-07-25T01:46:58.397Z'
+verified_sha: bf351981a2ed01bf1e9c21f30acc529959247221
+notes:
+  - kind: verified
+    text: >-
+      Merged via PR #28 and re-verified at merged main in a clean worktree: full vitest (70 files /
+      1250 tests incl. the 14-test tests/ssg-rawtext.test.js matrix) and all 14 Go packages green.
+      Reachability was compiler-proven (nested script/style compile; text+interpolations concatenate
+      into one text vnode).
+    sha: bf351981a2ed01bf1e9c21f30acc529959247221
 ---
 
 The SSG serializer stops entity-escaping `<script>`/`<style>` content —
