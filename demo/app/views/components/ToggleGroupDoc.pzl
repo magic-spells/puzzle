@@ -12,7 +12,7 @@
       </header>
 
       <ExampleBox code={ codeHero }>
-        <div class="flex flex-wrap items-center justify-center gap-3">
+        <div class="flex flex-col items-center gap-3">
           <ToggleGroup items={ alignOptions } value={ align } @change={ setAlign } label="Text alignment"/>
           <p class="text-sm text-muted">Alignment: { align || 'none' }</p>
         </div>
@@ -37,7 +37,7 @@
 
       <div class="mt-12 space-y-12">
         <ExampleBox id="multiple" title="Multiple" code={ codeMultiple }>
-          <div class="flex flex-wrap items-center justify-center gap-3">
+          <div class="flex flex-col items-center gap-3">
             <ToggleGroup type="multiple" items={ markOptions } value={ marks } @change={ setMarks } label="Text formatting"/>
             <p class="text-sm text-muted">Marks: { marksLabel }</p>
           </div>

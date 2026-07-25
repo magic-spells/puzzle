@@ -14,8 +14,13 @@
         </p>
       </header>
 
+      <!-- self-start: the ExampleBox preview is a centered flex box. The board's
+           height changes while dragging (the placeholder grows the hovered
+           column), and a vertically centered board recenters on every change —
+           shifting every card by half the delta, which `flip` then animates as
+           jitter. Top-aligning pins the board so only the bottom edge moves. -->
       <ExampleBox code={ codeHero }>
-        <div class="w-full">
+        <div class="w-full self-start">
           <Kanban columns={ board } @move={ onMove } label="Sprint board"/>
         </div>
       </ExampleBox>
@@ -63,7 +68,7 @@
 
       <div class="mt-12 space-y-12">
         <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
-          <div class="w-full">
+          <div class="w-full self-start">
             <Kanban columns={ staticBoard } disabled label="Read-only board"/>
           </div>
         </ExampleBox>

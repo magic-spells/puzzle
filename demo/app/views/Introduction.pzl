@@ -1,68 +1,71 @@
 <puzzle-view class="w-full">
-  <article class="mx-auto max-w-3xl">
-    <header class="mb-10">
-      <h1 class="text-4xl font-semibold tracking-tight text-ink">Puzzle Pieces</h1>
-      <p class="mt-3 text-lg text-body">
-        Beautifully-behaved UI components for the Puzzle framework. Tailwind-styled,
-        accessible, morph-aware — and copied into your app, not installed from npm.
-      </p>
-      <div class="mt-6 flex flex-wrap gap-3">
-        <Button variant="primary" @press={ browse }>Browse components</Button>
-        <Badge variant="outline">85 pieces</Badge>
-      </div>
-    </header>
+  <!-- Toc-width right inset — see ComponentsIndex.pzl for why. -->
+  <div class="xl:pr-60">
+    <article class="mx-auto w-full max-w-5xl min-w-0">
+      <header class="mb-10">
+        <h1 class="text-4xl font-semibold tracking-tight text-ink">Puzzle Pieces</h1>
+        <p class="mt-3 text-lg text-body">
+          Beautifully-behaved UI components for the Puzzle framework. Tailwind-styled,
+          accessible, morph-aware — and copied into your app, not installed from npm.
+        </p>
+        <div class="mt-6 flex flex-wrap gap-3">
+          <Button variant="primary" @press={ browse }>Browse components</Button>
+          <Badge variant="outline">85 pieces</Badge>
+        </div>
+      </header>
 
-    <section class="mb-10">
-      <h2 class="mb-3 text-xl font-semibold tracking-tight text-ink">Why copy-in?</h2>
-      <p class="text-sm/relaxed text-body">
-        Puzzle compiles <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">.pzl</code>
-        single-file components, and <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">.pzl</code>
-        files can't live in node_modules — the compiler doesn't scan there. So instead of
-        fighting that, Puzzle Pieces embraces it: every piece is source you copy into
-        <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">app/components/ui/</code>.
-        Your build compiles it, your Tailwind scan picks up its classes, and the code is
-        yours to restyle and rework — for Puzzle it's the structurally correct model.
-      </p>
-    </section>
+      <section class="mb-10">
+        <h2 class="mb-3 text-xl font-semibold tracking-tight text-ink">Why copy-in?</h2>
+        <p class="text-sm/relaxed text-body">
+          Puzzle compiles <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">.pzl</code>
+          single-file components, and <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">.pzl</code>
+          files can't live in node_modules — the compiler doesn't scan there. So instead of
+          fighting that, Puzzle Pieces embraces it: every piece is source you copy into
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">app/components/ui/</code>.
+          Your build compiles it, your Tailwind scan picks up its classes, and the code is
+          yours to restyle and rework — for Puzzle it's the structurally correct model.
+        </p>
+      </section>
 
-    <section class="mb-10">
-      <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Quick start</h2>
-      <ol class="space-y-6">
-        <li>
-          <p class="mb-2 text-sm font-medium text-ink">1. Copy a piece in</p>
-          <p class="mb-3 text-sm text-muted">
-            The Puzzle CLI copies the piece (and anything it depends on) into your app.
-            Your first add also drops the pieces.css design tokens into app/styles/.
-          </p>
-          <CodeBlock code={ addSnippet }/>
-        </li>
-        <li>
-          <p class="mb-2 text-sm font-medium text-ink">2. Wire up the design tokens</p>
-          <p class="mb-3 text-sm text-muted">
-            Every piece styles itself through semantic utilities (bg-surface, text-ink,
-            border-border, bg-brand…) generated from one token block — restyle everything
-            by editing the values.
-          </p>
-          <CodeBlock code={ tokensSnippet }/>
-        </li>
-        <li>
-          <p class="mb-2 text-sm font-medium text-ink">3. Use it</p>
-          <CodeBlock code={ useImport }/>
-          <CodeBlock code={ useMarkup } class="mt-3"/>
-        </li>
-      </ol>
-    </section>
+      <section class="mb-10">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Quick start</h2>
+        <ol class="space-y-6">
+          <li>
+            <p class="mb-2 text-sm font-medium text-ink">1. Copy a piece in</p>
+            <p class="mb-3 text-sm text-muted">
+              The Puzzle CLI copies the piece (and anything it depends on) into your app.
+              Your first add also drops the pieces.css design tokens into app/styles/.
+            </p>
+            <CodeBlock code={ addSnippet }/>
+          </li>
+          <li>
+            <p class="mb-2 text-sm font-medium text-ink">2. Wire up the design tokens</p>
+            <p class="mb-3 text-sm text-muted">
+              Every piece styles itself through semantic utilities (bg-surface, text-ink,
+              border-border, bg-brand…) generated from one token block — restyle everything
+              by editing the values.
+            </p>
+            <CodeBlock code={ tokensSnippet }/>
+          </li>
+          <li>
+            <p class="mb-2 text-sm font-medium text-ink">3. Use it</p>
+            <CodeBlock code={ useImport }/>
+            <CodeBlock code={ useMarkup } class="mt-3"/>
+          </li>
+        </ol>
+      </section>
 
-    <section>
-      <h2 class="mb-3 text-xl font-semibold tracking-tight text-ink">Conventions</h2>
-      <p class="text-sm/relaxed text-body">
-        Config-first APIs (props in, value-first callbacks out), controlled components
-        (the parent owns state), full keyboard and ARIA behavior in every piece, and no
-        colors outside the token set. Each file's header comment documents its props,
-        callbacks, and usage examples — the docs live with the code you copied.
-      </p>
-    </section>
-  </article>
+      <section>
+        <h2 class="mb-3 text-xl font-semibold tracking-tight text-ink">Conventions</h2>
+        <p class="text-sm/relaxed text-body">
+          Config-first APIs (props in, value-first callbacks out), controlled components
+          (the parent owns state), full keyboard and ARIA behavior in every piece, and no
+          colors outside the token set. Each file's header comment documents its props,
+          callbacks, and usage examples — the docs live with the code you copied.
+        </p>
+      </section>
+    </article>
+  </div>
 </puzzle-view>
 
 <script>

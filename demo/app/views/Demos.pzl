@@ -1,65 +1,36 @@
 <puzzle-view class="w-full">
-  <article>
-    <header class="mb-8 max-w-3xl">
-      <h1 class="text-3xl font-semibold tracking-tight text-ink">Demos</h1>
-      <p class="mt-2 text-body">
-        Six complete interfaces assembled from Puzzle Pieces. Open one to see how the
-        components work together in realistic dashboards, tools, conversations, and commerce.
-      </p>
-    </header>
+  <!-- Toc-width right inset — see ComponentsIndex.pzl for why. -->
+  <div class="xl:pr-60">
+    <article class="mx-auto w-full max-w-5xl min-w-0">
+      <header class="mb-8 max-w-3xl">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Demos</h1>
+        <p class="mt-2 text-body">
+          Six complete interfaces assembled from Puzzle Pieces. Open one to see how the
+          components work together in realistic dashboards, tools, conversations, and commerce.
+        </p>
+      </header>
 
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {#for demo in demos}
-        <Card title={ demo.title } description={ demo.description } class="h-full">
-          <a
-            href="#{ demo.path }"
-            class="text-sm font-medium text-brand hover:text-brand-dark">Open { demo.title } →</a>
-        </Card>
-      {/for}
-    </div>
-  </article>
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {#for demo in demos}
+          <Card title={ demo.title } description={ demo.description } class="h-full">
+            <a
+              href="#{ demo.path }"
+              class="text-sm font-medium text-brand hover:text-brand-dark">Open { demo.title } →</a>
+          </Card>
+        {/for}
+      </div>
+    </article>
+  </div>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Card from '@/components/ui/Card.pzl';
-
-const demos = [
-  {
-    title: 'Analytics',
-    path: '/examples/analytics',
-    description: 'A responsive metrics dashboard with stat cards, line, area, bar, and pie charts.',
-  },
-  {
-    title: 'Chat',
-    path: '/examples/chat',
-    description: 'A team conversation with messages, attachments, pinned scrolling, and a live composer.',
-  },
-  {
-    title: 'Banking',
-    path: '/examples/banking',
-    description: 'A finance dashboard with accounts, transactions, date filters, budgets, and transfers.',
-  },
-  {
-    title: 'Admin',
-    path: '/examples/admin',
-    description: 'A commerce back office with products, orders, customers, collections, and settings.',
-  },
-  {
-    title: 'Project',
-    path: '/examples/project',
-    description: 'A project workspace with navigation, metrics, a Kanban board, issues, and activity.',
-  },
-  {
-    title: 'Storefront',
-    path: '/examples/storefront',
-    description: 'A product detail experience with gallery, variants, cart controls, specs, and reviews.',
-  },
-];
+import { DEMOS } from '@/docs/demos.js';
 
 export default class Demos extends PuzzleView {
   data() {
-    return { demos };
+    return { demos: DEMOS };
   }
 }
 </script>

@@ -12,9 +12,9 @@
 
           <ul class={ column.listClass } role="list" data-kb-list>
             {#for item in column.items}
-              <li class="list-none" key={ item.key }>
+              <li class="list-none" key={ item.key } flip={ flipOpts }>
                 {#if item.placeholder}
-                  <div class="h-16 rounded-lg border-2 border-dashed border-brand bg-brand-tint/50" aria-hidden="true"></div>
+                  <div class="rounded-lg border-2 border-dashed border-brand bg-brand-tint/50" style={ item.placeholderStyle } aria-hidden="true"></div>
                 {:else}
                   <div
                     class={ item.cardClass }
@@ -99,7 +99,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //       }
 //       const dest = cols.find((c) => c.id === toColumnId);
 //       dest.cards.splice(toIndex, 0, card);
-//       this.setData({ columns: cols }); this.refresh();
+//       this.setData({ columns: cols });
 //     },
 //   };
 //
@@ -160,6 +160,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //     it resolves to the card's original slot (a no-op).
 
 const DRAG_THRESHOLD = 5;
+
+// Passed to every row's `flip` attribute. A shade quicker than the 250ms default:
+// cards shifting out of the way should read as a reaction to the pointer, not an
+// animation the user waits on. Template expressions do not admit inline object
+// literals, so this rides through data() as `flipOpts`.
+const FLIP = { duration: 180, easing: 'cubic-bezier(.2,.8,.2,1)' };
 
 const CARD_BASE =
   'block w-full rounded-lg border border-border bg-surface p-3 text-left shadow-sm ' +
@@ -227,6 +233,7 @@ export default class Kanban extends PuzzleView {
       hoveredColId: null,
       targetIndex: -1,
       ghostW: 0,
+      ghostH: 0,
       grabbedId: null,
       announce: '',
     });
@@ -284,7 +291,14 @@ export default class Kanban extends PuzzleView {
       const items = kept.map(cardView);
       if (dragging && col.id === hoveredColId) {
         const idx = clamp(targetIndex, 0, items.length);
-        items.splice(idx, 0, { placeholder: true, key: '__kb_placeholder__' });
+        // The gap has to be exactly as tall as the card that left it. A fixed
+        // height makes every row below jump by the difference on each pointermove,
+        // and `flip` animates that error instead of hiding it.
+        items.splice(idx, 0, {
+          placeholder: true,
+          key: '__kb_placeholder__',
+          placeholderStyle: `height:${d.ghostH || 64}px`,
+        });
       }
       return {
         id: col.id,
@@ -309,6 +323,7 @@ export default class Kanban extends PuzzleView {
       columnClass: 'flex w-72 shrink-0 flex-col rounded-xl border border-border bg-surface-sunken',
       boardLabel: props.label || 'Board',
       viewColumns,
+      flipOpts: FLIP,
       dragging,
       ghost: ghostCard ? cardView(ghostCard) : { title: '', badge: '', meta: '', assignee: '' },
       ghostStyle: dragging ? `width:${d.ghostW || 288}px` : false,
@@ -380,14 +395,22 @@ export default class Kanban extends PuzzleView {
 
     const colId = colEl.getAttribute('data-kb-col');
     const list = colEl.querySelector('[data-kb-list]');
-    const cards = list ? Array.from(list.querySelectorAll('[data-kb-card]')) : [];
-    let index = cards.length;
-    for (let i = 0; i < cards.length; i++) {
-      const r = cards[i].getBoundingClientRect();
-      if (clientY < r.top + r.height / 2) {
-        index = i;
-        break;
-      }
+    if (!list) return { colId, index: 0 };
+
+    // Measure in LAYOUT space, not visual space. `flip` animates each row with a
+    // transform and getBoundingClientRect() includes it, so hit-testing live rects
+    // reads cards mid-slide — which picks a different slot, relocates the
+    // placeholder, and starts another animation. That feedback loop is what makes
+    // rows jitter instead of settling. offsetTop/offsetHeight ignore transforms,
+    // and the list element is never itself transformed, so this is resting
+    // geometry regardless of what is in flight. Counting the rows above the
+    // pointer (rather than breaking at the first row below it) also degrades
+    // gracefully if a row is momentarily out of visual order.
+    const listTop = list.getBoundingClientRect().top - list.offsetTop;
+    let index = 0;
+    for (const row of list.children) {
+      if (!row.querySelector('[data-kb-card]')) continue; // skip the placeholder
+      if (clientY > listTop + row.offsetTop + row.offsetHeight / 2) index += 1;
     }
     return { colId, index };
   }
@@ -474,6 +497,7 @@ export default class Kanban extends PuzzleView {
       hoveredColId: a.colId,
       targetIndex: orig < 0 ? 0 : orig,
       ghostW: a.width,
+      ghostH: a.height,
       grabbedId: null,
       announce: '',
     });
@@ -668,6 +692,7 @@ export default class Kanban extends PuzzleView {
         offX: event.clientX - rect.left,
         offY: event.clientY - rect.top,
         width: rect.width,
+        height: rect.height,
       };
       this._addWindowListeners();
     },

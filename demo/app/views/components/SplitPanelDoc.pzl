@@ -71,7 +71,7 @@
               style slotted content with it. Drag the divider toward the left edge and the sidebar
               content fades out before the pane snaps closed.
             </p>
-            <SplitPanel class="h-56 rounded-lg border border-border" defaultSizes={ [35, 65] } max={ ['45%', null] } snap={ [0, 100] }>
+            <SplitPanel class="h-56 rounded-lg border border-border" defaultSizes={ [45, 55] } max={ ['45%', null] } snap={ [0, 100] }>
               <div slot="first" class="relative h-full overflow-hidden bg-surface-sunken">
                 <div
                   class="flex h-full min-w-[200px] origin-left flex-col justify-center gap-1.5 px-6 transition-[opacity,transform,filter] duration-50"
@@ -180,7 +180,7 @@ const codeConstraints = `<SplitPanel
   <main slot="second">Main content</main>
 </SplitPanel>`;
 
-const codeFade = `<SplitPanel class="h-56" defaultSizes={ [35, 65] } max={ ['45%', null] } snap={ [0, 100] }>
+const codeFade = `<SplitPanel class="h-56" defaultSizes={ [45, 55] } max={ ['45%', null] } snap={ [0, 100] }>
   <aside slot="first" class="relative overflow-hidden">
     <nav
       class="min-w-[200px] origin-left transition-[opacity,transform,filter] duration-50"

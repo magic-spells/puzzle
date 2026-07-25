@@ -7,7 +7,8 @@
         Puzzle Pieces
       </a>
       <div class="flex items-center gap-4">
-        <span class="text-xs text-muted">{ pieceCount } pieces · v0.1</span>
+        <SearchDialog/>
+        <span class="hidden text-xs text-muted sm:inline">{ pieceCount } pieces · v0.2</span>
         <DropdownMenu
           label="Color scheme"
           align="end"
@@ -88,6 +89,7 @@ import Toaster from '../components/ui/Toaster.pzl';
 import Collapsible from '../components/ui/Collapsible.pzl';
 import DropdownMenu from '../components/ui/DropdownMenu.pzl';
 import SideNav from '../components/docs/SideNav.pzl';
+import SearchDialog from '../components/docs/SearchDialog.pzl';
 import { COMPONENTS } from '../docs/nav.js';
 
 const SCHEMES = [

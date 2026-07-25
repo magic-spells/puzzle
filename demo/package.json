@@ -1,6 +1,6 @@
 {
   "name": "puzzle-pieces-demo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Dev harness + showcase app for the puzzle-pieces component library",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@magic-spells/morph-engine": "^0.1.0",
-    "@magic-spells/puzzle": "^0.2.0",
+    "@magic-spells/puzzle": "^0.3.1",
     "highlight.js": "^11.11.1"
   },
   "devDependencies": {

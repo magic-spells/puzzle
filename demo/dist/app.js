@@ -678,15 +678,15 @@ var require_core = __commonJS({
     function remapScopeNames(mode, regexes, { key }) {
       let offset = 0;
       const scopeNames = mode[key];
-      const emit = {};
+      const emit2 = {};
       const positions = {};
       for (let i2 = 1; i2 <= regexes.length; i2++) {
         positions[i2 + offset] = scopeNames[i2];
-        emit[i2 + offset] = true;
+        emit2[i2 + offset] = true;
         offset += countMatchGroups(regexes[i2 - 1]);
       }
       mode[key] = positions;
-      mode[key]._emit = emit;
+      mode[key]._emit = emit2;
       mode[key]._multi = true;
     }
     function beginMultiClass(mode) {
@@ -1618,6 +1618,7 @@ var FieldBuilder = class {
   }
   required(message) {
     this.def.required = true;
+    this.def.explicitRequired = true;
     if (message)
       this.def.requiredMessage = message;
     return this;
@@ -1660,7 +1661,7 @@ var PuzzleValidationError = class extends Error {
 function fieldErrors(field, def, value) {
   const errors = [];
   const missing = value === void 0 || value === null || value === "";
-  const autoGeneratablePrimary = def.primary && (value === void 0 || value === null);
+  const autoGeneratablePrimary = def.primary && !def.explicitRequired && (value === void 0 || value === null);
   if (def.required && missing && !autoGeneratablePrimary) {
     errors.push({
       field,
@@ -1932,10 +1933,563 @@ var PuzzleModel = class {
   }
 };
 
+// node_modules/@magic-spells/puzzle/client-runtime/devstate.js
+var DEV = false ? true : true;
+var HMR_KEY = "__puzzleHMR";
+var MAX_AGE_MS = 1e4;
+var MAX_DEPTH = 8;
+var DROP = Symbol("drop");
+var liveViews = /* @__PURE__ */ new Set();
+var viewObserver = null;
+function registerView(view) {
+  if (DEV) {
+    liveViews.add(view);
+    viewObserver?.(view, true);
+  }
+}
+function unregisterView(view) {
+  if (DEV) {
+    if (liveViews.delete(view))
+      viewObserver?.(view, false);
+  }
+}
+function setViewObserver(fn) {
+  if (DEV)
+    viewObserver = typeof fn === "function" ? fn : null;
+}
+function liveViewList() {
+  return DEV ? [...liveViews] : [];
+}
+function keyedViews() {
+  const counts = /* @__PURE__ */ Object.create(null);
+  const out = [];
+  for (const view of liveViews) {
+    const name = view?.constructor?.name || "View";
+    const idx = counts[name] ?? 0;
+    counts[name] = idx + 1;
+    out.push({ key: `${name}:${idx}`, view });
+  }
+  return out;
+}
+function getSessionStorage() {
+  try {
+    return typeof sessionStorage !== "undefined" ? sessionStorage : null;
+  } catch {
+    return null;
+  }
+}
+function safeState(data) {
+  const walked = walk(data, 0, /* @__PURE__ */ new WeakSet());
+  return walked === DROP || walked === null || typeof walked !== "object" ? {} : walked;
+}
+function walk(value, depth, seen) {
+  if (value === null)
+    return null;
+  const t2 = typeof value;
+  if (t2 === "boolean" || t2 === "string")
+    return value;
+  if (t2 === "number")
+    return Number.isFinite(value) ? value : DROP;
+  if (t2 !== "object")
+    return DROP;
+  if (depth >= MAX_DEPTH)
+    return DROP;
+  if (seen.has(value))
+    return DROP;
+  if (typeof value.nodeType === "number" && value.nodeName !== void 0)
+    return DROP;
+  seen.add(value);
+  try {
+    if (Array.isArray(value)) {
+      const arr = [];
+      for (const item of value) {
+        const w = walk(item, depth + 1, seen);
+        if (w === DROP)
+          return DROP;
+        arr.push(w);
+      }
+      return arr;
+    }
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null)
+      return DROP;
+    const obj = {};
+    for (const k of Object.keys(value)) {
+      const w = walk(value[k], depth + 1, seen);
+      if (w !== DROP)
+        obj[k] = w;
+    }
+    return obj;
+  } finally {
+    seen.delete(value);
+  }
+}
+function snapshotToStorage(app2) {
+  if (DEV)
+    snapshotImpl(app2);
+}
+function snapshotImpl(app2) {
+  try {
+    const storage = getSessionStorage();
+    if (!storage)
+      return;
+    const blob = { t: Date.now(), store: {}, views: [] };
+    try {
+      blob.store = app2.store._serializeAll();
+    } catch {
+      blob.store = {};
+    }
+    for (const { key, view } of keyedViews()) {
+      try {
+        blob.views.push({ key, data: safeState(view._localState()) });
+      } catch {
+      }
+    }
+    storage.setItem(HMR_KEY, JSON.stringify(blob));
+  } catch {
+  }
+}
+function restoreStoreFromStorage(app2) {
+  if (DEV)
+    return restoreStoreImpl(app2);
+  return null;
+}
+function restoreStoreImpl(app2) {
+  let blob;
+  try {
+    const storage = getSessionStorage();
+    if (!storage)
+      return null;
+    const raw2 = storage.getItem(HMR_KEY);
+    try {
+      storage.removeItem(HMR_KEY);
+    } catch {
+    }
+    if (!raw2)
+      return null;
+    blob = JSON.parse(raw2);
+  } catch {
+    return null;
+  }
+  try {
+    if (!blob || typeof blob !== "object")
+      return null;
+    if (typeof blob.t !== "number" || Date.now() - blob.t > MAX_AGE_MS)
+      return null;
+    try {
+      app2.store._hydrateAll(blob.store, { replace: true });
+    } catch {
+    }
+    return blob;
+  } catch {
+    return null;
+  }
+}
+function restoreViewsFromStorage(blob) {
+  if (DEV)
+    restoreViewsImpl(blob);
+}
+function restoreViewsImpl(blob) {
+  try {
+    if (!blob || !Array.isArray(blob.views))
+      return;
+    const byKey = /* @__PURE__ */ new Map();
+    for (const { key, view } of keyedViews())
+      byKey.set(key, view);
+    for (const entry of blob.views) {
+      try {
+        const view = byKey.get(entry?.key);
+        if (view && entry.data && typeof entry.data === "object")
+          view.setData(entry.data);
+      } catch {
+      }
+    }
+  } catch {
+  }
+}
+
+// node_modules/@magic-spells/puzzle/client-runtime/devtools.js
+var DEV2 = false ? true : true;
+var PROTOCOL_VERSION = 1;
+var FRAMEWORK_VERSION = "0.3.1";
+var HOOK_KEY = "__PUZZLE_DEVTOOLS_HOOK__";
+var OVERLAY_MARK = "data-puzzle-devtools";
+var hook = null;
+var boundApp = null;
+var overlay = null;
+var lastChain = [];
+var viewIds = /* @__PURE__ */ new WeakMap();
+var nextViewId = 1;
+function devtoolsAppMounted(app2) {
+  if (DEV2)
+    appMountedImpl(app2);
+}
+function devtoolsAppUnmounted(app2) {
+  if (DEV2)
+    appUnmountedImpl(app2);
+}
+function devtoolsFlush(store, keys2, notified) {
+  if (DEV2)
+    flushImpl(store, keys2, notified);
+}
+function devtoolsRouteCommit(next) {
+  if (DEV2)
+    routeCommitImpl(next);
+}
+function appMountedImpl(app2) {
+  try {
+    if (typeof window === "undefined")
+      return;
+    const candidate = window[HOOK_KEY];
+    if (!candidate || typeof candidate.emit !== "function" || typeof candidate.onRequest !== "function") {
+      return;
+    }
+    hook = candidate;
+    boundApp = app2;
+    emit("hello", {
+      protocolVersion: PROTOCOL_VERSION,
+      frameworkVersion: FRAMEWORK_VERSION
+    });
+    emit("app-mounted", {});
+    try {
+      hook.onRequest(handleRequest);
+    } catch {
+    }
+    setViewObserver(onViewChange);
+    for (const view of liveViewList())
+      emit("view-mounted", viewInfo(view));
+  } catch {
+  }
+}
+function appUnmountedImpl(app2) {
+  try {
+    if (!hook || boundApp !== null && boundApp !== app2)
+      return;
+    emit("app-unmounted", {});
+    setViewObserver(null);
+    removeOverlay();
+    hook = null;
+    boundApp = null;
+    lastChain = [];
+  } catch {
+  }
+}
+function emit(type, payload) {
+  if (!hook)
+    return;
+  try {
+    hook.emit({ puzzle: 1, v: PROTOCOL_VERSION, type, payload });
+  } catch {
+  }
+}
+function onViewChange(view, mounted) {
+  if (mounted)
+    emit("view-mounted", viewInfo(view));
+  else
+    emit("view-destroyed", { id: viewId(view) });
+}
+function flushImpl(store, keys2, notified) {
+  try {
+    if (!hook)
+      return;
+    const ids = [];
+    for (const sub of notified)
+      ids.push(subscriberId(sub));
+    emit("flush", { keys: [...keys2], notified: ids });
+  } catch {
+  }
+}
+function routeCommitImpl(next) {
+  try {
+    lastChain = chainNames(next?.views);
+    if (!hook)
+      return;
+    emit("route-commit", {
+      pathname: next?.pathname ?? null,
+      query: { ...next?.query ?? {} },
+      params: { ...next?.params ?? {} },
+      chain: [...lastChain],
+      title: typeof document !== "undefined" ? document.title : null
+    });
+  } catch {
+  }
+}
+function handleRequest(message) {
+  try {
+    const type = message?.type;
+    const payload = message?.payload ?? {};
+    switch (type) {
+      case "snapshot:views":
+        return { roots: snapshotViews() };
+      case "inspect:view":
+        return inspectView(payload.id);
+      case "snapshot:records":
+        return snapshotRecords(payload.type);
+      case "snapshot:subscriptions":
+        return snapshotSubscriptions();
+      case "snapshot:route":
+        return snapshotRoute();
+      case "edit:record":
+        return editRecord(payload.type, payload.id, payload.patch);
+      case "highlight:view":
+        return highlightView(payload.id, payload.on);
+      case "log:view":
+        return logView(payload.id);
+      case "log:record":
+        return logRecord(payload.type, payload.id);
+      default:
+        return { error: `unknown devtools request "${String(type)}"` };
+    }
+  } catch (err) {
+    return { error: err?.message ?? String(err) };
+  }
+}
+function snapshotViews() {
+  const views = liveViewList();
+  const childrenOf = /* @__PURE__ */ new Map();
+  const claimed = /* @__PURE__ */ new Set();
+  for (const view of views) {
+    const kids = [];
+    collectChildViews(readTree(view), kids);
+    childrenOf.set(view, kids);
+    for (const kid of kids)
+      claimed.add(kid);
+  }
+  const roots = [];
+  for (const view of views) {
+    if (!claimed.has(view))
+      roots.push(buildTreeNode(view, childrenOf, /* @__PURE__ */ new Set()));
+  }
+  return roots;
+}
+function readTree(view) {
+  try {
+    return view?._vnodeTree?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+function collectChildViews(vnode, out) {
+  if (!vnode || typeof vnode !== "object")
+    return;
+  if (vnode.component) {
+    out.push(vnode.component);
+    return;
+  }
+  if (!Array.isArray(vnode.children))
+    return;
+  for (const child of vnode.children)
+    collectChildViews(child, out);
+}
+function buildTreeNode(view, childrenOf, seen) {
+  const node = { ...viewInfo(view), children: [] };
+  if (seen.has(view))
+    return node;
+  seen.add(view);
+  for (const child of childrenOf.get(view) ?? []) {
+    node.children.push(buildTreeNode(child, childrenOf, seen));
+  }
+  return node;
+}
+function inspectView(id) {
+  const view = requireView(id);
+  return {
+    name: viewName(view),
+    module: viewModule(view),
+    // safeState is devstate's JSON-safe filter: store records, DOM nodes, and
+    // functions are dropped rather than serialized (or thrown on).
+    params: safeState(view.params),
+    props: safeState(view.props),
+    model: safeState(view._modelState?.() ?? {}),
+    local: safeState(view._localState?.() ?? {})
+  };
+}
+function snapshotRecords(type) {
+  const store = requireStore();
+  const types = {};
+  for (const [recordType, map] of store.recordsByType) {
+    if (type != null && recordType !== type)
+      continue;
+    types[recordType] = [...map.values()].map((record) => ({
+      ...record.toJSON(),
+      _synced: record._synced
+    }));
+  }
+  return { types };
+}
+function snapshotSubscriptions() {
+  const store = requireStore();
+  const byKey = {};
+  for (const [key, subs] of store.subscribersByKey) {
+    byKey[key] = [...subs].map(subscriberId);
+  }
+  const byView = {};
+  for (const [sub, keys2] of store.keysBySubscriber) {
+    const id = subscriberId(sub);
+    const bucket = byView[id] ??= [];
+    for (const key of keys2)
+      if (!bucket.includes(key))
+        bucket.push(key);
+  }
+  return { byKey, byView };
+}
+function editRecord(type, id, patch2) {
+  const store = requireStore();
+  if (!patch2 || typeof patch2 !== "object") {
+    return { error: "edit:record requires an object patch" };
+  }
+  const record = findRecord(store, type, id);
+  if (!record)
+    return { error: `no ${type} record with id ${JSON.stringify(id)}` };
+  try {
+    record.update(patch2);
+  } catch (err) {
+    return { error: err?.message ?? String(err) };
+  }
+  return { ok: true };
+}
+function findRecord(store, type, id) {
+  const map = store.recordsByType.get(type);
+  if (!map)
+    return null;
+  const direct = map.get(id);
+  if (direct)
+    return direct;
+  for (const [key, record] of map) {
+    if (String(key) === String(id))
+      return record;
+  }
+  return null;
+}
+function snapshotRoute() {
+  const current = boundApp?.router?.current ?? null;
+  if (!current)
+    return null;
+  return {
+    path: current.path ?? null,
+    pathname: current.pathname ?? null,
+    query: { ...current.query ?? {} },
+    hash: current.hash ?? "",
+    params: { ...current.params ?? {} },
+    route: typeof current.route?.path === "string" ? current.route.path : null,
+    routes: Array.isArray(current.chain) ? current.chain.map((entry) => entry?.path ?? null) : [],
+    chain: [...lastChain],
+    title: typeof document !== "undefined" ? document.title : null
+  };
+}
+function highlightView(id, on) {
+  if (on === false) {
+    removeOverlay();
+    return { ok: true };
+  }
+  const view = requireView(id);
+  const element = view.element;
+  if (!element || typeof element.getBoundingClientRect !== "function") {
+    removeOverlay();
+    return { ok: false };
+  }
+  const node = ensureOverlay();
+  if (!node)
+    return { ok: false };
+  const rect = element.getBoundingClientRect();
+  node.style.left = `${rect.left}px`;
+  node.style.top = `${rect.top}px`;
+  node.style.width = `${rect.width}px`;
+  node.style.height = `${rect.height}px`;
+  return { ok: true };
+}
+function ensureOverlay() {
+  if (typeof document === "undefined" || !document.body)
+    return null;
+  if (overlay && overlay.isConnected)
+    return overlay;
+  overlay = document.createElement("div");
+  overlay.setAttribute(OVERLAY_MARK, "highlight");
+  const style = overlay.style;
+  style.position = "fixed";
+  style.pointerEvents = "none";
+  style.zIndex = "2147483647";
+  style.background = "rgba(88, 132, 255, 0.28)";
+  style.outline = "1px solid rgba(88, 132, 255, 0.9)";
+  style.borderRadius = "2px";
+  document.body.appendChild(overlay);
+  return overlay;
+}
+function removeOverlay() {
+  try {
+    overlay?.remove();
+  } catch {
+  }
+  overlay = null;
+}
+function logView(id) {
+  const view = requireView(id);
+  publishInspectGlobal(view);
+  console.log("[puzzle] view", viewInfo(view), view);
+  return { ok: true };
+}
+function logRecord(type, id) {
+  const store = requireStore();
+  const record = findRecord(store, type, id);
+  if (!record)
+    return { error: `no ${type} record with id ${JSON.stringify(id)}` };
+  publishInspectGlobal(record);
+  console.log(`[puzzle] record ${type}#${id}`, record);
+  return { ok: true };
+}
+function publishInspectGlobal(value) {
+  if (typeof window !== "undefined")
+    window.$p = value;
+}
+function viewId(view) {
+  if (!view)
+    return null;
+  let id = viewIds.get(view);
+  if (id === void 0) {
+    id = nextViewId++;
+    viewIds.set(view, id);
+  }
+  return id;
+}
+function viewName(view) {
+  return view?.constructor?.name || "View";
+}
+function viewModule(view) {
+  return view?.constructor?.__pzlModule ?? null;
+}
+function viewInfo(view) {
+  return { id: viewId(view), name: viewName(view), module: viewModule(view) };
+}
+function chainNames(views) {
+  return Array.isArray(views) ? views.map(viewName) : [];
+}
+function subscriberId(sub) {
+  return typeof sub === "function" ? "fn" : viewId(sub);
+}
+function requireView(id) {
+  for (const view of liveViewList()) {
+    if (viewIds.get(view) === id)
+      return view;
+  }
+  throw new Error(`no live view with id ${JSON.stringify(id)}`);
+}
+function requireStore() {
+  let store = null;
+  try {
+    store = boundApp?.store ?? null;
+  } catch {
+    store = null;
+  }
+  if (!store)
+    throw new Error("no store \u2014 the app is not mounted");
+  return store;
+}
+
 // node_modules/@magic-spells/puzzle/client-runtime/datastore/store.js
 var REC_SEP = " ";
 var noop = () => {
 };
+var recordKey = (id) => typeof id === "number" ? String(id) : id;
 var PuzzleAdapterError = class extends Error {
   constructor(status, statusText, body) {
     super(`[puzzle] adapter request failed: ${status} ${statusText || ""}`.trimEnd());
@@ -1964,15 +2518,17 @@ var RELS_INSTALLED = Symbol("puzzleRelationshipsInstalled");
 var Store = class {
   /**
    * @param {object} models   type name → model class (from PuzzleApp config)
-   * @param {object} options  { storage, storageKey, apiURL } — storage is any
-   *   Storage-like object (getItem/setItem); pass window.localStorage to
-   *   persist. apiURL is the base for the D21 server read path.
+   * @param {object} options  { storage, storageKey, apiURL, beforeRequest } —
+   *   storage is any Storage-like object (getItem/setItem); pass
+   *   window.localStorage to persist. apiURL is the base for the D21 server read
+   *   path. beforeRequest is the adapter request hook (v1.55, D91) — see _fetch.
    */
   constructor(models = {}, options = {}) {
     this.models = models;
     this.storage = options.storage || null;
     this.storageKey = options.storageKey || "puzzle-store";
     this.apiURL = options.apiURL || "";
+    this.beforeRequest = typeof options.beforeRequest === "function" ? options.beforeRequest : null;
     this.recordsByType = /* @__PURE__ */ new Map();
     this.subscribersByKey = /* @__PURE__ */ new Map();
     this.keysBySubscriber = /* @__PURE__ */ new Map();
@@ -1990,7 +2546,8 @@ var Store = class {
   }
   // ---- model plumbing ----------------------------------------------------
   modelFor(type) {
-    return this.models[type] || PuzzleModel;
+    const own = Object.prototype.hasOwnProperty.call(this.models, type) ? this.models[type] : null;
+    return own || PuzzleModel;
   }
   // ---- relationships (constellation/doc/DOC-SPEC.md §21, D49) ---------------
   /**
@@ -2041,8 +2598,10 @@ var Store = class {
         if (!this._store)
           return [];
         const ownerPk = this.constructor.primaryKey();
-        const ownerId = this[ownerPk];
-        return this._store.findMany(def.type, { filter: (r2) => r2[fkKey] === ownerId });
+        const ownerKey = recordKey(this[ownerPk]);
+        return this._store.findMany(def.type, {
+          filter: (r2) => recordKey(r2[fkKey]) === ownerKey
+        });
       },
       set() {
         if (!warned) {
@@ -2096,19 +2655,21 @@ var Store = class {
     const map = this._typeMap(type);
     const pk = Model.primaryKey();
     const withDefaults = Model.applyDefaults(data);
-    if (withDefaults[pk] == null)
+    const pkDef = Model.normalizedSchema()[pk];
+    const autoGeneratePk = !(validate && pkDef && pkDef.explicitRequired);
+    if (withDefaults[pk] == null && autoGeneratePk)
       withDefaults[pk] = this._genId(map);
     if (validate) {
       const errors = Model._collectErrors(withDefaults);
       if (errors.length)
         throw new PuzzleValidationError(errors);
     }
-    if (map.has(withDefaults[pk])) {
+    if (map.has(recordKey(withDefaults[pk]))) {
       if (onDuplicate === "skip") {
         console.warn(
           `[puzzle] duplicate primary key ${JSON.stringify(withDefaults[pk])} for model "${type}" during hydration \u2014 keeping the first record, skipping the rest`
         );
-        return map.get(withDefaults[pk]);
+        return map.get(recordKey(withDefaults[pk]));
       }
       throw new Error(
         `[puzzle] duplicate primary key ${JSON.stringify(withDefaults[pk])} for model "${type}" \u2014 a record with that ${pk} already exists`
@@ -2121,12 +2682,12 @@ var Store = class {
       enumerable: false,
       configurable: true
     });
-    map.set(record[pk], record);
+    map.set(recordKey(record[pk]), record);
     return record;
   }
   findOne(type, id) {
     this._subscribe(type + REC_SEP + id);
-    return this._typeMap(type).get(id) ?? null;
+    return this._typeMap(type).get(recordKey(id)) ?? null;
   }
   /** @param {object} [options] { filter: (record) => boolean } */
   findMany(type, options = {}) {
@@ -2151,7 +2712,7 @@ var Store = class {
     if (!type)
       return;
     const id = record[this.modelFor(type).primaryKey()];
-    this._typeMap(type).delete(id);
+    this._typeMap(type).delete(recordKey(id));
     record._deleted = true;
     record._store = null;
     this._notify(type, id);
@@ -2220,13 +2781,9 @@ var Store = class {
     return isArray ? records : records[0];
   }
   async _fetchAdapter(type, suffix) {
-    const endpoint = this.modelFor(type).adapter?.endpoint;
-    if (!endpoint) {
-      throw new Error(
-        `[puzzle] no adapter declared for '${type}' \u2014 add static adapter = { endpoint: '/api/...' } to the model`
-      );
-    }
-    const res = await fetch(this.apiURL + endpoint + suffix);
+    const endpoint = this._requireEndpoint(type);
+    const url = this.apiURL + endpoint + suffix;
+    const res = await this._fetch(url, { method: "GET" }, { type, method: "GET", url });
     if (!res.ok) {
       throw new Error(`[puzzle] load '${type}' failed: ${res.status} ${res.statusText}`);
     }
@@ -2235,7 +2792,7 @@ var Store = class {
   /** Create or update-in-place by primary key; notifies either way. Public callers use upsert(). */
   _upsert(type, data) {
     const pk = this.modelFor(type).primaryKey();
-    const existing = data?.[pk] != null ? this._typeMap(type).get(data[pk]) : null;
+    const existing = data?.[pk] != null ? this._typeMap(type).get(recordKey(data[pk])) : null;
     if (existing) {
       safeMerge(existing, data);
       existing._synced = true;
@@ -2250,8 +2807,9 @@ var Store = class {
   // ---- server write path (constellation/doc/DOC-SPEC.md §22, D50) ------------
   /**
    * Resolve a model's adapter endpoint or throw the D21 no-adapter message.
-   * The write verbs are async, so this throw becomes a rejected promise —
-   * never a sync throw at the call site.
+   * Shared by the read path (_fetchAdapter) and the write verbs; every caller
+   * is async, so this throw becomes a rejected promise — never a sync throw
+   * at the call site.
    */
   _requireEndpoint(type) {
     const endpoint = this.modelFor(type).adapter?.endpoint;
@@ -2261,6 +2819,66 @@ var Store = class {
       );
     }
     return endpoint;
+  }
+  /**
+   * The ONE adapter fetch (v1.55, D91). Every server call — the D21 read path
+   * (loadAll/loadOne), the D50 write verbs (save/delete), and request() — goes
+   * through here, so `beforeRequest` is the single place an app attaches auth
+   * headers, `credentials`, or an AbortSignal to all of them at once.
+   *
+   * The hook is SYNCHRONOUS and may either mutate `init` in place or return a
+   * replacement object; a truthy object return wins, otherwise the (possibly
+   * mutated) original is used. Both shapes are supported on purpose — mutation
+   * reads better for a header push, a return for a spread. A returned
+   * replacement is shallow-COPIED before the re-stamp below: the re-stamp must
+   * never write into an object the app owns, so `Object.freeze({ ...init })`
+   * and getter-only fields are supported shapes, not TypeErrors. `context` is
+   * frozen: it is information about the request, not a second output channel.
+   *
+   * `method` and `body` are RE-STAMPED from the original init after the hook
+   * runs. This is load-bearing, not defensive: the write path captures
+   * `requestKey = record[pk]` before the await and reconciles against exactly
+   * that key afterwards (§22, D50), so a hook that flipped POST→PUT or rewrote
+   * the body would silently break identity re-checks, pk adoption, and the
+   * synced-flag contract. The URL is a separate fetch argument, so it is out of
+   * the hook's reach by construction. Everything else — headers, signal,
+   * credentials, mode, cache — passes through untouched.
+   *
+   * A throwing hook is NOT caught: it is app code, and an auth error raised
+   * there must reject the calling verb rather than ship an unauthenticated
+   * request. Every caller is async, so the throw surfaces as a rejection.
+   *
+   * The network step itself is delegated to `_network` (D98), so dev/test
+   * tooling can intercept a request AFTER the hook has run without this method
+   * — or any verb above it — knowing such tooling exists.
+   *
+   * @param {string} url      the fully built request URL
+   * @param {object} init     the fetch init this verb requires
+   * @param {object} context  { type, method, url } — frozen before the hook sees it
+   */
+  _fetch(url, init, context) {
+    if (!this.beforeRequest)
+      return this._network(url, init, context);
+    const method = init.method;
+    const body = init.body;
+    const returned = this.beforeRequest(init, Object.freeze(context));
+    const final = returned && typeof returned === "object" && returned !== init ? { ...returned } : init;
+    final.method = method;
+    if (body === void 0)
+      delete final.body;
+    else
+      final.body = body;
+    return this._network(url, final, context);
+  }
+  /**
+   * The one place an adapter request touches the network (D98). Dev/test
+   * tooling — the /fixtures module's mock adapter — replaces this method to
+   * serve requests from memory; nothing else calls it. `context` is the same
+   * frozen { type, method, url } _fetch built, so a replacement can dispatch
+   * per model type without re-deriving anything.
+   */
+  _network(url, init, context) {
+    return fetch(url, init);
   }
   /**
    * Save a record to the server (constellation/doc/DOC-SPEC.md §22, D50). Called by
@@ -2305,13 +2923,18 @@ var Store = class {
     if (errors.length)
       throw new PuzzleValidationError(errors);
     const wasSynced = record._synced;
-    const requestKey = record[pk];
+    const requestKey = recordKey(record[pk]);
     const url = wasSynced ? this.apiURL + endpoint + "/" + encodeURIComponent(record[pk]) : this.apiURL + endpoint;
-    const res = await fetch(url, {
-      method: wasSynced ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(record.toJSON())
-    });
+    const method = wasSynced ? "PUT" : "POST";
+    const res = await this._fetch(
+      url,
+      {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(record.toJSON())
+      },
+      { type, method, url }
+    );
     if (!res.ok) {
       throw new PuzzleAdapterError(res.status, res.statusText, await readBody(res));
     }
@@ -2322,18 +2945,18 @@ var Store = class {
     const isObject = body != null && typeof body === "object" && !Array.isArray(body);
     if (isObject) {
       const responsePk = body[pk];
-      const pkDiffers = responsePk != null && responsePk !== record[pk];
+      const pkDiffers = responsePk != null && recordKey(responsePk) !== recordKey(record[pk]);
       if (pkDiffers && !wasSynced) {
-        const occupant = map.get(responsePk);
+        const occupant = map.get(recordKey(responsePk));
         if (occupant && occupant !== record) {
           throw new Error(
             `[puzzle] save() response for '${type}' assigned primary key ${JSON.stringify(responsePk)}, which already belongs to a different record \u2014 refusing to overwrite it`
           );
         }
         const oldId = record[pk];
-        map.delete(oldId);
+        map.delete(recordKey(oldId));
         safeMerge(record, body);
-        map.set(record[pk], record);
+        map.set(recordKey(record[pk]), record);
         record._synced = true;
         this._notify(type, oldId);
         this._notify(type, record[pk]);
@@ -2372,10 +2995,9 @@ var Store = class {
     const Model = this.modelFor(type);
     const endpoint = this._requireEndpoint(type);
     const pk = Model.primaryKey();
-    const requestKey = record[pk];
-    const res = await fetch(this.apiURL + endpoint + "/" + encodeURIComponent(record[pk]), {
-      method: "DELETE"
-    });
+    const requestKey = recordKey(record[pk]);
+    const url = this.apiURL + endpoint + "/" + encodeURIComponent(record[pk]);
+    const res = await this._fetch(url, { method: "DELETE" }, { type, method: "DELETE", url });
     if (res.ok || res.status === 404) {
       if (this._typeMap(type).get(requestKey) === record) {
         this.removeRecord(record);
@@ -2398,7 +3020,8 @@ var Store = class {
       init.body = JSON.stringify(body);
       init.headers["Content-Type"] = "application/json";
     }
-    const res = await fetch(this.apiURL + endpoint + path, init);
+    const url = this.apiURL + endpoint + path;
+    const res = await this._fetch(url, init, { type, method, url });
     if (!res.ok) {
       throw new PuzzleAdapterError(res.status, res.statusText, await readBody(res));
     }
@@ -2629,6 +3252,9 @@ var Store = class {
         }
       }
     }
+    if (true) {
+      devtoolsFlush(this, keys2, notified);
+    }
   }
   // ---- optional persistence -------------------------------------------------
   /**
@@ -2683,7 +3309,11 @@ var Store = class {
     } catch {
       return;
     }
-    this._hydrateAll(data);
+    try {
+      this._hydrateAll(data);
+    } catch (err) {
+      console.warn("[puzzle] ignoring corrupt persisted store:", err);
+    }
   }
   /**
    * Hydrate records from a parsed wire-shape object (constellation/doc/DOC-SPEC.md §8).
@@ -2724,7 +3354,7 @@ var Store = class {
         const { __synced: marker, ...fields } = recordData;
         const syncedTo = hasMarker ? marker === true : true;
         const id = fields[pk];
-        const existing = id != null ? this._typeMap(type).get(id) : null;
+        const existing = id != null ? this._typeMap(type).get(recordKey(id)) : null;
         if (existing && replace) {
           safeMerge(existing, fields);
           existing._synced = syncedTo;
@@ -2778,6 +3408,20 @@ function editDistance(a2, b2) {
   }
   return prev[n2];
 }
+function nearestFormatter(formatters, name) {
+  let best = null;
+  let bestDist = 3;
+  for (const key of Object.keys(formatters)) {
+    if (key === "__missing")
+      continue;
+    const d = editDistance(name, key);
+    if (d < bestDist) {
+      bestDist = d;
+      best = key;
+    }
+  }
+  return best;
+}
 var FormatterRegistry = class {
   constructor(seedMap = manifest_default) {
     this.formatters = /* @__PURE__ */ Object.create(null);
@@ -2790,35 +3434,21 @@ var FormatterRegistry = class {
         this.register(name, fn);
     }
     this.formatters.__missing = (name) => {
-      if (!this._warnedMissing.has(name)) {
-        this._warnedMissing.add(name);
-        const suggestion = this._nearestFormatter(name);
-        const hint = suggestion ? ` (did you mean "${suggestion}"?)` : "";
-        console.error(
-          `[puzzle] unknown formatter "${name}" \u2014 value passed through unchanged${hint}`
-        );
+      if (true) {
+        if (!this._warnedMissing.has(name)) {
+          this._warnedMissing.add(name);
+          const suggestion = nearestFormatter(this.formatters, name);
+          const hint = suggestion ? ` (did you mean "${suggestion}"?)` : "";
+          console.error(
+            `[puzzle] unknown formatter "${name}" \u2014 value passed through unchanged${hint}`
+          );
+        }
       }
       return (v) => v;
     };
   }
   register(name, fn) {
     this.formatters[name] = fn;
-  }
-  // Nearest registered formatter name within edit distance ≤ 2, or null when
-  // nothing is close (D43 did-you-mean). First match wins on ties.
-  _nearestFormatter(name) {
-    let best = null;
-    let bestDist = 3;
-    for (const key of Object.keys(this.formatters)) {
-      if (key === "__missing")
-        continue;
-      const d = editDistance(name, key);
-      if (d < bestDist) {
-        bestDist = d;
-        best = key;
-      }
-    }
-    return best;
   }
   get(name) {
     return this.formatters[name] || this.formatters.__missing(name);
@@ -2828,6 +3458,20 @@ var FormatterRegistry = class {
     return this.formatters;
   }
 };
+function makeFormatterRegistry(customFormatters = {}, url) {
+  const registry2 = new FormatterRegistry();
+  for (const [name, fn] of Object.entries(customFormatters)) {
+    registry2.register(name, fn);
+  }
+  if (!registry2.getAll().link && typeof url === "function") {
+    registry2.register("link", (value) => {
+      if (value == null)
+        return "";
+      return url(String(value));
+    });
+  }
+  return registry2;
+}
 
 // node_modules/@magic-spells/puzzle/client-runtime/views/ViewNode.js
 var SLOT_TAG = "slot";
@@ -3010,31 +3654,6 @@ function noop2() {
 
 // node_modules/@magic-spells/puzzle/client-runtime/head.js
 var HEAD_FIELDS = ["title", "description", "canonical", "socialImage"];
-var MANAGED_TAGS = [
-  { id: "og:title", field: "title", tag: "meta", attr: "property", name: "og:title" },
-  { id: "twitter:title", field: "title", tag: "meta", attr: "name", name: "twitter:title" },
-  { id: "description", field: "description", tag: "meta", attr: "name", name: "description" },
-  { id: "og:description", field: "description", tag: "meta", attr: "property", name: "og:description" },
-  {
-    id: "twitter:description",
-    field: "description",
-    tag: "meta",
-    attr: "name",
-    name: "twitter:description"
-  },
-  { id: "canonical", field: "canonical", tag: "link" },
-  { id: "og:url", field: "canonical", tag: "meta", attr: "property", name: "og:url" },
-  { id: "og:image", field: "socialImage", tag: "meta", attr: "property", name: "og:image" },
-  { id: "twitter:image", field: "socialImage", tag: "meta", attr: "name", name: "twitter:image" },
-  {
-    id: "twitter:card",
-    field: "socialImage",
-    tag: "meta",
-    attr: "name",
-    name: "twitter:card",
-    fixed: "summary_large_image"
-  }
-];
 function resolveHead(chain) {
   const out = {};
   for (const field of HEAD_FIELDS) {
@@ -3045,42 +3664,37 @@ function resolveHead(chain) {
 function resolveField(chain, field) {
   for (let i2 = chain.length - 1; i2 >= 0; i2--) {
     const meta = chain[i2].meta;
-    if (meta && meta[field] !== void 0)
-      return meta[field];
+    if (!meta)
+      continue;
+    const value = meta[field];
+    if (value !== void 0)
+      return value;
   }
   return null;
 }
-function syncHead(resolved) {
+function syncTitle(resolved) {
   if (resolved.title != null)
     document.title = String(resolved.title);
-  const head = document.head;
-  for (const spec of MANAGED_TAGS) {
-    const value = resolved[spec.field];
-    const existing = head.querySelector(`[data-puzzle-head="${spec.id}"]`);
-    if (value == null) {
-      if (existing)
-        existing.remove();
-      continue;
-    }
-    const content = spec.fixed ?? String(value);
-    if (existing && existing.tagName.toLowerCase() === spec.tag) {
-      setTagValue(existing, spec, content);
-    } else {
-      if (existing)
-        existing.remove();
-      const el = document.createElement(spec.tag);
-      el.setAttribute("data-puzzle-head", spec.id);
-      if (spec.tag === "link")
-        el.setAttribute("rel", "canonical");
-      else
-        el.setAttribute(spec.attr, spec.name);
-      setTagValue(el, spec, content);
-      head.appendChild(el);
-    }
-  }
 }
-function setTagValue(el, spec, content) {
-  el.setAttribute(spec.tag === "link" ? "href" : "content", content);
+
+// node_modules/@magic-spells/puzzle/client-runtime/router/routeTree.js
+function joinPath(parentPath, childPath) {
+  if (childPath === "")
+    return parentPath;
+  return parentPath.replace(/\/$/, "") + "/" + childPath;
+}
+function walkRouteTree(node, out, makeLeaf, ancestors = [], fullPaths = []) {
+  const isRoot = ancestors.length === 0;
+  const parentPath = isRoot ? null : fullPaths[fullPaths.length - 1];
+  const fullPath = isRoot ? node.path : joinPath(parentPath, node.path);
+  const chain = [...ancestors, node];
+  const paths = [...fullPaths, fullPath];
+  if (node.children && node.children.length) {
+    for (const child of node.children)
+      walkRouteTree(child, out, makeLeaf, chain, paths);
+  } else {
+    out.push(makeLeaf(chain, paths));
+  }
 }
 
 // node_modules/@magic-spells/puzzle/client-runtime/router/router.js
@@ -3096,12 +3710,38 @@ var Router = class {
   // { path, entry, params, views: [v0..vN], layout, layoutClass } | null
   #state = null;
   #token = 0;
+  // The rawPath of the navigation that currently owns the token and has NOT yet
+  // committed or terminated (null when idle). push() reads it so a SECOND click on
+  // the active link WHILE its navigation is still in flight (data() slow) is a
+  // same-nav-key no-op instead of a supersession: the committed #state still names
+  // the OLD route pre-commit, so #state alone can't catch the double-click. Set at
+  // #navigate's token bump, cleared at #commitState (commit) and in
+  // #recoverFailedNavigation (block/failure); a newer navigation to a DIFFERENT path
+  // overwrites it and still supersedes normally.
+  #pendingNavPath = null;
+  // The #navigate promise of the navigation #pendingNavPath names — the two move
+  // together at every set/clear point, so whenever the path slot is non-null this
+  // holds the promise for THAT navigation. push()'s double-click no-op returns it
+  // instead of a fresh resolved promise, so the second caller settles when the
+  // in-flight navigation does. Written by push() (the only caller that can leave
+  // #pendingNavPath non-null, and the only place the promise object exists);
+  // cleared alongside the path in #navigate, #commitState, #recoverFailedNavigation
+  // and stop().
+  #pendingNavPromise = null;
   // Guard redirects re-enter the normal pipeline through replace(), so every
   // destination gets its own inherited guard chain and the denied URL never
   // commits. A bad pair/cycle could otherwise recurse forever without reaching
-  // #commitState; count consecutive guard-owned redirects and reset only when a
-  // navigation actually commits (D87).
+  // #commitState; count guard-owned redirects and reset at the START of each
+  // externally-initiated navigation — NOT only at commit, because a redirect to the
+  // already-current path is a same-path replace() no-op that never commits, so a
+  // commit-only reset would let the count accumulate across INDEPENDENT user
+  // navigations and spuriously trip the limit (D87).
   #guardRedirectCount = 0;
+  // True only for the synchronous entry of a #navigate that is a guard-redirect
+  // re-entry (set around the replace() call in #navigate's redirect branch, consumed
+  // at #navigate's token bump). Distinguishes those re-entries from externally-
+  // initiated navigations so the #guardRedirectCount reset skips them.
+  #guardRedirecting = false;
   // The instance an in-flight transition is currently animating OUT (or null).
   // A newer navigation reads this to cancel the running out and proceed
   // immediately (constellation/doc/DOC-SPEC.md §12 interruption rule).
@@ -3154,10 +3794,6 @@ var Router = class {
   // #swap out/in sequencing — every other path (matching, commit, interruption,
   // failure recovery) is shared.
   #defaultTransitionMode = "sequential";
-  // One-shot-per-class warn guard for an invalid view/layout-level transitionMode
-  // (D65) — a bad value there warns and falls through to the next resolution tier
-  // rather than throwing, so one misconfigured view can't crash navigation.
-  #warnedBadViewTransitionMode = /* @__PURE__ */ new Set();
   // ---- base path (v1.19, D51) ---------------------------------------------
   // Serve the app under a sub-path. Normalized to '' (no base) or a leading-'/'
   // no-trailing-'/' prefix. Applied at the SAME path-shape boundary as the mode
@@ -3169,11 +3805,6 @@ var Router = class {
   // it. Inert in memory mode (no URL exists), like scrollBehavior. '' ⇒ every
   // seam is byte-identical to the base-less router.
   #base;
-  // One-shot guard for the "loaded outside the configured base" warning (D51):
-  // history mode passes a non-base pathname through un-stripped (→ catch-all,
-  // visible not silent) but warns only ONCE per router instance so a noisy path
-  // can't spam the console on every #currentPath read.
-  #warnedOutsideBase = false;
   // ---- in-memory history (v1.11, D42) -------------------------------------
   // Memory mode only. #stack is the entry list ({ path } each) and #index the
   // current position; push() truncates forward entries and appends, go/back/
@@ -3209,12 +3840,35 @@ var Router = class {
   // key of the entry the window currently shows
   #keySeq = 0;
   #prevScrollRestoration = null;
+  // ---- focus + route announcement (v1.56, D93) ----------------------------
+  // `false` disables focus management AND the live region entirely; a function
+  // `(to, from) => Element|null|false` picks the target itself (called POST-mount
+  // inside #commitState, so it can query the committed DOM); undefined = the
+  // default (focus the committed leaf view's root, announce document.title).
+  // Inert in memory mode, exactly like #scrollBehavior — see #focusEnabled().
+  #focusBehavior;
+  // The single framework-owned polite live region, appended to <body> in start()
+  // and removed in stop(). Null when focus management is off (or before start).
+  #liveRegion = null;
+  // document.title as it stood at the LAST route announcement — seeded in start()
+  // with the pre-navigation title, cleared with the region in stop().
+  // #announceRoute compares against it to tell a title this route actually
+  // resolved from the previous route's leftover one — the D84 no-meta.title case,
+  // which must not be announced again (and, unchanged, would be silent).
+  #announcedTitle = null;
   /**
    * @param {Array<{path,name,view,layout,meta,guard,transitionMode,children}>} routes route definitions
    * @param {object} [options]
    * @param {false|Function} [options.scrollBehavior] `false` to leave scroll
    *   alone; `(to, from, savedPosition) => {x,y}|null` to customize; omit for
    *   the default (top on push, saved position on back/forward). D33.
+   * @param {false|Function} [options.focusBehavior] focus + route announcement
+   *   (v1.56, D93): omit for the default (after each committed navigation focus
+   *   the leaf view's root with `{ preventScroll: true }` and announce
+   *   `document.title` in a framework-owned polite live region); `false` to
+   *   disable both (no live region is created); `(to, from) => Element|null|false`
+   *   to choose the target — called after mount, falsy = skip focusing for that
+   *   navigation, a throw is logged and treated as falsy. Inert in memory mode.
    * @param {('history'|'hash'|'memory')} [options.mode] URL carrier: `'history'`
    *   (default, pathname), `'hash'` (`location.hash`, for static hosts, D34), or
    *   `'memory'` (router state only, no URL — for tests/embeds, D42).
@@ -3234,7 +3888,14 @@ var Router = class {
    *   destination view/layout's own `transitionMode` field, both take precedence
    *   when set — see `#resolveTransitionMode`.
    */
-  constructor(routes = [], { scrollBehavior, mode = "history", initialPath = null, base = "", transitionMode = "sequential" } = {}) {
+  constructor(routes = [], {
+    scrollBehavior,
+    focusBehavior,
+    mode = "history",
+    initialPath = null,
+    base = "",
+    transitionMode = "sequential"
+  } = {}) {
     if (mode !== "history" && mode !== "hash" && mode !== "memory") {
       throw new Error(
         `[puzzle] unknown router mode: "${mode}" (expected 'history', 'hash', or 'memory')`
@@ -3255,6 +3916,7 @@ var Router = class {
     this.#initialPath = initialPath ?? "/";
     this.#base = normalizeBase(base);
     this.#scrollBehavior = scrollBehavior;
+    this.#focusBehavior = focusBehavior;
     for (const route of routes) {
       if (route.path === "*") {
         validateTransitionMode(route.transitionMode, "the catch-all route");
@@ -3269,7 +3931,7 @@ var Router = class {
         };
         continue;
       }
-      flatten(route, [], [], this.#routes);
+      walkRouteTree(route, this.#routes, makeEntry);
     }
     this.#onClick = this.#handleClick.bind(this);
     this.#onPopState = this.#handlePopState.bind(this);
@@ -3292,6 +3954,10 @@ var Router = class {
     if (this.#scrollEnabled()) {
       this.#hydratePositions();
       this.#scrollKey = this.#adoptEntryKey();
+    }
+    if (this.#focusEnabled() && !this.#liveRegion) {
+      this.#liveRegion = this.#createLiveRegion();
+      this.#announcedTitle = document.title;
     }
     if (this.#mode === "memory") {
       this.#stack = [{ path: this.#initialPath }];
@@ -3327,6 +3993,9 @@ var Router = class {
       if (this.#base) {
         if (hash === "#" + this.#base)
           return "/";
+        if (hash.startsWith("#" + this.#base + "?")) {
+          return "/" + hash.slice(1 + this.#base.length);
+        }
         if (hash.startsWith("#" + this.#base + "/"))
           return hash.slice(1 + this.#base.length);
         return null;
@@ -3342,19 +4011,12 @@ var Router = class {
       if (pathname.startsWith(this.#base + "/")) {
         return pathname.slice(this.#base.length) + location.search;
       }
-      this.#warnOutsideBaseOnce(pathname);
+      if (true) {
+        warnOutsideBaseOnce(pathname, this.#base);
+      }
       return pathname + location.search;
     }
     return pathname + location.search;
-  }
-  /** One-shot "loaded outside the configured base" warning (D51). */
-  #warnOutsideBaseOnce(pathname) {
-    if (this.#warnedOutsideBase)
-      return;
-    this.#warnedOutsideBase = true;
-    console.warn(
-      `[puzzle] path "${pathname}" is outside the configured router base "${this.#base}" \u2014 passing it through un-stripped`
-    );
   }
   /**
    * Full router teardown — idempotent, safe to call twice or before start().
@@ -3384,12 +4046,20 @@ var Router = class {
     this.#index = -1;
     this.#pendingIndex = null;
     this.#guardRedirectCount = 0;
+    this.#guardRedirecting = false;
+    this.#pendingNavPath = null;
+    this.#pendingNavPromise = null;
     this.#positions.clear();
     this.#scrollKey = null;
     this.#committing = false;
     this.#pendingPush = null;
     document.removeEventListener("click", this.#onClick);
     window.removeEventListener("popstate", this.#onPopState);
+    if (this.#liveRegion) {
+      this.#liveRegion.remove();
+      this.#liveRegion = null;
+      this.#announcedTitle = null;
+    }
     if (this.#prevScrollRestoration != null) {
       history.scrollRestoration = this.#prevScrollRestoration;
       this.#prevScrollRestoration = null;
@@ -3420,10 +4090,17 @@ var Router = class {
       this.#pendingPush = { path, replace: false };
       return Promise.resolve();
     }
-    if (this.#state && sameNavKey(path) === sameNavKey(this.#state.path)) {
+    const key = sameNavKey(path);
+    if (this.#state && key === sameNavKey(this.#state.path)) {
       return Promise.resolve();
     }
-    return this.#navigate(path, { push: true });
+    if (this.#pendingNavPath != null && key === sameNavKey(this.#pendingNavPath)) {
+      return this.#pendingNavPromise ?? Promise.resolve();
+    }
+    const nav = this.#navigate(path, { push: true });
+    if (this.#pendingNavPath === path)
+      this.#pendingNavPromise = nav;
+    return nav;
   }
   /**
    * Programmatic navigation that REPLACES the current history entry (v1.49,
@@ -3507,16 +4184,7 @@ var Router = class {
    * for free — this is pure prefixing and never parses them.
    */
   url(path) {
-    if (typeof path !== "string") {
-      throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
-    }
-    if (path[0] !== "/")
-      return path;
-    if (this.#mode === "memory")
-      return path;
-    if (this.#mode === "hash")
-      return "#" + this.#base + path;
-    return this.#base + path;
+    return encodeURL(path, this.#mode, this.#base);
   }
   /**
    * Current route info: { path, pathname, query, hash, route, params, chain }
@@ -3592,6 +4260,43 @@ var Router = class {
       cancelAnimations(stalled.element);
     }
     this.#pendingIndex = null;
+    this.#pendingNavPath = null;
+    this.#pendingNavPromise = null;
+  }
+  /**
+   * Restore the committed URL after a guard refused a POPSTATE (D87). The browser
+   * had already moved the address bar to the guarded entry before the guard ran,
+   * but the mounted tree stayed on the committed route — a share/bookmark would
+   * capture the wrong URL, violating the router's "URL and mounted tree commit
+   * together" invariant. Rewrite the entry the browser popped to back to `path`.
+   *
+   * We do NOT history.go(delta) back to the pre-pop entry: history/hash mode keeps
+   * no browser-history index (only memory mode tracks #index/#stack), so the delta
+   * is unknowable. replaceState instead COLLAPSES the guarded entry — trading the
+   * exact back/forward stack shape for the URL/tree invariant (the guarded forward
+   * entry is lost). Because replaceState fires no popstate there is no echo
+   * navigation to suppress and the guard cannot re-run — the very reason a
+   * history.go revert (which would echo a popstate targeting `path`) was avoided.
+   * The URL is re-encoded exactly as #commitLocation writes it (shared #encodedUrl:
+   * base prefix, plain in history mode / '#'-encoded in hash mode); history.state rides through
+   * untouched so the entry keeps whatever __puzzleScrollKey #handlePopState settled
+   * on it. Memory mode has no browser URL (and no popstate listener); its #index
+   * already stayed on the committed entry (the blocked pop cleared #pendingIndex
+   * without moving #index), so there is nothing to repair.
+   */
+  #restoreCommittedUrl(path) {
+    if (this.#mode === "memory")
+      return;
+    history.replaceState(history.state, "", this.#encodedUrl(path));
+  }
+  /**
+   * The one write-side URL encoder: base prefixed before the mode-specific
+   * encoding (v1.19, D51), then plain in history mode / '#'-prefixed in hash
+   * mode (D34). Every writer (#commitLocation, #restoreCommittedUrl) must go
+   * through here so committed and restored URLs stay byte-identical.
+   */
+  #encodedUrl(path) {
+    return this.#mode === "hash" ? "#" + this.#base + path : this.#base + path;
   }
   async #navigate(rawPath, { push, pop = false, replace = false, savedPosition = null, memoryIndex = null }) {
     const matchPath = stripPath(rawPath);
@@ -3601,6 +4306,12 @@ var Router = class {
       return;
     }
     const token = ++this.#token;
+    this.#pendingNavPath = push ? rawPath : null;
+    this.#pendingNavPromise = null;
+    const guardReentry = this.#guardRedirecting;
+    this.#guardRedirecting = false;
+    if (!guardReentry)
+      this.#guardRedirectCount = 0;
     if (push || replace)
       this.#pendingIndex = null;
     const current = this.current;
@@ -3624,11 +4335,22 @@ var Router = class {
         return;
       if (guardVerdict === false) {
         this.#recoverFailedNavigation(token);
+        if (cur == null) {
+          console.error(
+            `[puzzle] an entry guard blocked the initial navigation to "${rawPath}" by returning false, so nothing was rendered \u2014 the app container is empty. Entry guards should return a redirect path (e.g. '/login') instead of false so first paint always has a route to render.`
+          );
+        } else if (pop) {
+          this.#restoreCommittedUrl(cur.path);
+        }
         return;
       }
       if (typeof guardVerdict === "string") {
+        this.#guardRedirecting = true;
         const redirected = await this.replace(guardVerdict);
+        this.#guardRedirecting = false;
         this.#recoverFailedNavigation(token);
+        if (pop && cur && this.#state === cur)
+          this.#restoreCommittedUrl(cur.path);
         return redirected;
       }
     }
@@ -3702,6 +4424,7 @@ var Router = class {
     const views = [...reusedViews, ...freshViews];
     const anchor = loc.hash ? loc.hash.slice(1) : null;
     const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
+    const focus = this.#resolveFocus({ to, from, push, pop, replace });
     if (keep === entry.chain.length) {
       this.#commitLocation({ rawPath, entry, push, replace, memoryIndex, departScroll });
       this.#commitState({
@@ -3714,7 +4437,8 @@ var Router = class {
         views,
         keys: cur.keys,
         layout,
-        scroll
+        scroll,
+        focus
       });
       if (layout)
         this.#refreshLogged(layout, params, to);
@@ -3751,6 +4475,7 @@ var Router = class {
       keep,
       rootVnode,
       scroll,
+      focus,
       to,
       // D61: #commitLocation (run as the first statement inside #swap's commit
       // window) reads these to move the URL/memory stack; null memoryIndex on a
@@ -3792,13 +4517,13 @@ var Router = class {
    */
   #commitLocation(next) {
     const { rawPath, entry, push, replace, memoryIndex } = next;
+    const url = this.#encodedUrl(rawPath);
     if (push) {
       if (this.#mode === "memory") {
         this.#stack.length = this.#index + 1;
         this.#stack.push({ path: rawPath });
         this.#index = this.#stack.length - 1;
       } else {
-        const url = this.#mode === "hash" ? "#" + this.#base + rawPath : this.#base + rawPath;
         if (this.#scrollEnabled()) {
           this.#savePosition(next.departScroll);
           this.#scrollKey = this.#newEntryKey();
@@ -3811,7 +4536,6 @@ var Router = class {
       if (this.#mode === "memory") {
         this.#stack[this.#index] = { path: rawPath };
       } else {
-        const url = this.#mode === "hash" ? "#" + this.#base + rawPath : this.#base + rawPath;
         if (this.#scrollEnabled()) {
           history.replaceState({ __puzzleScrollKey: this.#scrollKey }, "", url);
         } else {
@@ -4075,11 +4799,18 @@ var Router = class {
       layoutClass: next.entry.layout
     };
     this.#guardRedirectCount = 0;
-    this.#warnMissingSlots(next.views);
+    this.#pendingNavPath = null;
+    this.#pendingNavPromise = null;
+    if (true) {
+      warnMissingSlots(next.views);
+      devtoolsRouteCommit(next);
+    }
     if (next.scroll) {
       const pos = next.scroll.anchor !== void 0 ? this.#resolveAnchorPosition(next.scroll.anchor) : next.scroll;
       window.scrollTo(pos.x, pos.y);
     }
+    if (next.focus)
+      this.#applyFocus(next.focus, next.views);
   }
   /**
    * Resolve a push `#anchor` to a window position, AFTER mount (D41): the target
@@ -4141,11 +4872,6 @@ var Router = class {
       return { anchor };
     return { x: 0, y: 0 };
   }
-  /**
-   * Save the CURRENT window position under the entry key the window shows, then
-   * mirror the map to sessionStorage (D41). Delete-then-set so a re-saved key
-   * moves to newest in insertion order; evict the oldest past the cap.
-   */
   /**
    * Record the outgoing entry's scroll position. `captured` (when given) is the
    * position measured at navigation start, BEFORE the outgoing view's teardown
@@ -4215,24 +4941,159 @@ var Router = class {
     history.replaceState({ ...history.state || {}, __puzzleScrollKey: key }, "");
     return key;
   }
+  // ---- focus + route announcement (v1.56, D93) ----------------------------
   /**
-   * Dev aid (D30 edge): a non-leaf view whose routed child never landed has no
-   * <Slot/> in its template. Its child was preloaded but never mounted, so the
-   * child instance has no ViewManager and reports a null element. A parent
-   * still showing its skeleton (v1.8, D39 — not `loaded` yet) is skipped: its
-   * child legitimately mounts later, when the real template (and its <Slot/>)
-   * lands.
+   * Whether the router manages focus at all — the exact shape of
+   * #scrollEnabled(), for the exact reason. Memory mode is a full no-op: an embed
+   * shares the window with a host page the router has no claim on, and STEALING
+   * THE HOST'S FOCUS is strictly worse than stealing its scroll (it hijacks the
+   * host's keyboard). `focusBehavior: false` is the explicit opt-out and also
+   * suppresses the live region — there is nothing to announce if the app has
+   * taken accessibility ownership itself.
    */
-  #warnMissingSlots(views) {
-    for (let i2 = 0; i2 < views.length - 1; i2++) {
-      if (views[i2] && !views[i2].loaded)
-        continue;
-      if (views[i2 + 1] && views[i2 + 1].element == null) {
-        console.warn(
-          "[puzzle] a routed child did not mount \u2014 does the parent view template include a <Slot/>?"
-        );
+  #focusEnabled() {
+    if (this.#mode === "memory")
+      return false;
+    return this.#focusBehavior !== false;
+  }
+  /**
+   * Decide whether a committing navigation moves focus + announces; `null` = no.
+   * Only the GATE — the target is resolved post-mount in #applyFocus. The
+   * initial-navigation skip is #resolveScroll's precedent verbatim: the browser
+   * owns first paint, moving focus there would fight normal page-load behavior
+   * (and break the hybrid-output takeover, which IS nav #0). push, replace and
+   * pop all pass: browsers never restore focus for a client-side history move, so
+   * back/forward needs focus management just as much as a forward push.
+   */
+  #resolveFocus({ to, from, push, pop, replace }) {
+    if (!this.#focusEnabled())
+      return null;
+    if (!push && !pop && !replace)
+      return null;
+    return { to, from };
+  }
+  /**
+   * Move focus into the freshly committed chain and announce the route. Called
+   * from #commitState after the scroll landing, with the new content already in
+   * the DOM and before the next paint.
+   *
+   * Order is focus-then-announce: a polite live-region update issued immediately
+   * BEFORE a focus change is routinely dropped (the focus event resets the
+   * assistive tech's speech queue), while one issued after is spoken behind the
+   * focus announcement. A navigation with no focusable target — or a custom
+   * focusBehavior that declined — still announces: the route DID change.
+   */
+  #applyFocus(spec, views) {
+    const target = this.#resolveFocusTarget(spec, views);
+    if (target)
+      this.#focusElement(target);
+    this.#announceRoute();
+  }
+  /**
+   * The element focus should land on, or null. A custom focusBehavior runs HERE
+   * (post-mount) so it can query the committed DOM; a falsy or non-focusable
+   * return skips focusing for this navigation, and a throw is logged and treated
+   * as falsy — the same posture a throwing scrollBehavior gets (D33): a broken
+   * hook must never wedge a navigation that already committed.
+   *
+   * Default: the LEAF view's root element. `.element` is legitimately null for a
+   * view that never mounted — a parent whose template has no <Slot/> preloads its
+   * routed child and then has nowhere to put it, the exact case warnMissingSlots
+   * reports — so walk back UP the chain to the nearest live root, and return null
+   * (never throw) when no level has one.
+   */
+  #resolveFocusTarget(spec, views) {
+    if (typeof this.#focusBehavior === "function") {
+      let el = null;
+      try {
+        el = this.#focusBehavior(spec.to, spec.from);
+      } catch (err) {
+        console.error("[puzzle] focusBehavior failed:", err);
+        return null;
       }
+      return el && typeof el.focus === "function" ? el : null;
     }
+    for (let i2 = views.length - 1; i2 >= 0; i2--) {
+      const el = views[i2]?.element;
+      if (el && typeof el.focus === "function")
+        return el;
+    }
+    return null;
+  }
+  /**
+   * Focus an element that is probably not natively focusable (a <puzzle-view>
+   * root never is). tabindex="-1" makes it a PROGRAMMATIC-only target — it is
+   * focusable by script but never a Tab stop — and is taken back off at the
+   * element's blur so the DOM accumulates no attribute debris across navigations
+   * and the root cannot linger in anyone's mental model of the tab order. An
+   * author-set tabindex is left completely alone (they already chose this
+   * element's focus semantics), which also means we add no listener there.
+   */
+  #focusElement(el) {
+    if (!el.hasAttribute("tabindex")) {
+      el.setAttribute("tabindex", "-1");
+      el.addEventListener("blur", () => el.removeAttribute("tabindex"), { once: true });
+    }
+    el.focus({ preventScroll: true });
+  }
+  /**
+   * Announce the committed route in the live region. document.title is READ, never
+   * re-derived: #commitLocation (URL + memory stack + title/head, D84) runs
+   * immediately before the mount + #commitState, so the document already carries
+   * this navigation's resolved title.
+   *
+   * But a route that resolves NO meta.title deliberately leaves the previous
+   * title standing (D84), and aria-live announces on CHANGE only — writing that
+   * unchanged string back is silent, so an app with no per-route titles (the
+   * default) would announce nothing after its first navigation, and a mixed app
+   * would name the page the user just LEFT. So the title is used only when it is
+   * non-empty AND actually moved since the last announcement; otherwise fall back
+   * to something route-identifying that does change — the committed route's name,
+   * or its path when the name would repeat what the region already shows (two
+   * `/user/:id` navigations share one name).
+   */
+  #announceRoute() {
+    if (!this.#liveRegion)
+      return;
+    const title = document.title;
+    const moved = title !== "" && title !== this.#announcedTitle;
+    this.#announcedTitle = title;
+    let text = title;
+    if (!moved) {
+      const chain = this.#state?.entry?.chain;
+      const leaf = chain ? chain[chain.length - 1] : null;
+      text = leaf?.name ?? this.#state?.path ?? "";
+      if (text === this.#liveRegion.textContent)
+        text = this.#state?.path ?? text;
+    }
+    this.#liveRegion.textContent = text;
+  }
+  /**
+   * Build the polite live region. Visually hidden by the CLIP-RECT pattern —
+   * NOT display:none or visibility:hidden, which remove the node from the
+   * accessibility tree entirely and would make every announcement silent. Inline
+   * styles because the runtime ships no stylesheet of its own; the
+   * `data-puzzle-live-region` attribute marks the node as framework-owned (the
+   * router's only node outside the mount container) for debugging and teardown.
+   */
+  #createLiveRegion() {
+    const el = document.createElement("div");
+    el.setAttribute("aria-live", "polite");
+    el.setAttribute("aria-atomic", "true");
+    el.setAttribute("data-puzzle-live-region", "");
+    const s2 = el.style;
+    s2.position = "absolute";
+    s2.width = "1px";
+    s2.height = "1px";
+    s2.margin = "-1px";
+    s2.padding = "0";
+    s2.border = "0";
+    s2.overflow = "hidden";
+    s2.clip = "rect(0, 0, 0, 0)";
+    s2.clipPath = "inset(50%)";
+    s2.whiteSpace = "nowrap";
+    document.body.appendChild(el);
+    return el;
   }
   /**
    * Superseded mid-transition: drop the instances THIS navigation built but never
@@ -4308,34 +5169,34 @@ var Router = class {
     if (viewMode != null) {
       if (viewMode === "sequential" || viewMode === "overlap")
         return viewMode;
-      const label = newAnimator.constructor?.name ?? "(anonymous view)";
-      if (!this.#warnedBadViewTransitionMode.has(label)) {
-        this.#warnedBadViewTransitionMode.add(label);
-        console.warn(
-          `[puzzle] ${label}: unknown transitionMode "${viewMode}" (expected 'sequential' or 'overlap') \u2014 falling back to the app default`
-        );
+      if (true) {
+        warnBadViewTransitionMode(newAnimator, viewMode);
       }
     }
     return this.#defaultTransitionMode;
   }
   /**
-   * Managed head sync (D84, v1.50 — subsumes the pre-D84 #setTitle): resolve
-   * the four reserved meta fields (title/description/canonical/socialImage)
-   * from the destination chain — head.js resolveHead, the same nearest-defined
-   * leaf→root walk #setTitle performed for meta.title alone — and sync
-   * document.title + the `data-puzzle-head`-marked tags (head.js syncHead:
-   * update in place / create / remove-when-unresolved). Runs inside
-   * #commitLocation, so D61 atomicity covers the head exactly as it covered the
-   * title: a failed or superseded navigation never touches it. On hybrid
-   * takeover the SSG-emitted tags carry the SAME identities, so navigation #0
-   * adopts them in place — never duplicates. Title semantics stay byte-
-   * compatible: only a non-null resolved title assigns document.title (see
-   * resolveHead's asymmetry note on explicit null).
+   * Title sync (D84, v1.50 — subsumes the pre-D84 #setTitle): resolve the
+   * reserved meta fields from the destination chain — head.js resolveHead, the
+   * same nearest-defined leaf→root walk #setTitle performed for meta.title
+   * alone — and assign document.title. Runs inside #commitLocation, so D61
+   * atomicity covers it exactly as it covered the title: a failed or superseded
+   * navigation never touches it. Title semantics stay byte-compatible: only a
+   * non-null resolved title assigns document.title (see resolveHead's asymmetry
+   * note on explicit null).
+   *
+   * The managed og:/twitter:/description/canonical tags are deliberately NOT
+   * synced here, in any output mode (D111, amending D89). Crawlers and unfurlers
+   * fetch each URL fresh from the server and never client-navigate, so the tags
+   * the prerender baked into that page's HTML are always the ones they read; a
+   * client-side rewrite would only ever be observed by something reading
+   * document.head after an in-page navigation, which is explicitly out of scope.
+   * headTags.js is therefore build-time only and never enters a browser bundle.
    */
   #syncHead(entry) {
     if (this.#mode === "memory")
       return;
-    syncHead(resolveHead(entry.chain));
+    syncTitle(resolveHead(entry.chain));
   }
   #handlePopState() {
     const path = this.#currentPath();
@@ -4348,6 +5209,37 @@ var Router = class {
       savedPosition = this.#positions.get(this.#scrollKey) || null;
     }
     this.#navigate(path, { push: false, pop: true, savedPosition });
+  }
+  /**
+   * hash-mode click interception, shared by #handleClick's relative-href and
+   * absolute-URL branches (D34/D51): given the fragment to test (a relative href
+   * starting with '#', or an absolute same-page URL's `.hash`), route it if it
+   * names an in-app fragment and return true. With a base the fragment must be
+   * exactly '#' + base (→ '/') or under '#' + base + '/'; base-less, any '#/...'
+   * is a route. A bare '#anchor' matches nothing → returns false (browser handles
+   * it). preventDefault is called HERE, before push (its placement in the original
+   * inlined cascades), so the return value is advisory.
+   */
+  #tryHashFragment(fragment, e2) {
+    if (this.#base) {
+      if (fragment === "#" + this.#base) {
+        e2.preventDefault();
+        this.push("/");
+        return true;
+      }
+      if (fragment.startsWith("#" + this.#base + "/")) {
+        e2.preventDefault();
+        this.push(fragment.slice(1 + this.#base.length));
+        return true;
+      }
+      return false;
+    }
+    if (fragment.startsWith("#/")) {
+      e2.preventDefault();
+      this.push(fragment.slice(1));
+      return true;
+    }
+    return false;
   }
   /**
    * Intercept in-app <a> clicks. Falls through to the browser for anything that
@@ -4371,20 +5263,8 @@ var Router = class {
     if (!href)
       return;
     if (href.startsWith("#")) {
-      if (this.#mode === "hash") {
-        if (this.#base) {
-          if (href === "#" + this.#base) {
-            e2.preventDefault();
-            this.push("/");
-          } else if (href.startsWith("#" + this.#base + "/")) {
-            e2.preventDefault();
-            this.push(href.slice(1 + this.#base.length));
-          }
-        } else if (href.startsWith("#/")) {
-          e2.preventDefault();
-          this.push(href.slice(1));
-        }
-      }
+      if (this.#mode === "hash")
+        this.#tryHashFragment(href, e2);
       return;
     }
     if (href.startsWith("mailto:") || href.startsWith("tel:"))
@@ -4398,20 +5278,8 @@ var Router = class {
     if (url.origin !== location.origin)
       return;
     if (this.#mode === "hash") {
-      if (url.pathname === location.pathname) {
-        if (this.#base) {
-          if (url.hash === "#" + this.#base) {
-            e2.preventDefault();
-            this.push("/");
-          } else if (url.hash.startsWith("#" + this.#base + "/")) {
-            e2.preventDefault();
-            this.push(url.hash.slice(1 + this.#base.length));
-          }
-        } else if (url.hash.startsWith("#/")) {
-          e2.preventDefault();
-          this.push(url.hash.slice(1));
-        }
-      }
+      if (url.pathname === location.pathname)
+        this.#tryHashFragment(url.hash, e2);
       return;
     }
     if (this.#base && this.#mode === "history") {
@@ -4427,38 +5295,26 @@ var Router = class {
     this.push(url.pathname + url.search + url.hash);
   }
 };
-function flatten(node, ancestors, fullPaths, entries) {
-  const isRoot = ancestors.length === 0;
-  if (!isRoot) {
-    if (typeof node.path === "string" && node.path.startsWith("/")) {
-      throw new Error(
-        `[puzzle] child route path must be relative (no leading "/"): "${node.path}"`
-      );
-    }
-    if (node.layout != null) {
-      throw new Error(
-        `[puzzle] "layout" is only allowed on a top-level route (found on child "${node.path}")`
-      );
-    }
-    if (node.path === "*") {
-      throw new Error('[puzzle] "*" catch-all is not allowed inside children');
-    }
-  }
-  validateTransitionMode(node.transitionMode, `route "${node.path}"`);
-  validateGuard(node.guard, `route "${node.path}"`);
-  const parentPath = isRoot ? null : fullPaths[fullPaths.length - 1];
-  const fullPath = isRoot ? node.path : joinPath(parentPath, node.path);
-  const chain = [...ancestors, node];
-  const paths = [...fullPaths, fullPath];
-  if (node.children && node.children.length) {
-    for (const child of node.children) {
-      flatten(child, chain, paths, entries);
-    }
-  } else {
-    entries.push(makeEntry(chain, paths));
-  }
-}
 function makeEntry(chain, fullPaths) {
+  chain.forEach((node, index) => {
+    if (index) {
+      if (typeof node.path === "string" && node.path.startsWith("/")) {
+        throw new Error(
+          `[puzzle] child route path must be relative (no leading "/"): "${node.path}"`
+        );
+      }
+      if (node.layout != null) {
+        throw new Error(
+          `[puzzle] "layout" is only allowed on a top-level route (found on child "${node.path}")`
+        );
+      }
+      if (node.path === "*") {
+        throw new Error('[puzzle] "*" catch-all is not allowed inside children');
+      }
+    }
+    validateTransitionMode(node.transitionMode, `route "${node.path}"`);
+    validateGuard(node.guard, `route "${node.path}"`);
+  });
   const leafPath = fullPaths[fullPaths.length - 1];
   const paramNames = [];
   const regexPath = leafPath.split("/").map((seg) => {
@@ -4481,6 +5337,36 @@ function makeEntry(chain, fullPaths) {
     guards: chain.map((node) => node.guard).filter(Boolean)
   };
 }
+var warnedOutsideBase = false;
+function warnOutsideBaseOnce(pathname, base) {
+  if (warnedOutsideBase)
+    return;
+  warnedOutsideBase = true;
+  console.warn(
+    `[puzzle] path "${pathname}" is outside the configured router base "${base}" \u2014 passing it through un-stripped`
+  );
+}
+function warnMissingSlots(views) {
+  for (let i2 = 0; i2 < views.length - 1; i2++) {
+    if (views[i2] && !views[i2].loaded)
+      continue;
+    if (views[i2 + 1] && views[i2 + 1].element == null) {
+      console.warn(
+        "[puzzle] a routed child did not mount \u2014 does the parent view template include a <Slot/>?"
+      );
+    }
+  }
+}
+var warnedBadViewTransitionMode = /* @__PURE__ */ new Set();
+function warnBadViewTransitionMode(newAnimator, viewMode) {
+  const label = newAnimator.constructor?.name ?? "(anonymous view)";
+  if (warnedBadViewTransitionMode.has(label))
+    return;
+  warnedBadViewTransitionMode.add(label);
+  console.warn(
+    `[puzzle] ${label}: unknown transitionMode "${viewMode}" (expected 'sequential' or 'overlap') \u2014 falling back to the app default`
+  );
+}
 function escapeRegExp(str2) {
   return str2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -4496,11 +5382,6 @@ function validateGuard(value, label) {
     throw new Error(`[puzzle] guard on ${label} must be a function (got ${typeof value})`);
   }
 }
-function joinPath(parentPath, childPath) {
-  if (childPath === "")
-    return parentPath;
-  return parentPath.replace(/\/$/, "") + "/" + childPath;
-}
 function normalizeBase(base) {
   if (!base)
     return "";
@@ -4510,6 +5391,18 @@ function normalizeBase(base) {
   let b2 = base[0] === "/" ? base : "/" + base;
   b2 = b2.replace(/\/+$/, "");
   return b2;
+}
+function encodeURL(path, mode, base) {
+  if (typeof path !== "string") {
+    throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
+  }
+  if (path[0] !== "/")
+    return path;
+  if (mode === "memory")
+    return path;
+  if (mode === "hash")
+    return "#" + base + path;
+  return base + path;
 }
 function stripPath(rawPath) {
   const path = rawPath.split("?")[0].split("#")[0];
@@ -4549,169 +5442,6 @@ function sameNavKey(rawPath) {
   return stripTrailingSlash(rawPath.slice(0, cut)) + rawPath.slice(cut);
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/devstate.js
-var DEV = false ? true : true;
-var HMR_KEY = "__puzzleHMR";
-var MAX_AGE_MS = 1e4;
-var MAX_DEPTH = 8;
-var DROP = Symbol("drop");
-var liveViews = /* @__PURE__ */ new Set();
-function registerView(view) {
-  if (DEV)
-    liveViews.add(view);
-}
-function unregisterView(view) {
-  if (DEV)
-    liveViews.delete(view);
-}
-function keyedViews() {
-  const counts = /* @__PURE__ */ Object.create(null);
-  const out = [];
-  for (const view of liveViews) {
-    const name = view?.constructor?.name || "View";
-    const idx = counts[name] ?? 0;
-    counts[name] = idx + 1;
-    out.push({ key: `${name}:${idx}`, view });
-  }
-  return out;
-}
-function getSessionStorage() {
-  try {
-    return typeof sessionStorage !== "undefined" ? sessionStorage : null;
-  } catch {
-    return null;
-  }
-}
-function safeState(data) {
-  const walked = walk(data, 0, /* @__PURE__ */ new WeakSet());
-  return walked === DROP || walked === null || typeof walked !== "object" ? {} : walked;
-}
-function walk(value, depth, seen) {
-  if (value === null)
-    return null;
-  const t2 = typeof value;
-  if (t2 === "boolean" || t2 === "string")
-    return value;
-  if (t2 === "number")
-    return Number.isFinite(value) ? value : DROP;
-  if (t2 !== "object")
-    return DROP;
-  if (depth >= MAX_DEPTH)
-    return DROP;
-  if (seen.has(value))
-    return DROP;
-  if (typeof value.nodeType === "number" && value.nodeName !== void 0)
-    return DROP;
-  seen.add(value);
-  try {
-    if (Array.isArray(value)) {
-      const arr = [];
-      for (const item of value) {
-        const w = walk(item, depth + 1, seen);
-        if (w === DROP)
-          return DROP;
-        arr.push(w);
-      }
-      return arr;
-    }
-    const proto = Object.getPrototypeOf(value);
-    if (proto !== Object.prototype && proto !== null)
-      return DROP;
-    const obj = {};
-    for (const k of Object.keys(value)) {
-      const w = walk(value[k], depth + 1, seen);
-      if (w !== DROP)
-        obj[k] = w;
-    }
-    return obj;
-  } finally {
-    seen.delete(value);
-  }
-}
-function snapshotToStorage(app2) {
-  if (DEV)
-    snapshotImpl(app2);
-}
-function snapshotImpl(app2) {
-  try {
-    const storage = getSessionStorage();
-    if (!storage)
-      return;
-    const blob = { t: Date.now(), store: {}, views: [] };
-    try {
-      blob.store = app2.store._serializeAll();
-    } catch {
-      blob.store = {};
-    }
-    for (const { key, view } of keyedViews()) {
-      try {
-        blob.views.push({ key, data: safeState(view._localState()) });
-      } catch {
-      }
-    }
-    storage.setItem(HMR_KEY, JSON.stringify(blob));
-  } catch {
-  }
-}
-function restoreStoreFromStorage(app2) {
-  if (DEV)
-    return restoreStoreImpl(app2);
-  return null;
-}
-function restoreStoreImpl(app2) {
-  let blob;
-  try {
-    const storage = getSessionStorage();
-    if (!storage)
-      return null;
-    const raw2 = storage.getItem(HMR_KEY);
-    try {
-      storage.removeItem(HMR_KEY);
-    } catch {
-    }
-    if (!raw2)
-      return null;
-    blob = JSON.parse(raw2);
-  } catch {
-    return null;
-  }
-  try {
-    if (!blob || typeof blob !== "object")
-      return null;
-    if (typeof blob.t !== "number" || Date.now() - blob.t > MAX_AGE_MS)
-      return null;
-    try {
-      app2.store._hydrateAll(blob.store, { replace: true });
-    } catch {
-    }
-    return blob;
-  } catch {
-    return null;
-  }
-}
-function restoreViewsFromStorage(blob) {
-  if (DEV)
-    restoreViewsImpl(blob);
-}
-function restoreViewsImpl(blob) {
-  try {
-    if (!blob || !Array.isArray(blob.views))
-      return;
-    const byKey = /* @__PURE__ */ new Map();
-    for (const { key, view } of keyedViews())
-      byKey.set(key, view);
-    for (const entry of blob.views) {
-      try {
-        const view = byKey.get(entry?.key);
-        if (view && entry.data && typeof entry.data === "object")
-          view.setData(entry.data);
-      } catch {
-      }
-    }
-  } catch {
-  }
-}
-
 // node_modules/@magic-spells/puzzle/client-runtime/app.js
 var PuzzleApp = class {
   // Backing field for the `store` accessor. Null until mount() creates the Store
@@ -4732,6 +5462,21 @@ var PuzzleApp = class {
   // is the last reliable lifecycle signal (fires on unload AND bfcache entry,
   // where beforeunload is unreliable on mobile), so it forces the write out.
   #pageHideFlush = null;
+  // Mount generation (v1.31 lifecycle, D66). mount() is async, so every
+  // continuation after an await must answer "is MY mount still the live one?" —
+  // a question the _mounted BOOLEAN cannot answer, because it only records
+  // whether SOMETHING is mounted. An unmount() during an awaited beforeMount (or
+  // during router.start()) flips it false and tears down; a fresh mount() then
+  // flips it true again; the FIRST mount's continuation resumes, reads `true`,
+  // and proceeds against the NEW cycle's router/ctx — re-starting an already
+  // started router, restoring HMR state onto another cycle's tree, firing
+  // `mounted` a second time, or (on the beforeMount abort path) tearing the
+  // newer cycle down. So each mount() attempt claims a monotonic epoch and
+  // #teardown() burns the current one: `this.#mountEpoch !== epoch` is the
+  // authoritative staleness test — true iff anything tore down or re-mounted
+  // since this attempt began. The _mounted flag stays the "is anything mounted"
+  // question it always was (unmount()'s idempotency guard, the abort read).
+  #mountEpoch = 0;
   /**
    * @param {object} config the frozen v1 surface (SPEC §2)
    * @param {string|Element} config.target CSS selector or Element to mount into
@@ -4740,10 +5485,28 @@ var PuzzleApp = class {
    * @param {object} [config.formatters] app-level template formatters (override built-ins)
    * @param {string} [config.apiURL] base URL for the D21 server read path
    * @param {object} [config.storage] Storage-like object for persistence (opt-in)
+   * @param {Function} [config.beforeRequest] adapter request hook (v1.55, D91):
+   *   `beforeRequest(init, { type, method, url })`, called SYNCHRONOUSLY before
+   *   every adapter fetch (`loadAll`/`loadOne`, `save()`, `delete()`,
+   *   `request()`). Mutate `init` in place or return a replacement object to
+   *   attach auth headers, `credentials`, or an AbortSignal; the context arg is
+   *   frozen, and `method`/`body` are re-stamped by the Store (a hook cannot
+   *   change the verb or payload, which the D50 write path depends on). A throw
+   *   rejects the calling verb — no request is sent
    * @param {false|Function} [config.scrollBehavior] router scroll handling
    *   (v1.5, D33): omit for the default (top on push, restore on back/forward);
    *   `false` to leave scroll alone; `(to, from, savedPosition) => {x,y}|null`
    *   to customize per navigation
+   * @param {false|Function} [config.focusBehavior] router focus management +
+   *   route announcement (v1.56, D93): omit for the default (after every
+   *   committed navigation, focus the leaf view's root with
+   *   `{ preventScroll: true }` and announce the committed `document.title` in a
+   *   framework-owned visually-hidden `aria-live="polite"` region); `false` to
+   *   disable both — no focus move and no live region at all;
+   *   `(to, from) => Element|null|false` to choose the target, called after the
+   *   new content is mounted so it may query the committed DOM (a falsy return
+   *   skips focusing for that navigation, a throw is logged and treated as
+   *   falsy). Inert in memory mode, like `scrollBehavior`
    * @param {('history'|'hash'|'memory')} [config.routerMode] router URL carrier
    *   (v1.6, D34; v1.11, D42): omit/`'history'` for pathname routing, `'hash'` for
    *   `location.hash` routing on static hosts, `'memory'` for URL-less routing in
@@ -4821,9 +5584,10 @@ var PuzzleApp = class {
       return this;
     if (typeof document === "undefined")
       return this;
+    const epoch = ++this.#mountEpoch;
     for (const name of ["beforeMount", "mounted", "beforeUnmount"]) {
-      const hook = this.config[name];
-      if (hook != null && typeof hook !== "function") {
+      const hook2 = this.config[name];
+      if (hook2 != null && typeof hook2 !== "function") {
         throw new Error(`[puzzle] config.${name} must be a function when set`);
       }
     }
@@ -4834,7 +5598,9 @@ var PuzzleApp = class {
       formatters = {},
       apiURL,
       storage,
+      beforeRequest,
       scrollBehavior,
+      focusBehavior,
       routerMode,
       routerInitialPath,
       routerBase,
@@ -4847,12 +5613,16 @@ var PuzzleApp = class {
     const storeOptions = { apiURL };
     if (storage !== void 0)
       storeOptions.storage = storage;
+    if (beforeRequest !== void 0)
+      storeOptions.beforeRequest = beforeRequest;
     this.#store = new Store(models, storeOptions);
-    this.formatters = new FormatterRegistry(manifest_default);
-    for (const [name, fn] of Object.entries(formatters)) {
-      this.formatters.register(name, fn);
-    }
+    this.formatters = makeFormatterRegistry(
+      formatters,
+      (path) => this.router ? this.router.url(path) : path
+    );
     const routerOptions = { scrollBehavior };
+    if (focusBehavior !== void 0)
+      routerOptions.focusBehavior = focusBehavior;
     if (routerMode !== void 0)
       routerOptions.mode = routerMode;
     if (routerInitialPath !== void 0)
@@ -4862,15 +5632,9 @@ var PuzzleApp = class {
     if (transitionMode !== void 0)
       routerOptions.transitionMode = transitionMode;
     this.router = new Router(routes, routerOptions);
-    if (this.#morphHandler)
+    if (this.#morphHandler) {
+      this.#morphHandler.arm?.();
       this.router.setMorphHandler(this.#morphHandler);
-    if (!this.formatters.getAll().link) {
-      this.formatters.register("link", (v) => {
-        if (v == null)
-          return "";
-        const s2 = String(v);
-        return this.router ? this.router.url(s2) : s2;
-      });
     }
     this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
     this._mounted = true;
@@ -4880,23 +5644,24 @@ var PuzzleApp = class {
     }
     if (typeof window !== "undefined") {
       window.__PUZZLE_APP__ = this;
+      devtoolsAppMounted(this);
     }
     if (beforeMount != null) {
       try {
         await beforeMount.call(this, this);
       } catch (err) {
-        if (this._mounted)
+        if (this.#mountEpoch === epoch && this._mounted)
           this.#teardown();
         throw err;
       }
     }
-    if (!this._mounted)
+    if (this.#mountEpoch !== epoch || !this._mounted)
       return this;
     let hmrBlob = null;
     if (true)
       hmrBlob = restoreStoreFromStorage(this);
     await this.router.start(el, this.ctx);
-    if (!this._mounted)
+    if (this.#mountEpoch !== epoch || !this._mounted)
       return this;
     if (true)
       restoreViewsFromStorage(hmrBlob);
@@ -4952,10 +5717,14 @@ var PuzzleApp = class {
    * Assumes _mounted is true; leaves the app fully unmounted.
    */
   #teardown() {
+    this.#mountEpoch++;
     if (typeof window !== "undefined" && window.__PUZZLE_APP__ === this) {
       window.__PUZZLE_APP__ = null;
     }
+    if (true)
+      devtoolsAppUnmounted(this);
     this.router?.stop();
+    this.#morphHandler?.dispose?.();
     this.#store?.flush();
     if (typeof window !== "undefined" && this.#pageHideFlush) {
       window.removeEventListener("pagehide", this.#pageHideFlush);
@@ -5274,12 +6043,32 @@ function mountComponent(vnode, parent, ref, ctx) {
   const preloaded = vnode.instance != null;
   const child = vnode.instance ?? new vnode.tag(ctx);
   vnode.component = child;
-  child.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded }).then(() => {
-    vnode.el = child.element;
-    return child.playIn();
-  }).catch((err) => {
-    console.error("[puzzle] child mount failed:", err);
-  });
+  child.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded }).then(
+    // ENTER animation (constellation/doc/DOC-SPEC.md §12): once the first
+    // real render has landed (mount() resolved → this.element is the rendered
+    // root, not the anchor), run the child's playIn(). Chained here so it
+    // never blocks the synchronous patcher.
+    () => {
+      vnode.el = child.element;
+      return Promise.resolve(child.playIn()).catch(
+        (err) => console.error("[puzzle] child enter animation failed:", err)
+      );
+    },
+    (err) => {
+      console.error("[puzzle] child mount failed:", err);
+      if (preloaded)
+        return;
+      const anchor = child.element;
+      const placeholder = anchor && anchor.parentNode ? anchor.parentNode.insertBefore(document.createComment("puzzle"), anchor) : null;
+      child.destroy();
+      if (placeholder) {
+        vnode.el = placeholder;
+        child.__failedPlaceholder = placeholder;
+      }
+      vnode.component = null;
+      vnode.instance = null;
+    }
+  );
   vnode.el = child.element;
   return vnode.el;
 }
@@ -5291,6 +6080,13 @@ function patch(oldVnode, newVnode, parent, ctx) {
     return;
   }
   if (newVnode.isComponent) {
+    const dead = oldVnode.component;
+    if (dead == null || dead.isDestroyed) {
+      const placeholder = dead?.__failedPlaceholder ?? oldVnode.el;
+      mount(newVnode, parent, placeholder?.parentNode === parent ? placeholder : null, ctx);
+      placeholder?.remove();
+      return;
+    }
     patchComponent(oldVnode, newVnode);
     return;
   }
@@ -5328,7 +6124,7 @@ function patchComponent(oldVnode, newVnode) {
   newVnode.el = child.element;
 }
 function sameNode(a2, b2) {
-  return a2.tag === b2.tag && a2.key === b2.key;
+  return a2.tag === b2.tag && (a2.key === b2.key || a2.key !== a2.key && b2.key !== b2.key);
 }
 function shallowEqual(a2, b2) {
   if (a2 === b2)
@@ -5348,6 +6144,10 @@ var leavingEls = /* @__PURE__ */ new WeakSet();
 function unmount(vnode) {
   if (vnode.isComponent) {
     const child = vnode.component;
+    if (!child) {
+      vnode.el?.remove();
+      return;
+    }
     if (child?.animations?.out) {
       const leavingEl = child.element;
       if (leavingEl && leavingEl.nodeType === 1) {
@@ -5456,24 +6256,31 @@ function warnDuplicateKey(key) {
 function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
   const oldKeyed = /* @__PURE__ */ new Map();
   for (const child of oldChildren) {
-    if (child.key != null)
-      oldKeyed.set(child.tag + "\0" + child.key, child);
+    if (child.key != null) {
+      let byKey = oldKeyed.get(child.tag);
+      if (!byKey)
+        oldKeyed.set(child.tag, byKey = /* @__PURE__ */ new Map());
+      byKey.set(child.key, child);
+    }
   }
   const matched = /* @__PURE__ */ new Set();
   let oldUnkeyed = oldChildren.filter((c2) => c2.key == null);
   let unkeyedIdx = 0;
-  const seenNewKeys = /* @__PURE__ */ new Set();
+  const seenNewKeys = /* @__PURE__ */ new Map();
   let hasFlip = false;
   const pairs = newChildren.map((newChild) => {
     if (!hasFlip && "flip" in newChild.attrs)
       hasFlip = true;
     if (newChild.key != null) {
-      const mapKey = newChild.tag + "\0" + newChild.key;
-      if (seenNewKeys.has(mapKey))
+      let seen = seenNewKeys.get(newChild.tag);
+      if (!seen)
+        seenNewKeys.set(newChild.tag, seen = /* @__PURE__ */ new Set());
+      if (seen.has(newChild.key))
         warnDuplicateKey(newChild.key);
       else
-        seenNewKeys.add(mapKey);
-      const match = oldKeyed.get(mapKey);
+        seen.add(newChild.key);
+      const byKey = oldKeyed.get(newChild.tag);
+      const match = byKey ? byKey.get(newChild.key) : void 0;
       if (match)
         matched.add(match);
       return [match ?? null, newChild];
@@ -5486,6 +6293,9 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
     return [null, newChild];
   });
   const flip = hasFlip ? beginFlip(pairs) : null;
+  if (false) {
+    warnFlipCompiledOut();
+  }
   for (const child of oldChildren) {
     if (!matched.has(child))
       unmount(child);
@@ -5826,6 +6636,25 @@ var PuzzleView = class {
     return { ...this.#local };
   }
   /**
+   * The MODEL layer only (the last data() commit), as a fresh shallow copy.
+   * INTERNAL — not public API: the DevTools bridge (constellation/doc/DOC-SPEC.md
+   * §27, D100) shows the two state layers SEPARATELY, so it needs this alongside
+   * _localState() rather than the merged getData(). Same underscore-prefixed
+   * internal convention, never spelled in a template.
+   */
+  _modelState() {
+    return { ...this.#model };
+  }
+  /**
+   * This instance's current vnode tree, or null before the first render.
+   * INTERNAL dev reader for devstate/devtools (D100): the DevTools bridge walks
+   * it to discover child component instances (`vnode.component`) and so builds
+   * the live component forest without reaching into Router privates.
+   */
+  _vnodeTree() {
+    return this.#vm?.currentTree ?? null;
+  }
+  /**
    * Reference-stable derived value (v1.29, D64; constellation/doc/DOC-SPEC.md §32).
    * Per-instance cache keyed by `key`: returns the previously cached value while
    * `deps` (an array) matches the prior call for that key positionally by
@@ -6110,7 +6939,11 @@ var PuzzleView = class {
     this.#vm?.clear();
     for (const key of Object.keys(this.refs))
       this.refs[key] = null;
-    this.destroyed();
+    try {
+      this.destroyed();
+    } catch (err) {
+      console.error("[puzzle] destroyed hook error:", err);
+    }
   }
   // ---- hooks & overridables (SPEC §4 class contract) ---------------------------
   /** Component model. Compiled components and views override this. */
@@ -6329,13 +7162,22 @@ var PuzzleView = class {
           this.#settleEnter();
           return;
         }
-        this.viewWillShow();
+        try {
+          this.viewWillShow();
+        } catch (err) {
+          console.error("[puzzle] enter hook failed during a visible-trigger reveal:", err);
+        }
         handle.play();
         handle.finished.then(() => {
           if (this.#currentAnimation === handle)
             this.#currentAnimation = null;
-          if (!this.#destroyed)
-            this.viewDidShow();
+          if (!this.#destroyed) {
+            try {
+              this.viewDidShow();
+            } catch (err) {
+              console.error("[puzzle] enter hook failed during a visible-trigger reveal:", err);
+            }
+          }
           this.#settleEnter();
         });
       };
@@ -6520,8 +7362,13 @@ var PuzzleView = class {
       this.beforeUpdate();
     const showSkeleton = !this.#loaded && typeof this.renderSkeleton === "function";
     const tree = showSkeleton ? this.renderSkeleton() : this.render();
-    if (tree)
+    if (tree) {
       this.#vm.render(tree);
+    } else if (this.#vm.currentTree) {
+      const ref = this.#vm.element?.nextSibling ?? null;
+      this.#vm.clear();
+      this.#vm.anchorAt(ref);
+    }
     if (showSkeleton && this.#skeletonShownAt === 0)
       this.#skeletonShownAt = Date.now();
     if (isUpdate)
@@ -7938,6 +8785,3035 @@ SideNav.prototype.render = function() {
 };
 SideNav.__pzlModule = "app/components/docs/SideNav.pzl";
 
+// node_modules/@magic-spells/physics-engine/dist/physics-engine.esm.js
+var f = class {
+  #t;
+  constructor() {
+    this.#t = /* @__PURE__ */ new Map();
+  }
+  /**
+   * Binds a listener to an event.
+   * @param {string} event - The event to bind the listener to.
+   * @param {Function} listener - The listener function to bind.
+   * @returns {EventEmitter} The current instance for chaining.
+   * @throws {TypeError} If the listener is not a function.
+   */
+  on(t2, i2) {
+    if (typeof i2 != "function")
+      throw new TypeError("Listener must be a function");
+    const s2 = this.#t.get(t2) || [];
+    return s2.includes(i2) || s2.push(i2), this.#t.set(t2, s2), this;
+  }
+  /**
+   * Unbinds a listener from an event.
+   * @param {string} event - The event to unbind the listener from.
+   * @param {Function} listener - The listener function to unbind.
+   * @returns {EventEmitter} The current instance for chaining.
+   */
+  off(t2, i2) {
+    const s2 = this.#t.get(t2);
+    if (!s2)
+      return this;
+    const e2 = s2.indexOf(i2);
+    return e2 !== -1 && (s2.splice(e2, 1), s2.length === 0 ? this.#t.delete(t2) : this.#t.set(t2, s2)), this;
+  }
+  /**
+   * Triggers an event and calls all bound listeners.
+   * @param {string} event - The event to trigger.
+   * @param {...*} args - Arguments to pass to the listener functions.
+   * @returns {boolean} True if the event had listeners, false otherwise.
+   */
+  emit(t2, ...i2) {
+    const s2 = this.#t.get(t2);
+    if (!s2 || s2.length === 0)
+      return false;
+    const e2 = s2.slice();
+    for (let n2 = 0, r2 = e2.length; n2 < r2; ++n2)
+      try {
+        e2[n2].apply(this, i2);
+      } catch (h) {
+        console.error(`Error in listener for event '${t2}':`, h);
+      }
+    return true;
+  }
+  /**
+   * Removes all listeners for a specific event or all events.
+   * @param {string} [event] - The event to remove listeners from. If not provided, removes all listeners.
+   * @returns {EventEmitter} The current instance for chaining.
+   */
+  removeAllListeners(t2) {
+    return t2 ? this.#t.delete(t2) : this.#t.clear(), this;
+  }
+};
+var b = class extends f {
+  #t;
+  #m;
+  #o;
+  #n;
+  #s;
+  #e;
+  #r;
+  #h;
+  #i;
+  /**
+   * Creates an instance of PhysicsEngine.
+   * @param {number} [attraction=0.026] - The attraction value for physics-based animation (0 < attraction < 1).
+   * @param {number} [friction=0.28] - The friction value for physics-based animation (0 < friction < 1).
+   */
+  constructor({ attraction: t2 = 0.026, friction: i2 = 0.28 } = {}) {
+    if (super(), !Number.isFinite(t2) || t2 <= 0 || t2 >= 1)
+      throw new Error("Attraction must be a number between 0 and 1 (exclusive).");
+    if (!Number.isFinite(i2) || i2 <= 0 || i2 >= 1)
+      throw new Error("Friction must be a number between 0 and 1 (exclusive).");
+    this.#t = t2, this.#m = i2, this.#o = 1 - i2, this.#n = 0, this.#s = 0, this.#e = 0, this.isAnimating = false, this.#r = null, this.#h = 0, this.#i = null;
+  }
+  /**
+   * Animates from a start value to an end value.
+   * @param {number} startValue - The starting value.
+   * @param {number} endValue - The target value.
+   * @param {number} [velocity=0] - Initial velocity.
+   * @returns {Promise} Resolves when animation completes or is stopped.
+   */
+  animateTo(t2, i2, s2 = 0) {
+    if (!Number.isFinite(t2))
+      throw new Error("startValue must be a finite number.");
+    if (!Number.isFinite(i2))
+      throw new Error("endValue must be a finite number.");
+    if (!Number.isFinite(s2))
+      throw new Error("velocity must be a finite number.");
+    if (this.isAnimating && this.#u(), t2 === i2 && s2 === 0)
+      return this.emit("change", { position: i2, progress: 1 }), this.emit("complete", { position: i2, progress: 1 }), Promise.resolve();
+    this.#s = t2, this.#e = i2, this.#n = s2, this.isAnimating = true, this.#r = null;
+    const e2 = ++this.#h;
+    return new Promise((n2) => {
+      this.#i = n2;
+      const r2 = (h) => {
+        if (e2 !== this.#h || !this.isAnimating)
+          return;
+        if (this.#r === null) {
+          this.#r = h, requestAnimationFrame(r2);
+          return;
+        }
+        const o2 = Math.min(h - this.#r, 64) / 16.66;
+        this.#r = h;
+        const l = (this.#e - this.#s) * this.#t;
+        this.#n += l * o2, this.#n *= Math.pow(this.#o, o2), this.#s += this.#n * o2;
+        const m = this.#e - t2;
+        let u = 0;
+        if (m !== 0 && (u = (this.#s - t2) / m), this.emit("change", { position: this.#s, progress: u }), Math.abs(this.#s - this.#e) < 0.01 && Math.abs(this.#n) < 0.01) {
+          this.isAnimating = false;
+          const c2 = this.#i;
+          this.#i = null, this.emit("change", { position: this.#e, progress: 1 }), this.emit("complete", { position: this.#e, progress: 1 }), c2();
+          return;
+        }
+        requestAnimationFrame(r2);
+      };
+      requestAnimationFrame(r2);
+    });
+  }
+  /**
+   * Internal stop — resolves Promise without emitting 'stop'.
+   * Used when a new animateTo supersedes the current one.
+   */
+  #u() {
+    this.isAnimating = false, this.#i && (this.#i(), this.#i = null);
+  }
+  /**
+   * Stops the ongoing animation.
+   * Emits 'stop' event and resolves the pending Promise.
+   */
+  stop() {
+    if (!this.isAnimating)
+      return;
+    this.isAnimating = false, this.#h++;
+    const t2 = this.#i;
+    this.#i = null, this.emit("stop", { position: this.#s }), t2 && t2();
+  }
+  /**
+   * Sets the attraction value
+   * @param {number} attraction - The attraction value for physics-based animation (0 < attraction < 1).
+   */
+  setAttraction(t2) {
+    if (!Number.isFinite(t2) || t2 <= 0 || t2 >= 1)
+      throw new Error("Attraction must be a number between 0 and 1 (exclusive).");
+    this.#t = t2;
+  }
+  /**
+   * Sets the friction value
+   * @param {number} friction - The friction value for physics-based animation (0 < friction < 1).
+   */
+  setFriction(t2) {
+    if (!Number.isFinite(t2) || t2 <= 0 || t2 >= 1)
+      throw new Error("Friction must be a number between 0 and 1 (exclusive).");
+    this.#m = t2, this.#o = 1 - t2;
+  }
+};
+
+// node_modules/@magic-spells/frame-engine/dist/frame-engine.esm.js
+var e = /* @__PURE__ */ new Set(/* @__PURE__ */ "display.position.float.clear.visibility.overflow.overflow-x.overflow-y.flex-direction.flex-wrap.justify-content.align-items.align-content.order.grid-template-columns.grid-template-rows.grid-template-areas.grid-auto-flow.z-index.table-layout.empty-cells.caption-side.list-style-type.list-style-position.pointer-events.user-select.box-sizing.resize.text-align.text-transform.white-space.word-break.word-wrap.font-style.font-variant.background-repeat.background-attachment.border-style.border-collapse.content.page-break-before.page-break-after.page-break-inside".split("."));
+var t = /* @__PURE__ */ new Set([
+  "transform",
+  "filter",
+  "backdrop-filter"
+]);
+var n = {
+  translateX: [{
+    value: 0,
+    unit: "px"
+  }],
+  translateY: [{
+    value: 0,
+    unit: "px"
+  }],
+  translateZ: [{
+    value: 0,
+    unit: "px"
+  }],
+  translate: [{
+    value: 0,
+    unit: "px"
+  }, {
+    value: 0,
+    unit: "px"
+  }],
+  translate3d: [
+    {
+      value: 0,
+      unit: "px"
+    },
+    {
+      value: 0,
+      unit: "px"
+    },
+    {
+      value: 0,
+      unit: "px"
+    }
+  ],
+  scale: [{
+    value: 1,
+    unit: ""
+  }],
+  scaleX: [{
+    value: 1,
+    unit: ""
+  }],
+  scaleY: [{
+    value: 1,
+    unit: ""
+  }],
+  scaleZ: [{
+    value: 1,
+    unit: ""
+  }],
+  scale3d: [
+    {
+      value: 1,
+      unit: ""
+    },
+    {
+      value: 1,
+      unit: ""
+    },
+    {
+      value: 1,
+      unit: ""
+    }
+  ],
+  rotate: [{
+    value: 0,
+    unit: "deg"
+  }],
+  rotateX: [{
+    value: 0,
+    unit: "deg"
+  }],
+  rotateY: [{
+    value: 0,
+    unit: "deg"
+  }],
+  rotateZ: [{
+    value: 0,
+    unit: "deg"
+  }],
+  rotate3d: [
+    {
+      value: 0,
+      unit: ""
+    },
+    {
+      value: 0,
+      unit: ""
+    },
+    {
+      value: 1,
+      unit: ""
+    },
+    {
+      value: 0,
+      unit: "deg"
+    }
+  ],
+  skew: [{
+    value: 0,
+    unit: "deg"
+  }, {
+    value: 0,
+    unit: "deg"
+  }],
+  skewX: [{
+    value: 0,
+    unit: "deg"
+  }],
+  skewY: [{
+    value: 0,
+    unit: "deg"
+  }],
+  perspective: [{
+    value: 0,
+    unit: "px"
+  }],
+  blur: [{
+    value: 0,
+    unit: "px"
+  }],
+  brightness: [{
+    value: 1,
+    unit: ""
+  }],
+  contrast: [{
+    value: 1,
+    unit: ""
+  }],
+  grayscale: [{
+    value: 0,
+    unit: ""
+  }],
+  "hue-rotate": [{
+    value: 0,
+    unit: "deg"
+  }],
+  invert: [{
+    value: 0,
+    unit: ""
+  }],
+  opacity: [{
+    value: 1,
+    unit: ""
+  }],
+  saturate: [{
+    value: 1,
+    unit: ""
+  }],
+  sepia: [{
+    value: 0,
+    unit: ""
+  }],
+  "drop-shadow-1": [
+    {
+      value: 0,
+      unit: "px"
+    },
+    {
+      value: 0,
+      unit: "px"
+    },
+    {
+      value: 0,
+      unit: "px"
+    }
+  ],
+  "drop-shadow-2": [
+    {
+      value: 0,
+      unit: "px"
+    },
+    {
+      value: 0,
+      unit: "px"
+    },
+    {
+      value: 0,
+      unit: "px"
+    }
+  ]
+};
+var r = {
+  opacity: [0, 1],
+  blur: [0, Infinity],
+  brightness: [0, Infinity],
+  contrast: [0, Infinity],
+  grayscale: [0, 1],
+  invert: [0, 1],
+  sepia: [0, 1],
+  saturate: [0, Infinity]
+};
+var i = {
+  red: 0,
+  green: 0,
+  blue: 0,
+  alpha: 0
+};
+var a = false;
+function o(e2, t2, n2) {
+  return n2 < 0 && (n2 += 1), n2 > 1 && --n2, n2 < 1 / 6 ? e2 + (t2 - e2) * 6 * n2 : n2 < 1 / 2 ? t2 : n2 < 2 / 3 ? e2 + (t2 - e2) * (2 / 3 - n2) * 6 : e2;
+}
+var s = {
+  aliceblue: [
+    240,
+    248,
+    255,
+    1
+  ],
+  antiquewhite: [
+    250,
+    235,
+    215,
+    1
+  ],
+  aqua: [
+    0,
+    255,
+    255,
+    1
+  ],
+  aquamarine: [
+    127,
+    255,
+    212,
+    1
+  ],
+  azure: [
+    240,
+    255,
+    255,
+    1
+  ],
+  beige: [
+    245,
+    245,
+    220,
+    1
+  ],
+  bisque: [
+    255,
+    228,
+    196,
+    1
+  ],
+  black: [
+    0,
+    0,
+    0,
+    1
+  ],
+  blanchedalmond: [
+    255,
+    235,
+    205,
+    1
+  ],
+  blue: [
+    0,
+    0,
+    255,
+    1
+  ],
+  blueviolet: [
+    138,
+    43,
+    226,
+    1
+  ],
+  brown: [
+    165,
+    42,
+    42,
+    1
+  ],
+  burlywood: [
+    222,
+    184,
+    135,
+    1
+  ],
+  cadetblue: [
+    95,
+    158,
+    160,
+    1
+  ],
+  chartreuse: [
+    127,
+    255,
+    0,
+    1
+  ],
+  chocolate: [
+    210,
+    105,
+    30,
+    1
+  ],
+  coral: [
+    255,
+    127,
+    80,
+    1
+  ],
+  cornflowerblue: [
+    100,
+    149,
+    237,
+    1
+  ],
+  cornsilk: [
+    255,
+    248,
+    220,
+    1
+  ],
+  crimson: [
+    220,
+    20,
+    60,
+    1
+  ],
+  cyan: [
+    0,
+    255,
+    255,
+    1
+  ],
+  darkblue: [
+    0,
+    0,
+    139,
+    1
+  ],
+  darkcyan: [
+    0,
+    139,
+    139,
+    1
+  ],
+  darkgoldenrod: [
+    184,
+    134,
+    11,
+    1
+  ],
+  darkgray: [
+    169,
+    169,
+    169,
+    1
+  ],
+  darkgreen: [
+    0,
+    100,
+    0,
+    1
+  ],
+  darkgrey: [
+    169,
+    169,
+    169,
+    1
+  ],
+  darkkhaki: [
+    189,
+    183,
+    107,
+    1
+  ],
+  darkmagenta: [
+    139,
+    0,
+    139,
+    1
+  ],
+  darkolivegreen: [
+    85,
+    107,
+    47,
+    1
+  ],
+  darkorange: [
+    255,
+    140,
+    0,
+    1
+  ],
+  darkorchid: [
+    153,
+    50,
+    204,
+    1
+  ],
+  darkred: [
+    139,
+    0,
+    0,
+    1
+  ],
+  darksalmon: [
+    233,
+    150,
+    122,
+    1
+  ],
+  darkseagreen: [
+    143,
+    188,
+    143,
+    1
+  ],
+  darkslateblue: [
+    72,
+    61,
+    139,
+    1
+  ],
+  darkslategray: [
+    47,
+    79,
+    79,
+    1
+  ],
+  darkslategrey: [
+    47,
+    79,
+    79,
+    1
+  ],
+  darkturquoise: [
+    0,
+    206,
+    209,
+    1
+  ],
+  darkviolet: [
+    148,
+    0,
+    211,
+    1
+  ],
+  deeppink: [
+    255,
+    20,
+    147,
+    1
+  ],
+  deepskyblue: [
+    0,
+    191,
+    255,
+    1
+  ],
+  dimgray: [
+    105,
+    105,
+    105,
+    1
+  ],
+  dimgrey: [
+    105,
+    105,
+    105,
+    1
+  ],
+  dodgerblue: [
+    30,
+    144,
+    255,
+    1
+  ],
+  firebrick: [
+    178,
+    34,
+    34,
+    1
+  ],
+  floralwhite: [
+    255,
+    250,
+    240,
+    1
+  ],
+  forestgreen: [
+    34,
+    139,
+    34,
+    1
+  ],
+  fuchsia: [
+    255,
+    0,
+    255,
+    1
+  ],
+  gainsboro: [
+    220,
+    220,
+    220,
+    1
+  ],
+  ghostwhite: [
+    248,
+    248,
+    255,
+    1
+  ],
+  gold: [
+    255,
+    215,
+    0,
+    1
+  ],
+  goldenrod: [
+    218,
+    165,
+    32,
+    1
+  ],
+  gray: [
+    128,
+    128,
+    128,
+    1
+  ],
+  green: [
+    0,
+    128,
+    0,
+    1
+  ],
+  greenyellow: [
+    173,
+    255,
+    47,
+    1
+  ],
+  grey: [
+    128,
+    128,
+    128,
+    1
+  ],
+  honeydew: [
+    240,
+    255,
+    240,
+    1
+  ],
+  hotpink: [
+    255,
+    105,
+    180,
+    1
+  ],
+  indianred: [
+    205,
+    92,
+    92,
+    1
+  ],
+  indigo: [
+    75,
+    0,
+    130,
+    1
+  ],
+  ivory: [
+    255,
+    255,
+    240,
+    1
+  ],
+  khaki: [
+    240,
+    230,
+    140,
+    1
+  ],
+  lavender: [
+    230,
+    230,
+    250,
+    1
+  ],
+  lavenderblush: [
+    255,
+    240,
+    245,
+    1
+  ],
+  lawngreen: [
+    124,
+    252,
+    0,
+    1
+  ],
+  lemonchiffon: [
+    255,
+    250,
+    205,
+    1
+  ],
+  lightblue: [
+    173,
+    216,
+    230,
+    1
+  ],
+  lightcoral: [
+    240,
+    128,
+    128,
+    1
+  ],
+  lightcyan: [
+    224,
+    255,
+    255,
+    1
+  ],
+  lightgoldenrodyellow: [
+    250,
+    250,
+    210,
+    1
+  ],
+  lightgray: [
+    211,
+    211,
+    211,
+    1
+  ],
+  lightgreen: [
+    144,
+    238,
+    144,
+    1
+  ],
+  lightgrey: [
+    211,
+    211,
+    211,
+    1
+  ],
+  lightpink: [
+    255,
+    182,
+    193,
+    1
+  ],
+  lightsalmon: [
+    255,
+    160,
+    122,
+    1
+  ],
+  lightseagreen: [
+    32,
+    178,
+    170,
+    1
+  ],
+  lightskyblue: [
+    135,
+    206,
+    250,
+    1
+  ],
+  lightslategray: [
+    119,
+    136,
+    153,
+    1
+  ],
+  lightslategrey: [
+    119,
+    136,
+    153,
+    1
+  ],
+  lightsteelblue: [
+    176,
+    196,
+    222,
+    1
+  ],
+  lightyellow: [
+    255,
+    255,
+    224,
+    1
+  ],
+  lime: [
+    0,
+    255,
+    0,
+    1
+  ],
+  limegreen: [
+    50,
+    205,
+    50,
+    1
+  ],
+  linen: [
+    250,
+    240,
+    230,
+    1
+  ],
+  magenta: [
+    255,
+    0,
+    255,
+    1
+  ],
+  maroon: [
+    128,
+    0,
+    0,
+    1
+  ],
+  mediumaquamarine: [
+    102,
+    205,
+    170,
+    1
+  ],
+  mediumblue: [
+    0,
+    0,
+    205,
+    1
+  ],
+  mediumorchid: [
+    186,
+    85,
+    211,
+    1
+  ],
+  mediumpurple: [
+    147,
+    112,
+    219,
+    1
+  ],
+  mediumseagreen: [
+    60,
+    179,
+    113,
+    1
+  ],
+  mediumslateblue: [
+    123,
+    104,
+    238,
+    1
+  ],
+  mediumspringgreen: [
+    0,
+    250,
+    154,
+    1
+  ],
+  mediumturquoise: [
+    72,
+    209,
+    204,
+    1
+  ],
+  mediumvioletred: [
+    199,
+    21,
+    133,
+    1
+  ],
+  midnightblue: [
+    25,
+    25,
+    112,
+    1
+  ],
+  mintcream: [
+    245,
+    255,
+    250,
+    1
+  ],
+  mistyrose: [
+    255,
+    228,
+    225,
+    1
+  ],
+  moccasin: [
+    255,
+    228,
+    181,
+    1
+  ],
+  navajowhite: [
+    255,
+    222,
+    173,
+    1
+  ],
+  navy: [
+    0,
+    0,
+    128,
+    1
+  ],
+  oldlace: [
+    253,
+    245,
+    230,
+    1
+  ],
+  olive: [
+    128,
+    128,
+    0,
+    1
+  ],
+  olivedrab: [
+    107,
+    142,
+    35,
+    1
+  ],
+  orange: [
+    255,
+    165,
+    0,
+    1
+  ],
+  orangered: [
+    255,
+    69,
+    0,
+    1
+  ],
+  orchid: [
+    218,
+    112,
+    214,
+    1
+  ],
+  palegoldenrod: [
+    238,
+    232,
+    170,
+    1
+  ],
+  palegreen: [
+    152,
+    251,
+    152,
+    1
+  ],
+  paleturquoise: [
+    175,
+    238,
+    238,
+    1
+  ],
+  palevioletred: [
+    219,
+    112,
+    147,
+    1
+  ],
+  papayawhip: [
+    255,
+    239,
+    213,
+    1
+  ],
+  peachpuff: [
+    255,
+    218,
+    185,
+    1
+  ],
+  peru: [
+    205,
+    133,
+    63,
+    1
+  ],
+  pink: [
+    255,
+    192,
+    203,
+    1
+  ],
+  plum: [
+    221,
+    160,
+    221,
+    1
+  ],
+  powderblue: [
+    176,
+    224,
+    230,
+    1
+  ],
+  purple: [
+    128,
+    0,
+    128,
+    1
+  ],
+  rebeccapurple: [
+    102,
+    51,
+    153,
+    1
+  ],
+  red: [
+    255,
+    0,
+    0,
+    1
+  ],
+  rosybrown: [
+    188,
+    143,
+    143,
+    1
+  ],
+  royalblue: [
+    65,
+    105,
+    225,
+    1
+  ],
+  saddlebrown: [
+    139,
+    69,
+    19,
+    1
+  ],
+  salmon: [
+    250,
+    128,
+    114,
+    1
+  ],
+  sandybrown: [
+    244,
+    164,
+    96,
+    1
+  ],
+  seagreen: [
+    46,
+    139,
+    87,
+    1
+  ],
+  seashell: [
+    255,
+    245,
+    238,
+    1
+  ],
+  sienna: [
+    160,
+    82,
+    45,
+    1
+  ],
+  silver: [
+    192,
+    192,
+    192,
+    1
+  ],
+  skyblue: [
+    135,
+    206,
+    235,
+    1
+  ],
+  slateblue: [
+    106,
+    90,
+    205,
+    1
+  ],
+  slategray: [
+    112,
+    128,
+    144,
+    1
+  ],
+  slategrey: [
+    112,
+    128,
+    144,
+    1
+  ],
+  snow: [
+    255,
+    250,
+    250,
+    1
+  ],
+  springgreen: [
+    0,
+    255,
+    127,
+    1
+  ],
+  steelblue: [
+    70,
+    130,
+    180,
+    1
+  ],
+  tan: [
+    210,
+    180,
+    140,
+    1
+  ],
+  teal: [
+    0,
+    128,
+    128,
+    1
+  ],
+  thistle: [
+    216,
+    191,
+    216,
+    1
+  ],
+  tomato: [
+    255,
+    99,
+    71,
+    1
+  ],
+  turquoise: [
+    64,
+    224,
+    208,
+    1
+  ],
+  violet: [
+    238,
+    130,
+    238,
+    1
+  ],
+  wheat: [
+    245,
+    222,
+    179,
+    1
+  ],
+  white: [
+    255,
+    255,
+    255,
+    1
+  ],
+  whitesmoke: [
+    245,
+    245,
+    245,
+    1
+  ],
+  yellow: [
+    255,
+    255,
+    0,
+    1
+  ],
+  yellowgreen: [
+    154,
+    205,
+    50,
+    1
+  ],
+  transparent: [
+    0,
+    0,
+    0,
+    0
+  ]
+};
+var c = class {
+  constructor(e2) {
+    this.setKeyframes(e2);
+  }
+  setKeyframes(e2) {
+    this.keyframes = Object.keys(e2).map(Number).sort((e3, t2) => e3 - t2).map((t2) => ({
+      percent: t2,
+      values: this.flatten(e2[t2])
+    }));
+    let r2 = {};
+    for (let e3 of t)
+      r2[e3] = /* @__PURE__ */ new Set();
+    for (let e3 of this.keyframes)
+      for (let n2 in e3.values) {
+        let e4 = n2.indexOf(":");
+        if (e4 === -1)
+          continue;
+        let i2 = n2.substring(0, e4), a2 = n2.substring(e4 + 1);
+        a2 !== "__order" && t.has(i2) && r2[i2].add(a2);
+      }
+    for (let e3 of t) {
+      if (r2[e3].size === 0)
+        continue;
+      let t2 = `${e3}:__order`;
+      for (let a2 of this.keyframes) {
+        if (!(t2 in a2.values)) {
+          a2.values[t2] = {
+            discrete: true,
+            value: [...r2[e3]]
+          };
+          for (let t3 of r2[e3]) {
+            let r3 = `${e3}:${t3}`, o2 = n[t3] || [{
+              value: 0,
+              unit: ""
+            }];
+            a2.values[r3] = { args: o2.map((e4) => ({ ...e4 })) }, t3.startsWith("drop-shadow-") && (a2.values[r3].color = { ...i });
+          }
+          continue;
+        }
+        for (let o2 of r2[e3]) {
+          let r3 = `${e3}:${o2}`;
+          if (!(r3 in a2.values)) {
+            let e4 = n[o2] || [{
+              value: 0,
+              unit: ""
+            }];
+            a2.values[r3] = { args: e4.map((e5) => ({ ...e5 })) }, o2.startsWith("drop-shadow-") && (a2.values[r3].color = { ...i }), a2.values[t2].value.includes(o2) || a2.values[t2].value.push(o2);
+          }
+        }
+      }
+    }
+    this._allKeys = /* @__PURE__ */ new Set();
+    for (let e3 of this.keyframes)
+      for (let t2 in e3.values)
+        t2.endsWith(":__order") || this._allKeys.add(t2);
+    this._keyFrames = {};
+    for (let e3 of this._allKeys)
+      this._keyFrames[e3] = this.keyframes.filter((t2) => e3 in t2.values);
+    this._orders = {};
+    for (let e3 of t) {
+      let t2 = `${e3}:__order`, n2 = this.keyframes.filter((e4) => t2 in e4.values);
+      if (n2.length === 0)
+        continue;
+      let r3 = /* @__PURE__ */ new Set(), i2 = [];
+      for (let e4 of n2)
+        for (let n3 of e4.values[t2].value)
+          r3.has(n3) || (r3.add(n3), i2.push(n3));
+      this._orders[e3] = i2;
+    }
+  }
+  flatten(n2) {
+    let r2 = {};
+    for (let i2 in n2)
+      t.has(i2) ? Object.assign(r2, this.flattenFunctions(i2, n2[i2])) : this.isColor(n2[i2]) ? r2[i2] = this.parseColor(n2[i2]) || {
+        discrete: true,
+        value: n2[i2]
+      } : e.has(i2) ? r2[i2] = {
+        discrete: true,
+        value: n2[i2]
+      } : r2[i2] = this.parseValue(n2[i2]) || {
+        discrete: true,
+        value: n2[i2]
+      };
+    return r2;
+  }
+  flattenFunctions(e2, t2) {
+    let n2 = {}, r2 = [], i2 = {};
+    for (let { name: o2, args: s2, color: c2 } of this.parseFunctions(t2)) {
+      let t3 = o2;
+      if (o2 === "drop-shadow") {
+        if (i2[o2] = (i2[o2] || 0) + 1, i2[o2] > 2) {
+          a || (a = true, console.warn("FrameEngine: Only the first 2 drop-shadow functions per keyframe are interpolated. Additional drop-shadows are ignored."));
+          continue;
+        }
+        t3 = `${o2}-${i2[o2]}`;
+      }
+      let l = { args: s2 };
+      c2 && (l.color = c2), n2[`${e2}:${t3}`] = l, r2.push(t3);
+    }
+    return n2[`${e2}:__order`] = {
+      discrete: true,
+      value: r2
+    }, n2;
+  }
+  parseFunctions(e2) {
+    let t2 = [], n2 = 0, r2 = e2.length;
+    for (; n2 < r2; ) {
+      for (; n2 < r2 && /\s/.test(e2[n2]); )
+        n2++;
+      if (n2 >= r2)
+        break;
+      let i2 = "";
+      for (; n2 < r2 && /[\w-]/.test(e2[n2]); )
+        i2 += e2[n2], n2++;
+      if (!i2 || n2 >= r2 || e2[n2] !== "(")
+        continue;
+      n2++;
+      let a2 = 1, o2 = "";
+      for (; n2 < r2 && a2 > 0; ) {
+        if (e2[n2] === "(")
+          a2++;
+        else if (e2[n2] === ")" && (a2--, a2 === 0)) {
+          n2++;
+          break;
+        }
+        o2 += e2[n2], n2++;
+      }
+      if (i2 === "drop-shadow") {
+        let e3 = this.splitArgs(o2), n3 = [], r3 = null;
+        for (let t3 of e3)
+          if (this.isColor(t3)) {
+            let e4 = this.parseColor(t3);
+            e4 && (r3 = e4);
+          } else {
+            let e4 = t3.match(/^(-?\d*\.?\d+)(\D*)$/);
+            n3.push(e4 ? {
+              value: parseFloat(e4[1]),
+              unit: e4[2]
+            } : {
+              value: 0,
+              unit: ""
+            });
+          }
+        t2.push({
+          name: i2,
+          args: n3,
+          color: r3
+        });
+      } else {
+        let e3 = o2.split(/\s*,\s*|\s+/).map((e4) => {
+          let t3 = e4.match(/^(-?\d*\.?\d+)(\D*)$/);
+          return t3 ? {
+            value: parseFloat(t3[1]),
+            unit: t3[2]
+          } : {
+            value: 0,
+            unit: ""
+          };
+        });
+        t2.push({
+          name: i2,
+          args: e3
+        });
+      }
+    }
+    return t2;
+  }
+  splitArgs(e2) {
+    let t2 = [], n2 = "", r2 = 0;
+    for (let i2 = 0; i2 < e2.length; i2++) {
+      let a2 = e2[i2];
+      a2 === "(" ? r2++ : a2 === ")" && r2--, r2 === 0 && (a2 === " " || a2 === ",") ? (n2.trim() && t2.push(n2.trim()), n2 = "") : n2 += a2;
+    }
+    return n2.trim() && t2.push(n2.trim()), t2;
+  }
+  parseValue(e2) {
+    if (typeof e2 == "number")
+      return {
+        value: e2,
+        unit: ""
+      };
+    let t2 = String(e2).match(/^(-?\d*\.?\d+)(\D*)$/);
+    return t2 ? {
+      value: parseFloat(t2[1]),
+      unit: t2[2]
+    } : null;
+  }
+  parseColor(e2) {
+    let t2 = this.colorToRGBA(e2);
+    if (!t2)
+      return null;
+    let [n2, r2, i2, a2] = t2;
+    return {
+      red: n2,
+      green: r2,
+      blue: i2,
+      alpha: a2
+    };
+  }
+  colorToRGBA(e2) {
+    if (typeof e2 != "string")
+      return null;
+    let t2 = s[e2.toLowerCase()];
+    if (t2)
+      return t2;
+    let n2 = e2.match(/^color\(\s*srgb\s+([+-]?(?:\d*\.?\d+)(?:e[+-]?\d+)?)\s+([+-]?(?:\d*\.?\d+)(?:e[+-]?\d+)?)\s+([+-]?(?:\d*\.?\d+)(?:e[+-]?\d+)?)(?:\s*\/\s*([+-]?(?:\d*\.?\d+)(?:e[+-]?\d+)?)(%)?)?\s*\)$/i);
+    if (n2) {
+      let e3 = n2[4] === void 0 ? 1 : parseFloat(n2[4]) / (n2[5] ? 100 : 1);
+      return [
+        parseFloat(n2[1]) * 255,
+        parseFloat(n2[2]) * 255,
+        parseFloat(n2[3]) * 255,
+        e3
+      ];
+    }
+    if (/^#[0-9A-Fa-f]{3}$/.test(e2))
+      return [
+        parseInt(e2[1] + e2[1], 16),
+        parseInt(e2[2] + e2[2], 16),
+        parseInt(e2[3] + e2[3], 16),
+        1
+      ];
+    if (/^#[0-9A-Fa-f]{4}$/.test(e2))
+      return [
+        parseInt(e2[1] + e2[1], 16),
+        parseInt(e2[2] + e2[2], 16),
+        parseInt(e2[3] + e2[3], 16),
+        parseInt(e2[4] + e2[4], 16) / 255
+      ];
+    if (/^#[0-9A-Fa-f]{6}$/.test(e2))
+      return [
+        parseInt(e2.slice(1, 3), 16),
+        parseInt(e2.slice(3, 5), 16),
+        parseInt(e2.slice(5, 7), 16),
+        1
+      ];
+    if (/^#[0-9A-Fa-f]{8}$/.test(e2))
+      return [
+        parseInt(e2.slice(1, 3), 16),
+        parseInt(e2.slice(3, 5), 16),
+        parseInt(e2.slice(5, 7), 16),
+        parseInt(e2.slice(7, 9), 16) / 255
+      ];
+    let r2 = e2.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/);
+    if (r2)
+      return [
+        parseInt(r2[1], 10),
+        parseInt(r2[2], 10),
+        parseInt(r2[3], 10),
+        r2[4] === void 0 ? 1 : parseFloat(r2[4])
+      ];
+    let i2 = e2.match(/^rgba?\(\s*(\d+)\s+(\d+)\s+(\d+)\s*(?:\/\s*([\d.]+)\s*)?\)$/);
+    if (i2)
+      return [
+        parseInt(i2[1], 10),
+        parseInt(i2[2], 10),
+        parseInt(i2[3], 10),
+        i2[4] === void 0 ? 1 : parseFloat(i2[4])
+      ];
+    let a2 = e2.match(/^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*(?:,\s*([\d.]+)\s*)?\)$/);
+    if (a2)
+      return this._hslToRgba(parseFloat(a2[1]), parseFloat(a2[2]), parseFloat(a2[3]), a2[4] === void 0 ? 1 : parseFloat(a2[4]));
+    let o2 = e2.match(/^hsla?\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*(?:\/\s*([\d.]+)\s*)?\)$/);
+    return o2 ? this._hslToRgba(parseFloat(o2[1]), parseFloat(o2[2]), parseFloat(o2[3]), o2[4] === void 0 ? 1 : parseFloat(o2[4])) : null;
+  }
+  _hslToRgba(e2, t2, n2, r2) {
+    let i2 = e2 / 360, a2 = t2 / 100, s2 = n2 / 100;
+    if (a2 === 0) {
+      let e3 = Math.round(s2 * 255);
+      return [
+        e3,
+        e3,
+        e3,
+        r2
+      ];
+    }
+    let c2 = s2 < 0.5 ? s2 * (1 + a2) : s2 + a2 - s2 * a2, l = 2 * s2 - c2;
+    return [
+      Math.round(o(l, c2, i2 + 1 / 3) * 255),
+      Math.round(o(l, c2, i2) * 255),
+      Math.round(o(l, c2, i2 - 1 / 3) * 255),
+      r2
+    ];
+  }
+  isColor(e2) {
+    return typeof e2 == "string" ? /^(#[0-9A-Fa-f]{3}$|#[0-9A-Fa-f]{4}$|#[0-9A-Fa-f]{6}$|#[0-9A-Fa-f]{8}$|rgba?\s*\(|hsla?\s*\()/.test(e2) || /^color\(\s*srgb\s/i.test(e2) ? true : e2.toLowerCase() in s : false;
+  }
+  lerp(e2, t2, n2) {
+    return e2 + (t2 - e2) * n2;
+  }
+  lerpColor(e2, t2, n2) {
+    let r2 = (e3, t3, n3) => Math.min(n3, Math.max(t3, e3));
+    return {
+      red: Math.round(r2(this.lerp(e2.red, t2.red, n2), 0, 255)),
+      green: Math.round(r2(this.lerp(e2.green, t2.green, n2), 0, 255)),
+      blue: Math.round(r2(this.lerp(e2.blue, t2.blue, n2), 0, 255)),
+      alpha: parseFloat(r2(this.lerp(e2.alpha, t2.alpha, n2), 0, 1).toFixed(4))
+    };
+  }
+  format(e2) {
+    return parseFloat(e2.toFixed(4)).toString();
+  }
+  findFramesAndFactor(e2, t2) {
+    if (e2.length === 0)
+      return null;
+    if (e2.length === 1)
+      return {
+        from: e2[0],
+        to: e2[0],
+        factor: 0
+      };
+    let n2 = e2[0], r2 = e2[e2.length - 1];
+    if (t2 <= n2.percent) {
+      let r3 = e2[1].percent - n2.percent;
+      return {
+        from: n2,
+        to: e2[1],
+        factor: r3 === 0 ? 1 : (t2 - n2.percent) / r3
+      };
+    }
+    if (t2 >= r2.percent) {
+      let n3 = e2[e2.length - 2], i2 = r2.percent - n3.percent;
+      return {
+        from: n3,
+        to: r2,
+        factor: i2 === 0 ? 1 : (t2 - n3.percent) / i2
+      };
+    }
+    for (let n3 = 0; n3 < e2.length - 1; n3++)
+      if (t2 >= e2[n3].percent && t2 <= e2[n3 + 1].percent) {
+        let r3 = e2[n3 + 1].percent - e2[n3].percent;
+        return {
+          from: e2[n3],
+          to: e2[n3 + 1],
+          factor: r3 === 0 ? 1 : (t2 - e2[n3].percent) / r3
+        };
+      }
+    return {
+      from: r2,
+      to: r2,
+      factor: 0
+    };
+  }
+  getDiscrete(e2, t2) {
+    let n2 = this._keyFrames[e2] || this.keyframes.filter((t3) => e2 in t3.values);
+    if (n2.length === 0)
+      return null;
+    let r2 = n2[0];
+    for (let e3 of n2)
+      if (e3.percent <= t2)
+        r2 = e3;
+      else
+        break;
+    return r2.values[e2].value;
+  }
+  getDefault(e2) {
+    let t2 = e2.split(":")[1];
+    return t2 && n[t2] ? n[t2] : [{
+      value: 0,
+      unit: ""
+    }];
+  }
+  getFrame(e2) {
+    let t2 = e2 * 100, n2 = this._allKeys, a2 = {};
+    for (let e3 of n2) {
+      let n3 = this._keyFrames[e3];
+      if (!n3 || n3.length === 0)
+        continue;
+      let o2 = n3[0].values[e3];
+      if (o2 && o2.discrete) {
+        a2[e3] = this.getDiscrete(e3, t2);
+        continue;
+      }
+      let { from: s2, to: c2, factor: l } = this.findFramesAndFactor(n3, t2), u = s2.values[e3], d = c2.values[e3];
+      if (u && "red" in u) {
+        a2[e3] = this.lerpColor(u, d, l);
+        continue;
+      }
+      if (u && u.args) {
+        let t3 = d.args || this.getDefault(e3), n4 = this.getDefault(e3), o3 = Math.max(u.args.length, t3.length), s3 = [];
+        for (let e4 = 0; e4 < o3; e4++) {
+          let r2 = u.args[e4] || n4[e4] || {
+            value: 0,
+            unit: ""
+          }, i2 = t3[e4] || n4[e4] || {
+            value: 0,
+            unit: ""
+          };
+          s3.push({
+            value: this.lerp(r2.value, i2.value, l),
+            unit: r2.unit || i2.unit
+          });
+        }
+        let c3 = r[e3.includes(":") ? e3.substring(e3.indexOf(":") + 1) : e3];
+        if (c3)
+          for (let e4 of s3)
+            e4.value = Math.min(c3[1], Math.max(c3[0], e4.value));
+        let f2 = { args: s3 };
+        (u.color || d.color) && (f2.color = this.lerpColor(u.color || i, d.color || i, l)), a2[e3] = f2;
+        continue;
+      }
+      if (u && "value" in u) {
+        let t3 = d || this.getDefault(e3)[0], n4 = this.lerp(u.value, t3.value, l), i2 = r[e3];
+        i2 && (n4 = Math.min(i2[1], Math.max(i2[0], n4))), a2[e3] = {
+          value: n4,
+          unit: u.unit
+        };
+      }
+    }
+    return this.toStyles(a2);
+  }
+  toStyles(e2) {
+    let n2 = {}, r2 = {};
+    for (let i2 in e2) {
+      let a2 = e2[i2], o2 = i2.indexOf(":");
+      if (o2 !== -1) {
+        let e3 = i2.substring(0, o2), n3 = i2.substring(o2 + 1);
+        if (t.has(e3)) {
+          if (r2[e3] || (r2[e3] = {}), a2.args)
+            if (n3.startsWith("drop-shadow-")) {
+              let t2 = n3.replace(/-\d+$/, ""), i3 = a2.args.map((e4) => `${this.format(e4.value)}${e4.unit}`).join(" ");
+              if (a2.color) {
+                let o3 = a2.color, s2 = o3.alpha < 1 ? `rgba(${o3.red},${o3.green},${o3.blue},${o3.alpha})` : `rgb(${o3.red},${o3.green},${o3.blue})`;
+                r2[e3][n3] = `${t2}(${i3} ${s2})`;
+              } else
+                r2[e3][n3] = `${t2}(${i3})`;
+            } else
+              r2[e3][n3] = `${n3}(${a2.args.map((e4) => `${this.format(e4.value)}${e4.unit}`).join(", ")})`;
+          else
+            r2[e3][n3] = `${n3}(${this.format(a2.value)}${a2.unit})`;
+          continue;
+        }
+      }
+      if (typeof a2 == "string" || typeof a2 == "number") {
+        n2[i2] = a2;
+        continue;
+      }
+      if (a2 && "red" in a2) {
+        n2[i2] = a2.alpha < 1 ? `rgba(${a2.red},${a2.green},${a2.blue},${a2.alpha})` : `rgb(${a2.red},${a2.green},${a2.blue})`;
+        continue;
+      }
+      if (a2 && "value" in a2) {
+        n2[i2] = `${this.format(a2.value)}${a2.unit}`;
+        continue;
+      }
+      n2[i2] = a2;
+    }
+    for (let e3 in r2) {
+      let t2 = r2[e3], i2 = (this._orders[e3] || Object.keys(t2)).filter((e4) => t2[e4]).map((e4) => t2[e4]);
+      i2.length > 0 && (n2[e3] = i2.join(" "));
+    }
+    return n2;
+  }
+};
+
+// node_modules/@magic-spells/morph-engine/dist/morph-engine.esm.js
+var EventEmitter = class {
+  #events;
+  constructor() {
+    this.#events = /* @__PURE__ */ new Map();
+  }
+  /**
+  * Binds a listener to an event.
+  * @param {string} event - The event to bind the listener to.
+  * @param {Function} listener - The listener function to bind.
+  * @returns {EventEmitter} The current instance for chaining.
+  * @throws {TypeError} If the listener is not a function.
+  */
+  on(event, listener) {
+    if (typeof listener !== "function")
+      throw new TypeError("Listener must be a function");
+    const listeners = this.#events.get(event) || [];
+    if (!listeners.includes(listener))
+      listeners.push(listener);
+    this.#events.set(event, listeners);
+    return this;
+  }
+  /**
+  * Unbinds a listener from an event.
+  * @param {string} event - The event to unbind the listener from.
+  * @param {Function} listener - The listener function to unbind.
+  * @returns {EventEmitter} The current instance for chaining.
+  */
+  off(event, listener) {
+    const listeners = this.#events.get(event);
+    if (!listeners)
+      return this;
+    const index = listeners.indexOf(listener);
+    if (index !== -1) {
+      listeners.splice(index, 1);
+      if (listeners.length === 0)
+        this.#events.delete(event);
+      else
+        this.#events.set(event, listeners);
+    }
+    return this;
+  }
+  /**
+  * Triggers an event and calls all bound listeners.
+  * @param {string} event - The event to trigger.
+  * @param {...*} args - Arguments to pass to the listener functions.
+  * @returns {boolean} True if the event had listeners, false otherwise.
+  */
+  emit(event, ...args) {
+    const listeners = this.#events.get(event);
+    if (!listeners || listeners.length === 0)
+      return false;
+    const snapshot = listeners.slice();
+    for (let i2 = 0, n2 = snapshot.length; i2 < n2; ++i2)
+      try {
+        snapshot[i2].apply(this, args);
+      } catch (error) {
+        console.error(`Error in listener for event '${event}':`, error);
+      }
+    return true;
+  }
+  /**
+  * Removes all listeners for a specific event or all events.
+  * @param {string} [event] - The event to remove listeners from. If not provided, removes all listeners.
+  * @returns {EventEmitter} The current instance for chaining.
+  */
+  removeAllListeners(event) {
+    if (event)
+      this.#events.delete(event);
+    else
+      this.#events.clear();
+    return this;
+  }
+};
+var TRAVEL = 1e3;
+var SETTLE_POSITION_EPSILON = 1;
+var SETTLE_DELTA_EPSILON = 0.5;
+var DEFAULT_STYLE_PROPERTIES = [
+  "backgroundColor",
+  "borderTopLeftRadius",
+  "borderTopRightRadius",
+  "borderBottomRightRadius",
+  "borderBottomLeftRadius",
+  "borderTopWidth",
+  "borderRightWidth",
+  "borderBottomWidth",
+  "borderLeftWidth",
+  "borderTopColor",
+  "borderRightColor",
+  "borderBottomColor",
+  "borderLeftColor"
+];
+var BORDER_SIDES = [
+  "Top",
+  "Right",
+  "Bottom",
+  "Left"
+];
+var CLAMP_POSITIVE = [
+  "width",
+  "height",
+  "borderTopLeftRadius",
+  "borderTopRightRadius",
+  "borderBottomRightRadius",
+  "borderBottomLeftRadius",
+  "borderTopWidth",
+  "borderRightWidth",
+  "borderBottomWidth",
+  "borderLeftWidth"
+];
+var MANAGED_PROPERTIES = [
+  "visibility",
+  "display",
+  "opacity",
+  "transform",
+  "transformOrigin",
+  "willChange",
+  "transition"
+];
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+function round(value) {
+  return Math.round(value * 100) / 100;
+}
+var COLOR_PATTERN = /rgba?\([^)]*\)/;
+function parseColor(colorString) {
+  const match = colorString.match(/rgba?\(([^)]*)\)/);
+  if (!match)
+    return {
+      red: 0,
+      green: 0,
+      blue: 0,
+      alpha: 1
+    };
+  const parts = match[1].split(",").map((part) => parseFloat(part));
+  return {
+    red: parts[0] || 0,
+    green: parts[1] || 0,
+    blue: parts[2] || 0,
+    alpha: parts.length > 3 ? parts[3] : 1
+  };
+}
+function parseShadow(computedShadow) {
+  if (!computedShadow || computedShadow === "none")
+    return null;
+  let first = computedShadow;
+  let depth = 0;
+  for (let i2 = 0; i2 < computedShadow.length; i2++) {
+    const character = computedShadow[i2];
+    if (character === "(")
+      depth++;
+    else if (character === ")")
+      depth--;
+    else if (character === "," && depth === 0) {
+      first = computedShadow.slice(0, i2);
+      break;
+    }
+  }
+  const colorMatch = first.match(COLOR_PATTERN);
+  const color = parseColor(colorMatch ? colorMatch[0] : "rgba(0, 0, 0, 1)");
+  const [x = 0, y = 0, blur = 0, spread = 0] = first.replace(COLOR_PATTERN, "").trim().split(/\s+/).filter((token) => token !== "inset" && token !== "").map(parseFloat);
+  return {
+    x,
+    y,
+    blur,
+    spread,
+    color
+  };
+}
+function lerpShadow(fromShadow, toShadow, p) {
+  if (!fromShadow && !toShadow)
+    return "none";
+  const zeroed = (other) => ({
+    x: 0,
+    y: 0,
+    blur: 0,
+    spread: 0,
+    color: {
+      ...other.color,
+      alpha: 0
+    }
+  });
+  const start = fromShadow || zeroed(toShadow);
+  const end = toShadow || zeroed(fromShadow);
+  const lerp = (a2, b2) => a2 + (b2 - a2) * p;
+  return `${round(lerp(start.x, end.x))}px ${round(lerp(start.y, end.y))}px ${round(Math.max(0, lerp(start.blur, end.blur)))}px ${round(lerp(start.spread, end.spread))}px rgba(${Math.round(clamp(lerp(start.color.red, end.color.red), 0, 255))}, ${Math.round(clamp(lerp(start.color.green, end.color.green), 0, 255))}, ${Math.round(clamp(lerp(start.color.blue, end.color.blue), 0, 255))}, ${round(clamp(lerp(start.color.alpha, end.color.alpha), 0, 1))})`;
+}
+var MorphEngine = class extends EventEmitter {
+  #spring;
+  #frames = null;
+  #blob = null;
+  #cloneWrapper = null;
+  #styleProperties;
+  #state = "idle";
+  #p = 0;
+  #resolveRun = null;
+  #sourceElement = null;
+  #targetElement = null;
+  #displayOverride = null;
+  #savedInline = /* @__PURE__ */ new Map();
+  #savedBodyOverflow = null;
+  #fromMeasure = null;
+  #toMeasure = null;
+  #toElement = null;
+  #shownPosition = TRAVEL;
+  #revealed = false;
+  #revealStart = 0.75;
+  #revealFull = 0.875;
+  #sourceRevealed = false;
+  #sourceRevealUntil = 0.25;
+  #springTarget = TRAVEL;
+  #lastPosition = 0;
+  #settleCount = 0;
+  /**
+  * @param {Object} [options]
+  * @param {number} [options.attraction=0.1] - Spring attraction (0, 1) exclusive
+  * @param {number} [options.friction=0.32] - Spring friction (0, 1) exclusive
+  * @param {string[]} [options.styleProperties] - Computed styles captured and morphed
+  *   (camelCase longhands — shorthands snap instead of interpolating)
+  * @param {number} [options.revealAt=0.75] - Progress where the target reveal window begins
+  * @param {number} [options.sourceRevealUntil=0.25] - Progress where the source reveal window
+  *   ends (mirrors revealAt at the p→0 end so reversals crossfade instead of hard-swapping)
+  * @param {number} [options.cloneFadeUntil=0.25] - Progress where the source-content clone
+  *   finishes dissolving
+  * @param {boolean} [options.cloneContents=true] - Clone the source's content into the blob
+  * @param {boolean} [options.lockScroll=true] - Lock body scroll from show until fully
+  *   hidden — a scroll mid-morph would strand the fixed-position blob
+  * @param {number} [options.zIndex=9999] - Blob z-index
+  */
+  constructor({ attraction = 0.1, friction = 0.32, styleProperties = DEFAULT_STYLE_PROPERTIES, revealAt = 0.75, sourceRevealUntil = 0.25, cloneFadeUntil = 0.25, cloneContents = true, lockScroll = true, zIndex = 9999 } = {}) {
+    super();
+    this.#spring = new b({
+      attraction,
+      friction
+    });
+    this.#styleProperties = styleProperties;
+    this.revealAt = revealAt;
+    this.sourceRevealUntil = sourceRevealUntil;
+    this.cloneFadeUntil = cloneFadeUntil;
+    this.cloneContents = cloneContents;
+    this.lockScroll = lockScroll;
+    this.zIndex = zIndex;
+    this.#spring.on("change", ({ position }) => {
+      if (this.#state !== "showing" && this.#state !== "hiding")
+        return;
+      const p = position / TRAVEL;
+      this.#p = p;
+      this.#applyFrame(p);
+      this.emit("change", {
+        progress: p,
+        phase: this.#state
+      });
+      if (Math.abs(position - this.#springTarget) < SETTLE_POSITION_EPSILON && Math.abs(position - this.#lastPosition) < SETTLE_DELTA_EPSILON) {
+        if (++this.#settleCount >= 2) {
+          this.#applyFrame(this.#springTarget / TRAVEL);
+          this.#spring.stop();
+          this.#settle();
+          return;
+        }
+      } else
+        this.#settleCount = 0;
+      this.#lastPosition = position;
+    });
+    this.#spring.on("complete", () => this.#settle());
+  }
+  /** @returns {string} 'idle' | 'showing' | 'shown' | 'hiding' */
+  get state() {
+    return this.#state;
+  }
+  /** @returns {number} Last-known morph progress (overshoots past 1 while settling) */
+  get progress() {
+    return this.#p;
+  }
+  /**
+  * Morphs from the source element to the target element. Called while hiding,
+  * it reverses the in-flight morph instead (arguments are ignored).
+  * @param {Object} options
+  * @param {HTMLElement} options.from - Source element (stays hidden while shown)
+  * @param {HTMLElement} options.to - Target element (revealed as the blob arrives)
+  * @param {string} [options.display] - display value applied to a display:none target
+  * @returns {Promise<boolean>} true when settled, false if superseded or rejected
+  */
+  show({ from, to, display = null } = {}) {
+    if (this.#state === "showing" || this.#state === "shown") {
+      console.warn(`MorphEngine: show() ignored \u2014 already ${this.#state}`);
+      return Promise.resolve(false);
+    }
+    if (this.#state === "hiding")
+      return this.#reverse("showing");
+    if (!from || !to)
+      throw new Error("MorphEngine: show() requires { from, to } elements.");
+    this.#sourceElement = from;
+    this.#targetElement = to;
+    this.#displayOverride = display;
+    this.#saveInline(from);
+    this.#saveInline(to);
+    if (this.lockScroll) {
+      this.#savedBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
+    return this.#morph(from, to, "showing");
+  }
+  /**
+  * Morphs back from the target to the source. Called while showing, it
+  * reverses the in-flight morph.
+  * @returns {Promise<boolean>} true when settled, false if superseded or rejected
+  */
+  hide() {
+    if (this.#state === "idle" || this.#state === "hiding") {
+      console.warn(`MorphEngine: hide() ignored \u2014 ${this.#state}`);
+      return Promise.resolve(false);
+    }
+    if (this.#state === "showing")
+      return this.#reverse("hiding");
+    return this.#morph(this.#targetElement, this.#sourceElement, "hiding");
+  }
+  /**
+  * Aborts any morph and restores both elements to their pre-show resting state.
+  */
+  stop() {
+    if (this.#state === "idle")
+      return;
+    this.#supersede();
+    this.#spring.stop();
+    this.#removeBlob();
+    const source = this.#sourceElement;
+    const target = this.#targetElement;
+    if (source) {
+      this.#restoreInline(source);
+      source.removeAttribute("morphing");
+    }
+    if (target) {
+      this.#restoreInline(target);
+      target.removeAttribute("morphing");
+      target.removeAttribute("morph-shown");
+    }
+    this.#unlockScroll();
+    const progress = this.#p;
+    this.#state = "idle";
+    this.#p = 0;
+    this.emit("stop", { progress });
+  }
+  /**
+  * Stops and removes all listeners. The engine is unusable afterwards.
+  */
+  destroy() {
+    this.stop();
+    this.#spring.removeAllListeners();
+    this.removeAllListeners();
+  }
+  /** @param {number} attraction - Spring attraction (0, 1) exclusive, live-tunable */
+  setAttraction(attraction) {
+    this.#spring.setAttraction(attraction);
+  }
+  /** @param {number} friction - Spring friction (0, 1) exclusive, live-tunable */
+  setFriction(friction) {
+    this.#spring.setFriction(friction);
+  }
+  /**
+  * The single morph routine — show and hide are the same mechanics with the
+  * roles swapped. The blob starts pixel-identical to fromElement (its content
+  * cloned and frozen on top), springs to toElement's rect and styles, and
+  * reveals toElement across the final stretch.
+  */
+  #morph(fromElement, toElement, phase) {
+    this.#supersede();
+    const fromMeasure = this.#measure(fromElement);
+    const toMeasure = this.#measure(toElement);
+    this.#fromMeasure = fromMeasure;
+    this.#toMeasure = toMeasure;
+    this.#toElement = toElement;
+    this.#shownPosition = phase === "showing" ? TRAVEL : 0;
+    this.#state = phase;
+    this.#revealed = false;
+    this.#sourceRevealed = false;
+    this.#revealStart = this.revealAt;
+    this.#revealFull = this.revealAt + (1 - this.revealAt) / 2;
+    this.#sourceRevealUntil = this.sourceRevealUntil;
+    this.#reconcileBorderColors(fromMeasure, toMeasure);
+    this.#frames = new c(this.#buildKeyframes(fromMeasure, toMeasure));
+    this.#removeBlob();
+    this.#createBlob(fromMeasure, toMeasure);
+    this.#markElements(phase);
+    fromElement.style.transition = "none";
+    toElement.style.transition = "none";
+    fromElement.style.visibility = "hidden";
+    toElement.style.visibility = "hidden";
+    toElement.style.opacity = "0";
+    this.#applyFrame(0);
+    this.emit(phase === "showing" ? "show" : "hide", {
+      from: this.#sourceElement,
+      to: this.#targetElement
+    });
+    const promise = new Promise((resolve) => {
+      this.#resolveRun = resolve;
+    });
+    this.#armSettle(0, TRAVEL);
+    this.#spring.animateTo(0, TRAVEL);
+    return promise;
+  }
+  /**
+  * Reverses the in-flight morph. The keyframe mapping, blob, and clone are all
+  * pure functions of p, so travelling back unwinds everything automatically —
+  * the reveal window un-reveals, the clone fades back in, and the blob lands
+  * exactly where it started.
+  */
+  #reverse(newPhase) {
+    this.#supersede();
+    this.#state = newPhase;
+    this.#markElements(newPhase);
+    const targetPosition = newPhase === "showing" ? this.#shownPosition : TRAVEL - this.#shownPosition;
+    this.emit(newPhase === "showing" ? "show" : "hide", {
+      from: this.#sourceElement,
+      to: this.#targetElement
+    });
+    const promise = new Promise((resolve) => {
+      this.#resolveRun = resolve;
+    });
+    this.#armSettle(this.#p * TRAVEL, targetPosition);
+    this.#spring.animateTo(this.#p * TRAVEL, targetPosition);
+    return promise;
+  }
+  /**
+  * Arms the early-settle detector for a fresh run. Called at every animateTo so
+  * a reversal never inherits stale proximity state from the run it interrupts.
+  * @param {number} startPosition - Spring position the run begins from
+  * @param {number} target - Spring position the run is heading toward
+  */
+  #armSettle(startPosition, target) {
+    this.#springTarget = target;
+    this.#lastPosition = startPosition;
+    this.#settleCount = 0;
+  }
+  /**
+  * Spring settled — finalize whichever logical state we were heading toward.
+  * The spring's final change event already applied the exact end frame.
+  */
+  #settle() {
+    if (this.#state !== "showing" && this.#state !== "hiding")
+      return;
+    const resolve = this.#resolveRun;
+    this.#resolveRun = null;
+    if (this.#state === "showing")
+      this.#finalizeShown();
+    else
+      this.#finalizeHidden();
+    if (resolve)
+      resolve(true);
+  }
+  #finalizeShown() {
+    this.#removeBlob();
+    const source = this.#sourceElement;
+    const target = this.#targetElement;
+    this.#restoreProperties(target, [
+      "opacity",
+      "transform",
+      "transformOrigin",
+      "willChange",
+      "transition"
+    ]);
+    target.style.visibility = "visible";
+    this.#restoreProperties(source, [
+      "opacity",
+      "transform",
+      "transformOrigin",
+      "willChange"
+    ]);
+    source.style.visibility = "hidden";
+    source.removeAttribute("morphing");
+    target.removeAttribute("morphing");
+    target.setAttribute("morph-shown", "");
+    this.#state = "shown";
+    this.emit("shown", {
+      from: source,
+      to: target
+    });
+  }
+  #finalizeHidden() {
+    this.#removeBlob();
+    const source = this.#sourceElement;
+    const target = this.#targetElement;
+    this.#restoreInline(source);
+    this.#restoreInline(target);
+    source.removeAttribute("morphing");
+    target.removeAttribute("morphing");
+    target.removeAttribute("morph-shown");
+    this.#unlockScroll();
+    this.#state = "idle";
+    this.#p = 0;
+    this.emit("hidden", {
+      from: source,
+      to: target
+    });
+  }
+  #unlockScroll() {
+    if (this.#savedBodyOverflow === null)
+      return;
+    document.body.style.overflow = this.#savedBodyOverflow;
+    this.#savedBodyOverflow = null;
+  }
+  /** Resolves a superseded run's promise with false. */
+  #supersede() {
+    if (this.#resolveRun) {
+      this.#resolveRun(false);
+      this.#resolveRun = null;
+    }
+  }
+  /**
+  * The whole visual state as a pure function of p. Reveal handling is an
+  * idempotent check rather than a one-shot flag so a reversed spring that
+  * swings p back down automatically un-reveals the target.
+  */
+  #applyFrame(p) {
+    const styles = this.#frames.getFrame(p);
+    for (const property of CLAMP_POSITIVE)
+      if (property in styles && parseFloat(styles[property]) < 0)
+        styles[property] = "0px";
+    Object.assign(this.#blob.style, styles);
+    this.#blob.style.boxShadow = lerpShadow(this.#fromMeasure.shadow, this.#toMeasure.shadow, p);
+    if (this.#cloneWrapper) {
+      const fade = this.cloneFadeUntil > 0 ? clamp(1 - p / this.cloneFadeUntil, 0, 1) : p <= 0 ? 1 : 0;
+      this.#cloneWrapper.style.opacity = String(fade);
+    }
+    if (p >= this.#revealStart) {
+      this.#ensureRevealed();
+      const target = this.#toElement;
+      const naturalRect = this.#toMeasure.rect;
+      const blobRect = {
+        top: parseFloat(styles.top),
+        left: parseFloat(styles.left),
+        width: parseFloat(styles.width),
+        height: parseFloat(styles.height)
+      };
+      const fadeProgress = clamp((p - this.#revealStart) / (this.#revealFull - this.#revealStart), 0, 1);
+      target.style.opacity = String(fadeProgress);
+      target.style.transformOrigin = "0 0";
+      target.style.transform = `translate(${round(blobRect.left - naturalRect.left)}px, ${round(blobRect.top - naturalRect.top)}px) scale(${blobRect.width / naturalRect.width}, ${blobRect.height / naturalRect.height})`;
+    } else
+      this.#ensureUnrevealed();
+    if (p <= this.#sourceRevealUntil) {
+      this.#ensureSourceRevealed();
+      const source = this.#fromMeasure.element;
+      const naturalRect = this.#fromMeasure.rect;
+      const blobRect = {
+        top: parseFloat(styles.top),
+        left: parseFloat(styles.left),
+        width: parseFloat(styles.width),
+        height: parseFloat(styles.height)
+      };
+      const half = this.#sourceRevealUntil / 2;
+      const sourceOpacity = clamp((this.#sourceRevealUntil - p) / half, 0, 1);
+      source.style.opacity = String(sourceOpacity);
+      source.style.transformOrigin = "0 0";
+      source.style.transform = `translate(${round(blobRect.left - naturalRect.left)}px, ${round(blobRect.top - naturalRect.top)}px) scale(${blobRect.width / naturalRect.width}, ${blobRect.height / naturalRect.height})`;
+      const quarter = half / 2;
+      const blobFactor = clamp((p - quarter) / quarter, 0, 1);
+      this.#blob.style.opacity = String(parseFloat(styles.opacity ?? "1") * blobFactor);
+    } else
+      this.#ensureSourceUnrevealed();
+  }
+  #ensureRevealed() {
+    if (this.#revealed)
+      return;
+    this.#revealed = true;
+    const target = this.#toElement;
+    if (this.#toMeasure.wasDisplayNone)
+      target.style.display = this.#displayOverride || "block";
+    target.style.visibility = "visible";
+    target.style.willChange = "transform, opacity";
+    this.emit("reveal", {
+      from: this.#fromMeasure.element,
+      to: target
+    });
+  }
+  #ensureUnrevealed() {
+    if (!this.#revealed)
+      return;
+    this.#revealed = false;
+    const target = this.#toElement;
+    target.style.visibility = "hidden";
+    target.style.opacity = "0";
+    this.emit("unreveal", {
+      from: this.#fromMeasure.element,
+      to: target
+    });
+  }
+  /**
+  * Source mirror of #ensureRevealed — makes the real from-element paintable so it
+  * can crossfade in under the blob at the p→0 end. Idempotent.
+  */
+  #ensureSourceRevealed() {
+    if (this.#sourceRevealed)
+      return;
+    this.#sourceRevealed = true;
+    const source = this.#fromMeasure.element;
+    if (this.#fromMeasure.wasDisplayNone)
+      source.style.display = this.#displayOverride || "block";
+    source.style.visibility = "visible";
+    source.style.willChange = "transform, opacity";
+  }
+  /**
+  * Source mirror of #ensureUnrevealed — re-hides the from-element once p leaves the
+  * source window. Transform/willChange residue is cleared at finalize. Idempotent.
+  */
+  #ensureSourceUnrevealed() {
+    if (!this.#sourceRevealed)
+      return;
+    this.#sourceRevealed = false;
+    const source = this.#fromMeasure.element;
+    source.style.visibility = "hidden";
+    source.style.opacity = "0";
+  }
+  /**
+  * Measures an element's viewport rect and captured computed styles. A
+  * display:none element is flipped on invisibly for one synchronous read.
+  * (visibility:hidden elements keep their layout and measure normally.)
+  */
+  #measure(element) {
+    let restore = null;
+    if (element.getClientRects().length === 0) {
+      const style = element.style;
+      restore = {
+        display: style.display,
+        visibility: style.visibility,
+        transition: style.transition
+      };
+      style.transition = "none";
+      style.visibility = "hidden";
+      style.display = this.#displayOverride || "block";
+    }
+    const rect = element.getBoundingClientRect();
+    const computed = getComputedStyle(element);
+    const styles = {};
+    for (const property of this.#styleProperties)
+      styles[property] = computed[property];
+    const measure = {
+      element,
+      rect,
+      styles,
+      shadow: parseShadow(computed.boxShadow),
+      borderStyle: computed.borderTopStyle,
+      backdropFilter: computed.backdropFilter || computed.webkitBackdropFilter,
+      backgroundImage: computed.backgroundImage,
+      backgroundSize: computed.backgroundSize,
+      backgroundRepeat: computed.backgroundRepeat,
+      backgroundPosition: computed.backgroundPosition,
+      wasDisplayNone: restore !== null
+    };
+    if (restore)
+      Object.assign(element.style, restore);
+    return measure;
+  }
+  /**
+  * A borderless element's computed border-color falls back to currentColor (its
+  * text color), and `transparent` computes to rgba(0,0,0,0) — lerping toward
+  * either drags the visible end's border through an unrelated hue while the
+  * width or alpha collapses. Rewrite the degenerate end's color so only
+  * width/alpha animate: an absent border holds the visible end's color
+  * verbatim, a fully transparent one holds its hue at alpha 0.
+  */
+  #reconcileBorderColors(fromMeasure, toMeasure) {
+    const absent = (measure) => measure.borderStyle === "none" || BORDER_SIDES.every((side) => parseFloat(measure.styles[`border${side}Width`]) === 0);
+    const fromAbsent = absent(fromMeasure);
+    const toAbsent = absent(toMeasure);
+    if (fromAbsent && toAbsent)
+      return;
+    for (const side of BORDER_SIDES) {
+      const key = `border${side}Color`;
+      const fromColor = fromMeasure.styles[key];
+      const toColor = toMeasure.styles[key];
+      if (!fromColor || !toColor)
+        continue;
+      const fromDegenerate = fromAbsent || parseColor(fromColor).alpha === 0;
+      if (fromDegenerate === (toAbsent || parseColor(toColor).alpha === 0))
+        continue;
+      const visibleColor = fromDegenerate ? toColor : fromColor;
+      const { red, green, blue } = parseColor(visibleColor);
+      const replacement = (fromDegenerate ? fromAbsent : toAbsent) ? visibleColor : `rgba(${red}, ${green}, ${blue}, 0)`;
+      (fromDegenerate ? fromMeasure : toMeasure).styles[key] = replacement;
+    }
+  }
+  #buildKeyframes(fromMeasure, toMeasure) {
+    const rectStyles = (rect) => ({
+      top: `${rect.top}px`,
+      left: `${rect.left}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`
+    });
+    const blobClear = this.#revealFull + (1 - this.#revealFull) / 2;
+    return {
+      0: {
+        ...rectStyles(fromMeasure.rect),
+        ...fromMeasure.styles
+      },
+      [this.#revealFull * 100]: { opacity: "1" },
+      [blobClear * 100]: { opacity: "0" },
+      100: {
+        ...rectStyles(toMeasure.rect),
+        ...toMeasure.styles
+      }
+    };
+  }
+  #createBlob(fromMeasure, toMeasure) {
+    const blob = document.createElement("morph-blob");
+    const borderStyle = toMeasure.borderStyle !== "none" ? toMeasure.borderStyle : fromMeasure.borderStyle !== "none" ? fromMeasure.borderStyle : "solid";
+    Object.assign(blob.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      margin: "0",
+      boxSizing: "border-box",
+      pointerEvents: "none",
+      overflow: "hidden",
+      display: "block",
+      zIndex: String(this.zIndex),
+      borderStyle,
+      willChange: "top, left, width, height, opacity"
+    });
+    const backdropFilter = toMeasure.backdropFilter !== "none" ? toMeasure.backdropFilter : fromMeasure.backdropFilter !== "none" ? fromMeasure.backdropFilter : null;
+    if (backdropFilter) {
+      blob.style.backdropFilter = backdropFilter;
+      blob.style.webkitBackdropFilter = backdropFilter;
+    }
+    const backgroundMeasure = toMeasure.backgroundImage !== "none" ? toMeasure : fromMeasure.backgroundImage !== "none" ? fromMeasure : null;
+    if (backgroundMeasure) {
+      blob.style.backgroundImage = backgroundMeasure.backgroundImage;
+      blob.style.backgroundSize = backgroundMeasure.backgroundSize;
+      blob.style.backgroundRepeat = backgroundMeasure.backgroundRepeat;
+      blob.style.backgroundPosition = backgroundMeasure.backgroundPosition;
+    }
+    if (this.cloneContents)
+      this.#createClone(blob, fromMeasure);
+    document.body.appendChild(blob);
+    this.#blob = blob;
+  }
+  /**
+  * Freezes a visual copy of the source's content inside the blob. The wrapper
+  * keeps the source's original dimensions so text never rewraps as the blob
+  * resizes; the blob's overflow:hidden clips it. The clone's own surface
+  * (background, border, shadow) is stripped — the blob renders the surface.
+  */
+  #createClone(blob, fromMeasure) {
+    const clone = fromMeasure.element.cloneNode(true);
+    clone.removeAttribute("id");
+    clone.removeAttribute("morphing");
+    Object.assign(clone.style, {
+      position: "static",
+      margin: "0",
+      width: "100%",
+      height: "100%",
+      transform: "none",
+      transition: "none",
+      visibility: "visible",
+      opacity: "1",
+      boxShadow: "none",
+      background: "transparent",
+      borderColor: "transparent"
+    });
+    const wrapper = document.createElement("div");
+    Object.assign(wrapper.style, {
+      position: "absolute",
+      top: "0",
+      left: "0",
+      width: `${fromMeasure.rect.width}px`,
+      height: `${fromMeasure.rect.height}px`,
+      pointerEvents: "none"
+    });
+    wrapper.appendChild(clone);
+    blob.appendChild(wrapper);
+    this.#cloneWrapper = wrapper;
+  }
+  #removeBlob() {
+    if (!this.#blob)
+      return;
+    this.#blob.remove();
+    this.#blob = null;
+    this.#cloneWrapper = null;
+  }
+  /** Marks both elements for CSS hooks — which one the blob is flying away from. */
+  #markElements(phase) {
+    const showing = phase === "showing";
+    this.#sourceElement.setAttribute("morphing", showing ? "source" : "target");
+    this.#targetElement.setAttribute("morphing", showing ? "target" : "source");
+  }
+  #saveInline(element) {
+    const saved = {};
+    for (const property of MANAGED_PROPERTIES)
+      saved[property] = element.style[property];
+    this.#savedInline.set(element, saved);
+  }
+  #restoreProperties(element, properties) {
+    const saved = this.#savedInline.get(element) || {};
+    const hasTransition = properties.includes("transition");
+    for (const property of properties) {
+      if (property === "transition")
+        continue;
+      element.style[property] = saved[property] ?? "";
+    }
+    if (hasTransition) {
+      element.offsetWidth;
+      element.style.transition = saved.transition ?? "";
+    }
+  }
+  #restoreInline(element) {
+    this.#restoreProperties(element, MANAGED_PROPERTIES);
+    this.#savedInline.delete(element);
+  }
+};
+
+// app/components/ui/Kbd.pzl
+var BASE = "inline-flex items-center rounded border border-border bg-surface-sunken px-1.5 py-px font-sans text-xs text-muted shadow-[inset_0_-1px_0_var(--color-border)]";
+var Kbd = class extends PuzzleView {
+  data(params, props) {
+    return {
+      classes: [BASE, props.class || ""].join(" ")
+    };
+  }
+};
+Kbd.prototype.render = function() {
+  const __d = this.getData();
+  const __f = this.ctx.formatters.getAll();
+  return new ViewNode("kbd", { class: __d.classes }, [
+    new ViewNode(SLOT_TAG)
+  ]);
+};
+Kbd.__pzlModule = "app/components/ui/Kbd.pzl";
+
+// app/docs/demos.js
+var DEMOS = [
+  {
+    title: "Analytics",
+    path: "/examples/analytics",
+    description: "A responsive metrics dashboard with stat cards, line, area, bar, and pie charts."
+  },
+  {
+    title: "Chat",
+    path: "/examples/chat",
+    description: "A team conversation with messages, attachments, pinned scrolling, and a live composer."
+  },
+  {
+    title: "Banking",
+    path: "/examples/banking",
+    description: "A finance dashboard with accounts, transactions, date filters, budgets, and transfers."
+  },
+  {
+    title: "Admin",
+    path: "/examples/admin",
+    description: "A commerce back office with products, orders, customers, collections, and settings."
+  },
+  {
+    title: "Project",
+    path: "/examples/project",
+    description: "A project workspace with navigation, metrics, a Kanban board, issues, and activity."
+  },
+  {
+    title: "Storefront",
+    path: "/examples/storefront",
+    description: "A product detail experience with gallery, variants, cart controls, specs, and reviews."
+  }
+];
+
+// app/docs/search.js
+var SCORE = {
+  titleExact: 100,
+  titlePrefix: 60,
+  titleWord: 40,
+  title: 25,
+  name: 20,
+  description: 10,
+  section: 5
+};
+function normalize(value) {
+  return String(value || "").toLowerCase();
+}
+function hasWordAt(haystack, term, from) {
+  const at = haystack.indexOf(term, from);
+  if (at < 0)
+    return -1;
+  const before = at === 0 ? " " : haystack[at - 1];
+  return /[a-z0-9]/.test(before) ? hasWordAt(haystack, term, at + 1) : at;
+}
+function buildIndex() {
+  const entries = [];
+  for (const page of GETTING_STARTED) {
+    entries.push({
+      title: page.title,
+      path: page.path,
+      kind: "Page",
+      section: "Getting started",
+      description: "",
+      name: ""
+    });
+  }
+  for (const group of SECTIONS) {
+    for (const item of group.items) {
+      entries.push({
+        title: item.title,
+        path: item.path,
+        kind: "Component",
+        section: group.label,
+        description: item.description || "",
+        name: item.name || ""
+      });
+    }
+  }
+  for (const demo of DEMOS) {
+    entries.push({
+      title: demo.title,
+      path: demo.path,
+      kind: "Demo",
+      section: "Demos",
+      description: demo.description || "",
+      name: ""
+    });
+  }
+  return entries.map((entry) => ({
+    ...entry,
+    _title: normalize(entry.title),
+    _name: normalize(entry.name),
+    _description: normalize(entry.description),
+    _section: normalize(entry.section)
+  }));
+}
+var INDEX = buildIndex();
+var SEARCH_COUNT = INDEX.length;
+function scoreTerm(entry, term) {
+  let score = 0;
+  if (entry._title === term)
+    score += SCORE.titleExact;
+  else if (entry._title.startsWith(term))
+    score += SCORE.titlePrefix;
+  else if (hasWordAt(entry._title, term, 0) >= 0)
+    score += SCORE.titleWord;
+  else if (entry._title.includes(term))
+    score += SCORE.title;
+  if (!score && entry._name.includes(term))
+    score += SCORE.name;
+  if (entry._description.includes(term))
+    score += SCORE.description;
+  if (entry._section.includes(term))
+    score += SCORE.section;
+  return score;
+}
+function searchDocs(query, limit = 12) {
+  const terms = normalize(query).split(/\s+/).filter(Boolean);
+  if (!terms.length)
+    return [];
+  const hits = [];
+  for (const entry of INDEX) {
+    let total = 0;
+    let matchedAll = true;
+    for (const term of terms) {
+      const score = scoreTerm(entry, term);
+      if (!score) {
+        matchedAll = false;
+        break;
+      }
+      total += score;
+    }
+    if (matchedAll)
+      hits.push({ entry, score: total });
+  }
+  hits.sort((a2, b2) => b2.score - a2.score || a2.entry._title.localeCompare(b2.entry._title));
+  return hits.slice(0, limit).map(({ entry }) => ({
+    title: entry.title,
+    path: entry.path,
+    kind: entry.kind,
+    section: entry.section,
+    description: entry.description
+  }));
+}
+
+// app/components/docs/SearchDialog.pzl
+var ROW_BASE = "block scroll-my-2 rounded-lg border px-3 py-2.5 transition-colors outline-none";
+var ROW_IDLE = "border-transparent hover:bg-surface-sunken";
+var ROW_ACTIVE = "border-border-strong bg-surface-sunken";
+var SearchDialog = class extends PuzzleView {
+  created() {
+    this.setData({ query: "", results: [], activeIndex: 0 });
+  }
+  data() {
+    const state = this.getData();
+    const query = state.query || "";
+    const results = state.results || [];
+    const activeIndex = state.activeIndex || 0;
+    return {
+      query,
+      indexCount: SEARCH_COUNT,
+      hasResults: results.length > 0,
+      showHint: !query.trim(),
+      showEmpty: !!query.trim() && results.length === 0,
+      // Per-row class precomputed here — a {#for} body cannot branch on its own.
+      results: results.map((result, i2) => ({
+        ...result,
+        href: `#${result.path}`,
+        rowClass: `${ROW_BASE} ${i2 === activeIndex ? ROW_ACTIVE : ROW_IDLE}`
+      }))
+    };
+  }
+  mounted() {
+    const root = this.element;
+    this._openButton = root.querySelector("[data-search-open]");
+    this._dialog = root.querySelector("[data-search-dialog]");
+    this._frame = root.querySelector("[data-search-frame]");
+    this._input = root.querySelector("[data-search-input]");
+    this._scroll = root.querySelector("[data-search-scroll]");
+    this._morph = new MorphEngine();
+    this._wide = window.matchMedia("(min-width: 40rem)");
+    this._reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const isApple = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+    if (isApple) {
+      const key = root.querySelector("[data-search-shortcut]");
+      if (key)
+        key.textContent = "\u2318";
+      this._openButton.setAttribute("aria-keyshortcuts", "Meta+K");
+    }
+    this._onOpen = () => this.openModal();
+    this._onClose = () => this.closeModal();
+    this._onInput = () => this.runSearch(this._input.value);
+    this._onInputKey = (event) => this.onInputKey(event);
+    this._onCancel = (event) => {
+      event.preventDefault();
+      this.closeModal();
+    };
+    this._onDialogClose = () => {
+      document.body.style.overflow = this._storedOverflow || "";
+      if (this._morph.state === "shown")
+        this._morph.hide();
+    };
+    this._onDialogClick = (event) => {
+      if (event.target === this._dialog)
+        this.closeModal();
+    };
+    this._onResultClick = (event) => {
+      if (event.target.closest("[data-search-result]"))
+        this.closeModal();
+    };
+    this._onWindowKey = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        this._dialog.open ? this.closeModal() : this.openModal();
+      }
+    };
+    this._morph.on("reveal", ({ to }) => {
+      if (to !== this._dialog || this._dialog.open)
+        return;
+      this._dialog.showModal();
+      this.afterOpen();
+    });
+    this._morph.on("unreveal", ({ to }) => {
+      if (to === this._dialog && this._dialog.open)
+        this._dialog.close();
+    });
+    this._openButton.addEventListener("click", this._onOpen);
+    root.querySelector("[data-search-close]").addEventListener("click", this._onClose);
+    this._input.addEventListener("input", this._onInput);
+    this._input.addEventListener("keydown", this._onInputKey);
+    this._dialog.addEventListener("cancel", this._onCancel);
+    this._dialog.addEventListener("close", this._onDialogClose);
+    this._dialog.addEventListener("click", this._onDialogClick);
+    this._frame.addEventListener("click", this._onResultClick);
+    window.addEventListener("keydown", this._onWindowKey);
+  }
+  destroyed() {
+    this._openButton?.removeEventListener("click", this._onOpen);
+    this._input?.removeEventListener("input", this._onInput);
+    this._input?.removeEventListener("keydown", this._onInputKey);
+    this._dialog?.removeEventListener("cancel", this._onCancel);
+    this._dialog?.removeEventListener("close", this._onDialogClose);
+    this._dialog?.removeEventListener("click", this._onDialogClick);
+    this._frame?.removeEventListener("click", this._onResultClick);
+    window.removeEventListener("keydown", this._onWindowKey);
+    document.body.style.overflow = this._storedOverflow || "";
+    if (this._dialog?.open)
+      this._dialog.close();
+    this._morph?.destroy();
+  }
+  // Full-screen on a narrow viewport means there is no target box to morph into.
+  shouldMorph() {
+    return this._wide.matches && !this._reducedMotion.matches;
+  }
+  openModal() {
+    if (this._dialog.open)
+      return;
+    if (!this.shouldMorph()) {
+      this._dialog.showModal();
+      this.afterOpen();
+      return;
+    }
+    if (this._morph.state === "idle" || this._morph.state === "hiding") {
+      this._morph.show({ from: this._openButton, to: this._dialog, display: "flex" });
+    }
+  }
+  closeModal() {
+    const morphing = this._morph.state === "showing" || this._morph.state === "shown";
+    if (this._dialog.open)
+      this._dialog.close();
+    if (morphing && this._morph.state !== "hiding")
+      this._morph.hide();
+  }
+  afterOpen() {
+    this._storedOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    this._input.focus();
+    this._input.select();
+  }
+  runSearch(value) {
+    this.setData({ query: value, results: searchDocs(value), activeIndex: 0 });
+    this.refresh();
+  }
+  onInputKey(event) {
+    const results = this.getData().results || [];
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (!results.length)
+        return;
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next = (this.getData().activeIndex + step + results.length) % results.length;
+      this.setData({ activeIndex: next });
+      this.refresh();
+      this.scrollActiveIntoView(next);
+      return;
+    }
+    if (event.key === "Enter") {
+      const active = results[this.getData().activeIndex];
+      if (!active)
+        return;
+      event.preventDefault();
+      window.location.hash = active.path;
+      this.closeModal();
+    }
+  }
+  // Safe to read straight away: refresh() patches synchronously, so the rows
+  // already carry the new active class by the time this runs.
+  scrollActiveIntoView(index) {
+    const rows = this._scroll?.querySelectorAll("[data-search-result]");
+    rows?.[index]?.scrollIntoView({ block: "nearest" });
+  }
+};
+SearchDialog.prototype.render = function() {
+  const __d = this.getData();
+  const __f = this.ctx.formatters.getAll();
+  return new ViewNode("div", { class: "contents" }, [
+    new ViewNode("button", {
+      "data-search-open": true,
+      type: "button",
+      "aria-label": "Search the docs",
+      "aria-keyshortcuts": "Control+K",
+      class: "inline-flex h-8 cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface px-2.5 text-sm text-muted transition-colors hover:border-border-strong hover:text-ink outline-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+    }, [
+      new ViewNode("svg", {
+        class: "size-4 shrink-0",
+        viewBox: "0 0 24 24",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "2",
+        "stroke-linecap": "round",
+        "aria-hidden": "true"
+      }, [
+        new ViewNode("circle", {
+          cx: "11",
+          cy: "11",
+          r: "7"
+        }, []),
+        new ViewNode("path", { d: "m20 20-4-4" }, [])
+      ]),
+      new ViewNode("span", { class: "hidden sm:inline" }, [
+        new ViewNode("text", { value: "Search" })
+      ]),
+      new ViewNode(Kbd, { class: "hidden gap-1 sm:inline-flex" }, [
+        new ViewNode("span", { "data-search-shortcut": true }, [
+          new ViewNode("text", { value: "Ctrl" })
+        ]),
+        new ViewNode("span", {}, [
+          new ViewNode("text", { value: "K" })
+        ])
+      ])
+    ]),
+    new ViewNode("dialog", {
+      "data-search-dialog": true,
+      "aria-label": "Search the docs",
+      class: "m-0 h-dvh max-h-dvh w-full max-w-none border-0 bg-surface p-0 text-body shadow-2xl open:flex backdrop:bg-page/75 sm:fixed sm:inset-0 sm:mx-auto sm:mt-20 sm:h-fit sm:max-h-[min(34rem,calc(100vh-10rem))] sm:w-[min(92%,38rem)] sm:rounded-xl sm:border sm:border-border"
+    }, [
+      new ViewNode("div", {
+        "data-search-frame": true,
+        class: "flex min-h-0 w-full flex-1 flex-col overflow-hidden"
+      }, [
+        new ViewNode("div", { class: "flex items-center gap-3 border-b border-border p-4" }, [
+          new ViewNode("svg", {
+            class: "size-5 shrink-0 text-muted",
+            viewBox: "0 0 24 24",
+            fill: "none",
+            stroke: "currentColor",
+            "stroke-width": "2",
+            "stroke-linecap": "round",
+            "aria-hidden": "true"
+          }, [
+            new ViewNode("circle", {
+              cx: "11",
+              cy: "11",
+              r: "7"
+            }, []),
+            new ViewNode("path", { d: "m20 20-4-4" }, [])
+          ]),
+          new ViewNode("input", {
+            "data-search-input": true,
+            type: "search",
+            value: __d.query,
+            placeholder: "Search components, demos, and pages\u2026",
+            autocomplete: "off",
+            spellcheck: "false",
+            "aria-label": "Search query",
+            class: "min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-muted"
+          }, []),
+          new ViewNode("button", {
+            "data-search-close": true,
+            type: "button",
+            class: "cursor-pointer rounded-md px-2 py-1 text-sm font-medium text-brand transition-colors hover:bg-brand-tint hover:text-brand-dark outline-ring focus-visible:outline-2 focus-visible:outline-offset-2"
+          }, [
+            new ViewNode("text", { value: "Close" })
+          ])
+        ]),
+        new ViewNode("div", {
+          class: "min-h-0 flex-1 overflow-y-auto p-2",
+          "data-search-scroll": true
+        }, [
+          ...__d.showHint ? [
+            new ViewNode("p", { class: "px-2 py-8 text-center text-sm text-muted" }, [
+              new ViewNode("text", { value: "Search " + String(__d.indexCount) + " components, demos, and pages by name or description." })
+            ])
+          ] : [
+            new ViewNode("#")
+          ],
+          ...__d.showEmpty ? [
+            new ViewNode("p", { class: "px-2 py-8 text-center text-sm text-muted" }, [
+              new ViewNode("text", { value: "No matches for \u201C" + String(__d.query) + "\u201D." })
+            ])
+          ] : [
+            new ViewNode("#")
+          ],
+          ...__d.hasResults ? [
+            new ViewNode(
+              "div",
+              { class: "space-y-1" },
+              __d.results.map(
+                (result) => new ViewNode("a", {
+                  "data-search-result": true,
+                  key: result.path,
+                  href: result.href,
+                  class: result.rowClass
+                }, [
+                  new ViewNode("span", { class: "flex items-baseline gap-2" }, [
+                    new ViewNode("span", { class: "font-medium text-ink" }, [
+                      new ViewNode("text", { value: String(result.title) })
+                    ]),
+                    new ViewNode("span", { class: "text-xs text-faint" }, [
+                      new ViewNode("text", { value: String(result.section) })
+                    ])
+                  ]),
+                  ...result.description ? [
+                    new ViewNode("span", { class: "mt-1 block text-sm/relaxed text-muted" }, [
+                      new ViewNode("text", { value: String(result.description) })
+                    ])
+                  ] : [
+                    new ViewNode("#")
+                  ]
+                ])
+              )
+            )
+          ] : [
+            new ViewNode("#")
+          ]
+        ]),
+        new ViewNode("div", {
+          class: "hidden items-center gap-4 border-t border-border px-4 py-2.5 text-xs text-faint sm:flex"
+        }, [
+          new ViewNode("span", { class: "inline-flex items-center gap-1.5" }, [
+            new ViewNode(Kbd, {}, [
+              new ViewNode("text", { value: "\u2191" })
+            ]),
+            new ViewNode(Kbd, {}, [
+              new ViewNode("text", { value: "\u2193" })
+            ]),
+            new ViewNode("text", { value: " navigate" })
+          ]),
+          new ViewNode("span", { class: "inline-flex items-center gap-1.5" }, [
+            new ViewNode(Kbd, {}, [
+              new ViewNode("text", { value: "\u21B5" })
+            ]),
+            new ViewNode("text", { value: " open" })
+          ]),
+          new ViewNode("span", { class: "inline-flex items-center gap-1.5" }, [
+            new ViewNode(Kbd, {}, [
+              new ViewNode("text", { value: "Esc" })
+            ]),
+            new ViewNode("text", { value: " close" })
+          ])
+        ])
+      ])
+    ])
+  ]);
+};
+SearchDialog.__pzlModule = "app/components/docs/SearchDialog.pzl";
+
 // app/layouts/Default.pzl
 var SCHEMES = [
   { label: "Default", value: "default" },
@@ -8015,8 +11891,9 @@ DefaultLayout.prototype.render = function() {
           new ViewNode("text", { value: "Puzzle Pieces" })
         ]),
         new ViewNode("div", { class: "flex items-center gap-4" }, [
-          new ViewNode("span", { class: "text-xs text-muted" }, [
-            new ViewNode("text", { value: String(__d.pieceCount) + " pieces \xB7 v0.1" })
+          new ViewNode(SearchDialog, {}, []),
+          new ViewNode("span", { class: "hidden text-xs text-muted sm:inline" }, [
+            new ViewNode("text", { value: String(__d.pieceCount) + " pieces \xB7 v0.2" })
           ]),
           new ViewNode(DropdownMenu, {
             label: "Color scheme",
@@ -8286,7 +12163,7 @@ AppShell.prototype.render = function() {
 AppShell.__pzlModule = "app/layouts/AppShell.pzl";
 
 // app/components/ui/Button.pzl
-var BASE = "inline-flex items-center justify-center gap-2 whitespace-nowrap select-none rounded-lg font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none";
+var BASE2 = "inline-flex items-center justify-center gap-2 whitespace-nowrap select-none rounded-lg font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none";
 var VARIANT = {
   primary: "bg-brand text-brand-ink hover:bg-brand-dark",
   secondary: "bg-surface-sunken text-ink hover:bg-border",
@@ -8304,7 +12181,7 @@ var Button = class extends PuzzleView {
     const loading = !!props.loading;
     return {
       classes: [
-        BASE,
+        BASE2,
         VARIANT[props.variant] || VARIANT.primary,
         SIZE[props.size] || SIZE.md,
         props.class || ""
@@ -8349,7 +12226,7 @@ Button.prototype.render = function() {
 Button.__pzlModule = "app/components/ui/Button.pzl";
 
 // app/components/ui/Badge.pzl
-var BASE2 = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap";
+var BASE3 = "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap";
 var VARIANT2 = {
   default: "bg-surface-sunken text-body",
   brand: "bg-brand-tint text-brand",
@@ -8360,7 +12237,7 @@ var Badge = class extends PuzzleView {
   data(params, props) {
     return {
       classes: [
-        BASE2,
+        BASE3,
         VARIANT2[props.variant] || VARIANT2.default,
         props.class || ""
       ].join(" ")
@@ -11257,87 +15134,89 @@ Introduction.prototype.render = function() {
   const __d = this.getData();
   const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
-    new ViewNode("article", { class: "mx-auto max-w-3xl" }, [
-      new ViewNode("header", { class: "mb-10" }, [
-        new ViewNode("h1", { class: "text-4xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Puzzle Pieces" })
-        ]),
-        new ViewNode("p", { class: "mt-3 text-lg text-body" }, [
-          new ViewNode("text", { value: "Beautifully-behaved UI components for the Puzzle framework. Tailwind-styled, accessible, morph-aware \u2014 and copied into your app, not installed from npm." })
-        ]),
-        new ViewNode("div", { class: "mt-6 flex flex-wrap gap-3" }, [
-          new ViewNode(Button, {
-            variant: "primary",
-            press: (this.__h ??= {})[0] ??= (event) => this.events.browse(event)
-          }, [
-            new ViewNode("text", { value: "Browse components" })
+    new ViewNode("div", { class: "xl:pr-60" }, [
+      new ViewNode("article", { class: "mx-auto w-full max-w-5xl min-w-0" }, [
+        new ViewNode("header", { class: "mb-10" }, [
+          new ViewNode("h1", { class: "text-4xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Puzzle Pieces" })
           ]),
-          new ViewNode(Badge, { variant: "outline" }, [
-            new ViewNode("text", { value: "85 pieces" })
+          new ViewNode("p", { class: "mt-3 text-lg text-body" }, [
+            new ViewNode("text", { value: "Beautifully-behaved UI components for the Puzzle framework. Tailwind-styled, accessible, morph-aware \u2014 and copied into your app, not installed from npm." })
+          ]),
+          new ViewNode("div", { class: "mt-6 flex flex-wrap gap-3" }, [
+            new ViewNode(Button, {
+              variant: "primary",
+              press: (this.__h ??= {})[0] ??= (event) => this.events.browse(event)
+            }, [
+              new ViewNode("text", { value: "Browse components" })
+            ]),
+            new ViewNode(Badge, { variant: "outline" }, [
+              new ViewNode("text", { value: "85 pieces" })
+            ])
           ])
-        ])
-      ]),
-      new ViewNode("section", { class: "mb-10" }, [
-        new ViewNode("h2", { class: "mb-3 text-xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Why copy-in?" })
         ]),
-        new ViewNode("p", { class: "text-sm/relaxed text-body" }, [
-          new ViewNode("text", { value: "Puzzle compiles " }),
-          new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-            new ViewNode("text", { value: ".pzl" })
+        new ViewNode("section", { class: "mb-10" }, [
+          new ViewNode("h2", { class: "mb-3 text-xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Why copy-in?" })
           ]),
-          new ViewNode("text", { value: "single-file components, and " }),
-          new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-            new ViewNode("text", { value: ".pzl" })
-          ]),
-          new ViewNode("text", { value: "files can't live in node_modules \u2014 the compiler doesn't scan there. So instead of fighting that, Puzzle Pieces embraces it: every piece is source you copy into" }),
-          new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-            new ViewNode("text", { value: "app/components/ui/" })
-          ]),
-          new ViewNode("text", { value: ". Your build compiles it, your Tailwind scan picks up its classes, and the code is yours to restyle and rework \u2014 for Puzzle it's the structurally correct model." })
-        ])
-      ]),
-      new ViewNode("section", { class: "mb-10" }, [
-        new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Quick start" })
-        ]),
-        new ViewNode("ol", { class: "space-y-6" }, [
-          new ViewNode("li", {}, [
-            new ViewNode("p", { class: "mb-2 text-sm font-medium text-ink" }, [
-              new ViewNode("text", { value: "1. Copy a piece in" })
+          new ViewNode("p", { class: "text-sm/relaxed text-body" }, [
+            new ViewNode("text", { value: "Puzzle compiles " }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: ".pzl" })
             ]),
-            new ViewNode("p", { class: "mb-3 text-sm text-muted" }, [
-              new ViewNode("text", { value: "The Puzzle CLI copies the piece (and anything it depends on) into your app. Your first add also drops the pieces.css design tokens into app/styles/." })
+            new ViewNode("text", { value: "single-file components, and " }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: ".pzl" })
             ]),
-            new ViewNode(CodeBlock, { code: __d.addSnippet }, [])
-          ]),
-          new ViewNode("li", {}, [
-            new ViewNode("p", { class: "mb-2 text-sm font-medium text-ink" }, [
-              new ViewNode("text", { value: "2. Wire up the design tokens" })
+            new ViewNode("text", { value: "files can't live in node_modules \u2014 the compiler doesn't scan there. So instead of fighting that, Puzzle Pieces embraces it: every piece is source you copy into" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "app/components/ui/" })
             ]),
-            new ViewNode("p", { class: "mb-3 text-sm text-muted" }, [
-              new ViewNode("text", { value: "Every piece styles itself through semantic utilities (bg-surface, text-ink, border-border, bg-brand\u2026) generated from one token block \u2014 restyle everything by editing the values." })
-            ]),
-            new ViewNode(CodeBlock, { code: __d.tokensSnippet }, [])
-          ]),
-          new ViewNode("li", {}, [
-            new ViewNode("p", { class: "mb-2 text-sm font-medium text-ink" }, [
-              new ViewNode("text", { value: "3. Use it" })
-            ]),
-            new ViewNode(CodeBlock, { code: __d.useImport }, []),
-            new ViewNode(CodeBlock, {
-              code: __d.useMarkup,
-              class: "mt-3"
-            }, [])
+            new ViewNode("text", { value: ". Your build compiles it, your Tailwind scan picks up its classes, and the code is yours to restyle and rework \u2014 for Puzzle it's the structurally correct model." })
           ])
-        ])
-      ]),
-      new ViewNode("section", {}, [
-        new ViewNode("h2", { class: "mb-3 text-xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Conventions" })
         ]),
-        new ViewNode("p", { class: "text-sm/relaxed text-body" }, [
-          new ViewNode("text", { value: "Config-first APIs (props in, value-first callbacks out), controlled components (the parent owns state), full keyboard and ARIA behavior in every piece, and no colors outside the token set. Each file's header comment documents its props, callbacks, and usage examples \u2014 the docs live with the code you copied." })
+        new ViewNode("section", { class: "mb-10" }, [
+          new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Quick start" })
+          ]),
+          new ViewNode("ol", { class: "space-y-6" }, [
+            new ViewNode("li", {}, [
+              new ViewNode("p", { class: "mb-2 text-sm font-medium text-ink" }, [
+                new ViewNode("text", { value: "1. Copy a piece in" })
+              ]),
+              new ViewNode("p", { class: "mb-3 text-sm text-muted" }, [
+                new ViewNode("text", { value: "The Puzzle CLI copies the piece (and anything it depends on) into your app. Your first add also drops the pieces.css design tokens into app/styles/." })
+              ]),
+              new ViewNode(CodeBlock, { code: __d.addSnippet }, [])
+            ]),
+            new ViewNode("li", {}, [
+              new ViewNode("p", { class: "mb-2 text-sm font-medium text-ink" }, [
+                new ViewNode("text", { value: "2. Wire up the design tokens" })
+              ]),
+              new ViewNode("p", { class: "mb-3 text-sm text-muted" }, [
+                new ViewNode("text", { value: "Every piece styles itself through semantic utilities (bg-surface, text-ink, border-border, bg-brand\u2026) generated from one token block \u2014 restyle everything by editing the values." })
+              ]),
+              new ViewNode(CodeBlock, { code: __d.tokensSnippet }, [])
+            ]),
+            new ViewNode("li", {}, [
+              new ViewNode("p", { class: "mb-2 text-sm font-medium text-ink" }, [
+                new ViewNode("text", { value: "3. Use it" })
+              ]),
+              new ViewNode(CodeBlock, { code: __d.useImport }, []),
+              new ViewNode(CodeBlock, {
+                code: __d.useMarkup,
+                class: "mt-3"
+              }, [])
+            ])
+          ])
+        ]),
+        new ViewNode("section", {}, [
+          new ViewNode("h2", { class: "mb-3 text-xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Conventions" })
+          ]),
+          new ViewNode("p", { class: "text-sm/relaxed text-body" }, [
+            new ViewNode("text", { value: "Config-first APIs (props in, value-first callbacks out), controlled components (the parent owns state), full keyboard and ARIA behavior in every piece, and no colors outside the token set. Each file's header comment documents its props, callbacks, and usage examples \u2014 the docs live with the code you copied." })
+          ])
         ])
       ])
     ])
@@ -11355,40 +15234,42 @@ ComponentsIndex.prototype.render = function() {
   const __d = this.getData();
   const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
-    new ViewNode("article", {}, [
-      new ViewNode("header", { class: "mb-8 max-w-3xl" }, [
-        new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Components" })
-        ]),
-        new ViewNode("p", { class: "mt-2 text-body" }, [
-          new ViewNode("text", { value: "All 85 pieces in the registry. Every one is a native Puzzle component you copy into your app \u2014 click through for live examples and usage." })
-        ])
-      ]),
-      new ViewNode(
-        "div",
-        { class: "grid gap-4 sm:grid-cols-2 xl:grid-cols-3" },
-        __d.components.map(
-          (item) => new ViewNode("a", {
-            href: `#${item.path}`,
-            key: item.name,
-            class: "block rounded-xl border border-border bg-surface p-5 transition-colors hover:border-border-strong outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          }, [
-            new ViewNode("h2", { class: "text-sm font-semibold text-ink" }, [
-              new ViewNode("text", { value: String(item.title) })
-            ]),
-            new ViewNode("p", { class: "mt-1.5 text-sm/relaxed text-muted" }, [
-              new ViewNode("text", { value: String(item.description) })
-            ])
+    new ViewNode("div", { class: "xl:pr-60" }, [
+      new ViewNode("article", { class: "mx-auto w-full max-w-5xl min-w-0" }, [
+        new ViewNode("header", { class: "mb-8 max-w-3xl" }, [
+          new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Components" })
+          ]),
+          new ViewNode("p", { class: "mt-2 text-body" }, [
+            new ViewNode("text", { value: "All 85 pieces in the registry. Every one is a native Puzzle component you copy into your app \u2014 click through for live examples and usage." })
           ])
+        ]),
+        new ViewNode(
+          "div",
+          { class: "grid gap-4 sm:grid-cols-2 xl:grid-cols-3" },
+          __d.components.map(
+            (item) => new ViewNode("a", {
+              href: `#${item.path}`,
+              key: item.name,
+              class: "block rounded-xl border border-border bg-surface p-5 transition-colors hover:border-border-strong outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+            }, [
+              new ViewNode("h2", { class: "text-sm font-semibold text-ink" }, [
+                new ViewNode("text", { value: String(item.title) })
+              ]),
+              new ViewNode("p", { class: "mt-1.5 text-sm/relaxed text-muted" }, [
+                new ViewNode("text", { value: String(item.description) })
+              ])
+            ])
+          )
         )
-      )
+      ])
     ])
   ]);
 };
 ComponentsIndex.__pzlModule = "app/views/ComponentsIndex.pzl";
 
 // app/components/ui/Card.pzl
-var BASE3 = "rounded-xl border border-border bg-surface text-body";
+var BASE4 = "rounded-xl border border-border bg-surface text-body";
 var Card = class extends PuzzleView {
   data(params, props) {
     const title = props.title || "";
@@ -11401,7 +15282,7 @@ var Card = class extends PuzzleView {
       // Body keeps full p-6, but drops its top pad when a header already
       // supplied the top gutter — keeps the header→body seam a single 1.5rem.
       bodyClass: hasHeader ? "p-6 pt-0" : "p-6",
-      classes: [BASE3, props.class || ""].join(" ")
+      classes: [BASE4, props.class || ""].join(" ")
     };
   }
 };
@@ -11440,75 +15321,45 @@ Card.prototype.render = function() {
 Card.__pzlModule = "app/components/ui/Card.pzl";
 
 // app/views/Demos.pzl
-var demos = [
-  {
-    title: "Analytics",
-    path: "/examples/analytics",
-    description: "A responsive metrics dashboard with stat cards, line, area, bar, and pie charts."
-  },
-  {
-    title: "Chat",
-    path: "/examples/chat",
-    description: "A team conversation with messages, attachments, pinned scrolling, and a live composer."
-  },
-  {
-    title: "Banking",
-    path: "/examples/banking",
-    description: "A finance dashboard with accounts, transactions, date filters, budgets, and transfers."
-  },
-  {
-    title: "Admin",
-    path: "/examples/admin",
-    description: "A commerce back office with products, orders, customers, collections, and settings."
-  },
-  {
-    title: "Project",
-    path: "/examples/project",
-    description: "A project workspace with navigation, metrics, a Kanban board, issues, and activity."
-  },
-  {
-    title: "Storefront",
-    path: "/examples/storefront",
-    description: "A product detail experience with gallery, variants, cart controls, specs, and reviews."
-  }
-];
 var Demos = class extends PuzzleView {
   data() {
-    return { demos };
+    return { demos: DEMOS };
   }
 };
 Demos.prototype.render = function() {
   const __d = this.getData();
   const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
-    new ViewNode("article", {}, [
-      new ViewNode("header", { class: "mb-8 max-w-3xl" }, [
-        new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
-          new ViewNode("text", { value: "Demos" })
-        ]),
-        new ViewNode("p", { class: "mt-2 text-body" }, [
-          new ViewNode("text", { value: "Six complete interfaces assembled from Puzzle Pieces. Open one to see how the components work together in realistic dashboards, tools, conversations, and commerce." })
-        ])
-      ]),
-      new ViewNode(
-        "div",
-        { class: "grid gap-4 sm:grid-cols-2 xl:grid-cols-3" },
-        __d.demos.map(
-          (demo) => new ViewNode(Card, {
-            key: ViewNode.keyOf(demo),
-            title: demo.title,
-            description: demo.description,
-            class: "h-full"
-          }, [
-            new ViewNode("a", {
-              href: `#${demo.path}`,
-              class: "text-sm font-medium text-brand hover:text-brand-dark"
-            }, [
-              new ViewNode("text", { value: "Open " + String(demo.title) + " \u2192" })
-            ])
+    new ViewNode("div", { class: "xl:pr-60" }, [
+      new ViewNode("article", { class: "mx-auto w-full max-w-5xl min-w-0" }, [
+        new ViewNode("header", { class: "mb-8 max-w-3xl" }, [
+          new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Demos" })
+          ]),
+          new ViewNode("p", { class: "mt-2 text-body" }, [
+            new ViewNode("text", { value: "Six complete interfaces assembled from Puzzle Pieces. Open one to see how the components work together in realistic dashboards, tools, conversations, and commerce." })
           ])
+        ]),
+        new ViewNode(
+          "div",
+          { class: "grid gap-4 sm:grid-cols-2 xl:grid-cols-3" },
+          __d.demos.map(
+            (demo) => new ViewNode(Card, {
+              key: ViewNode.keyOf(demo),
+              title: demo.title,
+              description: demo.description,
+              class: "h-full"
+            }, [
+              new ViewNode("a", {
+                href: `#${demo.path}`,
+                class: "text-sm font-medium text-brand hover:text-brand-dark"
+              }, [
+                new ViewNode("text", { value: "Open " + String(demo.title) + " \u2192" })
+              ])
+            ])
+          )
         )
-      )
+      ])
     ])
   ]);
 };
@@ -11897,13 +15748,13 @@ Theming.__pzlModule = "app/views/Theming.pzl";
 // app/components/ui/Sidebar.pzl
 var uid2 = 0;
 var NAV_BASE = "flex h-full flex-col bg-surface border-r border-border transition-[width] duration-200 ease-out motion-reduce:transition-none";
-var ROW_BASE = "group flex items-center gap-3 rounded-md text-sm transition-colors outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
+var ROW_BASE2 = "group flex items-center gap-3 rounded-md text-sm transition-colors outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
 var IDLE2 = "text-muted hover:bg-surface-sunken hover:text-ink";
 var ACTIVE2 = "bg-brand-tint text-ink font-medium";
 var BADGE = "shrink-0 rounded-full bg-surface-sunken px-2 py-0.5 text-xs font-medium text-muted";
 var rowPad = (collapsed) => collapsed ? "justify-center px-2 py-2" : "px-3 py-2";
-var linkClass = (active, collapsed) => [ROW_BASE, rowPad(collapsed), active ? ACTIVE2 : IDLE2].join(" ");
-var childLinkClass = (active) => [ROW_BASE, "px-3 py-1.5", active ? ACTIVE2 : IDLE2].join(" ");
+var linkClass = (active, collapsed) => [ROW_BASE2, rowPad(collapsed), active ? ACTIVE2 : IDLE2].join(" ");
+var childLinkClass = (active) => [ROW_BASE2, "px-3 py-1.5", active ? ACTIVE2 : IDLE2].join(" ");
 function normalizeItems2(items, activePath) {
   const list = Array.isArray(items) ? items : [];
   return list.map((it, i2) => {
@@ -11992,7 +15843,7 @@ var Sidebar = class extends PuzzleView {
       badgeClass: BADGE,
       toggleLabel,
       toggleClass: [
-        ROW_BASE,
+        ROW_BASE2,
         rowPad(collapsed),
         "w-full cursor-pointer",
         IDLE2
@@ -13443,2540 +17294,6 @@ SearchField.prototype.render = function() {
 };
 SearchField.__pzlModule = "app/components/ui/SearchField.pzl";
 
-// node_modules/@magic-spells/physics-engine/dist/physics-engine.esm.js
-var f = class {
-  #t;
-  constructor() {
-    this.#t = /* @__PURE__ */ new Map();
-  }
-  /**
-   * Binds a listener to an event.
-   * @param {string} event - The event to bind the listener to.
-   * @param {Function} listener - The listener function to bind.
-   * @returns {EventEmitter} The current instance for chaining.
-   * @throws {TypeError} If the listener is not a function.
-   */
-  on(t2, i2) {
-    if (typeof i2 != "function")
-      throw new TypeError("Listener must be a function");
-    const s2 = this.#t.get(t2) || [];
-    return s2.includes(i2) || s2.push(i2), this.#t.set(t2, s2), this;
-  }
-  /**
-   * Unbinds a listener from an event.
-   * @param {string} event - The event to unbind the listener from.
-   * @param {Function} listener - The listener function to unbind.
-   * @returns {EventEmitter} The current instance for chaining.
-   */
-  off(t2, i2) {
-    const s2 = this.#t.get(t2);
-    if (!s2)
-      return this;
-    const e2 = s2.indexOf(i2);
-    return e2 !== -1 && (s2.splice(e2, 1), s2.length === 0 ? this.#t.delete(t2) : this.#t.set(t2, s2)), this;
-  }
-  /**
-   * Triggers an event and calls all bound listeners.
-   * @param {string} event - The event to trigger.
-   * @param {...*} args - Arguments to pass to the listener functions.
-   * @returns {boolean} True if the event had listeners, false otherwise.
-   */
-  emit(t2, ...i2) {
-    const s2 = this.#t.get(t2);
-    if (!s2 || s2.length === 0)
-      return false;
-    const e2 = s2.slice();
-    for (let n2 = 0, r2 = e2.length; n2 < r2; ++n2)
-      try {
-        e2[n2].apply(this, i2);
-      } catch (h) {
-        console.error(`Error in listener for event '${t2}':`, h);
-      }
-    return true;
-  }
-  /**
-   * Removes all listeners for a specific event or all events.
-   * @param {string} [event] - The event to remove listeners from. If not provided, removes all listeners.
-   * @returns {EventEmitter} The current instance for chaining.
-   */
-  removeAllListeners(t2) {
-    return t2 ? this.#t.delete(t2) : this.#t.clear(), this;
-  }
-};
-var b = class extends f {
-  #t;
-  #m;
-  #o;
-  #n;
-  #s;
-  #e;
-  #r;
-  #h;
-  #i;
-  /**
-   * Creates an instance of PhysicsEngine.
-   * @param {number} [attraction=0.026] - The attraction value for physics-based animation (0 < attraction < 1).
-   * @param {number} [friction=0.28] - The friction value for physics-based animation (0 < friction < 1).
-   */
-  constructor({ attraction: t2 = 0.026, friction: i2 = 0.28 } = {}) {
-    if (super(), !Number.isFinite(t2) || t2 <= 0 || t2 >= 1)
-      throw new Error("Attraction must be a number between 0 and 1 (exclusive).");
-    if (!Number.isFinite(i2) || i2 <= 0 || i2 >= 1)
-      throw new Error("Friction must be a number between 0 and 1 (exclusive).");
-    this.#t = t2, this.#m = i2, this.#o = 1 - i2, this.#n = 0, this.#s = 0, this.#e = 0, this.isAnimating = false, this.#r = null, this.#h = 0, this.#i = null;
-  }
-  /**
-   * Animates from a start value to an end value.
-   * @param {number} startValue - The starting value.
-   * @param {number} endValue - The target value.
-   * @param {number} [velocity=0] - Initial velocity.
-   * @returns {Promise} Resolves when animation completes or is stopped.
-   */
-  animateTo(t2, i2, s2 = 0) {
-    if (!Number.isFinite(t2))
-      throw new Error("startValue must be a finite number.");
-    if (!Number.isFinite(i2))
-      throw new Error("endValue must be a finite number.");
-    if (!Number.isFinite(s2))
-      throw new Error("velocity must be a finite number.");
-    if (this.isAnimating && this.#u(), t2 === i2 && s2 === 0)
-      return this.emit("change", { position: i2, progress: 1 }), this.emit("complete", { position: i2, progress: 1 }), Promise.resolve();
-    this.#s = t2, this.#e = i2, this.#n = s2, this.isAnimating = true, this.#r = null;
-    const e2 = ++this.#h;
-    return new Promise((n2) => {
-      this.#i = n2;
-      const r2 = (h) => {
-        if (e2 !== this.#h || !this.isAnimating)
-          return;
-        if (this.#r === null) {
-          this.#r = h, requestAnimationFrame(r2);
-          return;
-        }
-        const o2 = Math.min(h - this.#r, 64) / 16.66;
-        this.#r = h;
-        const l = (this.#e - this.#s) * this.#t;
-        this.#n += l * o2, this.#n *= Math.pow(this.#o, o2), this.#s += this.#n * o2;
-        const m = this.#e - t2;
-        let u = 0;
-        if (m !== 0 && (u = (this.#s - t2) / m), this.emit("change", { position: this.#s, progress: u }), Math.abs(this.#s - this.#e) < 0.01 && Math.abs(this.#n) < 0.01) {
-          this.isAnimating = false;
-          const c2 = this.#i;
-          this.#i = null, this.emit("change", { position: this.#e, progress: 1 }), this.emit("complete", { position: this.#e, progress: 1 }), c2();
-          return;
-        }
-        requestAnimationFrame(r2);
-      };
-      requestAnimationFrame(r2);
-    });
-  }
-  /**
-   * Internal stop — resolves Promise without emitting 'stop'.
-   * Used when a new animateTo supersedes the current one.
-   */
-  #u() {
-    this.isAnimating = false, this.#i && (this.#i(), this.#i = null);
-  }
-  /**
-   * Stops the ongoing animation.
-   * Emits 'stop' event and resolves the pending Promise.
-   */
-  stop() {
-    if (!this.isAnimating)
-      return;
-    this.isAnimating = false, this.#h++;
-    const t2 = this.#i;
-    this.#i = null, this.emit("stop", { position: this.#s }), t2 && t2();
-  }
-  /**
-   * Sets the attraction value
-   * @param {number} attraction - The attraction value for physics-based animation (0 < attraction < 1).
-   */
-  setAttraction(t2) {
-    if (!Number.isFinite(t2) || t2 <= 0 || t2 >= 1)
-      throw new Error("Attraction must be a number between 0 and 1 (exclusive).");
-    this.#t = t2;
-  }
-  /**
-   * Sets the friction value
-   * @param {number} friction - The friction value for physics-based animation (0 < friction < 1).
-   */
-  setFriction(t2) {
-    if (!Number.isFinite(t2) || t2 <= 0 || t2 >= 1)
-      throw new Error("Friction must be a number between 0 and 1 (exclusive).");
-    this.#m = t2, this.#o = 1 - t2;
-  }
-};
-
-// node_modules/@magic-spells/frame-engine/dist/frame-engine.esm.js
-var e = /* @__PURE__ */ new Set(/* @__PURE__ */ "display.position.float.clear.visibility.overflow.overflow-x.overflow-y.flex-direction.flex-wrap.justify-content.align-items.align-content.order.grid-template-columns.grid-template-rows.grid-template-areas.grid-auto-flow.z-index.table-layout.empty-cells.caption-side.list-style-type.list-style-position.pointer-events.user-select.box-sizing.resize.text-align.text-transform.white-space.word-break.word-wrap.font-style.font-variant.background-repeat.background-attachment.border-style.border-collapse.content.page-break-before.page-break-after.page-break-inside".split("."));
-var t = /* @__PURE__ */ new Set([
-  "transform",
-  "filter",
-  "backdrop-filter"
-]);
-var n = {
-  translateX: [{
-    value: 0,
-    unit: "px"
-  }],
-  translateY: [{
-    value: 0,
-    unit: "px"
-  }],
-  translateZ: [{
-    value: 0,
-    unit: "px"
-  }],
-  translate: [{
-    value: 0,
-    unit: "px"
-  }, {
-    value: 0,
-    unit: "px"
-  }],
-  translate3d: [
-    {
-      value: 0,
-      unit: "px"
-    },
-    {
-      value: 0,
-      unit: "px"
-    },
-    {
-      value: 0,
-      unit: "px"
-    }
-  ],
-  scale: [{
-    value: 1,
-    unit: ""
-  }],
-  scaleX: [{
-    value: 1,
-    unit: ""
-  }],
-  scaleY: [{
-    value: 1,
-    unit: ""
-  }],
-  scaleZ: [{
-    value: 1,
-    unit: ""
-  }],
-  scale3d: [
-    {
-      value: 1,
-      unit: ""
-    },
-    {
-      value: 1,
-      unit: ""
-    },
-    {
-      value: 1,
-      unit: ""
-    }
-  ],
-  rotate: [{
-    value: 0,
-    unit: "deg"
-  }],
-  rotateX: [{
-    value: 0,
-    unit: "deg"
-  }],
-  rotateY: [{
-    value: 0,
-    unit: "deg"
-  }],
-  rotateZ: [{
-    value: 0,
-    unit: "deg"
-  }],
-  rotate3d: [
-    {
-      value: 0,
-      unit: ""
-    },
-    {
-      value: 0,
-      unit: ""
-    },
-    {
-      value: 1,
-      unit: ""
-    },
-    {
-      value: 0,
-      unit: "deg"
-    }
-  ],
-  skew: [{
-    value: 0,
-    unit: "deg"
-  }, {
-    value: 0,
-    unit: "deg"
-  }],
-  skewX: [{
-    value: 0,
-    unit: "deg"
-  }],
-  skewY: [{
-    value: 0,
-    unit: "deg"
-  }],
-  perspective: [{
-    value: 0,
-    unit: "px"
-  }],
-  blur: [{
-    value: 0,
-    unit: "px"
-  }],
-  brightness: [{
-    value: 1,
-    unit: ""
-  }],
-  contrast: [{
-    value: 1,
-    unit: ""
-  }],
-  grayscale: [{
-    value: 0,
-    unit: ""
-  }],
-  "hue-rotate": [{
-    value: 0,
-    unit: "deg"
-  }],
-  invert: [{
-    value: 0,
-    unit: ""
-  }],
-  opacity: [{
-    value: 1,
-    unit: ""
-  }],
-  saturate: [{
-    value: 1,
-    unit: ""
-  }],
-  sepia: [{
-    value: 0,
-    unit: ""
-  }],
-  "drop-shadow-1": [
-    {
-      value: 0,
-      unit: "px"
-    },
-    {
-      value: 0,
-      unit: "px"
-    },
-    {
-      value: 0,
-      unit: "px"
-    }
-  ],
-  "drop-shadow-2": [
-    {
-      value: 0,
-      unit: "px"
-    },
-    {
-      value: 0,
-      unit: "px"
-    },
-    {
-      value: 0,
-      unit: "px"
-    }
-  ]
-};
-var r = {
-  opacity: [0, 1],
-  blur: [0, Infinity],
-  brightness: [0, Infinity],
-  contrast: [0, Infinity],
-  grayscale: [0, 1],
-  invert: [0, 1],
-  sepia: [0, 1],
-  saturate: [0, Infinity]
-};
-var i = {
-  red: 0,
-  green: 0,
-  blue: 0,
-  alpha: 0
-};
-var a = false;
-function o(e2, t2, n2) {
-  return n2 < 0 && (n2 += 1), n2 > 1 && --n2, n2 < 1 / 6 ? e2 + (t2 - e2) * 6 * n2 : n2 < 1 / 2 ? t2 : n2 < 2 / 3 ? e2 + (t2 - e2) * (2 / 3 - n2) * 6 : e2;
-}
-var s = {
-  aliceblue: [
-    240,
-    248,
-    255,
-    1
-  ],
-  antiquewhite: [
-    250,
-    235,
-    215,
-    1
-  ],
-  aqua: [
-    0,
-    255,
-    255,
-    1
-  ],
-  aquamarine: [
-    127,
-    255,
-    212,
-    1
-  ],
-  azure: [
-    240,
-    255,
-    255,
-    1
-  ],
-  beige: [
-    245,
-    245,
-    220,
-    1
-  ],
-  bisque: [
-    255,
-    228,
-    196,
-    1
-  ],
-  black: [
-    0,
-    0,
-    0,
-    1
-  ],
-  blanchedalmond: [
-    255,
-    235,
-    205,
-    1
-  ],
-  blue: [
-    0,
-    0,
-    255,
-    1
-  ],
-  blueviolet: [
-    138,
-    43,
-    226,
-    1
-  ],
-  brown: [
-    165,
-    42,
-    42,
-    1
-  ],
-  burlywood: [
-    222,
-    184,
-    135,
-    1
-  ],
-  cadetblue: [
-    95,
-    158,
-    160,
-    1
-  ],
-  chartreuse: [
-    127,
-    255,
-    0,
-    1
-  ],
-  chocolate: [
-    210,
-    105,
-    30,
-    1
-  ],
-  coral: [
-    255,
-    127,
-    80,
-    1
-  ],
-  cornflowerblue: [
-    100,
-    149,
-    237,
-    1
-  ],
-  cornsilk: [
-    255,
-    248,
-    220,
-    1
-  ],
-  crimson: [
-    220,
-    20,
-    60,
-    1
-  ],
-  cyan: [
-    0,
-    255,
-    255,
-    1
-  ],
-  darkblue: [
-    0,
-    0,
-    139,
-    1
-  ],
-  darkcyan: [
-    0,
-    139,
-    139,
-    1
-  ],
-  darkgoldenrod: [
-    184,
-    134,
-    11,
-    1
-  ],
-  darkgray: [
-    169,
-    169,
-    169,
-    1
-  ],
-  darkgreen: [
-    0,
-    100,
-    0,
-    1
-  ],
-  darkgrey: [
-    169,
-    169,
-    169,
-    1
-  ],
-  darkkhaki: [
-    189,
-    183,
-    107,
-    1
-  ],
-  darkmagenta: [
-    139,
-    0,
-    139,
-    1
-  ],
-  darkolivegreen: [
-    85,
-    107,
-    47,
-    1
-  ],
-  darkorange: [
-    255,
-    140,
-    0,
-    1
-  ],
-  darkorchid: [
-    153,
-    50,
-    204,
-    1
-  ],
-  darkred: [
-    139,
-    0,
-    0,
-    1
-  ],
-  darksalmon: [
-    233,
-    150,
-    122,
-    1
-  ],
-  darkseagreen: [
-    143,
-    188,
-    143,
-    1
-  ],
-  darkslateblue: [
-    72,
-    61,
-    139,
-    1
-  ],
-  darkslategray: [
-    47,
-    79,
-    79,
-    1
-  ],
-  darkslategrey: [
-    47,
-    79,
-    79,
-    1
-  ],
-  darkturquoise: [
-    0,
-    206,
-    209,
-    1
-  ],
-  darkviolet: [
-    148,
-    0,
-    211,
-    1
-  ],
-  deeppink: [
-    255,
-    20,
-    147,
-    1
-  ],
-  deepskyblue: [
-    0,
-    191,
-    255,
-    1
-  ],
-  dimgray: [
-    105,
-    105,
-    105,
-    1
-  ],
-  dimgrey: [
-    105,
-    105,
-    105,
-    1
-  ],
-  dodgerblue: [
-    30,
-    144,
-    255,
-    1
-  ],
-  firebrick: [
-    178,
-    34,
-    34,
-    1
-  ],
-  floralwhite: [
-    255,
-    250,
-    240,
-    1
-  ],
-  forestgreen: [
-    34,
-    139,
-    34,
-    1
-  ],
-  fuchsia: [
-    255,
-    0,
-    255,
-    1
-  ],
-  gainsboro: [
-    220,
-    220,
-    220,
-    1
-  ],
-  ghostwhite: [
-    248,
-    248,
-    255,
-    1
-  ],
-  gold: [
-    255,
-    215,
-    0,
-    1
-  ],
-  goldenrod: [
-    218,
-    165,
-    32,
-    1
-  ],
-  gray: [
-    128,
-    128,
-    128,
-    1
-  ],
-  green: [
-    0,
-    128,
-    0,
-    1
-  ],
-  greenyellow: [
-    173,
-    255,
-    47,
-    1
-  ],
-  grey: [
-    128,
-    128,
-    128,
-    1
-  ],
-  honeydew: [
-    240,
-    255,
-    240,
-    1
-  ],
-  hotpink: [
-    255,
-    105,
-    180,
-    1
-  ],
-  indianred: [
-    205,
-    92,
-    92,
-    1
-  ],
-  indigo: [
-    75,
-    0,
-    130,
-    1
-  ],
-  ivory: [
-    255,
-    255,
-    240,
-    1
-  ],
-  khaki: [
-    240,
-    230,
-    140,
-    1
-  ],
-  lavender: [
-    230,
-    230,
-    250,
-    1
-  ],
-  lavenderblush: [
-    255,
-    240,
-    245,
-    1
-  ],
-  lawngreen: [
-    124,
-    252,
-    0,
-    1
-  ],
-  lemonchiffon: [
-    255,
-    250,
-    205,
-    1
-  ],
-  lightblue: [
-    173,
-    216,
-    230,
-    1
-  ],
-  lightcoral: [
-    240,
-    128,
-    128,
-    1
-  ],
-  lightcyan: [
-    224,
-    255,
-    255,
-    1
-  ],
-  lightgoldenrodyellow: [
-    250,
-    250,
-    210,
-    1
-  ],
-  lightgray: [
-    211,
-    211,
-    211,
-    1
-  ],
-  lightgreen: [
-    144,
-    238,
-    144,
-    1
-  ],
-  lightgrey: [
-    211,
-    211,
-    211,
-    1
-  ],
-  lightpink: [
-    255,
-    182,
-    193,
-    1
-  ],
-  lightsalmon: [
-    255,
-    160,
-    122,
-    1
-  ],
-  lightseagreen: [
-    32,
-    178,
-    170,
-    1
-  ],
-  lightskyblue: [
-    135,
-    206,
-    250,
-    1
-  ],
-  lightslategray: [
-    119,
-    136,
-    153,
-    1
-  ],
-  lightslategrey: [
-    119,
-    136,
-    153,
-    1
-  ],
-  lightsteelblue: [
-    176,
-    196,
-    222,
-    1
-  ],
-  lightyellow: [
-    255,
-    255,
-    224,
-    1
-  ],
-  lime: [
-    0,
-    255,
-    0,
-    1
-  ],
-  limegreen: [
-    50,
-    205,
-    50,
-    1
-  ],
-  linen: [
-    250,
-    240,
-    230,
-    1
-  ],
-  magenta: [
-    255,
-    0,
-    255,
-    1
-  ],
-  maroon: [
-    128,
-    0,
-    0,
-    1
-  ],
-  mediumaquamarine: [
-    102,
-    205,
-    170,
-    1
-  ],
-  mediumblue: [
-    0,
-    0,
-    205,
-    1
-  ],
-  mediumorchid: [
-    186,
-    85,
-    211,
-    1
-  ],
-  mediumpurple: [
-    147,
-    112,
-    219,
-    1
-  ],
-  mediumseagreen: [
-    60,
-    179,
-    113,
-    1
-  ],
-  mediumslateblue: [
-    123,
-    104,
-    238,
-    1
-  ],
-  mediumspringgreen: [
-    0,
-    250,
-    154,
-    1
-  ],
-  mediumturquoise: [
-    72,
-    209,
-    204,
-    1
-  ],
-  mediumvioletred: [
-    199,
-    21,
-    133,
-    1
-  ],
-  midnightblue: [
-    25,
-    25,
-    112,
-    1
-  ],
-  mintcream: [
-    245,
-    255,
-    250,
-    1
-  ],
-  mistyrose: [
-    255,
-    228,
-    225,
-    1
-  ],
-  moccasin: [
-    255,
-    228,
-    181,
-    1
-  ],
-  navajowhite: [
-    255,
-    222,
-    173,
-    1
-  ],
-  navy: [
-    0,
-    0,
-    128,
-    1
-  ],
-  oldlace: [
-    253,
-    245,
-    230,
-    1
-  ],
-  olive: [
-    128,
-    128,
-    0,
-    1
-  ],
-  olivedrab: [
-    107,
-    142,
-    35,
-    1
-  ],
-  orange: [
-    255,
-    165,
-    0,
-    1
-  ],
-  orangered: [
-    255,
-    69,
-    0,
-    1
-  ],
-  orchid: [
-    218,
-    112,
-    214,
-    1
-  ],
-  palegoldenrod: [
-    238,
-    232,
-    170,
-    1
-  ],
-  palegreen: [
-    152,
-    251,
-    152,
-    1
-  ],
-  paleturquoise: [
-    175,
-    238,
-    238,
-    1
-  ],
-  palevioletred: [
-    219,
-    112,
-    147,
-    1
-  ],
-  papayawhip: [
-    255,
-    239,
-    213,
-    1
-  ],
-  peachpuff: [
-    255,
-    218,
-    185,
-    1
-  ],
-  peru: [
-    205,
-    133,
-    63,
-    1
-  ],
-  pink: [
-    255,
-    192,
-    203,
-    1
-  ],
-  plum: [
-    221,
-    160,
-    221,
-    1
-  ],
-  powderblue: [
-    176,
-    224,
-    230,
-    1
-  ],
-  purple: [
-    128,
-    0,
-    128,
-    1
-  ],
-  rebeccapurple: [
-    102,
-    51,
-    153,
-    1
-  ],
-  red: [
-    255,
-    0,
-    0,
-    1
-  ],
-  rosybrown: [
-    188,
-    143,
-    143,
-    1
-  ],
-  royalblue: [
-    65,
-    105,
-    225,
-    1
-  ],
-  saddlebrown: [
-    139,
-    69,
-    19,
-    1
-  ],
-  salmon: [
-    250,
-    128,
-    114,
-    1
-  ],
-  sandybrown: [
-    244,
-    164,
-    96,
-    1
-  ],
-  seagreen: [
-    46,
-    139,
-    87,
-    1
-  ],
-  seashell: [
-    255,
-    245,
-    238,
-    1
-  ],
-  sienna: [
-    160,
-    82,
-    45,
-    1
-  ],
-  silver: [
-    192,
-    192,
-    192,
-    1
-  ],
-  skyblue: [
-    135,
-    206,
-    235,
-    1
-  ],
-  slateblue: [
-    106,
-    90,
-    205,
-    1
-  ],
-  slategray: [
-    112,
-    128,
-    144,
-    1
-  ],
-  slategrey: [
-    112,
-    128,
-    144,
-    1
-  ],
-  snow: [
-    255,
-    250,
-    250,
-    1
-  ],
-  springgreen: [
-    0,
-    255,
-    127,
-    1
-  ],
-  steelblue: [
-    70,
-    130,
-    180,
-    1
-  ],
-  tan: [
-    210,
-    180,
-    140,
-    1
-  ],
-  teal: [
-    0,
-    128,
-    128,
-    1
-  ],
-  thistle: [
-    216,
-    191,
-    216,
-    1
-  ],
-  tomato: [
-    255,
-    99,
-    71,
-    1
-  ],
-  turquoise: [
-    64,
-    224,
-    208,
-    1
-  ],
-  violet: [
-    238,
-    130,
-    238,
-    1
-  ],
-  wheat: [
-    245,
-    222,
-    179,
-    1
-  ],
-  white: [
-    255,
-    255,
-    255,
-    1
-  ],
-  whitesmoke: [
-    245,
-    245,
-    245,
-    1
-  ],
-  yellow: [
-    255,
-    255,
-    0,
-    1
-  ],
-  yellowgreen: [
-    154,
-    205,
-    50,
-    1
-  ],
-  transparent: [
-    0,
-    0,
-    0,
-    0
-  ]
-};
-var c = class {
-  constructor(e2) {
-    this.setKeyframes(e2);
-  }
-  setKeyframes(e2) {
-    this.keyframes = Object.keys(e2).map(Number).sort((e3, t2) => e3 - t2).map((t2) => ({
-      percent: t2,
-      values: this.flatten(e2[t2])
-    }));
-    let r2 = {};
-    for (let e3 of t)
-      r2[e3] = /* @__PURE__ */ new Set();
-    for (let e3 of this.keyframes)
-      for (let n2 in e3.values) {
-        let e4 = n2.indexOf(":");
-        if (e4 === -1)
-          continue;
-        let i2 = n2.substring(0, e4), a2 = n2.substring(e4 + 1);
-        a2 !== "__order" && t.has(i2) && r2[i2].add(a2);
-      }
-    for (let e3 of t) {
-      if (r2[e3].size === 0)
-        continue;
-      let t2 = `${e3}:__order`;
-      for (let a2 of this.keyframes) {
-        if (!(t2 in a2.values)) {
-          a2.values[t2] = {
-            discrete: true,
-            value: [...r2[e3]]
-          };
-          for (let t3 of r2[e3]) {
-            let r3 = `${e3}:${t3}`, o2 = n[t3] || [{
-              value: 0,
-              unit: ""
-            }];
-            a2.values[r3] = { args: o2.map((e4) => ({ ...e4 })) }, t3.startsWith("drop-shadow-") && (a2.values[r3].color = { ...i });
-          }
-          continue;
-        }
-        for (let o2 of r2[e3]) {
-          let r3 = `${e3}:${o2}`;
-          if (!(r3 in a2.values)) {
-            let e4 = n[o2] || [{
-              value: 0,
-              unit: ""
-            }];
-            a2.values[r3] = { args: e4.map((e5) => ({ ...e5 })) }, o2.startsWith("drop-shadow-") && (a2.values[r3].color = { ...i }), a2.values[t2].value.includes(o2) || a2.values[t2].value.push(o2);
-          }
-        }
-      }
-    }
-    this._allKeys = /* @__PURE__ */ new Set();
-    for (let e3 of this.keyframes)
-      for (let t2 in e3.values)
-        t2.endsWith(":__order") || this._allKeys.add(t2);
-    this._keyFrames = {};
-    for (let e3 of this._allKeys)
-      this._keyFrames[e3] = this.keyframes.filter((t2) => e3 in t2.values);
-    this._orders = {};
-    for (let e3 of t) {
-      let t2 = `${e3}:__order`, n2 = this.keyframes.filter((e4) => t2 in e4.values);
-      if (n2.length === 0)
-        continue;
-      let r3 = /* @__PURE__ */ new Set(), i2 = [];
-      for (let e4 of n2)
-        for (let n3 of e4.values[t2].value)
-          r3.has(n3) || (r3.add(n3), i2.push(n3));
-      this._orders[e3] = i2;
-    }
-  }
-  flatten(n2) {
-    let r2 = {};
-    for (let i2 in n2)
-      t.has(i2) ? Object.assign(r2, this.flattenFunctions(i2, n2[i2])) : this.isColor(n2[i2]) ? r2[i2] = this.parseColor(n2[i2]) || {
-        discrete: true,
-        value: n2[i2]
-      } : e.has(i2) ? r2[i2] = {
-        discrete: true,
-        value: n2[i2]
-      } : r2[i2] = this.parseValue(n2[i2]) || {
-        discrete: true,
-        value: n2[i2]
-      };
-    return r2;
-  }
-  flattenFunctions(e2, t2) {
-    let n2 = {}, r2 = [], i2 = {};
-    for (let { name: o2, args: s2, color: c2 } of this.parseFunctions(t2)) {
-      let t3 = o2;
-      if (o2 === "drop-shadow") {
-        if (i2[o2] = (i2[o2] || 0) + 1, i2[o2] > 2) {
-          a || (a = true, console.warn("FrameEngine: Only the first 2 drop-shadow functions per keyframe are interpolated. Additional drop-shadows are ignored."));
-          continue;
-        }
-        t3 = `${o2}-${i2[o2]}`;
-      }
-      let l = { args: s2 };
-      c2 && (l.color = c2), n2[`${e2}:${t3}`] = l, r2.push(t3);
-    }
-    return n2[`${e2}:__order`] = {
-      discrete: true,
-      value: r2
-    }, n2;
-  }
-  parseFunctions(e2) {
-    let t2 = [], n2 = 0, r2 = e2.length;
-    for (; n2 < r2; ) {
-      for (; n2 < r2 && /\s/.test(e2[n2]); )
-        n2++;
-      if (n2 >= r2)
-        break;
-      let i2 = "";
-      for (; n2 < r2 && /[\w-]/.test(e2[n2]); )
-        i2 += e2[n2], n2++;
-      if (!i2 || n2 >= r2 || e2[n2] !== "(")
-        continue;
-      n2++;
-      let a2 = 1, o2 = "";
-      for (; n2 < r2 && a2 > 0; ) {
-        if (e2[n2] === "(")
-          a2++;
-        else if (e2[n2] === ")" && (a2--, a2 === 0)) {
-          n2++;
-          break;
-        }
-        o2 += e2[n2], n2++;
-      }
-      if (i2 === "drop-shadow") {
-        let e3 = this.splitArgs(o2), n3 = [], r3 = null;
-        for (let t3 of e3)
-          if (this.isColor(t3)) {
-            let e4 = this.parseColor(t3);
-            e4 && (r3 = e4);
-          } else {
-            let e4 = t3.match(/^(-?\d*\.?\d+)(\D*)$/);
-            n3.push(e4 ? {
-              value: parseFloat(e4[1]),
-              unit: e4[2]
-            } : {
-              value: 0,
-              unit: ""
-            });
-          }
-        t2.push({
-          name: i2,
-          args: n3,
-          color: r3
-        });
-      } else {
-        let e3 = o2.split(/\s*,\s*|\s+/).map((e4) => {
-          let t3 = e4.match(/^(-?\d*\.?\d+)(\D*)$/);
-          return t3 ? {
-            value: parseFloat(t3[1]),
-            unit: t3[2]
-          } : {
-            value: 0,
-            unit: ""
-          };
-        });
-        t2.push({
-          name: i2,
-          args: e3
-        });
-      }
-    }
-    return t2;
-  }
-  splitArgs(e2) {
-    let t2 = [], n2 = "", r2 = 0;
-    for (let i2 = 0; i2 < e2.length; i2++) {
-      let a2 = e2[i2];
-      a2 === "(" ? r2++ : a2 === ")" && r2--, r2 === 0 && (a2 === " " || a2 === ",") ? (n2.trim() && t2.push(n2.trim()), n2 = "") : n2 += a2;
-    }
-    return n2.trim() && t2.push(n2.trim()), t2;
-  }
-  parseValue(e2) {
-    if (typeof e2 == "number")
-      return {
-        value: e2,
-        unit: ""
-      };
-    let t2 = String(e2).match(/^(-?\d*\.?\d+)(\D*)$/);
-    return t2 ? {
-      value: parseFloat(t2[1]),
-      unit: t2[2]
-    } : null;
-  }
-  parseColor(e2) {
-    let t2 = this.colorToRGBA(e2);
-    if (!t2)
-      return null;
-    let [n2, r2, i2, a2] = t2;
-    return {
-      red: n2,
-      green: r2,
-      blue: i2,
-      alpha: a2
-    };
-  }
-  colorToRGBA(e2) {
-    if (typeof e2 != "string")
-      return null;
-    let t2 = s[e2.toLowerCase()];
-    if (t2)
-      return t2;
-    let n2 = e2.match(/^color\(\s*srgb\s+([+-]?(?:\d*\.?\d+)(?:e[+-]?\d+)?)\s+([+-]?(?:\d*\.?\d+)(?:e[+-]?\d+)?)\s+([+-]?(?:\d*\.?\d+)(?:e[+-]?\d+)?)(?:\s*\/\s*([+-]?(?:\d*\.?\d+)(?:e[+-]?\d+)?)(%)?)?\s*\)$/i);
-    if (n2) {
-      let e3 = n2[4] === void 0 ? 1 : parseFloat(n2[4]) / (n2[5] ? 100 : 1);
-      return [
-        parseFloat(n2[1]) * 255,
-        parseFloat(n2[2]) * 255,
-        parseFloat(n2[3]) * 255,
-        e3
-      ];
-    }
-    if (/^#[0-9A-Fa-f]{3}$/.test(e2))
-      return [
-        parseInt(e2[1] + e2[1], 16),
-        parseInt(e2[2] + e2[2], 16),
-        parseInt(e2[3] + e2[3], 16),
-        1
-      ];
-    if (/^#[0-9A-Fa-f]{4}$/.test(e2))
-      return [
-        parseInt(e2[1] + e2[1], 16),
-        parseInt(e2[2] + e2[2], 16),
-        parseInt(e2[3] + e2[3], 16),
-        parseInt(e2[4] + e2[4], 16) / 255
-      ];
-    if (/^#[0-9A-Fa-f]{6}$/.test(e2))
-      return [
-        parseInt(e2.slice(1, 3), 16),
-        parseInt(e2.slice(3, 5), 16),
-        parseInt(e2.slice(5, 7), 16),
-        1
-      ];
-    if (/^#[0-9A-Fa-f]{8}$/.test(e2))
-      return [
-        parseInt(e2.slice(1, 3), 16),
-        parseInt(e2.slice(3, 5), 16),
-        parseInt(e2.slice(5, 7), 16),
-        parseInt(e2.slice(7, 9), 16) / 255
-      ];
-    let r2 = e2.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/);
-    if (r2)
-      return [
-        parseInt(r2[1], 10),
-        parseInt(r2[2], 10),
-        parseInt(r2[3], 10),
-        r2[4] === void 0 ? 1 : parseFloat(r2[4])
-      ];
-    let i2 = e2.match(/^rgba?\(\s*(\d+)\s+(\d+)\s+(\d+)\s*(?:\/\s*([\d.]+)\s*)?\)$/);
-    if (i2)
-      return [
-        parseInt(i2[1], 10),
-        parseInt(i2[2], 10),
-        parseInt(i2[3], 10),
-        i2[4] === void 0 ? 1 : parseFloat(i2[4])
-      ];
-    let a2 = e2.match(/^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*(?:,\s*([\d.]+)\s*)?\)$/);
-    if (a2)
-      return this._hslToRgba(parseFloat(a2[1]), parseFloat(a2[2]), parseFloat(a2[3]), a2[4] === void 0 ? 1 : parseFloat(a2[4]));
-    let o2 = e2.match(/^hsla?\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*(?:\/\s*([\d.]+)\s*)?\)$/);
-    return o2 ? this._hslToRgba(parseFloat(o2[1]), parseFloat(o2[2]), parseFloat(o2[3]), o2[4] === void 0 ? 1 : parseFloat(o2[4])) : null;
-  }
-  _hslToRgba(e2, t2, n2, r2) {
-    let i2 = e2 / 360, a2 = t2 / 100, s2 = n2 / 100;
-    if (a2 === 0) {
-      let e3 = Math.round(s2 * 255);
-      return [
-        e3,
-        e3,
-        e3,
-        r2
-      ];
-    }
-    let c2 = s2 < 0.5 ? s2 * (1 + a2) : s2 + a2 - s2 * a2, l = 2 * s2 - c2;
-    return [
-      Math.round(o(l, c2, i2 + 1 / 3) * 255),
-      Math.round(o(l, c2, i2) * 255),
-      Math.round(o(l, c2, i2 - 1 / 3) * 255),
-      r2
-    ];
-  }
-  isColor(e2) {
-    return typeof e2 == "string" ? /^(#[0-9A-Fa-f]{3}$|#[0-9A-Fa-f]{4}$|#[0-9A-Fa-f]{6}$|#[0-9A-Fa-f]{8}$|rgba?\s*\(|hsla?\s*\()/.test(e2) || /^color\(\s*srgb\s/i.test(e2) ? true : e2.toLowerCase() in s : false;
-  }
-  lerp(e2, t2, n2) {
-    return e2 + (t2 - e2) * n2;
-  }
-  lerpColor(e2, t2, n2) {
-    let r2 = (e3, t3, n3) => Math.min(n3, Math.max(t3, e3));
-    return {
-      red: Math.round(r2(this.lerp(e2.red, t2.red, n2), 0, 255)),
-      green: Math.round(r2(this.lerp(e2.green, t2.green, n2), 0, 255)),
-      blue: Math.round(r2(this.lerp(e2.blue, t2.blue, n2), 0, 255)),
-      alpha: parseFloat(r2(this.lerp(e2.alpha, t2.alpha, n2), 0, 1).toFixed(4))
-    };
-  }
-  format(e2) {
-    return parseFloat(e2.toFixed(4)).toString();
-  }
-  findFramesAndFactor(e2, t2) {
-    if (e2.length === 0)
-      return null;
-    if (e2.length === 1)
-      return {
-        from: e2[0],
-        to: e2[0],
-        factor: 0
-      };
-    let n2 = e2[0], r2 = e2[e2.length - 1];
-    if (t2 <= n2.percent) {
-      let r3 = e2[1].percent - n2.percent;
-      return {
-        from: n2,
-        to: e2[1],
-        factor: r3 === 0 ? 1 : (t2 - n2.percent) / r3
-      };
-    }
-    if (t2 >= r2.percent) {
-      let n3 = e2[e2.length - 2], i2 = r2.percent - n3.percent;
-      return {
-        from: n3,
-        to: r2,
-        factor: i2 === 0 ? 1 : (t2 - n3.percent) / i2
-      };
-    }
-    for (let n3 = 0; n3 < e2.length - 1; n3++)
-      if (t2 >= e2[n3].percent && t2 <= e2[n3 + 1].percent) {
-        let r3 = e2[n3 + 1].percent - e2[n3].percent;
-        return {
-          from: e2[n3],
-          to: e2[n3 + 1],
-          factor: r3 === 0 ? 1 : (t2 - e2[n3].percent) / r3
-        };
-      }
-    return {
-      from: r2,
-      to: r2,
-      factor: 0
-    };
-  }
-  getDiscrete(e2, t2) {
-    let n2 = this._keyFrames[e2] || this.keyframes.filter((t3) => e2 in t3.values);
-    if (n2.length === 0)
-      return null;
-    let r2 = n2[0];
-    for (let e3 of n2)
-      if (e3.percent <= t2)
-        r2 = e3;
-      else
-        break;
-    return r2.values[e2].value;
-  }
-  getDefault(e2) {
-    let t2 = e2.split(":")[1];
-    return t2 && n[t2] ? n[t2] : [{
-      value: 0,
-      unit: ""
-    }];
-  }
-  getFrame(e2) {
-    let t2 = e2 * 100, n2 = this._allKeys, a2 = {};
-    for (let e3 of n2) {
-      let n3 = this._keyFrames[e3];
-      if (!n3 || n3.length === 0)
-        continue;
-      let o2 = n3[0].values[e3];
-      if (o2 && o2.discrete) {
-        a2[e3] = this.getDiscrete(e3, t2);
-        continue;
-      }
-      let { from: s2, to: c2, factor: l } = this.findFramesAndFactor(n3, t2), u = s2.values[e3], d = c2.values[e3];
-      if (u && "red" in u) {
-        a2[e3] = this.lerpColor(u, d, l);
-        continue;
-      }
-      if (u && u.args) {
-        let t3 = d.args || this.getDefault(e3), n4 = this.getDefault(e3), o3 = Math.max(u.args.length, t3.length), s3 = [];
-        for (let e4 = 0; e4 < o3; e4++) {
-          let r2 = u.args[e4] || n4[e4] || {
-            value: 0,
-            unit: ""
-          }, i2 = t3[e4] || n4[e4] || {
-            value: 0,
-            unit: ""
-          };
-          s3.push({
-            value: this.lerp(r2.value, i2.value, l),
-            unit: r2.unit || i2.unit
-          });
-        }
-        let c3 = r[e3.includes(":") ? e3.substring(e3.indexOf(":") + 1) : e3];
-        if (c3)
-          for (let e4 of s3)
-            e4.value = Math.min(c3[1], Math.max(c3[0], e4.value));
-        let f2 = { args: s3 };
-        (u.color || d.color) && (f2.color = this.lerpColor(u.color || i, d.color || i, l)), a2[e3] = f2;
-        continue;
-      }
-      if (u && "value" in u) {
-        let t3 = d || this.getDefault(e3)[0], n4 = this.lerp(u.value, t3.value, l), i2 = r[e3];
-        i2 && (n4 = Math.min(i2[1], Math.max(i2[0], n4))), a2[e3] = {
-          value: n4,
-          unit: u.unit
-        };
-      }
-    }
-    return this.toStyles(a2);
-  }
-  toStyles(e2) {
-    let n2 = {}, r2 = {};
-    for (let i2 in e2) {
-      let a2 = e2[i2], o2 = i2.indexOf(":");
-      if (o2 !== -1) {
-        let e3 = i2.substring(0, o2), n3 = i2.substring(o2 + 1);
-        if (t.has(e3)) {
-          if (r2[e3] || (r2[e3] = {}), a2.args)
-            if (n3.startsWith("drop-shadow-")) {
-              let t2 = n3.replace(/-\d+$/, ""), i3 = a2.args.map((e4) => `${this.format(e4.value)}${e4.unit}`).join(" ");
-              if (a2.color) {
-                let o3 = a2.color, s2 = o3.alpha < 1 ? `rgba(${o3.red},${o3.green},${o3.blue},${o3.alpha})` : `rgb(${o3.red},${o3.green},${o3.blue})`;
-                r2[e3][n3] = `${t2}(${i3} ${s2})`;
-              } else
-                r2[e3][n3] = `${t2}(${i3})`;
-            } else
-              r2[e3][n3] = `${n3}(${a2.args.map((e4) => `${this.format(e4.value)}${e4.unit}`).join(", ")})`;
-          else
-            r2[e3][n3] = `${n3}(${this.format(a2.value)}${a2.unit})`;
-          continue;
-        }
-      }
-      if (typeof a2 == "string" || typeof a2 == "number") {
-        n2[i2] = a2;
-        continue;
-      }
-      if (a2 && "red" in a2) {
-        n2[i2] = a2.alpha < 1 ? `rgba(${a2.red},${a2.green},${a2.blue},${a2.alpha})` : `rgb(${a2.red},${a2.green},${a2.blue})`;
-        continue;
-      }
-      if (a2 && "value" in a2) {
-        n2[i2] = `${this.format(a2.value)}${a2.unit}`;
-        continue;
-      }
-      n2[i2] = a2;
-    }
-    for (let e3 in r2) {
-      let t2 = r2[e3], i2 = (this._orders[e3] || Object.keys(t2)).filter((e4) => t2[e4]).map((e4) => t2[e4]);
-      i2.length > 0 && (n2[e3] = i2.join(" "));
-    }
-    return n2;
-  }
-};
-
-// node_modules/@magic-spells/morph-engine/dist/morph-engine.esm.js
-var EventEmitter = class {
-  #events;
-  constructor() {
-    this.#events = /* @__PURE__ */ new Map();
-  }
-  /**
-  * Binds a listener to an event.
-  * @param {string} event - The event to bind the listener to.
-  * @param {Function} listener - The listener function to bind.
-  * @returns {EventEmitter} The current instance for chaining.
-  * @throws {TypeError} If the listener is not a function.
-  */
-  on(event, listener) {
-    if (typeof listener !== "function")
-      throw new TypeError("Listener must be a function");
-    const listeners = this.#events.get(event) || [];
-    if (!listeners.includes(listener))
-      listeners.push(listener);
-    this.#events.set(event, listeners);
-    return this;
-  }
-  /**
-  * Unbinds a listener from an event.
-  * @param {string} event - The event to unbind the listener from.
-  * @param {Function} listener - The listener function to unbind.
-  * @returns {EventEmitter} The current instance for chaining.
-  */
-  off(event, listener) {
-    const listeners = this.#events.get(event);
-    if (!listeners)
-      return this;
-    const index = listeners.indexOf(listener);
-    if (index !== -1) {
-      listeners.splice(index, 1);
-      if (listeners.length === 0)
-        this.#events.delete(event);
-      else
-        this.#events.set(event, listeners);
-    }
-    return this;
-  }
-  /**
-  * Triggers an event and calls all bound listeners.
-  * @param {string} event - The event to trigger.
-  * @param {...*} args - Arguments to pass to the listener functions.
-  * @returns {boolean} True if the event had listeners, false otherwise.
-  */
-  emit(event, ...args) {
-    const listeners = this.#events.get(event);
-    if (!listeners || listeners.length === 0)
-      return false;
-    const snapshot = listeners.slice();
-    for (let i2 = 0, n2 = snapshot.length; i2 < n2; ++i2)
-      try {
-        snapshot[i2].apply(this, args);
-      } catch (error) {
-        console.error(`Error in listener for event '${event}':`, error);
-      }
-    return true;
-  }
-  /**
-  * Removes all listeners for a specific event or all events.
-  * @param {string} [event] - The event to remove listeners from. If not provided, removes all listeners.
-  * @returns {EventEmitter} The current instance for chaining.
-  */
-  removeAllListeners(event) {
-    if (event)
-      this.#events.delete(event);
-    else
-      this.#events.clear();
-    return this;
-  }
-};
-var TRAVEL = 1e3;
-var SETTLE_POSITION_EPSILON = 1;
-var SETTLE_DELTA_EPSILON = 0.5;
-var DEFAULT_STYLE_PROPERTIES = [
-  "backgroundColor",
-  "borderTopLeftRadius",
-  "borderTopRightRadius",
-  "borderBottomRightRadius",
-  "borderBottomLeftRadius",
-  "borderTopWidth",
-  "borderRightWidth",
-  "borderBottomWidth",
-  "borderLeftWidth",
-  "borderTopColor",
-  "borderRightColor",
-  "borderBottomColor",
-  "borderLeftColor"
-];
-var BORDER_SIDES = [
-  "Top",
-  "Right",
-  "Bottom",
-  "Left"
-];
-var CLAMP_POSITIVE = [
-  "width",
-  "height",
-  "borderTopLeftRadius",
-  "borderTopRightRadius",
-  "borderBottomRightRadius",
-  "borderBottomLeftRadius",
-  "borderTopWidth",
-  "borderRightWidth",
-  "borderBottomWidth",
-  "borderLeftWidth"
-];
-var MANAGED_PROPERTIES = [
-  "visibility",
-  "display",
-  "opacity",
-  "transform",
-  "transformOrigin",
-  "willChange",
-  "transition"
-];
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-function round(value) {
-  return Math.round(value * 100) / 100;
-}
-var COLOR_PATTERN = /rgba?\([^)]*\)/;
-function parseColor(colorString) {
-  const match = colorString.match(/rgba?\(([^)]*)\)/);
-  if (!match)
-    return {
-      red: 0,
-      green: 0,
-      blue: 0,
-      alpha: 1
-    };
-  const parts = match[1].split(",").map((part) => parseFloat(part));
-  return {
-    red: parts[0] || 0,
-    green: parts[1] || 0,
-    blue: parts[2] || 0,
-    alpha: parts.length > 3 ? parts[3] : 1
-  };
-}
-function parseShadow(computedShadow) {
-  if (!computedShadow || computedShadow === "none")
-    return null;
-  let first = computedShadow;
-  let depth = 0;
-  for (let i2 = 0; i2 < computedShadow.length; i2++) {
-    const character = computedShadow[i2];
-    if (character === "(")
-      depth++;
-    else if (character === ")")
-      depth--;
-    else if (character === "," && depth === 0) {
-      first = computedShadow.slice(0, i2);
-      break;
-    }
-  }
-  const colorMatch = first.match(COLOR_PATTERN);
-  const color = parseColor(colorMatch ? colorMatch[0] : "rgba(0, 0, 0, 1)");
-  const [x = 0, y = 0, blur = 0, spread = 0] = first.replace(COLOR_PATTERN, "").trim().split(/\s+/).filter((token) => token !== "inset" && token !== "").map(parseFloat);
-  return {
-    x,
-    y,
-    blur,
-    spread,
-    color
-  };
-}
-function lerpShadow(fromShadow, toShadow, p) {
-  if (!fromShadow && !toShadow)
-    return "none";
-  const zeroed = (other) => ({
-    x: 0,
-    y: 0,
-    blur: 0,
-    spread: 0,
-    color: {
-      ...other.color,
-      alpha: 0
-    }
-  });
-  const start = fromShadow || zeroed(toShadow);
-  const end = toShadow || zeroed(fromShadow);
-  const lerp = (a2, b2) => a2 + (b2 - a2) * p;
-  return `${round(lerp(start.x, end.x))}px ${round(lerp(start.y, end.y))}px ${round(Math.max(0, lerp(start.blur, end.blur)))}px ${round(lerp(start.spread, end.spread))}px rgba(${Math.round(clamp(lerp(start.color.red, end.color.red), 0, 255))}, ${Math.round(clamp(lerp(start.color.green, end.color.green), 0, 255))}, ${Math.round(clamp(lerp(start.color.blue, end.color.blue), 0, 255))}, ${round(clamp(lerp(start.color.alpha, end.color.alpha), 0, 1))})`;
-}
-var MorphEngine = class extends EventEmitter {
-  #spring;
-  #frames = null;
-  #blob = null;
-  #cloneWrapper = null;
-  #styleProperties;
-  #state = "idle";
-  #p = 0;
-  #resolveRun = null;
-  #sourceElement = null;
-  #targetElement = null;
-  #displayOverride = null;
-  #savedInline = /* @__PURE__ */ new Map();
-  #savedBodyOverflow = null;
-  #fromMeasure = null;
-  #toMeasure = null;
-  #toElement = null;
-  #shownPosition = TRAVEL;
-  #revealed = false;
-  #revealStart = 0.75;
-  #revealFull = 0.875;
-  #sourceRevealed = false;
-  #sourceRevealUntil = 0.25;
-  #springTarget = TRAVEL;
-  #lastPosition = 0;
-  #settleCount = 0;
-  /**
-  * @param {Object} [options]
-  * @param {number} [options.attraction=0.1] - Spring attraction (0, 1) exclusive
-  * @param {number} [options.friction=0.32] - Spring friction (0, 1) exclusive
-  * @param {string[]} [options.styleProperties] - Computed styles captured and morphed
-  *   (camelCase longhands — shorthands snap instead of interpolating)
-  * @param {number} [options.revealAt=0.75] - Progress where the target reveal window begins
-  * @param {number} [options.sourceRevealUntil=0.25] - Progress where the source reveal window
-  *   ends (mirrors revealAt at the p→0 end so reversals crossfade instead of hard-swapping)
-  * @param {number} [options.cloneFadeUntil=0.25] - Progress where the source-content clone
-  *   finishes dissolving
-  * @param {boolean} [options.cloneContents=true] - Clone the source's content into the blob
-  * @param {boolean} [options.lockScroll=true] - Lock body scroll from show until fully
-  *   hidden — a scroll mid-morph would strand the fixed-position blob
-  * @param {number} [options.zIndex=9999] - Blob z-index
-  */
-  constructor({ attraction = 0.1, friction = 0.32, styleProperties = DEFAULT_STYLE_PROPERTIES, revealAt = 0.75, sourceRevealUntil = 0.25, cloneFadeUntil = 0.25, cloneContents = true, lockScroll = true, zIndex = 9999 } = {}) {
-    super();
-    this.#spring = new b({
-      attraction,
-      friction
-    });
-    this.#styleProperties = styleProperties;
-    this.revealAt = revealAt;
-    this.sourceRevealUntil = sourceRevealUntil;
-    this.cloneFadeUntil = cloneFadeUntil;
-    this.cloneContents = cloneContents;
-    this.lockScroll = lockScroll;
-    this.zIndex = zIndex;
-    this.#spring.on("change", ({ position }) => {
-      if (this.#state !== "showing" && this.#state !== "hiding")
-        return;
-      const p = position / TRAVEL;
-      this.#p = p;
-      this.#applyFrame(p);
-      this.emit("change", {
-        progress: p,
-        phase: this.#state
-      });
-      if (Math.abs(position - this.#springTarget) < SETTLE_POSITION_EPSILON && Math.abs(position - this.#lastPosition) < SETTLE_DELTA_EPSILON) {
-        if (++this.#settleCount >= 2) {
-          this.#applyFrame(this.#springTarget / TRAVEL);
-          this.#spring.stop();
-          this.#settle();
-          return;
-        }
-      } else
-        this.#settleCount = 0;
-      this.#lastPosition = position;
-    });
-    this.#spring.on("complete", () => this.#settle());
-  }
-  /** @returns {string} 'idle' | 'showing' | 'shown' | 'hiding' */
-  get state() {
-    return this.#state;
-  }
-  /** @returns {number} Last-known morph progress (overshoots past 1 while settling) */
-  get progress() {
-    return this.#p;
-  }
-  /**
-  * Morphs from the source element to the target element. Called while hiding,
-  * it reverses the in-flight morph instead (arguments are ignored).
-  * @param {Object} options
-  * @param {HTMLElement} options.from - Source element (stays hidden while shown)
-  * @param {HTMLElement} options.to - Target element (revealed as the blob arrives)
-  * @param {string} [options.display] - display value applied to a display:none target
-  * @returns {Promise<boolean>} true when settled, false if superseded or rejected
-  */
-  show({ from, to, display = null } = {}) {
-    if (this.#state === "showing" || this.#state === "shown") {
-      console.warn(`MorphEngine: show() ignored \u2014 already ${this.#state}`);
-      return Promise.resolve(false);
-    }
-    if (this.#state === "hiding")
-      return this.#reverse("showing");
-    if (!from || !to)
-      throw new Error("MorphEngine: show() requires { from, to } elements.");
-    this.#sourceElement = from;
-    this.#targetElement = to;
-    this.#displayOverride = display;
-    this.#saveInline(from);
-    this.#saveInline(to);
-    if (this.lockScroll) {
-      this.#savedBodyOverflow = document.body.style.overflow;
-      document.body.style.overflow = "hidden";
-    }
-    return this.#morph(from, to, "showing");
-  }
-  /**
-  * Morphs back from the target to the source. Called while showing, it
-  * reverses the in-flight morph.
-  * @returns {Promise<boolean>} true when settled, false if superseded or rejected
-  */
-  hide() {
-    if (this.#state === "idle" || this.#state === "hiding") {
-      console.warn(`MorphEngine: hide() ignored \u2014 ${this.#state}`);
-      return Promise.resolve(false);
-    }
-    if (this.#state === "showing")
-      return this.#reverse("hiding");
-    return this.#morph(this.#targetElement, this.#sourceElement, "hiding");
-  }
-  /**
-  * Aborts any morph and restores both elements to their pre-show resting state.
-  */
-  stop() {
-    if (this.#state === "idle")
-      return;
-    this.#supersede();
-    this.#spring.stop();
-    this.#removeBlob();
-    const source = this.#sourceElement;
-    const target = this.#targetElement;
-    if (source) {
-      this.#restoreInline(source);
-      source.removeAttribute("morphing");
-    }
-    if (target) {
-      this.#restoreInline(target);
-      target.removeAttribute("morphing");
-      target.removeAttribute("morph-shown");
-    }
-    this.#unlockScroll();
-    const progress = this.#p;
-    this.#state = "idle";
-    this.#p = 0;
-    this.emit("stop", { progress });
-  }
-  /**
-  * Stops and removes all listeners. The engine is unusable afterwards.
-  */
-  destroy() {
-    this.stop();
-    this.#spring.removeAllListeners();
-    this.removeAllListeners();
-  }
-  /** @param {number} attraction - Spring attraction (0, 1) exclusive, live-tunable */
-  setAttraction(attraction) {
-    this.#spring.setAttraction(attraction);
-  }
-  /** @param {number} friction - Spring friction (0, 1) exclusive, live-tunable */
-  setFriction(friction) {
-    this.#spring.setFriction(friction);
-  }
-  /**
-  * The single morph routine — show and hide are the same mechanics with the
-  * roles swapped. The blob starts pixel-identical to fromElement (its content
-  * cloned and frozen on top), springs to toElement's rect and styles, and
-  * reveals toElement across the final stretch.
-  */
-  #morph(fromElement, toElement, phase) {
-    this.#supersede();
-    const fromMeasure = this.#measure(fromElement);
-    const toMeasure = this.#measure(toElement);
-    this.#fromMeasure = fromMeasure;
-    this.#toMeasure = toMeasure;
-    this.#toElement = toElement;
-    this.#shownPosition = phase === "showing" ? TRAVEL : 0;
-    this.#state = phase;
-    this.#revealed = false;
-    this.#sourceRevealed = false;
-    this.#revealStart = this.revealAt;
-    this.#revealFull = this.revealAt + (1 - this.revealAt) / 2;
-    this.#sourceRevealUntil = this.sourceRevealUntil;
-    this.#reconcileBorderColors(fromMeasure, toMeasure);
-    this.#frames = new c(this.#buildKeyframes(fromMeasure, toMeasure));
-    this.#removeBlob();
-    this.#createBlob(fromMeasure, toMeasure);
-    this.#markElements(phase);
-    fromElement.style.transition = "none";
-    toElement.style.transition = "none";
-    fromElement.style.visibility = "hidden";
-    toElement.style.visibility = "hidden";
-    toElement.style.opacity = "0";
-    this.#applyFrame(0);
-    this.emit(phase === "showing" ? "show" : "hide", {
-      from: this.#sourceElement,
-      to: this.#targetElement
-    });
-    const promise = new Promise((resolve) => {
-      this.#resolveRun = resolve;
-    });
-    this.#armSettle(0, TRAVEL);
-    this.#spring.animateTo(0, TRAVEL);
-    return promise;
-  }
-  /**
-  * Reverses the in-flight morph. The keyframe mapping, blob, and clone are all
-  * pure functions of p, so travelling back unwinds everything automatically —
-  * the reveal window un-reveals, the clone fades back in, and the blob lands
-  * exactly where it started.
-  */
-  #reverse(newPhase) {
-    this.#supersede();
-    this.#state = newPhase;
-    this.#markElements(newPhase);
-    const targetPosition = newPhase === "showing" ? this.#shownPosition : TRAVEL - this.#shownPosition;
-    this.emit(newPhase === "showing" ? "show" : "hide", {
-      from: this.#sourceElement,
-      to: this.#targetElement
-    });
-    const promise = new Promise((resolve) => {
-      this.#resolveRun = resolve;
-    });
-    this.#armSettle(this.#p * TRAVEL, targetPosition);
-    this.#spring.animateTo(this.#p * TRAVEL, targetPosition);
-    return promise;
-  }
-  /**
-  * Arms the early-settle detector for a fresh run. Called at every animateTo so
-  * a reversal never inherits stale proximity state from the run it interrupts.
-  * @param {number} startPosition - Spring position the run begins from
-  * @param {number} target - Spring position the run is heading toward
-  */
-  #armSettle(startPosition, target) {
-    this.#springTarget = target;
-    this.#lastPosition = startPosition;
-    this.#settleCount = 0;
-  }
-  /**
-  * Spring settled — finalize whichever logical state we were heading toward.
-  * The spring's final change event already applied the exact end frame.
-  */
-  #settle() {
-    if (this.#state !== "showing" && this.#state !== "hiding")
-      return;
-    const resolve = this.#resolveRun;
-    this.#resolveRun = null;
-    if (this.#state === "showing")
-      this.#finalizeShown();
-    else
-      this.#finalizeHidden();
-    if (resolve)
-      resolve(true);
-  }
-  #finalizeShown() {
-    this.#removeBlob();
-    const source = this.#sourceElement;
-    const target = this.#targetElement;
-    this.#restoreProperties(target, [
-      "opacity",
-      "transform",
-      "transformOrigin",
-      "willChange",
-      "transition"
-    ]);
-    target.style.visibility = "visible";
-    this.#restoreProperties(source, [
-      "opacity",
-      "transform",
-      "transformOrigin",
-      "willChange"
-    ]);
-    source.style.visibility = "hidden";
-    source.removeAttribute("morphing");
-    target.removeAttribute("morphing");
-    target.setAttribute("morph-shown", "");
-    this.#state = "shown";
-    this.emit("shown", {
-      from: source,
-      to: target
-    });
-  }
-  #finalizeHidden() {
-    this.#removeBlob();
-    const source = this.#sourceElement;
-    const target = this.#targetElement;
-    this.#restoreInline(source);
-    this.#restoreInline(target);
-    source.removeAttribute("morphing");
-    target.removeAttribute("morphing");
-    target.removeAttribute("morph-shown");
-    this.#unlockScroll();
-    this.#state = "idle";
-    this.#p = 0;
-    this.emit("hidden", {
-      from: source,
-      to: target
-    });
-  }
-  #unlockScroll() {
-    if (this.#savedBodyOverflow === null)
-      return;
-    document.body.style.overflow = this.#savedBodyOverflow;
-    this.#savedBodyOverflow = null;
-  }
-  /** Resolves a superseded run's promise with false. */
-  #supersede() {
-    if (this.#resolveRun) {
-      this.#resolveRun(false);
-      this.#resolveRun = null;
-    }
-  }
-  /**
-  * The whole visual state as a pure function of p. Reveal handling is an
-  * idempotent check rather than a one-shot flag so a reversed spring that
-  * swings p back down automatically un-reveals the target.
-  */
-  #applyFrame(p) {
-    const styles = this.#frames.getFrame(p);
-    for (const property of CLAMP_POSITIVE)
-      if (property in styles && parseFloat(styles[property]) < 0)
-        styles[property] = "0px";
-    Object.assign(this.#blob.style, styles);
-    this.#blob.style.boxShadow = lerpShadow(this.#fromMeasure.shadow, this.#toMeasure.shadow, p);
-    if (this.#cloneWrapper) {
-      const fade = this.cloneFadeUntil > 0 ? clamp(1 - p / this.cloneFadeUntil, 0, 1) : p <= 0 ? 1 : 0;
-      this.#cloneWrapper.style.opacity = String(fade);
-    }
-    if (p >= this.#revealStart) {
-      this.#ensureRevealed();
-      const target = this.#toElement;
-      const naturalRect = this.#toMeasure.rect;
-      const blobRect = {
-        top: parseFloat(styles.top),
-        left: parseFloat(styles.left),
-        width: parseFloat(styles.width),
-        height: parseFloat(styles.height)
-      };
-      const fadeProgress = clamp((p - this.#revealStart) / (this.#revealFull - this.#revealStart), 0, 1);
-      target.style.opacity = String(fadeProgress);
-      target.style.transformOrigin = "0 0";
-      target.style.transform = `translate(${round(blobRect.left - naturalRect.left)}px, ${round(blobRect.top - naturalRect.top)}px) scale(${blobRect.width / naturalRect.width}, ${blobRect.height / naturalRect.height})`;
-    } else
-      this.#ensureUnrevealed();
-    if (p <= this.#sourceRevealUntil) {
-      this.#ensureSourceRevealed();
-      const source = this.#fromMeasure.element;
-      const naturalRect = this.#fromMeasure.rect;
-      const blobRect = {
-        top: parseFloat(styles.top),
-        left: parseFloat(styles.left),
-        width: parseFloat(styles.width),
-        height: parseFloat(styles.height)
-      };
-      const half = this.#sourceRevealUntil / 2;
-      const sourceOpacity = clamp((this.#sourceRevealUntil - p) / half, 0, 1);
-      source.style.opacity = String(sourceOpacity);
-      source.style.transformOrigin = "0 0";
-      source.style.transform = `translate(${round(blobRect.left - naturalRect.left)}px, ${round(blobRect.top - naturalRect.top)}px) scale(${blobRect.width / naturalRect.width}, ${blobRect.height / naturalRect.height})`;
-      const quarter = half / 2;
-      const blobFactor = clamp((p - quarter) / quarter, 0, 1);
-      this.#blob.style.opacity = String(parseFloat(styles.opacity ?? "1") * blobFactor);
-    } else
-      this.#ensureSourceUnrevealed();
-  }
-  #ensureRevealed() {
-    if (this.#revealed)
-      return;
-    this.#revealed = true;
-    const target = this.#toElement;
-    if (this.#toMeasure.wasDisplayNone)
-      target.style.display = this.#displayOverride || "block";
-    target.style.visibility = "visible";
-    target.style.willChange = "transform, opacity";
-    this.emit("reveal", {
-      from: this.#fromMeasure.element,
-      to: target
-    });
-  }
-  #ensureUnrevealed() {
-    if (!this.#revealed)
-      return;
-    this.#revealed = false;
-    const target = this.#toElement;
-    target.style.visibility = "hidden";
-    target.style.opacity = "0";
-    this.emit("unreveal", {
-      from: this.#fromMeasure.element,
-      to: target
-    });
-  }
-  /**
-  * Source mirror of #ensureRevealed — makes the real from-element paintable so it
-  * can crossfade in under the blob at the p→0 end. Idempotent.
-  */
-  #ensureSourceRevealed() {
-    if (this.#sourceRevealed)
-      return;
-    this.#sourceRevealed = true;
-    const source = this.#fromMeasure.element;
-    if (this.#fromMeasure.wasDisplayNone)
-      source.style.display = this.#displayOverride || "block";
-    source.style.visibility = "visible";
-    source.style.willChange = "transform, opacity";
-  }
-  /**
-  * Source mirror of #ensureUnrevealed — re-hides the from-element once p leaves the
-  * source window. Transform/willChange residue is cleared at finalize. Idempotent.
-  */
-  #ensureSourceUnrevealed() {
-    if (!this.#sourceRevealed)
-      return;
-    this.#sourceRevealed = false;
-    const source = this.#fromMeasure.element;
-    source.style.visibility = "hidden";
-    source.style.opacity = "0";
-  }
-  /**
-  * Measures an element's viewport rect and captured computed styles. A
-  * display:none element is flipped on invisibly for one synchronous read.
-  * (visibility:hidden elements keep their layout and measure normally.)
-  */
-  #measure(element) {
-    let restore = null;
-    if (element.getClientRects().length === 0) {
-      const style = element.style;
-      restore = {
-        display: style.display,
-        visibility: style.visibility,
-        transition: style.transition
-      };
-      style.transition = "none";
-      style.visibility = "hidden";
-      style.display = this.#displayOverride || "block";
-    }
-    const rect = element.getBoundingClientRect();
-    const computed = getComputedStyle(element);
-    const styles = {};
-    for (const property of this.#styleProperties)
-      styles[property] = computed[property];
-    const measure = {
-      element,
-      rect,
-      styles,
-      shadow: parseShadow(computed.boxShadow),
-      borderStyle: computed.borderTopStyle,
-      backdropFilter: computed.backdropFilter || computed.webkitBackdropFilter,
-      backgroundImage: computed.backgroundImage,
-      backgroundSize: computed.backgroundSize,
-      backgroundRepeat: computed.backgroundRepeat,
-      backgroundPosition: computed.backgroundPosition,
-      wasDisplayNone: restore !== null
-    };
-    if (restore)
-      Object.assign(element.style, restore);
-    return measure;
-  }
-  /**
-  * A borderless element's computed border-color falls back to currentColor (its
-  * text color), and `transparent` computes to rgba(0,0,0,0) — lerping toward
-  * either drags the visible end's border through an unrelated hue while the
-  * width or alpha collapses. Rewrite the degenerate end's color so only
-  * width/alpha animate: an absent border holds the visible end's color
-  * verbatim, a fully transparent one holds its hue at alpha 0.
-  */
-  #reconcileBorderColors(fromMeasure, toMeasure) {
-    const absent = (measure) => measure.borderStyle === "none" || BORDER_SIDES.every((side) => parseFloat(measure.styles[`border${side}Width`]) === 0);
-    const fromAbsent = absent(fromMeasure);
-    const toAbsent = absent(toMeasure);
-    if (fromAbsent && toAbsent)
-      return;
-    for (const side of BORDER_SIDES) {
-      const key = `border${side}Color`;
-      const fromColor = fromMeasure.styles[key];
-      const toColor = toMeasure.styles[key];
-      if (!fromColor || !toColor)
-        continue;
-      const fromDegenerate = fromAbsent || parseColor(fromColor).alpha === 0;
-      if (fromDegenerate === (toAbsent || parseColor(toColor).alpha === 0))
-        continue;
-      const visibleColor = fromDegenerate ? toColor : fromColor;
-      const { red, green, blue } = parseColor(visibleColor);
-      const replacement = (fromDegenerate ? fromAbsent : toAbsent) ? visibleColor : `rgba(${red}, ${green}, ${blue}, 0)`;
-      (fromDegenerate ? fromMeasure : toMeasure).styles[key] = replacement;
-    }
-  }
-  #buildKeyframes(fromMeasure, toMeasure) {
-    const rectStyles = (rect) => ({
-      top: `${rect.top}px`,
-      left: `${rect.left}px`,
-      width: `${rect.width}px`,
-      height: `${rect.height}px`
-    });
-    const blobClear = this.#revealFull + (1 - this.#revealFull) / 2;
-    return {
-      0: {
-        ...rectStyles(fromMeasure.rect),
-        ...fromMeasure.styles
-      },
-      [this.#revealFull * 100]: { opacity: "1" },
-      [blobClear * 100]: { opacity: "0" },
-      100: {
-        ...rectStyles(toMeasure.rect),
-        ...toMeasure.styles
-      }
-    };
-  }
-  #createBlob(fromMeasure, toMeasure) {
-    const blob = document.createElement("morph-blob");
-    const borderStyle = toMeasure.borderStyle !== "none" ? toMeasure.borderStyle : fromMeasure.borderStyle !== "none" ? fromMeasure.borderStyle : "solid";
-    Object.assign(blob.style, {
-      position: "fixed",
-      top: "0",
-      left: "0",
-      margin: "0",
-      boxSizing: "border-box",
-      pointerEvents: "none",
-      overflow: "hidden",
-      display: "block",
-      zIndex: String(this.zIndex),
-      borderStyle,
-      willChange: "top, left, width, height, opacity"
-    });
-    const backdropFilter = toMeasure.backdropFilter !== "none" ? toMeasure.backdropFilter : fromMeasure.backdropFilter !== "none" ? fromMeasure.backdropFilter : null;
-    if (backdropFilter) {
-      blob.style.backdropFilter = backdropFilter;
-      blob.style.webkitBackdropFilter = backdropFilter;
-    }
-    const backgroundMeasure = toMeasure.backgroundImage !== "none" ? toMeasure : fromMeasure.backgroundImage !== "none" ? fromMeasure : null;
-    if (backgroundMeasure) {
-      blob.style.backgroundImage = backgroundMeasure.backgroundImage;
-      blob.style.backgroundSize = backgroundMeasure.backgroundSize;
-      blob.style.backgroundRepeat = backgroundMeasure.backgroundRepeat;
-      blob.style.backgroundPosition = backgroundMeasure.backgroundPosition;
-    }
-    if (this.cloneContents)
-      this.#createClone(blob, fromMeasure);
-    document.body.appendChild(blob);
-    this.#blob = blob;
-  }
-  /**
-  * Freezes a visual copy of the source's content inside the blob. The wrapper
-  * keeps the source's original dimensions so text never rewraps as the blob
-  * resizes; the blob's overflow:hidden clips it. The clone's own surface
-  * (background, border, shadow) is stripped — the blob renders the surface.
-  */
-  #createClone(blob, fromMeasure) {
-    const clone = fromMeasure.element.cloneNode(true);
-    clone.removeAttribute("id");
-    clone.removeAttribute("morphing");
-    Object.assign(clone.style, {
-      position: "static",
-      margin: "0",
-      width: "100%",
-      height: "100%",
-      transform: "none",
-      transition: "none",
-      visibility: "visible",
-      opacity: "1",
-      boxShadow: "none",
-      background: "transparent",
-      borderColor: "transparent"
-    });
-    const wrapper = document.createElement("div");
-    Object.assign(wrapper.style, {
-      position: "absolute",
-      top: "0",
-      left: "0",
-      width: `${fromMeasure.rect.width}px`,
-      height: `${fromMeasure.rect.height}px`,
-      pointerEvents: "none"
-    });
-    wrapper.appendChild(clone);
-    blob.appendChild(wrapper);
-    this.#cloneWrapper = wrapper;
-  }
-  #removeBlob() {
-    if (!this.#blob)
-      return;
-    this.#blob.remove();
-    this.#blob = null;
-    this.#cloneWrapper = null;
-  }
-  /** Marks both elements for CSS hooks — which one the blob is flying away from. */
-  #markElements(phase) {
-    const showing = phase === "showing";
-    this.#sourceElement.setAttribute("morphing", showing ? "source" : "target");
-    this.#targetElement.setAttribute("morphing", showing ? "target" : "source");
-  }
-  #saveInline(element) {
-    const saved = {};
-    for (const property of MANAGED_PROPERTIES)
-      saved[property] = element.style[property];
-    this.#savedInline.set(element, saved);
-  }
-  #restoreProperties(element, properties) {
-    const saved = this.#savedInline.get(element) || {};
-    const hasTransition = properties.includes("transition");
-    for (const property of properties) {
-      if (property === "transition")
-        continue;
-      element.style[property] = saved[property] ?? "";
-    }
-    if (hasTransition) {
-      element.offsetWidth;
-      element.style.transition = saved.transition ?? "";
-    }
-  }
-  #restoreInline(element) {
-    this.#restoreProperties(element, MANAGED_PROPERTIES);
-    this.#savedInline.delete(element);
-  }
-};
-
 // app/components/ui/Select.pzl
 var uid5 = 0;
 var TRIGGER_CLASS = "flex h-9 w-full items-center justify-between gap-2 rounded-lg border border-border bg-surface px-3 text-sm text-ink cursor-pointer select-none transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none";
@@ -16876,13 +18193,13 @@ SplitButton.prototype.render = function() {
 SplitButton.__pzlModule = "app/components/ui/SplitButton.pzl";
 
 // app/components/ui/AspectRatio.pzl
-var BASE4 = "relative w-full";
+var BASE5 = "relative w-full";
 var WRAPPER = "absolute inset-0 [&>*]:size-full [&>img]:object-cover [&>video]:object-cover";
 var AspectRatio = class extends PuzzleView {
   data(params, props) {
     const ratio = Number(props.ratio) > 0 ? Number(props.ratio) : 1;
     return {
-      classes: [BASE4, props.class || ""].join(" "),
+      classes: [BASE5, props.class || ""].join(" "),
       wrapperClass: WRAPPER,
       padStyle: `padding-bottom:${1 / ratio * 100}%`
     };
@@ -16979,11 +18296,11 @@ Checkbox.prototype.render = function() {
 Checkbox.__pzlModule = "app/components/ui/Checkbox.pzl";
 
 // app/components/ui/Empty.pzl
-var BASE5 = "flex flex-col items-center justify-center px-6 py-12 text-center";
+var BASE6 = "flex flex-col items-center justify-center px-6 py-12 text-center";
 var Empty = class extends PuzzleView {
   data(params, props) {
     return {
-      classes: [BASE5, props.class || ""].join(" "),
+      classes: [BASE6, props.class || ""].join(" "),
       title: props.title || "",
       description: props.description || ""
     };
@@ -19619,7 +20936,7 @@ Sparkline.prototype.render = function() {
 Sparkline.__pzlModule = "app/components/ui/Sparkline.pzl";
 
 // app/components/ui/StatCard.pzl
-var BASE6 = "rounded-xl border border-border bg-surface p-5";
+var BASE7 = "rounded-xl border border-border bg-surface p-5";
 var ARROW_UP = "M6 3 L10 9 L2 9 Z";
 var ARROW_DOWN = "M6 9 L10 3 L2 3 Z";
 var COLOR = { success: "text-success", danger: "text-danger", muted: "text-muted" };
@@ -19653,7 +20970,7 @@ var StatCard = class extends PuzzleView {
       sparkColor: hasDelta ? colorClass : "text-muted",
       sparkLabel: `${props.label || "Metric"} trend`,
       hasFooter: hasDelta || hasSparkline,
-      rootClass: [BASE6, props.class || ""].filter(Boolean).join(" ")
+      rootClass: [BASE7, props.class || ""].filter(Boolean).join(" ")
     };
   }
 };
@@ -23542,7 +24859,7 @@ Dialog.prototype.render = function() {
 Dialog.__pzlModule = "app/components/ui/Dialog.pzl";
 
 // app/components/ui/CopyButton.pzl
-var BASE7 = "inline-flex items-center justify-center gap-2 whitespace-nowrap select-none font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none";
+var BASE8 = "inline-flex items-center justify-center gap-2 whitespace-nowrap select-none font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none";
 var VARIANT5 = {
   ghost: "text-body hover:bg-surface-sunken hover:text-ink",
   outline: "border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken",
@@ -23577,7 +24894,7 @@ var CopyButton = class extends PuzzleView {
     const copied = !!this.getData().copied;
     return {
       classes: [
-        BASE7,
+        BASE8,
         VARIANT5[variant],
         iconOnly ? ICON_SIZE[size] : [SIZE6[size], "rounded-lg"].join(" "),
         props.class || ""
@@ -23681,7 +24998,7 @@ CopyButton.prototype.render = function() {
 CopyButton.__pzlModule = "app/components/ui/CopyButton.pzl";
 
 // app/components/ui/Separator.pzl
-var BASE8 = "bg-border";
+var BASE9 = "bg-border";
 var ORIENTATION2 = {
   horizontal: "h-px w-full",
   vertical: "w-px self-stretch"
@@ -23691,7 +25008,7 @@ var Separator = class extends PuzzleView {
     const vertical = props.orientation === "vertical";
     return {
       classes: [
-        BASE8,
+        BASE9,
         vertical ? ORIENTATION2.vertical : ORIENTATION2.horizontal,
         props.class || ""
       ].join(" "),
@@ -25404,11 +26721,11 @@ ChatDemo.__pzlModule = "app/views/ChatDemo.pzl";
 // app/components/ui/Tree.pzl
 var uid17 = 0;
 var TREE_BASE = "w-full select-none space-y-0.5";
-var ROW_BASE2 = "flex items-center gap-1.5 rounded-md py-1 pr-2 text-sm cursor-pointer transition-colors outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
-var ROW_IDLE = "text-body hover:bg-surface-sunken hover:text-ink";
+var ROW_BASE3 = "flex items-center gap-1.5 rounded-md py-1 pr-2 text-sm cursor-pointer transition-colors outline-ring focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring";
+var ROW_IDLE2 = "text-body hover:bg-surface-sunken hover:text-ink";
 var ROW_SELECTED = "bg-brand-tint text-ink font-medium";
 var ROW_DISABLED = "opacity-50 cursor-not-allowed pointer-events-none";
-function flatten2(nodes, expandedSet, value, level, out) {
+function flatten(nodes, expandedSet, value, level, out) {
   const list = Array.isArray(nodes) ? nodes : [];
   list.forEach((node, i2) => {
     const id = node && node.id != null ? String(node.id) : "";
@@ -25430,7 +26747,7 @@ function flatten2(nodes, expandedSet, value, level, out) {
       setsize: list.length
     });
     if (expanded)
-      flatten2(children, expandedSet, value, level + 1, out);
+      flatten(children, expandedSet, value, level + 1, out);
   });
   return out;
 }
@@ -25456,7 +26773,7 @@ var Tree = class extends PuzzleView {
   data(params, props) {
     const value = props.value != null ? String(props.value) : "";
     const expandedSet = this._expandedSet();
-    const rows = flatten2(props.nodes, expandedSet, value, 0, []);
+    const rows = flatten(props.nodes, expandedSet, value, 0, []);
     const base = `pieces-tree-${this._uid}`;
     let rovingId = null;
     if (value && rows.some((r2) => r2.id === value)) {
@@ -25482,8 +26799,8 @@ var Tree = class extends PuzzleView {
       r2.disabledAttr = r2.disabled ? "true" : false;
       r2.indentStyle = `padding-left:${r2.level * 16 + 8}px`;
       r2.rowClass = [
-        ROW_BASE2,
-        r2.selected ? ROW_SELECTED : ROW_IDLE,
+        ROW_BASE3,
+        r2.selected ? ROW_SELECTED : ROW_IDLE2,
         r2.disabled ? ROW_DISABLED : ""
       ].join(" ");
     });
@@ -25659,6 +26976,7 @@ Tree.__pzlModule = "app/components/ui/Tree.pzl";
 
 // app/components/ui/Kanban.pzl
 var DRAG_THRESHOLD = 5;
+var FLIP = { duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" };
 var CARD_BASE = "block w-full rounded-lg border border-border bg-surface p-3 text-left shadow-sm select-none transition-shadow hover:shadow-md outline-ring focus-visible:outline-2 focus-visible:outline-offset-2";
 var BADGE_BASE = "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap";
 var BADGE_VARIANT = {
@@ -25714,6 +27032,7 @@ var Kanban = class extends PuzzleView {
       hoveredColId: null,
       targetIndex: -1,
       ghostW: 0,
+      ghostH: 0,
       grabbedId: null,
       announce: ""
     });
@@ -25762,7 +27081,11 @@ var Kanban = class extends PuzzleView {
       const items = kept.map(cardView);
       if (dragging && col.id === hoveredColId) {
         const idx = clamp2(targetIndex, 0, items.length);
-        items.splice(idx, 0, { placeholder: true, key: "__kb_placeholder__" });
+        items.splice(idx, 0, {
+          placeholder: true,
+          key: "__kb_placeholder__",
+          placeholderStyle: `height:${d.ghostH || 64}px`
+        });
       }
       return {
         id: col.id,
@@ -25783,6 +27106,7 @@ var Kanban = class extends PuzzleView {
       columnClass: "flex w-72 shrink-0 flex-col rounded-xl border border-border bg-surface-sunken",
       boardLabel: props.label || "Board",
       viewColumns,
+      flipOpts: FLIP,
       dragging,
       ghost: ghostCard ? cardView(ghostCard) : { title: "", badge: "", meta: "", assignee: "" },
       ghostStyle: dragging ? `width:${d.ghostW || 288}px` : false,
@@ -25852,14 +27176,15 @@ var Kanban = class extends PuzzleView {
     }
     const colId = colEl.getAttribute("data-kb-col");
     const list = colEl.querySelector("[data-kb-list]");
-    const cards = list ? Array.from(list.querySelectorAll("[data-kb-card]")) : [];
-    let index = cards.length;
-    for (let i2 = 0; i2 < cards.length; i2++) {
-      const r2 = cards[i2].getBoundingClientRect();
-      if (clientY < r2.top + r2.height / 2) {
-        index = i2;
-        break;
-      }
+    if (!list)
+      return { colId, index: 0 };
+    const listTop = list.getBoundingClientRect().top - list.offsetTop;
+    let index = 0;
+    for (const row of list.children) {
+      if (!row.querySelector("[data-kb-card]"))
+        continue;
+      if (clientY > listTop + row.offsetTop + row.offsetHeight / 2)
+        index += 1;
     }
     return { colId, index };
   }
@@ -25941,6 +27266,7 @@ var Kanban = class extends PuzzleView {
       hoveredColId: a2.colId,
       targetIndex: orig < 0 ? 0 : orig,
       ghostW: a2.width,
+      ghostH: a2.height,
       grabbedId: null,
       announce: ""
     });
@@ -26118,7 +27444,8 @@ var Kanban = class extends PuzzleView {
         started: false,
         offX: event.clientX - rect.left,
         offY: event.clientY - rect.top,
-        width: rect.width
+        width: rect.width,
+        height: rect.height
       };
       this._addWindowListeners();
     },
@@ -26203,11 +27530,13 @@ Kanban.prototype.render = function() {
             column.items.map(
               (item) => new ViewNode("li", {
                 class: "list-none",
-                key: item.key
+                key: item.key,
+                flip: __d.flipOpts
               }, [
                 ...item.placeholder ? [
                   new ViewNode("div", {
-                    class: "h-16 rounded-lg border-2 border-dashed border-brand bg-brand-tint/50",
+                    class: "rounded-lg border-2 border-dashed border-brand bg-brand-tint/50",
+                    style: item.placeholderStyle,
                     "aria-hidden": "true"
                   }, [])
                 ] : [
@@ -29485,7 +30814,7 @@ AccordionDoc.prototype.render = function() {
 AccordionDoc.__pzlModule = "app/views/components/AccordionDoc.pzl";
 
 // app/components/ui/Alert.pzl
-var BASE9 = "flex gap-3 rounded-lg border p-4";
+var BASE10 = "flex gap-3 rounded-lg border p-4";
 var ICON2 = "size-4 shrink-0 mt-0.5";
 var VARIANT7 = {
   default: "border-border bg-surface-sunken",
@@ -29501,7 +30830,7 @@ var Alert = class extends PuzzleView {
   data(params, props) {
     const variant = VARIANT7[props.variant] ? props.variant : "default";
     return {
-      classes: [BASE9, VARIANT7[variant], props.class || ""].join(" "),
+      classes: [BASE10, VARIANT7[variant], props.class || ""].join(" "),
       iconClass: [ICON2, ICON_TONE[variant]].join(" "),
       role: variant === "danger" ? "alert" : "status",
       danger: variant === "danger",
@@ -42203,11 +43532,11 @@ function wordPrefix3(text, q) {
     return true;
   return text.split(/\s+/).some((w) => w.startsWith(q));
 }
-var INDEX = [];
+var INDEX2 = [];
 var _order = 0;
 for (const g of EMOJI_GROUPS) {
   for (const [char, name] of g.emoji) {
-    INDEX.push({
+    INDEX2.push({
       char,
       name,
       group: g.name,
@@ -42269,9 +43598,9 @@ var EmojiPicker = class extends PuzzleView {
   _matches(query) {
     const q = String(query || "").trim().toLowerCase();
     if (!q)
-      return INDEX;
+      return INDEX2;
     const out = [];
-    for (const e2 of INDEX) {
+    for (const e2 of INDEX2) {
       let tier;
       if (wordPrefix3(e2.nameLower, q))
         tier = 0;
@@ -44721,24 +46050,6 @@ InputGroup.prototype.render = function() {
 };
 InputGroup.__pzlModule = "app/components/ui/InputGroup.pzl";
 
-// app/components/ui/Kbd.pzl
-var BASE10 = "inline-flex items-center rounded border border-border bg-surface-sunken px-1.5 py-px font-sans text-xs text-muted shadow-[inset_0_-1px_0_var(--color-border)]";
-var Kbd = class extends PuzzleView {
-  data(params, props) {
-    return {
-      classes: [BASE10, props.class || ""].join(" ")
-    };
-  }
-};
-Kbd.prototype.render = function() {
-  const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
-  return new ViewNode("kbd", { class: __d.classes }, [
-    new ViewNode(SLOT_TAG)
-  ]);
-};
-Kbd.__pzlModule = "app/components/ui/Kbd.pzl";
-
 // app/views/components/InputGroupDoc.pzl
 var installCmd38 = "puzzle add piece input-group";
 var usageImport38 = `import InputGroup from '@/components/ui/InputGroup.pzl';`;
@@ -45656,7 +46967,7 @@ KanbanDoc.prototype.render = function() {
           ])
         ]),
         new ViewNode(ExampleBox, { code: __d.codeHero }, [
-          new ViewNode("div", { class: "w-full" }, [
+          new ViewNode("div", { class: "w-full self-start" }, [
             new ViewNode(Kanban, {
               columns: __d.board,
               move: (this.__h ??= {})[0] ??= (event) => this.events.onMove(event),
@@ -45759,7 +47070,7 @@ KanbanDoc.prototype.render = function() {
             title: "Disabled",
             code: __d.codeDisabled
           }, [
-            new ViewNode("div", { class: "w-full" }, [
+            new ViewNode("div", { class: "w-full self-start" }, [
               new ViewNode(Kanban, {
                 columns: __d.staticBoard,
                 disabled: true,
@@ -47131,7 +48442,7 @@ MasonryDoc.prototype.render = function() {
 MasonryDoc.__pzlModule = "app/views/components/MasonryDoc.pzl";
 
 // app/components/ui/Menubar.pzl
-var ROW_BASE3 = "flex w-full items-center gap-6 rounded-md px-2.5 py-1.5 text-sm cursor-pointer disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
+var ROW_BASE4 = "flex w-full items-center gap-6 rounded-md px-2.5 py-1.5 text-sm cursor-pointer disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
 var ROW_NORMAL = "text-body hover:bg-surface-sunken hover:text-ink";
 var ROW_DANGER = "text-danger hover:bg-danger-tint";
 var KBD = "ml-auto inline-flex items-center rounded border border-border bg-surface-sunken px-1.5 py-px font-sans text-xs text-muted shadow-[inset_0_-1px_0_var(--color-border)]";
@@ -47171,7 +48482,7 @@ function normalizeMenus(menus, seed) {
         shortcut: it && it.shortcut != null ? String(it.shortcut) : "",
         danger,
         disabled: !!(it && it.disabled),
-        rowClass: [ROW_BASE3, danger ? ROW_DANGER : ROW_NORMAL].join(" ")
+        rowClass: [ROW_BASE4, danger ? ROW_DANGER : ROW_NORMAL].join(" ")
       };
     });
     return {
@@ -55497,7 +56808,7 @@ function clampBounds(v, cfg) {
 function round2(v, cfg) {
   return parseFloat(v.toFixed(cfg.dec));
 }
-function normalize(value, thumb, cfg, committed) {
+function normalize2(value, thumb, cfg, committed) {
   let v = Number.isFinite(value) ? value : cfg.min;
   v = clampBounds(quantize(v, cfg), cfg);
   if (thumb === "min")
@@ -55787,7 +57098,7 @@ var Slider = class extends PuzzleView {
     if (Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD2)
       this._suppressClick = true;
     const raw2 = this._percentToValue(this._percentFromClientX(event.clientX), cfg);
-    const nv = normalize(raw2, drag.thumb, cfg, committed);
+    const nv = normalize2(raw2, drag.thumb, cfg, committed);
     const d = this.getData();
     if (d.draftThumb !== drag.thumb || d.draftValue !== nv || !d.dragging) {
       this.setData({ dragging: true, draftThumb: drag.thumb, draftValue: nv });
@@ -55816,7 +57127,7 @@ var Slider = class extends PuzzleView {
       const percent = this._percentFromClientX(event.clientX);
       const tapThumb = this._nearestThumb(percent, committed, cfg);
       this._suppressClick = true;
-      const nv = normalize(this._percentToValue(percent, cfg), tapThumb, cfg, committed);
+      const nv = normalize2(this._percentToValue(percent, cfg), tapThumb, cfg, committed);
       if (nv !== this._channel(committed, tapThumb)) {
         this.setData({ dragging: false, draftThumb: tapThumb, draftValue: nv });
         this.refresh();
@@ -55922,7 +57233,7 @@ var Slider = class extends PuzzleView {
           return;
       }
       event.preventDefault();
-      const nv = normalize(next, thumb, cfg, committed);
+      const nv = normalize2(next, thumb, cfg, committed);
       if (nv === current)
         return;
       this.setData({ dragging: false, draftThumb: thumb, draftValue: nv });
@@ -57506,7 +58817,7 @@ var codeConstraints = `<SplitPanel
   <aside slot="first">Sidebar</aside>
   <main slot="second">Main content</main>
 </SplitPanel>`;
-var codeFade = `<SplitPanel class="h-56" defaultSizes={ [35, 65] } max={ ['45%', null] } snap={ [0, 100] }>
+var codeFade = `<SplitPanel class="h-56" defaultSizes={ [45, 55] } max={ ['45%', null] } snap={ [0, 100] }>
   <aside slot="first" class="relative overflow-hidden">
     <nav
       class="min-w-[200px] origin-left transition-[opacity,transform,filter] duration-50"
@@ -57715,7 +59026,7 @@ SplitPanelDoc.prototype.render = function() {
               ]),
               new ViewNode(SplitPanel, {
                 class: "h-56 rounded-lg border border-border",
-                defaultSizes: [35, 65],
+                defaultSizes: [45, 55],
                 max: ["45%", null],
                 snap: [0, 100]
               }, [
@@ -61445,7 +62756,7 @@ ToggleGroupDoc.prototype.render = function() {
           ])
         ]),
         new ViewNode(ExampleBox, { code: __d.codeHero }, [
-          new ViewNode("div", { class: "flex flex-wrap items-center justify-center gap-3" }, [
+          new ViewNode("div", { class: "flex flex-col items-center gap-3" }, [
             new ViewNode(ToggleGroup, {
               items: __d.alignOptions,
               value: __d.align,
@@ -61491,7 +62802,7 @@ ToggleGroupDoc.prototype.render = function() {
             title: "Multiple",
             code: __d.codeMultiple
           }, [
-            new ViewNode("div", { class: "flex flex-wrap items-center justify-center gap-3" }, [
+            new ViewNode("div", { class: "flex flex-col items-center gap-3" }, [
               new ViewNode(ToggleGroup, {
                 type: "multiple",
                 items: __d.markOptions,
