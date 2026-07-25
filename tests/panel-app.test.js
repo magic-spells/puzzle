@@ -491,9 +491,10 @@ describe.skipIf(!built)('Views panel', () => {
 		const svg = twisty.querySelector('svg');
 
 		// {#svg} inlines the real file, so there is a live <path>, not a text glyph.
+		// A FILLED triangle (matching the pieces Tree's disclosure), not a stroked caret.
 		expect(svg).toBeTruthy();
 		expect(svg.querySelector('path')).toBeTruthy();
-		expect(svg.getAttribute('stroke')).toBe('currentColor');
+		expect(svg.getAttribute('fill')).toBe('currentColor');
 		expect(twisty.textContent.trim()).toBe('');
 
 		// Open → rotated, so one glyph serves both states.
