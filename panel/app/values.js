@@ -144,6 +144,95 @@ export function moduleTitle(name, module) {
 }
 
 /**
+ * Split a store subscription key into its parts.
+ *
+ * The runtime builds record keys as `type + REC_SEP + id` where REC_SEP is a
+ * SPACE (client-runtime/datastore/store.js: "never appears in a type name") —
+ * so a live key looks like `todo t2`, NOT `todo:t2`. The bridge passes keys
+ * through verbatim, and the panel renders them raw for the same reason: this is
+ * the string the app itself subscribes with, and inventing a prettier
+ * separator would make the panel disagree with `store.subscribe` output.
+ *
+ * Split ONCE, on the first space: the type can never contain one, but a primary
+ * key can contain anything, spaces included.
+ *
+ * @returns {{ type: string, id: string|null, kind: 'collection'|'record' }}
+ */
+export function subscriptionParts(key) {
+	const text = String(key);
+	const at = text.indexOf(' ');
+	if (at === -1) return { type: text, id: null, kind: 'collection' };
+	return { type: text.slice(0, at), id: text.slice(at + 1), kind: 'record' };
+}
+
+/**
+ * A store key's shape: `todo` is a collection query, `todo t2` a single record.
+ * That distinction is the only grouping the subscription rail needs.
+ */
+export function subscriptionKind(key) {
+	return subscriptionParts(key).kind;
+}
+
+/**
+ * Field-level diff of one record snapshot against the previous one.
+ *
+ * Pure and order-stable: previous fields first (in their own order), then keys
+ * only the next snapshot carries. `_synced` is ignored — it is provenance the
+ * bridge synthesizes per snapshot, not a field the app changed, so letting it
+ * through would put a spurious row in the changelog on every save.
+ *
+ * A field that appears reports `from: undefined`; one that disappears reports
+ * `to: undefined`. Comparison is `Object.is`, so `NaN` does not report as a
+ * change; object-valued fields fall back to JSON equality, because snapshots
+ * are re-serialized on every flush and would otherwise differ by identity every
+ * single time.
+ *
+ * @returns {{ field: string, from: any, to: any }[]} empty when nothing changed.
+ */
+export function diffRecord(previous, next) {
+	const before = previous && typeof previous === 'object' ? previous : {};
+	const after = next && typeof next === 'object' ? next : {};
+
+	const fields = Object.keys(before);
+	for (const key of Object.keys(after)) if (!fields.includes(key)) fields.push(key);
+
+	const changes = [];
+	for (const field of fields) {
+		if (field === '_synced') continue;
+		const from = before[field];
+		const to = after[field];
+		if (sameValue(from, to)) continue;
+		changes.push({ field, from, to });
+	}
+	return changes;
+}
+
+/** Object.is for primitives; JSON equality for structures re-serialized per snapshot. */
+function sameValue(a, b) {
+	if (Object.is(a, b)) return true;
+	const structural = a !== null && typeof a === 'object' && b !== null && typeof b === 'object';
+	if (!structural) return false;
+	try {
+		return JSON.stringify(a) === JSON.stringify(b);
+	} catch (err) {
+		return false;
+	}
+}
+
+/**
+ * Prepend `changes` to a capped, newest-first changelog.
+ *
+ * Returns the SAME array reference when there is nothing to add, so the common
+ * no-change flush cannot churn a re-render.
+ */
+export function appendHistory(history, changes, at, limit = 30) {
+	const list = Array.isArray(history) ? history : [];
+	if (!changes || changes.length === 0) return list;
+	const entries = changes.map((change) => ({ ...change, at }));
+	return [...entries, ...list].slice(0, limit);
+}
+
+/**
  * Column order for a record table: the primary key first, then every other key
  * any row carries, in first-seen order, capped so a wide model cannot push the
  * table off the panel. `_synced` is excluded — it renders as a badge, not a

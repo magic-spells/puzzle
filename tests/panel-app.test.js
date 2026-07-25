@@ -43,6 +43,16 @@ function transcript() {
 			},
 		],
 		inspect: {
+			// A layout that queries nothing — absent from byView, so it exercises
+			// the inspector's "no store subscriptions" case.
+			1: {
+				name: 'FixtureLayout',
+				module: 'layouts/Fixture.pzl',
+				params: {},
+				props: {},
+				model: { title: 'Fixture' },
+				local: {},
+			},
 			2: {
 				name: 'FixtureHome',
 				module: 'views/Home.pzl',
@@ -70,6 +80,32 @@ function transcript() {
 				{ id: 't2', text: 'Ship the panel', completed: false, priority: 2, _synced: false },
 			],
 			user: [{ id: 'u1', name: 'Ada', email: 'ada@example.com', active: true, _synced: true }],
+		},
+		// Both rail groups populated. Record keys use the runtime's REC_SEP, a SPACE
+		// (store.js) — live keys read `todo t2`, never `todo:t2`.
+		subscriptions: {
+			byKey: {
+				todo: [2, 3],
+				user: ['fn'],
+				'todo t2': [3, 4],
+			},
+			byView: {
+				2: ['todo'],
+				3: ['todo', 'todo t2'],
+				4: ['todo t2'],
+				fn: ['user'],
+			},
+		},
+		route: {
+			path: '/todos?filter=active',
+			pathname: '/todos',
+			query: { filter: 'active' },
+			hash: '',
+			params: { id: 't2' },
+			route: '/todos/:id',
+			routes: ['/', '/todos/:id'],
+			chain: ['FixtureLayout', 'FixtureHome'],
+			title: 'Todos',
 		},
 	};
 }
@@ -115,6 +151,11 @@ function stubBridge() {
 				Object.assign(row, patch);
 				return { ok: true };
 			},
+			'snapshot:subscriptions': () => ({
+				byKey: { ...world.subscriptions.byKey },
+				byView: { ...world.subscriptions.byView },
+			}),
+			'snapshot:route': () => ({ ...world.route }),
 			'highlight:view': () => ({ ok: true }),
 			'log:view': () => ({ ok: true }),
 		},
@@ -252,6 +293,12 @@ const splitDivider = () => document.querySelector('[data-split-divider]');
 
 /** The Empty piece's root — its base class string is the only stable handle. */
 const emptyBlocks = () => [...document.querySelectorAll('div.text-center.items-center')];
+/** Subscription rail rows, per group. */
+const subKeysIn = (group) =>
+	[...document.querySelectorAll(`[data-group="${group}"] [data-sub-key]`)].map((el) =>
+		el.getAttribute('data-sub-key')
+	);
+const subscriberRows = () => [...document.querySelectorAll('[data-subscriber]')];
 /** CopyButton renders an icon-only <button aria-label="Copy">. */
 const copyButtonIn = (root) => root?.querySelector('button[aria-label="Copy"]');
 
@@ -265,6 +312,15 @@ describe.skipIf(!built)('panel app (compiled bundle)', () => {
 
 	beforeEach(() => {
 		bridge = stubBridge();
+	});
+
+	it('gives the Connection panel the same refresh guidance', async () => {
+		await boot(bridge);
+		// Connection's no-hello state is hand-written rather than an Empty piece,
+		// so it needs its own assertion that the guidance is there too.
+		expect(document.body.textContent).toContain(
+			'If this page loaded before the extension was installed or updated, refresh the page.'
+		);
 	});
 
 	it('renders the "no Puzzle app detected" state before any hello', async () => {
@@ -287,6 +343,8 @@ describe.skipIf(!built)('panel app (compiled bundle)', () => {
 			'Connection',
 			'Views',
 			'Store',
+			'Subscriptions',
+			'Router',
 		]);
 
 		// The status chip is the last child of the bar and pushed right by ml-auto.
@@ -315,7 +373,7 @@ describe.skipIf(!built)('panel app (compiled bundle)', () => {
 	it('writes hash-mode nav hrefs, so panel.html stays loadable on reload', async () => {
 		await boot(bridge);
 		const hrefs = [...document.querySelectorAll('nav a')].map((a) => a.getAttribute('href'));
-		expect(hrefs).toEqual(['#/', '#/views', '#/store']);
+		expect(hrefs).toEqual(['#/', '#/views', '#/store', '#/subscriptions', '#/router']);
 	});
 
 	it('routes between panels', async () => {
@@ -396,7 +454,7 @@ describe.skipIf(!built)('panel app (compiled bundle)', () => {
 	it('marks a record type stale when a flush names its key', async () => {
 		const app = await boot(bridge);
 		app.store.upsert('recordType', { id: 'todo', records: [], count: 0, dirty: false });
-		bridge.emit('flush', { keys: ['todo:t2', 'todo'], notified: [1] });
+		bridge.emit('flush', { keys: ['todo t2', 'todo'], notified: [1] });
 		await settle(app);
 
 		expect(app.store.findOne('recordType', 'todo').dirty).toBe(true);
@@ -649,6 +707,27 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(row.querySelector('dd').getAttribute('title')).toBe('"Ship the panel now"');
 	});
 
+	it('shows the selected view’s store subscriptions beside its state', async () => {
+		treeRow('3').click();
+		await settle(app, 80);
+
+		const group = groupFor('subscriptions');
+		expect(group).toBeTruthy();
+		expect(group.textContent).toContain('todo');
+		expect(group.textContent).toContain('todo t2');
+		expect(group.textContent).toContain("re-runs this view's data()");
+
+		// One snapshot serves inspect AND the Subscriptions panel — not two.
+		expect(bridge.typesRequested().filter((t) => t === 'snapshot:subscriptions')).toHaveLength(1);
+	});
+
+	it('says so when a view subscribes to nothing', async () => {
+		treeRow('1').click(); // FixtureLayout is absent from byView
+		await settle(app, 80);
+
+		expect(groupFor('subscriptions').textContent).toContain('no store subscriptions');
+	});
+
 	it('reports an inspect:view failure inline instead of blanking the pane', async () => {
 		// No transcript entry for id 5 → the bridge answers { error }, which
 		// panel-glue turns into a rejection.
@@ -771,6 +850,11 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(empty).toHaveLength(1);
 		expect(empty[0].querySelector('p.font-medium').textContent).toBe('No Puzzle app detected');
 		expect(empty[0].textContent).toContain('dev-only runtime bridge');
+		// The page-hook injects at document_start, so a tab opened before the
+		// extension existed can never connect without a reload. Say so.
+		expect(empty[0].textContent).toContain(
+			'If this page loaded before the extension was installed or updated, refresh the page.'
+		);
 	});
 });
 
@@ -969,6 +1053,45 @@ describe.skipIf(!built)('Store panel', () => {
 		expect(bridge.typesRequested()).not.toContain('edit:record');
 	});
 
+	it('records a changelog for the watched record as flushes land', async () => {
+		document.querySelector('[data-row="t2"]').click();
+		await settle(app);
+		expect(document.querySelector('[data-history]').textContent).toContain('No changes yet');
+
+		// Something else mutates the record; the flush makes us re-read it.
+		bridge.world.records.todo[1].text = 'Ship the panel v2';
+		bridge.world.records.todo[1].priority = 9;
+		bridge.emit('flush', { keys: ['todo'], notified: [2] });
+		await settle(app, 260);
+
+		const entries = [...document.querySelectorAll('[data-history-entry]')];
+		expect(entries).toHaveLength(2);
+		const text = entries.map((e) => e.textContent.replace(/\s+/g, ' ')).join(' | ');
+		expect(text).toContain('text');
+		expect(text).toContain('Ship the panel');
+		expect(text).toContain('Ship the panel v2');
+		expect(text).toContain('priority');
+
+		// A flush that changes nothing appends nothing.
+		bridge.emit('flush', { keys: ['todo'], notified: [2] });
+		await settle(app, 260);
+		expect(document.querySelectorAll('[data-history-entry]')).toHaveLength(2);
+	});
+
+	it('clears the changelog when the watched record changes', async () => {
+		document.querySelector('[data-row="t2"]').click();
+		await settle(app);
+		bridge.world.records.todo[1].text = 'changed';
+		bridge.emit('flush', { keys: ['todo'], notified: [2] });
+		await settle(app, 260);
+		expect(document.querySelectorAll('[data-history-entry]').length).toBeGreaterThan(0);
+
+		document.querySelector('[data-row="t1"]').click();
+		await settle(app);
+		expect(document.querySelectorAll('[data-history-entry]')).toHaveLength(0);
+		expect(document.querySelector('[data-history]').textContent).toContain('No changes yet');
+	});
+
 	it('re-snapshots only the active type when a flush arrives', async () => {
 		const before = bridge.payloadsFor('snapshot:records').length;
 
@@ -989,6 +1112,199 @@ describe.skipIf(!built)('Store panel', () => {
 
 		expect(document.body.textContent).toContain('No Puzzle app detected');
 		expect(typeNames()).toHaveLength(0);
+		expect(fresh.typesRequested()).toEqual([]);
+		expect(document.body.textContent).toContain(
+			'If this page loaded before the extension was installed or updated, refresh the page.'
+		);
+	});
+});
+
+/* ========================================================================== */
+
+describe.skipIf(!built)('Subscriptions panel', () => {
+	let bridge;
+	let app;
+
+	beforeEach(async () => {
+		bridge = stubBridge();
+		app = await boot(bridge);
+		await connect(bridge, app);
+		await open(app, '/subscriptions');
+	});
+
+	it('splits the rail into Collections and Records with subscriber counts', () => {
+		expect(bridge.typesRequested()).toContain('snapshot:subscriptions');
+
+		// Bare `type` keys are collections; `type:id` keys are records.
+		expect(subKeysIn('collection')).toEqual(['todo', 'user']);
+		expect(subKeysIn('record')).toEqual(['todo t2']);
+
+		const todo = document.querySelector('[data-sub-key="todo"]');
+		expect(todo.textContent).toContain('2'); // two subscribers
+		expect(document.querySelector('[data-sub-key="todo t2"]').textContent).toContain('2');
+
+		expect(document.body.textContent).toContain('Collections');
+		expect(document.body.textContent).toContain('Records');
+	});
+
+	it('lists the subscriber views for the selected key', async () => {
+		document.querySelector('[data-sub-key="todo"]').click();
+		await settle(app);
+
+		expect(document.querySelector('[data-sub-key="todo"]').className).toContain(
+			'dt-row-selected'
+		);
+
+		// Ids resolve against the pview collection for name + module.
+		const rows = subscriberRows();
+		expect(rows).toHaveLength(2);
+		expect(rows[0].textContent).toContain('FixtureHome');
+		expect(rows[1].textContent).toContain('FixtureRow');
+		// Same row language as the tree: a kind dot per entry.
+		expect(rows[0].querySelector('[data-kind-dot]')).toBeTruthy();
+	});
+
+	it('labels the merged function-subscriber bucket', async () => {
+		document.querySelector('[data-sub-key="user"]').click();
+		await settle(app);
+
+		const rows = subscriberRows();
+		expect(rows).toHaveLength(1);
+		expect(rows[0].textContent).toContain('function subscriber');
+		// Not navigable — there is no identity behind it to show.
+		expect(rows[0].textContent).not.toContain('show in views');
+	});
+
+	it('pulses the keys a flush names', async () => {
+		expect(document.querySelectorAll('.dt-pulse')).toHaveLength(0);
+
+		bridge.emit('flush', { keys: ['todo', 'todo t2'], notified: [2, 3] });
+		await settle(app);
+
+		const lit = [...document.querySelectorAll('[data-sub-key].dt-pulse')].map((el) =>
+			el.getAttribute('data-sub-key')
+		);
+		expect(lit.sort()).toEqual(['todo', 'todo t2']);
+	});
+
+	it('re-snapshots the graph on flush, debounced', async () => {
+		const before = bridge.typesRequested().filter((t) => t === 'snapshot:subscriptions').length;
+
+		bridge.world.subscriptions.byKey.todo = [2];
+		bridge.emit('flush', { keys: ['todo'], notified: [2] });
+		bridge.emit('flush', { keys: ['todo'], notified: [2] });
+		await settle(app, 260);
+
+		const after = bridge.typesRequested().filter((t) => t === 'snapshot:subscriptions').length;
+		expect(after).toBe(before + 1); // coalesced
+		expect(document.querySelector('[data-sub-key="todo"]').textContent).toContain('1');
+	});
+
+	it('clicking a subscriber opens it in the Views panel, already selected', async () => {
+		document.querySelector('[data-sub-key="todo"]').click();
+		await settle(app);
+
+		subscriberRows()[1].click(); // FixtureRow, view #3
+		await settle(app, 120);
+
+		// Navigated...
+		expect(window.location.hash).toBe('#/views');
+		expect(treeIds().length).toBeGreaterThan(0);
+		// ...and the Views panel adopted the hand-off.
+		expect(treeRow('3').className).toContain('dt-row-selected');
+		expect(bridge.payloadsFor('inspect:view')).toContainEqual({ id: 3 });
+
+		// The intent is consumed, not sticky.
+		expect(app.store.findOne('ui', 'main').pendingViewId).toBeNull();
+	});
+
+	it('shows the refresh guidance when no app is connected', async () => {
+		const fresh = stubBridge();
+		const other = await boot(fresh);
+		await open(other, '/subscriptions');
+
+		expect(document.body.textContent).toContain('No Puzzle app detected');
+		expect(document.body.textContent).toContain(
+			'If this page loaded before the extension was installed or updated, refresh the page.'
+		);
+		expect(fresh.typesRequested()).toEqual([]);
+	});
+});
+
+/* ========================================================================== */
+
+describe.skipIf(!built)('Router panel', () => {
+	let bridge;
+	let app;
+
+	beforeEach(async () => {
+		bridge = stubBridge();
+		app = await boot(bridge);
+		await connect(bridge, app);
+		await open(app, '/router');
+	});
+
+	it('renders the current-route card from snapshot:route', () => {
+		expect(bridge.typesRequested()).toContain('snapshot:route');
+
+		expect(document.querySelector('[data-pathname]').textContent.trim()).toBe('/todos');
+		expect(document.body.textContent).toContain('/todos/:id'); // matched pattern
+
+		// params and query render as key/value groups.
+		expect(groupFor('params').textContent).toContain('id');
+		expect(groupFor('params').textContent).toContain('t2');
+		expect(groupFor('query').textContent).toContain('filter');
+		expect(groupFor('query').textContent).toContain('active');
+	});
+
+	it('renders the matched chain root to leaf with the leaf emphasized', () => {
+		const rows = [...document.querySelectorAll('[data-chain-row]')];
+		expect(rows.map((r) => r.getAttribute('data-chain-row'))).toEqual([
+			'0-FixtureLayout',
+			'1-FixtureHome',
+		]);
+		// Pattern beside the view name, zipped by index.
+		expect(rows[0].textContent).toContain('/');
+		expect(rows[1].textContent).toContain('/todos/:id');
+		// Only the leaf is marked.
+		expect(rows[1].textContent).toContain('leaf');
+		expect(rows[0].textContent).not.toContain('leaf');
+		expect(rows[1].className).toContain('bg-accent-soft');
+	});
+
+	it('builds a newest-first history feed from the event ring', async () => {
+		// No extra recording: these are the same route-commit events the
+		// Connection panel's message list already holds.
+		bridge.emit('route-commit', { pathname: '/todos', query: {}, params: {}, title: 'Todos' });
+		bridge.emit('route-commit', { pathname: '/about', query: {}, params: {}, title: 'About' });
+		await settle(app, 140);
+
+		const rows = [...document.querySelectorAll('[data-history-row]')];
+		expect(rows).toHaveLength(2);
+		expect(rows[0].textContent).toContain('/about'); // newest first
+		expect(rows[0].textContent).toContain('About');
+		expect(rows[1].textContent).toContain('/todos');
+	});
+
+	it('re-reads the route after a commit', async () => {
+		const before = bridge.typesRequested().filter((t) => t === 'snapshot:route').length;
+
+		bridge.world.route.pathname = '/about';
+		bridge.world.route.route = '/about';
+		bridge.emit('route-commit', { pathname: '/about', query: {}, params: {}, title: 'About' });
+		await settle(app, 160);
+
+		expect(bridge.typesRequested().filter((t) => t === 'snapshot:route').length).toBe(before + 1);
+		expect(document.querySelector('[data-pathname]').textContent.trim()).toBe('/about');
+	});
+
+	it('shows the refresh guidance when no app is connected', async () => {
+		const fresh = stubBridge();
+		const other = await boot(fresh);
+		await open(other, '/router');
+
+		expect(document.body.textContent).toContain('No Puzzle app detected');
+		expect(document.body.textContent).toContain('refresh the page.');
 		expect(fresh.typesRequested()).toEqual([]);
 	});
 });

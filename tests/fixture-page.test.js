@@ -192,7 +192,7 @@ describe('fixture page ↔ page hook', () => {
 		const { result } = request(REQUESTS.SNAPSHOT_SUBSCRIPTIONS);
 		expect(result.byKey.todo).toEqual([2, 3]);
 		expect(result.byKey.user).toEqual(['fn']); // function subscribers report as 'fn'
-		expect(result.byView['3']).toEqual(['todo', 'todo:t2']);
+		expect(result.byView['3']).toEqual(['todo', 'todo t2']);
 	});
 
 	it('answers snapshot:route with the parsed URL state', () => {
@@ -213,7 +213,7 @@ describe('fixture page ↔ page hook', () => {
 		expect(result).toEqual({ ok: true });
 
 		const flush = sent.slice(before).find((m) => m.message?.type === EVENTS.FLUSH);
-		expect(flush.message.payload.keys).toEqual(['todo', 'todo:t2']);
+		expect(flush.message.payload.keys).toEqual(['todo', 'todo t2']);
 
 		const { result: after } = request(REQUESTS.SNAPSHOT_RECORDS, { type: 'todo' });
 		expect(after.types.todo.find((r) => r.id === 't2').completed).toBe(true);

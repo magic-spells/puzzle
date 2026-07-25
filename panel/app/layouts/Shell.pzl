@@ -27,9 +27,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
 
 const NAV = [
-  { path: '/', label: 'Connection', soon: false },
-  { path: '/views', label: 'Views', soon: false },
-  { path: '/store', label: 'Store', soon: false },
+  { path: '/', label: 'Connection' },
+  { path: '/views', label: 'Views' },
+  { path: '/store', label: 'Store' },
+  { path: '/subscriptions', label: 'Subscriptions' },
+  { path: '/router', label: 'Router' },
 ];
 
 const ACTIVE = 'bg-accent-soft text-accent font-medium';

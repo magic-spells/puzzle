@@ -133,6 +133,13 @@
                   emptyLabel="no setData() state" />
               </div>
             </section>
+
+            <StateGroup
+              title="subscriptions"
+              tone="plain"
+              hint="Store keys whose next write re-runs this view's data()."
+              entries={ subEntries }
+              emptyLabel="no store subscriptions" />
           </div>
         {/if}
         </div>
@@ -148,7 +155,14 @@ import Empty from '../components/ui/Empty.pzl';
 import SplitPanel from '../components/ui/SplitPanel.pzl';
 import StateGroup from '../components/StateGroup.pzl';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
-import { api, applyViewSnapshot } from '../bridge.js';
+import { UI_ID } from '../models/ui.js';
+import { disconnectedEmpty } from '../emptystate.js';
+import {
+  api,
+  applyViewSnapshot,
+  ensureSubscriptions,
+  takeViewSelection,
+} from '../bridge.js';
 import { entriesOf, moduleLabel, moduleTitle, viewKind } from '../values.js';
 
 /**
@@ -251,6 +265,14 @@ export default class ViewsView extends PuzzleView {
       else clearTimeout(this._treeTimer);
     }
 
+    // Cross-panel intent parked by the Subscriptions panel. Reading it in
+    // data() (rather than only in mounted) means it also lands when this panel
+    // is already open — clicking a subscriber twice still re-selects.
+    const pendingViewId = store.findOne('ui', UI_ID)?.pendingViewId ?? null;
+    if (pendingViewId != null && pendingViewId !== local.selectedId) {
+      this.adoptPendingSelection(pendingViewId);
+    }
+
     const selectedId = local.selectedId;
     const selectedRecord = selectedId == null ? null : store.findOne('pview', selectedId);
 
@@ -268,11 +290,12 @@ export default class ViewsView extends PuzzleView {
     this._rows = rows;
 
     const inspect = local.inspect;
+    const empty = disconnectedEmpty(state);
 
     return {
       disconnected: !connected,
-      emptyTitle: this.emptyTitle(state),
-      emptyHint: this.emptyHint(state),
+      emptyTitle: empty.title,
+      emptyHint: empty.description,
 
       rows,
       liveCount: views.filter((view) => view.live).length,
@@ -295,7 +318,27 @@ export default class ViewsView extends PuzzleView {
       propEntries: entriesOf(inspect?.props),
       modelEntries: entriesOf(inspect?.model),
       localEntries: entriesOf(inspect?.local),
+      // From snapshot:subscriptions.byView, folded onto the pview record — the
+      // store keys whose next write re-runs THIS view's data().
+      subEntries: (selectedRecord?.subKeys ?? []).map((key) => ({
+        label: key,
+        value: '',
+        full: key,
+        copy: key,
+      })),
     };
+  }
+
+  /**
+   * Take the Subscriptions panel's hand-off: select the view it asked for, and
+   * clear the intent so a later manual visit does not re-apply it.
+   */
+  adoptPendingSelection(id) {
+    takeViewSelection();
+    clearTimeout(this._inspectTimer);
+    this._seenPulseAt = 0;
+    this.setData({ selectedId: id, inspect: null, inspectError: '' });
+    this.loadInspect(id);
   }
 
   /* ---- tree ------------------------------------------------------------- */
@@ -410,7 +453,14 @@ export default class ViewsView extends PuzzleView {
   async loadInspect(id) {
     if (this.isDestroyed) return;
     try {
-      const result = await api.inspectView(id);
+      // Both requests go out together: the subscription graph answers "what
+      // makes this view re-render", which belongs beside its state layers.
+      // `ensureSubscriptions` de-duplicates against the Subscriptions panel, so
+      // arriving here from a subscriber click issues ONE snapshot, not two.
+      const [result] = await Promise.all([
+        api.inspectView(id),
+        ensureSubscriptions().catch(() => null),
+      ]);
       if (this.isDestroyed) return;
       // A slow answer for a view the user already navigated away from must not
       // overwrite the pane.
@@ -438,17 +488,6 @@ export default class ViewsView extends PuzzleView {
     }, TOAST_MS);
   }
 
-  emptyTitle(state) {
-    if (state === CONNECTION_STATE.MISMATCH) return 'Protocol version mismatch';
-    return 'No Puzzle app detected';
-  }
-
-  emptyHint(state) {
-    if (state === CONNECTION_STATE.MISMATCH) {
-      return 'The page speaks a wire protocol this extension cannot render, so the tree would not be trustworthy. See the Connection panel.';
-    }
-    return 'The view tree comes from the dev-only runtime bridge. Run the app with `puzzle dev` (or build with --mode development) and reload the page with DevTools open.';
-  }
 
   events = {
     select: (id) => {

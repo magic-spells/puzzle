@@ -1,0 +1,296 @@
+<puzzle-view class="h-full flex min-h-0">
+  {#if disconnected}
+    <div class="flex-1 min-w-0">
+      <Empty title={ emptyTitle } description={ emptyHint } class="py-8! px-4!" />
+    </div>
+  {:else}
+    <SplitPanel
+      class="flex-1 min-h-0"
+      direction="horizontal"
+      defaultSizes={ [35, 65] }
+      min={ ['180px', '260px'] }
+      storageKey="puzzle-devtools:subs-split">
+
+    <div slot="first" class="h-full flex flex-col min-h-0 overflow-hidden border-r border-line bg-surface">
+      <header class="shrink-0 flex items-center gap-2 min-h-8 px-2 py-1.5 border-b border-line">
+        <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Keys</span>
+        <span class="font-mono text-[10px] tabular-nums text-faint">{ keyCount }</span>
+        <button
+          type="button"
+          data-reload-subs
+          title="Re-request snapshot:subscriptions"
+          class="ml-auto flex size-4 items-center justify-center rounded text-muted hover:bg-raised hover:text-accent { loadingClass }"
+          @click={ reload }>{#svg 'icons/refresh.svg'}</button>
+      </header>
+
+      {#if error}
+        <p class="m-0 px-2 py-1 font-mono text-[10px] text-danger break-all">{ error }</p>
+      {/if}
+
+      <div class="flex-1 min-h-0 overflow-auto">
+        {#if keyCount === 0}
+          <p class="m-0 px-2 py-2 text-[11px] text-faint">Nothing is subscribed.</p>
+        {:else}
+          {#for group in groups}
+            <section key={ group.id } data-group="{ group.id }">
+              <h2 class="m-0 sticky top-0 z-10 bg-surface px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-faint border-b border-line">
+                { group.label }
+                <span class="ml-1 tabular-nums">{ group.rows.length }</span>
+              </h2>
+              {#if group.rows.length === 0}
+                <p class="m-0 px-2 py-1 text-[10px] italic text-faint">none</p>
+              {:else}
+                <ul class="m-0 p-0 list-none">
+                  {#for row in group.rows}
+                    <li key={ row.id }>
+                      <div
+                        data-sub-key="{ row.id }"
+                        class="flex items-center gap-1.5 min-h-[22px] px-2 py-0.5 cursor-default { row.rowClass } { row.pulseClass }"
+                        title="{ row.id }"
+                        @click={ selectKey(row.id) }>
+                        <span class="min-w-0 truncate font-mono text-[11px] { row.nameClass }">{ row.id }</span>
+                        <span class="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">{ row.count }</span>
+                      </div>
+                    </li>
+                  {/for}
+                </ul>
+              {/if}
+            </section>
+          {/for}
+        {/if}
+      </div>
+    </div>
+
+    <div slot="second" class="h-full flex flex-col min-h-0 overflow-hidden">
+      {#if !hasSelection}
+        <Empty description="Select a store key to see which views re-render when it changes." class="py-8! px-4!" />
+      {:else}
+        <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
+          <span class="shrink-0 font-mono text-[12px] font-semibold text-ink">{ selectedKey }</span>
+          <span class="shrink-0 font-mono text-[10px] uppercase tracking-wide text-faint">{ selectedKind }</span>
+          <span class="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">{ subscriberCount } subscriber{ subscriberSuffix }</span>
+        </header>
+
+        <div class="flex-1 min-h-0 overflow-auto">
+          {#if subscribers.length === 0}
+            <p class="m-0 px-3 py-2 text-[11px] text-faint">No live subscribers.</p>
+          {:else}
+            <ul class="m-0 p-0 list-none">
+              {#for sub in subscribers}
+                <li key={ sub.key }>
+                  <div
+                    data-subscriber="{ sub.key }"
+                    class="group flex items-center gap-2 min-h-[22px] px-3 py-0.5 { sub.rowClass }"
+                    title="{ sub.title }"
+                    @click={ openView(sub.viewId) }>
+                    <ViewIdentity name={ sub.name } module={ sub.module } dim={ sub.dim } />
+                    {#if sub.navigable}
+                      <span class="ml-auto shrink-0 hidden group-hover:inline font-mono text-[9px] uppercase tracking-wide text-accent">show in views →</span>
+                    {/if}
+                  </div>
+                </li>
+              {/for}
+            </ul>
+          {/if}
+        </div>
+      {/if}
+    </div>
+    </SplitPanel>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Empty from '../components/ui/Empty.pzl';
+import SplitPanel from '../components/ui/SplitPanel.pzl';
+import ViewIdentity from '../components/ViewIdentity.pzl';
+import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
+import { disconnectedEmpty } from '../emptystate.js';
+import { ensureSubscriptions, ensureViews, requestViewSelection } from '../bridge.js';
+
+/**
+ * The Subscriptions panel: which store keys exist, who listens to each, and
+ * which of them a flush just woke up.
+ *
+ * This is the reverse of the Views panel's question. The tree answers "what is
+ * mounted"; this answers "what does a write to `todo` actually cost" — the
+ * subscriber list IS the re-render blast radius.
+ *
+ * Rows are `subscription` records the bridge folds `byKey` into, so the pulse
+ * arrives the same way the tree's does (a `flush` sets `pulseAt`, one shared
+ * timer clears it) and this view never touches a protocol event directly.
+ */
+
+/** Flushes arrive one per store batch; coalesce the re-snapshot they trigger. */
+const FLUSH_DEBOUNCE_MS = 200;
+
+const ROW_SELECTED = 'bg-accent-soft dt-row-selected';
+const ROW_IDLE = 'hover:bg-raised';
+
+export default class SubscriptionsView extends PuzzleView {
+  created() {
+    this.setData({ selectedKey: null, loading: false, error: '' });
+    this._seenGeneration = null;
+    this._flushTimer = null;
+  }
+
+  mounted() {
+    if (this.connected()) this.load({ force: true });
+  }
+
+  destroyed() {
+    clearTimeout(this._flushTimer);
+  }
+
+  data() {
+    const store = this.ctx.store;
+    const connection = store.findOne('connection', CONNECTION_ID);
+    const entries = store.findMany('subscription');
+    const local = this.getData();
+
+    const state = connection?.state ?? CONNECTION_STATE.WAITING;
+    const connected = state === CONNECTION_STATE.CONNECTED;
+
+    // Same generation trick the other panels use: a flush (or a late hello)
+    // means the graph we are holding is stale.
+    const generation = `${state}#${connection?.flushSeq ?? 0}`;
+    if (generation !== this._seenGeneration) {
+      const first = this._seenGeneration === null;
+      this._seenGeneration = generation;
+      if (!connected) clearTimeout(this._flushTimer);
+      else if (!first) this.scheduleRefresh();
+    }
+
+    const selectedKey = local.selectedKey;
+    const selected = selectedKey ? store.findOne('subscription', selectedKey) : null;
+    const empty = disconnectedEmpty(state);
+
+    return {
+      disconnected: !connected,
+      emptyTitle: empty.title,
+      emptyHint: empty.description,
+
+      keyCount: entries.length,
+      groups: [
+        { id: 'collection', label: 'Collections', rows: this.rowsOfKind(entries, 'collection', selectedKey) },
+        { id: 'record', label: 'Records', rows: this.rowsOfKind(entries, 'record', selectedKey) },
+      ],
+
+      hasSelection: !!selected,
+      selectedKey: selected?.id ?? '',
+      selectedKind: selected?.kind ?? '',
+      subscriberCount: selected?.count ?? 0,
+      subscriberSuffix: (selected?.count ?? 0) === 1 ? '' : 's',
+      subscribers: this.toSubscribers(selected),
+
+      loadingClass: local.loading ? 'animate-spin text-accent' : '',
+      error: local.error,
+    };
+  }
+
+  /** Keys of one kind, alphabetical — the runtime's Map order is not meaningful. */
+  rowsOfKind(entries, kind, selectedKey) {
+    return entries
+      .filter((entry) => entry.kind === kind)
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((entry) => ({
+        id: entry.id,
+        count: entry.count,
+        rowClass: entry.id === selectedKey ? ROW_SELECTED : ROW_IDLE,
+        nameClass: entry.id === selectedKey ? 'text-accent font-semibold' : 'text-ink',
+        pulseClass: entry.pulseAt ? 'dt-pulse' : '',
+      }));
+  }
+
+  /**
+   * Resolve subscriber ids against the live view collection. An id with no
+   * `pview` record is a view that was destroyed since the snapshot; it still
+   * renders (the graph said it was there) but is not navigable.
+   */
+  toSubscribers(selected) {
+    if (!selected) return [];
+    const store = this.ctx.store;
+    return selected.subscribers.map((id, index) => {
+      // 'fn' is the runtime's merged bucket for function subscribers — one
+      // entry for all of them, with no identity to resolve or navigate to.
+      if (id === 'fn') {
+        return {
+          key: `fn-${index}`,
+          viewId: null,
+          name: 'function subscriber',
+          module: null,
+          dim: true,
+          navigable: false,
+          rowClass: 'cursor-default',
+          title: 'store.subscribe(fn) — the runtime reports these merged, without identity',
+        };
+      }
+      const record = store.findOne('pview', id);
+      return {
+        key: `view-${id}`,
+        viewId: id,
+        name: record?.name ?? `#${id}`,
+        module: record?.module ?? null,
+        dim: !record,
+        navigable: !!record,
+        rowClass: record ? 'cursor-pointer hover:bg-raised' : 'cursor-default',
+        title: record ? `#${id} — click to show in the Views panel` : `#${id} (no longer mounted)`,
+      };
+    });
+  }
+
+  connected() {
+    const connection = this.ctx.store.findOne('connection', CONNECTION_ID);
+    return connection?.state === CONNECTION_STATE.CONNECTED;
+  }
+
+  scheduleRefresh() {
+    clearTimeout(this._flushTimer);
+    this._flushTimer = setTimeout(() => {
+      this._flushTimer = null;
+      this.load({ force: true });
+    }, FLUSH_DEBOUNCE_MS);
+  }
+
+  async load({ force = false } = {}) {
+    if (this.isDestroyed || !this.connected()) return;
+    this.setData({ loading: true, error: '' });
+    this.refresh();
+    try {
+      // Shared with the Views inspector: within the window, whichever panel
+      // asks first wins and the other joins that request.
+      //
+      // The view tree comes along because subscriber ids are resolved against
+      // the `pview` collection for a name and module — without it a panel
+      // opened straight to this tab could only print bare `#2` ids.
+      await Promise.all([ensureSubscriptions({ force }), ensureViews({ force })]);
+    } catch (err) {
+      if (!this.isDestroyed) this.setData('error', err?.message ?? String(err));
+    } finally {
+      if (!this.isDestroyed) {
+        this.setData('loading', false);
+        this.refresh();
+      }
+    }
+  }
+
+  events = {
+    selectKey: (id) => {
+      this.setData('selectedKey', this.getData().selectedKey === id ? null : id);
+      this.refresh();
+    },
+
+    // Cross-panel navigation: park the intent in the `ui` singleton, then route.
+    // The Views panel picks it up on mount — it does not exist yet right now.
+    openView: (viewId) => {
+      if (viewId == null) return;
+      requestViewSelection(viewId);
+      this.ctx.router.push('/views');
+    },
+
+    reload: () => {
+      this.load({ force: true });
+    },
+  };
+}
+</script>

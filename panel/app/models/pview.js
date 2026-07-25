@@ -35,6 +35,12 @@ export default class PView extends PuzzleModel {
 		 * 0 once the pulse expires. Drives the Views panel's re-render flash.
 		 */
 		pulseAt: Puzzle.number().default(0),
+		/**
+		 * Store keys this view subscribes to, from `snapshot:subscriptions.byView`.
+		 * Kept on the view rather than in a second lookup table, so the inspector
+		 * reads it the same way it reads the view's name.
+		 */
+		subKeys: Puzzle.array().default(() => []),
 		/** The most recent `inspect:view` payload — { params, props, model, local }. */
 		inspected: Puzzle.object().default(() => null),
 		inspectedAt: Puzzle.number().default(0),

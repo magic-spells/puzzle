@@ -428,9 +428,25 @@
 								return { types: types };
 							}
 							case 'snapshot:subscriptions':
+								// Both groups the Subscriptions rail splits on are populated.
+								// Record keys are `type + ' ' + id` — the runtime's REC_SEP is a
+								// SPACE (store.js), so they read 'todo t1', never 'todo:t1'.
+								// 'fn' is the merged function-subscriber bucket.
 								return {
-									byKey: { todo: [2, 3], 'todo:t2': [3], user: ['fn'] },
-									byView: { 2: ['todo'], 3: ['todo', 'todo:t2'], fn: ['user'] },
+									byKey: {
+										todo: [2, 3],
+										list: [5],
+										user: ['fn'],
+										'todo t1': [4],
+										'todo t2': [3],
+									},
+									byView: {
+										2: ['todo'],
+										3: ['todo', 'todo t2'],
+										4: ['todo t1'],
+										5: ['list'],
+										fn: ['user'],
+									},
 								};
 							case 'snapshot:route':
 								return route();
@@ -470,7 +486,8 @@
 
 								Object.assign(row, payload.patch);
 								emit('flush', {
-									keys: [payload.type, payload.type + ':' + payload.id],
+									// REC_SEP is a space (store.js), so a record key is `type id`.
+									keys: [payload.type, payload.type + ' ' + payload.id],
 									notified: [2, 3],
 								});
 								return { ok: true };
@@ -586,7 +603,7 @@
 						flushTick += 1;
 						var rotations = [
 							{ keys: ['todo'], notified: [2, 3] },
-							{ keys: ['todo:t2', 'todo'], notified: [3] },
+							{ keys: ['todo t2', 'todo'], notified: [3] },
 							{ keys: ['user'], notified: ['fn'] },
 						];
 						emit('flush', rotations[flushTick % rotations.length]);
@@ -601,6 +618,18 @@
 							title: document.title,
 						});
 					}, 5000);
+
+					// A second commit so the Router panel's history feed has more than
+					// one row to show without anyone clicking.
+					setTimeout(function () {
+						emit('route-commit', {
+							pathname: '/todos/t2',
+							query: {},
+							params: { id: 't2' },
+							chain: ['FixtureLayout', 'FixtureHome', 'FixtureRow'],
+							title: 'Todo t2',
+						});
+					}, 7000);
 				}
 
 				document.addEventListener('click', function (event) {

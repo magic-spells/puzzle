@@ -17,6 +17,8 @@ import {
 	isEnvelope,
 } from '../../protocol/constants.js';
 import { CONNECTION_ID, CONNECTION_STATE } from './models/connection.js';
+import { UI_ID } from './models/ui.js';
+import { subscriptionKind, subscriptionParts } from './values.js';
 
 /** Ring capacity for the `event` model. Oldest records are destroyed past this. */
 export const EVENT_LIMIT = 200;
@@ -27,6 +29,14 @@ export const PULSE_MS = 600;
 let store = null;
 let bridge = null;
 let pulseTimer = null;
+
+/** Shared `snapshot:subscriptions` de-duplication — see `ensureSubscriptions`. */
+let subscriptionsInFlight = null;
+let subscriptionsFetchedAt = 0;
+
+/** Shared `snapshot:views` de-duplication — see `ensureViews`. */
+let viewsInFlight = null;
+let viewsFetchedAt = 0;
 
 /**
  * The stand-in used when the panel runs outside DevTools (`puzzle dev`, tests).
@@ -186,15 +196,34 @@ function onFlush(payload) {
 		flushSeq: (connection?.flushSeq ?? 0) + 1,
 	});
 
-	// Store keys are either a bare type ('todo') or 'type:id' — either way the
-	// segment before the first colon names the bucket whose snapshot went stale.
+	// Store keys are either a bare type ('todo') or `type id` — the runtime joins
+	// them with a SPACE (store.js REC_SEP), so the segment before the first space
+	// names the bucket whose snapshot went stale.
 	for (const key of keys) {
-		const type = String(key).split(':')[0];
-		const bucket = store.findOne('recordType', type);
+		const bucket = store.findOne('recordType', subscriptionParts(key).type);
 		if (bucket) bucket.update({ dirty: true });
 	}
 
 	pulseViews(notified);
+	pulseSubscriptions(keys);
+}
+
+/**
+ * Light up the subscription keys this flush named. Same 600ms class discipline
+ * as the tree's rows, and the same shared timer clears both.
+ */
+function pulseSubscriptions(keys) {
+	const now = Date.now();
+	let lit = false;
+	for (const key of keys) {
+		const entry = store.findOne('subscription', String(key));
+		if (!entry) continue;
+		entry.update({ pulseAt: now });
+		lit = true;
+	}
+	if (!lit) return;
+	clearTimeout(pulseTimer);
+	pulseTimer = setTimeout(clearPulses, PULSE_MS);
 }
 
 /**
@@ -225,6 +254,9 @@ function clearPulses() {
 	if (!store) return;
 	for (const view of store.findMany('pview')) {
 		if (view.pulseAt) view.update({ pulseAt: 0 });
+	}
+	for (const entry of store.findMany('subscription')) {
+		if (entry.pulseAt) entry.update({ pulseAt: 0 });
 	}
 }
 
@@ -311,6 +343,113 @@ export function applyRecordSnapshot(result, type) {
 	return names;
 }
 
+/**
+ * Fold a `snapshot:subscriptions` answer into the store — BOTH directions at
+ * once, because the runtime sends both and two consumers want different halves:
+ * the Subscriptions panel reads `byKey` off the `subscription` collection, and
+ * the Views inspector reads `byView` off each `pview`'s `subKeys`.
+ *
+ * Doing it here is what makes one request serve both panels.
+ */
+export function applySubscriptionSnapshot(result) {
+	if (!store) return 0;
+
+	const byKey = result?.byKey && typeof result.byKey === 'object' ? result.byKey : {};
+	const seen = new Set();
+	for (const [key, subscribers] of Object.entries(byKey)) {
+		const list = Array.isArray(subscribers) ? subscribers : [];
+		store.upsert('subscription', {
+			id: key,
+			subscribers: list,
+			count: list.length,
+			kind: subscriptionKind(key),
+		});
+		seen.add(key);
+	}
+	// A key nobody subscribes to any more is gone, not empty.
+	for (const entry of store.findMany('subscription')) {
+		if (!seen.has(entry.id)) entry.destroy();
+	}
+
+	const byView = result?.byView && typeof result.byView === 'object' ? result.byView : {};
+	for (const view of store.findMany('pview')) {
+		// byView keys arrive as JSON object keys, so a numeric view id is a string.
+		const keys = byView[String(view.id)];
+		const next = Array.isArray(keys) ? keys : [];
+		if (next.length !== view.subKeys.length || next.some((k, i) => k !== view.subKeys[i])) {
+			view.update({ subKeys: next });
+		}
+	}
+	return seen.size;
+}
+
+/**
+ * One `snapshot:subscriptions` per debounce window, shared by every caller.
+ *
+ * The Views inspector and the Subscriptions panel both want this data and can
+ * ask within milliseconds of each other (selecting a view in one navigates to
+ * the other). A single in-flight promise plus a freshness window means the
+ * second caller joins the first request instead of issuing its own.
+ */
+export function ensureSubscriptions({ maxAgeMs = 250, force = false } = {}) {
+	if (!force && subscriptionsInFlight) return subscriptionsInFlight;
+	if (!force && Date.now() - subscriptionsFetchedAt < maxAgeMs) {
+		return Promise.resolve(null);
+	}
+	subscriptionsInFlight = api
+		.snapshotSubscriptions()
+		.then((result) => {
+			subscriptionsFetchedAt = Date.now();
+			applySubscriptionSnapshot(result);
+			return result;
+		})
+		.finally(() => {
+			subscriptionsInFlight = null;
+		});
+	return subscriptionsInFlight;
+}
+
+/**
+ * One `snapshot:views` per debounce window, shared the same way.
+ *
+ * The Subscriptions panel resolves subscriber IDS against the `pview`
+ * collection for a name and module, so it needs the tree even though it never
+ * draws one — otherwise a panel opened straight to /subscriptions can only show
+ * bare `#2` ids.
+ */
+export function ensureViews({ maxAgeMs = 250, force = false } = {}) {
+	if (!force && viewsInFlight) return viewsInFlight;
+	if (!force && Date.now() - viewsFetchedAt < maxAgeMs) return Promise.resolve(null);
+	viewsInFlight = api
+		.snapshotViews()
+		.then((result) => {
+			viewsFetchedAt = Date.now();
+			applyViewSnapshot(result?.roots);
+			return result;
+		})
+		.finally(() => {
+			viewsInFlight = null;
+		});
+	return viewsInFlight;
+}
+
+/** Ask the Views panel to select `id` the next time it renders. */
+export function requestViewSelection(id) {
+	if (!store) return;
+	const current = store.findOne('ui', UI_ID);
+	if (current) current.update({ pendingViewId: id });
+	else store.upsert('ui', { id: UI_ID, pendingViewId: id });
+}
+
+/** Consume the pending selection, if any. Reading it clears it. */
+export function takeViewSelection() {
+	if (!store) return null;
+	const current = store.findOne('ui', UI_ID);
+	const pending = current?.pendingViewId ?? null;
+	if (pending != null) current.update({ pendingViewId: null });
+	return pending;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Store helpers                                                               */
 /* -------------------------------------------------------------------------- */
@@ -332,9 +471,16 @@ export function resetSession({ port = 'connected' } = {}) {
 	if (!store) return;
 	clearTimeout(pulseTimer);
 	pulseTimer = null;
+	subscriptionsInFlight = null;
+	subscriptionsFetchedAt = 0;
+	viewsInFlight = null;
+	viewsFetchedAt = 0;
 	for (const view of store.findMany('pview')) view.destroy();
 	for (const event of store.findMany('event')) event.destroy();
 	for (const bucket of store.findMany('recordType')) bucket.destroy();
+	for (const entry of store.findMany('subscription')) entry.destroy();
+	const ui = store.findOne('ui', UI_ID);
+	if (ui) ui.update({ pendingViewId: null });
 
 	const existing = store.findOne('connection', CONNECTION_ID);
 	const fresh = {

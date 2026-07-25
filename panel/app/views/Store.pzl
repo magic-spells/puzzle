@@ -166,6 +166,32 @@
                     class="size-5! rounded-sm! shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" />
                 </div>
               {/for}
+
+              <section data-history class="border-t border-line">
+                <h3 class="m-0 flex items-baseline gap-2 px-3 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-faint">
+                  History
+                  <span class="tabular-nums">{ history.length }</span>
+                  <span class="ml-auto font-normal normal-case tracking-normal text-[9px] text-faint">changes seen while this card was open</span>
+                </h3>
+                {#if history.length === 0}
+                  <p class="m-0 px-3 pb-1.5 text-[10px] italic text-faint">No changes yet.</p>
+                {:else}
+                  <ul class="m-0 p-0 pb-1 list-none">
+                    {#for entry in history}
+                      <li
+                        key={ entry.key }
+                        data-history-entry
+                        class="flex items-baseline gap-2 px-3 py-0.5 font-mono text-[10px]">
+                        <span class="shrink-0 tabular-nums text-faint">{ entry.time }</span>
+                        <span class="shrink-0 text-muted">{ entry.field }</span>
+                        <span class="min-w-0 truncate text-faint line-through">{ entry.from }</span>
+                        <span class="shrink-0 text-faint">→</span>
+                        <span class="min-w-0 truncate text-ink">{ entry.to }</span>
+                      </li>
+                    {/for}
+                  </ul>
+                {/if}
+              </section>
             </dl>
           </section>
         {/if}
@@ -183,10 +209,13 @@ import Empty from '../components/ui/Empty.pzl';
 import SplitPanel from '../components/ui/SplitPanel.pzl';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
 import { api, applyRecordSnapshot } from '../bridge.js';
+import { disconnectedEmpty } from '../emptystate.js';
 import {
+  appendHistory,
   clipboardText,
   coerceInput,
   deriveColumns,
+  diffRecord,
   inputValue,
   preview,
   valueKind,
@@ -223,6 +252,8 @@ export default class StoreView extends PuzzleView {
       applying: false,
       loading: false,
       error: '',
+      /** Newest-first changelog for the record whose detail card is open. */
+      history: [],
     });
 
     // `<connection state>#<flushSeq>` as of the last data() run — composite so a
@@ -230,6 +261,10 @@ export default class StoreView extends PuzzleView {
     this._seenGeneration = null;
     this._flushTimer = null;
     this._okTimer = null;
+    // The last snapshot of the watched record: { type, id, row }. Kept OFF the
+    // local state layer on purpose — it is diff bookkeeping, never rendered, and
+    // putting it in setData would re-render the card on every flush.
+    this._watched = null;
   }
 
   mounted() {
@@ -269,14 +304,12 @@ export default class StoreView extends PuzzleView {
 
     const selectedRowId = local.selectedRowId;
     const selectedRow = findRow(records, shape.pk, selectedRowId);
+    const empty = disconnectedEmpty(state);
 
     return {
       disconnected: !connected,
-      emptyTitle: state === CONNECTION_STATE.MISMATCH ? 'Protocol version mismatch' : 'No Puzzle app detected',
-      emptyHint:
-        state === CONNECTION_STATE.MISMATCH
-          ? 'The page speaks a wire protocol this extension cannot render. See the Connection panel.'
-          : 'Store records come from the dev-only runtime bridge. Run the app with `puzzle dev` (or build with --mode development) and reload the page with DevTools open.',
+      emptyTitle: empty.title,
+      emptyHint: empty.description,
 
       types: buckets.map((type) => ({
         id: type.id,
@@ -297,6 +330,13 @@ export default class StoreView extends PuzzleView {
       fields: this.toFields(selectedRow, shape.pk, local.edits),
       // Pretty-printed so a pasted record is readable, not one long line.
       recordJson: selectedRow ? JSON.stringify(selectedRow, null, 2) : '',
+      history: (local.history ?? []).map((entry, index) => ({
+        key: `${entry.at}-${entry.field}-${index}`,
+        time: stamp(entry.at),
+        field: entry.field,
+        from: preview(entry.from, 40),
+        to: preview(entry.to, 40),
+      })),
 
       editError: local.editError,
       editOk: local.editOk,
@@ -386,6 +426,8 @@ export default class StoreView extends PuzzleView {
       if (!this.getData().activeType && names.length) {
         this.setData('activeType', names[0]);
       }
+      // Every re-snapshot is a chance to see what changed under the open card.
+      this.syncWatched();
     } catch (err) {
       if (this.isDestroyed) return;
       this.setData('error', err?.message ?? String(err));
@@ -395,6 +437,50 @@ export default class StoreView extends PuzzleView {
         this.refresh();
       }
     }
+  }
+
+  /**
+   * Diff the watched record against the snapshot we held before this one and
+   * append what changed.
+   *
+   * Only fires when the SAME record of the SAME type is still open — switching
+   * record or type resets the baseline instead of reporting the switch as a
+   * change. A record that vanished (deleted upstream) simply stops the watch;
+   * inventing "field → undefined" rows for a deletion would be noise.
+   */
+  syncWatched() {
+    const local = this.getData();
+    const type = local.activeType;
+    const id = local.selectedRowId;
+    if (!type || id == null) {
+      this._watched = null;
+      return;
+    }
+
+    const bucket = this.ctx.store.findOne('recordType', type);
+    const records = bucket?.records ?? [];
+    const shape = deriveColumns(records);
+    const row = findRow(records, shape.pk, id);
+    const next = row ? { ...row } : null;
+
+    const previous = this._watched;
+    const sameTarget =
+      previous && previous.type === type && String(previous.id) === String(id);
+
+    if (sameTarget && previous.row && next) {
+      const changes = diffRecord(previous.row, next);
+      if (changes.length) {
+        this.setData('history', appendHistory(local.history ?? [], changes, Date.now()));
+      }
+    }
+
+    this._watched = next ? { type, id, row: next } : null;
+  }
+
+  /** Drop the changelog and its baseline — the card is now showing something else. */
+  resetWatch() {
+    this._watched = null;
+    this.setData('history', []);
   }
 
   flashOk(message) {
@@ -418,6 +504,7 @@ export default class StoreView extends PuzzleView {
         editError: '',
         editOk: '',
       });
+      this.resetWatch();
       this.refresh();
     },
 
@@ -429,11 +516,16 @@ export default class StoreView extends PuzzleView {
         editError: '',
         editOk: '',
       });
+      // A different record means a different changelog; re-baseline immediately
+      // so the first flush after this diffs against what is on screen NOW.
+      this.resetWatch();
+      this.syncWatched();
       this.refresh();
     },
 
     closeDetail: () => {
       this.setData({ selectedRowId: null, edits: {}, editError: '', editOk: '' });
+      this.resetWatch();
       this.refresh();
     },
 
@@ -509,6 +601,14 @@ export default class StoreView extends PuzzleView {
       this.loadTypes();
     },
   };
+}
+
+/** hh:mm:ss for a changelog row — the date is never useful inside one session. */
+function stamp(at) {
+  if (!at) return '';
+  const d = new Date(at);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 /** Rows round-trip through JSON, so a numeric pk can arrive as either type. */

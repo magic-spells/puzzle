@@ -13,6 +13,7 @@
         <li>Reload the page with DevTools already open.</li>
         <li>Requires puzzle <code class="font-mono text-accent">0.2.0</code> or newer.</li>
       </ul>
+      <p class="mt-2.5 mb-0 text-[11px] text-faint leading-relaxed">{ refreshHint }</p>
     </section>
   {:else if state === 'version-mismatch'}
     <section class="rounded border border-warn bg-surface p-4">
@@ -85,6 +86,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import EventList from '../components/EventList.pzl';
 import { CONNECTION_ID } from '../models/connection.js';
+import { REFRESH_HINT } from '../emptystate.js';
 import { SUPPORTED_PROTOCOL_VERSIONS } from '../../../protocol/constants.js';
 import { api } from '../bridge.js';
 
@@ -100,6 +102,7 @@ export default class ConnectionView extends PuzzleView {
     const route = connection?.route ?? null;
 
     return {
+      refreshHint: REFRESH_HINT,
       state: connection?.state ?? 'waiting',
       appMounted: connection?.appMounted ?? false,
       protocolVersion: connection?.protocolVersion ?? '?',
