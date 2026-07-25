@@ -1,11 +1,11 @@
 ---
 name: SPEC.md — the frozen v1 contract
 status: verified
-verified_at: '2026-07-25T05:26:05.394Z'
+verified_at: '2026-07-25T05:53:25.564Z'
 connections:
   - DOC-VIEW-LIFECYCLE
   - DOC-DECISIONS
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
 notes:
   - kind: verified
     text: >-
@@ -16,6 +16,12 @@ notes:
       (snapshot:route was missing path/hash/title). §8/§21 were verified by the D112 session at this
       same sha. The remaining sections carry forward from the prior stamp.
     sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+  - kind: verified
+    text: >-
+      Now the index: preamble + §35 + deferred/open lists byte-identical, plus a 57-row section map.
+      Contract text lives in the six DOC-SPEC-* domain cards; all 55 distinct §N citations resolve
+      to exactly one heading.
+    sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
 ---
 
 The enforceable v1 contract: exports/naming, config surface, .pzl anatomy, real-JS scripts rule, event conventions, template grammar, models/store/router surfaces, and the deferred-features cut list. When docs conflict, SPEC.md wins.

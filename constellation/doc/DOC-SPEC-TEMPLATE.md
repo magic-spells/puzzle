@@ -1,12 +1,20 @@
 ---
 name: SPEC — template grammar, events, and composition
 kind: reference
-status: built
+status: verified
 connections:
   - DOC-SPEC
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
   - COMPONENT-VIEW-MANAGER
+verified_at: '2026-07-25T05:53:18.357Z'
+verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+notes:
+  - kind: verified
+    text: >-
+      Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
+      census); §N numbers unchanged
+    sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
 ---
 
 The frozen v1 contract for templates: the `@event` handler convention and its modifiers, the template grammar, DOM islands, inline SVG, composition markers and named slots, list keying, cached handlers, and compiler accessibility warnings. See [[DOC-SPEC]] for the section index and the rest of the contract.

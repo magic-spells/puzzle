@@ -1,10 +1,19 @@
 ---
 name: SPEC — routing, navigation, and commit semantics
 kind: reference
-status: built
+status: verified
 connections:
   - DOC-SPEC
   - COMPONENT-ROUTER
+verified_at: '2026-07-25T05:53:22.510Z'
+verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+notes:
+  - kind: verified
+    text: >-
+      Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
+      census); §N numbers unchanged. Finally collects the twelve router sections that ship-date
+      ordering had scattered.
+    sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
 ---
 
 The frozen v1 contract for routing: the router surface, scroll behavior, hash and base-path modes, the `this.route` snapshot, transitions, atomic location commit, query snapshot plus `replace()`, route head management, route guards, and focus management. See [[DOC-SPEC]] for the section index and the rest of the contract.

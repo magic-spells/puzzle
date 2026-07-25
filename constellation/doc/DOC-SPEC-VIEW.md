@@ -1,11 +1,19 @@
 ---
 name: SPEC — view runtime, lifecycle, and animation
 kind: reference
-status: built
+status: verified
 connections:
   - DOC-SPEC
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-ANIMATIONS
+verified_at: '2026-07-25T05:53:19.716Z'
+verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+notes:
+  - kind: verified
+    text: >-
+      Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
+      census); §N numbers unchanged
+    sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
 ---
 
 The frozen v1 contract for the view runtime: animations, skeleton loading, `this.memo()`, app lifecycle hooks, cross-view morphs, element refs, scroll-triggered enters, and the `flip` directive. See [[DOC-SPEC]] for the section index and the rest of the contract.

@@ -1,11 +1,19 @@
 ---
 name: SPEC — models, store, validation, and adapters
 kind: reference
-status: built
+status: verified
 connections:
   - DOC-SPEC
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
+verified_at: '2026-07-25T05:53:21.105Z'
+verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+notes:
+  - kind: verified
+    text: >-
+      Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
+      census); §N numbers unchanged
+    sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
 ---
 
 The frozen v1 contract for the data layer: models and schema builders, the store surface, schema validation enforcement, `hasMany`/`belongsTo` relationships, adapter write sync, the `beforeRequest` hook, and schema-driven fixtures with the mock adapter. See [[DOC-SPEC]] for the section index and the rest of the contract.

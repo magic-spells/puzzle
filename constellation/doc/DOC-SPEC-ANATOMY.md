@@ -1,11 +1,19 @@
 ---
 name: SPEC — app anatomy, config, and script blocks
 kind: reference
-status: built
+status: verified
 connections:
   - DOC-SPEC
   - COMPONENT-PUZZLE-APP
   - COMPONENT-ESBUILD-PLUGIN
+verified_at: '2026-07-25T05:53:16.920Z'
+verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+notes:
+  - kind: verified
+    text: >-
+      Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
+      census); §N numbers unchanged
+    sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
 ---
 
 The frozen v1 contract for app shape: exports and entry points, the app config surface, `.pzl` file anatomy, the real-JavaScript `<script>` rule, component context, project layout, TypeScript scripts, scoped styles, and the `@` module alias. See [[DOC-SPEC]] for the section index and the rest of the contract.
