@@ -219,8 +219,9 @@
  *
  * The row's inline style supplies `background-size: <depth * 12>px 100%`, which
  * is what limits the repeat to exactly one line per ancestor; a root row gets
- * 0px and paints none. The 15px offset puts each guide under its parent's
- * chevron centre (7px gutter + half of the 16px chevron box).
+ * 0px and paints none. The offset puts each guide under its parent's chevron
+ * centre (7px gutter + half of the 16px chevron box = 15, pulled 1px left by
+ * eye — Cory's call against the filled triangles' visual centre).
  */
 .dt-tree-row {
 	background-image: repeating-linear-gradient(
@@ -229,5 +230,5 @@
 		transparent 1px 12px
 	);
 	background-repeat: no-repeat;
-	background-position: 15px 0;
+	background-position: 14px 0;
 }
