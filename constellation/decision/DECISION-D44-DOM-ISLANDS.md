@@ -8,6 +8,7 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 notes:
   - kind: gotcha
     text: >-
@@ -24,7 +25,7 @@ notes:
 
 # D44 — DOM islands: the `island` attribute (v1.13)
 
-A static `island` attribute on a plain element makes its **children browser-/component-owned after mount**: the template seeds them once, the patcher never reconciles them again. The element's own attributes and listeners keep patching normally. The sanctioned escape hatch for `contenteditable` surfaces and third-party DOM (maps, charts, canvas overlays). See [[DOC-SPEC]] §17.
+A static `island` attribute on a plain element makes its **children browser-/component-owned after mount**: the template seeds them once, the patcher never reconciles them again. The element's own attributes and listeners keep patching normally. The sanctioned escape hatch for `contenteditable` surfaces and third-party DOM (maps, charts, canvas overlays). See [[DOC-SPEC-TEMPLATE]] §17.
 
 ## Context
 

@@ -5,11 +5,12 @@ connections:
   - DECISION-D76-CLI-UPGRADE
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-BUILD
 ---
 
 # D80 — Registry fetch Accept header (D76 fix)
 
-`FetchLatest` requests `<registry>/@magic-spells/puzzle/latest` with `Accept: application/json`, not the abbreviated `application/vnd.npm.install-v1+json` format the SPEC previously pinned. Amends [[DECISION-D76-CLI-UPGRADE]] / [[DOC-SPEC]] §41.
+`FetchLatest` requests `<registry>/@magic-spells/puzzle/latest` with `Accept: application/json`, not the abbreviated `application/vnd.npm.install-v1+json` format the SPEC previously pinned. Amends [[DECISION-D76-CLI-UPGRADE]] / [[DOC-SPEC-BUILD]] §41.
 
 ## Context
 

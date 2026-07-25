@@ -9,6 +9,7 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - TEST-TODOS-INTEGRATION
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 verified_at: '2026-07-14T07:08:15.922Z'
 ---
 
@@ -16,7 +17,7 @@ verified_at: '2026-07-14T07:08:15.922Z'
 
 The plan's "auto-key doubling paper cut" item, upgraded during design review
 to fix the underlying inconsistency. Driven by [[DECISION-D58-LIST-KEYING]];
-contract in [[DOC-SPEC]] §28.
+contract in [[DOC-SPEC-TEMPLATE]] §28.
 
 ## Intent
 

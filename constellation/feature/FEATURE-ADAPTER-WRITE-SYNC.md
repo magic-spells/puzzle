@@ -10,6 +10,7 @@ connections:
   - DOC-DATASTORE
   - DOC-MODELS
   - DOC-SPEC
+  - DOC-SPEC-DATA
 verified_at: '2026-07-12T00:14:45.180Z'
 notes:
   - kind: verified
@@ -22,7 +23,7 @@ notes:
 # v1.18 — Adapter write sync & custom adapter methods
 
 Completes the D21 adapter story on the write side. Driven by
-[[DECISION-D50-ADAPTER-WRITE-SYNC]]; contract in [[DOC-SPEC]] §22.
+[[DECISION-D50-ADAPTER-WRITE-SYNC]]; contract in [[DOC-SPEC-DATA]] §22.
 
 ## Intent
 

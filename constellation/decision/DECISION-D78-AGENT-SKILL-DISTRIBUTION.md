@@ -4,6 +4,7 @@ status: verified
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-BUILD
   - DECISION-D77-INIT-PROMPTS
   - DECISION-D32-CLI-TOOLING
   - FILE-CLI-ADD
@@ -22,7 +23,7 @@ notes:
 The repo now ships a distilled AI-agent skill for building Puzzle apps
 (`skills/puzzle/SKILL.md`, cross-agent SKILL.md format), and the CLI installs it:
 `puzzle add skills` (alias `skill`) copies the embedded skill into every detected
-agent config dir. See [[DOC-SPEC]] §13.
+agent config dir. See [[DOC-SPEC-BUILD]] §13.
 
 ## Context
 

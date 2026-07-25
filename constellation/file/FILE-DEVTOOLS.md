@@ -13,12 +13,13 @@ connections:
   - COMPONENT-STORE
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
+  - DOC-SPEC-BUILD
 verified_at: '2026-07-25T05:24:53.187Z'
 verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 Source binding for [[DECISION-D100-DEVTOOLS-BRIDGE]]; the wire contract itself
-is [[DOC-SPEC]] §55. This card anchors that plan to `client-runtime/devtools.js`.
+is [[DOC-SPEC-BUILD]] §55. This card anchors that plan to `client-runtime/devtools.js`.
 
 The module is reached from four call sites — `PuzzleApp.mount`/`unmount`,
 `Store.flush`, and `Router.#commitState` — each already inside a

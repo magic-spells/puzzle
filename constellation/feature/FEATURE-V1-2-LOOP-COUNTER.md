@@ -8,6 +8,7 @@ connections:
   - COMPONENT-CODEGEN
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 ---
 
 # v1.2 — Loop counter binding
@@ -22,4 +23,4 @@ v1's `{#for}` (two forms) had no way to read the loop position — no index for 
 **Out (rejected):** the `{#each ... as post, i}` Svelte keyword, `{#for ... as ...}`, Vue-style bindings-before-`in`, and implicit Liquid `forloop.index` magic variables — each rejected in [[DECISION-D29-LOOP-COUNTER]], which also records the compiled emission shapes.
 
 ## Outcome
-Shipped in v1.2; documented in [[DOC-SPEC]] §6 and [[DOC-TEMPLATE-SYNTAX]]. A purely additive amendment — SPEC §6's two v1 forms remain valid. Touched [[COMPONENT-TEMPLATE-PARSER]] (header parse) and [[COMPONENT-CODEGEN]] (emission).
+Shipped in v1.2; documented in [[DOC-SPEC-TEMPLATE]] §6 and [[DOC-TEMPLATE-SYNTAX]]. A purely additive amendment — SPEC §6's two v1 forms remain valid. Touched [[COMPONENT-TEMPLATE-PARSER]] (header parse) and [[COMPONENT-CODEGEN]] (emission).

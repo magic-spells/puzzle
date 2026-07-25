@@ -12,6 +12,7 @@ connections:
   - COMPONENT-CODEGEN
   - FEATURE-TYPESCRIPT-SCRIPTS
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
   - DOC-COMPILER-DESIGN
 ---
 
@@ -20,7 +21,7 @@ connections:
 Cashes in the promise [[DECISION-D03-SCRIPTS-REAL-JS]] made — "Editors, ESLint,
 Prettier, and (later) TypeScript work with zero special tooling." A `.pzl`
 opts a component's logic into TypeScript with `<script lang="ts">`; esbuild
-strips the types during the build. See [[DOC-SPEC]] §25.
+strips the types during the build. See [[DOC-SPEC-ANATOMY]] §25.
 
 ## Context
 `<script>` is an opaque string the Go compiler never parses (D3); esbuild owns

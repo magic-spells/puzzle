@@ -6,11 +6,12 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - DOC-MODELS
   - DOC-SPEC
+  - DOC-SPEC-DATA
 ---
 
 # D5 — Schema declared via `Puzzle.*` field builders
 
-Settled per [[DOC-SPEC]] §7. Schemas use fluent field builders (`Puzzle.string().required().min(1, 'msg')`) instead of raw descriptor objects.
+Settled per [[DOC-SPEC-DATA]] §7. Schemas use fluent field builders (`Puzzle.string().required().min(1, 'msg')`) instead of raw descriptor objects.
 
 ## Context
 Schema fields could be declared either as raw descriptor objects (`{ type: 'string', required: true, validate: [...] }`) or via a fluent builder API. Raw descriptors are boilerplate-heavy and offer no obvious single style.

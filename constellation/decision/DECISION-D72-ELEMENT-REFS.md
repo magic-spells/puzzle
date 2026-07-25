@@ -8,6 +8,7 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-EVENTS
   - DOC-SPEC
+  - DOC-SPEC-VIEW
   - DECISION-D44-DOM-ISLANDS
   - DECISION-D62-HANDLER-CACHING
 verified_at: '2026-07-17T23:27:05.105Z'
@@ -24,7 +25,7 @@ notes:
 
 # D72 — Element refs: static `ref="name"` → `this.refs.name` (v1.39)
 
-A static `ref="name"` attribute on a plain element binds that element's live DOM node to `this.refs.name` on the owning PuzzleView — populated before `mounted()`, re-pointed on keyed replacement, nulled on removal. Framework-owned attribute (never reaches the DOM), compiled to a per-instance cached callback in the vnode. Settled (v1.39); additive. See [[DOC-SPEC]] §38 and [[DOC-EVENTS]].
+A static `ref="name"` attribute on a plain element binds that element's live DOM node to `this.refs.name` on the owning PuzzleView — populated before `mounted()`, re-pointed on keyed replacement, nulled on removal. Framework-owned attribute (never reaches the DOM), compiled to a per-instance cached callback in the vnode. Settled (v1.39); additive. See [[DOC-SPEC-VIEW]] §38 and [[DOC-EVENTS]].
 
 ## Context
 

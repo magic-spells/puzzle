@@ -8,11 +8,12 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-VIEW
 ---
 
 # D39 — `<puzzle-skeleton>`: declarative loading template, auto-swapped (v1.8)
 
-An optional fourth `.pzl` section `<puzzle-skeleton>` renders while the first `data()` is pending, then swaps for the real template; routed views declaring one commit navigation immediately instead of gating on `data()`. Settled (v1.8); additive. See [[DOC-SPEC]] §16 and [[DOC-PUZZLE-FILE]].
+An optional fourth `.pzl` section `<puzzle-skeleton>` renders while the first `data()` is pending, then swaps for the real template; routed views declaring one commit navigation immediately instead of gating on `data()`. Settled (v1.8); additive. See [[DOC-SPEC-VIEW]] §16 and [[DOC-PUZZLE-FILE]].
 
 ## Context
 [[DOC-SPEC]] deferred "`<puzzle-skeleton>` auto-swap, skeleton loading management". D39 ships it: an optional fourth `.pzl` section, `<puzzle-skeleton>…</puzzle-skeleton>`, whose content renders while the component's **first `data()` is pending**, then swaps for the real template when it commits. Presence-driven — no config, no API; delete the section and the old await-everything behavior returns.

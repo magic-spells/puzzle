@@ -10,6 +10,7 @@ connections:
   - DECISION-D66-APP-LIFECYCLE-HOOKS
   - FILE-PUZZLE-APP
   - FILE-RUNTIME-ENTRY
+  - DOC-SPEC-ANATOMY
 notes:
   - kind: gotcha
     text: >-
@@ -34,7 +35,7 @@ the first route lands.
 Public config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
 `scrollBehavior`, `routerMode`, `routerInitialPath`, `routerBase`,
 `transitionMode`, `beforeMount`, `mounted`, and `beforeUnmount`. See
-[[DOC-SPEC]] §2 and the amendment sections.
+[[DOC-SPEC-ANATOMY]] §2 and the amendment sections.
 
 Lifecycle order:
 

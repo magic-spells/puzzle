@@ -5,6 +5,8 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
+  - DOC-SPEC-VIEW
   - DOC-DECISIONS
   - DOC-USER-GUIDE
   - DOC-DATASTORE
@@ -49,7 +51,7 @@ export default class ComponentName extends PuzzleView {
 
 Only the `<puzzle-view>` block is required.
 
-**Emission modes (D20):** files under `app/views/**` and `app/layouts/**` compile to a real `<puzzle-view>` DOM element carrying the tag's attributes; **reusable components render inline** — no wrapper element, template contents only — so nested components never stack wrappers. For components, `<puzzle-view>` is just the template delimiter: it must carry no attributes (compile error) and the template needs a single root element in v1. See [[DOC-SPEC]] §3 and [[DOC-DECISIONS]] D20.
+**Emission modes (D20):** files under `app/views/**` and `app/layouts/**` compile to a real `<puzzle-view>` DOM element carrying the tag's attributes; **reusable components render inline** — no wrapper element, template contents only — so nested components never stack wrappers. For components, `<puzzle-view>` is just the template delimiter: it must carry no attributes (compile error) and the template needs a single root element in v1. See [[DOC-SPEC-ANATOMY]] §3 and [[DOC-DECISIONS]] D20.
 
 ---
 
@@ -59,7 +61,7 @@ The contents of `<script>` must parse as **standard JavaScript** — no custom d
 
 Because esbuild owns module resolution, **JSON imports just work**: `import config from './config.json'` in a `<script>` block yields a real JS object via esbuild's built-in JSON loader — no config, no `<script>`-tag tricks. (SVG files are different: they're inlined into templates via `{#svg 'path'}` — see [[DOC-TEMPLATE-SYNTAX]] and [[DOC-SPEC]] §18 — not imported in `<script>`.)
 
-Imports may be relative or use the built-in **`@` alias for your `app/` directory** (v1.42, D75): `import Icon from '@/components/Icon.pzl'` resolves the same from any depth, which beats `../../components/Icon.pzl` once views are nested. Always on, no configuration; scoped packages like `@magic-spells/puzzle` are unaffected. See [[DOC-SPEC]] §40.
+Imports may be relative or use the built-in **`@` alias for your `app/` directory** (v1.42, D75): `import Icon from '@/components/Icon.pzl'` resolves the same from any depth, which beats `../../components/Icon.pzl` once views are nested. Always on, no configuration; scoped packages like `@magic-spells/puzzle` are unaffected. See [[DOC-SPEC-ANATOMY]] §40.
 
 The class exported from `<script>` extends `PuzzleView` and supports the following:
 
@@ -67,7 +69,7 @@ The class exported from `<script>` extends `PuzzleView` and supports the followi
 | ------------- | ----------------------- | ------- |
 | Class Methods | Regular functions       | Helper methods called internally by lifecycle or other methods.
 | `events`      | Class field: object of arrow functions | DOM event handlers bound to template actions. Arrow functions only.
-| `animations`  | Class field: `{ in?, out? }` | Declarative enter/leave animations via the Web Animations API (v1.1). Each spec is `{ from, to, duration, easing?, delay? }`. See [[DOC-SPEC]] §12.
+| `animations`  | Class field: `{ in?, out? }` | Declarative enter/leave animations via the Web Animations API (v1.1). Each spec is `{ from, to, duration, easing?, delay? }`. See [[DOC-SPEC-VIEW]] §12.
 | Lifecycle     | `created`, `mounted`, `beforeUpdate`, `afterUpdate`, `destroyed`, plus `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` (v1.1, around enter/leave animations) | Optional hooks executed during the view lifecycle.
 | `data`        | Method `(params, props)`, may be `async` | Return a plain object representing the component's model. Runs on mount and when subscribed store data changes.
 
@@ -240,7 +242,7 @@ When you provide a `data(params, props)` method in the `<script>` export, Puzzle
 ## Styles Block
 
 - `<style>` — in v1, styles are emitted as global CSS, applied as-is. v1 styling is Tailwind-first via utility classes.
-- `<style scoped>` — **Shipped in v1.27 (D59).** See [[DOC-SPEC]] §29. A bare `scoped` attribute (the only attribute `<style>` accepts) confines the block to this component's own rendered subtree: the compiler stamps one `data-<scopeId>` attribute on the template root and wraps the verbatim CSS in a native `@scope ([data-<scopeId>]) { … }` rule (it never parses your selectors). A valued/dynamic `scoped`, or any other attribute, is a compile error. Rules still cascade into nested child components like ordinary CSS; a `<style>` block without the attribute emits global CSS, byte-identically to before.
+- `<style scoped>` — **Shipped in v1.27 (D59).** See [[DOC-SPEC-ANATOMY]] §29. A bare `scoped` attribute (the only attribute `<style>` accepts) confines the block to this component's own rendered subtree: the compiler stamps one `data-<scopeId>` attribute on the template root and wraps the verbatim CSS in a native `@scope ([data-<scopeId>]) { … }` rule (it never parses your selectors). A valued/dynamic `scoped`, or any other attribute, is a compile error. Rules still cascade into nested child components like ordinary CSS; a `<style>` block without the attribute emits global CSS, byte-identically to before.
   ```html
   <puzzle-view class="card"><h2>{ title }</h2></puzzle-view>
   <style scoped> h2 { color: rebeccapurple; } </style>
@@ -251,7 +253,7 @@ When you provide a `data(params, props)` method in the `<script>` export, Puzzle
 
 ## Skeleton Loading States
 
-**Status: shipped in v1.8 (D39).** See [[DOC-SPEC]] §16 for the full contract.
+**Status: shipped in v1.8 (D39).** See [[DOC-SPEC-VIEW]] §16 for the full contract.
 
 `<puzzle-skeleton>` is an optional **top-level section** — a sibling of `<puzzle-view>`, not a tag inside it. Its content renders while the component's **first `data()`** is pending, then swaps for the real template when the data commits. There is no loading flag to manage and no API to call: declare the section and Puzzle handles the timing.
 
@@ -356,7 +358,7 @@ export default class PostDetail extends PuzzleView {
 </script>
 ```
 
-Because `data()` **resolves** (with `{ error }`) instead of rejecting, its result commits normally and the skeleton swaps out into the error branch. This is the sanctioned pattern — see [[DOC-SPEC]] §16.
+Because `data()` **resolves** (with `{ error }`) instead of rejecting, its result commits normally and the skeleton swaps out into the error branch. This is the sanctioned pattern — see [[DOC-SPEC-VIEW]] §16.
 
 ---
 

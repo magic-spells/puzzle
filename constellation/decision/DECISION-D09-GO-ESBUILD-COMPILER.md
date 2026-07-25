@@ -7,11 +7,12 @@ connections:
   - COMPONENT-COMPILER-CLI
   - DOC-COMPILER-DESIGN
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
 ---
 
 # D9 — Compiler is Go + an esbuild `onLoad` plugin
 
-Settled per [[DOC-SPEC]] §11. The compiler registers a `.pzl` esbuild plugin with `api.Build`: Go parses templates and generates render functions; esbuild owns bundling, resolution, sourcemaps, and minification.
+Settled per [[DOC-SPEC-ANATOMY]] §11. The compiler registers a `.pzl` esbuild plugin with `api.Build`: Go parses templates and generates render functions; esbuild owns bundling, resolution, sourcemaps, and minification.
 
 ## Context
 esbuild is Go-native, which makes it a natural fit for a Go-based compiler. The prototype used a `bundleRuntime()` concatenation approach that produced orphan output files.

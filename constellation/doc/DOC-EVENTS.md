@@ -6,12 +6,13 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-CODEGEN
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
   - DOC-TEMPLATE-SYNTAX
   - DOC-PUZZLE-FILE
   - DOC-DECISIONS
 ---
 
-The `events` class field with the arrow-only rationale (field initializers run at construction with `this` bound to the instance), the two template forms (bare identifier vs call expression per [[DOC-SPEC]] §5), worked todos examples, setData-vs-store-mutation semantics, the component-events sequence (D16), and the common-mistakes list.
+The `events` class field with the arrow-only rationale (field initializers run at construction with `this` bound to the instance), the two template forms (bare identifier vs call expression per [[DOC-SPEC-TEMPLATE]] §5), worked todos examples, setData-vs-store-mutation semantics, the component-events sequence (D16), and the common-mistakes list.
 
 # Puzzle Event Handling (v1)
 
@@ -294,7 +295,7 @@ There is no `$emit`, no bubbling, no event bus — functions passed down, called
 
 ### Handler identity (v1.29, D62)
 
-A callback prop whose handler is **data-independent** — the bare form (`@save={ savePost }`) or a call form whose arguments use only literals, `event`, `this.…`, or JS globals — compiles to a **per-instance cached closure**: the child receives the *same function object* on every parent render, so callback props no longer make the child's props shallow-differ, and the child's `data()` re-runs only when a prop really changes ([[DOC-SPEC]] §31).
+A callback prop whose handler is **data-independent** — the bare form (`@save={ savePost }`) or a call form whose arguments use only literals, `event`, `this.…`, or JS globals — compiles to a **per-instance cached closure**: the child receives the *same function object* on every parent render, so callback props no longer make the child's props shallow-differ, and the child's `data()` re-runs only when a prop really changes ([[DOC-SPEC-TEMPLATE]] §31).
 
 A call form that captures render data or a loop variable (`@remove={ removeCard(card.id) }`) is still a fresh closure per render — its capture genuinely changes — so a child receiving one re-runs `data()` on each parent render. That's correct, but worth knowing: if a child should *not* re-run per parent render, prefer passing the datum as its own prop and using a bare handler.
 
@@ -416,7 +417,7 @@ The panel mounts → the document listener attaches; a press anywhere outside th
 
 **Event-generic**, like `prevent`/`stop`/`once`: `@pointerdown:outside` dismisses on press, `@click:outside` on completed click, and `@focusin:outside` detects focus leaving a widget (the other pattern dropdown components hand-roll). `@click` and `@click:outside` on the same element are independent bindings.
 
-**Caveats** (documented, not solved): events inside an `<iframe>` never reach the parent document — true of every outside-click implementation; and on touch, `pointerdown` fires at scroll-start, so prefer `@click:outside` where scroll tolerance matters. The event choice is yours by construction. Full contract: [[DOC-SPEC]] §47 and [[DECISION-D86-OUTSIDE-MODIFIER]].
+**Caveats** (documented, not solved): events inside an `<iframe>` never reach the parent document — true of every outside-click implementation; and on touch, `pointerdown` fires at scroll-start, so prefer `@click:outside` where scroll tolerance matters. The event choice is yours by construction. Full contract: [[DOC-SPEC-TEMPLATE]] §47 and [[DECISION-D86-OUTSIDE-MODIFIER]].
 
 ## Deferred event features
 

@@ -5,6 +5,7 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
   - DECISION-D12-TAILWIND-FIRST
   - DECISION-D26-TAILWIND-PIPELINE
   - DECISION-D03-SCRIPTS-REAL-JS
@@ -12,7 +13,7 @@ connections:
 
 # D35 — No Sass support, ever
 
-Sass moves from "deferred" to permanently rejected: `styles.use` stays a single `'tailwindcss'` string and the reserved Sass object-entry slot is removed. Settled. See [[DOC-SPEC]] §11.
+Sass moves from "deferred" to permanently rejected: `styles.use` stays a single `'tailwindcss'` string and the reserved Sass object-entry slot is removed. Settled. See [[DOC-SPEC-ANATOMY]] §11.
 
 ## Context
 [[DECISION-D12-TAILWIND-FIRST]] shipped the Tailwind-first style pipeline and parked Sass as "deferred"; [[DECISION-D26-TAILWIND-PIPELINE]]/[[DECISION-D03-SCRIPTS-REAL-JS]] even reserved the `styles.use` object-entry shape (`{ name: 'sass', ... }`) as the deferred Sass slot. D35 closes that door.

@@ -5,12 +5,13 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
   - DECISION-D27B-BLOG-EXAMPLE
 ---
 
 # D11 — Project layout: `app/` source, `dist/` output
 
-Settled; enforced by [[DOC-SPEC]] §11. The entry point is `app/app.js`, build output goes to `dist/`, and `examples/todos/` is the canonical reference application.
+Settled; enforced by [[DOC-SPEC-ANATOMY]] §11. The entry point is `app/app.js`, build output goes to `dist/`, and `examples/todos/` is the canonical reference application.
 
 ## Context
 The prototype defaulted its source directory to `./src`.

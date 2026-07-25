@@ -9,6 +9,7 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-VIEW
 ---
 
 # v1.8 — Skeleton loading templates
@@ -23,4 +24,4 @@ SPEC deferred `<puzzle-skeleton>` auto-swap / skeleton loading management. Compo
 **Out (rejected):** auto-showing the skeleton on every refresh (flashes over real content), keeping the D19 gate and skeletons only for nested components, a `loading` slot/prop API instead of a section, and allowing a component root inside a skeleton. Sub-decisions in [[DECISION-D39-SKELETON]].
 
 ## Outcome
-Shipped in v1.8; documented in [[DOC-SPEC]] §16 and [[DOC-PUZZLE-FILE]]. An additive amendment — files without the section compile and behave byte-identically; skeleton-less views keep byte-identical D19 semantics. `view.loaded` reports the first commit. Touched [[COMPONENT-TEMPLATE-PARSER]], [[COMPONENT-CODEGEN]], [[COMPONENT-PUZZLE-VIEW]], and [[COMPONENT-ROUTER]].
+Shipped in v1.8; documented in [[DOC-SPEC-VIEW]] §16 and [[DOC-PUZZLE-FILE]]. An additive amendment — files without the section compile and behave byte-identically; skeleton-less views keep byte-identical D19 semantics. `view.loaded` reports the first commit. Touched [[COMPONENT-TEMPLATE-PARSER]], [[COMPONENT-CODEGEN]], [[COMPONENT-PUZZLE-VIEW]], and [[COMPONENT-ROUTER]].

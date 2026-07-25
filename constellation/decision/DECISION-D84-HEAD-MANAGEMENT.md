@@ -5,6 +5,7 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-SSG
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
   - DOC-ROUTER
   - DECISION-D67-SSG-STATIC-BUILD
   - DECISION-D81-STATIC-PAGES-MODE
@@ -49,7 +50,7 @@ rendered as managed head tags by BOTH the SSG shell injection and the SPA
 navigation commit. One metadata contract, two delivery paths, with SSG as the
 authoritative one (link-preview bots don't run the app). Closes the
 "head-management API (per-route meta/og)" entry on §36's deferred list. See
-[[DOC-SPEC]] §45.
+[[DOC-SPEC-ROUTER]] §45.
 
 ## Context
 

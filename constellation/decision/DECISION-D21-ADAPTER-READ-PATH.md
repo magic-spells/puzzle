@@ -6,6 +6,7 @@ connections:
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
   - DOC-DATASTORE
+  - DOC-SPEC-DATA
 ---
 
 # D21 — Server data in v1: explicit load methods reading the model's adapter declaration

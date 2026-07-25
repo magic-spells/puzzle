@@ -10,6 +10,7 @@ connections:
   - COMPONENT-PUZZLE-APP
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
 verified_at: '2026-07-12T00:14:46.752Z'
 notes:
   - kind: verified
@@ -23,7 +24,7 @@ notes:
 
 The remaining half of the old router-modes follow-up card (its `'memory'` half
 shipped in v1.11). Driven by [[DECISION-D51-ROUTER-BASE-PATH]]; contract in
-[[DOC-SPEC]] §23.
+[[DOC-SPEC-ROUTER]] §23.
 
 ## Intent
 

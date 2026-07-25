@@ -5,6 +5,7 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-PUZZLE-VIEW
   - DOC-USER-GUIDE
+  - DOC-SPEC-ANATOMY
 ---
 
 # D23 — Derived-from-local-UI state re-runs data() explicitly via this.refresh()
@@ -12,7 +13,7 @@ connections:
 Settled. When local-UI state feeds data derived in `data()`, the canonical pattern is `this.setData(...)` followed by `this.refresh()` — because `setData()` never re-runs `data()`.
 
 ## Context
-`setFilter` in the canonical todos example updated `currentFilter` with `setData()`, but `filteredTodos` is derived in `data()`, and `setData()` never re-runs `data()` ([[DOC-SPEC]] §4) — so the filter tabs highlighted but the list never narrowed. This was a latent bug found while hand-compiling the golden fixture (Step 4).
+`setFilter` in the canonical todos example updated `currentFilter` with `setData()`, but `filteredTodos` is derived in `data()`, and `setData()` never re-runs `data()` ([[DOC-SPEC-ANATOMY]] §4) — so the filter tabs highlighted but the list never narrowed. This was a latent bug found while hand-compiling the golden fixture (Step 4).
 
 ## Decision
 The canonical pattern for local-UI state that feeds derived data in `data()` is `this.setData(...)` followed by `this.refresh()`; `Home.pzl` and the fixture were updated.

@@ -7,6 +7,7 @@ connections:
   - COMPONENT-ROUTER
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
 ---
 
 # v1.6 — Hash routing
@@ -21,4 +22,4 @@ Through v1.5 the router only routed off `location.pathname`, forcing every host 
 **Out (rejected):** a Vue-Router-style pluggable history-abstraction layer (over-engineering for two modes), hash-shaped app APIs, a second `hashchange` listener (double-fires), normalizing bare fragments, and a boolean `hashRouting`/nested `router: { mode }` config shape. Sub-decisions in [[DECISION-D34-HASH-ROUTING]].
 
 ## Outcome
-Shipped in v1.6; documented in [[DOC-SPEC]] §15 and [[DOC-ROUTER]]. `routerMode` is the second amendment to the frozen §2 config surface (after v1.5's `scrollBehavior`). Router-only: D19 commit, D28 transitions, D30 nested chains, and D33 scroll all apply unchanged; an omitted `routerMode` is exact v1.5 behavior. Touched [[COMPONENT-ROUTER]].
+Shipped in v1.6; documented in [[DOC-SPEC-ROUTER]] §15 and [[DOC-ROUTER]]. `routerMode` is the second amendment to the frozen §2 config surface (after v1.5's `scrollBehavior`). Router-only: D19 commit, D28 transitions, D30 nested chains, and D33 scroll all apply unchanged; an omitted `routerMode` is exact v1.5 behavior. Touched [[COMPONENT-ROUTER]].

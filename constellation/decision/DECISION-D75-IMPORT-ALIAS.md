@@ -5,6 +5,7 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
   - DOC-USER-GUIDE
   - DECISION-D03-SCRIPTS-REAL-JS
   - DECISION-D67-SSG-STATIC-BUILD
@@ -23,7 +24,7 @@ notes:
 
 # D75 — The `@` app import alias (v1.42)
 
-`@/…` in any bundled import specifier resolves to the app's `app/` directory: `import Icon from '@/components/Icon.pzl'` is `<project root>/app/components/Icon.pzl` from any file at any depth. Always on, zero config, additive — relative imports are unchanged. See [[DOC-SPEC]] §40.
+`@/…` in any bundled import specifier resolves to the app's `app/` directory: `import Icon from '@/components/Icon.pzl'` is `<project root>/app/components/Icon.pzl` from any file at any depth. Always on, zero config, additive — relative imports are unchanged. See [[DOC-SPEC-ANATOMY]] §40.
 
 ## Context
 

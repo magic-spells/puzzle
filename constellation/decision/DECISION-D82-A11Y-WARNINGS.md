@@ -5,6 +5,7 @@ connections:
   - COMPONENT-CODEGEN
   - COMPONENT-TEMPLATE-PARSER
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
   - FILE-CODEGEN
   - FEATURE-V1-48-A11Y-WARNINGS
 verified_at: '2026-07-24T00:26:43.400Z'
@@ -16,7 +17,7 @@ verified_sha: df909f7f5581b312acbbc45a58cbd2b5e681a2a8
 The compiler emits **positioned, non-fatal warnings** for five common template
 accessibility mistakes. Zero runtime bytes, zero change to generated
 JavaScript — the diagnostics ride the existing out-of-band `Result.Warnings`
-channel. See [[DOC-SPEC]] §43.
+channel. See [[DOC-SPEC-TEMPLATE]] §43.
 
 ## Context
 

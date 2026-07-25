@@ -4,6 +4,7 @@ status: built
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-BUILD
   - DECISION-D78-AGENT-SKILL-DISTRIBUTION
   - DECISION-D76-CLI-UPGRADE
 ---
@@ -14,7 +15,7 @@ After `puzzle upgrade` actually installs a new version, it asks whether to
 reinstall the Puzzle agent skill wherever one is already installed, and does it
 by re-executing the binary it just installed. `puzzle add skills` gains a
 repeatable `--skill-root` flag that pins the config dirs and skips detection and
-the target prompt. See [[DOC-SPEC]] §13 and §41.
+the target prompt. See [[DOC-SPEC-BUILD]] §13 and §41.
 
 ## Context
 

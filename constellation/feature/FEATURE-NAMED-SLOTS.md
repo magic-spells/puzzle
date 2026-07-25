@@ -10,6 +10,7 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 verified_at: '2026-07-12T00:14:51.270Z'
 notes:
   - kind: verified
@@ -23,7 +24,7 @@ notes:
 # v1.21 — Named slots
 
 Multi-region composition, completing the [[DECISION-D16-COMPOSITION-SLOTS-CALLBACKS]]
-story. Driven by [[DECISION-D53-NAMED-SLOTS]]; contract in [[DOC-SPEC]] §24.
+story. Driven by [[DECISION-D53-NAMED-SLOTS]]; contract in [[DOC-SPEC-TEMPLATE]] §24.
 
 ## Intent
 

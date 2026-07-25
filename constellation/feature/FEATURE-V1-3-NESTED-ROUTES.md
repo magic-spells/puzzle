@@ -8,6 +8,7 @@ connections:
   - DOC-ROUTER
   - DOC-VIEW-LIFECYCLE
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
 ---
 
 # v1.3 — Nested routes
@@ -22,4 +23,4 @@ v1's router (D19) was strictly flat: one route = one full-path regex → one vie
 **Out (rejected):** flat routes with `parent:` name references, absolute child paths (constructor throw), per-level `layout` (root-only field — `layout` on a child throws), and auto-matching a parent's bare URL with an empty slot. All sub-decisions with their rejected alternatives are in [[DECISION-D30-NESTED-ROUTES]].
 
 ## Outcome
-Shipped in v1.3; documented in [[DOC-SPEC]] §9, [[DOC-ROUTER]], and [[DOC-VIEW-LIFECYCLE]] §4. A router-only additive amendment — the slot/compose/destroy plumbing was already generic, so no compiler, [[COMPONENT-VIEW-MANAGER]], or PuzzleView change; flat routes (chain length 1) behave exactly as before. Touched [[COMPONENT-ROUTER]].
+Shipped in v1.3; documented in [[DOC-SPEC-ROUTER]] §9, [[DOC-ROUTER]], and [[DOC-VIEW-LIFECYCLE]] §4. A router-only additive amendment — the slot/compose/destroy plumbing was already generic, so no compiler, [[COMPONENT-VIEW-MANAGER]], or PuzzleView change; flat routes (chain length 1) behave exactly as before. Touched [[COMPONENT-ROUTER]].

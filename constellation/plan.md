@@ -222,6 +222,19 @@ collections; and a WASM playground.
 ### Contracts and release truth
 
 - [[DOC-SPEC]] — frozen public contract; every amendment requires a decision.
+  Now the section index over six domain cards; `§N` numbers never move.
+  - [[DOC-SPEC-ANATOMY]] — naming, config, `.pzl` anatomy, real-JS scripts,
+    project layout, scoped styles, the `@` alias.
+  - [[DOC-SPEC-TEMPLATE]] — template grammar, event handlers and modifiers,
+    slots, islands, `{#svg}`, list keying, a11y warnings.
+  - [[DOC-SPEC-VIEW]] — animations, skeletons, `memo()`, refs, `flip`, morphs,
+    app lifecycle hooks.
+  - [[DOC-SPEC-DATA]] — models, schema builders, store, validation,
+    relationships, adapter read/write sync, fixtures.
+  - [[DOC-SPEC-ROUTER]] — routing surface, nested chains, scroll, hash/memory
+    modes, base path, transitions, atomic commit, head, guards, focus.
+  - [[DOC-SPEC-BUILD]] — CLI, HMR, static/hybrid output, upgrade, dev build
+    errors, `/testing`, `--fixtures`, the DevTools bridge.
 - [[DOC-DECISIONS]] — numeric decision index and links to ADR cards.
 - [[DOC-RELEASE-SURFACE]] — complete, compact shipped-surface inventory.
 - [[DOC-BUILD-PLAN]] — v1 implementation plan and release-phase status.

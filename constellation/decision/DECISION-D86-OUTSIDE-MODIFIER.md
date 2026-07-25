@@ -5,6 +5,7 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-TEMPLATE-PARSER
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
   - DOC-EVENTS
   - DECISION-D38-EVENT-MODIFIERS
   - DECISION-D72-ELEMENT-REFS
@@ -22,7 +23,7 @@ A new generic event modifier: `@click:outside={ close }` (any event —
 `document` in the **capture phase** and runs the handler only when the event
 target is **outside** the bound element (`el.contains(event.target)` bails).
 The framework owns the document-listener cleanup on unmount. Cory's design;
-see [[DOC-SPEC]] §5 (modifier table) and §47.
+see [[DOC-SPEC-TEMPLATE]] §5 (modifier table) and §47.
 
 ## Context
 

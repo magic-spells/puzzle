@@ -7,15 +7,16 @@ connections:
   - COMPONENT-CODEGEN
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
   - DECISION-D28-ANIMATIONS
 ---
 
 # D29 — Loop counter binding: trailing `, name` on `{#for}` (v1.2)
 
-An additive amendment to the frozen `{#for}` grammar: a trailing top-level `, identifier` on the loop header binds the 0-based index (item form) or the current number (range form). Settled (v1.2); see [[DOC-SPEC]] §6 and [[DOC-TEMPLATE-SYNTAX]].
+An additive amendment to the frozen `{#for}` grammar: a trailing top-level `, identifier` on the loop header binds the 0-based index (item form) or the current number (range form). Settled (v1.2); see [[DOC-SPEC-TEMPLATE]] §6 and [[DOC-TEMPLATE-SYNTAX]].
 
 ## Context
-v1's `{#for}` ([[DOC-SPEC]] §6, two forms) had no way to read the loop position. D29 adds a purely additive amendment — like the v1.1 animations amendment ([[DECISION-D28-ANIMATIONS]]), it extends the frozen grammar without breaking it: a trailing top-level `, identifier` on the loop header binds the **loop counter**.
+v1's `{#for}` ([[DOC-SPEC-TEMPLATE]] §6, two forms) had no way to read the loop position. D29 adds a purely additive amendment — like the v1.1 animations amendment ([[DECISION-D28-ANIMATIONS]]), it extends the frozen grammar without breaking it: a trailing top-level `, identifier` on the loop header binds the **loop counter**.
 
 ## Decision
 - **Item form** — `{#for post in posts, i}` binds `i` to the 0-based index of `post` in `posts`.
@@ -32,4 +33,4 @@ Compiled emission: item form → `__d.items.map((item, i) => …)`; named range 
 - **Implicit Liquid-style `forloop.index` magic variable.** Rejected: reserved names, shadowing rules, `parentloop` chains for nested loops — every modern framework converged on explicitly named bindings.
 
 ## Consequences
-Non-breaking: [[DOC-SPEC]] §6's two v1 forms remain valid; this is an additive amendment (v1.2).
+Non-breaking: [[DOC-SPEC-TEMPLATE]] §6's two v1 forms remain valid; this is an additive amendment (v1.2).

@@ -7,6 +7,7 @@ connections:
   - COMPONENT-FORMATTERS
   - DECISION-D25-BARE-FORMATTER-CALLS
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
   - DOC-TEMPLATE-SYNTAX
   - FEATURE-V1-12-FORMATTER-GUARD
 notes:
@@ -27,7 +28,7 @@ Supersedes the deferral in [[DECISION-D25-BARE-FORMATTER-CALLS]]. Codegen emits
 `__f.name(…)`; the runtime's `__missing` becomes a **factory** that logs one
 `console.error` per unknown name (with a did-you-mean suggestion when a close
 match exists) and passes the value through unchanged, so the app keeps
-rendering. See [[DOC-SPEC]] §6.
+rendering. See [[DOC-SPEC-TEMPLATE]] §6.
 
 ## Context
 D25 shipped v1 with bare calls to match golden file #1; a typo'd formatter

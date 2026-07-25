@@ -10,6 +10,7 @@ connections:
   - COMPONENT-PUZZLE-APP
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
 ---
 
 # v1.11 — `routerMode: 'memory'` + go/back/forward API
@@ -25,7 +26,7 @@ Complete the enum [[FEATURE-V1-6-HASH-ROUTING]] reserved a slot in. Memory mode 
 **In:**
 - An in-memory entry stack (`push()` truncates forward entries and appends); the full D19/D28/D30 pipeline unchanged; the stack index moves only at commit, so failed/superseded navigations move nothing.
 - `router.go(n)` / `back()` / `forward()` in **all** modes — history/hash delegate to `history.go(n)`; memory moves the stack index and runs the pipeline as a pop; out-of-range `n` is a silent no-op.
-- No popstate listener, no `document.title` writes, scroll management a no-op (`scrollBehavior` accepted but inert); the click interceptor stays active (embed caveat documented in [[DOC-SPEC]] §15).
+- No popstate listener, no `document.title` writes, scroll management a no-op (`scrollBehavior` accepted but inert); the click interceptor stays active (embed caveat documented in [[DOC-SPEC-ROUTER]] §15).
 - `routerInitialPath` on the PuzzleApp config (Router option `initialPath`, default `'/'`) — memory-mode only; a constructor throw elsewhere. Third amendment to the frozen §2 surface.
 
 **Out (deferred to [[FEATURE-ROUTER-BASE-PATH]]):** base-path support; mount-scoped link interception.

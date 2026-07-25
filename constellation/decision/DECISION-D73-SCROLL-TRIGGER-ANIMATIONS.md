@@ -5,6 +5,7 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC
+  - DOC-SPEC-VIEW
   - DOC-VIEW-LIFECYCLE
   - DOC-USER-GUIDE
   - DECISION-D28-ANIMATIONS
@@ -24,7 +25,7 @@ notes:
 
 # D73 — Scroll-triggered enter animations: `trigger: 'visible'` on the `in` spec (v1.40)
 
-The `animations.in` spec (D28, SPEC §12) gains an optional `trigger` key: `'mount'` (default — today's play-at-mount behavior, byte-identical) or `'visible'` — the enter animation holds the element at its `from` keyframe after mount and plays once when the element scrolls into the viewport, via a shared IntersectionObserver. An optional `triggerOffset` (px number or `'15%'` string) raises the trigger line above the viewport's bottom edge. Runtime-only amendment — the compiler never sees the `animations` field. See [[DOC-SPEC]] §39.
+The `animations.in` spec (D28, SPEC §12) gains an optional `trigger` key: `'mount'` (default — today's play-at-mount behavior, byte-identical) or `'visible'` — the enter animation holds the element at its `from` keyframe after mount and plays once when the element scrolls into the viewport, via a shared IntersectionObserver. An optional `triggerOffset` (px number or `'15%'` string) raises the trigger line above the viewport's bottom edge. Runtime-only amendment — the compiler never sees the `animations` field. See [[DOC-SPEC-VIEW]] §39.
 
 ## Context
 

@@ -10,6 +10,7 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DOC-PUZZLE-FILE
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
 verified_at: '2026-07-14T07:08:22.704Z'
 ---
 
@@ -18,7 +19,7 @@ verified_at: '2026-07-14T07:08:22.704Z'
 **Shipped in v1.27** (D59) — the card's own "may resolve won't-build" hedge
 resolved the other way once native `@scope` reached cross-engine Baseline,
 converting scoping from a CSS-parsing problem (the D35-class complexity this
-card dreaded) into a string-wrapping one. Contract in [[DOC-SPEC]] §29;
+card dreaded) into a string-wrapping one. Contract in [[DOC-SPEC-ANATOMY]] §29;
 rationale and rejected alternatives in [[DECISION-D59-SCOPED-STYLES]].
 
 ## What shipped

@@ -5,11 +5,12 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-PUZZLE-APP
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
 ---
 
 # D8 — Minimal v1 config surface
 
-Settled per [[DOC-SPEC]] §2. The v1 `PuzzleApp` config is exactly `{ target, routes, models, formatters, apiURL }` — nothing else.
+Settled per [[DOC-SPEC-ANATOMY]] §2. The v1 `PuzzleApp` config is exactly `{ target, routes, models, formatters, apiURL }` — nothing else.
 
 ## Context
 The prototype had a kitchen-sink config that implied months of runtime work irrelevant to proving the framework.

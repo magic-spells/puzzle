@@ -5,11 +5,12 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-PUZZLE-MODEL
   - DOC-MODELS
+  - DOC-SPEC-DATA
 ---
 
 # D6 — Model computed properties are plain getters
 
-Settled per [[DOC-SPEC]] §7. Computed properties are plain class getters — no `computedProperties` map, no registration API.
+Settled per [[DOC-SPEC-DATA]] §7. Computed properties are plain class getters — no `computedProperties` map, no registration API.
 
 ## Context
 Models need computed/derived values. A framework could require a `computedProperties` map or a registration API to declare them.

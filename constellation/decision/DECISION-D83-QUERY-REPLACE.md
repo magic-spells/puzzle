@@ -5,6 +5,7 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-SSG
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
   - DOC-ROUTER
   - DECISION-D47-ROUTE-SNAPSHOT
   - DECISION-D61-ATOMIC-LOCATION-COMMIT
@@ -22,7 +23,7 @@ verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 The route snapshot gains parsed URL state — `pathname`, `query`, `hash` — and
 the router gains `replace(path)`, the no-history-entry sibling of `push()`.
 Together they make URL-backed transient UI state (filters, tabs, search,
-pagination) first-class. See [[DOC-SPEC]] §44.
+pagination) first-class. See [[DOC-SPEC-ROUTER]] §44.
 
 ## Context
 

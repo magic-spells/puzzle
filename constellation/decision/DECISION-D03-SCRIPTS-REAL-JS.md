@@ -7,11 +7,12 @@ connections:
   - COMPONENT-CODEGEN
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
 ---
 
 # D3 — `<script>` blocks are real JavaScript
 
-Settled per [[DOC-SPEC]] §4 — the most consequential decision in the project. `.pzl` scripts must be standard JavaScript, so the Go compiler never parses JS.
+Settled per [[DOC-SPEC-ANATOMY]] §4 — the most consequential decision in the project. `.pzl` scripts must be standard JavaScript, so the Go compiler never parses JS.
 
 ## Context
 Older examples used an object-literal dialect inside class bodies (`events: {...},` with commas between members) that does not parse as JavaScript.

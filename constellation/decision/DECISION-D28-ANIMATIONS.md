@@ -8,13 +8,14 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DOC-VIEW-LIFECYCLE
   - DOC-SPEC
+  - DOC-SPEC-VIEW
   - DECISION-D20-PUZZLE-VIEW-ELEMENT
   - DECISION-D19-NAVIGATION-COMMIT
 ---
 
 # D28 — View & component animations: no-wrapper WAAPI, sequential transitions, fill-release
 
-The reserved `animations` class field graduates from inert to a shipped feature (v1.1): declarative `in`/`out` specs drive the Web Animations API on the instance root, view route transitions run sequentially, and enter animations use a fill-release contract. Settled (v1.1); see [[DOC-SPEC]] §12 and [[DOC-VIEW-LIFECYCLE]].
+The reserved `animations` class field graduates from inert to a shipped feature (v1.1): declarative `in`/`out` specs drive the Web Animations API on the instance root, view route transitions run sequentially, and enter animations use a fill-release contract. Settled (v1.1); see [[DOC-SPEC-VIEW]] §12 and [[DOC-VIEW-LIFECYCLE]].
 
 ## Context
 The `animations` class field was reserved by [[DECISION-D03-SCRIPTS-REAL-JS]] ([[DOC-SPEC]] §4) but inert. D28 makes it a shipped feature: declarative `in`/`out` specs (`{from, to, duration, easing?, delay?}`) drive `el.animate([from, to], { …, fill: 'both' })`, with completion via the `Animation.finished` promise.

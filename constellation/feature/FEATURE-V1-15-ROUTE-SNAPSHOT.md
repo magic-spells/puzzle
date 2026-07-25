@@ -10,6 +10,7 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
 ---
 
 # v1.15 — `this.route`: per-navigation route snapshot in `data()`
@@ -33,4 +34,4 @@ Make the active-nav highlight buildable. A reused ancestor's `data()` (nested ro
 
 ## Outcome
 
-Shipped in v1.15; documented in [[DOC-SPEC]] §19 (+ §9 cross-ref) and [[DOC-ROUTER]]. Touched [[COMPONENT-ROUTER]] and [[COMPONENT-PUZZLE-VIEW]] only — no compiler, store, or ViewManager change; snapshot-free apps patch byte-identically.
+Shipped in v1.15; documented in [[DOC-SPEC-ROUTER]] §19 (+ §9 cross-ref) and [[DOC-ROUTER]]. Touched [[COMPONENT-ROUTER]] and [[COMPONENT-PUZZLE-VIEW]] only — no compiler, store, or ViewManager change; snapshot-free apps patch byte-identically.

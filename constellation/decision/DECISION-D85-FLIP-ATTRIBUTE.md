@@ -5,6 +5,7 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ANIMATIONS
   - DOC-SPEC
+  - DOC-SPEC-VIEW
   - DECISION-D44-DOM-ISLANDS
   - DECISION-D72-ELEMENT-REFS
   - FILE-VIEW-MANAGER
@@ -31,7 +32,7 @@ object literals, SPEC §6) — on the keyed row root. Retained elements that MOV
 reconciliation animate from their old visual position to their new one;
 inserts and removes keep their existing enter/leave paths. Closes the
 "FLIP animations for keyed reorders" entry on the project's deferred list.
-See [[DOC-SPEC]] §46.
+See [[DOC-SPEC-VIEW]] §46.
 
 ## Context
 

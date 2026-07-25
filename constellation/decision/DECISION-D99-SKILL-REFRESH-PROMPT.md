@@ -4,6 +4,7 @@ status: verified
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-BUILD
   - DECISION-D78-AGENT-SKILL-DISTRIBUTION
   - DECISION-D97-UPGRADE-SKILL-REFRESH
   - DECISION-D77-INIT-PROMPTS
@@ -32,7 +33,7 @@ notes:
 An existing skill directory now prompts on a TTY rather than aborting the command,
 installs carry a `.puzzle-skill-version` stamp so the CLI can tell current from
 stale, and `puzzle upgrade skills` refreshes installed skills from the running
-binary. See [[DOC-SPEC]] §13 and §41.
+binary. See [[DOC-SPEC-BUILD]] §13 and §41.
 
 ## Context
 

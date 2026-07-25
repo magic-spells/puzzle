@@ -6,11 +6,12 @@ connections:
   - COMPONENT-CODEGEN
   - DOC-COMPILER-DESIGN
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
 ---
 
 # D10 — Generated `render()` attached via prototype assignment
 
-Settled per [[DOC-SPEC]] §4. The compiler emits `Component.prototype.render = function () { ... }` after the user's class definition rather than injecting a method into the class body.
+Settled per [[DOC-SPEC-ANATOMY]] §4. The compiler emits `Component.prototype.render = function () { ... }` after the user's class definition rather than injecting a method into the class body.
 
 ## Context
 The compiler must attach a generated `render()` to each component. It could inject a method into the user's class body or attach it externally.

@@ -6,12 +6,13 @@ connections:
   - COMPONENT-ROUTER
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
   - DECISION-D33-ROUTER-SCROLL
 ---
 
 # D34 — Hash routing: routerMode config, path-shaped API, popstate-only (v1.6)
 
-Opt-in hash mode (`routerMode: 'hash'`) carries the route in `location.hash` (`/#/user/123`) so static hosts with no rewrite rules can serve deep links and reloads. Settled (v1.6); router-only, additive. See [[DOC-SPEC]] §15 and [[DOC-ROUTER]].
+Opt-in hash mode (`routerMode: 'hash'`) carries the route in `location.hash` (`/#/user/123`) so static hosts with no rewrite rules can serve deep links and reloads. Settled (v1.6); router-only, additive. See [[DOC-SPEC-ROUTER]] §15 and [[DOC-ROUTER]].
 
 ## Context
 Through v1.5 the router only ever routed off `location.pathname`, which forces every host to serve `index.html` for every app route (the history-API fallback `puzzle dev` provides). On a static host that can't be configured — GitHub Pages, an S3 bucket, `file://` — that fallback doesn't exist, so a deep link or a reload 404s. D34 adds an opt-in **hash mode** that carries the route in `location.hash` (`/#/user/123`), where the pathname never changes and no server rewrite is needed.
