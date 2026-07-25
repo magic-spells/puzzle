@@ -9,8 +9,8 @@ connections:
   - DOC-ROUTER
   - FILE-ROUTER
   - FILE-SSG-RUNTIME
-verified_at: '2026-07-24T00:26:25.226Z'
-verified_sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 notes:
   - kind: verified
     text: >-
@@ -53,3 +53,20 @@ surface).
   navigation updates/removes managed tags atomically with the commit; failed
   navigation never touches the head; hostile values escape; unmanaged head
   elements untouched; full suites green.
+
+## Superseded in part by D111 — the SPA half was removed
+
+This card records what v1.50 **shipped**; the scope above is accurate as
+history. [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]] later deleted the
+runtime half outright, so three claims here no longer describe current
+behavior:
+
+- managed tags are **not** rendered "by … the SPA commit path" — only by the
+  SSG shell injection;
+- `syncHead` with identity adoption is gone. `head.js` keeps `resolveHead` and
+  a one-line `syncTitle`; the router assigns `document.title` and nothing else;
+- **hybrid takeover no longer adopts** the marked tags — it leaves them exactly
+  as prerendered, which is what every crawler fetches anyway.
+
+Everything about resolution, leaf→root inheritance, null suppression, escaping,
+and the SSG injectors still holds.

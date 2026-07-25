@@ -2,13 +2,15 @@
 name: >-
   D92 — Dev build errors reach the browser: typed SSE events, retained state, in-page overlay
   (v1.55)
-status: built
+status: verified
 connections:
   - COMPONENT-DEV-SERVER
   - FILE-DEV-SERVER
   - DECISION-D27-FAST-DEV-REBUILDS
   - DECISION-D57-HMR-STATE-RELOAD
   - DOC-SPEC
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 A failed `puzzle dev` build now shows up **in the page**, not only in the terminal. The reload channel carries typed events, the server retains the current error so late-connecting clients see it, and a first-ever failed build serves a self-healing error shell instead of a bare 404.

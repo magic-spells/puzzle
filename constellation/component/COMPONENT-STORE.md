@@ -31,8 +31,8 @@ notes:
       Re-verified after D112: recordKey index normalization reviewed line-by-line against the card's
       identity-rule paragraph; store suites + full runs green at merged main.
     sha: 11f64be1b6828318f5085a5dc16ebe8f53ebfbd4
-verified_at: '2026-07-25T00:00:49.373Z'
-verified_sha: 11f64be1b6828318f5085a5dc16ebe8f53ebfbd4
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # Store

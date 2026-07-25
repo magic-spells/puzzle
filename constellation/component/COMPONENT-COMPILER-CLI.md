@@ -11,8 +11,8 @@ connections:
   - FILE-GENERATE
   - FILE-PIECES
   - FILE-PZLC
-verified_at: '2026-07-22T19:43:05.365Z'
-verified_sha: 1c2f4b6fef8106cbf3d0a433bfb6186ef89fcc73
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # Compiler CLI
@@ -23,7 +23,9 @@ Cobra command surface shipped by the platform binary:
   development, true-static (D81), or hybrid-prerender (D67) build — the two
   output flags are mutually exclusive and must agree with any `output` config
   value — and prints raw/gzip output plus prerender summaries.
-- `puzzle dev [dir] --port` starts [[COMPONENT-DEV-SERVER]].
+- `puzzle dev [dir] --port` starts [[COMPONENT-DEV-SERVER]]. A busy port is not
+  fatal: the server scans upward for the first free one and warns when it moved;
+  `--strict-port` restores bind-or-fail ([[DECISION-D90-DEV-PORT-SCAN]]).
 - `--fixtures` on both `build` and `dev` (D98) wires `app/fixtures.js` through
   a generated two-module wrapper entry under `.puzzle/` so the `/fixtures`
   module installs before the app entry runs; requires the file, is rejected

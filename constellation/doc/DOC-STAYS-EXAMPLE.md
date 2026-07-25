@@ -2,7 +2,7 @@
 name: Puzzle Stays (examples/stays) — Airbnb-style example app
 kind: reference-app
 status: verified
-verified_at: '2026-07-22T00:04:06.034Z'
+verified_at: '2026-07-25T00:10:00.000Z'
 connections:
   - DOC-BLOG-EXAMPLE
   - COMPONENT-PUZZLE-APP
@@ -33,6 +33,7 @@ notes:
       _lastPath/window.scrollTo workaround was deleted in the same change. The example additionally
       gains correct back/forward position restore for free. The gotcha text remains as the
       historical motivation for D33.
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # Puzzle Stays (examples/stays)
@@ -63,6 +64,14 @@ file-level detail).
 - **Local persistence pattern**: hearts + browser-created trips (`t-local-`
   ids) snapshot to localStorage on visibilitychange/beforeunload (mirrors
   music's likes/session pattern).
+- **Route guards, the acceptance case for [[DECISION-D87-ROUTE-GUARDS]]**: a
+  `requireAuth` guard reads `ctx.store.findMany('session')` and, when empty,
+  returns `'/login?redirect=' + encodeURIComponent(to.path)`. This exercises
+  the two properties that matter: a **string verdict redirects** through public
+  `replace()`, so the denied URL never enters history; and because `guard` is
+  **inherited**, guarding the `/account` branch locks its whole layout subtree
+  without repeating the field on each child. `Login` shares `MainLayout` like
+  every other view, so the redirect is an ordinary view swap.
 
 ## Gotchas learned building it
 

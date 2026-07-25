@@ -8,8 +8,8 @@ connections:
   - DOC-SPEC
   - DOC-ROUTER
   - FILE-ROUTER
-verified_at: '2026-07-24T01:11:10.487Z'
-verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 notes:
   - kind: verified
     text: >-

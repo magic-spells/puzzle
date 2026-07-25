@@ -2,7 +2,7 @@
 name: Puzzle Press (examples/blog) — v1 reference app
 kind: reference-app
 status: verified
-verified_at: '2026-07-23T16:30:50.772Z'
+verified_at: '2026-07-25T00:10:00.000Z'
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-ROUTER
@@ -48,7 +48,7 @@ notes:
       Playwright/TypeScript devDeps + bin/optionalDependencies for distribution); the blog example
       itself is untouched and still builds via build:blog in pretest. No claim in this card
       affected.
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # Puzzle Press (examples/blog)

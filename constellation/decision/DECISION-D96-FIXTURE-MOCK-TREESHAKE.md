@@ -1,6 +1,6 @@
 ---
 name: D96 — Tree-shake the fixture/mock runtime out of production bundles (v1.59)
-status: built
+status: verified
 connections:
   - DECISION-D89-FEATURE-USAGE-TREESHAKE
   - DECISION-D95-FIXTURES-MOCK-ADAPTER
@@ -8,9 +8,11 @@ connections:
   - COMPONENT-STORE
   - FILE-BUILD-OPTIONS
   - DOC-SPEC
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
-**SUPERSEDED by [[DECISION-D98-FIXTURES-MODULE-FLAG]] (v1.61, same release — never published).** The scan/define approach had two structural hazards D98 records: a compiler older than these defines ships the whole runtime (fail-safe probes), and the conservative token scan compiles an app's own `store.seed()` seeding into production. The fixtures/mock scan bits reverted; D89's flip/head-tags scanning stays. Kept for rationale.
+**SUPERSEDED by [[DECISION-D98-FIXTURES-MODULE-FLAG]] (v1.61, same release — never published).** The scan/define approach had two structural hazards D98 records: a compiler older than these defines ships the whole runtime (fail-safe probes), and the conservative token scan compiles an app's own `store.seed()` seeding into production. The fixtures/mock scan bits reverted; D89's scanning stays — its `flip` half only, since [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]] later retired the head-tags half too. Kept for rationale.
 
 D95's fixture generator and mock adapter shipped in every production bundle. Two usage-scanned defines — `__PUZZLE_HAS_FIXTURES__` and `__PUZZLE_HAS_MOCK__` — folded them out of apps that used neither, extending D89's mechanism rather than inventing a parallel one.
 

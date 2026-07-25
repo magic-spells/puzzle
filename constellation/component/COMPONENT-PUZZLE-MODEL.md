@@ -5,8 +5,8 @@ connections:
   - COMPONENT-STORE
   - DOC-MODELS
   - FILE-PUZZLE-MODEL
-verified_at: '2026-07-23T16:30:47.420Z'
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # PuzzleModel and `Puzzle.*`
@@ -24,7 +24,12 @@ default application (object/array defaults deep-clone), `update`, local-only
 `toJSON`. Validation reports `{ valid, errors }`; static `validate` accepts
 `{ fields }` for partial checks (the same field-subset machinery `update()` uses)
 and exempts a nullish primary key — `createRecord` generates it, so the pre-create
-form check accepts the same input, while `''` still fails. Invalid
+form check accepts the same input, while `''` still fails. That exemption covers
+only the `required` that `.primary()` *implies*: `.required()` sets a separate
+`explicitRequired` flag, so `slug: string().primary().required()` — an author
+declaring a user-supplied key mandatory — reports the required error instead, and
+a create form's pre-check blocks submission rather than letting the Store
+silently auto-generate a random key (FEATURE-VALIDATE-PK-PARITY). Invalid
 create/update/save operations throw `PuzzleValidationError` before data enters
 the Store. Bound checks are type-aware: declared `number()`/`date()` fields fail
 `min`/`max` with a type-mismatch message rather than having their string length

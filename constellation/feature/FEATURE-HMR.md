@@ -1,7 +1,7 @@
 ---
 name: HMR with state preservation
 status: verified
-verified_at: '2026-07-23T16:30:51.696Z'
+verified_at: '2026-07-25T00:10:00.000Z'
 connections:
   - DECISION-D57-HMR-STATE-RELOAD
   - DECISION-D27-FAST-DEV-REBUILDS
@@ -36,7 +36,7 @@ notes:
       recomputed, never pinned). Fixes the masked bug where store-derived views rendered empty until
       the next mutation after a dev reload. DCE guard green; hmr-dev-reload.test.js grew
       first-paint/override/derived-recompute coverage.
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # v1.25 — State-preserving development reload

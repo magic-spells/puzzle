@@ -1,11 +1,13 @@
 ---
 name: v1.54 — dev server port scan + `--strict-port` (D88)
-status: built
+status: verified
 connections:
   - DECISION-D90-DEV-PORT-SCAN
   - COMPONENT-DEV-SERVER
   - COMPONENT-COMPILER-CLI
   - FILE-DEV-SERVER
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 `puzzle dev` binds the first free loopback port at or above `--port` instead of

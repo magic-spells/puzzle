@@ -14,8 +14,9 @@ connections:
   - FILE-BUILD-OPTIONS
   - FILE-BUILD-WATCH
   - FILE-BUILD-PRERENDER
-verified_at: '2026-07-22T00:04:06.540Z'
+verified_at: '2026-07-25T00:10:00.000Z'
 notes: []
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # Build flow

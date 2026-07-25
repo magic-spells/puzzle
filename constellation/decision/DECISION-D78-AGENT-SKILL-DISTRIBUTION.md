@@ -7,8 +7,8 @@ connections:
   - DECISION-D77-INIT-PROMPTS
   - DECISION-D32-CLI-TOOLING
   - FILE-CLI-ADD
-verified_at: '2026-07-22T19:43:05.019Z'
-verified_sha: 1c2f4b6fef8106cbf3d0a433bfb6186ef89fcc73
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 notes:
   - kind: verified
     text: >-
@@ -83,4 +83,21 @@ into the binary via a root-level `go:embed` package (`skills/embed.go`), and
 - The D3 no-JS-rewriting rule is untouched (the command writes only skill
   files under tool config dirs, never project JavaScript).
 - The skill file is release-checklist surface: its content must be re-verified
-  against the docs whenever the public surface changes.
+  against the docs whenever the public surface changes. **Nothing enforced this,
+  and it drifted** — `SKILL.md` went stale past D91/D93/D94/D95/D98/D100 before
+  anyone noticed. `constellation/plan.md`'s release checklist now carries it as
+  an explicit numbered item.
+
+## Refresh, as later decided
+
+This card closed with "`puzzle upgrade` + re-run refreshes it" — a manual re-run
+nobody remembers. Two follow-ons made the refresh real:
+
+- [[DECISION-D97-UPGRADE-SKILL-REFRESH]] — `puzzle upgrade` offers the refresh
+  after a version actually changes, and must **re-exec the newly installed
+  binary** to do it, because the payload is `go:embed`-ed and the running
+  process still holds the old one.
+- [[DECISION-D99-SKILL-REFRESH-PROMPT]] — re-running `puzzle add skills` IS the
+  refresh mechanism, so an existing install now asks instead of aborting, and
+  installs carry a `.puzzle-skill-version` stamp that turns "is this current?"
+  from an inference into a fact. Adds `puzzle upgrade skills`.

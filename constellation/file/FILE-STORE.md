@@ -6,8 +6,8 @@ language: javascript
 summary: Record registry, query tracking, adapters, persistence, and batched delivery.
 connections:
   - COMPONENT-STORE
-verified_at: '2026-07-23T16:30:55.404Z'
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `client-runtime/datastore/store.js`.

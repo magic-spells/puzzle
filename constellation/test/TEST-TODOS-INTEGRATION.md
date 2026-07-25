@@ -1,7 +1,7 @@
 ---
 name: Todos end-to-end integration test
 status: verified
-verified_at: '2026-07-22T00:04:06.910Z'
+verified_at: '2026-07-25T00:10:00.000Z'
 framework: vitest
 connections:
   - FLOW-REACTIVITY
@@ -46,6 +46,7 @@ notes:
       (which now carries the v1.12 formatter-guard emission and v1.20/v1.21 codegen — byte-identical
       for the todos fixtures, which use neither min-duration nor named slots). Todos app semantics
       untouched by v1.16–v1.21 (its schema rules were already satisfied by the app's writes).
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # Todos integration test

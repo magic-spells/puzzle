@@ -1,11 +1,21 @@
 ---
 name: SPEC.md — the frozen v1 contract
 status: verified
-verified_at: '2026-07-24T01:11:17.639Z'
+verified_at: '2026-07-25T00:09:26.606Z'
 connections:
   - DOC-VIEW-LIFECYCLE
   - DOC-DECISIONS
-verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+notes:
+  - kind: verified
+    text: >-
+      Delta re-verification, not a full re-read of the contract. Checked the sections the drift
+      since 214406a actually touches: §45 (rewritten — it still described the SPA syncing managed
+      tags and hybrid takeover adopting them by identity, both deleted by D111), §54's parenthetical
+      (the D89 scan gates flip only now), and §55 against client-runtime/devtools.js field by field
+      (snapshot:route was missing path/hash/title). §8/§21 were verified by the D112 session at this
+      same sha. The remaining sections carry forward from the prior stamp.
+    sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 The enforceable v1 contract: exports/naming, config surface, .pzl anatomy, real-JS scripts rule, event conventions, template grammar, models/store/router surfaces, and the deferred-features cut list. When docs conflict, SPEC.md wins.

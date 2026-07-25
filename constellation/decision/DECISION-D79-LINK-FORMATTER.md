@@ -12,8 +12,8 @@ connections:
   - DECISION-D43-FORMATTER-MISSING-GUARD
   - FILE-ROUTER
   - FILE-FORMATTER-REGISTRY
-verified_at: '2026-07-23T03:10:23.970Z'
-verified_sha: 5be830df5735ed947f41d4b947a7f856be415291
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 notes:
   - kind: verified
     text: >-
@@ -119,3 +119,21 @@ Sub-decisions, each with its rejected alternative:
   cannot fix new-tab/copy-link.
 - Shipping `link` as a pure tree-shaken built-in — needs the live router;
   built-ins are pure by contract (D31).
+
+## Later: one encoder, because three copies drifted
+
+The encoding this card defines is now a module-level
+`encodeURL(path, mode, base)` exported from `router/router.js`; `Router.url()`
+is a one-line call into it, and so are the DOM-free prerender paths (the static
+router stub, and the hybrid prerender ctx's shadowed `url()`).
+
+That is not tidiness. The rule had been reimplemented three times — plus a
+byte-copy of `normalizeBase` in `ssg/assemble.js` — and the copies fell out of
+step: hybrid prerender built its ctx router in **memory** mode, which returns
+paths unprefixed, so a `routerBase: '/docs'` app emitted `href="/about"` where
+the live router renders `/docs/about`. Crawlers, no-JS visitors, and anyone
+clicking before SPA takeover got a 404, and post-boot the click interceptor
+correctly refused to claim it as in-app, so it navigated off-site. Since the
+href is exactly the surface an interceptor cannot repair (see Context), a
+duplicated encoder was a latent version of the bug this decision exists to
+prevent. See [[COMPONENT-SSG]] for the prerender `ctx.router` shapes.

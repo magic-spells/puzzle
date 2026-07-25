@@ -1,7 +1,7 @@
 ---
 name: Compiler design
 status: verified
-verified_at: '2026-07-22T01:03:41.854Z'
+verified_at: '2026-07-25T00:10:00.000Z'
 connections:
   - DOC-SPEC
   - DOC-COMPILATION-FLOW
@@ -16,6 +16,7 @@ connections:
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
   - FILE-ESBUILD-PLUGIN
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # Compiler design

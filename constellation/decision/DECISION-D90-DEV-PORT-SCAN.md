@@ -1,11 +1,13 @@
 ---
 name: D90 — `puzzle dev` scans upward for a free port; `--strict-port` opts out (v1.54)
-status: built
+status: verified
 connections:
   - COMPONENT-DEV-SERVER
   - COMPONENT-COMPILER-CLI
   - FILE-DEV-SERVER
   - FEATURE-V1-54-DEV-PORT-SCAN
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 A busy dev port is no longer fatal. `puzzle dev` binds the first free loopback

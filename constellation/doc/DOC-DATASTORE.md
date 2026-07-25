@@ -1,7 +1,7 @@
 ---
 name: Puzzle datastore
 status: verified
-verified_at: '2026-07-23T16:30:51.171Z'
+verified_at: '2026-07-25T00:10:00.000Z'
 connections:
   - DOC-SPEC
   - DOC-MODELS
@@ -10,7 +10,7 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - FILE-STORE
   - FILE-PUZZLE-MODEL
-verified_sha: 93ebefacfc0dcd35ea787a1f09b56aa308bea4f9
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # Puzzle datastore
@@ -43,12 +43,28 @@ Views access the store as `this.ctx.store`.
 | API | Behavior |
 | --- | --- |
 | `createRecord(type, data)` | Apply defaults, generate/validate the primary key, validate all fields, insert, and notify. |
-| `findOne(type, id)` | Return one record or `null`; tracked inside `data()`. |
+| `findOne(type, id)` | Return one record or `null`; tracked inside `data()`. Number/string-insensitive on `id` (D112). |
 | `findMany(type, { filter }?)` | Return local records, optionally filtered; tracked at collection level. |
 | `loadOne(type, id)` | GET the adapter endpoint/id and identity-preserving upsert. |
 | `loadAll(type)` | GET the collection endpoint and upsert every returned record. |
 | `upsert(type, objectOrArray)` | Apply server-authoritative object(s) by explicit primary key, preserving identity and marking records synchronized. |
 | `request(type, path?, options?)` | Custom adapter request with method/body/headers; 204/empty responses map to `null`. |
+
+**Record identity ignores number/string spelling (D112).** The store indexes
+number primary keys by their string form, so `findOne('todo', id)` returns the
+same record whether `id` is `7` or `'7'` — which matters because route params are
+always strings while JSON payloads usually carry numbers. `belongsTo`/`hasMany`
+FK comparison uses the same rule. Only numbers normalize: `null` and objects keep
+strict identity, and there is no numeric parsing, so `'01'` and `1` stay
+distinct. A record's own primary-key field keeps its original type; a
+type-variant duplicate is a duplicate (`createRecord` throws, `upsert` updates in
+place).
+
+**Shaping outgoing requests: `beforeRequest` (D91).** Every adapter call — reads,
+writes, and `request()` — funnels through one place, and the optional synchronous
+`beforeRequest(init, { type, method, url })` config hook shapes the `init` before
+it goes out. This is the auth-header seam; it is deliberately synchronous, so
+inline token refresh is not supported (see the SPEC's deferred list).
 
 Local record methods:
 

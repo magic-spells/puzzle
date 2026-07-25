@@ -11,7 +11,7 @@ connections:
   - FILE-COMPILER-INTERNAL-PARSER-SLOT
   - FILE-TESTS-SLOT-FORWARDING-TEST
   - FILE-TESTS-SLOT-FORWARDING-COMPILED-TEST
-verified_at: '2026-07-22T00:04:06.730Z'
+verified_at: '2026-07-25T00:10:00.000Z'
 notes:
   - kind: verified
     text: >-
@@ -31,6 +31,7 @@ notes:
       in a layout — same marker node); bare lowercase `<slot/>` in that position is a positioned
       compile error like everywhere else. Forwarding semantics, the named-marker rejection, and the
       expansion walk are unchanged. See DECISION-D74-CHILDREN-MARKER.
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # D71 — Default-child forwarding through a component invocation

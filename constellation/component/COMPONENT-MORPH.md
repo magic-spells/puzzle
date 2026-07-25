@@ -12,7 +12,7 @@ connections:
   - COMPONENT-PUZZLE-APP
   - DOC-ROUTER
   - FILE-MORPH
-verified_at: '2026-07-17T23:33:29.572Z'
+verified_at: '2026-07-25T00:10:00.000Z'
 notes:
   - kind: gotcha
     text: >-
@@ -25,6 +25,7 @@ notes:
       An occluded Chrome window (not just a background tab — visibilityState goes hidden) freezes
       rAF, so a flight parks mid-air with show()'s promise pending and body scroll locked; on
       re-visibility the spring settles and the next enter's stop() recovers.
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 
 # Morph integration
@@ -42,3 +43,33 @@ Coexisting pairs take priority. On enter, the handler finds a measurable counter
 Sibling swaps use capture flights. Leave snapshots measurable launch elements before teardown and may pin a recently clicked source clone so it stays visually fixed during the outgoing fade. Enter flies that clone/snapshot into the first matching receiver. Skeleton views get a short-lived MutationObserver so the target may arrive at the skeleton-to-content swap. Captures are one-navigation, clone flights never establish a hide pair, and TTL/next-navigation cleanup handles failed or superseded work.
 
 Initial navigation and reduced motion skip morphing. Engine errors never wedge routing. Clone attributes are stripped to avoid self-pairing, duplicate ids warn once, and a fresh enter stops any stale engine run before pairing.
+
+## Install lifecycle: `dispose` / `arm`
+
+`enableMorph` owns a **capture-phase `document` click listener** (it records the
+last clicked launch element so leave can pin exactly that clone). A document
+listener outlives the app, so the handler carries its own lifecycle rather than
+leaking one per install:
+
+- A module-level `installedMorphs` WeakMap maps app → its live teardown. Calling
+  `enableMorph` twice on the same app disposes the first install before building
+  the second, so a duplicate listener can never stack. WeakMap so a discarded app
+  and its teardown closure collect together.
+- `dispose()` (idempotent) removes the listener, drops the possibly-detached
+  `lastClicked` ref, discards captures, disarms the cross-flight, and stops a
+  non-idle engine. It calls `engine.stop()`, **not** `destroy()` — the engine
+  stays reusable.
+- `arm()` re-attaches the listener and re-registers in the WeakMap, and is a
+  no-op while still armed.
+
+Both ride on the handler object passed to `setMorphHandler`. The router only ever
+reads `enter`/`leave`, so the extra fields are inert to it; `PuzzleApp.unmount()`
+disposes and `mount()` re-arms, which is what makes a mount → unmount → re-mount
+cycle restore click-pinning on the **same** handler object.
+
+**Gotcha — the dismissed target is excluded from the leaving capture.**
+`captureFromLeaving(el, dismissed)` takes the live pair's target whenever leave
+just ran the D55 path (fly-back *or* broken round trip) and refuses both to
+snapshot it and to click-pin it. Without that exclusion a dialog's close button —
+which sits *inside* the morph-marked shell, so the click hint resolves to the
+shell itself — leaves a frozen ghost of the dialog hanging behind the fly-back.

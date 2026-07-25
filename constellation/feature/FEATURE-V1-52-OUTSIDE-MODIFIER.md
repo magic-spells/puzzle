@@ -9,8 +9,8 @@ connections:
   - DOC-EVENTS
   - FILE-VIEW-MANAGER
   - FILE-PARSER
-verified_at: '2026-07-24T00:26:29.176Z'
-verified_sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+verified_at: '2026-07-25T00:10:00.000Z'
+verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 notes:
   - kind: verified
     text: >-
