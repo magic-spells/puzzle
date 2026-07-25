@@ -11,8 +11,17 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-DEVSTATE
   - DOC-SPEC
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T03:05:46.023Z'
+verified_sha: acb9aefb0dcb65bd4cbd379d1f8877dbb089700c
+notes:
+  - kind: verified
+    text: >-
+      Real-Chrome smoke passed (Cory, 2026-07-24): load-unpacked extension against a live `puzzle
+      dev` app (stays, port 3400, framework 0.3.0) — connected handshake with correct
+      framework/protocol versions, 18 live views tracked, flush keys streaming, Views tree with
+      module paths and props inspection all working. One cosmetic follow-up in the extension repo:
+      detail-pane header/props layout squished in short docks (value previews collapse to ellipsis).
+    sha: acb9aefb0dcb65bd4cbd379d1f8877dbb089700c
 ---
 
 Puzzle gets a Chrome DevTools extension. The framework ships only a dev-only
