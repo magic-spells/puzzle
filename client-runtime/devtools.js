@@ -44,7 +44,7 @@ const PROTOCOL_VERSION = 1;
 // The framework version reported in `hello`. The runtime has no generated
 // version constant and the ESM bundle cannot import package.json, so this is a
 // literal — BUMP IT WITH package.json AT EVERY RELEASE (D100).
-const FRAMEWORK_VERSION = '0.2.0';
+const FRAMEWORK_VERSION = '0.3.0';
 
 // The global the extension installs its hook on. Referenced ONLY from DEV-gated
 // code, so production DCE drops the usages and then this const — which is what

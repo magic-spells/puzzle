@@ -33,11 +33,15 @@ run.
 
 ## Current release state
 
-- Published: `0.1.0` (2026-07-21) and `0.1.1` (2026-07-22, D77 init prompts)
-  are live on npm (all five packages, MIT, manual publish via
-  `npm run release:prep` — there is no CI publish). `0.1.2` shipped the embedded
-  agent skill + `puzzle add skills` (D78/v1.45, published 2026-07-22). Working
-  version `0.2.0` (versions bumped, unpublished) adds path-shaped links via
+- Published: `0.1.0` (2026-07-21), `0.1.1` (2026-07-22, D77 init prompts),
+  `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), and
+  **`0.2.0` (2026-07-24, the current `latest`)** are live on npm (all five
+  packages, MIT, manual publish via `npm run release:prep` — there is no CI
+  publish). Everything from D88 onward landed AFTER the 0.2.0 publish and is
+  unreleased **`0.3.0`** — minor, not patch: two new export subpaths
+  (`./testing`, `./fixtures`) plus breaking changes in D110/D111/D112. Do not
+  describe 0.2.0 as unpublished; that error sat in these files for a day.
+  `0.2.0` adds path-shaped links via
   `router.url()` + the `link` formatter (D79/v1.46) and the true static-pages
   output mode (`output: 'static'` / `--static`, D81/v1.47); the D67
   prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid` — the config
