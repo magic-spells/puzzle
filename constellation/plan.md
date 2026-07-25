@@ -52,7 +52,12 @@ log in [[DOC-DECISIONS]] explains why the contract has its current shape.
   calendar date, parsed at local midnight so `date`/`timeago` read it as
   written in every viewer zone (the ES spec's UTC-midnight parse rendered it a
   day early for viewers west of UTC); `in_timezone` passes a calendar date
-  through untouched, since a day names no instant to re-express.
+  through untouched, since a day names no instant to re-express. Smaller
+  output change from the same round: `reverse` iterates strings by code
+  point, so emoji/astral text reverses correctly instead of tearing
+  surrogate pairs. The pre-publish review round added D115–D119 (mount-failure
+  recovery, pack-time pin verification, static history-hrefs, lifecycle hook
+  containment + mount epoch, router settlement/announcement).
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
