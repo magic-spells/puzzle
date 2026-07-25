@@ -2,6 +2,21 @@
   "version": 1,
   "registry": "/Users/coryschulz/Code/@magic-spells/puzzle-pieces/registry",
   "pieces": {
+    "badge": {
+      "files": {
+        "app/components/ui/Badge.pzl": "sha256:0d18280ee03d89afe02960db9f558f5d546fb1cb66746a4f71b7ac8e05770c9a"
+      }
+    },
+    "copy-button": {
+      "files": {
+        "app/components/ui/CopyButton.pzl": "sha256:7f89061986469b7a8460a67cd5fbb24ce2956afb853109a1b7198947280d21a4"
+      }
+    },
+    "empty": {
+      "files": {
+        "app/components/ui/Empty.pzl": "sha256:0b771254a491eb61f177799c27fe8d906dc0c32f0afa4a1d41277d0cd7ca98fd"
+      }
+    },
     "split-panel": {
       "files": {
         "app/components/ui/SplitPanel.pzl": "sha256:21623f0311737ff1a39d5b3214a2803095956f5682f99259201abfd34383656a"

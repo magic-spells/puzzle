@@ -1,10 +1,7 @@
 <puzzle-view class="h-full flex min-h-0">
   {#if disconnected}
-    <div class="flex-1 p-3">
-      <section class="rounded border border-dashed border-line bg-surface p-4">
-        <h1 class="m-0 text-[13px] font-semibold text-ink">{ emptyTitle }</h1>
-        <p class="mt-1.5 mb-0 text-[12px] text-muted leading-relaxed">{ emptyHint }</p>
-      </section>
+    <div class="flex-1 min-w-0">
+      <Empty title={ emptyTitle } description={ emptyHint } class="py-8! px-4!" />
     </div>
   {:else}
     <SplitPanel
@@ -86,9 +83,9 @@
 
     <div slot="second" class="h-full flex flex-col min-h-0 overflow-hidden">
       {#if !hasSelection}
-        <div class="m-3 rounded border border-dashed border-line p-4">
-          <p class="m-0 text-[12px] text-muted">Select a view to inspect its params, props and both state layers.</p>
-        </div>
+        <Empty
+          description="Select a view to inspect its params, props and both state layers."
+          class="py-8! px-4!" />
       {:else}
         <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
           <span class="shrink-0 font-mono text-[12px] font-semibold text-ink">{ detailName }</span>
@@ -141,6 +138,7 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
+import Empty from '../components/ui/Empty.pzl';
 import SplitPanel from '../components/ui/SplitPanel.pzl';
 import StateGroup from '../components/StateGroup.pzl';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';

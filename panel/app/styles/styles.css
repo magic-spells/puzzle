@@ -30,22 +30,32 @@
 	--color-danger: var(--dt-danger);
 
 	/*
-	 * Bridge for pieces from the puzzle-pieces registry (currently SplitPanel).
-	 * Pieces are written against the registry's own palette; the four token-backed
-	 * utilities SplitPanel uses — bg-brand, bg-border, bg-border-strong,
-	 * outline-ring — are aliased onto the panel's --dt-* tiers here.
+	 * Bridge for pieces from the puzzle-pieces registry (SplitPanel, CopyButton,
+	 * Empty, Badge). Pieces are written against the registry's own palette; every
+	 * token-backed utility they reach for is aliased onto the panel's --dt-* tiers
+	 * here, so a piece inherits the DevTools theme — including the data-theme flip
+	 * — without being edited.
 	 *
-	 * `app/styles/pieces.css` (installed alongside the piece, hash-tracked in
+	 * `app/styles/pieces.css` (installed alongside the pieces, hash-tracked in
 	 * pieces.lock) is deliberately NOT imported: it declares a full competing
 	 * palette including --color-surface / --color-ink / --color-line, which are
 	 * exactly the names this block already owns. Importing it would fight the
-	 * data-theme switch. Four aliases keep the panel on ONE palette, and the
-	 * piece file itself stays verbatim so `puzzle add piece` can re-verify it.
+	 * data-theme switch. Aliases keep the panel on ONE palette, and the piece
+	 * files stay verbatim so `puzzle add piece` can re-verify their hashes.
+	 *
+	 * `surface-sunken` maps to `raised` rather than `surface`: in the registry's
+	 * vocabulary "sunken" is the recessed fill behind a hover/selected row, which
+	 * is the job `--dt-raised` already does here.
 	 */
 	--color-brand: var(--dt-accent);
+	--color-brand-tint: var(--dt-accent-soft);
+	--color-brand-ink: var(--dt-canvas);
 	--color-border: var(--dt-line);
 	--color-border-strong: var(--dt-faint);
 	--color-ring: var(--dt-accent);
+	--color-surface-sunken: var(--dt-raised);
+	--color-body: var(--dt-muted);
+	--color-danger-tint: var(--dt-raised);
 
 	--font-sans: var(--dt-font-sans);
 	--font-mono: var(--dt-font-mono);

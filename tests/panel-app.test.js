@@ -162,6 +162,27 @@ function stubBridge() {
 	};
 }
 
+/** Writes the CopyButton piece made, newest last. Reset by every boot(). */
+const clipboardWrites = [];
+
+/**
+ * jsdom ships no Clipboard API, and CopyButton bails silently without one
+ * (`if (!navigator.clipboard?.writeText) return`) — so a missing stub would make
+ * every copy assertion pass vacuously. Install a recorder instead.
+ */
+function stubClipboard() {
+	clipboardWrites.length = 0;
+	Object.defineProperty(navigator, 'clipboard', {
+		configurable: true,
+		value: {
+			writeText: (text) => {
+				clipboardWrites.push(text);
+				return Promise.resolve();
+			},
+		},
+	});
+}
+
 async function boot(bridge) {
 	// jsdom keeps one location per test FILE, so a nav in an earlier test would
 	// otherwise decide where the next boot lands.
@@ -171,6 +192,7 @@ async function boot(bridge) {
 	// SplitPanel persists committed sizes under `split-panel:<storageKey>`; a
 	// leftover from an earlier test would decide the next boot's pane widths.
 	window.localStorage?.clear?.();
+	stubClipboard();
 	window.__PUZZLE_DEVTOOLS_PANEL__ = bridge;
 	vi.resetModules();
 	const mod = await import(/* @vite-ignore */ BUNDLE);
@@ -227,6 +249,11 @@ function groupFor(title) {
 /** The SplitPanel piece's own structure: two named panes around one separator. */
 const splitPane = (which) => document.querySelector(`[data-split-pane="${which}"]`);
 const splitDivider = () => document.querySelector('[data-split-divider]');
+
+/** The Empty piece's root — its base class string is the only stable handle. */
+const emptyBlocks = () => [...document.querySelectorAll('div.text-center.items-center')];
+/** CopyButton renders an icon-only <button aria-label="Copy">. */
+const copyButtonIn = (root) => root?.querySelector('button[aria-label="Copy"]');
 
 function type(input, value) {
 	input.value = value;
@@ -538,6 +565,38 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(short.every((dd) => dd.hasAttribute('title'))).toBe(true);
 	});
 
+	it('renders the Empty piece for the no-selection state', () => {
+		const empty = emptyBlocks();
+		expect(empty).toHaveLength(1);
+		expect(empty[0].textContent).toContain('Select a view to inspect');
+		// The hand-rolled dashed card it replaced is gone.
+		expect(document.querySelector('.border-dashed')).toBeNull();
+	});
+
+	it('copies an inspector row value to the clipboard', async () => {
+		treeRow('3').click();
+		await settle(app, 60);
+
+		const local = groupFor('setData() local layer');
+		const row = [...local.querySelectorAll('dt')].find(
+			(dt) => dt.textContent.trim() === 'draft'
+		).parentElement;
+
+		// The button sits inside the row, after the value, and must not have
+		// disturbed the value-wins layout.
+		const button = copyButtonIn(row);
+		expect(button).toBeTruthy();
+		expect(button.className).toContain('shrink-0');
+		expect(row.querySelector('dd').className).toContain('flex-1');
+
+		button.click();
+		await settle(app, 40);
+
+		// A string copies as its CONTENTS, not as the quoted literal the cell shows.
+		expect(clipboardWrites).toEqual(['Ship the panel now']);
+		expect(row.querySelector('dd').getAttribute('title')).toBe('"Ship the panel now"');
+	});
+
 	it('reports an inspect:view failure inline instead of blanking the pane', async () => {
 		// No transcript entry for id 5 → the bridge answers { error }, which
 		// panel-glue turns into a rejection.
@@ -654,6 +713,12 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(document.body.textContent).toContain('No Puzzle app detected');
 		expect(treeIds()).toHaveLength(0);
 		expect(fresh.typesRequested()).toEqual([]);
+
+		// The Empty piece, in its title + description form.
+		const empty = emptyBlocks();
+		expect(empty).toHaveLength(1);
+		expect(empty[0].querySelector('p.font-medium').textContent).toBe('No Puzzle app detected');
+		expect(empty[0].textContent).toContain('dev-only runtime bridge');
 	});
 });
 
@@ -710,6 +775,59 @@ describe.skipIf(!built)('Store panel', () => {
 		expect(document.querySelector('[data-row="t1"]').textContent).toContain('synced');
 		expect(document.querySelector('[data-row="t2"]').textContent).toContain('local');
 		expect(document.querySelector('[data-row="t1"]').textContent).toContain('Ship the bridge');
+	});
+
+	it('renders _synced provenance with the Badge piece', () => {
+		const synced = document.querySelector('[data-row="t1"] td:last-child span');
+		const local = document.querySelector('[data-row="t2"] td:last-child span');
+
+		expect(synced.textContent.trim()).toBe('synced');
+		expect(local.textContent.trim()).toBe('local');
+		// Badge's own base class, compacted to DevTools scale by the class prop.
+		expect(synced.className).toContain('rounded-full');
+		expect(synced.className).toContain('text-[9px]!');
+		// Distinct variants, not just distinct text.
+		expect(synced.className).not.toBe(local.className);
+	});
+
+	it('copies a field value and the whole record as JSON', async () => {
+		document.querySelector('[data-row="t2"]').click();
+		await settle(app);
+
+		copyButtonIn(document.querySelector('[data-field="text"]')).click();
+		await settle(app, 40);
+		expect(clipboardWrites).toEqual(['Ship the panel']);
+
+		// The detail header's button copies the record, pretty-printed.
+		const header = document.querySelector('[data-apply]').closest('header');
+		copyButtonIn(header).click();
+		await settle(app, 40);
+
+		expect(clipboardWrites).toHaveLength(2);
+		expect(JSON.parse(clipboardWrites[1])).toEqual({
+			id: 't2',
+			text: 'Ship the panel',
+			completed: false,
+			priority: 2,
+			_synced: false,
+		});
+		expect(clipboardWrites[1]).toContain('\n'); // pretty-printed, not one line
+	});
+
+	it('renders the Empty piece when a type has no records', async () => {
+		bridge.world.records.user = [];
+		document.querySelector('[data-type="user"]').click();
+		await settle(app);
+		await bridge.request('snapshot:records', { type: 'user' });
+
+		// Force a re-read so the emptied bucket reaches the table.
+		bridge.emit('flush', { keys: ['user'], notified: [] });
+		await settle(app, 260);
+
+		expect(rowKeys()).toEqual([]);
+		const empty = emptyBlocks();
+		expect(empty.length).toBeGreaterThan(0);
+		expect(empty.map((e) => e.textContent).join(' ')).toContain('No records of this type');
 	});
 
 	it('switches the active type', async () => {

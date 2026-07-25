@@ -82,6 +82,10 @@ export function coerceInput(raw, kind) {
  * uncapped, for the row's `title`. In a half-width card at a short dock height
  * the printed form is almost always clipped, so hover has to be able to show
  * the whole thing.
+ *
+ * `copy` is what the clipboard gets, and it deliberately differs from `full`:
+ * a string copies as its CONTENTS, not as a quoted JS literal (matching what
+ * Chrome's own "Copy value" does), while everything else copies as JSON.
  */
 export function entriesOf(object, max = PREVIEW_MAX) {
 	if (!object || typeof object !== 'object') return [];
@@ -91,10 +95,17 @@ export function entriesOf(object, max = PREVIEW_MAX) {
 			label,
 			value: preview(value, max),
 			full: preview(value, Infinity),
+			copy: clipboardText(value),
 			kind: valueKind(value),
 			raw: value,
 		};
 	});
+}
+
+/** The clipboard form of a value: strings bare, everything else JSON. */
+export function clipboardText(value) {
+	if (typeof value === 'string') return value;
+	return preview(value, Infinity);
 }
 
 /**
