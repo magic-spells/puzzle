@@ -29,16 +29,20 @@ log in [[DOC-DECISIONS]] explains why the contract has its current shape.
   prompts, D77/v1.44), and `0.1.2` (the embedded agent skill + `puzzle add
   skills` installer, D78/v1.45) are live on npm — MIT, five packages, manual
   publish, no CI release path.
-- **`0.2.0` is PUBLISHED** (npm, 2026-07-24) — it is the current `latest`. Its
-  headline was the D67 prerendered-SPA mode renaming to `output: 'hybrid'` /
-  `--hybrid`, plus path-shaped links and the true static-pages mode. Everything
-  below from D88 onward landed *after* that publish and belongs to the
-  unreleased **`0.3.0`** (versions bumped on `release/0.3.0`).
-- **Unreleased `0.3.0`.** Minor, not patch, for two independent reasons: two new
-  export subpaths (`./testing`, `./fixtures`) and three genuine breaking changes
-  against a released consumer — D111 (the runtime no longer syncs managed head
-  tags), D110 (`dev.proxy: { '/': … }` was working in 0.2.0 and is now a config
-  error that fails `dev` AND `build`), and D112 (a type-variant duplicate pk now
+- **`0.2.0`, `0.3.0`, and `0.3.1` are PUBLISHED.** `0.3.1` (npm, 2026-07-25)
+  is the current `latest`. `0.3.0` shipped without registry
+  `optionalDependencies`, so every global CLI install was broken; it is
+  deprecated and superseded by `0.3.1`, which publishes the same feature set
+  from the packed root tarball so the four platform binary pins reach the
+  registry (D120). `0.2.0` (2026-07-24) introduced the D67
+  prerendered-SPA mode rename to `output: 'hybrid'` / `--hybrid`, path-shaped
+  links, and true static-pages output.
+- **The `0.3.0` / `0.3.1` feature set.** Minor, not patch, for two independent
+  reasons: two new export subpaths (`./testing`, `./fixtures`) and three genuine
+  breaking changes against a released consumer — D111 (the runtime no longer
+  syncs managed head tags), D110 (`dev.proxy: { '/': … }` was working in 0.2.0
+  and is now a config error that fails `dev` AND `build`), and D112 (a
+  type-variant duplicate pk now
   throws from `createRecord` instead of silently creating a shadow record). Two
   softer behavior changes existing apps will notice: D93 moves focus and
   announces on every navigation (`focusBehavior: false` opts out) and D90 takes
@@ -104,7 +108,7 @@ log in [[DOC-DECISIONS]] explains why the contract has its current shape.
 - The 0.1.x backlog is done and published, `0.2.0` shipped 2026-07-24, and the
   `skills/puzzle/SKILL.md` refresh landed with it (checklist item 1b below
   stays a recurring per-release step). Launch assets (demo links, announcement)
-  remain open and now ride the `0.3.0` release.
+  remain open around the `0.3.1` launch.
 
 ## Deferred / known limitations
 
