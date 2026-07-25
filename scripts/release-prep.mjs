@@ -94,6 +94,23 @@ if (goMatch[1] !== version) {
 }
 console.log(`  OK  version.go Version = ${goMatch[1]}`);
 
+// The DevTools bridge reports a hardcoded framework version to the extension
+// (D100) — the ESM bundle cannot import package.json, so it is a literal that
+// ships in client-runtime/. A comment told the releaser to bump it and that was
+// not enough: it sat at 0.3.0 through the 0.3.1 bump. Assert it instead.
+const devtoolsJS = readFileSync(join(repoRoot, 'client-runtime/devtools.js'), 'utf8');
+const dtMatch = devtoolsJS.match(/^const FRAMEWORK_VERSION = '(.*)';$/m);
+if (!dtMatch) {
+	fail("could not find `const FRAMEWORK_VERSION = '...'` in client-runtime/devtools.js");
+}
+if (dtMatch[1] !== version) {
+	fail(
+		`client-runtime/devtools.js FRAMEWORK_VERSION is "${dtMatch[1]}", expected "${version}" ` +
+			'(it ships in the runtime and is reported to the DevTools extension)'
+	);
+}
+console.log(`  OK  client-runtime/devtools.js FRAMEWORK_VERSION = ${dtMatch[1]}`);
+
 // Each platform manifest must pin the same version.
 for (const { pkg } of MATRIX) {
 	const manifest = readJSON(`npm/${pkg}/package.json`);
