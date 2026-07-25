@@ -1,6 +1,6 @@
 {
 	"name": "@magic-spells/puzzle",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"description": "SPA-first JavaScript framework — single-file .pzl components, reactive data() components, Go + esbuild compiler",
 	"type": "module",
 	"main": "./client-runtime/index.js",
@@ -72,7 +72,8 @@
 		"test:types": "tsc -p tests-types",
 		"test:e2e-pack": "node scripts/e2e-pack.mjs",
 		"verify:pack": "node scripts/verify-pack.mjs",
-		"prepublishOnly": "node scripts/release-prep.mjs",
+		"verify:published": "node scripts/verify-published.mjs",
+		"prepublishOnly": "node scripts/refuse-directory-publish.mjs",
 		"prepack": "node scripts/inject-platform-pins.mjs inject",
 		"postpack": "node scripts/inject-platform-pins.mjs restore",
 		"release:prep": "node scripts/release-prep.mjs"
