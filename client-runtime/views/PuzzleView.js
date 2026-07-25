@@ -779,11 +779,35 @@ export class PuzzleView {
 					this.#settleEnter();
 					return;
 				}
-				this.viewWillShow();
+				// Both hooks are GUARDED here — unlike the mount path, where a throw
+				// rejects playIn()'s promise and the caller logs it (viewManager
+				// mountComponent's '[puzzle] child enter animation failed:', router
+				// #playInLogged). This reveal fires from an IntersectionObserver
+				// delivery, long after playIn() returned, so no caller can see the throw:
+				// an unguarded viewWillShow() would skip handle.play() and leave the enter
+				// held PAUSED at its `from` keyframe (typically opacity 0) — content
+				// stranded hidden forever, the §39 hard rule this function exists to keep
+				// — and both hooks would skip #settleEnter(), leaving playIn() pending.
+				// Log and continue instead; the sequence is never aborted by a user hook.
+				try {
+					this.viewWillShow();
+				} catch (err) {
+					console.error('[puzzle] enter hook failed during a visible-trigger reveal:', err);
+				}
 				handle.play();
+				// handle.finished NEVER rejects — playAnimation normalises WAAPI's
+				// cancel-time AbortError away (animate.js, "Cancellation resolves") — so
+				// the only throw reachable in here is the user hook, guarded so
+				// #settleEnter() below always runs. No .catch is needed on this chain.
 				handle.finished.then(() => {
 					if (this.#currentAnimation === handle) this.#currentAnimation = null;
-					if (!this.#destroyed) this.viewDidShow(); // skip if destroyed mid-enter
+					if (!this.#destroyed) {
+						try {
+							this.viewDidShow(); // skipped entirely if destroyed mid-enter
+						} catch (err) {
+							console.error('[puzzle] enter hook failed during a visible-trigger reveal:', err);
+						}
+					}
 					this.#settleEnter();
 				});
 			};
@@ -1017,7 +1041,32 @@ export class PuzzleView {
 		// prototype assignment, exactly like render().
 		const showSkeleton = !this.#loaded && typeof this.renderSkeleton === 'function';
 		const tree = showSkeleton ? this.renderSkeleton() : this.render();
-		if (tree) this.#vm.render(tree);
+		if (tree) {
+			this.#vm.render(tree);
+		} else if (this.#vm.currentTree) {
+			// A HAND-WRITTEN render() that returned a tree before and returns null now
+			// (compiled templates always emit a root vnode, so this is authored-view
+			// territory) must EMPTY this view's DOM — leaving the previous render on
+			// screen is a silent stale-content bug. clear() unmounts the live tree,
+			// destroying nested component instances and firing ref removals, and leaves
+			// the manager REUSABLE (currentTree/anchor both null, so a later render()
+			// takes its first-mount branch again).
+			//
+			// Re-anchor at the SAME position afterwards, capturing the departing root's
+			// nextSibling first: clear() alone would leave this.element null and drop the
+			// spot, so a parent's insertion refs (patch()/patchComponent read
+			// child.element) would go stale and the later truthy render would APPEND to
+			// the end of a container it may share with siblings. The comment anchor is
+			// exactly the placeholder mount() uses while async data() is in flight; the
+			// next render mounts before it and removes it.
+			//
+			// Gated on currentTree: null on the FIRST render is a no-op (nothing mounted,
+			// the mount-time anchor still holds the position) and repeated nulls never
+			// stack up comment nodes.
+			const ref = this.#vm.element?.nextSibling ?? null;
+			this.#vm.clear();
+			this.#vm.anchorAt(ref);
+		}
 		// Timestamp the FIRST actual skeleton render so the hold measures from when
 		// the skeleton became visible, not from mount (v1.20, D52). Set once.
 		if (showSkeleton && this.#skeletonShownAt === 0) this.#skeletonShownAt = Date.now();
