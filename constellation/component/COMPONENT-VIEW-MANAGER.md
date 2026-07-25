@@ -39,8 +39,8 @@ notes:
       probes post-reduction, detection covers component props) appended to this card's body — prior
       stamp (d9591d6) predated that paragraph.
     sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:23:56.086Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # ViewManager and ViewNode

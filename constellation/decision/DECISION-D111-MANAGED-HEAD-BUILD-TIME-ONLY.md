@@ -7,8 +7,8 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-HEAD-TAGS
-verified_at: '2026-07-24T23:35:04.615Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:24:34.861Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 notes:
   - kind: verified
     text: >-

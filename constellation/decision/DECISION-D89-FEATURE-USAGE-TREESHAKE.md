@@ -12,8 +12,8 @@ connections:
   - FILE-BUILD-OPTIONS
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 35e8fd092a8e4559269fd8578a419e69e8371f6c
+verified_at: '2026-07-25T05:24:28.106Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 notes:
   - kind: verified
     text: >-

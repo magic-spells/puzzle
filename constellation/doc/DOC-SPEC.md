@@ -1,11 +1,11 @@
 ---
 name: SPEC.md — the frozen v1 contract
 status: verified
-verified_at: '2026-07-25T00:09:26.606Z'
+verified_at: '2026-07-25T05:26:05.394Z'
 connections:
   - DOC-VIEW-LIFECYCLE
   - DOC-DECISIONS
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 notes:
   - kind: verified
     text: >-

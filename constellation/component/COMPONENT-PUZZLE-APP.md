@@ -17,8 +17,8 @@ notes:
       app.store throws before mount starts and after unmount. External wiring may
       call const pending = app.mount(); wire(app.store); await pending, or live in
       beforeMount.
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:23:57.477Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # PuzzleApp

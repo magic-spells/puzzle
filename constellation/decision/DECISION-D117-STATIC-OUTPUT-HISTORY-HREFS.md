@@ -2,12 +2,20 @@
 name: >-
   D117 — static output always emits history-style hrefs: routerMode is ignored under
   output:'static', with a build warning
-status: built
+status: verified
 connections:
   - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D79-LINK-FORMATTER
   - COMPONENT-SSG
   - FILE-SSG-RUNTIME
+verified_at: '2026-07-25T05:24:10.389Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+notes:
+  - kind: verified
+    text: >-
+      history forced in both stubs, warning emitted, unit + real static-docs build verified
+      path-shaped hrefs
+    sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 Under `output: 'static'`, the router stub that backs `router.url()` and the

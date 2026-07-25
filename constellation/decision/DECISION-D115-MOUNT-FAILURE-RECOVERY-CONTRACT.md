@@ -2,12 +2,20 @@
 name: >-
   D115 — mount-failure recovery keys off the shared instance, and router-adopted views are never
   torn down by the view manager
-status: built
+status: verified
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-ROUTER
   - DOC-VIEW-LIFECYCLE
+verified_at: '2026-07-25T05:23:41.910Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+notes:
+  - kind: verified
+    text: >-
+      race + preloaded exemption implemented in viewManager.js; both regression shapes covered by
+      tests/mount-failure-recovery-race.test.js, revert-proven
+    sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 The failed-first-mount teardown in `mountComponent`'s rejection handler

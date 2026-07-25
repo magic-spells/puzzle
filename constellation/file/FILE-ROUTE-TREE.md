@@ -1,12 +1,14 @@
 ---
 name: Shared route-flatten module
-status: built
+status: verified
 path: client-runtime/router/routeTree.js
 language: javascript
 summary: The single source of the nested-routes → per-leaf flatten both the Router and the SSG prerenderer walk.
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-SSG
+verified_at: '2026-07-25T05:26:03.967Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 Source binding for the shared flatten rules. The Router (router.js, compiling

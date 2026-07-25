@@ -7,8 +7,8 @@ connections:
   - FILE-DEV-SERVER
   - FEATURE-DEV-PROXY
   - DECISION-D08-MINIMAL-CONFIG
-verified_at: '2026-07-24T23:35:06.404Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:24:06.632Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 notes:
   - kind: verified
     text: >-

@@ -2,10 +2,18 @@
 name: >-
   D116 — platform pins are injected at pack time, and verify-pack inspects the real tarball, not
   the injection function
-status: built
+status: verified
 connections:
   - FEATURE-V1-32-RELEASE-HARDENING
   - FILE-PACKAGE
+verified_at: '2026-07-25T05:24:08.534Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+notes:
+  - kind: verified
+    text: >-
+      verify-pack real-tarball rework + release:prep restore-first landed; negative tests proved the
+      old check passed under --ignore-scripts and a broken postpack
+    sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 The four `@magic-spells/puzzle-<platform>-<arch>` optionalDependencies do not

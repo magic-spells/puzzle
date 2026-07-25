@@ -1,6 +1,6 @@
 ---
 name: 'D91 — `beforeRequest`: one synchronous hook on every adapter fetch (v1.55)'
-status: built
+status: verified
 connections:
   - COMPONENT-STORE
   - DECISION-D21-ADAPTER-READ-PATH
@@ -8,6 +8,8 @@ connections:
   - DECISION-D81-STATIC-PAGES-MODE
   - DOC-SPEC
   - DOC-DATASTORE
+verified_at: '2026-07-25T05:24:29.299Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 Every adapter fetch now routes through one private `Store._fetch(url, init, context)`, and an optional `beforeRequest` hook on the app config gets to shape the `init` before it goes out. This is how an app attaches auth headers, `credentials`, or an `AbortSignal` to the whole adapter surface at once.

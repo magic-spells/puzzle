@@ -2,13 +2,19 @@
 name: >-
   D118 — user lifecycle hook errors are contained at every boundary, and mount cycles carry a
   generation token
-status: built
+status: verified
 connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-PUZZLE-APP
   - COMPONENT-ANIMATIONS
   - COMPONENT-DEVSTATE
   - DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT
+verified_at: '2026-07-25T05:24:11.803Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+notes:
+  - kind: verified
+    text: all five containment fixes + mount epoch landed with revert-proven tests
+    sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 Four containment gaps closed in one round, all with the same posture the

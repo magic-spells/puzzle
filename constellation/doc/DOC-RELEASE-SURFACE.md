@@ -1,5 +1,5 @@
 ---
-name: Puzzle 0.1 release surface
+name: Puzzle release surface
 kind: reference
 status: verified
 connections:
@@ -23,14 +23,14 @@ connections:
   - COMPONENT-DEV-SERVER
   - FLOW-BUILD
   - FLOW-REACTIVITY
-verified_at: '2026-07-24T05:49:35.856Z'
-verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
+verified_at: '2026-07-25T05:26:59.621Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
-# Puzzle 0.1 release surface
+# Puzzle release surface
 
-Compact inventory of what ships in `@magic-spells/puzzle` at the first npm
-release. [[DOC-SPEC]] remains the binding contract; this card is the map, not a
+Compact inventory of what ships in `@magic-spells/puzzle` — kept current with
+the released surface (0.3.0 as of this writing), not pinned to one version. [[DOC-SPEC]] remains the binding contract; this card is the map, not a
 second specification. Decision cards hold rationale and git holds chronology.
 
 ## Package and application

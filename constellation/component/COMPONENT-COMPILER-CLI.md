@@ -11,8 +11,14 @@ connections:
   - FILE-GENERATE
   - FILE-PIECES
   - FILE-PZLC
-verified_at: '2026-07-25T00:10:00.000Z'
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_at: '2026-07-25T05:26:55.297Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+notes:
+  - kind: verified
+    text: >-
+      generate --path symlink containment + pieces fail-before-write ordering reviewed against the
+      card's new prose; Go suite green
+    sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # Compiler CLI

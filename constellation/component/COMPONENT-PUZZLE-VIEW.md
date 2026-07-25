@@ -16,8 +16,8 @@ notes:
       Keep raw source values and data()-derived display values under different
       keys. A successful data() replaces the model layer, so reusing one key for
       raw local state and a reshaped model value loses the raw value by design.
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:23:57.003Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # PuzzleView

@@ -2,11 +2,19 @@
 name: >-
   D114 — a bare YYYY-MM-DD is a calendar date: date formatters parse it as local, so it displays as
   written in every timezone
-status: built
+status: verified
 connections:
   - COMPONENT-FORMATTERS
   - FILE-FORMATTER-BUILTINS
   - DECISION-D112-STORE-ID-KEY-NORMALIZATION
+verified_at: '2026-07-25T05:23:36.554Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+notes:
+  - kind: verified
+    text: >-
+      in_timezone passes calendar dates through unshifted; rationale rewritten to match; absolute
+      multi-process-zone tests (subprocess per TZ) pin the output
+    sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 The built-in date formatters (`date`, and through it `time`/`datetime`, plus

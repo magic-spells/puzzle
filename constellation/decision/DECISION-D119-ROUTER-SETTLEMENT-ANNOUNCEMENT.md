@@ -2,11 +2,17 @@
 name: >-
   D119 — a same-path push mid-flight returns the in-flight navigation's promise, and the route
   announcement falls back past an unchanged title
-status: built
+status: verified
 connections:
   - COMPONENT-ROUTER
   - DECISION-D93-ROUTER-FOCUS-MANAGEMENT
-  - DECISION-D83-QUERY-SNAPSHOT-REPLACE
+  - DECISION-D83-QUERY-REPLACE
+verified_at: '2026-07-25T05:24:13.214Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+notes:
+  - kind: verified
+    text: pendingNavPromise pairing + announcement fallback landed with revert-proven tests
+    sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 Two router behavior fixes from the pre-0.3.0 review round. Neither changes the

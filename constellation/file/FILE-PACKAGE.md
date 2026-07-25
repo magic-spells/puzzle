@@ -1,6 +1,6 @@
 ---
 name: package.json
-status: built
+status: verified
 path: package.json
 language: JSON
 summary: The public npm manifest — exports map, files allowlist, bin shim, and the pack-time hook wiring.
@@ -8,6 +8,8 @@ connections:
   - DOC-RELEASE-SURFACE
   - DECISION-D116-PACK-TIME-PIN-INJECTION
   - DOC-BLOG-EXAMPLE
+verified_at: '2026-07-25T05:24:54.083Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # package.json

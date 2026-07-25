@@ -1,7 +1,7 @@
 ---
 name: "D81 — True static-pages output mode; old mode renamed 'hybrid'"
 status: verified
-verified_at: '2026-07-25T00:10:00.000Z'
+verified_at: '2026-07-25T05:24:22.452Z'
 connections:
   - DECISION-D67-SSG-STATIC-BUILD
   - DECISION-D01-SPA-ONLY
@@ -39,7 +39,7 @@ notes:
       + staticEntrySource) and WARNS when config.storage is set. A direct mountStatic({storage})
       caller still gets real persistence (the param stays on mountStatic/buildStaticContext).
     sha: d9591d6
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # D81 — True static-pages output mode; old mode renamed 'hybrid'
