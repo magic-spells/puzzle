@@ -53,7 +53,7 @@
           <p class="m-0 text-[12px] text-muted">Select a record type to browse its rows.</p>
         </div>
       {:else}
-        <header class="shrink-0 flex items-baseline gap-2 px-3 h-7 border-b border-line bg-surface">
+        <header class="shrink-0 flex items-baseline gap-2 min-h-9 px-3 py-2 leading-relaxed border-b border-line bg-surface">
           <span class="font-mono text-[12px] font-semibold text-ink">{ activeType }</span>
           <span class="font-mono text-[10px] tabular-nums text-faint">{ rowCount } rows</span>
           {#if hiddenColumns}
@@ -287,7 +287,7 @@ export default class StoreView extends PuzzleView {
 
   toRow(row, shape, selectedRowId) {
     const key = String(row?.[shape.pk] ?? '');
-    const isSelected = key === String(selectedRowId ?? ' ');
+    const isSelected = key === String(selectedRowId ?? '\u0000');
     return {
       key,
       rowClass: isSelected ? ROW_SELECTED : ROW_IDLE,
@@ -397,7 +397,7 @@ export default class StoreView extends PuzzleView {
     },
 
     selectRow: (key) => {
-      const same = String(this.getData().selectedRowId ?? ' ') === String(key);
+      const same = String(this.getData().selectedRowId ?? '\u0000') === String(key);
       this.setData({
         selectedRowId: same ? null : key,
         edits: {},
