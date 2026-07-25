@@ -262,11 +262,38 @@ describe('FormatterRegistry', () => {
 			expect(() => f.date('2026-7-24', 'iso')).not.toThrow();
 		});
 
-		it('timeago and in_timezone read a calendar date as local midnight too', () => {
+		it('timeago reads a calendar date as local midnight too', () => {
 			expect(f.timeago('2026-07-24')).toBe(f.timeago(new Date(2026, 6, 24).getTime()));
-			expect(f.in_timezone('2026-07-24', 'UTC').getTime()).toBe(
-				f.in_timezone(new Date(2026, 6, 24), 'UTC').getTime()
-			);
+		});
+
+		it('in_timezone returns a calendar date UNSHIFTED, whatever the target zone', () => {
+			// A bare YYYY-MM-DD names a day, not an instant, so there is nothing for
+			// in_timezone to re-express — shifting it would move the day and make the
+			// rendered date depend on the VIEWER's zone, the exact defect D114 removed
+			// from date/timeago. NOTE: the earlier form of this test compared against a
+			// locally built Date on both sides, so both moved with the process zone and
+			// it passed under every TZ even while the output was wrong. Absolute,
+			// multi-process-zone coverage lives in tests/formatters-timezone.test.js.
+			const midnight = new Date(2026, 6, 24).getTime();
+			expect(f.in_timezone('2026-07-24', 'UTC').getTime()).toBe(midnight);
+			expect(f.in_timezone('2026-07-24', 'Asia/Tokyo').getTime()).toBe(midnight);
+			expect(f.in_timezone('2026-07-24', 'Pacific/Honolulu').getTime()).toBe(midnight);
+			expect(f.date(f.in_timezone('2026-07-24', 'America/New_York'), 'date', 'en-US')).toBe('07/24/2026');
+			expect(f.date(f.in_timezone('2026-03-01', 'America/New_York'), 'date', 'en-US')).toBe('03/01/2026');
+			expect(f.date(f.in_timezone('2026-07-24', 'Asia/Tokyo'), 'date', 'en-US')).toBe('07/24/2026');
+		});
+
+		it('in_timezone still re-expresses a real instant in the target zone', () => {
+			// The other half of the contract: an instant DOES move. UTC midnight is
+			// 09:00 the same morning in Tokyo. Assert wall-clock components, which are
+			// process-zone-stable, rather than getTime(), which is not.
+			const tokyo = f.in_timezone('2026-07-24T00:00:00Z', 'Asia/Tokyo');
+			expect([tokyo.getFullYear(), tokyo.getMonth(), tokyo.getDate(), tokyo.getHours()]).toEqual([2026, 6, 24, 9]);
+			// Date instances and timestamps are instants too, never calendar dates.
+			const fromDate = f.in_timezone(new Date('2026-07-24T00:00:00Z'), 'Asia/Tokyo');
+			expect([fromDate.getDate(), fromDate.getHours()]).toEqual([24, 9]);
+			const la = f.in_timezone('2026-07-24T00:00:00Z', 'America/Los_Angeles');
+			expect([la.getDate(), la.getHours()]).toEqual([23, 17]);
 		});
 	});
 

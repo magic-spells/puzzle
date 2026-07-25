@@ -10,12 +10,14 @@ connections:
 ---
 
 The built-in date formatters (`date`, and through it `time`/`datetime`, plus
-`timeago` and `in_timezone`) parse a bare `YYYY-MM-DD` string as a **local**
-calendar date instead of letting `new Date(v)` apply the ES spec's UTC-midnight
-rule. `{ post.publishedAt | date }` of `"2026-07-24"` now renders `07/24/2026`
-for every reader; before, anyone west of UTC saw `07/23/2026`. Everything
-that carries its own time or zone — Date instances, timestamps, full ISO
-datetimes — is untouched.
+`timeago` and `in_timezone`) treat a bare `YYYY-MM-DD` string as a **calendar
+date**: `date`/`timeago` parse it as local midnight instead of letting
+`new Date(v)` apply the ES spec's UTC-midnight rule, and `in_timezone` passes
+it through untouched — a day names no instant, so there is nothing to
+re-express in another zone. `{ post.publishedAt | date }` of `"2026-07-24"`
+now renders `07/24/2026` for every reader; before, anyone west of UTC saw
+`07/23/2026`. Everything that carries its own time or zone — Date instances,
+timestamps, full ISO datetimes — is untouched.
 
 ## Context
 
@@ -42,6 +44,11 @@ and invisible to anyone testing east of UTC.
 - Used by `date()`, `timeago()`, and `in_timezone()` — one parse rule for the
   whole family (`time`/`datetime` delegate to `date`). The same
   one-identity-rule principle as [[DECISION-D112-STORE-ID-KEY-NORMALIZATION]].
+- **`in_timezone` is a no-op on calendar dates.** Its contract is "take an
+  instant, re-express its wall clock in a named zone" — a calendar date has no
+  instant, so it returns the parsed local-midnight Date unchanged. Shifting
+  from ANY midnight anchor (local or UTC) makes the rendered day a function of
+  the viewer's zone — the exact property this decision exists to eliminate.
 - **`iso` preset is idempotent on calendar dates**: `date('2026-07-24',
   'iso')` returns `'2026-07-24'` unchanged. `toISOString()` of local midnight
   would emit a timezone-dependent instant — the ISO form of a calendar date
@@ -52,10 +59,13 @@ and invisible to anyone testing east of UTC.
 ## Alternatives rejected
 
 - **Format date-only values in UTC instead** (keep UTC parse, add
-  `timeZone: 'UTC'` to the Intl options for them): renders correctly but
-  makes the *parsed instant* still UTC midnight, so `timeago`/`in_timezone`
-  and any chained math stay wrong; and it forks the options object per input
-  shape.
+  `timeZone: 'UTC'` to the Intl options for them): `date` would render
+  correctly, but `timeago` would measure from UTC midnight instead of the day
+  the author named in the reader's frame, and it forks the Intl options object
+  per input shape. (`in_timezone` is no argument for either anchor: it must
+  not shift a calendar date at all, so the anchor debate never reaches it —
+  the first shipped cut of this decision got that backwards and shifted local
+  midnight, which made its output viewer-dependent.)
 - **A `utc` preset/flag the author opts into** — the default is the bug; an
   opt-out nobody discovers fixes nobody.
 - **Timezone-shifting all output to a configured app zone** — a much bigger
@@ -65,8 +75,10 @@ and invisible to anyone testing east of UTC.
 ## Consequences
 
 - Date-only strings display as written everywhere; `timeago('2026-07-24')`
-  measures from local midnight (the day the author named), and
-  `in_timezone` shifts from the same instant — the family agrees.
+  measures from local midnight (the day the author named); `in_timezone`
+  returns a calendar date unshifted, so
+  `'2026-07-24' | in_timezone: <any zone> | date` renders `07/24/2026` for
+  every viewer.
 - The `iso` preset's output for date-only input changes from
   `'2026-07-24T00:00:00.000Z'` to `'2026-07-24'` — deterministic and
   round-trippable where the old form was a UTC-midnight artifact.
@@ -75,6 +87,12 @@ and invisible to anyone testing east of UTC.
 - `"2026-02-31"` previously rendered as a rolled March date (TZ-dependent);
   it now fails soft to the raw string — the one deliberate behavior change
   beyond date-only display itself.
-- Tests in `tests/formatters.test.js` are TZ-independent by construction —
-  the fix's defining property is that the assertions hold in any zone.
+- Tests pin **absolute output under explicit process zones**
+  (`tests/formatters-timezone.test.js`: one Node subprocess per zone — Node
+  caches the zone in ICU at startup, so mid-process `TZ` stubbing is not
+  trustworthy). A formatter-vs-locally-built-`Date` comparison moves with the
+  process zone on BOTH sides and passes even while output is viewer-dependent
+  — exactly how the original `in_timezone` cut slipped through. The zone list
+  includes `Pacific/Honolulu`, west of every listed process zone, so a
+  day-shifting `in_timezone` fails in ALL of them, not just some.
 - SPEC §6's Formatters bullet documents the calendar-date rule.

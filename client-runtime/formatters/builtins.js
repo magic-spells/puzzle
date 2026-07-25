@@ -244,6 +244,13 @@ function parseDateInput(v) {
 
 export function in_timezone(v, tz = 'UTC') {
 	const d = parseDateInput(v);
+	// A bare YYYY-MM-DD names a DAY, not an instant, so there is nothing to
+	// re-express in another zone — return D114's local midnight untouched.
+	// Shifting it would move the day: the local-midnight instant read as a wall
+	// clock in `tz` lands on the day before (or after) for any viewer whose own
+	// offset differs, making a calendar date render differently per viewer — the
+	// exact TZ dependence D114 removed from `date`/`timeago`.
+	if (typeof v === 'string' && DATE_ONLY.test(v)) return d;
 	// An unknown time-zone identifier throws RangeError at DateTimeFormat
 	// construction, and formatToParts throws on an invalid date — fail soft to the
 	// un-shifted date so a bad tz/date never crashes the render.
