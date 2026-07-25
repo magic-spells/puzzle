@@ -7,8 +7,8 @@ connections:
   - FILE-DEV-SERVER
   - FEATURE-DEV-PROXY
   - DECISION-D08-MINIMAL-CONFIG
-verified_at: '2026-07-24T23:35:06.404Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:24:06.632Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 notes:
   - kind: verified
     text: >-
@@ -84,7 +84,14 @@ unrecoverable.
 
 - Removes documented behavior. [[FEATURE-DEV-PROXY]]'s handler-chain prose
   previously described the `/` prefix as supported; it is now a config error.
-  Unpublished at time of change, so no released consumer can depend on it.
+  **This card originally claimed the change was unpublished and therefore free.
+  That was wrong**: `0.2.0` went to npm on 2026-07-24 carrying the working
+  `rootProxied` path, and this change landed later the same day. So a released
+  consumer *can* have `dev.proxy: { '/': … }` in a working config, and for them
+  `puzzle dev` — and `puzzle build`, since the rule lives in the loader — starts
+  failing on upgrade. It is a genuine breaking change and belongs in the `0.3.0`
+  release notes, not in a footnote. The decision itself stands: the only outcome
+  that config ever produced was a dev server with nothing of its own to serve.
 - A `/` or duplicate prefix now fails `puzzle build` as well. Consistent with
   the existing `dev.proxy` checks, but it does mean a dev-only key can fail a
   production build.

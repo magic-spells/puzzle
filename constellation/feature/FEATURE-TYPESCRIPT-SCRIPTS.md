@@ -10,6 +10,7 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
   - DOC-COMPILER-DESIGN
 ---
 
@@ -17,7 +18,7 @@ connections:
 
 First-class TypeScript in a `.pzl`, delivering the "(later) TypeScript works with
 zero special tooling" promise of [[DECISION-D03-SCRIPTS-REAL-JS]]. Driven by
-[[DECISION-D54-TYPESCRIPT-SCRIPTS]]; contract in [[DOC-SPEC]] §25.
+[[DECISION-D54-TYPESCRIPT-SCRIPTS]]; contract in [[DOC-SPEC-ANATOMY]] §25.
 
 ## Intent
 

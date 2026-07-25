@@ -15,7 +15,7 @@ connections:
   - FILE-COMPILER-INTERNAL-PARSER-SLOT
   - FILE-CODEGEN
   - FILE-VIEW-MANAGER
-verified_at: '2026-07-25T00:10:00.000Z'
+verified_at: '2026-07-25T05:24:14.653Z'
 notes:
   - kind: verified
     text: >-
@@ -27,7 +27,7 @@ notes:
       green; every respelled example .pzl compile-checked via pzlc (12/12). Runtime/SSG/router
       zero-diff as designed. Implementation by two Opus subagents against this card's contract;
       reviewed + verified by the session orchestrator.
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # D74 — `<children/>`: the default marker leaves the `slot` word (v1.41)

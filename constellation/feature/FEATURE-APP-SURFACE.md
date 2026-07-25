@@ -7,6 +7,7 @@ connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC
+  - DOC-SPEC-VIEW
 verified_at: '2026-07-14T17:04:48.129Z'
 notes:
   - kind: verified
@@ -28,7 +29,7 @@ proven demand, re-reject the rest — and that triage is now done:
 - **Admitted & shipped: app lifecycle hooks** — `beforeMount(app)` (awaited,
   pre-navigation-#0 — the sanctioned home for store seeding), `mounted(app)`,
   and `beforeUnmount(app)` as optional config fields. See
-  [[DECISION-D66-APP-LIFECYCLE-HOOKS]] and [[DOC-SPEC]] §34. Demand evidence:
+  [[DECISION-D66-APP-LIFECYCLE-HOOKS]] and [[DOC-SPEC-VIEW]] §34. Demand evidence:
   ten examples used `app.mount().then(seed)` (first `data()` saw an empty
   store), and music hand-rolled a `seedReady` promise awaited by six views —
   both idioms retired in the v1.31 sweep.

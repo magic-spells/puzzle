@@ -83,6 +83,11 @@ time, so nothing needs to be pre-wired:
   navigation #0 — the D66 seeding window).
 - `installFixtures` returns `uninstall()`, matching the
   `installFakeAnimate`/`installFakeObserver` convention, for test isolation.
+- **Typings**: the subpath ships `types/fixtures.d.ts` (the parallel of D94's
+  `types/testing.d.ts`), and because `seed()`/`resetFixtureSeed()` are added
+  to `Store.prototype` only at install time, they reach the `Store` type via
+  **module augmentation** in that file — importing `/fixtures` is what makes
+  `store.seed()` type-check; core's Store declaration stays clean.
 
 **Compiler.** `puzzle dev --fixtures` / `puzzle build --fixtures` wire the
 app's `app/fixtures.js` (convention; `.ts` allowed; missing file is a clear

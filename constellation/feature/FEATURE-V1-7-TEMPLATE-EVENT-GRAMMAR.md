@@ -12,6 +12,7 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-EVENTS
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 ---
 
 # v1.7 — Template & event grammar amendments
@@ -30,4 +31,4 @@ SPEC §5/§6 deferred inverted conditionals, multi-branch conditionals, and even
 **Out (rejected):** an `Unless` AST node and `{:else if}` chains under `{#unless}`; `{#switch}`/`{:case}` naming and desugaring case to nested ifs; a compile-time modifier wrapper (can't express once-ever) and a structured `{ handler, modifiers }` vnode value (breaks the function-value contract). The todos example and golden fixtures deliberately stay modifier-free (golden #1 protection).
 
 ## Outcome
-Shipped in v1.7; documented in [[DOC-SPEC]] §5/§6, [[DOC-TEMPLATE-SYNTAX]], and [[DOC-EVENTS]]. All three are additive amendments — existing `{#if}` templates untouched, modifier-free bindings byte-identical to before; only the [[COMPONENT-VIEW-MANAGER]] listener wiring changed for modifiers. Touched [[COMPONENT-TEMPLATE-PARSER]] and [[COMPONENT-CODEGEN]] (unless/case) and [[COMPONENT-VIEW-MANAGER]] (modifiers).
+Shipped in v1.7; documented in [[DOC-SPEC-TEMPLATE]] §5/§6, [[DOC-TEMPLATE-SYNTAX]], and [[DOC-EVENTS]]. All three are additive amendments — existing `{#if}` templates untouched, modifier-free bindings byte-identical to before; only the [[COMPONENT-VIEW-MANAGER]] listener wiring changed for modifiers. Touched [[COMPONENT-TEMPLATE-PARSER]] and [[COMPONENT-CODEGEN]] (unless/case) and [[COMPONENT-VIEW-MANAGER]] (modifiers).

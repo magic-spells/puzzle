@@ -9,6 +9,7 @@ connections:
   - DOC-MODELS
   - DOC-DATASTORE
   - DOC-SPEC
+  - DOC-SPEC-DATA
 verified_at: '2026-07-12T00:14:57.604Z'
 notes:
   - kind: verified
@@ -23,7 +24,7 @@ Supersedes the §7 "enforcement deferred" line. The rules the [[DECISION-D05-SCH
 builders have stored since v1 (`required`, `min`, `max`, `oneOf`, `validate`) now enforce:
 `store.createRecord()` and `record.update()` throw `PuzzleValidationError` on invalid data,
 and `Model.validate(data)` / `record.validate()` return a renderable `{ valid, errors }`
-without throwing. See [[DOC-SPEC]] §20.
+without throwing. See [[DOC-SPEC-DATA]] §20.
 
 ## Context
 Since v1 the builders accumulate validation rules on the normalized descriptor, but they

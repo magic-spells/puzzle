@@ -1,5 +1,5 @@
 /**
- * Declarations for the `@magic-spells/puzzle/static` subpath (D79) — the static
+ * Declarations for the `@magic-spells/puzzle/static` subpath (D81) — the static
  * output kernel. Mirrors client-runtime/static/index.js.
  *
  * Browser-only: `mountStatic` upgrades a prerendered static page to an interactive
@@ -40,13 +40,29 @@ export interface MountStaticOptions {
 	formatters?: Record<string, any>;
 	/** The store's base API URL. */
 	apiURL?: string;
+	/** Storage-like object for opt-in persistence, handed to the Store. */
+	storage?: any;
+	/**
+	 * IGNORED (D117). Accepted for config parity — the generated per-page entry
+	 * still passes the app's configured mode through — but static output has no
+	 * router and its files are path-shaped on disk, so `ctx.router.url()` (and
+	 * therefore the `link` formatter) always emits history-style hrefs.
+	 */
+	routerMode?: 'history' | 'hash' | 'memory';
+	/**
+	 * Normalized route URL prefix — unlike `routerMode` this DOES apply: a
+	 * sub-path deploy wants its hrefs prefixed.
+	 */
+	routerBase?: string;
 }
 
 /**
  * Mount a prerendered static page's interactive layer: wire the build-time ctx
- * (Store + FormatterRegistry, a throwing router stub), rehydrate the inline data
- * island, assemble + preload the route chain, and mount it over the prerendered
- * markup (flash-free, replace-on-commit). `beforeMount` is not run (build-time only).
+ * (Store + FormatterRegistry, plus the D79 link-capable router stub — `url()` and
+ * `current` work so `{ path | link }` and `router.current` resolve, while every
+ * navigation method throws), rehydrate the inline data island, assemble + preload
+ * the route chain, and mount it over the prerendered markup (flash-free,
+ * replace-on-commit). `beforeMount` is not run (build-time only).
  */
 export declare function mountStatic(options: MountStaticOptions): Promise<void>;
 

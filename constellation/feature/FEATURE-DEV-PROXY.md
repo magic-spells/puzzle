@@ -1,7 +1,7 @@
 ---
 name: "Dev-server API proxy (puzzle.config.js dev.proxy)"
 status: verified
-verified_at: '2026-07-24T23:40:00.000Z'
+verified_at: '2026-07-25T05:24:35.778Z'
 connections:
   - COMPONENT-DEV-SERVER
   - FILE-DEV-SERVER
@@ -14,7 +14,7 @@ notes:
       Found by the habit-lab test app (2026-07-22): the first Puzzle app with a
       live backend had to hand-roll CORS middleware and use an absolute apiURL
       because puzzle dev cannot forward /api/* to another port.
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # Dev-server API proxy (`dev.proxy`)

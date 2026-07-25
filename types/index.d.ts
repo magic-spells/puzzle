@@ -37,9 +37,15 @@ export interface Route {
 	 * constellation/doc/DOC-SPEC.md §45): each resolves independently,
 	 * nearest-defined walking the destination chain leaf→root; `undefined`
 	 * inherits from a parent, `null` explicitly suppresses an inherited value.
-	 * Static strings only (no functions/HTML). Rendered as managed
-	 * `data-puzzle-head` tags by both prerender output and SPA navigation;
-	 * custom keys are untouched by the framework.
+	 * Static strings only (no functions/HTML).
+	 *
+	 * Delivery is split (D111): the managed `data-puzzle-head` tags derived from
+	 * `description`/`canonical`/`socialImage` (og:/twitter:/description/canonical)
+	 * are emitted at BUILD time only, by the SSG shell injector — so `hybrid` and
+	 * `static` output bake them into the served HTML crawlers read. The browser
+	 * runtime never emits or updates those tags in any output mode; on SPA
+	 * navigation only `document.title` is synced. Custom keys are untouched by
+	 * the framework.
 	 */
 	meta?: {
 		title?: string | null;

@@ -10,6 +10,7 @@ connections:
   - COMPONENT-CODEGEN
   - DOC-PUZZLE-FILE
   - DOC-SPEC
+  - DOC-SPEC-VIEW
 verified_at: '2026-07-12T00:14:51.161Z'
 notes:
   - kind: verified
@@ -24,7 +25,7 @@ notes:
 
 Both items [[FEATURE-V1-8-SKELETONS]] left out, resolved by
 [[DECISION-D52-SKELETON-ANTIFLASH]]: one shipped, one settled won't-build.
-Contract in [[DOC-SPEC]] §16 (v1.20 paragraphs).
+Contract in [[DOC-SPEC-VIEW]] §16 (v1.20 paragraphs).
 
 ## Intent
 

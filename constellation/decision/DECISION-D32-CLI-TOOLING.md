@@ -5,13 +5,14 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-BUILD
   - DECISION-D13-CLI-DEV-BUILD
   - DECISION-D03-SCRIPTS-REAL-JS
 ---
 
 # D32 — CLI tooling: init/generate/add/doctor/info (v1.4)
 
-The full scaffolding/tooling CLI surface — `init`, `generate`, `add`, `doctor`, `info` (plus `--version`) — lands additively on top of `dev`/`build`, with no compiler or runtime-kernel change. Settled (v1.4); see [[DOC-SPEC]] §13 and [[COMPONENT-COMPILER-CLI]].
+The full scaffolding/tooling CLI surface — `init`, `generate`, `add`, `doctor`, `info` (plus `--version`) — lands additively on top of `dev`/`build`, with no compiler or runtime-kernel change. Settled (v1.4); see [[DOC-SPEC-BUILD]] §13 and [[COMPONENT-COMPILER-CLI]].
 
 ## Context
 [[DECISION-D13-CLI-DEV-BUILD]] shipped v1's CLI as just `puzzle dev` + `puzzle build` and deferred `init`/`generate`/`add`/`doctor`/`info` post-v1. D32 lands all five — the full scaffolding/tooling surface [[DOC-SPEC]] §11 promised — additively like D28–D31: no new SPEC directive, no compiler or runtime-kernel change, and `dev`/`build` behave exactly as before.

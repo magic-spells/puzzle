@@ -5,11 +5,12 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-PUZZLE-VIEW
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
 ---
 
 # D2 — Class-based components; `Puzzle.createView` removed
 
-Settled; enforced by [[DOC-SPEC]] §1. v1 has one component model — class-based `PuzzleView` — and the closure-based factory is deleted.
+Settled; enforced by [[DOC-SPEC-ANATOMY]] §1. v1 has one component model — class-based `PuzzleView` — and the closure-based factory is deleted.
 
 ## Context
 The prototype runtime carried two view implementations: a class-based `PuzzleView` and a closure-based `Puzzle.createView` factory. Two implementations meant two documentation stories and two compiler targets.
@@ -21,4 +22,4 @@ v1 is class-based only. The `Puzzle.createView` factory (and the duplicate view 
 - Keeping the closure-based `Puzzle.createView` factory alongside the class model — rejected to collapse to a single component model.
 
 ## Consequences
-Settled per [[DOC-SPEC]] §1. The duplicate view class inside `client-runtime/main.js` is removed.
+Settled per [[DOC-SPEC-ANATOMY]] §1. The duplicate view class inside `client-runtime/main.js` is removed.

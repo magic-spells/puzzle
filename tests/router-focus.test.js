@@ -247,6 +247,64 @@ describe('Router focus — route announcement (D93)', () => {
 		expect(liveRegion().textContent).toBe('Home Page');
 	});
 
+	it('falls back to route identity when the title did not move (no per-route titles)', async () => {
+		// The default app: one static <title> from the shipped HTML and no meta.title
+		// anywhere. Re-writing that unchanged string into the region is SILENT —
+		// aria-live announces on change only — so D93 announced nothing at all after
+		// the first navigation. Every consecutive navigation must change the region.
+		document.title = 'My App';
+		const { router } = await boot([
+			{ path: '/', name: 'home', view: HomeView },
+			{ path: '/about', name: 'about', view: AboutView },
+			{ path: '/user/:id', name: 'user', view: UserView },
+		]);
+
+		const seen = [];
+		await router.push('/about');
+		seen.push(liveRegion().textContent);
+		await router.push('/user/7');
+		seen.push(liveRegion().textContent);
+		// Params-only navigation: same route NAME both times, so the name alone would
+		// leave the region unchanged — the path identifies this one.
+		await router.push('/user/8');
+		seen.push(liveRegion().textContent);
+
+		expect(document.title).toBe('My App'); // never touched (D84)
+		expect(seen).toEqual(['about', 'user', '/user/8']);
+		expect(new Set(seen).size).toBe(3); // three navigations, three real changes
+	});
+
+	it('announces the NEW route, not the title the route it left behind set', async () => {
+		// Mixed app: /about carries a title, /plain does not — so document.title still
+		// says "About Page" when /plain commits. Announcing that would name the page
+		// the user just left.
+		const { router } = await boot([
+			{ path: '/', name: 'home', view: HomeView, meta: { title: 'Home Page' } },
+			{ path: '/about', name: 'about', view: AboutView, meta: { title: 'About Page' } },
+			{ path: '/plain', name: 'plain', view: UserView },
+		]);
+
+		await router.push('/about');
+		expect(liveRegion().textContent).toBe('About Page');
+
+		await router.push('/plain');
+		expect(document.title).toBe('About Page'); // the tab title deliberately stands
+		expect(liveRegion().textContent).not.toBe('About Page');
+		expect(liveRegion().textContent).toBe('plain');
+	});
+
+	it('a title that DID move still wins over the fallback', async () => {
+		// The fallback is a last resort: whenever the route resolved a title of its
+		// own, that is what gets announced (the D93 posture, unchanged).
+		const { router } = await boot();
+		await router.push('/about');
+		expect(liveRegion().textContent).toBe('About Page');
+		await router.push('/user/7');
+		expect(liveRegion().textContent).toBe('User Page');
+		await router.push('/');
+		expect(liveRegion().textContent).toBe('Home Page');
+	});
+
 	it('removes the live region in stop() — idempotently', async () => {
 		const { router } = await boot();
 		expect(liveRegion()).toBeTruthy();

@@ -7,6 +7,7 @@ connections:
   - COMPONENT-TEMPLATE-PARSER
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 ---
 
 # v1.9 — `{:else if}` conditional chaining
@@ -28,4 +29,4 @@ Branch ladders previously required nested `{#if}` blocks (one indent level per r
 
 ## Outcome
 
-Shipped in v1.9; documented in [[DOC-SPEC]] §6 and [[DOC-TEMPLATE-SYNTAX]]. Parser-only amendment — touched [[COMPONENT-TEMPLATE-PARSER]] (lexer + parser + attr mini-grammar error) plus tests and one codegen golden (`else_if`); codegen and runtime untouched, existing goldens byte-identical.
+Shipped in v1.9; documented in [[DOC-SPEC-TEMPLATE]] §6 and [[DOC-TEMPLATE-SYNTAX]]. Parser-only amendment — touched [[COMPONENT-TEMPLATE-PARSER]] (lexer + parser + attr mini-grammar error) plus tests and one codegen golden (`else_if`); codegen and runtime untouched, existing goldens byte-identical.

@@ -101,6 +101,20 @@ export async function prerender(config, opts = {}) {
 		warnings.push(warning);
 		console.warn(warning);
 	}
+
+	// `routerMode` is meaningless under static output: there is no router to carry a
+	// fragment/memory URL, and the emitted files are path-shaped by construction
+	// (/about → about/index.html). Honouring 'hash' here would prerender href="#/about"
+	// on a page that has no click interception — a dead link. So static forces
+	// history-style hrefs (buildContext below) and says so, since the config asked for
+	// something else. `routerBase` still applies (a subpath deploy wants the prefix).
+	if (isStatic && (config.routerMode === 'hash' || config.routerMode === 'memory')) {
+		warnings.push(
+			`[puzzle] static output ignores \`routerMode: "${config.routerMode}"\` — static pages are ` +
+				'plain path-shaped documents with no router, so links are emitted history-style. ' +
+				"Remove `routerMode`, or drop output: 'static' if you need hash routing."
+		);
+	}
 	const createPageContext = async (entry) => {
 		builtContext = true;
 		// Static mode threads the page's route snapshot into the router stub so the
@@ -352,14 +366,22 @@ async function buildContext(config, { mode = 'hybrid', route = null } = {}) {
 	const store = new Store(models, storeOptions);
 	// Router facade parity (D81): HYBRID keeps a real, unstarted memory Router because
 	// the SPA boots and takes over on load (current becomes real then). STATIC has no
-	// client router — the browser kernel (static/index.js) wires the base/mode-aware
+	// client router — the browser kernel (static/index.js) wires the base-aware
 	// makeRouterStub — so the prerender ctx uses that SAME stub over the SAME per-page
 	// snapshot here, or router.url()/current would differ between the prerendered HTML
-	// and the client re-render for any hash-mode or based app (the `{ path | link }`
-	// formatter reads router.url; a view may read router.current).
+	// and the client re-render for any based app (the `{ path | link }` formatter reads
+	// router.url; a view may read router.current).
+	//
+	// The stub's MODE is forced to 'history' in static output, and the kernel forces it
+	// identically (static/index.js buildStaticContext) so both sides emit byte-identical
+	// hrefs. Static pages ship no router and no click interception, so a hash-shaped
+	// href (`#/about`) would be a dead link on a page that physically lives at
+	// /about/index.html; the file layout is path-shaped, so the hrefs must be too.
+	// `config.routerMode` is warned about in prerender() and otherwise ignored here.
+	// `routerBase` DOES flow through: a subpath deploy still wants prefixed hrefs.
 	let router;
 	if (mode === 'static' && route) {
-		router = makeRouterStub(route, { mode: config.routerMode, base: config.routerBase });
+		router = makeRouterStub(route, { mode: 'history', base: config.routerBase });
 	} else {
 		router = new Router(config.routes ?? [], { mode: 'memory' });
 		// …but a memory router carries no URL, so its url() returns paths UNPREFIXED: a

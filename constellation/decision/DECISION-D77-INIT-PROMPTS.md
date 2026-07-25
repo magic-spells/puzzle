@@ -4,6 +4,7 @@ status: built
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-BUILD
   - DECISION-D76-CLI-UPGRADE
 ---
 
@@ -11,7 +12,7 @@ connections:
 
 On a TTY, `puzzle init` prompts for the template and TypeScript choices when their
 flags were not explicitly passed — extending the D32 app-name-prompt exception into
-a small guided flow. See [[DOC-SPEC]] §42 for the contract.
+a small guided flow. See [[DOC-SPEC-BUILD]] §42 for the contract.
 
 ## Context
 

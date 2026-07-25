@@ -106,6 +106,43 @@ func TestGenerateRejectsPathOutsideRoot(t *testing.T) {
 	}
 }
 
+func TestGenerateRejectsDestinationThroughEscapingSymlink(t *testing.T) {
+	root := newProject(t)
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(root, "linked")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	_, err := Generate(Options{Root: root, Kind: KindComponent, Name: "Escape", Dir: "linked"})
+	if err == nil {
+		t.Fatal("expected an escaping destination symlink to be refused")
+	}
+	if !strings.Contains(err.Error(), "refusing to write outside the project root") {
+		t.Fatalf("error = %q, want the existing outside-project refusal", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "Escape.pzl")); !os.IsNotExist(err) {
+		t.Errorf("generated file escaped through the destination symlink (err=%v)", err)
+	}
+}
+
+func TestGenerateAllowsContainedDestinationSymlink(t *testing.T) {
+	root := newProject(t)
+	target := filepath.Join(root, "app", "components", "shared")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(root, "linked")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	if _, err := Generate(Options{Root: root, Kind: KindComponent, Name: "Linked", Dir: "linked"}); err != nil {
+		t.Fatalf("contained destination symlink should be allowed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(target, "Linked.pzl")); err != nil {
+		t.Errorf("expected generated file through contained symlink: %v", err)
+	}
+}
+
 func TestGenerateNameValidation(t *testing.T) {
 	root := newProject(t)
 	cases := []struct {

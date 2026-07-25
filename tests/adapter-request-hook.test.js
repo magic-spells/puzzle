@@ -192,6 +192,63 @@ describe('beforeRequest — mutate in place OR return a replacement', () => {
 		expect(JSON.parse(init.body)).toEqual({ id: 't1', text: 'a', completed: false });
 	});
 
+	// The re-stamp below writes method/body, so the replacement it writes into must
+	// be one the STORE owns — `Object.freeze({ ...init, headers })` is the natural
+	// shape of a spread-style hook and must not TypeError out of the data layer.
+	it('a FROZEN replacement is copied, not written into — save() completes', async () => {
+		const fetchSpy = mockFetch({ body: '' });
+		let returned = null;
+		const store = hookedStore((init) => {
+			returned = Object.freeze({
+				...init,
+				headers: { ...init.headers, Authorization: 'Bearer t' },
+			});
+			return returned;
+		});
+		const todo = store.createRecord('todo', { id: 't1', text: 'a' });
+
+		await todo.save();
+
+		const [url, init] = fetchSpy.mock.calls[0];
+		expect(url).toBe(`${API}/api/todos`);
+		expect(init).not.toBe(returned); // a copy the store owns, not the app's object
+		expect(init.headers.Authorization).toBe('Bearer t');
+		expect(init.headers['Content-Type']).toBe('application/json');
+		expect(init.method).toBe('POST');
+		expect(JSON.parse(init.body)).toEqual({ id: 't1', text: 'a', completed: false });
+		expect(todo._synced).toBe(true);
+	});
+
+	it('a FROZEN replacement on the read path completes (body is deleted off the copy)', async () => {
+		const fetchSpy = mockFetch({ body: [{ id: 't1', text: 'a' }] });
+		const store = hookedStore((init) =>
+			Object.freeze({ ...init, headers: { Authorization: 'Bearer t' } })
+		);
+
+		const todos = await store.loadAll('todo');
+
+		const init = fetchSpy.mock.calls[0][1];
+		expect(init.method).toBe('GET');
+		expect(init.headers).toEqual({ Authorization: 'Bearer t' });
+		expect('body' in init).toBe(false);
+		expect(todos.map((t) => t.id)).toEqual(['t1']);
+	});
+
+	it('a getter-only method on the replacement is flattened, then re-stamped', async () => {
+		const fetchSpy = mockFetch({ body: '' });
+		const store = hookedStore((init) => ({
+			...init,
+			get method() {
+				return 'DELETE';
+			},
+		}));
+		const todo = store.createRecord('todo', { id: 't1', text: 'a' });
+
+		await todo.save();
+
+		expect(fetchSpy.mock.calls[0][1].method).toBe('POST');
+	});
+
 	it('a non-object return (undefined/null/false) keeps the mutated original', async () => {
 		const fetchSpy = mockFetch({ body: [] });
 		const store = hookedStore((init) => {

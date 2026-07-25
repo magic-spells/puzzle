@@ -10,6 +10,7 @@ connections:
   - DOC-DATASTORE
   - DOC-MODELS
   - DOC-SPEC
+  - DOC-SPEC-DATA
 verified_at: '2026-07-12T00:14:59.496Z'
 notes:
   - kind: verified
@@ -23,7 +24,7 @@ notes:
 Completes the [[DECISION-D21-ADAPTER-READ-PATH]] adapter story on the write side. The
 same `static adapter = { endpoint }` declaration now drives `record.save()` (create +
 update sync), `record.delete()` (confirmed server delete), and `store.request()` (the
-custom-endpoint escape hatch). See [[DOC-SPEC]] §22.
+custom-endpoint escape hatch). See [[DOC-SPEC-DATA]] §22.
 
 ## Context
 v1 shipped reads only; every app hand-rolled save logic — the largest gap between

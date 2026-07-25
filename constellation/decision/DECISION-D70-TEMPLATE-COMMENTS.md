@@ -5,6 +5,7 @@ connections:
   - COMPONENT-TEMPLATE-PARSER
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
   - DECISION-D40-ELSE-IF
   - DECISION-D46-INLINE-SVG
 verified_at: '2026-07-17T21:32:34.193Z'
@@ -21,7 +22,7 @@ notes:
 
 # D70 — Template comments: `{## }` inline + `{#comment}…{/comment}` raw block (v1.37)
 
-`{## any text }` — a self-contained inline comment — and `{#comment} … {/comment}` — a block comment whose body is discarded **raw**, never lexed as template — both erased at the lexer (they emit NO tokens). Settled (v1.37); additive; parser-only, in the [[DECISION-D40-ELSE-IF]] mold. See [[DOC-SPEC]] §6 and [[DOC-TEMPLATE-SYNTAX]].
+`{## any text }` — a self-contained inline comment — and `{#comment} … {/comment}` — a block comment whose body is discarded **raw**, never lexed as template — both erased at the lexer (they emit NO tokens). Settled (v1.37); additive; parser-only, in the [[DECISION-D40-ELSE-IF]] mold. See [[DOC-SPEC-TEMPLATE]] §6 and [[DOC-TEMPLATE-SYNTAX]].
 
 ## Context
 

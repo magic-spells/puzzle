@@ -8,6 +8,7 @@ connections:
   - COMPONENT-ROUTER
   - FLOW-REACTIVITY
   - DOC-SPEC
+  - DOC-SPEC-VIEW
   - DOC-DECISIONS
   - DOC-ROUTER
 verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0

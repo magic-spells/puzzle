@@ -9,6 +9,7 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DOC-VIEW-LIFECYCLE
   - DOC-SPEC
+  - DOC-SPEC-VIEW
 ---
 
 # v1.1 — View & component animations
@@ -23,4 +24,4 @@ v1 shipped `animations` as a reserved-but-inert class field (D3, SPEC §4) and h
 **Out (deferred/rejected):** a dedicated `<puzzle-component>` wrapper element (rejected — reintroduces D20's wrapper explosion), overlapping/cross-fade transitions (deferred then — shipped later as v1.24, [[DECISION-D56-OVERLAP-TRANSITIONS]]), awaited enters, and animating both a layout and its view on one transition. Full rationale and the five sub-decisions each with their rejected alternative live in [[DECISION-D28-ANIMATIONS]].
 
 ## Outcome
-Shipped in v1.1; documented in [[DOC-SPEC]] §12 and [[DOC-VIEW-LIFECYCLE]]. An additive amendment over the frozen SPEC — `destroy()` stays synchronous, existing callers and error paths unaffected. The URL still commits first (D19 untouched). Touched [[COMPONENT-PUZZLE-VIEW]] (hooks + animation field), [[COMPONENT-ROUTER]] (transition sequencing), and [[COMPONENT-VIEW-MANAGER]] (animation play/release).
+Shipped in v1.1; documented in [[DOC-SPEC-VIEW]] §12 and [[DOC-VIEW-LIFECYCLE]]. An additive amendment over the frozen SPEC — `destroy()` stays synchronous, existing callers and error paths unaffected. The URL still commits first (D19 untouched). Touched [[COMPONENT-PUZZLE-VIEW]] (hooks + animation field), [[COMPONENT-ROUTER]] (transition sequencing), and [[COMPONENT-VIEW-MANAGER]] (animation play/release).

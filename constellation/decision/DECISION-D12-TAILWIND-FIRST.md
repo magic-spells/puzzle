@@ -5,11 +5,12 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
 ---
 
 # D12 — Tailwind-first styling; `<style>` is global CSS in v1
 
-Settled; enforced by [[DOC-SPEC]] §3, §11. `puzzle.config.js` with `styles: { use: ['tailwindcss'] }` gives zero-config Tailwind, and `<style>` blocks emit global CSS in v1.
+Settled; enforced by [[DOC-SPEC-ANATOMY]] §3, §11. `puzzle.config.js` with `styles: { use: ['tailwindcss'] }` gives zero-config Tailwind, and `<style>` blocks emit global CSS in v1.
 
 ## Context
 Puzzle targets a Tailwind-first styling experience; the styling pipeline needed a v1 contract.

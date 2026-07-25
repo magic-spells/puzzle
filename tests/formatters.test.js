@@ -211,6 +211,92 @@ describe('FormatterRegistry', () => {
 		});
 	});
 
+	// Every assertion here must hold in ANY machine time zone — that IS the fix.
+	describe('date/time formatters — calendar dates display as written (D114)', () => {
+		const DATE_OPTS = { year: 'numeric', month: '2-digit', day: '2-digit' };
+		const fmt = (d) => new Intl.DateTimeFormat('en-US', DATE_OPTS).format(d);
+
+		it('renders a bare YYYY-MM-DD as the day written, not UTC-shifted', () => {
+			// The regression: date-only strings parse as UTC midnight per the ES spec,
+			// so before D114 everyone west of UTC saw 07/23/2026 here.
+			expect(f.date('2026-07-24', 'date', 'en-US')).toBe('07/24/2026');
+			expect(f.date('2026-01-01', 'long', 'en-US')).toBe('January 01, 2026');
+		});
+
+		it('datetime on a calendar date lands on local midnight of that day', () => {
+			const out = f.datetime('2026-07-24', 'datetime', 'en-US');
+			expect(out).toContain('07/24/2026');
+			expect(out).toContain('12:00');
+		});
+
+		it('the iso preset is idempotent for a calendar date', () => {
+			// The ISO form of a calendar date is itself; toISOString() on its local
+			// midnight would emit a time-zone-dependent instant instead.
+			expect(f.date('2026-07-24', 'iso')).toBe('2026-07-24');
+			expect(f.date('2026-01-01', 'iso')).toBe('2026-01-01');
+		});
+
+		it('leaves full ISO datetimes, Date instances, and timestamps untouched', () => {
+			expect(f.date('2026-07-24T12:00:00Z', 'iso')).toBe('2026-07-24T12:00:00.000Z');
+			// A Date/number formats exactly as the pre-D114 `new Date(v)` path did.
+			const inst = new Date(2026, 6, 24, 15, 30);
+			expect(f.date(inst, 'date', 'en-US')).toBe(fmt(new Date(inst)));
+			expect(f.date(inst.getTime(), 'date', 'en-US')).toBe(fmt(new Date(inst.getTime())));
+			expect(f.date('2026-07-24T12:00:00Z', 'date', 'en-US')).toBe(fmt(new Date('2026-07-24T12:00:00Z')));
+		});
+
+		it('fails soft to the raw value on any invalid calendar components', () => {
+			// A month outside 01-12 fails the ES date grammar → Invalid Date → raw.
+			expect(f.date('2026-13-01')).toBe('2026-13-01');
+			// "2026-02-31" is spec-LEGAL (DD ≤ 31) and would roll into March —
+			// TZ-dependently. D114's round-trip check coerces it to Invalid Date
+			// instead, so a nonexistent day fails soft exactly like a nonexistent month.
+			expect(f.date('2026-02-31', 'date', 'en-US')).toBe('2026-02-31');
+			expect(f.timeago('2026-02-31')).toBe('2026-02-31');
+		});
+
+		it('does not claim non-strict date-only forms', () => {
+			// "2026-7-24" misses the leading zero, so the calendar rule never applies;
+			// it stays on whatever the engine's fallback parser does, without throwing.
+			expect(() => f.date('2026-7-24', 'date', 'en-US')).not.toThrow();
+			expect(() => f.date('2026-7-24', 'iso')).not.toThrow();
+		});
+
+		it('timeago reads a calendar date as local midnight too', () => {
+			expect(f.timeago('2026-07-24')).toBe(f.timeago(new Date(2026, 6, 24).getTime()));
+		});
+
+		it('in_timezone returns a calendar date UNSHIFTED, whatever the target zone', () => {
+			// A bare YYYY-MM-DD names a day, not an instant, so there is nothing for
+			// in_timezone to re-express — shifting it would move the day and make the
+			// rendered date depend on the VIEWER's zone, the exact defect D114 removed
+			// from date/timeago. NOTE: the earlier form of this test compared against a
+			// locally built Date on both sides, so both moved with the process zone and
+			// it passed under every TZ even while the output was wrong. Absolute,
+			// multi-process-zone coverage lives in tests/formatters-timezone.test.js.
+			const midnight = new Date(2026, 6, 24).getTime();
+			expect(f.in_timezone('2026-07-24', 'UTC').getTime()).toBe(midnight);
+			expect(f.in_timezone('2026-07-24', 'Asia/Tokyo').getTime()).toBe(midnight);
+			expect(f.in_timezone('2026-07-24', 'Pacific/Honolulu').getTime()).toBe(midnight);
+			expect(f.date(f.in_timezone('2026-07-24', 'America/New_York'), 'date', 'en-US')).toBe('07/24/2026');
+			expect(f.date(f.in_timezone('2026-03-01', 'America/New_York'), 'date', 'en-US')).toBe('03/01/2026');
+			expect(f.date(f.in_timezone('2026-07-24', 'Asia/Tokyo'), 'date', 'en-US')).toBe('07/24/2026');
+		});
+
+		it('in_timezone still re-expresses a real instant in the target zone', () => {
+			// The other half of the contract: an instant DOES move. UTC midnight is
+			// 09:00 the same morning in Tokyo. Assert wall-clock components, which are
+			// process-zone-stable, rather than getTime(), which is not.
+			const tokyo = f.in_timezone('2026-07-24T00:00:00Z', 'Asia/Tokyo');
+			expect([tokyo.getFullYear(), tokyo.getMonth(), tokyo.getDate(), tokyo.getHours()]).toEqual([2026, 6, 24, 9]);
+			// Date instances and timestamps are instants too, never calendar dates.
+			const fromDate = f.in_timezone(new Date('2026-07-24T00:00:00Z'), 'Asia/Tokyo');
+			expect([fromDate.getDate(), fromDate.getHours()]).toEqual([24, 9]);
+			const la = f.in_timezone('2026-07-24T00:00:00Z', 'America/Los_Angeles');
+			expect([la.getDate(), la.getHours()]).toEqual([23, 17]);
+		});
+	});
+
 	// Unknown-formatter typo-guard (v1.12, D43): warn once, pass through, suggest.
 	describe('unknown-formatter guard (D43)', () => {
 		afterEach(() => {

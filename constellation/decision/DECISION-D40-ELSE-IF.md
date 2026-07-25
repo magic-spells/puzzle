@@ -6,12 +6,13 @@ connections:
   - COMPONENT-TEMPLATE-PARSER
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
   - DECISION-D36-UNLESS
 ---
 
 # D40 — `{:else if}`: conditional chaining (v1.9)
 
-`{#if a} … {:else if b} … {:else} … {/if}` — zero or more `{:else if expr}` clauses between the `{#if}` body and the optional trailing `{:else}`; a parse-time desugar to nested `If` AST nodes with zero codegen surface. Settled (v1.9); additive. See [[DOC-SPEC]] §6 and [[DOC-TEMPLATE-SYNTAX]].
+`{#if a} … {:else if b} … {:else} … {/if}` — zero or more `{:else if expr}` clauses between the `{#if}` body and the optional trailing `{:else}`; a parse-time desugar to nested `If` AST nodes with zero codegen surface. Settled (v1.9); additive. See [[DOC-SPEC-TEMPLATE]] §6 and [[DOC-TEMPLATE-SYNTAX]].
 
 ## Context
 

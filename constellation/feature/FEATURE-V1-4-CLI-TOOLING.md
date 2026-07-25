@@ -6,6 +6,7 @@ connections:
   - DECISION-D32-CLI-TOOLING
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
+  - DOC-SPEC-BUILD
 ---
 
 # v1.4 — CLI tooling surface
@@ -20,4 +21,4 @@ D13 shipped v1's CLI as just `puzzle dev` + `puzzle build` and deferred the rest
 **Out (rejected):** interactive prompts (rejected — CLI stays scriptable), and any rewriting of user JavaScript — `add`/`generate` never edit `app/models/index.js` or an existing config; they print the exact snippet instead (D3). All sub-decisions and the npm-publish caveat live in [[DECISION-D32-CLI-TOOLING]].
 
 ## Outcome
-Shipped in v1.4; documented in [[DOC-SPEC]] §13. A CLI-only additive amendment — no compiler or runtime-kernel change; `dev`/`build` behave exactly as before. Touched [[COMPONENT-COMPILER-CLI]].
+Shipped in v1.4; documented in [[DOC-SPEC-BUILD]] §13. A CLI-only additive amendment — no compiler or runtime-kernel change; `dev`/`build` behave exactly as before. Touched [[COMPONENT-COMPILER-CLI]].

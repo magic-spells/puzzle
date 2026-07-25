@@ -866,6 +866,111 @@ describe('Router — same-path push WHILE in flight (double-click, Fix 1)', () =
 		pushSpy.mockRestore();
 	});
 
+	it("the no-op'd second push resolves only when the FIRST navigation commits", async () => {
+		// The no-op must still mean what `await router.push(p)` means everywhere else:
+		// "the navigation to p has landed". Handing back a fresh resolved promise let
+		// the second caller continue while the OLD route was still committed and the
+		// new DOM did not exist yet — the caller's `await` silently became a no-wait.
+		let release;
+		const held = new Promise((r) => {
+			release = r;
+		});
+		let dataRuns = 0;
+		class SlowView extends PuzzleView {
+			async data() {
+				dataRuns++;
+				await held;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'slow' }, [text('SLOW')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{ path: '/slow', name: 'slow', view: SlowView, layout: DefaultLayout },
+		];
+		const { router, el } = await boot(routes);
+
+		const order = [];
+		const p1 = router.push('/slow');
+		p1.then(() => order.push('p1'));
+		await tick(); // data() started and held; nothing committed
+		expect(router.current.path).toBe('/');
+
+		const p2 = router.push('/slow'); // double-click on the active nav
+		// What the second caller sees AT ITS OWN resolution — the whole point.
+		let atP2 = null;
+		const observed = p2.then(() => {
+			atP2 = { path: router.current.path, mounted: !!el.querySelector('.slow') };
+			order.push('p2');
+		});
+
+		// Still pending while the first navigation loads. A macrotask beats any
+		// number of microtasks, so a promise already resolved at push() time would
+		// win this race; the pending one cannot.
+		expect(await Promise.race([p2.then(() => 'settled'), tick().then(() => 'pending')])).toBe(
+			'pending'
+		);
+		expect(router.current.path).toBe('/'); // confirms the race was not just slow
+
+		release();
+		await Promise.all([p1, p2, observed]);
+
+		expect(atP2).toEqual({ path: '/slow', mounted: true });
+		expect(order).toEqual(['p1', 'p2']); // same settlement, first caller first
+		expect(dataRuns).toBe(1); // still one navigation
+	});
+
+	it("a FAILED first navigation settles the no-op'd second push the same way", async () => {
+		// Failure semantics are the pipeline's, unchanged: a rejected data() logs,
+		// stays put, and RESOLVES the nav promise (D19). The second caller must ride
+		// exactly that — not resolve early, not reject on its own.
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		let fail;
+		const held = new Promise((_, reject) => {
+			fail = reject;
+		});
+		let dataRuns = 0;
+		class BadView extends PuzzleView {
+			async data() {
+				dataRuns++;
+				await held;
+				return {};
+			}
+			render() {
+				return h('puzzle-view', { class: 'bad' }, [text('BAD')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{ path: '/bad', name: 'bad', view: BadView, layout: DefaultLayout },
+		];
+		const { router, el } = await boot(routes);
+
+		const p1 = router.push('/bad');
+		await tick();
+		const p2 = router.push('/bad'); // double-click while the load is in flight
+
+		let p2Settled = 'pending';
+		p2.then(
+			() => (p2Settled = 'resolved'),
+			() => (p2Settled = 'rejected')
+		);
+		await tick();
+		expect(p2Settled).toBe('pending');
+
+		fail(new Error('boom'));
+		await Promise.all([p1, p2]); // resolves — a failed nav does not reject
+		expect(p2Settled).toBe('resolved');
+
+		expect(dataRuns).toBe(1);
+		expect(router.current.path).toBe('/'); // stayed put, nothing committed
+		expect(el.querySelector('.bad')).toBeNull();
+		expect(errSpy).toHaveBeenCalledWith('[puzzle] navigation data() failed:', expect.any(Error));
+		errSpy.mockRestore();
+	});
+
 	it('a push to a DIFFERENT path mid-flight still supersedes', async () => {
 		let release;
 		const held = new Promise((r) => {

@@ -7,14 +7,15 @@ connections:
   - COMPONENT-CODEGEN
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 ---
 
 # D37 — `{#case}` / `{:when}`: Liquid-style multi-branch block (v1.7)
 
-Multi-branch conditional shipped as `{#case expr}` + `{:when v1, v2, …}` clauses + optional `{:else}`; strict `===`, first-match-wins, no fallthrough, via a dedicated `Case` AST node. Chosen over `{#switch}`/`{:case}`. Settled (v1.7); additive. See [[DOC-SPEC]] §6 and [[DOC-TEMPLATE-SYNTAX]].
+Multi-branch conditional shipped as `{#case expr}` + `{:when v1, v2, …}` clauses + optional `{:else}`; strict `===`, first-match-wins, no fallthrough, via a dedicated `Case` AST node. Chosen over `{#switch}`/`{:case}`. Settled (v1.7); additive. See [[DOC-SPEC-TEMPLATE]] §6 and [[DOC-TEMPLATE-SYNTAX]].
 
 ## Context
-[[DOC-SPEC]] §6 deferred multi-branch conditionals under the name `{#switch}`. D37 ships the feature but **chooses `{#case}` / `{:when}` naming over `{#switch}` / `{:case}`** — Puzzle's formatter heritage is Liquid (whose tag is `{% case %}` / `{% when %}`), and the JS keyword `switch` carries fallthrough/`break` connotations this block deliberately does **not** have.
+[[DOC-SPEC-TEMPLATE]] §6 deferred multi-branch conditionals under the name `{#switch}`. D37 ships the feature but **chooses `{#case}` / `{:when}` naming over `{#switch}` / `{:case}`** — Puzzle's formatter heritage is Liquid (whose tag is `{% case %}` / `{% when %}`), and the JS keyword `switch` carries fallthrough/`break` connotations this block deliberately does **not** have.
 
 ## Decision
 Syntax: `{#case expr}` + one or more `{:when v1, v2, …}` clauses (top-level commas are **OR** — a splitter that respects nesting and string literals) + an optional trailing `{:else}`. Matching is strict `===`, **first match wins, NO fallthrough**.

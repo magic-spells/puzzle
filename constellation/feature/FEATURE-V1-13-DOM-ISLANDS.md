@@ -11,6 +11,7 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-EVENTS
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 ---
 
 # v1.13 — DOM islands + backspace/delete key filters
@@ -31,4 +32,4 @@ Always-on `contenteditable` surfaces (and third-party DOM mounts generally) need
 
 ## Outcome
 
-Shipped in v1.13; documented in [[DOC-SPEC]] §17 (+ §5/§6), [[DOC-TEMPLATE-SYNTAX]], [[DOC-EVENTS]]. Runtime: `patch()` carries old children forward and returns before `patchChildren` when `'island' in attrs`; `setAttr`/`removeAttr` strip `island` like `key`; `KEY_FILTERS` +2. Compiler: `eventKeyFilters` +2; new parser post-pass `validateIslands` (compiler/internal/parser/island.go) runs from both `ParseTemplate` and `ParseSkeleton`, walking block bodies and component children — four positioned errors per D44 (MixedAttr values classified dynamic). Codegen untouched: a bare `island` flows through as `island: true` in emitted attrs (pinned by the new `island` golden; existing goldens byte-identical). Tests: 7 island jsdom tests (seed mount, no DOM attr, carried-children invariant across two re-renders, attr+listener patch on the island element, keyed move with node identity, tag/key re-seed) + 2 key-filter tests + Go parser tables — 285 vitest + all Go packages green.
+Shipped in v1.13; documented in [[DOC-SPEC-TEMPLATE]] §17 (+ §5/§6), [[DOC-TEMPLATE-SYNTAX]], [[DOC-EVENTS]]. Runtime: `patch()` carries old children forward and returns before `patchChildren` when `'island' in attrs`; `setAttr`/`removeAttr` strip `island` like `key`; `KEY_FILTERS` +2. Compiler: `eventKeyFilters` +2; new parser post-pass `validateIslands` (compiler/internal/parser/island.go) runs from both `ParseTemplate` and `ParseSkeleton`, walking block bodies and component children — four positioned errors per D44 (MixedAttr values classified dynamic). Codegen untouched: a bare `island` flows through as `island: true` in emitted attrs (pinned by the new `island` golden; existing goldens byte-identical). Tests: 7 island jsdom tests (seed mount, no DOM attr, carried-children invariant across two re-renders, attr+listener patch on the island element, keyed move with node identity, tag/key re-seed) + 2 key-filter tests + Go parser tables — 285 vitest + all Go packages green.

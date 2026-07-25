@@ -9,6 +9,7 @@ connections:
   - COMPONENT-FORMATTERS
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 ---
 
 # v1.12 — The `__missing` formatter typo-guard
@@ -30,4 +31,4 @@ Close the long-carded D25 DX gap: a display-only mistake should never take a who
 
 ## Outcome
 
-Shipped in v1.12; documented in [[DOC-SPEC]] §6 and [[DOC-TEMPLATE-SYNTAX]]. Touched [[COMPONENT-CODEGEN]] and [[COMPONENT-FORMATTERS]] plus goldens/tests; template grammar and `.pzl` sources untouched — only emitted JS differs.
+Shipped in v1.12; documented in [[DOC-SPEC-TEMPLATE]] §6 and [[DOC-TEMPLATE-SYNTAX]]. Touched [[COMPONENT-CODEGEN]] and [[COMPONENT-FORMATTERS]] plus goldens/tests; template grammar and `.pzl` sources untouched — only emitted JS differs.

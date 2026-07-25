@@ -7,6 +7,7 @@ connections:
   - COMPONENT-PUZZLE-APP
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
   - DECISION-D34-HASH-ROUTING
   - DECISION-D33-ROUTER-SCROLL
   - DECISION-D19-NAVIGATION-COMMIT
@@ -20,7 +21,7 @@ the route lives entirely in router state — `location` and `history` are never
 read or written. For tests (no jsdom history gymnastics) and embedded/iframe
 apps that must not touch the host page's URL. Ships with the first programmatic
 history API — `router.go(n)` / `back()` / `forward()` — added in **all** modes.
-See [[DOC-SPEC]] §15.
+See [[DOC-SPEC-ROUTER]] §15.
 
 ## Context
 D34 built the mode seams (read-URL / write-URL / link-interceptor) and noted

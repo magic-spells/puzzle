@@ -44,8 +44,10 @@ import { assembleChain, makeRouteSnapshot, makeRouterStub } from '../ssg/assembl
  * @param {object} [options.formatters] the app custom formatters map
  * @param {string} [options.apiURL] the store's base API URL
  * @param {object} [options.storage] Storage-like persistence object
- * @param {'history'|'hash'|'memory'} [options.routerMode] URL carrier used by
- *   `ctx.router.url()` (history by default)
+ * @param {'history'|'hash'|'memory'} [options.routerMode] IGNORED — the generated
+ *   per-page entry still passes the app's configured mode through, but a static page
+ *   has no router, so `ctx.router.url()` is always history-style (see
+ *   buildStaticContext). Accepted for entry-module compatibility only.
  * @param {string} [options.routerBase] normalized route URL prefix
  * @returns {Promise<void>}
  */
@@ -113,7 +115,7 @@ function buildStaticContext({
 	formatters = {},
 	apiURL,
 	storage,
-	routerMode,
+	routerMode, // accepted (the generated entry passes it) and deliberately ignored — see below
 	routerBase,
 	route,
 }) {
@@ -121,7 +123,14 @@ function buildStaticContext({
 	if (storage !== undefined) storeOptions.storage = storage;
 	const store = new Store(models, storeOptions);
 
-	const router = makeRouterStub(route, { mode: routerMode, base: routerBase });
+	// The stub's mode is FORCED to 'history', ignoring the app's `routerMode`, and the
+	// prerenderer forces it identically (ssg/index.js buildContext) so the hrefs this
+	// re-render produces are byte-identical to the prerendered ones. Static pages ship
+	// no router and no click interception: they navigate by plain `<a>` page loads
+	// against path-shaped files on disk (/about → about/index.html), so a hash-shaped
+	// href would simply be dead. The build warns when a configured hash/memory mode is
+	// ignored this way. `routerBase` still applies — a subpath deploy wants the prefix.
+	const router = makeRouterStub(route, { mode: 'history', base: routerBase });
 	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 
 	return { store, router, formatters: registry };

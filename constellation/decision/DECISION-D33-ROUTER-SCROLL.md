@@ -6,6 +6,7 @@ connections:
   - COMPONENT-ROUTER
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
   - DECISION-D32-CLI-TOOLING
@@ -13,7 +14,7 @@ connections:
 
 # D33 — Router-owned window scroll: top on push, per-entry restore on back/forward (v1.5)
 
-The router takes ownership of window scroll: top on push, saved-position restore on back/forward (keyed per history entry), fall-back to top otherwise; the landing is applied inside the D19 commit. On by default, opt-out via `scrollBehavior`. Settled (v1.5); see [[DOC-SPEC]] §14 and [[DOC-ROUTER]].
+The router takes ownership of window scroll: top on push, saved-position restore on back/forward (keyed per history entry), fall-back to top otherwise; the landing is applied inside the D19 commit. On by default, opt-out via `scrollBehavior`. Settled (v1.5); see [[DOC-SPEC-ROUTER]] §14 and [[DOC-ROUTER]].
 
 ## Context
 Through v1.4 the router never touched scroll, so every window-scrolling app inherited the browser's default: navigating to a new route left the window wherever the old one was scrolled (a fresh page opening halfway down), and back/forward restoration was the browser's `'auto'` behavior, which fires *before* the router has swapped views and so restores against the wrong content. D33 makes the router **own window scroll**: push → top, back/forward → the position the target entry was at when it was left (in-memory, keyed by a `__puzzleScrollKey` stamped into `history.state`), fall back to top when none is saved. The initial navigation and any failed/superseded navigation leave scroll alone. The landing is applied **inside the [[DECISION-D19-NAVIGATION-COMMIT]] commit** — synchronously after the incoming view mounts, before paint, after the old view's `out` animation — so it never flashes the old offset or jumps mid-transition. Additive like D28–D32: router-only, no compiler or runtime-kernel change; flat and nested routing are otherwise unchanged.

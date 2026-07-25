@@ -122,7 +122,24 @@ func Add(opts Options) (*Result, error) {
 		}
 	}
 
-	result := &Result{AppRoot: opts.AppRoot, Source: opts.Fetcher.Source()}
+	// Theme fetches and existing-lock parsing can both fail. Complete them after
+	// the conflict pre-flight but before the first destination write so either
+	// error leaves the app tree untouched.
+	theme, advisory, err := planTheme(&opts, &reg)
+	if err != nil {
+		return nil, err
+	}
+	lockPath := filepath.Join(opts.AppRoot, LockFileName)
+	lock, err := readLock(lockPath)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &Result{
+		AppRoot:  opts.AppRoot,
+		Source:   opts.Fetcher.Source(),
+		LockPath: lockPath,
+	}
 	for _, u := range units {
 		ru := Unit{Name: u.name, IsLib: u.isLib}
 		for _, f := range u.files {
@@ -148,19 +165,17 @@ func Add(opts Options) (*Result, error) {
 	// import: styles.css is user-owned (D3), so the `@import './pieces.css';` line
 	// stays a printed next step. Runs BEFORE the lock write so a freshly-copied
 	// theme lands in the same lock pass as the pieces.
-	themeUnit, advisory, err := applyTheme(&opts, &reg)
-	if err != nil {
-		return nil, err
-	}
-	if themeUnit != nil {
-		result.Units = append(result.Units, *themeUnit)
+	if theme != nil {
+		if err := writePlannedTheme(theme); err != nil {
+			return nil, err
+		}
+		result.Units = append(result.Units, theme.unit)
 	}
 	result.Theme = advisory
 
 	// pieces.lock: merge in the units just copied (pieces, libs, and the theme),
 	// preserving prior entries.
-	result.LockPath = filepath.Join(opts.AppRoot, LockFileName)
-	if err := updateLock(result.LockPath, result.Source, result.Units); err != nil {
+	if err := updateLock(result.LockPath, lock, result.Source, result.Units); err != nil {
 		return nil, err
 	}
 
@@ -358,8 +373,14 @@ func collectNpmDeps(resolvedPieces []Piece) []string {
 // user-owned, so we never edit it (D3), we only tell them the one import to wire.
 const themeImportAdvisory = "add `@import './pieces.css';` to app/styles/styles.css (after `@import \"tailwindcss\";`)"
 
-// applyTheme reconciles the registry's design-token theme with the app, in three
-// states keyed off app/styles/styles.css and app/styles/pieces.css:
+type plannedTheme struct {
+	file plannedFile
+	unit Unit
+}
+
+// planTheme reconciles the registry's design-token theme with the app, in three
+// states keyed off app/styles/styles.css and app/styles/pieces.css. It performs
+// every read and registry fetch but deliberately does not write:
 //
 //	(a) styles.css already carries the tokens — the manual-merge marker, or an
 //	    import that references pieces.css — nothing to do, no advisory.
@@ -372,10 +393,10 @@ const themeImportAdvisory = "add `@import './pieces.css';` to app/styles/styles.
 // A missing styles.css counts as "not wired". The copy is additive and skipped
 // when pieces.css exists, so it deliberately sits OUTSIDE the piece/lib overwrite
 // pre-flight — an existing pieces.css is state (c), not a conflict.
-func applyTheme(opts *Options, reg *Registry) (unit *Unit, advisory string, err error) {
-	theme := reg.Theme
-	if theme == "" {
-		theme = "theme/pieces.css"
+func planTheme(opts *Options, reg *Registry) (theme *plannedTheme, advisory string, err error) {
+	themePath := reg.Theme
+	if themePath == "" {
+		themePath = "theme/pieces.css"
 	}
 
 	stylesPath := filepath.Join(opts.AppRoot, "app", "styles", "styles.css")
@@ -402,25 +423,27 @@ func applyTheme(opts *Options, reg *Registry) (unit *Unit, advisory string, err 
 	}
 
 	// (b) Copy the registry theme verbatim, then lock it like any other unit.
-	data, err := opts.Fetcher.Fetch(theme)
+	data, err := opts.Fetcher.Fetch(themePath)
 	if err != nil {
 		return nil, "", err
 	}
-	if err := os.MkdirAll(filepath.Dir(piecesPath), 0o755); err != nil {
-		return nil, "", err
-	}
-	if err := os.WriteFile(piecesPath, data, 0o644); err != nil {
-		return nil, "", fmt.Errorf("writing app/styles/pieces.css: %w", err)
-	}
-	// Keyed by its registry path ("theme/pieces.css"), same lock shape as a lib.
-	return &Unit{
-		Name: theme,
-		Files: []FileWrite{{
-			Rel:  "app/styles/pieces.css",
-			Abs:  piecesPath,
-			Hash: hashBytes(data),
-		}},
+	rel := "app/styles/pieces.css"
+	file := FileWrite{Rel: rel, Abs: piecesPath, Hash: hashBytes(data)}
+	return &plannedTheme{
+		file: plannedFile{rel: rel, abs: piecesPath, data: data},
+		// Keyed by its registry path ("theme/pieces.css"), same lock shape as a lib.
+		unit: Unit{Name: themePath, Files: []FileWrite{file}},
 	}, themeImportAdvisory, nil
+}
+
+func writePlannedTheme(theme *plannedTheme) error {
+	if err := os.MkdirAll(filepath.Dir(theme.file.abs), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(theme.file.abs, theme.file.data, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", theme.file.rel, err)
+	}
+	return nil
 }
 
 // RenderSummary prints the copy report and next steps through the CLI's Printer,

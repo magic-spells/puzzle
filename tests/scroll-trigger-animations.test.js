@@ -472,6 +472,130 @@ describe('scroll-trigger (D73) — out spec ignores trigger keys', () => {
 	});
 });
 
+describe('scroll-trigger enter (D73) — a throwing reveal hook never strands content', () => {
+	// The reveal fires from an IntersectionObserver delivery, LONG after playIn()
+	// returned — so the caller-side enter guards (viewManager mountComponent's
+	// '[puzzle] child enter animation failed:', router #playInLogged) can never see
+	// a throw from here. Unguarded, a throwing viewWillShow() skipped handle.play(),
+	// leaving the enter held paused at its `from` keyframe (opacity 0 = content
+	// PERMANENTLY hidden, the §39 hard rule broken) and never settling playIn(); a
+	// throwing viewDidShow() threw inside the finished .then, skipping #settleEnter()
+	// on the next line and raising an unhandled rejection.
+	const HOOK_ERR = '[puzzle] enter hook failed during a visible-trigger reveal:';
+
+	// Settle-or-not probe: resolves 'settled' if `p` settles within a macrotask
+	// window, 'pending' otherwise — so a never-settling playIn() fails fast and
+	// legibly instead of hanging until the suite timeout.
+	const settlesWithin = (p, ms = 50) =>
+		Promise.race([
+			p.then(() => 'settled'),
+			new Promise((r) => setTimeout(() => r('pending'), ms)),
+		]);
+
+	it('a throwing viewWillShow still PLAYS the held enter, logs, and settles playIn()', async () => {
+		installFakeAnimate();
+		installFakeIO();
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const calls = [];
+		class V extends PuzzleView {
+			animations = { in: visibleIn() };
+			viewWillShow() {
+				calls.push('willShow');
+				throw new Error('boom (viewWillShow)');
+			}
+			viewDidShow() { calls.push('didShow'); }
+			render() { return h('div', {}, [text('x')]); }
+		}
+		const v = await new V().mount(container());
+		const p = v.playIn();
+		const held = fakeAnimations[0];
+		expect(held.pause).toHaveBeenCalledTimes(1); // held at `from`
+
+		fireIntersect(v.element);
+
+		expect(calls).toEqual(['willShow']);
+		// The reveal was NOT aborted: the hold is released, so the element animates
+		// to its `to` state instead of staying stranded at the `from` opacity 0.
+		expect(held.play).toHaveBeenCalledTimes(1);
+		expect(err).toHaveBeenCalledWith(HOOK_ERR, expect.any(Error));
+
+		held.finish();
+		expect(await settlesWithin(p)).toBe('settled');
+		await tick();
+		expect(calls).toEqual(['willShow', 'didShow']); // the rest of the sequence ran
+		expect(held.cancel).toHaveBeenCalledTimes(1); // release: fill handed back
+	});
+
+	it('a throwing viewDidShow settles playIn(), logs, and raises no unhandled rejection', async () => {
+		installFakeAnimate();
+		installFakeIO();
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const rejections = [];
+		const onUnhandled = (reason) => rejections.push(reason);
+		process.on('unhandledRejection', onUnhandled);
+		try {
+			const calls = [];
+			class V extends PuzzleView {
+				animations = { in: visibleIn() };
+				viewWillShow() { calls.push('willShow'); }
+				viewDidShow() {
+					calls.push('didShow');
+					throw new Error('boom (viewDidShow)');
+				}
+				render() { return h('div', {}, [text('x')]); }
+			}
+			const v = await new V().mount(container());
+			const p = v.playIn();
+
+			fireIntersect(v.element);
+			expect(calls).toEqual(['willShow']);
+			fakeAnimations[0].finish();
+
+			expect(await settlesWithin(p)).toBe('settled');
+			await tick();
+			expect(calls).toEqual(['willShow', 'didShow']);
+			expect(err).toHaveBeenCalledWith(HOOK_ERR, expect.any(Error));
+			// The finished-chain throw is caught, not dropped on the floor.
+			await new Promise((r) => setTimeout(r, 20));
+			expect(rejections).toEqual([]);
+		} finally {
+			process.off('unhandledRejection', onUnhandled);
+		}
+	});
+
+	it('the non-throwing reveal is unchanged: hooks in order, revealed exactly once, nothing logged', async () => {
+		installFakeAnimate();
+		installFakeIO();
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const calls = [];
+		class V extends PuzzleView {
+			animations = { in: visibleIn() };
+			viewWillShow() { calls.push('willShow'); }
+			viewDidShow() { calls.push('didShow'); }
+			render() { return h('div', {}, [text('x')]); }
+		}
+		const v = await new V().mount(container());
+		const p = v.playIn();
+		expect(calls).toEqual([]); // deferred to the reveal
+
+		fireIntersect(v.element);
+		expect(calls).toEqual(['willShow']);
+		fakeAnimations[0].finish();
+		expect(await settlesWithin(p)).toBe('settled');
+		await tick();
+		expect(calls).toEqual(['willShow', 'didShow']);
+
+		// A second intersection cannot replay the reveal (observer already disarmed).
+		fireIntersect(v.element, false);
+		fireIntersect(v.element, true);
+		await tick();
+		expect(calls).toEqual(['willShow', 'didShow']);
+		expect(fakeAnimations).toHaveLength(1);
+		expect(fakeAnimations[0].play).toHaveBeenCalledTimes(1);
+		expect(err).not.toHaveBeenCalled();
+	});
+});
+
 describe('scroll-trigger enter (D73) — triggerAnchor anchored reveals', () => {
 	// Mount a child inside a section ancestor: attach `parent` to the document,
 	// nest a mount container inside it, and mount the view there. `parent` (with

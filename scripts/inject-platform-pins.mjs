@@ -8,12 +8,16 @@
 // injects the pins (version-matched to package.json's own version) into the
 // manifest right before the tarball is built, and `postpack` removes them again.
 //
-// Idempotent in both directions. If a crash between the two hooks leaves the
-// pins behind, `node scripts/inject-platform-pins.mjs restore` (or
-// `git checkout package.json`) recovers.
+// Idempotent in both directions. npm does NOT run postpack when the pack step
+// itself fails (a rejected prepublishOnly, Ctrl-C, a full disk), so a crash
+// between the two hooks leaves the pins in the tracked manifest;
+// `node scripts/inject-platform-pins.mjs restore` (or `git checkout package.json`)
+// recovers, and scripts/release-prep.mjs runs that restore as its first step so an
+// aborted pack can never feed a stale pinned manifest into the next release.
 //
-// scripts/verify-pack.mjs imports PLATFORM_PACKAGES/injectPins to assert the
-// as-published manifest, so the CLI entry below must stay import-safe.
+// scripts/verify-pack.mjs imports PLATFORM_PACKAGES (to cross-check its own copy of
+// the list) and asserts the pins by reading the REAL packed tarball, so the CLI
+// entry below must stay import-safe.
 
 import { readFileSync, writeFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -63,6 +67,11 @@ if (isCLI) {
 		);
 	} else {
 		next = { ...manifest };
+		// Unconditional delete, NOT a per-key removal of PLATFORM_PACKAGES. That is
+		// only correct while every optionalDependency in this manifest is pack-time
+		// injected. The day a genuine optional dependency is added to package.json,
+		// this line silently eats it on every postpack — narrow it to the platform
+		// names then (and teach verify-pack's stray check about the newcomer).
 		delete next.optionalDependencies;
 		console.error('inject-platform-pins: removed platform pins from package.json');
 	}

@@ -9,6 +9,7 @@ connections:
   - DOC-MODELS
   - DOC-DATASTORE
   - DOC-SPEC
+  - DOC-SPEC-DATA
 verified_at: '2026-07-12T00:14:41.892Z'
 notes:
   - kind: verified
@@ -21,7 +22,7 @@ notes:
 
 The rules stored by the [[DECISION-D05-SCHEMA-BUILDERS]] builders since v1
 (`required`, `min`, `max`, `oneOf`, `validate`) now enforce. Driven by
-[[DECISION-D48-SCHEMA-VALIDATION]]; contract in [[DOC-SPEC]] §20.
+[[DECISION-D48-SCHEMA-VALIDATION]]; contract in [[DOC-SPEC-DATA]] §20.
 
 ## Intent
 

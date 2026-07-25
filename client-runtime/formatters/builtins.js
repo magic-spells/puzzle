@@ -220,8 +220,37 @@ export function number_with_delimiter(v, delimiter = ',') {
 	return parts.join('.');
 }
 
+// A bare YYYY-MM-DD string is a CALENDAR date and must display as written in every
+// time zone (D114). The ES spec parses that date-only form as UTC midnight, which
+// Intl then renders a day early for anyone west of UTC, so build LOCAL midnight from
+// the components instead. A round-trip mismatch means the components name a day
+// that doesn't exist ("2026-02-31") — coerced to Invalid Date so the callers'
+// fail-soft passes the raw value through. Deliberately NOT `new Date(v)`: the ES
+// grammar accepts any day up to 31, so that would silently roll into March —
+// TZ-dependently — while "2026-13-01" (which fails the grammar) returned raw.
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseDateInput(v) {
+	if (typeof v === 'string' && DATE_ONLY.test(v)) {
+		const [y, m, d] = v.split('-').map(Number);
+		const local = new Date(y, m - 1, d);
+		if (local.getFullYear() === y && local.getMonth() === m - 1 && local.getDate() === d) {
+			return local;
+		}
+		return new Date(NaN);
+	}
+	return new Date(v);
+}
+
 export function in_timezone(v, tz = 'UTC') {
-	const d = new Date(v);
+	const d = parseDateInput(v);
+	// A bare YYYY-MM-DD names a DAY, not an instant, so there is nothing to
+	// re-express in another zone — return D114's local midnight untouched.
+	// Shifting it would move the day: the local-midnight instant read as a wall
+	// clock in `tz` lands on the day before (or after) for any viewer whose own
+	// offset differs, making a calendar date render differently per viewer — the
+	// exact TZ dependence D114 removed from `date`/`timeago`.
+	if (typeof v === 'string' && DATE_ONLY.test(v)) return d;
 	// An unknown time-zone identifier throws RangeError at DateTimeFormat
 	// construction, and formatToParts throws on an invalid date — fail soft to the
 	// un-shifted date so a bad tz/date never crashes the render.
@@ -241,10 +270,12 @@ export function in_timezone(v, tz = 'UTC') {
 }
 
 export function date(v, preset = 'date', locale = undefined) {
-	const d = new Date(v);
+	const d = parseDateInput(v);
 	if (isNaN(d.getTime())) return str(v);
 
-	if (preset === 'iso') return d.toISOString();
+	// The ISO form of a calendar date is the calendar date itself — toISOString() on
+	// its local midnight would emit a time-zone-dependent instant.
+	if (preset === 'iso') return typeof v === 'string' && DATE_ONLY.test(v) ? v : d.toISOString();
 
 	const formats = {
 		date:     { year: 'numeric', month: '2-digit', day: '2-digit' },
@@ -273,7 +304,7 @@ export function datetime(v, preset = 'datetime', locale = undefined) {
 }
 
 export function timeago(v) {
-	const then = new Date(v).getTime();
+	const then = parseDateInput(v).getTime();
 	if (isNaN(then)) return str(v);
 
 	const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });

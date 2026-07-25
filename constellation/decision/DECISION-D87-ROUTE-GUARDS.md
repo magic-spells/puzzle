@@ -5,6 +5,7 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-SSG
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
   - DOC-ROUTER
   - DOC-RELEASE-SURFACE
   - DECISION-D19-NAVIGATION-COMMIT
@@ -13,8 +14,8 @@ connections:
   - DECISION-D83-QUERY-REPLACE
   - FILE-ROUTER
   - FEATURE-V1-53-ROUTE-GUARDS
-verified_at: '2026-07-25T00:10:00.000Z'
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_at: '2026-07-25T05:24:26.723Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 notes:
   - kind: verified
     text: >-
@@ -32,7 +33,7 @@ matched chain **root → leaf, sequentially, first failure wins**, before any
 view/layout construction and before the D19 load gate. Guarding a top-level
 route locks its whole layout subtree with one declaration — the D30 "layouts
 are auth walls" framing made literal. Cory's design (2026-07-23); see
-[[DOC-SPEC]] §48 and the [[DOC-ROUTER]] guards section.
+[[DOC-SPEC-ROUTER]] §48 and the [[DOC-ROUTER]] guards section.
 
 ## Context
 

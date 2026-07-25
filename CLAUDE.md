@@ -33,11 +33,15 @@ run.
 
 ## Current release state
 
-- Published: `0.1.0` (2026-07-21) and `0.1.1` (2026-07-22, D77 init prompts)
-  are live on npm (all five packages, MIT, manual publish via
-  `npm run release:prep` — there is no CI publish). `0.1.2` shipped the embedded
-  agent skill + `puzzle add skills` (D78/v1.45, published 2026-07-22). Working
-  version `0.2.0` (versions bumped, unpublished) adds path-shaped links via
+- Published: `0.1.0` (2026-07-21), `0.1.1` (2026-07-22, D77 init prompts),
+  `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), and
+  **`0.2.0` (2026-07-24, the current `latest`)** are live on npm (all five
+  packages, MIT, manual publish via `npm run release:prep` — there is no CI
+  publish). Everything from D88 onward landed AFTER the 0.2.0 publish and is
+  unreleased **`0.3.0`** — minor, not patch: two new export subpaths
+  (`./testing`, `./fixtures`) plus breaking changes in D110/D111/D112. Do not
+  describe 0.2.0 as unpublished; that error sat in these files for a day.
+  `0.2.0` adds path-shaped links via
   `router.url()` + the `link` formatter (D79/v1.46) and the true static-pages
   output mode (`output: 'static'` / `--static`, D81/v1.47); the D67
   prerendered-SPA mode is renamed `output: 'hybrid'` / `--hybrid` — the config
@@ -49,8 +53,9 @@ run.
   framework-gap round (D91-D98: adapter `beforeRequest`, dev build errors in
   the browser, router focus + route announcement, `/testing`, `/fixtures` +
   mock adapter), agent-skill upgrade ergonomics (D97/D99), the DevTools
-  runtime bridge (D100 — framework half only; the extension is a separate,
-  unstarted repo), and a deep-review hardening round (D110 `dev.proxy` prefix
+  runtime bridge (D100 — the extension's v1 is built and smoke-verified in its
+  separate public repo `magic-spells/puzzle-devtools`), and a deep-review
+  hardening round (D110 `dev.proxy` prefix
   validation, D111 managed head tags build-time only).
 - Product line: v1 through v1.63, plus the July 21 pre-release
   correctness/performance hardening pass and the July 24 deep-review round.
@@ -67,8 +72,11 @@ run.
 - Canonical app: `examples/todos`. Other examples are acceptance cases for
   routing, data, TypeScript, morphs, static output, DOM islands, canvas, and
   virtual scrolling.
-- Releases are published by hand: bump versions everywhere (package.json +
-  optionalDependencies pins, four platform manifests, version.go), run
+- Releases are published by hand: bump versions in package.json, the four
+  platform manifests, and version.go. The repo manifest must **not** declare
+  `optionalDependencies` — the platform pins are injected at pack time by
+  `scripts/inject-platform-pins.mjs` (`prepack` injects, `postpack` restores),
+  and `npm run verify:pack` fails if the repo manifest carries them. Then run
   `npm run release:prep`, publish the four platform packages, then the root.
 
 ## Architecture at a glance

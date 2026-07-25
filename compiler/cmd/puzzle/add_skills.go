@@ -260,13 +260,25 @@ func promptSkillTargets(input io.Reader, output io.Writer, targets []skillTarget
 		Options(options...).
 		Filterable(false).
 		Value(&selected)
-	form := huh.NewForm(huh.NewGroup(field)).
-		WithInput(input).
-		WithOutput(output)
+	form := newSkillPromptForm(input, output, huh.NewGroup(field))
 	if err := form.Run(); err != nil {
 		return nil, fmt.Errorf("selecting skill targets: %w", err)
 	}
 	return selected, nil
+}
+
+// newSkillPromptForm preserves huh's environment-selected accessible mode for
+// real terminal input. In accessible mode huh reads os.Stdin directly, ignoring
+// WithInput, so an injected reader must pin the regular renderer to stay
+// deterministic regardless of TERM.
+func newSkillPromptForm(input io.Reader, output io.Writer, group *huh.Group) *huh.Form {
+	form := huh.NewForm(group).
+		WithInput(input).
+		WithOutput(output)
+	if inputFile, ok := input.(*os.File); !ok || inputFile != os.Stdin {
+		form.WithAccessible(false)
+	}
+	return form
 }
 
 // skillPlan splits selected targets by what is already sitting at their
@@ -361,9 +373,7 @@ func confirmSkillRefresh(input io.Reader, output io.Writer, targets []skillTarge
 		Affirmative("Yes").
 		Negative("No").
 		Value(&confirmed)
-	form := huh.NewForm(huh.NewGroup(field)).
-		WithInput(input).
-		WithOutput(output)
+	form := newSkillPromptForm(input, output, huh.NewGroup(field))
 	if err := form.Run(); err != nil {
 		return false, err
 	}

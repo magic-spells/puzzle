@@ -5,12 +5,13 @@ connections:
   - COMPONENT-COMPILER-CLI
   - COMPONENT-DEV-SERVER
   - DOC-SPEC
+  - DOC-SPEC-BUILD
   - FEATURE-V1-32-RELEASE-HARDENING
 ---
 
 # D76 — Update notification + `puzzle upgrade` (v1.43)
 
-`puzzle build` and `puzzle dev` print a one-line, cache-backed notice when a newer release is published, and `puzzle upgrade` performs the upgrade by driving the user's own package manager. See [[DOC-SPEC]] §41 for the full contract.
+`puzzle build` and `puzzle dev` print a one-line, cache-backed notice when a newer release is published, and `puzzle upgrade` performs the upgrade by driving the user's own package manager. See [[DOC-SPEC-BUILD]] §41 for the full contract.
 
 ## Context
 

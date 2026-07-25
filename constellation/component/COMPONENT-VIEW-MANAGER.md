@@ -39,8 +39,8 @@ notes:
       probes post-reduction, detection covers component props) appended to this card's body — prior
       stamp (d9591d6) predated that paragraph.
     sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:23:56.086Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # ViewManager and ViewNode
@@ -79,6 +79,17 @@ a component that had already mounted, painted, and subscribed. `playIn()` now
 carries its own `Promise.resolve(...).catch(log)` — the enter-side mirror of
 `destroyAnimated()`'s leave-hook guard, and the same idiom the router's
 `#playInLogged` uses.
+
+Since [[DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT]], that recovery keys off
+the **instance**, not the mount-time vnode: the handler runs in a microtask, so
+a same-turn parent re-render can already have transferred the instance to a new
+vnode via `patchComponent` — the handler stashes its placeholder on the
+instance (`__failedPlaceholder`), and `patch()`'s recovery test is
+`component == null || component.isDestroyed` (the getter, never the
+always-truthy `destroyed` hook method) with an attached-only insertion-ref
+guard. Router-preloaded instances are exempt from the teardown entirely — the
+Router owns that lifetime and expects a failed committed view to stand until
+the next navigation replaces it.
 
 Composition uses `SLOT_TAG` and shared `expandSlots`: `<children/>` fills the
 default bucket, `<slot name>` fills named buckets with fallback, and `<Slot/>`

@@ -7,6 +7,7 @@ connections:
   - DOC-ROUTER
   - DOC-VIEW-LIFECYCLE
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D28-ANIMATIONS
   - DECISION-D29-LOOP-COUNTER
@@ -14,7 +15,7 @@ connections:
 
 # D30 — Nested routes: children arrays, chain-prefix reuse, root-only layouts (v1.3)
 
-A routed **view** can host a child routed view at its `<Slot/>` via a `children: [...]` array on the parent route; navigation reuses the shared chain prefix, layouts stay root-only, and params merge down the chain. A router-only, purely additive amendment. Settled (v1.3); see [[DOC-SPEC]] §9, [[DOC-ROUTER]], and [[DOC-VIEW-LIFECYCLE]] §4.
+A routed **view** can host a child routed view at its `<Slot/>` via a `children: [...]` array on the parent route; navigation reuses the shared chain prefix, layouts stay root-only, and params merge down the chain. A router-only, purely additive amendment. Settled (v1.3); see [[DOC-SPEC-ROUTER]] §9, [[DOC-ROUTER]], and [[DOC-VIEW-LIFECYCLE]] §4.
 
 ## Context
 v1's router ([[DECISION-D19-NAVIGATION-COMMIT]]) is strictly flat: one route = one full-path regex → one view + optional top-level layout, and the only nesting is the layout's `<Slot/>` hosting the routed view. D30 lets a routed **view** host a child routed view the same way — a route object gains `children: [...]` and the parent view renders its matched child at `<Slot/>`. The slot/compose/destroy plumbing is already generic (the compiler parses `<Slot/>` in any template; keyed component vnodes with preattached instances compose at any depth; `destroy()` cascades to descendants), so this is a **router-only** amendment — no compiler, ViewManager, or PuzzleView changes. Like [[DECISION-D28-ANIMATIONS]]/[[DECISION-D29-LOOP-COUNTER]] it is purely additive: a route with no `children` (chain length 1) behaves exactly as today, and all v1 route contracts (trailing-slash sensitivity, `'*'` catch-all matched last, D19 commit ordering) are unchanged.

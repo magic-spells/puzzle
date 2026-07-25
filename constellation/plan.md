@@ -1,8 +1,8 @@
 ---
 name: Puzzle
-verified_at: '2026-07-24T23:38:10.493Z'
+verified_at: '2026-07-25T05:26:06.874Z'
 status: verified
-verified_sha: 35e8fd092a8e4559269fd8578a419e69e8371f6c
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 notes:
   - kind: verified
     text: >-
@@ -29,10 +29,36 @@ log in [[DOC-DECISIONS]] explains why the contract has its current shape.
   prompts, D77/v1.44), and `0.1.2` (the embedded agent skill + `puzzle add
   skills` installer, D78/v1.45) are live on npm — MIT, five packages, manual
   publish, no CI release path.
-- **Working version `0.2.0`** (versions bumped, unpublished). Two breaking-ish
-  renames account for the minor bump: the D67 prerendered-SPA mode is now
-  `output: 'hybrid'` / `--hybrid`, and D111 makes managed head tags build-time
-  only. What 0.2.0 adds, in order:
+- **`0.2.0` is PUBLISHED** (npm, 2026-07-24) — it is the current `latest`. Its
+  headline was the D67 prerendered-SPA mode renaming to `output: 'hybrid'` /
+  `--hybrid`, plus path-shaped links and the true static-pages mode. Everything
+  below from D88 onward landed *after* that publish and belongs to the
+  unreleased **`0.3.0`** (versions bumped on `release/0.3.0`).
+- **Unreleased `0.3.0`.** Minor, not patch, for two independent reasons: two new
+  export subpaths (`./testing`, `./fixtures`) and three genuine breaking changes
+  against a released consumer — D111 (the runtime no longer syncs managed head
+  tags), D110 (`dev.proxy: { '/': … }` was working in 0.2.0 and is now a config
+  error that fails `dev` AND `build`), and D112 (a type-variant duplicate pk now
+  throws from `createRecord` instead of silently creating a shadow record). Two
+  softer behavior changes existing apps will notice: D93 moves focus and
+  announces on every navigation (`focusBehavior: false` opts out) and D90 takes
+  the next free port instead of failing (`--strict-port` opts out).
+  Also in `0.3.0`: D113's prerender RAWTEXT rule — the SSG serializer stops
+  entity-escaping `<script>`/`<style>` text, which had been corrupting
+  prerendered JSON-LD into `&amp;` garbage for exactly the crawlers D111 makes
+  the sole audience, and breaking `a > b` selectors in prerendered `<style>`.
+  And D114's calendar-date rule — the change with the broadest user-visible
+  surface in the release: a bare `YYYY-MM-DD` through the date formatters is a
+  calendar date, parsed at local midnight so `date`/`timeago` read it as
+  written in every viewer zone (the ES spec's UTC-midnight parse rendered it a
+  day early for viewers west of UTC); `in_timezone` passes a calendar date
+  through untouched, since a day names no instant to re-express. Smaller
+  output change from the same round: `reverse` iterates strings by code
+  point, so emoji/astral text reverses correctly instead of tearing
+  surrogate pairs. The pre-publish review round added D115–D119 (mount-failure
+  recovery, pack-time pin verification, static history-hrefs, lifecycle hook
+  containment + mount epoch, router settlement/announcement).
+- What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
     (`output: 'static'` / `--static`, D81/v1.47).
@@ -75,9 +101,10 @@ log in [[DOC-DECISIONS]] explains why the contract has its current shape.
   optional macOS/Linux binaries for arm64/x64.
 - `examples/todos` is the canonical integration app. The rest of `examples/`
   are focused acceptance/showcase apps.
-- The 0.1.x backlog is done and published. Open work before `0.2.0` ships:
-  refresh `skills/puzzle/SKILL.md` against the current surface (checklist item
-  1b below), then launch assets (demo links, announcement).
+- The 0.1.x backlog is done and published, `0.2.0` shipped 2026-07-24, and the
+  `skills/puzzle/SKILL.md` refresh landed with it (checklist item 1b below
+  stays a recurring per-release step). Launch assets (demo links, announcement)
+  remain open and now ride the `0.3.0` release.
 
 ## Deferred / known limitations
 
@@ -135,16 +162,17 @@ current?" a fact rather than an inference from the CLI version. `puzzle upgrade
 skills` refreshes existing installs from the running binary — no registry check
 and no re-exec, since nothing was upgraded.
 
-The DevTools work (D100, 2026-07-24) is **half done**. The framework half is
-merged and suite-verified: `client-runtime/devtools.js` speaks SPEC §55's wire
-protocol, registers only when an extension injects
+The DevTools work (D100, 2026-07-24) shipped **both halves**. The framework
+half is merged and suite-verified: `client-runtime/devtools.js` speaks SPEC
+§55's wire protocol, registers only when an extension injects
 `window.__PUZZLE_DEVTOOLS_HOOK__`, and DCEs out of production entirely. The
-**extension itself is not started** — it lives in its own public repo
-`magic-spells/puzzle-devtools` (MV3, panel UI dogfooded as a Puzzle app;
-v1 = Views + Store panels). The store's `subscribersByKey`/`keysBySubscriber`
-pair is the asset — it answers "which views re-render when this record
-changes" exactly, which React and Svelte users answer by guessing; the
-subscriptions-graph panel that exploits it follows v1.
+extension lives in its own public repo `magic-spells/puzzle-devtools` (MV3,
+panel UI dogfooded as a Puzzle app), and its v1 — Views + Store panels — is
+built, unit-tested, and smoke-verified against a live `puzzle dev` app in real
+Chrome. The store's `subscribersByKey`/`keysBySubscriber` pair is the asset —
+it answers "which views re-render when this record changes" exactly, which
+React and Svelte users answer by guessing; the subscriptions-graph panel that
+exploits it is the named round 2.
 
 A **deep-review round** followed (2026-07-24), reading the merged tree rather
 than adding features. It produced two decision cards — D110 (`dev.proxy` rejects
@@ -194,6 +222,19 @@ collections; and a WASM playground.
 ### Contracts and release truth
 
 - [[DOC-SPEC]] — frozen public contract; every amendment requires a decision.
+  Now the section index over six domain cards; `§N` numbers never move.
+  - [[DOC-SPEC-ANATOMY]] — naming, config, `.pzl` anatomy, real-JS scripts,
+    project layout, scoped styles, the `@` alias.
+  - [[DOC-SPEC-TEMPLATE]] — template grammar, event handlers and modifiers,
+    slots, islands, `{#svg}`, list keying, a11y warnings.
+  - [[DOC-SPEC-VIEW]] — animations, skeletons, `memo()`, refs, `flip`, morphs,
+    app lifecycle hooks.
+  - [[DOC-SPEC-DATA]] — models, schema builders, store, validation,
+    relationships, adapter read/write sync, fixtures.
+  - [[DOC-SPEC-ROUTER]] — routing surface, nested chains, scroll, hash/memory
+    modes, base path, transitions, atomic commit, head, guards, focus.
+  - [[DOC-SPEC-BUILD]] — CLI, HMR, static/hybrid output, upgrade, dev build
+    errors, `/testing`, `--fixtures`, the DevTools bridge.
 - [[DOC-DECISIONS]] — numeric decision index and links to ADR cards.
 - [[DOC-RELEASE-SURFACE]] — complete, compact shipped-surface inventory.
 - [[DOC-BUILD-PLAN]] — v1 implementation plan and release-phase status.

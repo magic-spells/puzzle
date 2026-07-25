@@ -6,7 +6,7 @@ connections:
   - DOC-MODELS
   - DOC-DATASTORE
 kind: amendment
-verified_at: '2026-07-15T22:04:51.554Z'
+verified_at: '2026-07-25T05:24:49.808Z'
 notes:
   - kind: verified
     text: >-
@@ -14,6 +14,7 @@ notes:
       vet, 14 Playwright tests (Chromium+WebKit) including the scroll-restore regression guard,
       test:types, e2e-pack (real tarball install + build), verify-pack. Release remainders tracked
       outside this card: license text, NODE_AUTH_TOKEN secret, v0.1.0 tag.
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 The pre-0.1.0 hardening bundle (branch fix/pre-0.1.0-hardening, SPEC §35): the fifth
@@ -66,8 +67,13 @@ backslash paths.
 esbuild model: bin/puzzle.js shim in @magic-spells/puzzle resolves
 @magic-spells/puzzle-{darwin-arm64,darwin-x64,linux-x64,linux-arm64} from pinned
 optionalDependencies and execs the binary; npm/ holds the four manifests (binaries
-release-built, gitignored). Releases are published BY HAND: scripts/release-prep.mjs
-asserts package.json==version.go==manifests, runs verify-pack, cross-compiles with
+release-built, gitignored). The pins are NOT tracked — they are injected into
+package.json at pack time (prepack) and removed after (postpack), and verify-pack
+validates the mechanism against a real packed tarball; see
+[[DECISION-D116-PACK-TIME-PIN-INJECTION]] for the flow, the abort window, and its
+mitigation. Releases are published BY HAND: scripts/release-prep.mjs first restores
+a clean manifest (a previously-aborted pack may have left pins behind), asserts
+package.json==version.go==manifests, runs verify-pack, cross-compiles with
 -ldflags version stamping, and prints the publish commands (platform packages BEFORE
 the root). There is no CI publish workflow — the tag-triggered release.yml was removed
 pre-0.1.0 in favor of manual publishing. No postinstall. Windows:

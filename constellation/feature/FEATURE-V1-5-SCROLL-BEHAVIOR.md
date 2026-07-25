@@ -7,6 +7,7 @@ connections:
   - COMPONENT-ROUTER
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
 ---
 
 # v1.5 — Router scroll behavior
@@ -21,4 +22,4 @@ Through v1.4 the router never touched scroll, so every window-scrolling app inhe
 **Out (deferred):** persisting positions across full reloads via `sessionStorage` (deferred — matches Vue Router's reload-resets-to-top default, keeps v1.5 dependency-free). Sub-decisions and the app-level workaround it deletes (`examples/stays`) are in [[DECISION-D33-ROUTER-SCROLL]].
 
 ## Outcome
-Shipped in v1.5; documented in [[DOC-SPEC]] §14 and [[DOC-ROUTER]]. `scrollBehavior` is the first amendment to the frozen §2 config surface. Router-only: no compiler or runtime-kernel change; apps that never scrolled the window are unaffected and `scrollBehavior: false` restores exact pre-v1.5 behavior. Touched [[COMPONENT-ROUTER]].
+Shipped in v1.5; documented in [[DOC-SPEC-ROUTER]] §14 and [[DOC-ROUTER]]. `scrollBehavior` is the first amendment to the frozen §2 config surface. Router-only: no compiler or runtime-kernel change; apps that never scrolled the window are unaffected and `scrollBehavior: false` restores exact pre-v1.5 behavior. Touched [[COMPONENT-ROUTER]].

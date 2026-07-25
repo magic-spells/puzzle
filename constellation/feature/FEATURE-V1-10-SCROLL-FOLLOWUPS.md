@@ -9,6 +9,7 @@ connections:
   - COMPONENT-ROUTER
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
 ---
 
 # v1.10 — Anchor-target scrolling + sessionStorage scroll persistence
@@ -29,4 +30,4 @@ Round out [[DECISION-D33-ROUTER-SCROLL]] to parity with mature routers: navigati
 
 ## Outcome
 
-Shipped in v1.10; documented in [[DOC-SPEC]] §14 and [[DOC-ROUTER]]. Router-only — touched [[COMPONENT-ROUTER]] plus `tests/router-scroll.test.js` (13 new tests); no compiler or runtime-kernel change, no new config.
+Shipped in v1.10; documented in [[DOC-SPEC-ROUTER]] §14 and [[DOC-ROUTER]]. Router-only — touched [[COMPONENT-ROUTER]] plus `tests/router-scroll.test.js` (13 new tests); no compiler or runtime-kernel change, no new config.

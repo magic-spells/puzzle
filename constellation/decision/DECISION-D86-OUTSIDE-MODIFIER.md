@@ -5,14 +5,15 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-TEMPLATE-PARSER
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
   - DOC-EVENTS
   - DECISION-D38-EVENT-MODIFIERS
   - DECISION-D72-ELEMENT-REFS
   - FILE-VIEW-MANAGER
   - FILE-PARSER
   - FEATURE-V1-52-OUTSIDE-MODIFIER
-verified_at: '2026-07-25T00:10:00.000Z'
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_at: '2026-07-25T05:24:26.254Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # D86 — the `outside` event modifier: `@event:outside` declarative outside-dismiss (v1.52)
@@ -22,7 +23,7 @@ A new generic event modifier: `@click:outside={ close }` (any event —
 `document` in the **capture phase** and runs the handler only when the event
 target is **outside** the bound element (`el.contains(event.target)` bails).
 The framework owns the document-listener cleanup on unmount. Cory's design;
-see [[DOC-SPEC]] §5 (modifier table) and §47.
+see [[DOC-SPEC-TEMPLATE]] §5 (modifier table) and §47.
 
 ## Context
 

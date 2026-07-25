@@ -5,6 +5,7 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-SSG
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
   - DOC-ROUTER
   - DECISION-D67-SSG-STATIC-BUILD
   - DECISION-D81-STATIC-PAGES-MODE
@@ -13,8 +14,8 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-RUNTIME
   - FEATURE-V1-50-HEAD-MANAGEMENT
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 35e8fd092a8e4559269fd8578a419e69e8371f6c
+verified_at: '2026-07-25T05:24:24.366Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 notes:
   - kind: decision
     text: >-
@@ -49,7 +50,7 @@ rendered as managed head tags by BOTH the SSG shell injection and the SPA
 navigation commit. One metadata contract, two delivery paths, with SSG as the
 authoritative one (link-preview bots don't run the app). Closes the
 "head-management API (per-route meta/og)" entry on §36's deferred list. See
-[[DOC-SPEC]] §45.
+[[DOC-SPEC-ROUTER]] §45.
 
 ## Context
 
@@ -116,6 +117,11 @@ resolution rules and identity-marked managed tags.**
   semantics.
 
 ## Amended by D89 — module split, title core vs managed tags
+
+> **Superseded in part by D111 (next section).** The runtime half described
+> below — the DOM `syncTags` loop, `setTagValue`, the router call site, and the
+> `__PUZZLE_HAS_HEAD_TAGS__` gate — was deleted outright. Only the `head.js`
+> resolver + `syncTitle` half survives at runtime; read this section as history.
 
 [[DECISION-D89-FEATURE-USAGE-TREESHAKE]] splits this feature across two modules
 on a real seam. `head.js` keeps the pure resolver (`resolveHead`/`resolveField`,

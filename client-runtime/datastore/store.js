@@ -468,8 +468,11 @@ export class Store {
 	 * The hook is SYNCHRONOUS and may either mutate `init` in place or return a
 	 * replacement object; a truthy object return wins, otherwise the (possibly
 	 * mutated) original is used. Both shapes are supported on purpose — mutation
-	 * reads better for a header push, a return for a spread. `context` is frozen:
-	 * it is information about the request, not a second output channel.
+	 * reads better for a header push, a return for a spread. A returned
+	 * replacement is shallow-COPIED before the re-stamp below: the re-stamp must
+	 * never write into an object the app owns, so `Object.freeze({ ...init })`
+	 * and getter-only fields are supported shapes, not TypeErrors. `context` is
+	 * frozen: it is information about the request, not a second output channel.
 	 *
 	 * `method` and `body` are RE-STAMPED from the original init after the hook
 	 * runs. This is load-bearing, not defensive: the write path captures
@@ -497,7 +500,8 @@ export class Store {
 		const method = init.method;
 		const body = init.body;
 		const returned = this.beforeRequest(init, Object.freeze(context));
-		const final = returned && typeof returned === 'object' ? returned : init;
+		const final =
+			returned && typeof returned === 'object' && returned !== init ? { ...returned } : init;
 		final.method = method;
 		if (body === undefined) delete final.body;
 		else final.body = body;

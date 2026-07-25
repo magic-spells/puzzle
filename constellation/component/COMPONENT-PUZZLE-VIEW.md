@@ -16,8 +16,8 @@ notes:
       Keep raw source values and data()-derived display values under different
       keys. A successful data() replaces the model layer, so reusing one key for
       raw local state and a reshaped model value loses the raw value by design.
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:23:57.003Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # PuzzleView
@@ -63,5 +63,10 @@ D100). `_localState()` predates them and serves the same convention.
 
 Enter/leave specs and the four show/hide hooks delegate to
 [[COMPONENT-ANIMATIONS]]. Teardown catches leave-hook failures and still removes
-the subtree. The compiler attaches `render()` to the prototype after the user
-class and reads class-field `events` lazily at render time.
+the subtree, and the `destroyed()` hook itself is guarded — a throw is logged
+and never wedges the surrounding cascade (parent destroys, `Router.stop()`,
+`PuzzleApp.unmount()`; D118). A hand-written `render()` returning null after a
+tree clears the DOM and re-anchors its position — compiled templates always
+emit a root, so this is authored-view territory (D118). The compiler attaches
+`render()` to the prototype after the user class and reads class-field `events`
+lazily at render time.

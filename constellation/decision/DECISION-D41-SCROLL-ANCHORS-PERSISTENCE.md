@@ -6,6 +6,7 @@ connections:
   - COMPONENT-ROUTER
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
   - DECISION-D33-ROUTER-SCROLL
   - DECISION-D34-HASH-ROUTING
   - DECISION-D39-SKELETON
@@ -19,7 +20,7 @@ a `#anchor` suffix on a navigation target scrolls the landed page to that elemen
 and saved scroll positions persist in `sessionStorage` so back/forward restore
 survives a full reload. Router-only, config-free (the existing `scrollBehavior`
 contract is unchanged — `false` still disables everything, a custom function still
-wins). See [[DOC-SPEC]] §14.
+wins). See [[DOC-SPEC-ROUTER]] §14.
 
 ## Context
 v1.5 (D33) made the router own window scroll but explicitly cut two things: anchor

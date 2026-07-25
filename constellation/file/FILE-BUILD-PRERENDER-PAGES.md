@@ -12,7 +12,7 @@ verified_at: '2026-07-24T23:40:00.000Z'
 verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component ([[COMPONENT-SSG]], static mode of [[DECISION-D81-STATIC-PAGES-MODE]]); this card anchors that plan to `compiler/internal/build/prerender_pages.go`. Generates one `dist/_puzzle/<slug>.js` mountStatic entry per written page (keyed on the codegen `__pzlModule` stamps), derives slugs + suffixes collisions, detects models/formatters modules and warns on app.js-only formatters, and drops `staging/app.js`.
+Source binding for the owning component card. Behavioral intent stays in the connected component ([[COMPONENT-SSG]], static mode of [[DECISION-D81-STATIC-PAGES-MODE]]); this card anchors that plan to `compiler/internal/build/prerender_pages.go`. Generates one `dist/_puzzle/<slug>.js` mountStatic entry per written page (keyed on the codegen `__pzlModule` stamps), derives slugs + suffixes collisions, detects models/formatters modules (`findStaticModule` probes `.ts` variants as well as `.js`), warns on app.js-only formatters AND on a missing models module, and drops `staging/app.js`.
 
 Two shapes here are load-bearing and easy to undo:
 

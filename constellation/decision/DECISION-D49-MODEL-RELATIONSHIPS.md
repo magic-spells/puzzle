@@ -10,6 +10,7 @@ connections:
   - DOC-MODELS
   - DOC-DATASTORE
   - DOC-SPEC
+  - DOC-SPEC-DATA
 verified_at: '2026-07-12T00:14:58.605Z'
 notes:
   - kind: verified
@@ -24,7 +25,7 @@ Activates the schema entries reserved since v1 (SPEC §7). `Puzzle.belongsTo(typ
 `Puzzle.hasMany(type)` in a model's `static schema` now install **lazy prototype
 getters** that resolve against local store contents through the ordinary query path —
 so reactivity falls out of the existing subscription machinery for free. See
-[[DOC-SPEC]] §21.
+[[DOC-SPEC-DATA]] §21.
 
 ## Context
 Related records were hand-joined in every `data()` (`store.findMany('comment',

@@ -6,11 +6,12 @@ connections:
   - COMPONENT-COMPILER-CLI
   - COMPONENT-DEV-SERVER
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
 ---
 
 # D13 — CLI v1 is `puzzle dev` + `puzzle build`; build defaults to production
 
-Settled; enforced by [[DOC-SPEC]] §11. v1's CLI is just `puzzle dev` (watch + static server + SSE live reload) and `puzzle build` (production by default).
+Settled; enforced by [[DOC-SPEC-ANATOMY]] §11. v1's CLI is just `puzzle dev` (watch + static server + SSE live reload) and `puzzle build` (production by default).
 
 ## Context
 The prototype had a `watch` command and inverted the production/development default behind a `--production` flag.

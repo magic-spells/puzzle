@@ -6,11 +6,12 @@ connections:
   - COMPONENT-CODEGEN
   - DOC-EVENTS
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 ---
 
 # D4 — Event handler convention: bare identifier vs call expression
 
-Settled per [[DOC-SPEC]] §5. A bare `@click={ handler }` invokes `handler(event)`; a call expression `@click={ handler(todo) }` compiles to `(event) => handler(todo)`.
+Settled per [[DOC-SPEC-TEMPLATE]] §5. A bare `@click={ handler }` invokes `handler(event)`; a call expression `@click={ handler(todo) }` compiles to `(event) => handler(todo)`.
 
 ## Context
 Event handler syntax needs a clear rule for when the written expression is the handler versus a call made at event time. Early examples used a curried pattern.

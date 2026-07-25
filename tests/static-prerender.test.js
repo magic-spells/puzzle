@@ -393,15 +393,19 @@ class Linked extends PuzzleView {
 stamp(Linked, 'app/views/Linked.pzl');
 
 describe('static prerender router facade parity (D81, item B4)', () => {
-	it('static mode prefixes url() by routerMode + routerBase (hash + base) — matching the client stub', async () => {
+	it('static mode prefixes url() by routerBase and IGNORES routerMode — matching the client stub (P2.1)', async () => {
 		const cfg = {
 			target: '#app',
 			routerMode: 'hash',
 			routerBase: '/app',
 			routes: [{ path: '/', name: 'home', view: Linked }],
 		};
-		const { pages } = await prerender(cfg, { mode: 'static' });
-		expect(pages[0].html).toContain('href="#/app/next"');
+		const { pages, warnings } = await prerender(cfg, { mode: 'static' });
+		// Base applies; the hash mode does not — static files are path-shaped, and a
+		// static page installs no router to intercept a '#/' link.
+		expect(pages[0].html).toContain('href="/app/next"');
+		expect(pages[0].html).not.toContain('href="#/app/next"');
+		expect(warnings.some((w) => w.includes('ignores `routerMode: "hash"`'))).toBe(true);
 	});
 
 	it('static mode with no mode/base falls back to history semantics (unprefixed) — matching the client default', async () => {
@@ -474,9 +478,10 @@ describe('hybrid × hash/memory guard (D81, item B6)', () => {
 		expect((await prerender(cfg(undefined))).pages).toHaveLength(1);
 	});
 
-	it('static + hash is allowed (static has no router — the kernel is base/mode-aware)', async () => {
-		const { pages } = await prerender(cfg('hash'), { mode: 'static' });
+	it('static + hash is allowed, but the mode is ignored with a warning (P2.1)', async () => {
+		const { pages, warnings } = await prerender(cfg('hash'), { mode: 'static' });
 		expect(pages).toHaveLength(1);
+		expect(warnings.some((w) => w.includes('ignores `routerMode: "hash"`'))).toBe(true);
 	});
 
 	it('prerenderToDir hybrid + hash rejects — fails the Go build', async () => {

@@ -5,6 +5,7 @@ verified_at: '2026-07-22T00:04:06.109Z'
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
   - DOC-PUZZLE-FILE
   - DOC-EVENTS
 ---
@@ -347,7 +348,7 @@ Inside a layout component, `<Slot/>` marks where the routed view renders. A rout
 
 ## Named slots (v1.21, D53)
 
-Multi-region components — a card with a header/body/footer, a modal with a title/body/actions — declare **named slots** alongside the default one. Shipped in v1.21 (D53); see [[DOC-SPEC]] §24.
+Multi-region components — a card with a header/body/footer, a modal with a title/body/actions — declare **named slots** alongside the default one. Shipped in v1.21 (D53); see [[DOC-SPEC-TEMPLATE]] §24.
 
 **Child side.** `<slot name="header">…fallback…</slot>` declares a named region — `name` is now **required** (v1.41, D74). The fallback body uses the full template grammar and renders when the call site fills nothing for that name; a self-closing `<slot name="footer"/>` has no fallback. The `<children/>` marker is the **default** region.
 
@@ -394,7 +395,7 @@ A bare static `island` attribute on a **plain element** hands its children to th
 
 Data flows **out of** an island (events → store), never back in. To programmatically reset one, change its `key` — a tag or key change replaces the node and re-seeds from the template.
 
-**Compile errors:** `island={ expr }` (must be static); `island` on a component tag; a component or composition marker (`<children/>`/`<Slot/>`/`<slot name>`) inside an island subtree; `island` on the `<puzzle-view>` root. See [[DOC-SPEC]] §17 for the full semantics and rationale.
+**Compile errors:** `island={ expr }` (must be static); `island` on a component tag; a component or composition marker (`<children/>`/`<Slot/>`/`<slot name>`) inside an island subtree; `island` on the `<puzzle-view>` root. See [[DOC-SPEC-TEMPLATE]] §17 for the full semantics and rationale.
 
 ---
 
@@ -412,7 +413,7 @@ The header is exactly one quoted **static** path (single or double quotes), reso
 
 **The file is inert.** Its contents are dropped in verbatim (island semantics — seeded once, never diffed, zero per-patch cost) and are never template-parsed: no `{ expr }`, blocks, or `@event` handlers inside the file. For a reactive or animated SVG, paste the markup directly into the template — arbitrary inline SVG has always worked.
 
-**Compile errors:** unquoted/dynamic/missing path; anything after the path; a stray `{/svg}`; absolute or `./`/`../` paths; missing file or `app/assets/` dir; a file whose root element isn't `<svg>`. See [[DOC-SPEC]] §18.
+**Compile errors:** unquoted/dynamic/missing path; anything after the path; a stray `{/svg}`; absolute or `./`/`../` paths; missing file or `app/assets/` dir; a file whose root element isn't `<svg>`. See [[DOC-SPEC-TEMPLATE]] §18.
 
 ---
 

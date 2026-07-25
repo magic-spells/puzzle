@@ -5,14 +5,15 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ANIMATIONS
   - DOC-SPEC
+  - DOC-SPEC-VIEW
   - DECISION-D44-DOM-ISLANDS
   - DECISION-D72-ELEMENT-REFS
   - FILE-VIEW-MANAGER
   - FILE-ANIMATE
   - FILE-SSG-SERIALIZER
   - FEATURE-V1-51-FLIP
-verified_at: '2026-07-25T00:10:00.000Z'
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_at: '2026-07-25T05:24:25.430Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 notes:
   - kind: verified
     text: >-
@@ -31,7 +32,7 @@ object literals, SPEC §6) — on the keyed row root. Retained elements that MOV
 reconciliation animate from their old visual position to their new one;
 inserts and removes keep their existing enter/leave paths. Closes the
 "FLIP animations for keyed reorders" entry on the project's deferred list.
-See [[DOC-SPEC]] §46.
+See [[DOC-SPEC-VIEW]] §46.
 
 ## Context
 

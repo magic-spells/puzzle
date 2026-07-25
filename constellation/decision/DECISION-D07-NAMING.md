@@ -6,11 +6,12 @@ connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-FORMATTERS
   - DOC-SPEC
+  - DOC-SPEC-ANATOMY
 ---
 
 # D7 — Naming: `PuzzleApp`, `app.mount()`, "formatters"
 
-Settled per [[DOC-SPEC]] §1, §2, §10. The application class is `PuzzleApp`, apps start with `app.mount()`, and the transformation registry is called **formatters** everywhere.
+Settled per [[DOC-SPEC-ANATOMY]] §1, §2, §10. The application class is `PuzzleApp`, apps start with `app.mount()`, and the transformation registry is called **formatters** everywhere.
 
 ## Context
 The prototype used various names: the `Puzzle` name was taken by the app, apps started with `app.run()`, and the template transformation registry was called "filters".

@@ -2,11 +2,11 @@
  * Type-only consumer fixture (`npm run test:types`).
  *
  * Imports from the PUBLIC package root ('@magic-spells/puzzle') and the
- * '@magic-spells/puzzle/morph', '/ssg' and '/fixtures' subpaths exactly as an
- * app authored with `<script lang="ts">` would. The package is NOT installed
- * in this repo, so the fixture tsconfig maps the specifiers at ../types via
- * `paths` — this still type-checks the real exported declaration surface + its
- * exports wiring.
+ * '@magic-spells/puzzle/morph', '/ssg', '/static' and '/fixtures' subpaths
+ * exactly as an app authored with `<script lang="ts">` would. The package is
+ * NOT installed in this repo, so the fixture tsconfig maps the specifiers at
+ * ../types via `paths` — this still type-checks the real exported declaration
+ * surface + its exports wiring.
  *
  * Nothing here runs. `tsc --noEmit --strict` failing is the whole test: it
  * guards that the declared surface stays usable (and catches a declaration that
@@ -42,8 +42,20 @@ import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixt
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
 import { enableMorph } from '@magic-spells/puzzle/morph';
 import type { MorphEngine } from '@magic-spells/puzzle/morph';
-import { prerender, injectShell } from '@magic-spells/puzzle/ssg';
-import type { PrerenderResult, ResolvedRouteHead } from '@magic-spells/puzzle/ssg';
+import {
+	prerender,
+	injectShell,
+	injectStaticShell,
+	enumerateRoutes,
+} from '@magic-spells/puzzle/ssg';
+import type {
+	PrerenderResult,
+	PrerenderedPage,
+	ResolvedRouteHead,
+	RouteEntry,
+} from '@magic-spells/puzzle/ssg';
+import { mountStatic } from '@magic-spells/puzzle/static';
+import type { MountStaticOptions, StaticRoute } from '@magic-spells/puzzle/static';
 
 // ---------------------------------------------------------------------------
 // PuzzleModel + schema builders (§7, §20–§22)
@@ -362,6 +374,83 @@ prerender(config).then((result: PrerenderResult) => {
 		content: page.html ?? '',
 		title: page.title,
 		head,
+	});
+});
+
+// ---------------------------------------------------------------------------
+// ssg subpath: static-mode (D81) surface — the per-page capture fields on
+// PrerenderedPage, the exported route enumeration, and the static shell surgery.
+// ---------------------------------------------------------------------------
+
+// enumerateRoutes flattens the tree to one entry per leaf (the drift-guard export).
+const entries: RouteEntry[] = enumerateRoutes(routes);
+const leaf = entries[0];
+const leafPath: string = leaf.fullPath;
+const leafChain: any[] = leaf.chain;
+const leafLayout: any | null = leaf.layout;
+void [leafPath, leafChain, leafLayout];
+
+prerender(config, { mode: 'static' }).then((result: PrerenderResult) => {
+	const page: PrerenderedPage = result.pages[0];
+	// The three static-mode-only capture fields (all optional — absent in hybrid).
+	const islandData: Record<string, any[]> | undefined = page.data;
+	const modules: { views: string[]; layout: string | null } | undefined = page.modules;
+	const pageRoute: object | undefined = page.route;
+	const firstViewModule: string | undefined = modules?.views[0];
+	void [firstViewModule, pageRoute];
+
+	// Static shell surgery takes the data island + slug, plus the normalized
+	// `base` prefix for a sub-path deploy.
+	const shell = '<html><head><title>x</title></head><body><div id="app"></div></body></html>';
+	return injectStaticShell(shell, {
+		targetId: 'app',
+		content: page.html,
+		title: page.title,
+		head: page.head,
+		slug: 'index',
+		data: islandData ?? {},
+		base: '/app',
+	});
+});
+
+// ---------------------------------------------------------------------------
+// static subpath: the browser kernel for `output: 'static'` (D81). The generated
+// per-page entry module calls mountStatic with the summary's serialized route.
+// ---------------------------------------------------------------------------
+
+const staticRoute: StaticRoute = {
+	path: '/todos/edit',
+	params: {},
+	chain: [
+		{ path: '/todos', name: 'todos' },
+		{ path: 'edit', name: 'todo-edit', meta: { title: 'Edit' } },
+	],
+};
+
+const staticOptions: MountStaticOptions = {
+	target: '#app',
+	views: [TodoListView, TodoListView],
+	layout: null,
+	route: staticRoute,
+	models: { todo: Todo },
+	formatters: { upcase },
+	apiURL: '',
+	// The three options the kernel destructures beyond the summary basics.
+	// (`routerMode` is accepted for config parity but ignored — D117.)
+	storage: window.localStorage,
+	routerMode: 'history',
+	routerBase: '/app',
+};
+
+mountStatic(staticOptions).then(() => {
+	// Also assignable inline (the shape is a plain options bag, not a nominal type).
+	return mountStatic({
+		target: '#app',
+		views: [TodoListView],
+		route: { path: '/', params: {}, chain: [{ path: '/' }] },
+		storage: window.sessionStorage,
+		routerMode: 'hash',
+		routerBase: '',
 	});
 });
 

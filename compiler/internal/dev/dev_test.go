@@ -1095,3 +1095,21 @@ func TestListenDevPortZeroTakesAnyFreePort(t *testing.T) {
 		t.Error("port 0 should resolve to a kernel-assigned port")
 	}
 }
+
+func TestListenDevRejectsOutOfRangePorts(t *testing.T) {
+	for _, port := range []int{-1, 70000} {
+		t.Run(fmt.Sprintf("%d", port), func(t *testing.T) {
+			ln, err := listenDev(port, false)
+			if ln != nil {
+				ln.Close()
+				t.Errorf("listenDev(%d) returned a listener, want nil", port)
+			}
+			if err == nil {
+				t.Fatalf("listenDev(%d) returned nil error", port)
+			}
+			if !strings.Contains(err.Error(), fmt.Sprintf("%d", port)) {
+				t.Errorf("error should name invalid port %d, got: %v", port, err)
+			}
+		})
+	}
+}

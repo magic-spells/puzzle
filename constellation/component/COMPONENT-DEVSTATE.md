@@ -12,8 +12,8 @@ connections:
   - FILE-DEVTOOLS
   - FILE-PUZZLE-APP
   - FILE-DEV-SERVER
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:24:00.364Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # Development reload state
@@ -31,8 +31,10 @@ cycle, since the bridge already imports `safeState` and `liveViewList` from here
 — devstate holds one nullable `viewObserver` slot that [[FILE-DEVTOOLS]] fills
 at hook registration and clears at teardown. `registerView`/`unregisterView`
 call it after updating the set, so a mount/destroy becomes a live extension
-event; with no extension attached the slot is null and costs an optional-call
-check. `liveViewList()` returns the set as an array **in mount order**, which is
+event — `unregisterView` only when the delete actually removed the view, so a
+constructed-but-never-mounted destroy cannot emit an unbalanced
+`mounted:false` (D118); with no extension attached the slot is null and costs
+an optional-call check. `liveViewList()` returns the set as an array **in mount order**, which is
 what lets the bridge replay views that mounted before it registered.
 
 All code is guarded by the inline `__PUZZLE_DEV__` define. Production uses a constant-false branch that esbuild removes; a build regression test proves the registry, serializer, key strings, and hooks do not remain in production output. The gates are written as positive `if (DEV) { … }` blocks rather than an early `if (!DEV) return` — esbuild reliably eliminates a constant-false branch but does not strip statements after an unconditional return.

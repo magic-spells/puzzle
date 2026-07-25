@@ -10,6 +10,7 @@ connections:
   - DECISION-D66-APP-LIFECYCLE-HOOKS
   - FILE-PUZZLE-APP
   - FILE-RUNTIME-ENTRY
+  - DOC-SPEC-ANATOMY
 notes:
   - kind: gotcha
     text: >-
@@ -17,8 +18,8 @@ notes:
       app.store throws before mount starts and after unmount. External wiring may
       call const pending = app.mount(); wire(app.store); await pending, or live in
       beforeMount.
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:23:57.477Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # PuzzleApp
@@ -34,7 +35,7 @@ the first route lands.
 Public config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
 `scrollBehavior`, `routerMode`, `routerInitialPath`, `routerBase`,
 `transitionMode`, `beforeMount`, `mounted`, and `beforeUnmount`. See
-[[DOC-SPEC]] §2 and the amendment sections.
+[[DOC-SPEC-ANATOMY]] §2 and the amendment sections.
 
 Lifecycle order:
 
@@ -48,6 +49,13 @@ Lifecycle order:
 5. `unmount()` invokes `beforeUnmount.call(app, app)`, stops the router,
    flushes pending Store persistence (including mutations from destroyed
    hooks), clears the container, and drops services. It is idempotent.
+
+Every `mount()` attempt claims a private generation epoch (`#mountEpoch`),
+burned by any teardown: a continuation resuming after either await proves it
+still owns the app before proceeding, so unmount+remount around an awaited
+`beforeMount`/`router.start()` can neither double-start the router, double-fire
+`mounted`, nor let the stale abort path tear down the replacement cycle (D118).
+The `_mounted` boolean stays the "is anything mounted" question only.
 
 While mounted, the app holds a window `pagehide` listener that calls
 `store.flush()`: batched persistence ([[COMPONENT-STORE]]) leaves a dirty

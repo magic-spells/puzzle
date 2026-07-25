@@ -10,6 +10,7 @@ connections:
   - FEATURE-SKELETON-FOLLOWUPS
   - DOC-PUZZLE-FILE
   - DOC-SPEC
+  - DOC-SPEC-VIEW
 verified_at: '2026-07-12T00:15:02.801Z'
 notes:
   - kind: verified
@@ -23,7 +24,7 @@ notes:
 # D52 — Skeleton anti-flash: opt-in `min-duration` hold; the error slot resolves won't-build (v1.20)
 
 Closes both items [[DECISION-D39-SKELETON]] left out of v1.8. One ships, one is
-rejected on the merits. See [[DOC-SPEC]] §16 (v1.20 amendment inside the section).
+rejected on the merits. See [[DOC-SPEC-VIEW]] §16 (v1.20 amendment inside the section).
 
 ## Context
 v1.8's exclusions: (1) a declarative error slot for a `data()` rejection while the

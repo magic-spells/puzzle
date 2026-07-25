@@ -10,6 +10,7 @@ connections:
   - FEATURE-ROUTER-BASE-PATH
   - DOC-ROUTER
   - DOC-SPEC
+  - DOC-SPEC-ROUTER
 verified_at: '2026-07-12T00:15:00.443Z'
 notes:
   - kind: verified
@@ -30,7 +31,7 @@ notes:
 The remaining half of the old router-modes follow-up (its memory half shipped as D42).
 `routerBase: '/myapp'` in the PuzzleApp config serves the app under a sub-path in both
 URL-carrying modes while route definitions, `push()`, `router.current`, `params`, and
-`this.route` stay base-free. See [[DOC-SPEC]] §23.
+`this.route` stay base-free. See [[DOC-SPEC-ROUTER]] §23.
 
 ## Context
 History mode assumed root deployment; D42 deliberately deferred base support because

@@ -6,6 +6,7 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-STORE
   - DOC-SPEC
+  - DOC-SPEC-DATA
   - DOC-DATASTORE
   - DOC-ROUTER
 ---
@@ -334,7 +335,7 @@ See [[DOC-DATASTORE]] for the full store query surface and the reactive renderin
 
 ## v1 Enforcement Semantics
 
-Per [[DOC-SPEC]] §7 and §20, v1 draws a precise line between what the store *acts on* and what it merely *stores*:
+Per [[DOC-SPEC-DATA]] §7 and §20, v1 draws a precise line between what the store *acts on* and what it merely *stores*:
 
 - **`.default()` and `.primary()` are honored by the store.** Defaults are applied on `createRecord`; the primary key identifies records for `findOne` and updates.
 - **Validation rules are enforced at the local write boundary (v1.16, D48).** `.required()`, `.min()`, `.max()`, `.oneOf()`, and `.validate()` now reject invalid data:
@@ -343,7 +344,7 @@ Per [[DOC-SPEC]] §7 and §20, v1 draws a precise line between what the store *a
   - `err.errors` is `[{ field, rule, message }]` in schema-declaration order (rules within a field in declared order); `err.message` is the first error's message. Both methods keep their return-the-record contract on success.
   - **Non-throwing surface for form UX:** static **`Model.validate(data, { fields }?)`** (pre-create check) and instance **`record.validate()`** (current field values) return `{ valid, errors }` with the same errors shape — validate first, then write. Static validation mirrors `createRecord` acceptance: an omitted/null primary field produces no `required` error because the store will generate it; an empty-string primary key remains invalid because the store does not generate for `''`. Pass `{ fields: ['name', 'email'] }` to validate only an edited subset. There is no persistent `record.errors` state.
   - **Rule semantics** (no type coercion — rules compare what they are given): outside the static primary-key exception above, `required` fails on `undefined`/`null`/`''` and short-circuits that field's remaining rules; a non-required field that is `undefined`/`null` skips its remaining rules; `min`/`max` compare `.length` for strings/arrays and value for numbers/dates (an incomparable/NaN-ish comparison passes, never throws); `oneOf` is strict `===` membership; a custom `validate(fn)` treats a falsy return as invalid but lets a *thrown* exception propagate. **Type-aware bounds (SPEC §35):** on a field *declared* `number()`/`date()`, a wrong-runtime-type value fails `min`/`max` with a type-mismatch message (`"age" must be a number`) instead of silently measuring `.length` — form inputs hand you strings, so convert (`Number(input.value)`) before writing. Type mismatches on `string()`/`array()` fields are still not validated.
-  - **Exempt by design:** `store.loadAll`/`loadOne` and public `store.upsert` (server data is authoritative — backend drift must not crash the read path) plus storage hydration (fail-soft startup). See [[DOC-SPEC]] §20.
+  - **Exempt by design:** `store.loadAll`/`loadOne` and public `store.upsert` (server data is authoritative — backend drift must not crash the read path) plus storage hydration (fail-soft startup). See [[DOC-SPEC-DATA]] §20.
 
   A worked form flow — validate first, then write:
 
@@ -374,7 +375,7 @@ Per [[DOC-SPEC]] §7 and §20, v1 draws a precise line between what the store *a
     }
   }
   ```
-- **Relationships (v1.17, D49)** — `Puzzle.belongsTo(type)` / `Puzzle.hasMany(type)` declared as schema entries resolve as **lazy store-backed getters** (see [[DOC-SPEC]] §21). They replace the old `static relationships` block from earlier drafts — do not write one; it is not part of the contract.
+- **Relationships (v1.17, D49)** — `Puzzle.belongsTo(type)` / `Puzzle.hasMany(type)` declared as schema entries resolve as **lazy store-backed getters** (see [[DOC-SPEC-DATA]] §21). They replace the old `static relationships` block from earlier drafts — do not write one; it is not part of the contract.
 
   ```js
   static schema = {
@@ -422,7 +423,7 @@ Per [[DOC-SPEC]] §7 and §20, v1 draws a precise line between what the store *a
   }
   ```
 
-  Each upserted object must carry its model's primary key. **Query fault-in and automatic write-through — Status: Planned — not in v1.** See [[DOC-SPEC]] §22. Local persistence is in-memory with optional localStorage.
+  Each upserted object must carry its model's primary key. **Query fault-in and automatic write-through — Status: Planned — not in v1.** See [[DOC-SPEC-DATA]] §22. Local persistence is in-memory with optional localStorage.
 
 ---
 

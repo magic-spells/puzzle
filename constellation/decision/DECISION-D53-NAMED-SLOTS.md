@@ -11,6 +11,7 @@ connections:
   - FEATURE-NAMED-SLOTS
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 verified_at: '2026-07-12T00:15:03.604Z'
 notes:
   - kind: verified
@@ -34,7 +35,7 @@ notes:
 Completes the [[DECISION-D16-COMPOSITION-SLOTS-CALLBACKS]] composition story.
 Multi-region components (card header/footer, modal title/body/actions) declare
 `<slot name="header">fallback</slot>`; call sites target regions with the HTML
-`slot` attribute on direct children. See [[DOC-SPEC]] §24.
+`slot` attribute on direct children. See [[DOC-SPEC-TEMPLATE]] §24.
 
 ## Context
 D16 shipped the default `<slot/>` only; multi-insertion-point components needed

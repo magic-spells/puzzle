@@ -4,6 +4,9 @@
 // This is the ONLY release pipeline — releases are published by hand from this
 // machine; there is no publish workflow in CI. Steps, fail-fast:
 //
+//   0. Clear stale platform pins — an aborted pack can leave the pack-time
+//      optionalDependencies in the tracked manifest; restore before anything
+//      reads it.
 //   1. Version consistency — package.json vs compiler/internal/version/version.go
 //      and each npm/puzzle-*/package.json (all must agree).
 //   2. Pack allowlist — delegate to scripts/verify-pack.mjs (the tarball must ship
@@ -48,6 +51,30 @@ function fail(msg) {
 
 function readJSON(relPath) {
 	return JSON.parse(readFileSync(join(repoRoot, relPath), 'utf8'));
+}
+
+// --- 0. Clear any stale pack-time platform pins ----------------------------
+// `prepack` injects the four platform optionalDependencies into package.json and
+// `postpack` removes them again — but npm does NOT run postpack when the pack step
+// itself fails (a rejected prepublishOnly, Ctrl-C, a full disk). That leaves the
+// worktree manifest pinned to versions that do not exist on the registry yet.
+// Restoring FIRST means an aborted pack can never feed a stale pinned manifest into
+// the next release. Idempotent: byte-for-byte a no-op on an already-clean manifest.
+// Safe in every entry point — `npm publish` runs prepublishOnly BEFORE prepack, so
+// this never races the injection it is undoing.
+const hadStalePins = Boolean(readJSON('package.json').optionalDependencies);
+try {
+	execFileSync('node', ['scripts/inject-platform-pins.mjs', 'restore'], {
+		cwd: repoRoot,
+		stdio: ['ignore', 'ignore', hadStalePins ? 'inherit' : 'ignore'],
+	});
+} catch {
+	fail('could not restore package.json (node scripts/inject-platform-pins.mjs restore)');
+}
+if (hadStalePins) {
+	console.log(
+		'release-prep: cleared stale platform pins left in package.json by an aborted pack\n'
+	);
 }
 
 // --- 1. Version consistency check ------------------------------------------

@@ -6,8 +6,8 @@ connections:
   - COMPONENT-COMPILER-CLI
   - FILE-DEV-SERVER
   - FEATURE-V1-54-DEV-PORT-SCAN
-verified_at: '2026-07-25T00:10:00.000Z'
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_at: '2026-07-25T05:24:28.565Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 A busy dev port is no longer fatal. `puzzle dev` binds the first free loopback

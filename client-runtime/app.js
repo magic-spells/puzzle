@@ -62,6 +62,22 @@ export class PuzzleApp {
 	// where beforeunload is unreliable on mobile), so it forces the write out.
 	#pageHideFlush = null;
 
+	// Mount generation (v1.31 lifecycle, D66). mount() is async, so every
+	// continuation after an await must answer "is MY mount still the live one?" —
+	// a question the _mounted BOOLEAN cannot answer, because it only records
+	// whether SOMETHING is mounted. An unmount() during an awaited beforeMount (or
+	// during router.start()) flips it false and tears down; a fresh mount() then
+	// flips it true again; the FIRST mount's continuation resumes, reads `true`,
+	// and proceeds against the NEW cycle's router/ctx — re-starting an already
+	// started router, restoring HMR state onto another cycle's tree, firing
+	// `mounted` a second time, or (on the beforeMount abort path) tearing the
+	// newer cycle down. So each mount() attempt claims a monotonic epoch and
+	// #teardown() burns the current one: `this.#mountEpoch !== epoch` is the
+	// authoritative staleness test — true iff anything tore down or re-mounted
+	// since this attempt began. The _mounted flag stays the "is anything mounted"
+	// question it always was (unmount()'s idempotency guard, the abort read).
+	#mountEpoch = 0;
+
 	/**
 	 * @param {object} config the frozen v1 surface (SPEC §2)
 	 * @param {string|Element} config.target CSS selector or Element to mount into
@@ -178,6 +194,14 @@ export class PuzzleApp {
 		// proceeds exactly as before — non-SSG behavior is untouched.
 		if (typeof document === 'undefined') return this;
 
+		// Claim this attempt's mount generation (see the #mountEpoch field comment).
+		// AFTER the early-outs above — an already-mounted no-op must not burn the
+		// epoch of the in-flight mount it is declining to redo — and before any
+		// wiring, so every await below can compare against a token unique to this
+		// attempt. A validation/target throw below leaves the epoch bumped, which is
+		// correct: it can only invalidate continuations of cycles already torn down.
+		const epoch = ++this.#mountEpoch;
+
 		// App lifecycle hooks (v1.31, SPEC §34, D66): validate the three optional
 		// config hooks up front, before any wiring. Nullish → treated as absent;
 		// any other non-function value is a mount()-time throw (the constructor
@@ -266,7 +290,9 @@ export class PuzzleApp {
 		// unmount() guards on this flag — were it still false here, the guard would
 		// no-op and the pending navigation would later mount into a detached
 		// container. Set after the target resolved + services wired, so a
-		// target-resolution throw above still leaves the app un-mounted.
+		// target-resolution throw above still leaves the app un-mounted. This flag
+		// answers "is anything mounted?" only; "is MY mount still the live one?" is
+		// the epoch's job (see #mountEpoch) — the two are not interchangeable.
 		this._mounted = true;
 
 		// Land any batched storage write before the page can unload (see the
@@ -298,23 +324,29 @@ export class PuzzleApp {
 		// finishes before router.start(). A throw/rejection ABORTS the mount — tear
 		// back down to the unmounted state and rethrow (mount() rejects; re-mounting
 		// later is legal). This abort path must NOT fire beforeUnmount (which pairs
-		// only with a completed mount), so it calls #teardown() directly. The
-		// _mounted guard: an unmount() during the in-flight hook already tore down
-		// (and flipped the flag), so don't double-teardown — but swallow nothing.
+		// only with a completed mount), so it calls #teardown() directly. It must
+		// also tear down only ITS OWN cycle: an unmount() during the in-flight hook
+		// already tore us down (don't double-teardown), and a mount() after that
+		// unmount owns the app now — destroying IT because our stale hook rejected
+		// would kill a healthy cycle. The epoch comparison is what tells those apart
+		// (the flag reads `true` in both cases); a stale rejection just propagates,
+		// the newer cycle owns its own cleanup. Nothing is swallowed either way.
 		if (beforeMount != null) {
 			try {
 				await beforeMount.call(this, this);
 			} catch (err) {
-				if (this._mounted) this.#teardown();
+				if (this.#mountEpoch === epoch && this._mounted) this.#teardown();
 				throw err;
 			}
 		}
 
-		// unmount() may have run during an async beforeMount (SPEC §34): its
-		// #teardown() flipped _mounted false and dropped our services. Stay torn
-		// down — the router must never start (the same guard the post-start path
-		// below already has for an unmount during router.start()).
-		if (!this._mounted) return this;
+		// Staleness gate (see the #mountEpoch field comment). unmount() may have run
+		// during an async beforeMount (SPEC §34) — its #teardown() dropped our
+		// services and burned our epoch — and a NEWER mount() may already own the
+		// app. Either way this continuation is stale: stay out, the router must never
+		// (re-)start from here. `#mountEpoch !== epoch` is the load-bearing half; the
+		// `!this._mounted` read stays as the plain torn-down case it always covered.
+		if (this.#mountEpoch !== epoch || !this._mounted) return this;
 
 		// Dev HMR restore, phase 1 (§27, D57; Change D): consume the one-shot blob
 		// and transplant its STORE records BEFORE navigation #0, so nav #0's data()
@@ -328,10 +360,14 @@ export class PuzzleApp {
 		// 5. Start routing — registers listeners and runs navigation #0.
 		await this.router.start(el, this.ctx);
 
-		// unmount() may have run while start()'s initial navigation awaited data():
-		// its router.stop() invalidated the nav (it abandoned without mounting) and
-		// dropped our services. Stay torn down — do not re-wire anything.
-		if (!this._mounted) return this;
+		// The same staleness gate after start()'s initial navigation. unmount() may
+		// have run while it awaited data(): its router.stop() invalidated the nav (it
+		// abandoned without mounting) and dropped our services — and a newer mount()
+		// may have wired fresh ones since. Stay out: do not re-wire anything, do not
+		// restore HMR state onto another cycle's view tree, and do not fire `mounted`
+		// for a mount that no longer owns the app. Everything below this line is
+		// synchronous, so this single gate covers the phase-2 restore and the hook.
+		if (this.#mountEpoch !== epoch || !this._mounted) return this;
 
 		// Dev HMR restore, phase 2 (§27, D57; Change D): the view chain is now
 		// mounted, so each saved view's LOCAL setData state (drafts, toggles) can be
@@ -414,6 +450,13 @@ export class PuzzleApp {
 	 * Assumes _mounted is true; leaves the app fully unmounted.
 	 */
 	#teardown() {
+		// Burn the current mount generation FIRST (see the #mountEpoch field
+		// comment): every in-flight mount() continuation — ours or an older one — is
+		// stale from here on, and a mount() started after this one claims a fresh
+		// epoch that no earlier continuation can be confused with. Ahead of the
+		// teardown body so nothing below can be undone by a continuation that still
+		// believes it owns the app.
+		this.#mountEpoch++;
 		// Dev HMR (constellation/doc/DOC-SPEC.md §27, D57): retract the published app so a
 		// stale reference can't outlive this instance — but only if it still points
 		// at us (a re-mount elsewhere may have replaced it).

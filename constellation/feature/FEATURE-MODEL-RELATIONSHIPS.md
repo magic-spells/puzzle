@@ -10,6 +10,7 @@ connections:
   - DOC-MODELS
   - DOC-DATASTORE
   - DOC-SPEC
+  - DOC-SPEC-DATA
 verified_at: '2026-07-12T00:14:43.818Z'
 notes:
   - kind: verified
@@ -22,7 +23,7 @@ notes:
 # v1.17 — Model relationships (`hasMany` / `belongsTo`)
 
 The schema entries reserved since v1 now resolve. Driven by
-[[DECISION-D49-MODEL-RELATIONSHIPS]]; contract in [[DOC-SPEC]] §21.
+[[DECISION-D49-MODEL-RELATIONSHIPS]]; contract in [[DOC-SPEC-DATA]] §21.
 
 ## Intent
 

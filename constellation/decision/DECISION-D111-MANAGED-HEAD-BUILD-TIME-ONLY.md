@@ -7,8 +7,8 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-HEAD-TAGS
-verified_at: '2026-07-24T23:35:04.615Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-25T05:24:34.861Z'
+verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 notes:
   - kind: verified
     text: >-
@@ -101,8 +101,17 @@ are template facts, and the head-tag grep was the sole reason it ever opened a
   crawler fetches — remains correct per page. `tests/router-head.test.js` now
   pins this: the takeover path asserts SSG-emitted tags are left byte-identical.
 - **`meta.description`/`canonical`/`socialImage` are dead config under
-  `output: 'spa'`.** They resolve and are then unused. Accepted deliberately; a
-  compiler warning was considered and declined as unnecessary ceremony.
+  `output: 'spa'`.** They resolve and are then unused. A compiler warning was
+  initially declined as unnecessary ceremony, then ADDED in the 0.3.0
+  pre-publish round (Cory-approved): the silent acceptance was a trap, and an
+  honest signal turned out to exist — `warnDeadSPARouteMeta`
+  (`compiler/internal/build/route_head_warning.go`) lexes ONLY conventionally
+  named `app/**/routes.{js,ts}` modules (comment/string/regex/template-aware,
+  key-position match at depth 1 inside a `meta: { … }` object) and warns with
+  file:line:column under plain SPA output only. This is NOT the retired D89
+  byte scan coming back: one file convention, real tokens, zero prose
+  false-positives (pinned by tests), fires only when the key is genuinely
+  route-head config.
 - SPAs and hybrid apps shed ~1.4 KB minified and ~10 `querySelector` probes per
   navigation. Static never shipped it (no router).
 - D89's `flip` half is untouched and still shipping; only its head-tags half is

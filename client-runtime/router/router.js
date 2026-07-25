@@ -311,6 +311,15 @@ export class Router {
 	// #recoverFailedNavigation (block/failure); a newer navigation to a DIFFERENT path
 	// overwrites it and still supersedes normally.
 	#pendingNavPath = null;
+	// The #navigate promise of the navigation #pendingNavPath names — the two move
+	// together at every set/clear point, so whenever the path slot is non-null this
+	// holds the promise for THAT navigation. push()'s double-click no-op returns it
+	// instead of a fresh resolved promise, so the second caller settles when the
+	// in-flight navigation does. Written by push() (the only caller that can leave
+	// #pendingNavPath non-null, and the only place the promise object exists);
+	// cleared alongside the path in #navigate, #commitState, #recoverFailedNavigation
+	// and stop().
+	#pendingNavPromise = null;
 	// Guard redirects re-enter the normal pipeline through replace(), so every
 	// destination gets its own inherited guard chain and the denied URL never
 	// commits. A bad pair/cycle could otherwise recurse forever without reaching
@@ -439,6 +448,12 @@ export class Router {
 	// The single framework-owned polite live region, appended to <body> in start()
 	// and removed in stop(). Null when focus management is off (or before start).
 	#liveRegion = null;
+	// document.title as it stood at the LAST route announcement — seeded in start()
+	// with the pre-navigation title, cleared with the region in stop().
+	// #announceRoute compares against it to tell a title this route actually
+	// resolved from the previous route's leftover one — the D84 no-meta.title case,
+	// which must not be announced again (and, unchanged, would be silent).
+	#announcedTitle = null;
 
 	/**
 	 * @param {Array<{path,name,view,layout,meta,guard,transitionMode,children}>} routes route definitions
@@ -581,6 +596,12 @@ export class Router {
 		// null-check keeps a double start() from stacking regions.
 		if (this.#focusEnabled() && !this.#liveRegion) {
 			this.#liveRegion = this.#createLiveRegion();
+			// Baseline for #announceRoute's "did the title actually move?" test: the
+			// document title as it stands BEFORE navigation #0 — the static one the
+			// shipped HTML carries. An app with no per-route titles never moves it, so
+			// its very first announcement already falls back to route identity instead
+			// of reading the app name out.
+			this.#announcedTitle = document.title;
 		}
 
 		// Memory mode (D42): there is no URL to read. Seed the in-memory stack with
@@ -705,6 +726,7 @@ export class Router {
 		this.#guardRedirectCount = 0;
 		this.#guardRedirecting = false;
 		this.#pendingNavPath = null;
+		this.#pendingNavPromise = null;
 		this.#positions.clear();
 		this.#scrollKey = null;
 		// Drop any deferred push and clear the commit-window flag (defensive: the
@@ -724,6 +746,9 @@ export class Router {
 		if (this.#liveRegion) {
 			this.#liveRegion.remove();
 			this.#liveRegion = null;
+			// The comparison baseline belongs to that region — a later start() builds
+			// an empty one and must judge its first announcement from scratch.
+			this.#announcedTitle = null;
 		}
 		if (this.#prevScrollRestoration != null) {
 			history.scrollRestoration = this.#prevScrollRestoration;
@@ -782,10 +807,25 @@ export class Router {
 		// first nav discarded. #pendingNavPath names the target of the navigation that
 		// owns the token but has not committed, so a same-key push here no-ops; a push
 		// to a DIFFERENT path mid-flight has a different key and still supersedes.
+		//
+		// The no-op hands back the IN-FLIGHT navigation's promise, never a fresh
+		// resolved one: `await router.push(p)` must mean "the navigation to p has
+		// landed". A resolved promise here let the second caller continue while the
+		// OLD route was still committed and the new DOM did not exist yet. Sharing
+		// the first navigation's promise gives both callers the same settlement —
+		// commit, failure, or supersession alike.
 		if (this.#pendingNavPath != null && key === sameNavKey(this.#pendingNavPath)) {
-			return Promise.resolve();
+			return this.#pendingNavPromise ?? Promise.resolve();
 		}
-		return this.#navigate(path, { push: true });
+		const nav = this.#navigate(path, { push: true });
+		// #navigate runs synchronously up to its first await, so it has already
+		// recorded this push's target in #pendingNavPath (or left it null: an
+		// unmatched path warns and returns before the token bump). Pair the promise
+		// with it here — the only place the promise exists — but ONLY while the slot
+		// still names THIS push: a re-entrant push fired synchronously from inside
+		// that stretch owns the slot instead, and its own pairing must stand.
+		if (this.#pendingNavPath === path) this.#pendingNavPromise = nav;
+		return nav;
 	}
 
 	/**
@@ -979,6 +1019,7 @@ export class Router {
 		// failure, or a same-path redirect no-op) and still owns the token: clear the
 		// in-flight target so a later push to that path is not wrongly no-op'd.
 		this.#pendingNavPath = null;
+		this.#pendingNavPromise = null;
 	}
 
 	/**
@@ -1050,7 +1091,14 @@ export class Router {
 		// memory-mode back()-then-push('/same') is push-vs-pop (truncate+append vs
 		// index move), a real navigation despite the shared path. A pop/replace/initial
 		// nav starting here clears the slot for that reason.
+		//
+		// The paired promise is always cleared here and re-attached by push() the
+		// moment this call returns (see push()): the promise object does not exist
+		// yet inside #navigate, and leaving the PREVIOUS navigation's promise
+		// standing next to a fresh target would hand a re-entrant same-path push a
+		// promise for a navigation that is already over.
 		this.#pendingNavPath = push ? rawPath : null;
+		this.#pendingNavPromise = null;
 		const guardReentry = this.#guardRedirecting;
 		this.#guardRedirecting = false;
 		if (!guardReentry) this.#guardRedirectCount = 0;
@@ -1862,6 +1910,7 @@ export class Router {
 		// The in-flight navigation just committed (only the token owner reaches
 		// #commitState): clear its pending target — #state now names it.
 		this.#pendingNavPath = null;
+		this.#pendingNavPromise = null;
 		// Dev-only missing-<Slot/> diagnostic — the module helper (and this whole
 		// per-commit walk) DCEs away in production (§27 define pattern).
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -2140,12 +2189,34 @@ export class Router {
 	 * Announce the committed route in the live region. document.title is READ, never
 	 * re-derived: #commitLocation (URL + memory stack + title/head, D84) runs
 	 * immediately before the mount + #commitState, so the document already carries
-	 * this navigation's resolved title — including the case where the route sets
-	 * none and the previous title deliberately stands.
+	 * this navigation's resolved title.
+	 *
+	 * But a route that resolves NO meta.title deliberately leaves the previous
+	 * title standing (D84), and aria-live announces on CHANGE only — writing that
+	 * unchanged string back is silent, so an app with no per-route titles (the
+	 * default) would announce nothing after its first navigation, and a mixed app
+	 * would name the page the user just LEFT. So the title is used only when it is
+	 * non-empty AND actually moved since the last announcement; otherwise fall back
+	 * to something route-identifying that does change — the committed route's name,
+	 * or its path when the name would repeat what the region already shows (two
+	 * `/user/:id` navigations share one name).
 	 */
 	#announceRoute() {
 		if (!this.#liveRegion) return;
-		this.#liveRegion.textContent = document.title;
+		const title = document.title;
+		const moved = title !== '' && title !== this.#announcedTitle;
+		// Recorded whether or not it is what we announce: this tracks the DOCUMENT's
+		// title, so the next navigation can tell a freshly resolved title from the
+		// previous route's leftover one.
+		this.#announcedTitle = title;
+		let text = title;
+		if (!moved) {
+			const chain = this.#state?.entry?.chain;
+			const leaf = chain ? chain[chain.length - 1] : null;
+			text = leaf?.name ?? this.#state?.path ?? '';
+			if (text === this.#liveRegion.textContent) text = this.#state?.path ?? text;
+		}
+		this.#liveRegion.textContent = text;
 	}
 
 	/**

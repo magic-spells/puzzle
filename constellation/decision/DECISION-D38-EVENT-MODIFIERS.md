@@ -7,6 +7,7 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - DOC-EVENTS
   - DOC-SPEC
+  - DOC-SPEC-TEMPLATE
 notes:
   - kind: state
     text: >-
@@ -18,10 +19,10 @@ notes:
 
 # D38 — Event modifiers: `@event:modifier={...}` (v1.7)
 
-`@event:modifier[:modifier…]={ handler }` lands `prevent`/`stop`/`once` plus keyboard key filters; canonical execution order, modifiers encoded in the vnode key, wrapped at runtime via `withModifiers`. Settled (v1.7); additive. See [[DOC-SPEC]] §5 and [[DOC-EVENTS]].
+`@event:modifier[:modifier…]={ handler }` lands `prevent`/`stop`/`once` plus keyboard key filters; canonical execution order, modifiers encoded in the vnode key, wrapped at runtime via `withModifiers`. Settled (v1.7); additive. See [[DOC-SPEC-TEMPLATE]] §5 and [[DOC-EVENTS]].
 
 ## Context
-[[DOC-SPEC]] §5/§6 deferred event modifiers. D38 lands them.
+[[DOC-SPEC-TEMPLATE]] §5/§6 deferred event modifiers. D38 lands them.
 
 ## Decision
 `@event:modifier[:modifier…]={ handler }`. The set is **`prevent`** (`preventDefault`), **`stop`** (`stopPropagation`), **`once`** (fires once EVER for that binding) on any event, plus **key filters** `enter/escape/tab/space/up/down/left/right` (→ `event.key` `Enter`/`Escape`/`Tab`/`' '`/`ArrowUp`/`ArrowDown`/`ArrowLeft`/`ArrowRight`) valid **only** on `keydown`/`keyup`/`keypress`. Modifiers stack.
