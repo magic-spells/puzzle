@@ -5,9 +5,9 @@ description: >
   "puzzle view", "puzzle component", "PuzzleApp", "puzzle routes", "puzzle build",
   "puzzle dev", SSG/static export of a Puzzle app, or work in a repo containing
   puzzle.config.js. Covers app structure, .pzl anatomy, events, routing, the data
-  layer, loading skeletons, morph transitions, static prerendering rules, and
-  puzzle-pieces conventions.
-version: 1.2.0
+  layer, testing and fixtures, loading skeletons, morph transitions, static
+  prerendering rules, and puzzle-pieces conventions.
+version: 1.3.0
 ---
 
 # Puzzle Framework — App-Builder Guide
@@ -41,8 +41,25 @@ CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
 `--hybrid`, `--mode production|development`), `init`, `generate`, `add` (tailwind integration,
 `piece <name…>`, `skills`), `upgrade`, `doctor`, `info`.
 
+- `dev` and `build` both take `--fixtures` (see Fixtures below).
+- A busy `--port` is not fatal: `dev` scans upward for the first free one and
+  warns when it moved. `--strict-port` restores bind-or-fail.
+- `puzzle upgrade skills` refreshes the installed agent skill from the running
+  binary. `puzzle upgrade` also offers the refresh after it installs a new
+  version. Re-running `puzzle add skills` asks before replacing an existing
+  install rather than erroring.
+
 Production builds default to ES2022, minification, and **console stripping** —
 set `build: { dropConsole: false }` in puzzle.config.js to keep console calls.
+Linked source maps are **opt-in** in production (`build: { sourceMap: true }`);
+dev always emits them. Note that a JSON `null` means "unset" for these keys, not
+`false`.
+
+**Dev API proxy.** `dev: { proxy: { '/api': 'http://localhost:3091' } }` forwards
+matching prefixes to a backend so the app can use same-origin paths
+(`apiURL: ''`) with no CORS middleware. Paths are forwarded unrewritten. A `/`
+prefix and two prefixes differing only by a trailing slash are both config
+errors — proxy a specific prefix.
 
 ## .pzl anatomy
 
@@ -147,11 +164,25 @@ Rules that bite:
   order). Route views/layouts must be **statically imported** in routes.js.
 - **Head metadata lives on `meta`** (puzzle ≥ 0.2.0): `title`, `description`,
   `canonical`, `socialImage` — static strings, each inherited leaf→root
-  independently (`null` suppresses an inherited value). They render as
-  `<title>` + og/twitter/canonical tags in prerendered HTML AND stay synced
-  across SPA navigation. Define root-route defaults so child routes never
-  show stale values. Values are static only — no functions or per-record
-  titles.
+  independently (`null` suppresses an inherited value). Define root-route
+  defaults so child routes never show stale values. Values are static only — no
+  functions or per-record titles. **Delivery is split, and this trips people
+  up:** the browser syncs `document.title` on every navigation, but the
+  og/twitter/canonical tags are baked per page **at build time only** and are
+  never touched at runtime. Crawlers and unfurlers GET each URL fresh and never
+  client-navigate, so they always read the correct baked copy. The consequence:
+  under `output: 'spa'` (no prerender pass) `description`/`canonical`/
+  `socialImage` are accepted but **inert** — if you need social previews, build
+  `hybrid` or `static`. Do not write code that reads an og tag out of the live
+  DOM after an in-app navigation; it will be navigation zero's value.
+- **Focus + route announcement are automatic** (puzzle ≥ 0.2.0): every committed
+  navigation moves focus to the incoming view root (with `preventScroll`, under
+  a transient `tabindex="-1"`) and announces the committed title in a
+  framework-owned visually-hidden `aria-live` region. You get accessible SPA
+  navigation for free — don't hand-roll it. `focusBehavior` mirrors
+  `scrollBehavior`: omit for the default, `false` to disable entirely
+  (announcement included), or a function to take over. Memory mode and
+  navigation #0 are no-ops; static output has no router, so it gets neither.
 - **Query state is on the route snapshot** (puzzle ≥ 0.2.0): `this.route.query`
   is a parsed, frozen object (`?q=x&tag=a&tag=b` → `{ q: 'x', tag: ['a','b'] }`);
   `this.route.pathname`/`hash` split the raw `path`. Query never merges into
@@ -206,6 +237,30 @@ Views reach the store as `this.ctx.store`:
 - Records mutate in place: `record.update(patch)`, `record.destroy()`,
   `record.validate()` → `{ valid, errors }` (non-throwing, for form UX).
 
+**Record identity ignores number/string spelling.** `findOne('todo', id)` returns
+the same record whether `id` is `7` or `'7'` — which matters constantly, because
+route params are always strings while JSON payloads usually carry numbers. FK
+comparison in `belongsTo`/`hasMany` uses the same rule. Only numbers normalize:
+`null`/objects keep strict identity, and there is no numeric parsing (`'01'` ≠
+`1`). A record's own key field keeps its original type. So
+`findOne('post', this.route.params.id)` is correct as written — do not add
+`Number(...)` coercion.
+
+**Auth headers: `beforeRequest`.** Every adapter call — reads, writes, and
+`store.request()` — funnels through one hook you set in the app config:
+
+```js
+new PuzzleApp({
+  beforeRequest(init, { type, method, url }) {
+    init.headers = { ...init.headers, Authorization: `Bearer ${token()}` };
+  },
+});
+```
+
+It is **synchronous by design**, so inline token refresh is not supported —
+refresh outside the request path and let the hook read the current token. Mutate
+`init` or return a new one.
+
 The reactivity contract — the three methods are not interchangeable:
 
 - **`data()`** owns the model layer. Store queries made inside `data()`
@@ -222,6 +277,69 @@ The reactivity contract — the three methods are not interchangeable:
 
 Persistence: give the app config a `storage` (e.g. localStorage-backed); the
 store hydrates at startup and persists snapshots after changes, fail-soft.
+
+## Testing (`@magic-spells/puzzle/testing`)
+
+Puzzle ships its own test utilities — do NOT hand-roll a harness, and do not
+reach into private fields to await renders.
+
+```js
+import { mountView, createTestApp, settled } from '@magic-spells/puzzle/testing';
+
+const view = await mountView(TodoItem, { props: { id: '1' }, models: { todo: Todo } });
+await view.click('button.toggle');       // dispatches, then awaits settled()
+expect(view.find('.title').textContent).toBe('Walk the dog');
+view.destroy();                          // always, to release subscriptions
+
+const app = await createTestApp({ routes, models });   // real app, memory router
+await app.router.push('/todos/1');
+```
+
+- `mountView(ViewClass, options)` mounts ONE view against a detached container.
+  Options: `params`, `props`, `children`, `ref`, `route`, `models`, `store`,
+  `router`, `formatters`, `ctx`. Returns a handle: `instance`, `container`,
+  `element`, `ctx`, `store`, `router`, `find(sel)`, `findAll(sel)`,
+  `click(target)`, `setProps(props)`, `destroy()`.
+- `createTestApp(config)` boots a REAL `PuzzleApp` — `target` and
+  `routerMode: 'memory'` are forced, everything else (including
+  `routerInitialPath`) passes through. Handle: `app`, `store`, `router`, `ctx`,
+  `find`, `findAll`, `click`, `destroy()`.
+- `settled()` awaits the framework's pending render/flush work. `click()` and
+  `setProps()` already await it; use it directly after mutating the store.
+- `installFakeAnimate()` / `installFakeObserver()` stub Web Animations and
+  IntersectionObserver so animation and `trigger: 'visible'` code paths run
+  deterministically under jsdom.
+
+## Fixtures and the mock adapter
+
+Schema-driven fake data, generated from the model `static schema` alone:
+
+```js
+// app/fixtures.js
+export default {
+  seed: { todo: 12 },                       // generate 12 todos from the schema
+  mock: { todo: { latency: 150 } },         // intercept adapter calls for this type
+  setup(store) { /* optional hand-tuning after seeding */ },
+};
+```
+
+Run with `puzzle dev --fixtures` or `puzzle build --fixtures`. **Without the
+flag nothing imports the module**, so fixtures can never reach a production
+bundle — that exclusion is structural, not a tree-shaking heuristic. In tests,
+call `installFixtures(config)` (re-exported from `/testing`) yourself.
+
+The mock adapter replaces the store's single network seam, so it behaves
+identically in `puzzle dev` and in Vitest — this is deliberately a client-side
+mock, not a dev-only mock server.
+
+## DevTools
+
+A Chrome DevTools extension (separate repo, `magic-spells/puzzle-devtools`)
+inspects views, store records, and the subscription graph. The framework ships
+only a dev-only bridge that activates when the extension is installed; it costs
+**zero production bytes** and needs no config. Nothing to wire up — but if you
+are debugging reactivity, `window.__PUZZLE_APP__` is also available in dev
+builds.
 
 ## Loading skeletons
 
@@ -330,7 +448,9 @@ to `dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
 7. Prerendered output pairs with post-build tooling: Pagefind can index `dist/`
    (content is baked into `#app`). Since puzzle 0.2.0 the build writes
    `<title>` PLUS og/twitter/canonical tags from the route `meta` head fields
-   (see Routing) — sitemap generation still needs your own Node script.
+   (see Routing) — and the build is the ONLY place those tags are ever written,
+   so prerendering is what makes them exist at all. Sitemap generation still
+   needs your own Node script.
 
 ## Styling
 
