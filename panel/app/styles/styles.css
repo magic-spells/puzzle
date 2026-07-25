@@ -180,14 +180,18 @@
 @keyframes dt-pulse {
 	0% {
 		background-color: var(--dt-accent-soft);
-		box-shadow: inset 2px 0 0 var(--dt-accent);
 	}
 	100% {
 		background-color: transparent;
-		box-shadow: inset 2px 0 0 transparent;
 	}
 }
 
+/*
+ * The pulse animates BACKGROUND-COLOR ONLY. It used to also animate an inset
+ * left shadow, which is now how SELECTION is drawn (`dt-row-selected`) — and a
+ * selected row that re-renders must show both at once, so the two effects were
+ * split onto different properties rather than fighting over one.
+ */
 .dt-pulse {
 	animation: dt-pulse 600ms ease-out;
 }
@@ -197,4 +201,33 @@
 		animation-duration: 1ms;
 		background-color: var(--dt-accent-soft);
 	}
+}
+
+/*
+ * The active tree row's 2px left bar (VS Code's active-item convention). An
+ * inset box-shadow rather than a border so it costs no layout width and cannot
+ * shift the row's text by a pixel when selection moves.
+ */
+.dt-row-selected {
+	box-shadow: inset 2px 0 0 var(--dt-accent);
+}
+
+/*
+ * Indent guides. One hairline per ancestor level, painted as a repeating
+ * gradient rather than N nested elements — the tree is a FLAT keyed list, so
+ * per-level DOM would mean rebuilding row structure on every collapse.
+ *
+ * The row's inline style supplies `background-size: <depth * 12>px 100%`, which
+ * is what limits the repeat to exactly one line per ancestor; a root row gets
+ * 0px and paints none. The 15px offset puts each guide under its parent's
+ * chevron centre (7px gutter + half of the 16px chevron box).
+ */
+.dt-tree-row {
+	background-image: repeating-linear-gradient(
+		to right,
+		var(--dt-line) 0 1px,
+		transparent 1px 12px
+	);
+	background-repeat: no-repeat;
+	background-position: 15px 0;
 }

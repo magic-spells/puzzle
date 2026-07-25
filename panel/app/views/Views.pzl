@@ -12,16 +12,15 @@
       storageKey="puzzle-devtools:views-split">
 
     <div slot="first" class="h-full flex flex-col min-h-0 overflow-hidden border-r border-line bg-surface">
-      <header class="shrink-0 flex items-center gap-2 h-6 px-2 border-b border-line">
+      <header class="shrink-0 flex items-center gap-2 min-h-8 px-2 py-1.5 border-b border-line">
         <span class="font-mono text-[10px] font-semibold uppercase tracking-wider text-faint">Tree</span>
         <span class="font-mono text-[10px] tabular-nums text-faint">{ liveCount }</span>
         <button
           type="button"
+          data-reload-tree
           title="Re-request snapshot:views"
-          class="ml-auto rounded px-1 font-mono text-[10px] text-muted hover:bg-raised hover:text-accent"
-          @click={ reloadTree }>
-          { loadingTree ? '···' : '⟳' }
-        </button>
+          class="ml-auto flex size-4 items-center justify-center rounded text-muted hover:bg-raised hover:text-accent { reloadClass }"
+          @click={ reloadTree }>{#svg 'icons/refresh.svg'}</button>
       </header>
 
       {#if treeError}
@@ -42,8 +41,9 @@
               <li key={ row.id } role="treeitem">
                 <div
                   data-view-id="{ row.id }"
-                  class="group flex items-center gap-1 h-[19px] pr-1 cursor-default { row.rowClass } { row.pulseClass }"
-                  style="padding-left:{ row.indent }"
+                  class="dt-tree-row group flex items-center gap-1.5 min-h-[22px] py-0.5 pr-1 cursor-default { row.rowClass } { row.pulseClass }"
+                  style="padding-left:{ row.indent };background-size:{ row.guideWidth } 100%"
+                  title="{ row.title }"
                   @click={ select(row.id) }
                   @mouseenter={ hoverOn(row.id) }
                   @mouseleave={ hoverOff(row.id) }>
@@ -51,17 +51,23 @@
                     <button
                       type="button"
                       data-twisty="{ row.id }"
-                      class="shrink-0 w-4 h-4 leading-none text-[11px] text-muted hover:text-ink"
+                      class="shrink-0 flex size-4 items-center justify-center text-muted transition-transform duration-[120ms] ease-out hover:text-ink { row.twistyClass }"
                       title="Expand or collapse"
-                      @click:stop={ toggle(row.id) }>{ row.twisty }</button>
+                      @click:stop={ toggle(row.id) }>{#svg 'icons/chevron-right.svg'}</button>
                   {:else}
-                    <span class="shrink-0 w-4"></span>
+                    <span class="shrink-0 size-4"></span>
                   {/if}
 
-                  <span class="shrink-0 font-mono text-[11px] { row.nameClass }">{ row.name }</span>
                   <span
-                    class="min-w-0 truncate font-mono text-[10px] { row.moduleClass }"
-                    title="{ row.moduleLabel }">{ row.moduleLabel }</span>
+                    data-kind-dot
+                    class="shrink-0 size-1.5 rounded-full { row.kindClass }"
+                    aria-hidden="true"></span>
+
+                  <span class="shrink-0 font-mono text-[12px] leading-none { row.nameClass }">{ row.name }</span>
+
+                  {#if row.hasModuleLabel}
+                    <span class="min-w-0 truncate font-mono text-[10px] leading-none { row.moduleClass }">{ row.moduleLabel }</span>
+                  {/if}
 
                   <button
                     type="button"
@@ -143,7 +149,7 @@ import SplitPanel from '../components/ui/SplitPanel.pzl';
 import StateGroup from '../components/StateGroup.pzl';
 import { CONNECTION_ID, CONNECTION_STATE } from '../models/connection.js';
 import { api, applyViewSnapshot } from '../bridge.js';
-import { entriesOf } from '../values.js';
+import { entriesOf, moduleLabel, moduleTitle, viewKind } from '../values.js';
 
 /**
  * The Views panel: an Elements-style master/detail over the live component
@@ -166,8 +172,26 @@ const TREE_DEBOUNCE_MS = 120;
 const INSPECT_DEBOUNCE_MS = 150;
 const TOAST_MS = 2400;
 
-const ROW_SELECTED = 'bg-accent-soft';
+// Selection carries a 2px left accent bar (`dt-row-selected`, an inset shadow)
+// on top of the tint, so an active row still reads as active while the pulse
+// animation is repainting its background.
+const ROW_SELECTED = 'bg-accent-soft dt-row-selected';
 const ROW_IDLE = 'hover:bg-raised';
+
+/** Indent geometry, shared by the padding and the indent-guide gradient. */
+const GUTTER = 7;
+const STEP = 12;
+
+/**
+ * Kind is subliminal grouping, not a legend — three tiers from the existing
+ * palette, no invented hues. Layout is the accent, a routed view is the `ok`
+ * tier, and components recede to `faint` because they are the majority.
+ */
+const KIND_DOT = {
+  layout: 'bg-accent',
+  view: 'bg-ok',
+  component: 'bg-faint',
+};
 
 export default class ViewsView extends PuzzleView {
   created() {
@@ -253,6 +277,8 @@ export default class ViewsView extends PuzzleView {
       rows,
       liveCount: views.filter((view) => view.live).length,
       loadingTree: local.loadingTree,
+      // The reload glyph IS the spinner while a snapshot is in flight.
+      reloadClass: local.loadingTree ? 'animate-spin' : '',
       treeError: local.treeError,
       toast: local.toast,
 
@@ -302,15 +328,27 @@ export default class ViewsView extends PuzzleView {
       const isClosed = closed[record.id] === true;
       const isSelected = record.id === selectedId;
 
+      const label = moduleLabel(record.name, record.module);
+
       rows.push({
         id: record.id,
         name: record.name,
-        moduleLabel: record.module ?? '—',
+        // '' when the basename just repeats the name — the row then shows the
+        // name alone instead of "MainLayout MainLayout.pzl".
+        moduleLabel: label,
+        hasModuleLabel: label !== '',
+        title: moduleTitle(record.name, record.module),
         hasChildren,
-        twisty: hasChildren ? (isClosed ? '▸' : '▾') : '',
-        // 8px gutter + 12px per level, matching the Elements panel's feel.
-        indent: `${8 + depth * 12}px`,
+        // The chevron is one SVG, rotated 90° when the node is open, so there is
+        // exactly one glyph and the state reads as motion rather than a swap.
+        twistyClass: hasChildren && !isClosed ? 'rotate-90' : '',
+        // GUTTER + one STEP per level. `guideWidth` sizes the repeating
+        // hairline gradient (see .dt-tree-row) so a row draws exactly one guide
+        // per ancestor level and roots draw none.
+        indent: `${GUTTER + depth * STEP}px`,
+        guideWidth: `${depth * STEP}px`,
         rowClass: isSelected ? ROW_SELECTED : ROW_IDLE,
+        kindClass: KIND_DOT[viewKind(record.module)],
         nameClass: isSelected ? 'text-accent font-semibold' : 'text-ink',
         moduleClass: isSelected ? 'text-accent' : 'text-faint',
         pulseClass: record.pulseAt ? 'dt-pulse' : '',

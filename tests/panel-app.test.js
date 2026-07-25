@@ -464,13 +464,64 @@ describe.skipIf(!built)('Views panel', () => {
 		expect(treeIds()).toEqual(['1', '2', '3', '4', '5']);
 
 		expect(document.body.textContent).toContain('FixtureLayout');
-		expect(document.body.textContent).toContain('layouts/Fixture.pzl');
+		// The row prints the BASENAME only; the full path moved to the tooltip.
+		expect(treeRow('1').textContent).toContain('Fixture.pzl');
+		expect(treeRow('1').textContent).not.toContain('layouts/Fixture.pzl');
+		expect(treeRow('1').getAttribute('title')).toBe('layouts/Fixture.pzl');
 
 		// One flat keyed list; depth is padding, not nesting.
-		expect(treeRow('1').style.paddingLeft).toBe('8px');
-		expect(treeRow('2').style.paddingLeft).toBe('20px');
-		expect(treeRow('3').style.paddingLeft).toBe('32px');
-		expect(treeRow('5').style.paddingLeft).toBe('20px');
+		expect(treeRow('1').style.paddingLeft).toBe('7px');
+		expect(treeRow('2').style.paddingLeft).toBe('19px');
+		expect(treeRow('3').style.paddingLeft).toBe('31px');
+		expect(treeRow('5').style.paddingLeft).toBe('19px');
+	});
+
+	it('draws one indent guide per ancestor level', () => {
+		// The guide gradient is clipped by background-size, so its width IS the
+		// ancestor count times the step. Roots draw none.
+		expect(treeRow('1').style.backgroundSize).toBe('0px 100%');
+		expect(treeRow('2').style.backgroundSize).toBe('12px 100%');
+		expect(treeRow('3').style.backgroundSize).toBe('24px 100%');
+		expect(treeRow('5').style.backgroundSize).toBe('12px 100%');
+		expect(treeRow('3').className).toContain('dt-tree-row');
+	});
+
+	it('renders chevrons as inlined SVG that rotates when open', async () => {
+		const twisty = document.querySelector('[data-twisty="2"]');
+		const svg = twisty.querySelector('svg');
+
+		// {#svg} inlines the real file, so there is a live <path>, not a text glyph.
+		expect(svg).toBeTruthy();
+		expect(svg.querySelector('path')).toBeTruthy();
+		expect(svg.getAttribute('stroke')).toBe('currentColor');
+		expect(twisty.textContent.trim()).toBe('');
+
+		// Open → rotated, so one glyph serves both states.
+		expect(twisty.className).toContain('rotate-90');
+		expect(twisty.className).toContain('transition-transform');
+
+		twisty.click();
+		await settle(app);
+		expect(document.querySelector('[data-twisty="2"]').className).not.toContain('rotate-90');
+	});
+
+	it('colors a kind dot per row and bars the active row', async () => {
+		const dot = (id) => treeRow(id).querySelector('[data-kind-dot]').className;
+		expect(dot('1')).toContain('bg-accent'); // layouts/
+		expect(dot('2')).toContain('bg-ok'); // views/
+		expect(dot('3')).toContain('bg-faint'); // components/
+
+		treeRow('3').click();
+		await settle(app, 60);
+		expect(treeRow('3').className).toContain('dt-row-selected');
+		expect(treeRow('3').className).toContain('bg-accent-soft');
+
+		// Selection and pulse now ride different CSS properties, so a selected row
+		// that re-renders shows both at once.
+		bridge.emit('flush', { keys: ['todo'], notified: [3] });
+		await settle(app);
+		expect(treeRow('3').className).toContain('dt-row-selected');
+		expect(treeRow('3').className).toContain('dt-pulse');
 	});
 
 	it('collapses and re-expands a node without selecting it', async () => {

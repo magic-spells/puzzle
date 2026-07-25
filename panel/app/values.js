@@ -109,6 +109,41 @@ export function clipboardText(value) {
 }
 
 /**
+ * The role a view plays, read off its `__pzlModule` stamp's DIRECTORY segments —
+ * `layouts/Shell.pzl` is a layout, `components/ui/Badge.pzl` a component. Only
+ * directories are considered, so a view stamped `views/components.pzl` is not
+ * mistaken for one. Anything unrecognized — including a hand-written class with
+ * no module at all — is a plain view, which is the safe default.
+ */
+export function viewKind(module) {
+	if (typeof module !== 'string' || module === '') return 'view';
+	const directories = module.split('/').slice(0, -1);
+	if (directories.includes('layouts')) return 'layout';
+	if (directories.includes('components')) return 'component';
+	return 'view';
+}
+
+/**
+ * The dimmed path fragment shown after a view's name — the BASENAME only, and
+ * only when it carries information.
+ *
+ * `MainLayout` living in `layouts/MainLayout.pzl` is pure redundancy: the row
+ * would read "MainLayout MainLayout.pzl" and the repetition is what makes a
+ * dense tree unreadable. That case returns '' and the row shows just the name.
+ * Nothing is lost — the full path moves to the row's title (`moduleTitle`).
+ */
+export function moduleLabel(name, module) {
+	if (typeof module !== 'string' || module === '') return '';
+	const basename = module.split('/').pop();
+	return basename === `${name}.pzl` ? '' : basename;
+}
+
+/** The row tooltip: the full module path, or the bare name when there is none. */
+export function moduleTitle(name, module) {
+	return typeof module === 'string' && module !== '' ? module : name;
+}
+
+/**
  * Column order for a record table: the primary key first, then every other key
  * any row carries, in first-seen order, capped so a wide model cannot push the
  * table off the panel. `_synced` is excluded — it renders as a badge, not a
