@@ -1,5 +1,5 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D112)
+name: DECISIONS.md — decision-log index (D1–D113)
 status: verified
 verified_at: '2026-07-24T05:49:35.947Z'
 connections:
@@ -7,7 +7,7 @@ connections:
 verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
-Index of the ADR-lite decision log. Each decision D1–D112 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+Index of the ADR-lite decision log. Each decision D1–D113 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
 
 # Decision Log (index)
 
@@ -149,6 +149,8 @@ slice-of-work view.
 - **D111** [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]] — managed head tags (`og:*`/`twitter:*`/`canonical`) become build-time only: the runtime `syncTags` and its router call site are deleted, and with them `__PUZZLE_HAS_HEAD_TAGS__`, its whole-project byte scan, `Usage.HasHeadTags`, and the watch-rebuild invalidation; crawlers always GET each URL fresh and never client-navigate, so the SSG's per-page baked tags are the only copy anyone reads, and a SPA (app software behind auth — banking, design tools, kanban) has no crawler to serve; `syncTitle` stays ungated so the browser tab title still updates everywhere; deleting the one router import leaves `syncTags` with no browser importer, so plain tree-shaking replaces the whole gate; `ScanUsage` now reads only `.pzl`; amends [[DECISION-D89-FEATURE-USAGE-TREESHAKE]] (its `flip` half stands), supersedes the same-day `title`-probe patch; `meta.description`/`canonical`/`socialImage` are dead config under `output: 'spa'` by choice
 
 - **D112** [[DECISION-D112-STORE-ID-KEY-NORMALIZATION]] — record identity is number/string-insensitive: one `recordKey` helper (numbers → their string form, everything else untouched) at every id-keyed record-Map access and on both sides of `hasMany`'s FK filter, because subscription keys and adapter URLs already string-coerce — the Map was the store's only type-sensitive identity, so `findOne('post', this.params.id)` (route params are strings) subscribed to the right key yet missed a record a numeric-id JSON payload created, returning `null` while reactivity looked healthy; `save()`'s `pkDiffers` compares under the same rule, so a server echoing numeric `1` for a record keyed `'1'` merges normally instead of warning/adopting; record fields never coerce (a numeric server id stays a number), `null`/objects keep SameValueZero, no numeric parsing (`'01'` ≠ `1`); duplicate detection unifies — a type-variant duplicate now throws/updates in place instead of silently creating the shadow record that WAS the corruption; schema-driven coercion rejected (schemas optional → two identity regimes; the exempt server paths can hold ids the schema disagrees with; `Number()` is lossy — `''`→`0`, `NaN`, >2^53 snowflake ids) (SPEC §8/§21)
+
+- **D113** [[DECISION-D113-SSG-RAWTEXT-RULE]] — prerender RAWTEXT rule: the SSG serializer stops entity-escaping `<script>`/`<style>` text (RAWTEXT is never entity-decoded, so escaping corrupted prerendered JSON-LD into `&amp;` garbage for exactly the crawlers D111 says are the only readers, and killed `a > b` selectors in `<style>`) — JSON-typed scripts (`application/json` or any `+json` suffix) emit raw with `<` → `\u003c`, the SAME escape the D81 static data island already used, now shared as one `escapeScriptJson` helper; all other script/style content emits raw behind a build error on `</script`/`</style` (case-insensitive) or the `<!--`+`<script` double-escaped pair, because raw-always is a stored-XSS breakout (RAWTEXT ends at the first `</script`, even mid-string) and the serializer cannot know the embedded language's string semantics well enough to auto-repair; build-output-only change, no runtime bytes; entity-escaping (the bug), raw-always, auto-`<\/script` repair, and banning RAWTEXT interpolation all rejected (SPEC §36)
 
 ## Open questions (tracked, not yet decided)
 

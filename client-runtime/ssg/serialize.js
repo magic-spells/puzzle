@@ -23,6 +23,9 @@
  *   named/default slots and fallbacks behave identically;
  * - string children (an inlined `{#svg}` island seed, v1.14 D46) are emitted
  *   verbatim — they map to innerHTML seeding in the browser;
+ * - `<script>`/`<style>` are RAWTEXT: their text is emitted unescaped (a JSON-typed
+ *   script gets the `\u003c` data-island escape instead), and content that would
+ *   end — or refuse to end — the element in the parser is a build error;
  * - void elements self-close without children.
  *
  * Principled differences from a jsdom mount of the same tree (documented, tested
@@ -53,6 +56,16 @@ function stringify(v) {
 /** Escape a text node's content: the three characters that would break HTML text. */
 export function escapeText(s) {
 	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * The JSON-in-script emission rule, shared with the static data island
+ * (ssg/index.js). Replacing `<` with the `\u003c` escape is JSON-transparent — a
+ * parser decodes it back to the same string — and makes a literal `</script>`
+ * impossible to emit, so content can never end the RAWTEXT element early.
+ */
+export function escapeScriptJson(s) {
+	return s.replace(/</g, '\\u003c');
 }
 
 /** Escape a double-quoted attribute value (adds the quote characters over text). */
@@ -166,6 +179,13 @@ async function serializeNode(vnode, ctx, selectState) {
 		return `${open}${escapeText(stringify(vnode.attrs.value))}</${tag}>`;
 	}
 
+	if (tag === 'script' || tag === 'style') {
+		// RAWTEXT elements (D113): the HTML parser reads their content verbatim and
+		// never entity-decodes it, so escapeText would ship `&amp;`/`&lt;` to crawlers
+		// and turn a `a > b` CSS combinator into dead markup.
+		return `${open}${rawtextContent(tag, vnode.attrs, collectTextContent(vnode.children))}</${tag}>`;
+	}
+
 	// Inline-SVG seed (D46): string children are verbatim markup, not a vnode list.
 	const inner =
 		typeof vnode.children === 'string'
@@ -204,6 +224,50 @@ function collectTextContent(children) {
 		}
 	}
 	return out;
+}
+
+/**
+ * A RAWTEXT element's text content (D113). JSON-typed `<script>` payloads take the
+ * data-island escape; every other script/style body is emitted byte-raw, because
+ * that is what the HTML parser reads back. Raw emission is only safe while the
+ * content cannot reach the parser's end-of-RAWTEXT (or double-escape) states, so
+ * those cases throw at build time instead — a failed build keeps the last good
+ * dist/ via the atomic swap.
+ */
+function rawtextContent(tag, attrs, text) {
+	if (tag === 'style') {
+		if (/<\/style/i.test(text)) {
+			throw new Error(
+				'[puzzle] prerender: <style> content contains `</style`, which ends the style ' +
+					'element in the HTML parser — the rest of the stylesheet would escape as page ' +
+					'markup. Escape or restructure the content.'
+			);
+		}
+		return text;
+	}
+	const type = stringify(attrs.type).trim().toLowerCase();
+	if (type === 'application/json' || type.endsWith('+json')) return escapeScriptJson(text);
+	if (/<\/script/i.test(text)) {
+		throw new Error(
+			'[puzzle] prerender: <script> content contains `</script`, which ends the script ' +
+				'element in the HTML parser — the rest would escape as page markup. Put JSON ' +
+				'payloads in a JSON-typed script (type="application/ld+json"), which is escaped ' +
+				'automatically, or escape the sequence in source (`<\\/script>`).'
+		);
+	}
+	// script-data-double-escaped state: once `<!--` is followed by `<script`, the
+	// parser stops treating `</script>` as the end tag, so OUR closer would not close
+	// the element and the rest of the page would be swallowed as script content.
+	if (text.includes('<!--') && /<script/i.test(text)) {
+		throw new Error(
+			'[puzzle] prerender: <script> content contains both `<!--` and `<script`, the HTML ' +
+				'script-data-double-escaped state — the parser then does NOT end the script element ' +
+				'at its closing tag, so the rest of the page is swallowed. Put JSON payloads in a ' +
+				'JSON-typed script (type="application/ld+json"), which is escaped automatically, or ' +
+				'escape the sequence in source (`<\\/script>`).'
+		);
+	}
+	return text;
 }
 
 /**
