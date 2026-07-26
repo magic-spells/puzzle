@@ -118,6 +118,18 @@ This is [[DECISION-D121-DEV-PERFORMANCE-PROFILING]]'s premise demonstrated:
 identical data still costs a full render plus a full diff. The metric found it
 on first contact with a real app.
 
+Confirmed by a controlled run. With 1,000 rows already mounted, `create-1k`
+regenerates the same 1,000 ids with the same content: **1,001 of 1,003 renders
+wasted — 100%** — against 95 DOM mutations (the shell's own stats readout) and a
+17.2 ms flush. `KeyedList` itself posts 1.2 ms render + 14.2 ms patch + 1.3 ms
+`data()` for zero DOM change, on top of 1,000 child renders.
+
+Nothing anywhere short-circuits: not the model layer (`#commit` replaces
+wholesale), not the view layer, not the component boundary. The per-value
+comparison inside `patchAttrs`/text patching is the ONLY thing standing between
+a no-op update and a DOM write, and it runs after every render and diff has
+already been paid for.
+
 Two earlier diagnoses in this card were wrong and were corrected in place. The
 lesson worth keeping: a surprising profiler reading is more often the fixture
 than the instrument.
