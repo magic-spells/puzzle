@@ -351,6 +351,14 @@ like the handler A/B's `childDataRuns`.
 | `update-branch-root` | the shallowest node of branch 0 | **1 / 1,536** |
 | `update-global` | the record every node also queries | **1,536 / 1,536** |
 
+Production timings agree (medians, 15 iterations, `npm run bench`):
+
+| op | script | to painted frame |
+| --- | ---: | ---: |
+| `update-leaf` | 0.1ms *(below the resolution floor)* | 2.0ms |
+| `update-branch-root` | 0.1ms *(below the resolution floor)* | 1.8ms |
+| `update-global` | 5.0ms | 14.3ms |
+
 **Both hypotheses are refuted.** A leaf update is proportional to neither depth
 nor forest size — it is O(1). One view re-evaluates and re-renders; its child
 receives shallow-equal props and takes the component bailout, so propagation
@@ -406,6 +414,20 @@ mutating *frame*:
 | `burst-persist` | one tick + a frame | 15.0ms × 1 serialize | — |
 | `sustained-persist` | 10,010ms | **9,552ms** across 770 serializes | **95%** |
 
+The production harness prices one serialize directly, by differencing the two
+burst arms (medians, 15 iterations — the writes themselves are identical, so the
+whole difference is persistence):
+
+| op | script | to painted frame |
+| --- | ---: | ---: |
+| `burst` | 11.5ms | 16.4ms |
+| `burst-persist` | 11.5ms | **51.2ms** |
+
+Identical script time — `_persist()` only sets a dirty flag — and **+34.8ms on
+the painted frame** for one serialize of 10,000 records, against 11.5ms for the
+5,000 writes that triggered it. Persisting the store costs three times what
+mutating it did. Heap delta for the same op goes from 0.9MB to 10.3MB.
+
 Under a sustained write load a 10,000-record store spends **95% of the wall
 clock serializing itself**, and the frame rate collapses from 1,200 flushes to
 770 for the same number of writes. This is O(store) per mutating frame, not
@@ -431,8 +453,17 @@ machines has no business in a committed baseline.
 still cost?
 
 100 island elements × 200 descendants = **20,000 nodes** the patcher is
-contractually forbidden from touching after mount. Op: `shell-churn` re-renders
-the surrounding view at frame rate for 5 seconds.
+contractually forbidden from touching after mount. Two ops, same work, different
+bound: `shell-churn` re-renders the surrounding view at frame rate **for 5
+seconds**, and `shell-renders` does it **for a fixed 60 renders**.
+
+`shell-renders` is the arm `benchmarks/scenarios.mjs` times, because a
+fixed-duration op's milliseconds are an *input*, not a measurement — and the
+harness's clamp guard rightly rejects them. Measured, all three `shell-churn`
+samples landed within 60ms of a whole second, which is exactly the signature of
+the throttled renderer that guard exists to catch. Bounding by render count
+measures the same code path and asserts the same counters while leaving the clock
+free to say something.
 
 Measured over 600 shell renders:
 
@@ -449,6 +480,12 @@ on an island *element* are not violations (island freezes children, not the
 element) and are counted separately rather than folded in. The shell has its own
 observer as the control: zero island mutations means nothing unless the shell
 provably mutated in the same window.
+
+`shell-renders` puts a production number on it: **522.4ms for 60 renders, or
+8.7ms per render**, holding 20,000 frozen nodes the patcher never touches. The
+same assertions hold in the minified production bundle — `islandViolations` 0,
+`islandChildVnodesPerRender` 20,000, `shellDidMutate` 1 — which matters, because
+that bundle takes a different code path through the DCE'd devperf branches.
 
 **And the cost is confirmed too.** `island` saves *patching*, not *allocation*.
 `viewManager.js`'s island branch runs inside `patch()`, which is only reached
@@ -483,6 +520,25 @@ questions honestly:
 Timing a wrapped formatter would add two `performance.now()` calls to each of
 20,000 invocations — several milliseconds of pure instrument against the thing
 being measured. That is why the share comes from the A/B, not from the wrapper.
+
+### The formatters are 91% of the re-render
+
+Production medians, 15 iterations, no instrumentation in either arm:
+
+| arm | script | to painted frame |
+| --- | ---: | ---: |
+| `rerender` (date + timeago) | **376.1ms** | 376.1ms |
+| `rerender-raw` (control) | **32.4ms** | 32.4ms |
+| difference — the formatters | **343.7ms** | **91.4%** |
+
+The same tree, the same 10,000-node patch, the same records. Rendering 10,000
+rows costs 32ms; running `date` and `timeago` over them costs **ten times that
+again**. In the CDP decomposition the two arms have identical layout cost
+(47.6ms vs 46.6ms) and diverge entirely in `other` — the framework's own
+JavaScript — 839ms against 86.8ms.
+
+`count-intl` came in at 374.3ms, within noise of the uninstrumented 376.1ms, so
+the probe's own overhead is not what is being reported here.
 
 ### One Intl object per call, confirmed
 

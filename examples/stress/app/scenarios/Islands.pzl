@@ -74,6 +74,20 @@ const islandMetrics = { descendantReads: 0 };
 /** How long `shell-churn` drives the shell, at frame rate. */
 const CHURN_MS = 5000;
 
+/**
+ * `shell-renders` does the same work bounded by a RENDER COUNT instead of a
+ * clock, and it is the arm the benchmark matrix times.
+ *
+ * `shell-churn`'s duration is fixed by construction, so its milliseconds are an
+ * input, not a measurement — and the harness's clamp guard correctly rejects it:
+ * a 5,000ms sample is indistinguishable from a renderer throttled to whole
+ * seconds, which is exactly the failure that guard exists to catch. Bounding by
+ * renders makes the elapsed time a real per-render cost the guard can reason
+ * about, while measuring the identical code path and asserting the identical
+ * counters.
+ */
+const CHURN_RENDERS = 60;
+
 export default class Islands extends PuzzleView {
   api = {
     name: 'islands',
@@ -170,11 +184,12 @@ export default class Islands extends PuzzleView {
   // ---- ops -----------------------------------------------------------------
 
   async opRun(op) {
-    if (op !== 'shell-churn') throw new Error(`[stress] islands has no op "${op}"`);
-    return this.runChurn(op);
+    if (op === 'shell-churn') return this.runChurn(op, { kind: 'time', ms: CHURN_MS });
+    if (op === 'shell-renders') return this.runChurn(op, { kind: 'count', renders: CHURN_RENDERS });
+    throw new Error(`[stress] islands has no op "${op}"`);
   }
 
-  async runChurn(op) {
+  async runChurn(op, bound) {
     const root = viewRoot(this);
     const grid = root?.querySelector('.islands-grid');
     const shell = root?.querySelector('.shell-bar');
@@ -216,12 +231,14 @@ export default class Islands extends PuzzleView {
     const readsBefore = islandMetrics.descendantReads;
     let frames = 0;
     const t0 = performance.now();
-    const deadline = t0 + CHURN_MS;
+    const deadline = t0 + (bound.kind === 'time' ? bound.ms : 0);
+    const finished = () =>
+      bound.kind === 'time' ? performance.now() >= deadline : frames >= bound.renders;
 
     try {
       await new Promise((resolve) => {
         const step = () => {
-          if (performance.now() >= deadline || this.isDestroyed) {
+          if (finished() || this.isDestroyed) {
             resolve();
             return;
           }
