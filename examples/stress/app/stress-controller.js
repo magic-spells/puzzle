@@ -22,7 +22,8 @@
  * component tree the router happens to have built.
  */
 
-import { settleFrames } from './scenario-utils.js';
+import { RC_ENTRY_PATH } from './rc-paths.js';
+import { intParam, settleFrames } from './scenario-utils.js';
 
 export const SCENARIO_DEFINITIONS = [
 	{
@@ -111,6 +112,24 @@ export const SCENARIO_DEFINITIONS = [
 		ops: ['rerender', 'rerender-raw', 'count-intl'],
 	},
 	{
+		name: 'listener-churn',
+		label: 'Listener churn',
+		blurb: 'what does removing and re-adding a DOM listener on every render actually cost?',
+		// `rerender` is the uninstrumented TIMING arm and `count-listeners` is the
+		// same renders with Element.prototype patched — its counts are exact, its
+		// milliseconds carry the probe. Same split as formatters/count-intl, for
+		// the same reason. `click-select` is a behaviour gate, not a measurement.
+		ops: ['rerender', 'count-listeners', 'micro-listener-cost', 'click-select'],
+	},
+	{
+		name: 'route-churn',
+		label: 'Route churn',
+		blurb: '5 nested route levels + 50 leaves — how many times does a REUSED ancestor render per navigation?',
+		// The ONLY scenario that is not hosted in Home's stage: it needs real route
+		// nodes, so it is a sibling subtree at /rc/… (see ../rc-routes.js).
+		ops: ['navigate-100', 'navigate-burst-100', 'params-100', 'params-burst-100', 'back-forward-100', 'supersede-50'],
+	},
+	{
 		// LAST on purpose: the two ops here are deliberate pathologies, and the
 		// picker reads left to right. Both are behind their own explicit button
 		// and both carry a hard iteration cap — see LoopTrap.pzl.
@@ -157,6 +176,22 @@ async function waitForScenario(name = null) {
 }
 
 function pathFor(name, params = {}) {
+	// route-churn is the one scenario that is NOT hosted in Home's stage: it
+	// measures the router, so it needs real route nodes and lives at its own
+	// sibling subtree. Selecting it navigates out of `/` entirely and Home
+	// unmounts — RcLayout registers the scenario API from there, so nothing else
+	// in this file has to know. See ../rc-routes.js for why a sibling subtree
+	// beat a second PuzzleApp and beat nesting under `/`.
+	if (name === 'route-churn') {
+		const delay = intParam(params.delay, 0, 0, 2000);
+		// `navs` overrides the op's navigation count. It exists so counters can be
+		// read below the D121 runaway threshold — see NAV_INTERVAL_MS in RcLayout.
+		const navs = intParam(params.navs, 0, 0, 1000);
+		const query = [];
+		if (delay > 0) query.push(`delay=${delay}`);
+		if (navs > 0) query.push(`navs=${navs}`);
+		return query.length ? `${RC_ENTRY_PATH}?${query.join('&')}` : RC_ENTRY_PATH;
+	}
 	const query = new URLSearchParams({ scenario: name });
 	for (const [key, value] of Object.entries(params)) {
 		if (key === 'scenario') continue;

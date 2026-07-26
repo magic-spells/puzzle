@@ -28,7 +28,16 @@ so any measurement has a copy-pasteable URL:
 /?scenario=write-storm&n=10000
 /?scenario=islands&n=100&descendants=200
 /?scenario=formatters&n=10000
+/?scenario=listener-churn&n=10000&binding=churn
 /?scenario=loop-trap&cap=500
+```
+
+`route-churn` is the one exception — it measures the ROUTER, so it needs real
+route nodes rather than a query parameter, and lives at its own path:
+
+```
+/rc/s2/s3/s4/s5/leaf-0
+/rc/s2/s3/s4/s5/leaf-0?delay=50
 ```
 
 ## The control surface
@@ -37,7 +46,8 @@ so any measurement has a copy-pasteable URL:
 window.__STRESS__ = {
   ready,                  // Promise — resolves once the app has mounted
   scenarios,              // ['keyed-list', 'virtual-list', 'subscriptions', 'async-waterfall',
-                          //  'deep-nest', 'write-storm', 'islands', 'formatters', 'loop-trap']
+                          //  'deep-nest', 'write-storm', 'islands', 'formatters',
+                          //  'listener-churn', 'route-churn', 'loop-trap']
   definitions,            // [{ name, label, blurb, ops }]
   async select(name, params),
   async reset(),
@@ -560,7 +570,268 @@ modified. The point is to find out what it currently does, not to change it.
 `rerender-raw` costing the same as `rerender` (which would mean the formatted arm
 never ran the formatters).
 
-## Scenario 9 — `loop-trap`
+## Scenario 9 — `listener-churn`
+
+**Probes:** `viewManager.js`'s `setAttr()` removes and re-adds a DOM listener
+whenever a handler's identity changes. Vue avoids that with an "invoker" — one
+stable wrapper attached at mount, then a `wrapper.value` reassignment. Is
+adopting that pattern worth the regression risk?
+
+Ops: `rerender`, `count-listeners`, `micro-listener-cost`, `click-select`.
+Arms: `?binding=churn|stable|none`.
+
+### The question changes once you look at what the compiler emits
+
+`patchAttrs()` calls `setAttr()` only when `oldAttrs[name] !== value`, so
+listener churn needs the handler VALUE to be a fresh object every render. It is
+not, for the shapes real Puzzle code uses. `@click={ onSelect }` compiles to
+
+```js
+'@click': ((this.__h ??= {})[1] ??= (event) => this.events.onSelect(event))
+```
+
+— one function object per site per view instance, identical on every render
+(D62). `keyed-list`'s rows are exactly this shape, and it was measured directly
+rather than argued from the compiler output — `benchmarks/probe-listener-churn.mjs`
+patches `Element.prototype` from the DRIVER, so any scenario can be counted
+without touching the app:
+
+| `keyed-list/update-every-10th` | child `data()` runs | `addEventListener` | `removeEventListener` |
+| --- | ---: | ---: | ---: |
+| n=1,000 `handlers=inline` | 1,000 | **0** | **0** |
+| n=1,000 `handlers=stable` | 100 | **0** | **0** |
+| n=10,000 `handlers=inline` | 10,000 | **0** | **0** |
+| n=10,000 `handlers=stable` | 1,000 | **0** | **0** |
+
+The `inline` row at n=10,000 is the decisive one: **all 10,000 rows re-ran
+`data()` and re-rendered, and not one listener was rebound.** So the honest
+first answer is that there is nothing here to optimise in idiomatic code.
+
+Churn requires a data-capturing call on a DOM **element** inside a loop —
+`@click={ selectRow(row) }` on a `<button>` — where `row` is a loop variable and
+codegen cannot cache the closure. That is the `churn` arm, and it is the only
+shape that pays.
+
+| arm | binding | listener calls per row per render |
+| --- | --- | ---: |
+| `churn` | `@click={ selectRow(row) }` | **4** (2 handlers x remove+add) |
+| `stable` | `@click={ selectAny }` | **0** |
+| `none` | no `@click` at all | **0** |
+
+Exact totals over 20 renders of 10,000 rows:
+
+| arm | `addEventListener` | `removeEventListener` | per render |
+| --- | ---: | ---: | ---: |
+| `churn` | 400,000 | 400,000 | **40,000** |
+| `stable` | **0** | **0** | **0** |
+| `none` | **0** | **0** | **0** |
+
+All three render byte-identical DOM; `churn` and `stable` have identical vnode
+attribute key sets. Row identity in the `stable` arm moves onto `data-id`, read
+back off `event.currentTarget` — the same move `ListRow` makes when it reports
+`props.id` to its parent.
+
+### What it costs, and what an invoker would actually recover
+
+Production medians of 15, 20 renders per op, uninstrumented `rerender` arm:
+
+| n | `churn` | `stable` | `none` | churn − stable |
+| ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 74.4ms | 40.2ms | 45.7ms | **34.2ms (46.0%)** |
+| 10,000 | 651ms | 443ms | 413ms | **208ms (32.0%)** |
+
+`stable` and `none` sit within the instrument's noise of each other — at 1,000
+rows `stable` even reads *lower* than `none`, which is an artefact (MAD 11% on
+that row), not a finding. What is unambiguous at both sizes is that `churn`
+costs substantially more than either.
+
+The op runs **20** renders rather than 30 because at 30 the churn arm landed at
+~1,095ms and the harness's whole-second clamp guard rejected the sample set —
+the same reason `async-waterfall` runs at delay=35.
+
+**But that 208ms is not all listener rebinding, and this is the number that
+decides the question.** `micro-listener-cost` prices the pieces directly over the
+real rendered elements, batch-timed:
+
+| operation | per handler |
+| --- | ---: |
+| `removeEventListener` + `addEventListener` | **~200ns** |
+| invoker property write (`wrapper.value = h`) | **~1.5ns** |
+| arrow allocation | ~4ns *(likely understated — escape analysis)* |
+
+A render at 10,000 rows rebinds 20,000 handlers, so the DOM API accounts for
+**~4.0ms per render — ~80ms across the op**. That is about **38% of the churn
+penalty and ~12% of the churn arm's total render time.**
+
+The remaining ~128ms is the rest of `setAttr`'s per-call work: it re-parses the
+event name on every call (`'@click'.slice(1).split(':')` allocates a string and
+an array each time), walks the `LISTENERS` map, and stores the new handler —
+plus the closure allocation itself. **An invoker removes none of that.**
+`setAttr` is still entered whenever the handler identity changes; only the
+remove/add pair is replaced by a property write.
+
+**So the invoker's ceiling is ~12% of a churning large-list render, and exactly
+0% of an idiomatic one — and it is not worth it.** Not because the effect is
+invisible, but because it is absent from the code people actually write, and
+because the one shape that does pay is fixed better and more cheaply by spelling
+the handler cacheably: that recovers the whole 32%, needs no framework change,
+and carries no regression risk at all.
+
+**What a bad result looks like:** `stable` or `none` reporting any non-zero
+listener call (the cacheable-handler claim would be false), or `churn` reporting
+anything but exactly `4 x rows` per render. `click-select` is a behaviour gate in
+all three arms — and in `none` it asserts the click is **inert**, so an arm
+cannot be cheap because it quietly bound nothing.
+
+## Scenario 10 — `route-churn`
+
+**Probes:** how many times a REUSED route ancestor runs `data()` and renders per
+committed navigation, and how many of those renders change no DOM at all.
+
+Five nested ancestor levels and 50 leaf routes. Ops: `navigate-100`,
+`navigate-burst-100`, `params-100`, `params-burst-100`, `back-forward-100`,
+`supersede-50`, with a leaf loader delay of `?delay=0|10|50`.
+
+This is the one scenario that is **not** hosted in Home's stage. It measures the
+router, so it needs real route nodes; it is a sibling subtree at `/rc/…` with its
+own layout, and selecting it navigates out of `/` so Home unmounts. `RcLayout`
+registers the scenario API and carries its own panel. `app/rc-routes.js` records
+why that beat the two alternatives — a second `PuzzleApp` (which would rebind and
+then tear down the DevTools bridge, since `devtools.js` holds exactly one app
+slot) and nesting under `/` (which would make heavyweight Home a measured
+ancestor).
+
+### The hypothesis was "twice per navigation". It is worse than that.
+
+Production, 100 leaf-divergence navigations, exact counters:
+
+| level | renders per navigation | `data()` runs per navigation | DOM mutations |
+| --- | ---: | ---: | ---: |
+| 0 — root layout | **2** | 1 | 0 |
+| 1 | **3** | 1 | 0 |
+| 2 | **4** | 1 | 0 |
+| 3 | **5** | 1 | 0 |
+| 4 | **6** | 1 | 0 |
+| 5 — divergence level | **7** | 1 | 5 |
+| 6 — leaf (fresh) | 1 | 1 | 0 |
+
+**27 ancestor renders per committed navigation against 6 `data()` runs, and
+2,200 of the 2,700 renders (81.5%) mutate nothing.** A reused ancestor at depth
+`d` renders `d + 2` times — the reused prefix costs **O(depth²)** renders, not
+two per level.
+
+The mechanism is three cascades, and the arithmetic matches the code exactly:
+
+1. **Pre-commit**, `#navigate` awaits `refresh()` on every reused ancestor. Each
+   of those renders pushes its (unchanged) slot children down, and
+   `applyParentUpdate` re-renders every descendant that holds slot children. So
+   level 1's refresh alone re-renders levels 2–5. That contributes 1,2,3,4,5.
+2. **Post-commit**, the reassembled chain goes through
+   `layout.applyParentUpdate()` — one more render for the layout and every level.
+3. **Then `#refreshLogged(layout)`** re-runs the layout's `data()` and renders it
+   again, which cascades down the whole chain a third time.
+
+A view with no slot children is not re-rendered by the cascade, which is why the
+leaf renders exactly once — and is also the reason the count is depth-shaped.
+
+This predicts the incidental `examples/photo-gallery` observation that started
+the whole question: `AlbumView` sits one level under its layout, so `d + 2 = 3`
+renders per navigation — which is exactly the "6 renders across a few clicks"
+that was seen.
+
+### The params-only control
+
+`/rc/s2/s3/s4/s5/p/:id` is the same chain with only `:id` moving, so
+`keep === chain.length` and the router takes its params-only branch: no
+`applyParentUpdate` cascade, no post-commit layout re-render.
+
+| arm | ancestor renders / nav | ancestor `data()` / nav | ancestor DOM mutations |
+| --- | ---: | ---: | ---: |
+| `navigate` (leaf divergence) | **27** | 6 | 500 (all at level 5) |
+| `params` (control) | **21** | 6 | **0 — none, ever** |
+
+The control is what makes the finding attributable: it removes exactly the six
+renders the cascade adds (one per level plus the layout), and **100%** of its
+2,100 ancestor renders mutate nothing. Its leaf mount count is 0, confirming the
+leaf instance really is reused.
+
+The framework's own counters agree from a development build: 560 renders of
+which **520 wasted (93%)**, and 520 component prop bailouts.
+
+### The absolute cost is small — on a cheap tree
+
+| op | paint ms (median of 15) | per navigation |
+| --- | ---: | ---: |
+| `navigate-burst-100` | 25.2ms | **0.25ms** |
+| `params-burst-100` | 17.1ms | **0.17ms** |
+
+Read this together with the counters, not instead of them. 27 renders costing
+0.25ms means each render is ~9µs, because these ancestors render one span and a
+`<Slot/>`. The finding is a **multiplier**, and what it multiplies is whatever
+the app's real layouts do per render. A nav bar that formats dates or queries the
+store pays that cost `d + 2` times per navigation, ~93% of it for nothing.
+
+`back-forward-100` produces byte-identical counters to `navigate-100`, so a pop
+costs exactly what a push does.
+
+### A superseded navigation is not free — measured
+
+| counter | value |
+| --- | ---: |
+| committed navigations | 20 |
+| navigation attempts | 40 |
+| `data()` runs on levels 1–5 | **40 each — one per ATTEMPT** |
+| leaf `data()` runs | **40** |
+| leaf mounts | **20** |
+
+**Yes: a superseded navigation runs `data()` on every reused ancestor and on the
+destination leaf, then throws all of it away.** Each doomed attempt costs the
+full 15-render pre-commit cascade plus a leaf `data()` evaluation. Only the root
+layout is spared, because its refresh is post-commit and a doomed navigation
+never gets there.
+
+### Fast navigation trips the framework's own runaway detector
+
+This was found by hitting it. The D121 cross-frame guard fires on 60 renders in a
+1000ms window with ≥90% of them wasted — which is character-for-character the
+signature of a reused route ancestor. Since the deepest ancestor renders
+`depth + 2` times per navigation, the guard's limit is reached at
+
+```
+60 / (depth + 2)  navigations per second
+```
+
+— **~8.6/sec for this five-level chain**, and ~20/sec for a one-level ancestor.
+Both 20/sec and 10/sec were tried and both tripped it. When it fires, devperf
+**suppresses that ancestor's renders for 1000ms**, its `<Slot/>` stops updating,
+and the routed child never mounts:
+
+```
+[puzzle perf] __PUZZLE_PERF__: stopped RcLevel4 after 60 renders in one second (98% wasted)
+[puzzle] a routed child did not mount — does the parent view template include a <Slot/>?
+```
+
+The tree then stays broken until the next navigation, because nothing retries the
+missed mount. This is development-only — production compiles devperf out
+entirely — but in development it means fast navigation over a deep route tree
+**breaks the app**, and the warning does not say that is what happened.
+
+The paced arms therefore run at 5 navigations/sec, well under the limit.
+`navigate-burst-100` and `params-burst-100` keep the unpaced behaviour and are
+the arms `benchmarks/scenarios.mjs` records — in production, where there is no
+detector to distort them. Press `navigate-burst-100` in a dev build to watch the
+guard fire.
+
+**A paced op's milliseconds are an input, not a measurement**, and its `detail`
+line says so on the line itself. Only the burst arms produce a real timing.
+
+**What a bad result looks like:** `rcAncestorMutations` above 500 on `navigate`
+or above 0 on `params` (an ancestor is mutating DOM it should not), `rcCommits`
+below the navigation count (the op is averaging over the wrong denominator), or
+`rcLeafMounts` short of `rcCommits` on `navigate` — which is the detector having
+fired, and the run being worthless.
+
+## Scenario 11 — `loop-trap`
 
 **Probes:** the D121 loop detector (`client-runtime/devperf.js`), which had a
 unit test and **had never fired in a real browser**.
@@ -664,36 +935,43 @@ counter being measured.
 
 ## Not yet implemented
 
-Four scenarios from the original plan remain **not built**. Nothing in the app
+Three scenarios from the original plan remain **not built**. Nothing in the app
 references them; they are listed here as future work, not as shipped features.
 
 | scenario | would probe |
 | --- | --- |
-| `route-churn` | navigation cost, superseded navigations, back/forward |
 | `form-state` | `setData` throughput under a typing burst |
 | `virtual-scroll` | the userland windowing recipe as its own scenario (partly superseded by `virtual-list`) |
 | `morph-flip` | morph transitions and `flip` reordering under load |
 
-`route-churn` in particular had scaffolding in an earlier draft — a five-level
-nested route tree with 50 generated leaf routes — which imported six `.pzl` files
-that were never written. That route subtree was **deleted** from `routes.js`;
-the app now has exactly one route and scenario selection rides on the query
-string.
+`route-churn` **is now built** (scenario 10 above). An earlier draft's
+scaffolding for it — a five-level nested route tree with 50 generated leaf
+routes — imported six `.pzl` files that were never written and was deleted; the
+tree is now generated by `app/rc-routes.js` from three real views (`RcLayout`,
+`RcNode` and its five level subclasses, `RcLeaf`).
 
 ## Layout
 
 ```
 app/
   app.js                    installFixtures + PuzzleApp + __STRESS__ wiring
-  routes.js                 one route; scenarios select via ?scenario=
+  routes.js                 `/` (the lab) + the /rc/… route-churn subtree
+  rc-routes.js              the 5-level x 50-leaf tree, and why it is a sibling
+  rc-paths.js               route-churn's path vocabulary (a leaf module, no cycle)
   stress-controller.js      the __STRESS__ control surface + scenario registry
   scenario-utils.js         settle helpers, seeding shapes, param parsing
   row-ops.js                the row mutation set shared by both list scenarios
   row-metrics.js            child data() counter that survives a production build
   nest-metrics.js           the same, for deep-nest's node data() runs
+  rc-metrics.js             the same, per route level — renders vs data() runs
   models/                   one record schema, registered per scenario type
-  layouts/StressLayout.pzl
-  views/Home.pzl            control panel, stats, log, scenario host
+  layouts/
+    StressLayout.pzl        the lab's chrome
+    RcLayout.pzl            route-churn's layout, panel and ops (reused level 0)
+  views/
+    Home.pzl                control panel, stats, log, scenario host
+    RcNode.pzl              one nested ancestor level; 5 subclasses, one per depth
+    RcLeaf.pzl              the routed leaf, with the optional loader delay
   scenarios/
     ListRow.pzl             the shared 7-element row
     KeyedList.pzl           every row mounted
@@ -704,8 +982,14 @@ app/
     WriteStorm.pzl                  batched-flush and persistence pressure
     Islands.pzl                     20,000 frozen nodes, observed
     Formatters.pzl                  the built-in registry priced
+    ListenerChurn.pzl               churn / stable / none DOM handler binding
     LoopTrap.pzl + LoopCell.pzl     the D121 detector's real exercise
 ```
+
+`RcLayout`, `RcNode` and `RcLeaf` live in `layouts/` and `views/` rather than
+`scenarios/` because `codegen.ModeForPath` compiles only those two directories
+as views — which is what makes `<Slot/>` legal in them. Everything under
+`scenarios/` is a component.
 
 Each new scenario owns its own store type (`nest`, `storm`, `fmt`, `loop`) so no
 scenario can disturb another's data. `islands` deliberately has none: its 20,000

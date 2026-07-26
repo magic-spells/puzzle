@@ -429,6 +429,164 @@ export const OPS = [
 		note: 'count-intl is instrumented: Intl is patched and the registry entries wrapped. Its counts are exact; its milliseconds include the probe and must NOT be compared against the other two arms.',
 	},
 
+	// ── route-churn: what a committed navigation costs a REUSED ancestor ────
+	//
+	// Only the UNPACED arms are here, and that is not a stylistic choice.
+	// route-churn's other ops run at a fixed navigations/sec, which makes their
+	// duration an input rather than a measurement — and worse, a 100-navigation
+	// op at 10/sec lands on 10,000ms, which guard 4 (whole-second clustering)
+	// would rightly reject. The paced arms exist because a DEVELOPMENT build's
+	// D121 runaway-render detector fires on fast navigation over a deep route
+	// tree; production has no detector, so the burst arms are both safe and
+	// honest here.
+	//
+	// The counters are exact, deterministic, and the entire point. `navigate`
+	// diverges at the LEAF, so `keep` (5) is less than the chain length (6) and
+	// the router assembles + pushes the whole chain through the reused prefix
+	// after having already refreshed it. `params` moves only `:id`, so
+	// `keep === chain.length` and the params-only branch runs instead — the
+	// control that proves the extra renders come from the cascade.
+	{
+		id: 'route-churn/navigate-burst/100',
+		label: 'navigate-burst (leaf divergence)',
+		scenario: 'route-churn',
+		params: {},
+		size: 100,
+		op: 'navigate-burst-100',
+		preExpect: { views: 7 },
+		expect: {
+			records: 0,
+			views: 7,
+			rcCommits: 100,
+			rcLeafMounts: 100,
+			rcLeafDataRuns: 100,
+			// 2 renders per navigation for the reused root layout — the shape the
+			// finding predicted. The nested levels are worse; see rcAncestorRenders.
+			rcLayoutRenders: 200,
+			rcLayoutDataRuns: 100,
+			// 27 renders per navigation across layout + 5 levels, against 6 data()
+			// runs. Per level that is 2,3,4,5,6,7: each reused ancestor's refresh
+			// re-renders every descendant that holds slot children, so the reused
+			// prefix costs O(depth^2) renders, not 2 per level.
+			rcAncestorRenders: 2700,
+			rcAncestorDataRuns: 600,
+			// Every one of those mutations is at the divergence level (5 per
+			// navigation, the leaf swap). Levels 0-4 mutate NOTHING, ever.
+			rcAncestorMutations: 500,
+		},
+		note: 'navigate-burst is the headline: 100 leaf-divergence navigations over a 5-level chain. 27 ancestor renders and 6 data() runs per navigation, 2,200 of the 2,700 renders producing zero DOM mutations. rcAncestorMutations must stay at 500 — all of it at the divergence level.',
+	},
+	{
+		id: 'route-churn/params-burst/100',
+		label: 'params-burst (params-only control)',
+		scenario: 'route-churn',
+		params: {},
+		size: 100,
+		op: 'params-burst-100',
+		preExpect: { views: 7 },
+		expect: {
+			records: 0,
+			views: 7,
+			rcCommits: 100,
+			// ZERO. The params-only branch reuses the leaf INSTANCE, so it never
+			// remounts — which is exactly what makes this a control rather than a
+			// second copy of the arm above.
+			rcLeafMounts: 0,
+			rcLeafDataRuns: 100,
+			rcLayoutRenders: 100,
+			rcLayoutDataRuns: 100,
+			rcAncestorRenders: 2100,
+			rcAncestorDataRuns: 600,
+			// The decisive one: not a single ancestor DOM mutation in 2,100
+			// ancestor renders. Only the leaf's own text and data-leaf change.
+			rcAncestorMutations: 0,
+		},
+		note: 'the CONTROL. keep === chain.length, so there is no applyParentUpdate cascade and no post-commit layout re-render: 21 ancestor renders per navigation instead of 27, and ALL 2,100 of them mutate nothing. If this arm also showed the extra renders, the finding would be about something other than the cascade.',
+	},
+
+	// ── listener-churn: what does rebinding a DOM listener actually cost? ────
+	//
+	// Three arms over IDENTICAL DOM and identical renders. `rerender` is the
+	// uninstrumented timing arm; `count-listeners` is the same 30 renders with
+	// Element.prototype patched, so its counts are exact and its milliseconds
+	// carry the probe. Never compare across those two.
+	//
+	// The gates run first within each arm: `none` must prove that clicking does
+	// NOTHING, the other two that it works, or an arm could be fast because it
+	// quietly stopped binding anything.
+	...[1000, 10000].flatMap((size) =>
+		['churn', 'stable', 'none'].flatMap((binding) => {
+			const params = { n: size, binding };
+			const common = { scenario: 'listener-churn', params, size };
+			const invariant = (stats) =>
+				stats.mountedNodes === size * 7
+					? null
+					: `listener-churn: ${stats.mountedNodes} live elements for ${size} rows (want ${size * 7})`;
+			const entries = [
+				{
+					...common,
+					id: `listener-churn/rerender/${size}/${binding}`,
+					label: `rerender (${binding})`,
+					op: 'rerender',
+					invariant,
+					expect: { records: 0, lcRows: size, lcRenders: 20 },
+					note:
+						`rerender (${binding}) is the UNINSTRUMENTED timing arm: 20 renders of ${size} rows with no data change, so the DOM is identical before and after and the only work that differs between arms is the handler binding.` +
+						(size === 10000
+							? ' 20 renders, not 30, because at 30 the churn arm landed within 60ms of a whole second and guard 4 rejected the sample set — see RERENDER_COUNT in ListenerChurn.pzl.'
+							: ''),
+				},
+			];
+			// Structural counting only needs one size, and 10,000 rows makes the
+			// per-render arithmetic unambiguous.
+			if (size === 10000) {
+				entries.push({
+					...common,
+					id: `listener-churn/count-listeners/${size}/${binding}`,
+					label: `count-listeners (${binding})`,
+					op: 'count-listeners',
+					iterations: 3,
+					invariant,
+					expect:
+						binding === 'churn'
+							? {
+									lcRows: size,
+									lcRenders: 20,
+									// 2 handlers per row, each removed and re-added: 4 calls per
+									// row per render, 40,000 per render at 10,000 rows.
+									lcAddListener: 400000,
+									lcRemoveListener: 400000,
+									lcListenerCallsPerRender: 40000,
+								}
+							: {
+									lcRows: size,
+									lcRenders: 20,
+									// EXACTLY zero, and this is the whole finding: a cacheable
+									// handler expression never reaches setAttr, so the listener is
+									// never touched after mount.
+									lcAddListener: 0,
+									lcRemoveListener: 0,
+									lcListenerCallsPerRender: 0,
+								},
+					note: `count-listeners (${binding}) is instrumented — Element.prototype's addEventListener/removeEventListener are patched by the scenario. Its counts are exact; its milliseconds include the probe and must NOT be compared against rerender. Capped at 3 iterations: the counts are algorithmic, not statistical.`,
+				});
+			}
+			return entries;
+		})
+	),
+	...['churn', 'stable', 'none'].map((binding) => ({
+		id: `listener-churn/click-select/${binding}`,
+		label: `click-select (${binding})`,
+		scenario: 'listener-churn',
+		params: { n: 1000, binding },
+		size: 1000,
+		op: 'click-select',
+		iterations: 1,
+		warmup: 0,
+		expect: { lcRows: 1000 },
+		note: `click-select (${binding}) is a BEHAVIOUR GATE, not a measurement. ${binding === 'none' ? 'The none arm binds no handler at all, so it throws unless the click is INERT.' : 'It dispatches a real click and throws unless the selection flipped in state and in the DOM.'} Ignore its timings.`,
+	})),
+
 	// loop-trap is deliberately absent. It is a CORRECTNESS exercise for the D121
 	// loop detector, which devperf compiles out of a production build entirely —
 	// so in this harness's bundle there is nothing to detect anything, and every
