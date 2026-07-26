@@ -18,6 +18,8 @@ export { PuzzleView } from './views/PuzzleView.js';
 export { FormatterRegistry } from './formatters.js';
 
 // Compiler support (constellation/doc/DOC-COMPILER-DESIGN.md §b): compiled .pzl modules import
-// ViewNode/SLOT_TAG from the package root — the injected render() builds trees
-// with them. Not part of the SPEC §1 user-facing surface.
+// ViewNode/SLOT_TAG/displayValue from the package root — the injected render()
+// builds trees and applies the shared display-coercion rule with them. Not part
+// of the SPEC §1 user-facing surface.
 export { ViewNode, SLOT_TAG } from './views/ViewNode.js';
+export { displayValue } from './display.js';

@@ -8,7 +8,7 @@ export default class SkeletonInlineComponent extends PuzzleView {
   }
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 SkeletonInlineComponent.prototype.render = function () {
   const __d = this.getData();
@@ -16,7 +16,7 @@ SkeletonInlineComponent.prototype.render = function () {
 
   return new ViewNode('div', { class: 'user-card' }, [
     new ViewNode('h2', {}, [
-      new ViewNode('text', { value: String(__d.user.name) }),
+      new ViewNode('text', { value: __s(__d.user.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'user.name' : 0) }),
     ]),
   ]);
 };

@@ -12,7 +12,7 @@ export default class Editor extends PuzzleView {
   };
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 Editor.prototype.render = function () {
   const __d = this.getData();
@@ -27,7 +27,7 @@ Editor.prototype.render = function () {
       '@keydown:delete': ((this.__h ??= {})[1] ??= (event) => this.events.onDelete(event)),
       '@input': ((this.__h ??= {})[2] ??= (event) => this.events.syncText(event)),
     }, [
-      new ViewNode('text', { value: String(__d.block.text) }),
+      new ViewNode('text', { value: __s(__d.block.text, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'block.text' : 0) }),
     ]),
   ]);
 };

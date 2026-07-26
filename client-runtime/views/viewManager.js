@@ -25,6 +25,7 @@
 import { ViewNode, PLACEHOLDER_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import { devperfComponentPatch, devperfMutation } from '../devperf.js';
+import { displayValue } from '../display.js';
 
 // these must be assigned as element properties, not attributes
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'muted']);
@@ -972,11 +973,15 @@ function setAttr(el, name, value) {
 	}
 
 	if (value === false || value == null) {
+		// Preserve attribute-removal semantics, but still route an explicitly
+		// supplied nullish binding through the shared display policy so undefined
+		// gets its development diagnostic.
+		if (value == null) stringify(value);
 		el.removeAttribute(name);
 	} else if (value === true) {
 		el.setAttribute(name, '');
 	} else {
-		el.setAttribute(name, String(value));
+		el.setAttribute(name, stringify(value));
 	}
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 		devperfMutation();
@@ -1084,7 +1089,7 @@ function inSvgNamespace(tag, parent) {
 }
 
 function stringify(v) {
-	return v == null ? '' : String(v);
+	return displayValue(v);
 }
 
 export default ViewManager;

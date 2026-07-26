@@ -20,6 +20,7 @@ import {
 	Puzzle,
 	PuzzleValidationError,
 	PuzzleAdapterError,
+	displayValue,
 } from '@magic-spells/puzzle';
 import type {
 	PuzzleAppConfig,
@@ -56,6 +57,11 @@ import type {
 } from '@magic-spells/puzzle/ssg';
 import { mountStatic } from '@magic-spells/puzzle/static';
 import type { MountStaticOptions, StaticRoute } from '@magic-spells/puzzle/static';
+
+const renderedNull: string = displayValue(null);
+const renderedNamedValue: string = displayValue(0, 'count');
+void renderedNull;
+void renderedNamedValue;
 
 // ---------------------------------------------------------------------------
 // PuzzleModel + schema builders (§7, §20–§22)

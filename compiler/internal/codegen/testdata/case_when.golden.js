@@ -7,7 +7,7 @@ export default class CaseWhen extends PuzzleView {
   }
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 CaseWhen.prototype.render = function () {
   const __d = this.getData();
@@ -27,7 +27,7 @@ CaseWhen.prototype.render = function () {
               ...(__d.order.tracking
                 ? [
                     new ViewNode('a', { href: '/t' }, [
-                      new ViewNode('text', { value: String(__d.order.tracking) }),
+                      new ViewNode('text', { value: __s(__d.order.tracking, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'order.tracking' : 0) }),
                     ]),
                   ]
                 : [

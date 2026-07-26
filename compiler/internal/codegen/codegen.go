@@ -24,7 +24,7 @@
 // the next inline element kept) and pure inter-element indentation
 // ("</h2>\n      <form>") drops entirely. Consecutive Text/Interpolation
 // siblings coalesce into ONE text vnode whose value is the `+`-concatenation of
-// quoted literals and `String(expr)` parts.
+// quoted literals and shared display-coercion calls.
 package codegen
 
 import (
@@ -256,10 +256,14 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		}
 	}
 
-	importLine := "import { ViewNode } from '@magic-spells/puzzle';"
+	imports := []string{"ViewNode"}
 	if hasSlot(root.Children) || (skel != nil && hasSlot(skel.Children)) {
-		importLine = "import { ViewNode, SLOT_TAG } from '@magic-spells/puzzle';"
+		imports = append(imports, "SLOT_TAG")
 	}
+	if c.usesDisplayValue {
+		imports = append(imports, "displayValue as __s")
+	}
+	importLine := "import { " + strings.Join(imports, ", ") + " } from '@magic-spells/puzzle';"
 
 	var b strings.Builder
 	// 1. user's <script>, byte-for-byte verbatim (or the synthesized module for
@@ -342,6 +346,11 @@ type compiler struct {
 	// numbering is deterministic — recompiling an unchanged file is byte-stable.
 	// Non-cacheable sites consume no index and emit byte-identically to v1.28.
 	handlerSites int
+
+	// Set when an emitted text or quoted-attribute interpolation calls the
+	// package-root display helper. Static-only modules and modules whose dynamic
+	// values remain raw vnode attrs do not pay for an unused import.
+	usesDisplayValue bool
 
 	// SVG-dedup emission state (v1.14 D46 amendment). svgDedup selects the
 	// import-a-shared-module strategy over inline; svgOrder/svgIdent accumulate the
@@ -1126,7 +1135,7 @@ func (c *compiler) emitMixed(parts []parser.Part, scope map[string]bool) string 
 		case *parser.InterpPart:
 			expr := applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
 			b.WriteString("${")
-			b.WriteString(expr)
+			b.WriteString(c.displayValue(expr, pp.Interp.Expr))
 			b.WriteString("}")
 		case *parser.InlineIfPart:
 			cond := resolveExpr(pp.Cond, scope)
@@ -1158,7 +1167,7 @@ func (c *compiler) branchToStr(parts []parser.Part, scope map[string]bool) strin
 			segs = append(segs, jsString(pp.Text))
 		case *parser.InterpPart:
 			expr := applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
-			segs = append(segs, "String("+expr+")")
+			segs = append(segs, c.displayValue(expr, pp.Interp.Expr))
 		case *parser.InlineIfPart:
 			cond := resolveExpr(pp.Cond, scope)
 			thenS := c.branchToStr(pp.Then, scope)
@@ -1233,7 +1242,7 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 				return "", false, c.cgErr(t.Pos, objectLiteralMsg)
 			}
 			expr := applyFormatters(resolveExpr(t.Expr, scope), t.Formatters, scope)
-			segs = append(segs, seg{js: "String(" + expr + ")", static: false})
+			segs = append(segs, seg{js: c.displayValue(expr, t.Expr), static: false})
 		}
 	}
 	if len(segs) == 0 {
@@ -1247,6 +1256,16 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 		parts[i] = s.js
 	}
 	return strings.Join(parts, " + "), true, nil
+}
+
+// displayValue emits the one shared display-coercion call. The raw expression
+// name reaches development builds for an actionable undefined warning, while
+// the bundle-time define folds the argument to 0 in production and lets esbuild
+// remove the name completely.
+func (c *compiler) displayValue(expr, source string) string {
+	c.usesDisplayValue = true
+	label := jsString(strings.TrimSpace(source))
+	return "__s(" + expr + ", typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? " + label + " : 0)"
 }
 
 // applyFormatters nests a formatter chain as calls into the raw formatter map:

@@ -1,5 +1,5 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D126)
+name: DECISIONS.md — decision-log index (D1–D127)
 status: built
 verified_at: '2026-07-24T05:49:35.947Z'
 connections:
@@ -7,7 +7,7 @@ connections:
 verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
-Index of the ADR-lite decision log. Each decision D1–D126 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+Index of the ADR-lite decision log. Each decision D1–D127 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
 
 # Decision Log (index)
 
@@ -171,6 +171,8 @@ slice-of-work view.
 - **D125** [[DECISION-D125-SAVE-RECONCILE-REVISION]] — a save response never overwrites a field edited while its request was in flight: per-field mutation revisions in a module-private WeakMap gate the §22 merge, server-computed fields still land, pk adoption stays unconditional, and `_synced` remains a provenance bit so a queued save PUTs instead of POSTing a duplicate (amends SPEC §22/D50)
 
 - **D126** [[DECISION-D126-PATH-SHAPE-AND-OUTPUT-OWNERSHIP]] — one owner for route-path shape (`routePath.js`, shared by the Router and the SSG): a dynamic segment is only a complete `:name`, so literal `:`/`*` text prerenders instead of being skipped; top-level route paths are validated at construction; static routes shadowed by an earlier matcher warn in dev and are skipped by the hybrid prerenderer; and prerendered output may no longer silently overwrite a `public/` asset (route `/` → `index.html` exempt)
+
+- **D127** [[DECISION-D127-DISPLAY-COERCION-OWNER]] — one runtime owner for display coercion (`displayValue`, exported from the package root): nullish text interpolation renders empty instead of the literal `null`/`undefined`, quoted and brace-only attributes finally agree, `??` semantics keep `0`/`false` intact, and a missing field warns once in dev with the name folded out of production builds (amends the `String(value)` contract in DOC-COMPILER-DESIGN)
 
 ## Open questions (tracked, not yet decided)
 
