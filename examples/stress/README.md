@@ -164,7 +164,7 @@ by hand. The measured comparison, and what it proves about `shallowEqual`, is in
 a direct A/B against `keyed-list`.
 
 Ops: `create-1k`, `create-10k`, `create-50k`, `update-every-10th`, `select-row`,
-`swap-rows`, `append-1k`, `fast-scroll`, `clear`.
+`swap-rows`, `append-1k`, `fast-scroll`, `native-scroll`, `clear`.
 
 The comparison is apples-to-apples by construction:
 
@@ -191,6 +191,55 @@ deterministic rather than dependent on frame timing.
 window is capped at 25 rows, so anything above ~180 elements means windowing
 broke. Also a spacer-geometry failure: `topPx + rendered + bottomPx` must equal
 `total × 36px` exactly, or the scrollbar is lying about how much list there is.
+
+### `native-scroll` — the real `@scroll` path, which `fast-scroll` bypasses
+
+`fast-scroll`'s directness has a consequence: the `@scroll` handler fires *too*,
+so `applyScroll` runs twice per jump and the second call is always a no-op on a
+bucket the op has already moved. **The asynchronous event path has therefore
+never been the thing under measurement.** `native-scroll` writes `scrollTop` ten
+times, awaits a frame between writes, and then touches nothing — every window
+move has to come from the browser's own event.
+
+It is a **behaviour gate, not a timing measurement** (`iterations: 1`,
+`warmup: 0`). Its milliseconds are mostly the frames it waits between writes and
+mean nothing. Scroll events also **coalesce** — the browser fires them during
+"update the rendering", so two writes inside one frame collapse into one event —
+which makes the event count legitimately non-deterministic. It is printed in the
+op's `detail` line and is deliberately **not** a pinned counter.
+
+Two things about it *are* deterministic, and they are the assertions:
+
+| counter | claim |
+| --- | --- |
+| `vlGeometryOk` | `topPx + rendered × 36 + bottomPx === total × 36` (within 0.5px) after the burst settles |
+| `vlWindowMatchesScroll` | the mounted window agrees with the **final** `scrollTop` — the first rendered row is the record that scroll position asks for |
+
+The second one was the actual unknown. `applyScroll` is fully synchronous per
+event, with no rAF and no throttle, and `data()` re-queries and re-sorts the full
+collection on every bucket change — ~17ms per jump at 50,000 records, which is
+longer than a frame. Nothing in the design guarantees the window is not left a
+bucket behind.
+
+**It converges, in one frame.** Measured at 50,000 records in a production
+build: 10 `scrollTop` writes produced **9 scroll events** (the first write is
+`0` on an already-zero scroll position, so it fires nothing), **9 window moves**,
+and the window agreed with the final `scrollTop` after **1 frame** — the frame in
+which the last event was delivered. Not one event was coalesced away at one
+write per frame, and no jump was skipped.
+
+The convergence wait is capped at 60 frames and the count it actually needed is
+reported, so "converged after 1 frame" stays distinguishable from "converged only
+because the op waited long enough". Hitting the cap would be a finding, not a
+flake.
+
+**What a bad result looks like:** `vlWindowMatchesScroll` reading 0 — the window
+settled on a stale bucket, which means a synchronous per-event recompute cannot
+keep up with the events and the handler needs coalescing of its own.
+`vlGeometryOk` reading 0 means the spacers stopped describing the list, which the
+`validate()` geometry check would also catch. A `detail` line reporting far fewer
+than 9 events means the browser coalesced writes the op assumed were separate,
+and the 9 window moves would no longer be a meaningful count.
 
 ### The measured comparison
 
@@ -956,14 +1005,21 @@ counter being measured.
 
 ## Not yet implemented
 
-Three scenarios from the original plan remain **not built**. Nothing in the app
+Two scenarios from the original plan remain **not built**. Nothing in the app
 references them; they are listed here as future work, not as shipped features.
 
 | scenario | would probe |
 | --- | --- |
 | `form-state` | `setData` throughput under a typing burst |
-| `virtual-scroll` | the userland windowing recipe as its own scenario (partly superseded by `virtual-list`) |
 | `morph-flip` | morph transitions and `flip` reordering under load |
+
+`virtual-scroll` has been **dropped**, not deferred. It would have probed the
+userland windowing recipe — spacers, a computed slice, a `@scroll` handler — and
+`virtual-list` already runs exactly that recipe over 50,000 real store records.
+The one thing it still had to offer was the *native* scroll path, since
+`fast-scroll` drives the window by hand; `native-scroll` (scenario 2 above) now
+covers that directly, on the same records and the same rows. A second scenario
+would measure the same code twice.
 
 `route-churn` **is now built** (scenario 10 above). An earlier draft's
 scaffolding for it — a five-level nested route tree with 50 generated leaf

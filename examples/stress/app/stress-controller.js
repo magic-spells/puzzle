@@ -61,7 +61,12 @@ export const SCENARIO_DEFINITIONS = [
 			'select-row',
 			'swap-rows',
 			'append-1k',
+			// `fast-scroll` drives the window by hand for determinism;
+			// `native-scroll` writes scrollTop and lets the real @scroll event do
+			// all of it. The second is a behaviour gate — its milliseconds are
+			// frame waits, and its event count coalesces.
 			'fast-scroll',
+			'native-scroll',
 			'clear',
 		],
 	},

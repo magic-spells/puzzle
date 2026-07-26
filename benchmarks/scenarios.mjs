@@ -237,6 +237,28 @@ export const OPS = [
 		expect: { records: 50000 },
 		note: 'fast-scroll drags the window across the whole list in 10 jumps; it is 10 window re-renders, not one op, and each jump re-queries + re-sorts the full 50k collection.',
 	},
+	// Adjacent to fast-scroll so groupOps collapses them into one select.
+	//
+	// A BEHAVIOUR GATE, not a measurement: one iteration, no warmup, and its
+	// milliseconds are meaningless — they are mostly the frames it waits between
+	// scrollTop writes. Scroll events COALESCE, so the event count is not
+	// deterministic and is deliberately absent from the counters; it is printed
+	// in the op's detail line instead.
+	{
+		id: 'virtual-list/native-scroll/50000',
+		label: 'native-scroll',
+		scenario: 'virtual-list',
+		params: { n: 50000 },
+		size: 50000,
+		iterations: 1,
+		warmup: 0,
+		prepare: ['clear', 'create-50k'],
+		op: 'native-scroll',
+		invariant: windowedInvariant,
+		preExpect: { records: 50000 },
+		expect: { records: 50000, vlGeometryOk: 1, vlWindowMatchesScroll: 1 },
+		note: 'native-scroll is a BEHAVIOUR GATE, not a measurement — ignore its timings. It writes scrollTop 10 times and never calls applyScroll, so the real @scroll path (which fast-scroll bypasses for determinism) is the only thing moving the window. The two counters are the assertions: the spacers still add up to the full list height, and the mounted window agrees with the FINAL scrollTop rather than being left a bucket behind. How many frames that convergence needed is in the detail line.',
+	},
 
 	// ── subscriptions: how much of the app wakes up for one write ───────────
 	// Both modes are the SAME op over the SAME data; only the child data()'s
