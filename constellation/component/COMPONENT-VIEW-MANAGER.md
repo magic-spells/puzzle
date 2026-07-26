@@ -131,3 +131,23 @@ wasted-render definition. The collector and all per-view state live in
 Teardown destroys nested component instances, unsubscribes views, removes
 listeners/refs, and tolerates failing leave hooks. All DOM links transfer to the
 next vnode tree so repeated patches remain live.
+
+## Measured: `island` saves patching, not allocation
+
+The island branch runs inside `patch()`, which is reached only **after**
+`render()` has already built the entire new tree — so an island's children are
+constructed on every render and then thrown away
+(`newVnode.children = oldVnode.children`). [[DOC-STRESS-EXAMPLE]]'s `islands`
+scenario puts a number on both halves over 600 shell renders across 100 islands
+of 200 descendants each: **0** DOM mutations below an island boundary (measured
+with a real `MutationObserver`, with the shell's own 600 mutations as the
+control, so the zero means something), and **20,000 of 20,000 child vnodes
+rebuilt per render** — 12,000,000 across the window, counted by read-counting
+getters on each descendant rather than inferred from the source. Cost is ~8.7ms
+per shell render in a production bundle while holding 20,000 frozen nodes, and
+the same assertions hold in the minified bundle, which matters because it takes
+a different path through the DCE'd devperf branches.
+
+So the [[DECISION-D44-DOM-ISLANDS]] contract holds exactly, and its price is
+allocation: islanding a large subtree to avoid patch cost still pays full
+construction every render.

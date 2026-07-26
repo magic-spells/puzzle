@@ -93,3 +93,41 @@ caching them would fire stale values.
 - `this.__h` joins the emitted `__d`/`__f` as a reserved name (instance field).
 - `??=` requires ES2021; builds target ES2022 (dev and prod) — no lowering.
 - All goldens update; emitted bytes for non-cacheable sites are unchanged.
+
+## Measured: the prediction holds, and the idiom is what defeats the bailout
+
+This card's Context predicted the cost of a non-cacheable callback prop. It has
+now been measured end to end, in a 10,000-row list, both arms in one browser
+session — [[DOC-STRESS-EXAMPLE]]'s `?handlers=inline|stable` A/B, driven by
+[[DECISION-D128-BENCHMARK-METHODOLOGY]]. It settles a question that had been
+open as "is the per-row re-render cascade a framework bug?"
+
+**It is not a framework bug.** `patchComponent`'s `shallowEqual` prop bailout is
+correct and, given stable props, extremely effective. Structural counts at
+n=10,000 (exact, from a development build — properties of the render algorithm,
+not of the machine):
+
+| op | arm | child `data()` runs | renders | wasted | prop bailouts | DOM mutations |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `swap-rows` | inline | 10,000 | 10,001 | 10,000 | 0 | 997 |
+| `swap-rows` | stable | **0** | **1** | 0 | **10,000** | 997 |
+| `select-row` | inline | 10,000 | 10,001 | 10,000 | 0 | 1 |
+| `select-row` | stable | **1** | 2 | 1 | 9,999 | 1 |
+
+**The DOM work is identical in both arms** — the stable spelling is not skipping
+anything the user can see; it patches precisely the same nodes and stops waking
+the rows that had nothing to do. Production script time at 10,000 rows falls by
+more than half on every op that mutates an existing list (`select-row` 42.3ms →
+14.3ms, `update-every-10th` 46.7ms → 22.2ms, `swap-rows` 47.0ms → 18.5ms), and
+the renderer's own `task` accounting agrees. `create` is unchanged in both arms
+at both sizes — nothing can bail out on first mount.
+
+What the stable arm changes is only the *spelling*: `@select={ selectById }`
+instead of `@select={ selectRow(row) }`, with the row capture moved into the
+child (`props.select?.(props.id)`, parent re-queries by id). So the cascade is
+caused by the canonical Puzzle list idiom — the shape `examples/todos` uses —
+handing the patcher a brand-new function object per row per render, exactly as
+this decision's Context said it would. The rejected alternatives above
+(function-equality hacks in `shallowEqual`) remain rejected for the same reason;
+the remedy is on the authoring side, or in a future numbered decision, not in
+weakening prop equality.

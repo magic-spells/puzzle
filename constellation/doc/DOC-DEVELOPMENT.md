@@ -45,6 +45,7 @@ test orchestration are rooted at `package.json`.
 
 ## Common commands
 
+
 ```sh
 npx vitest run
 go test ./...                 # run from compiler/ per repository convention
@@ -52,11 +53,23 @@ npm run test:types
 npm run verify:pack
 npm run test:e2e-pack
 npm run test:browser
+npm run bench                 # production performance benchmark; see below
 ```
 
 `npm test` first recompiles generated fixture modules and smoke-builds the
 blog, grimoire, typed-todos, virtual-scroll, and slot-forwarding fixtures before
 running Vitest. Go is therefore required for the JavaScript test workflow.
+
+`npm run bench` is the production performance harness in `benchmarks/`
+([[DECISION-D128-BENCHMARK-METHODOLOGY]]). It is **not** part of the required
+suites and **not** a CI gate: it builds a scratch copy of the
+[[DOC-STRESS-EXAMPLE]] app in production mode, drives it through a fixed op
+matrix, and reports medians against `benchmarks/baseline.json`. Its exit code
+depends only on structural counters and validation, never on timing — a timing
+delta under ~13% on the machine of record is noise. `npm run bench:update`
+rewrites the baseline; `benchmarks/probe.mjs` is the development-build companion
+for the counters production compiles out. Read `benchmarks/README.md` before
+quoting any number from it.
 
 Golden codegen fixtures live in `compiler/internal/codegen/testdata/`.
 Regenerate intentionally with:

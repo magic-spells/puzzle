@@ -120,3 +120,35 @@ navigation zero.
 
 All server/storage merges use [[COMPONENT-PUZZLE-MODEL]]'s safe merge helper;
 malformed entries and protected keys cannot corrupt live records.
+
+## Measured costs
+
+Both figures come from [[DOC-STRESS-EXAMPLE]] under the production harness
+([[DECISION-D128-BENCHMARK-METHODOLOGY]]). They describe current behavior; they
+are not proposals.
+
+**Persistence is O(store) per mutating frame, not O(changed records).**
+`_persistNow()` serializes *every record of every type* through `toJSON()` and
+`JSON.stringify`s the result, once per dirty flush. At 10,000 records that blob
+is ~2,583 KB. Pricing one serialize by differencing two otherwise identical
+5,000-write bursts: script time is unchanged (`_persist()` only sets the dirty
+flag) at 11.5ms both ways, while time to the painted frame goes from **16.4ms to
+51.2ms** — **+34.8ms for one serialize**, three times what the writes that
+triggered it cost. Heap delta for the same op goes 0.9MB → 10.3MB. Under a
+sustained write load a 10,000-record store spends **~95% of the wall clock
+serializing itself**, and the flush rate drops for the same number of writes.
+The reported time is a **lower bound**: the probe uses an in-memory storage shim,
+because 2.5MB exceeds the localStorage quota and `_persistNow` swallows the
+resulting `QuotaExceededError` — the real `setItem` cost is not included.
+Persistence is opt-in (`options.storage`), so this cost is paid only by apps
+that asked for it.
+
+**Async tracking serialization is real in production, and it is not a timing
+inference.** Twenty independent `async data()` evaluations that share nothing and
+query nothing report `maxInFlight` **1 of 20** from an in-page concurrency census
+(the census was itself validated against a control of 8 genuinely parallel
+promises, which reports 8). Wall time agrees — 20 × 50ms → ~1028ms — but wall
+time alone cannot distinguish "serialized" from "slow", which is why the verdict
+comes from the census. The cause is the single store-wide `_asyncTrackingChain`
+described above; the trigger is the *shape* of `data()` (an `AsyncFunction`), so
+a component that awaits and touches no record still takes its turn in the queue.

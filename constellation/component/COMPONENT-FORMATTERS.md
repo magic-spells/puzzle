@@ -75,3 +75,22 @@ Invalid-Date fail-soft path, and `in_timezone` passes it through UNSHIFTED —
 a day names no instant to re-express. The `iso` preset is idempotent on such
 inputs; Date instances, timestamps, and full ISO datetimes parse exactly as
 before.
+
+## Measured cost: the date built-ins dominate a large re-render
+
+Measured, not inferred, through [[DOC-STRESS-EXAMPLE]]'s `formatters` scenario
+and the production harness ([[DECISION-D128-BENCHMARK-METHODOLOGY]]): across a
+10,000-row re-render running `date('short')` and `timeago` on each row, the
+formatters are **91.4% of the total** — **376.1ms** against **32.4ms** for an
+identical tree, identical per-row patch work, rendering plain record strings
+instead. The two arms have effectively identical layout cost (47.6ms vs 46.6ms)
+and diverge entirely in the framework's own JavaScript.
+
+The proximate cause is counted rather than reasoned about: one 10,000-row render
+constructs **10,000 `Intl.DateTimeFormat`** and **10,000 `Intl.RelativeTimeFormat`**
+objects — exactly one per formatter call, for 20,000 calls. `builtins.js`
+constructs a fresh instance inside `date()` and inside `timeago()` every time,
+and both are keyed entirely by `(locale, options)`. Nothing is memoized today.
+
+This paragraph records a measurement of current behavior. Any caching design is
+a separate, numbered decision; do not read this as describing shipped work.
