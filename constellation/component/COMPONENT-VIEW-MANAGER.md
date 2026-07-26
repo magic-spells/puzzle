@@ -67,6 +67,20 @@ instance; shallow-different props rerun `data()`, while slot-only changes only
 rerender. Async mounts use comment anchors and resolve insertion references from
 the live element to survive parent updates.
 
+`patchComponent`'s `shallowEqual` bailout is regression-covered by
+`tests/component-prop-bailout.test.js`, which pins both directions of the
+[[DECISION-D62-HANDLER-CACHING]] measurement at test scale: with stable props
+one changed child re-renders and its siblings do not; with a freshly allocated
+callback prop per row every child re-runs `data()` for the same single DOM
+mutation. Before those tests nothing asserted the bailout fired, so weakening it
+would have been invisible — green suite, slower apps. The comparator's exact
+contract is pinned too, through the real patch path rather than a direct import:
+the key-COUNT guard is what makes a present-but-`undefined` key differ from an
+absent one; values compare by strict `!==`, so a `NaN` prop never bails out
+(unlike `sameNode`, which compares keys by SameValueZero on purpose) while `+0`
+and `-0` do bail out; and equal key counts with disjoint all-`undefined` key
+sets compare equal, because key sets themselves are never compared.
+
 `mountComponent` chains the enter animation onto the mount promise with a
 **two-argument** `then(onFulfilled, onRejected)`, not a trailing `.catch()`. The
 distinction is load-bearing: the rejection handler is the mount-failure recovery
