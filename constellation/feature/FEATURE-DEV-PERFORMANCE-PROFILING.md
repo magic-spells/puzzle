@@ -21,7 +21,8 @@ Puzzle needs actionable development-time render attribution without paying a pro
 ## Scope
 
 - In: dev-only timings/counters, mutation-backed wasted render detection, causal chains, bounded same-chain and rolling-frame loop guards, runner-neutral `measureRenders`, public types, DCE metafile proof, focused Vitest coverage.
-- Out: a production profiler, a framework config option, DevTools protocol changes, or new runtime class state.
+- Out: a production profiler, a framework config option, or new runtime class state.
+- DevTools protocol exposure was originally out of scope and was added afterwards by [[DECISION-D122-DEVTOOLS-PROFILER-PROTOCOL]].
 
 ## Acceptance
 

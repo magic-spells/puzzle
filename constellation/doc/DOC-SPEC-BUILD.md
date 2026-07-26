@@ -162,7 +162,14 @@ frameworkVersion }` · `app-mounted` / `app-unmounted` · `view-mounted { id,
 name, module }` / `view-destroyed { id }` · `flush { keys, notified }` (one
 per store flush batch — rides D63's scheduling, no extra throttling) ·
 `route-commit { pathname, query, params, chain, title }` (emitted in the same
-post-mount pre-paint window as scroll/focus).
+post-mount pre-paint window as scroll/focus) · `perf-warning { kind, viewId,
+name, detail, count }` (D122 — fired only when a §56 loop guard trips, never
+per render).
+
+There is deliberately **no per-render event**. The page hook buffers 500
+messages pre-attach and the panel ring holds 200, so a render firehose would
+evict the events every other panel depends on; render data is PULLED via
+`snapshot:profile` while recording and not at all otherwise.
 
 **Requests (extension → runtime, via `hook.onRequest` handler):**
 `snapshot:views` (recursive `{ id, name, module, children }` tree; roots
@@ -178,7 +185,20 @@ params, route, routes, chain, title }` — `route`/`routes` are path PATTERNS an
 `edit:record { type, id, patch }` —
 applied through the real `record.update()`, so §20 validation applies and a
 throw returns `{ error }` · `highlight:view { id, on }` (page overlay) ·
-`log:view` / `log:record` (logs the live object and binds `window.$p`).
+`log:view` / `log:record` (logs the live object and binds `window.$p`) ·
+`perf:start` / `perf:stop` → `{ ok: true }` · `snapshot:profile` → `{ recording,
+durationMs, totals, views[], flushes[], warnings[] }` (D122).
+
+**Additive growth.** The message set grows WITHOUT a `PROTOCOL_VERSION` bump:
+unknown events fall through the extension's `receive()` default into the ring
+and unknown requests fail per-call with `{ error }`, so both ends already
+tolerate names they do not know. A bump forces every published app into the hard
+`MISMATCH` state and blanks every panel.
+
+**Profile aggregation lives in the bridge, not in the §56 collector**, so rows
+carry the bridge's own view ids (the panel cross-links into `snapshot:views` by
+them) and a recording retains no view references — otherwise a long recording
+would pin every view destroyed during it.
 
 **Identity.** View ids are session-scoped integers (WeakMap-assigned); `name`
 is the compiled class name (dev builds are unminified), `module` is the
