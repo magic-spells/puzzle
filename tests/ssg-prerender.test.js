@@ -119,6 +119,61 @@ describe('SSG prerender (M1)', () => {
 		expect(pages.some((p) => p.path === '/user/:id')).toBe(false);
 	});
 
+	describe('route precedence shadows (hybrid only)', () => {
+		it('skips a static route shadowed by an earlier dynamic matcher in hybrid output', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/user/:id', name: 'user', view: UserView, layout: Layout },
+					{ path: '/user/new', name: 'new-user', view: Home, layout: Layout },
+				],
+			};
+
+			const { skipped, warnings, pages } = await prerender(cfg);
+
+			expect(skipped).toContainEqual({ path: '/user/:id', reason: 'dynamic' });
+			expect(skipped).toContainEqual({ path: '/user/new', reason: 'shadowed' });
+			expect(
+				warnings.some((warning) =>
+					warning.includes(
+						'skipped shadowed route "/user/new" — earlier route "/user/:id"'
+					)
+				)
+			).toBe(true);
+			expect(pages.some((page) => page.path === '/user/new')).toBe(false);
+			warn.mockRestore();
+		});
+
+		it('keeps the static page when it is declared before the dynamic matcher', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/user/new', name: 'new-user', view: Home, layout: Layout },
+					{ path: '/user/:id', name: 'user', view: UserView, layout: Layout },
+				],
+			};
+
+			const { skipped, warnings, pages } = await prerender(cfg);
+
+			expect(skipped).toEqual([{ path: '/user/:id', reason: 'dynamic' }]);
+			expect(warnings.some((warning) => warning.includes('shadowed route'))).toBe(false);
+			expect(pages.some((page) => page.path === '/user/new')).toBe(true);
+			expect(warn).not.toHaveBeenCalled();
+			warn.mockRestore();
+		});
+	});
+
+	it('rejects a relative top-level path before route enumeration', async () => {
+		await expect(
+			prerender({
+				target: '#app',
+				routes: [{ path: 'about', name: 'about', view: Home, layout: Layout }],
+			})
+		).rejects.toThrow(/top-level route path must be "\*" or start with "\/"/);
+	});
+
 	it('flags prerender:false routes as shell-only pages', async () => {
 		const { pages } = await prerender(config());
 		const spa = pages.find((p) => p.path === '/app');
@@ -517,17 +572,24 @@ describe('SSG prerender (M1)', () => {
 			).toBe(true);
 		});
 
-		it('still skips a non-bare "*" route (only the exact catch-all renders)', async () => {
+		it("prerenders literal ':' and '*' text outside complete dynamic segments", async () => {
 			const cfg = {
 				target: '#app',
 				routes: [
 					{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } },
+					{
+						path: '/releases/v1:beta',
+						name: 'release',
+						view: UserView,
+						layout: Layout,
+					},
 					{ path: '/files/*', name: 'files', view: UserView, layout: Layout },
 				],
 			};
 			const { skipped, pages } = await prerender(cfg);
-			expect(skipped).toEqual([{ path: '/files/*', reason: 'dynamic' }]);
-			expect(pages.some((p) => p.path === '/files/*')).toBe(false);
+			expect(skipped).toEqual([]);
+			expect(pages.some((p) => p.path === '/releases/v1:beta')).toBe(true);
+			expect(pages.some((p) => p.path === '/files/*')).toBe(true);
 		});
 	});
 

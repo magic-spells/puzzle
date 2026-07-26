@@ -95,6 +95,27 @@ function writeShell(dir, shell = SHELL) {
 }
 
 describe('static prerender (D81)', () => {
+	it('keeps a static page shadowed under SPA precedence because static output has no router', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-shadow-'));
+		const shellPath = writeShell(outDir);
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const cfg = {
+			target: '#app',
+			routes: [
+				{ path: '/user/:id', name: 'user', view: Home, layout: Layout },
+				{ path: '/user/new', name: 'new-user', view: Home, layout: Layout },
+			],
+		};
+
+		const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+		expect(summary.skipped).toEqual([{ path: '/user/:id', reason: 'dynamic' }]);
+		expect(summary.warnings.some((warning) => warning.includes('shadowed route'))).toBe(false);
+		expect(summary.written.some((page) => page.path === '/user/new')).toBe(true);
+		expect(fs.existsSync(path.join(outDir, 'user', 'new', 'index.html'))).toBe(true);
+		warn.mockRestore();
+	});
+
 	describe('per-page store snapshot capture', () => {
 		it('warns once when any static route declares a guard', async () => {
 			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
