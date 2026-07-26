@@ -1,0 +1,7 @@
+# The staged production bundle the runner serves. Regenerated on every
+# `npm run bench`; never a source of truth.
+.build/
+
+# The most recent run, written unconditionally so a failed run can still be
+# diffed against baseline.json by hand. baseline.json IS committed; this is not.
+.last-run.json
