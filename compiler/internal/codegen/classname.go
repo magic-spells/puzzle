@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/magic-spells/puzzle/compiler/internal/jsident"
 	"github.com/magic-spells/puzzle/compiler/internal/parser"
 )
 
@@ -169,8 +170,8 @@ func isASCIISpace(b byte) bool {
 // for scriptless components (DOC-SPEC.md §4, where <script> is optional). The
 // base name has its extension stripped, every character that is not a JS
 // identifier char replaced with '_', and a leading '_' prepended when the result
-// would otherwise start with a digit. An empty/degenerate name falls back to a
-// stable default.
+// would otherwise start with a digit or be reserved in strict-mode JavaScript.
+// An empty/degenerate name falls back to a stable default.
 func classNameFromFilename(filename string) string {
 	base := filepath.Base(filename)
 	if ext := filepath.Ext(base); ext != "" {
@@ -188,7 +189,7 @@ func classNameFromFilename(filename string) string {
 	if name == "" {
 		return "PuzzleComponent"
 	}
-	if name[0] >= '0' && name[0] <= '9' {
+	if name[0] >= '0' && name[0] <= '9' || jsident.IsReservedBindingIdentifier(name) {
 		name = "_" + name
 	}
 	return name

@@ -407,6 +407,7 @@ describe('exempt read paths accept data that would fail validation (SPEC §20)',
 			ok: true,
 			status: 200,
 			statusText: 'OK',
+			text: async () => JSON.stringify([{ id: 's1', name: '', role: 'ghost', email: 'no-at' }]),
 			json: async () => [{ id: 's1', name: '', role: 'ghost', email: 'no-at' }],
 		}));
 		vi.stubGlobal('fetch', fetchFn);

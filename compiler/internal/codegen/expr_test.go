@@ -75,6 +75,8 @@ func TestResolveExpr(t *testing.T) {
 		// Division must stay division — the '/' follows a value, not an operator.
 		{"simple division", "a / b", nil, "__d.a / __d.b"},
 		{"division chain", "a / b / c", nil, "__d.a / __d.b / __d.c"},
+		{"postfix increment then division", "a++ / b / c", nil, "__d.a++ / __d.b / __d.c"},
+		{"postfix decrement then division", "a-- / b", nil, "__d.a-- / __d.b"},
 		{"divide assign", "count /= 2", nil, "__d.count /= 2"},
 		{"parenthesized division", "(a+b)/c", nil, "(__d.a+__d.b)/__d.c"},
 		{"index then division", "arr[0] / 2", nil, "__d.arr[0] / 2"},
@@ -104,6 +106,134 @@ func TestResolveExpr(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPostfixUpdateBeforeDivisionPzlCompile(t *testing.T) {
+	src := `<puzzle-view>{ a++ / b / c }</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class T extends PuzzleView {
+  ratio(index, total) {
+    return index++ / total;
+  }
+}
+</script>`
+	sec, err := parser.SplitSections(src, "T.pzl")
+	if err != nil {
+		t.Fatalf("split .pzl with postfix update in script: %v", err)
+	}
+	res, err := Compile(sec, Options{Filename: "T.pzl", Mode: ModeView})
+	if err != nil {
+		t.Fatalf("compile .pzl with postfix update interpolation: %v", err)
+	}
+	if want := "return index++ / total;"; !strings.Contains(res.JS, want) {
+		t.Fatalf("compiled output lost script expression %q:\n%s", want, res.JS)
+	}
+	if want := "String(__d.a++ / __d.b / __d.c)"; !strings.Contains(res.JS, want) {
+		t.Fatalf("compiled output missing %q:\n%s", want, res.JS)
+	}
+}
+
+func TestRegexDivisionScannerParity(t *testing.T) {
+	// Each fixture identifies the slash whose classification matters. The test
+	// replaces only the suffix at that slash with an unterminated "/ scannerProbe":
+	// the decisive prefix stays byte-for-byte identical, while resolveExpr makes
+	// division observable as "__d.scannerProbe" and leaves a regex body untouched.
+	cases := []struct {
+		name         string
+		expr         string
+		slashOrdinal int
+		wantRegex    bool
+	}{
+		// O-4's complete adversarial matrix.
+		{"postfix increment", "a++ / b", 1, false},
+		{"postfix decrement", "a-- / b", 1, false},
+		{"member postfix increment", "this.i++ / n", 1, false},
+		{"increment plus regex", "a+++/re/.source", 1, true},
+		{"decrement minus regex", "a--- /re/.source", 1, true},
+		{"separated unary plus regex", "a + +/re/.source", 1, true},
+		{"return regex", "return /re/.test(x)", 1, true},
+		{"postfix then line comment then division", "a++ // c\n / 2", 3, false},
+		{"prefix increment in parens then division", "(a, ++i) / 2", 1, false},
+		{"postfix decrement comparison then division", "a-->b/2", 1, false},
+
+		// Reserved-word and ordinary-token coverage protects the duplicated
+		// regex-preceding tables and state machines from drifting again.
+		{"typeof regex", "typeof /re/", 1, true},
+		{"instanceof regex", "value instanceof /re/", 1, true},
+		{"in regex", "key in /re/", 1, true},
+		{"of regex", "value of /re/", 1, true},
+		{"void regex", "void /re/", 1, true},
+		{"delete regex", "delete /re/", 1, true},
+		{"new regex", "new /re/", 1, true},
+		{"do regex", "do /re/", 1, true},
+		{"else regex", "else /re/", 1, true},
+		{"yield regex", "yield /re/", 1, true},
+		{"await regex", "await /re/", 1, true},
+		{"case regex", "case /re/", 1, true},
+		{"keyword property then division", "value.return / rhs", 1, false},
+		{"number then division", "42 / rhs", 1, false},
+		{"closing paren then division", "(value) / rhs", 1, false},
+		{"regex argument", "match(/re/)", 1, true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			slash := nthSlashIndex(t, tc.expr, tc.slashOrdinal)
+			probeExpr := tc.expr[:slash] + "/ scannerProbe"
+
+			parserRegex := parserClassifiesSlashAsRegex(t, probeExpr, slash)
+			codegenRegex := !strings.Contains(resolveExpr(probeExpr, nil), "__d.scannerProbe")
+
+			if parserRegex != tc.wantRegex {
+				t.Errorf("parser classified slash in %q as regex = %v, want %v", tc.expr, parserRegex, tc.wantRegex)
+			}
+			if codegenRegex != tc.wantRegex {
+				t.Errorf("codegen classified slash in %q as regex = %v, want %v", tc.expr, codegenRegex, tc.wantRegex)
+			}
+			if parserRegex != codegenRegex {
+				t.Errorf("scanner drift for %q: parser regex = %v, codegen regex = %v", tc.expr, parserRegex, codegenRegex)
+			}
+		})
+	}
+}
+
+func nthSlashIndex(t *testing.T, s string, ordinal int) int {
+	t.Helper()
+	for i := 0; i < len(s); i++ {
+		if s[i] != '/' {
+			continue
+		}
+		ordinal--
+		if ordinal == 0 {
+			return i
+		}
+	}
+	t.Fatalf("fixture %q has fewer slashes than requested", s)
+	return -1
+}
+
+func parserClassifiesSlashAsRegex(t *testing.T, expr string, target int) bool {
+	t.Helper()
+	prevEndsExpr := false
+	for i := 0; i <= target; {
+		next, pee, consumed := parser.LexSkip(expr, i, prevEndsExpr)
+		if i == target {
+			return consumed
+		}
+		if consumed {
+			if next > target {
+				t.Fatalf("parser skipped target slash in %q", expr)
+			}
+			prevEndsExpr = pee
+			i = next
+			continue
+		}
+		prevEndsExpr = parser.LexPlainEndsExpr(expr[i], prevEndsExpr)
+		i++
+	}
+	t.Fatalf("parser did not reach target slash in %q", expr)
+	return false
 }
 
 // TestScanRegexLiteralUnterminated pins the doc-comment contract shared with the

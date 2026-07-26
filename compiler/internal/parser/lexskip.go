@@ -38,10 +38,11 @@ func lexIsSpace(b byte) bool {
 
 // LexSkip inspects the byte at s[i] for the balanced scanners. When it begins a
 // lexical unit the caller must treat as OPAQUE — a '...'/"..."/`...` string, a
-// /re/flags regex literal, a // or /* */ comment, or an identifier run — LexSkip
-// returns the index just past that unit, the prevEndsExpr state that follows it,
-// and consumed=true; the caller must NOT re-inspect the skipped bytes. For any
-// other byte (operator, bracket, separator, digit, whitespace) it returns
+// /re/flags regex literal, a // or /* */ comment, an identifier run, or a ++/--
+// update operator — LexSkip returns the index just past that unit, the
+// prevEndsExpr state that follows it, and consumed=true; the caller must NOT
+// re-inspect the skipped bytes. For any other byte (operator, bracket, separator,
+// digit, whitespace) it returns
 // consumed=false and leaves i/pee alone: the caller processes s[i] itself, then
 // folds it into prevEndsExpr via LexPlainEndsExpr.
 //
@@ -99,6 +100,13 @@ func LexSkip(s string, i int, prevEndsExpr bool) (next int, pee bool, consumed b
 	case c == '/' && !prevEndsExpr:
 		// Regex literal — a '/' where the previous token cannot end an expression.
 		return lexScanRegexLiteral(s, i), true, true
+	case (c == '+' || c == '-') && i+1 < len(s) && s[i+1] == c:
+		// Prefix and postfix update operators preserve the incoming state. For a
+		// postfix update that keeps a following '/' in division context; for a
+		// prefix update the operand identifier sets the state afterward. Consuming
+		// both bytes is essential: in a+++/re/ the third '+' remains a plain
+		// operator, clears the state, and correctly leaves '/' as a regex opener.
+		return i + 2, prevEndsExpr, true
 	case lexIsIdentStart(c):
 		j := i
 		for j < len(s) && lexIsIdentChar(s[j]) {

@@ -518,7 +518,7 @@ export class Router {
 			);
 		}
 		this.#mode = mode;
-		this.#initialPath = initialPath ?? '/';
+		this.#initialPath = normalizeRoutePath(initialPath ?? '/');
 		// Normalize + validate the base at construction (D51, config-error posture
 		// like the unknown-mode throw above): '#'/'?' in a base is a hard error, and
 		// '', '/', and a trailing '/' all collapse to the canonical form.
@@ -778,6 +778,7 @@ export class Router {
 	 * returns a resolved promise since the deferred nav has not started yet.
 	 */
 	push(path) {
+		path = normalizeRoutePath(path);
 		if (this.#committing) {
 			this.#pendingPush = { path, replace: false }; // last-wins, single slot (no queue)
 			return Promise.resolve();
@@ -842,6 +843,7 @@ export class Router {
 	 * — the auth-redirect case that must not leave the aborted page in history).
 	 */
 	replace(path) {
+		path = normalizeRoutePath(path);
 		if (this.#committing) {
 			this.#pendingPush = { path, replace: true }; // last-wins, shared slot with push
 			return Promise.resolve();
@@ -928,8 +930,9 @@ export class Router {
 	 * is used exactly as stored (D51 already normalized it — no re-normalization). A
 	 * string NOT starting with '/' is returned unchanged: the deliberate pass-through
 	 * for external URLs, `mailto:`/`tel:`, bare `#anchor` fragments, an already-encoded
-	 * `'#/x'`, and `''`. Query strings and `#anchor` suffixes inside a path survive
-	 * for free — this is pure prefixing and never parses them.
+	 * `'#/x'`, and `''`. Non-ASCII text in a path-shaped value is percent-encoded
+	 * idempotently before the mode/base prefix is applied; query strings and
+	 * `#anchor` suffixes ride through the same normalization.
 	 */
 	url(path) {
 		return encodeURL(path, this.#mode, this.#base);
@@ -2536,12 +2539,15 @@ function makeEntry(chain, fullPaths) {
 	const leafPath = fullPaths[fullPaths.length - 1];
 	const paramNames = [];
 	// Compile ONE '/'-segment at a time: a segment that is a complete `:name`
-	// becomes a single-segment capture group; EVERY other segment is regex-escaped
-	// in full, so static path text with regex metacharacters ('.', '+', '(', '[',
-	// …) matches LITERALLY (`/docs.v1` matches only `/docs.v1`, not `/docsXv1`).
-	// The '/' separators are structural, re-joined below — never escaped. The
-	// top-level catch-all '*' never reaches here (handled in the constructor; a '*'
-	// inside children throws above), so '*' is escaped like any other literal.
+	// becomes a single-segment capture group; EVERY other segment first normalizes
+	// non-ASCII text to the browser's percent-encoded pathname form, then is
+	// regex-escaped in full. Static path text with regex metacharacters ('.', '+',
+	// '(', '[', …) still matches LITERALLY (`/docs.v1` matches only `/docs.v1`,
+	// not `/docsXv1`). Existing `%XX` escapes are ASCII and stay byte-identical, so
+	// this normalization is idempotent. The '/' separators are structural,
+	// re-joined below — never escaped. The top-level catch-all '*' never reaches
+	// here (handled in the constructor; a '*' inside children throws above), so
+	// '*' is escaped like any other literal.
 	const regexPath = leafPath
 		.split('/')
 		.map((seg) => {
@@ -2553,7 +2559,7 @@ function makeEntry(chain, fullPaths) {
 				paramNames.push(name);
 				return '([^/]+)';
 			}
-			return escapeRegExp(seg);
+			return escapeRegExp(normalizeRoutePath(seg));
 		})
 		.join('/');
 	return {
@@ -2645,9 +2651,10 @@ function validateGuard(value, label) {
  * (no base — the default; every seam stays byte-identical to the base-less
  * router). Otherwise a leading '/' is ensured and every trailing '/' trimmed, so
  * `'myapp'`, `'/myapp'`, and `'/myapp/'` all normalize to `'/myapp'`; multi-
- * segment bases (`'/a/b'`) work. A base containing `'#'` or `'?'` is a
- * constructor throw (config-error posture, like an unknown mode) — those
- * characters would corrupt the mode-specific URL encoding.
+ * segment bases (`'/a/b'`) work. Non-ASCII base text is percent-encoded through
+ * the same idempotent path normalizer used by routes. A base containing `'#'` or
+ * `'?'` is a constructor throw (config-error posture, like an unknown mode) —
+ * those characters would corrupt the mode-specific URL encoding.
  */
 export function normalizeBase(base) {
 	if (!base) return '';
@@ -2656,7 +2663,7 @@ export function normalizeBase(base) {
 	}
 	let b = base[0] === '/' ? base : '/' + base;
 	b = b.replace(/\/+$/, ''); // trim trailing slash(es); '/' → ''
-	return b;
+	return normalizeRoutePath(b);
 }
 
 /**
@@ -2673,9 +2680,31 @@ export function encodeURL(path, mode, base) {
 		throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
 	}
 	if (path[0] !== '/') return path;
+	path = normalizeRoutePath(path);
 	if (mode === 'memory') return path;
 	if (mode === 'hash') return '#' + base + path;
 	return base + path;
+}
+
+/**
+ * Canonicalize a path-shaped router value to the percent-encoded form browser
+ * URL APIs expose, so a declared route can match `location.pathname` on a cold
+ * load. Two classes are encoded: whole non-ASCII runs (encoding the run rather
+ * than the byte preserves surrogate pairs), and the four ASCII characters the
+ * WHATWG path percent-encode set escapes but `encodeURIComponent` alone would
+ * miss in a path — space, '"', '<', '>', and '`'. Space is the one that shows up
+ * in practice ('/my page' → '/my%20page').
+ *
+ * Everything else stays byte-identical: ordinary ASCII paths, regex
+ * metacharacters, malformed percent text, and existing `%XX` escapes. Because
+ * every output byte is ASCII and outside the escaped set, the operation is
+ * idempotent — `/caf%C3%A9` never becomes `/caf%25C3%25A9`.
+ *
+ * '?' and '#' are deliberately NOT encoded: they are structural delimiters that
+ * stripPath()/encodeURL() rely on to split query and fragment.
+ */
+function normalizeRoutePath(path) {
+	return path.replace(/[^\x00-\x7F]+|[ "<>`]/g, (literal) => encodeURIComponent(literal));
 }
 
 /** Reduce a full path to the pathname used for matching (drop query + hash). */

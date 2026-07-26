@@ -128,7 +128,18 @@ func startsWithObjectLiteral(expr string) bool {
 // object-literal keys are NOT recognized as binding positions, so a name written
 // there is still prefixed. These discouraged template forms are unsupported.
 func resolveExpr(expr string, scope map[string]bool) string {
+	out, _ := resolveExprTrackingScope(expr, scope, nil)
+	return out
+}
+
+// resolveExprTrackingScope resolves expr exactly like resolveExpr and also
+// reports whether it references an identifier from trackedScope. Keeping the
+// reference check inside the resolver makes it follow the same lexical rules:
+// property names and literal/comment/regex text do not count, while identifiers
+// inside template-literal interpolations do.
+func resolveExprTrackingScope(expr string, scope, trackedScope map[string]bool) (string, bool) {
 	var b strings.Builder
+	referencesTrackedScope := false
 	n := len(expr)
 	i := 0
 	lastNonSpace := byte(0)
@@ -188,9 +199,11 @@ func resolveExpr(expr string, scope map[string]bool) string {
 						break
 					}
 					inner := expr[j+2 : end]
+					resolved, referencesScope := resolveExprTrackingScope(inner, scope, trackedScope)
 					b.WriteString("${")
-					b.WriteString(resolveExpr(inner, scope))
+					b.WriteString(resolved)
 					b.WriteByte('}')
+					referencesTrackedScope = referencesTrackedScope || referencesScope
 					j = end + 1
 					continue
 				}
@@ -249,6 +262,9 @@ func resolveExpr(expr string, scope map[string]bool) string {
 			}
 			name := expr[i:j]
 			isProp := lastNonSpace == '.'
+			if !isProp && trackedScope[name] {
+				referencesTrackedScope = true
+			}
 			if isProp || jsKeywords[name] || jsGlobals[name] || scope[name] {
 				b.WriteString(name)
 			} else {
@@ -286,6 +302,15 @@ func resolveExpr(expr string, scope map[string]bool) string {
 			lastNonSpace = 0
 			prevEndsExpr = false
 			i += 3
+		case (c == '+' || c == '-') && i+1 < n && expr[i+1] == c:
+			// Prefix and postfix update operators preserve prevEndsExpr. A postfix
+			// update therefore leaves a following '/' as division, while a prefix
+			// update remains non-ending until its operand is scanned. Consume both
+			// bytes so a+++/re/ still treats the third '+' as a plain operator and
+			// the slash as a regex opener.
+			b.WriteString(expr[i : i+2])
+			lastNonSpace = c
+			i += 2
 		default:
 			b.WriteByte(c)
 			if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
@@ -297,7 +322,7 @@ func resolveExpr(expr string, scope map[string]bool) string {
 			i++
 		}
 	}
-	return b.String()
+	return b.String(), referencesTrackedScope
 }
 
 // scanRegexLiteral returns the index just past the regex literal starting at i
@@ -431,34 +456,111 @@ func matchBalanced(s string, open int, openDelim, closeDelim byte) int {
 	return -1
 }
 
-// compileEventValue compiles an @event expression to its SPEC §5 wrapper and
-// reports whether the compiled handler is DATA-INDEPENDENT (cacheable, v1.29 D62
-// / SPEC §31). Two forms only:
-//   - bare identifier `h`      → `(event) => this.events.h(event)`     (cacheable)
-//   - call expression `h(a,b)` → `(event) => this.events.h(<args resolved>)`
-//
-// The callee is qualified to `this.events.*`; arguments pass through scope
-// resolution with `event` in scope. Anything else (member callee, multiple
-// statements) is an error.
-//
-// Cacheability (D62): a data-independent handler is the same function object on
-// every render, so codegen may wrap it in a per-instance cache (this.__h) instead
-// of minting a fresh closure per render. The bare form captures only `this` →
-// always cacheable. A call form is cacheable iff its arguments reference NOTHING
-// from the render scope beyond `event`: literals, `event`, `this.…`, and JS
-// globals are all evaluated at fire time INSIDE the closure, so they're fine; a
-// loop/scope variable or a data reference is not. Detected by a two-pass
-// resolution (no new lexer): resolving the args against a REDUCED scope of only
-// {event} must produce output identical to the full-scope resolution AND that
-// output must not contain `__d.`. The equal-outputs check catches loop/scope
-// variables (in the reduced scope they'd gain the `__d.` prefix, so the outputs
-// diverge); the substring check catches data references (`__d.`-prefixed
-// identically in both passes). A string literal containing "__d." is a harmless
-// false negative — it just misses the cache.
+// splitEventConditional splits one top-level JS conditional expression into its
+// condition and branches. Strings, templates, regexes, comments, and nested
+// delimiters are opaque through LexSkip. Nested top-level conditionals are
+// tracked only to find the matching colon; compileEventValue still rejects them
+// as branch values because each branch must be a simple handler form or null.
+func splitEventConditional(expr string) (condition, truthy, falsy string, ok bool) {
+	depth := 0
+	question := -1
+	nestedQuestions := 0
+	prevEndsExpr := false
+	for i := 0; i < len(expr); {
+		if next, pee, consumed := parser.LexSkip(expr, i, prevEndsExpr); consumed {
+			prevEndsExpr = pee
+			i = next
+			continue
+		}
+		c := expr[i]
+		switch c {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+		}
+		if depth == 0 {
+			switch c {
+			case '?':
+				// `??` and `?.` are operators inside a condition, not the start
+				// of a handler-valued conditional.
+				isNullishOrOptional := (i > 0 && expr[i-1] == '?') ||
+					(i+1 < len(expr) && (expr[i+1] == '?' || expr[i+1] == '.'))
+				if !isNullishOrOptional {
+					if question < 0 {
+						question = i
+					} else {
+						nestedQuestions++
+					}
+				}
+			case ':':
+				if question >= 0 {
+					if nestedQuestions > 0 {
+						nestedQuestions--
+					} else {
+						return strings.TrimSpace(expr[:question]),
+							strings.TrimSpace(expr[question+1 : i]),
+							strings.TrimSpace(expr[i+1:]), true
+					}
+				}
+			}
+		}
+		prevEndsExpr = parser.LexPlainEndsExpr(c, prevEndsExpr)
+		i++
+	}
+	return "", "", "", false
+}
+
+// compileEventValue compiles an @event value and reports whether it is
+// DATA-INDEPENDENT (cacheable, v1.29 D62 / SPEC §31). It accepts the two SPEC §5
+// handler forms plus the D86 handler-valued conditional whose branches are each
+// a handler form or null. A literal null emits no handler.
 func compileEventValue(expr string, scope map[string]bool) (string, bool, error) {
 	expr = strings.TrimSpace(expr)
+	eventParam := "event"
+	if scope["event"] {
+		// Preserve a loop item/counter named event: the DOM event parameter must
+		// not shadow the outer .map((event) => …) binding.
+		eventParam = "__ev"
+	}
+	if expr == "null" {
+		return "null", false, nil
+	}
+	if condition, truthy, falsy, ok := splitEventConditional(expr); ok {
+		if condition == "" || truthy == "" || falsy == "" {
+			return "", false, fmt.Errorf("event handler must be a bare method name or a single call expression (got %q)", expr)
+		}
+		truthyJS, err := compileEventBranch(truthy, scope, eventParam)
+		if err != nil {
+			return "", false, err
+		}
+		falsyJS, err := compileEventBranch(falsy, scope, eventParam)
+		if err != nil {
+			return "", false, err
+		}
+		// The condition is evaluated during render and may toggle function ↔
+		// null, so the conditional value itself must never be cached.
+		return "(" + resolveExpr(condition, scope) + ") ? " + truthyJS + " : " + falsyJS, false, nil
+	}
+	return compileEventHandler(expr, scope, eventParam)
+}
+
+func compileEventBranch(expr string, scope map[string]bool, eventParam string) (string, error) {
+	if expr == "null" {
+		return "null", nil
+	}
+	out, _, err := compileEventHandler(expr, scope, eventParam)
+	return out, err
+}
+
+// compileEventHandler compiles one bare identifier or single call expression.
+// The callee is qualified to this.events.* and call arguments are resolved with
+// the DOM event in scope unless a loop binding named event already owns that
+// name. Call forms are cacheable only when their arguments directly reference no
+// loop-scope binding and contain no resolved render-data read.
+func compileEventHandler(expr string, scope map[string]bool, eventParam string) (string, bool, error) {
 	if isJSIdentifier(expr) {
-		return "(event) => this.events." + expr + "(event)", true, nil
+		return "(" + eventParam + ") => this.events." + expr + "(" + eventParam + ")", true, nil
 	}
 	op := strings.IndexByte(expr, '(')
 	if op < 0 {
@@ -483,18 +585,12 @@ func compileEventValue(expr string, scope map[string]bool) (string, bool, error)
 	evScope := cloneScope(scope)
 	evScope["event"] = true
 	argsJS := ""
+	referencesLoopScope := false
 	if argsRaw != "" {
-		argsJS = resolveExpr(argsRaw, evScope)
+		argsJS, referencesLoopScope = resolveExprTrackingScope(argsRaw, evScope, scope)
 	}
-	// Cacheable iff the args capture nothing from the render scope beyond `event`
-	// (D62). Empty args are trivially cacheable; otherwise re-resolve against a
-	// scope of ONLY {event} — a loop/scope variable gains the `__d.` prefix there
-	// and diverges, while a data reference carries `__d.` in BOTH passes (identical
-	// output) so the substring check rejects it.
-	reduced := map[string]bool{"event": true}
-	cacheable := argsRaw == "" ||
-		(argsJS == resolveExpr(argsRaw, reduced) && !strings.Contains(argsJS, "__d."))
-	return "(event) => this.events." + callee + "(" + argsJS + ")", cacheable, nil
+	cacheable := !referencesLoopScope && !strings.Contains(argsJS, "__d.")
+	return "(" + eventParam + ") => this.events." + callee + "(" + argsJS + ")", cacheable, nil
 }
 
 func cloneScope(scope map[string]bool) map[string]bool {

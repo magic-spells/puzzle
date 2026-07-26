@@ -77,6 +77,12 @@ func SplitSections(src, filename string) (*Sections, error) {
 	var nView, nSkeleton, nScripts, nStyles int
 
 	i := 0
+	// A leading UTF-8 BOM is an encoding marker, not top-level template
+	// content. Keep src itself untouched so every later byte offset and
+	// line/column calculation still refers to the original file.
+	if strings.HasPrefix(src, "\xEF\xBB\xBF") {
+		i = len("\xEF\xBB\xBF")
+	}
 	// Backstop tracking (see the strayContentErr call after the loop): the first
 	// byte of non-whitespace content that falls OUTSIDE every recognized section
 	// (silently skipped before this guard), plus the section that most recently

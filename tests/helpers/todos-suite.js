@@ -380,6 +380,7 @@ export function runTodosSuite({ TodoHome, DefaultLayout, Todo, label }) {
 				ok: true,
 				status: 200,
 				statusText: 'OK',
+				text: async () => JSON.stringify(payload),
 				json: async () => payload,
 			}));
 			vi.stubGlobal('fetch', fetchMock);

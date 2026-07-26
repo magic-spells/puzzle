@@ -260,13 +260,33 @@ const POLLUTION_SKIP = new Set(['__proto__', 'constructor', 'prototype']);
 // internals (`_store`/`_type`/`_synced`/`_deleted`).
 const MERGE_SKIP = new Set([...POLLUTION_SKIP, '_store', '_type', '_synced', '_deleted']);
 
-/** Shared body of safeAssign/safeMerge: assign every own key not in `skipSet`. */
-function assignSkipping(target, src, skipSet) {
+// Per-record local-mutation state used by save-response reconciliation. Weak
+// storage keeps it off the deliberate record shape and releases it with the
+// record. Each update() advances the record revision once and stamps every field
+// in that patch, so a response can merge untouched fields while skipping only
+// fields edited after its request was dispatched.
+const MUTATION_REVISIONS = new WeakMap();
+
+/** Shared body of safeAssign/safeMerge: assign every allowed own key. */
+function assignSkipping(target, src, skipSet, allow) {
 	for (const key of Object.keys(src)) {
 		if (skipSet.has(key)) continue;
+		if (allow && !allow(key)) continue;
 		target[key] = src[key];
 	}
 	return target;
+}
+
+/** Stamp one local-assignment revision across the fields accepted from a patch. */
+function recordMutation(target, fields) {
+	if (fields.length === 0) return;
+	let state = MUTATION_REVISIONS.get(target);
+	if (!state) {
+		state = { current: 0, fields: new Map() };
+		MUTATION_REVISIONS.set(target, state);
+	}
+	const revision = ++state.current;
+	for (const field of fields) state.fields.set(field, revision);
 }
 
 /**
@@ -288,7 +308,18 @@ function assignSkipping(target, src, skipSet) {
  * with safeMerge.
  */
 function safeAssign(target, src) {
-	return assignSkipping(target, src, POLLUTION_SKIP);
+	const assigned = [];
+	assignSkipping(target, src, POLLUTION_SKIP, (key) => {
+		assigned.push(key);
+		return true;
+	});
+	recordMutation(target, assigned);
+	return target;
+}
+
+/** Current local-mutation revision, captured when save() dispatches its body. */
+export function recordMutationRevision(record) {
+	return MUTATION_REVISIONS.get(record)?.current ?? 0;
 }
 
 /**
@@ -306,9 +337,18 @@ function safeAssign(target, src) {
  * legitimately set `_synced` do so explicitly right after this merge. All other keys
  * keep exact `record[key] = src[key]` assignment semantics; Object.keys preserves
  * enumeration order (identical to Object.assign for ordinary data).
+ *
+ * When `throughRevision` is provided by save reconciliation, a field changed by
+ * update() after that request's dispatch revision is skipped. Other merge sites
+ * omit it and remain server-authoritative exactly as before.
  */
-export function safeMerge(record, src) {
-	return assignSkipping(record, src, MERGE_SKIP);
+export function safeMerge(record, src, throughRevision) {
+	const state =
+		throughRevision === undefined ? null : MUTATION_REVISIONS.get(record);
+	return assignSkipping(record, src, MERGE_SKIP, (key) => {
+		if (throughRevision === undefined) return true;
+		return (state?.fields.get(key) ?? 0) <= throughRevision;
+	});
 }
 
 export class PuzzleModel {

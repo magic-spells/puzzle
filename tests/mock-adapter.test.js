@@ -275,6 +275,21 @@ describe('latency — the knob that makes skeletons developable', () => {
 		// setTimeout would hang here under fake timers.
 		expect(await store.loadAll('todo')).toHaveLength(1);
 	});
+
+	it('a throwing handler with latency rejects instead of leaving the request pending', async () => {
+		vi.useFakeTimers();
+		const store = storeWith({
+			data: [],
+			latency: 50,
+			handler() {
+				throw new Error('handler blew up');
+			},
+		});
+		const pending = expect(store.request('todo', '/explode')).rejects.toThrow('handler blew up');
+
+		await vi.advanceTimersByTimeAsync(50);
+		await pending;
+	});
 });
 
 describe('failure — the only supported way to make data() reject on purpose', () => {

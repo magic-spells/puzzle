@@ -124,20 +124,51 @@ func TestExtractClassName(t *testing.T) {
 }
 
 // TestClassNameFromFilename covers the scriptless-.pzl class-name sanitizer:
-// extension stripped, non-identifier chars → '_', leading digit guarded.
+// extension stripped, non-identifier chars → '_', leading digit and reserved
+// strict-mode bindings guarded.
 func TestClassNameFromFilename(t *testing.T) {
 	cases := map[string]string{
 		"Box.pzl":             "Box",
+		"Class.pzl":           "Class",
 		"components/Card.pzl": "Card",
 		"my-widget.pzl":       "my_widget",
 		"weird name!.pzl":     "weird_name_",
 		"my.thing.pzl":        "my_thing",
 		"2cool.pzl":           "_2cool",
+		"class.pzl":           "_class",
+		"default.pzl":         "_default",
+		"await.pzl":           "_await",
+		"arguments.pzl":       "_arguments",
 	}
 	for in, want := range cases {
 		if got := classNameFromFilename(in); got != want {
 			t.Errorf("classNameFromFilename(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestCompileScriptlessReservedFilenameProducesValidModule(t *testing.T) {
+	for _, file := range []string{"class.pzl", "default.pzl", "await.pzl"} {
+		t.Run(file, func(t *testing.T) {
+			src := `<puzzle-view><span>valid</span></puzzle-view>`
+			sec, err := parser.SplitSections(src, file)
+			if err != nil {
+				t.Fatalf("split: %v", err)
+			}
+			res, err := Compile(sec, Options{Filename: file, Mode: ModeComponent})
+			if err != nil {
+				t.Fatalf("compile: %v", err)
+			}
+			className := classNameFromFilename(file)
+			if !strings.Contains(res.JS, "export default class "+className+" extends PuzzleView {}") {
+				t.Fatalf("missing sanitized class declaration:\n%s", res.JS)
+			}
+			if !strings.Contains(res.JS, className+".prototype.render = function () {") {
+				t.Fatalf("render tail not bound to %s:\n%s", className, res.JS)
+			}
+			// nodeCheck writes a .mjs file, so Node parses this as an ESM module.
+			nodeCheck(t, res.JS)
+		})
 	}
 }
 
@@ -289,10 +320,12 @@ func TestCompileErrors(t *testing.T) {
 // TestModeForPath checks the D20 directory convention.
 func TestModeForPath(t *testing.T) {
 	cases := map[string]EmissionMode{
-		"app/views/Home.pzl":         ModeView,
-		"app/layouts/Default.pzl":    ModeView,
-		"app/components/Button.pzl":  ModeComponent,
-		"app/components/ui/Card.pzl": ModeComponent,
+		"app/views/Home.pzl":                  ModeView,
+		"app/layouts/Default.pzl":             ModeView,
+		"app/components/Button.pzl":           ModeComponent,
+		"app/components/ui/Card.pzl":          ModeComponent,
+		"app/components/myapp/views/Card.pzl": ModeComponent,
+		"/tmp/x/app/views/Shared.pzl":         ModeView,
 	}
 	for path, want := range cases {
 		if got := ModeForPath(path); got != want {

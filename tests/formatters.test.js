@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { FormatterRegistry } from '../client-runtime/formatters.js';
+import { FormatterRegistry, makeFormatterRegistry } from '../client-runtime/formatters.js';
 import fullBuiltins from '../client-runtime/formatters/builtins-all.js';
 import builtinNames from '../client-runtime/formatters/builtins.json';
 
@@ -26,6 +26,50 @@ describe('FormatterRegistry', () => {
 		expect(typeof passthrough).toBe('function');
 		expect(passthrough('untouched')).toBe('untouched');
 		spy.mockRestore();
+	});
+
+	describe('registration validation', () => {
+		it('rejects empty and non-string formatter names', () => {
+			const reg = new FormatterRegistry();
+			const formatter = (value) => value;
+
+			expect(() => reg.register('', formatter)).toThrow(
+				'[puzzle] formatter name must be a non-empty string'
+			);
+			expect(() => reg.register(null, formatter)).toThrow(
+				'[puzzle] formatter name must be a non-empty string'
+			);
+		});
+
+		it('rejects non-function values from direct and config registration', () => {
+			const reg = new FormatterRegistry();
+
+			expect(() => reg.register('price', 'not-a-function')).toThrow(
+				'[puzzle] formatter "price" must be a function (got string)'
+			);
+			expect(() => makeFormatterRegistry({ price: null })).toThrow(
+				'[puzzle] formatter "price" must be a function (got object)'
+			);
+		});
+
+		it('registers a valid formatter function', () => {
+			const reg = new FormatterRegistry();
+			reg.register('double', (value) => value * 2);
+
+			expect(reg.get('double')(4)).toBe(8);
+		});
+
+		it('keeps missing-name pass-through and did-you-mean behavior', () => {
+			const reg = new FormatterRegistry();
+			reg.register('decorate', (value) => `**${value}**`);
+			const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+			expect(reg.get('decorat')('plain')).toBe('plain');
+			expect(spy).toHaveBeenCalledWith(
+				'[puzzle] unknown formatter "decorat" — value passed through unchanged (did you mean "decorate"?)'
+			);
+			spy.mockRestore();
+		});
 	});
 
 	it('escapes HTML by default', () => {

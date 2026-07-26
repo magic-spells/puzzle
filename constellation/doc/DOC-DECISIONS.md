@@ -1,5 +1,5 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D121)
+name: DECISIONS.md — decision-log index (D1–D125)
 status: built
 verified_at: '2026-07-24T05:49:35.947Z'
 connections:
@@ -7,7 +7,7 @@ connections:
 verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
-Index of the ADR-lite decision log. Each decision D1–D121 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+Index of the ADR-lite decision log. Each decision D1–D125 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
 
 # Decision Log (index)
 
@@ -168,6 +168,7 @@ slice-of-work view.
 
 - **D121** [[DECISION-D121-DEV-PERFORMANCE-PROFILING]] — development-only render/data/Store instrumentation with mutation-backed wasted-render detection, causal-chain loop guards, runner-neutral `measureRenders` in `/testing`, and a strict zero-production-byte proof through both sentinel removal and esbuild metafile attribution (SPEC §53/§56)
 - **D122** [[DECISION-D122-DEVTOOLS-PROFILER-PROTOCOL]] — expose the D121 profiler over the DevTools bridge (`perf:start`/`perf:stop`/`snapshot:profile` plus a `perf-warning` event) ADDITIVELY on protocol v1; render data is pulled, never pushed, and rows are aggregated in the bridge keyed by its own view ids so a recording retains no view references (SPEC §55)
+- **D125** [[DECISION-D125-SAVE-RECONCILE-REVISION]] — a save response never overwrites a field edited while its request was in flight: per-field mutation revisions in a module-private WeakMap gate the §22 merge, server-computed fields still land, pk adoption stays unconditional, and `_synced` remains a provenance bit so a queued save PUTs instead of POSTing a duplicate (amends SPEC §22/D50)
 
 ## Open questions (tracked, not yet decided)
 
