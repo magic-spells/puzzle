@@ -135,6 +135,16 @@ export const SCENARIO_DEFINITIONS = [
 		ops: ['navigate-100', 'navigate-burst-100', 'params-100', 'params-burst-100', 'back-forward-100', 'supersede-50'],
 	},
 	{
+		name: 'flip-churn',
+		label: 'Flip churn',
+		blurb: 'N rows through the D85 FLIP path — playFlip interleaves a rect read and an animate() per row',
+		// `shuffle-noflip` is the CONTROL: the identical rotation over the
+		// identical rows with no `flip` attribute anywhere, so every flip counter
+		// must read 0. `interrupt` issues its reorders back to back so each one
+		// begins while the previous flip is still in flight.
+		ops: ['shuffle', 'shuffle-noflip', 'interrupt'],
+	},
+	{
 		// LAST on purpose: the two ops here are deliberate pathologies, and the
 		// picker reads left to right. Both are behind their own explicit button
 		// and both carry a hard iteration cap — see LoopTrap.pzl.

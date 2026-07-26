@@ -136,6 +136,8 @@
       <Islands key={ stageKey } n={ n } descendants={ descendants } />
     {:else if isFormatters}
       <Formatters key={ stageKey } n={ n } />
+    {:else if isFlipChurn}
+      <FlipChurn key={ stageKey } n={ n } />
     {:else if isLoopTrap}
       <LoopTrap key={ stageKey } cap={ cap } />
     {:else}
@@ -148,6 +150,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import AsyncWaterfall from '../scenarios/AsyncWaterfall.pzl';
 import DeepNest from '../scenarios/DeepNest.pzl';
+import FlipChurn from '../scenarios/FlipChurn.pzl';
 import Formatters from '../scenarios/Formatters.pzl';
 import Islands from '../scenarios/Islands.pzl';
 import KeyedList from '../scenarios/KeyedList.pzl';
@@ -202,6 +205,7 @@ const N_DEFAULTS = {
   islands: 100,
   formatters: 10000,
   'listener-churn': 1000,
+  'flip-churn': 500,
   // route-churn's size is fixed by its route table (5 levels, 50 leaves); its
   // only knob is the leaf loader delay.
   'route-churn': 0,
@@ -231,6 +235,7 @@ const PARAM_FIELDS = {
   ],
   formatters: [{ id: 'n', label: 'rows (N)' }],
   'listener-churn': [{ id: 'n', label: 'rows (N)' }],
+  'flip-churn': [{ id: 'n', label: 'rows (N)' }],
   'route-churn': [{ id: 'delay', label: 'loader ms' }],
   'loop-trap': [{ id: 'cap', label: 'hard cap' }],
 };
@@ -381,6 +386,7 @@ export default class StressHome extends PuzzleView {
       isIslands: scenario === 'islands',
       isFormatters: scenario === 'formatters',
       isListenerChurn: scenario === 'listener-churn',
+      isFlipChurn: scenario === 'flip-churn',
       isLoopTrap: scenario === 'loop-trap',
 
       // The keyed-list handler A/B. Only keyed-list implements both arms, so the
