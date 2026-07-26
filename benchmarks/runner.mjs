@@ -310,6 +310,27 @@ function extractCounters(entry, result, stats) {
 	};
 	const detail = result?.detail ?? '';
 
+	// ── render-structure counters (the handler A/B's evidence) ───────────────
+	//
+	// `childDataRuns` is the decisive one and it is reported by the SCENARIO, not
+	// by the framework: it counts ListRow.data() executions through a plain
+	// integer that survives into the production bundle (examples/stress/app/
+	// row-metrics.js). The framework's own counters live in devperf.js, which
+	// production compiles out — so `perf` is null in a production run and
+	// populated under `--build-mode development`. Both are recorded; neither is
+	// synthesized when absent, because a fabricated 0 and a measured 0 mean
+	// opposite things here.
+	if (typeof stats.childDataRuns === 'number') counters.childDataRuns = stats.childDataRuns;
+	if (typeof stats.handlers === 'string') counters.handlers = stats.handlers;
+	if (stats.perf) {
+		counters.renders = stats.perf.renders;
+		counters.wastedRenders = stats.perf.wastedRenders;
+		counters.frameworkDataRuns = stats.perf.dataRuns;
+		counters.domMutations = stats.perf.domMutations;
+		counters.propBailouts = stats.perf.componentPropBailouts;
+		counters.propReruns = stats.perf.componentPropReruns;
+	}
+
 	if (entry.scenario === 'subscriptions') {
 		const m = detail.match(/→\s*(\d+)\/(\d+)\s+views re-evaluated\s*\(expected\s*(\d+)\)/);
 		if (m) {

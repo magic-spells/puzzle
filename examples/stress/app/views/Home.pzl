@@ -28,6 +28,16 @@
       </div>
     {/if}
 
+    {#if showHandlerToggle}
+      <div class="flex flex-col gap-1">
+        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">handlers</span>
+        <div class="flex gap-1">
+          <button class={ inlineCls } disabled={ busy } @click={ setHandlers('inline') }>inline</button>
+          <button class={ stableCls } disabled={ busy } @click={ setHandlers('stable') }>stable</button>
+        </div>
+      </div>
+    {/if}
+
     {#if showModeToggle}
       <div class="flex flex-col gap-1">
         <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">mode</span>
@@ -106,7 +116,7 @@
     {:else if isVirtualList}
       <VirtualList key={ stageKey } n={ n } />
     {:else}
-      <KeyedList key={ stageKey } n={ n } />
+      <KeyedList key={ stageKey } n={ n } handlers={ handlers } />
     {/if}
   </div>
 </puzzle-view>
@@ -191,8 +201,13 @@ const SECONDARY_BTN =
 function readParams(scenario, query) {
   const raw = query || {};
   const mode = Array.isArray(raw.mode) ? raw.mode[0] : raw.mode;
+  const handlers = Array.isArray(raw.handlers) ? raw.handlers[0] : raw.handlers;
   return {
     mode: mode === 'fanout' ? 'fanout' : 'precision',
+    // The keyed-list handler A/B. `inline` is the DEFAULT and is what
+    // benchmarks/baseline.json was recorded against, so an unqualified URL and
+    // every existing baseline id keep meaning exactly what they meant before.
+    handlers: handlers === 'stable' ? 'stable' : 'inline',
     n: intParam(raw.n, N_DEFAULTS[scenario] ?? 100, 0, 200000),
     m: intParam(raw.m, 10000, 1, 200000),
     delay: intParam(raw.delay, 50, 0, 5000),
@@ -241,7 +256,7 @@ export default class StressHome extends PuzzleView {
     const scenario = this.scenarioName();
     const params = this.currentParams();
     const definition = definitionFor(scenario);
-    const stageKey = [scenario, params.mode, params.n, params.m, params.delay].join('|');
+    const stageKey = [scenario, params.mode, params.handlers, params.n, params.m, params.delay].join('|');
 
     // Changing scenario or parameters cancels any armed confirmation — an arm
     // for "50k on the full-DOM list" must not survive into a different context.
@@ -286,6 +301,14 @@ export default class StressHome extends PuzzleView {
       isSubscriptions: scenario === 'subscriptions',
       isAsyncWaterfall: scenario === 'async-waterfall',
       isVirtualList: scenario === 'virtual-list',
+
+      // The keyed-list handler A/B. Only keyed-list implements both arms, so the
+      // toggle is scoped to it rather than shown inert everywhere else.
+      showHandlerToggle: scenario === 'keyed-list',
+      inlineCls: params.handlers === 'inline' ? ACTIVE_MODE_BTN : IDLE_MODE_BTN,
+      stableCls: params.handlers === 'stable' ? ACTIVE_MODE_BTN : IDLE_MODE_BTN,
+      handlers: params.handlers,
+
       stageKey,
       mode: params.mode,
       n: params.n,
@@ -326,6 +349,11 @@ export default class StressHome extends PuzzleView {
     setMode: (mode) => {
       this.runTask(`mode=${mode}`, () =>
         selectScenario(this.scenarioName(), { ...this.currentParams(), mode })
+      );
+    },
+    setHandlers: (handlers) => {
+      this.runTask(`handlers=${handlers}`, () =>
+        selectScenario(this.scenarioName(), { ...this.currentParams(), handlers })
       );
     },
     setParam: (key, event) => {
