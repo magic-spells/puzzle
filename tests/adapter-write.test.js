@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Store, PuzzleAdapterError } from '../client-runtime/datastore/store.js';
-import { PuzzleModel, Puzzle, PuzzleValidationError } from '../client-runtime/model.js';
+import {
+	PuzzleModel,
+	Puzzle,
+	PuzzleValidationError,
+	recordMutationRevision,
+} from '../client-runtime/model.js';
 import * as pkg from '../client-runtime/index.js';
 
 // Adapter write sync (constellation/doc/DOC-SPEC.md §22, D50): explicit
@@ -325,6 +330,145 @@ describe('save() — response reconciliation preserves in-flight edits', () => {
 
 		expect(todo.text).toBe('B');
 		expect(todo._synced).toBe(true);
+	});
+});
+
+// Construction no longer stamps a local-mutation revision — only update() does.
+// The stamp cost every hydrated record an array, a closure, a {current, fields}
+// state object and a Map entry per field, for data ONLY save()-response
+// reconciliation reads; a record loaded and never saved paid all of it for
+// nothing. An unstamped record reports revision 0, and safeMerge's filter then
+// tests `(fields.get(key) ?? 0) <= 0` → true for every field — the same verdict
+// stamping every constructor field at revision 1 and capturing requestRevision 1
+// produced. This matrix is the proof, one case per boundary the change touches.
+//
+// These are equivalence tests: they pass identically with the constructor stamp
+// restored (verified). What they fail on is the protection itself — drop
+// safeMerge's throughRevision filter and cases 3 and 4 go red. The one assertion
+// that IS specific to the change is the revision-invariant test at the end.
+describe('save() — reconciliation with an unstamped constructor (D125 matrix)', () => {
+	// 1. Nothing local has changed since dispatch, so the response is wholly
+	//    authoritative — including over fields the constructor itself set.
+	it('construct → save: the response merges every server field', async () => {
+		mockFetch({
+			body: { id: 't1', text: 'from-server', completed: true, serverRevision: 7 },
+		});
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'local' });
+
+		await todo.save();
+
+		expect(todo.text).toBe('from-server'); // a constructor-set field still yields
+		expect(todo.completed).toBe(true);
+		expect(todo.serverRevision).toBe(7); // a field the record never had
+		expect(todo._synced).toBe(true);
+	});
+
+	// 2. The edit happened BEFORE dispatch, so the server saw it and its echo wins
+	//    — the same as case 1, and untouched fields merge alongside it. (The edit
+	//    that must survive is the mid-flight one; that is case 3.)
+	it('construct → update → save: untouched fields merge and the pre-dispatch edit takes the echo', async () => {
+		const fetchSpy = mockFetch({
+			body: { id: 't1', text: 'server-normalized', completed: true, serverRevision: 9 },
+		});
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		todo.update({ text: 'B' });
+		await todo.save();
+
+		// The request carried the update, so the response is authoritative over it.
+		expect(JSON.parse(fetchSpy.mock.calls[0][1].body).text).toBe('B');
+		expect(todo.text).toBe('server-normalized');
+		expect(todo.completed).toBe(true); // untouched → merged
+		expect(todo.serverRevision).toBe(9); // untouched → merged
+	});
+
+	// 3. THE case the revision machinery exists for (finding O-1): the edit lands
+	//    after the body was serialized, so the server never saw it and its response
+	//    must not roll it back — while every field the user did NOT touch merges.
+	it('save → update mid-flight: the response never overwrites the mid-flight edit', async () => {
+		const gate = deferred();
+		vi.stubGlobal('fetch', vi.fn(() => gate.promise));
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A', completed: false });
+
+		const saving = todo.save();
+		await Promise.resolve(); // body serialized and dispatched with text 'A'
+		todo.update({ text: 'B' });
+
+		gate.resolve(
+			makeRes({ body: { id: 't1', text: 'A', completed: true, serverRevision: 3 } })
+		);
+		await saving;
+
+		expect(todo.text).toBe('B'); // mid-flight edit survives
+		expect(todo.completed).toBe(true); // untouched → server wins
+		expect(todo.serverRevision).toBe(3);
+		expect(todo._synced).toBe(true);
+	});
+
+	// 4. Identity is the store's to change, not the user's: the server-assigned pk
+	//    merges with NO throughRevision, so it lands even while a sibling field is
+	//    being held back by a mid-flight edit.
+	it('save → update mid-flight: a server-assigned pk is still adopted unconditionally', async () => {
+		const gate = deferred();
+		vi.stubGlobal('fetch', vi.fn(() => gate.promise));
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 'temp-1', text: 'A' });
+
+		const saving = todo.save();
+		await Promise.resolve();
+		todo.update({ text: 'B' });
+
+		gate.resolve(
+			makeRes({ body: { id: 'server-99', text: 'A', completed: true } })
+		);
+		await saving;
+
+		expect(todo.id).toBe('server-99'); // adoption is unconditional
+		expect(todo.text).toBe('B'); // mid-flight edit still held back
+		expect(todo.completed).toBe(true);
+		expect(store.findOne('todo', 'server-99')).toBe(todo);
+		expect(store.findOne('todo', 'temp-1')).toBeNull();
+	});
+
+	// 5. The path that used to pay for all of this and read none of it. A record
+	//    that never saves must behave exactly as before: updates apply, and the
+	//    server-authoritative merge sites (upsert/hydrate — no throughRevision)
+	//    stay server-authoritative, since no revision can leak into them.
+	it('a record never saved behaves identically: updates apply and upsert stays authoritative', async () => {
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		todo.update({ text: 'B', completed: true });
+		expect(todo.text).toBe('B');
+		expect(todo.completed).toBe(true);
+
+		// upsert merges without a revision boundary — server wins even over the
+		// field just edited locally.
+		const same = store.upsert('todo', { id: 't1', text: 'server', completed: false });
+		expect(same).toBe(todo);
+		expect(todo.text).toBe('server');
+		expect(todo.completed).toBe(false);
+		expect(store.findOne('todo', 't1')).toBe(todo);
+	});
+
+	// The invariant the change actually introduces, asserted directly: restore the
+	// constructor stamp and this is the test that goes red.
+	it('reports revision 0 for a constructed record and advances only on update()', () => {
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+		expect(recordMutationRevision(todo)).toBe(0);
+
+		todo.update({ text: 'B' });
+		expect(recordMutationRevision(todo)).toBe(1);
+
+		todo.update({ completed: true });
+		expect(recordMutationRevision(todo)).toBe(2);
+
+		// A store-less record constructed directly takes the same path.
+		expect(recordMutationRevision(new ApiTodo({ id: 'x', text: 'y' }))).toBe(0);
 	});
 });
 

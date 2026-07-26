@@ -179,8 +179,13 @@ func bundlePrerenderEntry(absRoot, stdin, outfile, label string) error {
 		// Inline sourcemap so `node --enable-source-maps` maps a data()/model
 		// throw back to the user's .pzl/.js without a sidecar file in staging.
 		Sourcemap: api.SourceMapInline,
-		// Build-time render: the runtime's dev-only HMR machinery folds away.
-		Define:   bundleDefines(pl, false),
+		// Build-time render: the runtime's dev-only HMR machinery folds away, and
+		// so does the router's takeover path — this bundle GENERATES the
+		// prerendered markup under node and never adopts it. It pulls in
+		// router.js only for route-shape validation and segment-regex compilation
+		// (ssg/index.js constructs an unstarted memory Router); nothing here
+		// navigates into a container.
+		Define:   bundleDefines(pl, bundleFlags{Dev: false, Takeover: false}),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 	}

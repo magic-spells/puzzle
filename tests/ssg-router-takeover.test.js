@@ -408,4 +408,74 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.textContent).toBe('Homechild');
 		expect(willShow).toBe(1); // enter animation plays as before
 	});
+
+	// ---- __PUZZLE_TAKEOVER__ fallback ---------------------------------------
+	// The compiler defines __PUZZLE_TAKEOVER__ = false for a plain SPA build so the
+	// three takeover gates — and, through the dropped preloadTakeoverComponents
+	// import, ssg/preload.js itself — fold out of the bundle. Every gate is written
+	// `typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__`, so an
+	// ABSENT define means ON. That fallback is what keeps this whole file green
+	// (vitest supplies no define) and what keeps the runtime usable under a
+	// third-party bundler that does not know the name.
+	//
+	// This case pins it explicitly: it asserts the define really is absent here,
+	// then drives all three gates in one navigation — the skeleton-exemption probe
+	// (gate 1), the nested-component preload (gate 2), and #takeoverSSG's clear +
+	// marker drop (gate 3). Deleting the `typeof …` half of any gate would leave
+	// every OTHER test here passing only by accident of ReferenceError timing; this
+	// one fails loudly.
+	it('takes over with __PUZZLE_TAKEOVER__ undefined (the typeof fallback)', async () => {
+		expect(typeof globalThis.__PUZZLE_TAKEOVER__).toBe('undefined');
+
+		let leafGate = null;
+		let leafRenders = 0;
+		class FallbackLeaf extends PuzzleView {
+			async data() {
+				if (leafGate) await leafGate.promise;
+				return { label: 'LEAF' };
+			}
+			render() {
+				leafRenders++;
+				return h('span', { class: 'fallback-leaf' }, [text(this.getData().label)]);
+			}
+		}
+		// Declares renderSkeleton, so gate 1 is what decides whether the D39
+		// exemption applies. Under takeover it must NOT: skeletonRenders stays 0.
+		class FallbackPage extends PuzzleView {
+			async data() {
+				return { ready: true };
+			}
+			renderSkeleton() {
+				skeletonRenders++;
+				return h('div', { class: 'skeleton' }, [text('loading...')]);
+			}
+			render() {
+				return h('main', { class: 'fallback-page' }, [
+					text('PAGE'),
+					h(FallbackLeaf),
+				]);
+			}
+		}
+		const routes = [{ path: '/', name: 'fallback', view: FallbackPage }];
+		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
+		const el = ssgContainer(pages[0].html);
+		const prerendered = el.innerHTML;
+
+		// A pending nested data() at takeover time: without gate 2 the router would
+		// commit before the leaf resolved and the prerendered content would blank.
+		leafGate = deferred();
+		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+		const mounting = app.mount();
+		await tick();
+		const firstPaint = el.innerHTML;
+		leafGate.resolve();
+		await mounting;
+
+		expect(skeletonRenders).toBe(0); // gate 1: exemption suppressed under takeover
+		expect(firstPaint).toBe(prerendered); // gate 2: nested preload awaited
+		expect(el.innerHTML).toBe(prerendered); // one swap, identical content
+		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false); // gate 3: marker dropped
+		expect(willShow).toBe(0); // gate 3: enter suppressed
+		expect(leafRenders).toBeGreaterThan(0);
+	});
 });

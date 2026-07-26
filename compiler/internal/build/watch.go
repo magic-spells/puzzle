@@ -95,8 +95,10 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	}
 
 	// The watch builder is always development (§27, D57): __PUZZLE_DEV__ = true, so
-	// the HMR snapshot/restore hooks are live for `puzzle dev`.
-	buildOpts := newBundleOptions(absRoot, entry, outdir, pl, true)
+	// the HMR snapshot/restore hooks are live for `puzzle dev`. __PUZZLE_TAKEOVER__
+	// is true too — `puzzle dev` has no resolved output mode, and a dev bundle must
+	// never be the thing that silently drops a code path.
+	buildOpts := newBundleOptions(absRoot, entry, outdir, pl, bundleFlags{Dev: true, Takeover: true})
 	// Metafile carries the module graph's Inputs, used after each rebuild to prune
 	// CSS from files no longer imported (see Rebuild → plugin.PruneCSS).
 	buildOpts.Metafile = true
@@ -207,7 +209,7 @@ func (b *WatchBuilder) ScanUsage() error {
 		return nil
 	}
 
-	buildOpts := newBundleOptions(b.root, b.entry, b.outdir, b.pl, true)
+	buildOpts := newBundleOptions(b.root, b.entry, b.outdir, b.pl, bundleFlags{Dev: true, Takeover: true})
 	buildOpts.Metafile = true
 	if b.useFixtures {
 		buildOpts.Plugins = append(buildOpts.Plugins, b.fixtures.Plugin())

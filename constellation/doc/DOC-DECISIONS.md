@@ -1,5 +1,5 @@
 ---
-name: DECISIONS.md — decision-log index (D1–D127)
+name: DECISIONS.md — decision-log index (D1–D130)
 status: built
 verified_at: '2026-07-24T05:49:35.947Z'
 connections:
@@ -7,7 +7,7 @@ connections:
 verified_sha: d9591d6e01cb9c358acfa4d641174d08e1f05b23
 ---
 
-Index of the ADR-lite decision log. Each decision D1–D127 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
+Index of the ADR-lite decision log. Each decision D1–D130 now lives as its own DECISION card (full context, rationale, rejected alternatives); this card is the numeric index. [[DOC-SPEC]] is the enforceable contract — every SPEC change requires a new decision card, numbered here.
 
 # Decision Log (index)
 
@@ -175,6 +175,7 @@ slice-of-work view.
 - **D127** [[DECISION-D127-DISPLAY-COERCION-OWNER]] — one runtime owner for display coercion (`displayValue`, exported from the package root): nullish text interpolation renders empty instead of the literal `null`/`undefined`, quoted and brace-only attributes finally agree, `??` semantics keep `0`/`false` intact, and a missing field warns once in dev with the name folded out of production builds (amends the `String(value)` contract in DOC-COMPILER-DESIGN)
 
 - **D128** [[DECISION-D128-BENCHMARK-METHODOLOGY]] — the `benchmarks/` production harness (`npm run bench`) is a local instrument, not a CI gate: it measures a PRODUCTION build of [[DOC-STRESS-EXAMPLE]] only, because the dev build's ~3–4µs-per-mounted-view overhead lands on the strategy that mounts many views (+190ms on a 50k full-DOM create vs +3ms windowed) and therefore *overstates the case for windowing*; medians of 15 after warmup with a forced GC per iteration, never means; exit status keyed to structural counters, `validate()` and clamp rejections ONLY, never to timing (measured run-to-run variance: 1.4% median / 12.9% worst above 5ms, and `flr` instead of a percentage below it); every create declares `preExpect: { records: 0 }` because `freshSeed()` rewinds the deterministic seed and a create over a populated list regenerates identical ids that patch to nothing; builds into `benchmarks/.build/`, NEVER `examples/*/dist` (a production build there strips the DevTools bridge and killed a running dev session); CDP `ScriptDuration` is deliberately unreported after measuring 2.91ms against 182.9ms of real script time while Layout/RecalcStyle/Task were correct, and timed ops are kicked off from `setTimeout(0)` because `page.evaluate` work is not attributed at all; four independent throttle defences, since a background tab clamps `setTimeout` to ~1s and rAF to ~1Hz and produces whole-second-quantized fiction rather than merely slow numbers. Dev-build measurement, `ScriptDuration`, per-iteration tracing, timing-based exit codes, and building the example in place all rejected
+- **D130** [[DECISION-D130-TAKEOVER-BUILD-DEFINE]] — SSG takeover is a build-mode feature, not a universal runtime cost: `__PUZZLE_TAKEOVER__` joins `__PUZZLE_DEV__`/`__PUZZLE_HAS_FLIP__` as a bundle define meaning "this bundle may adopt prerendered DOM", true for the hybrid app bundle, the true-static per-page bundles and every dev/watch build, false for a plain SPA and for the node prerender bundle (which generates markup and never adopts it). Before it, `puzzle build` and `puzzle build --hybrid` emitted BYTE-IDENTICAL `app.js`, so every SPA shipped `ssg/preload.js` plus the router's three `data-puzzle-ssg` branches — code that cannot run because nothing stamps the marker (985 bytes raw / 271 gzip on `examples/todos`). The gate also covers the takeover *bookkeeping* that sits in the general mount path rather than behind the marker (`ViewNode`'s two fields, `viewManager`'s clone copies and mount-failure branch, `PuzzleView`'s `__takeoverTree` read), which ran in every app regardless of mode; gated rather than made lazy, so one hidden-class shape per build survives. Accepted cost: `app.js` is no longer mode-independent — a SPA-built bundle served against prerendered HTML silently renders client-side instead of taking over, a property D67 previously leaned on. Relocating `preload.js` out of `ssg/` rejected as insufficient (it renames but removes no bytes); vitest cannot verify the gated-OFF path at all (the define is absent there, so every gate is ON), making the Go build tests the only real check
 
 ## Open questions (tracked, not yet decided)
 

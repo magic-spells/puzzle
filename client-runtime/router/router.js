@@ -1300,8 +1300,16 @@ export class Router {
 		// prerendered DOM left intact). All other D39 behavior — SPA cold boot with a
 		// skeleton, subsequent client-side navigations to skeleton views — is
 		// byte-identical (isSSGTakeover false ⇒ skeletonExempt is the old check).
+		//
+		// __PUZZLE_TAKEOVER__ leads the conjunction so a plain SPA build folds the
+		// whole probe to `false` at compile time. Probed INLINE (never hoisted into
+		// a module const, which does not constant-propagate into method scopes);
+		// absent define ⇒ ON, so vitest and third-party bundlers keep the path.
 		const isSSGTakeover =
-			!cur && this.#container != null && this.#container.hasAttribute('data-puzzle-ssg');
+			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
+			!cur &&
+			this.#container != null &&
+			this.#container.hasAttribute('data-puzzle-ssg');
 		try {
 			const loads = [];
 			const hasSkeleton = (v) =>
@@ -1442,7 +1450,14 @@ export class Router {
 		// trees can contain non-routed async components. Only an SSG navigation-zero
 		// marker opts into waiting for those descendants: ordinary SPA navigation
 		// keeps ViewManager's fire-and-forget component mounting unchanged.
-		if (this.#container?.hasAttribute('data-puzzle-ssg')) {
+		//
+		// This is the branch that pays for itself: with __PUZZLE_TAKEOVER__ false the
+		// block folds away, `preloadTakeoverComponents` loses its only importer here,
+		// and ssg/preload.js tree-shakes out of the bundle ("sideEffects": false).
+		if (
+			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
+			this.#container?.hasAttribute('data-puzzle-ssg')
+		) {
 			let takeoverVnode = rootVnode;
 			if (layout) {
 				takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
@@ -1829,12 +1844,19 @@ export class Router {
 	 * `topView` is views[keep] — the view the ViewManager auto-plays in (behind a
 	 * layout) or the router plays in directly (no layout). A non-SSG app has no
 	 * marker, so this is a no-op and behavior is byte-identical.
+	 *
+	 * With __PUZZLE_TAKEOVER__ false the guarded block folds away and this is left
+	 * as an empty method — the two call sites stay, calling nothing. (Deleting the
+	 * method instead would change the class shape, exactly as __devSnapshot does
+	 * under __PUZZLE_DEV__.)
 	 */
 	#takeoverSSG(topView) {
-		if (!this.#container.hasAttribute('data-puzzle-ssg')) return;
-		this.#container.replaceChildren();
-		this.#container.removeAttribute('data-puzzle-ssg');
-		topView.skipEnter();
+		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+			if (!this.#container.hasAttribute('data-puzzle-ssg')) return;
+			this.#container.replaceChildren();
+			this.#container.removeAttribute('data-puzzle-ssg');
+			topView.skipEnter();
+		}
 	}
 
 	/**

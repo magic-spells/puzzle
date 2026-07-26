@@ -146,7 +146,15 @@ func Build(root string, opts Options) error {
 		return err
 	}
 
-	buildOpts := newBundleOptions(absRoot, entry, staging, pl, opts.Development)
+	// Takeover is a HYBRID-only capability for this bundle: only `output:
+	// 'hybrid'` emits a `data-puzzle-ssg` container for the router to adopt. A
+	// plain SPA build (and a --static build, whose app.js is not what boots a
+	// static page — the per-page mountStatic bundles are) can never reach those
+	// branches, so the define folds them — and ssg/preload.js — away.
+	buildOpts := newBundleOptions(absRoot, entry, staging, pl, bundleFlags{
+		Dev:      opts.Development,
+		Takeover: mode == "hybrid",
+	})
 	buildOpts.Metafile = opts.Metafile != nil
 	if opts.Fixtures {
 		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())

@@ -112,14 +112,71 @@ describe('displayValue', () => {
 		}
 	});
 
+	// setAttr's nullish branch calls the display helper and DISCARDS the result —
+	// the call exists solely for this warning, so it now sits behind the
+	// __PUZZLE_DEV__ probe. These two lock the behavior the probe must preserve.
+	//
+	// Fresh module graph: display.js's warned-once set is module state, and the
+	// tests above already spend the ''-expression key (setAttr passes no expression
+	// name, so it warns under ''). Without the reset these would silently pass on a
+	// suppressed warning.
+	it('still warns for an undefined attribute value on the removal path', async () => {
+		vi.resetModules();
+		const [{ ViewNode: Node }, { ViewManager: Manager }] = await Promise.all([
+			import('../client-runtime/views/ViewNode.js'),
+			import('../client-runtime/views/viewManager.js'),
+		]);
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const container = document.createElement('div');
+			new Manager(container).render(new Node('section', { 'data-missing': undefined }, []));
+
+			const section = container.querySelector('section');
+			expect(section.hasAttribute('data-missing')).toBe(false);
+			expect(warn).toHaveBeenCalledWith(
+				'[puzzle] undefined template value; rendering an empty string'
+			);
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
+	it('stays silent when a null attribute is removed', async () => {
+		vi.resetModules();
+		const [{ ViewNode: Node }, { ViewManager: Manager }] = await Promise.all([
+			import('../client-runtime/views/ViewNode.js'),
+			import('../client-runtime/views/viewManager.js'),
+		]);
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const container = document.createElement('div');
+			new Manager(container).render(new Node('section', { 'data-empty': null }, []));
+
+			expect(container.querySelector('section').hasAttribute('data-empty')).toBe(false);
+			expect(warn).not.toHaveBeenCalled();
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
 	it('has both runtime stringify adapters delegate to the shared helper', () => {
-		const sources = [
-			readFileSync('client-runtime/views/viewManager.js', 'utf8'),
-			readFileSync('client-runtime/ssg/serialize.js', 'utf8'),
+		const cases = [
+			// viewManager renames the import instead of wrapping it — a pure alias
+			// wrapper was one call per interpolation for nothing.
+			{
+				path: 'client-runtime/views/viewManager.js',
+				imports: "import { displayValue as stringify } from '../display.js';",
+			},
+			{
+				path: 'client-runtime/ssg/serialize.js',
+				imports: "import { displayValue } from '../display.js';",
+				wrapper: /function stringify\(v\) \{\s*return displayValue\(v\);\s*\}/,
+			},
 		];
-		for (const source of sources) {
-			expect(source).toContain("import { displayValue } from '../display.js';");
-			expect(source).toMatch(/function stringify\(v\) \{\s*return displayValue\(v\);\s*\}/);
+		for (const { path, imports, wrapper } of cases) {
+			const source = readFileSync(path, 'utf8');
+			expect(source).toContain(imports);
+			if (wrapper) expect(source).toMatch(wrapper);
 			expect(source).not.toContain("return v == null ? '' : String(v);");
 		}
 	});

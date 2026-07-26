@@ -264,7 +264,9 @@ const MERGE_SKIP = new Set([...POLLUTION_SKIP, '_store', '_type', '_synced', '_d
 // storage keeps it off the deliberate record shape and releases it with the
 // record. Each update() advances the record revision once and stamps every field
 // in that patch, so a response can merge untouched fields while skipping only
-// fields edited after its request was dispatched.
+// fields edited after its request was dispatched. Construction does NOT stamp
+// (see safeAssignTracked), so a record that is never update()d never allocates
+// an entry here at all.
 const MUTATION_REVISIONS = new WeakMap();
 
 /** Shared body of safeAssign/safeMerge: assign every allowed own key. */
@@ -308,6 +310,28 @@ function recordMutation(target, fields) {
  * with safeMerge.
  */
 function safeAssign(target, src) {
+	return assignSkipping(target, src, POLLUTION_SKIP);
+}
+
+/**
+ * safeAssign plus the local-mutation stamp — the update() path only.
+ *
+ * Construction deliberately does NOT stamp. A stamp costs an array, a closure, a
+ * `{current, fields: Map}` state object and one Map entry per field, and every
+ * record hydrated from the server pays it for data only save()-response
+ * reconciliation ever reads. It is also redundant: an unstamped record makes
+ * recordMutationRevision() return 0, and safeMerge's filter then tests
+ * `(fields.get(key) ?? 0) <= 0` → `0 <= 0` → true for every field. That is the
+ * right answer — a record with no local edits since dispatch should accept
+ * everything the server returns, which is exactly what stamping every
+ * constructor field at revision 1 and capturing requestRevision 1 also produced.
+ *
+ * The two schemes stay equivalent under later edits because the constructor
+ * stamp shifted EVERY revision by the same constant: a field stamped by update k
+ * compared `k+1 <= j+1` against a request dispatched after j updates, where it
+ * now compares `k <= j`. Same predicate.
+ */
+function safeAssignTracked(target, src) {
 	const assigned = [];
 	assignSkipping(target, src, POLLUTION_SKIP, (key) => {
 		assigned.push(key);
@@ -515,7 +539,9 @@ export class PuzzleModel {
 		const errors = this.constructor._collectErrors(patch, patched);
 		if (errors.length) throw new PuzzleValidationError(errors);
 
-		safeAssign(this, patch);
+		// Tracked: this is a LOCAL edit, and its revision is what stops an
+		// in-flight save() response from clobbering it (D125).
+		safeAssignTracked(this, patch);
 		this._store?.recordChanged(this);
 		return this;
 	}
