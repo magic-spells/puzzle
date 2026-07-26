@@ -672,6 +672,9 @@ export declare class PuzzleApp {
 // Compiler-support exports (not part of the user-facing SPEC §1 surface)
 // ----------------------------------------------------------------------------
 
+/** Shared nullish-safe display coercion used by compiled render functions. */
+export declare function displayValue(value: unknown, expression?: string | 0): string;
+
 /** One node of the virtual tree — compiled render functions build these. */
 export declare class ViewNode {
 	constructor(tag: any, attrs?: object, children?: any);

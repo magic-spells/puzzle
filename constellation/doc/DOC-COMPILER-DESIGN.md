@@ -62,7 +62,16 @@ data.
 
 Notable emission contracts:
 
-- text interpolation uses `String(value)`; DOM text nodes provide structural
+- text interpolation routes through the runtime's `displayValue` helper, emitted
+  as `__s(...)` and imported only when a module actually contains one (D127).
+  `null` and `undefined` render as an empty string — never the literal words —
+  while `0`, `false`, `''`, `NaN`, and objects coerce exactly as `String` would;
+  the runtime, not the compiler, owns that rule, so quoted and brace-only
+  attributes agree. `undefined` also warns once in development, since it almost
+  always means a mistyped or missing field, and that diagnostic folds out of
+  production builds entirely. Before D127 the compiler emitted `String(value)`
+  directly, which rendered `"null"` on the page and left the runtime's own
+  nullish guard permanently dead; DOM text nodes provide structural
   injection safety;
 - formatter calls use the tree-shaken runtime map and the missing-formatter
   guard;

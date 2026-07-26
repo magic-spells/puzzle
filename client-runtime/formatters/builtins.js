@@ -230,6 +230,18 @@ export function number_with_delimiter(v, delimiter = ',') {
 // TZ-dependently — while "2026-13-01" (which fails the grammar) returned raw.
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
+const DATE_FORMATS = {
+	date:     { year: 'numeric', month: '2-digit', day: '2-digit' },
+	time:     { hour: '2-digit', minute: '2-digit' },
+	short:    { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' },
+	long:     { year: 'numeric', month: 'long', day: '2-digit' },
+	datetime: { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }
+};
+
+const DATE_FORMATTERS = new Map();
+const RELATIVE_TIME_FORMATTERS = new Map();
+const TIMEZONE_FORMATTERS = new Map();
+
 function parseDateInput(v) {
 	if (typeof v === 'string' && DATE_ONLY.test(v)) {
 		const [y, m, d] = v.split('-').map(Number);
@@ -255,12 +267,17 @@ export function in_timezone(v, tz = 'UTC') {
 	// construction, and formatToParts throws on an invalid date — fail soft to the
 	// un-shifted date so a bad tz/date never crashes the render.
 	try {
-		const parts = new Intl.DateTimeFormat('en-CA', {
-			timeZone: tz,
-			year: 'numeric', month: '2-digit', day: '2-digit',
-			hour: '2-digit', minute: '2-digit', second: '2-digit',
-			hour12: false
-		}).formatToParts(d);
+		let formatter = TIMEZONE_FORMATTERS.get(tz);
+		if (!formatter) {
+			formatter = new Intl.DateTimeFormat('en-CA', {
+				timeZone: tz,
+				year: 'numeric', month: '2-digit', day: '2-digit',
+				hour: '2-digit', minute: '2-digit', second: '2-digit',
+				hour12: false
+			});
+			TIMEZONE_FORMATTERS.set(tz, formatter);
+		}
+		const parts = formatter.formatToParts(d);
 		const get = t => parts.find(p => p.type === t)?.value;
 		const iso = `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`;
 		return new Date(iso);
@@ -277,19 +294,22 @@ export function date(v, preset = 'date', locale = undefined) {
 	// its local midnight would emit a time-zone-dependent instant.
 	if (preset === 'iso') return typeof v === 'string' && DATE_ONLY.test(v) ? v : d.toISOString();
 
-	const formats = {
-		date:     { year: 'numeric', month: '2-digit', day: '2-digit' },
-		time:     { hour: '2-digit', minute: '2-digit' },
-		short:    { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' },
-		long:     { year: 'numeric', month: 'long', day: '2-digit' },
-		datetime: { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }
-	};
-
-	const options = formats[preset] || formats.date;
+	const resolvedPreset = Object.hasOwn(DATE_FORMATS, preset) ? preset : 'date';
+	const options = DATE_FORMATS[resolvedPreset];
 	// An invalid locale throws RangeError at DateTimeFormat construction — fail
 	// soft to the raw value like the invalid-date guard above.
 	try {
-		return new Intl.DateTimeFormat(locale, options).format(d);
+		const localeFormatters = DATE_FORMATTERS.get(locale);
+		let formatter = localeFormatters?.get(resolvedPreset);
+		if (!formatter) {
+			formatter = new Intl.DateTimeFormat(locale, options);
+			if (localeFormatters) {
+				localeFormatters.set(resolvedPreset, formatter);
+			} else {
+				DATE_FORMATTERS.set(locale, new Map([[resolvedPreset, formatter]]));
+			}
+		}
+		return formatter.format(d);
 	} catch {
 		return str(v);
 	}
@@ -307,7 +327,12 @@ export function timeago(v) {
 	const then = parseDateInput(v).getTime();
 	if (isNaN(then)) return str(v);
 
-	const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+	const locale = undefined;
+	let rtf = RELATIVE_TIME_FORMATTERS.get(locale);
+	if (!rtf) {
+		rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+		RELATIVE_TIME_FORMATTERS.set(locale, rtf);
+	}
 	const diff = Math.round((then - Date.now()) / 1000);
 	const units = [
 		['year', 31536000],

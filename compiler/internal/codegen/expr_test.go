@@ -129,7 +129,7 @@ export default class T extends PuzzleView {
 	if want := "return index++ / total;"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled output lost script expression %q:\n%s", want, res.JS)
 	}
-	if want := "String(__d.a++ / __d.b / __d.c)"; !strings.Contains(res.JS, want) {
+	if want := "__s(__d.a++ / __d.b / __d.c, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'a++ / b / c' : 0)"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled output missing %q:\n%s", want, res.JS)
 	}
 }
@@ -271,7 +271,7 @@ func TestNestedTemplateLiteralExpressionCompile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compile nested template literal: %v", err)
 	}
-	if want := "String(" + expr + ")"; !strings.Contains(res.JS, want) {
+	if want := "__s(" + expr + ","; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled expression did not preserve the source bytes %q:\n%s", want, res.JS)
 	}
 }
@@ -281,7 +281,7 @@ func TestRegexLiteralImmediatelyAfterBraceCompiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compile no-space regex interpolation: %v", err)
 	}
-	if want := "String(/\\d+/.test(__d.x))"; !strings.Contains(res.JS, want) {
+	if want := "__s(/\\d+/.test(__d.x),"; !strings.Contains(res.JS, want) {
 		t.Fatalf("compiled output missing %q:\n%s", want, res.JS)
 	}
 }

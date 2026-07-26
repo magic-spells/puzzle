@@ -7,7 +7,7 @@ export default class RangeNamed extends PuzzleView {
   }
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 RangeNamed.prototype.render = function () {
   const __d = this.getData();
@@ -19,7 +19,7 @@ RangeNamed.prototype.render = function () {
         key: n,
         class: 'dot',
       }, [
-        new ViewNode('text', { value: String(n) }),
+        new ViewNode('text', { value: __s(n, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'n' : 0) }),
       ])
     )
   );

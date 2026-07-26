@@ -96,6 +96,10 @@ export class PuzzleView {
 	// Animation bookkeeping (constellation/doc/DOC-SPEC.md §12).
 	#playedIn = false; // playIn() runs at most once per mount
 	#currentAnimation = null; // live { finished, cancel, play } handle, for interruption
+	// The router may need to restore a committed view after its out animation
+	// finished under fill:'both'. Keep that Puzzle-owned handle past natural
+	// completion so recovery can cancel only it, never app-owned root animations.
+	#outHandle = null;
 	#leaving = null; // memoised playOut() promise — idempotent teardown
 	// Scroll-triggered enter (v1.40, D73). While a `trigger: 'visible'` enter is
 	// held waiting for the element to scroll into view: #disarmVisible stops the
@@ -349,7 +353,11 @@ export class PuzzleView {
 		// §5) — just render the resolved model into the reserved position. This keeps
 		// the mount synchronous so the Router's COMMIT stays atomic (D19).
 		if (preloaded) {
-			this.#renderNow();
+			const takeoverTree = Object.prototype.hasOwnProperty.call(this, '__takeoverTree')
+				? this.__takeoverTree
+				: undefined;
+			delete this.__takeoverTree;
+			this.#renderNow(takeoverTree);
 		} else {
 			this.created();
 			const pending = this.refresh();
@@ -561,6 +569,7 @@ export class PuzzleView {
 		// #currentAnimation.cancel() below (its finished then resolves).
 		this.#disarmObserver();
 		this.#settleEnter();
+		this._cancelOutAnimation();
 		this.#currentAnimation?.cancel();
 		this.#currentAnimation = null;
 		this.ctx.store?.unsubscribe(this);
@@ -919,6 +928,9 @@ export class PuzzleView {
 	 */
 	playOut() {
 		if (this.#leaving) return this.#leaving;
+		// A new leave replaces any retained, finished out effect from an earlier
+		// run instead of accumulating another fill on the same root.
+		this._cancelOutAnimation();
 		this.#leaving = (async () => {
 			if (this.#destroyed) return;
 			// A held visible-trigger enter (D73) on this element must be unwound before
@@ -936,11 +948,25 @@ export class PuzzleView {
 				warnOnceForSpec(out, `animation out.trigger/out.triggerOffset/out.triggerAnchor is ignored (triggers apply to enter animations only)`);
 			}
 			this.viewWillHide();
-			await this.#runAnimation(out);
+			await this.#runAnimation(out, { retainOut: true });
 			if (this.#destroyed) return; // interrupted by destroy() — order preserved by it
 			this.viewDidHide();
 		})();
 		return this.#leaving;
+	}
+
+	/**
+	 * Router-only recovery seam: cancel the retained Puzzle-owned out animation,
+	 * including a naturally finished effect still filling the root. Never
+	 * enumerates Element.getAnimations(), so application-owned root motion is
+	 * untouched. A no-op when this view never created an out animation.
+	 */
+	_cancelOutAnimation() {
+		const handle = this.#outHandle;
+		this.#outHandle = null;
+		if (!handle) return;
+		if (this.#currentAnimation === handle) this.#currentAnimation = null;
+		handle.cancel();
 	}
 
 	/**
@@ -976,12 +1002,13 @@ export class PuzzleView {
 	 * the position is the comment anchor (data still in flight) — the surrounding
 	 * hooks always fire regardless (constellation/doc/DOC-SPEC.md §12 hook order).
 	 */
-	async #runAnimation(spec, { release = false } = {}) {
+	async #runAnimation(spec, { release = false, retainOut = false } = {}) {
 		if (!spec) return;
 		const el = this.element;
 		if (!el || el.nodeType !== 1 /* ELEMENT_NODE */) return;
 		const handle = playAnimation(el, spec, { reducedMotion: prefersReducedMotion(), release });
 		this.#currentAnimation = handle;
+		if (retainOut) this.#outHandle = handle;
 		await handle.finished;
 		if (this.#currentAnimation === handle) this.#currentAnimation = null;
 	}
@@ -1073,7 +1100,7 @@ export class PuzzleView {
 		return (this.skeletonMinDuration ?? 0) - (Date.now() - this.#skeletonShownAt);
 	}
 
-	#renderNow() {
+	#renderNow(preparedTree = undefined) {
 		if (!this.#vm || this.#destroyed) return;
 		if (
 			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
@@ -1092,7 +1119,12 @@ export class PuzzleView {
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			devperfRenderPrepare(this);
 		}
-		const tree = showSkeleton ? this.renderSkeleton() : this.render();
+		const tree =
+			preparedTree !== undefined
+				? preparedTree
+				: showSkeleton
+					? this.renderSkeleton()
+					: this.render();
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			devperfRenderTreeBuilt(this);
 		}

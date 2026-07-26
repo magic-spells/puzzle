@@ -5,6 +5,87 @@ import builtinNames from '../client-runtime/formatters/builtins.json';
 
 const f = new FormatterRegistry().getAll();
 
+function spyOnIntlConstructor(name) {
+	const Original = Intl[name];
+	return vi.spyOn(Intl, name).mockImplementation(function (...args) {
+		return new Original(...args);
+	});
+}
+
+describe('built-in Intl formatter caches', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+		vi.resetModules();
+	});
+
+	it('reuses the same DateTimeFormat for repeated locale/preset calls', async () => {
+		vi.resetModules();
+		const constructor = spyOnIntlConstructor('DateTimeFormat');
+		const { date } = await import('../client-runtime/formatters/builtins.js');
+
+		expect(date('2026-07-24', 'long', 'en-US')).toBe('July 24, 2026');
+		expect(date('2026-01-01', 'long', 'en-US')).toBe('January 01, 2026');
+		expect(constructor).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps alternating date presets cached independently with correct output', async () => {
+		vi.resetModules();
+		const constructor = spyOnIntlConstructor('DateTimeFormat');
+		const { date } = await import('../client-runtime/formatters/builtins.js');
+
+		expect(date('2026-07-24', 'date', 'en-US')).toBe('07/24/2026');
+		expect(date('2026-07-24', 'long', 'en-US')).toBe('July 24, 2026');
+		expect(date('2026-01-01', 'date', 'en-US')).toBe('01/01/2026');
+		expect(date('2026-01-01', 'long', 'en-US')).toBe('January 01, 2026');
+		expect(constructor).toHaveBeenCalledTimes(2);
+	});
+
+	it('shares the resolved date cache entry across unknown presets', async () => {
+		vi.resetModules();
+		const constructor = spyOnIntlConstructor('DateTimeFormat');
+		const { date } = await import('../client-runtime/formatters/builtins.js');
+
+		expect(date('2026-07-24', 'bogus-one', 'en-US')).toBe('07/24/2026');
+		expect(date('2026-01-01', 'bogus-two', 'en-US')).toBe('01/01/2026');
+		expect(constructor).toHaveBeenCalledTimes(1);
+	});
+
+	it('leaves invalid locales uncached without poisoning a later valid call', async () => {
+		vi.resetModules();
+		const constructor = spyOnIntlConstructor('DateTimeFormat');
+		const { date } = await import('../client-runtime/formatters/builtins.js');
+		const value = '2026-07-24T12:00:00Z';
+
+		expect(date(value, 'long', 'en US')).toBe(value);
+		expect(date(value, 'long', 'en US')).toBe(value);
+		expect(date('2026-07-24', 'long', 'en-US')).toBe('July 24, 2026');
+		expect(constructor).toHaveBeenCalledTimes(3);
+	});
+
+	it('reuses the RelativeTimeFormat used by timeago', async () => {
+		vi.resetModules();
+		const constructor = spyOnIntlConstructor('RelativeTimeFormat');
+		const { timeago } = await import('../client-runtime/formatters/builtins.js');
+		const now = Date.now();
+
+		expect(timeago(new Date(now - 2 * 3600 * 1000))).toMatch(/2 hours ago/);
+		expect(timeago(new Date(now - 3 * 60 * 1000))).toMatch(/3 minutes ago/);
+		expect(constructor).toHaveBeenCalledTimes(1);
+	});
+
+	it('reuses the DateTimeFormat for an in_timezone target', async () => {
+		vi.resetModules();
+		const constructor = spyOnIntlConstructor('DateTimeFormat');
+		const { in_timezone } = await import('../client-runtime/formatters/builtins.js');
+
+		const first = in_timezone('2026-07-24T00:00:00Z', 'Asia/Tokyo');
+		const second = in_timezone('2026-07-24T01:00:00Z', 'Asia/Tokyo');
+		expect([first.getFullYear(), first.getMonth(), first.getDate(), first.getHours()]).toEqual([2026, 6, 24, 9]);
+		expect([second.getFullYear(), second.getMonth(), second.getDate(), second.getHours()]).toEqual([2026, 6, 24, 10]);
+		expect(constructor).toHaveBeenCalledTimes(1);
+	});
+});
+
 describe('FormatterRegistry', () => {
 	it('keeps the compiler allowlist in sync with the full built-in manifest', () => {
 		// builtins.json is in declaration order; the manifest DEFAULT is now the

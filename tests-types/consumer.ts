@@ -20,6 +20,7 @@ import {
 	Puzzle,
 	PuzzleValidationError,
 	PuzzleAdapterError,
+	displayValue,
 } from '@magic-spells/puzzle';
 import type {
 	PuzzleAppConfig,
@@ -56,6 +57,11 @@ import type {
 } from '@magic-spells/puzzle/ssg';
 import { mountStatic } from '@magic-spells/puzzle/static';
 import type { MountStaticOptions, StaticRoute } from '@magic-spells/puzzle/static';
+
+const renderedNull: string = displayValue(null);
+const renderedNamedValue: string = displayValue(0, 'count');
+void renderedNull;
+void renderedNamedValue;
 
 // ---------------------------------------------------------------------------
 // PuzzleModel + schema builders (§7, §20–§22)
@@ -277,14 +283,12 @@ const app = new PuzzleApp(config);
 // mount() resolves to the app; store/router usable after.
 app.mount().then((mounted) => {
 	const todos = mounted.store.findMany('todo', { filter: (t) => !t.done });
+	const seeded = mounted.store.createRecord('todo', { title: 'a' });
+	void seeded;
 	mounted.router?.push('/todos');
 	mounted.router?.go(1);
 	return todos.length;
 });
-
-// store is readable off the constructed app too (typed non-null).
-const seeded = app.store.createRecord('todo', { title: 'a' });
-void seeded;
 
 // ---------------------------------------------------------------------------
 // fixtures subpath: installFixtures() attaches seed()/resetFixtureSeed() (D98)

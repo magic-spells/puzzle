@@ -83,7 +83,7 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 	if strings.Count(got, "key:") != 1 {
 		t.Errorf("explicit mixed key must not double the key property:\n%s", got)
 	}
-	if !strings.Contains(got, "key: `row-${item.id}`") {
+	if !strings.Contains(got, "key: `row-${__s(item.id,") {
 		t.Errorf("author's mixed key must stand as a template literal:\n%s", got)
 	}
 }

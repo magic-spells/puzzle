@@ -8,7 +8,7 @@ export default class SkeletonMinDuration extends PuzzleView {
   }
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 SkeletonMinDuration.prototype.render = function () {
   const __d = this.getData();
@@ -16,10 +16,10 @@ SkeletonMinDuration.prototype.render = function () {
 
   return new ViewNode('puzzle-view', { class: 'post-detail' }, [
     new ViewNode('h1', {}, [
-      new ViewNode('text', { value: String(__d.post.title) }),
+      new ViewNode('text', { value: __s(__d.post.title, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'post.title' : 0) }),
     ]),
     new ViewNode('p', {}, [
-      new ViewNode('text', { value: String(__d.post.body) }),
+      new ViewNode('text', { value: __s(__d.post.body, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'post.body' : 0) }),
     ]),
   ]);
 };
