@@ -1,0 +1,160 @@
+<puzzle-view>
+  <div class="loop-cell px-4 py-6 text-center">
+    <div class="loop-mode font-mono text-[10px] uppercase tracking-[0.2em] text-faint">{ modeLabel }</div>
+    <div class="loop-body mt-1 font-mono text-sm text-fg">{ body }</div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { intParam } from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// The view that misbehaves on purpose. Everything pathological in `loop-trap`
+// happens in here, and NOTHING happens until the host explicitly starts it.
+//
+// Two pathologies, deliberately built to trip two DIFFERENT halves of the D121
+// detector (client-runtime/devperf.js):
+//
+//   recursive — data() queries a record and then WRITES it. The query subscribes
+//               this view to that record, so the batched flush wakes this view,
+//               which runs data() again, which writes again. devperf keeps the
+//               whole thing in ONE causal chain (the store sits in
+//               chain.pendingStores across the rAF boundary, which is what stops
+//               the chain quiescing between frames), so the per-chain execution
+//               counter climbs one per frame until RECURSION_LIMIT (100).
+//
+//   runaway   — a plain rAF loop calling refresh() at frame rate while data()
+//               returns a CONSTANT. Every render therefore mutates zero DOM.
+//               Each frame gets its own causal chain (nothing keeps the previous
+//               one alive, so it quiesces in a microtask), which is exactly why
+//               the per-chain counter can NEVER catch this shape — it is the
+//               cross-frame rolling-window guard's whole reason to exist:
+//               >= 60 renders in 1000ms at >= 90% zero-mutation.
+//
+// ── Safety ────────────────────────────────────────────────────────────────
+// Both loops are hard-capped (`cap`, default 500) and the cap is checked BEFORE
+// the next iteration is scheduled, so the counter can never exceed it. The host
+// also stops the cell the moment the detector reports, and has a watchdog on
+// top of that. There is no window.confirm()/alert() anywhere near this: a modal
+// blocks the event loop, which would freeze the rAF loop being measured and
+// wedge the tab it is supposed to protect.
+// ---------------------------------------------------------------------------
+
+const TYPE = 'loop';
+
+/** Byte-identical every render — that is the runaway arm's entire requirement. */
+const CONSTANT_BODY = 'identical output, every frame';
+
+export default class LoopCell extends PuzzleView {
+	created() {
+		this.running = null; // null | 'recursive' | 'runaway'
+		this.iterations = 0;
+		this.raf = 0;
+		this.stoppedReason = null;
+	}
+
+	// The host drives this view directly rather than through props: a prop change
+	// is itself a render, and arming the pathology must not be indistinguishable
+	// from the pathology. Handing the instance up on mount keeps the start signal
+	// out of the render path entirely.
+	mounted() {
+		this.props.ready?.(this);
+	}
+
+	destroyed() {
+		this.stop('destroyed');
+	}
+
+	data() {
+		if (this.running === 'recursive') return this.recursiveStep();
+		// The runaway arm renders through here too, and returns a frozen model on
+		// purpose. Anything varying — a counter, a timestamp — would mutate the DOM
+		// and drop the window below the 90% zero-mutation ratio the guard requires.
+		return {
+			modeLabel: this.running === 'runaway' ? 'runaway' : 'idle',
+			body: CONSTANT_BODY,
+		};
+	}
+
+	cap() {
+		return intParam(this.props?.cap, 500, 10, 5000);
+	}
+
+	// ---- the recursive pathology --------------------------------------------
+
+	/**
+	 * data() → store write → data(). The query on the line below is what makes
+	 * the write on the line further down come back to this same view.
+	 */
+	recursiveStep() {
+		const store = this.ctx.store;
+		const record = store.findOne(TYPE, this.props?.recordId);
+		if (!record) {
+			this.stop('record-missing');
+			return { modeLabel: 'recursive', body: 'no record' };
+		}
+
+		this.iterations += 1;
+		this.props.tick?.(this.iterations);
+
+		if (this.iterations >= this.cap()) {
+			// The hard cap. In a build where the detector is compiled out this is
+			// the ONLY thing that ends the loop, which is precisely why it exists.
+			this.stop('cap');
+		} else {
+			record.update({ version: (record.version || 0) + 1 });
+		}
+
+		return { modeLabel: 'recursive', body: `v${record.version || 0} · run ${this.iterations}` };
+	}
+
+	startRecursive() {
+		if (this.running) return;
+		this.running = 'recursive';
+		this.iterations = 0;
+		this.stoppedReason = null;
+		// One manual kick; from here the store's own flush drives every further
+		// iteration, which is what keeps them inside a single causal chain.
+		this.refresh();
+	}
+
+	// ---- the runaway pathology ----------------------------------------------
+
+	startRunaway() {
+		if (this.running) return;
+		this.running = 'runaway';
+		this.iterations = 0;
+		this.stoppedReason = null;
+
+		const tick = () => {
+			this.raf = 0;
+			if (this.running !== 'runaway' || this.isDestroyed) return;
+			this.iterations += 1;
+			this.props.tick?.(this.iterations);
+			// Cap FIRST: the counter can never pass it, and the next frame is never
+			// scheduled once it is reached.
+			if (this.iterations >= this.cap()) {
+				this.stop('cap');
+				return;
+			}
+			this.refresh();
+			this.raf = requestAnimationFrame(tick);
+		};
+		this.raf = requestAnimationFrame(tick);
+	}
+
+	// ---- stopping ------------------------------------------------------------
+
+	stop(reason) {
+		if (this.raf) {
+			cancelAnimationFrame(this.raf);
+			this.raf = 0;
+		}
+		if (!this.running) return;
+		this.running = null;
+		this.stoppedReason = reason;
+		this.props.stopped?.(reason);
+	}
+}
+</script>

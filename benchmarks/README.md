@@ -31,6 +31,7 @@ the comparison the stress lab exists to make.
 | `runner.mjs` | the driver: build, serve, launch, calibrate, iterate, assert |
 | `report.mjs` | medians, MAD, clamp detection, baseline delta, table rendering |
 | `baseline.json` | committed reference numbers. Structural counters are asserted against it; timings are informational. |
+| `probe.mjs` | the mirror image of `runner.mjs`: builds the same staged copy in **development** mode and hands the page to an arbitrary probe script. Counters only — see below. |
 
 ### Every path this harness writes to
 
@@ -67,6 +68,37 @@ belong to `playwright.config.js`. If 4290 is taken the runner **fails with an
 instruction** rather than killing a process it did not start; change
 `server.port` in `playwright.benchmark.config.js` to another free port above
 4200.
+
+`probe.mjs` binds **127.0.0.1:4291**, one above the benchmark, so a probe and a
+benchmark can run back to back without either inheriting the other's server. It
+refuses a busy port the same way.
+
+### The development probe
+
+```bash
+node benchmarks/probe.mjs --script <file.mjs> [--no-build] [--headed]
+```
+
+`runner.mjs` measures timings from a production bundle, because that is what
+users ship. It therefore cannot see a single one of the framework's own
+structural counters: `client-runtime/devperf.js` is dev-only by construction and
+esbuild removes it from a production build outright, so `renders`,
+`wastedRenders`, `domMutations`, `componentPropBailouts` and the **D121 loop
+detector** simply do not exist there.
+
+`probe.mjs` builds the same staged copy in development mode and hands a
+Playwright `page` to a script that default-exports
+`async ({ page, log }) => result`. It refuses to run if the built bundle carries
+no `__PUZZLE_PERF__` sentinel, because a dev probe over a production bundle would
+report a fabricated zero for every counter it exists to collect.
+
+**Its milliseconds are worthless and must never be quoted as performance
+numbers.** Counters are the payload. This is how `loop-trap` is exercised — that
+scenario is not in the op matrix at all, because in the harness's own bundle
+there would be no detector to detect anything.
+
+It writes to the same `benchmarks/.build/stress-src` and, like the runner, never
+touches `examples/stress/dist`.
 
 ### Flags
 

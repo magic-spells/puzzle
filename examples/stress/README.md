@@ -24,6 +24,11 @@ so any measurement has a copy-pasteable URL:
 /?scenario=virtual-list&n=50000
 /?scenario=subscriptions&mode=fanout&n=100&m=10000
 /?scenario=async-waterfall&n=20&delay=50
+/?scenario=deep-nest&n=64&depth=24
+/?scenario=write-storm&n=10000
+/?scenario=islands&n=100&descendants=200
+/?scenario=formatters&n=10000
+/?scenario=loop-trap&cap=500
 ```
 
 ## The control surface
@@ -31,7 +36,8 @@ so any measurement has a copy-pasteable URL:
 ```js
 window.__STRESS__ = {
   ready,                  // Promise — resolves once the app has mounted
-  scenarios,              // ['keyed-list', 'virtual-list', 'subscriptions', 'async-waterfall']
+  scenarios,              // ['keyed-list', 'virtual-list', 'subscriptions', 'async-waterfall',
+                          //  'deep-nest', 'write-storm', 'islands', 'formatters', 'loop-trap']
   definitions,            // [{ name, label, blurb, ops }]
   async select(name, params),
   async reset(),
@@ -322,6 +328,256 @@ render.
 The scenario mounts **disarmed**; press `remount` to mount the cells and time
 them. Auto-arming would make simply selecting the scenario cost `n × delay`.
 
+## Scenario 5 — `deep-nest`
+
+**Probes:** is the cost of one update proportional to DEPTH, or does it traverse
+the whole forest?
+
+64 branches × 24 nested levels = **1,536 real `PuzzleView` instances**.
+`NestNode.pzl` renders *itself* for the next level down — genuinely nested
+components, not simulated depth. The self-reference needs no import: a
+capitalized tag compiles to a bare identifier inside the render function, and the
+class binding is already in module scope.
+
+Ops: `update-leaf`, `update-branch-root`, `update-global`.
+
+The decisive counter is `nodeDataRuns` — node `data()` executions across the op,
+counted by `app/nest-metrics.js` so it survives into a production bundle, exactly
+like the handler A/B's `childDataRuns`.
+
+| op | writes | nodes that ran `data()` |
+| --- | --- | ---: |
+| `update-leaf` | the deepest node of branch 0 | **1 / 1,536** |
+| `update-branch-root` | the shallowest node of branch 0 | **1 / 1,536** |
+| `update-global` | the record every node also queries | **1,536 / 1,536** |
+
+**Both hypotheses are refuted.** A leaf update is proportional to neither depth
+nor forest size — it is O(1). One view re-evaluates and re-renders; its child
+receives shallow-equal props and takes the component bailout, so propagation
+stops dead at the node that changed. A branch-root update is *also* 1, not 24:
+depth costs nothing unless the data being threaded down actually changes.
+
+`update-global` is the **control**, and it is what makes the other two numbers
+worth anything. Every node also queries one shared record, so a write to it must
+wake all 1,536. A scenario whose subscriptions were quietly broken would report a
+very impressive `1` for the leaf write and mean nothing at all.
+
+**What a bad result looks like:** `update-global` reporting less than 1,536
+(notifications being dropped, which also fails `validate()` — every node renders
+the shared record's version, so the DOM would disagree with itself), or the other
+two reporting ~24 (props churning down the chain, which would mean the scenario
+was measuring its own prop allocation).
+
+## Scenario 6 — `write-storm`
+
+**Probes:** does the rAF-batched flush hold under mutation pressure, and what
+does persistence cost?
+
+10,000 records. Ops: `sustained` (600 writes/sec for 10s), `burst` (5,000
+synchronous writes in one tick), and `-persist` variants of each.
+
+Both counters have to survive into a production bundle, so the scenario wraps
+`store.flush` and `store._persistNow` on the live instance for the duration of a
+run and restores them after. The runtime is not touched.
+
+### Batching holds, unconditionally
+
+| op | writes | flushes |
+| --- | ---: | ---: |
+| `burst` | 5,000 in one tick | **1** |
+| `sustained` | 5,988 over 10.0s | **1,200** |
+
+`burst` is the clean assertion: 5,000 writes, one flush. The op deliberately
+never calls `flush()` by hand — letting the frame arrive *is* the test.
+
+`sustained` flushes track **frames, not writes**: 1,200 flushes in 10 seconds is
+120/sec, which is this headless renderer's real rAF rate, against 598 writes/sec
+going in. Roughly five writes collapse into every flush. Nothing piles up.
+
+### Persistence is the finding
+
+`Store._persistNow()` serializes the **whole store** — every record of every
+type, through `toJSON()` — and `JSON.stringify`s it, once per dirty flush. At
+10,000 records that is a **2,583 KB** blob costing **~15ms**, and it is paid per
+mutating *frame*:
+
+| op | wall | time in persistence | share |
+| --- | ---: | ---: | ---: |
+| `burst-persist` | one tick + a frame | 15.0ms × 1 serialize | — |
+| `sustained-persist` | 10,010ms | **9,552ms** across 770 serializes | **95%** |
+
+Under a sustained write load a 10,000-record store spends **95% of the wall
+clock serializing itself**, and the frame rate collapses from 1,200 flushes to
+770 for the same number of writes. This is O(store) per mutating frame, not
+O(changed records).
+
+**The reported persistence time is a lower bound.** The probe attaches an
+in-memory storage shim rather than real `localStorage`: 2.5MB is well past the
+~5MB quota once you account for the existing payload, and `_persistNow` swallows
+the resulting `QuotaExceededError` — so a "real" run would be timing a write that
+*failed*. The shim keeps the O(store) half honest (serialize + stringify, the
+part that scales) and makes the storage write itself a constant-time assignment.
+The actual `localStorage.setItem` cost is **not** included.
+
+`sustained` and `sustained-persist` are deliberately **not** in
+`benchmarks/scenarios.mjs`. They run for a fixed 10 seconds, so their
+milliseconds are set by construction rather than measured, and their flush counts
+track the host's real frame rate — a counter that legitimately differs between
+machines has no business in a committed baseline.
+
+## Scenario 7 — `islands`
+
+**Probes:** does `island` really freeze its subtree, and what does the freeze
+still cost?
+
+100 island elements × 200 descendants = **20,000 nodes** the patcher is
+contractually forbidden from touching after mount. Op: `shell-churn` re-renders
+the surrounding view at frame rate for 5 seconds.
+
+Measured over 600 shell renders:
+
+| measurement | result |
+| --- | ---: |
+| DOM mutations below an island boundary | **0** |
+| shell mutations in the same window (control) | 600 |
+| island child vnodes built | 12,000,000 |
+| …per render | **20,000 of 20,000** |
+
+**The assertion holds exactly.** Zero — measured with a real `MutationObserver`
+over the grid, not by trusting the patcher. Attribute and `characterData` changes
+on an island *element* are not violations (island freezes children, not the
+element) and are counted separately rather than folded in. The shell has its own
+observer as the control: zero island mutations means nothing unless the shell
+provably mutated in the same window.
+
+**And the cost is confirmed too.** `island` saves *patching*, not *allocation*.
+`viewManager.js`'s island branch runs inside `patch()`, which is only reached
+**after** `render()` has already built the entire new tree — so all 20,000 child
+vnodes are constructed on every single render and then thrown away
+(`newVnode.children = oldVnode.children`). Each descendant's `label` is a getter
+that counts its own reads, so this is a measured number rather than an inference
+from the source: 20,000 per render, the full frozen count, every time.
+
+**What a bad result looks like:** any non-zero `islandViolations` (the island
+contract is broken, and `validate()` fails), or `shellDidMutate` reading 0 —
+which would mean the churn never ran and the zero above measured nothing.
+
+No components live inside an island here, and none may: the compiler rejects a
+component, `<children/>` or `<slot>` anywhere in an island subtree.
+
+## Scenario 8 — `formatters`
+
+**Probes:** what does the built-in formatter registry cost across a large
+re-render, and how much of it is `Intl` construction?
+
+10,000 rows through `{ row.createdAt | date('short') }` and
+`{ row.createdAt | timeago }`. Three ops, because one op cannot answer both
+questions honestly:
+
+- `rerender` — the formatted arm, **no instrumentation of any kind**.
+- `rerender-raw` — the identical tree with identical per-row patch work, but the
+  two spans render plain record strings. The **control**.
+- `count-intl` — the formatted arm again with `Intl` patched and the registry
+  entries wrapped. Its *counts* are exact; its *milliseconds* carry the probe.
+
+Timing a wrapped formatter would add two `performance.now()` calls to each of
+20,000 invocations — several milliseconds of pure instrument against the thing
+being measured. That is why the share comes from the A/B, not from the wrapper.
+
+### One Intl object per call, confirmed
+
+| constructed during one 10,000-row render | count |
+| --- | ---: |
+| `Intl.DateTimeFormat` | **10,000** |
+| `Intl.RelativeTimeFormat` | **10,000** |
+
+Exactly one per formatter call, for 20,000 calls. `builtins.js` constructs a
+fresh `Intl.DateTimeFormat` inside `date()` and a fresh `Intl.RelativeTimeFormat`
+inside `timeago()` every time, and both are perfectly cacheable by
+`(locale, options)`. Nothing is memoized today.
+
+The `Intl` patch lives in the scenario, on `globalThis.Intl` — the runtime is not
+modified. The point is to find out what it currently does, not to change it.
+
+**What a bad result looks like:** the two counts diverging from the call count
+(which would mean the scenario is not measuring what it thinks), or
+`rerender-raw` costing the same as `rerender` (which would mean the formatted arm
+never ran the formatters).
+
+## Scenario 9 — `loop-trap`
+
+**Probes:** the D121 loop detector (`client-runtime/devperf.js`), which had a
+unit test and **had never fired in a real browser**.
+
+Two deliberate pathologies, each behind its own explicit button. Ops:
+`recursive-loop`, `runaway-rerender`, `stop`.
+
+- **`recursive-loop`** — `data()` queries a record and then *writes* it. The
+  query subscribes the view to that record, so the batched flush wakes it, which
+  runs `data()` again, which writes again. devperf keeps the whole thing in ONE
+  causal chain — the store sits in `chain.pendingStores` across the rAF boundary,
+  which is what stops the chain quiescing between frames — so the per-chain
+  execution counter climbs one per frame.
+- **`runaway-rerender`** — a plain rAF loop calling `refresh()` at frame rate
+  while `data()` returns a constant, so every render mutates zero DOM. Each frame
+  gets its own causal chain (nothing keeps the previous one alive, so it quiesces
+  in a microtask), which is precisely why the per-chain counter can never catch
+  this shape and the cross-frame rolling-window guard has to exist.
+
+### Both arms fire, at exactly the documented thresholds
+
+| arm | kind reported | fired at | detector constant |
+| --- | --- | ---: | --- |
+| `recursive-loop` | `recursive` | **depth 100** | `RECURSION_LIMIT = 100` |
+| `runaway-rerender` | `cross-frame` | **60 renders, 97% wasted** | `RUNAWAY_RENDER_LIMIT = 60`, `RUNAWAY_WASTED_RATIO = 0.9` |
+
+In both cases the detector **stopped the loop**: each arm ended at its detection
+count, far below the scenario's own hard cap of 500. D121 works as specified in a
+real browser.
+
+The verdict is rendered on the page, not just logged. The detector also emits
+`perf-warning` over the DevTools bridge, so an attached Performance panel shows
+the same event under warnings — it is one detection reported twice, not two
+independent ones.
+
+### The rolling window is contaminable, and that is correct
+
+Run back to back, `runaway-rerender` first reported firing at **101** renders
+rather than 60. That is not a detector bug: the immediately preceding
+`recursive-loop` arm's renders *did* mutate DOM, they were still inside the
+1000ms window, and they held the wasted ratio under 90% until enough zero-mutation
+renders outvoted them. A guard that blamed a view which had been doing real work
+a moment ago would be worse.
+
+`runArm()` therefore waits the window out before arming anything, so the reported
+count is a property of the **detector** rather than of whatever the scenario
+happened to run a second earlier. This is worth knowing when reading a real
+`perf-warning`: the count it names is the window's, and the window remembers the
+last second of everything that view did.
+
+### Safety
+
+This scenario exists to build runaway loops, so nothing about stopping them is
+left to chance:
+
+- Each pathology has a **hard iteration cap** (default 500, `?cap=`), checked
+  *before* the next iteration is scheduled, so the counter can never pass it. In
+  a production build — where the detector does not exist at all — this cap is the
+  only thing that ends the loop, which is exactly why it is there.
+- A **live iteration counter** and a **stop button** are on the page. The counter
+  is polled at 10Hz from the host rather than rendered by the looping view,
+  because the looping view's output must stay byte-identical for the runaway arm
+  to mean anything.
+- A 30s **watchdog** on top of both. `validate()` fails if it was ever the thing
+  that ended a run.
+- **No `window.confirm()` or `alert()` anywhere near this.** A modal blocks the
+  event loop, which would freeze the rAF loop being measured and wedge the very
+  tab the guard is supposed to protect.
+
+The host makes no store query at all, for the same reason `subscriptions`'s parent
+does not: a query would drag the host into the same causal chain and inflate the
+counter being measured.
+
 ## Measurement caveats
 
 - **Background tabs are throttled.** Chrome clamps `setTimeout` to ~1000ms in a
@@ -352,19 +608,14 @@ them. Auto-arming would make simply selecting the scenario cost `n × delay`.
 
 ## Not yet implemented
 
-Nine scenarios from the original plan are **not built**. Nothing in the app
+Four scenarios from the original plan remain **not built**. Nothing in the app
 references them; they are listed here as future work, not as shipped features.
 
 | scenario | would probe |
 | --- | --- |
-| `deep-nest` | update cost at depth — leaf vs branch-root vs global |
-| `write-storm` | sustained and bursty write throughput against the batched flush |
 | `route-churn` | navigation cost, superseded navigations, back/forward |
 | `form-state` | `setData` throughput under a typing burst |
-| `islands` | `island` children staying frozen while the shell churns |
 | `virtual-scroll` | the userland windowing recipe as its own scenario (partly superseded by `virtual-list`) |
-| `formatters` | formatter registry overhead across a large re-render |
-| `loop-trap` | `data()`-writes-store feedback loops and identical-rerender detection |
 | `morph-flip` | morph transitions and `flip` reordering under load |
 
 `route-churn` in particular had scaffolding in an earlier draft — a five-level
@@ -383,7 +634,8 @@ app/
   scenario-utils.js         settle helpers, seeding shapes, param parsing
   row-ops.js                the row mutation set shared by both list scenarios
   row-metrics.js            child data() counter that survives a production build
-  models/                   one record schema, registered as `row` and `sub`
+  nest-metrics.js           the same, for deep-nest's node data() runs
+  models/                   one record schema, registered per scenario type
   layouts/StressLayout.pzl
   views/Home.pzl            control panel, stats, log, scenario host
   scenarios/
@@ -392,7 +644,17 @@ app/
     VirtualList.pzl         windowed, same records and rows
     Subscriptions.pzl + SubRow.pzl
     AsyncWaterfall.pzl + AsyncCell.pzl
+    DeepNest.pzl + NestNode.pzl     1,536 genuinely nested views
+    WriteStorm.pzl                  batched-flush and persistence pressure
+    Islands.pzl                     20,000 frozen nodes, observed
+    Formatters.pzl                  the built-in registry priced
+    LoopTrap.pzl + LoopCell.pzl     the D121 detector's real exercise
 ```
+
+Each new scenario owns its own store type (`nest`, `storm`, `fmt`, `loop`) so no
+scenario can disturb another's data. `islands` deliberately has none: its 20,000
+nodes are plain DOM built from instance state, and giving it a type would imply
+the frozen subtree was reactive.
 
 Fixtures are installed directly in `app.js` rather than via `--fixtures`, so
 `store.seed()` is available as a tool each scenario calls on demand and

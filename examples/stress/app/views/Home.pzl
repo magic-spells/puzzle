@@ -115,6 +115,16 @@
       <AsyncWaterfall key={ stageKey } count={ n } delay={ delay } />
     {:else if isVirtualList}
       <VirtualList key={ stageKey } n={ n } />
+    {:else if isDeepNest}
+      <DeepNest key={ stageKey } branches={ n } depth={ depth } />
+    {:else if isWriteStorm}
+      <WriteStorm key={ stageKey } n={ n } />
+    {:else if isIslands}
+      <Islands key={ stageKey } n={ n } descendants={ descendants } />
+    {:else if isFormatters}
+      <Formatters key={ stageKey } n={ n } />
+    {:else if isLoopTrap}
+      <LoopTrap key={ stageKey } cap={ cap } />
     {:else}
       <KeyedList key={ stageKey } n={ n } handlers={ handlers } />
     {/if}
@@ -124,9 +134,14 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import AsyncWaterfall from '../scenarios/AsyncWaterfall.pzl';
+import DeepNest from '../scenarios/DeepNest.pzl';
+import Formatters from '../scenarios/Formatters.pzl';
+import Islands from '../scenarios/Islands.pzl';
 import KeyedList from '../scenarios/KeyedList.pzl';
+import LoopTrap from '../scenarios/LoopTrap.pzl';
 import Subscriptions from '../scenarios/Subscriptions.pzl';
 import VirtualList from '../scenarios/VirtualList.pzl';
+import WriteStorm from '../scenarios/WriteStorm.pzl';
 import {
   DEFAULT_SCENARIO,
   SCENARIOS,
@@ -167,6 +182,13 @@ const N_DEFAULTS = {
   'virtual-list': 50000,
   subscriptions: 100,
   'async-waterfall': 100,
+  // `n` means branches here; depth is its own parameter.
+  'deep-nest': 64,
+  'write-storm': 10000,
+  islands: 100,
+  formatters: 10000,
+  // loop-trap takes no size at all — `cap` is its only knob.
+  'loop-trap': 0,
 };
 
 const PARAM_FIELDS = {
@@ -180,6 +202,17 @@ const PARAM_FIELDS = {
     { id: 'n', label: 'cells (N)' },
     { id: 'delay', label: 'await ms' },
   ],
+  'deep-nest': [
+    { id: 'n', label: 'branches' },
+    { id: 'depth', label: 'depth' },
+  ],
+  'write-storm': [{ id: 'n', label: 'records (N)' }],
+  islands: [
+    { id: 'n', label: 'islands' },
+    { id: 'descendants', label: 'descendants' },
+  ],
+  formatters: [{ id: 'n', label: 'rows (N)' }],
+  'loop-trap': [{ id: 'cap', label: 'hard cap' }],
 };
 
 const ACTIVE_SCENARIO_BTN =
@@ -211,6 +244,12 @@ function readParams(scenario, query) {
     n: intParam(raw.n, N_DEFAULTS[scenario] ?? 100, 0, 200000),
     m: intParam(raw.m, 10000, 1, 200000),
     delay: intParam(raw.delay, 50, 0, 5000),
+    // Scenario-specific knobs. Clamped generously here and again, tightly, by
+    // the scenario that owns each one — Home has no business knowing that a
+    // 40-level nest is the most the forest should ever be asked to build.
+    depth: intParam(raw.depth, 24, 1, 40),
+    descendants: intParam(raw.descendants, 200, 1, 1000),
+    cap: intParam(raw.cap, 500, 10, 5000),
   };
 }
 
@@ -256,7 +295,17 @@ export default class StressHome extends PuzzleView {
     const scenario = this.scenarioName();
     const params = this.currentParams();
     const definition = definitionFor(scenario);
-    const stageKey = [scenario, params.mode, params.handlers, params.n, params.m, params.delay].join('|');
+    const stageKey = [
+      scenario,
+      params.mode,
+      params.handlers,
+      params.n,
+      params.m,
+      params.delay,
+      params.depth,
+      params.descendants,
+      params.cap,
+    ].join('|');
 
     // Changing scenario or parameters cancels any armed confirmation — an arm
     // for "50k on the full-DOM list" must not survive into a different context.
@@ -301,6 +350,11 @@ export default class StressHome extends PuzzleView {
       isSubscriptions: scenario === 'subscriptions',
       isAsyncWaterfall: scenario === 'async-waterfall',
       isVirtualList: scenario === 'virtual-list',
+      isDeepNest: scenario === 'deep-nest',
+      isWriteStorm: scenario === 'write-storm',
+      isIslands: scenario === 'islands',
+      isFormatters: scenario === 'formatters',
+      isLoopTrap: scenario === 'loop-trap',
 
       // The keyed-list handler A/B. Only keyed-list implements both arms, so the
       // toggle is scoped to it rather than shown inert everywhere else.
@@ -314,6 +368,9 @@ export default class StressHome extends PuzzleView {
       n: params.n,
       m: params.m,
       delay: params.delay,
+      depth: params.depth,
+      descendants: params.descendants,
+      cap: params.cap,
 
       stats: this.stats,
       // Red once the list is big enough to hurt; this is the number to watch.

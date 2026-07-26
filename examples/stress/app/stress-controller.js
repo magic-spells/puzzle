@@ -76,6 +76,45 @@ export const SCENARIO_DEFINITIONS = [
 		blurb: 'N independent async data() calls — parallel or serialized?',
 		ops: ['remount'],
 	},
+	{
+		name: 'deep-nest',
+		label: 'Deep nest',
+		blurb: 'N branches x D nested view levels — is a leaf update depth- or forest-proportional?',
+		ops: ['update-leaf', 'update-branch-root', 'update-global'],
+	},
+	{
+		name: 'write-storm',
+		label: 'Write storm',
+		blurb: 'sustained and bursty writes against the rAF-batched flush (and O(store) persistence)',
+		// The `-persist` arms are the SAME writes with a storage shim attached, so
+		// Store._persistNow() actually runs. Separate ops rather than a mode toggle:
+		// the pair is only meaningful measured back to back, and a toggle would make
+		// half of every comparison a remount.
+		ops: ['sustained', 'burst', 'sustained-persist', 'burst-persist'],
+	},
+	{
+		name: 'islands',
+		label: 'Islands',
+		blurb: 'island children must stay frozen while the shell churns at 60Hz',
+		ops: ['shell-churn'],
+	},
+	{
+		name: 'formatters',
+		label: 'Formatters',
+		blurb: 'date + timeago over 10k rows — what does the built-in registry cost per render?',
+		// `rerender-raw` is the control arm and `count-intl` is the instrumented
+		// one; only `rerender` and `rerender-raw` produce comparable milliseconds.
+		ops: ['rerender', 'rerender-raw', 'count-intl'],
+	},
+	{
+		// LAST on purpose: the two ops here are deliberate pathologies, and the
+		// picker reads left to right. Both are behind their own explicit button
+		// and both carry a hard iteration cap — see LoopTrap.pzl.
+		name: 'loop-trap',
+		label: 'Loop trap',
+		blurb: 'the D121 loop detector, exercised for real — recursive chain and 60Hz identical re-render',
+		ops: ['recursive-loop', 'runaway-rerender', 'stop'],
+	},
 ];
 
 export const SCENARIOS = SCENARIO_DEFINITIONS.map((scenario) => scenario.name);
@@ -190,6 +229,14 @@ export function scenarioStats() {
 		handlers: local.handlers ?? null,
 		childDataRuns: local.childDataRuns ?? null,
 		perf: local.perf ?? null,
+		// The generic structural channel. A scenario returns whatever integers its
+		// question is actually about (island mutations, Intl constructions, store
+		// flushes) and benchmarks/runner.mjs spreads them into the asserted counter
+		// set — so a new scenario can declare `expect: { ... }` without the runner
+		// growing a branch per scenario. null, never {}, for the same reason
+		// childDataRuns is: a fabricated empty set and a measured empty set mean
+		// opposite things.
+		counters: local.counters ?? null,
 	};
 }
 
