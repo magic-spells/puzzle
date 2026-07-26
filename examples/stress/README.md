@@ -802,25 +802,36 @@ signature of a reused route ancestor. Since the deepest ancestor renders
 ```
 
 — **~8.6/sec for this five-level chain**, and ~20/sec for a one-level ancestor.
-Both 20/sec and 10/sec were tried and both tripped it. When it fires, devperf
-**suppresses that ancestor's renders for 1000ms**, its `<Slot/>` stops updating,
-and the routed child never mounts:
+Both 20/sec and 10/sec were tried and both tripped it.
+
+When this was found, the cross-frame guard **suppressed** the tripped ancestor's
+renders for 1000ms. Its `<Slot/>` stopped updating, the routed child never
+mounted, and the tree stayed broken until the next navigation because nothing
+retries a missed mount:
 
 ```
 [puzzle perf] __PUZZLE_PERF__: stopped RcLevel4 after 60 renders in one second (98% wasted)
 [puzzle] a routed child did not mount — does the parent view template include a <Slot/>?
 ```
 
-The tree then stays broken until the next navigation, because nothing retries the
-missed mount. This is development-only — production compiles devperf out
-entirely — but in development it means fast navigation over a deep route tree
-**breaks the app**, and the warning does not say that is what happened.
+**That was a defect, and it is fixed.** The cross-frame guard is a heuristic
+about waste, not proof of a loop, and a dev-only instrument must not change what
+the app does — so it now warns and never gates a render (D121). Fast navigation
+over a deep route tree still trips it at the same ~8.6/sec, but the app keeps
+working and the warning says what it means:
 
-The paced arms therefore run at 5 navigations/sec, well under the limit.
-`navigate-burst-100` and `params-burst-100` keep the unpaced behaviour and are
-the arms `benchmarks/scenarios.mjs` records — in production, where there is no
-detector to distort them. Press `navigate-burst-100` in a dev build to watch the
-guard fire.
+```
+[puzzle perf] __PUZZLE_PERF__: RcLevel4 rendered 60 times in one second and 98% produced no DOM change — likely a render loop
+```
+
+The recursive guard is unchanged and still stops at 100 executions in one chain.
+
+The paced arms still run at 5 navigations/sec, comfortably under the threshold,
+so the console stays quiet and a run is not narrated by warnings it caused
+itself. `navigate-burst-100` and `params-burst-100` keep the unpaced behaviour
+and are the arms `benchmarks/scenarios.mjs` records — in production, where the
+detector does not exist at all. Press `navigate-burst-100` in a dev build to
+watch the guard warn.
 
 **A paced op's milliseconds are an input, not a measurement**, and its `detail`
 line says so on the line itself. Only the burst arms produce a real timing.
@@ -828,8 +839,10 @@ line says so on the line itself. Only the burst arms produce a real timing.
 **What a bad result looks like:** `rcAncestorMutations` above 500 on `navigate`
 or above 0 on `params` (an ancestor is mutating DOM it should not), `rcCommits`
 below the navigation count (the op is averaging over the wrong denominator), or
-`rcLeafMounts` short of `rcCommits` on `navigate` — which is the detector having
-fired, and the run being worthless.
+`rcLeafMounts` short of `rcCommits` on `navigate` — a committed navigation whose
+leaf never mounted. That last one used to mean the cross-frame guard had
+suppressed an ancestor and the run was worthless; now that the guard only warns,
+it means a real mounting bug.
 
 ## Scenario 11 — `loop-trap`
 
@@ -858,9 +871,17 @@ Two deliberate pathologies, each behind its own explicit button. Ops:
 | `recursive-loop` | `recursive` | **depth 100** | `RECURSION_LIMIT = 100` |
 | `runaway-rerender` | `cross-frame` | **60 renders, 97% wasted** | `RUNAWAY_RENDER_LIMIT = 60`, `RUNAWAY_WASTED_RATIO = 0.9` |
 
-In both cases the detector **stopped the loop**: each arm ended at its detection
-count, far below the scenario's own hard cap of 500. D121 works as specified in a
-real browser.
+Each arm ended at its detection count, far below the scenario's own hard cap of
+500. D121 works as specified in a real browser.
+
+**Which thing did the stopping differs by arm, and that is the contract.** The
+recursive guard suppresses: devperf itself refuses further renders in that chain,
+so `recursive-loop` cannot continue. The cross-frame guard only *warns* — a waste
+heuristic must not change what an app does (see scenario 10's route-churn
+finding) — so `runaway-rerender` would keep looping to the cap on its own.
+`awaitEnd()` stops the cell the moment it sees the detection, which is what makes
+the reported iteration count the count at which the detector spoke. In a build
+with no detector at all, the hard cap is the only thing that ends either arm.
 
 The verdict is rendered on the page, not just logged. The detector also emits
 `perf-warning` over the DevTools bridge, so an attached Performance panel shows

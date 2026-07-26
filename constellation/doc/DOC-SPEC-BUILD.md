@@ -235,11 +235,25 @@ free of profiler sentinel strings.
   into generic data latency.
 - A causal token follows Store write/flush → view refresh → render → writes and
   framework work scheduled by those steps. Per-view execution depth resets only
-  when that chain is quiescent. At 100 executions the view is reported and
-  further work in that chain is stopped. Independently, a rolling one-second
-  window reports and stops a view after at least 60 renders when at least 90%
-  made zero DOM mutations and no recorded cause is animation or morph work.
-  Both guards must stop framework churn rather than hang the tab.
+  when that chain is quiescent. The two loop guards over that token are
+  deliberately asymmetric:
+  - **Recursive, per chain — stops.** At 100 executions of one view inside a
+    single non-quiescent chain the view is reported (`console.error`) and its
+    further renders in that chain are suppressed. That many executions in one
+    causal chain is proof of a loop, and stopping it rather than hanging the tab
+    is the point.
+  - **Cross-frame, rolling one second — warns only.** A view that renders at
+    least 60 times in a rolling second with at least 90% of those renders making
+    zero DOM mutations, and no recorded cause being animation or morph work, is
+    reported (`console.warn`) and nothing more. It **must not** suppress the
+    render. That threshold is a heuristic about waste, not proof of a loop, and
+    ordinary framework behaviour reaches it: a route ancestor renders `depth + 2`
+    times per navigation and most of those renders legitimately mutate nothing,
+    so a five-level route tree crosses 60-per-second at roughly 8.6 navigations
+    per second. When this guard did suppress, the tripped ancestor stopped
+    re-rendering its `<Slot/>` and the routed child never mounted. A
+    development-only instrument may not change what the app does. The warning
+    therefore describes the waste and never claims the framework intervened.
 - The development collector exposes temporary event sinks for §53's
   `measureRenders`; no test framework is imported. Production DCE is proved by a
   dev-only sentinel scan and an esbuild metafile assertion that attributes zero

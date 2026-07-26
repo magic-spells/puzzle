@@ -556,7 +556,7 @@ describe('devtools bridge — profiler (D121)', () => {
 			kind: 'runaway-rerender',
 			viewId: runawayId,
 			name: 'Runaway',
-			detail: expect.stringContaining('stopped Runaway after'),
+			detail: expect.stringContaining('likely a render loop'),
 			count: 1,
 		});
 
@@ -567,7 +567,7 @@ describe('devtools bridge — profiler (D121)', () => {
 				kind: 'runaway-rerender',
 				viewId: runawayId,
 				name: 'Runaway',
-				detail: expect.stringContaining('stopped Runaway after'),
+				detail: expect.stringContaining('likely a render loop'),
 				count: 1,
 			},
 		]);

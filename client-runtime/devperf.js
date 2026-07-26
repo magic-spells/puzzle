@@ -231,6 +231,7 @@ function viewState(view) {
 		activeDataChain: null,
 		dataRuns: 0,
 		renderWindow: [],
+		// Re-warn throttle for the cross-frame guard only — never a render gate.
 		runawayUntil: 0,
 	};
 	viewStates.set(view, state);
@@ -431,13 +432,26 @@ function markCauseImpl(view, cause) {
 	touch(chain);
 }
 
+/**
+ * Only the RECURSIVE guard suppresses a render. 100 executions of one view in a
+ * single synchronous causal chain is proof of a loop, and stopping it is the
+ * point.
+ *
+ * The cross-frame guard (checkRunaway) deliberately does NOT gate here. It is a
+ * heuristic about WASTE, not proof of a loop: a route ancestor renders depth+2
+ * times per navigation and most of those are legitimately zero-mutation, so a
+ * five-level route tree reaches 60-renders-per-second at roughly 8.6 navigations
+ * per second — a developer clicking quickly. Suppressing that ancestor stopped
+ * it re-rendering its <Slot/>, the routed child never mounted, and the app broke
+ * in front of the developer. A dev-only instrument must not change what the app
+ * does, so the cross-frame case warns and nothing more.
+ */
 function canRenderImpl(view) {
 	const state = viewState(view);
 	const chain = chainForView(state);
 	const recursiveBlocked =
 		chain.blockedViews.has(state.id) && state.dataExecutionChain !== chain;
-	const runawayBlocked = state.runawayUntil > now();
-	if (!recursiveBlocked && !runawayBlocked) return true;
+	if (!recursiveBlocked) return true;
 	chain.pendingViews.delete(state.id);
 	state.pendingCauses.clear();
 	touch(chain);
@@ -536,6 +550,14 @@ function mutationImpl(count) {
 	}
 }
 
+/**
+ * The cross-frame guard: WARN-ONLY. It reports a view that renders a lot while
+ * changing nothing, which is usually a render loop — but "usually" is not
+ * "always" (see canRenderImpl), so it never suppresses a render.
+ *
+ * `runawayUntil` is purely the re-warn throttle: one warning per rolling window
+ * instead of one per frame.
+ */
 function checkRunaway(mark, timestamp, wasted) {
 	const window = mark.state.renderWindow;
 	window.push({
@@ -550,8 +572,9 @@ function checkRunaway(mark, timestamp, wasted) {
 	if (hasAnimationCause || wastedCount / window.length < RUNAWAY_WASTED_RATIO) return;
 	mark.state.runawayUntil = timestamp + RUNAWAY_WINDOW_MS;
 	const message =
-		`[puzzle perf] ${PERF_SENTINEL}: stopped ${mark.state.name} after ` +
-		`${window.length} renders in one second (${Math.round((wastedCount / window.length) * 100)}% wasted)`;
+		`[puzzle perf] ${PERF_SENTINEL}: ${mark.state.name} rendered ${window.length} times ` +
+		`in one second and ${Math.round((wastedCount / window.length) * 100)}% produced no ` +
+		`DOM change — likely a render loop`;
 	console.warn(message);
 	emit(
 		'loop',
