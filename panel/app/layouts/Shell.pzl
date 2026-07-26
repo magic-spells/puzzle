@@ -32,6 +32,7 @@ const NAV = [
   { path: '/store', label: 'Store' },
   { path: '/subscriptions', label: 'Subscriptions' },
   { path: '/router', label: 'Router' },
+  { path: '/performance', label: 'Performance' },
 ];
 
 const ACTIVE = 'bg-accent-soft text-accent font-medium';

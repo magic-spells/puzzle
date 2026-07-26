@@ -23,6 +23,14 @@ import { subscriptionKind, subscriptionParts } from './values.js';
 /** Ring capacity for the `event` model. Oldest records are destroyed past this. */
 export const EVENT_LIMIT = 200;
 
+/**
+ * Ring capacity for `profileSample`. One sample per poll tick at
+ * `Performance.pzl`'s interval, so this is about a minute of recording — enough
+ * history to be useful, bounded so a recording left running overnight cannot
+ * grow the panel without limit.
+ */
+export const PROFILE_SAMPLE_LIMIT = 60;
+
 /** How long a re-rendered row stays lit after the flush that notified it. */
 export const PULSE_MS = 600;
 
@@ -37,6 +45,14 @@ let subscriptionsFetchedAt = 0;
 /** Shared `snapshot:views` de-duplication — see `ensureViews`. */
 let viewsInFlight = null;
 let viewsFetchedAt = 0;
+
+/**
+ * Sample sequence for the `profileSample` ring. Like `eventSeq` it is monotonic
+ * for the life of the panel and deliberately NOT reset by `resetSession` — an
+ * in-flight `snapshot:profile` answering after a page navigation must land on a
+ * fresh id rather than resurrecting a sample number the previous document used.
+ */
+let profileSeq = 0;
 
 /**
  * The stand-in used when the panel runs outside DevTools (`puzzle dev`, tests).
@@ -103,6 +119,17 @@ export const api = {
 	highlightView: (id, on) => getBridge().request(REQUESTS.HIGHLIGHT_VIEW, { id, on }),
 	logView: (id) => getBridge().request(REQUESTS.LOG_VIEW, { id }),
 	logRecord: (type, id) => getBridge().request(REQUESTS.LOG_RECORD, { type, id }),
+
+	/*
+	 * Profiler. A runtime that predates it answers these with an `{ error }`
+	 * result, which panel-glue turns into a rejection — so the Performance panel
+	 * reports "this app's framework has no profiler" on one code path and every
+	 * other panel keeps working. That is the whole reason these went in without a
+	 * protocol version bump.
+	 */
+	perfStart: () => getBridge().request(REQUESTS.PERF_START, {}),
+	perfStop: () => getBridge().request(REQUESTS.PERF_STOP, {}),
+	snapshotProfile: () => getBridge().request(REQUESTS.SNAPSHOT_PROFILE, {}),
 };
 
 /* -------------------------------------------------------------------------- */
@@ -136,6 +163,9 @@ function receive(message) {
 			break;
 		case EVENTS.ROUTE_COMMIT:
 			patchConnection({ route: message.payload || null });
+			break;
+		case EVENTS.PERF_WARNING:
+			onPerfWarning();
 			break;
 		default:
 			// A newer runtime emitting an event this build predates: it still shows
@@ -185,6 +215,18 @@ function markAllViewsDead() {
 function bumpViewSeq() {
 	const connection = store.findOne('connection', CONNECTION_ID);
 	patchConnection({ viewSeq: (connection?.viewSeq ?? 0) + 1 });
+}
+
+/**
+ * The loop detector fired. The warning's own payload needs no special handling —
+ * `recordEvent` already put it in the ring, where the Performance panel reads it
+ * for the immediate banner — so all this does is move the counter that panel
+ * debounces a `snapshot:profile` off, which is what pulls the authoritative
+ * report even when nothing is recording.
+ */
+function onPerfWarning() {
+	const connection = store.findOne('connection', CONNECTION_ID);
+	patchConnection({ perfSeq: (connection?.perfSeq ?? 0) + 1 });
 }
 
 function onFlush(payload) {
@@ -384,6 +426,45 @@ export function applySubscriptionSnapshot(result) {
 }
 
 /**
+ * Fold a `snapshot:profile` answer into the capped `profileSample` ring.
+ *
+ * The report is stored WHOLE and raw. Splitting it into per-view records was the
+ * obvious alternative and is wrong here: a sample is a coherent measurement of
+ * one instant, its `views` array is already keyed and ordered by the runtime,
+ * and the panel always renders exactly one sample. Per-view records would add a
+ * reconciliation pass (which views vanished since the last poll?) that buys
+ * nothing, once a second.
+ *
+ * @returns {object|null} the stored sample record.
+ */
+export function applyProfileSnapshot(report) {
+	if (!store) return null;
+	const source = report && typeof report === 'object' ? report : {};
+
+	profileSeq += 1;
+	store.upsert('profileSample', {
+		id: profileSeq,
+		at: Date.now(),
+		recording: source.recording === true,
+		durationMs: Number.isFinite(source.durationMs) ? source.durationMs : 0,
+		totals: source.totals && typeof source.totals === 'object' ? source.totals : {},
+		views: Array.isArray(source.views) ? source.views : [],
+		flushes: Array.isArray(source.flushes) ? source.flushes : [],
+		warnings: Array.isArray(source.warnings) ? source.warnings : [],
+	});
+
+	const samples = store.findMany('profileSample');
+	if (samples.length > PROFILE_SAMPLE_LIMIT) {
+		// Same discipline as the event ring: ids only increase, so findMany's
+		// insertion order puts the oldest samples at the head.
+		const overflow = samples.length - PROFILE_SAMPLE_LIMIT;
+		for (let i = 0; i < overflow; i++) samples[i].destroy();
+	}
+
+	return store.findOne('profileSample', profileSeq);
+}
+
+/**
  * One `snapshot:subscriptions` per debounce window, shared by every caller.
  *
  * The Views inspector and the Subscriptions panel both want this data and can
@@ -479,6 +560,11 @@ export function resetSession({ port = 'connected' } = {}) {
 	for (const event of store.findMany('event')) event.destroy();
 	for (const bucket of store.findMany('recordType')) bucket.destroy();
 	for (const entry of store.findMany('subscription')) entry.destroy();
+	// Every collection the bridge writes has to be listed here. A profile
+	// describes one document's views by their session-scoped ids, so surviving a
+	// reload would leave the Performance panel reporting counters for views that
+	// no longer exist under ids the new document is about to reuse.
+	for (const sample of store.findMany('profileSample')) sample.destroy();
 	const ui = store.findOne('ui', UI_ID);
 	if (ui) ui.update({ pendingViewId: null });
 
@@ -494,6 +580,7 @@ export function resetSession({ port = 'connected' } = {}) {
 		lastFlushKeys: [],
 		viewSeq: 0,
 		flushSeq: 0,
+		perfSeq: 0,
 		eventCount: 0,
 		lastEventAt: 0,
 		error: null,
@@ -550,6 +637,11 @@ function summarize(message) {
 		}
 		case EVENTS.ROUTE_COMMIT:
 			return payload.pathname ?? '(no path)';
+		case EVENTS.PERF_WARNING: {
+			const who = payload.name ?? (payload.viewId != null ? `#${payload.viewId}` : 'unknown view');
+			const times = Number(payload.count) || 0;
+			return `${payload.kind ?? 'warning'} · ${who}${times ? ` ×${times}` : ''}`;
+		}
 		default:
 			return '';
 	}

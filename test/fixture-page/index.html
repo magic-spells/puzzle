@@ -107,6 +107,11 @@
 				color: var(--muted);
 				font-size: 0.8rem;
 			}
+			p.hint {
+				margin: 0 0 0.6rem;
+				color: var(--muted);
+				font-size: 0.8rem;
+			}
 			code {
 				font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 			}
@@ -139,6 +144,21 @@
 				</div>
 				<div id="target">
 					Highlight target — <code>highlight:view { id: 2 }</code> outlines this box.
+				</div>
+			</section>
+
+			<section>
+				<h2>Profiler</h2>
+				<p class="hint">
+					<code>perf:start</code> begins accumulating per-view render counters;
+					<code>snapshot:profile</code> reports them. The panel POLLS that request while
+					recording — there is deliberately no per-render event, because a render firehose
+					would overrun the hook's 500-message buffer. Warnings are the exception: they are
+					rare, so they are pushed.
+				</p>
+				<div class="row">
+					<button data-act="perf-warning">perf-warning (runaway)</button>
+					<button data-act="perf-loop">perf-warning (recursive loop)</button>
 				</div>
 			</section>
 
@@ -401,6 +421,271 @@
 					};
 				}
 
+				/* ---- profiler ----------------------------------------------------- */
+
+				/*
+				 * Stand-in for the framework's dev-only profiler.
+				 *
+				 * The real one instruments the render path; this one accumulates a canned
+				 * per-view "shape" on a timer. What matters is that the WIRE behaviour
+				 * matches: perf:start/perf:stop answer { ok: true }, snapshot:profile
+				 * returns the full report every time (zeros before the first recording,
+				 * the final counters after a stop), and perf-warning is PUSHED while
+				 * everything else about the profile is PULLED.
+				 *
+				 * Accumulation is deterministic — no Math.random — so the panel's sort
+				 * order and heat buckets are reproducible in tests.
+				 */
+
+				/** Per-tick cost of each canned view. Ids 3 and 5 are the interesting ones. */
+				var PERF_SHAPE = {
+					// The layout: renders on navigation only, always changes something.
+					1: { renders: 2, waste: 0, mutations: 3, render: 0.4, patch: 0.3, data: 0.2,
+					     causes: { route: 2 }, memoHits: 1, memoMisses: 0, bailouts: 0, reruns: 2 },
+					2: { renders: 9, waste: 2, mutations: 14, render: 1.9, patch: 1.4, data: 0.9,
+					     causes: { data: 5, store: 3, route: 1 }, memoHits: 6, memoMisses: 3, bailouts: 2, reruns: 7 },
+					// The pathological one: subscribed to a key that changes constantly and
+					// re-renders to the same output every time. This is what the panel exists
+					// to surface, so it is the top row on the default wasted-desc sort.
+					3: { renders: 24, waste: 21, mutations: 2, render: 3.1, patch: 2.6, data: 1.2,
+					     causes: { store: 18, parent: 6 }, memoHits: 2, memoMisses: 22, bailouts: 0, reruns: 24 },
+					4: { renders: 11, waste: 3, mutations: 9, render: 1.5, patch: 1.1, data: 0.6,
+					     causes: { store: 7, parent: 4 }, memoHits: 5, memoMisses: 6, bailouts: 3, reruns: 8 },
+					5: { renders: 6, waste: 4, mutations: 1, render: 0.8, patch: 0.6, data: 0.5,
+					     causes: { data: 4, parent: 2 }, memoHits: 1, memoMisses: 5, bailouts: 1, reruns: 5 },
+					6: { renders: 3, waste: 0, mutations: 4, render: 0.5, patch: 0.4, data: 0.3,
+					     causes: { parent: 3 }, memoHits: 2, memoMisses: 1, bailouts: 1, reruns: 2 },
+				};
+
+				/** Views mounted at runtime get a modest, unremarkable shape. */
+				var PERF_DEFAULT_SHAPE = {
+					renders: 4, waste: 1, mutations: 5, render: 0.7, patch: 0.5, data: 0.4,
+					causes: { parent: 4 }, memoHits: 1, memoMisses: 2, bailouts: 1, reruns: 3,
+				};
+
+				var CAUSE_KEYS = ['data', 'store', 'parent', 'route', 'manual', 'slot'];
+
+				/** null until the first perf:start — the "never recorded" report. */
+				var perf = null;
+				var perfTimer = null;
+				var perfWarningTimer = null;
+
+				function round2(n) {
+					return Math.round(n * 100) / 100;
+				}
+
+				function perfShapeFor(id) {
+					return PERF_SHAPE[id] || PERF_DEFAULT_SHAPE;
+				}
+
+				function perfRowFor(view) {
+					var row = perf.views[view.id];
+					if (!row) {
+						var causes = {};
+						CAUSE_KEYS.forEach(function (key) {
+							causes[key] = 0;
+						});
+						row = perf.views[view.id] = {
+							id: view.id,
+							name: view.name,
+							module: view.module,
+							renders: 0,
+							wastedRenders: 0,
+							domMutations: 0,
+							renderMs: 0,
+							patchMs: 0,
+							dataMs: 0,
+							causes: causes,
+							memoHits: 0,
+							memoMisses: 0,
+							propsBailouts: 0,
+							propsReruns: 0,
+						};
+					}
+					// A view can be renamed only by being replaced, but keep these fresh
+					// anyway — the report is what the panel prints.
+					row.name = view.name;
+					row.module = view.module;
+					return row;
+				}
+
+				/** One accounting tick: every live view pays its shape's cost. */
+				function perfAccumulate() {
+					if (!perf || !perf.recording) return;
+					perf.ticks += 1;
+					views.forEach(function (view) {
+						var shape = perfShapeFor(view.id);
+						var row = perfRowFor(view);
+						row.renders += shape.renders;
+						row.wastedRenders += shape.waste;
+						row.domMutations += shape.mutations;
+						row.renderMs = round2(row.renderMs + shape.render * shape.renders);
+						row.patchMs = round2(row.patchMs + shape.patch * shape.renders);
+						row.dataMs = round2(row.dataMs + shape.data * shape.renders);
+						Object.keys(shape.causes).forEach(function (key) {
+							row.causes[key] = (row.causes[key] || 0) + shape.causes[key];
+						});
+						row.memoHits += shape.memoHits;
+						row.memoMisses += shape.memoMisses;
+						row.propsBailouts += shape.bailouts;
+						row.propsReruns += shape.reruns;
+					});
+				}
+
+				function perfStart() {
+					perf = {
+						startedAt: Date.now(),
+						stoppedAt: 0,
+						recording: true,
+						ticks: 0,
+						views: {},
+						flushes: [],
+						warnings: [],
+					};
+					// Bank one tick immediately: a snapshot taken right after start must
+					// have something in it, exactly as a real profiler that was already
+					// counting during the request would.
+					perfAccumulate();
+
+					clearInterval(perfTimer);
+					perfTimer = setInterval(perfAccumulate, 500);
+
+					// The loop detector "notices" the runaway view a few seconds in.
+					clearTimeout(perfWarningTimer);
+					perfWarningTimer = setTimeout(function () {
+						emitPerfWarning('runaway-rerender', 3);
+					}, 6000);
+
+					return { ok: true };
+				}
+
+				function perfStop() {
+					if (perf) {
+						perf.recording = false;
+						perf.stoppedAt = Date.now();
+					}
+					clearInterval(perfTimer);
+					perfTimer = null;
+					clearTimeout(perfWarningTimer);
+					perfWarningTimer = null;
+					return { ok: true };
+				}
+
+				function perfEmptyTotals() {
+					return {
+						renders: 0,
+						wastedRenders: 0,
+						domMutations: 0,
+						dataRuns: 0,
+						storeFlushes: 0,
+						storeNotifications: 0,
+					};
+				}
+
+				/** The whole report, rebuilt per request — callers never share our objects. */
+				function perfReport() {
+					if (!perf) {
+						return {
+							recording: false,
+							durationMs: 0,
+							totals: perfEmptyTotals(),
+							views: [],
+							flushes: [],
+							warnings: [],
+						};
+					}
+
+					var totals = perfEmptyTotals();
+					var rows = Object.keys(perf.views).map(function (key) {
+						var row = perf.views[key];
+						totals.renders += row.renders;
+						totals.wastedRenders += row.wastedRenders;
+						totals.domMutations += row.domMutations;
+						// Only a data() or store cause re-runs data(); a parent re-render
+						// that passes the same props does not.
+						totals.dataRuns += row.causes.data + row.causes.store;
+						return {
+							id: row.id,
+							name: row.name,
+							module: row.module,
+							renders: row.renders,
+							wastedRenders: row.wastedRenders,
+							domMutations: row.domMutations,
+							renderMs: row.renderMs,
+							patchMs: row.patchMs,
+							dataMs: row.dataMs,
+							causes: Object.assign({}, row.causes),
+							memoHits: row.memoHits,
+							memoMisses: row.memoMisses,
+							propsBailouts: row.propsBailouts,
+							propsReruns: row.propsReruns,
+						};
+					});
+
+					totals.storeFlushes = perf.flushes.length;
+					perf.flushes.forEach(function (flush) {
+						totals.storeNotifications += flush.notified;
+					});
+
+					return {
+						recording: perf.recording,
+						durationMs: (perf.recording ? Date.now() : perf.stoppedAt) - perf.startedAt,
+						totals: totals,
+						views: rows,
+						flushes: perf.flushes.slice(-20).map(function (flush) {
+							return Object.assign({}, flush);
+						}),
+						warnings: perf.warnings.map(function (warning) {
+							return Object.assign({}, warning);
+						}),
+					};
+				}
+
+				/**
+				 * Push a loop detection AND fold it into the report.
+				 *
+				 * Both halves matter: the event is what reaches a panel immediately, the
+				 * report entry is what a panel opened later still finds. Re-firing the
+				 * same detection increments `count` rather than adding a row, which is
+				 * what makes the panel's dedupe-by-kind-and-view rule meaningful.
+				 */
+				function emitPerfWarning(kind, viewId) {
+					var view = views.filter(function (candidate) {
+						return candidate.id === viewId;
+					})[0];
+					var name = view ? view.name : '#' + viewId;
+					var detail =
+						kind === 'recursive-loop'
+							? 'data() wrote to a store key it subscribes to'
+							: 'rendered repeatedly with no DOM change';
+
+					var existing = null;
+					if (perf) {
+						existing = perf.warnings.filter(function (warning) {
+							return warning.kind === kind && warning.viewId === viewId;
+						})[0];
+					}
+					var count = existing ? existing.count + 1 : 1;
+					if (existing) existing.count = count;
+					else if (perf) {
+						perf.warnings.push({
+							kind: kind,
+							viewId: viewId,
+							name: name,
+							detail: detail,
+							count: count,
+						});
+					}
+
+					emit('perf-warning', {
+						kind: kind,
+						viewId: viewId,
+						name: name,
+						detail: detail,
+						count: count,
+					});
+				}
+
 				/* ---- request handler (synchronous and total, like the real one) --- */
 
 				function handleRequest(message) {
@@ -450,6 +735,12 @@
 								};
 							case 'snapshot:route':
 								return route();
+							case 'perf:start':
+								return perfStart();
+							case 'perf:stop':
+								return perfStop();
+							case 'snapshot:profile':
+								return perfReport();
 							case 'edit:record': {
 								var bucket = records[payload.type];
 								if (!bucket) return { error: 'no such type ' + JSON.stringify(payload.type) };
@@ -552,6 +843,20 @@
 
 				function emit(type, payload) {
 					if (!hook) return;
+					// Every flush that lands during a recording becomes a row in the
+					// profile's store-side timeline. Note the shape difference the panel
+					// has to tolerate: the flush EVENT carries `notified` as a list of
+					// subscriber ids, while the profile reports it as a COUNT.
+					if (type === 'flush' && perf && perf.recording) {
+						var keys = (payload && payload.keys) || [];
+						var notified = (payload && payload.notified) || [];
+						perf.flushes.push({
+							at: Date.now(),
+							keys: keys.slice(),
+							notified: notified.length,
+							durationMs: round2(0.4 + keys.length * 0.3),
+						});
+					}
 					hook.emit({ puzzle: 1, v: PROTOCOL_VERSION, type: type, payload: payload });
 					log('emit', type);
 				}
@@ -679,6 +984,14 @@
 							chain: ['FixtureLayout', 'FixtureHome'],
 							title: document.title,
 						});
+						return;
+					}
+					if (act === 'perf-warning') {
+						emitPerfWarning('runaway-rerender', 3);
+						return;
+					}
+					if (act === 'perf-loop') {
+						emitPerfWarning('recursive-loop', 5);
 						return;
 					}
 					if (act === 'app-unmounted') {

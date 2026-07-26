@@ -107,7 +107,94 @@ function transcript() {
 			chain: ['FixtureLayout', 'FixtureHome'],
 			title: 'Todos',
 		},
+		// Nothing has been profiled yet — what `snapshot:profile` answers before
+		// the first `perf:start`.
+		profile: idleProfile(),
 	};
+}
+
+const ZERO_TOTALS = {
+	renders: 0,
+	wastedRenders: 0,
+	domMutations: 0,
+	dataRuns: 0,
+	storeFlushes: 0,
+	storeNotifications: 0,
+};
+
+function idleProfile() {
+	return {
+		recording: false,
+		durationMs: 0,
+		totals: { ...ZERO_TOTALS },
+		views: [],
+		flushes: [],
+		warnings: [],
+	};
+}
+
+/**
+ * A recorded profile over the transcript's five views.
+ *
+ * #3 is the pathological one — 24 renders, 21 of which changed nothing — so the
+ * default wasted-descending sort has an unambiguous top row, and #1 is the
+ * honest one (2 renders, none wasted) so the table is not uniformly alarming.
+ * Totals are summed from the rows rather than written out, so they cannot drift
+ * from the numbers the table prints.
+ */
+function recordedProfile() {
+	const views = [
+		{
+			id: 1, name: 'FixtureLayout', module: 'layouts/Fixture.pzl',
+			renders: 2, wastedRenders: 0, domMutations: 3,
+			renderMs: 0.8, patchMs: 0.6, dataMs: 0.4,
+			causes: { route: 2 }, memoHits: 1, memoMisses: 0, propsBailouts: 0, propsReruns: 2,
+		},
+		{
+			id: 2, name: 'FixtureHome', module: 'views/Home.pzl',
+			renders: 9, wastedRenders: 2, domMutations: 14,
+			renderMs: 17.1, patchMs: 12.6, dataMs: 8.1,
+			causes: { data: 5, store: 3, route: 1 }, memoHits: 6, memoMisses: 3, propsBailouts: 2, propsReruns: 7,
+		},
+		{
+			id: 3, name: 'FixtureRow', module: 'components/Row.pzl',
+			renders: 24, wastedRenders: 21, domMutations: 2,
+			renderMs: 74.4, patchMs: 62.4, dataMs: 28.8,
+			causes: { store: 18, parent: 6 }, memoHits: 2, memoMisses: 22, propsBailouts: 0, propsReruns: 24,
+		},
+		{
+			id: 4, name: 'FixtureRow', module: 'components/Row.pzl',
+			renders: 11, wastedRenders: 3, domMutations: 9,
+			renderMs: 16.5, patchMs: 12.1, dataMs: 6.6,
+			causes: { store: 7, parent: 4 }, memoHits: 5, memoMisses: 6, propsBailouts: 3, propsReruns: 8,
+		},
+		{
+			id: 5, name: 'FixtureNav', module: 'components/Nav.pzl',
+			renders: 6, wastedRenders: 4, domMutations: 1,
+			renderMs: 4.8, patchMs: 3.6, dataMs: 3,
+			causes: { data: 4, parent: 2 }, memoHits: 1, memoMisses: 5, propsBailouts: 1, propsReruns: 5,
+		},
+	];
+
+	const totals = views.reduce(
+		(acc, view) => ({
+			...acc,
+			renders: acc.renders + view.renders,
+			wastedRenders: acc.wastedRenders + view.wastedRenders,
+			domMutations: acc.domMutations + view.domMutations,
+			dataRuns: acc.dataRuns + (view.causes.data ?? 0) + (view.causes.store ?? 0),
+		}),
+		{ ...ZERO_TOTALS }
+	);
+
+	const flushes = [
+		{ at: 1000, keys: ['todo'], notified: 2, durationMs: 0.7 },
+		{ at: 2000, keys: ['todo', 'todo t2'], notified: 3, durationMs: 1.2 },
+	];
+	totals.storeFlushes = flushes.length;
+	totals.storeNotifications = flushes.reduce((sum, flush) => sum + flush.notified, 0);
+
+	return { recording: true, durationMs: 4200, totals, views, flushes, warnings: [] };
 }
 
 /**
@@ -158,6 +245,17 @@ function stubBridge() {
 			'snapshot:route': () => ({ ...world.route }),
 			'highlight:view': () => ({ ok: true }),
 			'log:view': () => ({ ok: true }),
+			'perf:start': () => {
+				world.profile = recordedProfile();
+				return { ok: true };
+			},
+			'perf:stop': () => {
+				world.profile = { ...world.profile, recording: false };
+				return { ok: true };
+			},
+			// Deep-cloned: the panel stores the report whole, and a shared
+			// reference would let a rendered sample mutate the world behind it.
+			'snapshot:profile': () => JSON.parse(JSON.stringify(world.profile)),
 		},
 		onMessage(cb) {
 			subs.message.push(cb);
@@ -302,6 +400,17 @@ const subscriberRows = () => [...document.querySelectorAll('[data-subscriber]')]
 /** CopyButton renders an icon-only <button aria-label="Copy">. */
 const copyButtonIn = (root) => root?.querySelector('button[aria-label="Copy"]');
 
+/* Performance panel readers. */
+const recordButton = () => document.querySelector('[data-perf-record]');
+const perfRow = (id) => document.querySelector(`[data-perf-view="${id}"]`);
+const perfRowIds = () =>
+	[...document.querySelectorAll('[data-perf-view]')].map((el) => el.getAttribute('data-perf-view'));
+const perfHeader = (key) => document.querySelector(`[data-perf-sort="${key}"]`);
+const perfHeatIn = (id) => perfRow(id)?.querySelector('[data-perf-heat]');
+const perfTotal = (key) => document.querySelector(`[data-perf-total="${key}"]`);
+const profilePulls = (bridge) =>
+	bridge.typesRequested().filter((type) => type === 'snapshot:profile').length;
+
 function type(input, value) {
 	input.value = value;
 	input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -345,6 +454,7 @@ describe.skipIf(!built)('panel app (compiled bundle)', () => {
 			'Store',
 			'Subscriptions',
 			'Router',
+			'Performance',
 		]);
 
 		// The status chip is the last child of the bar and pushed right by ml-auto.
@@ -373,7 +483,14 @@ describe.skipIf(!built)('panel app (compiled bundle)', () => {
 	it('writes hash-mode nav hrefs, so panel.html stays loadable on reload', async () => {
 		await boot(bridge);
 		const hrefs = [...document.querySelectorAll('nav a')].map((a) => a.getAttribute('href'));
-		expect(hrefs).toEqual(['#/', '#/views', '#/store', '#/subscriptions', '#/router']);
+		expect(hrefs).toEqual([
+			'#/',
+			'#/views',
+			'#/store',
+			'#/subscriptions',
+			'#/router',
+			'#/performance',
+		]);
 	});
 
 	it('routes between panels', async () => {
@@ -1305,6 +1422,299 @@ describe.skipIf(!built)('Router panel', () => {
 
 		expect(document.body.textContent).toContain('No Puzzle app detected');
 		expect(document.body.textContent).toContain('refresh the page.');
+		expect(fresh.typesRequested()).toEqual([]);
+	});
+});
+
+/* ========================================================================== */
+
+describe.skipIf(!built)('Performance panel', () => {
+	let bridge;
+	let app;
+
+	beforeEach(async () => {
+		bridge = stubBridge();
+		app = await boot(bridge);
+		await connect(bridge, app);
+		await open(app, '/performance');
+	});
+
+	/** Press Record and let perf:start + the first profile pull land. */
+	async function record() {
+		recordButton().click();
+		await settle(app, 80);
+	}
+
+	it('pulls a profile on arrival and shows the idle state until there is one', () => {
+		expect(bridge.typesRequested()).toContain('snapshot:profile');
+		// A report full of zeros is not worth a screen of empty tiles.
+		expect(document.body.textContent).toContain('Nothing profiled yet');
+		expect(perfRowIds()).toEqual([]);
+		expect(recordButton().textContent).toContain('Record');
+		expect(recordButton().getAttribute('aria-pressed')).toBe('false');
+	});
+
+	it('starts a recording with perf:start and renders the report', async () => {
+		await record();
+
+		expect(bridge.payloadsFor('perf:start')).toEqual([{}]);
+		expect(recordButton().textContent).toContain('Stop');
+		expect(recordButton().getAttribute('aria-pressed')).toBe('true');
+		expect(document.querySelector('[data-perf-elapsed]').textContent.trim()).toBe('4.2s');
+		expect(document.body.textContent).not.toContain('Nothing profiled yet');
+	});
+
+	it('gives wasted renders the headline, with its share of all renders', async () => {
+		await record();
+
+		// 0 + 2 + 21 + 3 + 4 across the five views.
+		expect(document.querySelector('[data-perf-wasted]').textContent.trim()).toBe('30');
+		expect(perfTotal('wastedRenders').textContent).toContain('58%');
+		expect(perfTotal('wastedRenders').textContent).toContain('Wasted renders');
+		expect(perfTotal('wastedRenders').textContent).toContain('no DOM mutations');
+
+		// The supporting tiles are present but visually secondary.
+		expect(perfTotal('renders').textContent).toContain('52');
+		expect(perfTotal('domMutations').textContent).toContain('29');
+		expect(perfTotal('storeFlushes').textContent).toContain('2');
+	});
+
+	it('opens on worst-waste-first, the metric the panel is about', async () => {
+		await record();
+		// wasted: #3=21, #5=4, #4=3, #2=2, #1=0
+		expect(perfRowIds()).toEqual(['3', '5', '4', '2', '1']);
+
+		const wasted = perfHeader('wasted');
+		expect(wasted.getAttribute('aria-sort')).toBe('descending');
+		// The arrow, not just the colour, marks the sorted column.
+		expect(wasted.textContent).toContain('▼');
+	});
+
+	it('re-sorts on a column click and toggles that column on a second click', async () => {
+		await record();
+
+		perfHeader('renders').click();
+		await settle(app, 40);
+		expect(perfRowIds()).toEqual(['3', '4', '2', '5', '1']);
+		expect(perfHeader('renders').getAttribute('aria-sort')).toBe('descending');
+		expect(perfHeader('wasted').getAttribute('aria-sort')).toBe('none');
+
+		perfHeader('renders').click();
+		await settle(app, 40);
+		expect(perfRowIds()).toEqual(['1', '5', '2', '4', '3']);
+		expect(perfHeader('renders').textContent).toContain('▲');
+
+		// A name sort opens ascending, because that is what sorting names means.
+		perfHeader('name').click();
+		await settle(app, 40);
+		expect(perfHeader('name').getAttribute('aria-sort')).toBe('ascending');
+	});
+
+	it('prints every timing column beside the counts', async () => {
+		await record();
+		const row = perfRow('3');
+		expect(row.textContent).toContain('24'); // renders
+		expect(row.textContent).toContain('21'); // wasted
+		expect(row.textContent).toContain('74.4'); // render ms
+		expect(row.textContent).toContain('62.4'); // patch ms
+		expect(row.textContent).toContain('28.8'); // data ms
+		expect(row.getAttribute('title')).toContain('causes: store 18 · parent 6');
+	});
+
+	it('scales the heat bar against the busiest view', async () => {
+		await record();
+
+		const hottest = perfHeatIn('3'); // 24 of 24 renders
+		expect(hottest.getAttribute('data-perf-heat')).toBe('4');
+		expect(hottest.className).toContain('bg-heat-4');
+		expect(hottest.style.width).toBe('100%');
+
+		const coldest = perfHeatIn('1'); // 2 of 24
+		expect(coldest.getAttribute('data-perf-heat')).toBe('1');
+		expect(coldest.className).toContain('bg-heat-1');
+		expect(coldest.style.width).toBe('8%');
+	});
+
+	it('never lets colour be the only signal', async () => {
+		await record();
+
+		// High waste is hatched as well as hot, so the two facts stay separable
+		// without hue; and the count is printed either way.
+		expect(perfHeatIn('3').className).toContain('dt-heat-hatch');
+		expect(perfHeatIn('1').className).not.toContain('dt-heat-hatch');
+		expect(perfRow('3').textContent).toContain('88%');
+		// The bar itself is decorative — the numbers beside it carry the meaning.
+		expect(perfHeatIn('3').closest('[aria-hidden="true"]')).toBeTruthy();
+	});
+
+	it('surfaces a pushed perf-warning prominently, without waiting for a poll', async () => {
+		await record();
+		expect(document.querySelector('[data-perf-warnings]')).toBeNull();
+
+		bridge.emit('perf-warning', {
+			kind: 'runaway-rerender',
+			viewId: 3,
+			name: 'FixtureRow',
+			detail: 'rendered 24 times with no DOM change',
+			count: 3,
+		});
+		await settle(app, 220);
+
+		const warnings = document.querySelector('[data-perf-warnings]');
+		expect(warnings).toBeTruthy();
+		expect(warnings.textContent).toContain('Render loops detected');
+		expect(warnings.textContent).toContain('runaway re-render');
+		expect(warnings.textContent).toContain('FixtureRow');
+		expect(warnings.textContent).toContain('rendered 24 times with no DOM change');
+		expect(warnings.textContent).toContain('×3');
+		expect(document.querySelector('[data-perf-warning="runaway-rerender"]')).toBeTruthy();
+	});
+
+	it('pulls a fresh profile when a warning fires, even while not recording', async () => {
+		const before = profilePulls(bridge);
+		bridge.emit('perf-warning', { kind: 'recursive-loop', viewId: 2, name: 'FixtureHome', count: 1 });
+		await settle(app, 220);
+
+		// The event bumps a counter; the panel debounces one pull off it. That is
+		// the same mechanism every other panel uses — not a second polling path.
+		expect(profilePulls(bridge)).toBe(before + 1);
+		expect(document.querySelector('[data-perf-warnings]').textContent).toContain('recursive loop');
+	});
+
+	it('summarizes a perf-warning in the shared event ring', async () => {
+		bridge.emit('perf-warning', {
+			kind: 'runaway-rerender',
+			viewId: 3,
+			name: 'FixtureRow',
+			count: 5,
+		});
+		await settle(app, 60);
+
+		const event = app.store.findMany('event').at(-1);
+		expect(event.type).toBe('perf-warning');
+		expect(event.summary).toBe('runaway-rerender · FixtureRow ×5');
+	});
+
+	it('polls the profile while recording, and only while recording', async () => {
+		const idle = profilePulls(bridge);
+		// Nothing is recording yet, so nothing is being polled.
+		await settle(app, 1200);
+		expect(profilePulls(bridge)).toBe(idle);
+
+		await record();
+		const started = profilePulls(bridge);
+		await settle(app, 1200);
+		const polled = profilePulls(bridge);
+		expect(polled).toBeGreaterThan(started);
+
+		// ...and the tree is NOT polled along with it.
+		expect(bridge.typesRequested().filter((t) => t === 'snapshot:views').length).toBeLessThan(3);
+	});
+
+	it('stops the recording and the polling with perf:stop', async () => {
+		await record();
+		recordButton().click();
+		await settle(app, 80);
+
+		expect(bridge.payloadsFor('perf:stop')).toEqual([{}]);
+		expect(recordButton().textContent).toContain('Record');
+		expect(document.body.textContent).toContain('showing the last report');
+
+		const settled = profilePulls(bridge);
+		await settle(app, 1200);
+		expect(profilePulls(bridge)).toBe(settled);
+
+		// Stopped is not blank: the counters stay on screen.
+		expect(perfRowIds()).toEqual(['3', '5', '4', '2', '1']);
+	});
+
+	it('adopts a recording that was already running when the panel mounted', async () => {
+		// Someone pressed Record, then switched to another panel and back.
+		bridge.world.profile = recordedProfile();
+		await open(app, '/views');
+		await open(app, '/performance');
+
+		expect(recordButton().textContent).toContain('Stop');
+		// No second perf:start — the runtime is authoritative about what is running.
+		expect(bridge.typesRequested()).not.toContain('perf:start');
+	});
+
+	it('clicking a view row opens it in the Views panel, already selected', async () => {
+		await record();
+
+		perfRow('3').click();
+		await settle(app, 120);
+
+		expect(window.location.hash).toBe('#/views');
+		expect(treeRow('3').className).toContain('dt-row-selected');
+		expect(bridge.payloadsFor('inspect:view')).toContainEqual({ id: 3 });
+		// The intent is consumed, not sticky.
+		expect(app.store.findOne('ui', 'main').pendingViewId).toBeNull();
+	});
+
+	it('renders a profiled view the page has since destroyed, but does not link it', async () => {
+		await record();
+		bridge.emit('view-destroyed', { id: 3 });
+		// The snapshot is authoritative about what is live; drop #3 from the tree.
+		bridge.world.views[0].children[0].children = [
+			{ id: 4, name: 'FixtureRow', module: 'components/Row.pzl', children: [] },
+		];
+		await settle(app, 260);
+		recordButton().click(); // stop, which re-pulls both profile and tree
+		await settle(app, 120);
+
+		const gone = perfRow('3');
+		expect(gone).toBeTruthy();
+		expect(gone.getAttribute('title')).toContain('no longer mounted');
+		gone.click();
+		await settle(app, 80);
+		// Still on the Performance panel — there is nothing to select.
+		expect(window.location.hash).not.toBe('#/views');
+	});
+
+	it('lists the store flushes the recording captured', async () => {
+		await record();
+		const flushes = document.querySelector('[data-perf-flushes]');
+		expect(flushes.textContent).toContain('todo, todo t2');
+		expect(flushes.textContent).toContain('3 notified');
+		expect(document.querySelectorAll('[data-perf-flush]')).toHaveLength(2);
+	});
+
+	it('clears the profile when the inspected page navigates', async () => {
+		await record();
+		expect(app.store.findMany('profileSample').length).toBeGreaterThan(0);
+
+		bridge.navigate();
+		await settle(app);
+
+		// A profile names views by session-scoped ids the new document is about
+		// to reuse — keeping it would report the old page's counters under the
+		// new page's views.
+		expect(app.store.findMany('profileSample')).toHaveLength(0);
+		expect(document.body.textContent).toContain('No Puzzle app detected');
+	});
+
+	it('reports a framework with no profiler inline instead of blanking', async () => {
+		// What a pre-profiler runtime does: an { error } result, which panel-glue
+		// turns into a rejection.
+		bridge.responses['perf:start'] = () => ({ error: 'unknown devtools request "perf:start"' });
+		await record();
+
+		expect(document.querySelector('[data-perf-error]').textContent).toContain(
+			'unknown devtools request'
+		);
+		expect(recordButton().textContent).toContain('Record');
+	});
+
+	it('shows the refresh guidance and asks for nothing when no app is connected', async () => {
+		const fresh = stubBridge();
+		const other = await boot(fresh);
+		await open(other, '/performance');
+
+		expect(document.body.textContent).toContain('No Puzzle app detected');
+		expect(document.body.textContent).toContain(
+			'If this page loaded before the extension was installed or updated, refresh the page.'
+		);
 		expect(fresh.typesRequested()).toEqual([]);
 	});
 });

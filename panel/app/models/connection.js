@@ -40,6 +40,12 @@ export default class Connection extends PuzzleModel {
 		 */
 		viewSeq: Puzzle.number().default(0),
 		flushSeq: Puzzle.number().default(0),
+		/**
+		 * Ticks on every `perf-warning`. The Performance panel debounces a
+		 * `snapshot:profile` off it, so a loop detection pulls the authoritative
+		 * report even when nothing is recording and nothing else is polling.
+		 */
+		perfSeq: Puzzle.number().default(0),
 		eventCount: Puzzle.number().default(0),
 		lastEventAt: Puzzle.number().default(0),
 		/** Set when the panel's own request plumbing fails, so the UI can say so. */

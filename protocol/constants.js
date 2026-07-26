@@ -23,6 +23,21 @@ export const SUPPORTED_PROTOCOL_VERSIONS = [1];
 export const ENVELOPE_MARKER = 'puzzle';
 export const ENVELOPE_MARKER_VALUE = 1;
 
+/**
+ * The message set grows ADDITIVELY, without a version bump.
+ *
+ * Both ends already tolerate names they do not know: an unrecognized EVENT falls
+ * through `bridge.js#receive`'s default case into the event ring, and an
+ * unrecognized REQUEST comes back as a per-call `{ error }` result. So a panel
+ * built against a newer name set still renders everything an older runtime sends,
+ * and an older panel ignores what a newer runtime adds.
+ *
+ * That is why the profiler messages below are still v1. Bumping PROTOCOL_VERSION
+ * would put every already-published app into the hard MISMATCH state and blank
+ * all six panels — a much larger regression than one panel reporting an empty
+ * profile because the runtime predates it.
+ */
+
 /** Events: runtime → extension, pushed through `hook.emit(message)`. */
 export const EVENTS = Object.freeze({
 	HELLO: 'hello',
@@ -32,6 +47,14 @@ export const EVENTS = Object.freeze({
 	VIEW_DESTROYED: 'view-destroyed',
 	FLUSH: 'flush',
 	ROUTE_COMMIT: 'route-commit',
+	/**
+	 * The profiler's loop detector fired: `{ kind, viewId, name, detail, count }`.
+	 * Deliberately LOW VOLUME — there is no per-render event, because the page
+	 * hook buffers only HOOK_BUFFER_LIMIT messages before the panel attaches and
+	 * the panel's own ring holds 200. Per-render traffic would blow both, so
+	 * render counts are POLLED through `snapshot:profile` while recording.
+	 */
+	PERF_WARNING: 'perf-warning',
 });
 
 /** Requests: extension → runtime, answered by the `hook.onRequest` handler. */
@@ -45,6 +68,16 @@ export const REQUESTS = Object.freeze({
 	HIGHLIGHT_VIEW: 'highlight:view',
 	LOG_VIEW: 'log:view',
 	LOG_RECORD: 'log:record',
+	/** Begin profiling. `{}` → `{ ok: true }`. */
+	PERF_START: 'perf:start',
+	/** End profiling; the counters stay readable afterwards. `{}` → `{ ok: true }`. */
+	PERF_STOP: 'perf:stop',
+	/**
+	 * The whole profile report: `{ recording, durationMs, totals, views[],
+	 * flushes[], warnings[] }`. The Performance panel polls this on an interval
+	 * while recording, and once on a `perf-warning`.
+	 */
+	SNAPSHOT_PROFILE: 'snapshot:profile',
 });
 
 export const EVENT_TYPES = Object.freeze(Object.values(EVENTS));
