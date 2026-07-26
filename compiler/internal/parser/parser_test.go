@@ -357,6 +357,63 @@ func TestParseForReservedIdentifiers(t *testing.T) {
 	}
 }
 
+func TestParseForRejectsStrictModeReservedBindings(t *testing.T) {
+	reserved := strings.Fields(
+		"break class const return new this let await yield var function typeof delete in static enum super null true false import export do if else for while switch case default try catch finally throw void instanceof with debugger " +
+			"continue extends implements interface package private protected public arguments eval",
+	)
+	for _, ident := range reserved {
+		t.Run(ident, func(t *testing.T) {
+			src := "<puzzle-view>{#for " + ident + " in items}<div>x</div>{/for}</puzzle-view>"
+			_, err := Parse([]byte(src), "test.pzl")
+			if err == nil {
+				t.Fatalf("expected %q to be rejected as a loop binding", ident)
+			}
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("error type = %T, want *ParseError", err)
+			}
+			if pe.Line != 1 || pe.Col != 14 {
+				t.Fatalf("position = %d:%d, want 1:14", pe.Line, pe.Col)
+			}
+			want := `loop variable "` + ident + `" is not a legal binding identifier in strict-mode JavaScript`
+			if pe.Message != want {
+				t.Fatalf("message = %q, want %q", pe.Message, want)
+			}
+		})
+	}
+}
+
+func TestParseForRejectsReservedCounters(t *testing.T) {
+	tests := map[string]string{
+		"item form":  "{#for item in items, class}<div>x</div>{/for}",
+		"range form": "{#for 1...3, class}<div>x</div>{/for}",
+	}
+	for name, content := range tests {
+		t.Run(name, func(t *testing.T) {
+			src := "<puzzle-view>" + content + "</puzzle-view>"
+			_, err := Parse([]byte(src), "test.pzl")
+			if err == nil {
+				t.Fatal("expected reserved loop counter to be rejected")
+			}
+			if !strings.Contains(err.Error(), `loop variable "class" is not a legal binding identifier in strict-mode JavaScript`) {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestParseForAllowsContextualBindingIdentifiers(t *testing.T) {
+	for _, ident := range []string{"of", "async", "get", "set"} {
+		t.Run(ident+" item", func(t *testing.T) {
+			parseContent(t, "{#for "+ident+" in items}<div>x</div>{/for}")
+		})
+		t.Run(ident+" counter", func(t *testing.T) {
+			parseContent(t, "{#for item in items, "+ident+"}<div>x</div>{/for}")
+		})
+	}
+}
+
 // TestParseForItemIdentifier pins that the loop variable is validated as a bare
 // JS identifier (the same isBareIdent rule as the counter): a '$'-prefixed name
 // is accepted, while a name carrying an HTML-name char like '-' is a positioned

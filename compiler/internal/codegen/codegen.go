@@ -124,7 +124,8 @@ type Warning struct {
 // app/layouts/** compile as views; everything else is a reusable component.
 func ModeForPath(path string) EmissionMode {
 	p := strings.ReplaceAll(path, "\\", "/")
-	if strings.Contains(p, "app/views/") || strings.Contains(p, "app/layouts/") {
+	if strings.HasPrefix(p, "app/views/") || strings.Contains(p, "/app/views/") ||
+		strings.HasPrefix(p, "app/layouts/") || strings.Contains(p, "/app/layouts/") {
 		return ModeView
 	}
 	return ModeComponent

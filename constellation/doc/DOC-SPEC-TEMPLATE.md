@@ -21,10 +21,13 @@ The frozen v1 contract for templates: the `@event` handler convention and its mo
 
 ## 5. Event handler convention
 
-Two forms in templates, one rule each:
+Three forms in templates, one rule each:
 
 1. **Bare identifier** — `@click={ clearCompleted }` → the handler is invoked as `clearCompleted(event)`.
 2. **Call expression** — `@click={ setFilter('all') }` or `@submit={ addTodo(event) }` → the compiler wraps the expression as `(event) => setFilter('all')`, evaluated **at event time** with `event` in scope. The handler receives exactly the arguments written in the template.
+3. **Null-toggle ternary** — `@pointerdown:outside={ menuOpen ? closeMenu : null }` → each branch must itself be form 1, form 2, or `null`; the condition is evaluated against render data and a `null` branch detaches the listener while the element stays mounted (§47, D86). The grammar is deliberately narrow: `@click={ a + b }`, `@click={ (e) => close(e) }`, `@click={ this.close }`, and `@click={ handlers.close }` all remain positioned compile errors. A bare `@click={ null }` is legal and emits no handler.
+
+`event` names the DOM event only when it is not otherwise bound. A `{#for}` item or counter named `event` shadows nothing — the loop variable wins, and the compiler emits the DOM event under an internal name instead.
 
 ```html
 <form @submit={ addTodo(event) }>

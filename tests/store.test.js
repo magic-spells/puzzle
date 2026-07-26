@@ -852,6 +852,7 @@ describe('Store — server read path (D21)', () => {
 			ok,
 			status,
 			statusText: ok ? 'OK' : 'Server Error',
+			text: async () => JSON.stringify(payload),
 			json: async () => payload,
 		}));
 		vi.stubGlobal('fetch', fn);

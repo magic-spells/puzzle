@@ -106,6 +106,12 @@ export class FormatterRegistry {
 	}
 
 	register(name, fn) {
+		if (typeof name !== 'string' || name === '') {
+			throw new Error('[puzzle] formatter name must be a non-empty string');
+		}
+		if (typeof fn !== 'function') {
+			throw new Error(`[puzzle] formatter "${name}" must be a function (got ${typeof fn})`);
+		}
 		this.formatters[name] = fn;
 	}
 

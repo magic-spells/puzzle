@@ -169,6 +169,8 @@ func TestLexSkip(t *testing.T) {
 		{"identifier run", "abc+", 0, false, 3, true, true},
 		{"keyword return leaves regex", "return /x/", 0, false, 6, false, true},
 		{"keyword as property ends expr", ".return /x/", 1, false, 7, true, true},
+		{"increment preserves expression-ending state", "++ / b", 0, true, 2, true, true},
+		{"decrement preserves expression-start state", "--a / b", 0, false, 2, false, true},
 		{"operator not consumed", "+ a", 0, false, 0, false, false},
 		{"bracket not consumed", ") a", 0, false, 0, false, false},
 	}
@@ -179,6 +181,49 @@ func TestLexSkip(t *testing.T) {
 				t.Errorf("LexSkip(%q, %d, %v) = (%d, %v, %v), want (%d, %v, %v)",
 					tc.s, tc.i, tc.prevEndsExpr, next, pee, consumed, tc.wantNext, tc.wantPEE, tc.wantConsumed)
 			}
+		})
+	}
+}
+
+func TestLexSkipUpdateOperatorsBeforeSlash(t *testing.T) {
+	cases := []struct {
+		name      string
+		expr      string
+		wantRegex bool
+	}{
+		{"postfix increment", "a++ / b", false},
+		{"postfix decrement", "a-- / b", false},
+		{"member postfix increment", "this.i++ / n", false},
+		{"prefix increment", "++i / n", false},
+		{"prefix decrement", "--i / n", false},
+		{"increment followed by plus then regex", "a+++/re/.source", true},
+		{"decrement followed by minus then regex", "a--- /re/.source", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			slash := strings.IndexByte(tc.expr, '/')
+			if slash < 0 {
+				t.Fatal("test fixture has no slash")
+			}
+
+			prevEndsExpr := false
+			for i := 0; i <= slash; {
+				next, pee, consumed := LexSkip(tc.expr, i, prevEndsExpr)
+				if i == slash {
+					if consumed != tc.wantRegex {
+						t.Fatalf("slash in %q classified as regex = %v, want %v", tc.expr, consumed, tc.wantRegex)
+					}
+					return
+				}
+				if consumed {
+					prevEndsExpr = pee
+					i = next
+					continue
+				}
+				prevEndsExpr = LexPlainEndsExpr(tc.expr[i], prevEndsExpr)
+				i++
+			}
+			t.Fatalf("scanner skipped target slash in %q", tc.expr)
 		})
 	}
 }
@@ -242,6 +287,18 @@ func TestParseTrailingBackslashPositionedError(t *testing.T) {
 				t.Errorf("error is not positioned: %d:%d (%s)", pe.Line, pe.Col, pe.Message)
 			}
 		})
+	}
+}
+
+func TestParsePostfixUpdateBeforeDivisionClosesInterpolation(t *testing.T) {
+	src := `<puzzle-view>
+  <div>{ index++ / total }</div>
+</puzzle-view>
+<script>
+export default class A {}
+</script>`
+	if _, err := Parse([]byte(src), "A.pzl"); err != nil {
+		t.Fatalf("postfix update before division must not hide the interpolation close: %v", err)
 	}
 }
 

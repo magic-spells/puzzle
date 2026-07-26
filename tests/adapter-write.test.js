@@ -29,8 +29,7 @@ const makeRes = ({ ok = true, status = 200, statusText = 'OK', body = '' } = {})
 	status,
 	statusText,
 	text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
-	// The D21 read path (loadAll/loadOne) reads via res.json(); provide it too so
-	// the same mock serves both read and write paths.
+	// Keep json() too so this remains a complete Response-shaped test double.
 	json: async () => (typeof body === 'string' ? JSON.parse(body) : body),
 });
 
@@ -40,6 +39,12 @@ const mockFetch = (...responses) => {
 	const fn = vi.fn(async () => (queue.length > 1 ? queue.shift() : queue[0]));
 	vi.stubGlobal('fetch', fn);
 	return fn;
+};
+
+const deferred = () => {
+	let resolve;
+	const promise = new Promise((r) => (resolve = r));
+	return { promise, resolve };
 };
 
 afterEach(() => {
@@ -56,6 +61,48 @@ describe('adapter write sync — package surface', () => {
 		expect(err.status).toBe(500);
 		expect(err.statusText).toBe('Server Error');
 		expect(err.body).toEqual({ m: 1 });
+	});
+});
+
+describe('adapter read response bodies', () => {
+	it('loadAll reports its shape guard for a 204 response', async () => {
+		mockFetch(new Response(null, { status: 204 }));
+
+		await expect(apiStore().loadAll('todo')).rejects.toThrow(
+			"[puzzle] loadAll('todo') expected a JSON array from the server"
+		);
+	});
+
+	it('loadOne reports its shape guard for an empty 200 response', async () => {
+		mockFetch(new Response('', { status: 200 }));
+
+		await expect(apiStore().loadOne('todo', 't1')).rejects.toThrow(
+			"[puzzle] loadOne('todo', id) expected a JSON object from the server"
+		);
+	});
+
+	it('loadAll reports its shape guard for a non-JSON 200 response', async () => {
+		mockFetch(new Response('<html>not JSON</html>', { status: 200 }));
+
+		await expect(apiStore().loadAll('todo')).rejects.toThrow(
+			"[puzzle] loadAll('todo') expected a JSON array from the server"
+		);
+	});
+
+	it('loadAll and loadOne still accept valid JSON responses', async () => {
+		mockFetch(
+			new Response(JSON.stringify([{ id: 't1', text: 'all' }]), { status: 200 }),
+			new Response(JSON.stringify({ id: 't2', text: 'one' }), { status: 200 })
+		);
+		const store = apiStore();
+
+		const records = await store.loadAll('todo');
+		const record = await store.loadOne('todo', 't2');
+
+		expect(records.map((item) => item.toJSON())).toEqual([
+			{ id: 't1', text: 'all', completed: false },
+		]);
+		expect(record.toJSON()).toEqual({ id: 't2', text: 'one', completed: false });
 	});
 });
 
@@ -177,6 +224,107 @@ describe('save() — 2xx response merge', () => {
 		expect(notifySpy).not.toHaveBeenCalledWith('todo', null); // never notified under null
 		store.flush();
 		expect(sub.onStoreChange).toHaveBeenCalled(); // notified under the real pk
+	});
+});
+
+describe('save() — response reconciliation preserves in-flight edits', () => {
+	it('a single POST preserves a local edit made after dispatch', async () => {
+		const gate = deferred();
+		const fetchSpy = vi.fn(() => gate.promise);
+		vi.stubGlobal('fetch', fetchSpy);
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		const saving = todo.save();
+		await Promise.resolve(); // let _saveRecordNow serialize and dispatch A
+		expect(JSON.parse(fetchSpy.mock.calls[0][1].body).text).toBe('A');
+
+		todo.update({ text: 'B' });
+		gate.resolve(makeRes({ body: { id: 't1', text: 'A', completed: false } }));
+		await saving;
+
+		expect(todo.text).toBe('B');
+		expect(todo._synced).toBe(true);
+	});
+
+	it('a single PUT preserves a local edit made after dispatch', async () => {
+		const gate = deferred();
+		const fetchSpy = vi.fn(() => gate.promise);
+		vi.stubGlobal('fetch', fetchSpy);
+		const store = apiStore();
+		const todo = store.upsert('todo', { id: 't1', text: 'A', completed: false });
+
+		const saving = todo.save();
+		await Promise.resolve(); // let _saveRecordNow serialize and dispatch A
+		expect(fetchSpy.mock.calls[0][1].method).toBe('PUT');
+
+		todo.update({ text: 'B' });
+		gate.resolve(makeRes({ body: { id: 't1', text: 'A', completed: false } }));
+		await saving;
+
+		expect(todo.text).toBe('B');
+	});
+
+	it('a queued save sends the newer local value after the first response reconciles', async () => {
+		const first = deferred();
+		const sent = [];
+		const fetchSpy = vi.fn((_url, init) => {
+			const body = JSON.parse(init.body);
+			sent.push({ method: init.method, body });
+			if (sent.length === 1) return first.promise;
+			return Promise.resolve(makeRes({ body }));
+		});
+		vi.stubGlobal('fetch', fetchSpy);
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		const firstSave = todo.save();
+		await Promise.resolve(); // first POST has captured A
+		todo.update({ text: 'B' });
+		const queuedSave = todo.save();
+
+		first.resolve(makeRes({ body: { id: 't1', text: 'A', completed: false } }));
+		await Promise.all([firstSave, queuedSave]);
+
+		expect(sent.map(({ method, body }) => ({ method, text: body.text }))).toEqual([
+			{ method: 'POST', text: 'A' },
+			{ method: 'PUT', text: 'B' },
+		]);
+		expect(todo.text).toBe('B');
+	});
+
+	it('still merges server-computed fields that were untouched locally', async () => {
+		const gate = deferred();
+		vi.stubGlobal('fetch', vi.fn(() => gate.promise));
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		const saving = todo.save();
+		await Promise.resolve();
+		todo.update({ text: 'B' });
+		gate.resolve(
+			makeRes({ body: { id: 't1', text: 'A', completed: false, serverRevision: 7 } })
+		);
+		await saving;
+
+		expect(todo.text).toBe('B');
+		expect(todo.serverRevision).toBe(7);
+	});
+
+	it('keeps the 204/empty path unchanged when an edit happens in flight', async () => {
+		const gate = deferred();
+		vi.stubGlobal('fetch', vi.fn(() => gate.promise));
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		const saving = todo.save();
+		await Promise.resolve();
+		todo.update({ text: 'B' });
+		gate.resolve(makeRes({ status: 204, statusText: 'No Content', body: '' }));
+		await saving;
+
+		expect(todo.text).toBe('B');
+		expect(todo._synced).toBe(true);
 	});
 });
 

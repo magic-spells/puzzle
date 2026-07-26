@@ -400,6 +400,30 @@ describe('SSG prerender (M1)', () => {
 			expect(summary.skipped).toEqual([{ path: '/user/:id', reason: 'dynamic' }]);
 		});
 
+		it('writes a percent-encoded non-ASCII route to its decoded UTF-8 directory name', async () => {
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-ssg-unicode-'));
+			const shellPath = path.join(outDir, 'shell.html');
+			fs.writeFileSync(shellPath, SHELL);
+			const unicodeConfig = {
+				target: '#app',
+				routes: [
+					{
+						path: '/caf%C3%A9',
+						name: 'cafe',
+						view: Home,
+						layout: Layout,
+						meta: { title: 'Café' },
+					},
+				],
+			};
+
+			const summary = await prerenderToDir(unicodeConfig, { outDir, shellPath });
+
+			expect(fs.existsSync(path.join(outDir, 'café', 'index.html'))).toBe(true);
+			expect(fs.existsSync(path.join(outDir, 'caf%C3%A9', 'index.html'))).toBe(false);
+			expect(summary.written[0].file).toBe(path.join(outDir, 'café', 'index.html'));
+		});
+
 		it('rejects a route whose path escapes the output directory, writing nothing outside it (FIX 12)', async () => {
 			// Nest outDir one level down so its `..` target is unique to this run (a
 			// shared tmpdir sibling would be polluted by any other run).

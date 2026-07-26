@@ -760,15 +760,26 @@ function managedTagRe(id) {
 
 /**
  * Directory-style output path: `/` → outDir/index.html, `/a/b` →
- * outDir/a/b/index.html. The bare catch-all (`path: '*'`) is the exception — it
- * writes `outDir/404.html`, the filename static hosts serve for unknown URLs.
+ * outDir/a/b/index.html. Percent-encoded route text is decoded to the UTF-8
+ * filesystem name a static server resolves from the browser's encoded request
+ * (`/caf%C3%A9/` → `outDir/café/index.html`); decodeURI deliberately preserves
+ * escaped URI delimiters such as `%2F`. Malformed percent text keeps its current
+ * literal-directory behavior. The bare catch-all (`path: '*'`) is the exception
+ * — it writes `outDir/404.html`, the filename static hosts serve for unknown URLs.
  */
 function pageOutputPath(outDir, routePath) {
 	let outPath;
 	if (routePath === '*') {
 		outPath = path.join(outDir, '404.html');
 	} else {
-		const clean = routePath.replace(/^\//, '').replace(/\/$/, '');
+		let filesystemPath = routePath;
+		try {
+			filesystemPath = decodeURI(routePath);
+		} catch {
+			// Preserve the pre-normalization output for a literal malformed '%'
+			// sequence; the Router also treats malformed literal text as bytes.
+		}
+		const clean = filesystemPath.replace(/^\//, '').replace(/\/$/, '');
 		const rel = clean === '' ? 'index.html' : path.join(clean, 'index.html');
 		outPath = path.join(outDir, rel);
 	}
