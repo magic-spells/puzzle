@@ -130,6 +130,17 @@ export const SCENARIO_DEFINITIONS = [
 		ops: ['navigate-100', 'navigate-burst-100', 'params-100', 'params-burst-100', 'back-forward-100', 'supersede-50'],
 	},
 	{
+		name: 'form-state',
+		label: 'Form state',
+		blurb: 'N controlled inputs + N controlled selects — what does a keystroke cost the rest of the form?',
+		// `rerender` is the clean arm and `rerender-dirty` is its CONTROL: the
+		// zero input writes in the first only mean something because the second
+		// proves the write path fires when a value really moves. `type-local` and
+		// `type-store` are the A/B on which state layer a keystroke lands in, and
+		// `type-event` is a behaviour gate, not a measurement.
+		ops: ['rerender', 'rerender-dirty', 'type-local', 'type-store', 'type-event'],
+	},
+	{
 		// LAST on purpose: the two ops here are deliberate pathologies, and the
 		// picker reads left to right. Both are behind their own explicit button
 		// and both carry a hard iteration cap — see LoopTrap.pzl.

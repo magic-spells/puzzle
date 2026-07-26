@@ -29,6 +29,7 @@ so any measurement has a copy-pasteable URL:
 /?scenario=islands&n=100&descendants=200
 /?scenario=formatters&n=10000
 /?scenario=listener-churn&n=10000&binding=churn
+/?scenario=form-state&n=200
 /?scenario=loop-trap&cap=500
 ```
 
@@ -47,7 +48,7 @@ window.__STRESS__ = {
   ready,                  // Promise — resolves once the app has mounted
   scenarios,              // ['keyed-list', 'virtual-list', 'subscriptions', 'async-waterfall',
                           //  'deep-nest', 'write-storm', 'islands', 'formatters',
-                          //  'listener-churn', 'route-churn', 'loop-trap']
+                          //  'listener-churn', 'route-churn', 'form-state', 'loop-trap']
   definitions,            // [{ name, label, blurb, ops }]
   async select(name, params),
   async reset(),
@@ -844,7 +845,175 @@ leaf never mounted. That last one used to mean the cross-frame guard had
 suppressed an ancestor and the run was worthless; now that the guard only warns,
 it means a real mounting bug.
 
-## Scenario 11 — `loop-trap`
+## Scenario 11 — `form-state`
+
+**Probes:** what does a form cost to re-render, and what does one keystroke cost
+to get into state?
+
+200 rows, each one controlled `<input>` and one controlled `<select>` of 8
+options — 400 controlled form properties on screen, 2,400 live elements — plus
+two typing targets bound to different state layers, plus one 24-field store
+record. Ops: `rerender`, `rerender-dirty`, `type-local`, `type-store`,
+`type-event`. Parameter: `n` (field rows).
+
+The two typing targets are the A/B:
+
+- `.fs-draft` — `setData('draftText', …)`. The **local** layer: re-render only,
+  `data()` never re-runs.
+- `.fs-bound` — `record.update({ text })`. The **model** layer: validate,
+  notify, `data()`, render.
+
+`draftText` is a key `data()` deliberately never returns. If it did,
+`#recompose()`'s `{ ...#local, ...#model }` would overlay the model value on the
+local one and the first store flush would erase the draft mid-typing. That
+clobber is documented in the scenario rather than counted — its interesting form
+depends on flush timing and is not deterministic.
+
+Every op installs **both** probes — the two controlled-property write counters
+and the `normalizedSchema` counter — so no counter is ever fabricated and the
+two typing arms carry identical instrument load. The cost of that uniformity is
+that **none of the timings are clean**: they all include the probe, and the
+finding here is counts-only. The one comparison worth reading off the clock is
+`type-store` minus `type-local`, which is fair precisely because their
+instrument load is identical by construction — though as measured below, even
+that one lands inside the noise.
+
+Typing drives **real events** — `el.value = …` then
+`dispatchEvent(new Event('input', { bubbles: true }))`. The `fast-scroll`
+precedent from `virtual-list` does *not* transfer: a scroll event is dispatched
+by the browser asynchronously at frame time, so an op built on it folds frame
+scheduling into its measurement. `dispatchEvent` runs the listener synchronously
+on the calling stack. Both flushes are then forced by hand — `flushUpdates()`
+*is* the body of the rAF callback `#scheduleRender()` arms, and `store.flush()`
+skips the rAF plus the 220ms D63 fallback — which makes each op bounded by a
+count rather than by 200 frames of scheduler (~3,300ms, whose milliseconds would
+be an input, and which the runner's clamp guard would rightly reject).
+
+| arm | renders | `data()` runs | `<input>.value` writes | `<select>.value` writes | `normalizedSchema()` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `rerender` (clean) | 20 | 20 | **0** | **4,000** | 0 |
+| `rerender-dirty` (control) | 20 | 20 | 4,000 | 8,000 | 0 |
+| `type-local` (setData) | 200 | **0** | 0 | **40,000** | 0 |
+| `type-store` (record.update) | 200 | 200 | 0 | 40,000 | **600** |
+| `type-event` (gate) | 2 | 1 | 0 | 400 | 3 |
+
+Production medians, 15 iterations, across four runs: `rerender` ~21ms,
+`rerender-dirty` 25–29ms, `type-local` 140–149ms, `type-store` 145–151ms. All
+four carry the probes, so none of those numbers is a clean framework cost.
+
+### A controlled `<select>` costs a DOM property write on every render, forever
+
+`viewManager.js` handles the two controlled form properties in two different
+places, and only one of them compares first:
+
+```js
+// patchAttrs — the input path
+if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
+  if (el.value !== stringify(value)) setAttr(el, name, value);
+}
+
+// reassertSelectValue — after patchChildren, for every <select>
+el.value = stringify(attrs.value);
+```
+
+The re-assertion exists for a good reason: a select's `value` cannot be applied
+before its `<option>` children exist, so it has to run after `patchChildren`
+settles. But it runs on **every patch of every select**, whether or not the
+bound value moved and whether or not the option list churned.
+
+Twenty re-renders in which nothing changed: the 200 inputs write **zero**, the
+200 selects write **4,000**. Two hundred keystrokes into an unrelated field:
+still zero input writes, and **40,000** `HTMLSelectElement.value` writes to type
+one sentence.
+
+### The comment above `patchAttrs` is not quite what the code does
+
+It says a select's `value` is "left to the generic path here since its options
+may not exist yet at attr-patch time" — but the generic path *writes*. A
+`<select>` is neither `INPUT` nor `TEXTAREA`, so it misses the live-DOM compare
+and falls through to `else if (oldAttrs[name] !== value) setAttr(...)`, which
+sets `el.value` against an option list that has not patched yet.
+`reassertSelectValue` then sets the identical value again a few lines later.
+
+`rerender-dirty` measures **8,000 writes for 4,000 selects patched — exactly two
+each**. This scenario was built expecting one write per select per render in
+both arms; the control found two, which is the entire reason a control exists.
+That first write is redundant in both directions: skipped when the value did not
+change, immediately redone when it did. Skipping `value` for `SELECT` in
+`patchAttrs` would remove it, since the re-assertion covers the same ground a
+few lines later — **not built, not shipped, and not measured beyond the counts
+above**.
+
+### One keystroke through `record.update()` normalizes the schema three times
+
+`PuzzleModel.normalizedSchema()` rebuilds its descriptor map from
+`Object.entries(this.schema)` on every call and is not memoized. A single-field
+`update()` reaches it three times:
+
+| call site | why |
+| --- | --- |
+| `primaryKey()` | the immutable-primary-key guard at the top of `update()` |
+| `_collectErrors()` | the §20 validation pass |
+| `Store.recordChanged()` → `primaryKey()` | building the notify key |
+
+200 keystrokes, **600 calls**, each one an `Object.entries` over 24 fields plus a
+`RelationshipBuilder` filter. `_collectErrors`'s `fields` filter narrows the
+*checks* to the patched key but never the *iteration* — all 24 entries are
+walked either way. The count is measured by wrapping the method, not asserted
+from the source, and the op throws if it is not exactly 3 per keystroke.
+
+And yet the A/B built to price that round trip **cannot see it**. Across four
+runs `type-store` came in +7ms, +5ms, +0ms and +2ms against `type-local` over
+200 keystrokes — at or below the ±1–3% spread on a ~150ms op. So the
+honest reading is an upper bound, not a measurement: validation over 24 fields,
+three schema normalizations, subscriber notification and a full `data()` re-run
+together cost **under ~35µs per keystroke**, and are not reliably separable from
+the local path at this size.
+
+That is the uncomfortable half of the finding. The A/B did not fail; it was
+swamped. The 40,000 `<select>.value` writes that *both* arms pay — for a
+keystroke in a field neither select is bound to — dominate the op so completely
+that the entire store round trip disappears into the noise beside them. Anyone
+optimising a slow Puzzle form should read that ordering carefully before
+reaching for the data layer.
+
+### A re-render during typing does not write `value`, and nothing was pinning that
+
+There is no caret mechanism in Puzzle. `selectionStart` and `setSelectionRange`
+appear nowhere in the repo, and `document.activeElement` appears nowhere in
+`client-runtime/`. Caret safety is *emergent* from `patchAttrs`'s live-DOM
+compare: mid-keystroke the bound value already equals the live property, so
+nothing is written and the caret is never disturbed. `tests/vdom.test.js` pins
+that on a hand-built tree; nothing pinned it end to end at scale.
+`fsInputValueWrites === 0` across 20 re-renders of 200 controlled inputs is that
+pin, and `rerender-dirty`'s 4,000 is what stops it from being a dead code path.
+
+The caret position itself is read in `type-event` and reported in `detail` only
+(it reads `caret at 20/20`). It is deliberately **not** a counter: Blink
+short-circuits some identical value assignments, so a passing caret check could
+mean the engine preserved it rather than the framework — and only one of those
+is a claim about Puzzle. The counter observes the framework's *decision*; the
+caret read observes an *effect* that has two possible causes.
+
+`type-event` is a behaviour gate rather than a measurement, and it fires one real
+event per binding, not one overall: both typing arms are measured, so an arm
+that quietly stopped working would otherwise just look fast.
+
+**What a bad result looks like:** `fsSelectValueWrites` of 0 in `rerender` means
+the renders never reached the grid and the input's zero measured nothing.
+`fsInputValueWrites` of 0 in `rerender-dirty` means the input write path is dead
+and the clean arm's zero proves nothing. `fsDataRuns` of 0 in `type-store` means
+the store comparison measured nothing. `fsInputValueWrites` above 0 in
+`rerender` would mean the live-DOM compare has been lost and every controlled
+input in every Puzzle app now eats the caret on re-render. `fsSchemaNormalizations`
+of anything but 600 in `type-store` means either the guard, the validation pass
+or the notify key moved — or that someone memoized `normalizedSchema()`, in
+which case the number should be 0 and this table needs rewriting. `validate()`
+also fails outright if the store has storage configured, because every flush
+would then serialize the whole store and the schema counts would stop meaning
+what they say.
+
+## Scenario 12 — `loop-trap`
 
 **Probes:** the D121 loop detector (`client-runtime/devperf.js`), which had a
 unit test and **had never fired in a real browser**.
@@ -956,14 +1125,18 @@ counter being measured.
 
 ## Not yet implemented
 
-Three scenarios from the original plan remain **not built**. Nothing in the app
+Two scenarios from the original plan remain **not built**. Nothing in the app
 references them; they are listed here as future work, not as shipped features.
 
 | scenario | would probe |
 | --- | --- |
-| `form-state` | `setData` throughput under a typing burst |
 | `virtual-scroll` | the userland windowing recipe as its own scenario (partly superseded by `virtual-list`) |
 | `morph-flip` | morph transitions and `flip` reordering under load |
+
+`form-state` **is now built** (scenario 11 above), and it grew past the original
+one-line plan: "`setData` throughput under a typing burst" turned out to be the
+*cheap* half of the question. The expensive half is what the rest of the form
+pays for that keystroke.
 
 `route-churn` **is now built** (scenario 10 above). An earlier draft's
 scaffolding for it — a five-level nested route tree with 50 generated leaf
@@ -985,7 +1158,9 @@ app/
   row-metrics.js            child data() counter that survives a production build
   nest-metrics.js           the same, for deep-nest's node data() runs
   rc-metrics.js             the same, per route level — renders vs data() runs
-  models/                   one record schema, registered per scenario type
+  models/
+    record.js               one general-purpose schema, registered per scenario type
+    form-record.js          form-state's 24-field record, and only its own
   layouts/
     StressLayout.pzl        the lab's chrome
     RcLayout.pzl            route-churn's layout, panel and ops (reused level 0)
@@ -1004,6 +1179,7 @@ app/
     Islands.pzl                     20,000 frozen nodes, observed
     Formatters.pzl                  the built-in registry priced
     ListenerChurn.pzl               churn / stable / none DOM handler binding
+    FormState.pzl                   400 controlled form properties under typing
     LoopTrap.pzl + LoopCell.pzl     the D121 detector's real exercise
 ```
 
@@ -1012,10 +1188,14 @@ app/
 as views — which is what makes `<Slot/>` legal in them. Everything under
 `scenarios/` is a component.
 
-Each new scenario owns its own store type (`nest`, `storm`, `fmt`, `loop`) so no
-scenario can disturb another's data. `islands` deliberately has none: its 20,000
-nodes are plain DOM built from instance state, and giving it a type would imply
-the frozen subtree was reactive.
+Each new scenario owns its own store type (`nest`, `storm`, `fmt`, `loop`,
+`form`) so no scenario can disturb another's data. `islands` deliberately has
+none: its 20,000 nodes are plain DOM built from instance state, and giving it a
+type would imply the frozen subtree was reactive. `form` is the one type that
+also gets its own model CLASS: `form-state` measures what a single-field
+`update()` costs, and that cost is dominated by `normalizedSchema()` running
+over every declared field three times per call site, so a 9-field
+`StressRecord` would understate it by nearly 3x.
 
 Fixtures are installed directly in `app.js` rather than via `--fixtures`, so
 `store.seed()` is available as a tool each scenario calls on demand and
