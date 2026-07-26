@@ -339,6 +339,165 @@ timing inference.
 
 ---
 
+## The handler A/B
+
+One question, and it is not a timing question: **is `keyed-list`'s per-row
+re-render cascade a framework problem or an example-written-badly problem?**
+
+Both arms run the same scenario, the same records, the same row component and
+the same ops. The only difference is how `KeyedList` spells its two callback
+props.
+
+- **`inline`** — the default, and what `baseline.json` was recorded from —
+  passes data-capturing props: `@select={ selectRow(row) }`. `row` is a loop
+  variable, so codegen cannot cache the closure (D62,
+  `compileEventValue` in `compiler/internal/codegen/expr.go`) and mints a fresh
+  arrow per row per parent render. Those arrows are component **props**, so they
+  take part in `patchComponent`'s `shallowEqual(oldProps, newProps)` bailout
+  (`client-runtime/views/viewManager.js`) — and a fresh function object never
+  compares equal. Every mounted row therefore re-runs `data()` and re-renders on
+  every parent render, however little changed.
+- **`stable`** passes bare method references: `@select={ selectById }`. Those
+  *are* cacheable, so codegen emits `((this.__h ??= {})[N] ??= ...)` — one
+  function object per site per view instance, identical across renders. An
+  untouched row's props then compare fully equal and `applyParentUpdate()`
+  returns without running `data()` and without rendering.
+
+The row capture has to go somewhere, and in `stable` it moves **into the child**:
+`ListRow` calls `props.select?.(props.id)` and the parent re-queries by id. That
+is the entire difference. `ListRow` is shared with `virtual-list`, which is
+unaffected — the inline closure simply ignores the extra id argument.
+
+### Running it
+
+`--filter handlers-` runs only this comparison: 20 entries appended to the end of
+`OPS`, with ids `handlers-inline/*` and `handlers-stable/*`. The existing
+`keyed-list/*` and `virtual-list/*` ids and params are untouched, and the
+`inline` arm deliberately does **not** pass `handlers=inline` — it is the
+default, so that arm's URL, render path and counters are identical to the plain
+`keyed-list/*` entries the committed baseline came from.
+
+The arms are ordered so each pair is adjacent in one browser session, at the same
+iteration count, with the same forced GC between iterations. Reinterpreting
+numbers gathered elsewhere in a run would fold in whatever drifted in between.
+
+**It takes two runs, and their outputs must never be mixed.** Timings come from
+the default production build. The structural counters come from
+`--build-mode development`, because `renders`, `wastedRenders`, `propBailouts`,
+`propReruns` and `domMutations` are produced by `client-runtime/devperf.js`,
+which production compiles out; the RENDER STRUCTURE table prints them as `—`
+rather than `0` in a production run, because a fabricated zero and a measured
+zero mean opposite things here. `childDataRuns` is the exception — it is a plain
+integer in `examples/stress/app/row-metrics.js`, incremented at the top of
+`ListRow.data()`, so it survives into the shipped bundle and is present in every
+build. The table's `handlers` column is reported by the scenario itself, so an
+arm cannot be mislabelled. **Never quote a development run's milliseconds.**
+
+### The behaviour gates
+
+A variant that is faster because it quietly stopped working is worthless, so each
+arm must prove it still works before any of its numbers are believed.
+`click-select` and `click-remove` are **behaviour gates, not measurements**: they
+dispatch a real DOM click at the first rendered row and throw unless the
+selection actually flipped — in the store *and* in the DOM — and unless that
+exact record left both the store and the DOM. They run first within each arm, at
+one iteration with no warmup; a throw is reported as `ERROR` and fails the run.
+Their milliseconds mean nothing. **Both arms pass.**
+
+### The timings
+
+Production build, 15 recorded iterations, medians, darwin-arm64, headless
+Chromium 149.0.7827.55, bundle 103.8 KB — larger than the 99.4 KB quoted above
+because the example now carries both arms. MAD ran 1–6%, against the ~13%
+detection threshold established under
+[Instrument variance](#instrument-variance).
+
+Median in-page `script ms`:
+
+| op | n | `inline` | `stable` |
+| --- | ---: | ---: | ---: |
+| `create` | 1,000 | 19.7 | 19.1 |
+| `update-every-10th` | 1,000 | 4.90 | 2.60 |
+| `swap-rows` | 1,000 | 8.90 | 5.10 |
+| `select-row` | 1,000 | 4.50 | 1.70 |
+| `create` | 10,000 | 164 | 162 |
+| `update-every-10th` | 10,000 | 46.7 | 22.2 |
+| `swap-rows` | 10,000 | 47.0 | 18.5 |
+| `select-row` | 10,000 | 42.3 | 14.3 |
+
+CDP `task ms` at 10,000 rows — the renderer's own accounting, as the independent
+second opinion:
+
+| op | `inline` | `stable` |
+| --- | ---: | ---: |
+| `create` | 439 | 439 |
+| `update-every-10th` | 116 | 53.8 |
+| `swap-rows` | 135 | 92.3 |
+| `select-row` | 78.3 | 21.4 |
+
+**Read the 10,000-row rows.** At 1,000 rows most of the `stable` arm lands under
+the 5ms mark below which [Instrument variance](#instrument-variance) says a
+delta is not worth trusting; the direction agrees there, the magnitude is not
+readable. `create` is unchanged in both arms and at
+both sizes — nothing can bail out on first mount, so there is nothing for the
+stable spelling to save. Every op that mutates an existing 10,000-row list is cut
+by more than half in script time. The renderer's `task` totals agree, though less
+sharply on `swap-rows` — the DOM work there is identical in both arms (see below)
+and is a larger share of the total.
+
+### The structural counts — the decisive evidence
+
+Development build, n=10,000. These are exact counts, not medians: they are
+properties of the render algorithm, not of the machine, so a difference between
+the two arms is a real difference.
+
+| op | arm | childDataRuns | renders | wastedRenders | propBailouts | propReruns | domMutations |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `create` | `inline` | 10,000 | 10,001 | 0 | 0 | 0 | 220,004 |
+| `create` | `stable` | 10,000 | 10,002 | 0 | 1 | 0 | 220,009 |
+| `update-every-10th` | `inline` | 10,000 | 10,001 | 9,001 | 0 | 10,000 | 2,000 |
+| `update-every-10th` | `stable` | 1,000 | 1,001 | 1 | 9,000 | 1,000 | 2,000 |
+| `swap-rows` | `inline` | 10,000 | 10,001 | 10,000 | 0 | 10,000 | 997 |
+| `swap-rows` | `stable` | 0 | 1 | 0 | 10,000 | 0 | 997 |
+| `select-row` | `inline` | 10,000 | 10,001 | 10,000 | 0 | 10,000 | 1 |
+| `select-row` | `stable` | 1 | 2 | 1 | 9,999 | 1 | 1 |
+
+**The DOM work is identical, and that is the whole point.** `domMutations`
+matches exactly on all three mutation ops — 2,000 for `update-every-10th`, 997
+for `swap-rows`, 1 for `select-row`. The `stable` arm is not skipping work the
+user can see. It patches precisely the same nodes; it just stops waking the rows
+that had nothing to do.
+
+On `create` the two arms differ by one render and five mutations out of 220,004.
+That is the control panel, not the list: `Home` polls `scenarioStats()` on a 1s
+interval and suppresses it only while its OWN buttons are driving an op, so a
+harness-driven op can have the poll land inside the measured window and repaint
+the four stat readouts. It is not row-proportional, it lands on whichever arm
+happens to straddle a tick, and it cannot touch `childDataRuns`, which counts
+only `ListRow.data()`. Treat the framework counters as exact to within about one
+render for this reason; `childDataRuns` is exact, full stop.
+
+**The bailout works.** `swap-rows` on the `stable` arm is the cleanest read in
+the suite: **0** child `data()` runs, **1** render, **10,000** prop bailouts —
+and the same 997 DOM mutations as the arm that re-rendered all 10,000 rows.
+`select-row` is the same shape with one row genuinely affected: 1 child `data()`
+run against 9,999 bailouts. `update-every-10th` writes 1,000 records and runs the
+child `data()` exactly 1,000 times.
+
+**The inline idiom defeats it.** The same three ops on the `inline` arm: 10,000
+child `data()` runs, ~10,000 wasted renders, 10,000 prop re-runs and **zero**
+bailouts, every time, whether the op touched 1,000 rows or one.
+
+So the cascade is not a framework defect. `patchComponent`'s `shallowEqual` prop
+bailout is correct and, given stable props, extremely effective; the canonical
+Puzzle list idiom — the shape `examples/todos` uses — is what disarms it, by
+handing the patcher a brand-new function object per row per render.
+
+It does not overturn the windowing result either: `create`, the op windowing wins
+hardest on, is the one op the stable spelling cannot help.
+
+---
+
 ## Production versus development
 
 Same harness, same machine, same headless Chromium, 15 iterations,
@@ -438,10 +597,12 @@ mismatches, zero clamp rejections, exit 0. Wall time ~7 minutes per suite.
   having a harness, not a defect in one.
 - **No memory-leak detection.** `heap Δ MB` is a single before/after delta
   around one op, not a retention analysis across iterations.
-- **Not every stress op is covered.** `replace-all`, `select-row`, `append-1k`
-  and `remove-row` exist in the app and are not in the matrix; the nine
-  unimplemented scenarios in `examples/stress/README.md` obviously are not
-  either. Add entries to `scenarios.mjs` — nothing else needs to change.
+- **Not every stress op is covered.** `replace-all`, `append-1k` and
+  `remove-row` exist in the app and are not in the matrix; `select-row` is in it
+  only inside the handler A/B arms, never in the main `keyed-list` or
+  `virtual-list` groups. The nine unimplemented scenarios in
+  `examples/stress/README.md` obviously are not covered either. Add entries to
+  `scenarios.mjs` — nothing else needs to change.
 - **`subscriptions` precision timing is unmeasurable**, not zero. It sits under
   the `performance.now()` ~100us clamp.
 

@@ -170,6 +170,17 @@ export function compareCounters(summary, baselineOp) {
 	return drift;
 }
 
+/** Column order for the RENDER STRUCTURE table; missing keys are dropped, not zeroed. */
+const RENDER_KEYS = [
+	'handlers',
+	'childDataRuns',
+	'renders',
+	'wastedRenders',
+	'propBailouts',
+	'propReruns',
+	'domMutations',
+];
+
 export function formatReport({ summaries, baseline, meta, logs, config, calibration }) {
 	const out = [];
 	const hasBaseline = !!baseline?.ops && Object.keys(baseline.ops).length > 0;
@@ -284,6 +295,40 @@ export function formatReport({ summaries, baseline, meta, logs, config, calibrat
 				['l', 'l', 'r', 'r']
 			)
 		);
+		out.push('');
+	}
+
+	// ── render-structure counters (the handler A/B) ─────────────────────────
+	//
+	// These answer "how much of the app woke up", which is a property of the
+	// render algorithm rather than of the machine — so unlike the timings above
+	// they are exact, and a difference between two arms is a real difference.
+	// `childDataRuns` is present in every build; the rest come from the dev-only
+	// profiler and are shown as "—" in a production run rather than as zero,
+	// because a fabricated zero and a measured zero mean opposite things here.
+	const structural = summaries.filter((s) => s.counters && 'childDataRuns' in s.counters);
+	if (structural.length) {
+		const keys = RENDER_KEYS.filter((k) => structural.some((s) => s.counters[k] !== undefined));
+		out.push('  RENDER STRUCTURE  (exact counts, not timings — the decisive evidence)');
+		out.push(
+			renderTable(
+				['op', 'n', ...keys],
+				structural.map((s) => [
+					s.label ?? s.id,
+					fmtInt(s.size),
+					...keys.map((k) => (s.counters[k] === undefined ? '—' : String(s.counters[k]))),
+				]),
+				['l', 'r', ...keys.map(() => 'r')]
+			)
+		);
+		if (!structural.some((s) => s.counters.renders !== undefined)) {
+			out.push(
+				'  renders / wastedRenders / propBailouts are dev-only — devperf.js is compiled out of production.'
+			);
+			out.push(
+				"  Re-run with --build-mode development to collect them, and never quote that run's milliseconds."
+			);
+		}
 		out.push('');
 	}
 

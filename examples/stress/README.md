@@ -74,8 +74,8 @@ is the entire story. `stageNodes` is the whole-scenario count if you want it.
 set so the numbers are comparable to React/Vue/Svelte.
 
 Ops: `create-1k`, `create-10k`, `create-50k`, `replace-all`,
-`update-every-10th`, `select-row`, `swap-rows`, `remove-row`, `append-1k`,
-`clear`.
+`update-every-10th`, `select-row`, `swap-rows`, `remove-row`, `click-select`,
+`click-remove`, `append-1k`, `clear`.
 
 Rows are **real store records** (`store.seed()` from
 `@magic-spells/puzzle/fixtures`), not a plain array, so every op goes through
@@ -97,6 +97,50 @@ reconciler and the per-render sort, not a blowup.
 **This scenario must never be virtualized.** Its whole job is to show what
 holding `n × 7` elements live actually costs. A windowed version would measure
 nothing and would make the `virtual-list` comparison vacuous.
+
+### `?handlers=inline|stable`
+
+`keyed-list` renders its rows two ways, chosen by a query parameter and by an
+in-page **handlers** toggle (`inline` / `stable`, next to the row-count control —
+scoped to this scenario, because no other one implements both arms). The default
+is `inline`, and everything else about the two arms is identical: same records,
+same ops, same `ListRow`.
+
+```
+/?scenario=keyed-list&n=10000&handlers=inline
+/?scenario=keyed-list&n=10000&handlers=stable
+```
+
+- `inline` — `@select={ selectRow(row) }`. `row` is a loop variable, so the
+  compiler cannot cache the closure and mints a fresh arrow per row per parent
+  render. Callback props take part in `shallowEqual`, a fresh function object
+  never compares equal, and every mounted row therefore re-runs `data()` and
+  re-renders.
+- `stable` — `@select={ selectById }`. A bare method reference *is* cacheable,
+  so codegen emits one function object per site per view instance. An untouched
+  row's props then compare fully equal and the child bails out without running
+  `data()` or rendering at all.
+
+The capture moves into the child: `ListRow` reports `props.id` and the parent
+re-queries the record by it. `ListRow` is shared with `virtual-list` and is
+unaffected — the inline closure ignores the extra id argument.
+
+Both arms have to behave identically, and two ops enforce that. They are
+**behaviour gates, not measurements**: `click-select` dispatches a real DOM click
+at the first rendered row and throws unless the selection flipped in the store
+*and* in the DOM; `click-remove` clicks that row's remove button and throws
+unless that exact record left both. Ignore their timings — an arm that got faster
+by quietly not working has to fail, not report a number.
+
+`app/row-metrics.js` counts child `data()` runs (one integer, incremented at the
+top of `ListRow.data()`), because the framework's own render counters are
+compiled out of production builds. Read it back through
+`__STRESS__.stats().childDataRuns`; each op's log line prints it too, alongside
+the framework counters when the build has them.
+
+Switching arms remounts the scenario, so call `warmup()` again before comparing
+by hand. The measured comparison, and what it proves about `shallowEqual`, is in
+`benchmarks/README.md` under "The handler A/B".
 
 ## Scenario 2 — `virtual-list`
 
@@ -298,7 +342,8 @@ them. Auto-arming would make simply selecting the scenario cost `n × delay`.
   always differs under `shallowEqual` and every parent re-render re-evaluates
   every mounted row. That is the canonical Puzzle list idiom (the same shape
   `examples/todos` uses), both list scenarios pay it identically, and it is
-  precisely why windowing wins at scale.
+  precisely why windowing wins at scale. `?handlers=stable` on `keyed-list`
+  makes the cost of that idiom directly measurable.
 - **`ListRow` takes primitive props, not the record.** Record props carry
   identity, not liveness: records mutate in place, so passing `row={ record }`
   would hand the patcher the same reference before and after an update,
@@ -337,6 +382,7 @@ app/
   stress-controller.js      the __STRESS__ control surface + scenario registry
   scenario-utils.js         settle helpers, seeding shapes, param parsing
   row-ops.js                the row mutation set shared by both list scenarios
+  row-metrics.js            child data() counter that survives a production build
   models/                   one record schema, registered as `row` and `sub`
   layouts/StressLayout.pzl
   views/Home.pzl            control panel, stats, log, scenario host

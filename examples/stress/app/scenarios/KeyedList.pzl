@@ -6,20 +6,38 @@
         every row in the DOM ·
         <span class="text-danger tabular-nums">{ elementCount }</span> elements
       </div>
-      <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint shrink-0">full DOM · keyed by record id</div>
+      <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint shrink-0">full DOM · keyed by record id · handlers: { handlerLabel }</div>
     </div>
 
+    <!-- The A/B. The two branches differ ONLY in how the callback props are
+         spelled; everything else, including the row component, is identical.
+         The branch is OUTSIDE the loop on purpose — putting the {#if} inside
+         would add a conditional vnode per row and charge the comparison for
+         scaffolding rather than for the thing being compared. -->
     <div class="kl-body max-h-[460px] overflow-y-auto overflow-x-hidden">
-      {#for row in rows}
-        <ListRow
-          id={ row.id }
-          label={ row.label }
-          value={ row.value }
-          version={ row.version }
-          selected={ row.selected }
-          @select={ selectRow(row) }
-          @remove={ removeRow(row) } />
-      {/for}
+      {#if stableHandlers}
+        {#for row in rows}
+          <ListRow
+            id={ row.id }
+            label={ row.label }
+            value={ row.value }
+            version={ row.version }
+            selected={ row.selected }
+            @select={ selectById }
+            @remove={ removeById } />
+        {/for}
+      {:else}
+        {#for row in rows}
+          <ListRow
+            id={ row.id }
+            label={ row.label }
+            value={ row.value }
+            version={ row.version }
+            selected={ row.selected }
+            @select={ selectRow(row) }
+            @remove={ removeRow(row) } />
+        {/for}
+      {/if}
     </div>
 
     {#if rowCount === 0}
@@ -35,7 +53,16 @@ import { PuzzleView } from '@magic-spells/puzzle';
 import ListRow from './ListRow.pzl';
 import { registerScenario } from '../stress-controller.js';
 import { HEAVY_ROW_THRESHOLD, ROW_TYPE, MARK, RowOps, mismatchInRows } from '../row-ops.js';
-import { afterPaint, intParam, ms1, settleFrames, viewRoot } from '../scenario-utils.js';
+import {
+  afterPaint,
+  intParam,
+  ms1,
+  perfDelta,
+  perfSnapshot,
+  settleFrames,
+  viewRoot,
+} from '../scenario-utils.js';
+import { resetRowMetrics, rowMetrics } from '../row-metrics.js';
 
 // ---------------------------------------------------------------------------
 // keyed-list — the js-framework-benchmark op set over REAL store records, with
@@ -57,6 +84,30 @@ import { afterPaint, intParam, ms1, settleFrames, viewRoot } from '../scenario-u
 // O(n log n) sort per render — inside both the measured op and the baseline
 // render, so it does not distort comparisons between ops.
 //
+// ---- the handler A/B (?handlers=inline|stable) ----------------------------
+//
+// `inline` (the DEFAULT, and what benchmarks/baseline.json was recorded from)
+// passes data-capturing callback props: `@select={ selectRow(row) }`. `row` is a
+// loop variable, so codegen cannot cache the closure (D62, see
+// compiler/internal/codegen/expr.go compileEventValue) and mints a fresh arrow
+// per row per parent render. Those arrows are component PROPS, so they take
+// part in patchComponent's `shallowEqual(oldProps, newProps)` bailout — and a
+// fresh function object never compares equal. Every mounted row therefore
+// re-runs data() and re-renders on every parent render, however little changed.
+//
+// `stable` passes bare method references: `@select={ selectById }`. Those ARE
+// cacheable, so codegen emits `((this.__h ??= {})[N] ??= ...)` — one function
+// object per site per view instance, identical across renders. An untouched
+// row's props then compare fully equal and the child bails out COMPLETELY:
+// applyParentUpdate() sees `props === undefined` with no slot children and
+// returns without running data() or rendering.
+//
+// The row capture has to go somewhere, and in `stable` it moves INTO the child:
+// ListRow calls `props.select?.(props.id)` and the parent looks the record up by
+// id. That is the whole difference. Both arms are required to be behaviourally
+// identical, which the `click-select` / `click-remove` ops below assert by
+// driving real DOM clicks through the real handler path.
+//
 // SAFETY: above HEAVY_ROW_THRESHOLD rows this view does NOT auto-seed on mount.
 // 50k rows is 350k elements and can wedge a tab for tens of seconds; that is a
 // legitimate finding but it must never happen by accident just because someone
@@ -77,6 +128,9 @@ export default class KeyedList extends PuzzleView {
     this.rowOps = new RowOps(this.ctx.store, ROW_TYPE);
     this.ordered = [];
     this.unregister = null;
+    // Counters for the LAST measured op, captured once the op has fully settled
+    // so a later stray render cannot perturb what stats() reports.
+    this.lastCounters = { childDataRuns: 0, perf: null };
     this.rowOps.freshSeed(this.autoSeedCount());
   }
 
@@ -94,29 +148,68 @@ export default class KeyedList extends PuzzleView {
     // Cache the rendered order so ops can address rows by DOM index without
     // paying a second sort inside the measured window.
     this.ordered = rows;
+    const stableHandlers = this.handlerMode() === 'stable';
     return {
       rows,
       rowCount: rows.length,
       elementCount: rows.length * 7,
+      stableHandlers,
+      handlerLabel: stableHandlers ? 'stable (cached refs)' : 'inline (fresh closures)',
       emptyText: this.isHeavy()
         ? `${this.requestedRows()} rows is above the ${HEAVY_ROW_THRESHOLD} auto-seed limit — press an op (twice, to confirm) to build the list.`
         : 'No rows. Run create-1k or reset.',
     };
   }
 
-  // Hand-driving from the page. Not part of the benchmark op set.
+  // The two handler shapes. `selectRow`/`removeRow` take the RECORD, captured by
+  // the inline closure; `selectById`/`removeById` take the id the child reports
+  // and re-query. Both end in exactly the same store mutation, which is what
+  // makes the arms comparable — and what `click-select` / `click-remove` check.
+  //
+  // findOne() here is safe from the accidental-subscription trap: store queries
+  // only auto-subscribe inside a tracking scope, and an event handler has none.
   events = {
     selectRow: (row) => {
-      row.update({ selected: !row.selected });
+      this.applySelect(row);
     },
     removeRow: (row) => {
-      this.rowOps.lastSwap = null;
-      this.rowOps.markedUpTo = 0;
-      row.destroy();
+      this.applyRemove(row);
+    },
+    selectById: (id) => {
+      this.applySelect(this.rowById(id));
+    },
+    removeById: (id) => {
+      this.applyRemove(this.rowById(id));
     },
   };
 
+  rowById(id) {
+    return this.ctx.store.findOne(ROW_TYPE, id) ?? null;
+  }
+
+  applySelect(row) {
+    if (!row) return;
+    row.update({ selected: !row.selected });
+  }
+
+  applyRemove(row) {
+    if (!row) return;
+    // Removing shifts every later position, so both positional assertions in
+    // validate() stop describing the DOM — drop them rather than let validate()
+    // report a false failure (same reasoning as RowOps.removeNth).
+    this.rowOps.lastSwap = null;
+    this.rowOps.markedUpTo = 0;
+    row.destroy();
+  }
+
   // ---- dataset ------------------------------------------------------------
+
+  /** `inline` (default) or `stable` — see the handler A/B note at the top. */
+  handlerMode() {
+    const raw = this.props?.handlers;
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    return value === 'stable' ? 'stable' : 'inline';
+  }
 
   requestedRows() {
     return intParam(this.props?.n, 1000, 0, 200000);
@@ -135,8 +228,14 @@ export default class KeyedList extends PuzzleView {
 
   async opRun(op) {
     const store = this.ctx.store;
+
+    // Counters are armed OUTSIDE the timed window: resetting a field and reading
+    // a frozen snapshot must not land inside scriptMs.
+    resetRowMetrics();
+    const perfBefore = perfSnapshot();
+
     const t0 = performance.now();
-    if (!this.rowOps.apply(op, this.ordered, { fallbackCount: this.requestedRows() })) {
+    if (!this.applyOp(op)) {
       throw new Error(`[stress] keyed-list has no op "${op}"`);
     }
     // Deliver notifications NOW rather than on the next rAF: every subscribed
@@ -147,12 +246,109 @@ export default class KeyedList extends PuzzleView {
     await afterPaint();
     const paintedMs = performance.now() - t0;
     await settleFrames(1);
+
+    // Capture only once everything has settled, so the number stats() reports is
+    // the number this op actually caused.
+    this.lastCounters = { childDataRuns: rowMetrics.dataRuns, perf: perfDelta(perfBefore) };
+
     return {
       op,
       ms: paintedMs,
       scriptMs,
-      detail: `${op}: ${ms1(scriptMs)}ms script / ${ms1(paintedMs)}ms to paint · ${this.ordered.length * 7} live elements`,
+      detail:
+        `${op} [${this.handlerMode()}]: ${ms1(scriptMs)}ms script / ${ms1(paintedMs)}ms to paint · ` +
+        `${this.ordered.length * 7} live elements · ${this.lastCounters.childDataRuns} row data() runs` +
+        this.perfDetail(),
     };
+  }
+
+  /**
+   * The store-driven op set, plus the two DOM-driven behaviour gates. The gates
+   * live here rather than in RowOps because they are not store mutations: they
+   * dispatch REAL clicks at the rendered row and assert the effect, which is the
+   * only way to prove the two handler variants behave identically through the
+   * path a user actually takes.
+   */
+  applyOp(op) {
+    if (op === 'click-select') return this.clickSelect();
+    if (op === 'click-remove') return this.clickRemove();
+    return this.rowOps.apply(op, this.ordered, { fallbackCount: this.requestedRows() });
+  }
+
+  /** Human-readable framework counters, or a note that this build cannot see them. */
+  perfDetail() {
+    const perf = this.lastCounters.perf;
+    if (!perf) return ' · framework counters unavailable (production build)';
+    return (
+      ` · ${perf.renders} renders (${perf.wastedRenders} wasted, ${perf.domMutations} DOM mutations)` +
+      ` · component patches: ${perf.componentPropBailouts} bailed out / ${perf.componentPropReruns} re-ran`
+    );
+  }
+
+  // ---- behaviour gates ----------------------------------------------------
+
+  /**
+   * Click the FIRST row's label and assert the selection actually flipped, in
+   * the store AND in the DOM. Throws on any disagreement — a variant that is
+   * faster but does not work is worthless, so this fails the run rather than
+   * quietly reporting a number.
+   */
+  clickSelect() {
+    const root = viewRoot(this);
+    const rowEl = root?.querySelector('.kl-row');
+    if (!rowEl) throw new Error('[stress] click-select: no row is rendered');
+
+    const id = rowEl.querySelector('.kl-id')?.textContent?.trim();
+    const record = this.rowById(id);
+    if (!record) throw new Error(`[stress] click-select: no record for rendered id "${id}"`);
+    const before = record.selected === true;
+
+    rowEl.querySelector('.kl-label').click();
+    this.ctx.store.flush();
+
+    const after = this.rowById(id)?.selected === true;
+    if (after === before) {
+      throw new Error(
+        `[stress] click-select [${this.handlerMode()}]: clicking row "${id}" did not change its selection (still ${before})`
+      );
+    }
+    // The click must reach the DOM too, not just the store: a handler that
+    // mutates without the row re-rendering would pass a store-only check.
+    const shown = root.querySelector('.kl-row')?.className.includes('bg-accent/15');
+    if (shown !== after) {
+      throw new Error(
+        `[stress] click-select [${this.handlerMode()}]: store says selected=${after} but the DOM says ${shown}`
+      );
+    }
+    return true;
+  }
+
+  /** Click the FIRST row's remove button and assert that exact row is gone. */
+  clickRemove() {
+    const root = viewRoot(this);
+    const rowEl = root?.querySelector('.kl-row');
+    if (!rowEl) throw new Error('[stress] click-remove: no row is rendered');
+
+    const id = rowEl.querySelector('.kl-id')?.textContent?.trim();
+    const before = this.rowOps.count();
+    if (!this.rowById(id)) throw new Error(`[stress] click-remove: no record for rendered id "${id}"`);
+
+    rowEl.querySelector('.kl-remove').click();
+    this.ctx.store.flush();
+
+    const after = this.rowOps.count();
+    if (after !== before - 1) {
+      throw new Error(
+        `[stress] click-remove [${this.handlerMode()}]: record count went ${before} -> ${after}, expected ${before - 1}`
+      );
+    }
+    if (this.rowById(id)) {
+      throw new Error(`[stress] click-remove [${this.handlerMode()}]: row "${id}" is still in the store`);
+    }
+    if (root.querySelector('.kl-id')?.textContent?.trim() === id) {
+      throw new Error(`[stress] click-remove [${this.handlerMode()}]: row "${id}" is still the first row in the DOM`);
+    }
+    return true;
   }
 
   async opReset() {
@@ -231,6 +427,11 @@ export default class KeyedList extends PuzzleView {
       mountedNodes: body ? body.querySelectorAll('*').length : 0,
       records: this.rowOps.count(),
       views: this.ordered.length + 1,
+      // The handler A/B's evidence. `childDataRuns` survives into production;
+      // `perf` is null there and populated in a development build.
+      handlers: this.handlerMode(),
+      childDataRuns: this.lastCounters.childDataRuns,
+      perf: this.lastCounters.perf,
     };
   }
 }

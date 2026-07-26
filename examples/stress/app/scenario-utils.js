@@ -104,3 +104,55 @@ export function viewRoot(view) {
 
 /** Round to 1 decimal for display. */
 export const ms1 = (n) => Math.round(n * 10) / 10;
+
+// ---------------------------------------------------------------------------
+// Framework structural counters (development builds only).
+//
+// `client-runtime/devperf.js` installs a frozen `globalThis.__PUZZLE_PERF__`
+// with a `snapshot()` of its running totals. It is dev-only by construction:
+// production defines `__PUZZLE_DEV__` as false and esbuild removes the module,
+// so the global simply does not exist in a production bundle and every helper
+// here degrades to `null` rather than throwing.
+//
+// That split is exactly the right one for this harness. TIMINGS must come from
+// the production bundle (see benchmarks/runner.mjs) because that is what users
+// run. STRUCTURAL COUNTS — how many views re-rendered, how many of those
+// renders mutated nothing, how many component patches took the shallowEqual
+// bailout — are properties of the render algorithm, not of the build mode, and
+// are only observable where the instrumentation survives. Run the harness with
+// `--build-mode development` to collect them, and never quote that run's
+// milliseconds.
+// ---------------------------------------------------------------------------
+
+/** Counters worth differencing across a single op. */
+const PERF_KEYS = [
+	'renders',
+	'wastedRenders',
+	'dataRuns',
+	'domMutations',
+	'componentPropBailouts',
+	'componentPropReruns',
+	'storeFlushes',
+	'storeNotifications',
+];
+
+/** Frozen totals from the dev-only profiler, or null in a production build. */
+export function perfSnapshot() {
+	const perf = typeof globalThis === 'undefined' ? null : globalThis.__PUZZLE_PERF__;
+	return typeof perf?.snapshot === 'function' ? perf.snapshot() : null;
+}
+
+/**
+ * Difference a snapshot taken before an op against the totals now.
+ *
+ * Returns null when the profiler is absent (production) so callers can report
+ * "not measurable in this build" rather than a fabricated zero — a zero here
+ * and a real zero mean opposite things.
+ */
+export function perfDelta(before) {
+	const after = perfSnapshot();
+	if (!before || !after) return null;
+	const out = {};
+	for (const key of PERF_KEYS) out[key] = (after[key] ?? 0) - (before[key] ?? 0);
+	return out;
+}

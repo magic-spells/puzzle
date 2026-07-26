@@ -38,6 +38,12 @@ export const SCENARIO_DEFINITIONS = [
 			'select-row',
 			'swap-rows',
 			'remove-row',
+			// Behaviour gates, not measurements: each dispatches a REAL click at
+			// the first rendered row and throws unless it selects / removes. They
+			// exist so the handler A/B (?handlers=inline|stable) cannot ship a
+			// variant that is faster because it quietly stopped working.
+			'click-select',
+			'click-remove',
 			'append-1k',
 			'clear',
 		],
@@ -179,6 +185,11 @@ export function scenarioStats() {
 		records: local.records || 0,
 		views: local.views || 0,
 		scenario: activeScenario?.name || null,
+		// Scenario-specific extras. Absent for scenarios that do not report them,
+		// which is why they are null rather than 0 — see examples/stress/app/row-metrics.js.
+		handlers: local.handlers ?? null,
+		childDataRuns: local.childDataRuns ?? null,
+		perf: local.perf ?? null,
 	};
 }
 
