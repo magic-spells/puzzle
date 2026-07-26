@@ -237,6 +237,28 @@ export const OPS = [
 		expect: { records: 50000 },
 		note: 'fast-scroll drags the window across the whole list in 10 jumps; it is 10 window re-renders, not one op, and each jump re-queries + re-sorts the full 50k collection.',
 	},
+	// Adjacent to fast-scroll so groupOps collapses them into one select.
+	//
+	// A BEHAVIOUR GATE, not a measurement: one iteration, no warmup, and its
+	// milliseconds are meaningless — they are mostly the frames it waits between
+	// scrollTop writes. Scroll events COALESCE, so the event count is not
+	// deterministic and is deliberately absent from the counters; it is printed
+	// in the op's detail line instead.
+	{
+		id: 'virtual-list/native-scroll/50000',
+		label: 'native-scroll',
+		scenario: 'virtual-list',
+		params: { n: 50000 },
+		size: 50000,
+		iterations: 1,
+		warmup: 0,
+		prepare: ['clear', 'create-50k'],
+		op: 'native-scroll',
+		invariant: windowedInvariant,
+		preExpect: { records: 50000 },
+		expect: { records: 50000, vlGeometryOk: 1, vlWindowMatchesScroll: 1 },
+		note: 'native-scroll is a BEHAVIOUR GATE, not a measurement — ignore its timings. It writes scrollTop 10 times and never calls applyScroll, so the real @scroll path (which fast-scroll bypasses for determinism) is the only thing moving the window. The two counters are the assertions: the spacers still add up to the full list height, and the mounted window agrees with the FINAL scrollTop rather than being left a bucket behind. How many frames that convergence needed is in the detail line.',
+	},
 
 	// ── subscriptions: how much of the app wakes up for one write ───────────
 	// Both modes are the SAME op over the SAME data; only the child data()'s
@@ -585,6 +607,251 @@ export const OPS = [
 		warmup: 0,
 		expect: { lcRows: 1000 },
 		note: `click-select (${binding}) is a BEHAVIOUR GATE, not a measurement. ${binding === 'none' ? 'The none arm binds no handler at all, so it throws unless the click is INERT.' : 'It dispatches a real click and throws unless the selection flipped in state and in the DOM.'} Ignore its timings.`,
+	})),
+
+	// ── form-state: what a keystroke costs the rest of the form ─────────────
+	//
+	// Five entries, ADJACENT so groupOps() collapses them into one browser
+	// session and one scenario select: they share `{ n: 200 }` exactly.
+	//
+	// Every op installs BOTH probes — the two controlled-property write counters
+	// and the normalizedSchema counter — so no counter here is ever fabricated
+	// and the two typing arms carry identical instrument load. The consequence is
+	// that NONE of the timings below are clean: they all include the probe. The
+	// finding is counts-only. (`rerender-uncontrolled`, the arm that would have
+	// made the milliseconds mean something by rendering the same grid with plain
+	// text nodes, is not built.) The one number worth reading off the clock is
+	// the type-store minus type-local delta, and only because their instrument
+	// load is identical by construction.
+	//
+	// Each row is 12 elements: the row div, its label span, one input, one
+	// select and its 8 options.
+	...(() => {
+		const params = { n: 200 };
+		const size = 200;
+		const fields = 200;
+		const renders = 20;
+		const keystrokes = 200;
+		const common = {
+			scenario: 'form-state',
+			params,
+			size,
+			preExpect: { records: 1 },
+			invariant: (stats) =>
+				stats.mountedNodes === fields * 12
+					? null
+					: `form-state: ${stats.mountedNodes} live elements for ${fields} field rows (want ${fields * 12} — row + label + input + select + 8 options)`,
+		};
+		// The three counters every arm reports identically. Declared once so a
+		// drift in any arm reads as a drift, not as a differently-shaped expect.
+		const shape = { fsFields: fields, fsSelectOptions: 8, fsSchemaFields: 24, records: 1 };
+		return [
+			{
+				...common,
+				id: 'form-state/rerender/200',
+				label: 'rerender (clean)',
+				op: 'rerender',
+				expect: {
+					...shape,
+					fsKeystrokes: 0,
+					fsRenders: renders,
+					fsDataRuns: renders,
+					// THE HEADLINE. 20 re-renders in which no bound value moved:
+					// every one of the 200 inputs writes NOTHING (patchAttrs compares
+					// against the live DOM property, which is what makes a caret safe
+					// mid-typing) while every one of the 200 selects is re-asserted
+					// unconditionally, once per render.
+					fsInputValueWrites: 0,
+					fsSelectValueWrites: fields * renders,
+					fsSchemaNormalizations: 0,
+				},
+				note: 'rerender is the clean arm: 20 renders of 200 controlled inputs and 200 controlled selects with NO bound value changing. fsInputValueWrites must be exactly 0 and fsSelectValueWrites exactly 4,000 — the select is re-asserted after its options patch with no compare, so it pays a DOM property write per render forever. Timings include the probes and are incidental; the finding is counts-only.',
+			},
+			{
+				...common,
+				id: 'form-state/rerender-dirty/200',
+				label: 'rerender (dirty control)',
+				op: 'rerender-dirty',
+				expect: {
+					...shape,
+					fsKeystrokes: 0,
+					fsRenders: renders,
+					fsDataRuns: renders,
+					// THE CONTROL. Identical renders, except every bound value on
+					// every field genuinely differs. Without this, the zero above is
+					// indistinguishable from a write path that never fires at all.
+					fsInputValueWrites: fields * renders,
+					// TWO writes per select per render, not one — measured, and NOT
+					// what this arm was built expecting. A <select> is neither INPUT
+					// nor TEXTAREA, so patchAttrs's live-DOM compare does not cover
+					// it and its `value` falls through to the generic
+					// `oldAttrs[name] !== value` branch, which writes. Then
+					// reassertSelectValue writes the identical value AGAIN once the
+					// options have patched. The first write is redundant in every
+					// case: skipped when the value is unchanged, immediately redone
+					// when it is not.
+					fsSelectValueWrites: fields * renders * 2,
+					fsSchemaNormalizations: 0,
+				},
+				note: 'rerender-dirty is the CONTROL for rerender: the same 20 renders with both bound values on every field genuinely different, by swapping between two precomputed row arrays. fsInputValueWrites must be 4,000 here — a zero would mean the input write path is dead and rerender\'s zero proves nothing. fsSelectValueWrites is 8,000, DOUBLE the clean arm: a changed select value is written once by patchAttrs\'s generic branch and once again by reassertSelectValue after the options patch. So a select costs one redundant DOM property write per render when nothing changed, and one redundant write per render when something did.',
+			},
+			{
+				...common,
+				id: 'form-state/type-local/200',
+				label: 'type-local (setData)',
+				op: 'type-local',
+				expect: {
+					...shape,
+					fsKeystrokes: keystrokes,
+					fsRenders: keystrokes,
+					// ZERO. setData re-renders without ever re-running data(), which
+					// is the cheap path and half of the A/B.
+					fsDataRuns: 0,
+					fsInputValueWrites: 0,
+					fsSelectValueWrites: fields * keystrokes,
+					fsSchemaNormalizations: 0,
+				},
+				note: 'type-local drives 200 REAL input events into a field bound to the local layer, forcing flushUpdates() after each so the op is bounded by a count rather than by 200 frames of scheduler. data() never re-runs, yet all 200 selects are still re-asserted on all 200 renders: 40,000 HTMLSelectElement.value writes to type one sentence into an unrelated field.',
+			},
+			{
+				...common,
+				id: 'form-state/type-store/200',
+				label: 'type-store (record.update)',
+				op: 'type-store',
+				expect: {
+					...shape,
+					fsKeystrokes: keystrokes,
+					fsRenders: keystrokes,
+					fsDataRuns: keystrokes,
+					fsInputValueWrites: 0,
+					fsSelectValueWrites: fields * keystrokes,
+					// THREE per keystroke. primaryKey() for the immutable-pk guard,
+					// _collectErrors() for the §20 validation pass, then primaryKey()
+					// again inside Store.recordChanged(). normalizedSchema() rebuilds
+					// its 24-entry map from scratch every time; nothing memoizes it.
+					fsSchemaNormalizations: keystrokes * 3,
+				},
+				note: 'type-store is type-local\'s A/B partner: the same 200 real keystrokes, the same grid, the same probes, routed through record.update() + store.flush() instead of setData(). Its delta against type-local is the only ms comparison here that is fair, because the instrument load is identical by construction — and measured, that delta (+7ms, +5ms, +0ms, +2ms over four runs) sits at or below the run-to-run spread, so the whole store round trip is an upper bound of ~35us per keystroke rather than a measurement. The 40,000 select writes both arms pay swamp it. 600 normalizedSchema() calls for 200 single-field updates is 3 per keystroke, and none of them are memoized.',
+			},
+			{
+				...common,
+				id: 'form-state/type-event/200',
+				label: 'type-event (gate)',
+				op: 'type-event',
+				iterations: 1,
+				warmup: 0,
+				expect: {
+					...shape,
+					fsKeystrokes: 2,
+					fsRenders: 2,
+					fsDataRuns: 1,
+					fsInputValueWrites: 0,
+					fsSelectValueWrites: fields * 2,
+					fsSchemaNormalizations: 3,
+				},
+				note: 'type-event is a BEHAVIOUR GATE, not a measurement: two real input events, one per binding, each of which must reach state AND the DOM or the op throws. Both bindings are covered because both typing arms are measured, and an arm that quietly stopped working would otherwise just look fast. The caret position is READ and reported in detail; it is deliberately not a counter, because Blink short-circuits some identical value assignments and a passing caret check could mean the engine preserved it rather than the framework. Ignore its timings.',
+			},
+		];
+	})(),
+
+	// ── flip-churn: what N rows cost the D85 FLIP path ──────────────────────
+	//
+	// Three arms over the SAME rows and the SAME reorder — a single-step rotation,
+	// which moves every row's layout position while needing exactly one
+	// insertBefore, so the DOM move cost is a constant and the difference between
+	// the arms is flip.js.
+	//
+	// `shuffle-noflip` is the CONTROL and it is not decoration: the same probe is
+	// installed on it, gated on the same row elements, so its zeroes are a
+	// measurement (nothing read those rects) rather than a probe that stopped
+	// looking. Every arm is instrumented — the counts are exact, the milliseconds
+	// carry the probe, and the flip arm carries more of it than the control does
+	// (the wrapper is entered 2N times there and essentially never here), so the
+	// A/B is an upper bound rather than a clean subtraction.
+	...[
+		{
+			op: 'shuffle',
+			label: 'shuffle (flip)',
+			// The census of one reorder. flipMeasured is the CANDIDATE count, and
+			// candidates are every RETAINED keyed row carrying `flip` — not the rows
+			// that moved, and not the rows that animate. Here that is all 500, which
+			// is only obvious once beginFlip is read: it collects from the keyed
+			// patcher's pairs before anything has moved, so "did it move" is not a
+			// question it can ask yet. playFlip then re-measures every one of them,
+			// which is why a single reorder of 500 rows forces 1,000 rect reads.
+			expect: {
+				records: 0,
+				flipRows: 500,
+				flipArm: 1,
+				flipMeasured: 500,
+				flipAnimated: 500,
+				// Zero, and that is an assertion rather than an absence: a rotation
+				// moves every row a full row height, so nothing may fall under
+				// MIN_DELTA. A non-zero here means rows are being skipped that moved.
+				flipSkipped: 0,
+				// Nothing may be in flight when the op starts — the scenario quiesces
+				// leftovers with the raw handles first, so this is the assertion that
+				// it worked.
+				flipCancelled: 0,
+			},
+			note: 'shuffle rotates 500 flip rows by one position. Every counter is instrumented and exact; the milliseconds carry the probe. flipMeasured is the candidate count (every retained keyed flip row, moved or not) and playFlip re-measures all of them, so this is 1,000 forced rect reads for one reorder.',
+		},
+		{
+			op: 'shuffle-noflip',
+			label: 'shuffle (control)',
+			// THE CONTROL. Identical rows, identical rotation, no `flip` attribute
+			// anywhere in that template branch — so `hasFlip` is false and
+			// patchKeyedChildren never calls beginFlip at all.
+			expect: {
+				records: 0,
+				flipRows: 500,
+				flipArm: 0,
+				flipMeasured: 0,
+				flipAnimated: 0,
+				flipSkipped: 0,
+				flipCancelled: 0,
+			},
+			note: 'the CONTROL: the same 500 rows rotated the same way with no flip attribute, so beginFlip is never entered. All four flip counters must be 0 — and they are measured zeroes, since the probe is installed and gated on the same row elements. Subtract this arm from shuffle to price flip.js.',
+		},
+		{
+			op: 'interrupt',
+			label: 'interrupt (in-flight)',
+			// Four reorders issued back to back with no await, inside a 2,000ms flip
+			// duration, so reorder k>1 always finds all 500 flips still running.
+			expect: {
+				records: 0,
+				flipRows: 500,
+				flipArm: 1,
+				flipMeasured: 2000,
+				flipAnimated: 2000,
+				flipSkipped: 0,
+				// 3 x 500. The FIRST reorder cancels nothing (the op starts quiesced);
+				// every later one cancels the whole previous generation. This is the
+				// counter that exercises cancelTrackedFlip's evict-before-cancel order
+				// and playFlip's settle-callback identity re-check — a superseded
+				// animation's rejection must not evict its successor's WeakMap entry,
+				// and if it did, the next reorder would find nothing to cancel and
+				// this would read 1,000.
+				flipCancelled: 1500,
+			},
+			note: 'interrupt issues 4 rotations back to back with no await, inside the rows\' explicit 2,000ms flip duration, so each one begins while the previous flip is still in flight. flipCancelled of 1,500 is 3 x 500: the first reorder starts quiesced, every later one cancels the entire previous generation. Four rather than six because six landed on ~1,005ms and guard 4 rightly rejected it.',
+		},
+	].map((arm) => ({
+		id: `flip-churn/${arm.op}/500`,
+		label: arm.label,
+		scenario: 'flip-churn',
+		params: { n: 500 },
+		size: 500,
+		op: arm.op,
+		// Each row is 3 elements (the row div plus two spans), deliberately light:
+		// the question is forced layout per ROW, and heavier rows would dilute it
+		// with patch work both arms pay anyway.
+		invariant: (stats) =>
+			stats.mountedNodes === 1500
+				? null
+				: `flip-churn: ${stats.mountedNodes} live elements for 500 rows (want 1500)`,
+		expect: arm.expect,
+		note: arm.note,
 	})),
 
 	// loop-trap is deliberately absent. It is a CORRECTNESS exercise for the D121

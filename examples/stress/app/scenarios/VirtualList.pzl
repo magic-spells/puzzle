@@ -68,6 +68,20 @@ const OVERSCAN = 6; // extra rows above and below the viewport
 const VISIBLE = Math.ceil(VIEWPORT_H / ROW_H); // 13
 const WINDOW = VISIBLE + OVERSCAN * 2; // 25 rows mounted at a time
 
+/** Jumps per scroll burst. Shared by `fast-scroll` and `native-scroll`. */
+const SCROLL_STEPS = 10;
+
+/**
+ * How many frames `native-scroll` will wait for the event path to catch up
+ * before declaring that it did NOT converge.
+ *
+ * A cap rather than an unbounded wait, on purpose: the interesting answer is the
+ * frame COUNT, and an op that spins until it passes cannot tell "converged" from
+ * "I waited long enough". 60 frames is a full second of headroom against a
+ * ~17ms-per-bucket render, so hitting it is a finding, not a flake.
+ */
+const CONVERGE_FRAME_CAP = 60;
+
 export default class VirtualList extends PuzzleView {
   api = {
     name: 'virtual-list',
@@ -83,6 +97,12 @@ export default class VirtualList extends PuzzleView {
     this.ordered = [];
     this.start = 0;
     this.lastScroll = null;
+    this.lastNative = null;
+    // Window moves driven by applyScroll, counted for `native-scroll`'s detail
+    // line. A plain integer rather than a probe: the number has to survive into
+    // a production bundle, and one increment per BUCKET CHANGE (not per event)
+    // is far below anything the timing can notice.
+    this.scrollRenders = 0;
     this.unregister = null;
     // No safety gate here: windowing is exactly what makes 50k cheap, so the
     // scenario seeds its full requested size on mount.
@@ -143,6 +163,21 @@ export default class VirtualList extends PuzzleView {
   }
 
   /**
+   * The window start a given scrollTop implies.
+   *
+   * Extracted so `native-scroll` can assert CONVERGENCE — did the event path
+   * arrive at the right bucket? — using the exact arithmetic the handler uses,
+   * rather than a second copy that could drift and turn a real disagreement into
+   * a passing test (or the reverse).
+   */
+  startFor(scrollTop) {
+    const total = this.ordered.length;
+    const maxStart = Math.max(0, total - WINDOW);
+    const firstVisible = Math.floor(scrollTop / ROW_H);
+    return Math.max(0, Math.min(maxStart, firstVisible - OVERSCAN));
+  }
+
+  /**
    * Move the window if — and only if — the start bucket actually changed.
    * Scrolling within one row's worth of pixels must not trigger a render, or a
    * fast flick would re-render on every scroll event.
@@ -150,12 +185,10 @@ export default class VirtualList extends PuzzleView {
    * @returns {boolean} whether a re-render happened
    */
   applyScroll(scrollTop) {
-    const total = this.ordered.length;
-    const maxStart = Math.max(0, total - WINDOW);
-    const firstVisible = Math.floor(scrollTop / ROW_H);
-    const next = Math.max(0, Math.min(maxStart, firstVisible - OVERSCAN));
+    const next = this.startFor(scrollTop);
     if (next === this.start) return false;
     this.start = next;
+    this.scrollRenders += 1;
     this.refresh();
     return true;
   }
@@ -164,6 +197,7 @@ export default class VirtualList extends PuzzleView {
 
   async opRun(op) {
     if (op === 'fast-scroll') return this.fastScroll();
+    if (op === 'native-scroll') return this.nativeScroll();
 
     const store = this.ctx.store;
     const t0 = performance.now();
@@ -198,7 +232,7 @@ export default class VirtualList extends PuzzleView {
     const total = this.ordered.length;
     if (total === 0) throw new Error('[stress] virtual-list: nothing to scroll — seed rows first');
 
-    const steps = 10;
+    const steps = SCROLL_STEPS;
     const maxScroll = Math.max(0, total * ROW_H - VIEWPORT_H);
     let renders = 0;
     const t0 = performance.now();
@@ -222,12 +256,141 @@ export default class VirtualList extends PuzzleView {
     };
   }
 
+  /**
+   * The REAL `@scroll` path, end to end.
+   *
+   * `fastScroll` writes `scrollTop` AND calls `applyScroll()` by hand, so the
+   * asynchronous scroll event has never been the thing under measurement: the
+   * handler fires as well, and its `applyScroll` is always a second, no-op call
+   * on a bucket the op already moved. `native-scroll` writes `scrollTop` and
+   * then touches nothing — every window move has to come from the browser's own
+   * event.
+   *
+   * THIS IS A BEHAVIOUR GATE, NOT A TIMING MEASUREMENT. Scroll events coalesce
+   * (the browser fires them in "update the rendering", so two writes inside one
+   * frame collapse into one event), which makes the event count legitimately
+   * non-deterministic — it lives in `detail` and must never become a pinned
+   * counter. The milliseconds are mostly frame waits and mean nothing at all.
+   *
+   * What IS deterministic is where the window ends up, and that is the real
+   * unknown this op exists to settle. `applyScroll` is fully synchronous per
+   * event with no rAF and no throttle, and `data()` re-queries and re-sorts the
+   * FULL collection on every bucket change (~17ms per jump at 50k). Whether the
+   * event path CONVERGES on the final `scrollTop` — rather than being left a
+   * bucket behind — had never been tested.
+   *
+   * The convergence wait is capped and its frame count is reported, so
+   * "converged after N frames" stays distinguishable from "converged only
+   * because I waited long enough".
+   */
+  async nativeScroll() {
+    const viewport = this.refs.viewport;
+    if (!viewport) throw new Error('[stress] virtual-list: viewport ref is missing');
+    const total = this.ordered.length;
+    if (total === 0) throw new Error('[stress] virtual-list: nothing to scroll — seed rows first');
+
+    const steps = SCROLL_STEPS;
+    const maxScroll = Math.max(0, total * ROW_H - VIEWPORT_H);
+    let events = 0;
+    const countEvent = () => {
+      events += 1;
+    };
+    // A second listener on the same node. The framework's `@scroll` binding was
+    // attached at mount, so it runs FIRST and this observes an event the window
+    // move has already been driven by — it cannot change what is measured.
+    viewport.addEventListener('scroll', countEvent);
+
+    const rendersBefore = this.scrollRenders;
+    const t0 = performance.now();
+    let framesToConverge = 0;
+    let converged = false;
+    let finalTop = 0;
+    let wantStart = 0;
+
+    try {
+      for (let i = 0; i < steps; i += 1) {
+        // Between steps only. Awaiting after the LAST write would hand the event
+        // path a free frame and make the convergence count trivially zero.
+        if (i > 0) await nextFrame();
+        viewport.scrollTop = steps === 1 ? 0 : Math.round((maxScroll * i) / (steps - 1));
+      }
+
+      // Read the position back off the element rather than reusing what was
+      // written: the browser clamps to scrollHeight - clientHeight, and the
+      // assertion has to be against where the viewport ACTUALLY is.
+      finalTop = viewport.scrollTop;
+      wantStart = this.startFor(finalTop);
+      for (framesToConverge = 0; framesToConverge < CONVERGE_FRAME_CAP; framesToConverge += 1) {
+        if (this.start === wantStart) {
+          converged = true;
+          break;
+        }
+        await nextFrame();
+      }
+      if (this.start === wantStart) converged = true;
+    } finally {
+      viewport.removeEventListener('scroll', countEvent);
+    }
+
+    const wallMs = performance.now() - t0;
+    await afterPaint();
+    await settleFrames(1);
+
+    // Geometry, re-derived from the live DOM rather than from data(): the
+    // spacers are what the scrollbar believes, so they are what must add up.
+    const root = viewRoot(this);
+    const topPx = parseFloat(root?.querySelector('.vl-spacer-top')?.style.height || '0');
+    const bottomPx = parseFloat(root?.querySelector('.vl-spacer-bottom')?.style.height || '0');
+    const rowEls = root ? root.querySelectorAll('.kl-row') : [];
+    const measured = topPx + rowEls.length * ROW_H + bottomPx;
+    const geometryOk = Math.abs(measured - total * ROW_H) <= 0.5;
+
+    // And the window itself, read off the DOM: the first mounted row must be the
+    // record the final scrollTop asks for. `this.start` agreeing is not enough —
+    // that is scenario state, and the claim is about what is rendered.
+    const shownId = rowEls.length ? rowEls[0].querySelector('.kl-id')?.textContent?.trim() : null;
+    const wantId = this.ordered[wantStart] ? String(this.ordered[wantStart].id) : null;
+    const windowMatches = converged && shownId !== null && shownId === wantId;
+
+    this.lastNative = {
+      steps,
+      events,
+      renders: this.scrollRenders - rendersBefore,
+      framesToConverge,
+      converged,
+      geometryOk,
+      windowMatches,
+      finalTop,
+      wantStart,
+      shownId,
+      wantId,
+      wallMs,
+    };
+    this.lastScroll = null;
+
+    const verdict = converged
+      ? `converged after ${framesToConverge} frame${framesToConverge === 1 ? '' : 's'}`
+      : `DID NOT CONVERGE in ${CONVERGE_FRAME_CAP} frames — window at ${this.start}, scrollTop ${finalTop} wants ${wantStart}`;
+    return {
+      op: 'native-scroll',
+      ms: wallMs,
+      scriptMs: wallMs,
+      detail:
+        `native-scroll: BEHAVIOUR GATE — ${steps} scrollTop writes across ${total} records driven ONLY by the ` +
+        `native scroll event; ${events} events delivered (coalesced, not deterministic), ` +
+        `${this.scrollRenders - rendersBefore} window moves · ${verdict} · ` +
+        `geometry ${measured}px === ${total * ROW_H}px: ${geometryOk ? 'ok' : 'BROKEN'} · ` +
+        `first mounted row "${shownId}" vs "${wantId}" · ignore the timing, it is mostly frame waits`,
+    };
+  }
+
   async opReset() {
     this.rowOps.freshSeed(this.requestedRows());
     this.rowOps.selectSlot = 0;
     this.rowOps.selectedId = null;
     this.start = 0;
     this.lastScroll = null;
+    this.lastNative = null;
     if (this.refs.viewport) this.refs.viewport.scrollTop = 0;
     this.ctx.store.flush();
     await afterPaint();
@@ -309,16 +472,37 @@ export default class VirtualList extends PuzzleView {
       notes.push(`${this.lastScroll.renders}/${this.lastScroll.steps} scroll jumps moved the window`);
     }
 
+    if (this.lastNative) {
+      const n = this.lastNative;
+      notes.push(
+        n.converged
+          ? `native scroll converged after ${n.framesToConverge} frame(s), ${n.events} events`
+          : `NATIVE SCROLL DID NOT CONVERGE: scrollTop ${n.finalTop} wants window ${n.wantStart}, window is at ${this.start}`
+      );
+    }
+
     return { ok: true, detail: notes.join(' · ') };
   }
 
   opStats() {
-    return {
+    const stats = {
       // The headline: bounded by WINDOW no matter how many records exist.
       mountedNodes: this.windowElementCount(),
       records: this.rowOps.count(),
       views: Math.min(WINDOW, this.ordered.length) + 1,
     };
+    // Only after `native-scroll` has actually run. Emitting these for every op
+    // would put a fabricated 0 where a measured 0 means something else entirely —
+    // the same reason listener-churn withholds its listener counts from the
+    // uninstrumented arm. The event count and the frame count are deliberately
+    // NOT here: events coalesce and frames are timing, so both live in `detail`.
+    if (this.lastNative) {
+      stats.counters = {
+        vlGeometryOk: this.lastNative.geometryOk ? 1 : 0,
+        vlWindowMatchesScroll: this.lastNative.windowMatches ? 1 : 0,
+      };
+    }
+    return stats;
   }
 }
 </script>

@@ -756,15 +756,19 @@ mismatches, zero clamp rejections, exit 0. Wall time ~7 minutes per suite.
   `params-100`, `back-forward-100`, `supersede-50`) are deliberately absent —
   their durations are inputs and the clamp guard would reject them — so their
   counters come from `probe.mjs` runs instead, and `listener-churn/rerender` is
-  the only listener arm timed at both sizes. The three unimplemented scenarios
+  the only listener arm timed at both sizes. The two unimplemented scenarios
   in `examples/stress/README.md` obviously are not covered either. Add entries
   to `scenarios.mjs` — nothing else needs to change.
-- **The two newest op groups have no committed baseline.** `route-churn/*` and
-  `listener-churn/*` were added after `baseline.json` was last written, so their
-  `Δscript`/`Δpaint` columns read `—` and `compareCounters` has nothing to
-  compare against. Their `expect` blocks and invariants still assert every
-  structural counter on every run; only the baseline cross-check is missing
-  until someone runs `npm run bench:update`.
+- **The newest op groups have no committed baseline.** `route-churn/*`,
+  `listener-churn/*`, `flip-churn/*` and `virtual-list/native-scroll` were added
+  after `baseline.json` was last written, so their `Δscript`/`Δpaint` columns
+  read `—` and `compareCounters` has nothing to compare against. Their `expect`
+  blocks and invariants still assert every structural counter on every run; only
+  the baseline cross-check is missing until someone runs `npm run bench:update`.
+- **Two entries are behaviour gates whose timings mean nothing.**
+  `virtual-list/native-scroll` (1 iteration, no warmup) is mostly the frames it
+  waits between `scrollTop` writes, and every `flip-churn` arm carries its own
+  probe. Read their counters; ignore their milliseconds.
 - **`subscriptions` precision timing is unmeasurable**, not zero. It sits under
   the `performance.now()` ~100us clamp.
 
