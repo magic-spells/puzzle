@@ -94,23 +94,33 @@ store flush notifying ONE subscriber in 405 ms; the same op on the windowed list
 reported 28 renders / 114 mutations / 27 views, flush 2.1 ms. Batching, the
 pull-not-push design, and the shared view-id space all behave as specified.
 
-## Open question: zero-mutation child renders in the stress app
+## Resolved: the stress app's zero-mutation rows are TRUE positives
 
-On `examples/stress`, every mounted `ListRow` reported `DOM 0` / `wasted 1` /
-`100%` while its parent absorbed the mutations, which looked like a systematic
-mount-attribution fault in `mutationImpl` (`devperf.js:530`, which credits the
-innermost render mark still open and skips any already `ended`).
+`ListRow` views on `examples/stress` reported `DOM 0` / `wasted 1` / `100%`,
+which looked first like a mount-attribution fault and then like an open puzzle.
+It is neither — the profiler is correct.
 
-**A later run on `examples/photo-gallery` contradicts that.** There, every
-mounted `PhotoCard` records its OWN mutations — `DOM 19` each, `wasted 0` —
-alongside `GalleryView` at 72. So child mount mutations ARE attributed to the
-child on that path, and the attribution logic is not broken in general.
+`RowOps.freshSeed()` calls `store.resetFixtureSeed(STRESS_SEED)`, rewinding the
+deterministic fixture stream, so `create-Nk` regenerates rows with content
+IDENTICAL to whatever was already mounted. Those rows re-render, the patcher
+compares every value, finds nothing changed, and writes no DOM. A wasted render
+is exactly what that is.
 
-The `ListRow` case therefore has some other cause and is not yet diagnosed.
-Candidates: the rows were already mounted and genuinely re-rendered to nothing
-(a true positive, not a defect), or the shared-component path used by both list
-scenarios differs from an ordinary `{#for}` component mount. Do not act on the
-mount-attribution theory until this is reproduced and isolated.
+Every figure reconciles. Windowed list with `n` previously 1000: the 25 visible
+rows already existed and regenerate identically (25 wasted), `VirtualList` posts
+2 mutations — its two spacer heights, 36,000px → 360,000px — and `StressHome`
+posts 112 for the stats readout. Real-DOM list, same starting `n`: rows 1-1000
+regenerate identically (exactly 1,000 wasted) while rows 1,001-10,000 are fresh
+mounts that produce real mutations.
+
+This is [[DECISION-D121-DEV-PERFORMANCE-PROFILING]]'s premise demonstrated:
+`#commit` replaces the model layer and re-renders with no equality bailout, so
+identical data still costs a full render plus a full diff. The metric found it
+on first contact with a real app.
+
+Two earlier diagnoses in this card were wrong and were corrected in place. The
+lesson worth keeping: a surprising profiler reading is more often the fixture
+than the instrument.
 
 ## Confirmed: layouts and views render twice per navigation
 
