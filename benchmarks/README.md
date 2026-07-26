@@ -32,6 +32,8 @@ the comparison the stress lab exists to make.
 | `report.mjs` | medians, MAD, clamp detection, baseline delta, table rendering |
 | `baseline.json` | committed reference numbers. Structural counters are asserted against it; timings are informational. |
 | `probe.mjs` | the mirror image of `runner.mjs`: builds the same staged copy in **development** mode and hands the page to an arbitrary probe script. Counters only — see below. |
+| `probe-route-churn.mjs` | per-level render / `data()` / mutation counters for `route-churn`, plus a hard failure if the D121 detector fired |
+| `probe-listener-churn.mjs` | exact listener-call counts per arm, and the micro decomposition that prices the invoker pattern |
 
 ### Every path this harness writes to
 
@@ -530,6 +532,124 @@ hardest on, is the one op the stable spelling cannot help.
 
 ---
 
+## Route churn — what a committed navigation costs a reused ancestor
+
+Two ops, `route-churn/navigate-burst/100` and `route-churn/params-burst/100`.
+The full derivation, the per-level table and the mechanism live in
+`examples/stress/README.md`; this section covers what belongs to the harness.
+
+**Only the UNPACED arms are in the matrix, and that is a measurement decision
+rather than a stylistic one.** `route-churn`'s other ops run at a fixed
+navigations-per-second, so their duration is an input; worse, a 100-navigation
+op at 5/sec lands on 20,000ms, and guard 4 (whole-second clustering) would
+rightly reject it. The paced arms exist because a **development** build's D121
+runaway-render detector fires on fast navigation over a deep route tree —
+production has no detector, so the burst arms are both safe and honest here.
+
+| op | script ms | paint ms | task | other | live nodes | views |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `navigate-burst/100` | — | **25.2** | 27.3 | 22.0 | 20 | 7 |
+| `params-burst/100` | — | **17.1** | 20.2 | 16.7 | 20 | 7 |
+
+Both report no `scriptMs`: a navigation is not a synchronous flush, so the
+scenario measures wall time around the whole loop, exactly as `async-waterfall`
+does. MAD was 2–3% across 15 iterations.
+
+0.25ms per leaf-divergence navigation against 0.17ms for the params-only
+control. **Read that next to the counters, not instead of them:** 27 ancestor
+renders inside 0.25ms means each render is ~9µs, because these ancestors render
+one span and a `<Slot/>`. The finding is a multiplier on whatever a real app's
+layouts do per render.
+
+The asserted counters are the payload, and they are exact rather than
+statistical — properties of the router, not of the machine:
+
+| counter | `navigate-burst` | `params-burst` |
+| --- | ---: | ---: |
+| `rcAncestorRenders` | **2,700** (27/nav) | **2,100** (21/nav) |
+| `rcAncestorDataRuns` | 600 (6/nav) | 600 (6/nav) |
+| `rcAncestorMutations` | 500 — all at the divergence level | **0** |
+| `rcLayoutRenders` | 200 (2/nav) | 100 (1/nav) |
+| `rcLeafMounts` | 100 | **0** — the leaf instance is reused |
+
+`rcLeafMounts` is the assertion that keeps the control honest: if the
+params-only arm ever remounted its leaf it would not be a params-only arm.
+
+## Listener churn — pricing the invoker pattern
+
+Three arms over identical DOM: `churn`, `stable`, `none`. `rerender` is the
+uninstrumented timing arm; `count-listeners` is the same 20 renders with
+`Element.prototype`'s `addEventListener`/`removeEventListener` patched **by the
+scenario**, so its counts are exact and its milliseconds carry the probe. The
+two must never be compared across, the same split `formatters` uses for
+`count-intl`.
+
+Production medians of 15, 20 renders per op, uninstrumented arm:
+
+| n | `churn` | `stable` | `none` | churn − stable |
+| ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 74.4 | 40.2 | 45.7 | **34.2ms (46.0%)** |
+| 10,000 | 651 | 443 | 413 | **208ms (32.0%)** |
+
+`stable` and `none` are within noise of each other; at 1,000 rows `stable` reads
+lower than `none`, which is an instrument artefact (MAD 11%) rather than a
+result. Only the `churn` gap is readable.
+
+Structural counts over 20 renders of 10,000 rows, and they are the finding:
+
+| arm | `addEventListener` | `removeEventListener` | per render |
+| --- | ---: | ---: | ---: |
+| `churn` | 400,000 | 400,000 | 40,000 |
+| `stable` | **0** | **0** | **0** |
+| `none` | **0** | **0** | **0** |
+
+**Zero. The canonical Puzzle handler spelling rebinds nothing**, because
+`@click={ onSelect }` compiles to a per-instance cached arrow and never fails
+`patchAttrs`'s identity check. The invoker pattern's saving in idiomatic code is
+therefore exactly 0%.
+
+`probe-listener-churn.mjs` confirms that on `keyed-list` itself, by patching
+`Element.prototype` from the driver so no app change is needed:
+
+| `keyed-list/update-every-10th` | child `data()` runs | add | remove |
+| --- | ---: | ---: | ---: |
+| n=10,000 `handlers=inline` | 10,000 | **0** | **0** |
+| n=10,000 `handlers=stable` | 1,000 | **0** | **0** |
+
+All 10,000 rows re-evaluating and re-rendering, and not one listener rebound.
+
+`micro-listener-cost` prices the parts over the real rendered elements,
+batch-timed (per-round timing put the invoker arm under the `performance.now()`
+clamp, where it reported a flat 0.0ns — a floor artefact shaped like a result):
+
+| operation | per handler |
+| --- | ---: |
+| `removeEventListener` + `addEventListener` | ~200ns |
+| invoker property write | **~1.5ns** |
+| arrow allocation | ~4ns *(likely understated — escape analysis)* |
+
+So of the 208ms `churn` penalty at 10,000 rows, the DOM API is ~80ms — **~12% of
+that arm's render time and only ~38% of its own penalty**. The rest is the
+remainder of `setAttr`'s per-call work (it re-parses the event name on every
+call, walks the `LISTENERS` map, stores the handler) plus the closure allocation.
+**An invoker removes none of that** — `setAttr` is still entered whenever the
+handler identity changes; only the remove/add pair becomes a property write.
+
+**The answer is that it is not worth adopting.** Not because the effect is
+invisible, but because it is absent from the code people actually write, and
+because the shape that does pay is fixed better and more cheaply by spelling the
+handler cacheably — that recovers the whole 32% against the invoker's ~12%, with
+no framework change and no regression risk.
+
+`rerender` runs **20** renders, not 30. At 30 the churn arm landed at ~1,095ms
+and guard 4 rejected the sample set — 8 of 8 samples within 60ms of a whole
+second is indistinguishable from a throttled renderer. 20 puts it at ~650ms.
+This is the second time that guard has moved an op's parameters rather than its
+verdict; `async-waterfall`'s delay=35 was the first. `count-listeners` carries a
+3-iteration `CAP` (its counts are algorithmic, not statistical).
+
+---
+
 ## Production versus development
 
 Same harness, same machine, same headless Chromium, 15 iterations,
@@ -632,9 +752,19 @@ mismatches, zero clamp rejections, exit 0. Wall time ~7 minutes per suite.
 - **Not every stress op is covered.** `replace-all`, `append-1k` and
   `remove-row` exist in the app and are not in the matrix; `select-row` is in it
   only inside the handler A/B arms, never in the main `keyed-list` or
-  `virtual-list` groups. The nine unimplemented scenarios in
-  `examples/stress/README.md` obviously are not covered either. Add entries to
-  `scenarios.mjs` — nothing else needs to change.
+  `virtual-list` groups. `route-churn`'s paced arms (`navigate-100`,
+  `params-100`, `back-forward-100`, `supersede-50`) are deliberately absent —
+  their durations are inputs and the clamp guard would reject them — so their
+  counters come from `probe.mjs` runs instead, and `listener-churn/rerender` is
+  the only listener arm timed at both sizes. The three unimplemented scenarios
+  in `examples/stress/README.md` obviously are not covered either. Add entries
+  to `scenarios.mjs` — nothing else needs to change.
+- **The two newest op groups have no committed baseline.** `route-churn/*` and
+  `listener-churn/*` were added after `baseline.json` was last written, so their
+  `Δscript`/`Δpaint` columns read `—` and `compareCounters` has nothing to
+  compare against. Their `expect` blocks and invariants still assert every
+  structural counter on every run; only the baseline cross-check is missing
+  until someone runs `npm run bench:update`.
 - **`subscriptions` precision timing is unmeasurable**, not zero. It sits under
   the `performance.now()` ~100us clamp.
 

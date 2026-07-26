@@ -1,0 +1,615 @@
+<puzzle-view class="min-h-screen bg-ink text-fg">
+  <header class="border-b border-hairline">
+    <div class="max-w-6xl mx-auto px-6 py-5 flex items-baseline justify-between gap-6">
+      <div>
+        <h1 class="text-lg font-semibold tracking-tight text-fg">route-churn</h1>
+        <p class="mt-0.5 text-xs text-muted">{ blurb }</p>
+      </div>
+      <button class="h-8 px-3 rounded-md border border-hairline text-xs text-muted hover:text-fg shrink-0" @click={ backToLab }>&larr; stress lab</button>
+    </div>
+  </header>
+
+  <main class="py-6">
+    <div id="scenario-stage" class="w-full max-w-6xl mx-auto px-6">
+      <div class="flex flex-wrap items-center gap-2">
+        <button class={ opBtn } disabled={ busy } @click={ doNavigate }>navigate-100</button>
+        <button class={ warnBtn } disabled={ busy } @click={ doBurst }>navigate-burst-100</button>
+        <button class={ opBtn } disabled={ busy } @click={ doParams }>params-100</button>
+        <button class={ opBtn } disabled={ busy } @click={ doBackForward }>back-forward-100</button>
+        <button class={ opBtn } disabled={ busy } @click={ doSupersede }>supersede-50</button>
+        <button class={ plainBtn } disabled={ busy } @click={ doValidate }>validate</button>
+        <span class="ml-auto font-mono text-[11px] text-faint shrink-0">{ config }</span>
+      </div>
+
+      <div class="mt-3 rounded-xl border border-hairline bg-surface px-4 py-3 font-mono text-[11px] leading-relaxed text-muted whitespace-pre-wrap">{ result }</div>
+
+      <div class="mt-4 rounded-xl border border-hairline bg-surface overflow-hidden">
+        <div class="rc-tree px-4 py-3 flex items-center gap-2" data-rc-level="0">
+          <span class="rc-tick hidden">{ probe.tick }</span>
+          <Slot/>
+        </div>
+      </div>
+    </div>
+  </main>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { registerScenario } from '../stress-controller.js';
+import { RC_LEAF_COUNT, RC_PREFIX, rcLeafPath, rcParamPath } from '../rc-paths.js';
+import {
+  RC_LAYOUT_LEVEL,
+  RC_LEAF_LEVEL,
+  RC_TICK,
+  rcMetrics,
+  resetRcMetrics,
+  snapshotRcMetrics,
+  sumAncestors,
+} from '../rc-metrics.js';
+import { intParam, ms1, perfDelta, perfSnapshot, settleFrames, sleep, viewRoot } from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// route-churn — the reused root LAYOUT, and the host of the scenario API.
+//
+// THE QUESTION
+//
+// A committed navigation that keeps part of its route chain refreshes that
+// reused prefix TWICE, through two different mechanisms, and the framework has
+// never been asked how much that costs on a controlled tree:
+//
+//   pre-commit    router.js #navigate awaits `v.refresh({ params, route })` for
+//                 every reused ancestor. That runs data() AND renders — against
+//                 the slot children the ancestor is still holding, i.e. the OLD
+//                 sub-chain.
+//   post-commit   the whole chain is reassembled leaf-up and pushed back
+//                 through the reused prefix (applyParentUpdate → a slot-only
+//                 #renderNow that does NOT re-run data()). The reused root
+//                 layout is the mirror image: it takes the cascade FIRST and
+//                 its data() re-run second, via #refreshLogged.
+//
+// It was observed incidentally in examples/photo-gallery — AlbumView rendering
+// 6 times across a few clicks, 3 of them wasted. This scenario puts an exact
+// number on it.
+//
+// WHY THIS VIEW IS THE HOST
+//
+// RcLayout is mounted for the whole `/rc` subtree and survives every navigation
+// inside it, so it is the one place a scenario API can live without being
+// destroyed by the very churn it is driving. Home is not mounted at all while
+// route-churn is active (see ../rc-routes.js for why the subtree is a sibling
+// rather than a child).
+//
+// WHY THE PANEL IS STATIC WHILE AN OP RUNS
+//
+// This view is BOTH the instrument and one of the things being measured — it is
+// reused ancestor level 0, and every one of its renders is counted. So its
+// rendered output has to be CONSTANT for the duration of an op, or its own
+// chrome would show up as DOM mutations and destroy the zero-mutation
+// assertion. `result` and `busy` are instance fields read by data(); they are
+// written only AFTER the counters have been captured. `probe.tick` hangs one
+// level below the data object for the reason ../rc-metrics.js explains.
+// ---------------------------------------------------------------------------
+
+const OP_BTN =
+  'h-8 px-3 rounded-md border border-accent/40 bg-accent/10 font-mono text-xs text-accent hover:bg-accent/20 disabled:opacity-40';
+const PLAIN_BTN =
+  'h-8 px-3 rounded-md border border-hairline text-xs text-muted hover:text-fg disabled:opacity-40';
+// The burst arm is styled as a warning because in a DEVELOPMENT build it trips
+// the D121 runaway-render guard by construction and the tree stops updating.
+// That is the point of the button — but it should not look like a routine op.
+const WARN_BTN =
+  'h-8 px-3 rounded-md border border-warn/60 bg-warn/10 font-mono text-xs text-warn hover:bg-warn/20 disabled:opacity-40';
+
+/** Navigations per op. 100 for the three navigation arms, 50 for supersede. */
+const NAV_COUNT = 100;
+const SUPERSEDE_COUNT = 50;
+
+/**
+ * ~20 navigations/sec — and this pacing is NOT cosmetic.
+ *
+ * Each committed navigation makes every reused ancestor render twice (that is
+ * the finding), and almost all of those renders mutate nothing. That is
+ * character-for-character the signature D121's cross-frame runaway-render guard
+ * looks for: RUNAWAY_RENDER_LIMIT = 60 renders inside a 1000ms rolling window
+ * with RUNAWAY_WASTED_RATIO ≥ 0.9 wasted. Navigating back-to-back on this tree
+ * reaches ~250/sec and the detector fires — measured, in a development build:
+ *
+ *     [puzzle perf] stopped RcLevel4 after 60 renders in one second (98% wasted)
+ *     [puzzle] a routed child did not mount — does the parent view template
+ *              include a <Slot/>?
+ *
+ * The detector then SUPPRESSES that ancestor's renders, its <Slot/> stops
+ * updating, and the leaf never mounts. So the guard does not merely warn about
+ * fast navigation on a deep route tree — in development it breaks it.
+ *
+ * THE RATE THE GUARD ALLOWS IS DERIVABLE, AND IT IS LOW.
+ *
+ * Measured (production, no detector to distort it), the reused ancestor at
+ * depth `d` renders `d + 2` times per committed navigation — 7 for the deepest
+ * of five levels. So the guard's 60-renders-per-second limit is reached at
+ *
+ *     60 / (depth + 2)  navigations per second
+ *
+ * which is ~8.6/sec for this five-level chain, and ~20/sec for a one-level
+ * reused ancestor like photo-gallery's AlbumView. 20/sec — the rate the brief
+ * asked for — therefore trips it here, and 10/sec still trips it: both were
+ * tried, and both produced runs with levels 4 and 5 short of their expected
+ * render counts and most leaf mounts missing. 5/sec leaves real margin (level 5
+ * at ~35 renders/sec), so that is what the paced arms use.
+ *
+ * `navigate-burst-100` deliberately keeps the unpaced behaviour, and is the
+ * PRIMARY measurement — in PRODUCTION, where devperf (and therefore the
+ * detector) is compiled out entirely, so nothing distorts the counters and the
+ * clock is free to say something. The per-level counters in ../rc-metrics.js
+ * are production-visible precisely so that run can be the primary one.
+ */
+const NAV_INTERVAL_MS = 200;
+
+/** supersede attempts TWO navigations per iteration, so it paces at half the rate. */
+const SUPERSEDE_INTERVAL_MS = 400;
+
+/** Frames a single navigation is allowed before the op gives up and throws. */
+const NAV_TIMEOUT_FRAMES = 600;
+
+export default class RcLayout extends PuzzleView {
+  api = {
+    name: 'route-churn',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.busy = false;
+    this.result = 'No op has run yet. navigate-100 is the headline; params-100 is its control.';
+    this.unregister = null;
+    this.lastCounters = null;
+    this.lastPerf = null;
+    this.lastChrome = 0;
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  data() {
+    rcMetrics.dataRuns[RC_LAYOUT_LEVEL] += 1;
+    const delay = this.delay();
+    return {
+      busy: this.busy,
+      result: this.result,
+      opBtn: OP_BTN,
+      plainBtn: PLAIN_BTN,
+      warnBtn: WARN_BTN,
+      blurb:
+        'five nested ancestor levels + ' +
+        RC_LEAF_COUNT +
+        ' leaves · how many times does a REUSED ancestor render per committed navigation?',
+      config: `delay ${delay}ms · ${RC_LEAF_COUNT} leaves · 5 nested levels`,
+      probe: {
+        get tick() {
+          rcMetrics.renders[RC_LAYOUT_LEVEL] += 1;
+          return RC_TICK;
+        },
+      },
+    };
+  }
+
+  events = {
+    backToLab: () => {
+      // Deliberately NOT router.push: selectScenario is the one path every
+      // scenario switch takes, so leaving works the same way arriving did.
+      import('../stress-controller.js').then((m) => m.selectScenario('keyed-list', {}));
+    },
+    doNavigate: () => this.runFromPage('navigate-100'),
+    doBurst: () => this.runFromPage('navigate-burst-100'),
+    doParams: () => this.runFromPage('params-100'),
+    doBackForward: () => this.runFromPage('back-forward-100'),
+    doSupersede: () => this.runFromPage('supersede-50'),
+    doValidate: () => {
+      const verdict = this.opValidate();
+      this.result = `validate: ${verdict.ok ? 'PASS' : 'FAIL'} · ${verdict.detail}`;
+      this.refresh();
+    },
+  };
+
+  /** The in-page driver. `__STRESS__.run()` bypasses this and calls opRun directly. */
+  async runFromPage(op) {
+    if (this.busy) return;
+    // Set BEFORE the op, and re-render now: this view is a measured ancestor, so
+    // the busy repaint has to land outside beginMeasure()'s window or it shows up
+    // as layout-chrome mutation in the very run it is announcing.
+    this.busy = true;
+    this.refresh();
+    try {
+      const result = await this.opRun(op);
+      const verdict = this.opValidate();
+      this.result = `${result.detail}\nvalidate: ${verdict.ok ? 'PASS' : 'FAIL'} · ${verdict.detail}`;
+    } catch (err) {
+      this.result = `${op} FAILED: ${err?.message || err}`;
+      console.error('[stress]', err);
+    }
+    this.busy = false;
+    this.refresh();
+  }
+
+  // ---- parameters ---------------------------------------------------------
+
+  get router() {
+    return this.ctx.router;
+  }
+
+  /** The leaf loader delay, in ms. Read off the live route so it tracks the URL. */
+  delay() {
+    return intParam(this.route?.query?.delay ?? this.router?.current?.query?.delay, 0, 0, 2000);
+  }
+
+  /** Carry `?delay=` onto every path this scenario navigates to, or the arm resets itself. */
+  withQuery(path) {
+    const parts = [];
+    const delay = this.delay();
+    if (delay > 0) parts.push(`delay=${delay}`);
+    const navs = this.navCount(NAV_COUNT);
+    if (navs !== NAV_COUNT) parts.push(`navs=${navs}`);
+    return parts.length ? `${path}?${parts.join('&')}` : path;
+  }
+
+  // ---- ops ----------------------------------------------------------------
+
+  /**
+   * Navigations per op. `?navs=` overrides it — which exists so the render
+   * counters can be read BELOW the D121 threshold: at a small count the guard
+   * provably cannot have fired, so those counters are a property of the router
+   * alone. The default 100 is what the benchmark records.
+   */
+  navCount(fallback) {
+    return intParam(this.route?.query?.navs ?? this.router?.current?.query?.navs, fallback, 1, 1000);
+  }
+
+  async opRun(op) {
+    const navs = this.navCount(NAV_COUNT);
+    if (op === 'navigate-100') return this.runNavigations(op, navs, rcLeafPath, NAV_INTERVAL_MS);
+    // The unpaced arm. Its milliseconds are the only NAVIGATION TIMING in this
+    // scenario that is actually measured rather than set; its structural
+    // counters are only trustworthy in a production build, because in a
+    // development build it trips the D121 guard by construction (see
+    // NAV_INTERVAL_MS) and the guard then changes the very renders being counted.
+    if (op === 'navigate-burst-100') return this.runNavigations(op, navs, rcLeafPath, 0);
+    if (op === 'params-100') return this.runNavigations(op, navs, rcParamPath, NAV_INTERVAL_MS);
+    // The params-only CONTROL, unpaced — the counterpart to navigate-burst-100.
+    // `keep === chain.length` here, so the router takes its params-only branch
+    // and there is no applyParentUpdate cascade to double-render anything.
+    if (op === 'params-burst-100') return this.runNavigations(op, navs, rcParamPath, 0);
+    if (op === 'back-forward-100') return this.runBackForward(op, navs, NAV_INTERVAL_MS);
+    if (op === 'supersede-50') return this.runSupersede(op, this.navCount(SUPERSEDE_COUNT), SUPERSEDE_INTERVAL_MS);
+    throw new Error(`[stress] route-churn has no op "${op}"`);
+  }
+
+  /** Hold until `deadline`, so an op runs at a fixed rate rather than flat out. */
+  async paceTo(deadline) {
+    const wait = deadline - performance.now();
+    if (wait > 0) await sleep(wait);
+  }
+
+  /**
+   * Await a navigation the router does NOT hand back a promise for.
+   *
+   * push()/replace() return the navigation promise, but go()/back()/forward()
+   * in history mode delegate to `history.go(n)` and return undefined — the
+   * navigation arrives later, through the popstate handler. Polling the
+   * committed path is the only signal available, and it is a real one: #state
+   * is written inside the atomic commit window, so `current.path` changing IS
+   * the commit.
+   */
+  async waitForPath(path, label) {
+    for (let i = 0; i < NAV_TIMEOUT_FRAMES; i += 1) {
+      if (this.router.current?.path === path) return true;
+      await settleFrames(1);
+    }
+    throw new Error(
+      `[stress] route-churn: ${label} never reached ${path} (still at ${this.router.current?.path}) after ${NAV_TIMEOUT_FRAMES} frames`
+    );
+  }
+
+  /** Untimed precondition move. Throws rather than silently measuring the wrong tree. */
+  async gotoPath(path) {
+    if (this.router.current?.path === path) return;
+    await this.router.push(path);
+    await this.waitForPath(path, 'precondition');
+    await settleFrames(1);
+  }
+
+  /**
+   * Start the measured window: attach the per-level mutation observer and zero
+   * every counter. Returns the teardown, which MUST be called before any
+   * counter is read — takeRecords() drains what the observer has not delivered
+   * yet, because MutationObserver callbacks are microtasks and an op that
+   * finished on a synchronous path would otherwise read a short count.
+   */
+  beginMeasure() {
+    const root = viewRoot(this);
+    if (!root) throw new Error('[stress] route-churn: the layout has no DOM root to observe');
+
+    let chrome = 0;
+    const classify = (records) => {
+      for (const record of records) {
+        // A childList change that adds or removes a LEVEL element is that
+        // level's own arrival/departure, not its parent's business — attribute
+        // it to the child. Without this every leaf swap would be filed under
+        // level 5, which is the element the swap happens to land on.
+        let attributed = false;
+        if (record.type === 'childList') {
+          for (const list of [record.addedNodes, record.removedNodes]) {
+            for (const node of list) {
+              if (node.nodeType !== 1 || !node.hasAttribute?.('data-rc-level')) continue;
+              rcMetrics.mutations[Number(node.getAttribute('data-rc-level'))] += 1;
+              attributed = true;
+            }
+          }
+        }
+        if (attributed) continue;
+
+        const target = record.target;
+        const element = target.nodeType === 1 ? target : target.parentElement;
+        const owner = element?.closest?.('[data-rc-level]') ?? null;
+        if (owner) rcMetrics.mutations[Number(owner.getAttribute('data-rc-level'))] += 1;
+        // Outside the tree entirely: the layout's own header/panel chrome. It
+        // must stay at zero during an op or this view is measuring itself.
+        else chrome += 1;
+      }
+    };
+
+    const observer = new MutationObserver(classify);
+    observer.observe(root, { childList: true, subtree: true, characterData: true, attributes: true });
+    resetRcMetrics();
+    const perfBefore = perfSnapshot();
+
+    return () => {
+      classify(observer.takeRecords());
+      observer.disconnect();
+      this.lastChrome = chrome;
+      this.lastPerf = perfDelta(perfBefore);
+      this.lastCounters = snapshotRcMetrics();
+      return { chrome, perf: this.lastPerf, counters: this.lastCounters };
+    };
+  }
+
+  /** `count` committed pushes, each awaited to completion before the next starts. */
+  async runNavigations(op, count, pathFor, interval) {
+    await this.gotoPath(this.withQuery(pathFor(0)));
+    await settleFrames(2);
+
+    const end = this.beginMeasure();
+    let committed = 0;
+    const t0 = performance.now();
+    for (let i = 1; i <= count; i += 1) {
+      const path = this.withQuery(pathFor(i));
+      await this.router.push(path);
+      if (this.router.current?.path === path) committed += 1;
+      if (interval > 0) await this.paceTo(t0 + i * interval);
+    }
+    const wall = performance.now() - t0;
+    rcMetrics.commits = committed;
+    const measured = end();
+
+    if (committed !== count) {
+      throw new Error(
+        `[stress] route-churn ${op}: only ${committed} of ${count} navigations committed — the counters would be averaged over the wrong denominator`
+      );
+    }
+    return this.report(op, wall, measured, count, `${count} pushes`, interval);
+  }
+
+  /** Alternate back/forward across two adjacent history entries. */
+  async runBackForward(op, count, interval) {
+    const a = this.withQuery(rcLeafPath(0));
+    const b = this.withQuery(rcLeafPath(1));
+    await this.gotoPath(a);
+    await this.gotoPath(b);
+    await settleFrames(2);
+
+    const end = this.beginMeasure();
+    let committed = 0;
+    const t0 = performance.now();
+    for (let i = 0; i < count; i += 1) {
+      const back = i % 2 === 0;
+      const target = back ? a : b;
+      if (back) this.router.back();
+      else this.router.forward();
+      await this.waitForPath(target, back ? 'back()' : 'forward()');
+      committed += 1;
+      if (interval > 0) await this.paceTo(t0 + (i + 1) * interval);
+    }
+    const wall = performance.now() - t0;
+    rcMetrics.commits = committed;
+    const measured = end();
+
+    // Leave the history cursor where it started, so a second run behaves like the first.
+    if (this.router.current?.path !== b) {
+      this.router.forward();
+      await this.waitForPath(b, 'restore');
+    }
+    return this.report(op, wall, measured, count, `${count} pops (back/forward)`, interval);
+  }
+
+  /**
+   * Fire a navigation and supersede it before it can commit.
+   *
+   * The question this answers: does the doomed destination still run data()?
+   * `dataRuns[6] - leafMounts` is the answer, and it is exact — a superseded
+   * leaf is constructed, preloaded, and then destroyed without ever mounting.
+   */
+  async runSupersede(op, count, interval) {
+    await this.gotoPath(this.withQuery(rcLeafPath(0)));
+    await settleFrames(2);
+
+    const end = this.beginMeasure();
+    let committed = 0;
+    const t0 = performance.now();
+    for (let i = 0; i < count; i += 1) {
+      const doomed = this.withQuery(rcLeafPath(2 * i + 1));
+      const winner = this.withQuery(rcLeafPath(2 * i + 2));
+      // Both are started SYNCHRONOUSLY: the second push bumps the navigation
+      // token while the first is still awaiting its leaf's async data(), which
+      // is exactly the interruption a fast-clicking user produces.
+      const first = this.router.push(doomed);
+      const second = this.router.push(winner);
+      await Promise.allSettled([first, second]);
+      await settleFrames(1);
+      if (this.router.current?.path === winner) committed += 1;
+      if (interval > 0) await this.paceTo(t0 + (i + 1) * interval);
+    }
+    const wall = performance.now() - t0;
+    rcMetrics.commits = committed;
+    const measured = end();
+
+    if (committed !== count) {
+      throw new Error(
+        `[stress] route-churn ${op}: ${committed} of ${count} winners committed — the supersession did not resolve the way the op assumes`
+      );
+    }
+    const abandoned = measured.counters.dataRuns[RC_LEAF_LEVEL] - measured.counters.leafMounts;
+    if (abandoned <= 0) {
+      throw new Error(
+        `[stress] route-churn ${op}: no navigation was actually superseded (leaf data() runs ${measured.counters.dataRuns[RC_LEAF_LEVEL]}, mounts ${measured.counters.leafMounts}). The arm is measuring nothing.`
+      );
+    }
+    return this.report(op, wall, measured, count, `${count} superseded pairs`, interval);
+  }
+
+  // ---- reporting ----------------------------------------------------------
+
+  report(op, wall, measured, navs, what, interval) {
+    const c = measured.counters;
+    const ancestorRenders = sumAncestors(c.renders);
+    const ancestorDataRuns = sumAncestors(c.dataRuns);
+    const ancestorMutations = sumAncestors(c.mutations);
+    const per = (n) => Math.round((n / navs) * 100) / 100;
+
+    // A PACED op's duration is an input, not a measurement — say so on the line
+    // itself so the number can never be lifted out of context and quoted.
+    const clock =
+      interval > 0
+        ? `${ms1(wall)}ms at a PACED ~${Math.round(1000 / interval)}/sec (duration is an input, not a measurement)`
+        : `${ms1(wall)}ms unpaced (${Math.round((navs / wall) * 1000)}/sec)`;
+
+    const detail =
+      `${op} [delay=${this.delay()}ms]: ${what}, ${navs} committed in ${clock}\n` +
+      `  reused ancestors (layout + 5 levels): ${ancestorRenders} renders / ${ancestorDataRuns} data() runs ` +
+      `= ${per(ancestorRenders)} renders and ${per(ancestorDataRuns)} data() runs per navigation\n` +
+      `  ancestor renders that mutated NOTHING: ${ancestorRenders - ancestorMutations} of ${ancestorRenders} ` +
+      `(${ancestorMutations} ancestor DOM mutations, ${measured.chrome} layout-chrome mutations)\n` +
+      `  per level  renders [${c.renders.join(', ')}]  data() [${c.dataRuns.join(', ')}]  mutations [${c.mutations.join(', ')}]\n` +
+      `  leaf: ${c.dataRuns[RC_LEAF_LEVEL]} data() runs, ${c.leafMounts} mounts ` +
+      `(${c.dataRuns[RC_LEAF_LEVEL] - c.leafMounts} for destinations that never committed)` +
+      this.perfDetail();
+
+    return { op, ms: wall, detail };
+  }
+
+  perfDetail() {
+    const perf = this.lastPerf;
+    if (!perf) return '\n  framework counters unavailable (production build)';
+    return (
+      `\n  framework: ${perf.renders} renders (${perf.wastedRenders} wasted, ${perf.domMutations} DOM mutations)` +
+      ` · component patches: ${perf.componentPropBailouts} bailed out / ${perf.componentPropReruns} re-ran`
+    );
+  }
+
+  async opReset() {
+    await this.gotoPath(this.withQuery(rcLeafPath(0)));
+    resetRcMetrics();
+    this.lastCounters = null;
+    await settleFrames(2);
+    return { detail: `reset to ${rcLeafPath(0)}` };
+  }
+
+  async opWarmup() {
+    await this.runNavigations('navigate-100', 5, rcLeafPath, NAV_INTERVAL_MS);
+    await this.opReset();
+    return { detail: 'warmup: 5 paced navigations, then reset' };
+  }
+
+  // ---- verification -------------------------------------------------------
+
+  /**
+   * The chain on screen must be the chain the URL names: levels 0…6 present,
+   * in order, and the leaf showing the id the committed path asks for. An
+   * ancestor that silently stopped re-rendering is invisible from the DOM, so
+   * this checks the one thing that IS visible — that the navigation landed.
+   */
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const levels = [...root.querySelectorAll('[data-rc-level]')].map((el) =>
+      Number(el.getAttribute('data-rc-level'))
+    );
+    const want = [0, 1, 2, 3, 4, 5, 6];
+    if (levels.length !== want.length || levels.some((v, i) => v !== want[i])) {
+      return {
+        ok: false,
+        detail: `chain in the DOM is [${levels.join(', ')}], expected [${want.join(', ')}]`,
+      };
+    }
+
+    const path = this.router.current?.path ?? '';
+    const shown = root.querySelector('.rc-leaf')?.getAttribute('data-leaf') ?? null;
+    const bare = path.split('?')[0];
+    let expected = null;
+    if (bare.startsWith(`${RC_PREFIX}/leaf-`)) expected = bare.slice(`${RC_PREFIX}/leaf-`.length);
+    else if (bare.startsWith(`${RC_PREFIX}/p/`)) expected = bare.slice(`${RC_PREFIX}/p/`.length);
+    if (expected === null) {
+      return { ok: false, detail: `committed path "${path}" is not a route-churn leaf` };
+    }
+    if (shown !== expected) {
+      return { ok: false, detail: `URL says leaf "${expected}" but the DOM shows "${shown}"` };
+    }
+
+    const c = this.lastCounters;
+    const notes = [`chain 0…6 mounted in order · leaf "${expected}" matches the URL`];
+    if (c) {
+      notes.push(
+        `last op: ${sumAncestors(c.renders)} ancestor renders / ${sumAncestors(c.dataRuns)} data() runs over ${c.commits} navigations`
+      );
+    }
+    return { ok: true, detail: notes.join(' · ') };
+  }
+
+  opStats() {
+    const root = viewRoot(this);
+    const tree = root ? root.querySelector('.rc-tree') : null;
+    const c = this.lastCounters;
+    return {
+      mountedNodes: tree ? tree.querySelectorAll('*').length : 0,
+      records: 0,
+      // layout + 5 nested ancestors + leaf.
+      views: 7,
+      perf: this.lastPerf,
+      // Flattened to scalars because benchmarks/runner.mjs compares each counter
+      // with !== against the entry's `expect` — an array would never match.
+      counters: c
+        ? {
+            rcCommits: c.commits,
+            rcLeafMounts: c.leafMounts,
+            rcLeafDataRuns: c.dataRuns[RC_LEAF_LEVEL],
+            rcLayoutRenders: c.renders[RC_LAYOUT_LEVEL],
+            rcLayoutDataRuns: c.dataRuns[RC_LAYOUT_LEVEL],
+            rcAncestorRenders: sumAncestors(c.renders),
+            rcAncestorDataRuns: sumAncestors(c.dataRuns),
+            rcAncestorMutations: sumAncestors(c.mutations),
+            rcChromeMutations: this.lastChrome,
+            rcLeafMutations: c.mutations[RC_LEAF_LEVEL],
+          }
+        : null,
+    };
+  }
+}
+</script>

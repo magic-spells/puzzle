@@ -1,0 +1,75 @@
+<puzzle-view>
+  <div class="rc-leaf" data-rc-level="6" data-leaf={ leafId }>
+    <span class="rc-tick hidden">{ probe.tick }</span>
+    <span class="rc-leaf-id font-mono text-xs text-accent tabular-nums">{ leafId }</span>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { rcMetrics, RC_TICK, RC_LEAF_LEVEL } from '../rc-metrics.js';
+import { intParam, sleep } from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// The routed LEAF — chain level 6, and the only level that is genuinely fresh
+// on a leaf-divergence navigation.
+//
+// Unlike the ancestors, this view's output DOES change per navigation (it
+// renders its own id), which is what makes the DOM checkable against the URL:
+// validate() reads `[data-leaf]` and compares it with the committed path. An
+// ancestor that stopped re-rendering would be invisible; a leaf that stopped
+// would be caught immediately.
+//
+// ── data() is async BY SHAPE, always ───────────────────────────────────────
+//
+// The loader-delay arm (`?delay=0|10|50`) is what makes a navigation
+// interruptible, so a superseded navigation is even possible to stage. But
+// `async` is a property of the FUNCTION, not of the call, so this cannot be
+// "sync when delay is 0" — and that matters more than it looks: Store.
+// withTracking defers a KNOWN-ASYNC evaluation behind whatever async
+// evaluation is already in flight (the `async-waterfall` finding), and the
+// trigger is the AsyncFunction shape rather than the presence of an await.
+//
+// So `delay=0` measures "an async data() that waits for nothing", NOT "a
+// synchronous data()". Every number this scenario reports at delay=0 carries
+// one microtask hop per navigation that a sync-data() app would not pay. That
+// is stated rather than hidden, because it is exactly the kind of constant a
+// reader would otherwise assume away.
+//
+// The ANCESTORS are all sync, which is the realistic shape for a layout.
+// ---------------------------------------------------------------------------
+
+export default class RcLeaf extends PuzzleView {
+  async data(params) {
+    rcMetrics.dataRuns[RC_LEAF_LEVEL] += 1;
+
+    // The loader. Read off the frozen route snapshot rather than location, so a
+    // navigation that is still gating reads ITS OWN query and not the committed
+    // one (constellation/doc/DOC-SPEC.md §route snapshot, D47).
+    const delay = intParam(this.route?.query?.delay, 0, 0, 2000);
+    if (delay > 0) await sleep(delay);
+
+    return {
+      // The param leaf carries `:id`; the 50 static leaves carry their id in
+      // route meta. One view serves both arms so the two are otherwise
+      // identical — see ../rc-routes.js.
+      leafId: String(params?.id ?? this.route?.route?.meta?.leafId ?? '?'),
+      probe: {
+        get tick() {
+          rcMetrics.renders[RC_LEAF_LEVEL] += 1;
+          return RC_TICK;
+        },
+      },
+    };
+  }
+
+  /**
+   * A leaf that reaches mounted() is a leaf the user can see. A SUPERSEDED
+   * navigation's leaf runs data() and is then destroyed without ever getting
+   * here, so `dataRuns[6] - leafMounts` prices the abandoned work exactly.
+   */
+  mounted() {
+    rcMetrics.leafMounts += 1;
+  }
+}
+</script>

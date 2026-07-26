@@ -38,6 +38,17 @@
       </div>
     {/if}
 
+    {#if showBindingToggle}
+      <div class="flex flex-col gap-1">
+        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">binding</span>
+        <div class="flex gap-1">
+          <button class={ churnCls } disabled={ busy } @click={ setBinding('churn') }>churn</button>
+          <button class={ stableBindCls } disabled={ busy } @click={ setBinding('stable') }>stable</button>
+          <button class={ noneBindCls } disabled={ busy } @click={ setBinding('none') }>none</button>
+        </div>
+      </div>
+    {/if}
+
     {#if showModeToggle}
       <div class="flex flex-col gap-1">
         <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">mode</span>
@@ -109,7 +120,9 @@
 
   <!-- The scenario itself -->
   <div id="scenario-stage" class="mt-4 rounded-xl border border-hairline bg-surface overflow-hidden">
-    {#if isSubscriptions}
+    {#if isListenerChurn}
+      <ListenerChurn key={ stageKey } n={ n } binding={ binding } />
+    {:else if isSubscriptions}
       <Subscriptions key={ stageKey } mode={ mode } n={ n } m={ m } />
     {:else if isAsyncWaterfall}
       <AsyncWaterfall key={ stageKey } count={ n } delay={ delay } />
@@ -138,6 +151,7 @@ import DeepNest from '../scenarios/DeepNest.pzl';
 import Formatters from '../scenarios/Formatters.pzl';
 import Islands from '../scenarios/Islands.pzl';
 import KeyedList from '../scenarios/KeyedList.pzl';
+import ListenerChurn from '../scenarios/ListenerChurn.pzl';
 import LoopTrap from '../scenarios/LoopTrap.pzl';
 import Subscriptions from '../scenarios/Subscriptions.pzl';
 import VirtualList from '../scenarios/VirtualList.pzl';
@@ -187,6 +201,10 @@ const N_DEFAULTS = {
   'write-storm': 10000,
   islands: 100,
   formatters: 10000,
+  'listener-churn': 1000,
+  // route-churn's size is fixed by its route table (5 levels, 50 leaves); its
+  // only knob is the leaf loader delay.
+  'route-churn': 0,
   // loop-trap takes no size at all — `cap` is its only knob.
   'loop-trap': 0,
 };
@@ -212,6 +230,8 @@ const PARAM_FIELDS = {
     { id: 'descendants', label: 'descendants' },
   ],
   formatters: [{ id: 'n', label: 'rows (N)' }],
+  'listener-churn': [{ id: 'n', label: 'rows (N)' }],
+  'route-churn': [{ id: 'delay', label: 'loader ms' }],
   'loop-trap': [{ id: 'cap', label: 'hard cap' }],
 };
 
@@ -235,8 +255,13 @@ function readParams(scenario, query) {
   const raw = query || {};
   const mode = Array.isArray(raw.mode) ? raw.mode[0] : raw.mode;
   const handlers = Array.isArray(raw.handlers) ? raw.handlers[0] : raw.handlers;
+  const binding = Array.isArray(raw.binding) ? raw.binding[0] : raw.binding;
   return {
     mode: mode === 'fanout' ? 'fanout' : 'precision',
+    // listener-churn's three arms. `churn` is the DEFAULT because it is the
+    // shape the scenario exists to price; `stable` is what real Puzzle code
+    // actually compiles to, and `none` is the floor.
+    binding: binding === 'stable' ? 'stable' : binding === 'none' ? 'none' : 'churn',
     // The keyed-list handler A/B. `inline` is the DEFAULT and is what
     // benchmarks/baseline.json was recorded against, so an unqualified URL and
     // every existing baseline id keep meaning exactly what they meant before.
@@ -299,6 +324,7 @@ export default class StressHome extends PuzzleView {
       scenario,
       params.mode,
       params.handlers,
+      params.binding,
       params.n,
       params.m,
       params.delay,
@@ -354,6 +380,7 @@ export default class StressHome extends PuzzleView {
       isWriteStorm: scenario === 'write-storm',
       isIslands: scenario === 'islands',
       isFormatters: scenario === 'formatters',
+      isListenerChurn: scenario === 'listener-churn',
       isLoopTrap: scenario === 'loop-trap',
 
       // The keyed-list handler A/B. Only keyed-list implements both arms, so the
@@ -362,6 +389,14 @@ export default class StressHome extends PuzzleView {
       inlineCls: params.handlers === 'inline' ? ACTIVE_MODE_BTN : IDLE_MODE_BTN,
       stableCls: params.handlers === 'stable' ? ACTIVE_MODE_BTN : IDLE_MODE_BTN,
       handlers: params.handlers,
+
+      // listener-churn's three binding arms, scoped to that scenario for the
+      // same reason the handler toggle is scoped to keyed-list.
+      showBindingToggle: scenario === 'listener-churn',
+      churnCls: params.binding === 'churn' ? ACTIVE_MODE_BTN : IDLE_MODE_BTN,
+      stableBindCls: params.binding === 'stable' ? ACTIVE_MODE_BTN : IDLE_MODE_BTN,
+      noneBindCls: params.binding === 'none' ? ACTIVE_MODE_BTN : IDLE_MODE_BTN,
+      binding: params.binding,
 
       stageKey,
       mode: params.mode,
@@ -411,6 +446,11 @@ export default class StressHome extends PuzzleView {
     setHandlers: (handlers) => {
       this.runTask(`handlers=${handlers}`, () =>
         selectScenario(this.scenarioName(), { ...this.currentParams(), handlers })
+      );
+    },
+    setBinding: (binding) => {
+      this.runTask(`binding=${binding}`, () =>
+        selectScenario(this.scenarioName(), { ...this.currentParams(), binding })
       );
     },
     setParam: (key, event) => {
