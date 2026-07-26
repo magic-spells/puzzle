@@ -76,6 +76,12 @@ export class ViewNode {
 		// A pre-built child instance the ViewManager adopts (Router-preloaded
 		// views); null means construct a fresh instance on first encounter.
 		this.instance = null;
+		// SSG/static takeover preparation may pin a NON-routed instance too. The
+		// ownership flag keeps mount-failure recovery distinct from Router-owned
+		// routed instances, while takeoverFailed carries the same recoverable blank
+		// position as an ordinary first-mount rejection.
+		this.takeoverPreloaded = false;
+		this.takeoverFailed = false;
 	}
 
 	get isText() {

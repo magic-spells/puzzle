@@ -291,6 +291,7 @@ import {
 } from './routePath.js';
 import { walkRouteTree } from './routeTree.js';
 import { devtoolsRouteCommit } from '../devtools.js';
+import { preloadTakeoverComponents } from '../ssg/preload.js';
 
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
 // { entryKey: {x,y} } under a single key; capped so a long session can't grow it
@@ -1436,6 +1437,28 @@ export class Router {
 			childVnode = vnode;
 		}
 		const rootVnode = childVnode; // vnode for chain level 0
+
+		// The routed chain/layout are already preloaded above, but their render
+		// trees can contain non-routed async components. Only an SSG navigation-zero
+		// marker opts into waiting for those descendants: ordinary SPA navigation
+		// keeps ViewManager's fire-and-forget component mounting unchanged.
+		if (this.#container?.hasAttribute('data-puzzle-ssg')) {
+			let takeoverVnode = rootVnode;
+			if (layout) {
+				takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
+				takeoverVnode.instance = layout;
+			}
+			const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
+			// A newer navigation may supersede us while a nested component loads.
+			// None of these instances mounted, so release each one's tracked state
+			// explicitly before discarding the routed chain.
+			if (token !== this.#token) {
+				for (const instance of nestedInstances) instance.destroy();
+				for (const v of freshViews) v.destroy();
+				if (layout && !reuseLayout) layout.destroy();
+				return;
+			}
+		}
 
 		await this.#swap(token, cur, {
 			rawPath,

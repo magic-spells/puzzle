@@ -28,6 +28,7 @@ import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { mount } from '../views/viewManager.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
+import { preloadTakeoverComponents } from '../ssg/preload.js';
 
 /**
  * Mount a prerendered static page's interactive layer.
@@ -92,6 +93,13 @@ export async function mountStatic({
 	hydrateStore(ctx.store);
 
 	const { topVnode, instances } = await assembleChain(entry, ctx, routeSnapshot);
+
+	// A marked static page is replacing content-complete prerendered DOM. Prepare
+	// every nested non-routed component before that swap; an unmarked
+	// prerender:false page keeps ordinary fire-and-forget component mounting.
+	if (targetEl.hasAttribute('data-puzzle-static')) {
+		await preloadTakeoverComponents(topVnode, ctx);
+	}
 
 	// Initial paint must NOT animate — the content is already on screen (same posture
 	// as the SSG takeover: skipEnter every preloaded instance).

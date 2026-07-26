@@ -353,7 +353,11 @@ export class PuzzleView {
 		// §5) — just render the resolved model into the reserved position. This keeps
 		// the mount synchronous so the Router's COMMIT stays atomic (D19).
 		if (preloaded) {
-			this.#renderNow();
+			const takeoverTree = Object.prototype.hasOwnProperty.call(this, '__takeoverTree')
+				? this.__takeoverTree
+				: undefined;
+			delete this.__takeoverTree;
+			this.#renderNow(takeoverTree);
 		} else {
 			this.created();
 			const pending = this.refresh();
@@ -1096,7 +1100,7 @@ export class PuzzleView {
 		return (this.skeletonMinDuration ?? 0) - (Date.now() - this.#skeletonShownAt);
 	}
 
-	#renderNow() {
+	#renderNow(preparedTree = undefined) {
 		if (!this.#vm || this.#destroyed) return;
 		if (
 			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
@@ -1115,7 +1119,12 @@ export class PuzzleView {
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			devperfRenderPrepare(this);
 		}
-		const tree = showSkeleton ? this.renderSkeleton() : this.render();
+		const tree =
+			preparedTree !== undefined
+				? preparedTree
+				: showSkeleton
+					? this.renderSkeleton()
+					: this.render();
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			devperfRenderTreeBuilt(this);
 		}
