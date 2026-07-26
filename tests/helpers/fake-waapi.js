@@ -42,8 +42,7 @@ export function installFakeAnimate() {
 	};
 	// WAAPI getAnimations(): the still-RELEVANT animations targeting this element
 	// — running, or finished-and-filling (fill:'both' keeps a finished animation
-	// in effect); a cancelled one is gone. Backs animate.js's cancelAnimations()
-	// (the router's navigation-failure strand recovery).
+	// in effect); a cancelled one is gone.
 	Element.prototype.getAnimations = function () {
 		return animations.filter((a) => a.target === this && a.finishedState !== 'cancelled');
 	};

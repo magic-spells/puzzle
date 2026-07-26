@@ -283,7 +283,6 @@
  */
 
 import { ViewNode } from '../views/ViewNode.js';
-import { cancelAnimations } from '../views/animate.js';
 import { resolveHead, syncTitle } from '../head.js';
 import {
 	findShadowedPaths,
@@ -1032,7 +1031,7 @@ export class Router {
 		if (this.#pendingOut) {
 			const stalled = this.#pendingOut;
 			this.#pendingOut = null;
-			cancelAnimations(stalled.element);
+			stalled._cancelOutAnimation();
 		}
 		this.#pendingIndex = null;
 		// This navigation terminated without committing (guard block/failure, data
