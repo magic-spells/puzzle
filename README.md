@@ -21,11 +21,19 @@ is compiled out of production bundles, so a production page correctly reports no
 | **Store** | Record types with counts, a compact table of the active type (pk first, `_synced` as a badge), and a detail card that edits primitive fields through `edit:record` — applied by the runtime with the app's real `record.update()`, so §20 validation failures come back and render inline. An open card also keeps a per-flush change history (`field: old → new`). |
 | **Subscriptions** | The store's reverse index as a panel: subscription keys grouped into collections (`todo`) and records (`todo t2`), and for the selected key, **every view that re-renders when it changes** — the blast radius of a write. Click a subscriber to land on it in Views. This is the panel other frameworks structurally cannot build: it is a lookup, not an inference. |
 | **Router** | The live route card — pathname, route pattern, params, the frozen query snapshot — over the matched chain root→leaf, and a navigation history feed rebuilt from the event ring. |
+| **Performance** | Record a session and see what it cost. **Wasted renders lead** — passes where the framework re-ran a view, re-diffed its tree and changed no DOM at all, which is the one number here that is unambiguously a bug. Under the totals: a sortable per-view table (renders, wasted, DOM mutations, render/patch/data ms) with a re-render heatmap scaled to the busiest view, hatching on views that are mostly waste, and a loud section for `recursive-loop` / `runaway-rerender` detections. Click a row to land on that view in Views. |
 
-No panel polls. The bridge writes monotonic counters into the panel's own store
-(`connection.viewSeq` / `connection.flushSeq`, `pview.pulseAt`); a subscribed `data()`
-sees them move and schedules its own debounced request. A page with no Puzzle app never
-gets a request at all.
+No panel polls — with one deliberate exception. The bridge writes monotonic counters into
+the panel's own store (`connection.viewSeq` / `flushSeq` / `perfSeq`, `pview.pulseAt`); a
+subscribed `data()` sees them move and schedules its own debounced request. A page with no
+Puzzle app never gets a request at all.
+
+The exception is the Performance panel, which polls `snapshot:profile` once a second
+**while recording** and not otherwise. There is deliberately no per-render event: the page
+hook buffers 500 messages before the panel attaches and the panel's ring holds 200, so a
+render firehose would overrun both and evict the events every other panel depends on.
+Counters are kept in the runtime and pulled. The only thing pushed is `perf-warning`,
+which is rare and urgent.
 
 ## Architecture
 
@@ -100,15 +108,24 @@ lists literally, so a rename upstream breaks this repo's suite instead of silent
 breaking the panel.
 
 Events (runtime → extension): `hello` · `app-mounted` · `app-unmounted` ·
-`view-mounted` · `view-destroyed` · `flush` · `route-commit`
+`view-mounted` · `view-destroyed` · `flush` · `route-commit` · `perf-warning`
 
 Requests (extension → runtime): `snapshot:views` · `inspect:view` ·
 `snapshot:records` · `snapshot:subscriptions` · `snapshot:route` · `edit:record` ·
-`highlight:view` · `log:view` · `log:record`
+`highlight:view` · `log:view` · `log:record` · `perf:start` · `perf:stop` ·
+`snapshot:profile`
 
 Versions are exchanged in `hello`. A protocol version outside
 `SUPPORTED_PROTOCOL_VERSIONS` puts the panel in an explicit mismatch state rather than
 misrendering.
+
+**The message set grows additively, without a version bump.** Both ends already tolerate
+names they do not know — an unrecognized event falls through to the event ring, an
+unrecognized request comes back as a per-call `{ error }` — so a newer panel still renders
+everything an older runtime sends. That is why the profiler messages above are v1: bumping
+would have put every already-published app into the hard mismatch state and blanked all
+six panels, to buy nothing. A runtime with no profiler simply reports the failure inside
+the Performance panel and leaves the rest working.
 
 ## Development setup
 
@@ -176,14 +193,22 @@ What it does on load:
 - emits `hello` → `app-mounted`, registers its request handler, then replays one
   `view-mounted` per live view;
 - emits a `flush` every 2s with rotating keys, and one `route-commit` at 5s;
-- answers all nine request types — `snapshot:views` returns a **six-node, three-level**
+- answers all twelve request types — `snapshot:views` returns a **six-node, three-level**
   tree rebuilt from a flat parent-linked list (so views added at runtime appear in it),
   `snapshot:records` two types of five-plus fields each including a boolean and a number,
   and unknown types come back as `{ error }`;
 - **validates `edit:record`** before applying it, the way §20 does: an empty required
   string answers `{ error: 'text cannot be empty' }`, a primary-key change and an
   out-of-range number are refused, and a patch that fails anywhere is applied nowhere;
-- offers buttons to emit each event on demand, and a box that `highlight:view` outlines.
+- **profiles on demand**: `perf:start` begins accumulating a canned per-view cost every
+  500ms (deterministic, no `Math.random`, so sort order and heat buckets are reproducible),
+  `snapshot:profile` reports it as a pure read, and `perf:stop` freezes the counters
+  without discarding them. FixtureRow #3 is the pathological view — 24 renders per tick,
+  21 of them wasted — so the panel's default sort has an unambiguous top row. Flushes that
+  land during a recording become the report's store-side timeline;
+- offers buttons to emit each event on demand, two that fire the loop detector
+  (`runaway-rerender` and `recursive-loop`, counting up on repeat rather than duplicating),
+  and a box that `highlight:view` outlines.
 
 Expected panel behavior: the Connection view flips from "No Puzzle app detected" to
 "Puzzle app connected", the message list fills, and **Probe snapshot:views** answers
@@ -204,9 +229,9 @@ npx vitest run
 | `page-hook.test.js`    | Buffering, ordered replay, the 500-event cap, request/response id correlation, error paths, same-window filtering. |
 | `panel-glue.test.js`   | Port naming, envelope construction, id correlation under out-of-order answers, the request timeout, `{ error }`-result unwrapping, status events. |
 | `background.test.js`   | Port pairing by tab id, both routing directions, the replayed `listening` control, stale-port replacement, rejection of malformed ports. |
-| `fixture-page.test.js` | The real page hook driving the real fixture script: the event stream, every request's response shape, and the `edit:record` validation paths. |
-| `panel-app.test.js`    | The compiled panel bundle booting against a stub bridge that reproduces panel-glue's `{ error }`-to-rejection contract: the shell (connection states, view tracking, the event ring), **Views** (tree render, indentation, expand/collapse, selection → both state layers, subscriptions group, flush pulse, debounced re-snapshot, highlight/log requests, arrow keys), **Store** (type list, table shape, detail card, edit success, validation error, change history), **Subscriptions** (rail grouping, subscriber lists, cross-tab hand-off), and **Router** (card, chain, history feed). Skipped when `panel/dist/app.js` has not been built. |
-| `values.test.js`       | The pure projection helpers with no DOM: view-kind derivation, module-label redundancy rules, subscription-key parsing (the `type id` **space** separator — a colon regression fails here), the record differ, and history capping. |
+| `fixture-page.test.js` | The real page hook driving the real fixture script: the event stream, every request's response shape, the `edit:record` validation paths, and the profiler (report shape, accumulation, stop-keeps-counters, pushed warnings and their dedupe-by-count). |
+| `panel-app.test.js`    | The compiled panel bundle booting against a stub bridge that reproduces panel-glue's `{ error }`-to-rejection contract: the shell (connection states, view tracking, the event ring), **Views** (tree render, indentation, expand/collapse, selection → both state layers, subscriptions group, flush pulse, debounced re-snapshot, highlight/log requests, arrow keys), **Store** (type list, table shape, detail card, edit success, validation error, change history), **Subscriptions** (rail grouping, subscriber lists, cross-tab hand-off), **Router** (card, chain, history feed), and **Performance** (record/stop, the polling window opening and closing with it, the wasted-renders headline, column sorting, heat scaling, pushed warnings, the cross-link, and session reset on navigation). Skipped when `panel/dist/app.js` has not been built. |
+| `values.test.js`       | The pure projection helpers with no DOM: view-kind derivation, module-label redundancy rules, subscription-key parsing (the `type id` **space** separator — a colon regression fails here), the record differ, history capping, and the profiler projections (formatting, waste ratios, relative heat buckets, the tiebreak that stops a once-a-second table from reshuffling, and the warning merge). |
 
 There is no Chrome automation; loading the unpacked extension is a manual smoke test.
 

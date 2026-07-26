@@ -28,6 +28,17 @@
 	--color-ok: var(--dt-ok);
 	--color-warn: var(--dt-warn);
 	--color-danger: var(--dt-danger);
+	--color-danger-soft: var(--dt-danger-soft);
+
+	/*
+	 * Re-render heat ramp (Performance panel), cold → hot. Aliased like every
+	 * other token so `bg-heat-3` follows the data-theme flip; `values.js` names
+	 * these classes literally so Tailwind emits them.
+	 */
+	--color-heat-1: var(--dt-heat-1);
+	--color-heat-2: var(--dt-heat-2);
+	--color-heat-3: var(--dt-heat-3);
+	--color-heat-4: var(--dt-heat-4);
 
 	/*
 	 * Bridge for pieces from the puzzle-pieces registry (SplitPanel, CopyButton,
@@ -92,6 +103,34 @@
 	--dt-ok: #146c34; /*  6.51 /  5.97 /  5.46 */
 	--dt-warn: #8a5300; /*  6.33 /  5.81 /  5.31 */
 	--dt-danger: #a3211a; /*  7.53 /  6.90 /  6.31 */
+	/*
+	 * The alarm wash behind the Performance panel's warnings card — `danger` what
+	 * `accent-soft` is to `accent`. Text drawn ON it, composited over the three
+	 * tiers: ink 14.70 / 13.53 / 12.42, muted 5.96 / 5.49 / 5.04, danger
+	 * 6.36 / 5.85 / 5.37. `faint` would land at 3.96 on raised and is therefore
+	 * deliberately not used on this surface.
+	 */
+	--dt-danger-soft: rgba(163, 33, 26, 0.1);
+
+	/*
+	 * Heat ramp. These fill BARS, never text, and no text is ever drawn on top of
+	 * one — that is deliberate. Washing the row background by heat was the first
+	 * design, and the numbers killed it: at the alphas needed to read as a
+	 * heatmap, `muted` fell to 3.96:1 and `faint` to 3.11:1 on the raised tier,
+	 * blowing the >= 4.5 budget above. Confining heat to a bar keeps every text
+	 * ratio in this file exactly as documented.
+	 *
+	 * The bar target is therefore the NON-TEXT 3:1 (WCAG 1.4.11), measured
+	 * against canvas / surface / raised. The cold end is deliberately below it —
+	 * "barely rendered" should barely show — and the row always prints the count
+	 * beside the bar, so no reading depends on the fill alone.
+	 */
+	--dt-heat-1: #e0b46f; /*  1.92 /  1.76 /  1.61 — cold, intentionally faint */
+	--dt-heat-2: #cf8b32; /*  2.84 /  2.61 /  2.38 */
+	--dt-heat-3: #bd5a1c; /*  4.52 /  4.15 /  3.79 */
+	--dt-heat-4: #a3211a; /*  7.53 /  6.90 /  6.31 — the danger tone, at the top */
+	/* Hatch stripes over a hot bar: the canvas colour, so they read as cut-outs. */
+	--dt-heat-hatch: rgba(255, 255, 255, 0.55);
 }
 
 /*
@@ -112,6 +151,15 @@
 	--dt-ok: #8fd3a2; /* 10.16 /  9.31 /  7.89 */
 	--dt-warn: #ffd970; /* 13.04 / 11.95 / 10.12 */
 	--dt-danger: #ff958c; /*  8.40 /  7.70 /  6.52 */
+	/* On it: ink 12.69 / 11.57 / 9.69, muted 7.18 / 6.55 / 5.48, danger 6.50 / 5.93 / 4.97. */
+	--dt-danger-soft: rgba(255, 149, 140, 0.14);
+
+	/* Heat ramp — same non-text budget as light. See the note there. */
+	--dt-heat-1: #5c4a2a; /*  2.09 /  1.91 /  1.62 — cold, intentionally faint */
+	--dt-heat-2: #a3822f; /*  4.90 /  4.49 /  3.80 */
+	--dt-heat-3: #d98b4a; /*  6.55 /  6.01 /  5.09 */
+	--dt-heat-4: #ff958c; /*  8.40 /  7.70 /  6.52 — the danger tone, at the top */
+	--dt-heat-hatch: rgba(23, 24, 26, 0.55);
 }
 
 /* Standalone `puzzle dev` (no panel-glue, so no data-theme) follows the OS. */
@@ -129,6 +177,12 @@
 		--dt-ok: #8fd3a2;
 		--dt-warn: #ffd970;
 		--dt-danger: #ff958c;
+		--dt-danger-soft: rgba(255, 149, 140, 0.14);
+		--dt-heat-1: #5c4a2a;
+		--dt-heat-2: #a3822f;
+		--dt-heat-3: #d98b4a;
+		--dt-heat-4: #ff958c;
+		--dt-heat-hatch: rgba(23, 24, 26, 0.55);
 	}
 }
 
@@ -231,4 +285,55 @@
 	);
 	background-repeat: no-repeat;
 	background-position: 14.5px 0;
+}
+
+/*
+ * High-waste hatching on a heat bar (Performance panel).
+ *
+ * Heat already encodes HOW MUCH a view rendered. This encodes something
+ * different on the same bar — that most of it was wasted — and it must not do
+ * that with hue alone, because the two facts would then be one indistinguishable
+ * colour axis for a red-green colour-blind reader. Stripes are a second,
+ * orthogonal channel; the wasted COUNT and its percentage are printed in the row
+ * regardless, so the pattern is the third cue rather than the only one.
+ *
+ * Unlayered for the same reason `dt-pulse` is: it has to win over the layered
+ * `bg-heat-*` utility it is painted on top of.
+ */
+.dt-heat-hatch {
+	background-image: repeating-linear-gradient(
+		45deg,
+		transparent 0 3px,
+		var(--dt-heat-hatch) 3px 6px
+	);
+}
+
+/*
+ * The recording indicator. Slower and gentler than `dt-pulse` — that one is a
+ * one-shot reaction to a flush, this one runs for the whole session, so it
+ * breathes rather than flashes.
+ */
+@keyframes dt-recording {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
+}
+
+.dt-recording {
+	animation: dt-recording 1400ms ease-in-out infinite;
+}
+
+/*
+ * Reduced motion: the dot still has to say "recording", so it stays fully
+ * opaque instead of animating. Same bargain the pulse makes.
+ */
+@media (prefers-reduced-motion: reduce) {
+	.dt-recording {
+		animation: none;
+		opacity: 1;
+	}
 }

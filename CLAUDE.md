@@ -34,6 +34,22 @@ To develop against an unpublished framework checkout:
   framework repo is the authority; `protocol/constants.js` transcribes it and
   `tests/protocol.test.js` pins the names literally. Never reach into framework
   internals from this repo, and never assume a version — `hello` negotiates.
+- **The message set grows ADDITIVELY; do not bump `PROTOCOL_VERSION` to add one.**
+  Unknown events fall through `receive()`'s default case into the ring and unknown
+  requests fail per-call with `{ error }`, so both ends already tolerate names they do
+  not know. A bump puts every already-published app into the hard `MISMATCH` state and
+  blanks *every* panel — a far worse regression than one panel reporting that this
+  runtime has no profiler. `tests/protocol.test.js` pins v1 and the additive rule.
+- **Only the Performance panel polls, and only while recording.** SPEC §55 defines no
+  per-render event on purpose: the page hook buffers 500 messages pre-attach and the
+  panel ring holds 200, so a render firehose would overrun both and evict the events the
+  other panels live on. Render counts are therefore PULLED (`snapshot:profile`, once a
+  second while recording, zero requests otherwise) and only `perf-warning` is pushed. Do
+  not add a second polling path; use the counter-and-debounce mechanism instead.
+- **`resetSession` must destroy EVERY collection the bridge writes.** It is a per-file
+  list with no compiler help, and a forgotten line is silent: the stale collection
+  survives a page reload and reports the previous document's data under the new
+  document's session-scoped view ids. Adding a collection means adding a line there.
 - **Record subscription keys use a SPACE separator** (`type id`, from the store's
   `REC_SEP = ' '`), not a colon. Split once on the first space: a type can't contain a
   space, a primary key can. `values.js#subscriptionParts` is the single parser and is
@@ -78,8 +94,10 @@ test/fixture-page/  the synthetic bridge: the permanent protocol test double
 
 Panels never call `chrome.*` and never subscribe to the bridge directly. Messages land in
 the store via `bridge.js`, which bumps monotonic counters (`connection.viewSeq`,
-`flushSeq`, `pview.pulseAt`); a subscribed `data()` sees them move and schedules its own
-debounced request. This is why a page with no Puzzle app produces zero traffic.
+`flushSeq`, `perfSeq`, `pview.pulseAt`); a subscribed `data()` sees them move and
+schedules its own debounced request. This is why a page with no Puzzle app produces zero
+traffic — including from the Performance panel, whose polling only ever runs between a
+`perf:start` and the report that says recording stopped.
 
 ## Registry pieces
 

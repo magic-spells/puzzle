@@ -336,4 +336,246 @@ describe('fixture page ↔ page hook', () => {
 		const { result } = request(REQUESTS.SNAPSHOT_VIEWS);
 		expect(result.roots[0].children.map((n) => n.name)).toEqual(['FixtureHome']);
 	});
+
+	/* ---- profiler --------------------------------------------------------- */
+
+	/*
+	 * The profiler is PULLED, not pushed: perf:start flips a switch, the counters
+	 * accumulate in the page, and snapshot:profile reports them. The only thing
+	 * that travels as an event is a loop detection. These assertions pin both
+	 * halves of that split, because it is the part of the contract the panel's
+	 * polling design depends on.
+	 */
+
+	const profile = () => request(REQUESTS.SNAPSHOT_PROFILE).result;
+
+	it('answers snapshot:profile before any recording with a zeroed report', () => {
+		const report = profile();
+		expect(Object.keys(report).sort()).toEqual([
+			'durationMs',
+			'flushes',
+			'recording',
+			'totals',
+			'views',
+			'warnings',
+		]);
+		expect(report.recording).toBe(false);
+		expect(report.durationMs).toBe(0);
+		expect(report.views).toEqual([]);
+		expect(report.warnings).toEqual([]);
+		expect(report.totals).toEqual({
+			renders: 0,
+			wastedRenders: 0,
+			domMutations: 0,
+			dataRuns: 0,
+			storeFlushes: 0,
+			storeNotifications: 0,
+		});
+	});
+
+	it('answers perf:start and perf:stop with the plain ok result', () => {
+		expect(request(REQUESTS.PERF_START).result).toEqual({ ok: true });
+		expect(request(REQUESTS.PERF_STOP).result).toEqual({ ok: true });
+	});
+
+	it('starts counting immediately, so a snapshot right after start is not empty', () => {
+		request(REQUESTS.PERF_START);
+		const report = profile();
+
+		expect(report.recording).toBe(true);
+		expect(report.views.length).toBe(6);
+		expect(report.totals.renders).toBeGreaterThan(0);
+	});
+
+	it('reports every per-view counter the Performance panel reads', () => {
+		request(REQUESTS.PERF_START);
+		const row = profile().views.find((view) => view.id === 3);
+
+		expect(Object.keys(row).sort()).toEqual([
+			'causes',
+			'dataMs',
+			'domMutations',
+			'id',
+			'memoHits',
+			'memoMisses',
+			'module',
+			'name',
+			'patchMs',
+			'propsBailouts',
+			'propsReruns',
+			'renderMs',
+			'renders',
+			'wastedRenders',
+		]);
+		expect(row.name).toBe('FixtureRow');
+		expect(row.module).toBe('components/Row.pzl');
+		expect(Object.keys(row.causes).sort()).toEqual([
+			'data',
+			'manual',
+			'parent',
+			'route',
+			'slot',
+			'store',
+		]);
+	});
+
+	it('keeps totals consistent with the rows they summarize', () => {
+		request(REQUESTS.PERF_START);
+		const report = profile();
+		const sum = (field) => report.views.reduce((total, view) => total + view[field], 0);
+
+		expect(report.totals.renders).toBe(sum('renders'));
+		expect(report.totals.wastedRenders).toBe(sum('wastedRenders'));
+		expect(report.totals.domMutations).toBe(sum('domMutations'));
+	});
+
+	it('models one pathological view, so the default sort has something to find', () => {
+		request(REQUESTS.PERF_START);
+		const views = profile().views;
+		const worst = [...views].sort((a, b) => b.wastedRenders - a.wastedRenders)[0];
+
+		// #3 renders constantly and changes almost nothing — the case the panel
+		// exists to surface.
+		expect(worst.id).toBe(3);
+		expect(worst.wastedRenders / worst.renders).toBeGreaterThan(0.5);
+		// ...and at least one view that is busy but honest, so the table is not
+		// uniformly alarming.
+		expect(views.some((view) => view.renders > 0 && view.wastedRenders === 0)).toBe(true);
+	});
+
+	it('does not advance the counters just because you asked for them', () => {
+		request(REQUESTS.PERF_START);
+		const first = profile();
+		const second = profile();
+
+		// Reading a profile is a pure read. If it were not, the panel's own
+		// polling would inflate every number it displays.
+		expect(second.totals).toEqual(first.totals);
+		expect(second.views).toEqual(first.views);
+	});
+
+	it('keeps accumulating on its own clock while recording', async () => {
+		request(REQUESTS.PERF_START);
+		const first = profile().totals.renders;
+
+		// The fixture accumulates every 500ms; wait out one tick for real.
+		await new Promise((resolve) => setTimeout(resolve, 620));
+		const second = profile().totals.renders;
+
+		expect(second).toBeGreaterThan(first);
+	});
+
+	it('stops recording but keeps the counters readable', () => {
+		request(REQUESTS.PERF_START);
+		const during = profile();
+		request(REQUESTS.PERF_STOP);
+		const after = profile();
+
+		expect(after.recording).toBe(false);
+		// A stopped recording is still a report — this is what the panel shows
+		// after Stop, and it must not blank out.
+		expect(after.totals.renders).toBe(during.totals.renders);
+		expect(after.views).toHaveLength(during.views.length);
+	});
+
+	it('records the flushes that land during a recording, with notified as a COUNT', () => {
+		attach();
+		request(REQUESTS.PERF_START);
+		expect(profile().flushes).toEqual([]);
+
+		window.document.querySelector('[data-act="flush"]').click();
+		const report = profile();
+
+		expect(report.flushes).toHaveLength(1);
+		expect(report.flushes[0].keys).toEqual(['todo']);
+		// The flush EVENT sends `notified` as a list of ids; the profile reports a
+		// number. The panel tolerates both, and this is why.
+		expect(report.flushes[0].notified).toBe(1);
+		expect(typeof report.flushes[0].at).toBe('number');
+		expect(typeof report.flushes[0].durationMs).toBe('number');
+		expect(report.totals.storeFlushes).toBe(1);
+		expect(report.totals.storeNotifications).toBe(1);
+	});
+
+	it('ignores flushes that land while nothing is recording', () => {
+		attach();
+		window.document.querySelector('[data-act="flush"]').click();
+		request(REQUESTS.PERF_START);
+		expect(profile().flushes).toEqual([]);
+	});
+
+	it('PUSHES a perf-warning event, unlike everything else in the profile', () => {
+		attach();
+		const before = sent.length;
+		window.document.querySelector('[data-act="perf-warning"]').click();
+
+		const warning = sent.slice(before).find((m) => m.message?.type === EVENTS.PERF_WARNING);
+		expect(warning).toBeTruthy();
+		expect(warning.message.payload).toEqual({
+			kind: 'runaway-rerender',
+			viewId: 3,
+			name: 'FixtureRow',
+			detail: 'rendered repeatedly with no DOM change',
+			count: 1,
+		});
+	});
+
+	it('emits both warning kinds', () => {
+		attach();
+		window.document.querySelector('[data-act="perf-loop"]').click();
+
+		const warning = sent.filter((m) => m.message?.type === EVENTS.PERF_WARNING).at(-1);
+		expect(warning.message.payload.kind).toBe('recursive-loop');
+		expect(warning.message.payload.viewId).toBe(5);
+		expect(warning.message.payload.detail).toMatch(/subscribes to/);
+	});
+
+	it('folds warnings into the report as well as emitting them', () => {
+		attach();
+		request(REQUESTS.PERF_START);
+		window.document.querySelector('[data-act="perf-warning"]').click();
+
+		const warnings = profile().warnings;
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toMatchObject({ kind: 'runaway-rerender', viewId: 3, count: 1 });
+	});
+
+	it('counts a repeated detection up instead of adding a second row', () => {
+		attach();
+		request(REQUESTS.PERF_START);
+		const button = window.document.querySelector('[data-act="perf-warning"]');
+		button.click();
+		button.click();
+		button.click();
+
+		const warnings = profile().warnings;
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0].count).toBe(3);
+		// The event carries the running count too, so a panel that only ever sees
+		// the event still knows how bad it is.
+		expect(sent.filter((m) => m.message?.type === EVENTS.PERF_WARNING).at(-1).message.payload.count).toBe(3);
+	});
+
+	it('still emits a warning when nothing is recording', () => {
+		attach();
+		window.document.querySelector('[data-act="perf-warning"]').click();
+
+		expect(sent.some((m) => m.message?.type === EVENTS.PERF_WARNING)).toBe(true);
+		// Nowhere to fold it, but the push is what the panel debounces a pull off.
+		expect(profile().warnings).toEqual([]);
+	});
+
+	it('starts a fresh recording rather than resuming the previous one', () => {
+		attach();
+		request(REQUESTS.PERF_START);
+		window.document.querySelector('[data-act="perf-warning"]').click();
+		const first = profile().totals.renders;
+
+		request(REQUESTS.PERF_STOP);
+		request(REQUESTS.PERF_START);
+		const second = profile();
+
+		expect(second.totals.renders).toBe(first);
+		expect(second.warnings).toEqual([]);
+	});
 });

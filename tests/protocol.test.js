@@ -31,6 +31,7 @@ const SPEC_EVENTS = [
 	'view-destroyed',
 	'flush',
 	'route-commit',
+	'perf-warning',
 ];
 
 const SPEC_REQUESTS = [
@@ -43,6 +44,9 @@ const SPEC_REQUESTS = [
 	'highlight:view',
 	'log:view',
 	'log:record',
+	'perf:start',
+	'perf:stop',
+	'snapshot:profile',
 ];
 
 describe('protocol constants', () => {
@@ -64,6 +68,31 @@ describe('protocol constants', () => {
 		expect(EVENTS.ROUTE_COMMIT).toBe('route-commit');
 		expect(REQUESTS.SNAPSHOT_VIEWS).toBe('snapshot:views');
 		expect(REQUESTS.EDIT_RECORD).toBe('edit:record');
+	});
+
+	it('names the profiler messages the Performance panel speaks', () => {
+		expect(EVENTS.PERF_WARNING).toBe('perf-warning');
+		expect(REQUESTS.PERF_START).toBe('perf:start');
+		expect(REQUESTS.PERF_STOP).toBe('perf:stop');
+		expect(REQUESTS.SNAPSHOT_PROFILE).toBe('snapshot:profile');
+	});
+
+	/*
+	 * The profiler was added WITHOUT a version bump, on purpose. Both ends already
+	 * tolerate unknown names — an unknown event falls through to the ring, an
+	 * unknown request fails per-call — so a v2 would have bought nothing and cost
+	 * every already-published app a hard MISMATCH that blanks all six panels.
+	 */
+	it('keeps the profiler additive: still v1, and every older name intact', () => {
+		expect(PROTOCOL_VERSION).toBe(1);
+		expect(SUPPORTED_PROTOCOL_VERSIONS).toEqual([1]);
+
+		for (const name of ['hello', 'app-mounted', 'flush', 'route-commit']) {
+			expect(EVENT_TYPES).toContain(name);
+		}
+		for (const name of ['snapshot:views', 'inspect:view', 'edit:record']) {
+			expect(REQUEST_TYPES).toContain(name);
+		}
 	});
 
 	it('builds the SPEC §55 envelope', () => {
