@@ -237,6 +237,28 @@ export const OPS = [
 		expect: { records: 50000 },
 		note: 'fast-scroll drags the window across the whole list in 10 jumps; it is 10 window re-renders, not one op, and each jump re-queries + re-sorts the full 50k collection.',
 	},
+	// Adjacent to fast-scroll so groupOps collapses them into one select.
+	//
+	// A BEHAVIOUR GATE, not a measurement: one iteration, no warmup, and its
+	// milliseconds are meaningless — they are mostly the frames it waits between
+	// scrollTop writes. Scroll events COALESCE, so the event count is not
+	// deterministic and is deliberately absent from the counters; it is printed
+	// in the op's detail line instead.
+	{
+		id: 'virtual-list/native-scroll/50000',
+		label: 'native-scroll',
+		scenario: 'virtual-list',
+		params: { n: 50000 },
+		size: 50000,
+		iterations: 1,
+		warmup: 0,
+		prepare: ['clear', 'create-50k'],
+		op: 'native-scroll',
+		invariant: windowedInvariant,
+		preExpect: { records: 50000 },
+		expect: { records: 50000, vlGeometryOk: 1, vlWindowMatchesScroll: 1 },
+		note: 'native-scroll is a BEHAVIOUR GATE, not a measurement — ignore its timings. It writes scrollTop 10 times and never calls applyScroll, so the real @scroll path (which fast-scroll bypasses for determinism) is the only thing moving the window. The two counters are the assertions: the spacers still add up to the full list height, and the mounted window agrees with the FINAL scrollTop rather than being left a bucket behind. How many frames that convergence needed is in the detail line.',
+	},
 
 	// ── subscriptions: how much of the app wakes up for one write ───────────
 	// Both modes are the SAME op over the SAME data; only the child data()'s
@@ -731,6 +753,106 @@ export const OPS = [
 			},
 		];
 	})(),
+
+	// ── flip-churn: what N rows cost the D85 FLIP path ──────────────────────
+	//
+	// Three arms over the SAME rows and the SAME reorder — a single-step rotation,
+	// which moves every row's layout position while needing exactly one
+	// insertBefore, so the DOM move cost is a constant and the difference between
+	// the arms is flip.js.
+	//
+	// `shuffle-noflip` is the CONTROL and it is not decoration: the same probe is
+	// installed on it, gated on the same row elements, so its zeroes are a
+	// measurement (nothing read those rects) rather than a probe that stopped
+	// looking. Every arm is instrumented — the counts are exact, the milliseconds
+	// carry the probe, and the flip arm carries more of it than the control does
+	// (the wrapper is entered 2N times there and essentially never here), so the
+	// A/B is an upper bound rather than a clean subtraction.
+	...[
+		{
+			op: 'shuffle',
+			label: 'shuffle (flip)',
+			// The census of one reorder. flipMeasured is the CANDIDATE count, and
+			// candidates are every RETAINED keyed row carrying `flip` — not the rows
+			// that moved, and not the rows that animate. Here that is all 500, which
+			// is only obvious once beginFlip is read: it collects from the keyed
+			// patcher's pairs before anything has moved, so "did it move" is not a
+			// question it can ask yet. playFlip then re-measures every one of them,
+			// which is why a single reorder of 500 rows forces 1,000 rect reads.
+			expect: {
+				records: 0,
+				flipRows: 500,
+				flipArm: 1,
+				flipMeasured: 500,
+				flipAnimated: 500,
+				// Zero, and that is an assertion rather than an absence: a rotation
+				// moves every row a full row height, so nothing may fall under
+				// MIN_DELTA. A non-zero here means rows are being skipped that moved.
+				flipSkipped: 0,
+				// Nothing may be in flight when the op starts — the scenario quiesces
+				// leftovers with the raw handles first, so this is the assertion that
+				// it worked.
+				flipCancelled: 0,
+			},
+			note: 'shuffle rotates 500 flip rows by one position. Every counter is instrumented and exact; the milliseconds carry the probe. flipMeasured is the candidate count (every retained keyed flip row, moved or not) and playFlip re-measures all of them, so this is 1,000 forced rect reads for one reorder.',
+		},
+		{
+			op: 'shuffle-noflip',
+			label: 'shuffle (control)',
+			// THE CONTROL. Identical rows, identical rotation, no `flip` attribute
+			// anywhere in that template branch — so `hasFlip` is false and
+			// patchKeyedChildren never calls beginFlip at all.
+			expect: {
+				records: 0,
+				flipRows: 500,
+				flipArm: 0,
+				flipMeasured: 0,
+				flipAnimated: 0,
+				flipSkipped: 0,
+				flipCancelled: 0,
+			},
+			note: 'the CONTROL: the same 500 rows rotated the same way with no flip attribute, so beginFlip is never entered. All four flip counters must be 0 — and they are measured zeroes, since the probe is installed and gated on the same row elements. Subtract this arm from shuffle to price flip.js.',
+		},
+		{
+			op: 'interrupt',
+			label: 'interrupt (in-flight)',
+			// Four reorders issued back to back with no await, inside a 2,000ms flip
+			// duration, so reorder k>1 always finds all 500 flips still running.
+			expect: {
+				records: 0,
+				flipRows: 500,
+				flipArm: 1,
+				flipMeasured: 2000,
+				flipAnimated: 2000,
+				flipSkipped: 0,
+				// 3 x 500. The FIRST reorder cancels nothing (the op starts quiesced);
+				// every later one cancels the whole previous generation. This is the
+				// counter that exercises cancelTrackedFlip's evict-before-cancel order
+				// and playFlip's settle-callback identity re-check — a superseded
+				// animation's rejection must not evict its successor's WeakMap entry,
+				// and if it did, the next reorder would find nothing to cancel and
+				// this would read 1,000.
+				flipCancelled: 1500,
+			},
+			note: 'interrupt issues 4 rotations back to back with no await, inside the rows\' explicit 2,000ms flip duration, so each one begins while the previous flip is still in flight. flipCancelled of 1,500 is 3 x 500: the first reorder starts quiesced, every later one cancels the entire previous generation. Four rather than six because six landed on ~1,005ms and guard 4 rightly rejected it.',
+		},
+	].map((arm) => ({
+		id: `flip-churn/${arm.op}/500`,
+		label: arm.label,
+		scenario: 'flip-churn',
+		params: { n: 500 },
+		size: 500,
+		op: arm.op,
+		// Each row is 3 elements (the row div plus two spans), deliberately light:
+		// the question is forced layout per ROW, and heavier rows would dilute it
+		// with patch work both arms pay anyway.
+		invariant: (stats) =>
+			stats.mountedNodes === 1500
+				? null
+				: `flip-churn: ${stats.mountedNodes} live elements for 500 rows (want 1500)`,
+		expect: arm.expect,
+		note: arm.note,
+	})),
 
 	// loop-trap is deliberately absent. It is a CORRECTNESS exercise for the D121
 	// loop detector, which devperf compiles out of a production build entirely —

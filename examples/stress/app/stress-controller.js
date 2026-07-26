@@ -61,7 +61,12 @@ export const SCENARIO_DEFINITIONS = [
 			'select-row',
 			'swap-rows',
 			'append-1k',
+			// `fast-scroll` drives the window by hand for determinism;
+			// `native-scroll` writes scrollTop and lets the real @scroll event do
+			// all of it. The second is a behaviour gate — its milliseconds are
+			// frame waits, and its event count coalesces.
 			'fast-scroll',
+			'native-scroll',
 			'clear',
 		],
 	},
@@ -139,6 +144,16 @@ export const SCENARIO_DEFINITIONS = [
 		// `type-store` are the A/B on which state layer a keystroke lands in, and
 		// `type-event` is a behaviour gate, not a measurement.
 		ops: ['rerender', 'rerender-dirty', 'type-local', 'type-store', 'type-event'],
+	},
+	{
+		name: 'flip-churn',
+		label: 'Flip churn',
+		blurb: 'N rows through the D85 FLIP path — playFlip interleaves a rect read and an animate() per row',
+		// `shuffle-noflip` is the CONTROL: the identical rotation over the
+		// identical rows with no `flip` attribute anywhere, so every flip counter
+		// must read 0. `interrupt` issues its reorders back to back so each one
+		// begins while the previous flip is still in flight.
+		ops: ['shuffle', 'shuffle-noflip', 'interrupt'],
 	},
 	{
 		// LAST on purpose: the two ops here are deliberate pathologies, and the

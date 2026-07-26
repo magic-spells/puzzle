@@ -30,6 +30,7 @@ so any measurement has a copy-pasteable URL:
 /?scenario=formatters&n=10000
 /?scenario=listener-churn&n=10000&binding=churn
 /?scenario=form-state&n=200
+/?scenario=flip-churn&n=500
 /?scenario=loop-trap&cap=500
 ```
 
@@ -48,7 +49,8 @@ window.__STRESS__ = {
   ready,                  // Promise — resolves once the app has mounted
   scenarios,              // ['keyed-list', 'virtual-list', 'subscriptions', 'async-waterfall',
                           //  'deep-nest', 'write-storm', 'islands', 'formatters',
-                          //  'listener-churn', 'route-churn', 'form-state', 'loop-trap']
+                          //  'listener-churn', 'route-churn', 'form-state',
+                          //  'flip-churn', 'loop-trap']
   definitions,            // [{ name, label, blurb, ops }]
   async select(name, params),
   async reset(),
@@ -165,7 +167,7 @@ by hand. The measured comparison, and what it proves about `shallowEqual`, is in
 a direct A/B against `keyed-list`.
 
 Ops: `create-1k`, `create-10k`, `create-50k`, `update-every-10th`, `select-row`,
-`swap-rows`, `append-1k`, `fast-scroll`, `clear`.
+`swap-rows`, `append-1k`, `fast-scroll`, `native-scroll`, `clear`.
 
 The comparison is apples-to-apples by construction:
 
@@ -192,6 +194,55 @@ deterministic rather than dependent on frame timing.
 window is capped at 25 rows, so anything above ~180 elements means windowing
 broke. Also a spacer-geometry failure: `topPx + rendered + bottomPx` must equal
 `total × 36px` exactly, or the scrollbar is lying about how much list there is.
+
+### `native-scroll` — the real `@scroll` path, which `fast-scroll` bypasses
+
+`fast-scroll`'s directness has a consequence: the `@scroll` handler fires *too*,
+so `applyScroll` runs twice per jump and the second call is always a no-op on a
+bucket the op has already moved. **The asynchronous event path has therefore
+never been the thing under measurement.** `native-scroll` writes `scrollTop` ten
+times, awaits a frame between writes, and then touches nothing — every window
+move has to come from the browser's own event.
+
+It is a **behaviour gate, not a timing measurement** (`iterations: 1`,
+`warmup: 0`). Its milliseconds are mostly the frames it waits between writes and
+mean nothing. Scroll events also **coalesce** — the browser fires them during
+"update the rendering", so two writes inside one frame collapse into one event —
+which makes the event count legitimately non-deterministic. It is printed in the
+op's `detail` line and is deliberately **not** a pinned counter.
+
+Two things about it *are* deterministic, and they are the assertions:
+
+| counter | claim |
+| --- | --- |
+| `vlGeometryOk` | `topPx + rendered × 36 + bottomPx === total × 36` (within 0.5px) after the burst settles |
+| `vlWindowMatchesScroll` | the mounted window agrees with the **final** `scrollTop` — the first rendered row is the record that scroll position asks for |
+
+The second one was the actual unknown. `applyScroll` is fully synchronous per
+event, with no rAF and no throttle, and `data()` re-queries and re-sorts the full
+collection on every bucket change — ~17ms per jump at 50,000 records, which is
+longer than a frame. Nothing in the design guarantees the window is not left a
+bucket behind.
+
+**It converges, in one frame.** Measured at 50,000 records in a production
+build: 10 `scrollTop` writes produced **9 scroll events** (the first write is
+`0` on an already-zero scroll position, so it fires nothing), **9 window moves**,
+and the window agreed with the final `scrollTop` after **1 frame** — the frame in
+which the last event was delivered. Not one event was coalesced away at one
+write per frame, and no jump was skipped.
+
+The convergence wait is capped at 60 frames and the count it actually needed is
+reported, so "converged after 1 frame" stays distinguishable from "converged only
+because the op waited long enough". Hitting the cap would be a finding, not a
+flake.
+
+**What a bad result looks like:** `vlWindowMatchesScroll` reading 0 — the window
+settled on a stale bucket, which means a synchronous per-event recompute cannot
+keep up with the events and the handler needs coalescing of its own.
+`vlGeometryOk` reading 0 means the spacers stopped describing the list, which the
+`validate()` geometry check would also catch. A `detail` line reporting far fewer
+than 9 events means the browser coalesced writes the op assumed were separate,
+and the 9 window moves would no longer be a meaningful count.
 
 ### The measured comparison
 
@@ -1012,8 +1063,211 @@ which case the number should be 0 and this table needs rewriting. `validate()`
 also fails outright if the store has storage configured, because every flush
 would then serialize the whole store and the schema counts would stop meaning
 what they say.
+## Scenario 12 — `flip-churn`
 
-## Scenario 12 — `loop-trap`
+**Probes:** the one place the D85 FLIP implementation interleaves layout reads
+and layout writes, and what that costs once N rows go through it at once.
+
+`client-runtime/views/flip.js`'s `beginFlip()` is properly two-phase and says so
+in its own comment: it measures *every* candidate in one loop, then cancels
+in-flight flips in a second loop, because cancelling drops the transform and
+later candidates must still be able to read their mid-flight rects.
+
+`playFlip()` does not maintain that separation. Per element it reads
+`getBoundingClientRect()`, reads `getComputedStyle().transform`, then writes
+`el.animate()` — read, write, read, write, N times. Nothing had ever put a large
+N through it.
+
+500 rows. Ops: `shuffle`, `shuffle-noflip`, `interrupt`.
+
+| op | what it does | what it measures |
+| --- | --- | --- |
+| `shuffle` | one reorder of 500 rows carrying `flip={ duration: 2000 }` | `flipMeasured`, `flipAnimated`, `flipSkipped` — the census of what flip.js did |
+| `shuffle-noflip` | **the control.** The identical rows, reordered identically, with no `flip` attribute anywhere | all four flip counters must be 0 |
+| `interrupt` | 4 reorders back to back with no `await` between them | `flipCancelled` — `cancelTrackedFlip`'s evict-before-cancel discipline, and playFlip's settle-callback identity re-check |
+
+**The reorder is a single-step rotation**, and both properties that makes it have
+are load-bearing. Every row's layout position moves by exactly one row height, so
+every candidate clears `MIN_DELTA` and the animated count is `N` by construction
+— no fixed points, and none when the rotation is applied four times either, so
+`interrupt`'s counters are arithmetic rather than a record of where rows happened
+to land. And the keyed patcher needs exactly **one** `insertBefore` to produce it
+(moving back to front, only the wrapped row is out of place), so the DOM move
+cost is a constant while the flip cost is `O(N)`. It is a rotation, not a random
+shuffle; the op keeps the name because it is the reorder arm.
+
+**The control is a second template branch, not a falsy `flip` value.**
+`flip={ enabled && opts }` is the documented way to disable a row's flip and it
+would guarantee an identical vnode shape in one place — but the attribute *key*
+would still be present, so `patchKeyedChildren`'s `hasFlip` check would fire,
+`beginFlip` would be **called**, and the control would pay a full `O(rows)`
+candidate scan before bailing. A control that pays part of what it is controlling
+for understates the answer. The price of two branches is that switching arms
+remounts every row, which each op settles untimed before it measures anything.
+
+Both arms carry the same probe, gated on the same row elements, so the control's
+zeroes are a measurement — nothing read those rects — rather than a probe that
+stopped looking.
+
+### Flip is 99% of the reorder
+
+Production medians, 15 iterations:
+
+| arm | script | MAD |
+| --- | ---: | ---: |
+| `shuffle` (flip) | **68.5ms** | 1% |
+| `shuffle-noflip` (control) | **0.80ms** | 0% |
+| difference — flip.js | **67.7ms** | **98.8%** |
+
+The same 500 rows, the same rotation, the same single `insertBefore`. Reordering
+them costs 0.8ms; animating that reorder costs **eighty-five times** as much
+again — **135µs per row**, for a row that is three elements and moves 36px.
+
+The flip arm's milliseconds carry the probe and the control's essentially do not
+(the `getBoundingClientRect` wrapper is entered 1,000 times in one arm and never
+in the other), so 67.7ms is an upper bound rather than a clean subtraction. The
+wrapper is a `WeakSet` lookup and a `Map` read-write; 1,000 of them are a
+fraction of a millisecond against a delta of 68.
+
+### The cost is forced layout and style, not the framework's JavaScript
+
+The CDP renderer decomposition is where this scenario earns its keep, because the
+in-page clock alone would have been read as "flip.js is slow":
+
+| arm | task | layout | style | other (framework JS) |
+| --- | ---: | ---: | ---: | ---: |
+| `shuffle` (flip) | 193ms | **92.3ms** | **54.6ms** | 45.9ms |
+| `shuffle-noflip` (control) | 6.05ms | 0.31ms | 0.06ms | 5.66ms |
+| ratio | 32× | **~300×** | **~900×** | 8.1× |
+
+**76% of the flip arm's main-thread time is the engine reflowing and restyling**
+(146.9ms of 193ms), against 6% for the control. The framework's own JavaScript
+grows by 8×; layout grows by ~300× and style by ~900× — the control's
+0.06ms makes that last ratio coarse, and the order of magnitude is the point.
+This is the
+read/write interleave being paid for, not slow framework code — `playFlip` reads
+a rect, starts an animation (dirtying style), reads the next rect (forcing style
+and layout again), and repeats N times.
+
+`beginFlip`'s discipline is exactly what avoids this in the First phase: N
+consecutive reads with nothing written between them force layout **once**. The
+Last phase does not have that property.
+
+### `flipMeasured` is the candidate count, and candidates are every retained row
+
+This is the count worth reading carefully, because "500" is not the obvious
+answer to "how many rows did flip measure".
+
+A candidate is a **retained keyed row with `flip` enabled and a live old element**
+— not a row that moved, and not a row that will animate. `beginFlip` collects
+them from the keyed patcher's `pairs` *before anything has moved*, so "did it
+move" is not a question it can ask yet. Fresh mounts have no old counterpart and
+removed rows never appear in `pairs`, so both exclusions fall out by
+construction; everything else is in.
+
+| one reorder of 500 rows | count |
+| --- | ---: |
+| candidates measured by `beginFlip` (First) | 500 |
+| re-measured by `playFlip` (Last) | 500 |
+| **forced rect reads** | **1,000** |
+| animated (delta ≥ `MIN_DELTA`) | 500 |
+| skipped under `MIN_DELTA` | 0 |
+
+So a flip reorder reads every candidate's rect **twice**, and the probe cannot
+tell the two phases apart from the outside — a wrapper on
+`getBoundingClientRect` sees a call, not a caller. It does not have to: within
+one patch flip.js reads each element exactly twice, and the scenario controls
+when a patch happens because it calls `refresh()` itself and `refresh()` is
+synchronous. The *n*th read of an element inside a patch names the phase. A third
+read, or a Last count that disagrees with the First count, fails `validate()` —
+which is what makes "500" a measured candidate count rather than an assumption.
+
+### An interrupted reorder cancels the entire previous generation
+
+`interrupt` issues its four rotations back to back with no `await`, inside the
+rows' explicit 2,000ms duration, so each one provably begins while the previous
+flip is still running. The duration is what makes the op **count-bounded**: a
+fixed sleep would make milliseconds an input, and the harness's whole-second
+clamp guard would rightly reject the sample set.
+
+| 4 back-to-back reorders of 500 rows | count |
+| --- | ---: |
+| candidates measured | 2,000 |
+| animated | 2,000 |
+| **in-flight flips cancelled** | **1,500** |
+
+1,500 is 3 × 500: the first reorder starts quiesced and cancels nothing, and
+every later one cancels the whole previous generation. That number is the
+assertion on two pieces of flip.js at once. `cancelTrackedFlip` evicts the
+WeakMap entry *before* calling `cancel()`, and `playFlip`'s settle callback
+deletes the entry only if it still points at *its own* animation — if a
+superseded animation's rejection evicted its successor, the next reorder would
+find nothing to cancel and this would read 1,000 instead.
+
+An interrupted reorder is **1.7× a clean one**: 453ms for four, or 113ms each,
+against 68.5ms standalone. The extra is the 500 cancellations plus measuring
+mid-flight rects, which forces layout with 500 active transforms in the tree —
+`interrupt`'s style time (253ms) overtakes even its layout time (245ms).
+
+### Any re-render during a flip restarts every flip on the list
+
+Found while building the probe, not predicted. A `refresh()` that changes nothing
+— the scenario's own result readout — still enters `patchKeyedChildren` with
+`hasFlip` true, so `beginFlip` collects all 500 rows as candidates and
+`cancelTrackedFlip` cancels all 500 in-flight animations. `playFlip` then
+measures the post-cancel layout position against the mid-flight rect and starts
+500 **new** animations.
+
+That is correct behaviour and it is why `beginFlip` measures before it cancels:
+the row picks the animation back up from where it visually was rather than
+snapping. But the cost is a second full flip cycle for a render that changed no
+row, and on a list re-rendering at frame rate it would be a flip cycle per frame.
+The scenario has to hold its counting window open only over the reorders and keep
+*tracking* past them, or these cancellations would be attributed to the op that
+follows.
+
+### The `__PUZZLE_HAS_FLIP__` bundle cost
+
+`__PUZZLE_HAS_FLIP__` is a **source** fact: `plugin.ScanUsage` reads the
+templates, so one `flip` attribute anywhere in `examples/stress` turns the define
+true for the *whole* bundle and pulls `flip.js` into every other scenario's code.
+Measured on the production bundle, by building the identical source three ways:
+
+| build | `app.js` | `flip.js` in it |
+| --- | ---: | --- |
+| before this scenario existed | 181,133 B | no |
+| with the scenario, `flip` attribute stripped | 191,031 B | no |
+| with the scenario as shipped | 192,430 B | yes |
+
+**`flip.js` costs 1,399 bytes minified (+0.73%)**; the scenario's own code is the
+other 9,898. The middle row is the isolation: the same file, the same 500 rows,
+one attribute removed, and the runtime module drops out. (It also confirms the
+scan does not read HTML comments — the template's comment quotes a `flip={ … }`
+spelling and that build still came out without it.)
+
+**What a bad result looks like:** `flipMeasured` reading 0 in the flip arm, which
+means `beginFlip` never measured anything and every other zero next to it is
+meaningless — `validate()` fails on exactly that. Any non-zero
+`flipMeasured`/`flipAnimated`/`flipCancelled` in the **control** arm, which would
+mean flip.js ran on a list with no `flip` attribute. `flipCancelled` reading
+1,000 rather than 1,500 on `interrupt`, which is the specific signature of a
+superseded animation's settle callback evicting its successor's WeakMap entry.
+`flipSkipped` above 0, since a rotation moves every row a full row height and
+nothing may fall under `MIN_DELTA`. And a `flipMeasured` that disagrees with the
+playFlip re-measure count, or any third read of an element inside one patch —
+both fail `validate()`, because both mean the phase model the counts rest on has
+stopped holding.
+
+**The two hazards that make every counter read 0 while nothing looks wrong.**
+`beginFlip` bails **before any measurement** when the OS prefers reduced motion
+and when the runtime has no WAAPI. Either produces zero rect reads, zero
+animations and zero cancellations — which is also what a completely broken flip
+implementation produces. `validate()` therefore checks
+`matchMedia('(prefers-reduced-motion: reduce)')` and `Element.prototype.animate`
+*first* and fails with its own message, rather than reporting the zeroes as a
+clean result.
+
+## Scenario 13 — `loop-trap`
 
 **Probes:** the D121 loop detector (`client-runtime/devperf.js`), which had a
 unit test and **had never fired in a real browser**.
@@ -1125,13 +1379,32 @@ counter being measured.
 
 ## Not yet implemented
 
-Two scenarios from the original plan remain **not built**. Nothing in the app
-references them; they are listed here as future work, not as shipped features.
+**One** scenario from the original plan remains not built. Nothing in the app
+references it; it is listed here as future work, not as a shipped feature.
 
 | scenario | would probe |
 | --- | --- |
-| `virtual-scroll` | the userland windowing recipe as its own scenario (partly superseded by `virtual-list`) |
-| `morph-flip` | morph transitions and `flip` reordering under load |
+| `morph-flip` | morph transitions across a route swap, with `flip` reordering underneath one |
+
+`flip` reordering under load is now `flip-churn` (scenario 12 above), so what is
+left of `morph-flip` is the **morph** half — and that is why it is still
+unbuilt rather than merely unwritten. Morph fires only on a **router swap**: the
+handler is a slot on the router (`app.js` hands it over, `enableMorph(app)`
+fills it), and the router calls `leave` and `enter` around a committed
+navigation and nowhere else. So there is nothing to morph inside Home's stage,
+where every other scenario lives. It needs the same
+structure `route-churn` needed — a sibling route subtree with real route nodes,
+outside `/` — plus `@magic-spells/morph-engine` in this example's manifest,
+which nothing here depends on today. Both are real work, and neither is work
+`flip-churn` did.
+
+`virtual-scroll` has been **dropped**, not deferred. It would have probed the
+userland windowing recipe — spacers, a computed slice, a `@scroll` handler — and
+`virtual-list` already runs exactly that recipe over 50,000 real store records.
+The one thing it still had to offer was the *native* scroll path, since
+`fast-scroll` drives the window by hand; `native-scroll` (scenario 2 above) now
+covers that directly, on the same records and the same rows. A second scenario
+would measure the same code twice.
 
 `form-state` **is now built** (scenario 11 above), and it grew past the original
 one-line plan: "`setData` throughput under a typing burst" turned out to be the
@@ -1180,6 +1453,7 @@ app/
     Formatters.pzl                  the built-in registry priced
     ListenerChurn.pzl               churn / stable / none DOM handler binding
     FormState.pzl                   400 controlled form properties under typing
+    FlipChurn.pzl                   N rows through the D85 FLIP read/write interleave
     LoopTrap.pzl + LoopCell.pzl     the D121 detector's real exercise
 ```
 

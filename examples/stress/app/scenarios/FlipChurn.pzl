@@ -1,0 +1,669 @@
+<puzzle-view>
+  <div class="fc-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="fc-count tabular-nums text-fg">{ rowCount }</span> rows ·
+        <span class={ armCls }>{ armLabel }</span>
+      </div>
+      <div class="font-mono text-[11px] shrink-0 { resultCls }">{ resultText }</div>
+    </div>
+
+    <div class="px-4 py-2 border-b border-line font-mono text-[11px] text-faint">{ explainText }</div>
+
+    <!-- Two arms, branched OUTSIDE the loop so neither pays for the branch per
+         row. Both render BYTE-IDENTICAL DOM: `flip` is a framework directive
+         like `key`, and viewManager's setAttr never writes it. The only
+         difference that reaches the runtime is whether patchKeyedChildren's
+         `'flip' in newChild.attrs` check finds anything.
+
+         WHY TWO BRANCHES AND NOT ONE CONDITIONAL VALUE. `flip={ useFlip &&
+         flipOpts }` is the documented way to disable a row's flip (flip.js
+         treats false/null/undefined as "no flip"), and it would guarantee an
+         identical vnode shape in one place. It was rejected because the attr
+         KEY would still be present, so `hasFlip` would be true, `beginFlip`
+         would be CALLED, and the control arm would pay a full O(rows) candidate
+         scan before bailing. The control has to be a list with no flip in it at
+         all, or the A/B understates what flip costs. Two branches buy that; the
+         cost is that switching arms remounts every row, which every op settles
+         untimed before it measures anything. -->
+    <div class="fc-list max-h-[380px] overflow-auto">
+      {#if useFlip}
+        {#for row in rows}
+          <div class="fc-row flex items-center gap-3 h-9 px-4 border-b border-line" key={ row.id } flip={ flipOpts }>
+            <span class="fc-id font-mono text-[11px] tabular-nums text-faint w-20 shrink-0">{ row.id }</span>
+            <span class="fc-label flex-1 min-w-0 truncate text-sm text-fg">{ row.label }</span>
+          </div>
+        {/for}
+      {:else}
+        {#for row in rows}
+          <div class="fc-row flex items-center gap-3 h-9 px-4 border-b border-line" key={ row.id }>
+            <span class="fc-id font-mono text-[11px] tabular-nums text-faint w-20 shrink-0">{ row.id }</span>
+            <span class="fc-label flex-1 min-w-0 truncate text-sm text-fg">{ row.label }</span>
+          </div>
+        {/for}
+      {/if}
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { registerScenario } from '../stress-controller.js';
+import {
+  afterPaint,
+  intParam,
+  ms1,
+  perfDelta,
+  perfSnapshot,
+  settleFrames,
+  viewRoot,
+} from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// flip-churn — what does FLIP cost when N rows go through it at once, and does
+// its one read/write interleave hold up?
+//
+// THE ONE PLACE THE IMPLEMENTATION IS ASYMMETRIC
+//
+// `client-runtime/views/flip.js` beginFlip() is properly two-phase and says so:
+// it measures EVERY candidate in one loop, then cancels in-flight flips in a
+// second loop, because cancel drops the transform and later candidates must
+// still be able to measure their mid-flight rects.
+//
+// playFlip() does not maintain that separation. Per element it reads
+// getBoundingClientRect(), reads getComputedStyle().transform, then writes
+// el.animate() — read, write, read, write, N times. Nothing had ever put a large
+// N through it.
+//
+// THE THREE OPS
+//
+//   shuffle          one reorder of N rows carrying `flip`. Its counters are the
+//                    census of what flip.js actually did.
+//   shuffle-noflip   THE CONTROL. The identical rows, reordered identically, with
+//                    no `flip` attribute anywhere. Every flip counter must read
+//                    0 — and they read 0 because flip.js never ran, not because
+//                    the probe stopped looking: the same probe is installed, and
+//                    it is gated on the same row elements.
+//   interrupt        K back-to-back reorders with no await between them, so each
+//                    one begins while the previous flip is still in flight. This
+//                    is what exercises cancelTrackedFlip's evict-before-cancel
+//                    discipline and playFlip's settle-callback identity re-check.
+//
+// THE REORDER IS A SINGLE-STEP ROTATION, ON PURPOSE
+//
+// Row at position i moves to position i+1, and the last row wraps to the front.
+// Two properties make it the right permutation here:
+//
+//   1. Every row's LAYOUT position moves by exactly one row height, so every
+//      candidate clears MIN_DELTA and the animated count is N by construction —
+//      no fixed points, and none in the rotation applied K times either, so
+//      `interrupt`'s counters are arithmetic rather than a measurement of which
+//      rows happened to land where.
+//   2. The keyed patcher needs exactly ONE insertBefore to produce it (moving
+//      back to front, only the wrapped row is out of place). So the DOM move
+//      cost is a constant while the flip cost is O(N), and the A/B against the
+//      control isolates flip.js almost perfectly.
+//
+// It is a rotation, not a random shuffle. The op keeps the name `shuffle`
+// because it is the reorder arm; the detail line says what it actually does.
+//
+// ROWS ARE PLAIN INSTANCE DATA, NOT STORE RECORDS — the same call islands and
+// listener-churn make. A reactive store would add query, sort and notification
+// cost to a measurement about forced layout, and the value of this scenario is
+// that its delta has one cause.
+// ---------------------------------------------------------------------------
+
+/**
+ * The flip spec every row carries, with an EXPLICIT duration.
+ *
+ * That duration is what makes `interrupt` count-bounded instead of
+ * clock-bounded: K reorders issued back to back cannot outlive it, so "the
+ * previous flip is still in flight" is guaranteed by construction rather than by
+ * a sleep. A fixed sleep would make milliseconds an input to the op, and the
+ * harness's whole-second clamp guard would rightly reject the sample set.
+ *
+ * Two seconds, not the D85 default of 250ms, and not the ~500ms the burst
+ * actually takes. `interrupt`'s pinned flipCancelled count only holds while no
+ * generation FINISHES before the next reorder cancels it, and the gap between
+ * reorders is one reorder's cost — measured here at ~113ms. Two seconds leaves
+ * an order of magnitude of headroom, so the counter stays true on a machine
+ * several times slower than this one rather than quietly dropping below its
+ * asserted value.
+ *
+ * `easing` is deliberately absent — resolveFlipOptions falls back to the D85
+ * default, and this scenario is not about the curve.
+ */
+const FLIP_OPTS = { duration: 2000 };
+
+/**
+ * Reorders per `interrupt`, issued with NO await between them.
+ *
+ * Every one of them starts well inside the duration above, so reorder k>1 always
+ * finds N live entries in flip.js's activeFlips map and cancels every one.
+ *
+ * FOUR, not six, and the reason is measured. At six reorders of 500 rows the op
+ * landed at 1004ms, 1011ms and 1077ms — two of the three inside the 60ms window
+ * benchmarks/runner.mjs guard 4 rejects, because a sample sitting on a whole
+ * second is indistinguishable from a renderer throttled to whole seconds. Four
+ * puts the same code path at ~700ms with a third of a second of clearance, and
+ * asserts the identical counters. Same trap, same fix, as `listener-churn`
+ * running 20 renders rather than 30.
+ */
+const INTERRUPT_REORDERS = 4;
+
+export default class FlipChurn extends PuzzleView {
+  api = {
+    name: 'flip-churn',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.rows = [];
+    this.useFlip = true;
+    this.lastResult = null;
+    this.unregister = null;
+    // Animations this scenario's probe saw created, kept so the NEXT op can
+    // quiesce them. Raw handles, never the counting proxies.
+    this.pendingAnimations = [];
+    // Captured before anything can wrap them, so validate() can prove by
+    // identity that every probe this scenario installs was also removed.
+    this.pristine = {
+      getBoundingClientRect: Element.prototype.getBoundingClientRect,
+      animate: Element.prototype.animate,
+    };
+    this.buildRows();
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  data() {
+    const result = this.lastResult;
+    return {
+      rows: this.rows,
+      rowCount: this.rows.length,
+      useFlip: this.useFlip,
+      flipOpts: FLIP_OPTS,
+      armLabel: this.useFlip ? `flip={ duration: ${FLIP_OPTS.duration} }` : 'no flip attribute (control)',
+      armCls: this.useFlip ? 'text-accent' : 'text-muted',
+      explainText:
+        'each reorder rotates the list by one row, so every row moves and the keyed patcher needs exactly one ' +
+        'insertBefore to do it. beginFlip measures every retained flip row before the patch; playFlip measures ' +
+        'each one AGAIN afterwards and interleaves a getComputedStyle and an el.animate() between the reads. ' +
+        'the control arm reorders the same rows with no flip attribute at all.',
+      resultText: result
+        ? `${result.op}: ${ms1(result.scriptMs)}ms · ${result.measured} measured / ${result.animated} animated / ${result.cancelled} cancelled`
+        : 'no run yet',
+      resultCls: result ? 'text-accent' : 'text-faint',
+    };
+  }
+
+  // ---- dataset -------------------------------------------------------------
+
+  wantRows() {
+    return intParam(this.props?.n, 500, 2, 5000);
+  }
+
+  buildRows() {
+    const count = this.wantRows();
+    const rows = new Array(count);
+    for (let i = 0; i < count; i += 1) {
+      rows[i] = { id: `fc-${i}`, label: `flip row ${i}` };
+    }
+    this.rows = rows;
+    this.lastResult = null;
+  }
+
+  /**
+   * Rotate by one position. Cheap enough (one shift + one push) that both arms
+   * pay it identically and it cannot show up in the delta.
+   */
+  rotate() {
+    if (this.rows.length < 2) return;
+    this.rows.push(this.rows.shift());
+  }
+
+  // ---- the probe -----------------------------------------------------------
+
+  /**
+   * Count what flip.js did, from outside it. THE RUNTIME IS NOT TOUCHED — this
+   * is the scenario observing DOM APIs, the same way `formatters` patches
+   * globalThis.Intl and `listener-churn` patches Element.prototype's listener
+   * methods.
+   *
+   * Both methods are OWN properties of Element.prototype, so `delete` would
+   * remove them rather than restore them (which is what listener-churn can do,
+   * because addEventListener is inherited from EventTarget). They are saved and
+   * assigned back instead, and validate() checks the restoration by identity
+   * against references captured in created().
+   *
+   * ── Separating beginFlip's reads from playFlip's ──────────────────────────
+   * A wrapper on getBoundingClientRect cannot see which phase called it. It does
+   * not have to: within ONE patch, flip.js reads each candidate's rect exactly
+   * twice — once in beginFlip (First) and once in playFlip (Last) — and the
+   * scenario controls when a patch happens, because it calls refresh() itself
+   * and refresh() is synchronous. So the Nth read of a given element inside a
+   * patch names the phase: 1 is First, 2 is Last, and anything past 2 would mean
+   * the model is wrong. `beginPatch()` is what the scenario calls to open a new
+   * patch window, and `extraReads` is what proves the model held.
+   */
+  installFlipProbe() {
+    const proto = Element.prototype;
+    if (
+      proto.getBoundingClientRect !== this.pristine.getBoundingClientRect ||
+      proto.animate !== this.pristine.animate
+    ) {
+      throw new Error('[stress] flip-churn: Element.prototype is already patched — refusing to nest probes');
+    }
+
+    // Gate on the rows THIS arm has mounted. Built from the live DOM after the
+    // arm has settled, so the control arm's zeroes are a measurement (nothing
+    // read these elements' rects) rather than an artefact of an empty gate.
+    const rows = new WeakSet();
+    const root = viewRoot(this);
+    let gated = 0;
+    for (const el of root?.querySelectorAll('.fc-row') ?? []) {
+      rows.add(el);
+      gated += 1;
+    }
+
+    const counts = { measured: 0, lastReads: 0, extraReads: 0, animated: 0, skipped: 0, cancelled: 0 };
+    const animations = [];
+    let reads = new Map();
+    // Counting and TRACKING are separate windows. Counting closes when the op's
+    // measured work is done; tracking stays open until restore(), because every
+    // animation this scenario sets flying has to be reachable by the next op's
+    // quiesce. An untracked animation is not merely unmeasured — it is still
+    // running when the next op starts, where flip.js cancels it and the next
+    // op's flipCancelled inherits work it did not do.
+    let counting = true;
+
+    const baseRect = proto.getBoundingClientRect;
+    const baseAnimate = proto.animate;
+
+    proto.getBoundingClientRect = function getBoundingClientRect(...args) {
+      if (counting && rows.has(this)) {
+        const n = (reads.get(this) ?? 0) + 1;
+        reads.set(this, n);
+        if (n === 1) {
+          counts.measured += 1;
+        } else if (n === 2) {
+          counts.lastReads += 1;
+          // Assume SKIPPED until the matching animate() says otherwise: playFlip
+          // reads a candidate's rect and only then decides whether it moved far
+          // enough to be worth animating.
+          counts.skipped += 1;
+        } else {
+          counts.extraReads += 1;
+        }
+      }
+      return baseRect.apply(this, args);
+    };
+
+    proto.animate = function animate(...args) {
+      const real = baseAnimate.apply(this, args);
+      if (!rows.has(this)) return real;
+      animations.push(real); // tracked even when counting is closed
+      if (counting) {
+        counts.animated += 1;
+        counts.skipped -= 1;
+      }
+      // flip.js stores what animate() returned and later calls .cancel() on it,
+      // so a forwarding proxy is where a cancellation becomes countable — and it
+      // stays countable without getAnimations(), which flip.js forbids for good
+      // reason. Methods are bound to the real Animation: invoking one with the
+      // proxy as receiver would be an illegal invocation.
+      return new Proxy(real, {
+        get(target, prop) {
+          if (prop === 'cancel') {
+            return (...cancelArgs) => {
+              if (counting) counts.cancelled += 1;
+              return target.cancel(...cancelArgs);
+            };
+          }
+          const value = Reflect.get(target, prop, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+    };
+
+    return {
+      counts,
+      animations,
+      gated,
+      /** Open a new patch window. The scenario calls this before every refresh(). */
+      beginPatch() {
+        reads = new Map();
+      },
+      /** Freeze the counters while leaving the wrappers (and their tracking) in place. */
+      stopCounting() {
+        counting = false;
+      },
+      restore() {
+        proto.getBoundingClientRect = baseRect;
+        proto.animate = baseAnimate;
+      },
+    };
+  }
+
+  /**
+   * Leave no flip in flight.
+   *
+   * `interrupt`'s whole counter — how many in-flight flips the NEXT reorder
+   * cancels — depends on nothing being in flight when the op starts. Without
+   * this, the first reorder of iteration 2 would cancel iteration 1's leftovers
+   * and flipCancelled would depend on how long the harness paused between
+   * iterations.
+   *
+   * The RAW handles are cancelled, never the counting proxies, so the scenario's
+   * own housekeeping can never be mistaken for flip.js cancelling something.
+   * flip.js clears its WeakMap entry from the `finished` rejection handler, which
+   * is a microtask, so a frame is enough to leave it empty.
+   */
+  async quiesceFlips() {
+    const pending = this.pendingAnimations;
+    this.pendingAnimations = [];
+    let stopped = 0;
+    for (const animation of pending) {
+      try {
+        if (animation.playState === 'running' || animation.playState === 'paused') {
+          animation.cancel();
+          stopped += 1;
+        }
+      } catch {
+        /* already finished or cancelled — nothing to stop */
+      }
+    }
+    if (stopped) await settleFrames(1);
+    return stopped;
+  }
+
+  // ---- ops -----------------------------------------------------------------
+
+  async opRun(op) {
+    if (op === 'shuffle') return this.runReorder(op, { useFlip: true, reorders: 1 });
+    if (op === 'shuffle-noflip') return this.runReorder(op, { useFlip: false, reorders: 1 });
+    if (op === 'interrupt') return this.runReorder(op, { useFlip: true, reorders: INTERRUPT_REORDERS });
+    throw new Error(`[stress] flip-churn has no op "${op}"`);
+  }
+
+  /**
+   * Settle into the requested arm UNTIMED, quiesce, then time exactly `reorders`
+   * synchronous reorders.
+   *
+   * The arm switch is a template-branch change, so it replaces every row.
+   * Timing that would compare a full remount against a reorder and hand the
+   * whole difference to flip.
+   *
+   * BOTH arms carry the probe. The counts are exact; the milliseconds are not
+   * probe-free, and the flip arm carries more of it than the control does — the
+   * wrapper is entered 2N times there and essentially never in the control,
+   * which makes the A/B an upper bound on flip's cost rather than a clean
+   * subtraction. Measured, that bias is a fraction of a millisecond against a
+   * delta of tens; it is named here rather than hidden because the alternative —
+   * a fourth, uninstrumented arm — would report a number no counter could vouch
+   * for.
+   */
+  async runReorder(op, { useFlip, reorders }) {
+    if (this.useFlip !== useFlip) {
+      this.useFlip = useFlip;
+      this.refresh();
+      await afterPaint();
+      await settleFrames(2);
+    }
+
+    const stopped = await this.quiesceFlips();
+    const probe = this.installFlipProbe();
+    const before = perfSnapshot();
+
+    let scriptMs = 0;
+    try {
+      const t0 = performance.now();
+      for (let i = 0; i < reorders; i += 1) {
+        // One patch window per reorder. refresh() is synchronous, so the patch
+        // — beginFlip, the moves, playFlip — is complete before the next
+        // iteration opens the next window.
+        probe.beginPatch();
+        this.rotate();
+        this.refresh();
+      }
+      scriptMs = performance.now() - t0;
+
+      await afterPaint();
+      await settleFrames(1);
+
+      // Close the COUNTING window here, and only here. The readout re-render
+      // below re-enters beginFlip on rows whose flips are still in flight, so it
+      // cancels all N and restarts them from where they visibly are — real work,
+      // but the scenario's own bookkeeping rather than the op's. Counting it
+      // would inflate flipCancelled; not TRACKING it would leave N animations
+      // flying into the next op, where they surface as phantom cancellations.
+      probe.stopCounting();
+
+      const c = probe.counts;
+      this.lastResult = {
+        op,
+        useFlip,
+        reorders,
+        rows: this.rows.length,
+        gated: probe.gated,
+        quiesced: stopped,
+        scriptMs,
+        measured: c.measured,
+        lastReads: c.lastReads,
+        extraReads: c.extraReads,
+        animated: c.animated,
+        skipped: c.skipped,
+        cancelled: c.cancelled,
+        perf: perfDelta(before),
+      };
+      this.refresh();
+      await settleFrames(1);
+    } finally {
+      // finally, so a throw mid-loop cannot leave Element.prototype patched and
+      // poison every later measurement in the page. Restore is OUTSIDE the timed
+      // window either way — scriptMs is read before the awaits.
+      probe.restore();
+      this.pendingAnimations = probe.animations;
+    }
+
+    const r = this.lastResult;
+    return {
+      op,
+      ms: scriptMs,
+      scriptMs,
+      detail:
+        `${op} [${useFlip ? 'flip' : 'control'}]: ${reorders} single-step rotation${reorders === 1 ? '' : 's'} of ` +
+        `${this.rows.length} rows in ${ms1(scriptMs)}ms script (INSTRUMENTED — the counts are exact, the timing carries the probe) · ` +
+        `${r.measured} candidates measured by beginFlip, ${r.lastReads} re-measured by playFlip ` +
+        `(${r.measured + r.lastReads} forced rect reads for ${reorders} reorder${reorders === 1 ? '' : 's'}) · ` +
+        `${r.animated} animated, ${r.skipped} skipped under MIN_DELTA, ${r.cancelled} in-flight flips cancelled` +
+        (stopped ? ` · ${stopped} leftover animation${stopped === 1 ? '' : 's'} quiesced before the run` : '') +
+        this.perfDetail(r.perf),
+    };
+  }
+
+  perfDetail(perf) {
+    if (!perf) return ' · framework counters unavailable (production build)';
+    return ` · ${perf.renders} renders, ${perf.domMutations} DOM mutations`;
+  }
+
+  /**
+   * Rebuilding the rows restores the original order, which — the ids being
+   * identical — is itself a keyed reorder, so the reset RENDER sets N flips
+   * flying like any other. It runs inside a tracking-only probe window for that
+   * reason: an untracked flip in flight survives into the next op, where flip.js
+   * cancels it and the op inherits cancellations it never caused.
+   */
+  async opReset() {
+    await this.quiesceFlips();
+    this.useFlip = true;
+    this.buildRows();
+    const probe = this.installFlipProbe();
+    probe.stopCounting();
+    try {
+      this.refresh();
+      await afterPaint();
+      await settleFrames(1);
+    } finally {
+      probe.restore();
+      this.pendingAnimations = probe.animations;
+    }
+    return { detail: `reset: ${this.rows.length} rows, flip arm` };
+  }
+
+  async opWarmup() {
+    await this.runReorder('shuffle', { useFlip: true, reorders: 1 });
+    await this.opReset();
+    return { detail: 'warmup: one flipped rotation, result discarded' };
+  }
+
+  // ---- verification --------------------------------------------------------
+
+  /**
+   * The two false-clean hazards come FIRST, because both of them make every
+   * counter in this scenario read 0 while everything else still looks perfect.
+   *
+   * beginFlip bails BEFORE any measurement when the OS prefers reduced motion or
+   * when the runtime has no WAAPI (flip.js lines 104-105). A run under either
+   * condition reports zero rect reads, zero animations and zero cancellations —
+   * which is exactly what a broken flip implementation would also report.
+   */
+  opValidate() {
+    const reducedMotion =
+      typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reducedMotion) {
+      return {
+        ok: false,
+        detail:
+          'prefers-reduced-motion is REDUCE, so beginFlip returns before it measures anything and every flip ' +
+          'counter reads 0 — a clean-looking result that measured nothing at all. Turn reduced motion off ' +
+          '(OS setting, or the browser/driver override) and re-run; do not read the zeroes.',
+      };
+    }
+    if (typeof this.pristine.animate !== 'function') {
+      return {
+        ok: false,
+        detail:
+          'this runtime has no WAAPI (Element.prototype.animate is absent), so beginFlip returns before it ' +
+          'measures anything and every flip counter reads 0. flip cannot be measured here.',
+      };
+    }
+
+    // A probe left installed would silently corrupt every later run and quietly
+    // add its own overhead to whatever ran next. Identity, not shape: the
+    // references were captured once, in created().
+    const proto = Element.prototype;
+    if (proto.getBoundingClientRect !== this.pristine.getBoundingClientRect) {
+      return { ok: false, detail: 'a getBoundingClientRect probe was left installed on Element.prototype' };
+    }
+    if (proto.animate !== this.pristine.animate) {
+      return { ok: false, detail: 'an animate probe was left installed on Element.prototype' };
+    }
+
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const rowEls = root.querySelectorAll('.fc-row');
+    if (rowEls.length !== this.rows.length) {
+      return { ok: false, detail: `DOM has ${rowEls.length} rows, state has ${this.rows.length}` };
+    }
+    // The reorder has to have actually reached the DOM, in the order state says.
+    const limit = Math.min(rowEls.length, 200);
+    for (let i = 0; i < limit; i += 1) {
+      const shown = rowEls[i].querySelector('.fc-id')?.textContent?.trim();
+      if (shown !== this.rows[i].id) {
+        return { ok: false, detail: `row ${i} is "${shown}", state says "${this.rows[i].id}"` };
+      }
+    }
+
+    const result = this.lastResult;
+    if (result) {
+      // The gate itself. A WeakSet built from the wrong arm's rows — or from a
+      // stage that had not settled — would silently zero every counter below,
+      // and the control arm's zeroes would stop meaning anything.
+      if (result.gated !== this.rows.length) {
+        return {
+          ok: false,
+          detail: `the probe was gated on ${result.gated} row elements but the list holds ${this.rows.length} — the counters describe a different set of rows`,
+        };
+      }
+      // The phase model the counts depend on: within one patch flip.js reads each
+      // candidate exactly twice. A third read, or a Last count that disagrees with
+      // the First count, would mean `flipMeasured` is not the candidate count.
+      if (result.extraReads !== 0) {
+        return {
+          ok: false,
+          detail: `${result.extraReads} rect reads past the second one in a single patch — flipMeasured is no longer the candidate count`,
+        };
+      }
+      if (result.measured !== result.lastReads) {
+        return {
+          ok: false,
+          detail: `beginFlip measured ${result.measured} candidates but playFlip re-measured ${result.lastReads} — the two phases disagree`,
+        };
+      }
+      if (result.skipped < 0) {
+        return { ok: false, detail: `${result.skipped} skipped rows — an animate() arrived without a preceding rect read` };
+      }
+      if (result.useFlip && result.measured === 0) {
+        return {
+          ok: false,
+          detail: 'the flip arm reordered the list and beginFlip measured nothing — flip did not run, so the zeroes below it mean nothing',
+        };
+      }
+      if (!result.useFlip && (result.measured || result.animated || result.cancelled)) {
+        return {
+          ok: false,
+          detail: `the control arm has no flip attribute, yet flip.js ran on it (${result.measured} measured, ${result.animated} animated)`,
+        };
+      }
+    }
+
+    return {
+      ok: true,
+      detail: result
+        ? `${this.rows.length} rows in state order · ${result.op} [${result.useFlip ? 'flip' : 'control'}]: ` +
+          `${result.measured} measured + ${result.lastReads} re-measured, ${result.animated} animated, ${result.cancelled} cancelled`
+        : `${this.rows.length} rows; no run yet`,
+    };
+  }
+
+  opStats() {
+    const root = viewRoot(this);
+    const list = root?.querySelector('.fc-list');
+    const result = this.lastResult;
+    const counters = {
+      flipRows: this.rows.length,
+      flipArm: this.useFlip ? 1 : 0,
+    };
+    if (result) {
+      // Only once a run has produced them. The control arm's zeroes are the whole
+      // point of the control, so a fabricated zero from "no run yet" must never
+      // be able to wear the same shape — the same reason listener-churn withholds
+      // its listener counts from the uninstrumented arm.
+      counters.flipMeasured = result.measured;
+      counters.flipAnimated = result.animated;
+      counters.flipSkipped = result.skipped;
+      counters.flipCancelled = result.cancelled;
+    }
+    return {
+      mountedNodes: list ? list.querySelectorAll('*').length : 0,
+      records: 0,
+      views: 1,
+      counters,
+      perf: result?.perf ?? null,
+    };
+  }
+}
+</script>

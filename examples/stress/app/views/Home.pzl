@@ -138,6 +138,8 @@
       <Formatters key={ stageKey } n={ n } />
     {:else if isFormState}
       <FormState key={ stageKey } n={ n } />
+    {:else if isFlipChurn}
+      <FlipChurn key={ stageKey } n={ n } />
     {:else if isLoopTrap}
       <LoopTrap key={ stageKey } cap={ cap } />
     {:else}
@@ -150,6 +152,7 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 import AsyncWaterfall from '../scenarios/AsyncWaterfall.pzl';
 import DeepNest from '../scenarios/DeepNest.pzl';
+import FlipChurn from '../scenarios/FlipChurn.pzl';
 import Formatters from '../scenarios/Formatters.pzl';
 import FormState from '../scenarios/FormState.pzl';
 import Islands from '../scenarios/Islands.pzl';
@@ -208,6 +211,7 @@ const N_DEFAULTS = {
   // `n` means FIELD ROWS here — one controlled <input> plus one controlled
   // <select> each, so 200 rows is 400 controlled form properties.
   'form-state': 200,
+  'flip-churn': 500,
   // route-churn's size is fixed by its route table (5 levels, 50 leaves); its
   // only knob is the leaf loader delay.
   'route-churn': 0,
@@ -238,6 +242,7 @@ const PARAM_FIELDS = {
   formatters: [{ id: 'n', label: 'rows (N)' }],
   'listener-churn': [{ id: 'n', label: 'rows (N)' }],
   'form-state': [{ id: 'n', label: 'fields (N)' }],
+  'flip-churn': [{ id: 'n', label: 'rows (N)' }],
   'route-churn': [{ id: 'delay', label: 'loader ms' }],
   'loop-trap': [{ id: 'cap', label: 'hard cap' }],
 };
@@ -389,6 +394,7 @@ export default class StressHome extends PuzzleView {
       isFormatters: scenario === 'formatters',
       isFormState: scenario === 'form-state',
       isListenerChurn: scenario === 'listener-churn',
+      isFlipChurn: scenario === 'flip-churn',
       isLoopTrap: scenario === 'loop-trap',
 
       // The keyed-list handler A/B. Only keyed-list implements both arms, so the
