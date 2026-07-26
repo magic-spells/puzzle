@@ -172,11 +172,22 @@ function snapshotImpl() {
 	return Object.freeze({ ...totals });
 }
 
-function emit(type, payload) {
+/**
+ * Deliver one event to every sink.
+ *
+ * `subject` is the INSTANCE the event is about (a view, or a store subscriber),
+ * passed beside the event rather than inside it. Two reasons: the event payload
+ * stays a plain data record a sink can keep without pinning a destroyed view
+ * alive, and `viewId` here is this module's own numbering — a sink that needs a
+ * different identity (the DevTools bridge numbers views for the extension) can
+ * only derive it from the instance. Sinks that do not care simply ignore the
+ * second argument.
+ */
+function emit(type, payload, subject = null) {
 	const event = Object.freeze({ type, ...payload });
 	for (const sink of [...sinks]) {
 		try {
-			sink(event);
+			sink(event, subject);
 		} catch (error) {
 			console.error('[puzzle perf] sink failed:', error);
 		}
@@ -283,7 +294,7 @@ function maybeQuiesce(chain) {
 	});
 }
 
-function claimExecution(state, chain) {
+function claimExecution(state, chain, view) {
 	if (chain.blockedViews.has(state.id)) return 0;
 	const depth = (chain.executions.get(state.id) ?? 0) + 1;
 	chain.executions.set(state.id, depth);
@@ -294,14 +305,18 @@ function claimExecution(state, chain) {
 			`[puzzle perf] ${PERF_SENTINEL}: stopped ${state.name} after ` +
 			`${RECURSION_LIMIT} executions in one causal chain`;
 		console.error(message);
-		emit('loop', {
-			viewId: state.id,
-			viewName: state.name,
-			chainId: chain.id,
-			depth,
-			kind: 'recursive',
-			message,
-		});
+		emit(
+			'loop',
+			{
+				viewId: state.id,
+				viewName: state.name,
+				chainId: chain.id,
+				depth,
+				kind: 'recursive',
+				message,
+			},
+			view ?? null
+		);
 	}
 	return depth;
 }
@@ -319,7 +334,7 @@ function prepareDataImpl(view, cause) {
 			: state.dataRuns === 0
 				? 'initial'
 				: 'refresh');
-	const depth = claimExecution(state, chain);
+	const depth = claimExecution(state, chain, view);
 	if (!depth) return null;
 	state.pendingChain = chain;
 	state.pendingCauses.add(resolvedCause);
@@ -383,15 +398,19 @@ function runDataImpl(view, params, props) {
 }
 
 function recordData(prepared, startedAt, async, failed) {
-	emit('data', {
-		viewId: prepared.state.id,
-		viewName: prepared.state.name,
-		chainId: prepared.chain.id,
-		cause: prepared.cause,
-		duration: now() - startedAt,
-		async,
-		failed,
-	});
+	emit(
+		'data',
+		{
+			viewId: prepared.state.id,
+			viewName: prepared.state.name,
+			chainId: prepared.chain.id,
+			cause: prepared.cause,
+			duration: now() - startedAt,
+			async,
+			failed,
+		},
+		prepared.view
+	);
 	prepared.state.pendingCauses.add(prepared.cause);
 }
 
@@ -466,7 +485,7 @@ function renderStartImpl(view) {
 		mark.state.dataExecutionChain = null;
 		mark.depth = mark.chain.executions.get(mark.state.id) ?? 1;
 	} else {
-		mark.depth = claimExecution(mark.state, mark.chain);
+		mark.depth = claimExecution(mark.state, mark.chain, mark.view);
 	}
 	mark.patchStartedAt = now();
 }
@@ -483,18 +502,22 @@ function renderEndImpl(view) {
 		totals.renders++;
 		totals.domMutations += mark.mutations;
 		if (wasted) totals.wastedRenders++;
-		emit('render', {
-			viewId: mark.state.id,
-			viewName: mark.state.name,
-			chainId: mark.chain.id,
-			causes: Object.freeze([...mark.causes]),
-			depth: mark.depth,
-			treeDuration: mark.treeDuration,
-			patchDuration,
-			domMutations: mark.mutations,
-			wasted,
-			timestamp,
-		});
+		emit(
+			'render',
+			{
+				viewId: mark.state.id,
+				viewName: mark.state.name,
+				chainId: mark.chain.id,
+				causes: Object.freeze([...mark.causes]),
+				depth: mark.depth,
+				treeDuration: mark.treeDuration,
+				patchDuration,
+				domMutations: mark.mutations,
+				wasted,
+				timestamp,
+			},
+			mark.view
+		);
 		checkRunaway(mark, timestamp, wasted);
 	}
 	popScope(mark.scope);
@@ -530,14 +553,18 @@ function checkRunaway(mark, timestamp, wasted) {
 		`[puzzle perf] ${PERF_SENTINEL}: stopped ${mark.state.name} after ` +
 		`${window.length} renders in one second (${Math.round((wastedCount / window.length) * 100)}% wasted)`;
 	console.warn(message);
-	emit('loop', {
-		viewId: mark.state.id,
-		viewName: mark.state.name,
-		chainId: mark.chain.id,
-		depth: mark.depth,
-		kind: 'cross-frame',
-		message,
-	});
+	emit(
+		'loop',
+		{
+			viewId: mark.state.id,
+			viewName: mark.state.name,
+			chainId: mark.chain.id,
+			depth: mark.depth,
+			kind: 'cross-frame',
+			message,
+		},
+		mark.view
+	);
 }
 
 // ---- secondary view metrics ------------------------------------------------
@@ -546,30 +573,38 @@ function componentPatchImpl(view, bailedOut) {
 	if (bailedOut) totals.componentPropBailouts++;
 	else totals.componentPropReruns++;
 	const state = viewState(view);
-	emit('component-props', {
-		viewId: state.id,
-		viewName: state.name,
-		bailedOut,
-	});
+	emit(
+		'component-props',
+		{
+			viewId: state.id,
+			viewName: state.name,
+			bailedOut,
+		},
+		view
+	);
 }
 
 function slotRenderImpl(view) {
 	totals.slotRenders++;
 	markCauseImpl(view, 'slots');
 	const state = viewState(view);
-	emit('slot-render', { viewId: state.id, viewName: state.name });
+	emit('slot-render', { viewId: state.id, viewName: state.name }, view);
 }
 
 function memoImpl(view, key, hit) {
 	if (hit) totals.memoHits++;
 	else totals.memoMisses++;
 	const state = viewState(view);
-	emit('memo', {
-		viewId: state.id,
-		viewName: state.name,
-		key,
-		hit,
-	});
+	emit(
+		'memo',
+		{
+			viewId: state.id,
+			viewName: state.name,
+			key,
+			hit,
+		},
+		view
+	);
 }
 
 // ---- Store metrics / propagation ------------------------------------------
@@ -643,15 +678,19 @@ function trackingDeferredImpl(subscriber, pending, retry, kind) {
 		totals.asyncTrackingDeferredMs += duration;
 		chain.pendingAsync = Math.max(0, chain.pendingAsync - 1);
 		touch(chain);
-		emit('tracking-deferral', {
-			viewId: state?.id ?? null,
-			viewName: state?.name ?? 'anonymous',
-			chainId: chain.id,
-			kind,
-			duration,
-			count: totals.asyncTrackingDeferrals,
-			totalDuration: totals.asyncTrackingDeferredMs,
-		});
+		emit(
+			'tracking-deferral',
+			{
+				viewId: state?.id ?? null,
+				viewName: state?.name ?? 'anonymous',
+				chainId: chain.id,
+				kind,
+				duration,
+				count: totals.asyncTrackingDeferrals,
+				totalDuration: totals.asyncTrackingDeferredMs,
+			},
+			state ? subscriber : null
+		);
 		maybeQuiesce(chain);
 		return retry();
 	};

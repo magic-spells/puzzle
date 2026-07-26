@@ -28,8 +28,15 @@
  * import this module back (a cycle), devstate exposes a single observer slot
  * that this module fills at registration time (setViewObserver) and clears at
  * unregistration.
+ *
+ * The same direction holds for the profiler (devperf.js, SPEC §56, D121): this
+ * module subscribes to devperf's event sink and aggregates a recording for the
+ * extension's Performance panel. devperf knows nothing about the protocol, and
+ * the panel never sees devperf's own view numbering — see the profiler section
+ * below for why that distinction is load-bearing.
  */
 
+import { devperfInstallSink } from './devperf.js';
 import { liveViewList, safeState, setViewObserver } from './devstate.js';
 
 // Never dereference __PUZZLE_DEV__ directly — see the identical note in
@@ -77,6 +84,21 @@ let lastChain = [];
 // view is collectable; ids are never reused within a session.
 const viewIds = new WeakMap();
 let nextViewId = 1;
+
+// The devperf sink detach function while this bridge is registered, else null.
+let perfDetach = null;
+
+// The current recording, or null before the first perf:start — which is the
+// difference between "0 renders measured" and "never recorded" (the report
+// distinguishes them; see profileReport).
+let profile = null;
+
+// The flush row awaiting its duration. devtoolsFlush() runs inside the store's
+// notify step and knows the KEYS; devperf's 'store-flush' event fires at the end
+// of the same synchronous flush() and knows the DURATION. This one-slot handoff
+// joins them — and because the inner flush of a re-entrant pair completes first,
+// each event fills the row its own flush pushed.
+let pendingFlushRow = null;
 
 // The gates below are positive `if (DEV) { … }` blocks, never `if (!DEV) return`
 // — see the measured note in devstate.js: only the positive form is reliably
@@ -152,6 +174,15 @@ function appMountedImpl(app) {
 		// Live view mount/destroy events from here on.
 		setViewObserver(onViewChange);
 
+		// Profiler events from here on too. The sink is attached for the whole
+		// session rather than only between perf:start and perf:stop: accumulation
+		// is gated on `profile`, but a LOOP DETECTION is worth pushing whenever a
+		// panel is attached, not only when someone happens to be recording.
+		// Detach first so a re-registration replaces its sink the way
+		// setViewObserver above replaces its observer — one slot, not a pile.
+		perfDetach?.();
+		perfDetach = devperfInstallSink(onPerfEvent);
+
 		// Replay anything already mounted (a beforeMount hook that mounted a view,
 		// or an app registered late). liveViewList() preserves mount order.
 		for (const view of liveViewList()) emit('view-mounted', viewInfo(view));
@@ -166,6 +197,10 @@ function appUnmountedImpl(app) {
 		if (!hook || (boundApp !== null && boundApp !== app)) return;
 		emit('app-unmounted', {});
 		setViewObserver(null);
+		perfDetach?.();
+		perfDetach = null;
+		profile = null;
+		pendingFlushRow = null;
 		removeOverlay();
 		hook = null;
 		boundApp = null;
@@ -197,6 +232,12 @@ function flushImpl(store, keys, notified) {
 		if (!hook) return;
 		const ids = [];
 		for (const sub of notified) ids.push(subscriberId(sub));
+		// The store-side half of a recording comes from HERE rather than from
+		// devperf's 'store-flush' event, because only this call site carries the
+		// changed KEYS (devperf keeps a count). Note the deliberate shape
+		// difference the panel documents: the flush EVENT reports `notified` as
+		// subscriber ids, the profile reports it as a count.
+		if (profile?.recording) recordProfileFlush(keys, ids.length);
 		emit('flush', { keys: [...keys], notified: ids });
 	} catch {
 		// never let a diagnostic break a store flush
@@ -242,6 +283,12 @@ function handleRequest(message) {
 				return snapshotSubscriptions();
 			case 'snapshot:route':
 				return snapshotRoute();
+			case 'perf:start':
+				return startProfile();
+			case 'perf:stop':
+				return stopProfile();
+			case 'snapshot:profile':
+				return profileReport();
 			case 'edit:record':
 				return editRecord(payload.type, payload.id, payload.patch);
 			case 'highlight:view':
@@ -426,6 +473,292 @@ function snapshotRoute() {
 		chain: [...lastChain],
 		title: typeof document !== 'undefined' ? document.title : null,
 	};
+}
+
+// ---- profiler (D121) --------------------------------------------------------
+
+/**
+ * The seam between devperf's event sink and the extension's Performance panel.
+ *
+ * Two things make this a translation layer rather than a pass-through:
+ *
+ * 1. IDENTITY. devperf numbers views in its OWN space (the id on its private
+ *    profiling state). The panel cross-links a profile row into the Views panel
+ *    by the id THIS module hands out, so a row keyed by devperf's number would
+ *    look right and silently link to the wrong view — or to nothing. Every row
+ *    is therefore keyed by viewId(instance), the same session-scoped WeakMap id
+ *    `view-mounted` and `inspect:view` use, which is why devperf passes each
+ *    event its subject instance alongside the payload.
+ * 2. RECORDING. devperf's totals are process-lifetime counters that never reset
+ *    — measureRenders() and the __PUZZLE_PERF__ console handle both depend on
+ *    that. A panel recording is a WINDOW between perf:start and perf:stop, so
+ *    the window is accumulated here instead.
+ *
+ * Rows hold a view's ID, never the view, so a view destroyed mid-recording keeps
+ * its row (the panel marks it "no longer mounted") with nothing pinned in memory.
+ *
+ * Everything about a profile is PULLED — the panel polls snapshot:profile while
+ * recording — because a per-render event would be a firehose that overruns both
+ * the hook's pre-attach buffer and the panel's message ring. The one push is
+ * `perf-warning`, emitted only when devperf's loop detector actually trips.
+ */
+
+/** The rolling cap on the flush timeline. Totals stay exact; only rows drop off. */
+const FLUSH_RING = 200;
+
+/** The re-render cause buckets a profile row reports, in the panel's print order. */
+const CAUSE_KEYS = ['data', 'store', 'parent', 'route', 'manual', 'slot'];
+
+/**
+ * devperf's cause vocabulary → those buckets. An unmapped cause is counted under
+ * its own name rather than dropped: the panel appends causes it does not know,
+ * so a cause a newer runtime starts emitting stays visible without a panel
+ * update.
+ */
+const CAUSE_BUCKET = {
+	initial: 'data', // the mount's first data() run
+	refresh: 'data', // an explicit refresh() re-ran data()
+	store: 'store',
+	props: 'parent', // a parent re-render passed new props down
+	route: 'route',
+	'local-state': 'manual', // setData()
+	render: 'manual', // a direct rerender() with nothing else pending
+	slots: 'slot',
+};
+
+/** devperf's loop-detector kinds → the protocol's. */
+const WARNING_KIND = {
+	recursive: 'recursive-loop',
+	'cross-frame': 'runaway-rerender',
+};
+
+/** Begin (or restart) a recording. Counters before this point are not in it. */
+function startProfile() {
+	profile = {
+		startedAt: Date.now(),
+		stoppedAt: 0,
+		recording: true,
+		views: new Map(),
+		dataRuns: 0,
+		storeFlushes: 0,
+		storeNotifications: 0,
+		flushes: [],
+		warnings: new Map(),
+	};
+	pendingFlushRow = null;
+	return { ok: true };
+}
+
+/** Freeze the recording. The report stays readable — and final — afterwards. */
+function stopProfile() {
+	if (profile?.recording) {
+		profile.recording = false;
+		profile.stoppedAt = Date.now();
+	}
+	pendingFlushRow = null;
+	return { ok: true };
+}
+
+/**
+ * The whole report, rebuilt per request so the extension never shares our
+ * objects. Before the first recording this is the zeroed shape, NOT null: the
+ * panel renders the report unconditionally.
+ */
+function profileReport() {
+	if (!profile) {
+		return {
+			recording: false,
+			durationMs: 0,
+			totals: emptyProfileTotals(),
+			views: [],
+			flushes: [],
+			warnings: [],
+		};
+	}
+
+	const totals = emptyProfileTotals();
+	const views = [];
+	for (const row of profile.views.values()) {
+		totals.renders += row.renders;
+		totals.wastedRenders += row.wastedRenders;
+		totals.domMutations += row.domMutations;
+		views.push({
+			...row,
+			renderMs: round2(row.renderMs),
+			patchMs: round2(row.patchMs),
+			dataMs: round2(row.dataMs),
+			causes: { ...row.causes },
+		});
+	}
+	totals.dataRuns = profile.dataRuns;
+	// From the running counters, never from the ring: a long recording drops old
+	// flush ROWS but must not under-report how many flushes there were.
+	totals.storeFlushes = profile.storeFlushes;
+	totals.storeNotifications = profile.storeNotifications;
+
+	return {
+		recording: profile.recording,
+		durationMs: (profile.recording ? Date.now() : profile.stoppedAt) - profile.startedAt,
+		totals,
+		views,
+		flushes: profile.flushes.map((flush) => ({ ...flush, keys: [...flush.keys] })),
+		warnings: [...profile.warnings.values()].map((warning) => ({ ...warning })),
+	};
+}
+
+function emptyProfileTotals() {
+	return {
+		renders: 0,
+		wastedRenders: 0,
+		domMutations: 0,
+		dataRuns: 0,
+		storeFlushes: 0,
+		storeNotifications: 0,
+	};
+}
+
+/**
+ * devperf's sink. `subject` is the instance the event is about — a view for
+ * every case below, and the only way to reach this module's id space.
+ */
+function onPerfEvent(event, subject) {
+	try {
+		// A loop detection is pushed whenever a panel is attached, recording or
+		// not: it is the one thing a developer must not have to be recording to
+		// find out about.
+		if (event.type === 'loop') {
+			profileWarning(event, subject);
+			return;
+		}
+		if (!profile?.recording) return;
+
+		switch (event.type) {
+			case 'render': {
+				const row = profileRow(subject);
+				if (!row) return;
+				row.renders++;
+				if (event.wasted) row.wastedRenders++;
+				row.domMutations += event.domMutations;
+				row.renderMs += event.treeDuration;
+				row.patchMs += event.patchDuration;
+				for (const cause of event.causes) countCause(row, cause);
+				return;
+			}
+			case 'data': {
+				// Counted per RUN rather than derived from causes: the event fires
+				// once per data() call (at settle, for an async one), which is the
+				// number the panel's "data() runs" tile means.
+				profile.dataRuns++;
+				const row = profileRow(subject);
+				if (row) row.dataMs += event.duration;
+				return;
+			}
+			case 'memo': {
+				const row = profileRow(subject);
+				if (!row) return;
+				if (event.hit) row.memoHits++;
+				else row.memoMisses++;
+				return;
+			}
+			case 'component-props': {
+				const row = profileRow(subject);
+				if (!row) return;
+				if (event.bailedOut) row.propsBailouts++;
+				else row.propsReruns++;
+				return;
+			}
+			case 'store-flush': {
+				// The duration half of the row devtoolsFlush() pushed earlier in
+				// this same synchronous flush().
+				if (pendingFlushRow) {
+					pendingFlushRow.durationMs = round2(event.duration);
+					pendingFlushRow = null;
+				}
+				return;
+			}
+			default:
+				// 'slot-render' and 'tracking-deferral' need no row of their own: a
+				// slot render already marks the next render's cause, and deferrals
+				// are a chain-level concern the report does not model.
+				return;
+		}
+	} catch {
+		// A profiler must never break the app it is measuring.
+	}
+}
+
+function profileRow(view) {
+	if (!view || !profile) return null;
+	const id = viewId(view);
+	let row = profile.views.get(id);
+	if (row) return row;
+	const causes = {};
+	for (const key of CAUSE_KEYS) causes[key] = 0;
+	row = {
+		...viewInfo(view),
+		renders: 0,
+		wastedRenders: 0,
+		domMutations: 0,
+		renderMs: 0,
+		patchMs: 0,
+		dataMs: 0,
+		causes,
+		memoHits: 0,
+		memoMisses: 0,
+		propsBailouts: 0,
+		propsReruns: 0,
+	};
+	profile.views.set(id, row);
+	return row;
+}
+
+function countCause(row, cause) {
+	const bucket = CAUSE_BUCKET[cause] ?? cause;
+	row.causes[bucket] = (row.causes[bucket] ?? 0) + 1;
+}
+
+/**
+ * Push one loop detection AND fold it into the report.
+ *
+ * Both halves matter: the event reaches an attached panel immediately, while the
+ * report entry is what a panel opened later still finds. Re-firing the same
+ * detection increments `count` instead of adding a row — the panel dedupes by
+ * kind + view and keeps the higher count, since it is simply the later
+ * observation of one ongoing loop.
+ */
+function profileWarning(event, subject) {
+	const kind = WARNING_KIND[event.kind] ?? event.kind ?? 'unknown';
+	const id = subject ? viewId(subject) : null;
+	const name = subject ? viewName(subject) : (event.viewName ?? null);
+	// devperf's own message already names the view and the numbers that tripped
+	// the detector, which is exactly what the panel prints as the detail line.
+	const detail = event.message ?? '';
+	let count = 1;
+	if (profile) {
+		const key = `${kind}#${id ?? '?'}`;
+		const existing = profile.warnings.get(key);
+		if (existing) {
+			existing.count++;
+			count = existing.count;
+		} else {
+			profile.warnings.set(key, { kind, viewId: id, name, detail, count });
+		}
+	}
+	emit('perf-warning', { kind, viewId: id, name, detail, count });
+}
+
+function recordProfileFlush(keys, notified) {
+	profile.storeFlushes++;
+	profile.storeNotifications += notified;
+	const row = { at: Date.now(), keys: [...keys], notified, durationMs: 0 };
+	profile.flushes.push(row);
+	if (profile.flushes.length > FLUSH_RING) profile.flushes.shift();
+	pendingFlushRow = row;
+}
+
+/** performance.now() is fractional; two decimals is all the panel prints. */
+function round2(value) {
+	return Math.round(value * 100) / 100;
 }
 
 // ---- highlight + log --------------------------------------------------------

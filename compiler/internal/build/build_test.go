@@ -122,6 +122,9 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if !strings.Contains(string(devJS), devperfSentinel) {
 		t.Errorf("dev bundle should retain the dev performance sentinel (__PUZZLE_DEV__ define = true)")
 	}
+	if !strings.Contains(string(devJS), profileRequestSentinel) {
+		t.Errorf("dev bundle should retain the profiler bridge request %q (__PUZZLE_DEV__ define = true)", profileRequestSentinel)
+	}
 
 	// Production: DCE strips every DEV-guarded branch — no __puzzleHMR reaches
 	// the bundle (zero production cost).
@@ -157,6 +160,12 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if strings.Contains(string(prodJS), devperfSentinel) {
 		t.Errorf("production bundle must DCE dev performance instrumentation — found %s present", devperfSentinel)
 	}
+	// The profiler seam leaves with the bridge (D121): the devperf sink
+	// devtools.js installs must not turn devtools.js into a live importer that
+	// drags devperf.js — or the profiler's own request strings — into production.
+	if strings.Contains(string(prodJS), profileRequestSentinel) {
+		t.Errorf("production bundle must DCE the profiler bridge — found the %q request present", profileRequestSentinel)
+	}
 	if bytes := metafileBytesInOutput(t, prodMetafile, "client-runtime/devperf.js"); bytes != 0 {
 		t.Errorf("production devperf.js bytesInOutput = %d, want 0", bytes)
 	}
@@ -167,6 +176,11 @@ func TestBuildDevDefineDCE(t *testing.T) {
 
 // devperfSentinel is a minification-proof literal unique to devperf.js.
 const devperfSentinel = "__PUZZLE_PERF__"
+
+// profileRequestSentinel is a minification-proof literal unique to the profiler
+// half of the DevTools bridge (devtools.js, D121) — a request type, so minifying
+// cannot rename it away.
+const profileRequestSentinel = "snapshot:profile"
 
 // metafileBytesInOutput sums one source input's attributed bytes across every
 // esbuild output. An input omitted from an output contributes zero.

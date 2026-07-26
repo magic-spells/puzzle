@@ -86,9 +86,28 @@ class Detail extends PuzzleView {
 }
 Detail.__pzlModule = 'views/Detail.pzl';
 
+/**
+ * Renders the same output no matter what local state says, which is exactly what
+ * devperf's runaway detector looks for: a burst of renders that mutate nothing.
+ * The instance publishes itself because driving the detector needs synchronous
+ * flushUpdates() calls, and the app handle exposes DOM, not view instances.
+ */
+let runaway = null;
+class Runaway extends PuzzleView {
+	created() {
+		runaway = this;
+	}
+
+	render() {
+		return h('puzzle-view', { class: 'runaway' }, [text('constant')]);
+	}
+}
+Runaway.__pzlModule = 'views/Runaway.pzl';
+
 const routes = [
 	{ path: '/', name: 'home', view: Home },
 	{ path: '/detail/:id', name: 'detail', view: Detail },
+	{ path: '/runaway', name: 'runaway', view: Runaway },
 ];
 
 const handles = [];
@@ -101,6 +120,7 @@ async function bootApp() {
 
 afterEach(() => {
 	for (const handle of handles.splice(0)) handle.destroy();
+	runaway = null;
 	delete window[HOOK_KEY];
 	delete window.$p;
 	for (const node of document.querySelectorAll(OVERLAY_SELECTOR)) node.remove();
@@ -384,6 +404,185 @@ describe('devtools bridge — requests', () => {
 		expect(document.querySelector(OVERLAY_SELECTOR)).toBeNull();
 		expect(hook.request('snapshot:records')).toEqual({
 			error: 'no store — the app is not mounted',
+		});
+	});
+});
+
+// ---- profiler ----------------------------------------------------------------
+
+describe('devtools bridge — profiler (D121)', () => {
+	const ZERO_REPORT = {
+		recording: false,
+		durationMs: 0,
+		totals: {
+			renders: 0,
+			wastedRenders: 0,
+			domMutations: 0,
+			dataRuns: 0,
+			storeFlushes: 0,
+			storeNotifications: 0,
+		},
+		views: [],
+		flushes: [],
+		warnings: [],
+	};
+
+	it('snapshot:profile answers the zeroed report before the first recording', async () => {
+		const hook = installHook();
+		const app = await bootApp();
+		app.store.createRecord('todo', { id: 't1', text: 'not recorded' });
+		await settled();
+
+		// The panel renders the shape unconditionally, so "never recorded" is
+		// zeros — never null — and work done before perf:start is not in it.
+		expect(hook.request('snapshot:profile')).toEqual(ZERO_REPORT);
+	});
+
+	it('perf:start accumulates per-view rows under the bridge’s own view ids', async () => {
+		const hook = installHook();
+		const app = await bootApp();
+		const homeId = hook.of('view-mounted').find((e) => e.payload.name === 'Home').payload.id;
+
+		expect(hook.request('perf:start')).toEqual({ ok: true });
+		app.store.createRecord('todo', { id: 't1', text: 'write the seam' });
+		await settled();
+
+		const report = hook.request('snapshot:profile');
+		expect(report.recording).toBe(true);
+		expect(report.durationMs).toBeGreaterThanOrEqual(0);
+		expect(report.totals.renders).toBeGreaterThan(0);
+		expect(report.totals.dataRuns).toBeGreaterThan(0);
+		expect(report.totals.storeFlushes).toBeGreaterThan(0);
+		expect(report.totals.storeNotifications).toBeGreaterThan(0);
+
+		// THE cross-link: the row id is the same id view-mounted/snapshot:views
+		// report, not devperf's separate internal numbering.
+		const row = report.views.find((view) => view.name === 'Home');
+		expect(row.id).toBe(homeId);
+		expect(row.id).toBe(hook.request('snapshot:views').roots[0].id);
+		expect(row.module).toBe('views/Home.pzl');
+		expect(row.renders).toBeGreaterThan(0);
+		expect(row.domMutations).toBeGreaterThan(0);
+		// onStoreChange refreshed it, so the cause lands in the store bucket, and
+		// every bucket the panel prints is present even at zero.
+		expect(row.causes.store).toBeGreaterThan(0);
+		expect(Object.keys(row.causes)).toEqual(
+			expect.arrayContaining(['data', 'store', 'parent', 'route', 'manual', 'slot'])
+		);
+		expect(typeof row.renderMs).toBe('number');
+		expect(typeof row.patchMs).toBe('number');
+		expect(typeof row.dataMs).toBe('number');
+		expect(row).toMatchObject({
+			memoHits: expect.any(Number),
+			memoMisses: expect.any(Number),
+			propsBailouts: expect.any(Number),
+			propsReruns: expect.any(Number),
+		});
+
+		// The store timeline keeps the changed KEYS (only this side of the bridge
+		// has them) and reports `notified` as a count, not the id list the flush
+		// EVENT carries.
+		const flush = report.flushes.at(-1);
+		expect(flush.keys).toContain('todo');
+		expect(flush.notified).toBeGreaterThan(0);
+		expect(typeof flush.at).toBe('number');
+		expect(typeof flush.durationMs).toBe('number');
+	});
+
+	it('perf:stop freezes the report and later work does not land in it', async () => {
+		const hook = installHook();
+		const app = await bootApp();
+
+		hook.request('perf:start');
+		app.store.createRecord('todo', { id: 't1', text: 'during' });
+		await settled();
+		expect(hook.request('perf:stop')).toEqual({ ok: true });
+
+		const stopped = hook.request('snapshot:profile');
+		expect(stopped.recording).toBe(false);
+		expect(stopped.totals.renders).toBeGreaterThan(0);
+
+		app.store.createRecord('todo', { id: 't2', text: 'after' });
+		await settled();
+
+		const later = hook.request('snapshot:profile');
+		expect(later.totals).toEqual(stopped.totals);
+		expect(later.flushes).toHaveLength(stopped.flushes.length);
+		// A stopped recording's duration is fixed at the stop, not still running.
+		expect(later.durationMs).toBe(stopped.durationMs);
+	});
+
+	it('perf:start restarts a recording rather than resuming the old one', async () => {
+		const hook = installHook();
+		const app = await bootApp();
+
+		hook.request('perf:start');
+		app.store.createRecord('todo', { id: 't1', text: 'first window' });
+		await settled();
+		expect(hook.request('snapshot:profile').totals.renders).toBeGreaterThan(0);
+
+		hook.request('perf:start');
+		expect(hook.request('snapshot:profile')).toMatchObject({
+			recording: true,
+			totals: ZERO_REPORT.totals,
+			views: [],
+			flushes: [],
+			warnings: [],
+		});
+	});
+
+	it('pushes one perf-warning per loop detection and folds it into the report', async () => {
+		const hook = installHook();
+		const app = await bootApp();
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		await app.visit('/runaway');
+		const runawayId = hook.of('view-mounted').find((e) => e.payload.name === 'Runaway').payload
+			.id;
+		hook.request('perf:start');
+
+		// 61 renders inside devperf's one-second window, none of them mutating
+		// anything — the runaway detector's exact trigger.
+		for (let i = 0; i < 61; i++) {
+			runaway.setData('tick', i);
+			runaway.flushUpdates();
+		}
+
+		// LOW VOLUME is the point: 60+ renders produce exactly one event.
+		const warnings = hook.of('perf-warning');
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0]).toMatchObject({ puzzle: 1, v: 1, type: 'perf-warning' });
+		expect(warnings[0].payload).toEqual({
+			kind: 'runaway-rerender',
+			viewId: runawayId,
+			name: 'Runaway',
+			detail: expect.stringContaining('stopped Runaway after'),
+			count: 1,
+		});
+
+		// The event reaches an attached panel now; the report entry is what a panel
+		// opened later still finds.
+		expect(hook.request('snapshot:profile').warnings).toEqual([
+			{
+				kind: 'runaway-rerender',
+				viewId: runawayId,
+				name: 'Runaway',
+				detail: expect.stringContaining('stopped Runaway after'),
+				count: 1,
+			},
+		]);
+	});
+
+	it('answers profiler requests without a recording and unknown ones by error', async () => {
+		const hook = installHook();
+		await bootApp();
+
+		// Stopping something that never started is not an error — the panel may
+		// reconnect to a page mid-session and stop defensively.
+		expect(hook.request('perf:stop')).toEqual({ ok: true });
+		expect(hook.request('snapshot:profile')).toEqual(ZERO_REPORT);
+		expect(hook.request('perf:profile')).toEqual({
+			error: 'unknown devtools request "perf:profile"',
 		});
 	});
 });
