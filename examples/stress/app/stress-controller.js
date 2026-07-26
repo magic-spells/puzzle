@@ -96,7 +96,11 @@ export const SCENARIO_DEFINITIONS = [
 		name: 'islands',
 		label: 'Islands',
 		blurb: 'island children must stay frozen while the shell churns at 60Hz',
-		ops: ['shell-churn'],
+		// Same work, two bounds. `shell-churn` runs for 5 seconds (the scenario as
+		// specified); `shell-renders` runs for a fixed 60 renders, which is what the
+		// benchmark times — a fixed-duration op's milliseconds are an input, not a
+		// measurement. See CHURN_RENDERS in Islands.pzl.
+		ops: ['shell-churn', 'shell-renders'],
 	},
 	{
 		name: 'formatters',

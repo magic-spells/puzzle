@@ -348,18 +348,21 @@ export const OPS = [
 	})),
 
 	// ── islands: 100 islands x 200 descendants, churned at frame rate ───────
+	//
+	// The timed arm is `shell-renders` (60 renders), NOT `shell-churn` (5,000ms).
+	// A fixed-duration op's milliseconds are an input rather than a measurement,
+	// and the harness's clamp guard rightly rejects them: measured, all three
+	// shell-churn samples landed within 60ms of a whole second, which is precisely
+	// the signature of the throttled renderer that guard exists to catch. Bounding
+	// by render count measures the same code path and asserts the same counters
+	// while leaving the clock free to say something.
 	{
-		id: 'islands/shell-churn/20000',
-		label: 'shell-churn',
+		id: 'islands/shell-renders/20000',
+		label: 'shell-renders',
 		scenario: 'islands',
 		params: { n: 100, descendants: 200 },
 		size: 20000,
-		op: 'shell-churn',
-		// Five seconds per iteration, so the sample set is small on purpose. The
-		// runner prints a CAP line for this, which is exactly the point: nobody
-		// should mistake three iterations for fifteen.
-		iterations: 3,
-		warmup: 0,
+		op: 'shell-renders',
 		expect: {
 			islandCount: 100,
 			islandDescendants: 200,
@@ -374,7 +377,7 @@ export const OPS = [
 			// mutated either.
 			shellDidMutate: 1,
 		},
-		note: 'shell-churn re-renders the surrounding view at frame rate for 5s. islandViolations must be 0 (island holds) while islandChildVnodesPerRender stays at the full 20,000 (the freeze saves patching, not allocation). Its ms are a fixed 5s window, not a measurement.',
+		note: 'shell-renders re-renders the surrounding view 60 times. islandViolations must be 0 (island holds) while islandChildVnodesPerRender stays at the full 20,000 (the freeze saves patching, not allocation). The 5-second shell-churn arm measures the same thing on a clock and is deliberately not timed here.',
 	},
 
 	// ── formatters: the A/B that prices the built-in registry ───────────────
