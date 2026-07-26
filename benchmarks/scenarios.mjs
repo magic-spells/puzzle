@@ -290,6 +290,147 @@ export const OPS = [
 	...handlerOps("stable", 1000),
 	...handlerOps("inline", 10000),
 	...handlerOps("stable", 10000),
+
+	// ── deep-nest: 64 branches x 24 levels = 1,536 real view instances ──────
+	//
+	// One counter decides all three: `nodeDataRuns`, the number of mounted views
+	// that re-evaluated for a single write. `update-global` is the CONTROL and
+	// must read the full 1,536 — without it, the `1` the other two report would
+	// be indistinguishable from a scenario whose subscriptions never worked.
+	...['update-leaf', 'update-branch-root', 'update-global'].map((op) => ({
+		id: `deep-nest/${op}/1536`,
+		label: op,
+		scenario: 'deep-nest',
+		params: { n: 64, depth: 24 },
+		size: 1536,
+		op,
+		preExpect: { records: 1537 },
+		expect: {
+			records: 1537,
+			views: 1537,
+			nodes: 1536,
+			nodeDataRuns: op === 'update-global' ? 1536 : 1,
+		},
+		note:
+			op === 'update-global'
+				? 'update-global is the control: one write to the record all 1,536 nodes query must wake all 1,536. Anything less means notifications are being dropped and the other two ops mean nothing.'
+				: `${op} writes ONE record that exactly one node queries. nodeDataRuns of 1 means the update is proportional to neither depth nor forest size.`,
+	})),
+
+	// ── write-storm: burst only ─────────────────────────────────────────────
+	//
+	// `sustained` and `sustained-persist` are deliberately NOT here. They run for
+	// a fixed 10 seconds, so their milliseconds are set by construction rather
+	// than measured, and their flush counts track the host's real frame rate —
+	// a counter that legitimately differs between machines has no business in a
+	// committed baseline. They are structural measurements, taken once through
+	// benchmarks/probe.mjs. The burst arms ARE deterministic: 5,000 writes inside
+	// one synchronous tick, which the scheduler must collapse into one flush.
+	...[false, true].map((persist) => ({
+		id: `write-storm/burst${persist ? '-persist' : ''}/10000`,
+		label: `burst${persist ? ' (persist)' : ''}`,
+		scenario: 'write-storm',
+		params: { n: 10000 },
+		size: 5000,
+		op: persist ? 'burst-persist' : 'burst',
+		preExpect: { records: 10000 },
+		expect: { records: 10000, stormWrites: 5000 },
+		// Flush count is asserted as a BOUND, not an equality: the store arms a
+		// rAF plus a 220ms fallback timer, and which one wins is a scheduling
+		// detail. What must hold is that 5,000 writes do not become 5,000 flushes.
+		invariant: (stats) =>
+			stats.stormFlushes <= 3
+				? null
+				: `write-storm: ${stats.stormWrites} writes produced ${stats.stormFlushes} flushes — the rAF batching has stopped collapsing a synchronous burst`,
+		note: persist
+			? 'burst-persist attaches a memory storage shim so Store._persistNow() actually runs. One dirty flush = one full serialize of all 10,000 records; compare its time against plain burst to price persistence.'
+			: 'burst issues 5,000 writes in one tick and never calls flush() by hand — letting the frame arrive IS the assertion.',
+	})),
+
+	// ── islands: 100 islands x 200 descendants, churned at frame rate ───────
+	{
+		id: 'islands/shell-churn/20000',
+		label: 'shell-churn',
+		scenario: 'islands',
+		params: { n: 100, descendants: 200 },
+		size: 20000,
+		op: 'shell-churn',
+		// Five seconds per iteration, so the sample set is small on purpose. The
+		// runner prints a CAP line for this, which is exactly the point: nobody
+		// should mistake three iterations for fifteen.
+		iterations: 3,
+		warmup: 0,
+		expect: {
+			islandCount: 100,
+			islandDescendants: 200,
+			islandNodes: 20000,
+			// THE assertion. Not "few", not "hopefully none" — exactly zero DOM
+			// mutations below an island boundary, measured with a MutationObserver.
+			islandViolations: 0,
+			// And the cost of that guarantee: every descendant vnode is still
+			// built on every render before the patcher discards the lot.
+			islandChildVnodesPerRender: 20000,
+			// The control. Zero island mutations means nothing if the shell never
+			// mutated either.
+			shellDidMutate: 1,
+		},
+		note: 'shell-churn re-renders the surrounding view at frame rate for 5s. islandViolations must be 0 (island holds) while islandChildVnodesPerRender stays at the full 20,000 (the freeze saves patching, not allocation). Its ms are a fixed 5s window, not a measurement.',
+	},
+
+	// ── formatters: the A/B that prices the built-in registry ───────────────
+	//
+	// `rerender` and `rerender-raw` are the SAME tree with the SAME per-row patch
+	// work; only the two formatted spans differ. Neither carries any
+	// instrumentation, so the difference between their timings is the formatters
+	// and nothing else. `count-intl` runs the formatted arm again with Intl
+	// patched — its COUNTS are exact, its milliseconds carry the probe.
+	{
+		id: 'formatters/rerender/10000',
+		label: 'rerender (date + timeago)',
+		scenario: 'formatters',
+		params: { n: 10000 },
+		size: 10000,
+		op: 'rerender',
+		preExpect: { records: 10000 },
+		expect: { records: 10000, fmtRows: 10000, fmtFormatted: 1, fmtFormatterCalls: 0 },
+		note: 'the formatted arm, with NO instrumentation of any kind. Subtract rerender-raw to price the two built-ins.',
+	},
+	{
+		id: 'formatters/rerender-raw/10000',
+		label: 'rerender (raw control)',
+		scenario: 'formatters',
+		params: { n: 10000 },
+		size: 10000,
+		op: 'rerender-raw',
+		preExpect: { records: 10000 },
+		expect: { records: 10000, fmtRows: 10000, fmtFormatted: 0, fmtFormatterCalls: 0 },
+		note: 'the control arm: identical tree, identical 10,000-node patch, plain record strings instead of date() and timeago().',
+	},
+	{
+		id: 'formatters/count-intl/10000',
+		label: 'count-intl',
+		scenario: 'formatters',
+		params: { n: 10000 },
+		size: 10000,
+		op: 'count-intl',
+		preExpect: { records: 10000 },
+		// One Intl object constructed per formatter call, and 20,000 calls for
+		// 10,000 rows. These are the numbers the whole scenario exists to pin.
+		expect: {
+			records: 10000,
+			fmtRows: 10000,
+			fmtDateTimeFormats: 10000,
+			fmtRelativeTimeFormats: 10000,
+			fmtFormatterCalls: 20000,
+		},
+		note: 'count-intl is instrumented: Intl is patched and the registry entries wrapped. Its counts are exact; its milliseconds include the probe and must NOT be compared against the other two arms.',
+	},
+
+	// loop-trap is deliberately absent. It is a CORRECTNESS exercise for the D121
+	// loop detector, which devperf compiles out of a production build entirely —
+	// so in this harness's bundle there is nothing to detect anything, and every
+	// counter it reports would be a fabricated zero. Run it through
+	// benchmarks/probe.mjs, which builds in development mode.
 ];
 
 /** Consecutive entries sharing scenario + params, so select() runs once per group. */

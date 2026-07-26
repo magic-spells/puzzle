@@ -322,6 +322,13 @@ function extractCounters(entry, result, stats) {
 	// opposite things here.
 	if (typeof stats.childDataRuns === 'number') counters.childDataRuns = stats.childDataRuns;
 	if (typeof stats.handlers === 'string') counters.handlers = stats.handlers;
+	// The generic structural channel (examples/stress/app/stress-controller.js).
+	// A scenario reports the integers ITS question is about; they are spread in
+	// as first-class counters so `expect`/`invariant` can assert them directly.
+	// Spread BEFORE the perf block so a scenario can never shadow a framework
+	// counter by accident.
+	if (stats.counters && typeof stats.counters === 'object') Object.assign(counters, stats.counters);
+
 	if (stats.perf) {
 		counters.renders = stats.perf.renders;
 		counters.wastedRenders = stats.perf.wastedRenders;

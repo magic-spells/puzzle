@@ -1,0 +1,65 @@
+<puzzle-view>
+  <div class="nest-node">
+    <span class="nest-label">{ label }</span>
+    <span class="nest-global">{ globalVersion }</span>
+    {#if hasChild}
+      <NestNode chain={ chain } level={ childLevel } globalId={ globalId } />
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { nestMetrics } from '../nest-metrics.js';
+
+// ---------------------------------------------------------------------------
+// One level of the nest. It renders ITSELF for the next level down, which is how
+// 64 x 24 becomes 1,536 real PuzzleView instances rather than simulated depth.
+//
+// The self-reference needs no import: a capitalized tag compiles to a bare
+// identifier inside the render function, and `NestNode` is already the class
+// binding in this module's scope. The reference is dereferenced at RENDER time,
+// long after module evaluation, so there is no circular-import or TDZ problem.
+// Recursion terminates on `hasChild`, which is false once `level` reaches the
+// end of the chain — the chain's length IS the depth.
+//
+// ── Every prop here is deliberately bailout-friendly ────────────────────────
+// `chain` is one array allocated once by the host and threaded down unchanged,
+// so Object.is holds; `level` and `globalId` are primitives. When a node
+// re-renders, its child's props are therefore shallow-equal and the patch takes
+// the component bailout — the child runs neither data() nor render(). That is
+// not an optimisation detail, it IS the measurement: if the props churned, every
+// update would look depth-proportional for reasons that have nothing to do with
+// the framework's propagation.
+//
+// ── Two subscriptions per node, on purpose ──────────────────────────────────
+// The findOne on this node's own record is the precise one. The findOne on the
+// SHARED global record is the control: it subscribes all 1,536 nodes to one key,
+// so `update-global` must wake every one of them. Without a control that reads
+// 1,536, a `1` from `update-leaf` would be indistinguishable from a scenario
+// whose subscriptions were simply broken.
+// ---------------------------------------------------------------------------
+
+const TYPE = 'nest';
+
+export default class NestNode extends PuzzleView {
+	data() {
+		nestMetrics.dataRuns += 1;
+
+		const store = this.ctx.store;
+		const chain = this.props.chain;
+		const level = this.props.level;
+		const record = store.findOne(TYPE, chain[level]);
+		const global = store.findOne(TYPE, this.props.globalId);
+
+		return {
+			label: `${level}·v${record ? record.version : '?'}`,
+			globalVersion: global ? global.version : 0,
+			hasChild: level + 1 < chain.length,
+			childLevel: level + 1,
+			chain,
+			globalId: this.props.globalId,
+		};
+	}
+}
+</script>

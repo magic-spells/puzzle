@@ -1,0 +1,384 @@
+<puzzle-view>
+  <div class="islands-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="tabular-nums text-fg">{ islandCount }</span> islands x
+        <span class="tabular-nums text-fg">{ descendantCount }</span> descendants =
+        <span class="tabular-nums text-accent">{ nodeCount }</span> frozen nodes
+      </div>
+      <div class="font-mono text-[11px] shrink-0 { resultCls }">{ resultText }</div>
+    </div>
+
+    <!-- The shell. This is the ONLY thing the churn changes, and it is observed
+         separately as the control: "zero mutations below an island" means
+         nothing unless the shell provably mutated in the same window. -->
+    <div class="shell-bar px-4 py-3 border-b border-hairline font-mono text-xs">
+      <span class="shell-tick text-accent tabular-nums">{ shellTick }</span>
+      <span class="text-faint"> · { shellNote }</span>
+    </div>
+
+    <div class="px-4 py-2 border-b border-line font-mono text-[11px] text-faint">{ explainText }</div>
+
+    <div class="islands-grid max-h-[380px] overflow-auto px-4 py-2">
+      {#for isle in islands}
+        <div class="isle" island>
+          {#for item in isle.items}
+            <span class="isle-leaf">{ item.label }</span>
+          {/for}
+        </div>
+      {/for}
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { registerScenario } from '../stress-controller.js';
+import { afterPaint, intParam, ms1, perfDelta, perfSnapshot, settleFrames, viewRoot } from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// islands — does `island` really freeze its subtree, and what does it still cost?
+//
+// 100 islands x 200 descendants = 20,000 nodes the patcher is contractually
+// forbidden from touching after mount. `shell-churn` re-renders the surrounding
+// view at frame rate for 5 seconds and asks two separate questions:
+//
+//   1. THE ASSERTION: DOM mutations below an island boundary must be exactly 0.
+//      Measured with a real MutationObserver over the grid, not by trusting the
+//      patcher. Attribute and characterData changes ON an island element itself
+//      are NOT violations — island freezes children, not the element — so they
+//      are counted separately rather than folded in.
+//
+//   2. THE COST: are the island's child vnodes still ALLOCATED every render even
+//      though they are never patched? viewManager.js's island branch runs inside
+//      patch(), which is reached only AFTER render() has already built the entire
+//      new tree — so the fresh children are built and then thrown away
+//      (`newVnode.children = oldVnode.children`). Each descendant's `label` is a
+//      getter that counts its own reads, so "vnodes built per render" is a
+//      measured number, not an inference from the source.
+//
+// ── The control matters ─────────────────────────────────────────────────────
+// A scenario that renders nothing also reports zero island mutations. The shell
+// gets its own observer, and `shellDidMutate` has to be 1 for the zero below the
+// boundary to mean anything at all.
+//
+// No components live inside an island here, and none may: the compiler rejects a
+// component, <children/> or <slot> anywhere in an island subtree. The 20,000
+// nodes are therefore plain elements, which is also what makes them a fair test
+// of the patcher rather than of component bailout.
+// ---------------------------------------------------------------------------
+
+/** Descendant vnode allocations, counted by the getter each build reads. */
+const islandMetrics = { descendantReads: 0 };
+
+/** How long `shell-churn` drives the shell, at frame rate. */
+const CHURN_MS = 5000;
+
+export default class Islands extends PuzzleView {
+  api = {
+    name: 'islands',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.islands = [];
+    this.islandCount = 0;
+    this.descendantCount = 0;
+    this.shellTick = 0;
+    this.lastResult = null;
+    this.unregister = null;
+    this.buildDataset();
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  data() {
+    const result = this.lastResult;
+    return {
+      islands: this.islands,
+      islandCount: this.islandCount,
+      descendantCount: this.descendantCount,
+      nodeCount: this.islandCount * this.descendantCount,
+      shellTick: this.shellTick,
+      shellNote: 'shell — the only thing shell-churn changes',
+      explainText:
+        'the grid below is 100 island elements. After mount the patcher may never touch their children again, ' +
+        'so churning the shell must produce exactly zero mutations underneath any of them — while the shell ' +
+        'itself provably mutates. Every descendant still counts how often its vnode gets rebuilt.',
+      resultText: result
+        ? `${result.frames} renders → ${result.violations} island mutations · ${result.vnodesPerRender} child vnodes/render`
+        : 'no run yet',
+      resultCls: result ? (result.violations === 0 ? 'text-accent' : 'text-danger') : 'text-faint',
+    };
+  }
+
+  // ---- dataset -------------------------------------------------------------
+
+  wantIslands() {
+    return intParam(this.props?.n, 100, 1, 400);
+  }
+
+  wantDescendants() {
+    return intParam(this.props?.descendants, 200, 1, 1000);
+  }
+
+  /**
+   * Build the frozen content once.
+   *
+   * `label` is a GETTER over a closed-over constant string. Reading it is what a
+   * vnode build does with an interpolation, so the counter measures exactly one
+   * thing: how many descendant vnodes the render function produced. The value
+   * never changes, so the getter can never itself cause a DOM mutation and
+   * contaminate the assertion it sits next to.
+   */
+  buildDataset() {
+    const islandCount = this.wantIslands();
+    const descendantCount = this.wantDescendants();
+
+    this.islandCount = islandCount;
+    this.descendantCount = descendantCount;
+    this.islands = new Array(islandCount);
+    for (let i = 0; i < islandCount; i += 1) {
+      const items = new Array(descendantCount);
+      for (let j = 0; j < descendantCount; j += 1) {
+        const text = `${i}.${j}`;
+        items[j] = {
+          id: j,
+          get label() {
+            islandMetrics.descendantReads += 1;
+            return text;
+          },
+        };
+      }
+      this.islands[i] = { id: i, items };
+    }
+    this.shellTick = 0;
+    this.lastResult = null;
+  }
+
+  // ---- ops -----------------------------------------------------------------
+
+  async opRun(op) {
+    if (op !== 'shell-churn') throw new Error(`[stress] islands has no op "${op}"`);
+    return this.runChurn(op);
+  }
+
+  async runChurn(op) {
+    const root = viewRoot(this);
+    const grid = root?.querySelector('.islands-grid');
+    const shell = root?.querySelector('.shell-bar');
+    if (!grid || !shell) throw new Error('[stress] islands: the grid or the shell did not render');
+
+    let violations = 0;
+    let islandOwnMutations = 0;
+    let shellMutations = 0;
+    const samples = [];
+
+    const classify = (records) => {
+      for (const record of records) {
+        const target = record.target;
+        const element = target.nodeType === 1 ? target : target.parentElement;
+        const isle = element?.closest('.isle') ?? null;
+        if (!isle) continue; // grid-level churn, not an island's business
+        // The island ELEMENT may still patch its own attrs and listeners; only
+        // its children are frozen. A childList change ON the island element is
+        // therefore a violation, an attribute change on it is not.
+        if (target === isle && record.type !== 'childList') {
+          islandOwnMutations += 1;
+          continue;
+        }
+        violations += 1;
+        if (samples.length < 5) {
+          samples.push(`${record.type} on <${(element?.nodeName || '?').toLowerCase()}>`);
+        }
+      }
+    };
+
+    const islandObserver = new MutationObserver(classify);
+    islandObserver.observe(grid, { childList: true, subtree: true, characterData: true, attributes: true });
+    const shellObserver = new MutationObserver((records) => {
+      shellMutations += records.length;
+    });
+    shellObserver.observe(shell, { childList: true, subtree: true, characterData: true, attributes: true });
+
+    const before = perfSnapshot();
+    const readsBefore = islandMetrics.descendantReads;
+    let frames = 0;
+    const t0 = performance.now();
+    const deadline = t0 + CHURN_MS;
+
+    try {
+      await new Promise((resolve) => {
+        const step = () => {
+          if (performance.now() >= deadline || this.isDestroyed) {
+            resolve();
+            return;
+          }
+          frames += 1;
+          this.shellTick += 1;
+          // A full re-render of THIS view: the shell changes, and the whole tree
+          // — islands included — is rebuilt by render() before patch() gets to
+          // decide what to touch.
+          this.refresh();
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      });
+
+      await afterPaint();
+      await settleFrames(2);
+    } finally {
+      // Drain anything still queued BEFORE disconnecting: MutationObserver
+      // callbacks are microtasks, so records from the final frames may not have
+      // been delivered yet and would otherwise be silently discarded — turning a
+      // real violation into a clean zero.
+      classify(islandObserver.takeRecords());
+      shellMutations += shellObserver.takeRecords().length;
+      islandObserver.disconnect();
+      shellObserver.disconnect();
+    }
+
+    const wallMs = performance.now() - t0;
+    const reads = islandMetrics.descendantReads - readsBefore;
+    const perf = perfDelta(before);
+    const vnodesPerRender = frames > 0 ? Math.round(reads / frames) : 0;
+
+    this.lastResult = {
+      op,
+      frames,
+      wallMs,
+      violations,
+      islandOwnMutations,
+      shellMutations,
+      reads,
+      vnodesPerRender,
+      samples,
+      perf,
+    };
+    this.refresh();
+    await settleFrames(1);
+
+    const verdict =
+      violations === 0
+        ? 'ZERO mutations below any island boundary'
+        : `${violations} MUTATIONS BELOW AN ISLAND BOUNDARY (${samples.join(', ')})`;
+    return {
+      op,
+      ms: wallMs,
+      scriptMs: wallMs,
+      detail:
+        `${frames} shell renders in ${ms1(wallMs)}ms → ${verdict}; shell itself mutated ${shellMutations} times; ` +
+        `${reads} island child vnodes built (${vnodesPerRender}/render of ${this.islandCount * this.descendantCount} frozen nodes)`,
+    };
+  }
+
+  async opReset() {
+    this.buildDataset();
+    this.refresh();
+    await afterPaint();
+    await settleFrames(1);
+    return { detail: `reset: ${this.islandCount} islands x ${this.descendantCount} descendants` };
+  }
+
+  async opWarmup() {
+    for (let i = 0; i < 3; i += 1) {
+      this.shellTick += 1;
+      this.refresh();
+      await settleFrames(1);
+    }
+    this.lastResult = null;
+    this.refresh();
+    await settleFrames(1);
+    return { detail: 'warmup: three shell renders, result discarded' };
+  }
+
+  // ---- verification --------------------------------------------------------
+
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const isles = root.querySelectorAll('.isle');
+    if (isles.length !== this.islandCount) {
+      return { ok: false, detail: `DOM has ${isles.length} islands, expected ${this.islandCount}` };
+    }
+
+    // Every island must still hold exactly the children it was seeded with. This
+    // is the structural half of the freeze: the observer proves nothing MOVED,
+    // this proves nothing went MISSING.
+    for (let i = 0; i < isles.length; i += 1) {
+      const leaves = isles[i].querySelectorAll('.isle-leaf');
+      if (leaves.length !== this.descendantCount) {
+        return {
+          ok: false,
+          detail: `island ${i} holds ${leaves.length} descendants, expected ${this.descendantCount}`,
+        };
+      }
+    }
+    const first = isles[0].querySelector('.isle-leaf')?.textContent?.trim();
+    if (first !== '0.0') {
+      return { ok: false, detail: `the first island's first leaf reads "${first}", expected "0.0"` };
+    }
+
+    const shown = root.querySelector('.shell-tick')?.textContent?.trim();
+    if (shown !== String(this.shellTick)) {
+      return { ok: false, detail: `the shell shows "${shown}", the scenario has churned ${this.shellTick} times` };
+    }
+
+    const result = this.lastResult;
+    if (result && result.violations > 0) {
+      return {
+        ok: false,
+        detail: `island contract broken: ${result.violations} DOM mutations below an island boundary (${result.samples.join(', ')})`,
+      };
+    }
+    if (result && result.shellMutations === 0) {
+      return {
+        ok: false,
+        detail: 'the shell never mutated, so "zero island mutations" measured nothing — the churn did not run',
+      };
+    }
+
+    return {
+      ok: true,
+      detail: result
+        ? `${this.islandCount * this.descendantCount} frozen nodes survived ${result.frames} shell renders with 0 mutations below the boundary`
+        : `${this.islandCount} islands x ${this.descendantCount} descendants; no run yet`,
+    };
+  }
+
+  opStats() {
+    const root = viewRoot(this);
+    const grid = root?.querySelector('.islands-grid');
+    const result = this.lastResult;
+    return {
+      mountedNodes: grid ? grid.querySelectorAll('*').length : 0,
+      records: 0,
+      views: 1,
+      counters: {
+        // Deterministic only. Frame counts and raw mutation totals vary run to
+        // run, so they stay in `detail` — a counter here would be pinned by
+        // `bench:update` and then drift on every later run.
+        islandCount: this.islandCount,
+        islandDescendants: this.descendantCount,
+        islandNodes: this.islandCount * this.descendantCount,
+        islandViolations: result?.violations ?? 0,
+        islandChildVnodesPerRender: result?.vnodesPerRender ?? 0,
+        shellDidMutate: result ? (result.shellMutations > 0 ? 1 : 0) : 0,
+      },
+      perf: result?.perf ?? null,
+    };
+  }
+}
+</script>
