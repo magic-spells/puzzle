@@ -94,20 +94,33 @@ store flush notifying ONE subscriber in 405 ms; the same op on the windowed list
 reported 28 renders / 114 mutations / 27 views, flush 2.1 ms. Batching, the
 pull-not-push design, and the shared view-id space all behave as specified.
 
-## Known defect: mount renders are counted as wasted
+## Open question: zero-mutation child renders in the stress app
 
-`mutationImpl` credits the innermost render mark that is still open
-(`devperf.js:530`), skipping any whose `ended` flag is set. A child component's
-render mark closes before the parent inserts that child's tree into the DOM, so
-mount-time mutations land on the PARENT and the child records zero.
+On `examples/stress`, every mounted `ListRow` reported `DOM 0` / `wasted 1` /
+`100%` while its parent absorbed the mutations, which looked like a systematic
+mount-attribution fault in `mutationImpl` (`devperf.js:530`, which credits the
+innermost render mark still open and skips any already `ended`).
 
-The child's mount render therefore looks wasted. This is a systematic false
-positive on the headline metric, not an edge case: the windowed list mounted 25
-`ListRow` views that between them created 175 real elements, and every one of
-them reported `DOM 0` / `wasted 1` / `100%`, while the parent absorbed 112
-mutations — an 89% "wasted" reading for a render pass that was entirely
-necessary. The same pattern accounts for 1,000 of the real-DOM list's wasted
-count.
+**A later run on `examples/photo-gallery` contradicts that.** There, every
+mounted `PhotoCard` records its OWN mutations — `DOM 19` each, `wasted 0` —
+alongside `GalleryView` at 72. So child mount mutations ARE attributed to the
+child on that path, and the attribution logic is not broken in general.
 
-A wasted render is only meaningful for an UPDATE. A view's first render is a
-mount by definition and cannot be waste.
+The `ListRow` case therefore has some other cause and is not yet diagnosed.
+Candidates: the rows were already mounted and genuinely re-rendered to nothing
+(a true positive, not a defect), or the shared-component path used by both list
+scenarios differs from an ordinary `{#for}` component mount. Do not act on the
+mount-attribution theory until this is reproduced and isolated.
+
+## Confirmed: layouts and views render twice per navigation
+
+The `photo-gallery` recording is a clean navigation-only sample — 0 store
+flushes, 0 notifications, so every render came from routing. Across a handful of
+route changes: `DefaultLayout` 6 renders (18 mutations, 6.7ms patch),
+`AlbumView` 6 renders of which **3 wasted (50%)**, `AlbumIndex` 3 renders of
+which 2 wasted (67%).
+
+That is the predicted double-render: the router pushes the new chain through the
+reused layout via slot-only `applyParentUpdate`, then calls `#refreshLogged`
+after commit, so each reused ancestor renders twice per committed navigation and
+the second pass frequently produces nothing.
