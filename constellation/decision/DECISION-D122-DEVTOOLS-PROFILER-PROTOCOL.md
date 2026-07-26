@@ -85,11 +85,29 @@ satisfies the SPEC §56 oracle trivially, since it is literally the same file.
 `build_test.go` now pins `snapshot:profile` in both the dev-retains and
 prod-DCE halves.
 
-## Not yet verified
+## Verified end to end
 
-The runtime side was tested against a fake hook and the panel side against the
-synthetic double at `test/fixture-page/index.html`. **The two have never spoken
-to each other in a real browser.** Until an unpacked `dist-extension/` is loaded
-against a running app and the Performance panel populates, this card's
-integration claim is unproven — the shapes match by construction and by reading,
-not by observation.
+Confirmed in real Chrome against `examples/stress` on a `puzzle dev` build: the
+panel connects, records, and populates. `create-10k` on the real-DOM list
+reported 10,003 renders / 198,122 DOM mutations / 10,002 views across a SINGLE
+store flush notifying ONE subscriber in 405 ms; the same op on the windowed list
+reported 28 renders / 114 mutations / 27 views, flush 2.1 ms. Batching, the
+pull-not-push design, and the shared view-id space all behave as specified.
+
+## Known defect: mount renders are counted as wasted
+
+`mutationImpl` credits the innermost render mark that is still open
+(`devperf.js:530`), skipping any whose `ended` flag is set. A child component's
+render mark closes before the parent inserts that child's tree into the DOM, so
+mount-time mutations land on the PARENT and the child records zero.
+
+The child's mount render therefore looks wasted. This is a systematic false
+positive on the headline metric, not an edge case: the windowed list mounted 25
+`ListRow` views that between them created 175 real elements, and every one of
+them reported `DOM 0` / `wasted 1` / `100%`, while the parent absorbed 112
+mutations — an 89% "wasted" reading for a render pass that was entirely
+necessary. The same pattern accounts for 1,000 of the real-DOM list's wasted
+count.
+
+A wasted render is only meaningful for an UPDATE. A view's first render is a
+mount by definition and cannot be waste.
