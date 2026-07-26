@@ -68,8 +68,14 @@ record. They are deliberately **not** part of the record shape: nothing is added
 `toJSON()`, storage blobs, or the record's own enumerable keys, and the state is
 released with the record.
 
-- `safeAssign` (the path every `update()` takes) advances one revision per call and
-  stamps every field in that patch.
+- `safeAssignTracked` (the path `update()` takes) advances one revision per call and
+  stamps every field in that patch. Record **construction** deliberately uses the
+  untracked `safeAssign` and stamps nothing: a record hydrated from the server has no
+  local edits to protect, and an unstamped record reports revision `0`, against which
+  every field passes `0 <= 0` and merges. Skipping the stamp there is therefore
+  behavior-identical — it only avoids allocating revision state for every record ever
+  loaded, read or not. The constructor stamp that shipped first shifted *every*
+  revision by the same constant, so the predicate was unchanged either way.
 - `_saveRecordNow` captures `recordMutationRevision(record)` beside the serialized body,
   so the revision and the bytes on the wire are taken at the same instant.
 - `safeMerge(record, src, throughRevision)` skips any field whose stamped revision is

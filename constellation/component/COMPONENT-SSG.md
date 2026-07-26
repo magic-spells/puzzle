@@ -81,7 +81,7 @@ maintained.
 
 ## Hybrid mode (`output: 'hybrid'`, D67)
 
-The original prerender mode, formerly spelled `output: 'static'` and renamed by D81 (behavior byte-identical). Each page is the prerendered markup **plus** the shared `/app.js` SPA bundle. Shell injection stamps `data-puzzle-ssg` on the empty `#id` target, injects title/content, and containment-checks every path. The browser [[COMPONENT-ROUTER]] recognizes the `data-puzzle-ssg` marker at navigation zero, replaces the prerendered children in its commit window, removes the marker, and skips the initial enter — after which the site is an ordinary SPA (routing, transitions, morph unchanged). Choose hybrid for apps that want prerendered first paint and instant client-side navigation afterward.
+The original prerender mode, formerly spelled `output: 'static'` and renamed by D81 (behavior byte-identical). Each page is the prerendered markup **plus** the shared `/app.js` runtime bundle — the same SPA runtime, but since [[DECISION-D130-TAKEOVER-BUILD-DEFINE]] built with `__PUZZLE_TAKEOVER__=true`, so it is no longer byte-identical to a plain `puzzle build` bundle and the two are not interchangeable. Shell injection stamps `data-puzzle-ssg` on the empty `#id` target, injects title/content, and containment-checks every path. The browser [[COMPONENT-ROUTER]] recognizes the `data-puzzle-ssg` marker at navigation zero, replaces the prerendered children in its commit window, removes the marker, and skips the initial enter — after which the site is an ordinary SPA (routing, transitions, morph unchanged). Choose hybrid for apps that want prerendered first paint and instant client-side navigation afterward.
 
 ## Static mode (`output: 'static'`, D81)
 
