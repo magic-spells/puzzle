@@ -25,7 +25,7 @@
 import { ViewNode, PLACEHOLDER_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import { devperfComponentPatch, devperfMutation } from '../devperf.js';
-import { displayValue } from '../display.js';
+import { displayValue as stringify } from '../display.js';
 
 // these must be assigned as element properties, not attributes
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'muted']);
@@ -173,8 +173,10 @@ function stripSlotAttr(vnode) {
 	clone.el = vnode.el;
 	clone.component = vnode.component;
 	clone.instance = vnode.instance;
-	clone.takeoverPreloaded = vnode.takeoverPreloaded;
-	clone.takeoverFailed = vnode.takeoverFailed;
+	if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+		clone.takeoverPreloaded = vnode.takeoverPreloaded;
+		clone.takeoverFailed = vnode.takeoverFailed;
+	}
 	return clone;
 }
 
@@ -212,8 +214,10 @@ function expandNode(vnode, parts) {
 		clone.el = vnode.el;
 		clone.component = vnode.component;
 		clone.instance = vnode.instance;
-		clone.takeoverPreloaded = vnode.takeoverPreloaded;
-		clone.takeoverFailed = vnode.takeoverFailed;
+		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+			clone.takeoverPreloaded = vnode.takeoverPreloaded;
+			clone.takeoverFailed = vnode.takeoverFailed;
+		}
 	}
 	return clone;
 }
@@ -326,7 +330,7 @@ export function mount(vnode, parent, ref, ctx) {
  * atomic-commit contract in constellation/doc/DOC-VIEW-LIFECYCLE.md §4.
  */
 function mountComponent(vnode, parent, ref, ctx) {
-	if (vnode.takeoverFailed) {
+	if ((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverFailed) {
 		const placeholder = document.createComment('puzzle');
 		vnode.el = placeholder;
 		parent.insertBefore(placeholder, ref ?? null);
@@ -335,7 +339,11 @@ function mountComponent(vnode, parent, ref, ctx) {
 		return placeholder;
 	}
 	const preloaded = vnode.instance != null;
-	const takeoverPreloaded = vnode.takeoverPreloaded;
+	// Gated HERE rather than at the `preloaded && !takeoverPreloaded` use below, so
+	// a non-takeover build folds this to `false` and that test collapses to plain
+	// `preloaded` — the pre-takeover behavior, with the property read gone.
+	const takeoverPreloaded =
+		(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
 	const child = vnode.instance ?? new vnode.tag(ctx);
 	vnode.component = child;
 	child
@@ -411,7 +419,11 @@ function mountComponent(vnode, parent, ref, ctx) {
 				}
 				vnode.component = null;
 				vnode.instance = null;
-				vnode.takeoverPreloaded = false;
+				// Gated: ungated this would ADD the property outside the constructor in a
+				// non-takeover build — exactly the hidden-class transition the gate above
+				// exists to avoid.
+				if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__)
+					vnode.takeoverPreloaded = false;
 			}
 		);
 	vnode.el = child.element;
@@ -975,8 +987,12 @@ function setAttr(el, name, value) {
 	if (value === false || value == null) {
 		// Preserve attribute-removal semantics, but still route an explicitly
 		// supplied nullish binding through the shared display policy so undefined
-		// gets its development diagnostic.
-		if (value == null) stringify(value);
+		// gets its development diagnostic. The RESULT is discarded — the call exists
+		// only for that warning, which production already DCEs inside displayValue —
+		// so the probe leads, and production pays nothing per nullish attribute.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (value == null) stringify(value);
+		}
 		el.removeAttribute(name);
 	} else if (value === true) {
 		el.setAttribute(name, '');
@@ -1086,10 +1102,6 @@ function withModifiers(fullName, mods, handler, listeners, el) {
 function inSvgNamespace(tag, parent) {
 	if (tag === 'svg') return true;
 	return parent.namespaceURI === SVG_NS && parent.nodeName.toLowerCase() !== 'foreignobject';
-}
-
-function stringify(v) {
-	return displayValue(v);
 }
 
 export default ViewManager;

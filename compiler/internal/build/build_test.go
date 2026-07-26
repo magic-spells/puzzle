@@ -237,6 +237,14 @@ func TestBuildTakeoverDefineDCE(t *testing.T) {
 	// all three branches are unreachable. Folding them drops
 	// preloadTakeoverComponents' last importer, and "sideEffects": false then lets
 	// ssg/preload.js leave the bundle entirely (metafile: zero attributed bytes).
+	//
+	// The name sweep is the stronger claim, and it only became true once EVERY
+	// takeover touchpoint was gated: the ViewNode constructor's two field stores,
+	// viewManager's stripSlotAttr/expandNode copies, mountComponent's reads and its
+	// mount-failure reset, and PuzzleView.mount's __takeoverTree probe+delete. Any
+	// ONE of those left ungated puts its property name back in the bundle —
+	// property names survive minification, so their absence is real evidence the
+	// stores are gone, not merely renamed.
 	t.Run("spa production build ships no takeover path", func(t *testing.T) {
 		root := writeSSGFixture(t, baseSSGFixture())
 		var meta string
@@ -244,8 +252,15 @@ func TestBuildTakeoverDefineDCE(t *testing.T) {
 			t.Fatalf("SPA Build failed: %v", err)
 		}
 		js := readFile(t, filepath.Join(root, "dist", "app.js"))
-		if strings.Contains(js, ssgTakeoverMarker) {
-			t.Errorf("SPA bundle must DCE the router's takeover branches — found %q present", ssgTakeoverMarker)
+		for _, name := range []string{
+			ssgTakeoverMarker, // the router's only takeover signal
+			"takeoverPreloaded",
+			"takeoverFailed",
+			"__takeoverTree",
+		} {
+			if strings.Contains(js, name) {
+				t.Errorf("SPA bundle must DCE every takeover touchpoint — found %q present", name)
+			}
 		}
 		if preloadModuleLinked(js) {
 			t.Error("SPA bundle must tree-shake ssg/preload.js — found its __takeoverTree assignment")

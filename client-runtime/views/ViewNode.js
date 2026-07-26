@@ -80,8 +80,17 @@ export class ViewNode {
 		// ownership flag keeps mount-failure recovery distinct from Router-owned
 		// routed instances, while takeoverFailed carries the same recoverable blank
 		// position as an ordinary first-mount rejection.
-		this.takeoverPreloaded = false;
-		this.takeoverFailed = false;
+		//
+		// Gated on the build define (probed INLINE — hoisting it into a module const
+		// stops esbuild propagating it into method scopes; see build_test.go): a
+		// bundle that can never take over stops paying two stores per vnode per
+		// render. The define folds to a LITERAL, so every ViewNode in a given build
+		// still gets the same shape — this must stay an all-or-nothing block, never
+		// lazy per-vnode assignment, which would fragment the hidden class.
+		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+			this.takeoverPreloaded = false;
+			this.takeoverFailed = false;
+		}
 	}
 
 	get isText() {

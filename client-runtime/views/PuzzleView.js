@@ -353,11 +353,21 @@ export class PuzzleView {
 		// §5) — just render the resolved model into the reserved position. This keeps
 		// the mount synchronous so the Router's COMMIT stays atomic (D19).
 		if (preloaded) {
-			const takeoverTree = Object.prototype.hasOwnProperty.call(this, '__takeoverTree')
-				? this.__takeoverTree
-				: undefined;
-			delete this.__takeoverTree;
-			this.#renderNow(takeoverTree);
+			// Only a prerender takeover ever stamps __takeoverTree, so a bundle built
+			// without the takeover path folds this to the bare `#renderNow()` it was
+			// before the feature existed — no hasOwnProperty probe and, more to the
+			// point, no `delete` (which can push the instance into dictionary mode) on
+			// every router-preloaded mount. Probed INLINE: hoisting the define into a
+			// module const stops esbuild propagating it here (see build_test.go).
+			if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+				const takeoverTree = Object.prototype.hasOwnProperty.call(this, '__takeoverTree')
+					? this.__takeoverTree
+					: undefined;
+				delete this.__takeoverTree;
+				this.#renderNow(takeoverTree);
+			} else {
+				this.#renderNow();
+			}
 		} else {
 			this.created();
 			const pending = this.refresh();
