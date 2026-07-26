@@ -207,6 +207,137 @@ func metafileBytesInOutput(t *testing.T, raw, sourceSuffix string) int {
 	return total
 }
 
+// ssgTakeoverMarker is the attribute the prerender stamps on a hybrid page's
+// mount target — the router's ONLY takeover signal, and a string literal, so it
+// survives minification. Its ABSENCE from a bundle is real evidence the router's
+// three takeover branches folded away rather than merely got renamed.
+const ssgTakeoverMarker = "data-puzzle-ssg"
+
+// preloadModuleLinked reports whether ssg/preload.js is linked into a bundle.
+// `instance.__takeoverTree = expanded` (preload.js) is the only ASSIGNMENT to
+// that property anywhere in the runtime — PuzzleView.js reads and deletes it,
+// never writes it — and property names survive minification. So this one probe
+// works on minified and readable output alike, including the static per-page
+// bundles, for which no metafile is requested.
+func preloadModuleLinked(js string) bool {
+	return strings.Contains(js, "__takeoverTree =") || strings.Contains(js, "__takeoverTree=")
+}
+
+// TestBuildTakeoverDefineDCE proves the __PUZZLE_TAKEOVER__ build define keeps
+// prerender-takeover code out of the bundles that can never run it, and leaves it
+// in the ones that can. The gate is per-OUTPUT-MODE, not per-dev-mode: only
+// `output: 'hybrid'` emits a data-puzzle-ssg container for the router to adopt.
+//
+// The runtime probes it as `typeof __PUZZLE_TAKEOVER__ === 'undefined' ||
+// __PUZZLE_TAKEOVER__`, inline at each branch — hoisting it into a module const
+// would leave the branches in the bundle (the same trap TestBuildDevDefineDCE
+// documents for __PUZZLE_DEV__), so the SPA subtest below is what catches that.
+func TestBuildTakeoverDefineDCE(t *testing.T) {
+	// A plain SPA bundle can never take over: nothing ever stamps the marker, so
+	// all three branches are unreachable. Folding them drops
+	// preloadTakeoverComponents' last importer, and "sideEffects": false then lets
+	// ssg/preload.js leave the bundle entirely (metafile: zero attributed bytes).
+	t.Run("spa production build ships no takeover path", func(t *testing.T) {
+		root := writeSSGFixture(t, baseSSGFixture())
+		var meta string
+		if err := Build(root, Options{Development: false, Metafile: &meta}); err != nil {
+			t.Fatalf("SPA Build failed: %v", err)
+		}
+		js := readFile(t, filepath.Join(root, "dist", "app.js"))
+		if strings.Contains(js, ssgTakeoverMarker) {
+			t.Errorf("SPA bundle must DCE the router's takeover branches — found %q present", ssgTakeoverMarker)
+		}
+		if preloadModuleLinked(js) {
+			t.Error("SPA bundle must tree-shake ssg/preload.js — found its __takeoverTree assignment")
+		}
+		if b := metafileBytesInOutput(t, meta, "client-runtime/ssg/preload.js"); b != 0 {
+			t.Errorf("SPA ssg/preload.js bytesInOutput = %d, want 0", b)
+		}
+	})
+
+	// Hybrid is the one browser bundle that adopts prerendered DOM. Asserting the
+	// emitted HTML carries the marker too keeps this honest: the retained branches
+	// are reachable, not just present.
+	t.Run("hybrid keeps the takeover path and marks the container", func(t *testing.T) {
+		requireSSGRuntime(t)
+		root := writeSSGFixture(t, baseSSGFixture())
+		var meta string
+		if err := Build(root, Options{Development: false, Output: "hybrid", Metafile: &meta}); err != nil {
+			t.Fatalf("hybrid Build failed: %v", err)
+		}
+		js := readFile(t, filepath.Join(root, "dist", "app.js"))
+		if !strings.Contains(js, ssgTakeoverMarker) {
+			t.Errorf("hybrid bundle must retain the router's takeover branches (%q)", ssgTakeoverMarker)
+		}
+		if !preloadModuleLinked(js) {
+			t.Error("hybrid bundle must retain ssg/preload.js")
+		}
+		if b := metafileBytesInOutput(t, meta, "client-runtime/ssg/preload.js"); b == 0 {
+			t.Error("hybrid ssg/preload.js bytesInOutput = 0, want a positive contribution")
+		}
+		home := readFile(t, filepath.Join(root, "dist", "index.html"))
+		if !strings.Contains(home, ssgTakeoverMarker) {
+			t.Errorf("prerendered dist/index.html must stamp %q for the router to adopt\n%s", ssgTakeoverMarker, home)
+		}
+	})
+
+	// True static pages boot through mountStatic, not the router, so they never
+	// carry data-puzzle-ssg (they stamp data-puzzle-static instead) — but they DO
+	// adopt prerendered DOM, so their per-page bundles must keep ssg/preload.js.
+	t.Run("static per-page bundles keep the takeover path", func(t *testing.T) {
+		requireStaticRuntime(t)
+		root := writeSSGFixture(t, baseSSGFixture())
+		if err := Build(root, Options{Development: false, Output: "static"}); err != nil {
+			t.Fatalf("static Build failed: %v", err)
+		}
+		pages := filepath.Join(root, "dist", staticPagesDir)
+		bundles, linked := 0, false
+		if err := filepath.WalkDir(pages, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || filepath.Ext(path) != ".js" {
+				return nil
+			}
+			bundles++
+			if preloadModuleLinked(readFile(t, path)) {
+				linked = true
+			}
+			return nil
+		}); err != nil {
+			t.Fatalf("walking %s: %v", pages, err)
+		}
+		if bundles == 0 {
+			t.Fatalf("no per-page bundles under %s", pages)
+		}
+		if !linked {
+			t.Errorf("static per-page bundles (%d of them) must retain ssg/preload.js — mountStatic adopts the prerendered page", bundles)
+		}
+	})
+
+	// `puzzle dev` resolves no output mode, so the watch builder defines the probe
+	// TRUE unconditionally: a dev bundle must never be the build that silently
+	// drops a code path the user is trying to exercise.
+	t.Run("dev watch build retains the takeover path", func(t *testing.T) {
+		root := writeSSGFixture(t, baseSSGFixture())
+		b, err := NewWatchBuilder(root, WatchOptions{})
+		if err != nil {
+			t.Fatalf("NewWatchBuilder: %v", err)
+		}
+		defer b.Dispose()
+		if err := b.Rebuild(); err != nil {
+			t.Fatalf("Rebuild: %v", err)
+		}
+		js := readDistBundle(t, root)
+		if !strings.Contains(js, ssgTakeoverMarker) {
+			t.Errorf("dev/watch bundle must retain the router's takeover branches (%q)", ssgTakeoverMarker)
+		}
+		if !preloadModuleLinked(js) {
+			t.Error("dev/watch bundle must retain ssg/preload.js")
+		}
+	})
+}
+
 // definesFixture parameterizes the throwaway one-route app the runtime-probe DCE
 // tests build. flipAttr is appended to the keyed <li>; routeMeta is appended to
 // the route object literal; extraFiles adds sibling modules.

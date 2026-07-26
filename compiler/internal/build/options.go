@@ -9,11 +9,31 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 )
 
+// bundleFlags carries the per-call BUILD facts that select the literal defines.
+// Every field is decided by the caller — the one-shot app build has already
+// resolved its output mode, the watch builder is always development — so no call
+// site has to re-derive a mode from an empty-string sentinel, and adding a
+// define does not silently default an existing caller to the wrong value.
+type bundleFlags struct {
+	// Dev selects __PUZZLE_DEV__ (§27, D57): the HMR snapshot/restore machinery,
+	// the window publish, the DevTools bridge, and the profiler seam.
+	Dev bool
+	// Takeover selects __PUZZLE_TAKEOVER__: "this bundle may adopt prerendered
+	// DOM". True for the hybrid app bundle (the router takes over the
+	// `data-puzzle-ssg` container at navigation zero), for the true-static
+	// per-page bundles (mountStatic adopts the prerendered page), and for every
+	// dev/watch build. FALSE for a plain SPA bundle — nothing ever stamps the
+	// marker, so the router's takeover branches are unreachable — and for the
+	// node-platform prerender bundle, which GENERATES the markup and never
+	// adopts it.
+	Takeover bool
+}
+
 // newBundleOptions assembles the shared esbuild BuildOptions. All runtime probes
 // receive boolean literal defines so esbuild can constant-fold their guarded
-// branches; `dev` selects __PUZZLE_DEV__, while the Plugin carries the
-// build-wide usage bit discovered before this call.
-func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool) api.BuildOptions {
+// branches; `flags` carries the build facts behind those literals, while the
+// Plugin carries the build-wide usage bits discovered before this call.
+func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bundleFlags) api.BuildOptions {
 	buildOpts := api.BuildOptions{
 		EntryPoints: []string{entry},
 		Bundle:      true,
@@ -28,11 +48,11 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool
 		Target: api.ES2022,
 		// Literal defines for state-preserving HMR (§27/D57) and usage-driven
 		// runtime modules. Production MinifySyntax drops false-probed branches.
-		Define:   bundleDefines(pl, dev),
+		Define:   bundleDefines(pl, flags),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 	}
-	if dev {
+	if flags.Dev {
 		// Keep development builds byte-for-byte on their existing linked-map
 		// behavior. Production enables linked maps only through build.sourceMap.
 		buildOpts.Sourcemap = api.SourceMapLinked
@@ -44,17 +64,25 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, dev bool
 
 // bundleDefines builds the literal define map. __PUZZLE_HAS_FLIP__ is a SOURCE
 // fact: plugin.ScanUsage reads the templates for the D85 `flip` attribute.
+// __PUZZLE_DEV__ and __PUZZLE_TAKEOVER__ are BUILD facts carried by bundleFlags.
+//
+// __PUZZLE_TAKEOVER__ = false strips the router's three `data-puzzle-ssg`
+// branches, which drops the last importer of ssg/preload.js so the module
+// tree-shakes out of a plain SPA bundle entirely. The runtime probes it with the
+// `typeof … === 'undefined' ||` idiom, so an absent define means ON — vitest and
+// any third-party bundler keep the takeover path.
 //
 // There is deliberately no managed-head define. The browser never syncs og:/
 // twitter:/canonical tags in ANY output mode (D111, amending D89): crawlers fetch
 // each URL fresh from the server and never client-navigate, so the tags the SSG
 // baked into that page's HTML are always the ones they read. The tab <title> is
 // a separate, always-in concern handled by head.js syncTitle.
-func bundleDefines(pl *plugin.Plugin, dev bool) map[string]string {
+func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 	f := pl.Features()
 	return map[string]string{
-		"__PUZZLE_DEV__":      strconv.FormatBool(dev),
+		"__PUZZLE_DEV__":      strconv.FormatBool(flags.Dev),
 		"__PUZZLE_HAS_FLIP__": strconv.FormatBool(f.Flip),
+		"__PUZZLE_TAKEOVER__": strconv.FormatBool(flags.Takeover),
 	}
 }
 

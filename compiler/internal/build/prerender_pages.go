@@ -363,7 +363,10 @@ func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg c
 		Sourcemap:   api.SourceMapLinked,
 		EntryNames:  "[name]",
 		ChunkNames:  "chunks/[name]-[hash]",
-		Define:      bundleDefines(pl, dev),
+		// Takeover: true — a static page's whole job is adopting the prerendered
+		// markup it was emitted alongside (mountStatic rehydrates the data island
+		// and mounts over it), so these bundles must keep the preload path.
+		Define:      bundleDefines(pl, bundleFlags{Dev: dev, Takeover: true}),
 		Plugins:     []api.Plugin{pl.ESBuild()},
 		LogLevel:    api.LogLevelSilent,
 	}
