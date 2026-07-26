@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+/*
+ * Tailwind v4 content detection. Paths are relative to this stylesheet
+ * (app/styles/), so "../" is the app root. The .js glob matters here: several
+ * class strings are computed in `data()` rather than written in markup.
+ */
+@source "../**/*.pzl";
+@source "../**/*.js";
+@source "../public/**/*.html";
+
+/*
+ * "Instrument panel" theme — flat, dark, high-contrast, numerals in mono. A
+ * measurement UI should be legible at a glance and cost nothing to render:
+ * there are no gradients, shadows, blurs or transitions on any element that
+ * appears inside #scenario-stage, because those would show up in the numbers.
+ */
+@theme {
+  --font-sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-ink: #080b10;
+  --color-surface: #0f141b;
+  --color-surface-2: #141a23;
+  --color-elevated: #1b2330;
+
+  --color-hairline: rgba(255, 255, 255, 0.10);
+  --color-line: rgba(255, 255, 255, 0.055);
+
+  --color-fg: #e6edf5;
+  --color-muted: #8b95a3;
+  --color-faint: #5a6472;
+
+  --color-accent: #46d39a;
+  --color-accent-2: #6ee7b7;
+  --color-danger: #f2777a;
+  --color-warn: #e6b450;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-ink);
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /*
+   * The compiled view root keeps the `puzzle-view` tag name, which the UA styles
+   * as an unknown inline element. Every scenario root and row wants block flow.
+   */
+  puzzle-view {
+    display: block;
+  }
+}

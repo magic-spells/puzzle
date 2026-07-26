@@ -1,0 +1,324 @@
+<puzzle-view>
+  <div class="vl-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="text-fg tabular-nums">{ total }</span> records ·
+        rendering <span class="text-accent tabular-nums">{ windowCount }</span> ·
+        <span class="text-accent tabular-nums">{ elementCount }</span> elements ·
+        rows #<span class="tabular-nums">{ firstIndex }</span>–<span class="tabular-nums">{ lastIndex }</span>
+      </div>
+      <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint shrink-0">windowed · { rowHeight }px rows</div>
+    </div>
+
+    <!-- The scroll container owns the scrollbar. The two spacers reserve the
+         height of everything outside the window, so the native scrollbar
+         behaves exactly as if all N rows were present. -->
+    <div ref="viewport" class="vl-viewport h-[460px] overflow-y-auto overflow-x-hidden" @scroll={ onScroll(event) }>
+      <div class="vl-spacer-top" style="height:{ topPx }px"></div>
+
+      {#for row in windowRows}
+        <ListRow
+          id={ row.id }
+          label={ row.label }
+          value={ row.value }
+          version={ row.version }
+          selected={ row.selected }
+          @select={ selectRow(row) }
+          @remove={ removeRow(row) } />
+      {/for}
+
+      <div class="vl-spacer-bottom" style="height:{ bottomPx }px"></div>
+    </div>
+
+    {#if total === 0}
+      <div class="px-4 py-10 text-center text-sm text-faint">
+        No rows. Run create-50k or reset.
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ListRow from './ListRow.pzl';
+import { registerScenario } from '../stress-controller.js';
+import { ROW_TYPE, MARK, RowOps, mismatchInRows } from '../row-ops.js';
+import { afterPaint, intParam, ms1, nextFrame, settleFrames, viewRoot } from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// virtual-list — the SAME records, the SAME row component and the SAME ops as
+// keyed-list, but only a window of rows is ever mounted.
+//
+// Read it against keyed-list: at 50,000 records keyed-list holds ~350,000
+// elements live, this holds ~180. That ratio is the whole scenario, and
+// `stats().mountedNodes` is where to read it.
+//
+// Modelled on examples/virtual-scroll, with one deliberate difference: that
+// example slices a plain array held on an instance field, whereas this queries
+// REAL store records every render. That matters, and it is the more interesting
+// half of the result — the DOM stays bounded, but `findMany` + sort over the
+// full collection does NOT, so a windowed list over a reactive store is O(1) in
+// nodes and O(n log n) in data() work per scroll bucket. Both numbers are
+// reported; neither is hidden.
+// ---------------------------------------------------------------------------
+
+const ROW_H = 36; // px — MUST match ListRow's h-9
+const VIEWPORT_H = 460; // px — MUST match the scroller's h-[460px]
+const OVERSCAN = 6; // extra rows above and below the viewport
+const VISIBLE = Math.ceil(VIEWPORT_H / ROW_H); // 13
+const WINDOW = VISIBLE + OVERSCAN * 2; // 25 rows mounted at a time
+
+export default class VirtualList extends PuzzleView {
+  api = {
+    name: 'virtual-list',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.rowOps = new RowOps(this.ctx.store, ROW_TYPE);
+    this.ordered = [];
+    this.start = 0;
+    this.lastScroll = null;
+    this.unregister = null;
+    // No safety gate here: windowing is exactly what makes 50k cheap, so the
+    // scenario seeds its full requested size on mount.
+    this.rowOps.freshSeed(this.requestedRows());
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  data() {
+    const all = this.rowOps.ordered();
+    this.ordered = all;
+
+    const total = all.length;
+    const maxStart = Math.max(0, total - WINDOW);
+    const start = Math.max(0, Math.min(maxStart, this.start));
+    this.start = start;
+
+    const windowRows = all.slice(start, start + WINDOW);
+    const below = total - start - windowRows.length;
+
+    return {
+      windowRows,
+      windowCount: windowRows.length,
+      elementCount: windowRows.length * 7,
+      total,
+      rowHeight: ROW_H,
+      // topPx + rendered rows + bottomPx === total * ROW_H, always.
+      topPx: start * ROW_H,
+      bottomPx: below * ROW_H,
+      firstIndex: total ? start : 0,
+      lastIndex: total ? start + windowRows.length - 1 : 0,
+    };
+  }
+
+  events = {
+    onScroll: (event) => {
+      this.applyScroll(event.target.scrollTop);
+    },
+    selectRow: (row) => {
+      row.update({ selected: !row.selected });
+    },
+    removeRow: (row) => {
+      this.rowOps.lastSwap = null;
+      this.rowOps.markedUpTo = 0;
+      row.destroy();
+    },
+  };
+
+  requestedRows() {
+    return intParam(this.props?.n, 50000, 0, 200000);
+  }
+
+  /**
+   * Move the window if — and only if — the start bucket actually changed.
+   * Scrolling within one row's worth of pixels must not trigger a render, or a
+   * fast flick would re-render on every scroll event.
+   *
+   * @returns {boolean} whether a re-render happened
+   */
+  applyScroll(scrollTop) {
+    const total = this.ordered.length;
+    const maxStart = Math.max(0, total - WINDOW);
+    const firstVisible = Math.floor(scrollTop / ROW_H);
+    const next = Math.max(0, Math.min(maxStart, firstVisible - OVERSCAN));
+    if (next === this.start) return false;
+    this.start = next;
+    this.refresh();
+    return true;
+  }
+
+  // ---- ops ----------------------------------------------------------------
+
+  async opRun(op) {
+    if (op === 'fast-scroll') return this.fastScroll();
+
+    const store = this.ctx.store;
+    const t0 = performance.now();
+    if (!this.rowOps.apply(op, this.ordered, { fallbackCount: this.requestedRows() })) {
+      throw new Error(`[stress] virtual-list has no op "${op}"`);
+    }
+    store.flush();
+    const scriptMs = performance.now() - t0;
+    await afterPaint();
+    const paintedMs = performance.now() - t0;
+    await settleFrames(1);
+    return {
+      op,
+      ms: paintedMs,
+      scriptMs,
+      detail: `${op}: ${ms1(scriptMs)}ms script / ${ms1(paintedMs)}ms to paint · ${this.windowElementCount()} live elements for ${this.ordered.length} records`,
+    };
+  }
+
+  /**
+   * Drag the window across the whole list in fixed steps. Only the virtual list
+   * can run this meaningfully — the full-DOM list has no window to move.
+   *
+   * The scrollTop write is real (it drives the native scrollbar and fires a
+   * real scroll event), but the window recompute is ALSO invoked directly so the
+   * op is deterministic: relying on the asynchronous scroll event alone would
+   * make the measurement depend on frame timing.
+   */
+  async fastScroll() {
+    const viewport = this.refs.viewport;
+    if (!viewport) throw new Error('[stress] virtual-list: viewport ref is missing');
+    const total = this.ordered.length;
+    if (total === 0) throw new Error('[stress] virtual-list: nothing to scroll — seed rows first');
+
+    const steps = 10;
+    const maxScroll = Math.max(0, total * ROW_H - VIEWPORT_H);
+    let renders = 0;
+    const t0 = performance.now();
+    for (let i = 0; i < steps; i += 1) {
+      const top = steps === 1 ? 0 : Math.round((maxScroll * i) / (steps - 1));
+      viewport.scrollTop = top;
+      if (this.applyScroll(top)) renders += 1;
+      await nextFrame();
+    }
+    const scriptMs = performance.now() - t0;
+    await afterPaint();
+    const paintedMs = performance.now() - t0;
+    await settleFrames(1);
+
+    this.lastScroll = { steps, renders, scriptMs };
+    return {
+      op: 'fast-scroll',
+      ms: paintedMs,
+      scriptMs,
+      detail: `fast-scroll: ${steps} jumps across ${total} records, ${renders} window re-renders, ${ms1(scriptMs)}ms · still only ${this.windowElementCount()} live elements`,
+    };
+  }
+
+  async opReset() {
+    this.rowOps.freshSeed(this.requestedRows());
+    this.rowOps.selectSlot = 0;
+    this.rowOps.selectedId = null;
+    this.start = 0;
+    this.lastScroll = null;
+    if (this.refs.viewport) this.refs.viewport.scrollTop = 0;
+    this.ctx.store.flush();
+    await afterPaint();
+    await settleFrames(1);
+    return { detail: `reset to ${this.requestedRows()} records, window at row 0` };
+  }
+
+  async opWarmup() {
+    await this.opRun('update-every-10th');
+    await this.opRun('fast-scroll');
+    await this.opReset();
+    return { detail: 'warmup: update-every-10th -> fast-scroll -> reset' };
+  }
+
+  // ---- verification -------------------------------------------------------
+
+  windowElementCount() {
+    const root = viewRoot(this);
+    const viewport = root ? root.querySelector('.vl-viewport') : null;
+    return viewport ? viewport.querySelectorAll('*').length : 0;
+  }
+
+  /**
+   * The window must show exactly the records at [start, start + WINDOW), the
+   * spacer geometry must sum to the full list height, and the mounted row count
+   * must stay bounded no matter how many records exist.
+   */
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const expected = this.rowOps.ordered();
+    const total = expected.length;
+    const rowEls = root.querySelectorAll('.kl-row');
+    const wantWindow = Math.min(WINDOW, total);
+
+    if (rowEls.length !== wantWindow) {
+      return { ok: false, detail: `window has ${rowEls.length} rows, expected ${wantWindow} of ${total}` };
+    }
+    if (rowEls.length > WINDOW) {
+      return { ok: false, detail: `windowing failed: ${rowEls.length} rows mounted, cap is ${WINDOW}` };
+    }
+
+    const mismatch = mismatchInRows(rowEls, expected, this.start);
+    if (mismatch) return { ok: false, detail: `${mismatch} (window starts at ${this.start})` };
+
+    // Geometry: the spacers plus the rendered rows must add up to the full list
+    // height, or the scrollbar is lying about how much list there is.
+    const topPx = parseFloat(root.querySelector('.vl-spacer-top')?.style.height || '0');
+    const bottomPx = parseFloat(root.querySelector('.vl-spacer-bottom')?.style.height || '0');
+    const measured = topPx + rowEls.length * ROW_H + bottomPx;
+    if (Math.abs(measured - total * ROW_H) > 0.5) {
+      return {
+        ok: false,
+        detail: `spacer geometry is off: ${measured}px reserved, list is ${total * ROW_H}px`,
+      };
+    }
+
+    const notes = [
+      `${rowEls.length} of ${total} rows mounted (${this.windowElementCount()} elements), window at ${this.start}`,
+      `geometry ${measured}px === ${total * ROW_H}px`,
+    ];
+
+    if (this.rowOps.markedUpTo > 0) {
+      // Only rows inside the window can be inspected; check the ones that are
+      // both marked and visible.
+      for (let i = 0; i < rowEls.length; i += 1) {
+        const index = this.start + i;
+        if (index % 10 !== 0 || index >= this.rowOps.markedUpTo) continue;
+        const label = rowEls[i].querySelector('.kl-label')?.textContent?.trim() ?? '';
+        if (!label.endsWith(MARK.trim())) {
+          return { ok: false, detail: `row ${index} label "${label}" is missing the update marker` };
+        }
+      }
+      notes.push('every visible 10th row carries the update marker');
+    }
+
+    if (this.lastScroll) {
+      notes.push(`${this.lastScroll.renders}/${this.lastScroll.steps} scroll jumps moved the window`);
+    }
+
+    return { ok: true, detail: notes.join(' · ') };
+  }
+
+  opStats() {
+    return {
+      // The headline: bounded by WINDOW no matter how many records exist.
+      mountedNodes: this.windowElementCount(),
+      records: this.rowOps.count(),
+      views: Math.min(WINDOW, this.ordered.length) + 1,
+    };
+  }
+}
+</script>

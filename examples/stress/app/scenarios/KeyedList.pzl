@@ -1,0 +1,237 @@
+<puzzle-view>
+  <div class="kl-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="text-fg tabular-nums">{ rowCount }</span> rows ·
+        every row in the DOM ·
+        <span class="text-danger tabular-nums">{ elementCount }</span> elements
+      </div>
+      <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint shrink-0">full DOM · keyed by record id</div>
+    </div>
+
+    <div class="kl-body max-h-[460px] overflow-y-auto overflow-x-hidden">
+      {#for row in rows}
+        <ListRow
+          id={ row.id }
+          label={ row.label }
+          value={ row.value }
+          version={ row.version }
+          selected={ row.selected }
+          @select={ selectRow(row) }
+          @remove={ removeRow(row) } />
+      {/for}
+    </div>
+
+    {#if rowCount === 0}
+      <div class="px-4 py-10 text-center text-sm text-faint">
+        { emptyText }
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ListRow from './ListRow.pzl';
+import { registerScenario } from '../stress-controller.js';
+import { HEAVY_ROW_THRESHOLD, ROW_TYPE, MARK, RowOps, mismatchInRows } from '../row-ops.js';
+import { afterPaint, intParam, ms1, settleFrames, viewRoot } from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// keyed-list — the js-framework-benchmark op set over REAL store records, with
+// EVERY row mounted in the DOM. The control arm of the virtual-list A/B.
+//
+// Why records and not a plain array: the point is to measure what a Puzzle app
+// actually pays. Every op goes through createRecord / record.update /
+// record.destroy, so the number includes schema validation, the batched notify
+// set, subscription delivery, data() re-evaluation and keyed reconciliation —
+// the real cost of the framework's data path, not just its DOM patcher.
+//
+// This scenario must NEVER be virtualized. Its whole job is to show the cost of
+// holding n × 7 elements live; a windowed version of it would measure nothing
+// and would make the comparison against virtual-list vacuous.
+//
+// Ordering: `findMany` returns records in Map-insertion order, which cannot be
+// permuted in place, so rows carry an explicit `seq` and data() sorts by it.
+// That makes `swap-rows` two genuine reactive writes, at the cost of one
+// O(n log n) sort per render — inside both the measured op and the baseline
+// render, so it does not distort comparisons between ops.
+//
+// SAFETY: above HEAVY_ROW_THRESHOLD rows this view does NOT auto-seed on mount.
+// 50k rows is 350k elements and can wedge a tab for tens of seconds; that is a
+// legitimate finding but it must never happen by accident just because someone
+// pasted a URL. Home adds a two-click arm on top of this for the ops themselves.
+// ---------------------------------------------------------------------------
+
+export default class KeyedList extends PuzzleView {
+  api = {
+    name: 'keyed-list',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.rowOps = new RowOps(this.ctx.store, ROW_TYPE);
+    this.ordered = [];
+    this.unregister = null;
+    this.rowOps.freshSeed(this.autoSeedCount());
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  data() {
+    const rows = this.rowOps.ordered();
+    // Cache the rendered order so ops can address rows by DOM index without
+    // paying a second sort inside the measured window.
+    this.ordered = rows;
+    return {
+      rows,
+      rowCount: rows.length,
+      elementCount: rows.length * 7,
+      emptyText: this.isHeavy()
+        ? `${this.requestedRows()} rows is above the ${HEAVY_ROW_THRESHOLD} auto-seed limit — press an op (twice, to confirm) to build the list.`
+        : 'No rows. Run create-1k or reset.',
+    };
+  }
+
+  // Hand-driving from the page. Not part of the benchmark op set.
+  events = {
+    selectRow: (row) => {
+      row.update({ selected: !row.selected });
+    },
+    removeRow: (row) => {
+      this.rowOps.lastSwap = null;
+      this.rowOps.markedUpTo = 0;
+      row.destroy();
+    },
+  };
+
+  // ---- dataset ------------------------------------------------------------
+
+  requestedRows() {
+    return intParam(this.props?.n, 1000, 0, 200000);
+  }
+
+  isHeavy() {
+    return this.requestedRows() > HEAVY_ROW_THRESHOLD;
+  }
+
+  /** Rows to build on mount — zero when the request is above the safety limit. */
+  autoSeedCount() {
+    return this.isHeavy() ? 0 : this.requestedRows();
+  }
+
+  // ---- ops ----------------------------------------------------------------
+
+  async opRun(op) {
+    const store = this.ctx.store;
+    const t0 = performance.now();
+    if (!this.rowOps.apply(op, this.ordered, { fallbackCount: this.requestedRows() })) {
+      throw new Error(`[stress] keyed-list has no op "${op}"`);
+    }
+    // Deliver notifications NOW rather than on the next rAF: every subscribed
+    // view re-evaluates and re-renders synchronously inside this call, so
+    // scriptMs is "mutation + reconciliation" with no scheduler slack in it.
+    store.flush();
+    const scriptMs = performance.now() - t0;
+    await afterPaint();
+    const paintedMs = performance.now() - t0;
+    await settleFrames(1);
+    return {
+      op,
+      ms: paintedMs,
+      scriptMs,
+      detail: `${op}: ${ms1(scriptMs)}ms script / ${ms1(paintedMs)}ms to paint · ${this.ordered.length * 7} live elements`,
+    };
+  }
+
+  async opReset() {
+    this.rowOps.freshSeed(this.autoSeedCount());
+    this.rowOps.selectSlot = 0;
+    this.rowOps.selectedId = null;
+    this.ctx.store.flush();
+    await afterPaint();
+    await settleFrames(1);
+    return { detail: `reset to ${this.autoSeedCount()} rows` };
+  }
+
+  async opWarmup() {
+    await this.opRun('create-1k');
+    await this.opRun('update-every-10th');
+    await this.opRun('swap-rows');
+    await this.opRun('clear');
+    await this.opReset();
+    return { detail: 'warmup: create-1k -> update-every-10th -> swap-rows -> clear -> reset' };
+  }
+
+  // ---- verification -------------------------------------------------------
+
+  /**
+   * Inspect the REAL DOM against the store. A benchmark over a broken render is
+   * worse than no benchmark, so this checks count AND full order, plus whatever
+   * the last op specifically claimed to have done.
+   */
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const expected = this.rowOps.ordered();
+    const rowEls = root.querySelectorAll('.kl-row');
+    if (rowEls.length !== expected.length) {
+      return { ok: false, detail: `DOM has ${rowEls.length} rows, store has ${expected.length}` };
+    }
+
+    const mismatch = mismatchInRows(rowEls, expected, 0);
+    if (mismatch) return { ok: false, detail: mismatch };
+
+    const notes = [`${expected.length} rows (${expected.length * 7} elements), DOM order === store order`];
+
+    const swap = this.rowOps.lastSwap;
+    if (swap) {
+      const atA = rowEls[swap.a]?.querySelector('.kl-id')?.textContent?.trim();
+      const atB = rowEls[swap.b]?.querySelector('.kl-id')?.textContent?.trim();
+      if (atA !== swap.idB || atB !== swap.idA) {
+        return {
+          ok: false,
+          detail: `swap not reflected: position ${swap.a} is "${atA}" (want ${swap.idB}), position ${swap.b} is "${atB}" (want ${swap.idA})`,
+        };
+      }
+      notes.push(`swap ${swap.a}<->${swap.b} reflected in the DOM`);
+    }
+
+    if (this.rowOps.markedUpTo > 0) {
+      const limit = Math.min(rowEls.length, this.rowOps.markedUpTo);
+      for (let i = 0; i < limit; i += 10) {
+        const label = rowEls[i].querySelector('.kl-label')?.textContent?.trim() ?? '';
+        if (!label.endsWith(MARK.trim())) {
+          return { ok: false, detail: `row ${i} label "${label}" is missing the update marker` };
+        }
+      }
+      notes.push(`every 10th row of the first ${limit} carries the update marker`);
+    }
+
+    return { ok: true, detail: notes.join(' · ') };
+  }
+
+  opStats() {
+    const root = viewRoot(this);
+    const body = root ? root.querySelector('.kl-body') : null;
+    return {
+      // The headline: every row is live, so this grows without bound.
+      mountedNodes: body ? body.querySelectorAll('*').length : 0,
+      records: this.rowOps.count(),
+      views: this.ordered.length + 1,
+    };
+  }
+}
+</script>

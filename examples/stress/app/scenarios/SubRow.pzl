@@ -1,0 +1,59 @@
+<puzzle-view>
+  <div class="sub-row bg-ink px-2.5 py-2 min-w-0">
+    <div class="font-mono text-[10px] tabular-nums text-faint">#{ index }</div>
+    <div class="sub-label truncate text-xs text-fg">{ label }</div>
+    <div class="font-mono text-[10px] tabular-nums text-muted">v{ version } · <span class="sub-evals">{ evals }</span> evals</div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ---------------------------------------------------------------------------
+// One subscriber view. The ONLY difference between the two modes is which store
+// query data() makes — and that single line decides whether a write to an
+// unrelated record wakes this view up.
+//
+//   precision — store.findOne(type, id)  subscribes to the key `sub|<id>`
+//   fanout    — store.findMany(type)     subscribes to the key `sub`
+//
+// The store notifies BOTH keys on every record write, so a fan-out subscriber is
+// woken by any write to the type, and a precision subscriber only by a write to
+// its own record.
+// ---------------------------------------------------------------------------
+
+const TYPE = 'sub';
+
+export default class SubRow extends PuzzleView {
+  data(params, props) {
+    const store = this.ctx.store;
+
+    // The probe is a plain object passed down by the parent — a shared counter,
+    // not reactive state. Incrementing it here is what lets the scenario report
+    // "N of M views re-evaluated" for a single-record write.
+    const probe = props.probe;
+    if (probe) {
+      probe.evals += 1;
+      probe.hits.add(props.index);
+    }
+    this.evalCount = (this.evalCount || 0) + 1;
+
+    let record = null;
+    if (props.mode === 'fanout') {
+      // The anti-pattern: pull the whole collection, then take your own row.
+      // Costs an O(M) array build per view per notification, and — the point of
+      // the scenario — subscribes this view to every record of the type.
+      record = store.findMany(TYPE)[props.index] || null;
+    } else {
+      record = store.findOne(TYPE, props.recordId);
+    }
+
+    return {
+      index: props.index,
+      label: record ? record.label : '(missing)',
+      version: record ? record.version || 0 : 0,
+      evals: this.evalCount,
+    };
+  }
+}
+</script>

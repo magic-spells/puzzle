@@ -1,0 +1,57 @@
+<puzzle-view>
+  <div class="aw-cell bg-ink px-2 py-2 text-center min-w-0">
+    <div class="aw-index font-mono text-[10px] tabular-nums text-accent">#{ index }</div>
+    <div class="aw-waited font-mono text-[10px] tabular-nums text-faint">{ waited }ms</div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { sleep } from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// One cell with an INDEPENDENT async data(). It awaits, it queries nothing, it
+// depends on no other cell — so a naive reading says N of these should mount in
+// roughly one delay, not N delays.
+//
+// `mounted()` is the completion signal: a view with an async data() and no
+// <puzzle-skeleton> does not fire mounted() until its data has resolved and the
+// real render has committed, which is exactly the moment the parent wants to
+// count.
+// ---------------------------------------------------------------------------
+
+export default class AsyncCell extends PuzzleView {
+  async data(params, props) {
+    const probe = props.probe;
+    const started = performance.now();
+
+    // Concurrency census. This is the load-bearing measurement, not the clock:
+    // if these evaluations overlap, every cell enters before any of them
+    // resolves and maxInFlight reaches N; if they queue, maxInFlight never
+    // leaves 1. That verdict holds even when the environment distorts the
+    // clock — a throttled background tab stretches every await equally, so wall
+    // time alone cannot tell "serialized" from "slow".
+    if (probe) {
+      probe.inFlight += 1;
+      if (probe.inFlight > probe.maxInFlight) probe.maxInFlight = probe.inFlight;
+      probe.started += 1;
+      if (probe.firstStartAt === 0) probe.firstStartAt = started;
+      probe.lastStartAt = started;
+    }
+
+    await sleep(props.delay);
+
+    if (probe) probe.inFlight -= 1;
+    return { index: props.index, waited: Math.round(performance.now() - started) };
+  }
+
+  mounted() {
+    const probe = this.props?.probe;
+    if (!probe) return;
+    probe.ready += 1;
+    if (probe.total > 0 && probe.ready >= probe.total) {
+      probe.onAllReady?.(performance.now() - probe.t0);
+    }
+  }
+}
+</script>

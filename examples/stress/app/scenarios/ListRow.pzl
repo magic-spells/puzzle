@@ -1,0 +1,62 @@
+<puzzle-view>
+  <div class="kl-row flex items-center gap-3 h-9 px-4 border-b border-line {#if selected}bg-accent/15{/if}">
+    <span class="kl-id font-mono text-[11px] tabular-nums text-faint w-20 shrink-0">{ id }</span>
+    <button type="button" class="kl-label flex-1 min-w-0 truncate text-left text-sm text-fg" @click:prevent={ onSelect }>{ label }</button>
+    <span class="kl-value font-mono text-[11px] tabular-nums text-muted w-10 shrink-0 text-right">{ value }</span>
+    <span class="kl-version font-mono text-[11px] tabular-nums text-faint w-10 shrink-0 text-right">v{ version }</span>
+    <button class="kl-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" @click:prevent={ onRemove }><span class="kl-x block leading-none text-base">&times;</span></button>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ---------------------------------------------------------------------------
+// The row, shared by keyed-list and virtual-list.
+//
+// It exists so the A/B is honest: if the windowed list rendered cheaper rows
+// than the full list, the comparison would measure the markup, not the
+// strategy. Both scenarios render THIS component, so the only difference
+// between them is how many of them exist at once.
+//
+// Row shape: 7 elements (root div, id, label button, value, version, remove
+// button, the × span). That matches js-framework-benchmark's row weight, so
+// `mountedNodes` divided by 7 is the row count.
+//
+// PRIMITIVE PROPS, NOT THE RECORD. This is the important design decision, and
+// it is forced by a framework rule: record props carry identity, not liveness.
+// Records mutate IN PLACE, so passing `row={ record }` would hand the patcher
+// the same object reference before and after an update — shallowEqual would
+// report "props unchanged", this view would never re-evaluate, and
+// `update-every-10th` would silently fail to repaint. Passing the fields
+// individually makes the change visible to the patcher.
+//
+// The `@select`/`@remove` callback props are data-capturing sites, so they
+// compile to a fresh arrow per parent render and therefore always differ under
+// shallowEqual — every parent re-render re-evaluates every mounted row. That is
+// not an oversight: it is the cost of the canonical Puzzle list idiom (the same
+// shape examples/todos uses), and since both scenarios pay it identically, it is
+// precisely what makes windowing win at scale.
+// ---------------------------------------------------------------------------
+
+export default class ListRow extends PuzzleView {
+  data(params, props) {
+    return {
+      id: props.id,
+      label: props.label,
+      value: props.value,
+      version: props.version,
+      selected: props.selected === true,
+    };
+  }
+
+  events = {
+    onSelect: () => {
+      this.props.select?.();
+    },
+    onRemove: () => {
+      this.props.remove?.();
+    },
+  };
+}
+</script>

@@ -1,0 +1,18 @@
+{
+  "name": "puzzle-stress",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deterministic stress-test harness for the Puzzle framework",
+  "scripts": {
+    "dev": "puzzle dev",
+    "build": "puzzle build"
+  },
+  "dependencies": {
+    "@magic-spells/puzzle": "^0.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.1.14",
+    "tailwindcss": "^4.1.14"
+  },
+  "type": "module"
+}

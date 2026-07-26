@@ -1,0 +1,443 @@
+<puzzle-view class="w-full max-w-6xl mx-auto px-6">
+  <!-- Scenario picker -->
+  <div class="flex flex-wrap items-center gap-2">
+    {#for item in scenarioButtons}
+      <button class={ item.cls } disabled={ busy } @click={ pickScenario(item.id) }>{ item.label }</button>
+    {/for}
+    <span class="ml-auto font-mono text-[11px] text-faint">{ blurb }</span>
+  </div>
+
+  <!-- Parameters -->
+  <div class="mt-4 flex flex-wrap items-end gap-4 rounded-xl border border-hairline bg-surface px-4 py-3">
+    {#for field in paramFields}
+      <label class="flex flex-col gap-1">
+        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">{ field.label }</span>
+        <input
+          type="number"
+          class="w-28 h-8 px-2 rounded-md bg-ink border border-hairline font-mono text-xs text-fg tabular-nums focus:outline-none focus:border-accent/60"
+          value={ field.value }
+          min="0"
+          disabled={ busy }
+          @change={ setParam(field.id, event) } />
+      </label>
+    {/for}
+
+    {#if showHeavyWarning}
+      <div class="max-w-md rounded-md border border-warn/50 bg-warn/10 px-3 py-2 font-mono text-[11px] leading-relaxed text-warn">
+        { heavyWarning }
+      </div>
+    {/if}
+
+    {#if showModeToggle}
+      <div class="flex flex-col gap-1">
+        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">mode</span>
+        <div class="flex gap-1">
+          <button class={ precisionCls } disabled={ busy } @click={ setMode('precision') }>precision</button>
+          <button class={ fanoutCls } disabled={ busy } @click={ setMode('fanout') }>fan-out</button>
+        </div>
+      </div>
+    {/if}
+
+    <div class="ml-auto flex items-center gap-2">
+      <button class={ resetCls } disabled={ busy } @click={ doReset }>{ resetLabel }</button>
+      <button class={ warmupCls } disabled={ busy } @click={ doWarmup }>{ warmupLabel }</button>
+      <button class="h-8 px-3 rounded-md border border-hairline text-xs text-muted hover:text-fg disabled:opacity-40" disabled={ busy } @click={ doValidate }>validate</button>
+    </div>
+  </div>
+
+  <!-- Ops -->
+  <div class="mt-3 flex flex-wrap items-center gap-2">
+    {#for op in opButtons}
+      <button class={ op.cls } disabled={ busy } @click={ runOp(op.id) }>{ op.label }</button>
+    {/for}
+    {#if busy}
+      <span class="font-mono text-xs text-warn">running…</span>
+    {/if}
+  </div>
+
+  <!-- Live stats. mountedNodes is the headline for the list A/B. -->
+  <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-px rounded-xl overflow-hidden border border-hairline bg-line">
+    <div class="bg-surface px-4 py-3">
+      <div class={ nodeCountCls }>{ stats.mountedNodes }</div>
+      <div class="mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-faint">live list elements</div>
+    </div>
+    <div class="bg-surface px-4 py-3">
+      <div class="font-mono text-xl tabular-nums text-fg">{ stats.records }</div>
+      <div class="mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-faint">store records</div>
+    </div>
+    <div class="bg-surface px-4 py-3">
+      <div class="font-mono text-xl tabular-nums text-fg">{ stats.views }</div>
+      <div class="mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-faint">mounted views</div>
+    </div>
+    <div class="bg-surface px-4 py-3">
+      <div class="font-mono text-xl tabular-nums text-muted">{ stats.stageNodes }</div>
+      <div class="mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-faint">stage elements</div>
+    </div>
+  </div>
+
+  <!-- Result log: per-op durations, readable without a benchmark runner -->
+  {#if hasLog}
+    <div class="mt-4 rounded-xl border border-hairline bg-surface overflow-hidden">
+      <div class="flex items-baseline gap-3 px-4 py-2 border-b border-hairline font-mono text-[10px] uppercase tracking-[0.2em] text-faint">
+        <span class="w-10 shrink-0">ok</span>
+        <span class="w-40 shrink-0">action</span>
+        <span class="w-20 shrink-0 text-right">script</span>
+        <span class="w-20 shrink-0 text-right">wall</span>
+        <span class="flex-1">detail</span>
+      </div>
+      {#for entry in log}
+        <div class="flex items-baseline gap-3 px-4 py-2 border-b border-line font-mono text-[11px]">
+          <span class={ entry.badgeCls }>{ entry.badge }</span>
+          <span class="w-40 shrink-0 truncate text-fg">{ entry.label }</span>
+          <span class="w-20 shrink-0 text-right tabular-nums text-accent">{ entry.script }</span>
+          <span class="w-20 shrink-0 text-right tabular-nums text-muted">{ entry.wall }ms</span>
+          <span class="flex-1 text-muted">{ entry.detail }</span>
+        </div>
+      {/for}
+    </div>
+  {/if}
+
+  <!-- The scenario itself -->
+  <div id="scenario-stage" class="mt-4 rounded-xl border border-hairline bg-surface overflow-hidden">
+    {#if isSubscriptions}
+      <Subscriptions key={ stageKey } mode={ mode } n={ n } m={ m } />
+    {:else if isAsyncWaterfall}
+      <AsyncWaterfall key={ stageKey } count={ n } delay={ delay } />
+    {:else if isVirtualList}
+      <VirtualList key={ stageKey } n={ n } />
+    {:else}
+      <KeyedList key={ stageKey } n={ n } />
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import AsyncWaterfall from '../scenarios/AsyncWaterfall.pzl';
+import KeyedList from '../scenarios/KeyedList.pzl';
+import Subscriptions from '../scenarios/Subscriptions.pzl';
+import VirtualList from '../scenarios/VirtualList.pzl';
+import {
+  DEFAULT_SCENARIO,
+  SCENARIOS,
+  SCENARIO_DEFINITIONS,
+  definitionFor,
+  resetScenario,
+  runScenario,
+  scenarioStats,
+  selectScenario,
+  validateScenario,
+  warmupScenario,
+} from '../stress-controller.js';
+import { HEAVY_ROW_THRESHOLD } from '../row-ops.js';
+import { intParam, ms1 } from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// The control panel, and the host of whichever scenario is active.
+//
+// Scenario + parameters live in the QUERY STRING, so every measurement has a
+// copy-pasteable URL and `__STRESS__.select()` and the on-page buttons drive the
+// exact same code path (a router.replace).
+//
+// `stageKey` is the important bit: the scenario component carries an explicit
+// key built from every parameter, so changing a parameter changes the vnode key,
+// which makes the patcher unmount and remount the scenario. Its created() then
+// rebuilds the dataset from scratch. Without that, a parameter change would be a
+// props update and the already-built dataset would silently disagree with the
+// URL.
+//
+// State here lives in plain instance fields rather than setData(): the template
+// reads only from data()'s return value, so a setData() write would need a
+// refresh() to become visible anyway.
+// ---------------------------------------------------------------------------
+
+/** Per-scenario default for `n`, which means a different thing in each. */
+const N_DEFAULTS = {
+  'keyed-list': 1000,
+  'virtual-list': 50000,
+  subscriptions: 100,
+  'async-waterfall': 100,
+};
+
+const PARAM_FIELDS = {
+  'keyed-list': [{ id: 'n', label: 'rows (N)' }],
+  'virtual-list': [{ id: 'n', label: 'rows (N)' }],
+  subscriptions: [
+    { id: 'n', label: 'views (N)' },
+    { id: 'm', label: 'records (M)' },
+  ],
+  'async-waterfall': [
+    { id: 'n', label: 'cells (N)' },
+    { id: 'delay', label: 'await ms' },
+  ],
+};
+
+const ACTIVE_SCENARIO_BTN =
+  'h-9 px-4 rounded-lg border border-accent bg-accent/15 text-sm font-medium text-accent disabled:opacity-40';
+const IDLE_SCENARIO_BTN =
+  'h-9 px-4 rounded-lg border border-hairline text-sm font-medium text-muted hover:text-fg hover:border-white/20 disabled:opacity-40';
+const ACTIVE_MODE_BTN =
+  'h-8 px-3 rounded-md border border-accent bg-accent/15 font-mono text-xs text-accent disabled:opacity-40';
+const IDLE_MODE_BTN =
+  'h-8 px-3 rounded-md border border-hairline font-mono text-xs text-muted hover:text-fg disabled:opacity-40';
+const OP_BTN =
+  'h-8 px-3 rounded-md border border-accent/40 bg-accent/10 font-mono text-xs text-accent hover:bg-accent/20 disabled:opacity-40';
+const ARMED_BTN =
+  'h-8 px-3 rounded-md border border-warn bg-warn/20 font-mono text-xs font-semibold text-warn disabled:opacity-40';
+const SECONDARY_BTN =
+  'h-8 px-3 rounded-md border border-hairline text-xs text-muted hover:text-fg disabled:opacity-40';
+
+/** Read every scenario parameter out of a route query snapshot, clamped. */
+function readParams(scenario, query) {
+  const raw = query || {};
+  const mode = Array.isArray(raw.mode) ? raw.mode[0] : raw.mode;
+  return {
+    mode: mode === 'fanout' ? 'fanout' : 'precision',
+    n: intParam(raw.n, N_DEFAULTS[scenario] ?? 100, 0, 200000),
+    m: intParam(raw.m, 10000, 1, 200000),
+    delay: intParam(raw.delay, 50, 0, 5000),
+  };
+}
+
+export default class StressHome extends PuzzleView {
+  created() {
+    this.busy = false;
+    this.log = [];
+    this.logSeq = 0;
+    this.stats = { mountedNodes: 0, stageNodes: 0, records: 0, views: 0 };
+    this.statsTimer = null;
+    // The two-click guard: the key of the action currently armed, or null.
+    this.armed = null;
+    this.lastStageKey = null;
+  }
+
+  mounted() {
+    // A slow poll so the readout is live without adding render pressure. It
+    // skips while an op is running (never perturb a measurement) and only
+    // re-renders when a number actually moved.
+    this.statsTimer = setInterval(() => {
+      if (this.busy || this.isDestroyed) return;
+      const next = scenarioStats();
+      const current = this.stats;
+      if (
+        next.mountedNodes === current.mountedNodes &&
+        next.stageNodes === current.stageNodes &&
+        next.records === current.records &&
+        next.views === current.views
+      ) {
+        return;
+      }
+      this.stats = next;
+      this.refresh();
+    }, 1000);
+  }
+
+  destroyed() {
+    if (this.statsTimer !== null) clearInterval(this.statsTimer);
+    this.statsTimer = null;
+  }
+
+  data() {
+    const scenario = this.scenarioName();
+    const params = this.currentParams();
+    const definition = definitionFor(scenario);
+    const stageKey = [scenario, params.mode, params.n, params.m, params.delay].join('|');
+
+    // Changing scenario or parameters cancels any armed confirmation — an arm
+    // for "50k on the full-DOM list" must not survive into a different context.
+    if (stageKey !== this.lastStageKey) {
+      this.lastStageKey = stageKey;
+      this.armed = null;
+    }
+
+    const needsArm = this.needsArm(scenario, params.n);
+
+    return {
+      busy: this.busy,
+      blurb: definition.blurb,
+      scenarioButtons: SCENARIO_DEFINITIONS.map((entry) => ({
+        id: entry.name,
+        label: entry.label,
+        cls: entry.name === scenario ? ACTIVE_SCENARIO_BTN : IDLE_SCENARIO_BTN,
+      })),
+      opButtons: definition.ops.map((op) => this.actionButton(`op:${op}`, op, needsArm, params.n, OP_BTN)),
+      resetLabel: this.actionLabel('reset', 'reset', needsArm, params.n),
+      resetCls: this.armed === 'reset' ? ARMED_BTN : SECONDARY_BTN,
+      warmupLabel: this.actionLabel('warmup', 'warmup', needsArm, params.n),
+      warmupCls: this.armed === 'warmup' ? ARMED_BTN : SECONDARY_BTN,
+
+      paramFields: (PARAM_FIELDS[scenario] || []).map((field) => ({
+        id: field.id,
+        label: field.label,
+        value: params[field.id],
+      })),
+
+      showHeavyWarning: needsArm,
+      heavyWarning:
+        `${params.n} rows in the real DOM is ~${params.n * 7} elements. ` +
+        `This can take tens of seconds and may wedge the tab — a legitimate finding, but not by accident. ` +
+        `Nothing is seeded on mount above ${HEAVY_ROW_THRESHOLD} rows, and every action needs a confirming second click. ` +
+        `Switch to Virtual list to run the same records safely.`,
+
+      showModeToggle: scenario === 'subscriptions',
+      precisionCls: params.mode === 'precision' ? ACTIVE_MODE_BTN : IDLE_MODE_BTN,
+      fanoutCls: params.mode === 'fanout' ? ACTIVE_MODE_BTN : IDLE_MODE_BTN,
+
+      isSubscriptions: scenario === 'subscriptions',
+      isAsyncWaterfall: scenario === 'async-waterfall',
+      isVirtualList: scenario === 'virtual-list',
+      stageKey,
+      mode: params.mode,
+      n: params.n,
+      m: params.m,
+      delay: params.delay,
+
+      stats: this.stats,
+      // Red once the list is big enough to hurt; this is the number to watch.
+      nodeCountCls:
+        this.stats.mountedNodes > HEAVY_ROW_THRESHOLD
+          ? 'font-mono text-xl tabular-nums text-danger'
+          : 'font-mono text-xl tabular-nums text-accent',
+      log: this.log,
+      hasLog: this.log.length > 0,
+    };
+  }
+
+  events = {
+    pickScenario: (name) => {
+      this.runTask(`select ${name}`, () => selectScenario(name, this.currentParams()));
+    },
+    runOp: (op) => {
+      this.guarded(`op:${op}`, op, () => runScenario(op));
+    },
+    doReset: () => {
+      this.guarded('reset', 'reset', () => resetScenario());
+    },
+    doWarmup: () => {
+      this.guarded('warmup', 'warmup', () => warmupScenario());
+    },
+    doValidate: () => {
+      // Read-only, so it is never gated.
+      const verdict = validateScenario();
+      this.pushLog('validate', 0, null, verdict.ok, verdict.detail);
+      this.stats = scenarioStats();
+      this.refresh();
+    },
+    setMode: (mode) => {
+      this.runTask(`mode=${mode}`, () =>
+        selectScenario(this.scenarioName(), { ...this.currentParams(), mode })
+      );
+    },
+    setParam: (key, event) => {
+      const value = event?.target?.value;
+      this.runTask(`${key}=${value}`, () =>
+        selectScenario(this.scenarioName(), { ...this.currentParams(), [key]: value })
+      );
+    },
+  };
+
+  // ---- the two-click guard ------------------------------------------------
+
+  /**
+   * Only the FULL-DOM list needs confirming, and only above the threshold. The
+   * virtual list renders a fixed window whatever N is, so gating it would be
+   * theatre.
+   */
+  needsArm(scenario, n) {
+    return scenario === 'keyed-list' && n > HEAVY_ROW_THRESHOLD;
+  }
+
+  actionLabel(key, label, needsArm, n) {
+    if (!needsArm) return label;
+    return this.armed === key ? `really run ${n}?` : label;
+  }
+
+  actionButton(key, label, needsArm, n, baseCls) {
+    const armed = needsArm && this.armed === key;
+    return {
+      id: label,
+      label: this.actionLabel(key, label, needsArm, n),
+      cls: armed ? ARMED_BTN : baseCls,
+    };
+  }
+
+  /**
+   * Run `action`, or — when the guard is active and this action is not yet
+   * armed — arm it and wait for a second click. Deliberately in-page state: a
+   * window.confirm() would block the event loop and freeze the very thing the
+   * harness is trying to measure.
+   */
+  guarded(key, label, action) {
+    if (this.busy) return;
+    const params = this.currentParams();
+    if (this.needsArm(this.scenarioName(), params.n) && this.armed !== key) {
+      this.armed = key;
+      this.refresh();
+      return;
+    }
+    this.armed = null;
+    this.runTask(label, action);
+  }
+
+  // ---- helpers ------------------------------------------------------------
+
+  scenarioName() {
+    const raw = this.route?.query?.scenario;
+    const name = Array.isArray(raw) ? raw[0] : raw;
+    return SCENARIOS.includes(name) ? name : DEFAULT_SCENARIO;
+  }
+
+  currentParams() {
+    return readParams(this.scenarioName(), this.route?.query);
+  }
+
+  pushLog(label, wall, scriptMs, ok, detail) {
+    this.log = [
+      {
+        id: (this.logSeq += 1),
+        label,
+        wall: ms1(wall),
+        script: scriptMs === null || scriptMs === undefined ? '—' : `${ms1(scriptMs)}ms`,
+        badge: ok ? 'PASS' : 'FAIL',
+        badgeCls: ok ? 'w-10 shrink-0 text-accent' : 'w-10 shrink-0 text-danger',
+        detail,
+      },
+      ...this.log,
+    ].slice(0, 14);
+  }
+
+  /**
+   * Run one control action: mark busy, time the wall clock around it, validate
+   * the resulting DOM, log the outcome. Validation runs on EVERY action — a
+   * measurement taken over a broken render should never be quietly recorded.
+   */
+  async runTask(label, action) {
+    if (this.busy) return;
+    this.busy = true;
+    this.refresh();
+
+    let wall = 0;
+    let scriptMs = null;
+    let ok = false;
+    let detail = '';
+    try {
+      const started = performance.now();
+      const result = await action();
+      wall = performance.now() - started;
+      if (typeof result?.scriptMs === 'number') scriptMs = result.scriptMs;
+      const verdict = validateScenario();
+      ok = verdict.ok;
+      detail = result?.detail ? `${result.detail} · ${verdict.detail}` : verdict.detail;
+    } catch (err) {
+      ok = false;
+      detail = String(err?.message || err);
+      console.error('[stress]', err);
+    }
+
+    this.busy = false;
+    this.pushLog(label, wall, scriptMs, ok, detail);
+    this.stats = scenarioStats();
+    this.refresh();
+  }
+}
+</script>

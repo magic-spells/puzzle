@@ -1,0 +1,247 @@
+<puzzle-view>
+  <div class="sub-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="text-fg">{ mode }</span> ·
+        <span class="tabular-nums">{ watcherCount }</span> subscriber views over
+        <span class="tabular-nums">{ datasetSize }</span> records
+      </div>
+      <div class="font-mono text-[11px] shrink-0 { resultCls }">{ resultText }</div>
+    </div>
+
+    <div class="px-4 py-2 border-b border-line font-mono text-[11px] text-faint">{ explainText }</div>
+
+    <div class="sub-grid grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-px bg-line max-h-[420px] overflow-y-auto">
+      {#for watcher in watchers}
+        <SubRow index={ watcher.index } recordId={ watcher.recordId } mode={ mode } probe={ probe } />
+      {/for}
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import SubRow from './SubRow.pzl';
+import { registerScenario } from '../stress-controller.js';
+import {
+  STRESS_SEED,
+  afterPaint,
+  clearType,
+  intParam,
+  ms1,
+  seqShapes,
+  settleFrames,
+  viewRoot,
+} from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// subscriptions — how much of the app wakes up when ONE record changes?
+//
+// N mounted views watch N distinct records out of M. The op writes to a record
+// that NO view watches, then counts how many views re-evaluated:
+//
+//   precision (store.findOne(type, id))  expected 0 of N
+//   fanout    (store.findMany(type))     expected N of N
+//
+// The write target is deliberately outside the watched window — otherwise
+// precision would legitimately notify 1 and the contrast would be muddy.
+//
+// This view's OWN data() makes no store query at all. That is load-bearing: if
+// the parent subscribed to the collection, the single write would re-render the
+// parent, which would re-render all N children, and the measurement would read
+// N-of-N in both modes for reasons that have nothing to do with subscription
+// precision. Dataset shape lives in instance fields instead, and the parameters
+// arrive as props from a component key that forces a remount when they change.
+// ---------------------------------------------------------------------------
+
+const TYPE = 'sub';
+
+export default class Subscriptions extends PuzzleView {
+  api = {
+    name: 'subscriptions',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.probe = { evals: 0, hits: new Set() };
+    this.watchers = [];
+    this.datasetSize = 0;
+    this.targetId = null;
+    this.lastResult = null;
+    this.unregister = null;
+    this.buildDataset();
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  data() {
+    const result = this.lastResult;
+    const mode = this.mode();
+    return {
+      mode,
+      watchers: this.watchers,
+      probe: this.probe,
+      watcherCount: this.watchers.length,
+      datasetSize: this.datasetSize,
+      explainText:
+        mode === 'fanout'
+          ? 'each view calls store.findMany(sub) — subscribed to the whole collection'
+          : 'each view calls store.findOne(sub, id) — subscribed to one record',
+      resultText: result
+        ? `${result.notified}/${result.total} re-evaluated (expected ${result.expected}) · ${ms1(result.scriptMs)}ms`
+        : 'no run yet',
+      resultCls: result
+        ? result.notified === result.expected
+          ? 'text-accent'
+          : 'text-danger'
+        : 'text-faint',
+    };
+  }
+
+  // ---- dataset ------------------------------------------------------------
+
+  mode() {
+    return this.props?.mode === 'fanout' ? 'fanout' : 'precision';
+  }
+
+  wantWatchers() {
+    return intParam(this.props?.n, 100, 1, 5000);
+  }
+
+  wantRecords() {
+    return intParam(this.props?.m, 10000, 1, 200000);
+  }
+
+  buildDataset() {
+    const store = this.ctx.store;
+    const m = this.wantRecords();
+    const n = Math.min(this.wantWatchers(), m);
+
+    clearType(store, TYPE);
+    store.resetFixtureSeed(STRESS_SEED);
+    const records = store.seed(TYPE, seqShapes(m, 0));
+
+    this.datasetSize = records.length;
+    this.watchers = records.slice(0, n).map((record, index) => ({
+      id: record.id,
+      index,
+      recordId: record.id,
+    }));
+    // Last record: outside the watched window by construction.
+    this.targetId = records[records.length - 1].id;
+    this.probe.evals = 0;
+    this.probe.hits.clear();
+    this.lastResult = null;
+  }
+
+  // ---- ops ----------------------------------------------------------------
+
+  async opRun(op) {
+    if (op !== 'update-one') throw new Error(`[stress] subscriptions has no op "${op}"`);
+    const store = this.ctx.store;
+    const target = store.findOne(TYPE, this.targetId);
+    if (!target) throw new Error('[stress] subscriptions: the write target is gone — reset the scenario');
+
+    this.probe.evals = 0;
+    this.probe.hits.clear();
+
+    const t0 = performance.now();
+    target.update({ version: (target.version || 0) + 1 });
+    // Synchronous delivery: every subscribed SubRow re-evaluates inside this
+    // call, so the counters below are final the instant flush() returns.
+    store.flush();
+    const scriptMs = performance.now() - t0;
+    const notified = this.probe.hits.size;
+    const evals = this.probe.evals;
+
+    await afterPaint();
+    const paintedMs = performance.now() - t0;
+    await settleFrames(1);
+
+    const mode = this.mode();
+    const total = this.watchers.length;
+    const expected = mode === 'fanout' ? total : 0;
+    this.lastResult = { mode, notified, evals, total, expected, scriptMs, paintedMs };
+    // Safe: this view's data() makes no store query, and the children's props
+    // are shallow-equal, so nothing re-evaluates and the counters stay honest.
+    this.refresh();
+
+    return {
+      op,
+      ms: paintedMs,
+      scriptMs,
+      detail: `${mode}: 1 record written → ${notified}/${total} views re-evaluated (expected ${expected}), ${ms1(scriptMs)}ms script`,
+    };
+  }
+
+  async opReset() {
+    this.buildDataset();
+    this.ctx.store.flush();
+    this.refresh();
+    await afterPaint();
+    await settleFrames(1);
+    return { detail: `reset: ${this.watchers.length} ${this.mode()} views over ${this.datasetSize} records` };
+  }
+
+  async opWarmup() {
+    await this.opRun('update-one');
+    this.lastResult = null;
+    this.refresh();
+    await settleFrames(1);
+    return { detail: 'warmup: one update-one cycle, result discarded' };
+  }
+
+  // ---- verification -------------------------------------------------------
+
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const rows = root.querySelectorAll('.sub-row');
+    if (rows.length !== this.watchers.length) {
+      return { ok: false, detail: `DOM has ${rows.length} subscriber views, expected ${this.watchers.length}` };
+    }
+
+    const store = this.ctx.store;
+    for (let i = 0; i < rows.length; i += 1) {
+      const record = store.findOne(TYPE, this.watchers[i].recordId);
+      if (!record) return { ok: false, detail: `watched record ${this.watchers[i].recordId} is missing from the store` };
+      const shown = rows[i].querySelector('.sub-label')?.textContent?.trim();
+      if (shown !== String(record.label)) {
+        return { ok: false, detail: `view ${i} renders "${shown}", its record holds "${record.label}"` };
+      }
+    }
+
+    if (!this.lastResult) {
+      return {
+        ok: true,
+        detail: `${rows.length} subscriber views over ${this.datasetSize} records; no run yet`,
+      };
+    }
+
+    const { mode, notified, total, expected } = this.lastResult;
+    return {
+      ok: notified === expected,
+      detail: `${mode}: ${notified}/${total} views re-evaluated for a single-record write (expected ${expected})`,
+    };
+  }
+
+  opStats() {
+    return {
+      records: this.ctx.store.findMany(TYPE).length,
+      views: this.watchers.length + 1,
+    };
+  }
+}
+</script>
