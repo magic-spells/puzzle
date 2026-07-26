@@ -285,6 +285,11 @@
 import { ViewNode } from '../views/ViewNode.js';
 import { cancelAnimations } from '../views/animate.js';
 import { resolveHead, syncTitle } from '../head.js';
+import {
+	findShadowedPaths,
+	isDynamicSegment,
+	validateTopLevelPath,
+} from './routePath.js';
 import { walkRouteTree } from './routeTree.js';
 import { devtoolsRouteCommit } from '../devtools.js';
 
@@ -546,6 +551,9 @@ export class Router {
 				continue;
 			}
 			walkRouteTree(route, this.#routes, makeEntry);
+		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			warnShadowedPaths(findShadowedPaths(this.#routes));
 		}
 		// Bind once so start()/stop() add and remove the SAME reference — the
 		// prototype bound at addEventListener time and leaked (CODE_REVIEW §2.5).
@@ -936,6 +944,15 @@ export class Router {
 	 */
 	url(path) {
 		return encodeURL(path, this.#mode, this.#base);
+	}
+
+	/**
+	 * Ordered compiled leaf entries for build-time route analysis. The SSG pass
+	 * reads their regexes to detect precedence shadows instead of compiling a
+	 * second matcher table with rules that could drift from this Router.
+	 */
+	get routeEntries() {
+		return this.#routes;
 	}
 
 	/**
@@ -2503,10 +2520,11 @@ export class Router {
  * consumer that both validates the leaf's chain and compiles it into a matcher
  * Entry.
  *
- * Fail-fast config errors (throw at construction): a child path with a leading
- * '/', a `layout` on a non-root node, `path:'*'` inside children, a duplicate
- * `:param` name within one chain, an unknown `transitionMode` value (D65), and a
- * non-function `guard` (D87) on any node (root or child).
+ * Fail-fast config errors (throw at construction): a top-level path that is
+ * neither `'*'` nor rooted with '/', a child path with a leading '/', a `layout`
+ * on a non-root node, `path:'*'` inside children, a duplicate `:param` name
+ * within one chain, an unknown `transitionMode` value (D65), and a non-function
+ * `guard` (D87) on any node (root or child).
  *
  * Build a leaf Entry: validate the chain, then compile the leaf's full path to a
  * matcher + merged params.
@@ -2518,7 +2536,9 @@ function makeEntry(chain, fullPaths) {
 	// and route trees are tiny, and a bad node still throws the same error the
 	// first time DFS reaches a leaf under it.
 	chain.forEach((node, index) => {
-		if (index) {
+		if (index === 0) {
+			validateTopLevelPath(node.path);
+		} else {
 			if (typeof node.path === 'string' && node.path.startsWith('/')) {
 				throw new Error(
 					`[puzzle] child route path must be relative (no leading "/"): "${node.path}"`
@@ -2546,12 +2566,12 @@ function makeEntry(chain, fullPaths) {
 	// not `/docsXv1`). Existing `%XX` escapes are ASCII and stay byte-identical, so
 	// this normalization is idempotent. The '/' separators are structural,
 	// re-joined below — never escaped. The top-level catch-all '*' never reaches
-	// here (handled in the constructor; a '*' inside children throws above), so
-	// '*' is escaped like any other literal.
+	// here (handled in the constructor); a non-bare '*' inside a top-level path is
+	// escaped like any other literal, while a '*' child still throws above.
 	const regexPath = leafPath
 		.split('/')
 		.map((seg) => {
-			if (seg.length > 1 && seg[0] === ':') {
+			if (isDynamicSegment(seg)) {
 				const name = seg.slice(1);
 				if (paramNames.includes(name)) {
 					throw new Error(`[puzzle] duplicate route param ":${name}" in "${leafPath}"`);
@@ -2565,6 +2585,8 @@ function makeEntry(chain, fullPaths) {
 	return {
 		chain,
 		fullPaths,
+		fullPath: leafPath,
+		matchPath: normalizeRoutePath(leafPath),
 		regex: new RegExp('^' + regexPath + '$'),
 		paramNames,
 		layout: chain[0].layout ?? null,
@@ -2580,6 +2602,20 @@ function makeEntry(chain, fullPaths) {
 // by esbuild, so the class-member form would ship dead warning scaffolding.
 // Once-state is per-module (per page load), not per-router-instance — fine for
 // a dev diagnostic, and vitest isolates module state per test file.
+
+/** Warn once per shadow pair even when SSG builds several memory routers. */
+const warnedShadowedPaths = new Set();
+function warnShadowedPaths(shadowedPaths) {
+	for (const { path, shadowedBy } of shadowedPaths) {
+		const key = shadowedBy + '\0' + path;
+		if (warnedShadowedPaths.has(key)) continue;
+		warnedShadowedPaths.add(key);
+		console.warn(
+			`[puzzle] route "${path}" is unreachable because earlier route "${shadowedBy}" ` +
+				'matches it first (routes match in declaration order)'
+		);
+	}
+}
 
 /** One-shot "loaded outside the configured base" warning (D51). */
 let warnedOutsideBase = false;

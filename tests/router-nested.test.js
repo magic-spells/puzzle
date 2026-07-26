@@ -2,7 +2,7 @@
 //
 // Nested routes & nested view slots (constellation/doc/DOC-DECISIONS.md D30, v1.3). Exercises the
 // chain-prefix navigation pipeline: relative-path composition, index children,
-// bare-parent no-match, merged params at every level, the four fail-fast config
+// bare-parent no-match, merged params at every level, fail-fast route config
 // throws, deep composition through nested <Slot/>s, prefix REUSE (ancestor kept +
 // awaited pre-commit, URL gated on all loads), the same-view-class sibling key
 // trap, params-only nested refresh, and failure/cancel teardown of the fresh
@@ -258,6 +258,25 @@ describe('Router nested — matching & composition', () => {
 describe('Router nested — constructor config throws', () => {
 	const V = makeLeaf('v');
 	const P = makeShell('p');
+
+	it('throws on relative or empty top-level paths', () => {
+		expect(() => new Router([{ path: 'about', view: V }])).toThrow(
+			/top-level route path must be "\*" or start with "\/"/
+		);
+		expect(() => new Router([{ path: '', view: V }])).toThrow(
+			/top-level route path must be "\*" or start with "\/"/
+		);
+	});
+
+	it('accepts a rooted top-level path and the bare catch-all', () => {
+		expect(
+			() =>
+				new Router([
+					{ path: '/foo', view: V },
+					{ path: '*', view: V },
+				])
+		).not.toThrow();
+	});
 
 	it('throws on a child path with a leading "/"', () => {
 		expect(
