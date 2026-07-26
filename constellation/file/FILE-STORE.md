@@ -1,6 +1,6 @@
 ---
 name: reactive Store runtime
-status: verified
+status: built
 path: client-runtime/datastore/store.js
 language: javascript
 summary: Record registry, query tracking, adapters, persistence, and batched delivery.

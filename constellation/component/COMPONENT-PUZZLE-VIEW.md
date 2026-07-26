@@ -1,6 +1,6 @@
 ---
 name: PuzzleView
-status: verified
+status: built
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ANIMATIONS
@@ -52,6 +52,12 @@ Static `ref="name"` bindings use cached `__ref` callbacks. Replacements repoint
 the ref; removals and destroy clear it. Development builds register mounted
 views with [[COMPONENT-DEVSTATE]] so only JSON-safe local state crosses a live
 reload.
+
+D121 adds development-only attribution around `data()`, render-tree
+construction, patching, memo, slot-only updates, and scheduled causes. All
+profiler state remains in [[FILE-DEVPERF]] WeakMaps: PuzzleView has no profiler
+field or private helper, and every class-method call site uses the inline
+positive `__PUZZLE_DEV__` probe required for production DCE.
 
 Two underscore-prefixed **internal** readers exist for dev tooling and are not
 public API (never spelled in a template): `_modelState()` returns just the model

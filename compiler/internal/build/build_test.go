@@ -1,6 +1,7 @@
 package build
 
 import (
+	"encoding/json"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -95,9 +96,14 @@ func TestBuildExample(t *testing.T) {
 func TestBuildDevDefineDCE(t *testing.T) {
 	root := exampleRoot(t)
 	distApp := filepath.Join(root, "dist", "app.js")
+	var devMetafile string
 
 	// Development: the guarded HMR code — and its sessionStorage key — survive.
-	if err := Build(root, Options{Development: true, Runner: &fakeRunner{css: "/* tw */"}}); err != nil {
+	if err := Build(root, Options{
+		Development: true,
+		Runner:      &fakeRunner{css: "/* tw */"},
+		Metafile:    &devMetafile,
+	}); err != nil {
 		t.Fatalf("dev Build failed: %v", err)
 	}
 	devJS, err := os.ReadFile(distApp)
@@ -113,10 +119,18 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if !strings.Contains(string(devJS), "__PUZZLE_DEVTOOLS_HOOK__") {
 		t.Errorf("dev bundle should retain the DevTools bridge hook global (__PUZZLE_DEV__ define = true)")
 	}
+	if !strings.Contains(string(devJS), devperfSentinel) {
+		t.Errorf("dev bundle should retain the dev performance sentinel (__PUZZLE_DEV__ define = true)")
+	}
 
 	// Production: DCE strips every DEV-guarded branch — no __puzzleHMR reaches
 	// the bundle (zero production cost).
-	if err := Build(root, Options{Development: false, Runner: &fakeRunner{css: "/* tw */"}}); err != nil {
+	var prodMetafile string
+	if err := Build(root, Options{
+		Development: false,
+		Runner:      &fakeRunner{css: "/* tw */"},
+		Metafile:    &prodMetafile,
+	}); err != nil {
 		t.Fatalf("prod Build failed: %v", err)
 	}
 	prodJS, err := os.ReadFile(distApp)
@@ -140,6 +154,43 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if strings.Contains(string(prodJS), "__PUZZLE_DEVTOOLS_HOOK__") {
 		t.Errorf("production bundle must DCE the DevTools bridge — found the __PUZZLE_DEVTOOLS_HOOK__ global present")
 	}
+	if strings.Contains(string(prodJS), devperfSentinel) {
+		t.Errorf("production bundle must DCE dev performance instrumentation — found %s present", devperfSentinel)
+	}
+	if bytes := metafileBytesInOutput(t, prodMetafile, "client-runtime/devperf.js"); bytes != 0 {
+		t.Errorf("production devperf.js bytesInOutput = %d, want 0", bytes)
+	}
+	if bytes := metafileBytesInOutput(t, devMetafile, "client-runtime/devperf.js"); bytes == 0 {
+		t.Errorf("development devperf.js bytesInOutput = 0, want a positive contribution")
+	}
+}
+
+// devperfSentinel is a minification-proof literal unique to devperf.js.
+const devperfSentinel = "__PUZZLE_PERF__"
+
+// metafileBytesInOutput sums one source input's attributed bytes across every
+// esbuild output. An input omitted from an output contributes zero.
+func metafileBytesInOutput(t *testing.T, raw, sourceSuffix string) int {
+	t.Helper()
+	var meta struct {
+		Outputs map[string]struct {
+			Inputs map[string]struct {
+				BytesInOutput int `json:"bytesInOutput"`
+			} `json:"inputs"`
+		} `json:"outputs"`
+	}
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		t.Fatalf("parsing esbuild metafile: %v", err)
+	}
+	total := 0
+	for _, output := range meta.Outputs {
+		for input, contribution := range output.Inputs {
+			if strings.HasSuffix(filepath.ToSlash(input), sourceSuffix) {
+				total += contribution.BytesInOutput
+			}
+		}
+	}
+	return total
 }
 
 // definesFixture parameterizes the throwaway one-route app the runtime-probe DCE

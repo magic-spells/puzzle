@@ -1,6 +1,6 @@
 ---
 name: esbuild plugin and build pipeline
-status: verified
+status: built
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN

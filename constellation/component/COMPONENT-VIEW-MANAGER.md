@@ -1,6 +1,6 @@
 ---
 name: ViewManager and ViewNode
-status: verified
+status: built
 connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-CODEGEN
@@ -121,6 +121,12 @@ sites — the two that reference the import — sit behind an inlined
 a `flip` attr, dropping the module. The `'flip' in attrs` detection itself is
 intentionally un-probed (it holds no import alive, so gating it would only skip
 an `in` check). Detection covers component props too, not just element attrs.
+
+D121 instruments actual DOM write/insert/remove/move sites and component-props
+bailouts during `ViewManager.render`. Nested component render scopes attribute
+mutations to the innermost render; a zero mutation delta is the durable
+wasted-render definition. The collector and all per-view state live in
+[[FILE-DEVPERF]], not on ViewManager.
 
 Teardown destroys nested component instances, unsubscribes views, removes
 listeners/refs, and tolerates failing leave hooks. All DOM links transfer to the

@@ -1,6 +1,6 @@
 ---
 name: Store
-status: verified
+status: built
 connections:
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-PUZZLE-VIEW
@@ -61,6 +61,12 @@ the batch to the D100 DevTools bridge ([[FILE-DEVTOOLS]]) — the changed keys a
 the exact subscriber set notified — placed after the delivery loop because only
 then are both halves final. The probe is spelled inline so production DCE folds
 the statement and the import tree-shakes away.
+
+D121 propagates causal chains through `_notify`/`flush`, records whole-flush
+duration plus key/subscriber counts, and measures both known-async and
+sync-shaped `_asyncTrackingChain` head-of-line deferrals. Store owns no profiler
+state; [[FILE-DEVPERF]] holds it and every Store touchpoint is an inline positive
+development probe.
 
 `modelFor(type)` resolves **own properties only**. `models` is a plain object
 literal, so a bare index also reaches `Object.prototype`: a persisted blob keyed

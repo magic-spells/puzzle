@@ -19,6 +19,13 @@
 
 import { PuzzleModel, PuzzleValidationError, safeMerge } from '../model.js';
 import { devtoolsFlush } from '../devtools.js';
+import {
+	devperfStoreFlushEnd,
+	devperfStoreFlushNotifications,
+	devperfStoreFlushStart,
+	devperfStoreNotify,
+	devperfTrackingDeferred,
+} from '../devperf.js';
 
 const REC_SEP = ' '; // never appears in a type name
 const noop = () => {}; // swallows a chained save()'s rejection (§22, D50)
@@ -53,6 +60,7 @@ export class PuzzleAdapterError extends Error {
 		this.body = body;
 	}
 }
+
 
 /**
  * Read a fetch Response body once: parsed JSON when it parses, raw text when it
@@ -765,6 +773,14 @@ export class Store {
 		// then retry. Only async evals serialize — a sync eval is safe inline.
 		if (this._asyncTrackingChain && expectsAsync) {
 			const retry = () => this.withTracking(subscriber, fn, true);
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				return devperfTrackingDeferred(
+					subscriber,
+					this._asyncTrackingChain,
+					retry,
+					'known-async'
+				);
+			}
 			return this._asyncTrackingChain.then(retry, retry);
 		}
 
@@ -819,6 +835,14 @@ export class Store {
 				result.then(noop, noop); // observe the abandoned promise — no unhandled rejection
 				finalize(false);
 				const retry = () => this.withTracking(subscriber, fn, true);
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+					return devperfTrackingDeferred(
+						subscriber,
+						this._asyncTrackingChain,
+						retry,
+						'sync-shaped'
+					);
+				}
 				return this._asyncTrackingChain.then(retry, retry);
 			}
 
@@ -898,6 +922,9 @@ export class Store {
 	_notify(type, id) {
 		this._pendingKeys.add(type);
 		this._pendingKeys.add(type + REC_SEP + id);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfStoreNotify(this, this._tracking);
+		}
 		this._scheduleFlush();
 	}
 
@@ -938,6 +965,9 @@ export class Store {
 	 * a caller that needs storage current immediately calls flush().
 	 */
 	flush() {
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfStoreFlushStart(this);
+		}
 		this._flushScheduled = false;
 		// Clear any armed D63 fallback timer — whichever scheduler (rAF or the
 		// timer) reached flush() first cancels the other, so delivery is once-only.
@@ -956,6 +986,9 @@ export class Store {
 		if (this._persistPending) {
 			this._persistPending = false;
 			this._persistNow();
+		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfStoreFlushEnd(this);
 		}
 	}
 
@@ -1011,6 +1044,7 @@ export class Store {
 		// (never hoisted into a shared const) so production DCE folds the whole
 		// statement and the devtools import tree-shakes away — see the note in app.js.
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfStoreFlushNotifications(this, keys, notified);
 			devtoolsFlush(this, keys, notified);
 		}
 	}

@@ -20,6 +20,19 @@ import { ViewManager } from './viewManager.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
+import {
+	devperfCanRender,
+	devperfMarkCause,
+	devperfMemo,
+	devperfPrepareData,
+	devperfRenderEnd,
+	devperfRenderPrepare,
+	devperfRenderScheduled,
+	devperfRenderStart,
+	devperfRenderTreeBuilt,
+	devperfRunData,
+	devperfSlotRender,
+} from '../devperf.js';
 
 // Dev HMR guard (constellation/doc/DOC-SPEC.md §27, D57): a live-view registry feeds the
 // state snapshot/restore. Gated on the __PUZZLE_DEV__ build define (production
@@ -200,7 +213,13 @@ export class PuzzleView {
 			hit.deps.length === deps.length &&
 			hit.deps.every((d, i) => Object.is(d, deps[i]))
 		) {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				devperfMemo(this, key, true);
+			}
 			return hit.value;
+		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfMemo(this, key, false);
 		}
 		const value = factory();
 		cache.set(key, { deps, value });
@@ -444,6 +463,9 @@ export class PuzzleView {
 			// already stored above, so the pending first #commit renders them in
 			// anyway. A skeleton child reaches #mounted almost immediately (its mount
 			// branch never awaits), so its slot-only re-renders keep flowing.
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				devperfSlotRender(this);
+			}
 			this.#renderNow();
 		}
 	}
@@ -460,8 +482,26 @@ export class PuzzleView {
 		if (props) this.#props = props;
 		if (route !== undefined) this.#route = route;
 
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (
+				!devperfPrepareData(
+					this,
+					params || route !== undefined
+						? 'route'
+						: props !== undefined
+							? 'props'
+							: undefined
+				)
+			)
+				return;
+		}
 		const token = ++this.#runToken;
-		const run = () => this.data(this.#params, this.#props);
+		const run = () => {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				return devperfRunData(this, this.#params, this.#props);
+			}
+			return this.data(this.#params, this.#props);
+		};
 		const result = this.ctx.store
 			? this.ctx.store.withTracking(this, run, this.data.constructor.name === 'AsyncFunction')
 			: run();
@@ -484,6 +524,9 @@ export class PuzzleView {
 		// refresh()'s own return is unchanged: mount()/preload() await it and must
 		// keep seeing rejections.
 		try {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				devperfMarkCause(this, 'store');
+			}
 			this.refresh()?.catch((err) =>
 				console.error('[puzzle] data() failed during a store-change refresh:', err)
 			);
@@ -1032,6 +1075,12 @@ export class PuzzleView {
 
 	#renderNow() {
 		if (!this.#vm || this.#destroyed) return;
+		if (
+			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
+			!devperfCanRender(this)
+		) {
+			return;
+		}
 		const isUpdate = this.#mounted;
 
 		if (isUpdate) this.beforeUpdate();
@@ -1040,8 +1089,17 @@ export class PuzzleView {
 		// renderSkeleton is compiled from <puzzle-skeleton> and attached by
 		// prototype assignment, exactly like render().
 		const showSkeleton = !this.#loaded && typeof this.renderSkeleton === 'function';
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfRenderPrepare(this);
+		}
 		const tree = showSkeleton ? this.renderSkeleton() : this.render();
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfRenderTreeBuilt(this);
+		}
 		if (tree) {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				devperfRenderStart(this);
+			}
 			this.#vm.render(tree);
 		} else if (this.#vm.currentTree) {
 			// A HAND-WRITTEN render() that returned a tree before and returns null now
@@ -1067,6 +1125,9 @@ export class PuzzleView {
 			this.#vm.clear();
 			this.#vm.anchorAt(ref);
 		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfRenderEnd(this);
+		}
 		// Timestamp the FIRST actual skeleton render so the hold measures from when
 		// the skeleton became visible, not from mount (v1.20, D52). Set once.
 		if (showSkeleton && this.#skeletonShownAt === 0) this.#skeletonShownAt = Date.now();
@@ -1076,6 +1137,9 @@ export class PuzzleView {
 	#scheduleRender() {
 		if (!this.#mounted || this.#destroyed || this.#updateScheduled) return;
 		this.#updateScheduled = true;
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfRenderScheduled(this, 'local-state');
+		}
 
 		const schedule =
 			typeof requestAnimationFrame === 'function'

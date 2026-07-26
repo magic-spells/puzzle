@@ -1,6 +1,6 @@
 ---
 name: Reactivity flow
-status: verified
+status: built
 triggers:
   - { kind: event }
   - { kind: manual }

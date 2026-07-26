@@ -1,7 +1,7 @@
 ---
 name: SPEC — build, output modes, dev loop, and tooling
 kind: reference
-status: verified
+status: built
 connections:
   - DOC-SPEC
   - COMPONENT-COMPILER-CLI
@@ -120,11 +120,12 @@ A failed `puzzle dev` build is reported **in the browser**, not only on the term
 
 ## 53. App-author test utilities: `@magic-spells/puzzle/testing` (v1.58)
 
-A fifth export subpath (D94) — `mountView`, `createTestApp`, `settled`, `installFakeAnimate`, `installFakeObserver`.
+A fifth export subpath (D94, amended by D121) — `mountView`, `createTestApp`, `settled`, `measureRenders`, `installFakeAnimate`, `installFakeObserver`.
 
 - **`mountView(ViewClass, opts)`** mounts one view against a detached container with the three-service ctx; the handle exposes `element`/`find`/`findAll`/`click`/`setProps`/`destroy`. **`createTestApp(config)`** runs a real app in `routerMode: 'memory'` (§15's stated purpose) so `visit(path)` drives the real load-then-commit pipeline, guards, and lifecycle.
 - **`settled()`** drains to a fixed point: stores through the public idempotent `flush()`, rAF-scheduled `setData` renders, and the current last-wins `data()`/navigation promises — repeating until two microtask-stable passes add no work (two, so work created by a promise continuation is caught without depending on rAF or §31's fallback timer).
 - **It is bounded** (`settled({ maxPasses })`, default 100) and **throws** on exhaustion, naming the churn sources. Unbounded, a `data()` → store-write → `data()` cycle hangs until the runner's global timeout and reports nothing.
+- **`measureRenders(handle, callback)`** installs a temporary §56 performance sink, runs and awaits the callback, then awaits `settled()` before detaching in `finally`. Its deeply frozen report is `{ renders, wastedRenders, domMutations, rendersByView, causes, maxRecursiveDepth, storeNotifications }`. A render means an entry into `ViewManager.render`, not a `refresh()` call; a render is wasted only when its DOM-mutation delta is zero. The helper is assertion-library-neutral and does not mutate the supplied handle.
 - **Its boundaries are contract, not omission.** `settled()` does not advance arbitrary user timers or `min-duration` holds, resolve promises `data()`/navigation never awaited, fire IntersectionObserver callbacks, or finish CSS/fire-and-forget enter animations. An outgoing animation *is* part of an awaited navigation, so that navigation stays unsettled until the test finishes or cancels it.
 - The shipped module **must not import `vitest`** — a published package cannot depend on a test runner.
 - `/testing` also re-exports `installFixtures` from the §52 module (v1.61, D98), so a test file needs one import for helpers *and* fixtures; the canonical pairing is `const uninstall = installFixtures({ seed })` in setup, `uninstall()` in teardown.
@@ -183,3 +184,41 @@ throw returns `{ error }` · `highlight:view { id, on }` (page overlay) ·
 is the compiled class name (dev builds are unminified), `module` is the
 codegen `__pzlModule` stamp (app-relative `.pzl` path).
 
+## 56. Dev-only runtime performance profiling + render assertions
+
+Development builds instrument the render/data/Store pipeline through one
+collector module (D121). Production builds contain **zero bytes** from that
+module: every class-method call site uses the inline positive
+`typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__` probe, module-scope
+functions may use the equivalent module constant, and esbuild syntax folding
+must remove every importer before tree-shaking. Undefined means enabled for
+unbundled tests. No profiler state is stored on PuzzleView, ViewManager, Store,
+or Router; per-view identity, counters, causes, and rolling windows live in
+WeakMaps in the collector.
+The canonical production artifact is also a regression oracle: both its raw
+bytes and gzip byte count must remain identical to the pre-D121 build, not only
+free of profiler sentinel strings.
+
+- A render record is one entry into `ViewManager.render`. It times the owning
+  view's tree build separately from diff/patch, and its mutation delta counts
+  actual text/property/attribute writes plus node insert/remove/move operations.
+  Delta zero means a **wasted render**. Refresh requests are not renders because
+  they may coalesce.
+- `data()` records wall time and sync/async shape. Component reuse records
+  shallow-props bailouts versus data reruns; slot-only updates and
+  `memo(key, ...)` hits/misses are attributed per view/key. Store flush records
+  whole-flush time, pending-key count, and unique notified subscribers.
+  Serialized async tracking records every head-of-line deferral and its wait
+  time so concurrent async `data()` serialization is visible rather than folded
+  into generic data latency.
+- A causal token follows Store write/flush → view refresh → render → writes and
+  framework work scheduled by those steps. Per-view execution depth resets only
+  when that chain is quiescent. At 100 executions the view is reported and
+  further work in that chain is stopped. Independently, a rolling one-second
+  window reports and stops a view after at least 60 renders when at least 90%
+  made zero DOM mutations and no recorded cause is animation or morph work.
+  Both guards must stop framework churn rather than hang the tab.
+- The development collector exposes temporary event sinks for §53's
+  `measureRenders`; no test framework is imported. Production DCE is proved by a
+  dev-only sentinel scan and an esbuild metafile assertion that attributes zero
+  production `bytesInOutput` to `client-runtime/devperf.js`.

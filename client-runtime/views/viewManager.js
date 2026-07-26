@@ -24,6 +24,7 @@
 
 import { ViewNode, PLACEHOLDER_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
+import { devperfComponentPatch, devperfMutation } from '../devperf.js';
 
 // these must be assigned as element properties, not attributes
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'muted']);
@@ -68,6 +69,8 @@ export class ViewManager {
 	anchorAt(ref) {
 		this.anchor = document.createComment('puzzle');
 		this.container.insertBefore(this.anchor, ref ?? null);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			devperfMutation();
 	}
 
 	/**
@@ -80,6 +83,8 @@ export class ViewManager {
 			mount(newTree, this.container, this.anchor, this.ctx);
 			if (this.anchor) {
 				this.anchor.remove();
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+					devperfMutation();
 				this.anchor = null;
 			}
 		} else {
@@ -99,6 +104,8 @@ export class ViewManager {
 		if (this.currentTree) unmount(this.currentTree);
 		if (this.anchor) {
 			this.anchor.remove();
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				devperfMutation();
 			this.anchor = null;
 		}
 		this.currentTree = null;
@@ -254,6 +261,8 @@ export function mount(vnode, parent, ref, ctx) {
 		el = document.createComment('');
 		vnode.el = el;
 		parent.insertBefore(el, ref ?? null);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			devperfMutation();
 		return el;
 	}
 	if (vnode.isText) {
@@ -280,6 +289,8 @@ export function mount(vnode, parent, ref, ctx) {
 		// never reconciles it (see patch()).
 		if (typeof vnode.children === 'string') {
 			el.innerHTML = vnode.children;
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				devperfMutation();
 		} else {
 			for (const child of vnode.children) {
 				mount(child, el, null, ctx);
@@ -292,6 +303,8 @@ export function mount(vnode, parent, ref, ctx) {
 	}
 	vnode.el = el;
 	parent.insertBefore(el, ref ?? null);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+		devperfMutation();
 	return el;
 }
 
@@ -374,6 +387,9 @@ function mountComponent(vnode, parent, ref, ctx) {
 					anchor && anchor.parentNode
 						? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
 						: null;
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+					if (placeholder) devperfMutation();
+				}
 				child.destroy(); // release any partial subscriptions; removes the child's own anchor
 				if (placeholder) {
 					vnode.el = placeholder;
@@ -431,6 +447,9 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 			// Only an ATTACHED node is a usable insertion ref — insertBefore against a
 			// detached one throws NotFoundError and empties the container.
 			mount(newVnode, parent, placeholder?.parentNode === parent ? placeholder : null, ctx);
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				if (placeholder?.parentNode) devperfMutation();
+			}
 			placeholder?.remove();
 			return;
 		}
@@ -448,7 +467,11 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 
 	if (newVnode.isText) {
 		const text = stringify(newVnode.attrs.value);
-		if (el.nodeValue !== text) el.nodeValue = text;
+		if (el.nodeValue !== text) {
+			el.nodeValue = text;
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				devperfMutation();
+		}
 		return;
 	}
 
@@ -472,7 +495,11 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 	// same-node patch carrying a new file's markup); an identical seed leaves the
 	// live DOM untouched. Dev live-reload of the .svg remounts anyway.
 	if (typeof newVnode.children === 'string') {
-		if (newVnode.children !== oldVnode.children) el.innerHTML = newVnode.children;
+		if (newVnode.children !== oldVnode.children) {
+			el.innerHTML = newVnode.children;
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				devperfMutation();
+		}
 		return;
 	}
 
@@ -494,6 +521,8 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 function reassertSelectValue(el, attrs) {
 	if (el.nodeName !== 'SELECT' || !('value' in attrs)) return;
 	el.value = stringify(attrs.value);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+		devperfMutation();
 }
 
 /**
@@ -505,6 +534,9 @@ function reassertSelectValue(el, attrs) {
 function patchComponent(oldVnode, newVnode) {
 	const child = (newVnode.component = oldVnode.component);
 	const props = shallowEqual(oldVnode.props, newVnode.props) ? undefined : newVnode.props;
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		devperfComponentPatch(child, props === undefined);
+	}
 	child.applyParentUpdate({ props, children: newVnode.children });
 	newVnode.el = child.element;
 }
@@ -551,6 +583,9 @@ function unmount(vnode) {
 		// placeholder (mountComponent's catch nulled `component`). No instance to
 		// destroy — just drop the placeholder node so it doesn't linger in the DOM.
 		if (!child) {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				if (vnode.el?.parentNode) devperfMutation();
+			}
 			vnode.el?.remove();
 			return;
 		}
@@ -580,6 +615,9 @@ function unmount(vnode) {
 		return;
 	}
 	releaseSubtree(vnode);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (vnode.el?.parentNode) devperfMutation();
+	}
 	vnode.el?.remove();
 }
 
@@ -845,6 +883,9 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 			patch(oldChild, newChild, el, ctx);
 			if (nextPersistentSibling(newChild.el) !== ref) {
 				el.insertBefore(newChild.el, ref);
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+					devperfMutation();
+				}
 			}
 		} else {
 			mount(newChild, el, ref, ctx);
@@ -904,10 +945,14 @@ function setAttr(el, name, value) {
 
 	if (PROPS.has(name)) {
 		el[name] = name === 'value' ? stringify(value) : Boolean(value);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			devperfMutation();
 		// keep boolean ATTRIBUTES coherent for CSS selectors like [disabled]
 		if (name !== 'value') {
 			if (value) el.setAttribute(name, '');
 			else el.removeAttribute(name);
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				devperfMutation();
 		}
 		return;
 	}
@@ -919,6 +964,8 @@ function setAttr(el, name, value) {
 	} else {
 		el.setAttribute(name, String(value));
 	}
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+		devperfMutation();
 }
 
 function removeAttr(el, name) {
@@ -944,8 +991,12 @@ function removeAttr(el, name) {
 
 	if (PROPS.has(name)) {
 		el[name] = name === 'value' ? '' : false;
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			devperfMutation();
 	}
 	el.removeAttribute(name);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+		devperfMutation();
 }
 
 // Event-modifier key filters: modifier name → the KeyboardEvent.key it gates on

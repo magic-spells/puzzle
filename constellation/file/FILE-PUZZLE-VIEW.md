@@ -1,6 +1,6 @@
 ---
 name: PuzzleView runtime
-status: verified
+status: built
 path: client-runtime/views/PuzzleView.js
 language: javascript
 summary: Component state, lifecycle, tracking, refs, memo, skeleton, and animation orchestration.

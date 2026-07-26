@@ -1,6 +1,6 @@
 ---
 name: Testing strategy
-status: verified
+status: built
 verified_at: '2026-07-22T00:04:06.191Z'
 connections:
   - DOC-DEVELOPMENT
@@ -98,7 +98,14 @@ App authors do **not** use anything in `tests/helpers/`. They import
 `@magic-spells/puzzle/testing` (D94, SPEC §53):
 
 ```js
-import { mountView, createTestApp, settled, installFakeAnimate, installFakeObserver }
+import {
+  mountView,
+  createTestApp,
+  settled,
+  measureRenders,
+  installFakeAnimate,
+  installFakeObserver,
+}
   from '@magic-spells/puzzle/testing';
 
 const view = await mountView(TodoList, { props: { filter: 'open' }, store });
@@ -107,6 +114,8 @@ await view.click('.toggle');
 const app = await createTestApp({ routes, models });
 await app.visit('/todos/42');
 await settled();
+
+const profile = await measureRenders(view, () => view.click('.toggle'));
 ```
 
 - `mountView` mounts one view against a detached container; the handle exposes
@@ -121,6 +130,11 @@ await settled();
 - **Know its non-guarantees** — it does not advance user timers or skeleton
   `min-duration` holds, resolve promises `data()` never awaited, fire
   IntersectionObserver callbacks, or finish fire-and-forget enter animations.
+- `measureRenders(handle, callback)` temporarily observes actual
+  `ViewManager.render` entries, awaits the callback and `settled()`, and returns
+  a deeply frozen report covering useful/wasted renders, DOM mutations,
+  per-view/cause counts, recursive depth, and Store notifications. It is
+  runner-neutral and counts no coalesced-away `refresh()` request as a render.
 - `installFakeAnimate` / `installFakeObserver` supply the WAAPI and
   IntersectionObserver jsdom lacks; each returns `uninstall()`.
 

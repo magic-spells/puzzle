@@ -12,7 +12,9 @@ connections:
   - DOC-SPEC
 ---
 
-A fifth export subpath — `mountView`, `createTestApp`, `settled`, `installFakeAnimate`, `installFakeObserver` — so people building apps with Puzzle can test them.
+A fifth export subpath — `mountView`, `createTestApp`, `settled`,
+`measureRenders`, `installFakeAnimate`, `installFakeObserver` — so people
+building apps with Puzzle can test them. `measureRenders` is the D121 amendment.
 
 ## Context
 
@@ -29,6 +31,10 @@ Publish the helpers, and make `settled()` the centrepiece.
 - **`createTestApp(config)`** wraps `PuzzleApp` in `routerMode: 'memory'`. This packages an intended use rather than inventing capability: `app.js` already documents memory mode as being for "tests/embeds". `visit(path)` drives the real router, so the real load-then-commit pipeline, guards, and lifecycle all run.
 - **`settled()` drains to a fixed point** — stores through the public idempotent `flush()`, rAF-scheduled `setData` renders through `flushUpdates()`, the current last-wins `data()`/navigation promises — repeating until two microtask-stable passes produce no new work. Two passes, because work created by a promise continuation must be caught without depending on rAF or D63's 220 ms timer firing.
 - **The loop is bounded** (`maxPasses`, default 100) and **throws on exhaustion**. Unbounded, a `data()` → store-write → `data()` cycle or a timer-driven store mutation hangs until the runner's global timeout, reporting "test timed out" and naming nothing — the worst possible signature for the one call every test awaits. It gets blamed for the app's bug.
+- **`measureRenders(handle, callback)` is runner-neutral.** It installs D121's
+  temporary performance sink, awaits the callback and this same `settled()`
+  fixed point, detaches in `finally`, and returns a deeply frozen report. It
+  counts actual `ViewManager.render` entries, not coalescible `refresh()` calls.
 - **Its boundaries are documented as first-class contract**, not omissions. `settled()` does *not* advance arbitrary user timers or skeleton `min-duration` holds, resolve promises `data()`/navigation never awaited, fire IntersectionObserver callbacks, or finish CSS/fire-and-forget WAAPI enter animations. Because an outgoing animation *is* part of an awaited navigation, that navigation stays unsettled until the test finishes or cancels it.
 - **The shipped module must not import `vitest`.** The internal `fake-waapi.js` did, which is fine for a repo helper and unacceptable in a published package. It was **copied** into the module (not moved) so the existing suite keeps working untouched.
 - **`installFakeObserver()`** provides the IntersectionObserver jsdom lacks, so D73's `trigger: 'visible'` animations are testable. Every install helper returns `uninstall()`.

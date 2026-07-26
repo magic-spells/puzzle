@@ -1,6 +1,6 @@
 ---
 name: DOM view manager
-status: verified
+status: built
 path: client-runtime/views/viewManager.js
 language: javascript
 summary: VNode mount, patch, keyed reconciliation, composition, events, islands, and teardown.

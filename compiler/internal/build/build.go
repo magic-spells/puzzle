@@ -47,6 +47,11 @@ type Options struct {
 	// changes — the module is simply never imported, which is the whole
 	// tree-shake. Unsupported alongside either prerender output mode.
 	Fixtures bool
+
+	// Metafile receives esbuild's JSON metafile when non-nil. It is primarily a
+	// build-test seam for proving an input contributes zero production bytes;
+	// normal CLI builds leave it nil and pay nothing.
+	Metafile *string
 }
 
 // Build compiles the app rooted at root (the directory containing app/app.js)
@@ -142,6 +147,7 @@ func Build(root string, opts Options) error {
 	}
 
 	buildOpts := newBundleOptions(absRoot, entry, staging, pl, opts.Development)
+	buildOpts.Metafile = opts.Metafile != nil
 	if opts.Fixtures {
 		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())
 	}
@@ -167,6 +173,9 @@ func Build(root string, opts Options) error {
 	}
 
 	result := api.Build(buildOpts)
+	if opts.Metafile != nil {
+		*opts.Metafile = result.Metafile
+	}
 	if len(result.Errors) > 0 {
 		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
 			Kind:          api.ErrorMessage,

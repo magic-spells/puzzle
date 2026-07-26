@@ -1,6 +1,6 @@
 ---
 name: Build flow
-status: verified
+status: built
 triggers:
   - { kind: manual }
 connections:

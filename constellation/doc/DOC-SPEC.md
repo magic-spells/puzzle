@@ -1,6 +1,6 @@
 ---
 name: SPEC.md — the frozen v1 contract
-status: verified
+status: built
 verified_at: '2026-07-25T05:53:25.564Z'
 connections:
   - DOC-VIEW-LIFECYCLE
@@ -95,6 +95,7 @@ The spec is split across six domain cards. Section numbers are globally unique a
 | 53 | App-author test utilities: `@magic-spells/puzzle/testing` (v1.58) | [[DOC-SPEC-BUILD]] |
 | 54 | The `--fixtures` build switch (v1.61) | [[DOC-SPEC-BUILD]] |
 | 55 | The DevTools bridge and wire protocol (v1.63) | [[DOC-SPEC-BUILD]] |
+| 56 | Dev-only runtime performance profiling + render assertions | [[DOC-SPEC-BUILD]] |
 | — | Deferred features (post-v1) | this card |
 | — | Open questions (tracked, not blocking) | this card |
 
