@@ -99,7 +99,7 @@ caching them would fire stale values.
 This card's Context predicted the cost of a non-cacheable callback prop. It has
 now been measured end to end, in a 10,000-row list, both arms in one browser
 session — [[DOC-STRESS-EXAMPLE]]'s `?handlers=inline|stable` A/B, driven by
-[[DECISION-D127-BENCHMARK-METHODOLOGY]]. It settles a question that had been
+[[DECISION-D128-BENCHMARK-METHODOLOGY]]. It settles a question that had been
 open as "is the per-row re-render cascade a framework bug?"
 
 **It is not a framework bug.** `patchComponent`'s `shallowEqual` prop bailout is
@@ -131,3 +131,30 @@ this decision's Context said it would. The rejected alternatives above
 (function-equality hacks in `shallowEqual`) remain rejected for the same reason;
 the remedy is on the authoring side, or in a future numbered decision, not in
 weakening prop equality.
+
+## Regression cover
+
+`tests/component-prop-bailout.test.js` holds this finding in place at test
+scale. The browser measurement above is not repeatable in CI, and until that
+file existed **nothing asserted the bailout fires at all** — a change to
+`shallowEqual`, or a newly added prop that is freshly allocated on every parent
+render, would have left the suite green while every list-shaped app quietly
+reverted to the `inline` column of the table.
+
+It covers both directions against a 20-row list, using
+`measureRenders().rendersByView` (keyed by constructor name, so each row gets
+its own generated subclass name and the report says WHICH row woke up):
+
+- **stable arm** — one row's `label` changes, one row re-renders, 19 do not, one
+  `data()` run, one DOM mutation.
+- **inline arm** — the same op with a per-row closure prop; all 20 re-run
+  `data()` and re-render for the *same single* DOM mutation. Committed
+  deliberately as characterization of a known cost, not as an endorsement, so
+  that "fixing" it by deep-comparing props or exempting function-valued props
+  fails loudly instead of changing behaviour in silence.
+- **DOM equivalence** — both arms produce byte-identical markup and the same
+  `domMutations`, which is the claim the table's last column makes.
+
+The comparator's own boundaries are pinned through the real patch path rather
+than by exporting `shallowEqual`, so a future `patchComponent` that stops
+consulting it fails too.

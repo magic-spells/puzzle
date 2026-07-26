@@ -1,6 +1,10 @@
 package parser
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/jsident"
+)
 
 // parser.go is the recursive-descent parser over the lexer's token stream
 // (constellation/doc/DOC-COMPILER-DESIGN.md §c). It produces the AST in ast.go. Blocks and
@@ -879,8 +883,8 @@ func parseForHeader(rest string, pos Position, file string) (*For, *ParseError) 
 	if perr != nil {
 		return nil, perr
 	}
-	if isReservedLoopIdent(counter) {
-		return nil, reservedLoopIdentError(counter, pos, file)
+	if perr := loopBindingIdentError(counter, pos, file); perr != nil {
+		return nil, perr
 	}
 	if idx := topLevelIndex(rest, "..."); idx >= 0 {
 		from := strings.TrimSpace(rest[:idx])
@@ -901,8 +905,8 @@ func parseForHeader(rest string, pos Position, file string) (*For, *ParseError) 
 	if !isBareIdent(item) {
 		return nil, errAt(file, pos, "{#for} item must be a valid identifier (got %q)", item)
 	}
-	if isReservedLoopIdent(item) {
-		return nil, reservedLoopIdentError(item, pos, file)
+	if perr := loopBindingIdentError(item, pos, file); perr != nil {
+		return nil, perr
 	}
 	if counter != "" && counter == item {
 		return nil, errAt(file, pos, "{#for} loop counter %q duplicates the item name", counter)
@@ -953,12 +957,14 @@ func isBareIdent(s string) bool {
 	return true
 }
 
-func isReservedLoopIdent(s string) bool {
-	return s == "ViewNode" || strings.HasPrefix(s, "__")
-}
-
-func reservedLoopIdentError(name string, pos Position, file string) *ParseError {
-	return errAt(file, pos, "loop variable %q uses a reserved name (identifiers starting with %q and %q are reserved by the compiler)", name, "__", "ViewNode")
+func loopBindingIdentError(name string, pos Position, file string) *ParseError {
+	if name == "ViewNode" || strings.HasPrefix(name, "__") {
+		return errAt(file, pos, "loop variable %q uses a reserved name (identifiers starting with %q and %q are reserved by the compiler)", name, "__", "ViewNode")
+	}
+	if jsident.IsReservedBindingIdentifier(name) {
+		return errAt(file, pos, "loop variable %q is not a legal binding identifier in strict-mode JavaScript", name)
+	}
+	return nil
 }
 
 // splitForIn splits "item in collection": item is the leading whitespace-

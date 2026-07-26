@@ -61,7 +61,12 @@ export const SCENARIO_DEFINITIONS = [
 			'select-row',
 			'swap-rows',
 			'append-1k',
+			// `fast-scroll` drives the window by hand for determinism;
+			// `native-scroll` writes scrollTop and lets the real @scroll event do
+			// all of it. The second is a behaviour gate — its milliseconds are
+			// frame waits, and its event count coalesces.
 			'fast-scroll',
+			'native-scroll',
 			'clear',
 		],
 	},
@@ -128,6 +133,27 @@ export const SCENARIO_DEFINITIONS = [
 		// The ONLY scenario that is not hosted in Home's stage: it needs real route
 		// nodes, so it is a sibling subtree at /rc/… (see ../rc-routes.js).
 		ops: ['navigate-100', 'navigate-burst-100', 'params-100', 'params-burst-100', 'back-forward-100', 'supersede-50'],
+	},
+	{
+		name: 'form-state',
+		label: 'Form state',
+		blurb: 'N controlled inputs + N controlled selects — what does a keystroke cost the rest of the form?',
+		// `rerender` is the clean arm and `rerender-dirty` is its CONTROL: the
+		// zero input writes in the first only mean something because the second
+		// proves the write path fires when a value really moves. `type-local` and
+		// `type-store` are the A/B on which state layer a keystroke lands in, and
+		// `type-event` is a behaviour gate, not a measurement.
+		ops: ['rerender', 'rerender-dirty', 'type-local', 'type-store', 'type-event'],
+	},
+	{
+		name: 'flip-churn',
+		label: 'Flip churn',
+		blurb: 'N rows through the D85 FLIP path — playFlip interleaves a rect read and an animate() per row',
+		// `shuffle-noflip` is the CONTROL: the identical rotation over the
+		// identical rows with no `flip` attribute anywhere, so every flip counter
+		// must read 0. `interrupt` issues its reorders back to back so each one
+		// begins while the previous flip is still in flight.
+		ops: ['shuffle', 'shuffle-noflip', 'interrupt'],
 	},
 	{
 		// LAST on purpose: the two ops here are deliberate pathologies, and the

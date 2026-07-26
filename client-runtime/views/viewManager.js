@@ -25,6 +25,7 @@
 import { ViewNode, PLACEHOLDER_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import { devperfComponentPatch, devperfMutation } from '../devperf.js';
+import { displayValue } from '../display.js';
 
 // these must be assigned as element properties, not attributes
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'muted']);
@@ -172,6 +173,8 @@ function stripSlotAttr(vnode) {
 	clone.el = vnode.el;
 	clone.component = vnode.component;
 	clone.instance = vnode.instance;
+	clone.takeoverPreloaded = vnode.takeoverPreloaded;
+	clone.takeoverFailed = vnode.takeoverFailed;
 	return clone;
 }
 
@@ -209,6 +212,8 @@ function expandNode(vnode, parts) {
 		clone.el = vnode.el;
 		clone.component = vnode.component;
 		clone.instance = vnode.instance;
+		clone.takeoverPreloaded = vnode.takeoverPreloaded;
+		clone.takeoverFailed = vnode.takeoverFailed;
 	}
 	return clone;
 }
@@ -321,7 +326,16 @@ export function mount(vnode, parent, ref, ctx) {
  * atomic-commit contract in constellation/doc/DOC-VIEW-LIFECYCLE.md §4.
  */
 function mountComponent(vnode, parent, ref, ctx) {
+	if (vnode.takeoverFailed) {
+		const placeholder = document.createComment('puzzle');
+		vnode.el = placeholder;
+		parent.insertBefore(placeholder, ref ?? null);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			devperfMutation();
+		return placeholder;
+	}
 	const preloaded = vnode.instance != null;
+	const takeoverPreloaded = vnode.takeoverPreloaded;
 	const child = vnode.instance ?? new vnode.tag(ctx);
 	vnode.component = child;
 	child
@@ -362,7 +376,7 @@ function mountComponent(vnode, parent, ref, ctx) {
 				// pointing at a dead, unrefreshable view the Router knows nothing about — and
 				// would swap the committed markup for a comment behind its back. Log only;
 				// the instance and the vnode's links are left exactly as they are.
-				if (preloaded) return;
+				if (preloaded && !takeoverPreloaded) return;
 				// The instance never reached a working mounted state (data()/render()/
 				// mounted() threw on the first mount). Left as-is, patchComponent would REUSE
 				// this dead instance on every later render without ever re-mounting it, so a
@@ -397,6 +411,7 @@ function mountComponent(vnode, parent, ref, ctx) {
 				}
 				vnode.component = null;
 				vnode.instance = null;
+				vnode.takeoverPreloaded = false;
 			}
 		);
 	vnode.el = child.element;
@@ -958,11 +973,15 @@ function setAttr(el, name, value) {
 	}
 
 	if (value === false || value == null) {
+		// Preserve attribute-removal semantics, but still route an explicitly
+		// supplied nullish binding through the shared display policy so undefined
+		// gets its development diagnostic.
+		if (value == null) stringify(value);
 		el.removeAttribute(name);
 	} else if (value === true) {
 		el.setAttribute(name, '');
 	} else {
-		el.setAttribute(name, String(value));
+		el.setAttribute(name, stringify(value));
 	}
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 		devperfMutation();
@@ -1070,7 +1089,7 @@ function inSvgNamespace(tag, parent) {
 }
 
 function stringify(v) {
-	return v == null ? '' : String(v);
+	return displayValue(v);
 }
 
 export default ViewManager;

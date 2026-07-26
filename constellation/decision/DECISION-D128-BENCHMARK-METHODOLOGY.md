@@ -1,6 +1,6 @@
 ---
 name: >-
-  D127 — the production benchmark harness: production-only measurement, medians, and structural exit
+  D128 — the production benchmark harness: production-only measurement, medians, and structural exit
   codes
 status: built
 connections:
@@ -15,7 +15,7 @@ connections:
   - COMPONENT-FORMATTERS
 ---
 
-# D127 — the production benchmark harness: production-only measurement, medians, and structural exit codes
+# D128 — the production benchmark harness: production-only measurement, medians, and structural exit codes
 
 ## Context
 

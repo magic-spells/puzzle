@@ -47,11 +47,12 @@ const prerenderDir = ".puzzle-prerender"
 
 // ssgSummary mirrors the JSON the SSG runtime's prerenderToDir prints after the
 // sentinel: the files written, the routes it skipped (dynamic routes in v1), and
-// any advisory warnings. `written` entries also carry the output file path and a
-// prerender flag — the Go side never reads them, so they are not modeled here.
+// any advisory warnings. The output file path lets the build compare each route
+// output with the public assets copied into staging before the prerender pass.
 type ssgSummary struct {
 	Written []struct {
 		Path string `json:"path"`
+		File string `json:"file"`
 		// false for a `prerender: false` route — the plain SPA shell was written
 		// at its path instead of rendered markup (an SPA island, SPEC §36).
 		Prerender bool `json:"prerender"`
@@ -69,7 +70,7 @@ type ssgSummary struct {
 // copyPublic just produced — it is the injection template. On any failure the
 // returned error surfaces node's stderr/stdout and staging is discarded by
 // Build's defer, so the previous dist/ is untouched.
-func prerenderHybrid(absRoot, staging string) error {
+func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool) error {
 	// The generated prerender entry (the SSG contract): import the app's default
 	// export + prerenderToDir, run it against the outDir/shellPath passed on argv
 	// in the 'hybrid' mode (passed explicitly so the JS side is unambiguous — it
@@ -101,6 +102,11 @@ func prerenderHybrid(absRoot, staging string) error {
 	if err := json.Unmarshal([]byte(payload), &summary); err != nil {
 		return fmt.Errorf("puzzle build --hybrid: prerender summary was not readable JSON: %w", err)
 	}
+	for _, page := range summary.Written {
+		if err := checkPrerenderCollision(absRoot, staging, publicFiles, page.Path, page.File); err != nil {
+			return err
+		}
+	}
 
 	printPrerenderSummary(summary)
 
@@ -109,6 +115,33 @@ func prerenderHybrid(absRoot, staging string) error {
 		return fmt.Errorf("puzzle build --hybrid: cleaning %s: %w", prerenderDir, err)
 	}
 	return nil
+}
+
+// checkPrerenderCollision rejects a route output owned by public/. The root
+// route is the one intentional overlap: it consumes the copied index.html as
+// its shell and writes the rendered page back to that same path.
+func checkPrerenderCollision(absRoot, staging string, publicFiles map[string]bool, routePath, outputFile string) error {
+	rel, err := filepath.Rel(staging, outputFile)
+	if err != nil {
+		return fmt.Errorf("checking prerender output %s: %w", outputFile, err)
+	}
+	rel = filepath.ToSlash(rel)
+	if routePath == "/" && rel == "index.html" {
+		return nil
+	}
+	if !publicFiles[rel] {
+		return nil
+	}
+
+	publicPath, err := filepath.Rel(absRoot, filepath.Join(publicDir(absRoot), filepath.FromSlash(rel)))
+	if err != nil {
+		return fmt.Errorf("resolving public asset for prerender output %s: %w", outputFile, err)
+	}
+	return fmt.Errorf(
+		"[puzzle] prerendered route %q would overwrite public asset %s\n"+
+			"at dist/%s; rename the public asset or remove the route output",
+		routePath, filepath.ToSlash(publicPath), rel,
+	)
 }
 
 // appEntryPath is the app's default-export entry (app/app.js under absRoot),

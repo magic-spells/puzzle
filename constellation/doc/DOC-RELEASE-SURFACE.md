@@ -59,8 +59,10 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - One `<puzzle-view>` template; optional `<script>` and `<style>`; optional
   `<puzzle-skeleton min-duration="…">`.
-- `<script>` is real JS. `lang="ts"` enables esbuild transpilation only; the
-  build does not type-check `.pzl` bodies.
+- `<script>` is real JS. `lang="ts"` enables esbuild transpilation only; neither
+  the Puzzle build, scaffolded `tsc --noEmit`, nor editors type-check `.pzl`
+  `<script>` bodies. The scaffolded TypeScript config checks standalone
+  `.ts`/`.js` files and declarations.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and formatter chains; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.

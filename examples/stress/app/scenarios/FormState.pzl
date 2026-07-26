@@ -1,0 +1,894 @@
+<puzzle-view>
+  <div class="fs-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="tabular-nums text-fg">{ fieldCount }</span> controlled fields ·
+        <span class="tabular-nums text-fg">{ optionCount }</span> options per select ·
+        <span class="tabular-nums text-accent">{ schemaFields }</span> schema fields on the record
+      </div>
+      <div class="font-mono text-[11px] shrink-0 { resultCls }">{ resultText }</div>
+    </div>
+
+    <div class="px-4 py-2 border-b border-line font-mono text-[11px] text-faint leading-relaxed">{ explainText }</div>
+
+    <!-- The two typing targets. Neither is in the write probe's WeakSet, so the
+         driver's own `el.value = …` is structurally uncountable rather than
+         merely uncounted. They bind DIFFERENT state layers on purpose:
+
+           .fs-draft  setData('draftText', …) — the local layer, no data() run
+           .fs-bound  record.update({ text }) — the model layer, via the store
+
+         `draftText` is a key data() NEVER returns. If data() also returned it,
+         #recompose()'s { ...#local, ...#model } would overlay the model value
+         on top of the local one and the FIRST store flush would silently erase
+         the draft mid-typing (PuzzleView.js — the two-layer precedence rule).
+         That clobber is documented here rather than counted: its interesting
+         form depends on flush timing and is not deterministic. -->
+    <div class="fs-typing flex flex-wrap items-end gap-6 px-4 py-3 border-b border-hairline">
+      <label class="flex flex-col gap-1">
+        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">local draft · setData</span>
+        <input
+          class="fs-draft w-72 h-8 px-2 rounded-md bg-ink border border-hairline font-mono text-xs text-fg focus:outline-none focus:border-accent/60"
+          type="text"
+          value={ draftText }
+          @input={ onDraft(event) } />
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint">store record · record.update</span>
+        <input
+          class="fs-bound w-72 h-8 px-2 rounded-md bg-ink border border-hairline font-mono text-xs text-fg focus:outline-none focus:border-accent/60"
+          type="text"
+          value={ boundText }
+          @input={ onBound(event) } />
+      </label>
+    </div>
+
+    <!-- The grid. N rows, each one <input> and one <select> carrying the SAME
+         shape of controlled `value` binding — that pairing is the entire
+         experiment, so they must sit side by side under identical render
+         pressure.
+
+         No @event bindings down here, and no keys. Handlers would put closure
+         identity into a measurement about controlled-value writes, and
+         `listener-churn` already owns that question. Keys would buy nothing: the
+         row set never changes, so index alignment reuses every element for the
+         whole op — which is also what makes a WeakSet of live elements built
+         ONCE per op valid until the op ends. -->
+    <div class="fs-grid max-h-[380px] overflow-auto px-4 py-2">
+      {#for row in rows}
+        <div class="fs-row flex items-center gap-3 h-9">
+          <span class="fs-label font-mono text-[11px] tabular-nums text-faint w-16 shrink-0">{ row.label }</span>
+          <input
+            class="fs-input flex-1 min-w-0 h-7 px-2 rounded bg-ink border border-hairline font-mono text-[11px] text-fg focus:outline-none"
+            type="text"
+            value={ row.text } />
+          <select
+            class="fs-select w-44 shrink-0 h-7 px-2 rounded bg-ink border border-hairline font-mono text-[11px] text-muted focus:outline-none"
+            value={ row.choice }>
+            {#for opt in options}
+              <option value={ opt.value }>{ opt.label }</option>
+            {/for}
+          </select>
+        </div>
+      {/for}
+    </div>
+
+    <div class="px-4 py-2 border-t border-hairline font-mono text-[11px] text-muted">{ probe.tick }{ note }</div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { FORM_DRAFT_SEED } from '../models/form-record.js';
+import { registerScenario } from '../stress-controller.js';
+import {
+  afterPaint,
+  clearType,
+  intParam,
+  ms1,
+  perfDelta,
+  perfSnapshot,
+  settleFrames,
+  viewRoot,
+} from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// form-state — what does a form cost to RE-RENDER, and what does a keystroke
+// cost to get into state?
+//
+// Three questions, ranked, each with its own control.
+//
+// Q1 (the headline) — A CONTROLLED <select> COSTS A DOM PROPERTY WRITE ON EVERY
+//     RENDER, FOREVER.
+//
+//     `client-runtime/views/viewManager.js` handles the two controlled form
+//     properties in two different places, and only one of them compares first:
+//
+//       patchAttrs()          if (name === 'value' && (INPUT || TEXTAREA)) {
+//                               if (el.value !== stringify(value)) setAttr(...)
+//                             }
+//       reassertSelectValue() el.value = stringify(attrs.value);   // no compare
+//
+//     The select's write is unconditional BY DESIGN and the reason is sound: a
+//     select's `value` cannot be applied until its <option> children exist, so
+//     the re-assertion runs after patchChildren settles. But it runs on EVERY
+//     patch of EVERY select, whether or not the bound value moved and whether
+//     or not the option list churned.
+//
+//     200 selects x 200 keystrokes = 40,000 HTMLSelectElement.value writes to
+//     type one sentence into an unrelated field. The <input> sitting in the
+//     same row, with the identical binding shape, writes ZERO.
+//
+//     AND THE COMMENT ABOVE patchAttrs IS NOT QUITE WHAT THE CODE DOES. It says
+//     the select's value is "left to the generic path here since its options may
+//     not exist yet" — but the generic path WRITES. A <select> is neither INPUT
+//     nor TEXTAREA, so it misses the live-DOM compare and falls through to
+//     `else if (oldAttrs[name] !== value) setAttr(...)`, which sets `el.value`
+//     against an option list that has not patched yet. reassertSelectValue then
+//     sets the identical value again a few lines later. `rerender-dirty`
+//     measures 8,000 writes for 4,000 selects patched — exactly two each — and
+//     that first write is redundant in BOTH directions: skipped when the value
+//     did not change, immediately redone when it did. This scenario was built
+//     expecting one write per select per render in both arms; the control found
+//     two, which is why the control exists.
+//
+// Q2 — ONE KEYSTROKE THROUGH record.update() NORMALIZES THE SCHEMA THREE TIMES.
+//
+//     `PuzzleModel.normalizedSchema()` (client-runtime/model.js) rebuilds its
+//     descriptor map from Object.entries(this.schema) on every call and is not
+//     memoized. A single-field update() reaches it via primaryKey() (the
+//     immutable-pk guard), _collectErrors() (the §20 validation pass) and
+//     Store.recordChanged() -> primaryKey() again. The count is MEASURED here,
+//     not asserted from the source: the probe wraps the method and the op
+//     throws if the total is not exactly 3 per keystroke.
+//
+// Q3 — A RE-RENDER DURING TYPING MUST NOT WRITE `value`.
+//
+//     There is no caret mechanism in Puzzle: `selectionStart` and
+//     `setSelectionRange` appear nowhere in the repo, and `document.activeElement`
+//     appears nowhere in client-runtime/. Caret safety is EMERGENT from the
+//     live-DOM compare in patchAttrs — the bound value already equals the live
+//     property mid-keystroke, so nothing is written and the caret is never
+//     disturbed. tests/vdom.test.js pins that on a hand-built tree; nothing
+//     pinned it end to end at scale. `fsInputValueWrites === 0` across 20
+//     re-renders of 200 controlled inputs is that pin.
+//
+// ── Why the events are REAL, and why they are not scroll events ─────────────
+// Typing is driven as `el.value = …` followed by
+// `dispatchEvent(new Event('input', { bubbles: true }))`. The `fast-scroll`
+// precedent in VirtualList.pzl does NOT transfer: a scroll event is dispatched
+// by the browser ASYNCHRONOUSLY at frame time, so an op built on it necessarily
+// folds frame scheduling into its measurement. `dispatchEvent` runs the
+// listener SYNCHRONOUSLY, on the calling stack, which is what makes a
+// 200-keystroke op count-bounded instead of clock-bounded.
+//
+// Both flushes are then forced by hand, for the same reason:
+//   flushUpdates()   IS the body of the rAF callback #scheduleRender() arms
+//                    (PuzzleView.js), and it is public.
+//   store.flush()    is the store's documented "force a write" entry point; it
+//                    skips the rAF plus the 220ms D63 fallback.
+// Waiting for 200 real frames would be ~3,300ms of scheduler, whose ms are an
+// input rather than a measurement — and a sample set that lands on a whole
+// second is exactly what the runner's clamp guard exists to reject.
+//
+// ── Why the counters live in this file ─────────────────────────────────────
+// row-metrics.js / nest-metrics.js / rc-metrics.js are separate modules because
+// they are incremented by CHILD views living in OTHER files. `form-state` is
+// one view with no children, so a module-scope const here is the correct shape
+// and a `form-metrics.js` would be ceremony. Do not "fix" this.
+// ---------------------------------------------------------------------------
+
+const TYPE = 'form';
+const DRAFT_ID = 'draft';
+
+/** <option> children per <select>. Real forms are not two-option toggles. */
+const OPTIONS_PER_SELECT = 8;
+
+/** Renders per timed re-render op. One render is far below the harness's floor. */
+const RERENDER_COUNT = 20;
+
+/** Keystrokes per timed typing op — a sentence, not a word. */
+const KEYSTROKES = 200;
+
+const CHOICES = Array.from({ length: OPTIONS_PER_SELECT }, (_, i) => ({
+  value: `opt-${i}`,
+  label: `option ${i}`,
+}));
+
+/**
+ * Progressive typing strokes, precomputed.
+ *
+ * Every stroke is one character longer than the last, so no two are equal and
+ * every keystroke is a genuine state change — a repeated value would make
+ * `record.update()` a no-op write and quietly deflate the DOM-write counts.
+ */
+const TYPED_STROKES = (() => {
+  let source = '';
+  while (source.length < KEYSTROKES) source += 'the quick brown fox jumps over the lazy dog. ';
+  const out = new Array(KEYSTROKES);
+  for (let i = 0; i < KEYSTROKES; i += 1) out[i] = source.slice(0, i + 1);
+  return out;
+})();
+
+/** The `type-event` gate's two payloads. Distinct, so a stale value cannot pass. */
+const GATE_LOCAL = 'gate-local-keystroke';
+const GATE_STORE = 'gate-store-keystroke';
+
+/**
+ * Renders and data() runs, counted by the view itself so both survive into the
+ * PRODUCTION bundle the benchmark measures (devperf.js is compiled out there).
+ *
+ * `renders` is incremented by a NESTED getter — `probe.tick`, one level below
+ * what data() returns — because PuzzleView.#recompose() rebuilds visible state
+ * as { ...#local, ...#model }, and that spread INVOKES any getter sitting at the
+ * top level. A top-level getter would therefore count data() runs, which is a
+ * different number entirely: `type-local` drives 200 renders and ZERO data()
+ * runs. See rc-metrics.js for the same trick at length.
+ */
+const formMetrics = { renders: 0, dataRuns: 0 };
+
+export default class FormState extends PuzzleView {
+  api = {
+    name: 'form-state',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.unregister = null;
+    this.lastResult = null;
+    this.note = '';
+    this.record = null;
+
+    // Captured BEFORE anything can wrap them, so validate() proves by identity
+    // that every probe this scenario installs was also removed. Same posture as
+    // Formatters.pzl's `pristine` block.
+    const Model = this.ctx.store.modelFor(TYPE);
+    this.pristine = {
+      inputValueDesc: Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value'),
+      selectValueDesc: Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value'),
+      normalizedSchema: Model.normalizedSchema,
+    };
+
+    // Computed ONCE and cached. Reading it live from stats() would go through
+    // the probe while a probe is installed and drift the normalization count by
+    // one, which is exactly the kind of instrument-measuring-itself bug the
+    // whole file is built to avoid.
+    this.schemaFieldCount = Object.keys(Model.normalizedSchema()).length;
+
+    this.buildDataset();
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  data() {
+    formMetrics.dataRuns += 1;
+    const record = this.ctx.store.findOne(TYPE, DRAFT_ID);
+    const result = this.lastResult;
+    return {
+      rows: this.rows,
+      options: CHOICES,
+      fieldCount: this.fieldCount,
+      optionCount: OPTIONS_PER_SELECT,
+      schemaFields: this.schemaFieldCount,
+      // The store-backed typing target. `draftText` is deliberately ABSENT —
+      // see the template comment.
+      boundText: record ? record.text : '',
+      explainText:
+        'each row is one controlled <input> and one controlled <select> carrying the same shape of value binding. ' +
+        'patchAttrs compares an input\'s value against the LIVE DOM property and writes only on a difference; a ' +
+        'select misses that compare entirely and is re-asserted after its options patch, unconditionally — twice ' +
+        'over when the value did change. rerender proves the input\'s zero, rerender-dirty proves the write path ' +
+        'still fires, and the two typing arms price a keystroke through the local layer against the same keystroke ' +
+        'through record.update().',
+      note: this.note,
+      resultText: result
+        ? `${result.op}: ${result.renders} renders · ${result.inputWrites} input writes · ` +
+          `${result.selectWrites} select writes · ${result.schemaCalls} schema normalizations`
+        : 'no run yet',
+      resultCls: result ? 'text-accent' : 'text-faint',
+      // Renders, counted one level below the data object so #recompose()'s
+      // spread cannot invoke it. Returns a constant, so it can never itself
+      // cause a DOM mutation.
+      probe: {
+        get tick() {
+          formMetrics.renders += 1;
+          return '';
+        },
+      },
+    };
+  }
+
+  events = {
+    // Bare-shaped arguments, so codegen caches one arrow per site per instance
+    // and the two typing targets never churn a listener.
+    onDraft: (event) => this.setData('draftText', event?.target?.value ?? ''),
+    onBound: (event) => this.record?.update({ text: event?.target?.value ?? '' }),
+  };
+
+  // ---- dataset -------------------------------------------------------------
+
+  wantFields() {
+    return intParam(this.props?.n, 200, 1, 2000);
+  }
+
+  /**
+   * Build the grid ONCE, as TWO fully precomputed row arrays.
+   *
+   * `rerender-dirty` alternates `this.rows` between them, so every bound value
+   * on every field differs on every render at a cost of one reference swap —
+   * no per-render string building, no allocation, and byte-identical work in
+   * the clean arm, which simply never swaps. Every rowsB entry differs from its
+   * rowsA counterpart in BOTH the input text and the select choice.
+   */
+  buildDataset() {
+    const store = this.ctx.store;
+    const count = this.wantFields();
+    this.fieldCount = count;
+
+    const rowsA = new Array(count);
+    const rowsB = new Array(count);
+    for (let i = 0; i < count; i += 1) {
+      const id = `fs-${i}`;
+      const label = `field ${i}`;
+      rowsA[i] = { id, label, text: `alpha value ${i}`, choice: CHOICES[i % OPTIONS_PER_SELECT].value };
+      rowsB[i] = { id, label, text: `bravo value ${i}`, choice: CHOICES[(i + 1) % OPTIONS_PER_SELECT].value };
+    }
+    this.rowsA = rowsA;
+    this.rowsB = rowsB;
+    this.rows = rowsA;
+
+    // One record, 24 schema fields. clearType() is safe here: it calls findMany,
+    // which auto-subscribes the CURRENT tracking scope, and neither created()
+    // nor an op runs inside one.
+    clearType(store, TYPE);
+    this.record = store.createRecord(TYPE, { id: DRAFT_ID, ...FORM_DRAFT_SEED });
+
+    // The local layer's seed. setData before mount just seeds state — the
+    // scheduled render is a no-op until #mounted flips.
+    this.setData('draftText', 'draft');
+
+    this.lastResult = null;
+    this.note = '';
+  }
+
+  // ---- probes --------------------------------------------------------------
+
+  /**
+   * Count writes to the GRID's controlled properties, and nothing else.
+   *
+   * `value` is an OWN accessor on both HTMLInputElement.prototype and
+   * HTMLSelectElement.prototype, so — unlike ListenerChurn's addEventListener
+   * shadow — this cannot be a delete-to-restore trick. The original descriptors
+   * are captured in created() and restored by identity instead.
+   *
+   * The getter is forwarded UNCHANGED (the same function object), so
+   * patchAttrs's live-DOM compare — which reads `el.value` once per input per
+   * patch — pays nothing for the probe. Only writes are wrapped.
+   *
+   * The gate is a WeakSet of the live grid elements, built once per op, holding
+   * exactly the N inputs and N selects under `.fs-grid`. `.fs-draft` and
+   * `.fs-bound` are NOT in it, so the driver's own `el.value = …` is
+   * structurally uncountable rather than merely uncounted.
+   */
+  installValueProbe(gridElements) {
+    const inputProto = HTMLInputElement.prototype;
+    const selectProto = HTMLSelectElement.prototype;
+    const inputDesc = Object.getOwnPropertyDescriptor(inputProto, 'value');
+    const selectDesc = Object.getOwnPropertyDescriptor(selectProto, 'value');
+    if (
+      inputDesc.set !== this.pristine.inputValueDesc.set ||
+      selectDesc.set !== this.pristine.selectValueDesc.set
+    ) {
+      throw new Error('[stress] form-state: a value-setter probe is already installed — refusing to nest probes');
+    }
+
+    const gated = new WeakSet(gridElements);
+    const counts = { input: 0, select: 0 };
+
+    Object.defineProperty(inputProto, 'value', {
+      configurable: true,
+      enumerable: inputDesc.enumerable,
+      get: inputDesc.get,
+      set(next) {
+        if (gated.has(this)) counts.input += 1;
+        inputDesc.set.call(this, next);
+      },
+    });
+    Object.defineProperty(selectProto, 'value', {
+      configurable: true,
+      enumerable: selectDesc.enumerable,
+      get: selectDesc.get,
+      set(next) {
+        if (gated.has(this)) counts.select += 1;
+        selectDesc.set.call(this, next);
+      },
+    });
+
+    return {
+      counts,
+      restore() {
+        Object.defineProperty(inputProto, 'value', inputDesc);
+        Object.defineProperty(selectProto, 'value', selectDesc);
+      },
+    };
+  }
+
+  /**
+   * Count PuzzleModel.normalizedSchema() calls for FormRecord alone.
+   *
+   * FormRecord does NOT own the static — it is inherited from PuzzleModel — so
+   * an own property SHADOWS it for this one model and `delete` restores the
+   * original lookup exactly. That is the ListenerChurn.installListenerProbe
+   * trick, and it is what keeps every other scenario's records off this
+   * counter. THE RUNTIME IS NOT TOUCHED.
+   */
+  installSchemaProbe() {
+    const Model = this.ctx.store.modelFor(TYPE);
+    if (Object.prototype.hasOwnProperty.call(Model, 'normalizedSchema')) {
+      throw new Error('[stress] form-state: FormRecord already carries an own normalizedSchema — refusing to nest probes');
+    }
+    const base = this.pristine.normalizedSchema;
+    const counts = { calls: 0 };
+    Object.defineProperty(Model, 'normalizedSchema', {
+      configurable: true,
+      writable: true,
+      enumerable: false,
+      value: function normalizedSchema() {
+        counts.calls += 1;
+        return base.call(this);
+      },
+    });
+    return {
+      counts,
+      restore() {
+        delete Model.normalizedSchema;
+      },
+    };
+  }
+
+  /**
+   * Both probes, for EVERY op.
+   *
+   * Uniformity is the point: a counter that only exists on the arm that
+   * expected it is indistinguishable from a fabricated one, and the two typing
+   * arms are only comparable if they carry identical instrument load — then the
+   * millisecond delta between them is exactly data() + validate + notify.
+   */
+  installProbes() {
+    const root = viewRoot(this);
+    const inputs = [...(root?.querySelectorAll('.fs-input') ?? [])];
+    const selects = [...(root?.querySelectorAll('.fs-select') ?? [])];
+    if (inputs.length !== this.fieldCount || selects.length !== this.fieldCount) {
+      throw new Error(
+        `[stress] form-state: the grid holds ${inputs.length} inputs and ${selects.length} selects, expected ${this.fieldCount} of each`
+      );
+    }
+    const value = this.installValueProbe([...inputs, ...selects]);
+    const schema = this.installSchemaProbe();
+    return {
+      value: value.counts,
+      schema: schema.counts,
+      restore() {
+        schema.restore();
+        value.restore();
+      },
+    };
+  }
+
+  // ---- ops -----------------------------------------------------------------
+
+  async opRun(op) {
+    if (op === 'rerender') return this.runRenders(op, false);
+    if (op === 'rerender-dirty') return this.runRenders(op, true);
+    if (op === 'type-local') return this.runTyping(op, 'local');
+    if (op === 'type-store') return this.runTyping(op, 'store');
+    if (op === 'type-event') return this.runEventGate(op);
+    throw new Error(`[stress] form-state has no op "${op}"`);
+  }
+
+  /** One real keystroke: set the property, then dispatch the event the app listens for. */
+  typeOnce(el, value) {
+    el.value = value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  /**
+   * R re-renders of the whole form.
+   *
+   * `dirty === false` leaves every bound value untouched: the inputs must write
+   * NOTHING and the selects must still write once each, per render.
+   * `dirty === true` swaps the row array on every render so every bound value
+   * genuinely differs — the CONTROL, which turns the clean arm's zero from
+   * "nothing happened" into "the framework decided not to write". It also
+   * catches the second select write: a CHANGED select value goes through
+   * patchAttrs's generic branch AND the re-assertion, so the dirty arm counts
+   * two per select per render where the clean arm counts one.
+   */
+  async runRenders(op, dirty) {
+    const probes = this.installProbes();
+    const perfBefore = perfSnapshot();
+    formMetrics.renders = 0;
+    formMetrics.dataRuns = 0;
+
+    const t0 = performance.now();
+    let scriptMs = 0;
+    try {
+      for (let i = 0; i < RERENDER_COUNT; i += 1) {
+        if (dirty) this.rows = this.rows === this.rowsA ? this.rowsB : this.rowsA;
+        this.refresh();
+      }
+      scriptMs = performance.now() - t0;
+    } finally {
+      // finally, so a throw mid-loop can never leave the DOM prototypes patched
+      // and poison every later measurement in the page.
+      probes.restore();
+    }
+
+    await afterPaint();
+    const paintedMs = performance.now() - t0;
+    await settleFrames(1);
+
+    this.assertSchedule(op, RERENDER_COUNT, RERENDER_COUNT);
+    return this.finish(op, {
+      keystrokes: 0,
+      scriptMs,
+      paintedMs,
+      probes,
+      perfBefore,
+      summary:
+        `${op}: ${RERENDER_COUNT} renders of ${this.fieldCount} controlled fields ` +
+        `(${dirty ? 'every bound value differs' : 'no bound value changed'}) in ${ms1(scriptMs)}ms script`,
+    });
+  }
+
+  /**
+   * K real keystrokes into ONE field, with the framework's own flush forced
+   * synchronously after each so the op is bounded by a count and not a clock.
+   *
+   *   local  setData -> flushUpdates()  — re-render only, data() never re-runs
+   *   store  record.update -> store.flush() — validate, notify, data(), render
+   *
+   * Identical probe load, identical keystroke count, identical grid. The only
+   * difference between the arms is which state layer the keystroke lands in.
+   */
+  async runTyping(op, arm) {
+    const root = viewRoot(this);
+    const el = root?.querySelector(arm === 'local' ? '.fs-draft' : '.fs-bound');
+    if (!el) throw new Error(`[stress] form-state ${op}: the ${arm} typing target is not rendered`);
+    if (arm === 'store' && !this.record) throw new Error(`[stress] form-state ${op}: no draft record`);
+
+    const probes = this.installProbes();
+    const perfBefore = perfSnapshot();
+    formMetrics.renders = 0;
+    formMetrics.dataRuns = 0;
+
+    const t0 = performance.now();
+    let scriptMs = 0;
+    try {
+      for (let i = 0; i < KEYSTROKES; i += 1) {
+        this.typeOnce(el, TYPED_STROKES[i]);
+        if (arm === 'local') this.flushUpdates();
+        else this.ctx.store.flush();
+      }
+      scriptMs = performance.now() - t0;
+    } finally {
+      probes.restore();
+    }
+
+    await afterPaint();
+    const paintedMs = performance.now() - t0;
+    await settleFrames(1);
+
+    this.assertSchedule(op, KEYSTROKES, arm === 'local' ? 0 : KEYSTROKES);
+    return this.finish(op, {
+      keystrokes: KEYSTROKES,
+      scriptMs,
+      paintedMs,
+      probes,
+      perfBefore,
+      summary:
+        `${op}: ${KEYSTROKES} keystrokes through ${arm === 'local' ? 'setData' : 'record.update()'} ` +
+        `over ${this.fieldCount} controlled fields in ${ms1(scriptMs)}ms script`,
+    });
+  }
+
+  /**
+   * Behaviour gate, not a measurement.
+   *
+   * TWO real events, one per binding, because both typing arms are measured and
+   * a gate that only covered one of them would leave the other free to be fast
+   * by quietly doing nothing. Each has to land in state AND on screen.
+   *
+   * The caret is READ here and reported in `detail` only. It is deliberately not
+   * a counter: Blink short-circuits some identical value assignments, so a
+   * passing caret check can mean the framework preserved it OR that the engine
+   * did — and only one of those is a claim about Puzzle. The counter that
+   * carries the real assertion is fsInputValueWrites, which observes the
+   * framework's DECISION rather than its visible effect.
+   */
+  async runEventGate(op) {
+    const root = viewRoot(this);
+    const draftEl = root?.querySelector('.fs-draft');
+    const boundEl = root?.querySelector('.fs-bound');
+    if (!draftEl || !boundEl) throw new Error(`[stress] form-state ${op}: a typing target is not rendered`);
+    if (!this.record) throw new Error(`[stress] form-state ${op}: no draft record`);
+
+    const probes = this.installProbes();
+    const perfBefore = perfSnapshot();
+    formMetrics.renders = 0;
+    formMetrics.dataRuns = 0;
+
+    const t0 = performance.now();
+    let scriptMs = 0;
+    let caret = 'not read';
+    try {
+      this.typeOnce(draftEl, GATE_LOCAL);
+      this.flushUpdates();
+      this.typeOnce(boundEl, GATE_STORE);
+      this.ctx.store.flush();
+      scriptMs = performance.now() - t0;
+
+      const localState = this.getData().draftText;
+      if (localState !== GATE_LOCAL) {
+        throw new Error(`[stress] form-state ${op}: the local keystroke never reached setData (state holds "${localState}")`);
+      }
+      if (draftEl.value !== GATE_LOCAL) {
+        throw new Error(`[stress] form-state ${op}: the local keystroke never reached the DOM (input shows "${draftEl.value}")`);
+      }
+      const stored = this.ctx.store.findOne(TYPE, DRAFT_ID)?.text;
+      if (stored !== GATE_STORE) {
+        throw new Error(`[stress] form-state ${op}: the store keystroke never reached the record (it holds "${stored}")`);
+      }
+      if (boundEl.value !== GATE_STORE) {
+        throw new Error(`[stress] form-state ${op}: the store keystroke never reached the DOM (input shows "${boundEl.value}")`);
+      }
+
+      // `selectionStart` throws on type="number" and can read null in some
+      // hosts. Neither is a failure of the framework, so neither fails the gate.
+      try {
+        const at = boundEl.selectionStart;
+        caret = at === null || at === undefined ? 'caret not observable in this host' : `caret at ${at}/${boundEl.value.length}`;
+      } catch {
+        caret = 'caret not observable in this host';
+      }
+    } finally {
+      probes.restore();
+    }
+
+    await afterPaint();
+    const paintedMs = performance.now() - t0;
+    await settleFrames(1);
+
+    this.assertSchedule(op, 2, 1);
+    return this.finish(op, {
+      keystrokes: 2,
+      scriptMs,
+      paintedMs,
+      probes,
+      perfBefore,
+      summary:
+        `${op}: BEHAVIOUR GATE — one real input event per binding reached state AND the DOM ` +
+        `(local via setData, store via record.update). ${caret}. Ignore the timing.`,
+    });
+  }
+
+  /**
+   * A scheduling anomaly must be a LOUD failure, not a drifting number.
+   *
+   * Every counter this scenario reports is per-render or per-keystroke, so a
+   * render the op did not ask for silently rescales all of them at once. Both
+   * totals are therefore asserted exactly rather than reported.
+   */
+  assertSchedule(op, wantRenders, wantDataRuns) {
+    if (formMetrics.renders !== wantRenders) {
+      throw new Error(
+        `[stress] form-state ${op}: ${formMetrics.renders} renders for ${wantRenders} requested — the op is not measuring what it claims`
+      );
+    }
+    if (formMetrics.dataRuns !== wantDataRuns) {
+      throw new Error(
+        `[stress] form-state ${op}: ${formMetrics.dataRuns} data() runs, expected ${wantDataRuns} — the op is not measuring what it claims`
+      );
+    }
+  }
+
+  /** Record the run, re-render the readout, and report. */
+  finish(op, { keystrokes, scriptMs, paintedMs, probes, perfBefore, summary }) {
+    this.lastResult = {
+      op,
+      fields: this.fieldCount,
+      keystrokes,
+      renders: formMetrics.renders,
+      dataRuns: formMetrics.dataRuns,
+      inputWrites: probes.value.input,
+      selectWrites: probes.value.select,
+      schemaCalls: probes.schema.calls,
+      scriptMs,
+      paintedMs,
+      perf: perfDelta(perfBefore),
+    };
+    const r = this.lastResult;
+    this.note =
+      ` · ${r.renders} renders / ${r.dataRuns} data() runs · ` +
+      `input value writes ${r.inputWrites} · select value writes ${r.selectWrites} · ` +
+      `schema normalizations ${r.schemaCalls}`;
+    this.refresh();
+
+    return {
+      op,
+      ms: paintedMs,
+      scriptMs,
+      detail:
+        `${summary} · ${r.renders} renders, ${r.dataRuns} data() runs · ` +
+        `${r.inputWrites} <input>.value writes vs ${r.selectWrites} <select>.value writes ` +
+        `(${this.fieldCount} of each on screen) · ${r.schemaCalls} normalizedSchema() calls`,
+    };
+  }
+
+  async opReset() {
+    this.buildDataset();
+    this.refresh();
+    await afterPaint();
+    await settleFrames(1);
+    return {
+      detail: `reset: ${this.fieldCount} fields x (1 input + 1 select of ${OPTIONS_PER_SELECT}) + one ${this.schemaFieldCount}-field record`,
+    };
+  }
+
+  async opWarmup() {
+    await this.runRenders('rerender', false);
+    this.lastResult = null;
+    this.note = '';
+    this.refresh();
+    await settleFrames(1);
+    return { detail: 'warmup: one clean re-render, result discarded' };
+  }
+
+  // ---- verification --------------------------------------------------------
+
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const rows = root.querySelectorAll('.fs-row');
+    if (rows.length !== this.fieldCount) {
+      return { ok: false, detail: `DOM has ${rows.length} field rows, the scenario holds ${this.fieldCount}` };
+    }
+
+    const firstInputs = rows[0].querySelectorAll('.fs-input');
+    const firstSelects = rows[0].querySelectorAll('.fs-select');
+    if (firstInputs.length !== 1 || firstSelects.length !== 1) {
+      return {
+        ok: false,
+        detail: `row 0 holds ${firstInputs.length} inputs and ${firstSelects.length} selects, expected 1 of each`,
+      };
+    }
+    const firstOptions = firstSelects[0].querySelectorAll('option');
+    if (firstOptions.length !== OPTIONS_PER_SELECT) {
+      return { ok: false, detail: `row 0's select holds ${firstOptions.length} options, expected ${OPTIONS_PER_SELECT}` };
+    }
+
+    // Spot-check the LIVE controlled properties against held state, at both ends
+    // and the middle. `rerender`'s zero write count only means "the caret was
+    // safe" if the values on screen are also correct — a patcher that stopped
+    // writing entirely would report the same zero.
+    const probes = [0, Math.floor(this.fieldCount / 2), this.fieldCount - 1];
+    for (const i of probes) {
+      const want = this.rows[i];
+      const shown = rows[i].querySelector('.fs-input')?.value;
+      if (shown !== want.text) {
+        return { ok: false, detail: `field ${i}'s input reads "${shown}", state holds "${want.text}"` };
+      }
+    }
+    for (const i of probes) {
+      const want = this.rows[i];
+      const shown = rows[i].querySelector('.fs-select')?.value;
+      if (shown !== want.choice) {
+        return { ok: false, detail: `field ${i}'s select reads "${shown}", state holds "${want.choice}"` };
+      }
+    }
+
+    const record = this.ctx.store.findOne(TYPE, DRAFT_ID);
+    if (!record) return { ok: false, detail: `the ${TYPE}:${DRAFT_ID} record is missing` };
+    const boundShown = root.querySelector('.fs-bound')?.value;
+    if (boundShown !== record.text) {
+      return { ok: false, detail: `the bound input reads "${boundShown}", the record holds "${record.text}"` };
+    }
+    const draftHeld = this.getData().draftText;
+    const draftShown = root.querySelector('.fs-draft')?.value;
+    if (draftShown !== draftHeld) {
+      return { ok: false, detail: `the draft input reads "${draftShown}", the local layer holds "${draftHeld}"` };
+    }
+
+    // fsSchemaNormalizations === 3 per keystroke depends on the store having NO
+    // storage: _persist() no-ops without it, and a configured storage would add
+    // a full _serializeAll() to every flush. Asserted rather than reasoned about.
+    if (this.ctx.store.storage != null) {
+      return {
+        ok: false,
+        detail: 'the store has storage configured — every flush would also serialize the whole store and the schema counts would not mean what they say',
+      };
+    }
+
+    // Probe restoration, BY IDENTITY against what created() captured. A probe
+    // left installed would silently corrupt every later run in the page and add
+    // its own overhead to the arms that exist to be clean.
+    const inputDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    const selectDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+    if (inputDesc.set !== this.pristine.inputValueDesc.set || inputDesc.get !== this.pristine.inputValueDesc.get) {
+      return { ok: false, detail: 'a value-setter probe was left installed on HTMLInputElement.prototype' };
+    }
+    if (selectDesc.set !== this.pristine.selectValueDesc.set || selectDesc.get !== this.pristine.selectValueDesc.get) {
+      return { ok: false, detail: 'a value-setter probe was left installed on HTMLSelectElement.prototype' };
+    }
+    const Model = this.ctx.store.modelFor(TYPE);
+    if (Model.normalizedSchema !== this.pristine.normalizedSchema) {
+      return { ok: false, detail: 'a normalizedSchema probe was left installed on FormRecord' };
+    }
+
+    // Control-did-run, BOTH directions. Each of these zeros would otherwise read
+    // as a finding when it is really a dead code path.
+    const result = this.lastResult;
+    if (result && result.op === 'rerender' && result.selectWrites === 0) {
+      return {
+        ok: false,
+        detail: 'rerender wrote no select values at all, so its zero input writes measured nothing — the renders never reached the grid',
+      };
+    }
+    if (result && result.op === 'rerender-dirty' && result.inputWrites === 0) {
+      return {
+        ok: false,
+        detail: 'rerender-dirty wrote no input values, so the control is a dead code path and rerender\'s zero proves nothing',
+      };
+    }
+    if (result && result.op === 'type-store' && result.dataRuns === 0) {
+      return {
+        ok: false,
+        detail: 'type-store ran data() zero times, so the comparison against type-local measured nothing',
+      };
+    }
+
+    return {
+      ok: true,
+      detail: result
+        ? `${this.fieldCount} controlled fields · arm "${result.op}" · ${result.inputWrites} input vs ${result.selectWrites} select value writes over ${result.renders} renders`
+        : `${this.fieldCount} controlled fields x (1 input + 1 select of ${OPTIONS_PER_SELECT}); no run yet`,
+    };
+  }
+
+  opStats() {
+    const root = viewRoot(this);
+    const grid = root?.querySelector('.fs-grid');
+    const r = this.lastResult;
+    return {
+      mountedNodes: grid ? grid.querySelectorAll('*').length : 0,
+      records: this.ctx.store.findMany(TYPE).length,
+      views: 1,
+      counters: {
+        // Deterministic only. Raw milliseconds live in `detail`.
+        fsFields: this.fieldCount,
+        fsSelectOptions: OPTIONS_PER_SELECT,
+        fsSchemaFields: this.schemaFieldCount,
+        fsKeystrokes: r?.keystrokes ?? 0,
+        fsRenders: r?.renders ?? 0,
+        fsDataRuns: r?.dataRuns ?? 0,
+        fsInputValueWrites: r?.inputWrites ?? 0,
+        fsSelectValueWrites: r?.selectWrites ?? 0,
+        fsSchemaNormalizations: r?.schemaCalls ?? 0,
+      },
+      perf: r?.perf ?? null,
+    };
+  }
+}
+</script>

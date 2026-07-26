@@ -58,6 +58,8 @@ An additive build OUTPUT mode that prerenders every static route to its own HTML
 
 **Shared prerender pipeline:** after the normal bundle + Tailwind + `public/` copy into the staging dir, the CLI bundles a second node-platform entry (same `.pzl` plugin, `__PUZZLE_DEV__=false`) that imports the app's **default-exported PuzzleApp** from `app/app.js` (required convention: `export default app`) plus `@magic-spells/puzzle/ssg`, and runs it under `node` once (with the mode passed through). A prerender failure fails the build; the staging swap guarantees the last good `dist/` is untouched. The summary (pages written, skipped routes, warnings) rides a stdout JSON sentinel (`__PUZZLE_SSG_JSON__`), same pattern as the config loader.
 
+**Prerendered output may not overwrite a `public/` asset (D126).** `app/public/` is copied into staging before the prerender pass, and a route page whose output path collides with a copied asset is a **build error** naming both the route and the asset — previously the page silently won and the public file's contents were lost. The likely case is `public/404.html` plus a `*` catch-all. Exactly one collision is exempt: route `/` writing `index.html`, which *is* the copied SPA shell and is read into memory before the write loop, so rewriting it is a byte no-op. This is separate from the root-level reserved-name check (`app.js`, `app.js.map`, `styles.css`), which stays files-only and root-only — nested `public/vendor/app.js` remains legal.
+
 **Per-route output** is directory-style in both modes: `/` → `dist/index.html`, `/components/badge` → `dist/components/badge/index.html`. Each page is the `public/index.html` shell with the rendered markup injected into the (required, empty, `#id`-form `config.target`) element and the first `<title>` replaced by the route's `meta.title` (nearest-defined leaf → root; shell title kept when absent). Pages link absolute paths, so they work at any depth.
 
 **Render semantics** (`client-runtime/ssg/`, both modes): each route's layout + view chain is instantiated and loaded via `preload()` — `created()` + awaited `data()`, with `this.route` populated — so **no `mounted()`, no animations, no DOM runs at build time**; `data()` executes once per page under Node (global `fetch` serves adapters; browser globals in module scope must be guarded). `render()` always, never `renderSkeleton()`. The serializer mirrors the ViewManager byte-for-byte where it matters: slot expansion is the SAME `expandSlots`, `@event`/`key`/`island` attrs are dropped, boolean props emit bare attrs, `{#svg}` island seeds emit verbatim, scoped-style `data-<scopeId>` stamps pass through. Principled difference: `value` serializes as an attribute (pre-JS display) where the browser assigns a property. Second principled difference (D113): `<script>`/`<style>` are RAWTEXT — their text is **not** entity-escaped, because the HTML parser never entity-decodes it. JSON-typed scripts (`type` of `application/json` or any `+json` suffix) emit with `<` escaped to `\u003c` — the same JSON-transparent, breakout-proof rule as the static data island; all other script/style content emits raw, and the build **fails** if it contains `</script`/`</style` (case-insensitive) or the `<!--` + `<script` double-escaped pair, since the parser would end (or refuse to end) the element mid-content. `config.beforeMount` is awaited once with a `{ store, config }` facade — **build-time only in both modes** (the Astro-frontmatter policy).
@@ -233,11 +235,25 @@ free of profiler sentinel strings.
   into generic data latency.
 - A causal token follows Store write/flush → view refresh → render → writes and
   framework work scheduled by those steps. Per-view execution depth resets only
-  when that chain is quiescent. At 100 executions the view is reported and
-  further work in that chain is stopped. Independently, a rolling one-second
-  window reports and stops a view after at least 60 renders when at least 90%
-  made zero DOM mutations and no recorded cause is animation or morph work.
-  Both guards must stop framework churn rather than hang the tab.
+  when that chain is quiescent. The two loop guards over that token are
+  deliberately asymmetric:
+  - **Recursive, per chain — stops.** At 100 executions of one view inside a
+    single non-quiescent chain the view is reported (`console.error`) and its
+    further renders in that chain are suppressed. That many executions in one
+    causal chain is proof of a loop, and stopping it rather than hanging the tab
+    is the point.
+  - **Cross-frame, rolling one second — warns only.** A view that renders at
+    least 60 times in a rolling second with at least 90% of those renders making
+    zero DOM mutations, and no recorded cause being animation or morph work, is
+    reported (`console.warn`) and nothing more. It **must not** suppress the
+    render. That threshold is a heuristic about waste, not proof of a loop, and
+    ordinary framework behaviour reaches it: a route ancestor renders `depth + 2`
+    times per navigation and most of those renders legitimately mutate nothing,
+    so a five-level route tree crosses 60-per-second at roughly 8.6 navigations
+    per second. When this guard did suppress, the tripped ancestor stopped
+    re-rendering its `<Slot/>` and the routed child never mounted. A
+    development-only instrument may not change what the app does. The warning
+    therefore describes the waste and never claims the framework intervened.
 - The development collector exposes temporary event sinks for §53's
   `measureRenders`; no test framework is imported. Production DCE is proved by a
   dev-only sentinel scan and an esbuild metafile assertion that attributes zero

@@ -6,7 +6,7 @@
 // non-param segment — and a malformed percent-encoded param ('/%zz' → URIError)
 // must make that route a NON-MATCH (falling through to the catch-all) instead of
 // throwing out of the whole navigation.
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
@@ -33,6 +33,8 @@ const view = (label) =>
 const Docs = view('docs');
 const Files = view('files');
 const Report = view('report');
+const Release = view('release');
+const LiteralStar = view('literal-star');
 const User = view('user');
 const NotFound = view('notfound');
 
@@ -52,6 +54,7 @@ beforeEach(() => {
 afterEach(() => {
 	routers.forEach((r) => r.stop());
 	routers = [];
+	vi.restoreAllMocks();
 });
 
 describe('Router — literal static route patterns (regex metacharacters escaped)', () => {
@@ -59,6 +62,8 @@ describe('Router — literal static route patterns (regex metacharacters escaped
 		{ path: '/docs.v1', name: 'docs', view: Docs },
 		{ path: '/files+new', name: 'files', view: Files },
 		{ path: '/report(2024)', name: 'report', view: Report },
+		{ path: '/releases/v1:beta', name: 'release', view: Release },
+		{ path: '/files/*', name: 'literal-star', view: LiteralStar },
 		{ path: '*', name: 'nf', view: NotFound },
 	];
 
@@ -98,6 +103,46 @@ describe('Router — literal static route patterns (regex metacharacters escaped
 		await router.push('/report2024');
 		expect(el.querySelector('.report')).toBeNull();
 		expect(el.querySelector('.notfound')).not.toBeNull();
+	});
+
+	it("matches ':' and '*' literally when they are not a complete dynamic segment", async () => {
+		const { router, el } = await boot(routes());
+
+		await router.push('/releases/v1:beta');
+		expect(el.querySelector('.release')).not.toBeNull();
+		expect(router.current.params).toEqual({});
+
+		await router.push('/files/*');
+		expect(el.querySelector('.literal-star')).not.toBeNull();
+		expect(router.current.params).toEqual({});
+	});
+});
+
+describe('Router — declaration-order shadow warnings', () => {
+	it('warns when an earlier dynamic route shadows a later static route', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		new Router([
+			{ path: '/user/:id', name: 'user', view: User },
+			{ path: '/user/new', name: 'new-user', view: Release },
+		]);
+
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining(
+				'route "/user/new" is unreachable because earlier route "/user/:id" matches it first'
+			)
+		);
+	});
+
+	it('does not warn when the static route is declared before the dynamic route', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		new Router([
+			{ path: '/user/new', name: 'new-user', view: Release },
+			{ path: '/user/:id', name: 'user', view: User },
+		]);
+
+		expect(warn).not.toHaveBeenCalled();
 	});
 });
 

@@ -61,7 +61,7 @@ blog, grimoire, typed-todos, virtual-scroll, and slot-forwarding fixtures before
 running Vitest. Go is therefore required for the JavaScript test workflow.
 
 `npm run bench` is the production performance harness in `benchmarks/`
-([[DECISION-D127-BENCHMARK-METHODOLOGY]]). It is **not** part of the required
+([[DECISION-D128-BENCHMARK-METHODOLOGY]]). It is **not** part of the required
 suites and **not** a CI gate: it builds a scratch copy of the
 [[DOC-STRESS-EXAMPLE]] app in production mode, drives it through a fixed op
 matrix, and reports medians against `benchmarks/baseline.json`. Its exit code

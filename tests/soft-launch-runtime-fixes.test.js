@@ -35,6 +35,7 @@ const mockFetch = (payload, ok = true, status = 200) => {
 		ok,
 		status,
 		statusText: ok ? 'OK' : 'Server Error',
+		text: async () => JSON.stringify(payload),
 		json: async () => payload,
 	}));
 	vi.stubGlobal('fetch', fn);

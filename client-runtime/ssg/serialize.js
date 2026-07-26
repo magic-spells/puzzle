@@ -37,6 +37,7 @@
 
 import { SLOT_TAG, PLACEHOLDER_TAG } from '../views/ViewNode.js';
 import { expandSlots } from '../views/viewManager.js';
+import { displayValue } from '../display.js';
 
 // Void elements (HTML spec): self-closing, never carry children.
 const VOID_ELEMENTS = new Set([
@@ -50,7 +51,7 @@ const BOOLEAN_PROPS = new Set(['checked', 'disabled', 'selected', 'muted']);
 
 /** Coerce a text/attr value to a string the way viewManager.js stringify() does. */
 function stringify(v) {
-	return v == null ? '' : String(v);
+	return displayValue(v);
 }
 
 /** Escape a text node's content: the three characters that would break HTML text. */
@@ -97,11 +98,14 @@ function serializeAttrs(tag, attrs, { selected = false, controlledSelect = false
 		} else if (BOOLEAN_PROPS.has(name)) {
 			if (value) out += ` ${name}`;
 		} else if (value === false || value == null) {
-			// omitted
+			// Omitted to mirror ViewManager attribute semantics. Still apply the
+			// shared display policy to an explicitly supplied nullish binding so
+			// undefined gets its development diagnostic.
+			if (value == null) stringify(value);
 		} else if (value === true) {
 			out += ` ${name}`;
 		} else {
-			out += ` ${name}="${escapeAttr(String(value))}"`;
+			out += ` ${name}="${escapeAttr(stringify(value))}"`;
 		}
 	}
 	if (selected) out += ' selected';
@@ -245,7 +249,10 @@ function rawtextContent(tag, attrs, text) {
 		}
 		return text;
 	}
-	const type = stringify(attrs.type).trim().toLowerCase();
+	// A missing type is the ordinary default JavaScript script kind, not a
+	// missing template value — do not route that internal absence through the
+	// undefined-display diagnostic.
+	const type = (attrs.type == null ? '' : stringify(attrs.type)).trim().toLowerCase();
 	if (type === 'application/json' || type.endsWith('+json')) return escapeScriptJson(text);
 	if (/<\/script/i.test(text)) {
 		throw new Error(

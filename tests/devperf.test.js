@@ -111,10 +111,12 @@ describe('dev performance render instrumentation', () => {
 		);
 	});
 
-	it('warns and stops a rolling-second zero-mutation runaway at 60 renders', async () => {
+	it('warns about a rolling-second zero-mutation runaway WITHOUT stopping the view', async () => {
+		// Byte-identical output while `label` is unset — the cross-frame guard's
+		// exact trigger — then a real DOM change once it is set.
 		class FrameRunaway extends PuzzleView {
 			render() {
-				return h('div', {}, [text('stable')]);
+				return h('div', {}, [text(this.getData().label ?? 'stable')]);
 			}
 		}
 
@@ -137,11 +139,27 @@ describe('dev performance render instrumentation', () => {
 		const loop = events.find(
 			(event) => event.type === 'loop' && event.kind === 'cross-frame'
 		);
-		// The initial mount is also inside the rolling second, so 59 measured
-		// updates bring the view's complete window to the 60-render threshold.
-		expect(renders).toHaveLength(59);
+		// Every update rendered. The mount render is inside the rolling second too,
+		// so the window crossed the 60-render threshold partway through the burst —
+		// and the renders after that point still happened, because this guard warns
+		// and never gates. (When it did gate, only 59 of the 61 arrived.)
+		expect(renders).toHaveLength(61);
 		expect(renders.every((event) => event.wasted)).toBe(true);
 		expect(loop).toMatchObject({ viewName: 'FrameRunaway', kind: 'cross-frame' });
+		// The warning is throttled to one per rolling window, not one per frame.
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain('__PUZZLE_PERF__');
+		expect(warn.mock.calls[0][0]).toContain('likely a render loop');
+		// It must not claim devperf intervened.
+		expect(warn.mock.calls[0][0]).not.toContain('stopped');
+
+		// The whole point: work still gets done after the warning. A render that
+		// DOES change the DOM lands.
+		view.instance.setData('label', 'after the warning');
+		view.instance.flushUpdates();
+		expect(view.element.textContent).toBe('after the warning');
+		const afterWarning = events.filter((event) => event.type === 'render').at(-1);
+		expect(afterWarning).toMatchObject({ wasted: false, domMutations: 1 });
 		expect(warn).toHaveBeenCalledTimes(1);
 	});
 });
@@ -169,9 +187,13 @@ describe('dev performance loop detector', () => {
 			const view = await mountView(FeedbackLoop);
 			handles.push(view);
 			const loops = [];
+			const renders = [];
 			cleanups.push(
 				devperfInstallSink((event) => {
 					if (event.type === 'loop') loops.push(event);
+					if (event.type === 'render' && event.viewName === 'FeedbackLoop') {
+						renders.push(event);
+					}
 				})
 			);
 			const error = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -191,6 +213,11 @@ describe('dev performance loop detector', () => {
 				expect.stringContaining('stopped FeedbackLoop after 100 executions')
 			);
 			expect(view.element.textContent).toBe('100');
+			// The recursive guard genuinely SUPPRESSES: the cycle would otherwise run
+			// to settled()'s 150-pass cap, so the render count has to stay at the
+			// limit rather than merely be warned about. This is the regression the
+			// warn-only change to the cross-frame guard must not have caused.
+			expect(renders.length).toBeLessThanOrEqual(100);
 		},
 		3000
 	);

@@ -75,6 +75,7 @@ type staticSummary struct {
 // staticPage is one written page in the static summary.
 type staticPage struct {
 	Path string `json:"path"`
+	File string `json:"file"`
 	// false for a `prerender: false` route — an empty, unmarked target is written
 	// and the per-page script populates it client-side.
 	Prerender bool `json:"prerender"`
@@ -100,7 +101,7 @@ type staticModules struct {
 // at absRoot, writing content-complete HTML pages (via the node prerender pass)
 // plus one per-page ES-module bundle under staging/_puzzle. cfg + dev select the
 // same minify/define/dropConsole policy as the main app.js pass.
-func prerenderStaticPages(absRoot, staging string, cfg config.Config, dev bool) error {
+func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, cfg config.Config, dev bool) error {
 	// A public/ asset that already produced a staging/_puzzle would be clobbered
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
@@ -139,6 +140,11 @@ func prerenderStaticPages(absRoot, staging string, cfg config.Config, dev bool) 
 	var summary staticSummary
 	if err := json.Unmarshal([]byte(payload), &summary); err != nil {
 		return fmt.Errorf("puzzle build --static: prerender summary was not readable JSON: %w", err)
+	}
+	for _, page := range summary.Written {
+		if err := checkPrerenderCollision(absRoot, staging, publicFiles, page.Path, page.File); err != nil {
+			return err
+		}
 	}
 
 	// 2. Generate one mountStatic entry file per written page. Whether the app

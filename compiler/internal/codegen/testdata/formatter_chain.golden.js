@@ -7,7 +7,7 @@ export default class FormatterChain extends PuzzleView {
   }
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 FormatterChain.prototype.render = function () {
   const __d = this.getData();
@@ -15,10 +15,10 @@ FormatterChain.prototype.render = function () {
 
   return new ViewNode('puzzle-view', { class: 'fmt' }, [
     new ViewNode('p', { class: 'joined' }, [
-      new ViewNode('text', { value: String((__f["upcase"] || __f.__missing("upcase"))((__f["join"] || __f.__missing("join"))(__d.tags, ', '))) }),
+      new ViewNode('text', { value: __s((__f["upcase"] || __f.__missing("upcase"))((__f["join"] || __f.__missing("join"))(__d.tags, ', ')), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'tags' : 0) }),
     ]),
     new ViewNode('p', { class: 'money' }, [
-      new ViewNode('text', { value: String((__f["currency"] || __f.__missing("currency"))(__d.price, '$', 2)) }),
+      new ViewNode('text', { value: __s((__f["currency"] || __f.__missing("currency"))(__d.price, '$', 2), typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'price' : 0) }),
     ]),
   ]);
 };

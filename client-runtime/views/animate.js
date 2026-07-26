@@ -142,37 +142,6 @@ export function playAnimation(el, spec, { reducedMotion = false, release = false
 }
 
 /**
- * Cancel every WAAPI animation currently affecting `el`, handing the element
- * back to its stylesheet-driven state — Animation.cancel() clears the effect,
- * INCLUDING a finished-but-still-filling one (which is how a completed out
- * animation holds an element invisible under `fill: 'both'`). The router's
- * navigation-failure recovery uses this to RESTORE an outgoing unit whose out
- * animation ran for a navigation that never completed: #state is unchanged, so
- * that unit is still the committed view and must come back on screen. Root
- * element only (the one-animator rule puts the out animation on the animator's
- * root — never on descendants). Same hard rules as playAnimation: never throw;
- * no getAnimations (jsdom, old browsers) degrades to a no-op.
- *
- * @param {Element|null} el the animator's root element
- */
-export function cancelAnimations(el) {
-	if (!el || typeof el.getAnimations !== 'function') return;
-	let animations;
-	try {
-		animations = el.getAnimations();
-	} catch {
-		return;
-	}
-	for (const animation of animations) {
-		try {
-			animation.cancel();
-		} catch {
-			/* already finished/cancelled — ignore */
-		}
-	}
-}
-
-/**
  * Detect the OS "reduce motion" setting. Guarded for environments without
  * matchMedia (jsdom by default) — those report "no preference" (false).
  * @returns {boolean}

@@ -193,6 +193,7 @@ describe('PuzzleApp — models & store wiring', () => {
 			ok: true,
 			status: 200,
 			statusText: 'OK',
+			text: async () => JSON.stringify([{ id: 't1', text: 'from server' }]),
 			json: async () => [{ id: 't1', text: 'from server' }],
 		}));
 		vi.stubGlobal('fetch', fetchMock);

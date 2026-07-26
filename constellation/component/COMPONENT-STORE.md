@@ -124,7 +124,7 @@ malformed entries and protected keys cannot corrupt live records.
 ## Measured costs
 
 Both figures come from [[DOC-STRESS-EXAMPLE]] under the production harness
-([[DECISION-D127-BENCHMARK-METHODOLOGY]]). They describe current behavior; they
+([[DECISION-D128-BENCHMARK-METHODOLOGY]]). They describe current behavior; they
 are not proposals.
 
 **Persistence is O(store) per mutating frame, not O(changed records).**

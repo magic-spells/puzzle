@@ -283,10 +283,15 @@
  */
 
 import { ViewNode } from '../views/ViewNode.js';
-import { cancelAnimations } from '../views/animate.js';
 import { resolveHead, syncTitle } from '../head.js';
+import {
+	findShadowedPaths,
+	isDynamicSegment,
+	validateTopLevelPath,
+} from './routePath.js';
 import { walkRouteTree } from './routeTree.js';
 import { devtoolsRouteCommit } from '../devtools.js';
+import { preloadTakeoverComponents } from '../ssg/preload.js';
 
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
 // { entryKey: {x,y} } under a single key; capped so a long session can't grow it
@@ -518,7 +523,7 @@ export class Router {
 			);
 		}
 		this.#mode = mode;
-		this.#initialPath = initialPath ?? '/';
+		this.#initialPath = normalizeRoutePath(initialPath ?? '/');
 		// Normalize + validate the base at construction (D51, config-error posture
 		// like the unknown-mode throw above): '#'/'?' in a base is a hard error, and
 		// '', '/', and a trailing '/' all collapse to the canonical form.
@@ -546,6 +551,9 @@ export class Router {
 				continue;
 			}
 			walkRouteTree(route, this.#routes, makeEntry);
+		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			warnShadowedPaths(findShadowedPaths(this.#routes));
 		}
 		// Bind once so start()/stop() add and remove the SAME reference — the
 		// prototype bound at addEventListener time and leaked (CODE_REVIEW §2.5).
@@ -778,6 +786,7 @@ export class Router {
 	 * returns a resolved promise since the deferred nav has not started yet.
 	 */
 	push(path) {
+		path = normalizeRoutePath(path);
 		if (this.#committing) {
 			this.#pendingPush = { path, replace: false }; // last-wins, single slot (no queue)
 			return Promise.resolve();
@@ -842,6 +851,7 @@ export class Router {
 	 * — the auth-redirect case that must not leave the aborted page in history).
 	 */
 	replace(path) {
+		path = normalizeRoutePath(path);
 		if (this.#committing) {
 			this.#pendingPush = { path, replace: true }; // last-wins, shared slot with push
 			return Promise.resolve();
@@ -928,11 +938,21 @@ export class Router {
 	 * is used exactly as stored (D51 already normalized it — no re-normalization). A
 	 * string NOT starting with '/' is returned unchanged: the deliberate pass-through
 	 * for external URLs, `mailto:`/`tel:`, bare `#anchor` fragments, an already-encoded
-	 * `'#/x'`, and `''`. Query strings and `#anchor` suffixes inside a path survive
-	 * for free — this is pure prefixing and never parses them.
+	 * `'#/x'`, and `''`. Non-ASCII text in a path-shaped value is percent-encoded
+	 * idempotently before the mode/base prefix is applied; query strings and
+	 * `#anchor` suffixes ride through the same normalization.
 	 */
 	url(path) {
 		return encodeURL(path, this.#mode, this.#base);
+	}
+
+	/**
+	 * Ordered compiled leaf entries for build-time route analysis. The SSG pass
+	 * reads their regexes to detect precedence shadows instead of compiling a
+	 * second matcher table with rules that could drift from this Router.
+	 */
+	get routeEntries() {
+		return this.#routes;
 	}
 
 	/**
@@ -1012,7 +1032,7 @@ export class Router {
 		if (this.#pendingOut) {
 			const stalled = this.#pendingOut;
 			this.#pendingOut = null;
-			cancelAnimations(stalled.element);
+			stalled._cancelOutAnimation();
 		}
 		this.#pendingIndex = null;
 		// This navigation terminated without committing (guard block/failure, data
@@ -1417,6 +1437,28 @@ export class Router {
 			childVnode = vnode;
 		}
 		const rootVnode = childVnode; // vnode for chain level 0
+
+		// The routed chain/layout are already preloaded above, but their render
+		// trees can contain non-routed async components. Only an SSG navigation-zero
+		// marker opts into waiting for those descendants: ordinary SPA navigation
+		// keeps ViewManager's fire-and-forget component mounting unchanged.
+		if (this.#container?.hasAttribute('data-puzzle-ssg')) {
+			let takeoverVnode = rootVnode;
+			if (layout) {
+				takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
+				takeoverVnode.instance = layout;
+			}
+			const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
+			// A newer navigation may supersede us while a nested component loads.
+			// None of these instances mounted, so release each one's tracked state
+			// explicitly before discarding the routed chain.
+			if (token !== this.#token) {
+				for (const instance of nestedInstances) instance.destroy();
+				for (const v of freshViews) v.destroy();
+				if (layout && !reuseLayout) layout.destroy();
+				return;
+			}
+		}
 
 		await this.#swap(token, cur, {
 			rawPath,
@@ -2500,10 +2542,11 @@ export class Router {
  * consumer that both validates the leaf's chain and compiles it into a matcher
  * Entry.
  *
- * Fail-fast config errors (throw at construction): a child path with a leading
- * '/', a `layout` on a non-root node, `path:'*'` inside children, a duplicate
- * `:param` name within one chain, an unknown `transitionMode` value (D65), and a
- * non-function `guard` (D87) on any node (root or child).
+ * Fail-fast config errors (throw at construction): a top-level path that is
+ * neither `'*'` nor rooted with '/', a child path with a leading '/', a `layout`
+ * on a non-root node, `path:'*'` inside children, a duplicate `:param` name
+ * within one chain, an unknown `transitionMode` value (D65), and a non-function
+ * `guard` (D87) on any node (root or child).
  *
  * Build a leaf Entry: validate the chain, then compile the leaf's full path to a
  * matcher + merged params.
@@ -2515,7 +2558,9 @@ function makeEntry(chain, fullPaths) {
 	// and route trees are tiny, and a bad node still throws the same error the
 	// first time DFS reaches a leaf under it.
 	chain.forEach((node, index) => {
-		if (index) {
+		if (index === 0) {
+			validateTopLevelPath(node.path);
+		} else {
 			if (typeof node.path === 'string' && node.path.startsWith('/')) {
 				throw new Error(
 					`[puzzle] child route path must be relative (no leading "/"): "${node.path}"`
@@ -2536,16 +2581,19 @@ function makeEntry(chain, fullPaths) {
 	const leafPath = fullPaths[fullPaths.length - 1];
 	const paramNames = [];
 	// Compile ONE '/'-segment at a time: a segment that is a complete `:name`
-	// becomes a single-segment capture group; EVERY other segment is regex-escaped
-	// in full, so static path text with regex metacharacters ('.', '+', '(', '[',
-	// …) matches LITERALLY (`/docs.v1` matches only `/docs.v1`, not `/docsXv1`).
-	// The '/' separators are structural, re-joined below — never escaped. The
-	// top-level catch-all '*' never reaches here (handled in the constructor; a '*'
-	// inside children throws above), so '*' is escaped like any other literal.
+	// becomes a single-segment capture group; EVERY other segment first normalizes
+	// non-ASCII text to the browser's percent-encoded pathname form, then is
+	// regex-escaped in full. Static path text with regex metacharacters ('.', '+',
+	// '(', '[', …) still matches LITERALLY (`/docs.v1` matches only `/docs.v1`,
+	// not `/docsXv1`). Existing `%XX` escapes are ASCII and stay byte-identical, so
+	// this normalization is idempotent. The '/' separators are structural,
+	// re-joined below — never escaped. The top-level catch-all '*' never reaches
+	// here (handled in the constructor); a non-bare '*' inside a top-level path is
+	// escaped like any other literal, while a '*' child still throws above.
 	const regexPath = leafPath
 		.split('/')
 		.map((seg) => {
-			if (seg.length > 1 && seg[0] === ':') {
+			if (isDynamicSegment(seg)) {
 				const name = seg.slice(1);
 				if (paramNames.includes(name)) {
 					throw new Error(`[puzzle] duplicate route param ":${name}" in "${leafPath}"`);
@@ -2553,12 +2601,14 @@ function makeEntry(chain, fullPaths) {
 				paramNames.push(name);
 				return '([^/]+)';
 			}
-			return escapeRegExp(seg);
+			return escapeRegExp(normalizeRoutePath(seg));
 		})
 		.join('/');
 	return {
 		chain,
 		fullPaths,
+		fullPath: leafPath,
+		matchPath: normalizeRoutePath(leafPath),
 		regex: new RegExp('^' + regexPath + '$'),
 		paramNames,
 		layout: chain[0].layout ?? null,
@@ -2574,6 +2624,20 @@ function makeEntry(chain, fullPaths) {
 // by esbuild, so the class-member form would ship dead warning scaffolding.
 // Once-state is per-module (per page load), not per-router-instance — fine for
 // a dev diagnostic, and vitest isolates module state per test file.
+
+/** Warn once per shadow pair even when SSG builds several memory routers. */
+const warnedShadowedPaths = new Set();
+function warnShadowedPaths(shadowedPaths) {
+	for (const { path, shadowedBy } of shadowedPaths) {
+		const key = shadowedBy + '\0' + path;
+		if (warnedShadowedPaths.has(key)) continue;
+		warnedShadowedPaths.add(key);
+		console.warn(
+			`[puzzle] route "${path}" is unreachable because earlier route "${shadowedBy}" ` +
+				'matches it first (routes match in declaration order)'
+		);
+	}
+}
 
 /** One-shot "loaded outside the configured base" warning (D51). */
 let warnedOutsideBase = false;
@@ -2645,9 +2709,10 @@ function validateGuard(value, label) {
  * (no base — the default; every seam stays byte-identical to the base-less
  * router). Otherwise a leading '/' is ensured and every trailing '/' trimmed, so
  * `'myapp'`, `'/myapp'`, and `'/myapp/'` all normalize to `'/myapp'`; multi-
- * segment bases (`'/a/b'`) work. A base containing `'#'` or `'?'` is a
- * constructor throw (config-error posture, like an unknown mode) — those
- * characters would corrupt the mode-specific URL encoding.
+ * segment bases (`'/a/b'`) work. Non-ASCII base text is percent-encoded through
+ * the same idempotent path normalizer used by routes. A base containing `'#'` or
+ * `'?'` is a constructor throw (config-error posture, like an unknown mode) —
+ * those characters would corrupt the mode-specific URL encoding.
  */
 export function normalizeBase(base) {
 	if (!base) return '';
@@ -2656,7 +2721,7 @@ export function normalizeBase(base) {
 	}
 	let b = base[0] === '/' ? base : '/' + base;
 	b = b.replace(/\/+$/, ''); // trim trailing slash(es); '/' → ''
-	return b;
+	return normalizeRoutePath(b);
 }
 
 /**
@@ -2673,9 +2738,31 @@ export function encodeURL(path, mode, base) {
 		throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
 	}
 	if (path[0] !== '/') return path;
+	path = normalizeRoutePath(path);
 	if (mode === 'memory') return path;
 	if (mode === 'hash') return '#' + base + path;
 	return base + path;
+}
+
+/**
+ * Canonicalize a path-shaped router value to the percent-encoded form browser
+ * URL APIs expose, so a declared route can match `location.pathname` on a cold
+ * load. Two classes are encoded: whole non-ASCII runs (encoding the run rather
+ * than the byte preserves surrogate pairs), and the four ASCII characters the
+ * WHATWG path percent-encode set escapes but `encodeURIComponent` alone would
+ * miss in a path — space, '"', '<', '>', and '`'. Space is the one that shows up
+ * in practice ('/my page' → '/my%20page').
+ *
+ * Everything else stays byte-identical: ordinary ASCII paths, regex
+ * metacharacters, malformed percent text, and existing `%XX` escapes. Because
+ * every output byte is ASCII and outside the escaped set, the operation is
+ * idempotent — `/caf%C3%A9` never becomes `/caf%25C3%25A9`.
+ *
+ * '?' and '#' are deliberately NOT encoded: they are structural delimiters that
+ * stripPath()/encodeURL() rely on to split query and fragment.
+ */
+function normalizeRoutePath(path) {
+	return path.replace(/[^\x00-\x7F]+|[ "<>`]/g, (literal) => encodeURIComponent(literal));
 }
 
 /** Reduce a full path to the pathname used for matching (drop query + hash). */

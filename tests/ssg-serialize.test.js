@@ -2,7 +2,7 @@
 // (client-runtime/ssg/serialize.js). Node env: serialize + preload are DOM-free,
 // so no jsdom is needed. Hand-written ViewNode trees stand in for compiler output
 // (same convention as the other suites).
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
@@ -99,9 +99,15 @@ describe('SSG serializer (M1)', () => {
 		});
 
 		it('true → bare attr; false/null/undefined omit', async () => {
-			expect(await serialize(h('details', { open: true }))).toBe('<details open></details>');
-			const tree = h('div', { id: 'a', 'data-x': false, 'data-y': null, 'data-z': undefined });
-			expect(await serialize(tree)).toBe('<div id="a"></div>');
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			try {
+				expect(await serialize(h('details', { open: true }))).toBe('<details open></details>');
+				const tree = h('div', { id: 'a', 'data-x': false, 'data-y': null, 'data-z': undefined });
+				expect(await serialize(tree)).toBe('<div id="a"></div>');
+				expect(warn).toHaveBeenCalledTimes(1);
+			} finally {
+				warn.mockRestore();
+			}
 		});
 
 		it('skips @event, key, and island directives', async () => {

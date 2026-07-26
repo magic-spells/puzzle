@@ -17,7 +17,12 @@
  * optional (injectable) persistence.
  */
 
-import { PuzzleModel, PuzzleValidationError, safeMerge } from '../model.js';
+import {
+	PuzzleModel,
+	PuzzleValidationError,
+	recordMutationRevision,
+	safeMerge,
+} from '../model.js';
 import { devtoolsFlush } from '../devtools.js';
 import {
 	devperfStoreFlushEnd,
@@ -64,8 +69,8 @@ export class PuzzleAdapterError extends Error {
 
 /**
  * Read a fetch Response body once: parsed JSON when it parses, raw text when it
- * doesn't, undefined when empty/unreadable (covers 204). Used by every write verb
- * for both the merge path and PuzzleAdapterError's `.body`.
+ * doesn't, undefined when empty/unreadable (covers 204). Used by adapter reads
+ * and every write verb for both the merge path and PuzzleAdapterError's `.body`.
  */
 async function readBody(res) {
 	let text;
@@ -430,7 +435,7 @@ export class Store {
 		if (!res.ok) {
 			throw new Error(`[puzzle] load '${type}' failed: ${res.status} ${res.statusText}`);
 		}
-		return res.json();
+		return readBody(res);
 	}
 
 	/** Create or update-in-place by primary key; notifies either way. Public callers use upsert(). */
@@ -580,12 +585,17 @@ export class Store {
 			? this.apiURL + endpoint + '/' + encodeURIComponent(record[pk])
 			: this.apiURL + endpoint;
 		const method = wasSynced ? 'PUT' : 'POST';
+		// Capture the local mutation revision beside the exact body sent. A later
+		// update() advances the edited fields beyond this boundary, so the response
+		// can still contribute untouched server fields without overwriting them.
+		const requestRevision = recordMutationRevision(record);
+		const requestBody = JSON.stringify(record.toJSON());
 		const res = await this._fetch(
 			url,
 			{
 				method,
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(record.toJSON()),
+				body: requestBody,
 			},
 			{ type, method, url }
 		);
@@ -630,7 +640,11 @@ export class Store {
 				}
 				const oldId = record[pk];
 				map.delete(recordKey(oldId));
-				safeMerge(record, body); // includes the new pk
+				// The server-assigned pk is the sanctioned identity change and must
+				// always land. Reconcile every other field against requestRevision.
+				const { [pk]: adoptedPk, ...rest } = body;
+				safeMerge(record, { [pk]: adoptedPk });
+				safeMerge(record, rest, requestRevision);
 				map.set(recordKey(record[pk]), record);
 				record._synced = true;
 				this._notify(type, oldId); // old key: subscribers of the gone id
@@ -644,17 +658,21 @@ export class Store {
 					`[puzzle] save() response for '${type}' carried a different primary key ${JSON.stringify(responsePk)} — ignoring; primary keys are immutable after creation`
 				);
 				const { [pk]: _ignored, ...rest } = body;
-				safeMerge(record, rest);
+				safeMerge(record, rest, requestRevision);
 			} else if (responsePk == null && pk in body) {
 				// An explicit-null (or undefined) pk present in the body would blank the
 				// record's local pk while the type map still keys it under the old id —
 				// index desync + a _notify(type, null). Drop it; keep the local pk (normal,
 				// no warn — an absent/missing pk in the body is expected).
 				const { [pk]: _ignored, ...rest } = body;
-				safeMerge(record, rest);
+				safeMerge(record, rest, requestRevision);
 			} else {
-				safeMerge(record, body);
+				safeMerge(record, body, requestRevision);
 			}
+			// _synced is server-provenance, not a clean/dirty bit: this request
+			// succeeded even when a newer local field was intentionally preserved.
+			// Keeping it true also makes a queued follow-up PUT instead of POSTing a
+			// duplicate after a successful first save.
 			record._synced = true;
 			this._notify(type, record[pk]);
 			this._persist();

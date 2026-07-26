@@ -19,13 +19,14 @@
  * prerenderToDir(app.config, …); prerender() is the DOM-free, filesystem-free core
  * that returns the rendered pages for tests or a custom writer.
  *
- * v1 scope (DOC plan): static paths only — a route whose full path carries a
- * `:param` (or a `*` that is NOT the top-level catch-all) is skipped with a
- * warning; the bare top-level catch-all (`path: '*'`, D19) renders like any
- * static route and its output lands at `<outDir>/404.html` — the static-host
- * convention (GitHub Pages/Netlify/Render/Cloudflare serve it for unknown
- * URLs); a route flagged `prerender: false` gets the untouched shell written at
- * its path. Dynamic `staticPaths()` is an explicit follow-up.
+ * v1 scope (DOC plan): static paths only — a route with a complete `:param`
+ * segment is skipped with a warning. A `:` or `*` inside any other segment is
+ * literal static text, matching the Router's segment compiler. The bare
+ * top-level catch-all (`path: '*'`, D19) renders like any static route and its
+ * output lands at `<outDir>/404.html` — the static-host convention (GitHub
+ * Pages/Netlify/Render/Cloudflare serve it for unknown URLs); a route flagged
+ * `prerender: false` gets the untouched shell written at its path. Dynamic
+ * `staticPaths()` is an explicit follow-up.
  */
 
 import fs from 'node:fs';
@@ -34,6 +35,7 @@ import path from 'node:path';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { Router, encodeURL, normalizeBase } from '../router/router.js';
+import { findShadowedPaths, isDynamicSegment } from '../router/routePath.js';
 import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr, escapeScriptJson } from './serialize.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub } from './assemble.js';
@@ -51,6 +53,8 @@ import { MANAGED_TAGS } from '../headTags.js';
  *   mode; `'static'` additionally captures each page's store snapshot (`data`), its
  *   view/layout `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot
  *   so prerenderToDir can emit true static pages (D81).
+ * @param {Router} [opts.router] preconstructed memory Router used internally by
+ *   prerenderToDir so validation and precedence analysis share one compiled table.
  * @returns {Promise<{
  *   pages: Array<{ path: string, html: string|null, title: string|null,
  *     head: { title: string|null, description: string|null, canonical: string|null,
@@ -88,6 +92,14 @@ export async function prerender(config, opts = {}) {
 	// supports '#id' targets only — the shell surgery keys on the id).
 	parseTargetId(config.target);
 
+	// One Router owns route-shape validation + regex compilation. Direct callers
+	// construct it here; prerenderToDir passes the memory Router it already needs
+	// for whole-table validation, so the SSG never compiles matchers independently.
+	const routeRouter = opts.router ?? new Router(config.routes ?? [], { mode: 'memory' });
+	const shadowedPaths = findShadowedPaths(routeRouter.routeEntries);
+	const shadowedByIndex = new Map(
+		shadowedPaths.map(({ index, shadowedBy }) => [index, shadowedBy])
+	);
 	const entries = enumerateRoutes(config.routes ?? []);
 
 	const pages = [];
@@ -95,6 +107,7 @@ export async function prerender(config, opts = {}) {
 	const warnings = [];
 	let hasCatchAll = false;
 	let builtContext = false;
+	let compiledEntryIndex = 0;
 	if (isStatic && hasGuard(config.routes ?? [])) {
 		const warning =
 			'[puzzle] static output declares route guards, but guards never run in static output (no router)';
@@ -128,20 +141,35 @@ export async function prerender(config, opts = {}) {
 	for (const entry of entries) {
 		const { fullPath, chain } = entry;
 
-		// The bare top-level catch-all (`path: '*'`, D19) is NOT dynamic in the
-		// skip sense — it renders like any static route and lands at 404.html
-		// (see pageOutputPath). The router construction-checks `'*'` anywhere else,
-		// so `fullPath === '*'` is the only legal `*` shape here.
+		// The bare top-level catch-all (`path: '*'`, D19) lands at 404.html (see
+		// pageOutputPath). Every non-bare '*' is ordinary literal segment text, just
+		// as it is in the Router's regex compiler.
 		const isCatchAll = fullPath === '*';
 		if (isCatchAll) hasCatchAll = true;
+		const entryIndex = isCatchAll ? null : compiledEntryIndex++;
 
-		// Dynamic route (`:param`, or a `*` that is NOT the catch-all): v1 skips it
-		// with a warning (DOC plan).
-		if (!isCatchAll && (fullPath.includes(':') || fullPath.includes('*'))) {
+		// Only a complete `:name` segment is dynamic. Colons and stars in any
+		// other segment are regex-escaped literal text by the Router and therefore
+		// produce ordinary prerenderable static paths here.
+		if (!isCatchAll && fullPath.split('/').some(isDynamicSegment)) {
 			skipped.push({ path: fullPath, reason: 'dynamic' });
 			warnings.push(
 				`[puzzle] skipped dynamic route "${fullPath}" — SSG v1 renders static paths only ` +
-					'(a :param/* route needs a staticPaths() hook, a post-v1 follow-up)'
+					'(a :param route needs a staticPaths() hook, a post-v1 follow-up)'
+			);
+			continue;
+		}
+
+		// Hybrid pages are taken over by the live first-match-wins Router. Emitting a
+		// static page for a route an earlier matcher wins would make first paint and
+		// takeover disagree. True static output has no Router, so it deliberately
+		// keeps the page.
+		if (!isStatic && shadowedByIndex.has(entryIndex)) {
+			const shadowedBy = shadowedByIndex.get(entryIndex);
+			skipped.push({ path: fullPath, reason: 'shadowed' });
+			warnings.push(
+				`[puzzle] skipped shadowed route "${fullPath}" — earlier route "${shadowedBy}" ` +
+					'matches it first in hybrid output (routes match in declaration order)'
 			);
 			continue;
 		}
@@ -231,11 +259,11 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 	// page (for example, an all-dynamic app with no beforeMount hook). Per-page
 	// contexts also construct memory routers, but skipped routes never reach that
 	// path; this construction makes their config errors fail the static build.
-	new Router(config.routes ?? [], { mode: 'memory' });
+	const routeRouter = new Router(config.routes ?? [], { mode: 'memory' });
 
 	const targetId = parseTargetId(config.target);
 	const shell = fs.readFileSync(shellPath, 'utf8');
-	const { pages, skipped, warnings } = await prerender(config, { mode });
+	const { pages, skipped, warnings } = await prerender(config, { mode, router: routeRouter });
 
 	if (mode === 'static') {
 		return writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings });
@@ -760,15 +788,26 @@ function managedTagRe(id) {
 
 /**
  * Directory-style output path: `/` → outDir/index.html, `/a/b` →
- * outDir/a/b/index.html. The bare catch-all (`path: '*'`) is the exception — it
- * writes `outDir/404.html`, the filename static hosts serve for unknown URLs.
+ * outDir/a/b/index.html. Percent-encoded route text is decoded to the UTF-8
+ * filesystem name a static server resolves from the browser's encoded request
+ * (`/caf%C3%A9/` → `outDir/café/index.html`); decodeURI deliberately preserves
+ * escaped URI delimiters such as `%2F`. Malformed percent text keeps its current
+ * literal-directory behavior. The bare catch-all (`path: '*'`) is the exception
+ * — it writes `outDir/404.html`, the filename static hosts serve for unknown URLs.
  */
 function pageOutputPath(outDir, routePath) {
 	let outPath;
 	if (routePath === '*') {
 		outPath = path.join(outDir, '404.html');
 	} else {
-		const clean = routePath.replace(/^\//, '').replace(/\/$/, '');
+		let filesystemPath = routePath;
+		try {
+			filesystemPath = decodeURI(routePath);
+		} catch {
+			// Preserve the pre-normalization output for a literal malformed '%'
+			// sequence; the Router also treats malformed literal text as bytes.
+		}
+		const clean = filesystemPath.replace(/^\//, '').replace(/\/$/, '');
 		const rel = clean === '' ? 'index.html' : path.join(clean, 'index.html');
 		outPath = path.join(outDir, rel);
 	}

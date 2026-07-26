@@ -987,6 +987,79 @@ func TestBuildAllowsNestedReservedNames(t *testing.T) {
 	}
 }
 
+func TestBuildHybridRejectsPrerenderPublicAssetCollision(t *testing.T) {
+	requireSSGRuntime(t)
+	files := baseSSGFixture()
+	files["app/public/about/index.html"] = "PUBLIC ABOUT ASSET"
+	root := writeSSGFixture(t, files)
+
+	err := Build(root, Options{Development: true, Output: "hybrid"})
+	want := "[puzzle] prerendered route \"/about\" would overwrite public asset app/public/about/index.html\n" +
+		"at dist/about/index.html; rename the public asset or remove the route output"
+	if err == nil {
+		t.Fatal("expected the hybrid build to reject the route/public asset collision")
+	}
+	if err.Error() != want {
+		t.Fatalf("collision error:\n%s\nwant:\n%s", err, want)
+	}
+}
+
+func TestBuildStaticRejectsPrerenderPublicAssetCollision(t *testing.T) {
+	requireStaticRuntime(t)
+	files := baseSSGFixture()
+	files["app/public/about/index.html"] = "PUBLIC ABOUT ASSET"
+	root := writeSSGFixture(t, files)
+
+	err := Build(root, Options{Development: true, Output: "static"})
+	want := "[puzzle] prerendered route \"/about\" would overwrite public asset app/public/about/index.html\n" +
+		"at dist/about/index.html; rename the public asset or remove the route output"
+	if err == nil {
+		t.Fatal("expected the static build to reject the route/public asset collision")
+	}
+	if err.Error() != want {
+		t.Fatalf("collision error:\n%s\nwant:\n%s", err, want)
+	}
+}
+
+func TestBuildHybridRejectsCatchAllPublicAssetCollision(t *testing.T) {
+	requireSSGRuntime(t)
+	files := baseSSGFixture()
+	files["app/public/404.html"] = "PUBLIC 404 ASSET"
+	root := writeSSGFixture(t, files)
+
+	err := Build(root, Options{Development: true, Output: "hybrid"})
+	want := "[puzzle] prerendered route \"*\" would overwrite public asset app/public/404.html\n" +
+		"at dist/404.html; rename the public asset or remove the route output"
+	if err == nil {
+		t.Fatal("expected the hybrid build to reject the catch-all/public asset collision")
+	}
+	if err.Error() != want {
+		t.Fatalf("collision error:\n%s\nwant:\n%s", err, want)
+	}
+}
+
+func TestBuildHybridAllowsRootRouteToRewritePublicIndexShell(t *testing.T) {
+	requireSSGRuntime(t)
+	files := baseSSGFixture()
+	files["app/routes.js"] = `import Home from './views/Home.pzl';
+import DefaultLayout from './layouts/Default.pzl';
+
+export default [
+  { path: '/', name: 'home', view: Home, layout: DefaultLayout, prerender: false },
+];
+`
+	root := writeSSGFixture(t, files)
+
+	if err := Build(root, Options{Development: true, Output: "hybrid"}); err != nil {
+		t.Fatalf("root route should be allowed to rewrite the public index shell: %v", err)
+	}
+	publicShell := readFile(t, filepath.Join(root, "app", "public", "index.html"))
+	distShell := readFile(t, filepath.Join(root, "dist", "index.html"))
+	if distShell != publicShell {
+		t.Error("prerender:false root route should rewrite the public index shell byte-for-byte")
+	}
+}
+
 // TestValidatePublicReservedNamesCaseInsensitive proves the reserved-name check
 // folds case: on the case-insensitive filesystems macOS/Windows default to, a
 // public/App.js or STYLES.CSS would still clobber the compiler's dist/app.js /

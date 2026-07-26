@@ -653,10 +653,10 @@ describe('Router transitions — interruption reusing the pending-out subtree (D
 // completes must not wedge an in-flight transition. Two paths: (a) an UNMATCHED
 // push is a warn-and-no-op — the token bump now happens only AFTER the match
 // check, so it cancels nothing; (b) a MATCHED push whose gated data() rejects
-// restores the stalled outgoing unit (cancels its out animation via
-// animate.js cancelAnimations — WAAPI cancel clears the fill holding it
-// invisible) and clears #pendingOut, since a failed navigation leaves #state —
-// and therefore that unit — as the current view.
+// restores the stalled outgoing unit (cancels its retained Puzzle-owned out
+// handle — WAAPI cancel clears the fill holding it invisible) and clears
+// #pendingOut, since a failed navigation leaves #state — and therefore that
+// unit — as the current view.
 describe('Router transitions — incomplete navigations do not strand an in-flight out (strand fix)', () => {
 	function flatRoutes(log, extra = []) {
 		const One = makeView('one', log);
@@ -717,6 +717,98 @@ describe('Router transitions — incomplete navigations do not strand an in-flig
 		expect(el.querySelector('.two')).not.toBeNull();
 		expect(el.querySelector('.one')).toBeNull();
 		expect(router.current.path).toBe('/two');
+	});
+
+	it('failed recovery cancels the router out animation but preserves an app-owned root animation', async () => {
+		waapi = installFakeAnimate();
+		const log = [];
+		let appOwned = null;
+		class One extends PuzzleView {
+			animations = { out: OUT };
+			mounted() {
+				appOwned = this.element.animate(
+					[{ transform: 'scale(1)' }, { transform: 'scale(1.02)' }],
+					{ duration: 5000, fill: 'both' }
+				);
+			}
+			render() {
+				return h('puzzle-view', { class: 'one' }, [text('ONE')]);
+			}
+		}
+		const Two = makeView('two', log);
+		class Bad extends PuzzleView {
+			async data() {
+				throw new Error('boom');
+			}
+			render() {
+				return h('puzzle-view', { class: 'bad' }, [text('BAD')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'one', view: One, layout: PlainLayout },
+			{ path: '/two', name: 'two', view: Two, layout: PlainLayout },
+			{ path: '/bad', name: 'bad', view: Bad, layout: PlainLayout },
+		];
+		const { router, el } = await boot(routes);
+		await tick();
+		expect(appOwned).not.toBeNull();
+
+		const p1 = router.push('/two');
+		await tick();
+		const outAnim = waapi.animations.at(-1);
+		expect(outAnim).not.toBe(appOwned);
+
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		await router.push('/bad');
+		await p1;
+		await tick();
+
+		expect(errSpy).toHaveBeenCalledWith('[puzzle] navigation data() failed:', expect.any(Error));
+		expect(outAnim.cancel).toHaveBeenCalledOnce();
+		expect(appOwned.cancel).not.toHaveBeenCalled();
+		expect(appOwned.finishedState).toBe('running');
+		expect(el.querySelector('.one')).not.toBeNull();
+		expect(router.current.route.name).toBe('one');
+	});
+
+	it('failed recovery cancels a naturally finished out animation that is still filling the root', async () => {
+		waapi = installFakeAnimate();
+		const log = [];
+		class Bad extends PuzzleView {
+			async data() {
+				throw new Error('boom');
+			}
+			render() {
+				return h('puzzle-view', { class: 'bad' }, [text('BAD')]);
+			}
+		}
+		const routes = flatRoutes(log, [{ path: '/bad', name: 'bad', view: Bad, layout: PlainLayout }]);
+		const { router, el } = await boot(routes);
+		await settle();
+		log.length = 0;
+
+		const p1 = router.push('/two');
+		await tick();
+		const outAnim = waapi.animations.at(-1);
+		expect(outAnim.options.fill).toBe('both');
+
+		// Resolve the WAAPI promise, but start the failing navigation before the
+		// queued playOut continuation can commit. Recovery must still retain and
+		// cancel this finished effect so its opacity:0 fill no longer owns the root.
+		outAnim.finish();
+		expect(outAnim.finishedState).toBe('finished');
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const failed = router.push('/bad');
+
+		await failed;
+		await p1;
+		await tick();
+
+		expect(errSpy).toHaveBeenCalledWith('[puzzle] navigation data() failed:', expect.any(Error));
+		expect(outAnim.cancel).toHaveBeenCalledOnce();
+		expect(outAnim.finishedState).toBe('cancelled');
+		expect(el.querySelector('.one')).not.toBeNull();
+		expect(router.current.route.name).toBe('one');
 	});
 
 	it('a matched push whose data() rejects mid-out restores the outgoing view, clears the stall, and later navigation works', async () => {

@@ -29,6 +29,8 @@ so any measurement has a copy-pasteable URL:
 /?scenario=islands&n=100&descendants=200
 /?scenario=formatters&n=10000
 /?scenario=listener-churn&n=10000&binding=churn
+/?scenario=form-state&n=200
+/?scenario=flip-churn&n=500
 /?scenario=loop-trap&cap=500
 ```
 
@@ -47,7 +49,8 @@ window.__STRESS__ = {
   ready,                  // Promise — resolves once the app has mounted
   scenarios,              // ['keyed-list', 'virtual-list', 'subscriptions', 'async-waterfall',
                           //  'deep-nest', 'write-storm', 'islands', 'formatters',
-                          //  'listener-churn', 'route-churn', 'loop-trap']
+                          //  'listener-churn', 'route-churn', 'form-state',
+                          //  'flip-churn', 'loop-trap']
   definitions,            // [{ name, label, blurb, ops }]
   async select(name, params),
   async reset(),
@@ -164,7 +167,7 @@ by hand. The measured comparison, and what it proves about `shallowEqual`, is in
 a direct A/B against `keyed-list`.
 
 Ops: `create-1k`, `create-10k`, `create-50k`, `update-every-10th`, `select-row`,
-`swap-rows`, `append-1k`, `fast-scroll`, `clear`.
+`swap-rows`, `append-1k`, `fast-scroll`, `native-scroll`, `clear`.
 
 The comparison is apples-to-apples by construction:
 
@@ -191,6 +194,55 @@ deterministic rather than dependent on frame timing.
 window is capped at 25 rows, so anything above ~180 elements means windowing
 broke. Also a spacer-geometry failure: `topPx + rendered + bottomPx` must equal
 `total × 36px` exactly, or the scrollbar is lying about how much list there is.
+
+### `native-scroll` — the real `@scroll` path, which `fast-scroll` bypasses
+
+`fast-scroll`'s directness has a consequence: the `@scroll` handler fires *too*,
+so `applyScroll` runs twice per jump and the second call is always a no-op on a
+bucket the op has already moved. **The asynchronous event path has therefore
+never been the thing under measurement.** `native-scroll` writes `scrollTop` ten
+times, awaits a frame between writes, and then touches nothing — every window
+move has to come from the browser's own event.
+
+It is a **behaviour gate, not a timing measurement** (`iterations: 1`,
+`warmup: 0`). Its milliseconds are mostly the frames it waits between writes and
+mean nothing. Scroll events also **coalesce** — the browser fires them during
+"update the rendering", so two writes inside one frame collapse into one event —
+which makes the event count legitimately non-deterministic. It is printed in the
+op's `detail` line and is deliberately **not** a pinned counter.
+
+Two things about it *are* deterministic, and they are the assertions:
+
+| counter | claim |
+| --- | --- |
+| `vlGeometryOk` | `topPx + rendered × 36 + bottomPx === total × 36` (within 0.5px) after the burst settles |
+| `vlWindowMatchesScroll` | the mounted window agrees with the **final** `scrollTop` — the first rendered row is the record that scroll position asks for |
+
+The second one was the actual unknown. `applyScroll` is fully synchronous per
+event, with no rAF and no throttle, and `data()` re-queries and re-sorts the full
+collection on every bucket change — ~17ms per jump at 50,000 records, which is
+longer than a frame. Nothing in the design guarantees the window is not left a
+bucket behind.
+
+**It converges, in one frame.** Measured at 50,000 records in a production
+build: 10 `scrollTop` writes produced **9 scroll events** (the first write is
+`0` on an already-zero scroll position, so it fires nothing), **9 window moves**,
+and the window agreed with the final `scrollTop` after **1 frame** — the frame in
+which the last event was delivered. Not one event was coalesced away at one
+write per frame, and no jump was skipped.
+
+The convergence wait is capped at 60 frames and the count it actually needed is
+reported, so "converged after 1 frame" stays distinguishable from "converged only
+because the op waited long enough". Hitting the cap would be a finding, not a
+flake.
+
+**What a bad result looks like:** `vlWindowMatchesScroll` reading 0 — the window
+settled on a stale bucket, which means a synchronous per-event recompute cannot
+keep up with the events and the handler needs coalescing of its own.
+`vlGeometryOk` reading 0 means the spacers stopped describing the list, which the
+`validate()` geometry check would also catch. A `detail` line reporting far fewer
+than 9 events means the browser coalesced writes the op assumed were separate,
+and the 9 window moves would no longer be a meaningful count.
 
 ### The measured comparison
 
@@ -802,25 +854,36 @@ signature of a reused route ancestor. Since the deepest ancestor renders
 ```
 
 — **~8.6/sec for this five-level chain**, and ~20/sec for a one-level ancestor.
-Both 20/sec and 10/sec were tried and both tripped it. When it fires, devperf
-**suppresses that ancestor's renders for 1000ms**, its `<Slot/>` stops updating,
-and the routed child never mounts:
+Both 20/sec and 10/sec were tried and both tripped it.
+
+When this was found, the cross-frame guard **suppressed** the tripped ancestor's
+renders for 1000ms. Its `<Slot/>` stopped updating, the routed child never
+mounted, and the tree stayed broken until the next navigation because nothing
+retries a missed mount:
 
 ```
 [puzzle perf] __PUZZLE_PERF__: stopped RcLevel4 after 60 renders in one second (98% wasted)
 [puzzle] a routed child did not mount — does the parent view template include a <Slot/>?
 ```
 
-The tree then stays broken until the next navigation, because nothing retries the
-missed mount. This is development-only — production compiles devperf out
-entirely — but in development it means fast navigation over a deep route tree
-**breaks the app**, and the warning does not say that is what happened.
+**That was a defect, and it is fixed.** The cross-frame guard is a heuristic
+about waste, not proof of a loop, and a dev-only instrument must not change what
+the app does — so it now warns and never gates a render (D121). Fast navigation
+over a deep route tree still trips it at the same ~8.6/sec, but the app keeps
+working and the warning says what it means:
 
-The paced arms therefore run at 5 navigations/sec, well under the limit.
-`navigate-burst-100` and `params-burst-100` keep the unpaced behaviour and are
-the arms `benchmarks/scenarios.mjs` records — in production, where there is no
-detector to distort them. Press `navigate-burst-100` in a dev build to watch the
-guard fire.
+```
+[puzzle perf] __PUZZLE_PERF__: RcLevel4 rendered 60 times in one second and 98% produced no DOM change — likely a render loop
+```
+
+The recursive guard is unchanged and still stops at 100 executions in one chain.
+
+The paced arms still run at 5 navigations/sec, comfortably under the threshold,
+so the console stays quiet and a run is not narrated by warnings it caused
+itself. `navigate-burst-100` and `params-burst-100` keep the unpaced behaviour
+and are the arms `benchmarks/scenarios.mjs` records — in production, where the
+detector does not exist at all. Press `navigate-burst-100` in a dev build to
+watch the guard warn.
 
 **A paced op's milliseconds are an input, not a measurement**, and its `detail`
 line says so on the line itself. Only the burst arms produce a real timing.
@@ -828,10 +891,383 @@ line says so on the line itself. Only the burst arms produce a real timing.
 **What a bad result looks like:** `rcAncestorMutations` above 500 on `navigate`
 or above 0 on `params` (an ancestor is mutating DOM it should not), `rcCommits`
 below the navigation count (the op is averaging over the wrong denominator), or
-`rcLeafMounts` short of `rcCommits` on `navigate` — which is the detector having
-fired, and the run being worthless.
+`rcLeafMounts` short of `rcCommits` on `navigate` — a committed navigation whose
+leaf never mounted. That last one used to mean the cross-frame guard had
+suppressed an ancestor and the run was worthless; now that the guard only warns,
+it means a real mounting bug.
 
-## Scenario 11 — `loop-trap`
+## Scenario 11 — `form-state`
+
+**Probes:** what does a form cost to re-render, and what does one keystroke cost
+to get into state?
+
+200 rows, each one controlled `<input>` and one controlled `<select>` of 8
+options — 400 controlled form properties on screen, 2,400 live elements — plus
+two typing targets bound to different state layers, plus one 24-field store
+record. Ops: `rerender`, `rerender-dirty`, `type-local`, `type-store`,
+`type-event`. Parameter: `n` (field rows).
+
+The two typing targets are the A/B:
+
+- `.fs-draft` — `setData('draftText', …)`. The **local** layer: re-render only,
+  `data()` never re-runs.
+- `.fs-bound` — `record.update({ text })`. The **model** layer: validate,
+  notify, `data()`, render.
+
+`draftText` is a key `data()` deliberately never returns. If it did,
+`#recompose()`'s `{ ...#local, ...#model }` would overlay the model value on the
+local one and the first store flush would erase the draft mid-typing. That
+clobber is documented in the scenario rather than counted — its interesting form
+depends on flush timing and is not deterministic.
+
+Every op installs **both** probes — the two controlled-property write counters
+and the `normalizedSchema` counter — so no counter is ever fabricated and the
+two typing arms carry identical instrument load. The cost of that uniformity is
+that **none of the timings are clean**: they all include the probe, and the
+finding here is counts-only. The one comparison worth reading off the clock is
+`type-store` minus `type-local`, which is fair precisely because their
+instrument load is identical by construction — though as measured below, even
+that one lands inside the noise.
+
+Typing drives **real events** — `el.value = …` then
+`dispatchEvent(new Event('input', { bubbles: true }))`. The `fast-scroll`
+precedent from `virtual-list` does *not* transfer: a scroll event is dispatched
+by the browser asynchronously at frame time, so an op built on it folds frame
+scheduling into its measurement. `dispatchEvent` runs the listener synchronously
+on the calling stack. Both flushes are then forced by hand — `flushUpdates()`
+*is* the body of the rAF callback `#scheduleRender()` arms, and `store.flush()`
+skips the rAF plus the 220ms D63 fallback — which makes each op bounded by a
+count rather than by 200 frames of scheduler (~3,300ms, whose milliseconds would
+be an input, and which the runner's clamp guard would rightly reject).
+
+| arm | renders | `data()` runs | `<input>.value` writes | `<select>.value` writes | `normalizedSchema()` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `rerender` (clean) | 20 | 20 | **0** | **4,000** | 0 |
+| `rerender-dirty` (control) | 20 | 20 | 4,000 | 8,000 | 0 |
+| `type-local` (setData) | 200 | **0** | 0 | **40,000** | 0 |
+| `type-store` (record.update) | 200 | 200 | 0 | 40,000 | **600** |
+| `type-event` (gate) | 2 | 1 | 0 | 400 | 3 |
+
+Production medians, 15 iterations, across four runs: `rerender` ~21ms,
+`rerender-dirty` 25–29ms, `type-local` 140–149ms, `type-store` 145–151ms. All
+four carry the probes, so none of those numbers is a clean framework cost.
+
+### A controlled `<select>` costs a DOM property write on every render, forever
+
+`viewManager.js` handles the two controlled form properties in two different
+places, and only one of them compares first:
+
+```js
+// patchAttrs — the input path
+if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
+  if (el.value !== stringify(value)) setAttr(el, name, value);
+}
+
+// reassertSelectValue — after patchChildren, for every <select>
+el.value = stringify(attrs.value);
+```
+
+The re-assertion exists for a good reason: a select's `value` cannot be applied
+before its `<option>` children exist, so it has to run after `patchChildren`
+settles. But it runs on **every patch of every select**, whether or not the
+bound value moved and whether or not the option list churned.
+
+Twenty re-renders in which nothing changed: the 200 inputs write **zero**, the
+200 selects write **4,000**. Two hundred keystrokes into an unrelated field:
+still zero input writes, and **40,000** `HTMLSelectElement.value` writes to type
+one sentence.
+
+### The comment above `patchAttrs` is not quite what the code does
+
+It says a select's `value` is "left to the generic path here since its options
+may not exist yet at attr-patch time" — but the generic path *writes*. A
+`<select>` is neither `INPUT` nor `TEXTAREA`, so it misses the live-DOM compare
+and falls through to `else if (oldAttrs[name] !== value) setAttr(...)`, which
+sets `el.value` against an option list that has not patched yet.
+`reassertSelectValue` then sets the identical value again a few lines later.
+
+`rerender-dirty` measures **8,000 writes for 4,000 selects patched — exactly two
+each**. This scenario was built expecting one write per select per render in
+both arms; the control found two, which is the entire reason a control exists.
+That first write is redundant in both directions: skipped when the value did not
+change, immediately redone when it did. Skipping `value` for `SELECT` in
+`patchAttrs` would remove it, since the re-assertion covers the same ground a
+few lines later — **not built, not shipped, and not measured beyond the counts
+above**.
+
+### One keystroke through `record.update()` normalizes the schema three times
+
+`PuzzleModel.normalizedSchema()` rebuilds its descriptor map from
+`Object.entries(this.schema)` on every call and is not memoized. A single-field
+`update()` reaches it three times:
+
+| call site | why |
+| --- | --- |
+| `primaryKey()` | the immutable-primary-key guard at the top of `update()` |
+| `_collectErrors()` | the §20 validation pass |
+| `Store.recordChanged()` → `primaryKey()` | building the notify key |
+
+200 keystrokes, **600 calls**, each one an `Object.entries` over 24 fields plus a
+`RelationshipBuilder` filter. `_collectErrors`'s `fields` filter narrows the
+*checks* to the patched key but never the *iteration* — all 24 entries are
+walked either way. The count is measured by wrapping the method, not asserted
+from the source, and the op throws if it is not exactly 3 per keystroke.
+
+And yet the A/B built to price that round trip **cannot see it**. Across four
+runs `type-store` came in +7ms, +5ms, +0ms and +2ms against `type-local` over
+200 keystrokes — at or below the ±1–3% spread on a ~150ms op. So the
+honest reading is an upper bound, not a measurement: validation over 24 fields,
+three schema normalizations, subscriber notification and a full `data()` re-run
+together cost **under ~35µs per keystroke**, and are not reliably separable from
+the local path at this size.
+
+That is the uncomfortable half of the finding. The A/B did not fail; it was
+swamped. The 40,000 `<select>.value` writes that *both* arms pay — for a
+keystroke in a field neither select is bound to — dominate the op so completely
+that the entire store round trip disappears into the noise beside them. Anyone
+optimising a slow Puzzle form should read that ordering carefully before
+reaching for the data layer.
+
+### A re-render during typing does not write `value`, and nothing was pinning that
+
+There is no caret mechanism in Puzzle. `selectionStart` and `setSelectionRange`
+appear nowhere in the repo, and `document.activeElement` appears nowhere in
+`client-runtime/`. Caret safety is *emergent* from `patchAttrs`'s live-DOM
+compare: mid-keystroke the bound value already equals the live property, so
+nothing is written and the caret is never disturbed. `tests/vdom.test.js` pins
+that on a hand-built tree; nothing pinned it end to end at scale.
+`fsInputValueWrites === 0` across 20 re-renders of 200 controlled inputs is that
+pin, and `rerender-dirty`'s 4,000 is what stops it from being a dead code path.
+
+The caret position itself is read in `type-event` and reported in `detail` only
+(it reads `caret at 20/20`). It is deliberately **not** a counter: Blink
+short-circuits some identical value assignments, so a passing caret check could
+mean the engine preserved it rather than the framework — and only one of those
+is a claim about Puzzle. The counter observes the framework's *decision*; the
+caret read observes an *effect* that has two possible causes.
+
+`type-event` is a behaviour gate rather than a measurement, and it fires one real
+event per binding, not one overall: both typing arms are measured, so an arm
+that quietly stopped working would otherwise just look fast.
+
+**What a bad result looks like:** `fsSelectValueWrites` of 0 in `rerender` means
+the renders never reached the grid and the input's zero measured nothing.
+`fsInputValueWrites` of 0 in `rerender-dirty` means the input write path is dead
+and the clean arm's zero proves nothing. `fsDataRuns` of 0 in `type-store` means
+the store comparison measured nothing. `fsInputValueWrites` above 0 in
+`rerender` would mean the live-DOM compare has been lost and every controlled
+input in every Puzzle app now eats the caret on re-render. `fsSchemaNormalizations`
+of anything but 600 in `type-store` means either the guard, the validation pass
+or the notify key moved — or that someone memoized `normalizedSchema()`, in
+which case the number should be 0 and this table needs rewriting. `validate()`
+also fails outright if the store has storage configured, because every flush
+would then serialize the whole store and the schema counts would stop meaning
+what they say.
+## Scenario 12 — `flip-churn`
+
+**Probes:** the one place the D85 FLIP implementation interleaves layout reads
+and layout writes, and what that costs once N rows go through it at once.
+
+`client-runtime/views/flip.js`'s `beginFlip()` is properly two-phase and says so
+in its own comment: it measures *every* candidate in one loop, then cancels
+in-flight flips in a second loop, because cancelling drops the transform and
+later candidates must still be able to read their mid-flight rects.
+
+`playFlip()` does not maintain that separation. Per element it reads
+`getBoundingClientRect()`, reads `getComputedStyle().transform`, then writes
+`el.animate()` — read, write, read, write, N times. Nothing had ever put a large
+N through it.
+
+500 rows. Ops: `shuffle`, `shuffle-noflip`, `interrupt`.
+
+| op | what it does | what it measures |
+| --- | --- | --- |
+| `shuffle` | one reorder of 500 rows carrying `flip={ duration: 2000 }` | `flipMeasured`, `flipAnimated`, `flipSkipped` — the census of what flip.js did |
+| `shuffle-noflip` | **the control.** The identical rows, reordered identically, with no `flip` attribute anywhere | all four flip counters must be 0 |
+| `interrupt` | 4 reorders back to back with no `await` between them | `flipCancelled` — `cancelTrackedFlip`'s evict-before-cancel discipline, and playFlip's settle-callback identity re-check |
+
+**The reorder is a single-step rotation**, and both properties that makes it have
+are load-bearing. Every row's layout position moves by exactly one row height, so
+every candidate clears `MIN_DELTA` and the animated count is `N` by construction
+— no fixed points, and none when the rotation is applied four times either, so
+`interrupt`'s counters are arithmetic rather than a record of where rows happened
+to land. And the keyed patcher needs exactly **one** `insertBefore` to produce it
+(moving back to front, only the wrapped row is out of place), so the DOM move
+cost is a constant while the flip cost is `O(N)`. It is a rotation, not a random
+shuffle; the op keeps the name because it is the reorder arm.
+
+**The control is a second template branch, not a falsy `flip` value.**
+`flip={ enabled && opts }` is the documented way to disable a row's flip and it
+would guarantee an identical vnode shape in one place — but the attribute *key*
+would still be present, so `patchKeyedChildren`'s `hasFlip` check would fire,
+`beginFlip` would be **called**, and the control would pay a full `O(rows)`
+candidate scan before bailing. A control that pays part of what it is controlling
+for understates the answer. The price of two branches is that switching arms
+remounts every row, which each op settles untimed before it measures anything.
+
+Both arms carry the same probe, gated on the same row elements, so the control's
+zeroes are a measurement — nothing read those rects — rather than a probe that
+stopped looking.
+
+### Flip is 99% of the reorder
+
+Production medians, 15 iterations:
+
+| arm | script | MAD |
+| --- | ---: | ---: |
+| `shuffle` (flip) | **68.5ms** | 1% |
+| `shuffle-noflip` (control) | **0.80ms** | 0% |
+| difference — flip.js | **67.7ms** | **98.8%** |
+
+The same 500 rows, the same rotation, the same single `insertBefore`. Reordering
+them costs 0.8ms; animating that reorder costs **eighty-five times** as much
+again — **135µs per row**, for a row that is three elements and moves 36px.
+
+The flip arm's milliseconds carry the probe and the control's essentially do not
+(the `getBoundingClientRect` wrapper is entered 1,000 times in one arm and never
+in the other), so 67.7ms is an upper bound rather than a clean subtraction. The
+wrapper is a `WeakSet` lookup and a `Map` read-write; 1,000 of them are a
+fraction of a millisecond against a delta of 68.
+
+### The cost is forced layout and style, not the framework's JavaScript
+
+The CDP renderer decomposition is where this scenario earns its keep, because the
+in-page clock alone would have been read as "flip.js is slow":
+
+| arm | task | layout | style | other (framework JS) |
+| --- | ---: | ---: | ---: | ---: |
+| `shuffle` (flip) | 193ms | **92.3ms** | **54.6ms** | 45.9ms |
+| `shuffle-noflip` (control) | 6.05ms | 0.31ms | 0.06ms | 5.66ms |
+| ratio | 32× | **~300×** | **~900×** | 8.1× |
+
+**76% of the flip arm's main-thread time is the engine reflowing and restyling**
+(146.9ms of 193ms), against 6% for the control. The framework's own JavaScript
+grows by 8×; layout grows by ~300× and style by ~900× — the control's
+0.06ms makes that last ratio coarse, and the order of magnitude is the point.
+This is the
+read/write interleave being paid for, not slow framework code — `playFlip` reads
+a rect, starts an animation (dirtying style), reads the next rect (forcing style
+and layout again), and repeats N times.
+
+`beginFlip`'s discipline is exactly what avoids this in the First phase: N
+consecutive reads with nothing written between them force layout **once**. The
+Last phase does not have that property.
+
+### `flipMeasured` is the candidate count, and candidates are every retained row
+
+This is the count worth reading carefully, because "500" is not the obvious
+answer to "how many rows did flip measure".
+
+A candidate is a **retained keyed row with `flip` enabled and a live old element**
+— not a row that moved, and not a row that will animate. `beginFlip` collects
+them from the keyed patcher's `pairs` *before anything has moved*, so "did it
+move" is not a question it can ask yet. Fresh mounts have no old counterpart and
+removed rows never appear in `pairs`, so both exclusions fall out by
+construction; everything else is in.
+
+| one reorder of 500 rows | count |
+| --- | ---: |
+| candidates measured by `beginFlip` (First) | 500 |
+| re-measured by `playFlip` (Last) | 500 |
+| **forced rect reads** | **1,000** |
+| animated (delta ≥ `MIN_DELTA`) | 500 |
+| skipped under `MIN_DELTA` | 0 |
+
+So a flip reorder reads every candidate's rect **twice**, and the probe cannot
+tell the two phases apart from the outside — a wrapper on
+`getBoundingClientRect` sees a call, not a caller. It does not have to: within
+one patch flip.js reads each element exactly twice, and the scenario controls
+when a patch happens because it calls `refresh()` itself and `refresh()` is
+synchronous. The *n*th read of an element inside a patch names the phase. A third
+read, or a Last count that disagrees with the First count, fails `validate()` —
+which is what makes "500" a measured candidate count rather than an assumption.
+
+### An interrupted reorder cancels the entire previous generation
+
+`interrupt` issues its four rotations back to back with no `await`, inside the
+rows' explicit 2,000ms duration, so each one provably begins while the previous
+flip is still running. The duration is what makes the op **count-bounded**: a
+fixed sleep would make milliseconds an input, and the harness's whole-second
+clamp guard would rightly reject the sample set.
+
+| 4 back-to-back reorders of 500 rows | count |
+| --- | ---: |
+| candidates measured | 2,000 |
+| animated | 2,000 |
+| **in-flight flips cancelled** | **1,500** |
+
+1,500 is 3 × 500: the first reorder starts quiesced and cancels nothing, and
+every later one cancels the whole previous generation. That number is the
+assertion on two pieces of flip.js at once. `cancelTrackedFlip` evicts the
+WeakMap entry *before* calling `cancel()`, and `playFlip`'s settle callback
+deletes the entry only if it still points at *its own* animation — if a
+superseded animation's rejection evicted its successor, the next reorder would
+find nothing to cancel and this would read 1,000 instead.
+
+An interrupted reorder is **1.7× a clean one**: 453ms for four, or 113ms each,
+against 68.5ms standalone. The extra is the 500 cancellations plus measuring
+mid-flight rects, which forces layout with 500 active transforms in the tree —
+`interrupt`'s style time (253ms) overtakes even its layout time (245ms).
+
+### Any re-render during a flip restarts every flip on the list
+
+Found while building the probe, not predicted. A `refresh()` that changes nothing
+— the scenario's own result readout — still enters `patchKeyedChildren` with
+`hasFlip` true, so `beginFlip` collects all 500 rows as candidates and
+`cancelTrackedFlip` cancels all 500 in-flight animations. `playFlip` then
+measures the post-cancel layout position against the mid-flight rect and starts
+500 **new** animations.
+
+That is correct behaviour and it is why `beginFlip` measures before it cancels:
+the row picks the animation back up from where it visually was rather than
+snapping. But the cost is a second full flip cycle for a render that changed no
+row, and on a list re-rendering at frame rate it would be a flip cycle per frame.
+The scenario has to hold its counting window open only over the reorders and keep
+*tracking* past them, or these cancellations would be attributed to the op that
+follows.
+
+### The `__PUZZLE_HAS_FLIP__` bundle cost
+
+`__PUZZLE_HAS_FLIP__` is a **source** fact: `plugin.ScanUsage` reads the
+templates, so one `flip` attribute anywhere in `examples/stress` turns the define
+true for the *whole* bundle and pulls `flip.js` into every other scenario's code.
+Measured on the production bundle, by building the identical source three ways:
+
+| build | `app.js` | `flip.js` in it |
+| --- | ---: | --- |
+| before this scenario existed | 181,133 B | no |
+| with the scenario, `flip` attribute stripped | 191,031 B | no |
+| with the scenario as shipped | 192,430 B | yes |
+
+**`flip.js` costs 1,399 bytes minified (+0.73%)**; the scenario's own code is the
+other 9,898. The middle row is the isolation: the same file, the same 500 rows,
+one attribute removed, and the runtime module drops out. (It also confirms the
+scan does not read HTML comments — the template's comment quotes a `flip={ … }`
+spelling and that build still came out without it.)
+
+**What a bad result looks like:** `flipMeasured` reading 0 in the flip arm, which
+means `beginFlip` never measured anything and every other zero next to it is
+meaningless — `validate()` fails on exactly that. Any non-zero
+`flipMeasured`/`flipAnimated`/`flipCancelled` in the **control** arm, which would
+mean flip.js ran on a list with no `flip` attribute. `flipCancelled` reading
+1,000 rather than 1,500 on `interrupt`, which is the specific signature of a
+superseded animation's settle callback evicting its successor's WeakMap entry.
+`flipSkipped` above 0, since a rotation moves every row a full row height and
+nothing may fall under `MIN_DELTA`. And a `flipMeasured` that disagrees with the
+playFlip re-measure count, or any third read of an element inside one patch —
+both fail `validate()`, because both mean the phase model the counts rest on has
+stopped holding.
+
+**The two hazards that make every counter read 0 while nothing looks wrong.**
+`beginFlip` bails **before any measurement** when the OS prefers reduced motion
+and when the runtime has no WAAPI. Either produces zero rect reads, zero
+animations and zero cancellations — which is also what a completely broken flip
+implementation produces. `validate()` therefore checks
+`matchMedia('(prefers-reduced-motion: reduce)')` and `Element.prototype.animate`
+*first* and fails with its own message, rather than reporting the zeroes as a
+clean result.
+
+## Scenario 13 — `loop-trap`
 
 **Probes:** the D121 loop detector (`client-runtime/devperf.js`), which had a
 unit test and **had never fired in a real browser**.
@@ -858,9 +1294,17 @@ Two deliberate pathologies, each behind its own explicit button. Ops:
 | `recursive-loop` | `recursive` | **depth 100** | `RECURSION_LIMIT = 100` |
 | `runaway-rerender` | `cross-frame` | **60 renders, 97% wasted** | `RUNAWAY_RENDER_LIMIT = 60`, `RUNAWAY_WASTED_RATIO = 0.9` |
 
-In both cases the detector **stopped the loop**: each arm ended at its detection
-count, far below the scenario's own hard cap of 500. D121 works as specified in a
-real browser.
+Each arm ended at its detection count, far below the scenario's own hard cap of
+500. D121 works as specified in a real browser.
+
+**Which thing did the stopping differs by arm, and that is the contract.** The
+recursive guard suppresses: devperf itself refuses further renders in that chain,
+so `recursive-loop` cannot continue. The cross-frame guard only *warns* — a waste
+heuristic must not change what an app does (see scenario 10's route-churn
+finding) — so `runaway-rerender` would keep looping to the cap on its own.
+`awaitEnd()` stops the cell the moment it sees the detection, which is what makes
+the reported iteration count the count at which the detector spoke. In a build
+with no detector at all, the hard cap is the only thing that ends either arm.
 
 The verdict is rendered on the page, not just logged. The detector also emits
 `perf-warning` over the DevTools bridge, so an attached Performance panel shows
@@ -935,14 +1379,37 @@ counter being measured.
 
 ## Not yet implemented
 
-Three scenarios from the original plan remain **not built**. Nothing in the app
-references them; they are listed here as future work, not as shipped features.
+**One** scenario from the original plan remains not built. Nothing in the app
+references it; it is listed here as future work, not as a shipped feature.
 
 | scenario | would probe |
 | --- | --- |
-| `form-state` | `setData` throughput under a typing burst |
-| `virtual-scroll` | the userland windowing recipe as its own scenario (partly superseded by `virtual-list`) |
-| `morph-flip` | morph transitions and `flip` reordering under load |
+| `morph-flip` | morph transitions across a route swap, with `flip` reordering underneath one |
+
+`flip` reordering under load is now `flip-churn` (scenario 12 above), so what is
+left of `morph-flip` is the **morph** half — and that is why it is still
+unbuilt rather than merely unwritten. Morph fires only on a **router swap**: the
+handler is a slot on the router (`app.js` hands it over, `enableMorph(app)`
+fills it), and the router calls `leave` and `enter` around a committed
+navigation and nowhere else. So there is nothing to morph inside Home's stage,
+where every other scenario lives. It needs the same
+structure `route-churn` needed — a sibling route subtree with real route nodes,
+outside `/` — plus `@magic-spells/morph-engine` in this example's manifest,
+which nothing here depends on today. Both are real work, and neither is work
+`flip-churn` did.
+
+`virtual-scroll` has been **dropped**, not deferred. It would have probed the
+userland windowing recipe — spacers, a computed slice, a `@scroll` handler — and
+`virtual-list` already runs exactly that recipe over 50,000 real store records.
+The one thing it still had to offer was the *native* scroll path, since
+`fast-scroll` drives the window by hand; `native-scroll` (scenario 2 above) now
+covers that directly, on the same records and the same rows. A second scenario
+would measure the same code twice.
+
+`form-state` **is now built** (scenario 11 above), and it grew past the original
+one-line plan: "`setData` throughput under a typing burst" turned out to be the
+*cheap* half of the question. The expensive half is what the rest of the form
+pays for that keystroke.
 
 `route-churn` **is now built** (scenario 10 above). An earlier draft's
 scaffolding for it — a five-level nested route tree with 50 generated leaf
@@ -964,7 +1431,9 @@ app/
   row-metrics.js            child data() counter that survives a production build
   nest-metrics.js           the same, for deep-nest's node data() runs
   rc-metrics.js             the same, per route level — renders vs data() runs
-  models/                   one record schema, registered per scenario type
+  models/
+    record.js               one general-purpose schema, registered per scenario type
+    form-record.js          form-state's 24-field record, and only its own
   layouts/
     StressLayout.pzl        the lab's chrome
     RcLayout.pzl            route-churn's layout, panel and ops (reused level 0)
@@ -983,6 +1452,8 @@ app/
     Islands.pzl                     20,000 frozen nodes, observed
     Formatters.pzl                  the built-in registry priced
     ListenerChurn.pzl               churn / stable / none DOM handler binding
+    FormState.pzl                   400 controlled form properties under typing
+    FlipChurn.pzl                   N rows through the D85 FLIP read/write interleave
     LoopTrap.pzl + LoopCell.pzl     the D121 detector's real exercise
 ```
 
@@ -991,10 +1462,14 @@ app/
 as views — which is what makes `<Slot/>` legal in them. Everything under
 `scenarios/` is a component.
 
-Each new scenario owns its own store type (`nest`, `storm`, `fmt`, `loop`) so no
-scenario can disturb another's data. `islands` deliberately has none: its 20,000
-nodes are plain DOM built from instance state, and giving it a type would imply
-the frozen subtree was reactive.
+Each new scenario owns its own store type (`nest`, `storm`, `fmt`, `loop`,
+`form`) so no scenario can disturb another's data. `islands` deliberately has
+none: its 20,000 nodes are plain DOM built from instance state, and giving it a
+type would imply the frozen subtree was reactive. `form` is the one type that
+also gets its own model CLASS: `form-state` measures what a single-field
+`update()` costs, and that cost is dominated by `normalizedSchema()` running
+over every declared field three times per call site, so a 9-field
+`StressRecord` would understate it by nearly 3x.
 
 Fixtures are installed directly in `app.js` rather than via `--fixtures`, so
 `store.seed()` is available as a tool each scenario calls on demand and

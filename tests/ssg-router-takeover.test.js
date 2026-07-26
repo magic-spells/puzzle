@@ -10,8 +10,9 @@
 // Enter suppression is observed via viewWillShow(): playIn() fires it even with no
 // `animations` field (zero-duration), UNLESS skipEnter() ran first — which is
 // exactly what #takeoverSSG does. So viewWillShow NOT firing == enter suppressed.
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { PuzzleApp } from '../client-runtime/app.js';
+import { prerender } from '../client-runtime/ssg/index.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 
@@ -203,6 +204,110 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.textContent).toBe('Real');
 	});
 
+	it('keeps prerendered deep async component content until hybrid takeover commits', async () => {
+		let clientGate = null;
+		class AsyncLeaf extends PuzzleView {
+			async data() {
+				if (clientGate) await clientGate.promise;
+				return { label: 'ASYNC-CONTENT' };
+			}
+			render() {
+				return h('section', { class: 'async-leaf' }, [text(this.getData().label)]);
+			}
+		}
+		class NestedShell extends PuzzleView {
+			render() {
+				return h('div', { class: 'nested-shell' }, [h(AsyncLeaf)]);
+			}
+		}
+		class NestedLayout extends PuzzleView {
+			render() {
+				return h('div', { class: 'nested-layout' }, [h(NestedShell), slot()]);
+			}
+		}
+		class NestedPage extends PuzzleView {
+			render() {
+				return h('main', { class: 'nested-page' }, [text('PAGE-CONTENT')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'nested', view: NestedPage, layout: NestedLayout },
+		];
+		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
+		const el = ssgContainer(pages[0].html);
+		const prerendered = el.innerHTML;
+		clientGate = deferred();
+		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+
+		const mounting = app.mount();
+		await tick(); // a paint opportunity while the nested data() macrotask is pending
+		const firstPaint = el.innerHTML;
+		clientGate.resolve();
+		await mounting;
+
+		expect(firstPaint).toBe(prerendered);
+		expect(el.innerHTML).toBe(prerendered);
+		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false);
+	});
+
+	it('keeps the nested sync component control byte-identical during hybrid takeover', async () => {
+		class SyncLeaf extends PuzzleView {
+			data() {
+				return { label: 'SYNC-CONTENT' };
+			}
+			render() {
+				return h('section', { class: 'sync-leaf' }, [text(this.getData().label)]);
+			}
+		}
+		class SyncPage extends PuzzleView {
+			render() {
+				return h('main', { class: 'sync-page' }, [h(SyncLeaf)]);
+			}
+		}
+		const routes = [{ path: '/', name: 'sync', view: SyncPage }];
+		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
+		const el = ssgContainer(pages[0].html);
+		const prerendered = el.innerHTML;
+		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+
+		await app.mount();
+
+		expect(el.innerHTML).toBe(prerendered);
+		expect(el.querySelector('.sync-leaf').textContent).toBe('SYNC-CONTENT');
+	});
+
+	it('mounts the hybrid page when a nested component preload rejects', async () => {
+		let rejectOnClient = false;
+		class RejectingLeaf extends PuzzleView {
+			async data() {
+				await tick();
+				if (rejectOnClient) throw new Error('nested takeover rejected');
+				return { label: 'BUILD-CONTENT' };
+			}
+			render() {
+				return h('section', { class: 'rejecting-leaf' }, [text(this.getData().label)]);
+			}
+		}
+		class RejectingPage extends PuzzleView {
+			render() {
+				return h('main', { class: 'rejecting-page' }, [h(RejectingLeaf)]);
+			}
+		}
+		const routes = [{ path: '/', name: 'rejecting', view: RejectingPage }];
+		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
+		const el = ssgContainer(pages[0].html);
+		rejectOnClient = true;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+
+		await expect(app.mount()).resolves.toBe(app);
+
+		expect(error).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false);
+		expect(el.querySelector('.rejecting-page')).not.toBe(null);
+		expect(el.querySelector('.rejecting-leaf')).toBe(null);
+	});
+
 	it('after takeover, a client-side nav to a skeleton view still shows the skeleton (D39 intact)', async () => {
 		// Nav #0 takes over a plain prerendered Home; then push('/sk') is an ordinary
 		// client-side navigation (cur exists, no marker) — the D39 exemption applies,
@@ -259,19 +364,48 @@ describe('router SSG takeover (M2)', () => {
 	});
 
 	it('unmarked container: existing behavior is unchanged (enter plays, no marker)', async () => {
+		const nestedGate = deferred();
+		class PlainAsyncChild extends PuzzleView {
+			async data() {
+				await nestedGate.promise;
+				return { label: 'child' };
+			}
+			render() {
+				return h('span', { class: 'plain-async-child' }, [text(this.getData().label)]);
+			}
+		}
+		class PlainHome extends Home {
+			render() {
+				return h('div', {}, [
+					h('h1', { class: 'home' }, [text('Home')]),
+					h(PlainAsyncChild),
+				]);
+			}
+		}
 		const el = document.createElement('div');
 		el.id = 'app';
 		document.body.appendChild(el);
 		const app = boot({
 			target: '#app',
-			routes: [{ path: '/', name: 'home', view: Home }],
+			routes: [{ path: '/', name: 'home', view: PlainHome }],
 			routerMode: 'memory',
 		});
-		await app.mount();
+		let mounted = false;
+		const mounting = app.mount().then(() => {
+			mounted = true;
+		});
+		await tick();
+		const mountedBeforeNestedData = mounted;
+		const childBeforeData = el.querySelector('.plain-async-child');
+		nestedGate.resolve();
+		await mounting;
+		await tick();
 
 		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false); // never had it
 		expect(el.querySelectorAll('h1.home').length).toBe(1);
-		expect(el.textContent).toBe('Home');
+		expect(mountedBeforeNestedData).toBe(true); // ordinary SPA did not await the child
+		expect(childBeforeData).toBe(null);
+		expect(el.textContent).toBe('Homechild');
 		expect(willShow).toBe(1); // enter animation plays as before
 	});
 });

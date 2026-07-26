@@ -78,12 +78,16 @@ not under-report.
 
 ## Zero production bytes still holds
 
-Unchanged from D121, and verified more strictly: the change was stashed, the
-bundle rebuilt, and the hashes compared. `examples/todos` production `app.js` is
-**byte-identical** at 63,796 bytes, `sha256 4641cb51…18ff7` either way — which
-satisfies the SPEC §56 oracle trivially, since it is literally the same file.
-`build_test.go` now pins `snapshot:profile` in both the dev-retains and
-prod-DCE halves.
+Unchanged from D121, and verified more strictly than a sentinel scan: stash the
+bridge change, build `examples/todos` for production, unstash, rebuild, and
+compare **hashes**. They match — the SPEC §56 oracle is satisfied trivially
+because it is literally the same file. `build_test.go` now pins
+`snapshot:profile` in both the dev-retains and prod-DCE halves.
+
+The invariant is the *identity*, never an absolute size: the bundle's byte count
+moves whenever unrelated example or runtime work lands, so a recorded number goes
+stale and then reads as a regression when it is nothing of the kind. Re-verify by
+stash-and-compare, not by remembering a figure.
 
 ## Verified end to end
 

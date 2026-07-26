@@ -3,7 +3,7 @@ name: Puzzle Stress Lab (examples/stress) — the performance measurement app
 kind: reference-app
 status: built
 connections:
-  - DECISION-D127-BENCHMARK-METHODOLOGY
+  - DECISION-D128-BENCHMARK-METHODOLOGY
   - DECISION-D121-DEV-PERFORMANCE-PROFILING
   - DECISION-D122-DEVTOOLS-PROFILER-PROTOCOL
   - DECISION-D62-HANDLER-CACHING
@@ -29,7 +29,7 @@ broken render is worse than no benchmark.
 Scenario and parameters ride the query string (`/?scenario=keyed-list&n=10000`),
 so every measurement has a copy-pasteable URL. The full scenario walkthrough,
 op lists and hand-run tables are in `examples/stress/README.md`; the production
-harness that drives this app is [[DECISION-D127-BENCHMARK-METHODOLOGY]] and
+harness that drives this app is [[DECISION-D128-BENCHMARK-METHODOLOGY]] and
 `benchmarks/README.md`. This card holds intent and the durable gotchas.
 
 ## The `window.__STRESS__` contract
@@ -85,7 +85,7 @@ driver has already opted in.
 `loop-trap` is **not** in the benchmark op matrix at all: the harness measures a
 production bundle, where [[FILE-DEVPERF]] does not exist, so there would be no
 detector to detect anything. It is exercised through `benchmarks/probe.mjs`
-instead ([[DECISION-D127-BENCHMARK-METHODOLOGY]]).
+instead ([[DECISION-D128-BENCHMARK-METHODOLOGY]]).
 
 ## `keyed-list` is deliberately NOT virtualized
 

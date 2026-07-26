@@ -7,7 +7,7 @@ export default class Panel extends PuzzleView {
   }
 }
 
-import { ViewNode, SLOT_TAG } from '@magic-spells/puzzle';
+import { ViewNode, SLOT_TAG, displayValue as __s } from '@magic-spells/puzzle';
 
 Panel.prototype.render = function () {
   const __d = this.getData();
@@ -17,7 +17,7 @@ Panel.prototype.render = function () {
     new ViewNode('div', { class: 'body' }, [
       new ViewNode(SLOT_TAG, {}, [
         new ViewNode('p', { class: 'empty' }, [
-          new ViewNode('text', { value: 'Nothing yet, ' + String(__d.placeholder) }),
+          new ViewNode('text', { value: 'Nothing yet, ' + __s(__d.placeholder, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'placeholder' : 0) }),
         ]),
       ]),
     ]),

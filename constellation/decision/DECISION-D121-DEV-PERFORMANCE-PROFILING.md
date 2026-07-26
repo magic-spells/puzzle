@@ -24,7 +24,16 @@ Puzzle can coalesce refresh requests, but it has no way to distinguish useful re
 
 Add [[FILE-DEVPERF]] as the single dev-only collector. All per-view state and ids live in module WeakMaps; no fields are added to PuzzleView, ViewManager, Store, or Router. Instrument tree construction separately from ViewManager diff/patch, count actual DOM writes, time `data()` and Store flushes, surface async tracking-chain deferral count/time, props bailouts, slot-only renders, and memo hits/misses. Render records are emitted only for entries into `ViewManager.render`; a zero DOM-mutation delta is a wasted render.
 
-A causal token follows Store notification → view data refresh → render → writes/scheduled work. One view is stopped and reported after 100 executions in one non-quiescent chain. A separate rolling-second guard stops/reports a view at 60 renders with at least 90% wasted renders when the cause is not animation or morph work. Quiescence, not an individual queue drain, resets recursive depth.
+A causal token follows Store notification → view data refresh → render → writes/scheduled work. Quiescence, not an individual queue drain, resets recursive depth.
+
+Two loop guards ride that token, and they are deliberately **asymmetric — one stops, one only warns**:
+
+- **Recursive (per causal chain) — stops.** At 100 executions of one view inside a single non-quiescent chain the view is reported (`console.error`, event `kind: 'recursive'`) and its further renders in that chain are suppressed. 100 executions in one causal chain *is* an infinite loop; stopping it instead of hanging the tab is the whole point of the guard.
+- **Cross-frame (rolling one second) — warns only.** A view that renders at least 60 times in a rolling second with at least 90% of those renders making zero DOM mutations, and no recorded cause being animation or morph work, is reported (`console.warn`, event `kind: 'cross-frame'`) and nothing else happens. This guard never gates a render.
+
+The asymmetry is the correction of a real defect, not a nicety. The cross-frame threshold is a *heuristic about waste*, not proof of a loop, and ordinary framework behaviour reaches it: this decision's own measurements established that a route ancestor renders `depth + 2` times per navigation and that most of those renders legitimately mutate nothing, so a five-level nested route tree crosses 60-renders-per-second at roughly `60 / (depth + 2)` ≈ **8.6 navigations per second** — a developer clicking quickly through a nested app. While the guard suppressed renders, that tripped ancestor stopped re-rendering its `<Slot/>`, the routed child never mounted, and the tree stayed broken until the next navigation, with a warning that read as a diagnosis rather than an admission that the profiler had intervened. A development-only instrument must not change what the app does.
+
+`runawayUntil` survives as the guard's **re-warn throttle only** — one warning per rolling window instead of one per frame — and no longer feeds the render gate. The emitted event keeps its `kind: 'cross-frame'` payload shape (the D122 bridge maps it to `perf-warning` for the published extension); only the human-readable text changed, to describe the waste rather than claim a stoppage.
 
 Extend D94/SPEC §53 with runner-neutral `measureRenders(handle, callback)` in [[FILE-TESTING-RENDER-PROFILE]]. It installs a temporary collector sink, awaits the callback and the existing fixed-point `settled()`, detaches in `finally`, and returns a deeply frozen report: renders, wasted renders, DOM mutations, per-view counts, causes, maximum recursive depth, and Store notifications.
 
@@ -36,11 +45,13 @@ Zero production bytes is a contract, not an optimization hope. Every class-metho
 - MutationObserver-based counting: delivery is asynchronous, cannot reliably bracket nested component renders, and misses the source-level write attribution needed for causal reports.
 - Add profiler fields or private methods to runtime classes: esbuild retains unreferenced private class members, silently violating the zero-byte contract.
 - Reset recursion at each Store flush or rAF drain: a data→write→flush loop crosses drains, so that reset makes the detector ineffective.
+- Keep the cross-frame guard suppressing and simply raise its threshold: any limit high enough to clear legitimate route-ancestor churn is too high to catch a real rAF-driven loop promptly, and the cost of being wrong (a silently broken route tree the developer cannot attribute) is far worse than a missed warning.
+- Exempt route ancestors from the cross-frame guard: the collector would have to recognise router-owned views, and the guard would still be wrong for any other view that is legitimately busy without mutating.
 - Make `measureRenders` framework-runner-specific: D94 deliberately keeps the published testing subpath independent of Vitest/Jest.
 
 ## Consequences
 
-Development builds gain enough attribution to find wasted work and Store head-of-line blocking, plus bounded loop protection. Production output remains exactly the pre-D121 bytes. The instrumentation contract is coupled to build-level DCE assertions so a missed call-site guard fails the Go suite instead of shipping silently.
+Development builds gain enough attribution to find wasted work and Store head-of-line blocking, plus bounded recursion protection. Cross-frame waste is *surfaced, not policed*: a genuine rAF-driven render loop in development now warns and keeps looping, bounded only by whatever the app itself does about it, which is the same situation production has always been in. That is the accepted price of never letting the profiler break a running app. Production output remains exactly the pre-D121 bytes. The instrumentation contract is coupled to build-level DCE assertions so a missed call-site guard fails the Go suite instead of shipping silently.
 
 Implementation note: esbuild can attribute zero output bytes to `devperf.js`
 while dead imported bindings still perturb global minified identifier
