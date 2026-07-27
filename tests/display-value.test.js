@@ -160,23 +160,12 @@ describe('displayValue', () => {
 	});
 
 	it('has both runtime stringify adapters delegate to the shared helper', () => {
-		const cases = [
-			// viewManager renames the import instead of wrapping it — a pure alias
-			// wrapper was one call per interpolation for nothing.
-			{
-				path: 'client-runtime/views/viewManager.js',
-				imports: "import { displayValue as stringify } from '../display.js';",
-			},
-			{
-				path: 'client-runtime/ssg/serialize.js',
-				imports: "import { displayValue } from '../display.js';",
-				wrapper: /function stringify\(v\) \{\s*return displayValue\(v\);\s*\}/,
-			},
-		];
-		for (const { path, imports, wrapper } of cases) {
+		// Both rename the import instead of wrapping it — a pure alias wrapper was
+		// one call per interpolation for nothing.
+		const paths = ['client-runtime/views/viewManager.js', 'client-runtime/ssg/serialize.js'];
+		for (const path of paths) {
 			const source = readFileSync(path, 'utf8');
-			expect(source).toContain(imports);
-			if (wrapper) expect(source).toMatch(wrapper);
+			expect(source).toContain("import { displayValue as stringify } from '../display.js';");
 			expect(source).not.toContain("return v == null ? '' : String(v);");
 		}
 	});

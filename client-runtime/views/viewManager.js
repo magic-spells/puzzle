@@ -985,13 +985,12 @@ function setAttr(el, name, value) {
 	}
 
 	if (value === false || value == null) {
-		// Preserve attribute-removal semantics, but still route an explicitly
-		// supplied nullish binding through the shared display policy so undefined
-		// gets its development diagnostic. The RESULT is discarded — the call exists
-		// only for that warning, which production already DCEs inside displayValue —
-		// so the probe leads, and production pays nothing per nullish attribute.
+		// Preserve attribute-removal semantics, but still hand an undefined binding
+		// to the shared display policy for its development diagnostic. The RESULT is
+		// discarded — the call exists only for that warning — so the probe leads and
+		// production pays nothing per nullish attribute.
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			if (value == null) stringify(value);
+			if (value === undefined) stringify(value);
 		}
 		el.removeAttribute(name);
 	} else if (value === true) {

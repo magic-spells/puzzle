@@ -239,8 +239,10 @@ const DATE_FORMATS = {
 };
 
 const DATE_FORMATTERS = new Map();
-const RELATIVE_TIME_FORMATTERS = new Map();
 const TIMEZONE_FORMATTERS = new Map();
+// `timeago` takes no locale, so there is exactly one formatter to cache — built
+// on first use so importing the module never constructs an Intl object.
+let relativeTimeFormatter;
 
 function parseDateInput(v) {
 	if (typeof v === 'string' && DATE_ONLY.test(v)) {
@@ -332,12 +334,9 @@ export function timeago(v) {
 	const then = parseDateInput(v).getTime();
 	if (isNaN(then)) return str(v);
 
-	const locale = undefined;
-	let rtf = RELATIVE_TIME_FORMATTERS.get(locale);
-	if (!rtf) {
-		rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
-		RELATIVE_TIME_FORMATTERS.set(locale, rtf);
-	}
+	const rtf = (relativeTimeFormatter ??= new Intl.RelativeTimeFormat(undefined, {
+		numeric: 'auto',
+	}));
 	const diff = Math.round((then - Date.now()) / 1000);
 	const units = [
 		['year', 31536000],

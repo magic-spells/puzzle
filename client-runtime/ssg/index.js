@@ -53,8 +53,6 @@ import { MANAGED_TAGS } from '../headTags.js';
  *   mode; `'static'` additionally captures each page's store snapshot (`data`), its
  *   view/layout `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot
  *   so prerenderToDir can emit true static pages (D81).
- * @param {Router} [opts.router] preconstructed memory Router used internally by
- *   prerenderToDir so validation and precedence analysis share one compiled table.
  * @returns {Promise<{
  *   pages: Array<{ path: string, html: string|null, title: string|null,
  *     head: { title: string|null, description: string|null, canonical: string|null,
@@ -92,10 +90,9 @@ export async function prerender(config, opts = {}) {
 	// supports '#id' targets only — the shell surgery keys on the id).
 	parseTargetId(config.target);
 
-	// One Router owns route-shape validation + regex compilation. Direct callers
-	// construct it here; prerenderToDir passes the memory Router it already needs
-	// for whole-table validation, so the SSG never compiles matchers independently.
-	const routeRouter = opts.router ?? new Router(config.routes ?? [], { mode: 'memory' });
+	// One Router owns route-shape validation + regex compilation, so the SSG never
+	// compiles matchers independently — it reads this one's compiled leaves.
+	const routeRouter = new Router(config.routes ?? [], { mode: 'memory' });
 	const shadowedPaths = findShadowedPaths(routeRouter.routeEntries);
 	const shadowedByIndex = new Map(
 		shadowedPaths.map(({ index, shadowedBy }) => [index, shadowedBy])
@@ -271,15 +268,16 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 	if (!outDir) throw new Error('[puzzle] prerenderToDir requires an outDir');
 	if (!shellPath) throw new Error('[puzzle] prerenderToDir requires a shellPath');
 
-	// Validate the complete route table even when enumeration will skip every
-	// page (for example, an all-dynamic app with no beforeMount hook). Per-page
-	// contexts also construct memory routers, but skipped routes never reach that
-	// path; this construction makes their config errors fail the static build.
-	const routeRouter = new Router(config.routes ?? [], { mode: 'memory' });
+	// Validate the complete route table FIRST, before the target selector and the
+	// shell read: prerender() builds its own Router, but only after those checks,
+	// and a bad route table should be the error a build reports either way. (It is
+	// also the only route validation an all-dynamic app with no beforeMount hook
+	// ever gets — every page is skipped before a per-page context is built.)
+	new Router(config.routes ?? [], { mode: 'memory' });
 
 	const targetId = parseTargetId(config.target);
 	const shell = fs.readFileSync(shellPath, 'utf8');
-	const { pages, skipped, warnings } = await prerender(config, { mode, router: routeRouter });
+	const { pages, skipped, warnings } = await prerender(config, { mode });
 
 	if (mode === 'static') {
 		return writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings });

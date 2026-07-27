@@ -53,16 +53,14 @@ function increment(record, key) {
 	record[key] = (record[key] ?? 0) + 1;
 }
 
+/**
+ * Freeze the tally in place — the sink is detached moments later and `counts` is
+ * never handed out anywhere else, so the report can BE it.
+ */
 function immutableReport(counts) {
-	return Object.freeze({
-		renders: counts.renders,
-		wastedRenders: counts.wastedRenders,
-		domMutations: counts.domMutations,
-		rendersByView: Object.freeze({ ...counts.rendersByView }),
-		causes: Object.freeze({ ...counts.causes }),
-		maxRecursiveDepth: counts.maxRecursiveDepth,
-		storeNotifications: counts.storeNotifications,
-	});
+	Object.freeze(counts.rendersByView);
+	Object.freeze(counts.causes);
+	return Object.freeze(counts);
 }
 
 export default measureRenders;

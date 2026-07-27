@@ -50,10 +50,12 @@ export function validateTopLevelPath(path) {
 
 /**
  * Find fully-static leaf entries hidden by an earlier matcher. Entries are the
- * Router's ordered compiled leaves and carry:
+ * Router's ordered compiled leaves (makeEntry output) and always carry:
  *   - fullPath: the route-table spelling used in diagnostics
  *   - matchPath: the normalized pathname tested by the Router
  *   - regex: the compiled matcher
+ * The bare catch-all is not among them — the Router keeps it out of the compiled
+ * list and matches it last regardless of position (D19).
  *
  * The returned indexes identify occurrences, not just path strings, so duplicate
  * static declarations do not cause the first (reachable) occurrence to be
@@ -62,20 +64,13 @@ export function validateTopLevelPath(path) {
 export function findShadowedPaths(entries) {
 	const shadowed = [];
 	for (let index = 0; index < entries.length; index++) {
-		const entry = entries[index];
-		const fullPath = entry.fullPath ?? entry.fullPaths[entry.fullPaths.length - 1];
-		if (fullPath === '*' || fullPath.split('/').some(isDynamicSegment)) continue;
+		const { fullPath, matchPath } = entries[index];
+		if (fullPath.split('/').some(isDynamicSegment)) continue;
 
-		const matchPath = entry.matchPath ?? fullPath;
 		for (let earlierIndex = 0; earlierIndex < index; earlierIndex++) {
 			const earlier = entries[earlierIndex];
-			if (!earlier.regex?.test(matchPath)) continue;
-			shadowed.push({
-				index,
-				path: fullPath,
-				shadowedBy:
-					earlier.fullPath ?? earlier.fullPaths[earlier.fullPaths.length - 1],
-			});
+			if (!earlier.regex.test(matchPath)) continue;
+			shadowed.push({ index, path: fullPath, shadowedBy: earlier.fullPath });
 			break;
 		}
 	}
