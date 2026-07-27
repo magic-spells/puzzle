@@ -65,7 +65,7 @@
  *   filter-typing keystroke must not jump to top); an explicit `#anchor` on the
  *   replace target still lands like push's, and a custom scrollBehavior
  *   (savedPosition null) still overrides. The same-path no-op, the #committing
- *   commit-window deferral (via the { path, replace } #pendingPush slot), and
+ *   commit-window deferral (via the shared #pendingPush slot), and
  *   pending-memory-pop supersession all mirror push() exactly.
  * - pushState fires for push()/link clicks ONLY, now via #commitLocation inside the
  *   synchronous commit window (D61) — never on the initial navigation or popstate
@@ -359,16 +359,16 @@ export class Router {
 	// While the router is inside the SYNCHRONOUS commit/mount section of a
 	// navigation — the region where a fresh view's mounted() (and viewWillShow)
 	// fire BEFORE #commitState has recorded the just-committed chain as
-	// #state/current — a push() from one of those hooks must NOT re-enter
+	// #state/current — a push()/replace()/memory go() from one of those hooks
+	// must NOT re-enter
 	// #navigate: it would read the stale #state as `cur`, compute its reuse
 	// prefix against the OLD chain, and double-mount the shared layout (the
-	// pyramid-puzzle redirect-from-mounted bug). Such a push is DEFERRED — its
-	// target recorded as { path, replace } (last-wins, single slot — a replace()
-	// arriving in the window shares the slot, D83) and re-dispatched the instant
-	// the in-flight commit completes and #state is consistent. No await runs
-	// inside the window, so only a synchronous reentrant push can land while the
-	// flag is set; a push arriving during the async LOAD or out-animation phases
-	// (flag off) keeps today's interruption semantics.
+	// pyramid-puzzle redirect-from-mounted bug). Such a navigation is DEFERRED —
+	// its verb + argument are recorded in one last-wins slot and re-dispatched
+	// the instant the in-flight commit completes and #state is consistent. No
+	// await runs inside the window, so only a synchronous reentrant navigation
+	// can land while the flag is set; one arriving during the async LOAD or
+	// out-animation phases (flag off) keeps today's interruption semantics.
 	#committing = false;
 	#pendingPush = null;
 
@@ -789,7 +789,7 @@ export class Router {
 	push(path) {
 		path = normalizeRoutePath(path);
 		if (this.#committing) {
-			this.#pendingPush = { path, replace: false }; // last-wins, single slot (no queue)
+			this.#pendingPush = { kind: 'push', path }; // last-wins, single slot (no queue)
 			return Promise.resolve();
 		}
 		// v-next same-path no-op: a push whose target matches the COMMITTED state's
@@ -854,7 +854,7 @@ export class Router {
 	replace(path) {
 		path = normalizeRoutePath(path);
 		if (this.#committing) {
-			this.#pendingPush = { path, replace: true }; // last-wins, shared slot with push
+			this.#pendingPush = { kind: 'replace', path }; // last-wins, shared slot with push/go
 			return Promise.resolve();
 		}
 		// Same-path no-op, exactly push()'s guard: replacing the committed entry
@@ -866,27 +866,29 @@ export class Router {
 	}
 
 	/**
-	 * Run a push/replace deferred during the commit window, now that
+	 * Run a push/replace/memory-go deferred during the commit window, now that
 	 * #state/current are consistent (the just-committed chain is recorded).
 	 * Fire-and-forget: the caller has already finished its own commit. Single
 	 * slot — last writer wins.
 	 */
 	#runPendingPush() {
 		if (this.#pendingPush == null) return;
-		const { path, replace } = this.#pendingPush;
+		const pending = this.#pendingPush;
 		this.#pendingPush = null;
-		// Re-dispatch through push()/replace(), NOT straight into #navigate: by now
+		// Re-dispatch through the public verbs, NOT straight into #navigate: by now
 		// the outer finally has cleared #committing and #commitState recorded the
 		// just-committed #state, so the normal entry point applies the same-path
 		// no-op guard. Without this, an auth guard in mounted()/viewWillShow that
 		// redirects to the very path being committed (landing on '/login' and
 		// pushing '/login') would run a full redundant navigation + duplicate
-		// history entry. #pendingPush carries { path, replace } (the sole argument
-		// plus which verb to re-dispatch, D83), so nothing is lost. Fire-and-forget.
-		if (replace) {
-			this.replace(path);
+		// history entry. go() likewise must recompute from the now-committed memory
+		// index so it preserves #pendingIndex's normal double-back semantics.
+		if (pending.kind === 'go') {
+			this.go(pending.n);
+		} else if (pending.kind === 'replace') {
+			this.replace(pending.path);
 		} else {
-			this.push(path);
+			this.push(pending.path);
 		}
 	}
 
@@ -903,6 +905,12 @@ export class Router {
 		if (this.#mode !== 'memory') {
 			// go(0) reloads the page in browsers; delegating preserves that parity.
 			history.go(n);
+			return;
+		}
+		if (this.#committing) {
+			this.#pendingPush = { kind: 'go', n }; // last-wins, shared slot with push/replace
+			// The deferred navigation has not started yet, so there is no nav promise
+			// to return; this matches push()/replace()'s commit-window posture.
 			return;
 		}
 		// Before start() (or after stop()) the in-memory stack is null (D42) — degrade
@@ -1208,8 +1216,12 @@ export class Router {
 				// (Fix 2); clear unconditionally after the await in case replace() was a
 				// no-op that never re-entered #navigate to consume the flag.
 				this.#guardRedirecting = true;
-				const redirected = await this.replace(guardVerdict);
-				this.#guardRedirecting = false;
+				let redirected;
+				try {
+					redirected = await this.replace(guardVerdict);
+				} finally {
+					this.#guardRedirecting = false;
+				}
 				this.#recoverFailedNavigation(token);
 				// A redirect that no-op'd (its target is already the committed route, or is
 				// unmatched) left #state and the URL untouched, so after a POPSTATE the
@@ -2465,16 +2477,22 @@ export class Router {
 	 * absolute-URL branches (D34/D51): given the fragment to test (a relative href
 	 * starting with '#', or an absolute same-page URL's `.hash`), route it if it
 	 * names an in-app fragment and return true. With a base the fragment must be
-	 * exactly '#' + base (→ '/') or under '#' + base + '/'; base-less, any '#/...'
-	 * is a route. A bare '#anchor' matches nothing → returns false (browser handles
-	 * it). preventDefault is called HERE, before push (its placement in the original
-	 * inlined cascades), so the return value is advisory.
+	 * exactly '#' + base (→ '/'), the base followed directly by a query (→ '/?...'),
+	 * or under '#' + base + '/'; base-less, any '#/...' is a route. A bare '#anchor'
+	 * matches nothing → returns false (browser handles it). preventDefault is called
+	 * HERE, before push (its placement in the original inlined cascades), so the
+	 * return value is advisory.
 	 */
 	#tryHashFragment(fragment, e) {
 		if (this.#base) {
 			if (fragment === '#' + this.#base) {
 				e.preventDefault();
 				this.push('/');
+				return true;
+			}
+			if (fragment.startsWith('#' + this.#base + '?')) {
+				e.preventDefault();
+				this.push('/' + fragment.slice(1 + this.#base.length));
 				return true;
 			}
 			if (fragment.startsWith('#' + this.#base + '/')) {

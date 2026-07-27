@@ -93,8 +93,12 @@ export function beginFlip(pairs) {
 			warnUnkeyedFlip();
 			continue;
 		}
-		if (!oldChild || !oldChild.el || oldChild.el.nodeType !== 1) continue; // fresh mount / no live element
-		(candidates ??= []).push({ el: oldChild.el, newChild, spec, first: null });
+		if (!oldChild) continue;
+		const componentEl = oldChild.isComponent ? oldChild.component?.element : null;
+		const el =
+			componentEl?.nodeType === 1 && componentEl.isConnected ? componentEl : oldChild.el;
+		if (!el || el.nodeType !== 1) continue; // fresh mount / no live element
+		(candidates ??= []).push({ el, newChild, spec, first: null });
 	}
 	if (!candidates) return null;
 

@@ -1005,6 +1005,50 @@ describe('Router — same-path push WHILE in flight (double-click, Fix 1)', () =
 });
 
 describe('Router — guard-redirect budget resets per navigation (Fix 2, D87)', () => {
+	it('clears guard redirect state when redirected data rejects so a later guard redirect is still honored', async () => {
+		class BadView extends PuzzleView {
+			async data() {
+				throw new Error('redirect target failed');
+			}
+			render() {
+				return h('puzzle-view', { class: 'bad' }, [text('BAD')]);
+			}
+		}
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const routes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{
+				path: '/first',
+				name: 'first',
+				view: AboutView,
+				layout: DefaultLayout,
+				guard: () => '/bad',
+			},
+			{ path: '/bad', name: 'bad', view: BadView, layout: DefaultLayout },
+			{
+				path: '/second',
+				name: 'second',
+				view: HomeView,
+				layout: DefaultLayout,
+				guard: () => '/about',
+			},
+			{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+		];
+		const { router, el } = await boot(routes);
+
+		await router.push('/first');
+		expect(router.current.path).toBe('/');
+
+		await router.push('/second');
+		expect(router.current.path).toBe('/about');
+		expect(el.querySelector('.about')).not.toBeNull();
+		expect(errSpy).toHaveBeenCalledWith(
+			'[puzzle] navigation data() failed:',
+			expect.any(Error)
+		);
+		errSpy.mockRestore();
+	});
+
 	it('a guard redirecting to the current path never trips the limit across many navigations', async () => {
 		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const routes = [

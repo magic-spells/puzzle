@@ -326,6 +326,25 @@ describe('Router base — hash mode (D51)', () => {
 		expect(router.current.query.tab).toBe('3');
 	});
 
+	it("intercepts a '#/myapp?q=1' root-query link and pushes '/?q=1'", async () => {
+		const { router, el } = await bootBase(baseRoutes, '/#/myapp/about', '/myapp', {
+			mode: 'hash',
+		});
+		const pushSpy = vi.spyOn(router, 'push');
+		const link = document.createElement('a');
+		link.setAttribute('href', '#/myapp?q=1');
+		document.body.appendChild(link);
+		const evt = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+
+		link.dispatchEvent(evt);
+
+		expect(evt.defaultPrevented).toBe(true);
+		expect(pushSpy).toHaveBeenCalledWith('/?q=1');
+		await tick();
+		expect(router.current.path).toBe('/?q=1');
+		expect(el.querySelector('.home')).not.toBeNull();
+	});
+
 	it("intercepts a '#/myapp/...' link but leaves a bare '#anchor' and a non-base '#/other' alone", async () => {
 		const { router, el } = await bootBase(baseRoutes, '/', '/myapp', { mode: 'hash' });
 		const pushSpy = vi.spyOn(router, 'push');

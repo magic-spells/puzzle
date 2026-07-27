@@ -21,6 +21,7 @@ import {
 	DELETED_SAVE_MESSAGE,
 	PuzzleModel,
 	PuzzleValidationError,
+	recordKey,
 	recordMutationRevision,
 	safeMerge,
 } from '../model.js';
@@ -35,20 +36,6 @@ import {
 
 const REC_SEP = ' '; // never appears in a type name
 const noop = () => {}; // swallows a chained write's rejection (§22, D50)
-
-/**
- * Normalize the RECORD-MAP key only — never a record's fields (D112).
- *
- * Subscription keys (`type + REC_SEP + id`) and adapter URLs already string-coerce
- * identity, so the record Map was the only type-sensitive index in the datastore: a
- * string route param (`findOne('post', '1')`) missed the record a numeric-id JSON
- * payload created, while the subscription still fired.
- *
- * ONLY numbers convert. null/undefined/objects pass through untouched, which keeps
- * belongsTo's null-FK short-circuit intact and stops String(null) from colliding
- * with a real 'null' string id. Record fields keep whatever type the server sent.
- */
-const recordKey = (id) => (typeof id === 'number' ? String(id) : id);
 
 /**
  * Thrown by the write verbs — saveRecord/deleteRecord/request — when the server

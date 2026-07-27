@@ -489,6 +489,46 @@ describe('ViewManager — leave animation on component removal', () => {
 		render() { return h('li', { 'data-id': this.getData().id }, [text(this.getData().id)]); }
 	}
 
+	it('warns once for unkeyed out-animated removal and does not warn for keyed removal', async () => {
+		class KeyedHost extends PuzzleView {
+			created() { this.setData({ order: ['a', 'b'] }); }
+			data() { return { order: this.getData().order }; }
+			render() {
+				return h('ul', {}, this.getData().order.map((id) => comp(Row, { key: id, id })));
+			}
+		}
+		class UnkeyedHost extends PuzzleView {
+			created() { this.setData({ order: ['a', 'b', 'c'] }); }
+			data() { return { order: this.getData().order }; }
+			render() {
+				return h('ul', {}, this.getData().order.map((id) => comp(Row, { id })));
+			}
+		}
+		installFakeAnimate();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		const keyed = await new KeyedHost().mount(container());
+		await tick();
+		keyed.setData('order', ['a']);
+		keyed.flushUpdates();
+		expect(warn).not.toHaveBeenCalled();
+
+		const unkeyed = await new UnkeyedHost().mount(container());
+		await tick();
+		unkeyed.setData('order', ['a', 'b']);
+		unkeyed.flushUpdates();
+		unkeyed.setData('order', ['a']);
+		unkeyed.flushUpdates();
+
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn).toHaveBeenCalledWith(
+			'[puzzle] out animations in an unkeyed list can misorder siblings — ' +
+				'give the list items key attributes'
+		);
+		fakeAnimations.forEach((a) => a.finishedState === 'running' && a.finish());
+		await tick();
+	});
+
 	it('defers DOM removal until the out-animation finishes', async () => {
 		const destroyed = vi.fn();
 		class Item extends Row { destroyed() { destroyed(); } }

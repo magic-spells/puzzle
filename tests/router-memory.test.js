@@ -490,6 +490,34 @@ describe('Router memory mode — go / back / forward (D42)', () => {
 		await router.back();
 		expect(router.current.path).toBe('/');
 	});
+
+	it('back() from mounted() defers through the commit window, lands on the previous entry, and mounts the shared layout once', async () => {
+		let routerRef = null;
+		let layoutMounts = 0;
+		class SharedLayout extends DefaultLayout {
+			mounted() {
+				layoutMounts++;
+			}
+		}
+		class BackView extends AboutView {
+			mounted() {
+				routerRef.back();
+			}
+		}
+		const { router, el } = await bootMemory([
+			{ path: '/', name: 'home', view: HomeView, layout: SharedLayout },
+			{ path: '/about', name: 'about', view: BackView, layout: SharedLayout },
+		]);
+		routerRef = router;
+
+		await router.push('/about');
+		await tick();
+		await tick();
+
+		expect(router.current.path).toBe('/');
+		expect(el.querySelector('.home')).not.toBeNull();
+		expect(layoutMounts).toBe(1);
+	});
 });
 
 // Fix 3 (D42): go(n) bases its target off a PENDING pop when one is in flight, not

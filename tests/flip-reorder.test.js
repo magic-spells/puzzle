@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { ViewManager } from '../client-runtime/views/viewManager.js';
+import { beginFlip } from '../client-runtime/views/flip.js';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 
 // FLIP keyed-reorder animation (D85): a `flip` attr on a keyed row root
@@ -102,6 +103,24 @@ afterEach(() => {
 });
 
 describe('FLIP keyed reorder (D85)', () => {
+	it('beginFlip measures the live component element when the component vnode el is stale', () => {
+		stubs = installStubs();
+		class Row {}
+		const live = document.createElement('li');
+		document.body.appendChild(live);
+		const stale = document.createElement('li');
+		const oldChild = h(Row, { key: 'row', flip: true });
+		oldChild.el = stale;
+		oldChild.component = { element: live };
+		const newChild = h(Row, { key: 'row', flip: true });
+
+		const candidates = beginFlip([[oldChild, newChild]]);
+
+		expect(candidates).toHaveLength(1);
+		expect(candidates[0].el).toBe(live);
+		expect(candidates[0].first).not.toBeNull();
+	});
+
 	it('computes correct dx/dy for vertical moves and uses the default timing', () => {
 		stubs = installStubs();
 		stubs.setLayout(vertical(20));

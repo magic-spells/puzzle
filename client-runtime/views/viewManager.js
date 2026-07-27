@@ -773,8 +773,25 @@ function patchIndexedChildren(el, oldChildren, newChildren, ctx) {
 		mount(newChildren[i], el, null, ctx);
 	}
 	for (let i = common; i < oldChildren.length; i++) {
+		if (
+			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
+			oldChildren[i].isComponent &&
+			oldChildren[i].component?.animations?.out
+		) {
+			warnUnkeyedOutAnimation();
+		}
 		unmount(oldChildren[i]);
 	}
+}
+
+let warnedUnkeyedOutAnimation = false;
+function warnUnkeyedOutAnimation() {
+	if (warnedUnkeyedOutAnimation) return;
+	warnedUnkeyedOutAnimation = true;
+	console.warn(
+		'[puzzle] out animations in an unkeyed list can misorder siblings — ' +
+			'give the list items key attributes'
+	);
 }
 
 // Two siblings with the SAME tag and SAME key silently collapse (the per-tag Map

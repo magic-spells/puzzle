@@ -211,6 +211,23 @@ describe('PuzzleModel', () => {
 		expect(store.recordChanged).toHaveBeenCalledWith(todo);
 	});
 
+	it('uses recordKey identity for primary-key immutability: numeric 1 accepts "1", but rejects a different key', () => {
+		class NumericItem extends PuzzleModel {
+			static schema = {
+				id: Puzzle.number().primary(),
+			};
+		}
+		const store = new Store({ item: NumericItem });
+		const item = store.createRecord('item', { id: 1 });
+
+		expect(() => item.update({ id: '1' })).not.toThrow();
+		expect(store.findOne('item', 1)).toBe(item);
+		expect(store.findOne('item', '1')).toBe(item);
+
+		expect(() => item.update({ id: 2 })).toThrow(/primary key "id"/);
+		expect(store.findOne('item', 1)).toBe(item);
+	});
+
 	it('updates non-pk fields normally on a store-attached record', () => {
 		const todo = new Todo({ id: 't1', text: 'a', completed: false });
 		const store = attachToStore(todo, 'todo', Todo);
@@ -281,6 +298,33 @@ describe('PuzzleModel', () => {
 });
 
 describe('PuzzleModel.validate() / createRecord() parity (D48)', () => {
+	class DefaultedForm extends PuzzleModel {
+		static schema = {
+			status: Puzzle.string().default('draft').required(),
+			title: Puzzle.string().required(),
+		};
+	}
+
+	it('static validate applies a required field schema default before collecting errors', () => {
+		expect(DefaultedForm.validate({ title: 'Ready' })).toEqual({ valid: true, errors: [] });
+	});
+
+	it('static validate still rejects a required field without a default', () => {
+		expect(DefaultedForm.validate({}).errors).toEqual([
+			{ field: 'title', rule: 'required', message: '"title" is required' },
+		]);
+	});
+
+	it('applying defaults keeps static validate fields-subset behavior unchanged', () => {
+		expect(DefaultedForm.validate({}, { fields: ['status'] })).toEqual({
+			valid: true,
+			errors: [],
+		});
+		expect(DefaultedForm.validate({}, { fields: ['title'] }).errors).toEqual([
+			{ field: 'title', rule: 'required', message: '"title" is required' },
+		]);
+	});
+
 	it('accepts an omitted or null primary key, but still reports other required fields', () => {
 		expect(Todo.validate({ text: 'ready' })).toEqual({ valid: true, errors: [] });
 		expect(Todo.validate({ id: null, text: 'ready' })).toEqual({ valid: true, errors: [] });
