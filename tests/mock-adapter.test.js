@@ -317,6 +317,7 @@ describe('failure — the only supported way to make data() reject on purpose', 
 	it('fail: true rejects delete() and keeps the record', async () => {
 		const store = storeWith({ data: [], fail: true });
 		const record = store.createRecord('todo', { id: 't1', text: 'a' });
+		record._synced = true; // a never-synced delete() skips the network entirely
 
 		await expect(record.delete()).rejects.toBeInstanceOf(PuzzleAdapterError);
 		expect(store.findOne('todo', 't1')).toBe(record);

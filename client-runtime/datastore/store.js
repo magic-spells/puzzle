@@ -18,6 +18,7 @@
  */
 
 import {
+	DELETED_SAVE_MESSAGE,
 	PuzzleModel,
 	PuzzleValidationError,
 	recordMutationRevision,
@@ -33,7 +34,7 @@ import {
 } from '../devperf.js';
 
 const REC_SEP = ' '; // never appears in a type name
-const noop = () => {}; // swallows a chained save()'s rejection (§22, D50)
+const noop = () => {}; // swallows a chained write's rejection (§22, D50)
 
 /**
  * Normalize the RECORD-MAP key only — never a record's fields (D112).
@@ -123,7 +124,7 @@ export class Store {
 		this._flushScheduled = false;
 		this._flushTimer = null; // armed fallback timer (D63); cleared by flush()
 		this._persistPending = false; // dirty flag: storage write is batched into flush()
-		this._saveChains = new WeakMap(); // record → in-flight save() promise (§22, D50)
+		this._writeChains = new WeakMap(); // record → in-flight write promise, save AND delete (§22, D50)
 
 		this._installRelationships();
 
@@ -546,20 +547,41 @@ export class Store {
 	 * re-keys the index atomically; an UPDATE-save with a differing pk warns and
 	 * drops it from the merge. On success the record is marked synced.
 	 *
-	 * Concurrent save()s on ONE record serialize through a per-record in-flight
-	 * chain: a second save waits for the first to settle, then re-evaluates
-	 * wasSynced — so a double-click POSTs once then PUTs, never double-creates. The
-	 * prior link's rejection is swallowed FOR CHAINING ONLY; its own caller still
-	 * observes it (they hold that promise).
+	 * Concurrent writes on ONE record serialize through its write chain (see
+	 * _chain): a second save waits for the first to settle, then re-evaluates
+	 * wasSynced — so a double-click POSTs once then PUTs, never double-creates.
+	 * A save that finds its record already removed when its turn comes sends
+	 * nothing and rejects with the same message record.save() gives at call time —
+	 * no write may create or revive a row for a record the app has discarded.
 	 */
 	saveRecord(record) {
-		const prev = this._saveChains.get(record);
-		const run = (prev ? prev.then(noop, noop) : Promise.resolve()).then(() =>
-			this._saveRecordNow(record)
-		);
-		this._saveChains.set(record, run);
+		return this._chain(record, () => this._saveRecordNow(record));
+	}
+
+	/**
+	 * Serialize one record's server writes — save AND delete — behind a single
+	 * per-record chain. Both verbs mutate the SAME server row and the same map
+	 * entry, so ordering them separately is not enough: an unchained delete
+	 * racing a first save either orphans the row the POST creates or builds its
+	 * URL from a client-side pk the POST is about to replace, and then removes
+	 * nothing anywhere while resolving successfully.
+	 *
+	 * Each link reads the record's state when it REACHES the front of the queue,
+	 * never when it was enqueued — that is what makes a queued delete see the
+	 * adopted primary key and a queued save see a removal that happened while it
+	 * waited.
+	 *
+	 * The prior link's rejection is swallowed FOR CHAINING ONLY; its own caller
+	 * still observes it (they hold that promise). This holds ACROSS verbs: a
+	 * queued delete does not inherit a failed save's rejection, and vice versa.
+	 * Every caller observes exactly its own outcome.
+	 */
+	_chain(record, fn) {
+		const prev = this._writeChains.get(record);
+		const run = (prev ? prev.then(noop, noop) : Promise.resolve()).then(fn);
+		this._writeChains.set(record, run);
 		const cleanup = () => {
-			if (this._saveChains.get(record) === run) this._saveChains.delete(record);
+			if (this._writeChains.get(record) === run) this._writeChains.delete(record);
 		};
 		run.then(cleanup, cleanup);
 		return run;
@@ -567,6 +589,16 @@ export class Store {
 
 	/** The actual save (network + merge); serialized per record by saveRecord(). */
 	async _saveRecordNow(record) {
+		// Removal check at RUN time, not call time: model.js's save() already
+		// rejects a record that was gone when save() was called, but a queued save
+		// can outlive its record — a delete or destroy() may land while it waits.
+		// removeRecord is the only path that evicts a record from the type map (the
+		// pk-adoption re-key below re-inserts synchronously), and it always sets
+		// _deleted, so this flag alone is the whole guard: no map lookup, and no
+		// chance of false-positiving a normal first save, which IS indexed under its
+		// client-side key before the POST goes out.
+		if (record._deleted) throw new Error(DELETED_SAVE_MESSAGE);
+
 		const type = record._type;
 		const Model = this.modelFor(type);
 		const endpoint = this._requireEndpoint(type);
@@ -690,12 +722,44 @@ export class Store {
 	 * record.delete(). DELETE endpoint/:id, then remove locally via the normal
 	 * notify path on 2xx OR 404 (already gone — idempotent). Any other status
 	 * rejects with PuzzleAdapterError and the record stays.
+	 *
+	 * Serialized behind the record's write chain (see _chain), so a delete fired
+	 * during a save waits for it: the URL below is then built from the primary key
+	 * the save reconciled, which is the row the server actually created.
+	 *
+	 * Two cases resolve without a request: a record already removed when the turn
+	 * comes (idempotent), and a NEVER-SYNCED record, which the server has no row
+	 * for — that one is removed locally, so a `delete()` on a freshly created
+	 * record is a local removal, not a doomed DELETE that can reject.
 	 */
-	async deleteRecord(record) {
+	deleteRecord(record) {
+		return this._chain(record, () => this._deleteRecordNow(record));
+	}
+
+	/** The actual delete (network + removal); serialized per record by deleteRecord(). */
+	async _deleteRecordNow(record) {
+		// a. already gone when this link reaches the front — a second delete, or a
+		// destroy()/delete() that landed while this one waited. Resolve idempotently
+		// with the detached record, exactly as model.js's call-time check does, and
+		// send nothing: the row is either already deleted or never existed.
+		if (record._deleted || !record._store) return record;
+
 		const type = record._type;
 		const Model = this.modelFor(type);
+		// Endpoint FIRST, before the never-synced short-circuit below: delete() is
+		// the server verb, so a model with no adapter reports that the same way it
+		// always has rather than quietly behaving like destroy().
 		const endpoint = this._requireEndpoint(type);
 		const pk = Model.primaryKey();
+
+		// b. never round-tripped with the server — nothing exists to DELETE. Remove
+		// locally (notifying as usual) and skip the network: the request could only
+		// 404, or worse 4xx on an id the server has never issued, and a rejection
+		// there would strand a record the app has already discarded.
+		if (!record._synced) {
+			this.removeRecord(record);
+			return record;
+		}
 
 		// Capture the key the record is indexed under NOW, before the await — the
 		// post-response identity check reconciles against exactly this key.

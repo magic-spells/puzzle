@@ -489,10 +489,10 @@ export declare class PuzzleModel {
 	/** Remove the record from its store (local-only). */
 	destroy(): this;
 
-	/** Sync the record to the server: POST when new, PUT thereafter (v1.18, D50). */
+	/** Sync the record to the server: POST when new, PUT thereafter; serialized with delete() per record (v1.18, D50). */
 	save(): Promise<this>;
 
-	/** Confirmed server delete, then local remove; resolves the record (v1.18, D50). */
+	/** Confirmed server delete, then local remove; a never-synced record removes locally with no request. Serialized with save() per record; resolves the record (v1.18, D50). */
 	delete(): Promise<this>;
 
 	/** Validate this record's current field values (non-throwing). */
