@@ -29,6 +29,7 @@ the comparison the stress lab exists to make.
 | `../playwright.benchmark.config.js` | build/server/browser/iteration settings. **Not** a `@playwright/test` config — see its header. |
 | `scenarios.mjs` | the op matrix: what runs, at what size, with what preparation and assertions |
 | `runner.mjs` | the driver: build, serve, launch, calibrate, iterate, assert |
+| `harness-lib.mjs` | the staging/build and static-server plumbing `runner.mjs` and `probe.mjs` share. Each driver keeps its OWN assertion about the bundle (no dev markers vs. a `__PUZZLE_PERF__` sentinel); everything mechanical lives here once. |
 | `report.mjs` | medians, MAD, clamp detection, baseline delta, table rendering |
 | `baseline.json` | committed reference numbers. Structural counters are asserted against it; timings are informational. |
 | `probe.mjs` | the mirror image of `runner.mjs`: builds the same staged copy in **development** mode and hands the page to an arbitrary probe script. Counters only — see below. |
@@ -112,6 +113,20 @@ touches `examples/stress/dist`.
 --build-mode <mode>   production (default) | development — see below
 --list                print every op id
 ```
+
+Two combinations are refused outright rather than producing a plausible-looking
+file:
+
+- **`--update-baseline` with `--filter`.** The baseline is written *whole*, so a
+  filtered run would delete every op it did not measure — and the loss is
+  invisible afterwards, because a missing baseline entry has nothing to compare
+  against and reports no drift. Re-run the full suite to update.
+- **`--update-baseline` with `--build-mode development`.** A dev-build baseline
+  would enshrine the distortion the harness exists to avoid.
+
+`--no-build` is also checked rather than trusted: both build modes stage to the
+same directory, so the runner re-greps the staged `app.js` for dev markers and
+refuses to measure a leftover development bundle as production.
 
 ---
 

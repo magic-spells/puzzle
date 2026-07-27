@@ -365,7 +365,7 @@ export const OPS = [
 				? null
 				: `write-storm: ${stats.stormWrites} writes produced ${stats.stormFlushes} flushes — the rAF batching has stopped collapsing a synchronous burst`,
 		note: persist
-			? 'burst-persist attaches a memory storage shim so Store._persistNow() actually runs. One dirty flush = one full serialize of all 10,000 records; compare its time against plain burst to price persistence.'
+			? 'burst-persist attaches a memory storage shim so Store._persistNow() actually runs. Serialization is STORE-WIDE — every record of every type — so the scenario now empties every registered type before seeding, and one dirty flush is one full serialize of its own 10,000 records and nothing else. Compare its time against plain burst to price persistence; numbers taken before that isolation priced whatever earlier scenarios had left in the store.'
 			: 'burst issues 5,000 writes in one tick and never calls flush() by hand — letting the frame arrive IS the assertion.',
 	})),
 
