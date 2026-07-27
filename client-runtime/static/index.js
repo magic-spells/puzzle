@@ -95,10 +95,13 @@ export async function mountStatic({
 	const { topVnode, instances } = await assembleChain(entry, ctx, routeSnapshot);
 
 	// A marked static page is replacing content-complete prerendered DOM. Prepare
-	// every nested non-routed component before that swap; an unmarked
-	// prerender:false page keeps ordinary fire-and-forget component mounting.
+	// every nested non-routed component before that swap, and suppress its enter
+	// too — mountComponent auto-chains playIn() onto each one, and that content is
+	// already on screen. An unmarked prerender:false page keeps ordinary
+	// fire-and-forget component mounting AND its ordinary nested enters.
 	if (targetEl.hasAttribute('data-puzzle-static')) {
-		await preloadTakeoverComponents(topVnode, ctx);
+		const nested = await preloadTakeoverComponents(topVnode, ctx);
+		for (const instance of nested) instance.skipEnter();
 	}
 
 	// Initial paint must NOT animate — the content is already on screen (same posture
