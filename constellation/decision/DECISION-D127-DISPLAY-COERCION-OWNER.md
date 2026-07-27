@@ -12,6 +12,19 @@ connections:
   - COMPONENT-SSG
   - DOC-COMPILER-DESIGN
   - DOC-SPEC-TEMPLATE
+notes:
+  - kind: decision
+    text: >-
+      Config-error throws ship UNGATED in production, deliberately (Cory-ratified at the 0.4.0
+      pre-release review by merging PR #37 with the guards kept): FormatterRegistry.register()'s two
+      type guards (~100 gzip bytes) stay outside the __PUZZLE_DEV__ fold, matching the router's
+      validateGuard/transitionMode/base posture. Rationale: with dropConsole (production default)
+      the D43 unknown-formatter fail-soft's console.error is STRIPPED, so a broken registration
+      would otherwise render unformatted values with zero signal anywhere — the register throw at
+      config time is the only production-visible evidence. Do not re-flag these strings as dev bytes
+      leaking into production; gating them (or any config throw) trades a loud config-time failure
+      for silent breakage.
+    sha: bd46628
 ---
 
 # D127 — one runtime owner for display coercion
