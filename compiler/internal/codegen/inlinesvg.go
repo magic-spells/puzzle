@@ -224,6 +224,11 @@ const SVGAssetSpecifierPrefix = "@magic-spells/puzzle/svg-asset/"
 
 // emitSVGImports returns the module-top import lines for every asset referenced
 // in dedup mode, in first-seen order (empty when none / inline mode).
+//
+// The specifier goes through jsString, not raw concatenation: validSVGPath vets
+// traversal, not bytes, so a filename carrying a quote/backslash/newline would
+// otherwise close the literal early and emit a broken module. Escaping is
+// defense in depth — plain paths are byte-identical to the concatenated form.
 func (c *compiler) emitSVGImports() string {
 	if len(c.svgOrder) == 0 {
 		return ""
@@ -232,10 +237,9 @@ func (c *compiler) emitSVGImports() string {
 	for _, src := range c.svgOrder {
 		b.WriteString("import ")
 		b.WriteString(c.svgIdent[src])
-		b.WriteString(" from '")
-		b.WriteString(SVGAssetSpecifierPrefix)
-		b.WriteString(src)
-		b.WriteString("';\n")
+		b.WriteString(" from ")
+		b.WriteString(jsString(SVGAssetSpecifierPrefix + src))
+		b.WriteString(";\n")
 	}
 	return b.String()
 }

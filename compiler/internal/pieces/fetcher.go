@@ -116,13 +116,37 @@ func (d *dirFetcher) Ref(rel string) string {
 	return filepath.Join(d.root, filepath.FromSlash(rel))
 }
 
+// maxBodyBytes caps a single registry response. A piece is source text — a
+// .pzl, a .js helper, the registry JSON — so 10 MiB is orders of magnitude above
+// anything real, while a body without a cap lets a hostile or broken host stream
+// the CLI out of memory (a chunked response ignores Content-Length entirely).
+const maxBodyBytes = 10 << 20
+
+// maxRedirects bounds the redirect chain. Go's default follows up to 10 hops to
+// anywhere; a registry is a static file host (raw.githubusercontent.com does not
+// redirect at all) so a legitimate mirror needs one or two, and 3 refuses to be
+// walked down a long chain to an unrelated origin.
+const maxRedirects = 3
+
 // httpFetcher reads a registry served over http(s) (the public default, or any
-// mirror). Each request is a fresh GET under a shared timeout.
+// mirror). Each request is a fresh GET under a shared timeout, a bounded
+// redirect chain, and a bounded response body.
 type httpFetcher struct{ base string }
 
 func (h *httpFetcher) Fetch(rel string) ([]byte, error) {
 	url := h.base + "/" + rel
-	client := &http.Client{Timeout: httpTimeout}
+	client := &http.Client{
+		Timeout: httpTimeout,
+		// via holds the requests ALREADY issued, so len(via) is the number of
+		// redirects followed to reach this one: allow it while that count is still
+		// within budget, refuse the hop that would exceed it.
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) > maxRedirects {
+				return fmt.Errorf("stopped after %d redirects", maxRedirects)
+			}
+			return nil
+		},
+	}
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", url, err)
@@ -133,7 +157,16 @@ func (h *httpFetcher) Fetch(rel string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetching %s: HTTP %d", url, resp.StatusCode)
 	}
-	return io.ReadAll(resp.Body)
+	// Read ONE byte past the cap: a body that exactly fills it still succeeds, and
+	// anything larger is detected without buffering the remainder.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("fetching %s: %w", url, err)
+	}
+	if len(data) > maxBodyBytes {
+		return nil, fmt.Errorf("fetching %s: response exceeds the %d MiB limit", url, maxBodyBytes>>20)
+	}
+	return data, nil
 }
 
 func (h *httpFetcher) Source() string        { return h.base }
