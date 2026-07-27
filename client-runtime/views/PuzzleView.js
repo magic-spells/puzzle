@@ -681,7 +681,10 @@ export class PuzzleView {
 		// and CSS animations keep working). Enter `to` keyframes should equal the
 		// element's natural styled state, so the handback is invisible.
 		await this.#runAnimation(spec, { release: true });
-		if (this.#destroyed) return; // destroyed mid-enter — skip the "did" hook
+		// Destroyed mid-enter, or a leave preempted it (playOut cancels the enter, which
+		// RESOLVES this await rather than rejecting) — either way the "show" sequence
+		// never completed, so its closing hook must not fire into a teardown or a leave.
+		if (this.#destroyed || this.#leaving) return;
 		this.viewDidShow();
 	}
 
@@ -864,7 +867,9 @@ export class PuzzleView {
 				// #settleEnter() below always runs. No .catch is needed on this chain.
 				handle.finished.then(() => {
 					if (this.#currentAnimation === handle) this.#currentAnimation = null;
-					if (!this.#destroyed) {
+					// Same rule as the mount path: destroyed OR preempted by a leave means
+					// the reveal never completed, so its closing hook is skipped.
+					if (!this.#destroyed && !this.#leaving) {
 						try {
 							this.viewDidShow(); // skipped entirely if destroyed mid-enter
 						} catch (err) {
@@ -947,6 +952,16 @@ export class PuzzleView {
 			// A held visible-trigger enter (D73) on this element must be unwound before
 			// the out animation runs on the same element — cancel the hold, proceed.
 			this.#abortEnter();
+			// …and #abortEnter only covers a VISIBLE-trigger enter. A mount-trigger enter
+			// still running is a live animation filling this same element (fill: 'both'),
+			// so the out spec would run CONCURRENTLY with it and #currentAnimation would
+			// simply be overwritten — the SPEC §12 one-animator rule. Cancel whatever
+			// still owns the element before the leave starts. That resolves the enter's
+			// finished promise (animate.js normalises WAAPI's cancel-time AbortError), so
+			// the awaiting playIn() resumes; its viewDidShow is suppressed by the #leaving
+			// check there.
+			this.#currentAnimation?.cancel();
+			this.#currentAnimation = null;
 			// A `trigger`/`triggerOffset`/`triggerAnchor` on the OUT spec is meaningless
 			// (leave is never scroll-gated) — warn once and ignore it; the leave path is
 			// unchanged (D73).
@@ -1119,6 +1134,13 @@ export class PuzzleView {
 		) {
 			return;
 		}
+		// A render is landing NOW with the current state, so any frame #scheduleRender
+		// armed is already satisfied — clear the flag so its rAF no-ops instead of
+		// repeating this render with byte-identical state (a synchronous refresh() after
+		// a setData used to render twice). Deliberately AFTER both bails: clearing above
+		// them would silently drop a legitimately pending local-state render. A setData
+		// later in this same tick sees the flag false and re-arms normally.
+		this.#updateScheduled = false;
 		const isUpdate = this.#mounted;
 
 		if (isUpdate) this.beforeUpdate();

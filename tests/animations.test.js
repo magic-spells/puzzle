@@ -199,6 +199,68 @@ describe('PuzzleView — enter/leave hooks (order, with & without animations)', 
 		expect(calls).toEqual(['willHide', 'didHide']);
 	});
 
+	// #abortEnter only unwinds a PENDING visible-trigger enter, so a running
+	// mount-trigger enter survived into the leave: playOut overwrote
+	// #currentAnimation and both fill:'both' animations owned the same element at
+	// once (SPEC §12 one-animator rule). Cancelling the enter also resolves its
+	// finished promise (animate.js normalises the AbortError), so the awaiting
+	// playIn() resumes — and must not fire viewDidShow into a leave.
+	it('playOut cancels a running mount-trigger enter and suppresses its viewDidShow', async () => {
+		installFakeAnimate();
+		const calls = [];
+		class V extends PuzzleView {
+			animations = { in: IN, out: OUT };
+			viewWillShow() { calls.push('willShow'); }
+			viewDidShow() { calls.push('didShow'); }
+			viewWillHide() { calls.push('willHide'); }
+			viewDidHide() { calls.push('didHide'); }
+			render() { return h('div', {}, [text('x')]); }
+		}
+		const v = await new V().mount(container());
+		const enter = v.playIn();
+		expect(fakeAnimations).toHaveLength(1);
+		const enterAnim = fakeAnimations[0];
+		expect(calls).toEqual(['willShow']);
+
+		const leave = v.playOut(); // interrupts mid-enter
+		const outAnim = fakeAnimations[1];
+		expect(outAnim.keyframes).toEqual([OUT.from, OUT.to]);
+		// The enter is gone before the out spec starts filling the same element.
+		expect(enterAnim.finishedState).toBe('cancelled');
+		expect(fakeAnimations.filter((a) => a.finishedState === 'running')).toEqual([outAnim]);
+
+		await enter; // resolves via the cancel
+		expect(calls).toEqual(['willShow', 'willHide']); // no didShow into the leave
+
+		outAnim.finish();
+		await leave;
+		expect(calls).toEqual(['willShow', 'willHide', 'didHide']);
+	});
+
+	it('an enter that COMPLETES before the leave still fires both hooks in SPEC order', async () => {
+		installFakeAnimate();
+		const calls = [];
+		class V extends PuzzleView {
+			animations = { in: IN, out: OUT };
+			viewWillShow() { calls.push('willShow'); }
+			viewDidShow() { calls.push('didShow'); }
+			viewWillHide() { calls.push('willHide'); }
+			viewDidHide() { calls.push('didHide'); }
+			render() { return h('div', {}, [text('x')]); }
+		}
+		const v = await new V().mount(container());
+		const enter = v.playIn();
+		fakeAnimations[0].finish();
+		await enter;
+		expect(calls).toEqual(['willShow', 'didShow']);
+
+		const leave = v.playOut();
+		const outAnim = fakeAnimations[fakeAnimations.length - 1];
+		outAnim.finish();
+		await leave;
+		expect(calls).toEqual(['willShow', 'didShow', 'willHide', 'didHide']);
+	});
+
 	it('playOut is idempotent — a second call returns the same promise', async () => {
 		installFakeAnimate();
 		const willHide = vi.fn();

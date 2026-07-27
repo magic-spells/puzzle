@@ -547,7 +547,14 @@ export function patch(oldVnode, newVnode, parent, ctx) {
  */
 function reassertSelectValue(el, attrs) {
 	if (el.nodeName !== 'SELECT' || !('value' in attrs)) return;
-	el.value = stringify(attrs.value);
+	// Compare against the LIVE property first, exactly as the INPUT/TEXTAREA branch of
+	// patchAttrs does: a settled select re-asserted on every patch wrote the value it
+	// already had and charged devperf a phantom DOM mutation. When the option list
+	// churned (or the user changed the selection out of band) the live value differs
+	// and the write still happens.
+	const next = stringify(attrs.value);
+	if (el.value === next) return;
+	el.value = next;
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 		devperfMutation();
 }
@@ -988,9 +995,13 @@ function setAttr(el, name, value) {
 		// Preserve attribute-removal semantics, but still hand an undefined binding
 		// to the shared display policy for its development diagnostic. The RESULT is
 		// discarded — the call exists only for that warning — so the probe leads and
-		// production pays nothing per nullish attribute.
+		// production pays nothing per nullish attribute. The attribute NAME rides
+		// along as the label: display.js dedups warnings by label, so without it every
+		// brace-only undefined in the app collapsed into the one '' key and only the
+		// first ever warned. Production is byte-neutral — the whole call folds away
+		// with this dev gate.
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-			if (value === undefined) stringify(value);
+			if (value === undefined) stringify(value, name);
 		}
 		el.removeAttribute(name);
 	} else if (value === true) {

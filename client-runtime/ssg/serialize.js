@@ -95,8 +95,10 @@ function serializeAttrs(tag, attrs, { selected = false, controlledSelect = false
 		} else if (value === false || value == null) {
 			// Omitted to mirror ViewManager attribute semantics, but an undefined
 			// binding still gets its development diagnostic — the result is
-			// discarded, the call is only there for the warning.
-			if (value === undefined) stringify(value);
+			// discarded, the call is only there for the warning. The attribute NAME is
+			// the dedup label (display.js keys warned-once by it); without it every
+			// unlabeled undefined collapsed into one '' key and only the first warned.
+			if (value === undefined) stringify(value, name);
 		} else if (value === true) {
 			out += ` ${name}`;
 		} else {

@@ -354,4 +354,48 @@ describe('measureRenders', () => {
 		expect(Object.isFrozen(profile.rendersByView)).toBe(true);
 		expect(Object.isFrozen(profile.causes)).toBe(true);
 	});
+
+	// The handle was required but never patched or inspected — the sink is global.
+	// Both call shapes are supported; the two-arg form stays self-documenting.
+	it('accepts the callback-only form', async () => {
+		class Bumper extends PuzzleView {
+			data() {
+				return { count: this.ctx.store.findMany('item').length };
+			}
+			events = { add: () => this.ctx.store.createRecord('item', {}) };
+			render() {
+				return h('div', {}, [
+					h('button', { class: 'add', '@click': this.events.add }, [text('Add')]),
+					h('span', { class: 'count' }, [text(this.getData().count)]),
+				]);
+			}
+		}
+
+		const view = await mountView(Bumper);
+		handles.push(view);
+		const profile = await measureRenders(async () => {
+			await view.click('.add');
+		});
+
+		expect(profile.renders).toBe(1);
+		expect(profile.rendersByView).toEqual({ Bumper: 1 });
+		expect(Object.isFrozen(profile)).toBe(true);
+	});
+
+	it('still rejects a call with no callback at all', async () => {
+		await expect(measureRenders()).rejects.toThrow(
+			'[puzzle/testing] measureRenders() expects a callback'
+		);
+		const view = await mountView(
+			class extends PuzzleView {
+				render() {
+					return h('div', {}, [text('x')]);
+				}
+			}
+		);
+		handles.push(view);
+		await expect(measureRenders(view)).rejects.toThrow(
+			'[puzzle/testing] measureRenders() expects a callback'
+		);
+	});
 });

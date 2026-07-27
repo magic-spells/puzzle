@@ -309,6 +309,9 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
  * marker, inline JSON data island, per-page module script), and collect the extended
  * summary the Go static build consumes (per page: `entry`, `modules`, `route`; top
  * level: `mode`, `target`, `apiURL`, `hasFormatters`).
+ *
+ * A page whose output file an earlier page already claimed is skipped here with
+ * reason `'duplicate'` rather than overwriting it (see claimedPaths below).
  */
 function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings }) {
 	// The app-bundle tag is stripped once (the shell is identical for every page) so
@@ -340,8 +343,30 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 	const base = normalizeBase(config.routerBase);
 
 	const slugCounts = new Map();
+	// outPath → the route path that already claimed it. Two routes can declare the
+	// SAME path, or two paths that normalize to one file (`/caf%C3%A9` and `/café`
+	// decode identically). Slugs are collision-suffixed but the output file is
+	// path-DERIVED, so the later page used to overwrite the earlier one's HTML while
+	// both bundles still shipped. Hybrid output never reaches this: the live
+	// first-match-wins Router makes the second route shadowed and prerender() skips
+	// it. Static output deliberately keeps shadowed pages (no router), so the writer
+	// itself refuses the second claim — the emitted HTML then belongs to the first
+	// route in reachable order and no dead second bundle is generated.
+	const claimedPaths = new Map();
 	const written = [];
 	for (const page of pages) {
+		const outPath = pageOutputPath(outDir, page.path);
+		if (claimedPaths.has(outPath)) {
+			skipped.push({ path: page.path, reason: 'duplicate' });
+			warnings.push(
+				`[puzzle] skipped duplicate route "${page.path}" — earlier route ` +
+					`"${claimedPaths.get(outPath)}" already writes ${path.relative(outDir, outPath)} ` +
+					'(two routes cannot own one static page; remove or rename one of them)'
+			);
+			continue;
+		}
+		claimedPaths.set(outPath, page.path);
+
 		const slug = uniqueSlug(computeSlug(page.path), slugCounts);
 		const html = injectStaticShell(baseShell, {
 			targetId,
@@ -352,7 +377,6 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 			slug,
 			data: page.data ?? {},
 		});
-		const outPath = pageOutputPath(outDir, page.path);
 		fs.mkdirSync(path.dirname(outPath), { recursive: true });
 		fs.writeFileSync(outPath, html);
 		written.push({
