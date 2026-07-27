@@ -265,6 +265,23 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	}
 	importLine := "import { " + strings.Join(imports, ", ") + " } from '@magic-spells/puzzle';"
 
+	// Reserved module-scope names: everything the import line above binds locally,
+	// plus one `__svg_N` per unique {#svg} asset in dedup mode. A <script> that
+	// binds one of these at module scope is a duplicate declaration in the emitted
+	// module, so it is a positioned compile error here rather than an esbuild error
+	// against the injected line (see checkReservedScriptBindings). The list is
+	// built from what THIS file emits — nothing is reserved unconditionally.
+	emitted := make([]string, 0, len(imports)+len(c.svgOrder))
+	for _, spec := range imports {
+		emitted = append(emitted, importLocalName(spec))
+	}
+	for _, src := range c.svgOrder {
+		emitted = append(emitted, c.svgIdent[src])
+	}
+	if err := checkReservedScriptBindings(sec.Scripts, emitted, opts.Filename, sec.ScriptsPos); err != nil {
+		return "", err
+	}
+
 	var b strings.Builder
 	// 1. user's <script>, byte-for-byte verbatim (or the synthesized module for
 	//    a scriptless .pzl).

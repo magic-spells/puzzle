@@ -1,6 +1,12 @@
 package codegen
 
-import "github.com/magic-spells/puzzle/compiler/internal/parser"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/jsident"
+	"github.com/magic-spells/puzzle/compiler/internal/parser"
+)
 
 // scriptcollide.go — the <script>-import collision WARNING (v0.1 hardening).
 //
@@ -28,6 +34,7 @@ type jsTok struct {
 	ident  string // non-empty for an identifier token
 	ch     byte   // non-zero for a punctuation token
 	opaque bool   // a skipped string / comment / regex literal
+	off    int    // byte offset of the token's first byte in the scanned body
 }
 
 // tokenizeJS lexes s into jsToks, skipping whitespace and treating strings,
@@ -40,16 +47,16 @@ func tokenizeJS(s string) []jsTok {
 		c := s[i]
 		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
 			if isIdentStart(c) {
-				toks = append(toks, jsTok{ident: s[i:next]})
+				toks = append(toks, jsTok{ident: s[i:next], off: i})
 			} else {
-				toks = append(toks, jsTok{opaque: true})
+				toks = append(toks, jsTok{opaque: true, off: i})
 			}
 			prevEndsExpr = pee
 			i = next
 			continue
 		}
 		if !isASCIISpace(c) {
-			toks = append(toks, jsTok{ch: c})
+			toks = append(toks, jsTok{ch: c, off: i})
 		}
 		prevEndsExpr = parser.LexPlainEndsExpr(c, prevEndsExpr)
 		i++
@@ -84,7 +91,7 @@ func scriptImportBindings(scripts string) map[string]bool {
 			continue
 		}
 		if depth == 0 && t.ident == "import" {
-			i = collectImportClause(toks, i+1, set)
+			i = collectImportClause(toks, i+1, func(name string, _ int) { set[name] = true })
 			continue
 		}
 		i++
@@ -93,10 +100,11 @@ func scriptImportBindings(scripts string) map[string]bool {
 }
 
 // collectImportClause reads an import statement's binding clause starting at
-// toks[j] (the token after `import`), adds every local binding to set, and
-// returns the index just past the statement. It fully consumes the clause's
-// braces, so the caller's depth counter stays balanced.
-func collectImportClause(toks []jsTok, j int, set map[string]bool) int {
+// toks[j] (the token after `import`), reports every local binding (name plus the
+// byte offset of its identifier) to bind, and returns the index just past the
+// statement. It fully consumes the clause's braces, so the caller's depth
+// counter stays balanced.
+func collectImportClause(toks []jsTok, j int, bind func(name string, off int)) int {
 	if j >= len(toks) {
 		return j
 	}
@@ -130,7 +138,7 @@ func collectImportClause(toks []jsTok, j int, set map[string]bool) int {
 				// `X as local` / `* as ns` — the LOCAL binding is the next ident.
 				j++
 				if j < len(toks) && toks[j].ident != "" {
-					set[toks[j].ident] = true
+					bind(toks[j].ident, toks[j].off)
 					j++
 				}
 				continue
@@ -142,7 +150,7 @@ func collectImportClause(toks []jsTok, j int, set map[string]bool) int {
 					j++
 					continue
 				}
-				set[t.ident] = true
+				bind(t.ident, t.off)
 				j++
 				continue
 			}
@@ -151,6 +159,156 @@ func collectImportClause(toks []jsTok, j int, set map[string]bool) int {
 		j++
 	}
 	return j
+}
+
+// scriptTopLevelBindings returns every MODULE-SCOPE binding in the opaque
+// <script> body — import locals (via the same clause reader the warning scan
+// uses) plus the names declared by a top-level const/let/var/function/class —
+// mapped to the byte offset of the binding identifier. Only brace/paren-depth-0
+// declarations count: a helper declared inside a function body merely shadows.
+//
+// This set feeds an EXACT-name check (checkReservedScriptBindings), not the
+// heuristic warning above, so the tradeoff is inverted from that scan's: a miss
+// falls through to esbuild's duplicate-binding error (today's behavior), while a
+// false hit would reject legal code. Deliberately skipped, therefore:
+//   - destructuring patterns (`const { ViewNode } = x`), which bind nothing here;
+//   - the second and later declarators of a list (`const a = 1, __s = 2`);
+//   - `function`/`class` whose preceding token shows an EXPRESSION position — a
+//     named class expression (`const A = class ViewNode {}`) binds its name
+//     inside the expression only.
+func scriptTopLevelBindings(scripts string) map[string]int {
+	set := map[string]int{}
+	if scripts == "" {
+		return set
+	}
+	bind := func(name string, off int) {
+		if _, dup := set[name]; !dup {
+			set[name] = off
+		}
+	}
+	toks := tokenizeJS(scripts)
+	depth := 0
+	// prev is the previous SIGNIFICANT token; strings, comments, and regex
+	// literals are transparent so a comment above a declaration does not hide the
+	// statement boundary. Start of file is a boundary.
+	prev := jsTok{ch: ';'}
+	for i := 0; i < len(toks); {
+		t := toks[i]
+		switch {
+		case t.ch != 0:
+			switch t.ch {
+			case '(', '[', '{':
+				depth++
+			case ')', ']', '}':
+				if depth > 0 {
+					depth--
+				}
+			}
+		case t.opaque:
+			i++
+			continue
+		case depth == 0 && prev.ch != '.':
+			switch t.ident {
+			case "import":
+				prev = jsTok{ch: ';'} // the statement ends at the clause
+				i = collectImportClause(toks, i+1, bind)
+				continue
+			case "const", "let", "var":
+				// `declare const X` (TS) is type-only: erased by the loader, so it
+				// binds nothing in the emitted module. `declare function`/`declare
+				// class` are covered by startsDeclaration, which rejects `declare`.
+				if prev.ident != "declare" {
+					bindDeclaredName(toks, i+1, bind)
+				}
+			case "function", "class":
+				if startsDeclaration(prev) {
+					bindDeclaredName(toks, i+1, bind)
+				}
+			}
+		}
+		prev = t
+		i++
+	}
+	return set
+}
+
+// bindDeclaredName binds the declared identifier at toks[j], skipping a
+// generator `*`. A non-identifier (or a reserved word, e.g. the `extends` of an
+// anonymous default class) is one of the forms this scan skips.
+func bindDeclaredName(toks []jsTok, j int, bind func(name string, off int)) {
+	if j < len(toks) && toks[j].ch == '*' {
+		j++
+	}
+	if j < len(toks) && toks[j].ident != "" && !jsident.IsReservedBindingIdentifier(toks[j].ident) {
+		bind(toks[j].ident, toks[j].off)
+	}
+}
+
+// startsDeclaration reports whether prev — the previous significant token — puts
+// a following `function`/`class` in STATEMENT position, i.e. makes it a
+// declaration that binds at module scope rather than an expression.
+func startsDeclaration(prev jsTok) bool {
+	if prev.ch != 0 {
+		return prev.ch == ';' || prev.ch == '}'
+	}
+	return prev.ident == "export" || prev.ident == "default" || prev.ident == "async"
+}
+
+// checkReservedScriptBindings fails the compile when the <script> binds, at
+// module scope, one of the names codegen appends its own declaration for
+// (emitted: the local names of the injected import line, in emission order). The
+// injected import lands AFTER the verbatim script, so such a binding is a
+// duplicate declaration — one esbuild reports against a line that appears in no
+// .pzl, at a skewed position. Catching it here keeps the diagnostic in the
+// user's source. Renaming was rejected: the script's bytes are the user's.
+//
+// The set is per-file and exact: `__s` is legal in a module that never coerces a
+// value for display, and the function-scope helpers (`__d`, `__f`) never collide
+// because they are shadowed inside the render body, not redeclared.
+func checkReservedScriptBindings(scripts string, emitted []string, file string, scriptsPos parser.Position) error {
+	bindings := scriptTopLevelBindings(scripts)
+	if len(bindings) == 0 {
+		return nil
+	}
+	for _, name := range emitted {
+		off, hit := bindings[name]
+		if !hit {
+			continue
+		}
+		pos := scriptsPos.Advance(scripts[:off])
+		what, why := reservedBindingImport(name)
+		return &parser.ParseError{
+			File: file, Line: pos.Line, Col: pos.Col,
+			Message: fmt.Sprintf(
+				"<script> binds %q at module scope, a name reserved by the compiler: it imports %s after the <script> (%s), so the two declarations collide — rename the <script> binding",
+				name, what, why),
+		}
+	}
+	return nil
+}
+
+// reservedBindingImport names what the compiler imports as `name` and why THIS
+// file imports it, so the error explains a reservation the .pzl cannot see.
+func reservedBindingImport(name string) (what, why string) {
+	switch name {
+	case "ViewNode":
+		return "ViewNode", "every compiled module builds its render tree with it"
+	case "SLOT_TAG":
+		return "SLOT_TAG", "this template contains a slot"
+	case "__s":
+		return "the display helper as __s", "this template coerces an interpolation for display"
+	default:
+		return name, "the shared module for a {#svg} asset in this template"
+	}
+}
+
+// importLocalName returns the local binding a named-import specifier introduces
+// ("displayValue as __s" → "__s").
+func importLocalName(spec string) string {
+	if i := strings.LastIndex(spec, " as "); i >= 0 {
+		return spec[i+len(" as "):]
+	}
+	return spec
 }
 
 // collectDataCollisions scans an emitted render expression for `__d.<name>`
