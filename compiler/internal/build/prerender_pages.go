@@ -141,8 +141,9 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 	if err := json.Unmarshal([]byte(payload), &summary); err != nil {
 		return fmt.Errorf("puzzle build --static: prerender summary was not readable JSON: %w", err)
 	}
+	owners := publicOwnership(publicFiles)
 	for _, page := range summary.Written {
-		if err := checkPrerenderCollision(absRoot, staging, publicFiles, page.Path, page.File); err != nil {
+		if err := checkPrerenderCollision(absRoot, staging, owners, page.Path, page.File); err != nil {
 			return err
 		}
 	}
@@ -304,9 +305,14 @@ func staticEntrySource(absRoot string, page staticPage, summary staticSummary, m
 	// throwing data() during rehydration, or a corrupt chain would otherwise
 	// surface only as an unobserved rejection. The prerendered markup is still on
 	// screen at that point (replaceChildren has not run), so the page LOOKS right
-	// while nothing is interactive. Log it like every other entry point does.
+	// while nothing is interactive. Log it like every other entry point does, then
+	// rethrow from a fresh task: production strips console.* (bundleStaticPages
+	// sets Drop: api.DropConsole), which would leave an EMPTY handler that swallows
+	// the failure outright. The async throw reaches window.onerror instead, so
+	// production still reports it and dev keeps the readable log.
 	b.WriteString("}).catch((err) => {\n")
 	b.WriteString("  console.error('[puzzle] static page mount failed:', err);\n")
+	b.WriteString("  setTimeout(() => { throw err; });\n")
 	b.WriteString("});\n")
 	return b.String(), nil
 }
@@ -366,9 +372,9 @@ func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg c
 		// Takeover: true — a static page's whole job is adopting the prerendered
 		// markup it was emitted alongside (mountStatic rehydrates the data island
 		// and mounts over it), so these bundles must keep the preload path.
-		Define:      bundleDefines(pl, bundleFlags{Dev: dev, Takeover: true}),
-		Plugins:     []api.Plugin{pl.ESBuild()},
-		LogLevel:    api.LogLevelSilent,
+		Define:   bundleDefines(pl, bundleFlags{Dev: dev, Takeover: true}),
+		Plugins:  []api.Plugin{pl.ESBuild()},
+		LogLevel: api.LogLevelSilent,
 	}
 	// Production (dev=false) matches the main bundle: minify everything and strip
 	// console.* unless build.dropConsole: false opts out.

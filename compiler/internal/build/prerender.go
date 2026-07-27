@@ -102,8 +102,9 @@ func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool) error
 	if err := json.Unmarshal([]byte(payload), &summary); err != nil {
 		return fmt.Errorf("puzzle build --hybrid: prerender summary was not readable JSON: %w", err)
 	}
+	owners := publicOwnership(publicFiles)
 	for _, page := range summary.Written {
-		if err := checkPrerenderCollision(absRoot, staging, publicFiles, page.Path, page.File); err != nil {
+		if err := checkPrerenderCollision(absRoot, staging, owners, page.Path, page.File); err != nil {
 			return err
 		}
 	}
@@ -117,10 +118,30 @@ func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool) error
 	return nil
 }
 
+// publicOwnership folds copyPublic's result into the lookup the collision check
+// needs: folded dist-relative path → the asset's ORIGINAL spelling. Output
+// ownership is case-insensitive — on the case-insensitive filesystems macOS and
+// Windows default to, public/404.HTML and a catch-all route's generated 404.html
+// are the same dist file — while the error must still name the file the user
+// wrote. copyPublic's own map keeps original case; the watch path mirrors
+// deletions from it.
+func publicOwnership(publicFiles map[string]bool) map[string]string {
+	owners := make(map[string]string, len(publicFiles))
+	for rel := range publicFiles {
+		fold := strings.ToLower(rel)
+		// Two spellings of one folded path can coexist only on a case-SENSITIVE
+		// filesystem; pick deterministically so the error text is stable.
+		if prev, ok := owners[fold]; !ok || rel < prev {
+			owners[fold] = rel
+		}
+	}
+	return owners
+}
+
 // checkPrerenderCollision rejects a route output owned by public/. The root
 // route is the one intentional overlap: it consumes the copied index.html as
 // its shell and writes the rendered page back to that same path.
-func checkPrerenderCollision(absRoot, staging string, publicFiles map[string]bool, routePath, outputFile string) error {
+func checkPrerenderCollision(absRoot, staging string, publicOwners map[string]string, routePath, outputFile string) error {
 	rel, err := filepath.Rel(staging, outputFile)
 	if err != nil {
 		return fmt.Errorf("checking prerender output %s: %w", outputFile, err)
@@ -129,11 +150,12 @@ func checkPrerenderCollision(absRoot, staging string, publicFiles map[string]boo
 	if routePath == "/" && rel == "index.html" {
 		return nil
 	}
-	if !publicFiles[rel] {
+	owner, ok := publicOwners[strings.ToLower(rel)]
+	if !ok {
 		return nil
 	}
 
-	publicPath, err := filepath.Rel(absRoot, filepath.Join(publicDir(absRoot), filepath.FromSlash(rel)))
+	publicPath, err := filepath.Rel(absRoot, filepath.Join(publicDir(absRoot), filepath.FromSlash(owner)))
 	if err != nil {
 		return fmt.Errorf("resolving public asset for prerender output %s: %w", outputFile, err)
 	}

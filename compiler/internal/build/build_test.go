@@ -1184,6 +1184,30 @@ func TestBuildHybridRejectsCatchAllPublicAssetCollision(t *testing.T) {
 	}
 }
 
+// TestBuildHybridRejectsCatchAllPublicAssetCollisionCaseInsensitive proves the
+// prerender ownership check folds case the way the reserved-output guard does:
+// on the case-insensitive filesystems macOS/Windows default to, public/404.HTML
+// and the catch-all's generated 404.html are ONE dist file, so the build must
+// fail instead of emitting host-dependent output. The fold is in the lookup, not
+// the filesystem, so this holds on case-sensitive CI too — and the message keeps
+// the asset's actual spelling.
+func TestBuildHybridRejectsCatchAllPublicAssetCollisionCaseInsensitive(t *testing.T) {
+	requireSSGRuntime(t)
+	files := baseSSGFixture()
+	files["app/public/404.HTML"] = "PUBLIC 404 ASSET"
+	root := writeSSGFixture(t, files)
+
+	err := Build(root, Options{Development: true, Output: "hybrid"})
+	want := "[puzzle] prerendered route \"*\" would overwrite public asset app/public/404.HTML\n" +
+		"at dist/404.html; rename the public asset or remove the route output"
+	if err == nil {
+		t.Fatal("expected the hybrid build to reject the case-folded catch-all collision")
+	}
+	if err.Error() != want {
+		t.Fatalf("collision error:\n%s\nwant:\n%s", err, want)
+	}
+}
+
 func TestBuildHybridAllowsRootRouteToRewritePublicIndexShell(t *testing.T) {
 	requireSSGRuntime(t)
 	files := baseSSGFixture()
