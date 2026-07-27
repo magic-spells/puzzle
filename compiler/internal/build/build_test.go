@@ -1167,6 +1167,57 @@ func TestBuildStaticRejectsPrerenderPublicAssetCollision(t *testing.T) {
 	}
 }
 
+// TestBuildRejectsPrerenderScratchDirCollision proves BOTH prerender modes
+// reject a public/.puzzle-prerender subtree instead of silently eating it. That
+// path is each mode's scratch dir: the generated bundle is written into it and
+// the whole directory is RemoveAll'd before the staging→dist swap, so the copied
+// asset used to disappear while the build reported success. ValidatePublic can't
+// see it (root-level FILES only, directories skipped), so the guard reads the
+// post-copyPublic staging state — which is also why it can't be dodged by using
+// a flat public/ instead of app/public. No node run is involved: the guard fires
+// before the prerender bundle is built.
+func TestBuildRejectsPrerenderScratchDirCollision(t *testing.T) {
+	for _, tc := range []struct {
+		mode      string
+		publicDir string
+		asset     string
+	}{
+		{mode: "hybrid", publicDir: "app/public", asset: "app/public/.puzzle-prerender/keep.txt"},
+		{mode: "static", publicDir: "app/public", asset: "app/public/.puzzle-prerender/keep.txt"},
+		// A flat root-level public/ resolves to the same staging path.
+		{mode: "hybrid", publicDir: "public", asset: "public/.puzzle-prerender/keep.txt"},
+		// The collision is a plain FILE, not a directory.
+		{mode: "static", publicDir: "app/public", asset: "app/public/.puzzle-prerender"},
+	} {
+		t.Run(tc.mode+"/"+tc.asset, func(t *testing.T) {
+			files := baseSSGFixture()
+			if tc.publicDir != "app/public" {
+				files[tc.publicDir+"/index.html"] = files["app/public/index.html"]
+				delete(files, "app/public/index.html")
+			}
+			files[tc.asset] = "KEEP ME"
+			root := writeSSGFixture(t, files)
+
+			err := Build(root, Options{Development: true, Output: tc.mode})
+			if err == nil {
+				t.Fatalf("expected the %s build to reject the .puzzle-prerender collision", tc.mode)
+			}
+			want := "public asset " + tc.publicDir + "/.puzzle-prerender would be consumed by the prerender step " +
+				"(.puzzle-prerender is a reserved output name); rename or remove it"
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("collision error:\n%s\nwant substring:\n%s", err, want)
+			}
+			if !strings.Contains(err.Error(), "puzzle build --"+tc.mode) {
+				t.Errorf("error should name the mode; got: %v", err)
+			}
+			// The failure is atomic: staging is discarded, so no dist/ was written.
+			if _, err := os.Stat(filepath.Join(root, "dist")); !os.IsNotExist(err) {
+				t.Errorf("failed build should not have produced dist/: %v", err)
+			}
+		})
+	}
+}
+
 func TestBuildHybridRejectsCatchAllPublicAssetCollision(t *testing.T) {
 	requireSSGRuntime(t)
 	files := baseSSGFixture()
@@ -1178,6 +1229,30 @@ func TestBuildHybridRejectsCatchAllPublicAssetCollision(t *testing.T) {
 		"at dist/404.html; rename the public asset or remove the route output"
 	if err == nil {
 		t.Fatal("expected the hybrid build to reject the catch-all/public asset collision")
+	}
+	if err.Error() != want {
+		t.Fatalf("collision error:\n%s\nwant:\n%s", err, want)
+	}
+}
+
+// TestBuildHybridRejectsCatchAllPublicAssetCollisionCaseInsensitive proves the
+// prerender ownership check folds case the way the reserved-output guard does:
+// on the case-insensitive filesystems macOS/Windows default to, public/404.HTML
+// and the catch-all's generated 404.html are ONE dist file, so the build must
+// fail instead of emitting host-dependent output. The fold is in the lookup, not
+// the filesystem, so this holds on case-sensitive CI too — and the message keeps
+// the asset's actual spelling.
+func TestBuildHybridRejectsCatchAllPublicAssetCollisionCaseInsensitive(t *testing.T) {
+	requireSSGRuntime(t)
+	files := baseSSGFixture()
+	files["app/public/404.HTML"] = "PUBLIC 404 ASSET"
+	root := writeSSGFixture(t, files)
+
+	err := Build(root, Options{Development: true, Output: "hybrid"})
+	want := "[puzzle] prerendered route \"*\" would overwrite public asset app/public/404.HTML\n" +
+		"at dist/404.html; rename the public asset or remove the route output"
+	if err == nil {
+		t.Fatal("expected the hybrid build to reject the case-folded catch-all collision")
 	}
 	if err.Error() != want {
 		t.Fatalf("collision error:\n%s\nwant:\n%s", err, want)

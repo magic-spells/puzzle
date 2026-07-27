@@ -284,6 +284,86 @@ describe('static prerender (D81)', () => {
 		});
 	});
 
+	describe('duplicate output paths', () => {
+		// Two routes declaring the SAME path get distinct slugs (about, about-2) but a
+		// path-DERIVED output file, so both wrote dist/about/index.html and the second
+		// silently won — while the Go build still generated the dead about-2 bundle.
+		// Hybrid catches this via shadow detection; static deliberately keeps shadowed
+		// pages, so the writer itself has to refuse the second claim.
+		it('skips a second route claiming an already-written file instead of overwriting it', async () => {
+			class First extends PuzzleView {
+				render() {
+					return h('p', { class: 'first' }, [text('first')]);
+				}
+			}
+			class Second extends PuzzleView {
+				render() {
+					return h('p', { class: 'second' }, [text('second')]);
+				}
+			}
+			stamp(First, 'app/views/First.pzl');
+			stamp(Second, 'app/views/Second.pzl');
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-dup-'));
+			const shellPath = writeShell(outDir);
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/about', name: 'about', view: First },
+					{ path: '/about', name: 'about-again', view: Second },
+				],
+			};
+
+			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+			// The FIRST (reachable-order) route owns the file and the emitted module href.
+			const html = fs.readFileSync(path.join(outDir, 'about', 'index.html'), 'utf8');
+			expect(html).toContain('first');
+			expect(html).not.toContain('second');
+			expect(html).toContain('/_puzzle/about.js');
+			expect(html).not.toContain('/_puzzle/about-2.js');
+
+			// …and the counts stay truthful: one page, one bundle, one skip.
+			expect(summary.written.filter((w) => w.path === '/about')).toHaveLength(1);
+			expect(summary.written[0].entry).toBe('_puzzle/about.js');
+			expect(summary.count).toBe(1);
+			expect(summary.skipped).toContainEqual({ path: '/about', reason: 'duplicate' });
+			expect(
+				summary.warnings.some(
+					(w) => w.includes('duplicate route "/about"') && w.includes('about/index.html')
+				)
+			).toBe(true);
+		});
+
+		it('treats two different route paths that normalize to one file as duplicates', async () => {
+			class Only extends PuzzleView {
+				render() {
+					return h('p', {}, [text('only')]);
+				}
+			}
+			stamp(Only, 'app/views/Only.pzl');
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-dup2-'));
+			const shellPath = writeShell(outDir);
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/caf%C3%A9', name: 'cafe-encoded', view: Only },
+					{ path: '/café', name: 'cafe-literal', view: Only },
+				],
+			};
+
+			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+			expect(summary.count).toBe(1);
+			expect(summary.written[0].path).toBe('/caf%C3%A9');
+			expect(summary.skipped).toContainEqual({ path: '/café', reason: 'duplicate' });
+			expect(
+				summary.warnings.some(
+					(w) => w.includes('duplicate route "/café"') && w.includes('"/caf%C3%A9"')
+				)
+			).toBe(true);
+		});
+	});
+
 	describe('static shell surgery', () => {
 		it('strips /app.js, injects data + entry scripts, marks data-puzzle-static', async () => {
 			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-'));

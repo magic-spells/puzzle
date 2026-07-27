@@ -62,6 +62,29 @@ describe('built-in Intl formatter caches', () => {
 		expect(constructor).toHaveBeenCalledTimes(3);
 	});
 
+	it('never keys the date cache on a non-string locale', async () => {
+		vi.resetModules();
+		const constructor = spyOnIntlConstructor('DateTimeFormat');
+		const { date } = await import('../client-runtime/formatters/builtins.js');
+		const list = ['en-US'];
+
+		// Intl accepts a locale LIST, but a Map keyed by it can only ever be hit by
+		// the SAME array instance — a call site that builds one inline would miss and
+		// insert on every render, growing the cache without bound. So a list formats
+		// correctly and constructs per call instead. (The cache itself is module-
+		// private, so the construction count is the observable proxy for its size:
+		// keying on the list would make the repeated `list` calls hit.)
+		expect(date('2026-07-24', 'long', list)).toBe('July 24, 2026');
+		expect(date('2026-01-01', 'long', list)).toBe('January 01, 2026');
+		expect(date('2026-07-24', 'long', ['en-US'])).toBe('July 24, 2026');
+		expect(constructor).toHaveBeenCalledTimes(3);
+
+		// And they leave the string cache alone: one construction, then hits.
+		expect(date('2026-07-24', 'long', 'en-US')).toBe('July 24, 2026');
+		expect(date('2026-01-01', 'long', 'en-US')).toBe('January 01, 2026');
+		expect(constructor).toHaveBeenCalledTimes(4);
+	});
+
 	it('reuses the RelativeTimeFormat used by timeago', async () => {
 		vi.resetModules();
 		const constructor = spyOnIntlConstructor('RelativeTimeFormat');

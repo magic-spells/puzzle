@@ -120,7 +120,13 @@ export interface RenderProfile {
  * framework work with settled(). A render with no DOM writes is wasted.
  *
  * The returned report and its nested records are frozen.
+ *
+ * The instrumentation sink is global, so the handle is optional — pass one only
+ * when naming the subject makes the call site clearer.
  */
+export declare function measureRenders(
+	callback: () => void | Promise<void>
+): Promise<Readonly<RenderProfile>>;
 export declare function measureRenders(
 	handle: MountedView | TestApp,
 	callback: () => void | Promise<void>

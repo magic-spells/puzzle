@@ -239,8 +239,10 @@ const DATE_FORMATS = {
 };
 
 const DATE_FORMATTERS = new Map();
-const RELATIVE_TIME_FORMATTERS = new Map();
 const TIMEZONE_FORMATTERS = new Map();
+// `timeago` takes no locale, so there is exactly one formatter to cache — built
+// on first use so importing the module never constructs an Intl object.
+let relativeTimeFormatter;
 
 function parseDateInput(v) {
 	if (typeof v === 'string' && DATE_ONLY.test(v)) {
@@ -296,16 +298,21 @@ export function date(v, preset = 'date', locale = undefined) {
 
 	const resolvedPreset = Object.hasOwn(DATE_FORMATS, preset) ? preset : 'date';
 	const options = DATE_FORMATS[resolvedPreset];
+	// Only undefined and string locales are cache KEYS. Intl also accepts a locale
+	// LIST (and an Intl.Locale), and a call site that builds one inline hands over a
+	// fresh object every render — identity keying would miss the Map every time AND
+	// insert, growing it without bound. Those construct a formatter per call instead.
+	const cacheable = locale === undefined || typeof locale === 'string';
 	// An invalid locale throws RangeError at DateTimeFormat construction — fail
 	// soft to the raw value like the invalid-date guard above.
 	try {
-		const localeFormatters = DATE_FORMATTERS.get(locale);
+		const localeFormatters = cacheable ? DATE_FORMATTERS.get(locale) : undefined;
 		let formatter = localeFormatters?.get(resolvedPreset);
 		if (!formatter) {
 			formatter = new Intl.DateTimeFormat(locale, options);
 			if (localeFormatters) {
 				localeFormatters.set(resolvedPreset, formatter);
-			} else {
+			} else if (cacheable) {
 				DATE_FORMATTERS.set(locale, new Map([[resolvedPreset, formatter]]));
 			}
 		}
@@ -327,12 +334,9 @@ export function timeago(v) {
 	const then = parseDateInput(v).getTime();
 	if (isNaN(then)) return str(v);
 
-	const locale = undefined;
-	let rtf = RELATIVE_TIME_FORMATTERS.get(locale);
-	if (!rtf) {
-		rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
-		RELATIVE_TIME_FORMATTERS.set(locale, rtf);
-	}
+	const rtf = (relativeTimeFormatter ??= new Intl.RelativeTimeFormat(undefined, {
+		numeric: 'auto',
+	}));
 	const diff = Math.round((then - Date.now()) / 1000);
 	const units = [
 		['year', 31536000],

@@ -66,6 +66,29 @@ export function clearType(store, type) {
 }
 
 /**
+ * Destroy every record of every REGISTERED type — the whole store, not one type.
+ *
+ * `store.models` is the type-name → model-class registry the app hands
+ * `PuzzleApp` (see app/models/index.js), so iterating its own keys reaches the
+ * datasets OTHER scenarios seeded as well as the caller's. Every scenario
+ * rebuilds its own dataset in `created()`, so emptying the store between them
+ * costs a reseed and nothing else.
+ *
+ * This exists for `write-storm`. `Store._persistNow()` serializes the WHOLE
+ * store on every dirty flush, so an arm that means to price "persisting 10,000
+ * records" has to be the only 10,000 records in it — clearing just its own type
+ * leaves every earlier scenario's rows in the blob and prices them too.
+ *
+ * Same tracking-scope rule as `clearType`: `findMany` auto-subscribes the
+ * current scope, so call this OUTSIDE `data()`.
+ */
+export function clearAllTypes(store) {
+	let destroyed = 0;
+	for (const type of Object.keys(store?.models ?? {})) destroyed += clearType(store, type);
+	return destroyed;
+}
+
+/**
  * Shapes for `store.seed(type, shapes)` that pin `seq` to insertion order.
  *
  * `findMany` returns records in Map-insertion order, which cannot be permuted in

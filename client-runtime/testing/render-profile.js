@@ -7,10 +7,21 @@ import { settled } from './settled.js';
 
 /**
  * Measure framework render work caused by callback, including work drained by
- * settled(). The handle is intentionally not patched or inspected; accepting it
- * keeps the call site self-documenting and leaves room for view/app parity.
+ * settled(). Call it as `measureRenders(callback)` or, when naming the subject
+ * reads better, `measureRenders(handle, callback)` — the sink is global, so the
+ * handle is never patched or inspected; it only documents the call site.
+ *
+ * @param {object|(() => void|Promise<void>)} handle a MountedView/TestApp, or the
+ *   callback itself in the one-argument form
+ * @param {() => void|Promise<void>} [callback] omitted in the one-argument form
  */
 export async function measureRenders(handle, callback) {
+	// One-argument form: the first (and only) argument IS the callback. Requiring
+	// `callback === undefined` keeps `measureRenders(fnHandle, cb)` unambiguous.
+	if (callback === undefined && typeof handle === 'function') {
+		callback = handle;
+		handle = undefined;
+	}
 	if (typeof callback !== 'function') {
 		throw new TypeError('[puzzle/testing] measureRenders() expects a callback');
 	}
@@ -53,16 +64,14 @@ function increment(record, key) {
 	record[key] = (record[key] ?? 0) + 1;
 }
 
+/**
+ * Freeze the tally in place — the sink is detached moments later and `counts` is
+ * never handed out anywhere else, so the report can BE it.
+ */
 function immutableReport(counts) {
-	return Object.freeze({
-		renders: counts.renders,
-		wastedRenders: counts.wastedRenders,
-		domMutations: counts.domMutations,
-		rendersByView: Object.freeze({ ...counts.rendersByView }),
-		causes: Object.freeze({ ...counts.causes }),
-		maxRecursiveDepth: counts.maxRecursiveDepth,
-		storeNotifications: counts.storeNotifications,
-	});
+	Object.freeze(counts.rendersByView);
+	Object.freeze(counts.causes);
+	return Object.freeze(counts);
 }
 
 export default measureRenders;

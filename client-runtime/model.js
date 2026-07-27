@@ -316,7 +316,7 @@ function safeAssign(target, src) {
 /**
  * safeAssign plus the local-mutation stamp — the update() path only.
  *
- * Construction deliberately does NOT stamp. A stamp costs an array, a closure, a
+ * Construction deliberately does NOT stamp. A stamp costs a key array, a
  * `{current, fields: Map}` state object and one Map entry per field, and every
  * record hydrated from the server pays it for data only save()-response
  * reconciliation ever reads. It is also redundant: an unstamped record makes
@@ -332,12 +332,11 @@ function safeAssign(target, src) {
  * now compares `k <= j`. Same predicate.
  */
 function safeAssignTracked(target, src) {
-	const assigned = [];
-	assignSkipping(target, src, POLLUTION_SKIP, (key) => {
-		assigned.push(key);
-		return true;
-	});
-	recordMutation(target, assigned);
+	safeAssign(target, src);
+	recordMutation(
+		target,
+		Object.keys(src).filter((key) => !POLLUTION_SKIP.has(key))
+	);
 	return target;
 }
 
@@ -367,12 +366,14 @@ export function recordMutationRevision(record) {
  * omit it and remain server-authoritative exactly as before.
  */
 export function safeMerge(record, src, throughRevision) {
-	const state =
-		throughRevision === undefined ? null : MUTATION_REVISIONS.get(record);
-	return assignSkipping(record, src, MERGE_SKIP, (key) => {
-		if (throughRevision === undefined) return true;
-		return (state?.fields.get(key) ?? 0) <= throughRevision;
-	});
+	if (throughRevision === undefined) return assignSkipping(record, src, MERGE_SKIP);
+	const state = MUTATION_REVISIONS.get(record);
+	return assignSkipping(
+		record,
+		src,
+		MERGE_SKIP,
+		(key) => (state?.fields.get(key) ?? 0) <= throughRevision
+	);
 }
 
 export class PuzzleModel {

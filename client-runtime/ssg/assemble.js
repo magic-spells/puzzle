@@ -16,6 +16,7 @@
 
 import { ViewNode } from '../views/ViewNode.js';
 import { encodeURL, normalizeBase } from '../router/router.js';
+import { normalizeRoutePath } from '../router/routePath.js';
 
 /**
  * Instantiate + preload the layout+view chain for one route and assemble it into
@@ -72,11 +73,18 @@ export async function assembleChain(entry, ctx, route = makeRouteSnapshot(entry)
  * Build the frozen D83 route snapshot shared by static prerender and mount.
  * Static paths carry no params/query/fragment, so their pathname is the full
  * path and the query object is a frozen null-prototype empty map.
+ *
+ * The path runs through the Router's own normalizer: a live Router exposes
+ * `/caf%C3%A9` for a route declared `/café`, so a raw snapshot would make
+ * `this.route.path` differ between the prerender and the takeover/mount that
+ * replaces it. Both prerender modes build the snapshot here, so normalizing
+ * once keeps every side in the same spelling (the operation is idempotent).
  */
 export function makeRouteSnapshot({ chain, fullPath }) {
+	const path = normalizeRoutePath(fullPath);
 	return Object.freeze({
-		path: fullPath,
-		pathname: fullPath,
+		path,
+		pathname: path,
 		query: Object.freeze(Object.create(null)),
 		hash: '',
 		route: chain[chain.length - 1],

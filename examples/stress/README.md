@@ -467,8 +467,23 @@ going in. Roughly five writes collapse into every flush. Nothing piles up.
 ### Persistence is the finding
 
 `Store._persistNow()` serializes the **whole store** — every record of every
-type, through `toJSON()` — and `JSON.stringify`s it, once per dirty flush. At
-10,000 records that is a **2,583 KB** blob costing **~15ms**, and it is paid per
+type, through `toJSON()` — and `JSON.stringify`s it, once per dirty flush.
+
+That "whole store" is literal, and it used to include everybody else's data. The
+store is shared across scenarios and each one seeds its own type, so a
+`-persist` arm that cleared only `storm` was serializing every record every
+earlier scenario had left behind — 31,537 of them in a full-suite run, against
+the 10,000 the arm claims to be pricing, and 11,000 even in an isolated run
+(Home mounts `keyed-list` first, which auto-seeds 1,000 rows). `buildDataset()`
+now empties **every registered type** before seeding, so the arm's serialize is
+its own 10,000 records and nothing else.
+
+**Every figure in this section was measured before that isolation landed and is
+therefore an over-count of unknown size. They will be refreshed on the next
+bench run.** The shape of the finding — O(store) per mutating frame, not
+O(changed records) — is unaffected; the magnitudes are not yet trustworthy.
+
+At 10,000 records the blob was **2,583 KB** costing **~15ms**, and it is paid per
 mutating *frame*:
 
 | op | wall | time in persistence | share |
@@ -486,18 +501,21 @@ whole difference is persistence):
 | `burst-persist` | 11.5ms | **51.2ms** |
 
 Identical script time — `_persist()` only sets a dirty flag — and **+34.8ms on
-the painted frame** for one serialize of 10,000 records, against 11.5ms for the
-5,000 writes that triggered it. Persisting the store costs three times what
-mutating it did. Heap delta for the same op goes from 0.9MB to 10.3MB.
+the painted frame** for one serialize of *the store as it stood in that run*,
+against 11.5ms for the 5,000 writes that triggered it. Persisting the store cost
+three times what mutating it did. Heap delta for the same op goes from 0.9MB to
+10.3MB. Read the per-serialize numbers as "the store", not "10,000 records":
+they predate the isolation and the store held more.
 
-Under a sustained write load a 10,000-record store spends **95% of the wall
-clock serializing itself**, and the frame rate collapses from 1,200 flushes to
-770 for the same number of writes. This is O(store) per mutating frame, not
-O(changed records).
+Under a sustained write load the store spends **95% of the wall clock
+serializing itself**, and the frame rate collapses from 1,200 flushes to 770 for
+the same number of writes. That ratio is the durable part — this is O(store) per
+mutating frame, not O(changed records) — and it is why the size of the store the
+arm serializes had to be made a controlled input rather than a leftover.
 
 **The reported persistence time is a lower bound.** The probe attaches an
-in-memory storage shim rather than real `localStorage`: 2.5MB is well past the
-~5MB quota once you account for the existing payload, and `_persistNow` swallows
+in-memory storage shim rather than real `localStorage`: a multi-MB blob is well
+past the ~5MB quota once you account for the existing payload, and `_persistNow` swallows
 the resulting `QuotaExceededError` — so a "real" run would be timing a write that
 *failed*. The shim keeps the O(store) half honest (serialize + stringify, the
 part that scales) and makes the storage write itself a constant-time assignment.

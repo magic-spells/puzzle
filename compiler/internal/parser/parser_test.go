@@ -338,6 +338,13 @@ func TestParseForReservedIdentifiers(t *testing.T) {
 		{name: "reserved item prefix", content: "{#for __d in items}<div>x</div>{/for}", ident: "__d"},
 		{name: "reserved counter prefix", content: "{#for item in items, __i}<div>x</div>{/for}", ident: "__i"},
 		{name: "reserved ViewNode item", content: "{#for ViewNode in items}<div>x</div>{/for}", ident: "ViewNode"},
+		{name: "reserved ViewNode counter", content: "{#for item in items, ViewNode}<div>x</div>{/for}", ident: "ViewNode"},
+		// SLOT_TAG is imported whenever the template holds a slot; a loop binding of
+		// that name shadows the outlet marker inside the body.
+		{name: "reserved SLOT_TAG item", content: "{#for SLOT_TAG in items}<Slot/>{/for}", ident: "SLOT_TAG"},
+		{name: "reserved SLOT_TAG counter", content: "{#for item in items, SLOT_TAG}<Slot/>{/for}", ident: "SLOT_TAG"},
+		// Reserved regardless of whether this template actually emits the import.
+		{name: "reserved SLOT_TAG without a slot", content: "{#for SLOT_TAG in items}<div>x</div>{/for}", ident: "SLOT_TAG"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -346,7 +353,7 @@ func TestParseForReservedIdentifiers(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected a reserved loop identifier error")
 			}
-			want := `loop variable "` + tc.ident + `" uses a reserved name (identifiers starting with "__" and "ViewNode" are reserved by the compiler)`
+			want := `loop variable "` + tc.ident + `" uses a reserved name (identifiers starting with "__" and the names "ViewNode" and "SLOT_TAG" are reserved by the compiler)`
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error %q should contain %q", err, want)
 			}

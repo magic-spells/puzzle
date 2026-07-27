@@ -73,7 +73,10 @@ const CAPTURE_TTL_MS = 2000;
 const FADE_MS = 150;
 
 // A pinned clone keeps author-owned inline presentation, but never geometry the
-// pin replaces or residue the morph engine writes during a flight.
+// pin replaces or residue the morph engine writes during a flight. The
+// independent transform properties (`translate`/`scale`/`rotate`) count as
+// geometry too: the captured rect ALREADY reflects them, so copying them onto
+// the clone would apply the same offset a second time.
 const PIN_CLONE_EXCLUDED_STYLES = new Set([
 	'position',
 	'top',
@@ -87,6 +90,9 @@ const PIN_CLONE_EXCLUDED_STYLES = new Set([
 	'pointer-events',
 	'transform',
 	'transform-origin',
+	'translate',
+	'scale',
+	'rotate',
 	'opacity',
 	'visibility',
 	'display',

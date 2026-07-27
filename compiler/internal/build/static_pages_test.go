@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 )
 
@@ -217,6 +218,45 @@ func TestStaticEntrySourceObservesMountRejection(t *testing.T) {
 		if !strings.Contains(src, "console.error('[puzzle] static page mount failed:', err);") {
 			t.Errorf("entry for %s missing the [puzzle] mount-failure log\n---\n%s", page.Path, src)
 		}
+		// Production strips console.*, which would leave the handler EMPTY and
+		// swallow the rejection; the async rethrow survives the drop and reaches
+		// window.onerror.
+		if !strings.Contains(src, "setTimeout(() => { throw err; });") {
+			t.Errorf("entry for %s does not rethrow past console stripping\n---\n%s", page.Path, src)
+		}
+	}
+}
+
+// TestStaticEntrySourceMountFailureSurvivesConsoleStripping is the same claim at
+// the bundler level: run the generated tail through the production policy
+// bundleStaticPages applies (Drop: console + minify) and prove a signal remains.
+// A bare console.error handler compiles to `.catch(() => {})` there.
+func TestStaticEntrySourceMountFailureSurvivesConsoleStripping(t *testing.T) {
+	s := cannedSummary()
+	src, err := staticEntrySource("/abs/app-root", s.Written[0], s, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Only the .catch tail matters here; the imports resolve nowhere, so transform
+	// (not bundle) the source.
+	result := api.Transform(src, api.TransformOptions{
+		Loader:            api.LoaderJS,
+		Format:            api.FormatESModule,
+		Target:            api.ES2022,
+		Drop:              api.DropConsole,
+		MinifyWhitespace:  true,
+		MinifyIdentifiers: true,
+		MinifySyntax:      true,
+	})
+	if len(result.Errors) > 0 {
+		t.Fatalf("transforming the generated entry failed: %v", result.Errors)
+	}
+	out := string(result.Code)
+	if strings.Contains(out, "console") {
+		t.Fatalf("console.* should have been dropped:\n%s", out)
+	}
+	if !strings.Contains(out, "throw") {
+		t.Errorf("stripped entry swallows the mount rejection — no throw survives:\n%s", out)
 	}
 }
 

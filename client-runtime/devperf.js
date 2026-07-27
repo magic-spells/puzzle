@@ -2,9 +2,9 @@
  * Development-only performance instrumentation (SPEC §56, D121).
  *
  * Production builds define __PUZZLE_DEV__ as false. Every runtime importer is
- * guarded at its call site, and every export below is a positive DEV wrapper,
- * so esbuild removes the callers and tree-shakes this whole module. Undefined
- * means true for unbundled tests.
+ * guarded at its call site, so esbuild removes the callers and tree-shakes this
+ * whole module out of a production bundle (the compiler's build tests assert
+ * it). Undefined means true for unbundled tests.
  */
 
 const DEV = typeof __PUZZLE_DEV__ === 'undefined' ? true : __PUZZLE_DEV__;
@@ -19,6 +19,10 @@ const viewStates = new WeakMap();
 const preparedData = new WeakMap();
 const activeRenders = new WeakMap();
 const storeChains = new WeakMap();
+// store → the LIFO stack of its in-flight flush marks. flush() is reentrant: a
+// subscriber may call store.flush() synchronously during delivery, and a single
+// slot would let the inner call's end pop the OUTER mark — leaving the outer
+// scope on activeScopes forever, so its chain could never quiesce.
 const activeStoreFlushes = new WeakMap();
 const activeScopes = [];
 
@@ -60,7 +64,11 @@ if (DEV && typeof globalThis !== 'undefined') {
 	}
 }
 
-// ---- positive DEV wrappers -------------------------------------------------
+// ---- exported touchpoints --------------------------------------------------
+// Every runtime call site is itself inside a __PUZZLE_DEV__ guard, so the
+// exports it reaches call straight through; the void touchpoints keep a DEV
+// guard as a cheap one-line belt-and-braces. devperfInstallSink is the export
+// that genuinely needs one: /testing's measureRenders calls it UNGATED.
 
 export function devperfInstallSink(sink) {
 	if (DEV) return installSinkImpl(sink);
@@ -68,18 +76,15 @@ export function devperfInstallSink(sink) {
 }
 
 export function devperfSnapshot() {
-	if (DEV) return snapshotImpl();
-	return Object.freeze({});
+	return snapshotImpl();
 }
 
 export function devperfPrepareData(view, cause) {
-	if (DEV) return prepareDataImpl(view, cause);
-	return {};
+	return prepareDataImpl(view, cause);
 }
 
 export function devperfRunData(view, params, props) {
-	if (DEV) return runDataImpl(view, params, props);
-	return view.data(params, props);
+	return runDataImpl(view, params, props);
 }
 
 export function devperfRenderScheduled(view, cause) {
@@ -91,13 +96,11 @@ export function devperfMarkCause(view, cause) {
 }
 
 export function devperfCanRender(view) {
-	if (DEV) return canRenderImpl(view);
-	return true;
+	return canRenderImpl(view);
 }
 
 export function devperfRenderPrepare(view) {
-	if (DEV) return renderPrepareImpl(view);
-	return null;
+	return renderPrepareImpl(view);
 }
 
 export function devperfRenderTreeBuilt(view) {
@@ -149,8 +152,7 @@ export function devperfStoreFlushEnd(store) {
 }
 
 export function devperfTrackingDeferred(subscriber, pending, retry, kind) {
-	if (DEV) return trackingDeferredImpl(subscriber, pending, retry, kind);
-	return pending.then(retry, retry);
+	return trackingDeferredImpl(subscriber, pending, retry, kind);
 }
 
 // ---- sink/global snapshots -------------------------------------------------
@@ -661,21 +663,30 @@ function storeFlushStartImpl(store) {
 		keys: store?._pendingKeys?.size ?? 0,
 		notified: 0,
 	};
-	activeStoreFlushes.set(store, mark);
+	let stack = activeStoreFlushes.get(store);
+	if (!stack) {
+		stack = [];
+		activeStoreFlushes.set(store, stack);
+	}
+	stack.push(mark);
 	return mark;
 }
 
 function storeFlushNotificationsImpl(store, keys, notified) {
-	const mark = activeStoreFlushes.get(store);
+	// Delivery belongs to the INNERMOST open flush — the one whose _deliverNotifications
+	// is running — so the counters land on the top of the stack.
+	const stack = activeStoreFlushes.get(store);
+	const mark = stack?.[stack.length - 1];
 	if (!mark) return;
 	mark.keys = keys.length;
 	mark.notified = notified.size;
 }
 
 function storeFlushEndImpl(store) {
-	const mark = activeStoreFlushes.get(store);
+	const stack = activeStoreFlushes.get(store);
+	const mark = stack?.pop();
 	if (!mark) return;
-	activeStoreFlushes.delete(store);
+	if (stack.length === 0) activeStoreFlushes.delete(store);
 	totals.storeFlushes++;
 	totals.storeNotifications += mark.notified;
 	emit('store-flush', {

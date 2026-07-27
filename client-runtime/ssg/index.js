@@ -53,8 +53,6 @@ import { MANAGED_TAGS } from '../headTags.js';
  *   mode; `'static'` additionally captures each page's store snapshot (`data`), its
  *   view/layout `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot
  *   so prerenderToDir can emit true static pages (D81).
- * @param {Router} [opts.router] preconstructed memory Router used internally by
- *   prerenderToDir so validation and precedence analysis share one compiled table.
  * @returns {Promise<{
  *   pages: Array<{ path: string, html: string|null, title: string|null,
  *     head: { title: string|null, description: string|null, canonical: string|null,
@@ -92,10 +90,9 @@ export async function prerender(config, opts = {}) {
 	// supports '#id' targets only — the shell surgery keys on the id).
 	parseTargetId(config.target);
 
-	// One Router owns route-shape validation + regex compilation. Direct callers
-	// construct it here; prerenderToDir passes the memory Router it already needs
-	// for whole-table validation, so the SSG never compiles matchers independently.
-	const routeRouter = opts.router ?? new Router(config.routes ?? [], { mode: 'memory' });
+	// One Router owns route-shape validation + regex compilation, so the SSG never
+	// compiles matchers independently — it reads this one's compiled leaves.
+	const routeRouter = new Router(config.routes ?? [], { mode: 'memory' });
 	const shadowedPaths = findShadowedPaths(routeRouter.routeEntries);
 	const shadowedByIndex = new Map(
 		shadowedPaths.map(({ index, shadowedBy }) => [index, shadowedBy])
@@ -146,7 +143,23 @@ export async function prerender(config, opts = {}) {
 		// as it is in the Router's regex compiler.
 		const isCatchAll = fullPath === '*';
 		if (isCatchAll) hasCatchAll = true;
-		const entryIndex = isCatchAll ? null : compiledEntryIndex++;
+		// The Router drops a catch-all that declares `children` WHOLESALE — its '*'
+		// branch stores the flat single-node chain and never walks the tree — so the
+		// leaves enumerated beneath it are routes the app can never navigate to. They
+		// must also not consume a compiled-entry index: entryIndex is the position in
+		// the Router's compiled leaf list, and one phantom index shifts every later
+		// leaf's shadow attribution by one.
+		const underCatchAll = !isCatchAll && chain[0].path === '*';
+		const entryIndex = isCatchAll || underCatchAll ? null : compiledEntryIndex++;
+		if (underCatchAll) {
+			skipped.push({ path: fullPath, reason: 'unreachable' });
+			warnings.push(
+				`[puzzle] skipped route "${fullPath}" — it is a child of the catch-all route ` +
+					"'*', which the Router matches as a single leaf, so this path is " +
+					'unreachable (declare it as a top-level route to prerender it)'
+			);
+			continue;
+		}
 
 		// Only a complete `:name` segment is dynamic. Colons and stars in any
 		// other segment are regex-escaped literal text by the Router and therefore
@@ -255,15 +268,16 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 	if (!outDir) throw new Error('[puzzle] prerenderToDir requires an outDir');
 	if (!shellPath) throw new Error('[puzzle] prerenderToDir requires a shellPath');
 
-	// Validate the complete route table even when enumeration will skip every
-	// page (for example, an all-dynamic app with no beforeMount hook). Per-page
-	// contexts also construct memory routers, but skipped routes never reach that
-	// path; this construction makes their config errors fail the static build.
-	const routeRouter = new Router(config.routes ?? [], { mode: 'memory' });
+	// Validate the complete route table FIRST, before the target selector and the
+	// shell read: prerender() builds its own Router, but only after those checks,
+	// and a bad route table should be the error a build reports either way. (It is
+	// also the only route validation an all-dynamic app with no beforeMount hook
+	// ever gets — every page is skipped before a per-page context is built.)
+	new Router(config.routes ?? [], { mode: 'memory' });
 
 	const targetId = parseTargetId(config.target);
 	const shell = fs.readFileSync(shellPath, 'utf8');
-	const { pages, skipped, warnings } = await prerender(config, { mode, router: routeRouter });
+	const { pages, skipped, warnings } = await prerender(config, { mode });
 
 	if (mode === 'static') {
 		return writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings });
@@ -295,6 +309,9 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
  * marker, inline JSON data island, per-page module script), and collect the extended
  * summary the Go static build consumes (per page: `entry`, `modules`, `route`; top
  * level: `mode`, `target`, `apiURL`, `hasFormatters`).
+ *
+ * A page whose output file an earlier page already claimed is skipped here with
+ * reason `'duplicate'` rather than overwriting it (see claimedPaths below).
  */
 function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings }) {
 	// The app-bundle tag is stripped once (the shell is identical for every page) so
@@ -326,8 +343,30 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 	const base = normalizeBase(config.routerBase);
 
 	const slugCounts = new Map();
+	// outPath → the route path that already claimed it. Two routes can declare the
+	// SAME path, or two paths that normalize to one file (`/caf%C3%A9` and `/café`
+	// decode identically). Slugs are collision-suffixed but the output file is
+	// path-DERIVED, so the later page used to overwrite the earlier one's HTML while
+	// both bundles still shipped. Hybrid output never reaches this: the live
+	// first-match-wins Router makes the second route shadowed and prerender() skips
+	// it. Static output deliberately keeps shadowed pages (no router), so the writer
+	// itself refuses the second claim — the emitted HTML then belongs to the first
+	// route in reachable order and no dead second bundle is generated.
+	const claimedPaths = new Map();
 	const written = [];
 	for (const page of pages) {
+		const outPath = pageOutputPath(outDir, page.path);
+		if (claimedPaths.has(outPath)) {
+			skipped.push({ path: page.path, reason: 'duplicate' });
+			warnings.push(
+				`[puzzle] skipped duplicate route "${page.path}" — earlier route ` +
+					`"${claimedPaths.get(outPath)}" already writes ${path.relative(outDir, outPath)} ` +
+					'(two routes cannot own one static page; remove or rename one of them)'
+			);
+			continue;
+		}
+		claimedPaths.set(outPath, page.path);
+
 		const slug = uniqueSlug(computeSlug(page.path), slugCounts);
 		const html = injectStaticShell(baseShell, {
 			targetId,
@@ -338,7 +377,6 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 			slug,
 			data: page.data ?? {},
 		});
-		const outPath = pageOutputPath(outDir, page.path);
 		fs.mkdirSync(path.dirname(outPath), { recursive: true });
 		fs.writeFileSync(outPath, html);
 		written.push({

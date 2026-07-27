@@ -13,7 +13,8 @@
       "@magic-spells/puzzle/morph": ["../types/morph.d.ts"],
       "@magic-spells/puzzle/ssg": ["../types/ssg.d.ts"],
       "@magic-spells/puzzle/static": ["../types/static.d.ts"],
-      "@magic-spells/puzzle/fixtures": ["../types/fixtures.d.ts"]
+      "@magic-spells/puzzle/fixtures": ["../types/fixtures.d.ts"],
+      "@magic-spells/puzzle/testing": ["../types/testing.d.ts"]
     }
   },
   "include": ["consumer.ts"]

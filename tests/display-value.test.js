@@ -116,10 +116,9 @@ describe('displayValue', () => {
 	// the call exists solely for this warning, so it now sits behind the
 	// __PUZZLE_DEV__ probe. These two lock the behavior the probe must preserve.
 	//
-	// Fresh module graph: display.js's warned-once set is module state, and the
-	// tests above already spend the ''-expression key (setAttr passes no expression
-	// name, so it warns under ''). Without the reset these would silently pass on a
-	// suppressed warning.
+	// Fresh module graph: display.js's warned-once set is module state, and an
+	// earlier test in this file may already have spent this attribute's key.
+	// Without the reset these would silently pass on a suppressed warning.
 	it('still warns for an undefined attribute value on the removal path', async () => {
 		vi.resetModules();
 		const [{ ViewNode: Node }, { ViewManager: Manager }] = await Promise.all([
@@ -134,8 +133,58 @@ describe('displayValue', () => {
 			const section = container.querySelector('section');
 			expect(section.hasAttribute('data-missing')).toBe(false);
 			expect(warn).toHaveBeenCalledWith(
-				'[puzzle] undefined template value; rendering an empty string'
+				'[puzzle] undefined template value for "data-missing"; rendering an empty string'
 			);
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
+	// The probes call the display helper with no label, so every unlabeled warning
+	// collapsed into the '' dedup key and only the FIRST brace-only undefined in a
+	// whole session ever warned. Both sites have the attribute name in scope.
+	it('dedups the undefined-attribute warning PER ATTRIBUTE and names each one', async () => {
+		vi.resetModules();
+		const [{ ViewNode: Node }, { ViewManager: Manager }] = await Promise.all([
+			import('../client-runtime/views/ViewNode.js'),
+			import('../client-runtime/views/viewManager.js'),
+		]);
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const container = document.createElement('div');
+			new Manager(container).render(
+				new Node('section', { 'data-one': undefined, 'data-two': undefined }, [])
+			);
+
+			expect(warn).toHaveBeenCalledWith(
+				'[puzzle] undefined template value for "data-one"; rendering an empty string'
+			);
+			expect(warn).toHaveBeenCalledWith(
+				'[puzzle] undefined template value for "data-two"; rendering an empty string'
+			);
+			expect(warn).toHaveBeenCalledTimes(2);
+		} finally {
+			warn.mockRestore();
+		}
+	});
+
+	it('names the attribute in the SSG serializer warning too', async () => {
+		vi.resetModules();
+		const [{ ViewNode: Node }, { serialize: serializeFresh }] = await Promise.all([
+			import('../client-runtime/views/ViewNode.js'),
+			import('../client-runtime/ssg/serialize.js'),
+		]);
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			await serializeFresh(new Node('section', { 'data-alpha': undefined, 'data-beta': undefined }, []));
+
+			expect(warn).toHaveBeenCalledWith(
+				'[puzzle] undefined template value for "data-alpha"; rendering an empty string'
+			);
+			expect(warn).toHaveBeenCalledWith(
+				'[puzzle] undefined template value for "data-beta"; rendering an empty string'
+			);
+			expect(warn).toHaveBeenCalledTimes(2);
 		} finally {
 			warn.mockRestore();
 		}
@@ -160,23 +209,12 @@ describe('displayValue', () => {
 	});
 
 	it('has both runtime stringify adapters delegate to the shared helper', () => {
-		const cases = [
-			// viewManager renames the import instead of wrapping it — a pure alias
-			// wrapper was one call per interpolation for nothing.
-			{
-				path: 'client-runtime/views/viewManager.js',
-				imports: "import { displayValue as stringify } from '../display.js';",
-			},
-			{
-				path: 'client-runtime/ssg/serialize.js',
-				imports: "import { displayValue } from '../display.js';",
-				wrapper: /function stringify\(v\) \{\s*return displayValue\(v\);\s*\}/,
-			},
-		];
-		for (const { path, imports, wrapper } of cases) {
+		// Both rename the import instead of wrapping it — a pure alias wrapper was
+		// one call per interpolation for nothing.
+		const paths = ['client-runtime/views/viewManager.js', 'client-runtime/ssg/serialize.js'];
+		for (const path of paths) {
 			const source = readFileSync(path, 'utf8');
-			expect(source).toContain(imports);
-			if (wrapper) expect(source).toMatch(wrapper);
+			expect(source).toContain("import { displayValue as stringify } from '../display.js';");
 			expect(source).not.toContain("return v == null ? '' : String(v);");
 		}
 	});

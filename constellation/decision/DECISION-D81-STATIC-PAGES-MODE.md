@@ -39,6 +39,18 @@ notes:
       + staticEntrySource) and WARNS when config.storage is set. A direct mountStatic({storage})
       caller still gets real persistence (the param stays on mountStatic/buildStaticContext).
     sha: d9591d6
+  - kind: state
+    text: >-
+      Pre-release review, pre-existing fixes (fix/prerelease-review): (1) two static routes
+      declaring the same path previously got unique module slugs but the SECOND HTML write silently
+      won at the shared output path while both bundles shipped — writeStaticDir now tracks claimed
+      output paths and skips the duplicate with reason 'duplicate' (warning names both routes);
+      hybrid was already covered by shadow detection, static deliberately keeps shadowed pages so it
+      needed its own guard. (2) staging/.puzzle-prerender is now a reserved name in BOTH prerender
+      modes, mirroring the existing _puzzle guard: a public/.puzzle-prerender subtree was previously
+      consumed as scratch and os.RemoveAll'd while the build reported success (reproduced in both
+      modes). The guard probes the post-copyPublic STAGING state so app/public vs flat public/
+      resolution and file-vs-dir spellings can't dodge it.
 verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 

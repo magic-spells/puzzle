@@ -32,18 +32,25 @@ async function preloadNode(vnode, ctx, instances) {
 		return;
 	}
 
+	// A routed instance arrives already constructed and preloaded (the Router owns
+	// it). Only a NESTED component is built here — and its construction sits inside
+	// the fail-soft try, because a constructor that throws (a field initializer, an
+	// explicit body) would otherwise abort the whole takeover instead of degrading to
+	// this one component's placeholder.
 	const nested = vnode.instance == null;
-	const instance = vnode.instance ?? new vnode.tag(ctx);
+	let instance = vnode.instance;
 
 	if (nested) {
 		try {
+			instance = new vnode.tag(ctx);
 			await instance.preload({ params: {}, props: vnode.attrs, route: null });
 		} catch (err) {
 			// Match mountComponent's existing fail-soft posture: log the failed child,
 			// release partial subscriptions/lifecycle state, and leave a recoverable
-			// comment position when the prepared parent tree mounts.
+			// comment position when the prepared parent tree mounts. A constructor that
+			// threw left no instance to release.
 			console.error('[puzzle] child mount failed:', err);
-			instance.destroy();
+			instance?.destroy();
 			vnode.takeoverFailed = true;
 			return;
 		}

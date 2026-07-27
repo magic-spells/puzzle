@@ -28,6 +28,18 @@ const container = () => {
 
 const ctxWith = (store) => ({ store, router: null, formatters: null });
 
+/**
+ * Wait past the animation frame #scheduleRender armed. The view's rAF callback was
+ * registered first, so ours runs after it in the same frame batch; the trailing
+ * setTimeout drains anything it queued.
+ */
+const afterFrame = () =>
+	new Promise((resolve) => {
+		const done = () => setTimeout(resolve, 0);
+		if (typeof requestAnimationFrame === 'function') requestAnimationFrame(done);
+		else setTimeout(done, 0);
+	});
+
 describe('PuzzleView — lifecycle', () => {
 	it('runs created → data → render → mounted, in order', async () => {
 		const calls = [];
@@ -213,6 +225,55 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 		v.flushUpdates();
 		expect(el.textContent).toBe('count: 3');
 		expect(hooks).toEqual(['before', 'after']); // one update cycle
+	});
+
+	// #scheduleRender arms a rAF and sets #updateScheduled; only flushUpdates cleared
+	// it. A synchronous refresh() in the same tick renders immediately, so the still
+	// pending rAF fired a THIRD render with byte-identical state. Clearing the flag
+	// wherever a render actually lands makes any render satisfy the pending one.
+	it('a synchronous refresh() satisfies the render setData scheduled (no stale third pass)', async () => {
+		const renders = [];
+		class V extends PuzzleView {
+			data() { return { n: this.getData().n ?? 0 }; }
+			render() {
+				renders.push(this.getData().n);
+				return h('span', {}, [text(`n: ${this.getData().n}`)]);
+			}
+		}
+		const v = new V();
+		const el = container();
+		await v.mount(el);
+		expect(renders).toEqual([0]);
+
+		v.setData('n', 1);
+		expect(renders).toEqual([0]); // scheduled for the frame, not rendered yet
+		v.refresh(); // sync data() → commits and renders right now
+		expect(renders).toEqual([0, 1]);
+
+		await afterFrame();
+		expect(renders).toEqual([0, 1]); // the stale rAF must not re-render
+		expect(el.textContent).toBe('n: 1');
+	});
+
+	it('a setData issued after that synchronous refresh still re-arms the frame', async () => {
+		const renders = [];
+		class V extends PuzzleView {
+			data() { return { n: this.getData().n ?? 0 }; }
+			render() {
+				renders.push(this.getData().n);
+				return h('span', {}, [text(`n: ${this.getData().n}`)]);
+			}
+		}
+		const v = new V();
+		const el = container();
+		await v.mount(el);
+
+		v.setData('n', 1);
+		v.refresh();
+		v.setData('n', 2); // same tick, after the sync render
+		await afterFrame();
+		expect(renders).toEqual([0, 1, 2]);
+		expect(el.textContent).toBe('n: 2');
 	});
 
 	it('a throwing update never wedges the scheduler', async () => {

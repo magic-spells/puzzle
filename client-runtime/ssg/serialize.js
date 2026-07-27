@@ -37,7 +37,7 @@
 
 import { SLOT_TAG, PLACEHOLDER_TAG } from '../views/ViewNode.js';
 import { expandSlots } from '../views/viewManager.js';
-import { displayValue } from '../display.js';
+import { displayValue as stringify } from '../display.js';
 
 // Void elements (HTML spec): self-closing, never carry children.
 const VOID_ELEMENTS = new Set([
@@ -48,11 +48,6 @@ const VOID_ELEMENTS = new Set([
 // Boolean element properties the ViewManager assigns AND reflects as bare attrs
 // (mirrors viewManager.js PROPS, minus `value`, which is handled on its own).
 const BOOLEAN_PROPS = new Set(['checked', 'disabled', 'selected', 'muted']);
-
-/** Coerce a text/attr value to a string the way viewManager.js stringify() does. */
-function stringify(v) {
-	return displayValue(v);
-}
 
 /** Escape a text node's content: the three characters that would break HTML text. */
 export function escapeText(s) {
@@ -98,10 +93,12 @@ function serializeAttrs(tag, attrs, { selected = false, controlledSelect = false
 		} else if (BOOLEAN_PROPS.has(name)) {
 			if (value) out += ` ${name}`;
 		} else if (value === false || value == null) {
-			// Omitted to mirror ViewManager attribute semantics. Still apply the
-			// shared display policy to an explicitly supplied nullish binding so
-			// undefined gets its development diagnostic.
-			if (value == null) stringify(value);
+			// Omitted to mirror ViewManager attribute semantics, but an undefined
+			// binding still gets its development diagnostic — the result is
+			// discarded, the call is only there for the warning. The attribute NAME is
+			// the dedup label (display.js keys warned-once by it); without it every
+			// unlabeled undefined collapsed into one '' key and only the first warned.
+			if (value === undefined) stringify(value, name);
 		} else if (value === true) {
 			out += ` ${name}`;
 		} else {

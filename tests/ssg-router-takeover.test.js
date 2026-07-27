@@ -308,6 +308,40 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.querySelector('.rejecting-leaf')).toBe(null);
 	});
 
+	it('mounts the hybrid page when a nested component CONSTRUCTOR throws', async () => {
+		// A field initializer or constructor body throws before preload() is ever
+		// reached, so the construction has to sit inside the same fail-soft try: this
+		// component degrades to its placeholder instead of aborting the takeover.
+		let throwOnClient = false;
+		class ThrowingCtorLeaf extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				if (throwOnClient) throw new Error('nested constructor exploded');
+			}
+			render() {
+				return h('section', { class: 'ctor-leaf' }, [text('LEAF')]);
+			}
+		}
+		class CtorPage extends PuzzleView {
+			render() {
+				return h('main', { class: 'ctor-page' }, [h(ThrowingCtorLeaf)]);
+			}
+		}
+		const routes = [{ path: '/', name: 'ctor', view: CtorPage }];
+		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
+		const el = ssgContainer(pages[0].html);
+		throwOnClient = true;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+
+		await expect(app.mount()).resolves.toBe(app);
+
+		expect(error).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false); // navigation still committed
+		expect(el.querySelector('.ctor-page')).not.toBe(null);
+		expect(el.querySelector('.ctor-leaf')).toBe(null); // recoverable placeholder
+	});
+
 	it('after takeover, a client-side nav to a skeleton view still shows the skeleton (D39 intact)', async () => {
 		// Nav #0 takes over a plain prerendered Home; then push('/sk') is an ordinary
 		// client-side navigation (cur exists, no marker) — the D39 exemption applies,

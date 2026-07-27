@@ -8,6 +8,15 @@ connections:
   - FILE-DEVTOOLS
   - FILE-DEVPERF
   - DOC-SPEC-BUILD
+notes:
+  - kind: state
+    text: >-
+      Pre-release review fix (fix/prerelease-review): profileWarning now folds loop warnings into
+      the saved profile only while profile.recording — a stopped report previously kept mutating
+      (warnings appeared with frozen duration/totals, breaking the "final after perf:stop"
+      contract). The live perf-warning push to the panel stays unconditional, which is the
+      documented intent (loop detection must not require an active recording).
+    sha: ed27cae
 ---
 
 # D122 — Expose the dev profiler over the DevTools bridge, additively on protocol v1

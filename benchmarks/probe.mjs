@@ -27,16 +27,14 @@
  * holds it.
  */
 
-import { createServer } from 'node:http';
-import { spawnSync } from 'node:child_process';
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL, fileURLToPath } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
 import config from '../playwright.benchmark.config.js';
+import { buildStaged, serveStatic, stagedDistDir } from './harness-lib.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = 4291;
 
 function parseArgs(argv) {
@@ -53,88 +51,25 @@ function parseArgs(argv) {
 	return args;
 }
 
-/** Copy the example's SOURCE into the benchmark's scratch tree and build THERE. */
+/**
+ * Stage + build (see harness-lib.mjs), then prove the instrumentation SURVIVED.
+ *
+ * The staging and the compiler invocation are shared with runner.mjs; the
+ * assertion is its mirror image. A dev probe over a production bundle would
+ * report a fabricated zero for every counter it exists to collect, so the
+ * sentinel check reads what was emitted rather than trusting the flag.
+ */
 function build(mode) {
-	const srcRoot = path.join(ROOT, config.build.example);
-	const stageSrc = path.join(ROOT, config.build.stageSrcDir);
-
-	fs.rmSync(stageSrc, { recursive: true, force: true });
-	fs.mkdirSync(stageSrc, { recursive: true });
-	for (const entry of config.build.copyEntries) {
-		const from = path.join(srcRoot, entry);
-		if (!fs.existsSync(from)) continue;
-		fs.cpSync(from, path.join(stageSrc, entry), { recursive: true });
-	}
-
-	const binPath = path.join(ROOT, config.build.bin);
-	const usingBin = fs.existsSync(binPath);
-	const cmd = usingBin ? binPath : config.build.goFallback[0];
-	const target = path.relative(ROOT, stageSrc);
-	const argv = usingBin
-		? ['build', target, '--mode', mode]
-		: [...config.build.goFallback.slice(1), 'build', target, '--mode', mode];
-
-	const res = spawnSync(cmd, argv, { cwd: ROOT, encoding: 'utf8' });
-	if (res.status !== 0) {
-		throw new Error(`probe build failed (exit ${res.status})\n${res.stdout || ''}${res.stderr || ''}`);
-	}
-
-	const dir = path.join(stageSrc, 'dist');
-	const bundle = fs.readFileSync(path.join(dir, 'app.js'), 'utf8');
-
-	// A dev probe over a production bundle would report a fabricated zero for
-	// every counter it exists to collect, so prove the instrumentation is there.
-	if (mode === 'development' && !bundle.includes('__PUZZLE_PERF__')) {
+	const built = buildStaged(mode, { label: 'probe' });
+	if (mode === 'development' && !built.source.includes('__PUZZLE_PERF__')) {
 		throw new Error('the built bundle carries no __PUZZLE_PERF__ sentinel — devperf was compiled out, so no structural counter is observable');
 	}
-	return { dir, bundleKb: +(bundle.length / 1024).toFixed(1) };
-}
-
-const MIME = {
-	'.html': 'text/html; charset=utf-8',
-	'.js': 'text/javascript; charset=utf-8',
-	'.css': 'text/css; charset=utf-8',
-	'.json': 'application/json; charset=utf-8',
-	'.svg': 'image/svg+xml',
-	'.map': 'application/json; charset=utf-8',
-};
-
-function serveStatic(dir, port) {
-	const server = createServer((req, res) => {
-		const url = new URL(req.url, `http://127.0.0.1:${port}`);
-		let file = path.join(dir, decodeURIComponent(url.pathname));
-		if (!file.startsWith(dir)) return void res.writeHead(403).end('forbidden');
-		if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
-			const indexed = path.join(file, 'index.html');
-			file = fs.existsSync(indexed) ? indexed : path.join(dir, 'index.html');
-		}
-		if (!fs.existsSync(file)) return void res.writeHead(404).end('not found');
-		res.writeHead(200, {
-			'content-type': MIME[path.extname(file)] || 'application/octet-stream',
-			'cache-control': 'no-store',
-		});
-		fs.createReadStream(file).pipe(res);
-	});
-	return new Promise((resolve, reject) => {
-		server.once('error', (err) => {
-			if (err.code === 'EADDRINUSE') {
-				reject(
-					new Error(
-						`port ${port} is already in use. The probe will not kill a process it did not start — ` +
-							`free the port or change PORT in benchmarks/probe.mjs.`
-					)
-				);
-				return;
-			}
-			reject(err);
-		});
-		server.listen(port, '127.0.0.1', () => resolve(server));
-	});
+	return { dir: built.dir, bundleKb: built.bundleKb };
 }
 
 async function main() {
 	const args = parseArgs(process.argv.slice(2));
-	const stageDir = path.join(ROOT, config.build.stageSrcDir, 'dist');
+	const stageDir = stagedDistDir();
 
 	let built = { dir: stageDir, bundleKb: NaN };
 	if (args.build) {
@@ -148,7 +83,11 @@ async function main() {
 	const probe = (await import(pathToFileURL(path.resolve(args.script)).href)).default;
 	if (typeof probe !== 'function') throw new Error(`${args.script} must default-export an async function`);
 
-	const server = await serveStatic(built.dir, PORT);
+	const server = await serveStatic(built.dir, {
+		host: '127.0.0.1',
+		port: PORT,
+		busyHint: 'The probe will not kill a process it did not start — free the port or change PORT in benchmarks/probe.mjs.',
+	});
 	const browser = await chromium.launch({ headless: !args.headed, args: config.browser.args });
 	const context = await browser.newContext({ viewport: config.browser.viewport });
 	const page = await context.newPage();

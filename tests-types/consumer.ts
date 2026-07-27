@@ -57,6 +57,8 @@ import type {
 } from '@magic-spells/puzzle/ssg';
 import { mountStatic } from '@magic-spells/puzzle/static';
 import type { MountStaticOptions, StaticRoute } from '@magic-spells/puzzle/static';
+import { createTestApp, measureRenders, mountView } from '@magic-spells/puzzle/testing';
+import type { RenderProfile } from '@magic-spells/puzzle/testing';
 
 const renderedNull: string = displayValue(null);
 const renderedNamedValue: string = displayValue(0, 'count');
@@ -457,6 +459,29 @@ mountStatic(staticOptions).then(() => {
 		routerBase: '',
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Testing helpers (D94/D121) — both measureRenders call shapes
+// ---------------------------------------------------------------------------
+
+async function profileRenders(): Promise<void> {
+	const view = await mountView(TodoListView);
+	// Callback-only form: the handle is optional (the sink is global).
+	const bare: Readonly<RenderProfile> = await measureRenders(async () => {
+		await view.click('.toggle');
+	});
+	// Handle + callback form, unchanged.
+	const named: Readonly<RenderProfile> = await measureRenders(view, () => {
+		view.find('.toggle');
+	});
+	const app = await createTestApp({ routes: [{ path: '/', view: TodoListView }] });
+	const appProfile: Readonly<RenderProfile> = await measureRenders(app, async () => {
+		await app.visit('/');
+	});
+	const renders: number = bare.renders + named.wastedRenders + appProfile.domMutations;
+	void renders;
+}
+void profileRenders;
 
 // ---------------------------------------------------------------------------
 // Error shapes (§20, §22)

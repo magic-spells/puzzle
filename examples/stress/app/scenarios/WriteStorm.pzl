@@ -27,7 +27,7 @@ import { registerScenario } from '../stress-controller.js';
 import {
   STRESS_SEED,
   afterPaint,
-  clearType,
+  clearAllTypes,
   intParam,
   ms1,
   perfDelta,
@@ -50,6 +50,9 @@ import {
 //      store — every record of every type, through toJSON() — and JSON.stringify
 //      s it, once per dirty flush. That is O(store) per mutating FRAME, so at
 //      10,000 records a sustained write load pays it 60 times a second.
+//      Because that cost is store-WIDE, buildDataset() empties every registered
+//      type before seeding: the -persist arms only price 10,000 records if
+//      10,000 records are all the store holds. See buildDataset().
 //
 // ── The probes, and why they are instance patches ──────────────────────────
 // Both counters have to survive into a PRODUCTION bundle, because that is what
@@ -134,7 +137,8 @@ export default class WriteStorm extends PuzzleView {
       explainText:
         `sustained writes ${SUSTAINED_RATE_PER_SEC}/sec for ${SUSTAINED_MS / 1000}s; burst writes ${BURST_WRITES} in one tick. ` +
         'Batching holds iff flushes track frames rather than writes. The -persist arms attach a memory storage shim so ' +
-        'Store._persistNow() actually runs — it serializes every record in the store on every dirty flush.',
+        'Store._persistNow() actually runs — it serializes every record in the store on every dirty flush, which is why ' +
+        'this scenario empties every type before seeding its own.',
       readout: [
         { id: 'writes', label: 'writes', value: result ? result.writes : 0 },
         { id: 'flushes', label: 'flushes', value: result ? result.flushes : 0 },
@@ -160,7 +164,15 @@ export default class WriteStorm extends PuzzleView {
 
   buildDataset() {
     const store = this.ctx.store;
-    clearType(store, TYPE);
+    // EVERY type, not just this one. The store is shared across scenarios and
+    // _persistNow() serializes all of it, so leaving another scenario's rows in
+    // place would put them in the blob the -persist arms time — measured, a
+    // full-suite run reached this point with 31,537 records, of which only
+    // 10,000 belonged here. Even a single-scenario run inherits keyed-list's
+    // auto-seeded 1,000 rows, because Home mounts that scenario first.
+    // Emptying the store makes "one serialize of 10,000 records" true rather
+    // than aspirational; every other scenario reseeds in its own created().
+    clearAllTypes(store);
     store.resetFixtureSeed(STRESS_SEED);
     // Hold the record objects, not ids: records mutate in place, so these
     // references stay valid and a write costs no lookup. The lookup would

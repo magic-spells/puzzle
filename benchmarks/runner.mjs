@@ -17,23 +17,26 @@
  *
  * ── Exit status ────────────────────────────────────────────────────────────
  * Non-zero for a validate() failure, a structural-counter mismatch, an op that
- * threw or timed out, or a rejected (throttle-clamped) sample set. NEVER for a
- * timing regression. Wall-clock time on a developer laptop is noise; this is a
- * local instrument, not a gate.
+ * threw or timed out, a rejected (throttle-clamped) sample set, or an UNCAUGHT
+ * page error (a `pageerror` event — the app under measurement broke). A failing
+ * run also refuses to write the baseline.
+ *
+ * NEVER for a timing regression: wall-clock time on a developer laptop is noise;
+ * this is a local instrument, not a gate. And never for a console.error — the
+ * runtime logs those from expected recovery paths the scenarios exercise on
+ * purpose, so they are printed in the LOG section and nothing more.
  */
 
-import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import config from '../playwright.benchmark.config.js';
 import { OPS, groupOps } from './scenarios.mjs';
 import { buildBaseline, compareCounters, formatReport, summarize } from './report.mjs';
+import { ROOT, buildStaged, findDevMarkers, serveStatic, stagedDistDir } from './harness-lib.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const logs = [];
 const log = (line) => logs.push(line);
 
@@ -69,119 +72,38 @@ function parseArgs(argv) {
 	if (args.update && args.buildMode !== 'production') {
 		throw new Error('--update-baseline requires a production build; a dev-build baseline would enshrine the distortion');
 	}
+	// A filtered run measures a SUBSET, but the baseline is written WHOLE —
+	// buildBaseline(summaries) becomes the entire file. So `--filter x -u` would
+	// delete every op the filter excluded, and the loss is invisible afterwards:
+	// compareCounters() has nothing to compare a missing entry against and returns
+	// no drift, so the next full run passes silently with most of its structural
+	// assertions gone. Refusing is the only cheap answer; merging a partial run
+	// into a baseline would also merge its build mode, iteration count and machine
+	// into numbers taken somewhere else.
+	if (args.update && args.filter) {
+		throw new Error(
+			`--update-baseline cannot be combined with --filter: the baseline is written whole, so a run filtered to "${args.filter}" would delete every op it did not measure. Re-run the full suite to update.`
+		);
+	}
 	return args;
 }
 
 // ──────────────────────────────────────────────────────────────── build ────
 
 /**
- * Copy the example's SOURCE into the benchmark's own scratch tree and build
- * THERE. `examples/stress/dist` is never written, read, or served.
+ * Stage + build (see harness-lib.mjs), then prove the BYTES are production.
  *
- * `puzzle build` has no output-dir flag, so it always emits `<appdir>/dist`.
- * Building the example in place therefore clobbers the bundle a human's
- * `puzzle dev` session is serving — and because a production build strips the
- * DevTools bridge, it silently kills their Performance panel. Copying the
- * source is the cheap way to make the benchmark's writes provably its own.
+ * The staging and the compiler invocation are shared with probe.mjs; the
+ * assertion is not. An accidental dev build would silently invalidate the whole
+ * run, so the marker check reads what was emitted rather than trusting the flag.
  */
 function buildProduction(mode = config.build.mode) {
-	const srcRoot = path.join(ROOT, config.build.example);
-	const stageSrc = path.join(ROOT, config.build.stageSrcDir);
-
-	fs.rmSync(stageSrc, { recursive: true, force: true });
-	fs.mkdirSync(stageSrc, { recursive: true });
-	for (const entry of config.build.copyEntries) {
-		const from = path.join(srcRoot, entry);
-		if (!fs.existsSync(from)) continue;
-		fs.cpSync(from, path.join(stageSrc, entry), { recursive: true });
-	}
-
-	const binPath = path.join(ROOT, config.build.bin);
-	const usingBin = fs.existsSync(binPath);
-	const cmd = usingBin ? binPath : config.build.goFallback[0];
-	const target = path.relative(ROOT, stageSrc);
-	const argv = usingBin
-		? ['build', target, '--mode', mode]
-		: [...config.build.goFallback.slice(1), 'build', target, '--mode', mode];
-
-	if (!usingBin) {
-		log(`BUILD  ${config.build.bin} is missing; fell back to \`go run\`, which cold-compiles the compiler first.`);
-	}
-
-	const res = spawnSync(cmd, argv, { cwd: ROOT, encoding: 'utf8' });
-	if (res.status !== 0) {
-		throw new Error(`benchmark build failed (exit ${res.status})\n${res.stdout || ''}${res.stderr || ''}`);
-	}
-
-	const dest = path.join(stageSrc, 'dist');
-	if (!fs.existsSync(path.join(dest, 'app.js'))) {
-		throw new Error(`build produced no app.js in ${path.relative(ROOT, dest)}`);
-	}
-
-	// An accidental dev build would silently invalidate the whole run, so prove
-	// the bytes are what was asked for rather than trusting the flag.
-	const bundle = fs.readFileSync(path.join(dest, 'app.js'), 'utf8');
-	const devMarkers = ['__PUZZLE_DEVTOOLS_HOOK__', 'import.meta.hot', 'puzzle:hmr'];
-	const found = devMarkers.filter((m) => bundle.includes(m));
+	const built = buildStaged(mode, { label: 'benchmark', log });
+	const found = findDevMarkers(built.source);
 	if (mode === 'production' && found.length) {
 		throw new Error(`the served bundle carries development machinery (${found.join(', ')}) — this is not a production build`);
 	}
-	return { dir: dest, bundleKb: +(bundle.length / 1024).toFixed(1), usingBin, mode, devMarkers: found };
-}
-
-// ─────────────────────────────────────────────────────────────── server ────
-
-const MIME = {
-	'.html': 'text/html; charset=utf-8',
-	'.js': 'text/javascript; charset=utf-8',
-	'.mjs': 'text/javascript; charset=utf-8',
-	'.css': 'text/css; charset=utf-8',
-	'.json': 'application/json; charset=utf-8',
-	'.svg': 'image/svg+xml',
-	'.map': 'application/json; charset=utf-8',
-};
-
-/** Minimal static server with SPA fallback. No dev server, no live reload, no extra dependency. */
-function serveStatic(dir, { host, port }) {
-	const server = createServer((req, res) => {
-		const url = new URL(req.url, `http://${host}:${port}`);
-		let file = path.join(dir, decodeURIComponent(url.pathname));
-		if (!file.startsWith(dir)) {
-			res.writeHead(403).end('forbidden');
-			return;
-		}
-		if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
-			const indexed = path.join(file, 'index.html');
-			file = fs.existsSync(indexed) ? indexed : path.join(dir, 'index.html');
-		}
-		if (!fs.existsSync(file)) {
-			res.writeHead(404).end('not found');
-			return;
-		}
-		res.writeHead(200, {
-			'content-type': MIME[path.extname(file)] || 'application/octet-stream',
-			'cache-control': 'no-store',
-		});
-		fs.createReadStream(file).pipe(res);
-	});
-	return new Promise((resolve, reject) => {
-		server.once('error', (err) => {
-			// Someone else's server is on this port. Fail with an instruction
-			// rather than killing a process the benchmark did not start —
-			// this repo's dev servers live on 3000, 4173, 4174 and 4190.
-			if (err.code === 'EADDRINUSE') {
-				reject(
-					new Error(
-						`port ${port} is already in use. The benchmark will not kill a process it did not start; ` +
-							`change server.port in playwright.benchmark.config.js to a free port above 4200.`
-					)
-				);
-				return;
-			}
-			reject(err);
-		});
-		server.listen(port, host, () => resolve(server));
-	});
+	return { dir: built.dir, bundleKb: built.bundleKb, usingBin: built.usingBin, mode, devMarkers: found };
 }
 
 // ────────────────────────────────────────────────────────────────── cdp ────
@@ -548,10 +470,11 @@ async function main() {
 
 	// ── build ────────────────────────────────────────────────────────────────
 	let built = {
-		dir: path.join(ROOT, config.build.stageSrcDir, 'dist'),
+		dir: stagedDistDir(),
 		bundleKb: NaN,
 		usingBin: true,
 		mode: args.buildMode,
+		devMarkers: [],
 	};
 	if (args.build) {
 		process.stdout.write(`  building examples/stress in ${args.buildMode.toUpperCase()} mode ... `);
@@ -564,11 +487,32 @@ async function main() {
 		}
 	} else {
 		log('BUILD  --no-build: reusing the previously staged production bundle in benchmarks/.build.');
-		if (!fs.existsSync(path.join(built.dir, 'app.js'))) throw new Error('--no-build but nothing is staged; run without it once');
-		built.bundleKb = +(fs.statSync(path.join(built.dir, 'app.js')).size / 1024).toFixed(1);
+		const stagedApp = path.join(built.dir, 'app.js');
+		if (!fs.existsSync(stagedApp)) throw new Error('--no-build but nothing is staged; run without it once');
+
+		// Both modes stage to the SAME directory, so the path proves nothing about
+		// what is in it: `--build-mode development` followed by a later `--no-build`
+		// reuses the dev bundle while the report, the meta block and — with
+		// `--update-baseline`, which only checks the REQUESTED mode — the committed
+		// baseline all call it production. That is the exact distortion the
+		// dev-baseline guard exists to prevent, arriving through the other door.
+		// Read the bytes, as buildProduction() does, and let them decide.
+		const staged = fs.readFileSync(stagedApp, 'utf8');
+		built.devMarkers = findDevMarkers(staged);
+		if (args.buildMode === 'production' && built.devMarkers.length) {
+			throw new Error(
+				`--no-build is reusing a DEVELOPMENT bundle: the staged app.js carries ${built.devMarkers.join(', ')}. Dev and production builds stage to the same directory, so the bytes decide, not the flag. Re-run without --no-build.`
+			);
+		}
+		built.bundleKb = +(fs.statSync(stagedApp).size / 1024).toFixed(1);
 	}
 
-	const server = await serveStatic(built.dir, config.server);
+	const server = await serveStatic(built.dir, {
+		...config.server,
+		busyHint:
+			'The benchmark will not kill a process it did not start; ' +
+			'change server.port in playwright.benchmark.config.js to a free port above 4200.',
+	});
 	const base = `http://${config.server.host}:${config.server.port}`;
 
 	const browser = await chromium.launch({
@@ -578,10 +522,22 @@ async function main() {
 	const context = await browser.newContext({ viewport: config.browser.viewport });
 	const page = await context.newPage();
 
+	// Two error channels, deliberately NOT pooled.
+	//
+	// `pageerror` is an UNCAUGHT exception in the page: the app under measurement
+	// broke, so every number recorded around it is suspect. That is fatal (see the
+	// exit-status gate after the drain loop below).
+	//
+	// `console.error` is ADVISORY. Puzzle's runtime logs console.error from
+	// expected recovery paths (a failed adapter write, a rejected record), and
+	// scenarios exercise those on purpose — gating the exit code on it would redden
+	// healthy runs, which is exactly how such a gate gets `|| true`'d away. Printed,
+	// never fatal.
 	const pageErrors = [];
+	const consoleErrors = [];
 	page.on('pageerror', (err) => pageErrors.push(String(err)));
 	page.on('console', (msg) => {
-		if (msg.type() === 'error') pageErrors.push(`console.error: ${msg.text()}`);
+		if (msg.type() === 'error') consoleErrors.push(msg.text());
 	});
 
 	const cdp = await openCdp(page);
@@ -686,6 +642,12 @@ async function main() {
 		}
 
 		for (const err of pageErrors) log(`PAGE ERROR  ${err}`);
+		for (const err of consoleErrors) log(`console.error  ${err}`);
+
+		// An uncaught page exception fails the run. Set here, BEFORE the
+		// --update-baseline block below, so a run whose page threw can neither exit 0
+		// nor enshrine itself as the baseline.
+		if (pageErrors.length) exitCode = 1;
 
 		const meta = {
 			builtAt: new Date().toISOString(),
@@ -720,6 +682,11 @@ async function main() {
 					`  REFUSING to update the baseline: ${summaries.length - measured.length} op(s) did not report ok. A baseline written from a partial run would bake the failure in.\n`
 				);
 				exitCode = 1;
+			} else if (pageErrors.length) {
+				// exitCode is already 1 from the gate above; this only explains the refusal.
+				console.error(
+					`  REFUSING to update the baseline: the page threw ${pageErrors.length} uncaught error(s) during the run. Every op may still have reported ok, but a baseline measured through a broken page is not a baseline.\n`
+				);
 			} else {
 				fs.writeFileSync(
 					path.join(ROOT, config.report.baselinePath),
@@ -730,8 +697,10 @@ async function main() {
 		}
 
 		if (exitCode !== 0) {
-			console.error('  EXIT 1 — a validate() failure, a structural mismatch, an op error, or a rejected sample set.');
-			console.error('  Timing deltas NEVER affect the exit code.\n');
+			console.error(
+				'  EXIT 1 — a validate() failure, a structural mismatch, an op error, a rejected sample set, or an uncaught page error.'
+			);
+			console.error('  Timing deltas and console.error output NEVER affect the exit code.\n');
 		}
 	} finally {
 		await context.close().catch(() => {});

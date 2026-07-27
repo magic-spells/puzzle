@@ -957,9 +957,13 @@ func isBareIdent(s string) bool {
 	return true
 }
 
+// SLOT_TAG joins ViewNode as a compiler-emitted binding: codegen imports it
+// whenever the template contains a slot, and a loop variable of that name would
+// shadow the outlet marker inside the loop body (the row object silently becomes
+// the tag).
 func loopBindingIdentError(name string, pos Position, file string) *ParseError {
-	if name == "ViewNode" || strings.HasPrefix(name, "__") {
-		return errAt(file, pos, "loop variable %q uses a reserved name (identifiers starting with %q and %q are reserved by the compiler)", name, "__", "ViewNode")
+	if name == "ViewNode" || name == "SLOT_TAG" || strings.HasPrefix(name, "__") {
+		return errAt(file, pos, "loop variable %q uses a reserved name (identifiers starting with %q and the names %q and %q are reserved by the compiler)", name, "__", "ViewNode", "SLOT_TAG")
 	}
 	if jsident.IsReservedBindingIdentifier(name) {
 		return errAt(file, pos, "loop variable %q is not a legal binding identifier in strict-mode JavaScript", name)
