@@ -98,39 +98,29 @@ import {
 //
 // Three questions, ranked, each with its own control.
 //
-// Q1 (the headline) — A CONTROLLED <select> COSTS A DOM PROPERTY WRITE ON EVERY
-//     RENDER, FOREVER.
+// Q1 (the headline) — A CONTROLLED FORM FIELD WRITES ONLY WHEN ITS VALUE MOVED.
 //
-//     `client-runtime/views/viewManager.js` handles the two controlled form
-//     properties in two different places, and only one of them compares first:
+//     `client-runtime/views/viewManager.js` live-compares BOTH controlled form
+//     properties before writing:
 //
 //       patchAttrs()          if (name === 'value' && (INPUT || TEXTAREA)) {
 //                               if (el.value !== stringify(value)) setAttr(...)
 //                             }
-//       reassertSelectValue() el.value = stringify(attrs.value);   // no compare
+//       reassertSelectValue() if (el.value === next) return; el.value = next;
 //
-//     The select's write is unconditional BY DESIGN and the reason is sound: a
-//     select's `value` cannot be applied until its <option> children exist, so
-//     the re-assertion runs after patchChildren settles. But it runs on EVERY
-//     patch of EVERY select, whether or not the bound value moved and whether
-//     or not the option list churned.
+//     The select's re-assertion still runs after patchChildren settles — its
+//     `value` cannot be applied before the <option> children exist — but it
+//     compares the live property first, so a settled select writes nothing. A
+//     genuinely CHANGED select writes exactly once, via patchAttrs's generic
+//     `oldAttrs[name] !== value` branch; the re-assertion then finds the live
+//     property already equal and skips.
 //
-//     200 selects x 200 keystrokes = 40,000 HTMLSelectElement.value writes to
-//     type one sentence into an unrelated field. The <input> sitting in the
-//     same row, with the identical binding shape, writes ZERO.
-//
-//     AND THE COMMENT ABOVE patchAttrs IS NOT QUITE WHAT THE CODE DOES. It says
-//     the select's value is "left to the generic path here since its options may
-//     not exist yet" — but the generic path WRITES. A <select> is neither INPUT
-//     nor TEXTAREA, so it misses the live-DOM compare and falls through to
-//     `else if (oldAttrs[name] !== value) setAttr(...)`, which sets `el.value`
-//     against an option list that has not patched yet. reassertSelectValue then
-//     sets the identical value again a few lines later. `rerender-dirty`
-//     measures 8,000 writes for 4,000 selects patched — exactly two each — and
-//     that first write is redundant in BOTH directions: skipped when the value
-//     did not change, immediately redone when it did. This scenario was built
-//     expecting one write per select per render in both arms; the control found
-//     two, which is why the control exists.
+//     This scenario measured the previous shape and is why it changed: the
+//     re-assert wrote UNCONDITIONALLY — 4,000 writes per 20 clean renders,
+//     40,000 HTMLSelectElement.value writes to type one sentence into an
+//     unrelated field, and TWO writes per changed select in the dirty arm
+//     (8,000 where one-each is 4,000). The zeros in the clean and typing arms
+//     and the dirty arm's exactly-one-write are what the counters pin now.
 //
 // Q2 — ONE KEYSTROKE THROUGH record.update() NORMALIZES THE SCHEMA THREE TIMES.
 //
@@ -286,11 +276,11 @@ export default class FormState extends PuzzleView {
       boundText: record ? record.text : '',
       explainText:
         'each row is one controlled <input> and one controlled <select> carrying the same shape of value binding. ' +
-        'patchAttrs compares an input\'s value against the LIVE DOM property and writes only on a difference; a ' +
-        'select misses that compare entirely and is re-asserted after its options patch, unconditionally — twice ' +
-        'over when the value did change. rerender proves the input\'s zero, rerender-dirty proves the write path ' +
-        'still fires, and the two typing arms price a keystroke through the local layer against the same keystroke ' +
-        'through record.update().',
+        'patchAttrs compares an input\'s value against the LIVE DOM property and writes only on a difference; the ' +
+        'select\'s post-options re-assert makes the same live compare, so a settled select also writes nothing. ' +
+        'rerender proves both zeros, rerender-dirty proves both write paths still fire — one write per changed ' +
+        'select, not two — and the two typing arms price a keystroke through the local layer against the same ' +
+        'keystroke through record.update().',
       note: this.note,
       resultText: result
         ? `${result.op}: ${result.renders} renders · ${result.inputWrites} input writes · ` +
@@ -840,16 +830,16 @@ export default class FormState extends PuzzleView {
     // Control-did-run, BOTH directions. Each of these zeros would otherwise read
     // as a finding when it is really a dead code path.
     const result = this.lastResult;
-    if (result && result.op === 'rerender' && result.selectWrites === 0) {
-      return {
-        ok: false,
-        detail: 'rerender wrote no select values at all, so its zero input writes measured nothing — the renders never reached the grid',
-      };
-    }
     if (result && result.op === 'rerender-dirty' && result.inputWrites === 0) {
       return {
         ok: false,
         detail: 'rerender-dirty wrote no input values, so the control is a dead code path and rerender\'s zero proves nothing',
+      };
+    }
+    if (result && result.op === 'rerender-dirty' && result.selectWrites === 0) {
+      return {
+        ok: false,
+        detail: 'rerender-dirty wrote no select values, so the select write path is dead and rerender\'s zero proves nothing',
       };
     }
     if (result && result.op === 'type-store' && result.dataRuns === 0) {

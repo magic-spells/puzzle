@@ -79,7 +79,7 @@ driver has already opted in.
 | `deep-nest` | is one update proportional to DEPTH, or to the forest? | **neither** — O(1); see "refuted" below |
 | `write-storm` | does the rAF-batched flush hold under mutation pressure, and what does persistence cost? | batching holds unconditionally; persistence is the finding |
 | `islands` | does `island` really freeze its subtree, and what does the freeze still cost? | 0 violations; 20,000 child vnodes rebuilt per render |
-| `formatters` | what does the built-in registry cost across a large re-render? | 91.4% of it |
+| `formatters` | what does the built-in registry cost across a large re-render? | was 91.4% — priced the Intl cache that cut it to ~23%; `count-intl` now pins 0 constructions |
 | `loop-trap` | does the D121 loop detector actually fire in a browser? | both arms, at exactly the documented thresholds |
 
 `loop-trap` is **not** in the benchmark op matrix at all: the harness measures a

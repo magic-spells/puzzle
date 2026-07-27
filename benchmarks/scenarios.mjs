@@ -439,13 +439,18 @@ export const OPS = [
 		size: 10000,
 		op: 'count-intl',
 		preExpect: { records: 10000 },
-		// One Intl object constructed per formatter call, and 20,000 calls for
-		// 10,000 rows. These are the numbers the whole scenario exists to pin.
+		// ZERO Intl constructions for 20,000 formatter calls: builtins.js caches
+		// date()'s Intl.DateTimeFormat per (locale, options) and timeago()'s
+		// RelativeTimeFormat outright, and everything this op runs was warmed by
+		// the rerender arm earlier in the same session. Before the cache this
+		// measured 10,000 + 10,000 — one construction per call — so this op is
+		// the cache's regression pin, and fmtFormatterCalls is what proves the
+		// formatters still ran.
 		expect: {
 			records: 10000,
 			fmtRows: 10000,
-			fmtDateTimeFormats: 10000,
-			fmtRelativeTimeFormats: 10000,
+			fmtDateTimeFormats: 0,
+			fmtRelativeTimeFormats: 0,
 			fmtFormatterCalls: 20000,
 		},
 		note: 'count-intl is instrumented: Intl is patched and the registry entries wrapped. Its counts are exact; its milliseconds include the probe and must NOT be compared against the other two arms.',
@@ -656,16 +661,18 @@ export const OPS = [
 					fsKeystrokes: 0,
 					fsRenders: renders,
 					fsDataRuns: renders,
-					// THE HEADLINE. 20 re-renders in which no bound value moved:
-					// every one of the 200 inputs writes NOTHING (patchAttrs compares
+					// THE HEADLINE, both halves zero. 20 re-renders in which no bound
+					// value moved: the 200 inputs write NOTHING (patchAttrs compares
 					// against the live DOM property, which is what makes a caret safe
-					// mid-typing) while every one of the 200 selects is re-asserted
-					// unconditionally, once per render.
+					// mid-typing) and the 200 selects write NOTHING either, because
+					// reassertSelectValue makes the same live compare before its
+					// post-options re-assert. It measured 4,000 — one unconditional
+					// write per select per render — before that compare landed.
 					fsInputValueWrites: 0,
-					fsSelectValueWrites: fields * renders,
+					fsSelectValueWrites: 0,
 					fsSchemaNormalizations: 0,
 				},
-				note: 'rerender is the clean arm: 20 renders of 200 controlled inputs and 200 controlled selects with NO bound value changing. fsInputValueWrites must be exactly 0 and fsSelectValueWrites exactly 4,000 — the select is re-asserted after its options patch with no compare, so it pays a DOM property write per render forever. Timings include the probes and are incidental; the finding is counts-only.',
+				note: 'rerender is the clean arm: 20 renders of 200 controlled inputs and 200 controlled selects with NO bound value changing. Both write counters must be exactly 0 — patchAttrs live-compares an input\'s value, and reassertSelectValue live-compares a select\'s before re-asserting it after the options patch. rerender-dirty is what proves both write paths still exist. Timings include the probes and are incidental; the finding is counts-only.',
 			},
 			{
 				...common,
@@ -678,22 +685,19 @@ export const OPS = [
 					fsRenders: renders,
 					fsDataRuns: renders,
 					// THE CONTROL. Identical renders, except every bound value on
-					// every field genuinely differs. Without this, the zero above is
-					// indistinguishable from a write path that never fires at all.
+					// every field genuinely differs. Without this, the zeros above are
+					// indistinguishable from write paths that never fire at all.
 					fsInputValueWrites: fields * renders,
-					// TWO writes per select per render, not one — measured, and NOT
-					// what this arm was built expecting. A <select> is neither INPUT
-					// nor TEXTAREA, so patchAttrs's live-DOM compare does not cover
-					// it and its `value` falls through to the generic
-					// `oldAttrs[name] !== value` branch, which writes. Then
-					// reassertSelectValue writes the identical value AGAIN once the
-					// options have patched. The first write is redundant in every
-					// case: skipped when the value is unchanged, immediately redone
-					// when it is not.
-					fsSelectValueWrites: fields * renders * 2,
+					// ONE write per select per render. A <select> is neither INPUT
+					// nor TEXTAREA, so its `value` goes through patchAttrs's generic
+					// `oldAttrs[name] !== value` branch, which writes the changed
+					// value; reassertSelectValue then finds the live property already
+					// equal and skips. Before the live compare it wrote the identical
+					// value AGAIN after the options patched — 8,000 here, two each.
+					fsSelectValueWrites: fields * renders,
 					fsSchemaNormalizations: 0,
 				},
-				note: 'rerender-dirty is the CONTROL for rerender: the same 20 renders with both bound values on every field genuinely different, by swapping between two precomputed row arrays. fsInputValueWrites must be 4,000 here — a zero would mean the input write path is dead and rerender\'s zero proves nothing. fsSelectValueWrites is 8,000, DOUBLE the clean arm: a changed select value is written once by patchAttrs\'s generic branch and once again by reassertSelectValue after the options patch. So a select costs one redundant DOM property write per render when nothing changed, and one redundant write per render when something did.',
+				note: 'rerender-dirty is the CONTROL for rerender: the same 20 renders with both bound values on every field genuinely different, by swapping between two precomputed row arrays. fsInputValueWrites and fsSelectValueWrites must both be 4,000 here — a zero in either would mean that write path is dead and the clean arm\'s zeros prove nothing. A changed select is written once, by patchAttrs\'s generic branch; reassertSelectValue live-compares and skips the second write it used to make.',
 			},
 			{
 				...common,
@@ -708,10 +712,10 @@ export const OPS = [
 					// is the cheap path and half of the A/B.
 					fsDataRuns: 0,
 					fsInputValueWrites: 0,
-					fsSelectValueWrites: fields * keystrokes,
+					fsSelectValueWrites: 0,
 					fsSchemaNormalizations: 0,
 				},
-				note: 'type-local drives 200 REAL input events into a field bound to the local layer, forcing flushUpdates() after each so the op is bounded by a count rather than by 200 frames of scheduler. data() never re-runs, yet all 200 selects are still re-asserted on all 200 renders: 40,000 HTMLSelectElement.value writes to type one sentence into an unrelated field.',
+				note: 'type-local drives 200 REAL input events into a field bound to the local layer, forcing flushUpdates() after each so the op is bounded by a count rather than by 200 frames of scheduler. data() never re-runs, and no select is written: typing into an unrelated field now touches zero HTMLSelectElement values across 200 renders, where it wrote 40,000 before reassertSelectValue compared first.',
 			},
 			{
 				...common,
@@ -724,14 +728,14 @@ export const OPS = [
 					fsRenders: keystrokes,
 					fsDataRuns: keystrokes,
 					fsInputValueWrites: 0,
-					fsSelectValueWrites: fields * keystrokes,
+					fsSelectValueWrites: 0,
 					// THREE per keystroke. primaryKey() for the immutable-pk guard,
 					// _collectErrors() for the §20 validation pass, then primaryKey()
 					// again inside Store.recordChanged(). normalizedSchema() rebuilds
 					// its 24-entry map from scratch every time; nothing memoizes it.
 					fsSchemaNormalizations: keystrokes * 3,
 				},
-				note: 'type-store is type-local\'s A/B partner: the same 200 real keystrokes, the same grid, the same probes, routed through record.update() + store.flush() instead of setData(). Its delta against type-local is the only ms comparison here that is fair, because the instrument load is identical by construction — and measured, that delta (+7ms, +5ms, +0ms, +2ms over four runs) sits at or below the run-to-run spread, so the whole store round trip is an upper bound of ~35us per keystroke rather than a measurement. The 40,000 select writes both arms pay swamp it. 600 normalizedSchema() calls for 200 single-field updates is 3 per keystroke, and none of them are memoized.',
+				note: 'type-store is type-local\'s A/B partner: the same 200 real keystrokes, the same grid, the same probes, routed through record.update() + store.flush() instead of setData(). Its delta against type-local is the only ms comparison here that is fair, because the instrument load is identical by construction. 600 normalizedSchema() calls for 200 single-field updates is 3 per keystroke, and none of them are memoized.',
 			},
 			{
 				...common,
@@ -746,7 +750,7 @@ export const OPS = [
 					fsRenders: 2,
 					fsDataRuns: 1,
 					fsInputValueWrites: 0,
-					fsSelectValueWrites: fields * 2,
+					fsSelectValueWrites: 0,
 					fsSchemaNormalizations: 3,
 				},
 				note: 'type-event is a BEHAVIOUR GATE, not a measurement: two real input events, one per binding, each of which must reach state AND the DOM or the op throws. Both bindings are covered because both typing arms are measured, and an arm that quietly stopped working would otherwise just look fast. The caret position is READ and reported in detail; it is deliberately not a counter, because Blink short-circuits some identical value assignments and a passing caret check could mean the engine preserved it rather than the framework. Ignore its timings.',

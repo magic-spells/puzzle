@@ -601,44 +601,52 @@ Timing a wrapped formatter would add two `performance.now()` calls to each of
 20,000 invocations — several milliseconds of pure instrument against the thing
 being measured. That is why the share comes from the A/B, not from the wrapper.
 
-### The formatters are 91% of the re-render
+### The formatters are ~23% of the re-render, down from 91%
 
 Production medians, 15 iterations, no instrumentation in either arm:
 
 | arm | script | to painted frame |
 | --- | ---: | ---: |
-| `rerender` (date + timeago) | **376.1ms** | 376.1ms |
-| `rerender-raw` (control) | **32.4ms** | 32.4ms |
-| difference — the formatters | **343.7ms** | **91.4%** |
+| `rerender` (date + timeago) | **40.8ms** | 40.8ms |
+| `rerender-raw` (control) | **31.4ms** | 31.4ms |
+| difference — the formatters | **9.4ms** | **23%** |
 
-The same tree, the same 10,000-node patch, the same records. Rendering 10,000
-rows costs 32ms; running `date` and `timeago` over them costs **ten times that
-again**. In the CDP decomposition the two arms have identical layout cost
-(47.6ms vs 46.6ms) and diverge entirely in `other` — the framework's own
-JavaScript — 839ms against 86.8ms.
+The same tree, the same 10,000-node patch, the same records. Before
+`builtins.js` cached its Intl objects this table read **376.1ms against
+32.4ms** — the formatters were **91.4%** of the formatted arm, ten times the
+cost of rendering the rows they sat in — and this A/B is the measurement that
+priced the cache. In the CDP decomposition the two arms still have identical
+layout cost (~48ms each) and diverge only in `other`, the framework's own
+JavaScript.
 
-`count-intl` came in at 374.3ms, within noise of the uninstrumented 376.1ms, so
-the probe's own overhead is not what is being reported here.
+`count-intl` came in at 47.4ms against the uninstrumented 40.8ms: two
+`performance.now()` calls per invocation are a visible ~7ms against an op this
+size, which is exactly why the share is read off the A/B and never off the
+probe arm.
 
-### One Intl object per call, confirmed
+### Zero Intl constructions per re-render, confirmed
 
 | constructed during one 10,000-row render | count |
 | --- | ---: |
-| `Intl.DateTimeFormat` | **10,000** |
-| `Intl.RelativeTimeFormat` | **10,000** |
+| `Intl.DateTimeFormat` | **0** |
+| `Intl.RelativeTimeFormat` | **0** |
 
-Exactly one per formatter call, for 20,000 calls. `builtins.js` constructs a
-fresh `Intl.DateTimeFormat` inside `date()` and a fresh `Intl.RelativeTimeFormat`
-inside `timeago()` every time, and both are perfectly cacheable by
-`(locale, options)`. Nothing is memoized today.
+20,000 formatter calls, zero constructions: `date()` caches its
+`Intl.DateTimeFormat` per `(locale, options)`, `timeago()` its
+`RelativeTimeFormat` outright, both built on first use — and everything this op
+runs is already warm from the arms before it. Before the cache this table read
+**10,000 and 10,000**, exactly one construction per call. The op is now the
+cache's regression pin; `fmtFormatterCalls` staying at 20,000 is what proves
+the formatters still ran.
 
 The `Intl` patch lives in the scenario, on `globalThis.Intl` — the runtime is not
 modified. The point is to find out what it currently does, not to change it.
 
-**What a bad result looks like:** the two counts diverging from the call count
-(which would mean the scenario is not measuring what it thinks), or
-`rerender-raw` costing the same as `rerender` (which would mean the formatted arm
-never ran the formatters).
+**What a bad result looks like:** either construction count above zero (the
+cache has regressed, or its key has fractured), `fmtFormatterCalls` diverging
+from 20,000 (the scenario is not measuring what it thinks), or `rerender-raw`
+costing the same as `rerender` (which would mean the formatted arm never ran
+the formatters).
 
 ## Scenario 9 — `listener-churn`
 
@@ -960,20 +968,20 @@ be an input, and which the runner's clamp guard would rightly reject).
 
 | arm | renders | `data()` runs | `<input>.value` writes | `<select>.value` writes | `normalizedSchema()` |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `rerender` (clean) | 20 | 20 | **0** | **4,000** | 0 |
-| `rerender-dirty` (control) | 20 | 20 | 4,000 | 8,000 | 0 |
-| `type-local` (setData) | 200 | **0** | 0 | **40,000** | 0 |
-| `type-store` (record.update) | 200 | 200 | 0 | 40,000 | **600** |
-| `type-event` (gate) | 2 | 1 | 0 | 400 | 3 |
+| `rerender` (clean) | 20 | 20 | **0** | **0** | 0 |
+| `rerender-dirty` (control) | 20 | 20 | 4,000 | **4,000** | 0 |
+| `type-local` (setData) | 200 | **0** | 0 | **0** | 0 |
+| `type-store` (record.update) | 200 | 200 | 0 | 0 | **600** |
+| `type-event` (gate) | 2 | 1 | 0 | 0 | 3 |
 
-Production medians, 15 iterations, across four runs: `rerender` ~21ms,
-`rerender-dirty` 25–29ms, `type-local` 140–149ms, `type-store` 145–151ms. All
-four carry the probes, so none of those numbers is a clean framework cost.
+Production medians, 15 iterations: `rerender` ~18ms, `rerender-dirty` ~26ms,
+`type-local` ~128ms, `type-store` ~130ms. All four carry the probes, so none of
+those numbers is a clean framework cost.
 
-### A controlled `<select>` costs a DOM property write on every render, forever
+### Both controlled form properties write only on a real change
 
 `viewManager.js` handles the two controlled form properties in two different
-places, and only one of them compares first:
+places, and both of them now compare against the live DOM first:
 
 ```js
 // patchAttrs — the input path
@@ -982,36 +990,34 @@ if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA'))
 }
 
 // reassertSelectValue — after patchChildren, for every <select>
-el.value = stringify(attrs.value);
+const next = stringify(attrs.value);
+if (el.value === next) return;
+el.value = next;
 ```
 
 The re-assertion exists for a good reason: a select's `value` cannot be applied
 before its `<option>` children exist, so it has to run after `patchChildren`
-settles. But it runs on **every patch of every select**, whether or not the
-bound value moved and whether or not the option list churned.
+settles. It used to run **unconditionally** — this scenario measured 4,000
+writes across twenty clean re-renders, and **40,000** `HTMLSelectElement.value`
+writes to type one sentence into an unrelated field, which is the measurement
+that put the live compare in front of the write. Twenty re-renders in which
+nothing changes now write **zero** on both element kinds, and both zeros are
+asserted counters.
 
-Twenty re-renders in which nothing changed: the 200 inputs write **zero**, the
-200 selects write **4,000**. Two hundred keystrokes into an unrelated field:
-still zero input writes, and **40,000** `HTMLSelectElement.value` writes to type
-one sentence.
+### A changed select writes once, not twice
 
-### The comment above `patchAttrs` is not quite what the code does
+A `<select>` is neither `INPUT` nor `TEXTAREA`, so its `value` goes through
+`patchAttrs`'s generic `oldAttrs[name] !== value` branch, which writes the
+changed value before the option list has patched; `reassertSelectValue` then
+finds the live property already equal and skips. `rerender-dirty` measures
+**4,000 writes for 4,000 selects patched — exactly one each**.
 
-It says a select's `value` is "left to the generic path here since its options
-may not exist yet at attr-patch time" — but the generic path *writes*. A
-`<select>` is neither `INPUT` nor `TEXTAREA`, so it misses the live-DOM compare
-and falls through to `else if (oldAttrs[name] !== value) setAttr(...)`, which
-sets `el.value` against an option list that has not patched yet.
-`reassertSelectValue` then sets the identical value again a few lines later.
-
-`rerender-dirty` measures **8,000 writes for 4,000 selects patched — exactly two
-each**. This scenario was built expecting one write per select per render in
-both arms; the control found two, which is the entire reason a control exists.
-That first write is redundant in both directions: skipped when the value did not
-change, immediately redone when it did. Skipping `value` for `SELECT` in
-`patchAttrs` would remove it, since the re-assertion covers the same ground a
-few lines later — **not built, not shipped, and not measured beyond the counts
-above**.
+Before the re-assert compared first, this arm measured 8,000 — the identical
+value written again after the options settled — and the control arm is how
+that redundancy was found at all. It now doubles as the liveness canary:
+`validate()` fails the run outright if the dirty arm's select writes read zero,
+because that would make the clean arm's zero a dead code path rather than a
+finding.
 
 ### One keystroke through `record.update()` normalizes the schema three times
 
@@ -1031,20 +1037,19 @@ above**.
 walked either way. The count is measured by wrapping the method, not asserted
 from the source, and the op throws if it is not exactly 3 per keystroke.
 
-And yet the A/B built to price that round trip **cannot see it**. Across four
-runs `type-store` came in +7ms, +5ms, +0ms and +2ms against `type-local` over
-200 keystrokes — at or below the ±1–3% spread on a ~150ms op. So the
-honest reading is an upper bound, not a measurement: validation over 24 fields,
-three schema normalizations, subscriber notification and a full `data()` re-run
-together cost **under ~35µs per keystroke**, and are not reliably separable from
-the local path at this size.
+And yet the A/B built to price that round trip still **cannot see it**. With
+the 40,000 select writes gone from both arms, the typing ops dropped from
+~145–150ms to ~128–130ms — and `type-store` still lands within the run-to-run
+spread of `type-local`: +2.5ms and +4ms over 200 keystrokes across the two
+post-fix runs. The honest reading remains an upper bound, not a measurement:
+validation over 24 fields, three schema normalizations, subscriber notification
+and a full `data()` re-run together cost **under ~20µs per keystroke**, and are
+not reliably separable from the local path at this size.
 
-That is the uncomfortable half of the finding. The A/B did not fail; it was
-swamped. The 40,000 `<select>.value` writes that *both* arms pay — for a
-keystroke in a field neither select is bound to — dominate the op so completely
-that the entire store round trip disappears into the noise beside them. Anyone
-optimising a slow Puzzle form should read that ordering carefully before
-reaching for the data layer.
+The first time this was measured the delta was swamped by the select writes
+both arms paid; with those gone, the conclusion survives on its own — the
+store round trip is simply small. Anyone optimising a slow Puzzle form should
+look at what their render writes before reaching for the data layer.
 
 ### A re-render during typing does not write `value`, and nothing was pinning that
 
@@ -1068,19 +1073,20 @@ caret read observes an *effect* that has two possible causes.
 event per binding, not one overall: both typing arms are measured, so an arm
 that quietly stopped working would otherwise just look fast.
 
-**What a bad result looks like:** `fsSelectValueWrites` of 0 in `rerender` means
-the renders never reached the grid and the input's zero measured nothing.
-`fsInputValueWrites` of 0 in `rerender-dirty` means the input write path is dead
-and the clean arm's zero proves nothing. `fsDataRuns` of 0 in `type-store` means
-the store comparison measured nothing. `fsInputValueWrites` above 0 in
-`rerender` would mean the live-DOM compare has been lost and every controlled
-input in every Puzzle app now eats the caret on re-render. `fsSchemaNormalizations`
-of anything but 600 in `type-store` means either the guard, the validation pass
-or the notify key moved — or that someone memoized `normalizedSchema()`, in
-which case the number should be 0 and this table needs rewriting. `validate()`
-also fails outright if the store has storage configured, because every flush
-would then serialize the whole store and the schema counts would stop meaning
-what they say.
+**What a bad result looks like:** `fsSelectValueWrites` or `fsInputValueWrites`
+of 0 in `rerender-dirty` means that write path is dead and the clean arm's
+zeros prove nothing. `fsSelectValueWrites` above 0 in `rerender`, `type-local`
+or `type-store` means the re-assert's live compare has been lost and every
+settled select is paying writes again. `fsInputValueWrites` above 0 in
+`rerender` would mean the input's live-DOM compare has been lost and every
+controlled input in every Puzzle app now eats the caret on re-render.
+`fsDataRuns` of 0 in `type-store` means the store comparison measured nothing.
+`fsSchemaNormalizations` of anything but 600 in `type-store` means either the
+guard, the validation pass or the notify key moved — or that someone memoized
+`normalizedSchema()`, in which case the number should be 0 and this table needs
+rewriting. `validate()` also fails outright if the store has storage
+configured, because every flush would then serialize the whole store and the
+schema counts would stop meaning what they say.
 ## Scenario 12 — `flip-churn`
 
 **Probes:** the one place the D85 FLIP implementation interleaves layout reads

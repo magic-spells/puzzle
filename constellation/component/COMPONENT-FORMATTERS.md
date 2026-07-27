@@ -76,21 +76,20 @@ a day names no instant to re-express. The `iso` preset is idempotent on such
 inputs; Date instances, timestamps, and full ISO datetimes parse exactly as
 before.
 
-## Measured cost: the date built-ins dominate a large re-render
+## Measured cost: the Intl cache, and what it bought
 
 Measured, not inferred, through [[DOC-STRESS-EXAMPLE]]'s `formatters` scenario
-and the production harness ([[DECISION-D128-BENCHMARK-METHODOLOGY]]): across a
-10,000-row re-render running `date('short')` and `timeago` on each row, the
-formatters are **91.4% of the total** — **376.1ms** against **32.4ms** for an
-identical tree, identical per-row patch work, rendering plain record strings
-instead. The two arms have effectively identical layout cost (47.6ms vs 46.6ms)
-and diverge entirely in the framework's own JavaScript.
+and the production harness ([[DECISION-D128-BENCHMARK-METHODOLOGY]]). Before
+the date family cached its Intl objects, a 10,000-row re-render running
+`date('short')` and `timeago` on each row constructed **10,000
+`Intl.DateTimeFormat`** and **10,000 `Intl.RelativeTimeFormat`** objects — one
+per formatter call — and the formatters were **91.4%** of the re-render:
+376.1ms against 32.4ms for an identical tree rendering plain record strings.
+That measurement priced the cache; the gotcha note on this card carries its
+design constraints (keyed Maps, insert-after-success).
 
-The proximate cause is counted rather than reasoned about: one 10,000-row render
-constructs **10,000 `Intl.DateTimeFormat`** and **10,000 `Intl.RelativeTimeFormat`**
-objects — exactly one per formatter call, for 20,000 calls. `builtins.js`
-constructs a fresh instance inside `date()` and inside `timeago()` every time,
-and both are keyed entirely by `(locale, options)`. Nothing is memoized today.
-
-This paragraph records a measurement of current behavior. Any caching design is
-a separate, numbered decision; do not read this as describing shipped work.
+With the cache shipped, the same A/B reads **40.8ms against 31.4ms** — the two
+formatters cost ~9ms, roughly a quarter of the formatted arm — and the
+scenario's `count-intl` op asserts **zero** Intl constructions across a warmed
+render. That op is the cache's regression pin in the production benchmark
+baseline: a count above zero fails the run.
