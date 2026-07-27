@@ -31,6 +31,15 @@ notes:
       single-slot per-subject mark storage is wrong wherever the instrumented operation can
       re-enter.
     sha: ed27cae
+  - kind: gotcha
+    text: >-
+      activeRenders was the last single-slot violation of that invariant, and the earlier "no
+      reentry path" refutation traced only framework-internal #renderNow callers. The real door is
+      user code INSIDE the render span — ref callbacks and connectedCallback on subtree insert —
+      calling refresh(), which with a sync data() renders synchronously. Now a per-view LIFO stack
+      mirroring activeStoreFlushes; renderTreeBuilt/renderStart peek the innermost mark, renderEnd
+      pops it.
+    sha: 93f548c
 ---
 
 # D121 — Dev-only runtime performance profiling with zero production bytes
