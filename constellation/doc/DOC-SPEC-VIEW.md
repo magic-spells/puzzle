@@ -35,6 +35,8 @@ Each spec compiles to `el.animate([from, to], { duration, easing, delay, fill: '
 
 **Animation target.** The instance's own root element — for views and layouts the `<puzzle-view>` element; for reusable components the single root element the template requires (D20). There is **no wrapper element**; the single-root rule makes the root the animation handle.
 
+**Out animations in lists require keys.** The keyed reconciler patches around a leaving element (`leavingEls`); the indexed (unkeyed) path has no leaver awareness, so survivors can visibly misorder while an unkeyed sibling fades out. Supported pattern: key the list items. Development builds warn once per session when an unkeyed list unmounts an out-animated component.
+
 **Completion.** Detected via the WAAPI `Animation.finished` promise. Interrupting navigation or unmount **cancels** the running animation and proceeds immediately.
 
 **Lifecycle hooks.** Four no-op base methods on `PuzzleView`, firing around each phase:

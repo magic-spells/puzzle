@@ -95,7 +95,7 @@ The rules stored by the §7 builders since v1 now enforce. Shipped in v1.16 (D48
 - Both throw **`PuzzleValidationError`** (exported from the package root): `err.errors` is `[{ field, rule, message }]` in schema-declaration order; `err.message` is the first error's message. The return-the-record contract of both methods is unchanged on success.
 - **Exempt by design:** `loadAll`/`loadOne` upserts (the server is authoritative — backend drift must not crash the read path) and storage hydration (fail-soft startup, same posture as the duplicate-pk skip).
 
-**Renderable surface (non-throwing):** static `Model.validate(data)` and instance `record.validate()` return `{ valid, errors }` with the same errors shape — validate first in form UX, then write. There is no persistent `record.errors` state (rejected in D48).
+**Renderable surface (non-throwing):** static `Model.validate(data)` and instance `record.validate()` return `{ valid, errors }` with the same errors shape — validate first in form UX, then write. There is no persistent `record.errors` state (rejected in D48). *(Amended: static `validate(data)` applies schema `.default()`s before collecting errors, matching `createRecord` — a `.default(…).required()` field no longer fails a pre-create form check that the create itself would pass. Instance `validate()` reads already-defaulted fields and is unchanged.)*
 
 **Rule semantics** (no type coercion — rules compare what they're given):
 
