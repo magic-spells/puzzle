@@ -62,6 +62,15 @@ data.
 
 Notable emission contracts:
 
+- the appended import makes a small set of module-scope names compiler-owned in
+  a `.pzl` script: `ViewNode`, `SLOT_TAG` (when slots are present), the `__s`
+  display alias (when interpolation is present), and by convention every
+  `__`-prefixed identifier (codegen's scratch namespace: `__d`, `__f`, `__ev`,
+  `__i`, …). A script that declares one of these at module scope fails the
+  bundle with a duplicate-binding syntax error — loud and at build time, by
+  design. The compiler never parses the script body (§ contract above), so it
+  cannot detect the collision earlier or pick a different alias; the names are
+  reserved instead.
 - text interpolation routes through the runtime's `displayValue` helper, emitted
   as `__s(...)` and imported only when a module actually contains one (D127).
   `null` and `undefined` render as an empty string — never the literal words —
