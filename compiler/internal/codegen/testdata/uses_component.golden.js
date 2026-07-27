@@ -16,7 +16,6 @@ import { ViewNode } from '@magic-spells/puzzle';
 
 UsesComponent.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'page' }, [
     new ViewNode(Card, {

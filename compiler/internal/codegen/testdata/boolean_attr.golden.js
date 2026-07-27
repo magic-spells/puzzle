@@ -11,7 +11,6 @@ import { ViewNode } from '@magic-spells/puzzle';
 
 BooleanAttr.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'form' }, [
     new ViewNode('input', {

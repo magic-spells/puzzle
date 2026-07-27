@@ -8,7 +8,6 @@ import { ViewNode, SLOT_TAG } from '@magic-spells/puzzle';
 
 Card.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('div', { class: 'card' }, [
     new ViewNode('div', { class: 'body' }, [

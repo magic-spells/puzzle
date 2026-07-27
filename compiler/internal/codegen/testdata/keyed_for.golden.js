@@ -11,7 +11,6 @@ import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 KeyedFor.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'list' }, [
     new ViewNode('ul', { class: 'items' },

@@ -12,7 +12,6 @@ import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 SkeletonInlineComponent.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('div', { class: 'user-card' }, [
     new ViewNode('h2', {}, [
@@ -24,7 +23,6 @@ SkeletonInlineComponent.__pzlModule = 'skeleton_inline_component.pzl';
 
 SkeletonInlineComponent.prototype.renderSkeleton = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('div', { class: 'user-card is-loading' }, [
     new ViewNode('h2', { class: 'bg-skeleton h-5' }, []),
