@@ -4,14 +4,14 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 
 // Hand-written stand-ins for what the compiler emits for named slots (SPEC §24,
-// D53): a named marker is `new ViewNode(SLOT_TAG, { name }, [fallback…])`, a bare
-// default marker is `new ViewNode(SLOT_TAG)`, and a call-site child routed to a
-// region carries a static `slot` attr the ViewManager partitions + strips.
+// D134): a named marker is `new ViewNode(SLOT_TAG, { name })`, a bare default
+// marker is `new ViewNode(SLOT_TAG)`, and a call-site child routed to a region
+// carries a static `slot` attr the ViewManager partitions + strips.
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, props = {}, children = []) => new ViewNode(Class, props, children);
 const slot = () => new ViewNode(SLOT_TAG);
-const namedSlot = (name, fallback = []) => new ViewNode(SLOT_TAG, { name }, fallback);
+const namedSlot = (name) => new ViewNode(SLOT_TAG, { name });
 
 const container = () => {
 	const el = document.createElement('div');
@@ -19,12 +19,11 @@ const container = () => {
 	return el;
 };
 
-// A three-region card: named header (fallback "Untitled"), default body,
-// named footer (no fallback).
+// A three-region card: named header, default body, named footer.
 class Card extends PuzzleView {
 	render() {
 		return h('div', { class: 'card' }, [
-			h('header', {}, [namedSlot('header', [text('Untitled')])]),
+			h('header', {}, [namedSlot('header')]),
 			h('div', { class: 'body' }, [slot()]),
 			h('footer', {}, [namedSlot('footer')]),
 		]);
@@ -50,7 +49,6 @@ describe('named slots — routing (D53)', () => {
 		expect(el.querySelector('.card header h2').textContent).toBe('Title');
 		expect(el.querySelector('.card .body p').textContent).toBe('body content');
 		expect(el.querySelector('.card footer button').textContent).toBe('Read');
-		// fallback is gone once the region is filled
 		expect(el.querySelector('.card header').textContent).toBe('Title');
 	});
 
@@ -80,8 +78,8 @@ describe('named slots — routing (D53)', () => {
 	});
 });
 
-describe('named slots — fallback (D53)', () => {
-	it('renders fallback when unfilled and swaps it in/out on later patches', async () => {
+describe('named slots — unfilled markers render nothing (D134)', () => {
+	it('inserts and removes a later fill without fallback content', async () => {
 		class Host extends PuzzleView {
 			created() {
 				this.setData({ withHeader: false });
@@ -100,25 +98,25 @@ describe('named slots — fallback (D53)', () => {
 		const el = container();
 		const host = await new Host().mount(el);
 
-		// unfilled → fallback
-		expect(el.querySelector('.card header').textContent).toBe('Untitled');
+		// unfilled → nothing
+		expect(el.querySelector('.card header').textContent).toBe('');
 
-		// fill it → fallback replaced
+		// fill it
 		host.setData('withHeader', true);
 		host.flushUpdates();
 		expect(el.querySelector('.card header h2').textContent).toBe('Filled');
 		expect(el.querySelector('.card header').textContent).toBe('Filled');
 
-		// unfill again → fallback returns
+		// unfill again → nothing
 		host.setData('withHeader', false);
 		host.flushUpdates();
 		expect(el.querySelector('.card header h2')).toBeNull();
-		expect(el.querySelector('.card header').textContent).toBe('Untitled');
+		expect(el.querySelector('.card header').textContent).toBe('');
 	});
 
-	it('a routed view/layout (router fills default only) renders named fallbacks', async () => {
+	it('a routed view/layout (router fills default only) omits named markers', async () => {
 		// The router only ever supplies DEFAULT slot content (a view/layout chain),
-		// so a named marker in that template renders its fallback naturally.
+		// so named markers in that template contribute no nodes.
 		class Host extends PuzzleView {
 			render() {
 				return h('div', {}, [comp(Card, {}, [h('p', {}, [text('routed body')])])]);
@@ -127,9 +125,23 @@ describe('named slots — fallback (D53)', () => {
 		const el = container();
 		await new Host().mount(el);
 
-		expect(el.querySelector('.card header').textContent).toBe('Untitled'); // fallback
+		expect(el.querySelector('.card header').textContent).toBe('');
 		expect(el.querySelector('.card .body p').textContent).toBe('routed body');
-		expect(el.querySelector('.card footer').textContent).toBe(''); // empty fallback
+		expect(el.querySelector('.card footer').textContent).toBe('');
+	});
+
+	it('ignores legacy marker children instead of treating them as fallback', async () => {
+		class LegacyMarker extends PuzzleView {
+			render() {
+				return h('div', { class: 'legacy' }, [
+					new ViewNode(SLOT_TAG, { name: 'missing' }, [text('legacy fallback')]),
+				]);
+			}
+		}
+		const el = container();
+		await new LegacyMarker().mount(el);
+
+		expect(el.querySelector('.legacy').textContent).toBe('');
 	});
 });
 
@@ -226,7 +238,7 @@ describe('named slots — reserved-name slot buckets (FIX 10)', () => {
 		class Weird extends PuzzleView {
 			render() {
 				return h('div', { class: 'weird' }, [
-					h('section', { class: 'ctor' }, [namedSlot('constructor', [text('fallback')])]),
+					h('section', { class: 'ctor' }, [namedSlot('constructor')]),
 					h('div', { class: 'body' }, [slot()]),
 				]);
 			}

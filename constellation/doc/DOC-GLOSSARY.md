@@ -36,8 +36,8 @@ Puzzle does not infer a two-way state assignment; event handlers update state.
 It is replaced on refresh and sits below persistent local state.
 
 **default children** — Content written inside a component invocation and placed
-by the child with `<children/>`. The retired lowercase bare `<slot/>` spelling
-is a compile error.
+by the child with `<Children/>`. Lowercase `<children>`/`<slot>` spellings are
+compile errors.
 
 **development-state transfer** — One-shot session snapshot/restore used by
 `puzzle dev` full-page reloads for store records and JSON-safe local view data.
@@ -62,8 +62,9 @@ record is a stable instance stored by type and primary key.
 `data-puzzle-morph*` attributes. It complements, rather than replaces, router
 transitions.
 
-**named slot** — A child insertion point declared with `<slot name=\"…\">` and
-filled by a direct call-site child carrying a static `slot=\"…\"`.
+**named slot** — A child insertion point declared with `<Slot name=\"…\"/>` and
+filled by a direct call-site child carrying a static `slot=\"…\"`; it renders
+nothing when unfilled.
 
 **navigation token** — Monotonic router identity preventing stale async loads or
 transitions from committing over a newer navigation.

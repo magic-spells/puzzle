@@ -342,7 +342,7 @@ Inside a layout component, `<Slot/>` marks where the routed view renders. A rout
 </puzzle-view>
 ```
 
-`<Slot/>` and `<children/>` are the **same marker** under one mechanism, split by convention (v1.41, D74): `<Slot/>` (capitalized, bare) is the canonical spelling for the **router outlet** in routed views/layouts, while `<children/>` is the **default marker** in reusable components — children written at a component's call site (`<Button>Save</Button>`) render at that component's `<children/>` (D16). The bare lowercase `<slot/>` is retired: it is now a positioned compile error steering to `<children/>` (call-site children) or `<Slot/>` (router outlet). `<children/>` may carry **fallback children** (`<children><p>empty</p></children>`), rendered when the call site supplies nothing. **Named slots** (`<slot name="…">`) add multiple insertion points — see the next section.
+`<Children/>` and `<Slot/>` are the **same marker** under one mechanism (v1.64, D134), split by convention and attributes: `<Children/>` is the **default marker** in reusable components, `<Slot/>` is the canonical **router outlet** in routed views/layouts, and `<Slot name="…"/>` is a named marker. Children written at a component's call site (`<Button>Save</Button>`) render at that component's `<Children/>` (D16). Every marker is self-closing and renders nothing when unfilled; lowercase `<children>`/`<slot>` spellings are positioned steering errors.
 
 ---
 
@@ -350,14 +350,14 @@ Inside a layout component, `<Slot/>` marks where the routed view renders. A rout
 
 Multi-region components — a card with a header/body/footer, a modal with a title/body/actions — declare **named slots** alongside the default one. Shipped in v1.21 (D53); see [[DOC-SPEC-TEMPLATE]] §24.
 
-**Child side.** `<slot name="header">…fallback…</slot>` declares a named region — `name` is now **required** (v1.41, D74). The fallback body uses the full template grammar and renders when the call site fills nothing for that name; a self-closing `<slot name="footer"/>` has no fallback. The `<children/>` marker is the **default** region.
+**Child side.** `<Slot name="header"/>` declares a named region. `name` must be static and non-empty; marker bodies are not allowed. `<Children/>` is the **default** region.
 
 ```html
 <!-- Card.pzl -->
 <puzzle-view class="card">
-  <header><slot name="header">Untitled</slot></header>
-  <div class="body"><children/></div>
-  <footer><slot name="footer"/></footer>
+  <header><Slot name="header"/></header>
+  <div class="body"><Children/></div>
+  <footer><Slot name="footer"/></footer>
 </puzzle-view>
 ```
 
@@ -366,16 +366,16 @@ Multi-region components — a card with a header/body/footer, a modal with a tit
 ```html
 <Card>
   <h2 slot="header">{ post.title }</h2>
-  <p>{ post.excerpt }</p>            <!-- no slot attr → default content → <children/> -->
+  <p>{ post.excerpt }</p>            <!-- no slot attr → default content → <Children/> -->
   <Button slot="footer" @click={ open }>Read</Button>
 </Card>
 ```
 
-- **`name` must be static, non-empty, and unique per template.** `name="default"` and `name="children"` are reserved — `<children/>` IS the default (both are compile errors, the latter steering to `<children/>`). A `<puzzle-skeleton>` body is a separate template, so the same name may appear once in each.
+- **`name` must be static, non-empty, and unique per template.** `name="default"` and `name="children"` are reserved — `<Children/>` IS the default (both steer to `<Children/>`). A `<puzzle-skeleton>` body is a separate template, so the same name may appear once in each.
 - **Direct-child rule.** `slot` targeting is honored only on a **direct child** of the component tag. Anywhere else — a child of a plain element, or deeper — `slot` is the ordinary HTML global attribute and passes through untouched.
-- **Views/layouts.** The router only ever fills the DEFAULT slot, so a named slot in a routed view's or layout's template just renders its fallback. Scoped slots (child data flowing back into parent-provided content) remain deferred.
+- **Views/layouts.** The router only ever fills the DEFAULT slot, so a named marker in a routed view's or layout's template renders nothing. Scoped slots (child data flowing back into parent-provided content) remain deferred.
 
-**Compile errors:** a dynamic `slot={ expr }` on a direct component child; a control-flow block (`{#if}`/`{#unless}`/`{#for}`/`{#case}`) at direct-child level whose top-level nodes carry `slot` attrs (put the condition **inside** the slotted element instead); on the child side, a non-static/interpolated `name`, an empty `name`, `name="default"`, a non-`name` attribute on `<slot>`, or a duplicate slot name within one template.
+**Compile errors:** a dynamic `slot={ expr }` on a direct component child; a control-flow block (`{#if}`/`{#unless}`/`{#for}`/`{#case}`) at direct-child level whose top-level nodes carry `slot` attrs (put the condition **inside** the slotted element instead); on the child side, a marker body, a non-static/interpolated or empty `name`, a reserved name, a non-`name` attribute on `<Slot>`, or a duplicate slot name within one template.
 
 ---
 
@@ -395,7 +395,7 @@ A bare static `island` attribute on a **plain element** hands its children to th
 
 Data flows **out of** an island (events → store), never back in. To programmatically reset one, change its `key` — a tag or key change replaces the node and re-seeds from the template.
 
-**Compile errors:** `island={ expr }` (must be static); `island` on a component tag; a component or composition marker (`<children/>`/`<Slot/>`/`<slot name>`) inside an island subtree; `island` on the `<puzzle-view>` root. See [[DOC-SPEC-TEMPLATE]] §17 for the full semantics and rationale.
+**Compile errors:** `island={ expr }` (must be static); `island` on a component tag; a component or composition marker (`<Children/>`/`<Slot/>`/`<Slot name="…"/>`) inside an island subtree; `island` on the `<puzzle-view>` root. See [[DOC-SPEC-TEMPLATE]] §17 for the full semantics and rationale.
 
 ---
 
@@ -509,8 +509,8 @@ modifiers, and `{:else if}` are shipped and documented above.
 | Event + modifiers | `@event:mod[:mod]={ handler }` | `@keydown:enter={ addTodo(event) }`, `@click:prevent:stop={ nav }` |
 | Component + props | `<Name prop={ expr } />` | `<UserProfile userId={selectedUserId} />` |
 | Router outlet (view/layout) | `<Slot/>` | `<main><Slot/></main>` |
-| Default marker (component children) | `<children/>` (optional fallback) | `<div class="body"><children/></div>` |
-| Named slot (child) | `<slot name="…">fallback</slot>` (`name` required) | `<header><slot name="header">Untitled</slot></header>` |
+| Default marker (component children) | `<Children/>` | `<div class="body"><Children/></div>` |
+| Named slot (child) | `<Slot name="…"/>` | `<header><Slot name="header"/></header>` |
 | Named slot (call site) | `<el slot="…">` on a direct component child | `<h2 slot="header">{ title }</h2>` |
 | DOM island | `<el island>seed</el>` | `<div contenteditable="true" island>{ block.text }</div>` |
 | Inline SVG | `{#svg 'path'}` (void — no closer) | `<span class="size-5">{#svg 'icons/cart.svg'}</span>` |

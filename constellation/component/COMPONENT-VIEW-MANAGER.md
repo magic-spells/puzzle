@@ -105,11 +105,11 @@ guard. Router-preloaded instances are exempt from the teardown entirely — the
 Router owns that lifetime and expects a failed committed view to stand until
 the next navigation replaces it.
 
-Composition uses `SLOT_TAG` and shared `expandSlots`: `<children/>` fills the
-default bucket, `<slot name>` fills named buckets with fallback, and `<Slot/>`
-is the router outlet by convention. Buckets are null-prototype objects and
-forwarding descends through component call-site children while preserving
-pinned routed instances.
+Composition uses `SLOT_TAG` and shared `expandSlots`: `<Children/>` fills
+the default bucket, `<Slot name="x"/>` fills named buckets, and `<Slot/>` is
+the router outlet by convention. Unfilled markers contribute no nodes (D134).
+Buckets are null-prototype objects and forwarding descends through component
+call-site children while preserving pinned routed instances.
 
 Host behavior includes SVG namespaces/`foreignObject`, per-node listener
 installation and removal, event modifiers with once-spend persistence, ref

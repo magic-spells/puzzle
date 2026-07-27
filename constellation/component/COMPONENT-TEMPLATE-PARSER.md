@@ -1,6 +1,6 @@
 ---
 name: Template parser
-status: verified
+status: built
 connections:
   - COMPONENT-CODEGEN
   - DOC-TEMPLATE-SYNTAX
@@ -60,18 +60,15 @@ Parser helpers enforce event/modifier grammar (generic modifiers: `prevent`,
 keyboard-only), static islands, literal inline SVG roots/paths, list
 identifiers/keys, and unique static refs.
 
-Composition grammar is current D74: `<children/>` is the default marker and may
-carry fallback children; `<slot name="x">` is named-only; `<Slot/>` is a bare
-router outlet; lowercase bare `<slot/>` is an error. Call-site named fills must
-be direct static `slot="x"` children, while default forwarding may appear
-inside a component invocation. Components/slots are forbidden inside islands;
-refs are forbidden on components, slots, roots, loops, and skeletons. The island
-walk descends **through slot markers too** — a `<children>…</children>` or
-`<slot name="x">…</slot>` fallback body is ordinary content that renders when the
-slot goes unfilled, so an island (or a component inside one) declared there is
-just as real as anywhere else. Missing that case let such a component compile
-clean and then be frozen after mount: the orphaned-instance corruption the check
-exists to prevent.
+Composition grammar is current D134: `<Children/>` is the default marker,
+`<Slot/>` is the router outlet, and `<Slot name="x"/>` is a named marker.
+Both tag names are reserved before component resolution. Markers are
+self-closing only; lowercase `<children>`/`<slot>` and any marker body are
+positioned steering errors. Slot names stay static, non-empty, reserved-name
+checked, and unique per template body. Call-site named fills must be direct
+static `slot="x"` children, while default forwarding may appear inside a
+component invocation. Components/markers are forbidden inside islands; refs
+are forbidden on components, markers, roots, loops, and skeletons.
 
 `ParseError` includes file and one-based line/column. Cross-nesting and
 did-you-mean diagnostics report the actionable source position.

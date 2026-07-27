@@ -59,7 +59,7 @@ examples/blog/
     │   ├── About.pzl         # About page
     │   └── NotFound.pzl      # '*' catch-all page
     ├── components/           # Reusable UI components (.pzl files)
-    │   ├── Button.pzl        # Button (props + <children/> + callback prop)
+    │   ├── Button.pzl        # Button (props + <Children/> + callback prop)
     │   ├── PostCard.pzl      # Post summary card
     │   └── CommentItem.pzl   # Single comment row
     ├── layouts/              # Layout components (.pzl files)
@@ -675,7 +675,7 @@ names are prefixed (`.btn`, `.post-card`, …) so the global stylesheet stays ti
 ```html
 <puzzle-view>
   <button class="btn btn--{ variant }" type={ type } disabled={ disabled } @click={ handleClick }>
-    <children/>
+    <Children/>
   </button>
 </puzzle-view>
 
@@ -684,7 +684,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 
 // A reusable button. Component-mode files render inline, so <puzzle-view> is
 // just the template delimiter — it carries no attributes and wraps a single
-// root element (D20). Label content is projected through <children/>.
+// root element (D20). Label content is projected through <Children/>.
 export default class Button extends PuzzleView {
   data(params, props) {
     return {
@@ -745,7 +745,7 @@ export default class Button extends PuzzleView {
 ```
 
 Key points: the `<button>` (not `<puzzle-view>`) carries the attributes; the label
-is projected through **`<children/>`** (the default marker, D16/D74 — the same
+is projected through **`<Children/>`** (the default marker, D16/D134 — the same
 primitive layouts spell `<Slot/>` as the router outlet); and `@click` here is a **real DOM listener**
 on the child's own `<button>`. The `press` callback prop is guarded before it's
 called — `this.$emit` does not exist in v1.

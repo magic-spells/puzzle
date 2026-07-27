@@ -48,7 +48,7 @@ Freeze the container with `island`: template children seed once, never patch
 again; reset via key change. This is the `contenteditable` case
 ([[DOC-GRIMOIRE-EXAMPLE]]) and the Swiper/Slick case (loop-mode slide clones).
 Cost: island children can never be data-reactive, and a composition marker
-(`<children/>`/`<Slot/>`/`<slot name>`) is a compile
+(`<Children/>`/`<Slot/>`/`<Slot name="…"/>`) is a compile
 error inside — content must be seeded from the wrapper's own template or managed
 fully imperatively.
 

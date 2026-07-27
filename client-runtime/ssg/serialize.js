@@ -20,7 +20,7 @@
  * - a component vnode renders inline with NO wrapper element (D20), adopting a
  *   pinned `instance` or constructing + preloading a fresh one;
  * - slot markers are expanded via the shared expandSlots() (viewManager.js), so
- *   named/default slots and fallbacks behave identically;
+ *   named/default slots and unfilled-marker omission behave identically;
  * - string children (an inlined `{#svg}` island seed, v1.14 D46) are emitted
  *   verbatim — they map to innerHTML seeding in the browser;
  * - `<script>`/`<style>` are RAWTEXT: their text is emitted unescaped (a JSON-typed

@@ -1,7 +1,7 @@
 <puzzle-view>
   <div class="card">
     <div class="body">
-      <children/>
+      <Children/>
     </div>
   </div>
 </puzzle-view>

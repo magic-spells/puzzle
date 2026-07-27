@@ -347,7 +347,7 @@ func (p *parser) unclosedErr(ctx openCtx) *ParseError {
 }
 
 // parseElement parses an element, component, or composition marker
-// (<children/>, <Slot/>, or a named <slot name>) starting at the current
+// (<Children/>, <Slot/>, or <Slot name="x"/>) starting at the current
 // TokTagOpen.
 func (p *parser) parseElement() (Node, *ParseError) {
 	open := p.cur
@@ -361,14 +361,36 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		return nil, perr
 	}
 
-	// Composition markers (v1.41, D74): each spelling now has exactly one role —
-	// <children/> is the default marker (call-site content), <Slot/> is the same
-	// marker capitalized (the router outlet), and lowercase <slot> is ONLY ever a
-	// named slot (name is required). All three emit the same marker vnode.
-	isChildren := name == "children"
-	isSlotTag := name == "slot"
-	isOutlet := name == "Slot"
-	isComp := isCapitalized(name)
+	// Composition markers (v1.64, D134) are reserved capitalized tags matched
+	// before component resolution. Every marker is self-closing; lowercase
+	// spellings are positioned steering errors in every form.
+	if name == "children" {
+		return nil, errAt(p.file, pos, "the default marker is spelled <Children/> since v1.64 (D134)")
+	}
+	if name == "slot" {
+		for _, a := range attrs {
+			if attrNameOf(a) == "name" {
+				return nil, errAt(p.file, pos, `named slots are spelled <Slot name="…"/> since v1.64 (D134)`)
+			}
+		}
+		return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)")
+	}
+	if name == "Children" || name == "Slot" {
+		if !selfClose {
+			return nil, errAt(p.file, pos, "composition markers are self-closing — fallback content is not supported (D134)")
+		}
+		if name == "Children" {
+			if perr := childrenMarkerAttrs(attrs, p.file); perr != nil {
+				return nil, perr
+			}
+			return &Slot{Pos: pos}, nil
+		}
+		slotName, perr := slotMarkerFromAttrs(attrs, pos, p.file)
+		if perr != nil {
+			return nil, perr
+		}
+		return &Slot{Name: slotName, Pos: pos}, nil
+	}
 
 	var children []Node
 	if !selfClose {
@@ -382,43 +404,7 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		}
 	}
 
-	if isChildren {
-		// <children/> (D74): the DEFAULT marker. No attributes (any is a
-		// positioned error; ref gets the D72 render-target message). Fallback
-		// children ARE allowed — rendered when the default bucket is empty (this
-		// un-freezes D53's deferred default-slot fallback). Modeled as an unnamed
-		// *Slot so codegen and the runtime treat it exactly like a bare <Slot/>.
-		if perr := childrenMarkerAttrs(attrs, p.file); perr != nil {
-			return nil, perr
-		}
-		return &Slot{Name: "", Children: children, Pos: pos}, nil
-	}
-	if isOutlet {
-		// <Slot/> (D30): the router outlet — the default marker, capitalized,
-		// canonical in routed views/layouts. Bare only: a `name` attr steers to
-		// lowercase <slot name>, and children are rejected (no fallback on the
-		// outlet — an index child route is the sanctioned empty-state; only
-		// <children> takes fallback).
-		if perr := slotOutletAttrs(attrs, p.file); perr != nil {
-			return nil, perr
-		}
-		if len(children) > 0 {
-			return nil, errAt(p.file, pos, "<Slot> cannot have children")
-		}
-		return &Slot{Pos: pos}, nil
-	}
-	if isSlotTag {
-		// Lowercase <slot> (D74): a NAMED slot only — `name` is REQUIRED. A
-		// nameless <slot>/<slot/> is a positioned error naming both replacements.
-		// Children are fallback content (full grammar), rendered when the call
-		// site fills nothing for this name (v1.21, D53).
-		slotName, perr := namedSlotFromAttrs(attrs, pos, p.file)
-		if perr != nil {
-			return nil, perr
-		}
-		return &Slot{Name: slotName, Children: children, Pos: pos}, nil
-	}
-	if isComp {
+	if isCapitalized(name) {
 		return &Component{Name: name, Props: attrs, Children: children, Pos: pos}, nil
 	}
 	return &Element{Tag: name, Attrs: attrs, Children: children, Pos: pos}, nil

@@ -330,7 +330,7 @@ export class PuzzleView {
 	 *
 	 * A parent's ViewManager also calls this to mount a child component
 	 * (constellation/doc/DOC-APP-ANATOMY.md §4): `children` is the slot content captured at the
-	 * call site (rendered at the child's `<children/>`) and `ref` is the DOM node
+	 * call site (rendered at the child's `<Children/>`) and `ref` is the DOM node
 	 * to insert before. The anchor placeholder reserves the position
 	 * synchronously so an async data() does not strand the parent's insertion
 	 * refs.

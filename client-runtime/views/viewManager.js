@@ -119,10 +119,10 @@ export class ViewManager {
  * Substitute the slot markers in `vnode`'s tree with the call-site content
  * captured in `slotChildren`. Named slots (v1.21, D53) partition the content
  * once per render (partitionSlots) by each direct child's stripped `slot`
- * attribute; the bare default marker takes the unattributed remainder exactly as
- * before. Name-free templates AND slot-attr-free call sites take the same fast
- * path they always did — the default bucket is the original `slotChildren` array
- * (no clones) and no vnode changes unless a marker is actually present.
+ * attribute; <Children/> and the bare <Slot/> take the unattributed remainder.
+ * Name-free templates AND slot-attr-free call sites take the same fast path they
+ * always did — the default bucket is the original `slotChildren` array (no
+ * clones) and no vnode changes unless a marker is actually present.
  */
 export function expandSlots(vnode, slotChildren) {
 	return expandNode(vnode, partitionSlots(slotChildren));
@@ -183,14 +183,13 @@ function stripSlotAttr(vnode) {
 /**
  * Replace slot markers anywhere in `vnode` against the partitioned `parts`. Only
  * nodes on the path to a marker are cloned; everything else is returned untouched
- * so DOM links survive. A named marker substitutes its named bucket when
- * non-empty, else its OWN fallback children (recursively expanded); the bare
- * marker substitutes the default bucket. Content is already parent-expanded —
- * spliced in as-is.
+ * so DOM links survive. A named marker substitutes its named bucket; the bare
+ * marker substitutes the default bucket. An unfilled marker contributes no
+ * nodes (v1.64, D134). Content is already parent-expanded — spliced in as-is.
  *
  * Component vnodes (v1.38, D71): the walk descends into a component's CALL-SITE
  * children — they are authored in THIS template, so this template's markers
- * there must be substituted (`<Card><children/></Card>` in a layout forwards the
+ * there must be substituted (`<Card><Children/></Card>` in a layout forwards the
  * routed page into Card's default slot). The component's own TEMPLATE is never
  * entered — it expands its own slots against these children at render time.
  * Substituted content becomes ordinary slot content for the component; the
@@ -237,11 +236,6 @@ function expandChildList(kids, parts) {
 			const bucket = name ? parts.named && parts.named[name] : parts.default;
 			if (bucket && bucket.length) {
 				for (const sc of bucket) out.push(sc);
-			} else {
-				// Unfilled: render the marker's own fallback children (empty for the
-				// bare default marker). Router-filled views/layouts only ever fill the
-				// default, so a named marker there renders its fallback naturally (D53).
-				for (const fb of k.children) out.push(expandNode(fb, parts));
 			}
 			continue;
 		}

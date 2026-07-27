@@ -578,25 +578,12 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 	case *parser.Component:
 		return c.emitElement(n.Name, n.Props, n.Children, ind, ind, true, scope)
 	case *parser.Slot:
-		// Bare default marker (<children/>/<Slot/>, D74; formerly bare <slot/>):
-		// emitted byte-for-byte as before so name-free templates (golden #1
-		// included) are unchanged.
-		if n.Name == "" && len(n.Children) == 0 {
+		// Bare/default marker keeps the minimal one-argument emission.
+		if n.Name == "" {
 			return "new ViewNode(SLOT_TAG)", nil
 		}
-		// Default marker WITH fallback (<children>…</children>, v1.41/D74): the
-		// runtime renders the fallback when the default bucket is empty. Emit
-		// `new ViewNode(SLOT_TAG, {}, [fallback])` via the element machinery with
-		// an EMPTY attrs list. MUST precede the named branch below — a Name=="" +
-		// children slot would otherwise mis-emit as `{ name: "" }`.
-		if n.Name == "" {
-			return c.emitElement("SLOT_TAG", nil, n.Children, ind, ind, false, scope)
-		}
-		// Named marker (v1.21, D53): `new ViewNode(SLOT_TAG, { name }, [fallback])`
-		// — same emission style as an element, with the name attr and the fallback
-		// children the ViewManager renders when the call site fills nothing.
-		nameAttr := []parser.Attr{&parser.StaticAttr{Name: "name", Value: n.Name}}
-		return c.emitElement("SLOT_TAG", nameAttr, n.Children, ind, ind, false, scope)
+		// Named marker (v1.21/D53, respelled v1.64/D134).
+		return "new ViewNode(SLOT_TAG, { name: " + jsString(n.Name) + " })", nil
 	case *parser.If:
 		return c.emitIf(n, ind, scope)
 	case *parser.Case:
@@ -1395,8 +1382,8 @@ func trailingWSHasNewline(s string) bool {
 	return false
 }
 
-// hasSlot reports whether any composition marker (<children/>/<Slot/>/<slot
-// name>) appears in the tree (→ SLOT_TAG import). All spellings are *parser.Slot.
+// hasSlot reports whether any composition marker (<Children/> or <Slot/>) appears
+// in the tree (→ SLOT_TAG import). Both reserved tags parse as *parser.Slot.
 func hasSlot(nodes []parser.Node) bool {
 	for _, n := range nodes {
 		switch t := n.(type) {

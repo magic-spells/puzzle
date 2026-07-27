@@ -154,4 +154,4 @@ Subscriptions reset on every `data()` re-run: the component is subscribed to exa
 
 ---
 
-*Settled by D15–D19: plain-class PuzzleView, component composition via default marker (`<children/>` since v1.41/D74, spelled `<slot/>` originally) + callback props, vdom rendering, per-node listeners, and the navigation state machine. No frontend-architecture questions remain open for the 0.1 release.*
+*Settled by D15–D19: plain-class PuzzleView, component composition via default marker (`<Children/>` since v1.64/D134, `<children/>` in v1.41/D74, and `<slot/>` originally) + callback props, vdom rendering, per-node listeners, and the navigation state machine. No frontend-architecture questions remain open for the 0.1 release.*

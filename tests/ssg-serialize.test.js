@@ -11,7 +11,7 @@ const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children)
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, props = {}, children = []) => new ViewNode(Class, props, children);
 const slot = () => new ViewNode(SLOT_TAG);
-const namedSlot = (name, fallback = []) => new ViewNode(SLOT_TAG, { name }, fallback);
+const namedSlot = (name) => new ViewNode(SLOT_TAG, { name });
 
 describe('SSG serializer (M1)', () => {
 	describe('escaping', () => {
@@ -134,7 +134,7 @@ describe('SSG serializer (M1)', () => {
 		class Card extends PuzzleView {
 			render() {
 				return h('div', { class: 'card' }, [
-					h('header', {}, [namedSlot('header', [text('Untitled')])]),
+					h('header', {}, [namedSlot('header')]),
 					h('div', { class: 'body' }, [slot()]),
 					h('footer', {}, [namedSlot('footer')]),
 				]);
@@ -153,11 +153,18 @@ describe('SSG serializer (M1)', () => {
 			);
 		});
 
-		it('renders slot fallbacks when a region is unfilled', async () => {
+		it('renders nothing when regions are unfilled', async () => {
 			const tree = comp(Card, {}, []);
 			expect(await serialize(tree)).toBe(
-				'<div class="card"><header>Untitled</header><div class="body"></div><footer></footer></div>'
+				'<div class="card"><header></header><div class="body"></div><footer></footer></div>'
 			);
+		});
+
+		it('ignores legacy marker children instead of serializing them as fallback', async () => {
+			const tree = h('section', {}, [
+				new ViewNode(SLOT_TAG, { name: 'missing' }, [text('legacy fallback')]),
+			]);
+			expect(await serialize(tree)).toBe('<section></section>');
 		});
 	});
 
