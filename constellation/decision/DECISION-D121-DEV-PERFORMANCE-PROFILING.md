@@ -1,6 +1,6 @@
 ---
 name: D121 — Dev-only runtime performance profiling with zero production bytes
-status: building
+status: verified
 connections:
   - FEATURE-DEV-PERFORMANCE-PROFILING
   - COMPONENT-PUZZLE-VIEW
@@ -12,6 +12,8 @@ connections:
   - DECISION-D94-TESTING-EXPORT
   - FILE-DEVPERF
   - FILE-TESTING-RENDER-PROFILE
+verified_at: '2026-07-27T04:52:00.000Z'
+verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
 notes:
   - kind: gotcha
     text: >-
@@ -54,7 +56,7 @@ The asymmetry is the correction of a real defect, not a nicety. The cross-frame 
 
 Extend D94/SPEC §53 with runner-neutral `measureRenders(handle, callback)` in [[FILE-TESTING-RENDER-PROFILE]]. It installs a temporary collector sink, awaits the callback and the existing fixed-point `settled()`, detaches in `finally`, and returns a deeply frozen report: renders, wasted renders, DOM mutations, per-view counts, causes, maximum recursive depth, and Store notifications.
 
-Zero production bytes is a contract, not an optimization hope. Every class-method touchpoint spells `typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__` inline in a positive branch; module-scope functions may use a module `DEV` constant. No bare define reads, negative early-return gates, or dev-only private class methods/fields. The build test must prove the module's sentinel is retained in development, absent in production, and that esbuild's production metafile attributes zero `bytesInOutput` to `client-runtime/devperf.js`. The canonical todos production bundle must remain byte-identical.
+Zero production bytes is a contract, not an optimization hope. Every class-method touchpoint spells `typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__` inline in a positive branch; module-scope functions may use a module `DEV` constant. No bare define reads, negative early-return gates, or dev-only private class methods/fields. The build test must prove the module's sentinel is retained in development, absent in production, and that esbuild's production metafile attributes zero `bytesInOutput` to `client-runtime/devperf.js`.
 
 ## Alternatives rejected
 
@@ -68,10 +70,24 @@ Zero production bytes is a contract, not an optimization hope. Every class-metho
 
 ## Consequences
 
-Development builds gain enough attribution to find wasted work and Store head-of-line blocking, plus bounded recursion protection. Cross-frame waste is *surfaced, not policed*: a genuine rAF-driven render loop in development now warns and keeps looping, bounded only by whatever the app itself does about it, which is the same situation production has always been in. That is the accepted price of never letting the profiler break a running app. Production output remains exactly the pre-D121 bytes. The instrumentation contract is coupled to build-level DCE assertions so a missed call-site guard fails the Go suite instead of shipping silently.
+Development builds gain enough attribution to find wasted work and Store head-of-line blocking, plus bounded recursion protection. Cross-frame waste is *surfaced, not policed*: a genuine rAF-driven render loop in development now warns and keeps looping, bounded only by whatever the app itself does about it, which is the same situation production has always been in. That is the accepted price of never letting the profiler break a running app. Production output carries no profiler bytes at all. The instrumentation contract is coupled to build-level DCE assertions so a missed call-site guard fails the Go suite instead of shipping silently.
 
-Implementation note: esbuild can attribute zero output bytes to `devperf.js`
-while dead imported bindings still perturb global minified identifier
-allocation. The current building state demonstrates that distinction: raw
-production length is unchanged but gzip is four bytes below the pre-D121
-baseline, so the strict artifact-identity consequence is not yet satisfied.
+Implementation note: the zero-byte contract is enforced as *zero attributed
+devperf bytes*, not as byte-identity against a remembered artifact. Identity was
+the wrong oracle, for two reasons that both showed up in practice.
+
+First, esbuild can attribute zero output bytes to `devperf.js` while dead
+imported bindings still perturb global minified identifier allocation, so raw
+length and gzip length can disagree about an unchanged module — an early
+production reading sat four bytes under the pre-D121 gzip baseline at unchanged
+raw length, which was that effect and never retained instrumentation. Second,
+and load-bearing: unrelated runtime and example work legitimately moves the
+bundle, so any remembered figure drifts and then reads as a profiler regression
+when the profiler contributed nothing to it.
+
+The enforced invariant is therefore that esbuild's production metafile
+attributes zero `bytesInOutput` to `client-runtime/devperf.js` (positive in
+development), and that neither the `__PUZZLE_PERF__` sentinel nor the profiler's
+bridge request strings survive into production. `TestBuildDevDefineDCE` asserts
+every part of that, so a missed call-site guard fails the Go suite rather than
+shipping.

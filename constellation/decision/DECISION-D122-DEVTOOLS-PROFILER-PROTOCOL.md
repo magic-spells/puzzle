@@ -1,6 +1,6 @@
 ---
 name: D122 — Expose the dev profiler over the DevTools bridge, additively on protocol v1
-status: building
+status: verified
 connections:
   - DECISION-D121-DEV-PERFORMANCE-PROFILING
   - DECISION-D100-DEVTOOLS-BRIDGE
@@ -8,6 +8,8 @@ connections:
   - FILE-DEVTOOLS
   - FILE-DEVPERF
   - DOC-SPEC-BUILD
+verified_at: '2026-07-27T04:52:00.000Z'
+verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
 notes:
   - kind: state
     text: >-
@@ -87,16 +89,19 @@ not under-report.
 
 ## Zero production bytes still holds
 
-Unchanged from D121, and verified more strictly than a sentinel scan: stash the
-bridge change, build `examples/todos` for production, unstash, rebuild, and
-compare **hashes**. They match — the SPEC §56 oracle is satisfied trivially
-because it is literally the same file. `build_test.go` now pins
-`snapshot:profile` in both the dev-retains and prod-DCE halves.
+Unchanged from D121. `build_test.go` pins `snapshot:profile` in both the
+dev-retains and prod-DCE halves, so the bridge cannot quietly turn into a live
+importer that drags `devperf.js` — or the profiler's own request strings — into
+production. That assertion plus D121's zero-`bytesInOutput` metafile check is
+the contract, and it holds.
 
-The invariant is the *identity*, never an absolute size: the bundle's byte count
-moves whenever unrelated example or runtime work lands, so a recorded number goes
-stale and then reads as a regression when it is nothing of the kind. Re-verify by
-stash-and-compare, not by remembering a figure.
+An absolute size was never the oracle: the bundle's byte count moves whenever
+unrelated example or runtime work lands, so a recorded number goes stale and
+then reads as a regression when it is nothing of the kind. Neither is identity
+against a remembered artifact, which D121 retired for the same reason. Stashing
+a change and comparing the two production builds' **hashes** remains the
+cheapest ad-hoc way to show that one specific edit added nothing — it is how
+this bridge was checked — but it is a convenience, not the enforced invariant.
 
 ## Verified end to end
 

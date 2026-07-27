@@ -2,7 +2,7 @@
 name: >-
   D130 — SSG takeover is a build-mode feature: __PUZZLE_TAKEOVER__ keeps the prerender-adoption path
   out of plain SPA bundles
-status: built
+status: verified
 connections:
   - DECISION-D57-HMR-STATE-RELOAD
   - DECISION-D67-SSG-STATIC-BUILD
@@ -13,6 +13,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-VIEW-MANAGER
   - DOC-SPEC-BUILD
+verified_at: '2026-07-27T04:56:00.000Z'
+verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
 ---
 
 # D130 — SSG takeover is a build-mode feature

@@ -2,7 +2,7 @@
 name: >-
   D126 — one owner for route-path shape, and prerender output may not silently overwrite a
   public asset
-status: built
+status: verified
 connections:
   - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D67-SSG-STATIC-BUILD
@@ -13,6 +13,8 @@ connections:
   - DOC-SPEC-BUILD
   - DOC-SPEC-ROUTER
   - FILE-ROUTER
+verified_at: '2026-07-27T04:56:00.000Z'
+verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
 notes:
   - kind: state
     text: >-
@@ -58,10 +60,11 @@ path-shape truth for both consumers:
 - **`findShadowedPaths(entries)`** — for each fully-static leaf, test it against
   every *earlier* compiled regex.
 
-`prerenderToDir` retains the `new Router(routes, { mode: 'memory' })` it already
-constructed for validation and passes it to `prerender()`, which reads
-`router.routeEntries`. The SSG therefore never recompiles matchers — there is
-exactly one regex compiler in the system, and it stays in the Router.
+`prerender()` constructs one `new Router(routes, { mode: 'memory' })` and reads
+its `routeEntries`; `prerenderToDir` builds a second one up front purely so a bad
+route table fails the build before the target selector and the shell read. The
+SSG therefore compiles no matchers of its own — there is exactly one regex
+compiler in the system, and it stays in the Router.
 
 ## A non-bare `*` stays legal
 

@@ -2,7 +2,7 @@
 name: >-
   D128 — the production benchmark harness: production-only measurement, medians, and structural exit
   codes
-status: built
+status: verified
 connections:
   - DOC-STRESS-EXAMPLE
   - DECISION-D121-DEV-PERFORMANCE-PROFILING
@@ -13,6 +13,8 @@ connections:
   - COMPONENT-STORE
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-FORMATTERS
+verified_at: '2026-07-27T04:56:00.000Z'
+verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
 ---
 
 # D128 — the production benchmark harness: production-only measurement, medians, and structural exit codes
@@ -52,8 +54,9 @@ answer.
 
 The runner does not trust the `--mode` flag either — it greps the emitted bundle
 for `__PUZZLE_DEVTOOLS_HOOK__`, `import.meta.hot` and `puzzle:hmr` and refuses to
-run a "production" build containing any of them, then snapshots `dist/` before
-serving so a rebuild in another terminal cannot change the bytes mid-suite.
+run a "production" build containing any of them. `--no-build` re-reads the staged
+bundle and applies the same three greps: both modes stage into one directory, so
+the path proves nothing about what is in it and the bytes have to decide.
 
 ### 2. CDP `ScriptDuration` is unusable and is deliberately not reported
 
@@ -100,11 +103,19 @@ thermal state), so sub-13% deltas on those rows deserve extra suspicion.
 ### 4. Exit status is driven by structural counters ONLY, never by timing
 
 Non-zero exit means a `validate()` failure, a structural-counter mismatch, an op
-that threw or timed out, or a rejected throttle-clamped sample set. **Never a
-timing regression.** Timing on a developer laptop is noise; `Δscript`/`Δpaint` are
-display-only. `mountedNodes` / `views` / `records` are deterministic properties of
-the render algorithm, so they are hard-asserted four ways and are the only thing
-the exit code is allowed to depend on.
+that threw or timed out, a rejected throttle-clamped sample set, or an uncaught
+exception in the page. **Never a timing regression.** Timing on a developer laptop
+is noise; `Δscript`/`Δpaint` are display-only. `mountedNodes` / `views` / `records`
+are deterministic properties of the render algorithm, so they are hard-asserted
+four ways and are the only thing the exit code is allowed to depend on.
+
+`console.error` is deliberately outside that list — the runtime logs it from
+expected recovery paths the scenarios exercise on purpose, so it is printed and
+never fatal; a gate that reddens healthy runs is a gate someone eventually
+disables. Writing the baseline inherits every gate and adds its own:
+`--update-baseline` refuses a run with a non-ok op or an uncaught page error,
+refuses a development build, and refuses `--filter`, because the file is written
+WHOLE and a filtered update would delete every op it did not measure.
 
 ### 5. `validate()` gates every timed run, and every create declares `preExpect`
 
@@ -134,8 +145,9 @@ human's browser is holding open, and because a production build strips the
 DevTools bridge by design, their Performance panel went dead with "No Puzzle app
 detected" and nothing said why. The staged copy lives inside the repo so
 `@magic-spells/puzzle` still resolves through the root `node_modules`, and
-byte-identity of `examples/stress/dist/app.js` across a run is checked by
-checksum. The static server binds 127.0.0.1:4290 (probe: 4291) and **fails with
+`examples/stress/dist` is never written, read or served — which is also what
+stops a rebuild in another terminal from changing the bytes under a running
+suite. The static server binds 127.0.0.1:4290 (probe: 4291) and **fails with
 an instruction** on a busy port rather than killing a process it did not start.
 
 ### 7. A throttled renderer must be proven absent, not assumed

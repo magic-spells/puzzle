@@ -217,9 +217,13 @@ must remove every importer before tree-shaking. Undefined means enabled for
 unbundled tests. No profiler state is stored on PuzzleView, ViewManager, Store,
 or Router; per-view identity, counters, causes, and rolling windows live in
 WeakMaps in the collector.
-The canonical production artifact is also a regression oracle: both its raw
-bytes and gzip byte count must remain identical to the pre-D121 build, not only
-free of profiler sentinel strings.
+The enforced regression oracle is attribution, not artifact identity (D131,
+correcting the original D121 consequence): a production build's esbuild
+metafile must attribute zero `bytesInOutput` to `client-runtime/devperf.js`,
+and the bundle must be free of the profiler sentinel and bridge request
+strings. Identity to a remembered build is NOT the contract — unrelated work
+legitimately moves the bundle, and minified-identifier allocation can shift
+gzip output by a few bytes with zero retained instrumentation.
 
 - A render record is one entry into `ViewManager.render`. It times the owning
   view's tree build separately from diff/patch, and its mutation delta counts

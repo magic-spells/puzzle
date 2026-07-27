@@ -2,7 +2,7 @@
 name: >-
   D125 — a save response never overwrites a field edited while its request was in flight
   (per-field mutation revisions)
-status: built
+status: verified
 connections:
   - DECISION-D50-ADAPTER-WRITE-SYNC
   - DECISION-D21-ADAPTER-READ-PATH
@@ -11,6 +11,8 @@ connections:
   - DOC-SPEC-DATA
   - FILE-STORE
   - FILE-PUZZLE-MODEL
+verified_at: '2026-07-27T04:56:00.000Z'
+verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
 ---
 
 # D125 — a save response never overwrites a field edited while its request was in flight

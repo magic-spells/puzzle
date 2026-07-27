@@ -2,7 +2,7 @@
 name: >-
   D127 — one runtime owner for display coercion: nullish interpolation renders empty, and a
   missing field warns in dev
-status: built
+status: verified
 connections:
   - DECISION-D22-NO-ESCAPE-BY-DEFAULT
   - DECISION-D43-FORMATTER-MISSING-GUARD
@@ -12,6 +12,8 @@ connections:
   - COMPONENT-SSG
   - DOC-COMPILER-DESIGN
   - DOC-SPEC-TEMPLATE
+verified_at: '2026-07-27T04:56:00.000Z'
+verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
 notes:
   - kind: decision
     text: >-
