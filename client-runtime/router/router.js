@@ -1412,7 +1412,11 @@ export class Router {
 				keys: cur.keys,
 				layout,
 				scroll,
-				focus,
+				// A leaf-identical replace is URL-backed transient-state churn, not
+				// a route change: leave the user's current focus in place and make no
+				// live-region announcement. Params-only pushes still take the normal
+				// focus path, and full replaces never reach this branch.
+				focus: replace ? null : focus,
 			});
 			if (layout) this.#refreshLogged(layout, params, to);
 			return;

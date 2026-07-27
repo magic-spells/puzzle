@@ -360,6 +360,7 @@ export class Store {
 		if (!Array.isArray(list)) {
 			throw new Error(`[puzzle] loadAll('${type}') expected a JSON array from the server`);
 		}
+		const pk = this.modelFor(type).primaryKey();
 		// Per-element shape guard (mirrors loadOne): validate EVERY entry up front,
 		// before any upsert, so a null/array/non-object mid-array can't half-apply
 		// the response — a null would slip through _upsert → _instantiate as a
@@ -369,6 +370,11 @@ export class Store {
 			if (data == null || typeof data !== 'object' || Array.isArray(data)) {
 				throw new Error(
 					`[puzzle] loadAll('${type}') expected an array of JSON objects from the server`
+				);
+			}
+			if (data[pk] == null) {
+				throw new Error(
+					`[puzzle] loadAll('${type}') requires primary key "${pk}" on every record`
 				);
 			}
 		}
@@ -385,6 +391,12 @@ export class Store {
 		// record with a generated pk marked _synced; an array spreads indices as fields).
 		if (data == null || typeof data !== 'object' || Array.isArray(data)) {
 			throw new Error(`[puzzle] loadOne('${type}', id) expected a JSON object from the server`);
+		}
+		const pk = this.modelFor(type).primaryKey();
+		if (data[pk] == null) {
+			throw new Error(
+				`[puzzle] loadOne('${type}', id) requires primary key "${pk}" on the record`
+			);
 		}
 		const record = this._upsert(type, data);
 		this._persist();

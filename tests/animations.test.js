@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { playAnimation, prefersReducedMotion } from '../client-runtime/views/animate.js';
+import { Store } from '../client-runtime/datastore/store.js';
+import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 
 // Hand-written stand-ins for compiler output (SPEC §4), same style as the other
 // suites: render() returns a ViewNode tree; a component vnode is
@@ -259,6 +261,61 @@ describe('PuzzleView — enter/leave hooks (order, with & without animations)', 
 		outAnim.finish();
 		await leave;
 		expect(calls).toEqual(['willShow', 'didShow', 'willHide', 'didHide']);
+	});
+
+	it('a store mutation during leave neither re-runs data() nor re-renders the leaving view', async () => {
+		installFakeAnimate();
+		class Todo extends PuzzleModel {
+			static schema = {
+				id: Puzzle.string().primary(),
+				text: Puzzle.string(),
+			};
+		}
+		const store = new Store({ todo: Todo });
+		store.createRecord('todo', { id: 't1', text: 'before' });
+		store.flush();
+		const dataSpy = vi.fn();
+		const renderSpy = vi.fn();
+		const hooks = [];
+		class V extends PuzzleView {
+			animations = { out: OUT };
+			data() {
+				dataSpy();
+				return { todos: this.ctx.store.findMany('todo') };
+			}
+			render() {
+				renderSpy();
+				return h('div', {}, [text(this.getData().todos[0].text)]);
+			}
+			viewWillHide() {
+				hooks.push('willHide');
+			}
+			viewDidHide() {
+				hooks.push('didHide');
+			}
+		}
+		const v = await new V({ store }).mount(container());
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+		expect(renderSpy).toHaveBeenCalledTimes(1);
+
+		const leave = v.playOut();
+		expect(hooks).toEqual(['willHide']);
+		v.refresh();
+		v.setData('ignored', true);
+		v.onStoreChange();
+		v.applyParentUpdate({ props: { ignored: true } });
+		v.flushUpdates();
+		store.findOne('todo', 't1').update({ text: 'during leave' });
+		store.flush();
+
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+		expect(renderSpy).toHaveBeenCalledTimes(1);
+		expect(v.element.textContent).toBe('before');
+
+		fakeAnimations[0].finish();
+		await leave;
+		expect(hooks).toEqual(['willHide', 'didHide']);
+		v.destroy();
 	});
 
 	it('playOut is idempotent — a second call returns the same promise', async () => {

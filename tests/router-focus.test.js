@@ -51,11 +51,19 @@ class UserView extends PuzzleView {
 		return h('puzzle-view', { class: 'user' }, [text('USER')]);
 	}
 }
+class SearchView extends PuzzleView {
+	render() {
+		return h('puzzle-view', { class: 'search' }, [
+			h('input', { class: 'search-input', type: 'search' }),
+		]);
+	}
+}
 
 const ROUTES = [
 	{ path: '/', name: 'home', view: HomeView, meta: { title: 'Home Page' } },
 	{ path: '/about', name: 'about', view: AboutView, meta: { title: 'About Page' } },
 	{ path: '/user/:id', name: 'user', view: UserView, meta: { title: 'User Page' } },
+	{ path: '/search', name: 'search', view: SearchView, meta: { title: 'Search Page' } },
 ];
 
 let routers = [];
@@ -125,7 +133,7 @@ describe('Router focus — the committed leaf root (D93)', () => {
 		expect(order).toEqual(['scroll', 'focus']);
 	});
 
-	it('focuses on a params-only navigation (same chain, new params)', async () => {
+	it('params-only push still moves focus to the reused leaf root', async () => {
 		const { router, el } = await boot();
 		await router.push('/user/1');
 		const user = el.querySelector('puzzle-view.user');
@@ -134,6 +142,27 @@ describe('Router focus — the committed leaf root (D93)', () => {
 
 		await router.push('/user/2');
 		expect(document.activeElement).toBe(user); // same reused instance + element
+	});
+
+	it('query-only replace keeps an input focused and writes nothing new to the live region', async () => {
+		const { router, el } = await boot();
+		await router.push('/search');
+		const input = el.querySelector('.search-input');
+		input.focus();
+		const announcement = liveRegion().textContent;
+		let writes = 0;
+		const observer = new MutationObserver((records) => {
+			writes += records.length;
+		});
+		observer.observe(liveRegion(), { childList: true, characterData: true, subtree: true });
+
+		await router.replace('/search?q=spell');
+		await tick();
+		observer.disconnect();
+
+		expect(document.activeElement).toBe(input);
+		expect(liveRegion().textContent).toBe(announcement);
+		expect(writes).toBe(0);
 	});
 });
 

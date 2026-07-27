@@ -323,6 +323,18 @@ export function mount(vnode, parent, ref, ctx) {
  * created()/data() are not run twice and its mount is synchronous — the
  * atomic-commit contract in constellation/doc/DOC-VIEW-LIFECYCLE.md §4.
  */
+export function plantFailedMountPlaceholder(child) {
+	const anchor = child.element;
+	const placeholder =
+		anchor && anchor.parentNode
+			? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
+			: null;
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (placeholder) devperfMutation();
+	}
+	return placeholder;
+}
+
 function mountComponent(vnode, parent, ref, ctx) {
 	if ((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverFailed) {
 		const placeholder = document.createComment('puzzle');
@@ -398,14 +410,7 @@ function mountComponent(vnode, parent, ref, ctx) {
 				// placeholder on it so patch() finds it through WHICHEVER vnode holds the
 				// component. The vnode nulls below stay: they are correct (and the cheaper
 				// path) whenever nothing raced.
-				const anchor = child.element; // the child's current root — its anchor comment unless a render landed
-				const placeholder =
-					anchor && anchor.parentNode
-						? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
-						: null;
-				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-					if (placeholder) devperfMutation();
-				}
+				const placeholder = plantFailedMountPlaceholder(child);
 				child.destroy(); // release any partial subscriptions; removes the child's own anchor
 				if (placeholder) {
 					vnode.el = placeholder;

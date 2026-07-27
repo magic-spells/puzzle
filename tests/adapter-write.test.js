@@ -109,6 +109,31 @@ describe('adapter read response bodies', () => {
 		]);
 		expect(record.toJSON()).toEqual({ id: 't2', text: 'one', completed: false });
 	});
+
+	it('loadAll rejects a pk-less element before storing any response records', async () => {
+		mockFetch({
+			body: [
+				{ id: 't1', text: 'valid but must not land' },
+				{ text: 'missing id' },
+			],
+		});
+		const store = apiStore();
+
+		await expect(store.loadAll('todo')).rejects.toThrow(
+			`[puzzle] loadAll('todo') requires primary key "id" on every record`
+		);
+		expect(store.findMany('todo')).toEqual([]);
+	});
+
+	it('loadOne rejects a pk-less server object', async () => {
+		mockFetch({ body: { text: 'missing id' } });
+		const store = apiStore();
+
+		await expect(store.loadOne('todo', 't1')).rejects.toThrow(
+			`[puzzle] loadOne('todo', id) requires primary key "id" on the record`
+		);
+		expect(store.findMany('todo')).toEqual([]);
+	});
 });
 
 describe('save() — POST vs PUT', () => {
