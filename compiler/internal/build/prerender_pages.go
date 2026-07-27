@@ -112,6 +112,11 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 			staticPagesDir,
 		)
 	}
+	// Same class of collision for the prerender scratch dir, which is overwritten
+	// by the generated bundle and then deleted before the swap.
+	if err := checkPrerenderScratchCollision(absRoot, staging, "--static"); err != nil {
+		return err
+	}
 
 	// 1. Node prerender pass in mode 'static': the JS side renders each static
 	//    route, captures its store payload into the page's data island, strips the

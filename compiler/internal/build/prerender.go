@@ -45,6 +45,39 @@ const prerenderTimeout = 120 * time.Second
 // bundle. It is deleted before the staging→dist swap so it never ships in dist/.
 const prerenderDir = ".puzzle-prerender"
 
+// checkPrerenderScratchCollision rejects a public/ asset that copyPublic already
+// materialized at staging/.puzzle-prerender. Both prerender modes use that path
+// as scratch and os.RemoveAll it before the swap, so without this guard a
+// public/.puzzle-prerender/ subtree would be silently consumed and deleted while
+// the build reported success. ValidatePublic cannot catch it: it only compares
+// ROOT-LEVEL FILE names against the compiler's own output names and skips
+// directories outright.
+//
+// The check reads the post-copyPublic STAGING state rather than the app tree, so
+// neither the app/public vs flat public/ resolution nor a file-instead-of-dir
+// spelling can dodge it. It mirrors the reserved-name guard the static mode
+// already applies to staging/_puzzle (prerender_pages.go). label names the mode
+// in the error, as elsewhere in this file.
+func checkPrerenderScratchCollision(absRoot, staging, label string) error {
+	scratch := filepath.Join(staging, prerenderDir)
+	if !dirExists(scratch) && !FileExists(scratch) {
+		return nil
+	}
+	// Name the user's file where it can be resolved; the staging copy is a temp
+	// path that is gone by the time the error is read.
+	source := prerenderDir
+	if pub := publicDir(absRoot); pub != "" {
+		if rel, err := filepath.Rel(absRoot, filepath.Join(pub, prerenderDir)); err == nil {
+			source = filepath.ToSlash(rel)
+		}
+	}
+	return fmt.Errorf(
+		"puzzle build %s: public asset %s would be consumed by the prerender step "+
+			"(%s is a reserved output name); rename or remove it",
+		label, source, prerenderDir,
+	)
+}
+
 // ssgSummary mirrors the JSON the SSG runtime's prerenderToDir prints after the
 // sentinel: the files written, the routes it skipped (dynamic routes in v1), and
 // any advisory warnings. The output file path lets the build compare each route
@@ -71,6 +104,13 @@ type ssgSummary struct {
 // returned error surfaces node's stderr/stdout and staging is discarded by
 // Build's defer, so the previous dist/ is untouched.
 func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool) error {
+	// A public/ asset copied to staging/.puzzle-prerender would be overwritten by
+	// the prerender bundle and then deleted with it — reject it before any of that
+	// happens. copyPublic has already run, so the collision is observable here.
+	if err := checkPrerenderScratchCollision(absRoot, staging, "--hybrid"); err != nil {
+		return err
+	}
+
 	// The generated prerender entry (the SSG contract): import the app's default
 	// export + prerenderToDir, run it against the outDir/shellPath passed on argv
 	// in the 'hybrid' mode (passed explicitly so the JS side is unambiguous — it

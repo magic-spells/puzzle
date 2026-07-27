@@ -17,9 +17,14 @@
  *
  * ── Exit status ────────────────────────────────────────────────────────────
  * Non-zero for a validate() failure, a structural-counter mismatch, an op that
- * threw or timed out, or a rejected (throttle-clamped) sample set. NEVER for a
- * timing regression. Wall-clock time on a developer laptop is noise; this is a
- * local instrument, not a gate.
+ * threw or timed out, a rejected (throttle-clamped) sample set, or an UNCAUGHT
+ * page error (a `pageerror` event — the app under measurement broke). A failing
+ * run also refuses to write the baseline.
+ *
+ * NEVER for a timing regression: wall-clock time on a developer laptop is noise;
+ * this is a local instrument, not a gate. And never for a console.error — the
+ * runtime logs those from expected recovery paths the scenarios exercise on
+ * purpose, so they are printed in the LOG section and nothing more.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -517,10 +522,22 @@ async function main() {
 	const context = await browser.newContext({ viewport: config.browser.viewport });
 	const page = await context.newPage();
 
+	// Two error channels, deliberately NOT pooled.
+	//
+	// `pageerror` is an UNCAUGHT exception in the page: the app under measurement
+	// broke, so every number recorded around it is suspect. That is fatal (see the
+	// exit-status gate after the drain loop below).
+	//
+	// `console.error` is ADVISORY. Puzzle's runtime logs console.error from
+	// expected recovery paths (a failed adapter write, a rejected record), and
+	// scenarios exercise those on purpose — gating the exit code on it would redden
+	// healthy runs, which is exactly how such a gate gets `|| true`'d away. Printed,
+	// never fatal.
 	const pageErrors = [];
+	const consoleErrors = [];
 	page.on('pageerror', (err) => pageErrors.push(String(err)));
 	page.on('console', (msg) => {
-		if (msg.type() === 'error') pageErrors.push(`console.error: ${msg.text()}`);
+		if (msg.type() === 'error') consoleErrors.push(msg.text());
 	});
 
 	const cdp = await openCdp(page);
@@ -625,6 +642,12 @@ async function main() {
 		}
 
 		for (const err of pageErrors) log(`PAGE ERROR  ${err}`);
+		for (const err of consoleErrors) log(`console.error  ${err}`);
+
+		// An uncaught page exception fails the run. Set here, BEFORE the
+		// --update-baseline block below, so a run whose page threw can neither exit 0
+		// nor enshrine itself as the baseline.
+		if (pageErrors.length) exitCode = 1;
 
 		const meta = {
 			builtAt: new Date().toISOString(),
@@ -659,6 +682,11 @@ async function main() {
 					`  REFUSING to update the baseline: ${summaries.length - measured.length} op(s) did not report ok. A baseline written from a partial run would bake the failure in.\n`
 				);
 				exitCode = 1;
+			} else if (pageErrors.length) {
+				// exitCode is already 1 from the gate above; this only explains the refusal.
+				console.error(
+					`  REFUSING to update the baseline: the page threw ${pageErrors.length} uncaught error(s) during the run. Every op may still have reported ok, but a baseline measured through a broken page is not a baseline.\n`
+				);
 			} else {
 				fs.writeFileSync(
 					path.join(ROOT, config.report.baselinePath),
@@ -669,8 +697,10 @@ async function main() {
 		}
 
 		if (exitCode !== 0) {
-			console.error('  EXIT 1 — a validate() failure, a structural mismatch, an op error, or a rejected sample set.');
-			console.error('  Timing deltas NEVER affect the exit code.\n');
+			console.error(
+				'  EXIT 1 — a validate() failure, a structural mismatch, an op error, a rejected sample set, or an uncaught page error.'
+			);
+			console.error('  Timing deltas and console.error output NEVER affect the exit code.\n');
 		}
 	} finally {
 		await context.close().catch(() => {});

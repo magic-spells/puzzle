@@ -278,7 +278,20 @@ missing and the `expect` check fails.
 ### 7. Exit status
 
 Non-zero **only** for a `validate()` failure, a structural-counter mismatch, an
-op that threw or timed out, or a rejected (throttle-clamped) sample set.
+op that threw or timed out, a rejected (throttle-clamped) sample set, or an
+**uncaught page error**. A run that exits non-zero also refuses to write
+`baseline.json` under `--update-baseline` — a partial or broken run must not
+enshrine itself as the reference.
+
+An uncaught page error is a `pageerror` event: an exception nothing in the page
+caught, which means the app being measured broke and the numbers around it are
+not describing working code.
+
+A `console.error` is **not** an uncaught page error and does not affect the exit
+code. Puzzle's runtime logs `console.error` from recovery paths the scenarios
+exercise deliberately, so gating on it would redden healthy runs — which is how
+such a gate ends up disabled. Console errors are collected and printed in the
+`LOG` section instead.
 
 **Never for a timing regression.** Timing on a developer laptop is noise; this
 is a local instrument, not a CI gate. The `Δscript`/`Δpaint` columns are for
