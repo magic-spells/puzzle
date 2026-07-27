@@ -1,7 +1,7 @@
 ---
 name: >-
   D132 — save() and delete() serialize behind one per-record write chain
-status: built
+status: verified
 connections:
   - DECISION-D50-ADAPTER-WRITE-SYNC
   - DECISION-D125-SAVE-RECONCILE-REVISION
@@ -10,6 +10,16 @@ connections:
   - COMPONENT-STORE
   - FILE-STORE
   - DOC-SPEC-DATA
+verified_at: '2026-07-27T06:25:22.809Z'
+verified_sha: f2bf7b6ab1c0487ce458b48443b62b447ff55ff6
+notes:
+  - kind: verified
+    text: >-
+      Verified at the merged release/0.4.0 tip (PR #38): _chain/_writeChains semantics, both delete
+      early-outs, and the _saveRecordNow run-time _deleted guard reviewed line-by-line against
+      store.js; six cross-verb tests plus the retimed mid-flight guards green (vitest 1439/1439 at
+      the merge commit).
+    sha: f2bf7b6ab1c0487ce458b48443b62b447ff55ff6
 ---
 
 # D132 — save() and delete() serialize behind one per-record write chain

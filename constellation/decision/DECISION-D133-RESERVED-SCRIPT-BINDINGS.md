@@ -2,13 +2,24 @@
 name: >-
   D133 — Reserved module-scope script bindings are a positioned compile error, not an esbuild
   duplicate-binding frame
-status: built
+status: verified
 connections:
   - DECISION-D29-LOOP-COUNTER
   - DECISION-D127-DISPLAY-COERCION-OWNER
   - COMPONENT-CODEGEN
   - FILE-CODEGEN
   - DOC-COMPILER-DESIGN
+verified_at: '2026-07-27T06:25:25.148Z'
+verified_sha: f2bf7b6ab1c0487ce458b48443b62b447ff55ff6
+notes:
+  - kind: verified
+    text: >-
+      Verified at the merged release/0.4.0 tip (PR #38): checkReservedScriptBindings wiring in
+      compile(), the conservative top-level scan, and the declaration-positioned ParseError reviewed
+      against scriptcollide.go/codegen.go; reserved_bindings_test.go (11 subtests + position +
+      svg-dedup cases) green, zero golden changes from the check itself (go test ./... all 14
+      packages ok at the merge commit).
+    sha: f2bf7b6ab1c0487ce458b48443b62b447ff55ff6
 ---
 
 # D133 — Reserved module-scope script bindings are a positioned compile error
