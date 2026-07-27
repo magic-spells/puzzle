@@ -12,6 +12,23 @@ connections:
   - DECISION-D94-TESTING-EXPORT
   - FILE-DEVPERF
   - FILE-TESTING-RENDER-PROFILE
+notes:
+  - kind: gotcha
+    text: >-
+      Two scope-lifecycle leaks found and fixed in the pre-release review (fix/prerelease-review):
+      (1) a throwing render()/renderSkeleton()/patch skipped devperfRenderEnd, stranding the
+      prepared mark's scope on activeScopes — the chain never quiesced and every later render piled
+      onto it until canRenderImpl's recursion guard suppressed LEGITIMATE renders (reproduced: one
+      throwing template froze an unrelated view at render #101). #renderNow's dev branch now wraps
+      the render span in try/catch → devperfRenderCancel (which had been exported with zero callers)
+      → rethrow; production folds the wrapper out. (2) activeStoreFlushes held ONE mark per store,
+      but public flush() is reentrant (a subscriber may call store.flush() synchronously): the inner
+      flush overwrote the outer mark and its end deleted it, so the outer scope leaked identically.
+      Now a per-store LIFO stack; the notified-counter targets the top. The invariant to preserve in
+      future instrumentation: every pushScope must be popped on ALL exits including throws, and any
+      single-slot per-subject mark storage is wrong wherever the instrumented operation can
+      re-enter.
+    sha: ed27cae
 ---
 
 # D121 — Dev-only runtime performance profiling with zero production bytes

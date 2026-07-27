@@ -13,6 +13,25 @@ connections:
   - DOC-SPEC-BUILD
   - DOC-SPEC-ROUTER
   - FILE-ROUTER
+notes:
+  - kind: state
+    text: >-
+      Pre-release review hardening (fix/prerelease-review): normalizeRoutePath moved INTO
+      routePath.js (exported; router.js imports it) and makeRouteSnapshot now runs path/pathname
+      through it, so prerendered route snapshots carry the same canonical form the live Router
+      exposes — a snapshot '/café' vs live '/caf%C3%A9' disagreement existed until then. Char class
+      extended with { } ^ (browsers percent-encode them in pathnames; '|' deliberately not — WHATWG
+      leaves it literal; backslash still disagrees and the doc comment now says the normalizer is
+      not full browser canonicalization). Two more alignment fixes: an enumerated leaf under a
+      catch-all root ({path:'*', children:[…]} — the Router drops those children entirely) no longer
+      consumes a compiledEntryIndex position, which previously INVERTED shadow skips (the reachable
+      duplicate skipped, the shadowed one emitted); and makeEntry strips one trailing slash from the
+      leaf path before regex compilation, matching #match's incoming normalization (a route declared
+      '/docs/' was previously unmatchable by any URL). The ownership half: checkPrerenderCollision
+      now folds keys case-insensitively (public/404.HTML vs generated 404.html was silently
+      host-dependent), keeping the asset's real spelling in the diagnostic (compiler commit
+      1c7b19e).
+    sha: ed27cae
 ---
 
 # D126 — one owner for route-path shape, and prerender output may not silently overwrite a public asset
