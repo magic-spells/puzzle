@@ -274,6 +274,31 @@ describe('cross-view capture flights (v1.35, D68)', () => {
 		expect(from.style.pointerEvents).toBe('none');
 	});
 
+	it('snapshot clone drops the independent transform properties the rect already includes', async () => {
+		// translate/scale/rotate move the element exactly like `transform` does, and
+		// the captured rect is measured WITH them applied. Copying them onto a clone
+		// that is then pinned at that rect applies the same offset twice.
+		const routes = [
+			{ path: '/a', name: 'a', view: morphLeaf('a', 'art-1') },
+			{ path: '/b', name: 'b', view: morphLeaf('b', 'art-1') },
+		];
+		const { app, engine } = await mountApp(routes, '/a');
+
+		const aArt = document.querySelector('.a-art');
+		aArt.style.cssText = 'translate:40px 12px; scale:1.5; rotate:15deg; border-radius:8px;';
+
+		await app.router.push('/b');
+
+		const { from } = engine.shows[0].opts;
+		expect(from.style.translate).toBe('');
+		expect(from.style.scale).toBe('');
+		expect(from.style.rotate).toBe('');
+		// Author-owned presentation still rides along, and the pin still wins.
+		expect(from.style.borderRadius).toBe('8px');
+		expect(from.style.top).toBe('10px');
+		expect(from.style.left).toBe('20px');
+	});
+
 	it('back navigation flies a fresh clone the other direction', async () => {
 		const routes = [
 			{ path: '/a', name: 'a', view: morphLeaf('a', 'art-1') },

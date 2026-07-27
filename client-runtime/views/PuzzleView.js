@@ -25,6 +25,7 @@ import {
 	devperfMarkCause,
 	devperfMemo,
 	devperfPrepareData,
+	devperfRenderCancel,
 	devperfRenderEnd,
 	devperfRenderPrepare,
 	devperfRenderScheduled,
@@ -1128,7 +1129,33 @@ export class PuzzleView {
 		const showSkeleton = !this.#loaded && typeof this.renderSkeleton === 'function';
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			devperfRenderPrepare(this);
+			// A throwing render()/renderSkeleton()/patch would skip devperfRenderEnd and
+			// strand the prepared mark's scope on devperf's stack — every later render in
+			// the process would then pile onto that abandoned causal chain (and eventually
+			// trip the recursion guard). The wrapper is dev-only: production folds this
+			// branch out and calls the span directly.
+			try {
+				this.#renderSpan(preparedTree, showSkeleton);
+			} catch (error) {
+				devperfRenderCancel(this);
+				throw error;
+			}
+		} else {
+			this.#renderSpan(preparedTree, showSkeleton);
 		}
+		// Timestamp the FIRST actual skeleton render so the hold measures from when
+		// the skeleton became visible, not from mount (v1.20, D52). Set once.
+		if (showSkeleton && this.#skeletonShownAt === 0) this.#skeletonShownAt = Date.now();
+		if (isUpdate) this.afterUpdate();
+	}
+
+	/**
+	 * The instrumented span of one render: build the tree, then patch it in (or
+	 * empty the view's DOM when a hand-written render() returns null). Everything
+	 * between devperfRenderPrepare and devperfRenderEnd lives here so #renderNow can
+	 * close the prepared mark on a throw without duplicating the body.
+	 */
+	#renderSpan(preparedTree, showSkeleton) {
 		const tree =
 			preparedTree !== undefined
 				? preparedTree
@@ -1170,10 +1197,6 @@ export class PuzzleView {
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			devperfRenderEnd(this);
 		}
-		// Timestamp the FIRST actual skeleton render so the hold measures from when
-		// the skeleton became visible, not from mount (v1.20, D52). Set once.
-		if (showSkeleton && this.#skeletonShownAt === 0) this.#skeletonShownAt = Date.now();
-		if (isUpdate) this.afterUpdate();
 	}
 
 	#scheduleRender() {

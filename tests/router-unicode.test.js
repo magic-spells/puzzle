@@ -160,6 +160,36 @@ describe('Router — non-ASCII literal paths use encoded pathname form', () => {
 		expect(router.url('/my page')).toBe('/my%20page');
 	});
 
+	// '{', '}' and '^' are in the same WHATWG path percent-encode set as the space,
+	// and browsers escape them in location.pathname just as jsdom's URL parser does
+	// here. '|' is NOT in that set — the browser leaves it verbatim — so the
+	// normalizer must leave it alone too, or a route declared '/a|b' would stop
+	// matching the pathname the browser reports.
+	it('matches literal braces and a caret, and leaves a pipe verbatim', async () => {
+		const punctuated = [
+			{ path: '/', name: 'home', view: Home },
+			{ path: '/a{b}', name: 'braced', view: Cafe },
+			{ path: '/x^y', name: 'caret', view: Japanese },
+			{ path: '/p|q', name: 'piped', view: Home },
+			{ path: '*', name: 'notfound', view: NotFound },
+		];
+		expect(new URL('/a{b}', 'http://x').pathname).toBe('/a%7Bb%7D');
+		expect(new URL('/p|q', 'http://x').pathname).toBe('/p|q');
+
+		const { router } = await boot('/a{b}', {}, punctuated);
+		expect(location.pathname).toBe('/a%7Bb%7D');
+		expect(router.current.route.name).toBe('braced');
+		expect(router.url('/a{b}')).toBe('/a%7Bb%7D');
+
+		await router.push('/x^y');
+		expect(location.pathname).toBe('/x%5Ey');
+		expect(router.current.route.name).toBe('caret');
+
+		await router.push('/p|q');
+		expect(location.pathname).toBe('/p|q');
+		expect(router.current.route.name).toBe('piped');
+	});
+
 	it('leaves ? and # unencoded so query and fragment stay structural', async () => {
 		const { router } = await boot();
 

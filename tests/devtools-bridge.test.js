@@ -573,6 +573,37 @@ describe('devtools bridge — profiler (D121)', () => {
 		]);
 	});
 
+	it('keeps pushing warnings after perf:stop without writing them into the frozen report', async () => {
+		const hook = installHook();
+		const app = await bootApp();
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		await app.visit('/runaway');
+		hook.request('perf:start');
+		for (let i = 0; i < 61; i++) {
+			runaway.setData('tick', i);
+			runaway.flushUpdates();
+		}
+		hook.request('perf:stop');
+		const stopped = hook.request('snapshot:profile');
+		expect(stopped.warnings).toHaveLength(1);
+
+		// A FRESH Runaway instance: devperf throttles one cross-frame warning per view
+		// per rolling second, and the bridge keys report rows by view id, so this is a
+		// detection the stopped report would otherwise gain a second row for.
+		await app.visit('/');
+		await app.visit('/runaway');
+		for (let i = 0; i < 61; i++) {
+			runaway.setData('tick', i);
+			runaway.flushUpdates();
+		}
+
+		// The live push is unconditional — a loop matters whether or not anyone is
+		// recording — but the stopped report is final.
+		expect(hook.of('perf-warning')).toHaveLength(2);
+		expect(hook.request('snapshot:profile').warnings).toEqual(stopped.warnings);
+	});
+
 	it('answers profiler requests without a recording and unknown ones by error', async () => {
 		const hook = installHook();
 		await bootApp();

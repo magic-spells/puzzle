@@ -118,6 +118,37 @@ describe('Router — literal static route patterns (regex metacharacters escaped
 	});
 });
 
+describe('Router — a declared trailing slash is insignificant', () => {
+	// #match strips one trailing slash from every incoming pathname, so a route
+	// compiled verbatim from '/docs/' would have a regex nothing could reach.
+	const routes = () => [
+		{ path: '/docs/', name: 'docs', view: Docs },
+		{ path: '*', name: 'nf', view: NotFound },
+	];
+
+	it("matches both '/docs' and '/docs/' against a route declared '/docs/'", async () => {
+		const { router, el } = await boot(routes());
+
+		await router.push('/docs');
+		expect(el.querySelector('.docs')).not.toBeNull();
+		expect(router.current.route.name).toBe('docs');
+
+		await router.push('/docs/');
+		expect(el.querySelector('.docs')).not.toBeNull();
+		expect(router.current.route.name).toBe('docs');
+	});
+
+	it("leaves the root '/' route untouched", async () => {
+		const { router, el } = await boot([
+			{ path: '/', name: 'root', view: Docs },
+			{ path: '*', name: 'nf', view: NotFound },
+		]);
+
+		expect(router.current.route.name).toBe('root');
+		expect(el.querySelector('.docs')).not.toBeNull();
+	});
+});
+
 describe('Router — declaration-order shadow warnings', () => {
 	it('warns when an earlier dynamic route shadows a later static route', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

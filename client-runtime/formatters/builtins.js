@@ -296,16 +296,21 @@ export function date(v, preset = 'date', locale = undefined) {
 
 	const resolvedPreset = Object.hasOwn(DATE_FORMATS, preset) ? preset : 'date';
 	const options = DATE_FORMATS[resolvedPreset];
+	// Only undefined and string locales are cache KEYS. Intl also accepts a locale
+	// LIST (and an Intl.Locale), and a call site that builds one inline hands over a
+	// fresh object every render — identity keying would miss the Map every time AND
+	// insert, growing it without bound. Those construct a formatter per call instead.
+	const cacheable = locale === undefined || typeof locale === 'string';
 	// An invalid locale throws RangeError at DateTimeFormat construction — fail
 	// soft to the raw value like the invalid-date guard above.
 	try {
-		const localeFormatters = DATE_FORMATTERS.get(locale);
+		const localeFormatters = cacheable ? DATE_FORMATTERS.get(locale) : undefined;
 		let formatter = localeFormatters?.get(resolvedPreset);
 		if (!formatter) {
 			formatter = new Intl.DateTimeFormat(locale, options);
 			if (localeFormatters) {
 				localeFormatters.set(resolvedPreset, formatter);
-			} else {
+			} else if (cacheable) {
 				DATE_FORMATTERS.set(locale, new Map([[resolvedPreset, formatter]]));
 			}
 		}

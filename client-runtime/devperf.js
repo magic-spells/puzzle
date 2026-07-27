@@ -19,6 +19,10 @@ const viewStates = new WeakMap();
 const preparedData = new WeakMap();
 const activeRenders = new WeakMap();
 const storeChains = new WeakMap();
+// store → the LIFO stack of its in-flight flush marks. flush() is reentrant: a
+// subscriber may call store.flush() synchronously during delivery, and a single
+// slot would let the inner call's end pop the OUTER mark — leaving the outer
+// scope on activeScopes forever, so its chain could never quiesce.
 const activeStoreFlushes = new WeakMap();
 const activeScopes = [];
 
@@ -661,21 +665,30 @@ function storeFlushStartImpl(store) {
 		keys: store?._pendingKeys?.size ?? 0,
 		notified: 0,
 	};
-	activeStoreFlushes.set(store, mark);
+	let stack = activeStoreFlushes.get(store);
+	if (!stack) {
+		stack = [];
+		activeStoreFlushes.set(store, stack);
+	}
+	stack.push(mark);
 	return mark;
 }
 
 function storeFlushNotificationsImpl(store, keys, notified) {
-	const mark = activeStoreFlushes.get(store);
+	// Delivery belongs to the INNERMOST open flush — the one whose _deliverNotifications
+	// is running — so the counters land on the top of the stack.
+	const stack = activeStoreFlushes.get(store);
+	const mark = stack?.[stack.length - 1];
 	if (!mark) return;
 	mark.keys = keys.length;
 	mark.notified = notified.size;
 }
 
 function storeFlushEndImpl(store) {
-	const mark = activeStoreFlushes.get(store);
+	const stack = activeStoreFlushes.get(store);
+	const mark = stack?.pop();
 	if (!mark) return;
-	activeStoreFlushes.delete(store);
+	if (stack.length === 0) activeStoreFlushes.delete(store);
 	totals.storeFlushes++;
 	totals.storeNotifications += mark.notified;
 	emit('store-flush', {

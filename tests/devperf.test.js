@@ -111,6 +111,60 @@ describe('dev performance render instrumentation', () => {
 		);
 	});
 
+	it('closes the render scope when render() throws, leaving later renders unpoisoned', async () => {
+		// A render that throws skips devperfRenderEnd. If the prepared mark's scope
+		// stayed on the stack, currentChain() would keep handing that abandoned chain
+		// to every later render in the process — they would share one chainId and
+		// accumulate executions until the recursion guard suppressed them.
+		class Exploding extends PuzzleView {
+			render() {
+				if (this.getData().explode) throw new Error('render exploded');
+				return h('div', {}, [text(this.getData().label ?? 'ok')]);
+			}
+		}
+		class Neighbor extends PuzzleView {
+			render() {
+				return h('div', {}, [text(String(this.getData().tick ?? 0))]);
+			}
+		}
+
+		const exploding = await mountView(Exploding);
+		const neighbor = await mountView(Neighbor);
+		handles.push(exploding, neighbor);
+		const renders = [];
+		cleanups.push(
+			devperfInstallSink((event) => {
+				if (event.type === 'render') renders.push(event);
+			})
+		);
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		exploding.instance.setData('explode', true);
+		exploding.instance.flushUpdates(); // flushUpdates catches and logs the throw
+		await settled();
+		expect(error).toHaveBeenCalledWith('[puzzle] render update failed:', expect.any(Error));
+		// The failed attempt never entered the patch, so it reports no render.
+		expect(renders.filter((event) => event.viewName === 'Exploding')).toHaveLength(0);
+
+		// Two later, independent interactions each open their OWN chain at depth 1.
+		neighbor.instance.setData('tick', 1);
+		await settled();
+		neighbor.instance.setData('tick', 2);
+		await settled();
+
+		const neighborRenders = renders.filter((event) => event.viewName === 'Neighbor');
+		expect(neighborRenders).toHaveLength(2); // nothing suppressed
+		expect(neighborRenders[0].chainId).not.toBe(neighborRenders[1].chainId);
+		expect(neighborRenders.every((event) => event.depth === 1)).toBe(true);
+		expect(neighbor.element.textContent).toBe('2');
+
+		// And the thrower itself still renders once it stops throwing.
+		exploding.instance.setData('explode', false);
+		exploding.instance.setData('label', 'recovered');
+		await settled();
+		expect(exploding.element.textContent).toBe('recovered');
+	});
+
 	it('warns about a rolling-second zero-mutation runaway WITHOUT stopping the view', async () => {
 		// Byte-identical output while `label` is unset — the cross-frame guard's
 		// exact trigger — then a real DOM change once it is set.
@@ -161,6 +215,45 @@ describe('dev performance render instrumentation', () => {
 		const afterWarning = events.filter((event) => event.type === 'render').at(-1);
 		expect(afterWarning).toMatchObject({ wasted: false, domMutations: 1 });
 		expect(warn).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('dev performance store instrumentation', () => {
+	it('reports both halves of a reentrant flush and leaves no scope behind', async () => {
+		// A function subscriber may call flush() synchronously during delivery. Both
+		// flushes must report, the delivery counters must land on the INNER one's
+		// caller (the outer flush, whose _deliverNotifications is running), and
+		// neither may strand its scope — a stranded scope would keep every later
+		// interaction inside the same causal chain forever.
+		const store = new Store();
+		const flushes = [];
+		cleanups.push(
+			devperfInstallSink((event) => {
+				if (event.type === 'store-flush') flushes.push(event);
+			})
+		);
+		let reentered = false;
+		const subscriber = () => {
+			if (reentered) return;
+			reentered = true;
+			store.flush();
+		};
+		store.withTracking(subscriber, () => store.findMany('item'));
+
+		store.createRecord('item', {});
+		store.flush();
+
+		expect(flushes).toHaveLength(2);
+		expect(flushes[0].chainId).toBe(flushes[1].chainId);
+		expect(flushes[0].notified).toBe(0); // the reentrant flush delivered nothing
+		expect(flushes[1].notified).toBe(1); // the outer flush's delivery counted here
+
+		await settled();
+		store.createRecord('item', {});
+		store.flush();
+
+		expect(flushes).toHaveLength(3);
+		expect(flushes[2].chainId).not.toBe(flushes[1].chainId);
 	});
 });
 

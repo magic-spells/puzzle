@@ -287,6 +287,7 @@ import { resolveHead, syncTitle } from '../head.js';
 import {
 	findShadowedPaths,
 	isDynamicSegment,
+	normalizeRoutePath,
 	validateTopLevelPath,
 } from './routePath.js';
 import { walkRouteTree } from './routeTree.js';
@@ -2600,7 +2601,11 @@ function makeEntry(chain, fullPaths) {
 		validateTransitionMode(node.transitionMode, `route "${node.path}"`);
 		validateGuard(node.guard, `route "${node.path}"`);
 	});
-	const leafPath = fullPaths[fullPaths.length - 1];
+	// A DECLARED trailing slash is as insignificant as an incoming one: #match strips
+	// one from every pathname it tests, so a route compiled verbatim from '/docs/'
+	// would have a regex nothing could ever reach. Strip it once here (never from the
+	// root '/') so the declaration and the matcher agree.
+	const leafPath = stripTrailingSlash(fullPaths[fullPaths.length - 1]);
 	const paramNames = [];
 	// Compile ONE '/'-segment at a time: a segment that is a complete `:name`
 	// becomes a single-segment capture group; EVERY other segment first normalizes
@@ -2764,27 +2769,6 @@ export function encodeURL(path, mode, base) {
 	if (mode === 'memory') return path;
 	if (mode === 'hash') return '#' + base + path;
 	return base + path;
-}
-
-/**
- * Canonicalize a path-shaped router value to the percent-encoded form browser
- * URL APIs expose, so a declared route can match `location.pathname` on a cold
- * load. Two classes are encoded: whole non-ASCII runs (encoding the run rather
- * than the byte preserves surrogate pairs), and the four ASCII characters the
- * WHATWG path percent-encode set escapes but `encodeURIComponent` alone would
- * miss in a path — space, '"', '<', '>', and '`'. Space is the one that shows up
- * in practice ('/my page' → '/my%20page').
- *
- * Everything else stays byte-identical: ordinary ASCII paths, regex
- * metacharacters, malformed percent text, and existing `%XX` escapes. Because
- * every output byte is ASCII and outside the escaped set, the operation is
- * idempotent — `/caf%C3%A9` never becomes `/caf%25C3%25A9`.
- *
- * '?' and '#' are deliberately NOT encoded: they are structural delimiters that
- * stripPath()/encodeURL() rely on to split query and fragment.
- */
-function normalizeRoutePath(path) {
-	return path.replace(/[^\x00-\x7F]+|[ "<>`]/g, (literal) => encodeURIComponent(literal));
 }
 
 /** Reduce a full path to the pathname used for matching (drop query + hash). */

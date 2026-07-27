@@ -146,7 +146,23 @@ export async function prerender(config, opts = {}) {
 		// as it is in the Router's regex compiler.
 		const isCatchAll = fullPath === '*';
 		if (isCatchAll) hasCatchAll = true;
-		const entryIndex = isCatchAll ? null : compiledEntryIndex++;
+		// The Router drops a catch-all that declares `children` WHOLESALE — its '*'
+		// branch stores the flat single-node chain and never walks the tree — so the
+		// leaves enumerated beneath it are routes the app can never navigate to. They
+		// must also not consume a compiled-entry index: entryIndex is the position in
+		// the Router's compiled leaf list, and one phantom index shifts every later
+		// leaf's shadow attribution by one.
+		const underCatchAll = !isCatchAll && chain[0].path === '*';
+		const entryIndex = isCatchAll || underCatchAll ? null : compiledEntryIndex++;
+		if (underCatchAll) {
+			skipped.push({ path: fullPath, reason: 'unreachable' });
+			warnings.push(
+				`[puzzle] skipped route "${fullPath}" — it is a child of the catch-all route ` +
+					"'*', which the Router matches as a single leaf, so this path is " +
+					'unreachable (declare it as a top-level route to prerender it)'
+			);
+			continue;
+		}
 
 		// Only a complete `:name` segment is dynamic. Colons and stars in any
 		// other segment are regex-escaped literal text by the Router and therefore

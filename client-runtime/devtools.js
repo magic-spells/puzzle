@@ -725,6 +725,10 @@ function countCause(row, cause) {
  * detection increments `count` instead of adding a row — the panel dedupes by
  * kind + view and keeps the higher count, since it is simply the later
  * observation of one ongoing loop.
+ *
+ * The push is unconditional (a loop matters whether or not anyone is recording);
+ * the FOLD only happens while the recording is open, because perf:stop freezes
+ * the report — a detection after the stop must not rewrite a finished window.
  */
 function profileWarning(event, subject) {
 	const kind = WARNING_KIND[event.kind] ?? event.kind ?? 'unknown';
@@ -734,7 +738,7 @@ function profileWarning(event, subject) {
 	// the detector, which is exactly what the panel prints as the detail line.
 	const detail = event.message ?? '';
 	let count = 1;
-	if (profile) {
+	if (profile?.recording) {
 		const key = `${kind}#${id ?? '?'}`;
 		const existing = profile.warnings.get(key);
 		if (existing) {
