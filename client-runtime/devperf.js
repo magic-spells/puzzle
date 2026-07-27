@@ -17,6 +17,12 @@ const RUNAWAY_WASTED_RATIO = 0.9;
 const sinks = new Set();
 const viewStates = new WeakMap();
 const preparedData = new WeakMap();
+// view → the LIFO stack of its in-flight render marks. A render span is
+// reentrant: user code inside it (a `ref` callback fired mid-patch, a
+// connectedCallback on subtree insert) may call refresh(), and refresh() with a
+// sync data() renders synchronously. A single slot would let the inner render's
+// end pop the OUTER mark — leaving the outer scope on activeScopes forever, so
+// its chain could never quiesce.
 const activeRenders = new WeakMap();
 const storeChains = new WeakMap();
 // store → the LIFO stack of its in-flight flush marks. flush() is reentrant: a
@@ -484,17 +490,28 @@ function renderPrepareImpl(view) {
 		ended: false,
 	};
 	mark.scope = pushScope(chain, mark);
-	activeRenders.set(view, mark);
+	let stack = activeRenders.get(view);
+	if (!stack) {
+		stack = [];
+		activeRenders.set(view, stack);
+	}
+	stack.push(mark);
+}
+
+/** The INNERMOST open render mark for a view — the span its callers are inside. */
+function currentRender(view) {
+	const stack = activeRenders.get(view);
+	return stack?.[stack.length - 1] ?? null;
 }
 
 function renderTreeBuiltImpl(view) {
-	const mark = activeRenders.get(view);
+	const mark = currentRender(view);
 	if (!mark || mark.ended) return;
 	mark.treeDuration = now() - mark.treeStartedAt;
 }
 
 function renderStartImpl(view) {
-	const mark = activeRenders.get(view);
+	const mark = currentRender(view);
 	if (!mark || mark.ended) return;
 	mark.entered = true;
 	if (mark.state.dataExecutionChain === mark.chain) {
@@ -507,10 +524,12 @@ function renderStartImpl(view) {
 }
 
 function renderEndImpl(view) {
-	const mark = activeRenders.get(view);
+	const stack = activeRenders.get(view);
+	const mark = stack?.[stack.length - 1];
 	if (!mark || mark.ended) return;
 	mark.ended = true;
-	activeRenders.delete(view);
+	stack.pop();
+	if (stack.length === 0) activeRenders.delete(view);
 	const timestamp = now();
 	const patchDuration = mark.patchStartedAt ? timestamp - mark.patchStartedAt : 0;
 	if (mark.entered) {
