@@ -190,6 +190,8 @@ slice-of-work view.
 
 - **D137** [[DECISION-D137-LOAD-PK-GUARD]] — `loadAll`/`loadOne` apply `upsert()`'s primary-key preflight: every server record is checked up front and a pk-less one throws before any upsert (all-or-nothing), closing the documented load-bearing hazard the loaders reached unguarded — `_upsert` → `_instantiate` auto-generated an id and marked the phantom `_synced`, so its next `save()` PUT a URL the server never had. Storage hydration keeps auto-generating (genuinely fail-soft) and the §20 validation exemption for server records is untouched — this is a shape check beside the existing null/array/non-object guards (amends the D21 read path)
 
+- **D138** [[DECISION-D138-LOAD-REVISION-MERGE]] — `loadAll`/`loadOne` merge through D125's per-field revision gate: the loader snapshots each existing record's `recordMutationRevision` immediately before its GET and `_upsert` forwards it as `safeMerge`'s `throughRevision`, so a field edited while the request was in flight keeps its local value (a background poll can no longer wipe the keystroke typed during its own round trip). Deliberately D125-exact: pre-dispatch edits still take the server value, records absent at dispatch (including concurrent-create pk collisions) merge server-wins, and public `upsert()`/`request()` merges stay imperative-overwrite; open-ended "unsaved edits always win" rejected (needs a synced-through dirtiness concept and lets abandoned edits shadow the server forever) (amends §8/D21 with §22/D125's gate)
+
 ## Open questions (tracked, not yet decided)
 
 - `Puzzle.*` vs dedicated builder namespace (see [[DECISION-D05-SCHEMA-BUILDERS]]).

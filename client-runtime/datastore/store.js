@@ -343,11 +343,17 @@ export class Store {
 	 * Subscribers are notified as data lands (batched, as usual).
 	 */
 	async loadAll(type) {
+		const pk = this.modelFor(type).primaryKey();
+		const revisionsAtDispatch = new Map(
+			Array.from(this._typeMap(type).values(), (record) => [
+				recordKey(record[pk]),
+				recordMutationRevision(record),
+			])
+		);
 		const list = await this._fetchAdapter(type, '');
 		if (!Array.isArray(list)) {
 			throw new Error(`[puzzle] loadAll('${type}') expected a JSON array from the server`);
 		}
-		const pk = this.modelFor(type).primaryKey();
 		// Per-element shape guard (mirrors loadOne): validate EVERY entry up front,
 		// before any upsert, so a null/array/non-object mid-array can't half-apply
 		// the response — a null would slip through _upsert → _instantiate as a
@@ -365,13 +371,17 @@ export class Store {
 				);
 			}
 		}
-		const records = list.map((data) => this._upsert(type, data));
+		const records = list.map((data) =>
+			this._upsert(type, data, revisionsAtDispatch.get(recordKey(data[pk])))
+		);
 		this._persist();
 		return records;
 	}
 
 	/** GET apiURL + adapter.endpoint + '/' + id and upsert the single record. */
 	async loadOne(type, id) {
+		const existing = this._typeMap(type).get(recordKey(id));
+		const revisionAtDispatch = existing ? recordMutationRevision(existing) : undefined;
 		const data = await this._fetchAdapter(type, '/' + encodeURIComponent(id));
 		// Response-shape guard (mirrors loadAll): a null/array/non-object body would
 		// slip through _upsert → _instantiate as a bogus record (200 null → an empty
@@ -385,7 +395,7 @@ export class Store {
 				`[puzzle] loadOne('${type}', id) requires primary key "${pk}" on the record`
 			);
 		}
-		const record = this._upsert(type, data);
+		const record = this._upsert(type, data, revisionAtDispatch);
 		this._persist();
 		return record;
 	}
@@ -438,12 +448,18 @@ export class Store {
 		return readBody(res);
 	}
 
-	/** Create or update-in-place by primary key; notifies either way. Public callers use upsert(). */
-	_upsert(type, data) {
+	/**
+	 * Create or update-in-place by primary key; notifies either way.
+	 * @param {string} type
+	 * @param {object} data
+	 * @param {number} [throughRevision] D138 load-response revision boundary.
+	 * Public callers use upsert(), which deliberately leaves this undefined.
+	 */
+	_upsert(type, data, throughRevision) {
 		const pk = this.modelFor(type).primaryKey();
 		const existing = data?.[pk] != null ? this._typeMap(type).get(recordKey(data[pk])) : null;
 		if (existing) {
-			safeMerge(existing, data);
+			safeMerge(existing, data, throughRevision);
 			existing._synced = true; // came from the server (constellation/doc/DOC-SPEC.md §22, D50)
 			this._notify(type, data[pk]);
 			return existing;
