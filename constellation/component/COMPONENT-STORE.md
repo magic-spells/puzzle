@@ -81,11 +81,16 @@ companion to `request()`): existing records update in place, new ones instantiat
 validation-exempt and synced. Every payload must be a JSON object carrying an
 explicit primary key — the guard that keeps a phantom generated-id record from
 being marked synced and PUTting to a nonsense URL; arrays preflight every element
-before any mutation and persist once. Writes serialize concurrent saves
-per record, validate first, POST unsynced records and PUT synced records, adopt
+before any mutation and persist once. Writes serialize per record across BOTH
+verbs — `saveRecord` and `deleteRecord` share one `_writeChains` chain via
+`_chain(record, fn)` (D132), each link reading record state when it reaches the
+front — validate first, POST unsynced records and PUT synced records, adopt
 server keys atomically, protect against destroy/replacement/collision races, and
 throw `PuzzleAdapterError` for adapter failures. Confirmed delete accepts 2xx or
-404; `request()` covers custom endpoints. `removeRecord` flags the instance
+404; a never-synced record's `delete()` removes locally with no request, an
+already-`_deleted` one resolves idempotently, and `_saveRecordNow` re-checks
+`_deleted` at run time so a queued save cannot resurrect a removed record's row;
+`request()` covers custom endpoints. `removeRecord` flags the instance
 `_deleted` before detaching it — one terminal state shared by local `destroy()`
 and confirmed `delete()`, so stale references delete idempotently and can never
 `save()` a resurrected copy.

@@ -27,7 +27,6 @@ import { ViewNode, SLOT_TAG } from '@magic-spells/puzzle';
 
 DefaultLayout.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'relative min-h-screen flex flex-col bg-ink text-fg' }, [
     new ViewNode('div', { class: 'app-glow pointer-events-none absolute inset-x-0 top-0 h-[440px]' }, []),

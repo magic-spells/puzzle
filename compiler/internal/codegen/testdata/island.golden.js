@@ -16,7 +16,6 @@ import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 Editor.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'editor' }, [
     new ViewNode('div', {

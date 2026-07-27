@@ -1474,6 +1474,10 @@ export class Router {
 				if (layout && !reuseLayout) layout.destroy();
 				return;
 			}
+			// Same suppression the routed chain gets below: mountComponent auto-chains
+			// playIn() onto every component it mounts, and these are about to mount over
+			// prerendered markup that already shows them.
+			for (const instance of nestedInstances) instance.skipEnter();
 		}
 
 		await this.#swap(token, cur, {

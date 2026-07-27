@@ -89,6 +89,7 @@ describe('beforeRequest — fires for every adapter verb with the right context'
 		const calls = [];
 		const store = hookedStore((init, ctx) => calls.push(ctx));
 		const todo = store.createRecord('todo', { id: 't1', text: 'a' });
+		todo._synced = true; // a never-synced delete() skips the network entirely
 
 		await todo.delete();
 
@@ -302,6 +303,7 @@ describe('beforeRequest — cannot change what the request IS', () => {
 			init.method = 'GET';
 		});
 		const todo = store.createRecord('todo', { id: 't1', text: 'a' });
+		todo._synced = true; // a never-synced delete() skips the network entirely
 
 		await todo.delete();
 
@@ -374,6 +376,7 @@ describe('beforeRequest — a throwing hook rejects the operation', () => {
 			throw new Error('session expired');
 		});
 		const todo = store.createRecord('todo', { id: 't1', text: 'a' });
+		todo._synced = true; // a never-synced delete() skips the network entirely
 
 		await expect(todo.delete()).rejects.toThrow('session expired');
 		expect(fetchSpy).not.toHaveBeenCalled();
@@ -486,6 +489,7 @@ describe('no hook configured — requests are byte-identical to before (regressi
 		const fetchSpy = mockFetch({ body: '' });
 		const store = hookedStore(undefined);
 		const todo = store.createRecord('todo', { id: 't1', text: 'a' });
+		todo._synced = true; // a never-synced delete() skips the network entirely
 
 		await todo.delete();
 

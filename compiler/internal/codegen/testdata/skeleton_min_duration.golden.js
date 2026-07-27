@@ -12,7 +12,6 @@ import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 SkeletonMinDuration.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'post-detail' }, [
     new ViewNode('h1', {}, [
@@ -27,7 +26,6 @@ SkeletonMinDuration.__pzlModule = 'skeleton_min_duration.pzl';
 
 SkeletonMinDuration.prototype.renderSkeleton = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'post-detail' }, [
     new ViewNode('div', { class: 'animate-pulse' },

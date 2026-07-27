@@ -39,7 +39,10 @@ driven by the same `static adapter = { endpoint }` the read path uses.
   thereafter via a non-enumerable `_synced` provenance flag; 2xx JSON-object
   responses merge via the exempt path; failed saves keep dirty state and
   reject), `record.delete()` is a confirmed delete (DELETE first; 2xx or 404
-  removes locally; otherwise rejects and the record stays).
+  removes locally; otherwise rejects and the record stays). Since
+  [[DECISION-D132-CROSS-VERB-WRITE-CHAIN]] both verbs share the per-record
+  write chain — a delete queued behind a first save targets the adopted server
+  pk — and a never-synced record's `delete()` removes locally with no request.
 - **Server pk adoption:** a first save whose response carries a different pk
   re-keys the store index atomically (the one sanctioned pk change); an
   update-save pk mismatch warns and is dropped from the merge.

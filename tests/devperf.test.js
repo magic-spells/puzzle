@@ -165,6 +165,73 @@ describe('dev performance render instrumentation', () => {
 		expect(exploding.element.textContent).toBe('recovered');
 	});
 
+	it('reports both halves of a reentrant render and leaves no scope behind', async () => {
+		// User code runs INSIDE the render span — a `ref` callback fires mid-patch —
+		// and refresh() with a sync data() is fully synchronous, so one view can be
+		// rendering twice at once. Both renders must report, and neither may strand
+		// its scope: a stranded scope keeps every later render in the process inside
+		// the same causal chain, where executions accumulate until the recursion
+		// guard suppresses an unrelated view.
+		let armed = false; // only reenter from a PATCH, not from the mount render
+		let reentered = false;
+		class Reentrant extends PuzzleView {
+			data() {
+				return { label: 'x' };
+			}
+			render() {
+				return h('div', {}, [
+					// A fresh closure each render, so patchAttrs rebinds (and fires) it on
+					// a PERSISTING element — no DOM churn, just user code inside the patch.
+					h('span', {
+						ref: () => {
+							if (!armed || reentered) return;
+							reentered = true;
+							this.refresh();
+						},
+					}),
+				]);
+			}
+		}
+		class Neighbor extends PuzzleView {
+			render() {
+				return h('div', {}, [text(String(this.getData().tick ?? 0))]);
+			}
+		}
+
+		const reentrant = await mountView(Reentrant);
+		const neighbor = await mountView(Neighbor);
+		handles.push(reentrant, neighbor);
+		const renders = [];
+		const loops = [];
+		cleanups.push(
+			devperfInstallSink((event) => {
+				if (event.type === 'render') renders.push(event);
+				if (event.type === 'loop') loops.push(event);
+			})
+		);
+
+		armed = true;
+		reentrant.instance.setData('tick', 1);
+		await settled();
+
+		const reentrantRenders = renders.filter((event) => event.viewName === 'Reentrant');
+		expect(reentered).toBe(true);
+		expect(reentrantRenders).toHaveLength(2); // inner and outer both closed
+
+		// Two later, independent interactions each open their OWN chain at depth 1 —
+		// the proof that the outer render's scope was popped.
+		neighbor.instance.setData('tick', 1);
+		await settled();
+		neighbor.instance.setData('tick', 2);
+		await settled();
+
+		const neighborRenders = renders.filter((event) => event.viewName === 'Neighbor');
+		expect(neighborRenders).toHaveLength(2);
+		expect(neighborRenders[0].chainId).not.toBe(neighborRenders[1].chainId);
+		expect(neighborRenders.every((event) => event.depth === 1)).toBe(true);
+		expect(loops).toHaveLength(0);
+	});
+
 	it('warns about a rolling-second zero-mutation runaway WITHOUT stopping the view', async () => {
 		// Byte-identical output while `label` is unset — the cross-frame guard's
 		// exact trigger — then a real DOM change once it is set.

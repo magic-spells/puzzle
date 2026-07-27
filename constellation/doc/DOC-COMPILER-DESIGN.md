@@ -64,13 +64,21 @@ Notable emission contracts:
 
 - the appended import makes a small set of module-scope names compiler-owned in
   a `.pzl` script: `ViewNode`, `SLOT_TAG` (when slots are present), the `__s`
-  display alias (when interpolation is present), and by convention every
-  `__`-prefixed identifier (codegen's scratch namespace: `__d`, `__f`, `__ev`,
-  `__i`, …). A script that declares one of these at module scope fails the
-  bundle with a duplicate-binding syntax error — loud and at build time, by
-  design. The compiler never parses the script body (§ contract above), so it
-  cannot detect the collision earlier or pick a different alias; the names are
-  reserved instead.
+  display alias (when display coercion is compiled), and `__svg_N` (SVG-dedup
+  mode). Codegen's function-scope scratch names (`__d`, `__f`, `__ev`, `__i`,
+  …) are NOT reserved — a module-scope binding is merely shadowed inside the
+  render body. A script that binds a reserved name at module scope fails as a
+  **positioned compile error at the offending declaration** (D133): the
+  scriptcollide tokenizer's conservative top-level-declaration scan checks the
+  exact per-file emitted set without parsing the script (the never-parse
+  contract above holds — this is the same token walk behind the import-shadow
+  warning). Scan misses — destructuring patterns, expression-position class
+  names — fall through to esbuild's duplicate-binding error, still loud at
+  build time. An alias allocator stays rejected; the names are reserved.
+- `const __f = this.ctx.formatters.getAll()` is emitted only when a non-empty
+  formatter chain was compiled (`usesFormatters`, module-wide across render and
+  skeleton), mirroring the `usesDisplayValue` gate on the `__s` import —
+  formatter-free views carry no dead registry read.
 - text interpolation routes through the runtime's `displayValue` helper, emitted
   as `__s(...)` and imported only when a module actually contains one (D127).
   `null` and `undefined` render as an empty string — never the literal words —

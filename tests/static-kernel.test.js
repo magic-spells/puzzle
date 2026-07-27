@@ -96,7 +96,10 @@ function seedDocument({ content, data }) {
 	return document.querySelector('#app');
 }
 
+let nestedWillShow = 0;
+
 afterEach(() => {
+	nestedWillShow = 0;
 	document.body.innerHTML = '';
 });
 
@@ -302,6 +305,55 @@ describe('static kernel — mountStatic (D81)', () => {
 		await mountStatic({ target: '#app', views: [NoAnim], route: pages[0].route });
 		await tick();
 		expect(willShow).toBe(0);
+	});
+
+	// A NESTED (non-routed) component is not part of the route chain, so it is not
+	// in `instances` — mountComponent auto-chains playIn() onto it. Under takeover
+	// its markup is already on screen, so it must be skipEnter'd too.
+	class EnterLeaf extends PuzzleView {
+		animations = { in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 200 } };
+		viewWillShow() {
+			nestedWillShow++;
+		}
+		render() {
+			return h('section', { class: 'enter-leaf' }, [text('LEAF')]);
+		}
+	}
+	stamp(EnterLeaf, 'app/components/EnterLeaf.pzl');
+	class EnterPage extends PuzzleView {
+		render() {
+			return h('main', { class: 'enter-page' }, [h(EnterLeaf)]);
+		}
+	}
+	stamp(EnterPage, 'app/views/EnterPage.pzl');
+	const enterRoutes = [{ path: '/', name: 'home', view: EnterPage }];
+
+	it('does not animate a NESTED component on the initial paint either', async () => {
+		const { pages } = await prerender({ target: '#app', routes: enterRoutes }, { mode: 'static' });
+		const el = seedDocument({ content: pages[0].html, data: pages[0].data });
+
+		await mountStatic({ target: '#app', views: [EnterPage], route: pages[0].route });
+		await tick();
+
+		expect(el.querySelector('.enter-leaf')).not.toBe(null);
+		expect(nestedWillShow).toBe(0);
+	});
+
+	it('a prerender:false page still plays its nested component enter', async () => {
+		// No `data-puzzle-static` marker ⇒ nothing was prerendered into the target, so
+		// the nested enter is an ordinary first paint and must animate as usual.
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: EnterPage, prerender: false }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const el = seedDocument({ content: '', data: pages[0].data });
+
+		await mountStatic({ target: '#app', views: [EnterPage], route: pages[0].route });
+		await tick();
+
+		expect(el.querySelector('.enter-leaf')).not.toBe(null);
+		expect(nestedWillShow).toBe(1);
 	});
 
 	it('mounts a prerender:false page into the empty target (same code path)', async () => {

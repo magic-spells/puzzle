@@ -13,6 +13,11 @@ type Position struct {
 	Offset int
 }
 
+// Advance is advance for callers outside the parser: codegen maps a byte offset
+// inside the opaque <script> body back to file coordinates by advancing the
+// section's start position over the preceding bytes.
+func (p Position) Advance(s string) Position { return p.advance(s) }
+
 // advance returns the Position reached after consuming s, tracking newlines so
 // that a position inside the extracted template content maps back to file
 // coordinates. Columns are byte-based (adequate for error reporting).

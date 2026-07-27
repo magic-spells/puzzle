@@ -19,7 +19,6 @@ import { ViewNode } from '@magic-spells/puzzle';
 
 EventMods.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'evt-mods' }, [
     new ViewNode('form', { '@submit:prevent': ((this.__h ??= {})[0] ??= (event) => this.events.addTodo(event)) }, [

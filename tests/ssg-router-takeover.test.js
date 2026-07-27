@@ -22,6 +22,7 @@ const slot = () => new ViewNode(SLOT_TAG);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 let willShow = 0;
+let nestedWillShow = 0;
 
 function deferred() {
 	let resolve;
@@ -48,6 +49,26 @@ class Layout extends PuzzleView {
 	}
 }
 
+// A NESTED (non-routed) component that animates in. mountComponent auto-chains
+// playIn() onto every component it mounts, so this counter is the probe for
+// whether the takeover suppressed the nested enters too — not just the routed
+// chain's. Under takeover the leaf's markup is already on screen, so an enter
+// would fade it in over content the reader is looking at.
+class EnterLeaf extends PuzzleView {
+	animations = { in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 200 } };
+	viewWillShow() {
+		nestedWillShow++;
+	}
+	render() {
+		return h('section', { class: 'enter-leaf' }, [text('LEAF')]);
+	}
+}
+class EnterPage extends PuzzleView {
+	render() {
+		return h('main', { class: 'enter-page' }, [h(EnterLeaf)]);
+	}
+}
+
 const apps = [];
 function boot(cfg) {
 	const app = new PuzzleApp(cfg);
@@ -67,6 +88,7 @@ function ssgContainer(inner) {
 
 afterEach(() => {
 	willShow = 0;
+	nestedWillShow = 0;
 	skeletonRenders = 0;
 	while (apps.length) apps.pop().unmount();
 	document.body.innerHTML = '';
@@ -274,6 +296,36 @@ describe('router SSG takeover (M2)', () => {
 
 		expect(el.innerHTML).toBe(prerendered);
 		expect(el.querySelector('.sync-leaf').textContent).toBe('SYNC-CONTENT');
+	});
+
+	it('suppresses the NESTED components enter during hybrid takeover', async () => {
+		const routes = [{ path: '/', name: 'enter', view: EnterPage }];
+		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
+		const el = ssgContainer(pages[0].html);
+		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+
+		await app.mount();
+		await tick(); // the nested playIn is chained off mountComponent's mount promise
+
+		expect(el.querySelector('.enter-leaf')).not.toBe(null);
+		expect(nestedWillShow).toBe(0);
+	});
+
+	it('unmarked container: a nested component still plays its enter', async () => {
+		const el = document.createElement('div');
+		el.id = 'app';
+		document.body.appendChild(el);
+		const app = boot({
+			target: '#app',
+			routes: [{ path: '/', name: 'enter', view: EnterPage }],
+			routerMode: 'memory',
+		});
+
+		await app.mount();
+		await tick();
+
+		expect(el.querySelector('.enter-leaf')).not.toBe(null);
+		expect(nestedWillShow).toBe(1);
 	});
 
 	it('mounts the hybrid page when a nested component preload rejects', async () => {

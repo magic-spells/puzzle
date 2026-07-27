@@ -17,7 +17,6 @@ import { ViewNode } from '@magic-spells/puzzle';
 
 Events.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'evt' }, [
     new ViewNode('button', { '@click': ((this.__h ??= {})[0] ??= (event) => this.events.clear(event)) }, [

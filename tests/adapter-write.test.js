@@ -674,12 +674,13 @@ describe('save() — mid-flight save-boundary hardening (§22, D50)', () => {
 		const notifySpy = vi.spyOn(store, '_notify');
 
 		const savePromise = todo.save();
+		// Let the serialized save chain reach _saveRecordNow's fetch (it runs a
+		// microtask later) BEFORE the removal, so the POST is genuinely in flight —
+		// a record removed before its request is dispatched never sends one at all.
+		await new Promise((r) => setTimeout(r, 0));
 		todo.destroy(); // removeRecord mid-flight — notifies once for the removal
 		const notifiesAfterRemoval = notifySpy.mock.calls.length;
 
-		// Let the serialized save chain reach _saveRecordNow's fetch (it runs a
-		// microtask later), so resolveFetch is wired before we release the response.
-		await new Promise((r) => setTimeout(r, 0));
 		resolveFetch(makeRes({ body: { id: 't1', text: 'x', completed: false } }));
 		await expect(savePromise).resolves.toBe(todo); // resolves with the detached record
 
@@ -712,10 +713,13 @@ describe('save() — mid-flight save-boundary hardening (§22, D50)', () => {
 });
 
 describe('delete()', () => {
+	// These exercise the SERVER delete path, so each record is marked synced: a
+	// never-synced record short-circuits to a local removal with no request (§22).
 	it('removes locally + notifies on a 2xx', async () => {
 		mockFetch({ status: 200, body: '' });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		todo._synced = true;
 		const sub = { onStoreChange: vi.fn() };
 		store.withTracking(sub, () => store.findMany('todo'));
 
@@ -729,6 +733,7 @@ describe('delete()', () => {
 		mockFetch({ ok: false, status: 404, statusText: 'Not Found', body: '' });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		todo._synced = true;
 
 		await todo.delete();
 		expect(store.findOne('todo', 't1')).toBeNull();
@@ -738,6 +743,7 @@ describe('delete()', () => {
 		mockFetch({ ok: false, status: 500, statusText: 'Server Error', body: 'boom' });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		todo._synced = true;
 
 		await expect(todo.delete()).rejects.toMatchObject({ name: 'PuzzleAdapterError', status: 500, body: 'boom' });
 		expect(store.findOne('todo', 't1')).toBe(todo);
@@ -747,6 +753,7 @@ describe('delete()', () => {
 		const fetchSpy = mockFetch({ body: '' });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 'a/b', text: 'x' });
+		todo._synced = true;
 		await todo.delete();
 		expect(fetchSpy).toHaveBeenCalledWith('https://x.test/v1/api/todos/a%2Fb', { method: 'DELETE' });
 	});
@@ -779,6 +786,7 @@ describe('delete()', () => {
 		const fetchSpy = mockFetch({ body: '' });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		todo._synced = true;
 
 		await todo.delete();
 		await expect(todo.save()).rejects.toThrow(/cannot save a deleted record/);
@@ -793,13 +801,15 @@ describe('delete()', () => {
 
 		const store = apiStore();
 		const a = store.createRecord('todo', { id: 't1', text: 'A' });
+		a._synced = true;
 
-		const delPromise = a.delete(); // DELETE in flight; requestKey 't1' captured
+		const delPromise = a.delete();
+		// Let the chained delete reach its fetch first: requestKey 't1' is captured
+		// when the link RUNS, and only then is the DELETE genuinely in flight.
+		await new Promise((r) => setTimeout(r, 0));
 		a.destroy(); // A removed locally
 		const b = store.createRecord('todo', { id: 't1', text: 'B' }); // reuse the id
 
-		// Let the deleteRecord await settle its wiring before releasing the response.
-		await new Promise((r) => setTimeout(r, 0));
 		resolveFetch(makeRes({ status: 200, body: '' }));
 		await expect(delPromise).resolves.toBe(a); // resolves with the detached record
 
@@ -807,6 +817,144 @@ describe('delete()', () => {
 		// the map no longer holds A at 't1'.
 		expect(store.findOne('todo', 't1')).toBe(b);
 		expect(b.text).toBe('B');
+	});
+});
+
+describe('save()/delete() — cross-verb write serialization (§22, D50)', () => {
+	// One chain per record covers BOTH verbs: a delete can no longer overtake an
+	// in-flight save (server orphan / silently-nothing-deleted), and a queued save
+	// can no longer resurrect a record that was removed while it waited.
+
+	// A fetch double that holds the first matching method open until the gate opens,
+	// so a later verb is provably queued rather than merely slower.
+	const gatedFetch = (gatedMethod, gatedResponse) => {
+		const gate = deferred();
+		const fn = vi.fn(async (_url, init) => {
+			if (init.method === gatedMethod) {
+				await gate.promise;
+				return makeRes(gatedResponse);
+			}
+			return makeRes({ status: 204, body: '' });
+		});
+		vi.stubGlobal('fetch', fn);
+		return { fetchSpy: fn, open: gate.resolve };
+	};
+
+	it('a delete() fired during a first save() DELETEs the SERVER-assigned id, not the client one', async () => {
+		const { fetchSpy, open } = gatedFetch('POST', {
+			body: { id: 'server-9', text: 'x', completed: false },
+		});
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 'temp-1', text: 'x' });
+
+		const savePromise = todo.save();
+		const deletePromise = todo.delete(); // same tick, behind the POST
+		open();
+
+		await expect(savePromise).resolves.toBe(todo);
+		await expect(deletePromise).resolves.toBe(todo);
+
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		expect(fetchSpy.mock.calls[0][1].method).toBe('POST');
+		expect(fetchSpy.mock.calls[1][1].method).toBe('DELETE');
+		// The URL proves the delete read the post-reconciliation pk: it was built
+		// AFTER the POST adopted 'server-9', so the created row is the row removed.
+		expect(fetchSpy.mock.calls[1][0]).toBe('https://x.test/v1/api/todos/server-9');
+		expect(store.findOne('todo', 'server-9')).toBeNull();
+		expect(store.findOne('todo', 'temp-1')).toBeNull();
+		expect(todo._deleted).toBe(true);
+	});
+
+	it('delete() on a never-synced record removes it locally with NO request', async () => {
+		const fetchSpy = mockFetch({ body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		const sub = { onStoreChange: vi.fn() };
+		store.withTracking(sub, () => store.findMany('todo'));
+
+		// The server has never seen this record, so there is nothing to DELETE — and a
+		// 4xx from a doomed request would strand it locally.
+		await expect(todo.delete()).resolves.toBe(todo);
+
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(store.findOne('todo', 't1')).toBeNull();
+		expect(todo._deleted).toBe(true);
+		store.flush();
+		expect(sub.onStoreChange).toHaveBeenCalled(); // removal notifies as usual
+	});
+
+	it('a queued save() whose record was removed out of band rejects instead of re-POSTing', async () => {
+		const { fetchSpy, open } = gatedFetch('POST', { body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		const first = todo.save();
+		const queued = todo.save();
+		await new Promise((r) => setTimeout(r, 0)); // the POST is dispatched and held
+		todo.destroy(); // local removal while the first POST is still in flight
+		open();
+
+		await expect(first).resolves.toBe(todo); // reconciliation skipped, resolves detached
+		// Same rejection a fresh save() on a removed record gives — the queued caller
+		// cannot tell whether it discovered the removal before or after it was queued.
+		await expect(queued).rejects.toThrow(/cannot save a deleted record/);
+		expect(fetchSpy).toHaveBeenCalledTimes(1); // the POST only; no resurrecting write
+		expect(store.findMany('todo')).toEqual([]);
+	});
+
+	it('save(); save(); delete() issues POST, PUT, DELETE in that order', async () => {
+		const { fetchSpy, open } = gatedFetch('POST', { body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		const first = todo.save();
+		const second = todo.save();
+		const deletePromise = todo.delete();
+		open();
+
+		await expect(first).resolves.toBe(todo);
+		await expect(second).resolves.toBe(todo); // ran while the record was still live
+		await expect(deletePromise).resolves.toBe(todo);
+
+		expect(fetchSpy.mock.calls.map((call) => call[1].method)).toEqual([
+			'POST',
+			'PUT',
+			'DELETE',
+		]);
+		expect(store.findMany('todo')).toEqual([]);
+	});
+
+	it('two concurrent delete()s issue exactly one DELETE and both resolve', async () => {
+		const fetchSpy = mockFetch({ body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		todo._synced = true; // server-known → delete() is a real request
+
+		const [a, b] = await Promise.all([todo.delete(), todo.delete()]);
+
+		expect(a).toBe(todo);
+		expect(b).toBe(todo); // idempotent: the queued one finds the record already gone
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(store.findMany('todo')).toEqual([]);
+	});
+
+	it('a queued delete() does not inherit the prior save()\'s rejection', async () => {
+		const fetchSpy = mockFetch(
+			{ ok: false, status: 500, statusText: 'Server Error', body: 'boom' }, // POST
+			{ body: '' }
+		);
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		const savePromise = todo.save();
+		const deletePromise = todo.delete();
+
+		await expect(savePromise).rejects.toMatchObject({ name: 'PuzzleAdapterError', status: 500 });
+		// Each caller observes only its own promise. The failed create also left the
+		// record server-unknown, so the delete is local-only.
+		await expect(deletePromise).resolves.toBe(todo);
+		expect(fetchSpy).toHaveBeenCalledTimes(1); // the failed POST only
+		expect(store.findMany('todo')).toEqual([]);
 	});
 });
 

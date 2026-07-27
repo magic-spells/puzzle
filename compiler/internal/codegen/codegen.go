@@ -265,6 +265,23 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	}
 	importLine := "import { " + strings.Join(imports, ", ") + " } from '@magic-spells/puzzle';"
 
+	// Reserved module-scope names: everything the import line above binds locally,
+	// plus one `__svg_N` per unique {#svg} asset in dedup mode. A <script> that
+	// binds one of these at module scope is a duplicate declaration in the emitted
+	// module, so it is a positioned compile error here rather than an esbuild error
+	// against the injected line (see checkReservedScriptBindings). The list is
+	// built from what THIS file emits — nothing is reserved unconditionally.
+	emitted := make([]string, 0, len(imports)+len(c.svgOrder))
+	for _, spec := range imports {
+		emitted = append(emitted, importLocalName(spec))
+	}
+	for _, src := range c.svgOrder {
+		emitted = append(emitted, c.svgIdent[src])
+	}
+	if err := checkReservedScriptBindings(sec.Scripts, emitted, opts.Filename, sec.ScriptsPos); err != nil {
+		return "", err
+	}
+
 	var b strings.Builder
 	// 1. user's <script>, byte-for-byte verbatim (or the synthesized module for
 	//    a scriptless .pzl).
@@ -282,7 +299,13 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	b.WriteString(className)
 	b.WriteString(".prototype.render = function () {\n")
 	b.WriteString("  const __d = this.getData();\n")
-	b.WriteString("  const __f = this.ctx.formatters.getAll();\n\n")
+	// The formatter registry is read only by a formatter chain, so the binding is
+	// emitted only when one was compiled (usesFormatters, set by applyFormatters).
+	// rootExpr and skelExpr are both fully built above, so the flag is final here.
+	if c.usesFormatters {
+		b.WriteString("  const __f = this.ctx.formatters.getAll();\n")
+	}
+	b.WriteString("\n")
 	b.WriteString("  return ")
 	b.WriteString(rootExpr)
 	b.WriteString(";\n};\n")
@@ -301,7 +324,10 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		b.WriteString(className)
 		b.WriteString(".prototype.renderSkeleton = function () {\n")
 		b.WriteString("  const __d = this.getData();\n")
-		b.WriteString("  const __f = this.ctx.formatters.getAll();\n\n")
+		if c.usesFormatters {
+			b.WriteString("  const __f = this.ctx.formatters.getAll();\n")
+		}
+		b.WriteString("\n")
 		b.WriteString("  return ")
 		b.WriteString(skelExpr)
 		b.WriteString(";\n};\n")
@@ -351,6 +377,15 @@ type compiler struct {
 	// package-root display helper. Static-only modules and modules whose dynamic
 	// values remain raw vnode attrs do not pay for an unused import.
 	usesDisplayValue bool
+
+	// Set when an emitted interpolation carries a non-empty formatter chain, which
+	// is the only thing that reads __f. It gates the `const __f =
+	// this.ctx.formatters.getAll()` line in BOTH render() and renderSkeleton() —
+	// module-wide, so a formatter in either body emits the line in both. A third
+	// tracker of the same signal is internal/plugin/scan.go collectFormatterCalls
+	// (the built-in tree-shaking allow-list); the two are kept in sync by
+	// plugin_test.go's built-in sync tests.
+	usesFormatters bool
 
 	// SVG-dedup emission state (v1.14 D46 amendment). svgDedup selects the
 	// import-a-shared-module strategy over inline; svgOrder/svgIdent accumulate the
@@ -1133,7 +1168,7 @@ func (c *compiler) emitMixed(parts []parser.Part, scope map[string]bool) string 
 		case *parser.StaticPart:
 			b.WriteString(tplEscape(pp.Text))
 		case *parser.InterpPart:
-			expr := applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
+			expr := c.applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
 			b.WriteString("${")
 			b.WriteString(c.displayValue(expr, pp.Interp.Expr))
 			b.WriteString("}")
@@ -1166,7 +1201,7 @@ func (c *compiler) branchToStr(parts []parser.Part, scope map[string]bool) strin
 		case *parser.StaticPart:
 			segs = append(segs, jsString(pp.Text))
 		case *parser.InterpPart:
-			expr := applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
+			expr := c.applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
 			segs = append(segs, c.displayValue(expr, pp.Interp.Expr))
 		case *parser.InlineIfPart:
 			cond := resolveExpr(pp.Cond, scope)
@@ -1241,7 +1276,7 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 			if startsWithObjectLiteral(t.Expr) {
 				return "", false, c.cgErr(t.Pos, objectLiteralMsg)
 			}
-			expr := applyFormatters(resolveExpr(t.Expr, scope), t.Formatters, scope)
+			expr := c.applyFormatters(resolveExpr(t.Expr, scope), t.Formatters, scope)
 			segs = append(segs, seg{js: c.displayValue(expr, t.Expr), static: false})
 		}
 	}
@@ -1281,7 +1316,15 @@ func (c *compiler) displayValue(expr, source string) string {
 // a pass-through formatter, so a typo'd formatter renders the raw value instead
 // of crashing the view. The name is passed as a JS string literal so the runtime
 // error can identify it. See DOC-SPEC §6.
-func applyFormatters(base string, fmts []parser.FormatterCall, scope map[string]bool) string {
+//
+// An empty chain returns base untouched and records nothing: c.usesFormatters
+// gates the `const __f` line, so only a real formatter call pays for the
+// registry read.
+func (c *compiler) applyFormatters(base string, fmts []parser.FormatterCall, scope map[string]bool) string {
+	if len(fmts) == 0 {
+		return base
+	}
+	c.usesFormatters = true
 	out := base
 	for _, fc := range fmts {
 		name := strconv.Quote(fc.Name)

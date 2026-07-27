@@ -260,6 +260,15 @@ const POLLUTION_SKIP = new Set(['__proto__', 'constructor', 'prototype']);
 // internals (`_store`/`_type`/`_synced`/`_deleted`).
 const MERGE_SKIP = new Set([...POLLUTION_SKIP, '_store', '_type', '_synced', '_deleted']);
 
+/**
+ * The one save-after-removal message. save() raises it at CALL time; the Store's
+ * _saveRecordNow raises the identical error when a save that was QUEUED behind
+ * another write discovers the removal only on reaching the front of the chain.
+ * Callers cannot tell those apart and must not have to, so the string lives here
+ * and the Store imports it. Not re-exported from index.js — internal, not API.
+ */
+export const DELETED_SAVE_MESSAGE = '[puzzle] cannot save a deleted record';
+
 // Per-record local-mutation state used by save-response reconciliation. Weak
 // storage keeps it off the deliberate record shape and releases it with the
 // record. Each update() advances the record revision once and stamps every field
@@ -564,7 +573,7 @@ export class PuzzleModel {
 	 */
 	save() {
 		if (this._deleted) {
-			return Promise.reject(new Error('[puzzle] cannot save a deleted record'));
+			return Promise.reject(new Error(DELETED_SAVE_MESSAGE));
 		}
 		if (!this._store) {
 			return Promise.reject(

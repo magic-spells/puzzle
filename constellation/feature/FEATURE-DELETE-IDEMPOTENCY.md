@@ -57,6 +57,11 @@ Set `_deleted = true` on the confirmed-delete ack path in `deleteRecord`
 `_store` unconditionally, checking `_deleted` before `_store` is exactly what makes
 the second call resolve instead of reject.
 
+Since [[DECISION-D132-CROSS-VERB-WRITE-CHAIN]] the same idempotency holds for
+CONCURRENT double deletes: both calls queue on the record's write chain,
+`_deleteRecordNow` re-checks `_deleted`/`_store` when its turn comes, and the
+second link resolves with no request — exactly one DELETE reaches the adapter.
+
 **Decision to make during implementation:** does `destroy()` (local-only removal,
 `model.js:454-457` → `removeRecord`) also set `_deleted`? Recommendation: set it in
 `removeRecord` itself, so `destroy()`-then-`delete()` resolves too — "this instance

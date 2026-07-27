@@ -11,7 +11,6 @@ import { ViewNode } from '@magic-spells/puzzle';
 
 InlineSvg.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'icons' }, [
     new ViewNode('span', { class: 'inline-block size-5' }, [
@@ -36,7 +35,6 @@ InlineSvg.__pzlModule = 'inline_svg.pzl';
 
 InlineSvg.prototype.renderSkeleton = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'icons' }, [
     new ViewNode('div', { class: 'animate-pulse' }, [
