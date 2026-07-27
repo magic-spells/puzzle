@@ -97,6 +97,46 @@ func TestExtractClassName(t *testing.T) {
 			scripts: "obj.export;\nexport default class Real extends PuzzleView {}",
 			want:    "Real",
 		},
+		{
+			// A comment is whitespace to the grammar: it must not break the
+			// export→default→class adjacency the scan tracks.
+			name:    "block comment between the keywords",
+			scripts: "export default /* why not */ class Foo extends PuzzleView {}",
+			want:    "Foo",
+		},
+		{
+			name:    "line comment between the keywords",
+			scripts: "export default // trailing note\nclass Foo extends PuzzleView {}",
+			want:    "Foo",
+		},
+		{
+			name:    "comment between export and default",
+			scripts: "export /* a */ default /* b */ class Foo extends PuzzleView {}",
+			want:    "Foo",
+		},
+		{
+			// TypeScript modifier between `default` and `class`.
+			name:    "abstract class declaration",
+			scripts: "export default abstract class Foo extends PuzzleView {}",
+			want:    "Foo",
+		},
+		{
+			name:    "abstract with comments around it",
+			scripts: "export default /* ts */ abstract // modifier\nclass Foo extends PuzzleView {}",
+			want:    "Foo",
+		},
+		{
+			// The guard on the comment exemption: a STRING still breaks adjacency,
+			// so a stringified declaration is not a declaration.
+			name:    "string between default and class is not a declaration",
+			scripts: `export default "class Foo {}";`,
+			wantErr: true,
+		},
+		{
+			name:    "whole declaration inside a string literal is not a declaration",
+			scripts: `const s = "export default class Foo extends PuzzleView {}";`,
+			wantErr: true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -187,12 +187,18 @@ func addPieces(w io.Writer, out *ui.Printer, dir, registry string, overwrite boo
 // When a config already exists it never rewrites the user's JS (D3): a config
 // that already declares Tailwind is a friendly no-op; otherwise the exact
 // snippet to add is printed as a manual step.
+//
+// Like `add piece`, the app root is the walk-up root, not the working
+// directory: running `puzzle add tailwind` from app/ used to write
+// app/puzzle.config.js, which the compiler never loads (it reads the project
+// root's config), so the command reported success and changed nothing.
 func addTailwind(w io.Writer, out *ui.Printer, dir string) error {
-	configPath := filepath.Join(dir, config.ConfigFileName)
+	root := tailwindRoot(dir)
+	configPath := filepath.Join(root, config.ConfigFileName)
 	info, statErr := os.Stat(configPath)
 	switch {
 	case statErr == nil && !info.IsDir():
-		return addTailwindExisting(w, out, dir)
+		return addTailwindExisting(w, out, root)
 	case statErr != nil && !os.IsNotExist(statErr):
 		return fmt.Errorf("checking for %s: %w", config.ConfigFileName, statErr)
 	}
@@ -204,7 +210,7 @@ func addTailwind(w io.Writer, out *ui.Printer, dir string) error {
 	fmt.Fprintf(w, "%s Wrote %s (Tailwind pipeline declared).\n",
 		out.Green("✓"), config.ConfigFileName)
 
-	rel, wrote, err := ensureTailwindStyles(dir)
+	rel, wrote, err := ensureTailwindStyles(root)
 	if err != nil {
 		return err
 	}
@@ -214,6 +220,23 @@ func addTailwind(w io.Writer, out *ui.Printer, dir string) error {
 
 	fmt.Fprintf(w, "\nNext, install the Tailwind CLI:\n\n  %s\n", out.Bold(npmInstallLine))
 	return nil
+}
+
+// tailwindRoot resolves the app root for `add tailwind` the way addPieces does:
+// walk up from dir for package.json / puzzle.config.js. Unlike `add piece` this
+// is best-effort — a directory with no project marker anywhere above it is not
+// an error, it is the bootstrap case (`puzzle add tailwind` in a bare directory
+// still writes the config where the user is standing).
+func tailwindRoot(dir string) string {
+	start, err := filepath.Abs(dir)
+	if err != nil {
+		return dir
+	}
+	root, err := generate.FindProjectRoot(start)
+	if err != nil {
+		return start
+	}
+	return root
 }
 
 // addTailwindExisting handles the "config already present" case: load it (D3 —

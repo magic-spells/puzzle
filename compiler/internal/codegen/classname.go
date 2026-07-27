@@ -78,13 +78,17 @@ func findDefaultClass(s string) (name string, hasExtends bool, found bool) {
 	for i < n {
 		c := s[i]
 		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
-			if isIdentStart(c) {
+			switch {
+			case isIdentStart(c):
 				tok := s[i:next]
 				switch {
 				case state == wantExport && tok == "export" && !prevWasDot:
 					state = wantDefault
 				case state == wantDefault && tok == "default":
 					state = wantClass
+				case state == wantClass && tok == "abstract":
+					// TypeScript `export default abstract class Foo {}` — the
+					// modifier sits between `default` and `class`; keep waiting.
 				case state == wantClass && tok == "class":
 					name, hasExtends := classDeclarationAfter(s, next)
 					return name, hasExtends, true
@@ -93,8 +97,14 @@ func findDefaultClass(s string) (name string, hasExtends bool, found bool) {
 				default:
 					state = wantExport
 				}
-			} else {
-				state = wantExport // string/comment/regex breaks adjacency
+			case isCommentStart(s, i):
+				// A comment is whitespace to the grammar: `export default /* x */
+				// class Foo {}` and `export default // c⏎class Foo {}` are real
+				// declarations, so a comment must NOT break keyword adjacency.
+				// Strings/regexes/templates still do — `export default "class"`
+				// is not a class declaration.
+			default:
+				state = wantExport // string/regex/template breaks adjacency
 			}
 			prevWasDot = false
 			prevEndsExpr = pee
@@ -109,6 +119,15 @@ func findDefaultClass(s string) (name string, hasExtends bool, found bool) {
 		i++
 	}
 	return "", false, false
+}
+
+// isCommentStart reports whether the unit LexSkip is about to consume at i is a
+// `//` or `/*` comment. LexSkip returns only (next, prevEndsExpr, consumed) — it
+// does not report the unit KIND — but its own comment cases are exactly these
+// two byte pairs, checked before the regex-literal case, so the same two-byte
+// look is an exact classification.
+func isCommentStart(s string, i int) bool {
+	return i+1 < len(s) && s[i] == '/' && (s[i+1] == '/' || s[i+1] == '*')
 }
 
 // classDeclarationAfter reads the class name following the `class` keyword and

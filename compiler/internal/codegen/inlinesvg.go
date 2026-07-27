@@ -122,6 +122,12 @@ func (c *compiler) resolveOneSVG(n *parser.InlineSVG, assetsDir string, inlined 
 	return &parser.Element{Tag: "svg", Attrs: attrs, RawInner: &seed, RawSrc: src, Pos: n.Pos}, nil
 }
 
+// ValidSVGPath is the exported form of validSVGPath, for callers outside this
+// package that resolve a {#svg} asset specifier against app/assets/ — the
+// esbuild plugin validates the virtual-module specifier with the SAME rule the
+// compile-time path uses, before it ever touches the filesystem.
+func ValidSVGPath(src string) bool { return validSVGPath(src) }
+
 // validSVGPath reports whether src is a plain, app/assets-relative forward-slash
 // path: not absolute, no "./"/"../" prefix, and a Clean that stays inside the
 // assets dir.
