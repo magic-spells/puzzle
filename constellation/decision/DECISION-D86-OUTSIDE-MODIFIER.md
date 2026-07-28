@@ -21,7 +21,8 @@ verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 A new generic event modifier: `@click:outside={ close }` (any event —
 `@pointerdown:outside`, `@focusin:outside`) attaches the listener to
 `document` in the **capture phase** and runs the handler only when the event
-target is **outside** the bound element (`el.contains(event.target)` bails).
+target is **outside** the bound element (the logical-containment gate bails on
+inside targets, portaled descendants included).
 The framework owns the document-listener cleanup on unmount. Cory's design;
 see [[DOC-SPEC-TEMPLATE]] §5 (modifier table) and §47.
 
@@ -53,15 +54,14 @@ semantics:**
   mid-event attaches its listener after document's capture phase already
   passed. (The Popover piece carries a comment block working around exactly
   this race.)
-- **Containment is LOGICAL since D144**: the gate is `portalAwareContains(el,
-  target)` — `el.contains(target)` first, and on failure a target physically
-  inside the portal outlet resolves to its owning portal's local placeholder
-  and re-tests there (iterating for nested portals), so content portaled by a
-  descendant of the bound element counts as inside. Zero cost with no live
-  portals ([[DECISION-D144-PORTAL]]).
-- **Containment via `el.contains(event.target)`**, the element being the one
-  carrying the binding — inside events bail before every other modifier step.
-  Canonical order becomes: outside-gate → key-gate → once-spend →
+- **Containment is LOGICAL**: the gate is `portalAwareContains(el, target)`,
+  the element being the one carrying the binding — `el.contains(target)`
+  first, and on failure a target physically inside the portal outlet resolves
+  to its owning portal's local placeholder and re-tests there (iterating for
+  nested portals), so content portaled by a descendant of the bound element
+  counts as inside. Zero cost with no live portals
+  ([[DECISION-D144-PORTAL]]). Inside events bail before every other modifier
+  step; canonical order is: outside-gate → key-gate → once-spend →
   `preventDefault` → `stopPropagation` → handler; a bailed event spends
   nothing.
 - **Framework-owned cleanup.** A document listener does not die with its

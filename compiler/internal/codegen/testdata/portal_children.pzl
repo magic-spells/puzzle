@@ -1,0 +1,11 @@
+<puzzle-view>
+  <Portal>
+    <Children/>
+  </Portal>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class PortalChildren extends PuzzleView {}
+</script>
