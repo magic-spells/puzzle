@@ -1,19 +1,21 @@
 package parser
 
 // slot.go — compile-time validation for the composition markers (named slots
-// v1.21/D53; capitalized, self-closing grammar v1.64/D134). See [[DOC-SPEC]]
-// §24 and [[DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS]].
+// v1.21/D53; capitalized grammar v1.64/D134; fallback bodies D141). See
+// [[DOC-SPEC]] §24 and [[DECISION-D141-MARKER-FALLBACK-BODIES]].
 //
 // Two reserved tags have three roles:
 //
-//   <Children/> — the DEFAULT marker (call-site content). No attributes or body.
+//   <Children>…fallback…</Children> — the DEFAULT marker (call-site content).
+//   It takes no attributes.
 //
-//   <Slot/> — the same unnamed marker used as the ROUTER OUTLET (D30).
+//   <Slot>…fallback…</Slot> — the same unnamed marker used as the ROUTER OUTLET
+//   (D30).
 //
-//   <Slot name="x"/> — a NAMED slot. `name` is static, non-empty, and
-//   per-template-unique; "default" and "children" are reserved and steer to
-//   <Children/>. Local shape checks run in slotMarkerFromAttrs; the per-body
-//   uniqueness check runs in validateSlots.
+//   <Slot name="x">…fallback…</Slot> — a NAMED slot. `name` is static,
+//   non-empty, and per-template-unique; "default" and "children" are reserved
+//   and steer to <Children/>. Local shape checks run in slotMarkerFromAttrs; the
+//   per-body uniqueness check runs in validateSlots.
 //
 //   Call site (<Card><h2 slot="header">…</h2></Card>): the parser's job is
 //   VALIDATION ONLY — a static `slot` attribute rides through codegen unchanged
@@ -24,9 +26,10 @@ package parser
 //   default-routing would misroute). Anywhere else `slot` is the ordinary HTML
 //   global attribute and passes through untouched.
 
-// childrenMarkerAttrs validates a <Children/>'s attributes (D134): the default
+// childrenMarkerAttrs validates a <Children>'s attributes: the default
 // marker takes NO attributes. A `ref` gets the D72-style render-target message;
-// any other attribute is the generic no-attributes error.
+// any other attribute is the generic no-attributes error. Fallback children are
+// handled by parseElement.
 func childrenMarkerAttrs(attrs []Attr, file string) *ParseError {
 	for _, a := range attrs {
 		if attrNameOf(a) == "ref" {
@@ -123,6 +126,12 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 				}
 				seen["default"] = node.Pos
 			}
+			if nested := nestedFallbackMarker(node.Children); nested != nil {
+				return errAt(file, nested.Pos, "a composition marker cannot appear inside another marker's fallback body (D141)")
+			}
+			if perr := walkSlots(node.Children, file, seen, inCallSite); perr != nil {
+				return perr
+			}
 		case *Element:
 			if perr := walkSlots(node.Children, file, seen, inCallSite); perr != nil {
 				return perr
@@ -159,6 +168,48 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 			}
 			if perr := walkSlots(node.Else, file, seen, inCallSite); perr != nil {
 				return perr
+			}
+		}
+	}
+	return nil
+}
+
+// nestedFallbackMarker returns the first marker anywhere inside a fallback
+// body. D141 deliberately rejects recursive marker expansion; the error belongs
+// to the inner marker, even when it is nested through elements, components, or
+// control-flow branches.
+func nestedFallbackMarker(nodes []Node) *Slot {
+	for _, n := range nodes {
+		switch node := n.(type) {
+		case *Slot:
+			return node
+		case *Element:
+			if found := nestedFallbackMarker(node.Children); found != nil {
+				return found
+			}
+		case *Component:
+			if found := nestedFallbackMarker(node.Children); found != nil {
+				return found
+			}
+		case *If:
+			if found := nestedFallbackMarker(node.Then); found != nil {
+				return found
+			}
+			if found := nestedFallbackMarker(node.Else); found != nil {
+				return found
+			}
+		case *For:
+			if found := nestedFallbackMarker(node.Body); found != nil {
+				return found
+			}
+		case *Case:
+			for _, clause := range node.Clauses {
+				if found := nestedFallbackMarker(clause.Body); found != nil {
+					return found
+				}
+			}
+			if found := nestedFallbackMarker(node.Else); found != nil {
+				return found
 			}
 		}
 	}

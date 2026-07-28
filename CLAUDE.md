@@ -175,9 +175,10 @@ run.
 - Navigation loads before commit. URL/title/history, mounted tree, route
   snapshot, and outgoing scroll save commit together. Failed or superseded
   pushes do not partially commit.
-- `<Children/>` is the component default marker, `<Slot name="x"/>` is named
-  composition, and `<Slot/>` is the router outlet. Markers are self-closing
-  only — no fallback bodies — and any lowercase `<slot>`/`<children>` is a
+- `<Children>` is the component default marker, `<Slot name="x">` is named
+  composition, and `<Slot>` is the router outlet. A marker is self-closing or
+  paired — a paired body is fallback content, rendered only when nothing fills
+  the position (D141) — and any lowercase `<slot>`/`<children>` is a
   positioned compile error steering to the capitalized form (D134).
 - DOM listeners are per-node and patch-managed. Component `@event` bindings
   are callback props, not custom DOM events; there is no `$emit`.

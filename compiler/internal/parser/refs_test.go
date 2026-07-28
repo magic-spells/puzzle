@@ -158,6 +158,11 @@ func TestParseRefErrors(t *testing.T) {
 			"not allowed inside a {#for}",
 		},
 		{
+			"ref inside for block in marker fallback",
+			`<puzzle-view><Children>{#for i in items}<span ref="x"></span>{/for}</Children></puzzle-view>` + "\n<script></script>",
+			"not allowed inside a {#for}",
+		},
+		{
 			"duplicate ref name",
 			`<puzzle-view><div ref="a"></div><span ref="a"></span></puzzle-view>` + "\n<script></script>",
 			`duplicate ref name "a"`,

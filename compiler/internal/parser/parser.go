@@ -347,7 +347,7 @@ func (p *parser) unclosedErr(ctx openCtx) *ParseError {
 }
 
 // parseElement parses an element, component, or composition marker
-// (<Children/>, <Slot/>, or <Slot name="x"/>) starting at the current
+// (<Children>, <Slot>, or <Slot name="x">) starting at the current
 // TokTagOpen.
 func (p *parser) parseElement() (Node, *ParseError) {
 	open := p.cur
@@ -361,9 +361,11 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		return nil, perr
 	}
 
-	// Composition markers (v1.64, D134) are reserved capitalized tags matched
-	// before component resolution. Every marker is self-closing; lowercase
-	// spellings are positioned steering errors in every form.
+	// Composition markers are reserved capitalized tags matched before component
+	// resolution. Lowercase spellings remain positioned steering errors (D134).
+	// Paired capitalized forms carry ordinary template children as fallback
+	// content (D141); self-closing forms have no fallback.
+	var slotName string
 	if name == "children" {
 		return nil, errAt(p.file, pos, "the default marker is spelled <Children/> since v1.64 (D134)")
 	}
@@ -376,20 +378,17 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)")
 	}
 	if name == "Children" || name == "Slot" {
-		if !selfClose {
-			return nil, errAt(p.file, pos, "composition markers are self-closing — fallback content is not supported (D134)")
-		}
 		if name == "Children" {
 			if perr := childrenMarkerAttrs(attrs, p.file); perr != nil {
 				return nil, perr
 			}
-			return &Slot{Pos: pos}, nil
+		} else {
+			var markerErr *ParseError
+			slotName, markerErr = slotMarkerFromAttrs(attrs, pos, p.file)
+			if markerErr != nil {
+				return nil, markerErr
+			}
 		}
-		slotName, perr := slotMarkerFromAttrs(attrs, pos, p.file)
-		if perr != nil {
-			return nil, perr
-		}
-		return &Slot{Name: slotName, Pos: pos}, nil
 	}
 
 	var children []Node
@@ -404,6 +403,12 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		}
 	}
 
+	if name == "Children" {
+		return &Slot{Children: children, Pos: pos}, nil
+	}
+	if name == "Slot" {
+		return &Slot{Name: slotName, Children: children, Pos: pos}, nil
+	}
 	if isCapitalized(name) {
 		return &Component{Name: name, Props: attrs, Children: children, Pos: pos}, nil
 	}

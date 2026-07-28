@@ -149,7 +149,7 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.textContent).toBe('Still readable');
 		expect(el.hasAttribute('data-puzzle-ssg')).toBe(true);
 		expect(error).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit:',
+			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
 			expect.any(Error)
 		);
 		error.mockRestore();
@@ -183,7 +183,7 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.querySelector('.fresh-layout')).toBeNull();
 		expect(el.hasAttribute('data-puzzle-ssg')).toBe(true);
 		expect(error).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit:',
+			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
 			expect.any(Error)
 		);
 		error.mockRestore();

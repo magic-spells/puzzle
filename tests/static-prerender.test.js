@@ -1,14 +1,17 @@
+// @vitest-environment jsdom
 // Static output mode (D81) — the prerender + shell-surgery half
 // (client-runtime/ssg/index.js `mode: 'static'`): per-page store snapshot capture,
 // __pzlModule stamp collection (+ the missing-stamp error), slug rules + collision
 // suffixing, static shell surgery (app.js tag stripped, data + entry scripts
 // injected, `</script>` in a record cannot break the JSON island, data-puzzle-static
-// marker), and the extended summary fields. Node env: prerender is DOM-free.
+// marker), and the extended summary fields. Prerender remains DOM-free; jsdom is
+// present only for the hybrid/static/live-router markup parity assertion.
 import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { prerender, prerenderToDir, injectStaticShell } from '../client-runtime/ssg/index.js';
+import { Router } from '../client-runtime/router/router.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
@@ -521,11 +524,42 @@ describe('static prerender router facade parity (D81, item B4)', () => {
 		expect(pages[0].html).toContain('>/</a>'); // current.path === '/', not 'NULL'
 	});
 
-	it('hybrid mode still uses the unstarted memory router — url() unprefixed, current null', async () => {
+	it('hybrid prerender router.current is the page snapshot while url() stays unprefixed', async () => {
 		const cfg = { target: '#app', routes: [{ path: '/', name: 'home', view: Linked }] };
 		const { pages } = await prerender(cfg); // hybrid default, history-mode
 		expect(pages[0].html).toContain('href="/next"');
-		expect(pages[0].html).toContain('>NULL</a>'); // memory router unstarted → current null
+		expect(pages[0].html).toContain('>/</a>'); // current.path === '/', not 'NULL'
+	});
+
+	it('hybrid, static, and a started live router render matching current-aware markup', async () => {
+		let liveView = null;
+		class ParityLinked extends Linked {
+			constructor(ctx) {
+				super(ctx);
+				liveView = this;
+			}
+		}
+		const routes = [{ path: '/', name: 'home', view: ParityLinked }];
+		const cfg = { target: '#app', routes };
+		const [{ pages: hybridPages }, { pages: staticPages }] = await Promise.all([
+			prerender(cfg),
+			prerender(cfg, { mode: 'static' }),
+		]);
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+		const router = new Router(routes, { mode: 'memory' });
+
+		try {
+			await router.start(target, { store: null, router, formatters: null });
+			// Navigation mounts before #commitState advances current. Re-render after
+			// start resolves to compare against the started router's public state.
+			await liveView.refresh();
+			expect(hybridPages[0].html).toBe(staticPages[0].html);
+			expect(hybridPages[0].html).toBe(target.innerHTML);
+		} finally {
+			router.stop();
+			target.remove();
+		}
 	});
 });
 

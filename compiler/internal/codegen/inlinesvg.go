@@ -32,8 +32,9 @@ const pathShapeMsg = `src must be a plain app/assets-relative path like "icons/h
 
 // resolveInlineSVG walks nodes in place, replacing every *parser.InlineSVG with a
 // resolved <svg> Element (RawInner set). It recurses through element/component
-// children, both {#if} branches (which also covers desugared {:else if} chains,
-// nested in Else), the {#for} body, and every {#case} clause body + Else. Each
+// children, marker fallbacks, both {#if} branches (which also covers desugared
+// {:else if} chains, nested in Else), the {#for} body, and every {#case} clause
+// body + Else. Each
 // resolved or attempted absolute file path is appended to *inlined. A validation,
 // missing-file, or malformed-svg failure returns a positioned error; *inlined
 // still holds whatever was recorded so far.
@@ -51,6 +52,10 @@ func (c *compiler) resolveInlineSVG(nodes []parser.Node, assetsDir string, inlin
 				return err
 			}
 		case *parser.Component:
+			if err := c.resolveInlineSVG(n.Children, assetsDir, inlined); err != nil {
+				return err
+			}
+		case *parser.Slot:
 			if err := c.resolveInlineSVG(n.Children, assetsDir, inlined); err != nil {
 				return err
 			}

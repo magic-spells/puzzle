@@ -60,10 +60,12 @@ Parser helpers enforce event/modifier grammar (generic modifiers: `prevent`,
 keyboard-only), static islands, literal inline SVG roots/paths, list
 identifiers/keys, and unique static refs.
 
-Composition grammar is current D134: `<Children/>` is the default marker,
-`<Slot/>` is the router outlet, and `<Slot name="x"/>` is a named marker.
+Composition grammar (D134/D141): `<Children>` is the default marker,
+`<Slot>` is the router outlet, and `<Slot name="x">` is a named marker.
 Both tag names are reserved before component resolution. Markers are
-self-closing only; lowercase `<children>`/`<slot>` and any marker body are
+self-closing (no fallback) or paired — the body is fallback content, parsed
+as ordinary template children, with a marker nested inside another marker's
+fallback a positioned compile error; lowercase `<children>`/`<slot>` are
 positioned steering errors. Slot names stay static, non-empty, reserved-name
 checked, and unique per template body. Call-site named fills must be direct
 static `slot="x"` children, while default forwarding may appear inside a

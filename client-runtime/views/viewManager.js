@@ -184,8 +184,9 @@ function stripSlotAttr(vnode) {
  * Replace slot markers anywhere in `vnode` against the partitioned `parts`. Only
  * nodes on the path to a marker are cloned; everything else is returned untouched
  * so DOM links survive. A named marker substitutes its named bucket; the bare
- * marker substitutes the default bucket. An unfilled marker contributes no
- * nodes (v1.64, D134). Content is already parent-expanded — spliced in as-is.
+ * marker substitutes the default bucket. When the selected bucket is empty, the
+ * marker's own children expand as fallback content (D141). Supplied content wins
+ * completely. Content is already parent-expanded — spliced in as-is.
  *
  * Component vnodes (v1.38, D71): the walk descends into a component's CALL-SITE
  * children — they are authored in THIS template, so this template's markers
@@ -236,6 +237,8 @@ function expandChildList(kids, parts) {
 			const bucket = name ? parts.named && parts.named[name] : parts.default;
 			if (bucket && bucket.length) {
 				for (const sc of bucket) out.push(sc);
+			} else {
+				for (const fb of k.children) out.push(expandNode(fb, parts));
 			}
 			continue;
 		}
@@ -381,7 +384,6 @@ function mountComponent(vnode, parent, ref, ctx) {
 				);
 			},
 			(err) => {
-				console.error('[puzzle] child mount failed:', err);
 				// A ROUTER-PRELOADED instance (`vnode.instance`, pinned by router.js) is not
 				// ours to tear down: the Router owns that lifetime, committed the view
 				// SYNCHRONOUSLY, and its own #observeMount logs a post-commit mount failure
@@ -390,7 +392,17 @@ function mountComponent(vnode, parent, ref, ctx) {
 				// pointing at a dead, unrefreshable view the Router knows nothing about — and
 				// would swap the committed markup for a comment behind its back. Log only;
 				// the instance and the vnode's links are left exactly as they are.
-				if (preloaded && !takeoverPreloaded) return;
+				if (preloaded && !takeoverPreloaded) {
+					console.error(
+						'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+						err
+					);
+					return;
+				}
+				console.error(
+					'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+					err
+				);
 				// The instance never reached a working mounted state (data()/render()/
 				// mounted() threw on the first mount). Left as-is, patchComponent would REUSE
 				// this dead instance on every later render without ever re-mounting it, so a

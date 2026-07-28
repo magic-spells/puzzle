@@ -578,12 +578,22 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 	case *parser.Component:
 		return c.emitElement(n.Name, n.Props, n.Children, ind, ind, true, scope)
 	case *parser.Slot:
-		// Bare/default marker keeps the minimal one-argument emission.
-		if n.Name == "" {
+		// Empty default markers keep the minimal one-argument emission.
+		if n.Name == "" && len(n.Children) == 0 {
 			return "new ViewNode(SLOT_TAG)", nil
 		}
-		// Named marker (v1.21/D53, respelled v1.64/D134).
-		return "new ViewNode(SLOT_TAG, { name: " + jsString(n.Name) + " })", nil
+		// A default marker with fallback emits `new ViewNode(SLOT_TAG, {},
+		// [fallback])` through the ordinary child-emission path (D141).
+		if n.Name == "" {
+			return c.emitElement("SLOT_TAG", nil, n.Children, ind, ind, false, scope)
+		}
+		// Named markers use the same path so their third argument carries fallback
+		// children. An empty paired body stays byte-equivalent to self-closing.
+		if len(n.Children) == 0 {
+			return "new ViewNode(SLOT_TAG, { name: " + jsString(n.Name) + " })", nil
+		}
+		nameAttr := []parser.Attr{&parser.StaticAttr{Name: "name", Value: n.Name}}
+		return c.emitElement("SLOT_TAG", nameAttr, n.Children, ind, ind, false, scope)
 	case *parser.If:
 		return c.emitIf(n, ind, scope)
 	case *parser.Case:

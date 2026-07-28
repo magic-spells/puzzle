@@ -66,12 +66,17 @@ mode FORCED to `'history'` regardless of `config.routerMode`
 files with no router, so a hash-shaped href is dead; a configured hash/memory
 mode gets a prerender warning, and `routerBase` still applies. **Hybrid**
 keeps a real *unstarted memory-mode* `Router` — the SPA takeover needs the
-compiled route table and a working `current`, and the instance cannot be wrapped
-in a delegating facade because `current` reads private fields. But a memory
-router returns paths **unprefixed**, so `url()` alone is shadowed with the app's
-real `routerMode`/`routerBase`; without that, a `routerBase: '/docs'` app
-prerendered `href="/about"` where the live router renders `/docs/about` — a link
-that 404s for crawlers, no-JS visitors, and anyone clicking before takeover.
+compiled route table, and the instance cannot be wrapped in a delegating facade
+because `current` reads private fields. Two instance properties are shadowed on
+it ([[DECISION-D142-HYBRID-ROUTE-SNAPSHOT]]): `url()` with the app's real
+`routerMode`/`routerBase` (a memory router returns paths unprefixed, so a
+`routerBase: '/docs'` app would otherwise prerender `href="/about"` where the
+live router renders `/docs/about` — a 404 for crawlers, no-JS visitors, and
+anyone clicking before takeover), and `current` with the page's frozen route
+snapshot (the same `makeRouteSnapshot` static mode threads into its stub), so
+route-aware markup — active-nav classes, `current.params` reads — prerenders in
+the same state the live router renders. The takeover replaces the instance, so
+neither shadow outlives the prerender.
 
 All three call sites (`Router.url`, the stub, the hybrid shadow) run the single
 `encodeURL(path, mode, base)` exported from `router/router.js`, which also owns

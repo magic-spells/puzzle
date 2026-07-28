@@ -673,6 +673,36 @@ export default class Home extends PuzzleView {}
 	}
 }
 
+// Marker fallbacks compile through the same child-emission path as element
+// bodies (D141), so build-wide formatter and feature scans must descend into
+// them. Missing either result would silently omit the formatter or flip module.
+func TestScanUsageCoversMarkerFallbacks(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/views/Home.pzl": `<puzzle-view>
+  <Children>
+    <p>{ amount | round }</p>
+    <div flip>row</div>
+  </Children>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`,
+	})
+
+	usage, err := ScanUsage(root)
+	if err != nil {
+		t.Fatalf("ScanUsage: %v", err)
+	}
+	if !usage.Formatters["round"] {
+		t.Errorf("scanner missed formatter used in marker fallback: %#v", usage.Formatters)
+	}
+	if !usage.HasFlip {
+		t.Error("scanner missed flip used in marker fallback")
+	}
+}
+
 // A builtin formatter used ONLY inside a <puzzle-skeleton> section is emitted by
 // codegen's renderSkeleton() but was never seeded by the scan (which parsed only
 // the template body) — so the runtime logged `unknown formatter` and showed the

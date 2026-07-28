@@ -14,7 +14,7 @@ package parser
 //     attribute's mere presence, so island="false" silently freezes anyway.
 //  2. island on a component tag — it is not a prop; put it on a plain element
 //     inside the component.
-//  3. a component tag or a composition marker (<Children/>/<Slot/>)
+//  3. a component tag or a composition marker (<Children>/<Slot>)
 //     anywhere inside an island subtree — a live instance in browser-owned DOM
 //     can be destroyed out from under the framework; a marker would splice
 //     parent-owned nodes into an unreconciled subtree.
@@ -64,6 +64,12 @@ func walkIslands(nodes []Node, file string) *ParseError {
 					return errAt(file, attrPos(a), "island is not a component prop — put it on a plain element inside <%s>", node.Name)
 				}
 			}
+			if perr := walkIslands(node.Children, file); perr != nil {
+				return perr
+			}
+		case *Slot:
+			// A marker fallback is ordinary template content (D141), so island
+			// validation applies inside it exactly as it does inside an element.
 			if perr := walkIslands(node.Children, file); perr != nil {
 				return perr
 			}

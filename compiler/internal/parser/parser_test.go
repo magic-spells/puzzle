@@ -1011,18 +1011,25 @@ func TestParseComponentAndSlot(t *testing.T) {
 	})
 }
 
-// TestParseCompositionMarkersD134 covers the v1.64 marker grammar: capitalized
-// self-closing markers only, with Slot's role split by the static name attr.
-func TestParseCompositionMarkersD134(t *testing.T) {
+// TestParseCompositionMarkersD141 covers the capitalized marker grammar:
+// self-closing or paired-with-fallback forms, with Slot's role split by the
+// static name attr. Lowercase D134 spellings stay retired.
+func TestParseCompositionMarkersD141(t *testing.T) {
 	t.Run("happy paths", func(t *testing.T) {
 		cases := []struct {
-			name     string
-			src      string
-			slotName string
+			name          string
+			src           string
+			slotName      string
+			fallbackNodes int
 		}{
-			{"Children default marker", "<Children/>", ""},
-			{"Slot bare outlet", "<Slot/>", ""},
-			{"Slot named marker", `<Slot name="header"/>`, "header"},
+			{"Children default marker", "<Children/>", "", 0},
+			{"Children fallback", "<Children><p>Default</p></Children>", "", 1},
+			{"Children empty paired body", "<Children></Children>", "", 0},
+			{"Slot bare outlet", "<Slot/>", "", 0},
+			{"Slot outlet fallback", "<Slot>{#if show}<p>Empty</p>{/if}</Slot>", "", 1},
+			{"Slot named marker", `<Slot name="header"/>`, "header", 0},
+			{"Slot named fallback", `<Slot name="header"><h2>Untitled</h2></Slot>`, "header", 1},
+			{"Slot named empty paired body", `<Slot name="header"></Slot>`, "header", 0},
 		}
 		for _, c := range cases {
 			t.Run(c.name, func(t *testing.T) {
@@ -1033,6 +1040,9 @@ func TestParseCompositionMarkersD134(t *testing.T) {
 				}
 				if s.Name != c.slotName {
 					t.Fatalf("slot name: got %q, want %q", s.Name, c.slotName)
+				}
+				if got := len(elementChildren(s.Children)); got != c.fallbackNodes {
+					t.Fatalf("fallback nodes: got %d, want %d", got, c.fallbackNodes)
 				}
 			})
 		}
@@ -1078,26 +1088,6 @@ func TestParseCompositionMarkersD134(t *testing.T) {
 			name:        "lowercase dynamic named slot is retired",
 			src:         `<puzzle-view><slot name={ target }/></puzzle-view>` + "\n<script></script>",
 			wantMessage: `named slots are spelled <Slot name="…"/> since v1.64 (D134)`,
-		},
-		{
-			name:        "Children empty paired form is rejected",
-			src:         `<puzzle-view><Children></Children></puzzle-view>` + "\n<script></script>",
-			wantMessage: "composition markers are self-closing — fallback content is not supported (D134)",
-		},
-		{
-			name:        "Children fallback body is rejected",
-			src:         `<puzzle-view><Children>fallback</Children></puzzle-view>` + "\n<script></script>",
-			wantMessage: "composition markers are self-closing — fallback content is not supported (D134)",
-		},
-		{
-			name:        "Slot outlet fallback body is rejected",
-			src:         `<puzzle-view><Slot>fallback</Slot></puzzle-view>` + "\n<script></script>",
-			wantMessage: "composition markers are self-closing — fallback content is not supported (D134)",
-		},
-		{
-			name:        "named Slot empty paired form is rejected",
-			src:         `<puzzle-view><Slot name="x"></Slot></puzzle-view>` + "\n<script></script>",
-			wantMessage: "composition markers are self-closing — fallback content is not supported (D134)",
 		},
 		{
 			name:        "class attribute on Children marker",
@@ -1178,6 +1168,25 @@ func TestParseCompositionMarkersD134(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("nested marker in fallback is positioned at the inner marker", func(t *testing.T) {
+		src := `<puzzle-view><Children><div><Slot name="inner"/></div></Children></puzzle-view>` + "\n<script></script>"
+		_, err := Parse([]byte(src), "test.pzl")
+		if err == nil {
+			t.Fatal("expected a nested-marker error")
+		}
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Fatalf("expected positioned *ParseError, got %T (%v)", err, err)
+		}
+		if pe.Message != "a composition marker cannot appear inside another marker's fallback body (D141)" {
+			t.Fatalf("message = %q", pe.Message)
+		}
+		wantCol := strings.Index(src, `<Slot name="inner"/>`) + 1
+		if pe.Line != 1 || pe.Col != wantCol {
+			t.Fatalf("position = %d:%d, want 1:%d at inner marker", pe.Line, pe.Col, wantCol)
+		}
+	})
 }
 
 // TestParseNamedSlotErrors keeps the D53 shape and uniqueness errors pinned on
@@ -1820,6 +1829,11 @@ func TestParseIslandErrors(t *testing.T) {
 			name:       "named slot inside island subtree",
 			src:        `<puzzle-view><div island><Slot name="x"/></div></puzzle-view>` + "\n<script></script>",
 			wantSubstr: `a composition marker (<Children/>/<Slot/>/<Slot name="…"/>) cannot appear inside an island element`,
+		},
+		{
+			name:       "dynamic island inside marker fallback",
+			src:        `<puzzle-view><Slot name="x"><div island={ on }>x</div></Slot></puzzle-view>` + "\n<script></script>",
+			wantSubstr: "island must be a static attribute",
 		},
 		{
 			name:       "island on puzzle-view root",

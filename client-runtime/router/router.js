@@ -1856,15 +1856,17 @@ export class Router {
 	 * destroys it normally. On navigation-zero SSG takeover, restoreTakeover puts
 	 * the exact prerendered nodes + marker back before logging — the committed
 	 * failed instance remains router-owned, but the user never gets a blank page.
-	 * (Child views mounted through the ViewManager's keyed
-	 * patch are already observed there — '[puzzle] child mount failed:'; this covers
-	 * the three mounts the router drives directly: bare root view, layout swap,
-	 * initial-nav layout.)
+	 * (Child views mounted through the ViewManager's keyed patch are already observed
+	 * there; this covers the three mounts the router drives directly: bare root view,
+	 * layout swap, initial-nav layout.)
 	 */
 	#observeMount(p, restoreTakeover = null) {
 		Promise.resolve(p).catch((err) => {
 			restoreTakeover?.();
-			console.error('[puzzle] view mount failed after commit:', err);
+			console.error(
+				'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+				err
+			);
 		});
 	}
 

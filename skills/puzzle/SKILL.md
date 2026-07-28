@@ -101,8 +101,10 @@ Rules that bite:
   default children render; `<Slot name="x"/>` declares a named region (the
   caller routes a direct child in with a static `slot="x"` attribute);
   `<Slot/>` is the ROUTER outlet where a child route or routed view renders.
-  Markers are self-closing only; lowercase `<children>`/`<slot>` are compile
-  errors.
+  A marker is self-closing, or paired with a fallback body that renders only
+  when nothing fills it (`<Slot name="trigger"><b>Open</b></Slot>`) — supplied
+  content replaces the fallback entirely. Lowercase `<children>`/`<slot>` are
+  compile errors.
 - **`island` freezes children.** An element with the `island` attribute keeps
   its children untouched by patching after mount (for third-party DOM widgets);
   the element's own attrs/listeners still patch. Components, slots, and view

@@ -155,7 +155,10 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(el.firstElementChild).toBe(prerendered);
 		expect(el.textContent).toBe('Still readable');
 		expect(el.hasAttribute('data-puzzle-static')).toBe(true);
-		expect(error).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(error).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and the prerendered content restored (static pages have no later patch/remount):',
+			expect.any(Error)
+		);
 		error.mockRestore();
 	});
 
@@ -186,7 +189,10 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(el.firstElementChild).toBe(prerendered);
 		expect(el.textContent).toBe('Still readable');
 		expect(el.hasAttribute('data-puzzle-static')).toBe(true);
-		expect(error).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(error).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and the prerendered content restored (static pages have no later patch/remount):',
+			expect.any(Error)
+		);
 		error.mockRestore();
 	});
 

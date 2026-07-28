@@ -4,14 +4,14 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 
 // Hand-written stand-ins for what the compiler emits for named slots (SPEC §24,
-// D134): a named marker is `new ViewNode(SLOT_TAG, { name })`, a bare default
-// marker is `new ViewNode(SLOT_TAG)`, and a call-site child routed to a region
-// carries a static `slot` attr the ViewManager partitions + strips.
+// D141): a named marker is `new ViewNode(SLOT_TAG, { name }, [fallback…])`, a
+// bare default marker is `new ViewNode(SLOT_TAG)`, and a call-site child routed
+// to a region carries a static `slot` attr the ViewManager partitions + strips.
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, props = {}, children = []) => new ViewNode(Class, props, children);
 const slot = () => new ViewNode(SLOT_TAG);
-const namedSlot = (name) => new ViewNode(SLOT_TAG, { name });
+const namedSlot = (name, fallback = []) => new ViewNode(SLOT_TAG, { name }, fallback);
 
 const container = () => {
 	const el = document.createElement('div');
@@ -78,7 +78,7 @@ describe('named slots — routing (D53)', () => {
 	});
 });
 
-describe('named slots — unfilled markers render nothing (D134)', () => {
+describe('named slots — unfilled markers (D141)', () => {
 	it('inserts and removes a later fill without fallback content', async () => {
 		class Host extends PuzzleView {
 			created() {
@@ -130,18 +130,18 @@ describe('named slots — unfilled markers render nothing (D134)', () => {
 		expect(el.querySelector('.card footer').textContent).toBe('');
 	});
 
-	it('ignores legacy marker children instead of treating them as fallback', async () => {
-		class LegacyMarker extends PuzzleView {
+	it('renders marker children as fallback', async () => {
+		class FallbackMarker extends PuzzleView {
 			render() {
-				return h('div', { class: 'legacy' }, [
-					new ViewNode(SLOT_TAG, { name: 'missing' }, [text('legacy fallback')]),
+				return h('div', { class: 'fallback' }, [
+					new ViewNode(SLOT_TAG, { name: 'missing' }, [text('fallback')]),
 				]);
 			}
 		}
 		const el = container();
-		await new LegacyMarker().mount(el);
+		await new FallbackMarker().mount(el);
 
-		expect(el.querySelector('.legacy').textContent).toBe('');
+		expect(el.querySelector('.fallback').textContent).toBe('fallback');
 	});
 });
 
