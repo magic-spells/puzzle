@@ -192,8 +192,8 @@ of step with `MANAGED_TAGS`), and two were **fail-soft paths that were not**
 (Store hydration escaping the constructor, an enter-hook throw reaching the
 mount-failure recovery).
 
-Identified and **not** scheduled, roughly by value: error boundaries + an app
-`onError` hook; dynamic
+Identified and **not** scheduled, roughly by value (error boundaries + the app
+`onError` hook shipped in 0.5.0 — [[DECISION-D145-ERROR-BOUNDARIES]]): dynamic
 components (`<component is={}>`); `<KeepAlive>`-style view-state retention on
 back-navigation; two-way `bind` sugar plus a schema-derived forms helper;
 `<svelte:window>`-style global event bindings; per-subtree provide/inject;

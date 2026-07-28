@@ -248,6 +248,15 @@ second specification. Decision cards hold rationale and git holds chronology.
   from the running binary with no registry check (D99).
 - `pzlc` is the internal/test-facing single-file compiler.
 
+## Error handling (D145)
+
+`new PuzzleApp({ onError(error, { phase, view, route }) })` receives every
+framework-contained error (mount, refresh, navigation, transition/leave,
+boundary); unregistered → the original `console.error` per catch site. A view's
+script-side `errorContent(error)` renders fallback UI in place of the
+failed-mount placeholder; nearest boundary wins, null declines outward, owner
+`refresh()` retries. Event handlers and formatters surface uncaught.
+
 ## Deliberately not shipped
 
 No SSR server, hydration, lazy route/code splitting,

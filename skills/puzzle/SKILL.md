@@ -112,6 +112,11 @@ Rules that bite:
   portaled content as inside its logical owner. Portals emit nothing in
   prerendered HTML (content appears at takeover). For focus-trapped modals,
   prefer native `<dialog>.showModal()` via a ref.
+- **Error handling.** `new PuzzleApp({ onError(error, { phase, view, route }) })`
+  hears every framework-contained failure (mount, refresh, navigation);
+  a view's script-side `errorContent(error)` renders fallback UI where the view
+  failed to mount — nearest boundary wins, return null to decline outward, and
+  the owner's `refresh()` retries. Event handlers and formatters stay uncaught.
 - **`island` freezes children.** An element with the `island` attribute keeps
   its children untouched by patching after mount (for third-party DOM widgets);
   the element's own attrs/listeners still patch. Components, slots, and view
