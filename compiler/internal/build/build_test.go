@@ -2,10 +2,12 @@ package build
 
 import (
 	"encoding/json"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -983,6 +985,96 @@ func TestSwapOutput(t *testing.T) {
 		}
 		assertNoOldResidue(t, root)
 	})
+
+	// The swap itself is what the build depends on; deleting the previous tree is
+	// housekeeping AFTER it succeeded. A failure there used to be returned, so a
+	// build with a correct, complete dist/ was reported as failed.
+	t.Run("old-tree cleanup failure warns and the build still succeeds", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("directory permissions do not block removal on Windows")
+		}
+		if os.Geteuid() == 0 {
+			t.Skip("running as root: directory permissions don't prevent removal")
+		}
+		root := t.TempDir()
+		dist := filepath.Join(root, "dist")
+		staging := filepath.Join(root, ".dist-staging-test")
+		locked := filepath.Join(dist, "locked")
+		if err := os.MkdirAll(locked, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(locked, "pinned.txt"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(staging, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(staging, "app.js"), []byte("new"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// A read-only directory inside the PREVIOUS dist: renaming the tree aside
+		// still works (its parent grants that), but the RemoveAll afterwards cannot
+		// unlink the file it holds.
+		if err := os.Chmod(locked, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+				if err == nil && d.IsDir() {
+					_ = os.Chmod(path, 0o755)
+				}
+				return nil
+			})
+		})
+
+		var swapErr error
+		stderr := captureStderr(t, func() { swapErr = swapOutput(staging, dist) })
+		if swapErr != nil {
+			t.Fatalf("swapOutput reported a failure for a build that succeeded: %v", swapErr)
+		}
+		if got, err := os.ReadFile(filepath.Join(dist, "app.js")); err != nil || string(got) != "new" {
+			t.Errorf("dist/app.js = %q, err=%v — the new build must be in place", got, err)
+		}
+		if !strings.Contains(stderr, "previous dist") {
+			t.Errorf("expected a warning naming the leftover dist, got: %q", stderr)
+		}
+		// The undeletable tree is left behind on purpose — it is named in the warning.
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var leftovers int
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), "dist.old-") {
+				leftovers++
+			}
+		}
+		if leftovers != 1 {
+			t.Errorf("expected the undeletable previous dist to remain, found %d", leftovers)
+		}
+	})
+}
+
+// captureStderr runs fn with os.Stderr redirected and returns what it wrote.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+	fn()
+	os.Stderr = orig
+	_ = w.Close()
+	out := <-done
+	_ = r.Close()
+	return out
 }
 
 // TestBuildFailedCompileLeavesDistIntact proves the staging-then-swap fix: a

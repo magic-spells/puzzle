@@ -4,9 +4,11 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
+import { installFakeAnimate } from './helpers/fake-waapi.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
+const comp = (Class, attrs = {}, children = []) => new ViewNode(Class, attrs, children);
 
 class Todo extends PuzzleModel {
 	static schema = {
@@ -165,6 +167,105 @@ describe('PuzzleView — lifecycle', () => {
 		expect(mountedSpy).toHaveBeenCalledTimes(1);
 		expect(mountedEl).toBeInstanceOf(Element);
 		expect(mountedEl.textContent).toBe('fresh');
+	});
+
+	it('a nested superseded async mount enters only after mounted(), on the real root', async () => {
+		const waapi = installFakeAnimate();
+		const deferred = () => {
+			let resolve;
+			const promise = new Promise((r) => {
+				resolve = r;
+			});
+			return { promise, resolve };
+		};
+		const gates = { one: deferred(), two: deferred() };
+		const order = [];
+		const mounted = vi.fn((el) => order.push(['mounted', el]));
+		const willShow = vi.fn((el) => order.push(['viewWillShow', el]));
+		const didShow = vi.fn((el) => order.push(['viewDidShow', el]));
+		const instances = [];
+
+		class Child extends PuzzleView {
+			animations = {
+				in: {
+					from: { opacity: 0 },
+					to: { opacity: 1 },
+					duration: 100,
+				},
+			};
+			constructor(...args) {
+				super(...args);
+				instances.push(this);
+			}
+			async data(params, props) {
+				const value = await gates[props.which].promise;
+				return { value };
+			}
+			mounted() {
+				mounted(this.element);
+			}
+			viewWillShow() {
+				willShow(this.element);
+			}
+			viewDidShow() {
+				didShow(this.element);
+			}
+			render() {
+				return h('span', { class: 'async-child' }, [text(this.getData().value)]);
+			}
+		}
+		class Host extends PuzzleView {
+			created() {
+				this.setData('which', 'one');
+			}
+			render() {
+				return h('section', {}, [comp(Child, { which: this.getData().which })]);
+			}
+		}
+
+		try {
+			const el = container();
+			const host = await new Host().mount(el);
+			host.setData('which', 'two');
+			host.flushUpdates();
+
+			gates.one.resolve('stale');
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(order).toEqual([]);
+			expect(waapi.animations).toHaveLength(0);
+
+			gates.two.resolve('fresh');
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+
+			const root = el.querySelector('.async-child');
+			expect(root.textContent).toBe('fresh');
+			expect(order).toEqual([
+				['mounted', root],
+				['viewWillShow', root],
+			]);
+			expect(mounted).toHaveBeenCalledTimes(1);
+			expect(willShow).toHaveBeenCalledTimes(1);
+			expect(didShow).not.toHaveBeenCalled();
+			expect(waapi.animations).toHaveLength(1);
+			expect(waapi.animations[0].target).toBe(root);
+			expect(instances).toHaveLength(1);
+
+			waapi.finishAll();
+			await Promise.resolve();
+			await Promise.resolve();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(order).toEqual([
+				['mounted', root],
+				['viewWillShow', root],
+				['viewDidShow', root],
+			]);
+		} finally {
+			waapi.uninstall();
+		}
 	});
 
 	it('destroy() during async data() suppresses mounted() but still fires destroyed()', async () => {

@@ -16,7 +16,7 @@
  * - setData() → re-render only, data() does NOT re-run
  */
 
-import { ViewManager } from './viewManager.js';
+import { ViewManager, plantFailedMountPlaceholder } from './viewManager.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
@@ -79,6 +79,10 @@ export class PuzzleView {
 	// #completeMount() is then deferred to the first #commit that DOES render, so
 	// mounted() never fires against the comment anchor. Cleared when it fires.
 	#pendingMountHook = false;
+	// ViewManager may request the one-shot enter after mount() resolves through
+	// the anchor-race branch above. Keep that request pending until the landing
+	// commit completes mounted() against the real root.
+	#enterPending = false;
 	#destroyed = false;
 	#updateScheduled = false;
 	#runToken = 0;
@@ -145,6 +149,7 @@ export class PuzzleView {
 	 * beats the model; a data() commit beats an earlier setData).
 	 */
 	setData(key, value) {
+		if (this.#destroyed || this.#leaving) return;
 		if (typeof key === 'object' && key !== null) {
 			Object.assign(this.#local, key);
 			Object.assign(this.#data, key);
@@ -330,7 +335,7 @@ export class PuzzleView {
 	 *
 	 * A parent's ViewManager also calls this to mount a child component
 	 * (constellation/doc/DOC-APP-ANATOMY.md §4): `children` is the slot content captured at the
-	 * call site (rendered at the child's `<children/>`) and `ref` is the DOM node
+	 * call site (rendered at the child's `<Children/>`) and `ref` is the DOM node
 	 * to insert before. The anchor placeholder reserves the position
 	 * synchronously so an async data() does not strand the parent's insertion
 	 * refs.
@@ -448,7 +453,7 @@ export class PuzzleView {
 	 * content swap alone re-renders without re-running data().
 	 */
 	applyParentUpdate({ props, children }) {
-		if (this.#destroyed) return;
+		if (this.#destroyed || this.#leaving) return;
 		const hadSlots = this.#children.length > 0;
 		if (children !== undefined) {
 			this.#children = children;
@@ -464,10 +469,16 @@ export class PuzzleView {
 			// when destroyed) — hence the optional chain.
 			try {
 				this.refresh({ props })?.catch((err) =>
-					console.error('[puzzle] data() failed during a parent prop update:', err)
+					this.#handleBackgroundRefreshFailure(
+						'[puzzle] data() failed during a parent prop update:',
+						err
+					)
 				);
 			} catch (err) {
-				console.error('[puzzle] data() failed during a parent prop update:', err);
+				this.#handleBackgroundRefreshFailure(
+					'[puzzle] data() failed during a parent prop update:',
+					err
+				);
 			}
 		} else if (this.#mounted && (hadSlots || this.#children.length > 0)) {
 			// The #mounted gate: a slot-only re-render must NEVER run the real
@@ -496,7 +507,7 @@ export class PuzzleView {
 	 * supersedes an in-flight async one (stale results are discarded).
 	 */
 	refresh({ params, props, route } = {}) {
-		if (this.#destroyed) return;
+		if (this.#destroyed || this.#leaving) return;
 		if (params) this.#params = params;
 		if (props) this.#props = props;
 		if (route !== undefined) this.#route = route;
@@ -533,6 +544,7 @@ export class PuzzleView {
 
 	/** Store subscription callback (Store.flush → subscribed components). */
 	onStoreChange() {
+		if (this.#destroyed || this.#leaving) return;
 		// Fire-and-forget: a data() failure on the store-change path is logged
 		// rather than escaping into Store.flush() (where an uncaught throw would
 		// abort delivery to every later subscriber). A rejecting ASYNC data() comes
@@ -547,11 +559,36 @@ export class PuzzleView {
 				devperfMarkCause(this, 'store');
 			}
 			this.refresh()?.catch((err) =>
-				console.error('[puzzle] data() failed during a store-change refresh:', err)
+				this.#handleBackgroundRefreshFailure(
+					'[puzzle] data() failed during a store-change refresh:',
+					err
+				)
 			);
 		} catch (err) {
-			console.error('[puzzle] data() failed during a store-change refresh:', err);
+			this.#handleBackgroundRefreshFailure(
+				'[puzzle] data() failed during a store-change refresh:',
+				err
+			);
 		}
+	}
+
+	/**
+	 * Contain a fire-and-forget refresh failure. Normally logging is enough, but
+	 * an anchor-race mount whose superseding first render failed can never reach
+	 * #completeMount(). Recover through the same instance-owned placeholder
+	 * contract mountComponent uses so the next parent patch creates a fresh view.
+	 *
+	 * Router-preloaded views never set #pendingMountHook: preload() resolves before
+	 * their synchronous mount, so Router ownership remains untouched.
+	 */
+	#handleBackgroundRefreshFailure(message, err) {
+		console.error(message, err);
+		if (!this.#pendingMountHook || this.#destroyed) return;
+		this.#pendingMountHook = false;
+		this.#enterPending = false;
+		const placeholder = plantFailedMountPlaceholder(this);
+		this.destroy();
+		if (placeholder) this.__failedPlaceholder = placeholder;
 	}
 
 	/**
@@ -670,6 +707,10 @@ export class PuzzleView {
 	 */
 	async playIn() {
 		if (this.#destroyed || this.#playedIn) return;
+		if (this.#pendingMountHook) {
+			this.#enterPending = true;
+			return;
+		}
 		this.#playedIn = true;
 		const spec = this.animations?.in;
 		if (this.#useVisibleTrigger(spec)) {
@@ -930,6 +971,7 @@ export class PuzzleView {
 	 * the ViewManager's auto-chained slot-child playIn() therefore does nothing.
 	 */
 	skipEnter() {
+		this.#enterPending = false;
 		this.#playedIn = true;
 	}
 
@@ -944,10 +986,20 @@ export class PuzzleView {
 	 */
 	playOut() {
 		if (this.#leaving) return this.#leaving;
+		let resolveLeaving;
+		let rejectLeaving;
+		this.#leaving = new Promise((resolve, reject) => {
+			resolveLeaving = resolve;
+			rejectLeaving = reject;
+		});
+		// Leaving views become inert immediately. Store.flush() snapshots its
+		// subscribers, so the method guards cover an already-snapshotted delivery;
+		// unsubscribing here prevents every later one. destroy() repeats this safely.
+		this.ctx.store?.unsubscribe(this);
 		// A new leave replaces any retained, finished out effect from an earlier
 		// run instead of accumulating another fill on the same root.
 		this._cancelOutAnimation();
-		this.#leaving = (async () => {
+		const leavingTask = (async () => {
 			if (this.#destroyed) return;
 			// A held visible-trigger enter (D73) on this element must be unwound before
 			// the out animation runs on the same element — cancel the hold, proceed.
@@ -978,6 +1030,7 @@ export class PuzzleView {
 			if (this.#destroyed) return; // interrupted by destroy() — order preserved by it
 			this.viewDidHide();
 		})();
+		leavingTask.then(resolveLeaving, rejectLeaving);
 		return this.#leaving;
 	}
 
@@ -1095,6 +1148,12 @@ export class PuzzleView {
 		if (this.#pendingMountHook) {
 			this.#pendingMountHook = false;
 			this.#completeMount();
+			if (this.#enterPending) {
+				this.#enterPending = false;
+				Promise.resolve(this.playIn()).catch((err) =>
+					console.error('[puzzle] child enter animation failed:', err)
+				);
+			}
 		}
 	}
 

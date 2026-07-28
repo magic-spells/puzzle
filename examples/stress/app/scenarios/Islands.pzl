@@ -63,7 +63,7 @@ import { afterPaint, intParam, ms1, perfDelta, perfSnapshot, settleFrames, viewR
 // boundary to mean anything at all.
 //
 // No components live inside an island here, and none may: the compiler rejects a
-// component, <children/> or <slot> anywhere in an island subtree. The 20,000
+// component, <Children/> or <Slot> anywhere in an island subtree. The 20,000
 // nodes are therefore plain elements, which is also what makes them a fair test
 // of the patcher rather than of component bailout.
 // ---------------------------------------------------------------------------

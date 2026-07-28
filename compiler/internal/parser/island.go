@@ -14,7 +14,7 @@ package parser
 //     attribute's mere presence, so island="false" silently freezes anyway.
 //  2. island on a component tag — it is not a prop; put it on a plain element
 //     inside the component.
-//  3. a component tag or a composition marker (<children/>/<slot>/<Slot/>)
+//  3. a component tag or a composition marker (<Children/>/<Slot/>)
 //     anywhere inside an island subtree — a live instance in browser-owned DOM
 //     can be destroyed out from under the framework; a marker would splice
 //     parent-owned nodes into an unreconciled subtree.
@@ -67,14 +67,6 @@ func walkIslands(nodes []Node, file string) *ParseError {
 			if perr := walkIslands(node.Children, file); perr != nil {
 				return perr
 			}
-		case *Slot:
-			// A marker's fallback children (<children>…</children>,
-			// <slot name="x">…</slot>) are ordinary nodes that render when the slot
-			// goes unfilled, so an island — or a component inside one — declared
-			// there is just as real as anywhere else and must be validated.
-			if perr := walkIslands(node.Children, file); perr != nil {
-				return perr
-			}
 		case *If:
 			if perr := walkIslands(node.Then, file); perr != nil {
 				return perr
@@ -110,7 +102,7 @@ func rejectComponentsAndSlots(nodes []Node, islandPos Position, file string) *Pa
 		case *Component:
 			return errAt(file, node.Pos, "<%s> cannot appear inside an island element opened at %d:%d — a component in browser-owned DOM would be orphaned; move it outside the island", node.Name, islandPos.Line, islandPos.Col)
 		case *Slot:
-			return errAt(file, node.Pos, "a composition marker (<children/>/<slot>/<Slot/>) cannot appear inside an island element opened at %d:%d — it would splice parent-owned nodes into an unreconciled subtree", islandPos.Line, islandPos.Col)
+			return errAt(file, node.Pos, `a composition marker (<Children/>/<Slot/>/<Slot name="…"/>) cannot appear inside an island element opened at %d:%d — it would splice parent-owned nodes into an unreconciled subtree`, islandPos.Line, islandPos.Col)
 		case *Element:
 			if perr := rejectComponentsAndSlots(node.Children, islandPos, file); perr != nil {
 				return perr

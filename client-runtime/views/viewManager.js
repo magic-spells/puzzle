@@ -119,10 +119,10 @@ export class ViewManager {
  * Substitute the slot markers in `vnode`'s tree with the call-site content
  * captured in `slotChildren`. Named slots (v1.21, D53) partition the content
  * once per render (partitionSlots) by each direct child's stripped `slot`
- * attribute; the bare default marker takes the unattributed remainder exactly as
- * before. Name-free templates AND slot-attr-free call sites take the same fast
- * path they always did — the default bucket is the original `slotChildren` array
- * (no clones) and no vnode changes unless a marker is actually present.
+ * attribute; <Children/> and the bare <Slot/> take the unattributed remainder.
+ * Name-free templates AND slot-attr-free call sites take the same fast path they
+ * always did — the default bucket is the original `slotChildren` array (no
+ * clones) and no vnode changes unless a marker is actually present.
  */
 export function expandSlots(vnode, slotChildren) {
 	return expandNode(vnode, partitionSlots(slotChildren));
@@ -183,14 +183,13 @@ function stripSlotAttr(vnode) {
 /**
  * Replace slot markers anywhere in `vnode` against the partitioned `parts`. Only
  * nodes on the path to a marker are cloned; everything else is returned untouched
- * so DOM links survive. A named marker substitutes its named bucket when
- * non-empty, else its OWN fallback children (recursively expanded); the bare
- * marker substitutes the default bucket. Content is already parent-expanded —
- * spliced in as-is.
+ * so DOM links survive. A named marker substitutes its named bucket; the bare
+ * marker substitutes the default bucket. An unfilled marker contributes no
+ * nodes (v1.64, D134). Content is already parent-expanded — spliced in as-is.
  *
  * Component vnodes (v1.38, D71): the walk descends into a component's CALL-SITE
  * children — they are authored in THIS template, so this template's markers
- * there must be substituted (`<Card><children/></Card>` in a layout forwards the
+ * there must be substituted (`<Card><Children/></Card>` in a layout forwards the
  * routed page into Card's default slot). The component's own TEMPLATE is never
  * entered — it expands its own slots against these children at render time.
  * Substituted content becomes ordinary slot content for the component; the
@@ -237,11 +236,6 @@ function expandChildList(kids, parts) {
 			const bucket = name ? parts.named && parts.named[name] : parts.default;
 			if (bucket && bucket.length) {
 				for (const sc of bucket) out.push(sc);
-			} else {
-				// Unfilled: render the marker's own fallback children (empty for the
-				// bare default marker). Router-filled views/layouts only ever fill the
-				// default, so a named marker there renders its fallback naturally (D53).
-				for (const fb of k.children) out.push(expandNode(fb, parts));
 			}
 			continue;
 		}
@@ -329,6 +323,18 @@ export function mount(vnode, parent, ref, ctx) {
  * created()/data() are not run twice and its mount is synchronous — the
  * atomic-commit contract in constellation/doc/DOC-VIEW-LIFECYCLE.md §4.
  */
+export function plantFailedMountPlaceholder(child) {
+	const anchor = child.element;
+	const placeholder =
+		anchor && anchor.parentNode
+			? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
+			: null;
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (placeholder) devperfMutation();
+	}
+	return placeholder;
+}
+
 function mountComponent(vnode, parent, ref, ctx) {
 	if ((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverFailed) {
 		const placeholder = document.createComment('puzzle');
@@ -404,14 +410,7 @@ function mountComponent(vnode, parent, ref, ctx) {
 				// placeholder on it so patch() finds it through WHICHEVER vnode holds the
 				// component. The vnode nulls below stay: they are correct (and the cheaper
 				// path) whenever nothing raced.
-				const anchor = child.element; // the child's current root — its anchor comment unless a render landed
-				const placeholder =
-					anchor && anchor.parentNode
-						? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
-						: null;
-				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-					if (placeholder) devperfMutation();
-				}
+				const placeholder = plantFailedMountPlaceholder(child);
 				child.destroy(); // release any partial subscriptions; removes the child's own anchor
 				if (placeholder) {
 					vnode.el = placeholder;
@@ -774,8 +773,25 @@ function patchIndexedChildren(el, oldChildren, newChildren, ctx) {
 		mount(newChildren[i], el, null, ctx);
 	}
 	for (let i = common; i < oldChildren.length; i++) {
+		if (
+			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
+			oldChildren[i].isComponent &&
+			oldChildren[i].component?.animations?.out
+		) {
+			warnUnkeyedOutAnimation();
+		}
 		unmount(oldChildren[i]);
 	}
+}
+
+let warnedUnkeyedOutAnimation = false;
+function warnUnkeyedOutAnimation() {
+	if (warnedUnkeyedOutAnimation) return;
+	warnedUnkeyedOutAnimation = true;
+	console.warn(
+		'[puzzle] out animations in an unkeyed list can misorder siblings — ' +
+			'give the list items key attributes'
+	);
 }
 
 // Two siblings with the SAME tag and SAME key silently collapse (the per-tag Map
@@ -960,12 +976,17 @@ function setAttr(el, name, value) {
 		const target = mods.includes('outside') ? document : el;
 		const opts = target === el ? undefined : OUTSIDE_OPTS;
 		const listeners = (el[LISTENERS] ??= {});
-		if (listeners[name]) target.removeEventListener(event, listeners[name], opts);
+		detachListener(el, name, event, mods, listeners);
 		if (typeof value === 'function') {
+			// A spent once-binding survives fresh handler closures across patches
+			// (D38). Its listener detached when it fired, so do not resurrect it.
+			if (mods.includes('once') && listeners[name + ONCE_SPENT]) return;
 			// An outside binding always wraps (mods is non-empty by construction —
 			// 'outside' itself is a modifier), so the gate below never needs a
 			// separate no-other-mods path.
-			const handler = mods.length ? withModifiers(name, mods, value, listeners, el) : value;
+			const handler = mods.length
+				? withModifiers(name, event, mods, value, listeners, el)
+				: value;
 			target.addEventListener(event, handler, opts);
 			listeners[name] = handler;
 		} else {
@@ -1021,14 +1042,10 @@ function removeAttr(el, name) {
 		// even when the key carries modifiers ('@event:mod' → event 'event').
 		const [event, ...mods] = name.slice(1).split(':');
 		const listeners = el[LISTENERS];
-		if (listeners?.[name]) {
-			// `outside` (D86) listeners live on document/capture — mirror setAttr's
-			// target + options exactly or removeEventListener silently misses.
-			if (mods.includes('outside')) document.removeEventListener(event, listeners[name], OUTSIDE_OPTS);
-			else el.removeEventListener(event, listeners[name]);
-			delete listeners[name];
-			// The listener is gone — drop its once-spent marker too (D38), else a later
-			// patch that re-adds this @event:once would read the stale flag and never fire.
+		if (listeners) {
+			detachListener(el, name, event, mods, listeners);
+			// Explicit removal resets a once-binding even when spend already detached
+			// its handler — a later re-add must start fresh (D38).
 			delete listeners[name + ONCE_SPENT];
 		}
 		return;
@@ -1042,6 +1059,19 @@ function removeAttr(el, name) {
 	el.removeAttribute(name);
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 		devperfMutation();
+}
+
+/**
+ * Detach one patch-managed listener and drop its live-handler entry. The
+ * once-spent marker is deliberately left alone; only an explicit binding
+ * removal resets it (D38).
+ */
+function detachListener(el, name, event, mods, listeners) {
+	const handler = listeners[name];
+	if (!handler) return;
+	if (mods.includes('outside')) document.removeEventListener(event, handler, OUTSIDE_OPTS);
+	else el.removeEventListener(event, handler);
+	delete listeners[name];
 }
 
 // Event-modifier key filters: modifier name → the KeyboardEvent.key it gates on
@@ -1077,12 +1107,13 @@ export const KEY_FILTERS = {
  *   5. stopPropagation;
  *   6. the handler.
  * @param {string} fullName the '@event:mod…' attr name (LISTENERS key)
+ * @param {string} eventName the bare DOM event name
  * @param {string[]} mods modifiers in written order
  * @param {Function} handler the compiled listener
  * @param {object} listeners the element's LISTENERS object (holds the spent flag)
  * @param {Element} el the bound element — the outside-gate's containment anchor
  */
-function withModifiers(fullName, mods, handler, listeners, el) {
+function withModifiers(fullName, eventName, mods, handler, listeners, el) {
 	const spentKey = fullName + ONCE_SPENT;
 	const outside = mods.includes('outside');
 	return (event) => {
@@ -1094,6 +1125,7 @@ function withModifiers(fullName, mods, handler, listeners, el) {
 		if (mods.includes('once')) {
 			if (listeners[spentKey]) return;
 			listeners[spentKey] = true;
+			detachListener(el, fullName, eventName, mods, listeners);
 		}
 		if (mods.includes('prevent')) event.preventDefault();
 		if (mods.includes('stop')) event.stopPropagation();

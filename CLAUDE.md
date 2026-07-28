@@ -175,9 +175,10 @@ run.
 - Navigation loads before commit. URL/title/history, mounted tree, route
   snapshot, and outgoing scroll save commit together. Failed or superseded
   pushes do not partially commit.
-- `<children/>` is the component default marker, `<slot name="x">` is named
-  composition, and `<Slot/>` is the router outlet. Bare lowercase `<slot/>` is
-  a compile error.
+- `<Children/>` is the component default marker, `<Slot name="x"/>` is named
+  composition, and `<Slot/>` is the router outlet. Markers are self-closing
+  only — no fallback bodies — and any lowercase `<slot>`/`<children>` is a
+  positioned compile error steering to the capitalized form (D134).
 - DOM listeners are per-node and patch-managed. Component `@event` bindings
   are callback props, not custom DOM events; there is no `$emit`.
 - Template text is not HTML-entity decoded and interpolations become text

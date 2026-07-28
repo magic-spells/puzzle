@@ -68,8 +68,8 @@ state machine.
 vnodes, text, SVG, refs, event listeners, controlled properties, islands, and
 composition markers all use the same tree.
 
-- `<children/>` inserts default component call-site content.
-- `<slot name>` inserts named content or fallback.
+- `<Children/>` inserts default component call-site content.
+- `<Slot name="…"/>` inserts named content and renders nothing when unfilled.
 - `<Slot/>` inserts the routed child view.
 - Keyed children move by identity rather than remounting by index.
 

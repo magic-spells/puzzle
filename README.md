@@ -227,13 +227,13 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 </Card>
 ```
 
-**Named slots.** The child declares regions with `<slot name="header">fallback</slot>`, and the call site routes a direct child into one with a static `slot="header"` attribute (stripped from the rendered output). Routed views fill the default slot only. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §24.
+**Named slots.** The child declares regions with `<Slot name="header"/>`, and the call site routes a direct child into one with a static `slot="header"` attribute (stripped from the rendered output). Unfilled markers render nothing; routed views fill the default marker only. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §24.
 
-Reusable components declare default child content with `<children/>`:
+Reusable components declare default child content with `<Children/>`:
 
 ```html
 <article class="card">
-  <children><p>Fallback content</p></children>
+  <Children/>
 </article>
 ```
 
@@ -321,7 +321,7 @@ through that step unchanged and a single `console.error` names the offender.
     {#if icon}
     <Icon name={ icon } />
     {/if}
-    <children />
+    <Children />
   </button>
 </puzzle-view>
 

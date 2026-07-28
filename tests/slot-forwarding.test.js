@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 // Default-slot forwarding through a component invocation (v1.38, D71).
 //
-// A `<slot/>` marker written INSIDE a component's call-site children is authored
+// A `<Children/>` marker written INSIDE a component's call-site children is authored
 // in the outer template, so the outer template's slot expansion must substitute
-// it before the component ever sees its children — `<Card><slot/></Card>` in a
+// it before the component ever sees its children — `<Card><Children/></Card>` in a
 // layout forwards the routed page into Card's default slot. Pre-D71 the
 // expansion walk early-returned at component vnodes and the marker mounted as a
 // literal inert <slot> DOM element (the routed content silently never mounted).
@@ -45,7 +45,7 @@ class Panel extends PuzzleView {
 
 describe('default-slot forwarding through a component (D71)', () => {
 	it('forwards slot content into a wrapping component instead of mounting a literal <slot>', async () => {
-		// The layout case: this view's own <slot/> (router-filled) sits inside a
+		// The layout case: this view's own <Children/> (router-filled) sits inside a
 		// <Card> invocation. Its slot content must land inside Card's rendered body.
 		class Layout extends PuzzleView {
 			render() {

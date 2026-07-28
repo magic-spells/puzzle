@@ -311,4 +311,32 @@ describe('PuzzleApp — mount generation (unmount + remount mid-mount)', () => {
 		expect(el.querySelector('.layout main .home')).not.toBeNull();
 		expect(beforeUnmountCalls).toBe(0);
 	});
+
+	it('a navigation-zero commit rejection tears the mount down so a later mount succeeds', async () => {
+		const el = container();
+		let beforeUnmountCalls = 0;
+		vi.spyOn(document, 'title', 'set').mockImplementationOnce(() => {
+			throw new Error('navigation zero failed');
+		});
+		const app = make({
+			target: '#app',
+			routes: routesWith().map((route, index) =>
+				index === 0 ? { ...route, meta: { title: 'Home' } } : route
+			),
+			beforeUnmount() {
+				beforeUnmountCalls++;
+			},
+		});
+
+		await expect(app.mount()).rejects.toThrow('navigation zero failed');
+
+		expect(el.children.length).toBe(0);
+		expect(app.router).toBeNull();
+		expect(() => app.store).toThrow(/app\.store is not available/);
+		expect(beforeUnmountCalls).toBe(0);
+
+		await app.mount();
+		expect(el.querySelector('.layout main .home')).not.toBeNull();
+		expect(beforeUnmountCalls).toBe(0);
+	});
 });

@@ -785,6 +785,96 @@ func TestAddHTTPFetcherNon200NamesURL(t *testing.T) {
 	}
 }
 
+// TestHTTPFetcherCapsBodySize: a registry response is bounded. A piece is source
+// text, so a body past maxBodyBytes is either a broken host or a hostile one —
+// either way the CLI must refuse it instead of buffering it whole, and the error
+// names the URL and the cap.
+func TestHTTPFetcherCapsBodySize(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Streamed in chunks so the test never materializes the oversized body
+		// itself, and so no Content-Length lets the client short-circuit.
+		chunk := bytes.Repeat([]byte("x"), 64<<10)
+		for written := 0; written <= maxBodyBytes; written += len(chunk) {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	_, err := NewFetcher(srv.URL).Fetch("registry.json")
+	if err == nil {
+		t.Fatal("an oversized body must be refused")
+	}
+	if !strings.Contains(err.Error(), srv.URL+"/registry.json") {
+		t.Errorf("cap error must name the URL, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "exceeds the 10 MiB limit") {
+		t.Errorf("cap error must name the cap, got: %v", err)
+	}
+}
+
+// TestHTTPFetcherAcceptsBodyAtCap: the cap is inclusive — reading one byte past
+// it must not turn a body that exactly fills the budget into an error.
+func TestHTTPFetcherAcceptsBodyAtCap(t *testing.T) {
+	const size = 3 << 20 // well under the cap; the boundary logic is len > cap
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(bytes.Repeat([]byte("y"), size))
+	}))
+	defer srv.Close()
+
+	data, err := NewFetcher(srv.URL).Fetch("ui/button/Button.pzl")
+	if err != nil {
+		t.Fatalf("a body under the cap must succeed: %v", err)
+	}
+	if len(data) != size {
+		t.Errorf("truncated body: got %d bytes, want %d", len(data), size)
+	}
+}
+
+// TestHTTPFetcherBoundsRedirects: Go's default client follows up to 10 hops to
+// anywhere. A static file registry needs one or two, so a longer chain is
+// refused — and a short one still resolves.
+func TestHTTPFetcherBoundsRedirects(t *testing.T) {
+	// /hop/N redirects to /hop/N-1; /hop/0 serves the payload. Requesting
+	// "hop/<n>" therefore costs exactly n redirects.
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var n int
+		if _, err := fmt.Sscanf(r.URL.Path, "/hop/%d", &n); err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if n == 0 {
+			_, _ = w.Write([]byte("PAYLOAD"))
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("%s/hop/%d", srv.URL, n-1), http.StatusFound)
+	}))
+	defer srv.Close()
+	f := NewFetcher(srv.URL)
+
+	// A 2-hop chain is within budget.
+	data, err := f.Fetch("hop/2")
+	if err != nil || string(data) != "PAYLOAD" {
+		t.Fatalf("a 2-redirect chain must succeed: %q err=%v", data, err)
+	}
+	// maxRedirects hops is still allowed; one more is not.
+	if _, err := f.Fetch(fmt.Sprintf("hop/%d", maxRedirects)); err != nil {
+		t.Fatalf("a chain at the limit must succeed: %v", err)
+	}
+	_, err = f.Fetch(fmt.Sprintf("hop/%d", maxRedirects+1))
+	if err == nil {
+		t.Fatal("a chain past the limit must be refused")
+	}
+	if !strings.Contains(err.Error(), "fetching "+srv.URL+"/hop/") {
+		t.Errorf("redirect error must keep the fetching-<url> framing, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("stopped after %d redirects", maxRedirects)) {
+		t.Errorf("redirect error must name the limit, got: %v", err)
+	}
+}
+
 func TestResolveSourcePrecedence(t *testing.T) {
 	// flag wins over env and default.
 	t.Setenv("PUZZLE_PIECES_REGISTRY", "/env/path")

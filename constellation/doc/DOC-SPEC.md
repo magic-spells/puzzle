@@ -63,7 +63,7 @@ The spec is split across six domain cards. Section numbers are globally unique a
 | 21 | Model relationships: `hasMany` / `belongsTo` (v1.17) | [[DOC-SPEC-DATA]] |
 | 22 | Adapter write sync (v1.18) | [[DOC-SPEC-DATA]] |
 | 23 | Router base path (v1.19) | [[DOC-SPEC-ROUTER]] |
-| 24 | Composition markers: `<children/>` + named slots (v1.21, amended v1.41) | [[DOC-SPEC-TEMPLATE]] |
+| 24 | Composition markers: `<Children/>`, `<Slot/>`, `<Slot name>` (v1.21, amended v1.41, v1.64) | [[DOC-SPEC-TEMPLATE]] |
 | 25 | TypeScript scripts: `<script lang="ts">` (v1.22) | [[DOC-SPEC-ANATOMY]] |
 | 26 | Overlapping route transitions (v1.24) | [[DOC-SPEC-ROUTER]] |
 | 27 | Dev HMR: state-preserving reload (v1.25) | [[DOC-SPEC-BUILD]] |

@@ -15,7 +15,7 @@ RangeFor.prototype.render = function () {
   return new ViewNode('puzzle-view', { class: 'dots' },
     Array.from({ length: (__d.count) - (1) + 1 }, (_, __i) =>
       new ViewNode('span', {
-        key: __i,
+        key: (1) + __i,
         class: 'dot',
       }, [])
     )

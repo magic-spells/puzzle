@@ -127,6 +127,117 @@ describe('router SSG takeover (M2)', () => {
 		expect(willShow).toBe(0); // top view's enter suppressed
 	});
 
+	it('restores the exact prerendered nodes when a no-layout render throws', async () => {
+		class BadRender extends PuzzleView {
+			render() {
+				throw new Error('takeover render failed');
+			}
+		}
+		const el = ssgContainer('<article class="prerendered">Still readable</article>');
+		const prerendered = el.firstElementChild;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const app = boot({
+			target: '#app',
+			routes: [{ path: '/', name: 'bad', view: BadRender }],
+			routerMode: 'memory',
+		});
+
+		await expect(app.mount()).resolves.toBe(app);
+		await tick();
+
+		expect(el.firstElementChild).toBe(prerendered);
+		expect(el.textContent).toBe('Still readable');
+		expect(el.hasAttribute('data-puzzle-ssg')).toBe(true);
+		expect(error).toHaveBeenCalledWith(
+			'[puzzle] view mount failed after commit:',
+			expect.any(Error)
+		);
+		error.mockRestore();
+	});
+
+	it('restores prerendered nodes and marker when an initial layout mounted() throws', async () => {
+		class BadMountedLayout extends PuzzleView {
+			render() {
+				return h('div', { class: 'fresh-layout' }, [slot()]);
+			}
+			mounted() {
+				throw new Error('takeover mounted failed');
+			}
+		}
+		const el = ssgContainer(
+			'<div class="prerendered-layout"><h1 class="home">Home</h1></div>'
+		);
+		const prerendered = el.firstElementChild;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const app = boot({
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: Home, layout: BadMountedLayout }],
+			routerMode: 'memory',
+		});
+
+		await expect(app.mount()).resolves.toBe(app);
+		await tick();
+
+		expect(el.firstElementChild).toBe(prerendered);
+		expect(el.querySelector('.prerendered-layout')).not.toBeNull();
+		expect(el.querySelector('.fresh-layout')).toBeNull();
+		expect(el.hasAttribute('data-puzzle-ssg')).toBe(true);
+		expect(error).toHaveBeenCalledWith(
+			'[puzzle] view mount failed after commit:',
+			expect.any(Error)
+		);
+		error.mockRestore();
+	});
+
+	it('a layout swap after a restored takeover does not duplicate the page', async () => {
+		// The failed-takeover restore puts the marker back, so the NEXT container
+		// mount must re-run the takeover clear — otherwise the fresh layout mounts
+		// ALONGSIDE the restored prerendered nodes.
+		class BadMountedLayout extends PuzzleView {
+			render() {
+				return h('div', { class: 'fresh-layout' }, [slot()]);
+			}
+			mounted() {
+				throw new Error('takeover mounted failed');
+			}
+		}
+		class OtherLayout extends PuzzleView {
+			render() {
+				return h('div', { class: 'other-layout' }, [slot()]);
+			}
+		}
+		class Other extends PuzzleView {
+			render() {
+				return h('h1', { class: 'other' }, [text('Other')]);
+			}
+		}
+		const el = ssgContainer(
+			'<div class="prerendered-layout"><h1 class="home">Home</h1></div>'
+		);
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const app = boot({
+			target: '#app',
+			routes: [
+				{ path: '/', name: 'home', view: Home, layout: BadMountedLayout },
+				{ path: '/other', name: 'other', view: Other, layout: OtherLayout },
+			],
+			routerMode: 'memory',
+		});
+		await app.mount();
+		await tick();
+		expect(el.querySelector('.prerendered-layout')).not.toBeNull(); // restored
+
+		await app.router.push('/other');
+		await tick();
+
+		expect(el.querySelectorAll('.other-layout').length).toBe(1);
+		expect(el.querySelector('.prerendered-layout')).toBeNull(); // cleared, not duplicated
+		expect(el.querySelector('.fresh-layout')).toBeNull();
+		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false);
+		expect(el.textContent).toBe('Other');
+		error.mockRestore();
+	});
+
 	// Static hosts serve the SSG output at directory URLs — a prerendered page
 	// loads as '/components/badge/' while its route is '/components/badge'. The
 	// matcher ignores a single trailing '/' so navigation #0 still matches and the

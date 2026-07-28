@@ -1,7 +1,7 @@
 <puzzle-view>
   <div class="rounded-2xl border border-line bg-white/60 shadow-sm overflow-hidden">
     <div class="p-8 md:p-10">
-      <children/>
+      <Children/>
     </div>
     <div class="px-8 py-3 border-t border-line bg-surface-2/50">
       <p class="font-mono text-[10px] uppercase tracking-[0.25em] text-faint">

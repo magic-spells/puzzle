@@ -97,11 +97,12 @@ Rules that bite:
 - **Text is text.** Template text is NOT HTML-entity decoded and interpolations
   become text nodes — you cannot inject markup through `{ expr }`. The one
   raw-markup exception is compile-time `{#svg 'path.svg'}` inline SVG.
-- **Three slot-like things, three meanings.** `<children/>` marks where a
-  component's default children render; `<slot name="x">fallback</slot>` declares
-  a named region (the caller routes a direct child in with a static
-  `slot="x"` attribute); `<Slot/>` is the ROUTER outlet where a child route or
-  routed view renders. Bare lowercase `<slot/>` is a compile error.
+- **Two marker tags, three meanings.** `<Children/>` marks where a component's
+  default children render; `<Slot name="x"/>` declares a named region (the
+  caller routes a direct child in with a static `slot="x"` attribute);
+  `<Slot/>` is the ROUTER outlet where a child route or routed view renders.
+  Markers are self-closing only; lowercase `<children>`/`<slot>` are compile
+  errors.
 - **`island` freezes children.** An element with the `island` attribute keeps
   its children untouched by patching after mount (for third-party DOM widgets);
   the element's own attrs/listeners still patch. Components, slots, and view
@@ -177,7 +178,9 @@ Rules that bite:
   DOM after an in-app navigation; it will be navigation zero's value.
 - **Focus + route announcement are automatic** (puzzle ≥ 0.2.0): every committed
   navigation moves focus to the incoming view root (with `preventScroll`, under
-  a transient `tabindex="-1"`) and announces the committed title in a
+  a transient `tabindex="-1"` that also suppresses `outline`/`box-shadow` for
+  its lifetime — no focus ring around the view) and announces the committed
+  title in a
   framework-owned visually-hidden `aria-live` region. You get accessible SPA
   navigation for free — don't hand-roll it. `focusBehavior` mirrors
   `scrollBehavior`: omit for the default, `false` to disable entirely

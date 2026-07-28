@@ -104,6 +104,27 @@ describe('ViewManager — event modifiers (@event:mod)', () => {
 		expect(onceFn).toHaveBeenCalledTimes(1); // still once EVER
 	});
 
+	it('once detaches on spend and a fresh handler patch does not re-attach it', () => {
+		const { container, vm } = setup();
+		const fn = vi.fn();
+		vm.render(h('button', { '@click:once': () => fn() }, [text('go')]));
+		const btn = container.querySelector('button');
+		const remove = vi.spyOn(btn, 'removeEventListener');
+
+		btn.click();
+		expect(fn).toHaveBeenCalledTimes(1);
+		expect(remove).toHaveBeenCalledWith('click', expect.any(Function));
+
+		const add = vi.spyOn(btn, 'addEventListener');
+		vm.render(h('button', { '@click:once': () => fn() }, [text('go')]));
+		expect(add).not.toHaveBeenCalled();
+
+		btn.click();
+		expect(fn).toHaveBeenCalledTimes(1);
+		add.mockRestore();
+		remove.mockRestore();
+	});
+
 	it('once-spent marker clears on attr REMOVAL so a re-added @click:once fires again (FIX)', () => {
 		const { container, vm } = setup();
 		const fn = vi.fn();

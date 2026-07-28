@@ -43,15 +43,12 @@ type Component struct {
 	Pos      Position
 }
 
-// Slot is a slot render target. The bare form (<slot/>/<Slot/>, D16) has an
-// empty Name and no Children: it substitutes the DEFAULT call-site content
-// (SPEC §6). A NAMED form (<slot name="x">…fallback…</slot>, v1.21 D53) carries
-// a static, non-empty Name and optional fallback Children (full template
-// grammar) rendered when the call site fills nothing for that name (SPEC §24).
+// Slot is a self-closing composition render target (v1.64, D134). <Children/>
+// and <Slot/> have an empty Name and substitute the default bucket;
+// <Slot name="x"/> carries a static, non-empty Name.
 type Slot struct {
-	Name     string
-	Children []Node
-	Pos      Position
+	Name string
+	Pos  Position
 }
 
 // Text is literal text between tags/directives. Brace escapes (\{ \}) are

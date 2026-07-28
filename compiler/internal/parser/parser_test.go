@@ -1011,143 +1011,153 @@ func TestParseComponentAndSlot(t *testing.T) {
 	})
 }
 
-// TestParseNamedSlots covers the child-side named-slot declaration forms (v1.21,
-// D53): a named slot carries its static name and optional fallback children, and
-// a self-closing named slot has no fallback. (The default marker is now
-// <children/>/<Slot/> — see TestParseChildrenMarkerD74.)
-func TestParseNamedSlots(t *testing.T) {
-	t.Run("named slot with fallback", func(t *testing.T) {
-		root := parseContent(t, `<slot name="header">Untitled</slot>`)
-		s := elementChildren(root.Children)[0].(*Slot)
-		if s.Name != "header" {
-			t.Errorf("name: got %q, want header", s.Name)
-		}
-		if len(elementChildren(s.Children)) != 1 {
-			t.Fatalf("fallback children: got %d, want 1", len(elementChildren(s.Children)))
-		}
-		if txt, ok := elementChildren(s.Children)[0].(*Text); !ok || strings.TrimSpace(txt.Value) != "Untitled" {
-			t.Errorf("fallback: got %#v, want Text \"Untitled\"", elementChildren(s.Children)[0])
-		}
-	})
-
-	t.Run("self-closing named slot has empty fallback", func(t *testing.T) {
-		root := parseContent(t, `<slot name="footer"/>`)
-		s := elementChildren(root.Children)[0].(*Slot)
-		if s.Name != "footer" {
-			t.Errorf("name: got %q, want footer", s.Name)
-		}
-		if len(s.Children) != 0 {
-			t.Errorf("children: got %d, want 0", len(s.Children))
-		}
-	})
-
-	t.Run("named slot with element fallback (full grammar)", func(t *testing.T) {
-		root := parseContent(t, `<slot name="body"><p>{ fallbackText }</p></slot>`)
-		s := elementChildren(root.Children)[0].(*Slot)
-		if s.Name != "body" {
-			t.Errorf("name: got %q, want body", s.Name)
-		}
-		if _, ok := elementChildren(s.Children)[0].(*Element); !ok {
-			t.Errorf("fallback child0: got %T, want *Element", elementChildren(s.Children)[0])
-		}
-	})
-}
-
-// TestParseChildrenMarkerD74 covers the v1.41 (D74) marker-role split: the
-// <children/> default marker (bare + fallback), <Slot/> the bare-only router
-// outlet, lowercase <slot> requiring a name, and the newly-reserved
-// name="children".
-func TestParseChildrenMarkerD74(t *testing.T) {
+// TestParseCompositionMarkersD134 covers the v1.64 marker grammar: capitalized
+// self-closing markers only, with Slot's role split by the static name attr.
+func TestParseCompositionMarkersD134(t *testing.T) {
 	t.Run("happy paths", func(t *testing.T) {
-		// (i) <children/> bare, <children> with fallback, <Slot/> bare, named slot.
 		cases := []struct {
-			name string
-			src  string
+			name     string
+			src      string
+			slotName string
 		}{
-			{"children bare", "<children/>"},
-			{"children with element+interpolation fallback", `<children><p>{ empty }</p></children>`},
-			{"Slot bare outlet", "<Slot/>"},
-			{"named slot", `<slot name="header">Untitled</slot>`},
+			{"Children default marker", "<Children/>", ""},
+			{"Slot bare outlet", "<Slot/>", ""},
+			{"Slot named marker", `<Slot name="header"/>`, "header"},
 		}
 		for _, c := range cases {
 			t.Run(c.name, func(t *testing.T) {
 				root := parseContent(t, c.src)
-				if _, ok := elementChildren(root.Children)[0].(*Slot); !ok {
+				s, ok := elementChildren(root.Children)[0].(*Slot)
+				if !ok {
 					t.Fatalf("expected *Slot, got %T", elementChildren(root.Children)[0])
+				}
+				if s.Name != c.slotName {
+					t.Fatalf("slot name: got %q, want %q", s.Name, c.slotName)
 				}
 			})
 		}
 	})
 
-	t.Run("children marker keeps its fallback children", func(t *testing.T) {
-		root := parseContent(t, `<children><p class="empty">{ msg }</p></children>`)
-		s := elementChildren(root.Children)[0].(*Slot)
-		if s.Name != "" {
-			t.Errorf("children marker name: got %q, want empty", s.Name)
-		}
-		if len(elementChildren(s.Children)) != 1 {
-			t.Fatalf("fallback children: got %d, want 1", len(elementChildren(s.Children)))
-		}
-		if _, ok := elementChildren(s.Children)[0].(*Element); !ok {
-			t.Errorf("fallback child0: got %T, want *Element", elementChildren(s.Children)[0])
-		}
-	})
-
-	t.Run("children marker forwards inside a component invocation", func(t *testing.T) {
-		if _, err := Parse([]byte(`<puzzle-view><Card><children/></Card></puzzle-view>`+"\n<script></script>"), "test.pzl"); err != nil {
-			t.Fatalf("<children/> inside an invocation should forward, got %v", err)
+	t.Run("Children marker forwards inside a component invocation", func(t *testing.T) {
+		if _, err := Parse([]byte(`<puzzle-view><Card><Children/></Card></puzzle-view>`+"\n<script></script>"), "test.pzl"); err != nil {
+			t.Fatalf("<Children/> inside an invocation should forward, got %v", err)
 		}
 	})
 
 	errs := []struct {
-		name       string
-		src        string
-		wantSubstr string
+		name        string
+		src         string
+		wantMessage string
 	}{
-		{ // (a) bare lowercase slot
-			name:       "bare lowercase slot is retired",
-			src:        `<puzzle-view><slot/></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "bare <slot/> was replaced in v1.41 (D74)",
+		{
+			name:        "lowercase children is retired",
+			src:         `<puzzle-view><children/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "the default marker is spelled <Children/> since v1.64 (D134)",
 		},
-		{ // (b) bare lowercase slot with a body
-			name:       "bare lowercase slot with body is retired",
-			src:        `<puzzle-view><slot>fallback</slot></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "bare <slot/> was replaced in v1.41 (D74)",
+		{
+			name:        "lowercase children paired form is retired",
+			src:         `<puzzle-view><children>fallback</children></puzzle-view>` + "\n<script></script>",
+			wantMessage: "the default marker is spelled <Children/> since v1.64 (D134)",
 		},
-		{ // (c) name on capitalized Slot
-			name:       "name attribute on capitalized Slot",
-			src:        `<puzzle-view><Slot name="x"/></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "named slots are spelled lowercase",
+		{
+			name:        "bare lowercase slot is retired",
+			src:         `<puzzle-view><slot/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)",
 		},
-		{ // Slot with children keeps the cannot-have-children error
-			name:       "capitalized Slot cannot have children",
-			src:        `<puzzle-view><Slot>fallback</Slot></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "<Slot> cannot have children",
+		{
+			name:        "bare lowercase slot with body is retired",
+			src:         `<puzzle-view><slot>fallback</slot></puzzle-view>` + "\n<script></script>",
+			wantMessage: "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)",
 		},
-		{ // (d) attribute on children marker
-			name:       "class attribute on children marker",
-			src:        `<puzzle-view><children class="x"/></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "<children> takes no attributes — call-site content needs no configuration",
+		{
+			name:        "lowercase named slot is retired",
+			src:         `<puzzle-view><slot name="x"/></puzzle-view>` + "\n<script></script>",
+			wantMessage: `named slots are spelled <Slot name="…"/> since v1.64 (D134)`,
 		},
-		{ // (e) name attribute on children marker
-			name:       "name attribute on children marker",
-			src:        `<puzzle-view><children name="x"/></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "<children> takes no attributes — call-site content needs no configuration",
+		{
+			name:        "lowercase dynamic named slot is retired",
+			src:         `<puzzle-view><slot name={ target }/></puzzle-view>` + "\n<script></script>",
+			wantMessage: `named slots are spelled <Slot name="…"/> since v1.64 (D134)`,
 		},
-		{ // (f) reserved name="children" on a lowercase slot
-			name:       "reserved name children on lowercase slot",
-			src:        `<puzzle-view><slot name="children"/></puzzle-view>` + "\n<script></script>",
-			wantSubstr: `<slot name="children"> is reserved — use <children/>`,
+		{
+			name:        "Children empty paired form is rejected",
+			src:         `<puzzle-view><Children></Children></puzzle-view>` + "\n<script></script>",
+			wantMessage: "composition markers are self-closing — fallback content is not supported (D134)",
 		},
-		{ // (g) ref on children marker
-			name:       "ref on children marker",
-			src:        `<puzzle-view><children ref="x"/></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "ref cannot be placed on a <children> — a children marker is a render target, not a real element",
+		{
+			name:        "Children fallback body is rejected",
+			src:         `<puzzle-view><Children>fallback</Children></puzzle-view>` + "\n<script></script>",
+			wantMessage: "composition markers are self-closing — fallback content is not supported (D134)",
 		},
-		{ // (h) duplicate default markers spelled <children/> + <Slot/>
-			name:       "duplicate default markers across spellings",
-			src:        `<puzzle-view><children/><Slot/></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "duplicate default marker (<children/>/<Slot/>)",
+		{
+			name:        "Slot outlet fallback body is rejected",
+			src:         `<puzzle-view><Slot>fallback</Slot></puzzle-view>` + "\n<script></script>",
+			wantMessage: "composition markers are self-closing — fallback content is not supported (D134)",
+		},
+		{
+			name:        "named Slot empty paired form is rejected",
+			src:         `<puzzle-view><Slot name="x"></Slot></puzzle-view>` + "\n<script></script>",
+			wantMessage: "composition markers are self-closing — fallback content is not supported (D134)",
+		},
+		{
+			name:        "class attribute on Children marker",
+			src:         `<puzzle-view><Children class="x"/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "<Children> takes no attributes — call-site content needs no configuration",
+		},
+		{
+			name:        "ref on Children marker",
+			src:         `<puzzle-view><Children ref="x"/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "ref cannot be placed on a <Children> — a children marker is a render target, not a real element",
+		},
+		{
+			name:        "ref on Slot marker",
+			src:         `<puzzle-view><Slot ref="x"/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "ref cannot be placed on a <Slot> — a slot is a render target, not a real element",
+		},
+		{
+			name:        "dynamic Slot name",
+			src:         `<puzzle-view><Slot name={ target }/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "<Slot> name must be a static string, not name={ ... }",
+		},
+		{
+			name:        "interpolated Slot name",
+			src:         `<puzzle-view><Slot name="pre-{ target }"/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "<Slot> name must be a static string, not an interpolated value",
+		},
+		{
+			name:        "empty Slot name",
+			src:         `<puzzle-view><Slot name=""/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "<Slot name> cannot be empty",
+		},
+		{
+			name:        "reserved Slot name default",
+			src:         `<puzzle-view><Slot name="default"/></puzzle-view>` + "\n<script></script>",
+			wantMessage: `<Slot name="default"> is reserved — use <Children/>`,
+		},
+		{
+			name:        "reserved Slot name children",
+			src:         `<puzzle-view><Slot name="children"/></puzzle-view>` + "\n<script></script>",
+			wantMessage: `<Slot name="children"> is reserved — use <Children/>`,
+		},
+		{
+			name:        "non-name Slot attribute",
+			src:         `<puzzle-view><Slot class="x"/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "<Slot> only takes a static name attribute",
+		},
+		{
+			name:        "Slot event handler",
+			src:         `<puzzle-view><Slot @click={ open }/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "<Slot> does not take event handlers",
+		},
+		{
+			name:        "duplicate default markers across spellings",
+			src:         `<puzzle-view><Children/><Slot/></puzzle-view>` + "\n<script></script>",
+			wantMessage: "duplicate default marker (<Children/>/<Slot/>) — already declared at 1:14",
+		},
+		{
+			name:        "named marker inside component invocation",
+			src:         `<puzzle-view><Card><Slot name="header"/></Card></puzzle-view>` + "\n<script></script>",
+			wantMessage: `<Slot name="header"> inside a component invocation is not supported — only the bare default <Children/> or <Slot/> forwards through a component`,
 		},
 	}
 	for _, tc := range errs {
@@ -1156,15 +1166,22 @@ func TestParseChildrenMarkerD74(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected error, got nil")
 			}
-			if !strings.Contains(err.Error(), tc.wantSubstr) {
-				t.Fatalf("error %q does not contain %q", err.Error(), tc.wantSubstr)
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected positioned *ParseError, got %T (%v)", err, err)
+			}
+			if pe.Message != tc.wantMessage {
+				t.Fatalf("message = %q, want %q", pe.Message, tc.wantMessage)
+			}
+			if pe.Line != 1 || pe.Col < 1 {
+				t.Fatalf("position = %d:%d, want a valid line-1 position", pe.Line, pe.Col)
 			}
 		})
 	}
 }
 
-// TestParseNamedSlotErrors covers the positioned child-side declaration errors
-// (v1.21, D53).
+// TestParseNamedSlotErrors keeps the D53 shape and uniqueness errors pinned on
+// the capitalized v1.64 spelling.
 func TestParseNamedSlotErrors(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -1173,37 +1190,37 @@ func TestParseNamedSlotErrors(t *testing.T) {
 	}{
 		{
 			name:       "dynamic name",
-			src:        `<puzzle-view><slot name={ x }/></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Slot name={ x }/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "name must be a static string",
 		},
 		{
 			name:       "interpolated name",
-			src:        `<puzzle-view><slot name="a{ b }"/></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Slot name="a{ b }"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "name must be a static string",
 		},
 		{
 			name:       "empty name",
-			src:        `<puzzle-view><slot name=""/></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Slot name=""/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "cannot be empty",
 		},
 		{
 			name:       "reserved default name",
-			src:        `<puzzle-view><slot name="default"/></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Slot name="default"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: `reserved`,
 		},
 		{
 			name:       "foreign attribute on slot",
-			src:        `<puzzle-view><slot class="x"/></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Slot class="x"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "only takes a static name attribute",
 		},
 		{
 			name:       "duplicate slot name in one template",
-			src:        `<puzzle-view><slot name="a"/><slot name="a"/></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Slot name="a"/><Slot name="a"/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "duplicate slot name",
 		},
 		{
 			name:       "duplicate default marker in one template",
-			src:        `<puzzle-view><children/><Slot/></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Children/><Slot/></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "duplicate default marker",
 		},
 	}
@@ -1220,17 +1237,17 @@ func TestParseNamedSlotErrors(t *testing.T) {
 	}
 }
 
-// TestParseDefaultAndNamedSlotOK asserts one default marker <children/> plus one
+// TestParseDefaultAndNamedSlotOK asserts one default marker <Children/> plus one
 // named slot in the same template is legal — the duplicate-default guard keys on
 // "default" only, so it never collides with a named slot.
 func TestParseDefaultAndNamedSlotOK(t *testing.T) {
-	if _, err := Parse([]byte(`<puzzle-view><children/><slot name="header"/></puzzle-view>`+"\n<script></script>"), "test.pzl"); err != nil {
+	if _, err := Parse([]byte(`<puzzle-view><Children/><Slot name="header"/></puzzle-view>`+"\n<script></script>"), "test.pzl"); err != nil {
 		t.Fatalf("one default marker + one named slot should be legal, got %v", err)
 	}
 }
 
 // TestParseSlotForwarding covers the D71 call-site forwarding rules (v1.38,
-// respelled by v1.41/D74): the default marker <children/> (or <Slot/>) may sit
+// respelled by v1.64/D134): the default marker <Children/> (or <Slot/>) may sit
 // inside a component invocation (it forwards through the component at runtime),
 // but a NAMED marker there is a positioned compile error — named forwarding
 // semantics are deliberately unspecified.
@@ -1240,16 +1257,16 @@ func TestParseSlotForwarding(t *testing.T) {
 		src  string
 	}{
 		{
-			name: "children marker inside a component invocation",
-			src:  `<puzzle-view><Card><children/></Card></puzzle-view>` + "\n<script></script>",
+			name: "Children marker inside a component invocation",
+			src:  `<puzzle-view><Card><Children/></Card></puzzle-view>` + "\n<script></script>",
 		},
 		{
-			name: "children marker nested deeper inside call-site markup",
-			src:  `<puzzle-view><Card><div class="wrap"><children/></div></Card></puzzle-view>` + "\n<script></script>",
+			name: "Children marker nested deeper inside call-site markup",
+			src:  `<puzzle-view><Card><div class="wrap"><Children/></div></Card></puzzle-view>` + "\n<script></script>",
 		},
 		{
 			name: "named declaration outside plus default forwarding inside",
-			src:  `<puzzle-view><slot name="header"/><Card><children/></Card></puzzle-view>` + "\n<script></script>",
+			src:  `<puzzle-view><Slot name="header"/><Card><Children/></Card></puzzle-view>` + "\n<script></script>",
 		},
 		{
 			name: "capitalized Slot outlet forwarding inside an invocation",
@@ -1271,33 +1288,33 @@ func TestParseSlotForwarding(t *testing.T) {
 	}{
 		{
 			name:       "named slot as a direct child of a component invocation",
-			src:        `<puzzle-view><Card><slot name="header"/></Card></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Card><Slot name="header"/></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "inside a component invocation is not supported",
 		},
 		{
 			name:       "named slot nested in an element inside an invocation",
-			src:        `<puzzle-view><Card><div><slot name="header"/></div></Card></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Card><div><Slot name="header"/></div></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "inside a component invocation is not supported",
 		},
 		{
 			name:       "named slot inside control flow inside an invocation",
-			src:        `<puzzle-view><Card>{#if a}<slot name="header"/>{/if}</Card></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Card>{#if a}<Slot name="header"/>{/if}</Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "inside a component invocation is not supported",
 		},
 		{
 			name:       "named slot inside a nested component invocation",
-			src:        `<puzzle-view><Card><Panel><slot name="header"/></Panel></Card></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Card><Panel><Slot name="header"/></Panel></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "inside a component invocation is not supported",
 		},
 		{
 			name:       "default marker both inside and outside an invocation is still a duplicate",
-			src:        `<puzzle-view><children/><Card><children/></Card></puzzle-view>` + "\n<script></script>",
+			src:        `<puzzle-view><Children/><Card><Children/></Card></puzzle-view>` + "\n<script></script>",
 			wantSubstr: "duplicate default marker",
 		},
 		{
 			name:       "bare lowercase slot inside an invocation is the retired-spelling error",
 			src:        `<puzzle-view><Card><slot/></Card></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "bare <slot/> was replaced in v1.41 (D74)",
+			wantSubstr: "bare <slot> is not a marker",
 		},
 	}
 	for _, tc := range errs {
@@ -1795,14 +1812,14 @@ func TestParseIslandErrors(t *testing.T) {
 			wantSubstr: "<Editor> cannot appear inside an island element",
 		},
 		{
-			name:       "children marker inside island subtree",
-			src:        `<puzzle-view><div island><children/></div></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "a composition marker (<children/>/<slot>/<Slot/>) cannot appear inside an island element",
+			name:       "Children marker inside island subtree",
+			src:        `<puzzle-view><div island><Children/></div></puzzle-view>` + "\n<script></script>",
+			wantSubstr: `a composition marker (<Children/>/<Slot/>/<Slot name="…"/>) cannot appear inside an island element`,
 		},
 		{
 			name:       "named slot inside island subtree",
-			src:        `<puzzle-view><div island><slot name="x"/></div></puzzle-view>` + "\n<script></script>",
-			wantSubstr: "a composition marker (<children/>/<slot>/<Slot/>) cannot appear inside an island element",
+			src:        `<puzzle-view><div island><Slot name="x"/></div></puzzle-view>` + "\n<script></script>",
+			wantSubstr: `a composition marker (<Children/>/<Slot/>/<Slot name="…"/>) cannot appear inside an island element`,
 		},
 		{
 			name:       "island on puzzle-view root",
@@ -1818,59 +1835,6 @@ func TestParseIslandErrors(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), tc.wantSubstr) {
 				t.Fatalf("error %q does not contain %q", err.Error(), tc.wantSubstr)
-			}
-		})
-	}
-}
-
-// TestParseIslandInSlotFallback covers island validation INSIDE a composition
-// marker's fallback children. Fallback content renders whenever the slot goes
-// unfilled, so an island declared there is a real island and the D44 rules apply
-// exactly as they do anywhere else — walkIslands must descend into *Slot the way
-// every other walker in the package does. wantCol is derived from the source
-// (each Pos points at the construct's opening token) so it is not hand-counted.
-func TestParseIslandInSlotFallback(t *testing.T) {
-	tests := []struct {
-		name       string
-		src        string
-		marker     string // substring whose start column the error must point at
-		wantSubstr string
-	}{
-		{
-			name:       "component inside island in named-slot fallback",
-			src:        `<puzzle-view><slot name="aside"><div island><Chart/></div></slot></puzzle-view>` + "\n<script></script>",
-			marker:     "<Chart",
-			wantSubstr: "<Chart> cannot appear inside an island element opened at 1:38",
-		},
-		{
-			name:       "dynamic island in named-slot fallback",
-			src:        `<puzzle-view><slot name="aside"><div island={ on }>x</div></slot></puzzle-view>` + "\n<script></script>",
-			marker:     "island={",
-			wantSubstr: "island must be a static attribute",
-		},
-		{
-			name:       "component inside island in children fallback",
-			src:        `<puzzle-view><children><div island><Chart/></div></children></puzzle-view>` + "\n<script></script>",
-			marker:     "<Chart",
-			wantSubstr: "<Chart> cannot appear inside an island element",
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := Parse([]byte(tc.src), "test.pzl")
-			if err == nil {
-				t.Fatalf("expected error, got nil")
-			}
-			pe, ok := err.(*ParseError)
-			if !ok {
-				t.Fatalf("expected *ParseError, got %T (%v)", err, err)
-			}
-			if !strings.Contains(pe.Message, tc.wantSubstr) {
-				t.Fatalf("error %q does not contain %q", pe.Message, tc.wantSubstr)
-			}
-			wantCol := strings.Index(tc.src, tc.marker) + 1
-			if pe.Line != 1 || pe.Col != wantCol {
-				t.Errorf("position: got %d:%d, want 1:%d (at %q)", pe.Line, pe.Col, wantCol, tc.marker)
 			}
 		})
 	}

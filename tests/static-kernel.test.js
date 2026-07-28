@@ -128,6 +128,68 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(el.textContent).toContain('beta');
 	});
 
+	it('restores the exact prerendered nodes when the root render throws', async () => {
+		let failOnClient = false;
+		class BadRenderPage extends PuzzleView {
+			render() {
+				if (failOnClient) throw new Error('static render failed');
+				return h('main', { class: 'prerendered-bad-render' }, [text('Still readable')]);
+			}
+		}
+		stamp(BadRenderPage, 'app/views/BadRenderPage.pzl');
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'bad-render', view: BadRenderPage }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+		const el = seedDocument({ content: page.html, data: page.data });
+		const prerendered = el.firstElementChild;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		failOnClient = true;
+
+		await expect(
+			mountStatic({ target: '#app', views: [BadRenderPage], route: page.route })
+		).resolves.toBeUndefined();
+
+		expect(el.firstElementChild).toBe(prerendered);
+		expect(el.textContent).toBe('Still readable');
+		expect(el.hasAttribute('data-puzzle-static')).toBe(true);
+		expect(error).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		error.mockRestore();
+	});
+
+	it('restores prerendered nodes and marker when the root mounted() throws', async () => {
+		class BadMountedPage extends PuzzleView {
+			render() {
+				return h('main', { class: 'bad-mounted' }, [text('Still readable')]);
+			}
+			mounted() {
+				throw new Error('static mounted failed');
+			}
+		}
+		stamp(BadMountedPage, 'app/views/BadMountedPage.pzl');
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'bad-mounted', view: BadMountedPage }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+		const el = seedDocument({ content: page.html, data: page.data });
+		const prerendered = el.firstElementChild;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		await expect(
+			mountStatic({ target: '#app', views: [BadMountedPage], route: page.route })
+		).resolves.toBeUndefined();
+
+		expect(el.firstElementChild).toBe(prerendered);
+		expect(el.textContent).toBe('Still readable');
+		expect(el.hasAttribute('data-puzzle-static')).toBe(true);
+		expect(error).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		error.mockRestore();
+	});
+
 	it('keeps prerendered deep async component content until static takeover commits', async () => {
 		let clientGate = null;
 		class AsyncLeaf extends PuzzleView {

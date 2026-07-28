@@ -227,7 +227,7 @@ export default class DefaultLayout extends PuzzleView {
 
 Layouts are full `PuzzleView` components — they can have `data()`, `events`, and lifecycle hooks like any other component. Different routes can use different layouts (e.g. `DefaultLayout` for pages, `AuthLayout` for login).
 
-Note: `<Slot/>` is the **router outlet** — the place the router injects the routed view. Reusable components use `<children/>` for their default marker and `<slot name="…">` for named slots (v1.21, D53; the bare lowercase `<slot/>` was retired in v1.41, D74); scoped slots remain deferred. See [[DOC-SPEC]] §24.
+Note: `<Slot/>` is the **router outlet** — the place the router injects the routed view. Reusable components use `<Children/>` for their default marker and `<Slot name="…"/>` for named slots (v1.64, D134); all markers are self-closing and render nothing when unfilled. Scoped slots remain deferred. See [[DOC-SPEC]] §24.
 
 ---
 

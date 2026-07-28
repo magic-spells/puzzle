@@ -342,8 +342,13 @@ func swapOutput(staging, outdir string) error {
 		}
 		return fmt.Errorf("finalizing dist %s: %w", outdir, err)
 	}
+	// The swap has ALREADY succeeded: dist/ is the new build. Deleting the
+	// previous tree is best-effort housekeeping — reporting its failure as a
+	// build error would fail a build whose output is correct and complete (and
+	// the user would still have the fresh dist/ on disk). Warn instead, naming
+	// the leftover directory so it can be removed by hand.
 	if err := os.RemoveAll(old); err != nil {
-		return fmt.Errorf("removing previous dist %s: %w", old, err)
+		fmt.Fprintf(os.Stderr, "warning: could not remove the previous dist %s: %v (the new build is in place; delete it by hand)\n", old, err)
 	}
 	return nil
 }

@@ -138,9 +138,9 @@ func TestParseRefErrors(t *testing.T) {
 			"<Chart>",
 		},
 		{
-			"ref on bare slot",
-			`<puzzle-view><slot ref="x"></slot></puzzle-view>` + "\n<script></script>",
-			"ref cannot be placed on a <slot>",
+			"ref on Children marker",
+			`<puzzle-view><Children ref="x"/></puzzle-view>` + "\n<script></script>",
+			"ref cannot be placed on a <Children>",
 		},
 		{
 			"ref on capitalized Slot",

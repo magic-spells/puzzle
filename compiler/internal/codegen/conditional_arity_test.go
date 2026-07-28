@@ -85,7 +85,7 @@ export default class T extends PuzzleView {}
 func TestSlotDisablesCasePadding(t *testing.T) {
 	got := compileSrc(t, `<puzzle-view>
   {#case state}
-    {:when 'full'}<children/><span>fixed</span>
+    {:when 'full'}<Children/><span>fixed</span>
     {:when 'short'}<span>short</span>
   {/case}
   <input placeholder="name" />

@@ -65,7 +65,7 @@
  *   filter-typing keystroke must not jump to top); an explicit `#anchor` on the
  *   replace target still lands like push's, and a custom scrollBehavior
  *   (savedPosition null) still overrides. The same-path no-op, the #committing
- *   commit-window deferral (via the { path, replace } #pendingPush slot), and
+ *   commit-window deferral (via the shared #pendingPush slot), and
  *   pending-memory-pop supersession all mirror push() exactly.
  * - pushState fires for push()/link clicks ONLY, now via #commitLocation inside the
  *   synchronous commit window (D61) — never on the initial navigation or popstate
@@ -209,7 +209,10 @@
  * element, walking back up the chain when a leaf rendered no element (`.element`
  * is legitimately null) and doing nothing when no level has one. The root is not
  * natively focusable, so tabindex="-1" is stamped before focusing and removed on
- * the element's blur — no permanent tab stop, no attribute debris. The focus()
+ * the element's blur — no permanent tab stop, no attribute debris. The stamp also
+ * cuts both focus-ring channels (`outline` and `box-shadow`, inline + !important)
+ * for its lifetime, restored on the same blur — a programmatic-only target is not
+ * keyboard-operable, so a ring around the whole view is noise (D139). The focus()
  * call ALWAYS passes { preventScroll: true }: without it the browser scrolls the
  * element into view and fights the window.scrollTo above, breaking D33 restore
  * and D41 anchor landings. Announcement is a single framework-owned
@@ -359,16 +362,16 @@ export class Router {
 	// While the router is inside the SYNCHRONOUS commit/mount section of a
 	// navigation — the region where a fresh view's mounted() (and viewWillShow)
 	// fire BEFORE #commitState has recorded the just-committed chain as
-	// #state/current — a push() from one of those hooks must NOT re-enter
+	// #state/current — a push()/replace()/memory go() from one of those hooks
+	// must NOT re-enter
 	// #navigate: it would read the stale #state as `cur`, compute its reuse
 	// prefix against the OLD chain, and double-mount the shared layout (the
-	// pyramid-puzzle redirect-from-mounted bug). Such a push is DEFERRED — its
-	// target recorded as { path, replace } (last-wins, single slot — a replace()
-	// arriving in the window shares the slot, D83) and re-dispatched the instant
-	// the in-flight commit completes and #state is consistent. No await runs
-	// inside the window, so only a synchronous reentrant push can land while the
-	// flag is set; a push arriving during the async LOAD or out-animation phases
-	// (flag off) keeps today's interruption semantics.
+	// pyramid-puzzle redirect-from-mounted bug). Such a navigation is DEFERRED —
+	// its verb + argument are recorded in one last-wins slot and re-dispatched
+	// the instant the in-flight commit completes and #state is consistent. No
+	// await runs inside the window, so only a synchronous reentrant navigation
+	// can land while the flag is set; one arriving during the async LOAD or
+	// out-animation phases (flag off) keeps today's interruption semantics.
 	#committing = false;
 	#pendingPush = null;
 
@@ -789,7 +792,7 @@ export class Router {
 	push(path) {
 		path = normalizeRoutePath(path);
 		if (this.#committing) {
-			this.#pendingPush = { path, replace: false }; // last-wins, single slot (no queue)
+			this.#pendingPush = { kind: 'push', path }; // last-wins, single slot (no queue)
 			return Promise.resolve();
 		}
 		// v-next same-path no-op: a push whose target matches the COMMITTED state's
@@ -854,7 +857,7 @@ export class Router {
 	replace(path) {
 		path = normalizeRoutePath(path);
 		if (this.#committing) {
-			this.#pendingPush = { path, replace: true }; // last-wins, shared slot with push
+			this.#pendingPush = { kind: 'replace', path }; // last-wins, shared slot with push/go
 			return Promise.resolve();
 		}
 		// Same-path no-op, exactly push()'s guard: replacing the committed entry
@@ -866,27 +869,29 @@ export class Router {
 	}
 
 	/**
-	 * Run a push/replace deferred during the commit window, now that
+	 * Run a push/replace/memory-go deferred during the commit window, now that
 	 * #state/current are consistent (the just-committed chain is recorded).
 	 * Fire-and-forget: the caller has already finished its own commit. Single
 	 * slot — last writer wins.
 	 */
 	#runPendingPush() {
 		if (this.#pendingPush == null) return;
-		const { path, replace } = this.#pendingPush;
+		const pending = this.#pendingPush;
 		this.#pendingPush = null;
-		// Re-dispatch through push()/replace(), NOT straight into #navigate: by now
+		// Re-dispatch through the public verbs, NOT straight into #navigate: by now
 		// the outer finally has cleared #committing and #commitState recorded the
 		// just-committed #state, so the normal entry point applies the same-path
 		// no-op guard. Without this, an auth guard in mounted()/viewWillShow that
 		// redirects to the very path being committed (landing on '/login' and
 		// pushing '/login') would run a full redundant navigation + duplicate
-		// history entry. #pendingPush carries { path, replace } (the sole argument
-		// plus which verb to re-dispatch, D83), so nothing is lost. Fire-and-forget.
-		if (replace) {
-			this.replace(path);
+		// history entry. go() likewise must recompute from the now-committed memory
+		// index so it preserves #pendingIndex's normal double-back semantics.
+		if (pending.kind === 'go') {
+			this.go(pending.n);
+		} else if (pending.kind === 'replace') {
+			this.replace(pending.path);
 		} else {
-			this.push(path);
+			this.push(pending.path);
 		}
 	}
 
@@ -903,6 +908,12 @@ export class Router {
 		if (this.#mode !== 'memory') {
 			// go(0) reloads the page in browsers; delegating preserves that parity.
 			history.go(n);
+			return;
+		}
+		if (this.#committing) {
+			this.#pendingPush = { kind: 'go', n }; // last-wins, shared slot with push/replace
+			// The deferred navigation has not started yet, so there is no nav promise
+			// to return; this matches push()/replace()'s commit-window posture.
 			return;
 		}
 		// Before start() (or after stop()) the in-memory stack is null (D42) — degrade
@@ -1208,8 +1219,12 @@ export class Router {
 				// (Fix 2); clear unconditionally after the await in case replace() was a
 				// no-op that never re-entered #navigate to consume the flag.
 				this.#guardRedirecting = true;
-				const redirected = await this.replace(guardVerdict);
-				this.#guardRedirecting = false;
+				let redirected;
+				try {
+					redirected = await this.replace(guardVerdict);
+				} finally {
+					this.#guardRedirecting = false;
+				}
 				this.#recoverFailedNavigation(token);
 				// A redirect that no-op'd (its target is already the committed route, or is
 				// unmatched) left #state and the URL untouched, so after a POPSTATE the
@@ -1412,7 +1427,11 @@ export class Router {
 				keys: cur.keys,
 				layout,
 				scroll,
-				focus,
+				// A leaf-identical replace is URL-backed transient-state churn, not
+				// a route change: leave the user's current focus in place and make no
+				// live-region announcement. Params-only pushes still take the normal
+				// focus path, and full replaces never reach this branch.
+				focus: replace ? null : focus,
 			});
 			if (layout) this.#refreshLogged(layout, params, to);
 			return;
@@ -1738,9 +1757,10 @@ export class Router {
 					if (keep === 0) {
 						// Mounted directly (the ViewManager does not auto-play it in) → the
 						// router plays it in as the animator.
-						this.#takeoverSSG(topView);
+						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
-							topView.mount(this.#container, { children: rootVnode.children, preloaded: true })
+							topView.mount(this.#container, { children: rootVnode.children, preloaded: true }),
+							restoreTakeover
 						);
 						this.#commitState(next);
 						this.#playInLogged(topView);
@@ -1774,17 +1794,24 @@ export class Router {
 						// Layout SWAP: the LAYOUT is the animator — suppress the whole fresh
 						// chain (topView + deeper) so the subtree does not double-animate.
 						topView.skipEnter();
+						// The marker can only be present here after a FAILED navigation-#0
+						// takeover restored it: clear the restored prerendered nodes again or
+						// this fresh layout mounts ALONGSIDE them (duplicated page). A marker-
+						// less app makes this a no-op and the branch stays byte-identical.
+						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
-							layout.mount(this.#container, { children: [rootVnode], preloaded: true })
+							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+							restoreTakeover
 						);
 						this.#commitState(next);
 						this.#playInLogged(layout);
 					} else {
 						// INITIAL nav: a layout does NOT animate on first paint — the topmost
 						// view plays in exactly once via the ViewManager's slot-child chain.
-						this.#takeoverSSG(topView);
+						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
-							layout.mount(this.#container, { children: [rootVnode], preloaded: true })
+							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+							restoreTakeover
 						);
 						this.#commitState(next);
 					}
@@ -1826,26 +1853,34 @@ export class Router {
 	 * throw — the commit block keeps running, no rollback: D19/D61). Left
 	 * unobserved that becomes an unhandled rejection; log it once here instead. The
 	 * failed view is still committed to #state, so a later navigation replaces and
-	 * destroys it normally. (Child views mounted through the ViewManager's keyed
+	 * destroys it normally. On navigation-zero SSG takeover, restoreTakeover puts
+	 * the exact prerendered nodes + marker back before logging — the committed
+	 * failed instance remains router-owned, but the user never gets a blank page.
+	 * (Child views mounted through the ViewManager's keyed
 	 * patch are already observed there — '[puzzle] child mount failed:'; this covers
 	 * the three mounts the router drives directly: bare root view, layout swap,
 	 * initial-nav layout.)
 	 */
-	#observeMount(p) {
-		Promise.resolve(p).catch((err) =>
-			console.error('[puzzle] view mount failed after commit:', err)
-		);
+	#observeMount(p, restoreTakeover = null) {
+		Promise.resolve(p).catch((err) => {
+			restoreTakeover?.();
+			console.error('[puzzle] view mount failed after commit:', err);
+		});
 	}
 
 	/**
 	 * SSG takeover (M2): when the container was server-prerendered, the SSG step
 	 * stamped `data-puzzle-ssg` on it and filled it with the rendered markup. The
-	 * marker is present only on navigation #0 of an SSG app; this runs immediately
-	 * before an initial-nav mount into the container (the no-layout keep-0 branch
-	 * and the initial-nav layout branch). Clear the prerendered content so the fresh
-	 * mount doesn't append alongside it (duplicating the page), drop the marker (a
-	 * later re-mount is a normal SPA mount), and suppress the incoming top view's
-	 * ENTER animation so content the user is already reading doesn't re-animate.
+	 * marker is present only on navigation #0 of an SSG app — or restored by a
+	 * FAILED takeover mount (below); this runs immediately before every mount
+	 * into the container (the no-layout keep-0 branch, the initial-nav layout
+	 * branch, and the layout-swap branch, where only the restored-marker case can
+	 * match). Snapshot then clear the prerendered
+	 * content so the fresh mount doesn't append alongside it (duplicating the
+	 * page), drop the marker (a later re-mount is a normal SPA mount), and suppress
+	 * the incoming top view's ENTER animation so content the user is already
+	 * reading doesn't re-animate. The returned callback restores the exact nodes
+	 * and marker if the async mount promise rejects on render()/mounted().
 	 * `topView` is views[keep] — the view the ViewManager auto-plays in (behind a
 	 * layout) or the router plays in directly (no layout). A non-SSG app has no
 	 * marker, so this is a no-op and behavior is byte-identical.
@@ -1858,9 +1893,15 @@ export class Router {
 	#takeoverSSG(topView) {
 		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
 			if (!this.#container.hasAttribute('data-puzzle-ssg')) return;
+			const marker = this.#container.getAttribute('data-puzzle-ssg');
+			const prerendered = [...this.#container.childNodes];
 			this.#container.replaceChildren();
 			this.#container.removeAttribute('data-puzzle-ssg');
 			topView.skipEnter();
+			return () => {
+				this.#container.replaceChildren(...prerendered);
+				this.#container.setAttribute('data-puzzle-ssg', marker);
+			};
 		}
 	}
 
@@ -2241,12 +2282,41 @@ export class Router {
 	 * element's blur so the DOM accumulates no attribute debris across navigations
 	 * and the root cannot linger in anyone's mental model of the tab order. An
 	 * author-set tabindex is left completely alone (they already chose this
-	 * element's focus semantics), which also means we add no listener there.
+	 * element's focus semantics — including its focus VISUALS), which also means
+	 * we add no listener there.
+	 *
+	 * The focus ring is suppressed for the stamp's lifetime (D139): a
+	 * keyboard-driven navigation (Enter on a link, back/forward) makes
+	 * :focus-visible match the freshly focused root, and the UA draws its outline
+	 * around the entire view — pure noise, because a programmatic-only target is
+	 * not keyboard-operable and there is nothing the ring could invite the user to
+	 * do. BOTH ring channels are cut: `outline` (the UA default and most app
+	 * `:focus` rules) and `box-shadow` (how Tailwind's `focus:ring-*` utilities
+	 * draw). Inline + !important so no app stylesheet can re-draw either, and
+	 * undone on the SAME blur that lifts the tabindex — a pre-existing inline
+	 * value is put back exactly as found, everything else is removed outright.
 	 */
 	#focusElement(el) {
 		if (!el.hasAttribute('tabindex')) {
 			el.setAttribute('tabindex', '-1');
-			el.addEventListener('blur', () => el.removeAttribute('tabindex'), { once: true });
+			const prior = ['outline', 'box-shadow'].map((prop) => [
+				prop,
+				el.style.getPropertyValue(prop),
+				el.style.getPropertyPriority(prop),
+			]);
+			el.style.setProperty('outline', 'none', 'important');
+			el.style.setProperty('box-shadow', 'none', 'important');
+			el.addEventListener(
+				'blur',
+				() => {
+					el.removeAttribute('tabindex');
+					for (const [prop, value, priority] of prior) {
+						if (value) el.style.setProperty(prop, value, priority);
+						else el.style.removeProperty(prop);
+					}
+				},
+				{ once: true }
+			);
 		}
 		// preventScroll is LOAD-BEARING, not a nicety: the default focus() scrolls
 		// the element into view, which would immediately fight the window.scrollTo
@@ -2461,16 +2531,22 @@ export class Router {
 	 * absolute-URL branches (D34/D51): given the fragment to test (a relative href
 	 * starting with '#', or an absolute same-page URL's `.hash`), route it if it
 	 * names an in-app fragment and return true. With a base the fragment must be
-	 * exactly '#' + base (→ '/') or under '#' + base + '/'; base-less, any '#/...'
-	 * is a route. A bare '#anchor' matches nothing → returns false (browser handles
-	 * it). preventDefault is called HERE, before push (its placement in the original
-	 * inlined cascades), so the return value is advisory.
+	 * exactly '#' + base (→ '/'), the base followed directly by a query (→ '/?...'),
+	 * or under '#' + base + '/'; base-less, any '#/...' is a route. A bare '#anchor'
+	 * matches nothing → returns false (browser handles it). preventDefault is called
+	 * HERE, before push (its placement in the original inlined cascades), so the
+	 * return value is advisory.
 	 */
 	#tryHashFragment(fragment, e) {
 		if (this.#base) {
 			if (fragment === '#' + this.#base) {
 				e.preventDefault();
 				this.push('/');
+				return true;
+			}
+			if (fragment.startsWith('#' + this.#base + '?')) {
+				e.preventDefault();
+				this.push('/' + fragment.slice(1 + this.#base.length));
 				return true;
 			}
 			if (fragment.startsWith('#' + this.#base + '/')) {

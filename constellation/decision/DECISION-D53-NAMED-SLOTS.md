@@ -28,6 +28,14 @@ notes:
       `<children>` may carry fallback children with the same semantics named slots always had. All
       D53 mechanics (partition/expand, call-site `slot=` attr rules, one marker type) hold
       unchanged; emission is byte-stable. See DECISION-D74-CHILDREN-MARKER.
+  - kind: state
+    text: >-
+      Amended again by D134 (v1.64): the markers are capitalized and self-closing — a named slot is
+      now spelled `<Slot name="x"/>`, the default marker `<Children/>`, and FALLBACK BODIES ARE
+      RETIRED everywhere (an unfilled slot renders nothing; a marker with content is a compile
+      error). Lowercase `<slot>`/`<children>` are positioned steering errors. The partition/expand
+      mechanics and call-site `slot=` attr rules still hold. See
+      DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS.
 ---
 
 # D53 — Named slots: `<slot name>` with fallbacks, filled by `slot="…"` attributes on direct component children (v1.21)

@@ -71,8 +71,8 @@ second specification. Decision cards hold rationale and git holds chronology.
 - DOM events support bare/call handlers, `prevent`, `stop`, `once`, `outside`
   (document-capture outside-dismiss, D86), and keyboard filters. Component
   event attributes compile to callback props.
-- Composition: `<children/>` default content with fallback, named
-  `<slot name="…">`, `<Slot/>` router outlets, and default-slot forwarding
+- Composition: `<Children/>` default content, named `<Slot name="…"/>`,
+  `<Slot/>` router outlets, unfilled-marker omission, and default-slot forwarding
   through component invocations.
 - `key` overrides list auto-keying; `ref="name"` binds `this.refs`; `island`
   makes element children browser-owned after mount; `flip` FLIP-animates keyed

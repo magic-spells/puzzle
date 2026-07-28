@@ -14,6 +14,25 @@
  * { valid, errors } without throwing.
  */
 
+/**
+ * Normalize record identity at every index/comparison boundary — never a
+ * record's fields (D112).
+ *
+ * Subscription keys (`type + REC_SEP + id`) and adapter URLs already
+ * string-coerce identity, so the record Map was the only type-sensitive index
+ * in the datastore: a string route param (`findOne('post', '1')`) missed the
+ * record a numeric-id JSON payload created, while the subscription still
+ * fired. update()'s pk-immutability guard compares through the same
+ * normalization, so `update({ id: '1' })` on a record keyed 1 is the no-op it
+ * reads as.
+ *
+ * ONLY numbers convert. null/undefined/objects pass through untouched, which
+ * keeps belongsTo's null-FK short-circuit intact and stops String(null) from
+ * colliding with a real 'null' string id. Record fields keep whatever type
+ * the server sent.
+ */
+export const recordKey = (id) => (typeof id === 'number' ? String(id) : id);
+
 class FieldBuilder {
 	constructor(type) {
 		this.def = { type, validate: [] };
@@ -504,7 +523,7 @@ export class PuzzleModel {
 	 * @returns {{ valid: boolean, errors: Array<{field, rule, message}> }}
 	 */
 	static validate(data = {}, { fields } = {}) {
-		const errors = this._collectErrors(data, fields);
+		const errors = this._collectErrors(this.applyDefaults(data), fields);
 		return { valid: errors.length === 0, errors };
 	}
 
@@ -531,7 +550,7 @@ export class PuzzleModel {
 			const pk = this._store.modelFor(this._type).primaryKey();
 			if (
 				Object.prototype.hasOwnProperty.call(patch, pk) &&
-				patch[pk] !== this[pk]
+				recordKey(patch[pk]) !== recordKey(this[pk])
 			) {
 				throw new Error(
 					`Cannot change primary key "${pk}": primary keys are immutable after creation.`

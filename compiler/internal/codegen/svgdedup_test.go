@@ -109,6 +109,70 @@ func TestSVGDedupOffInlines(t *testing.T) {
 	}
 }
 
+// TestSVGDedupImportSpecifierIsEscaped: the shared-module import specifier is a
+// JS string LITERAL, so the asset path is escaped rather than concatenated into
+// quotes. A quote in a filename is legal on disk and reaches codegen intact —
+// the {#svg} header accepts a double-quoted path and copies the bytes verbatim,
+// and validSVGPath only vets traversal shape. Concatenated, `icons/he'art.svg`
+// closed the literal early and emitted a module that does not parse.
+//
+// (Backslashes never get this far from a template: resolveOneSVG rejects them up
+// front so the assets path stays forward-slash-only and platform-independent.
+// The escaping here is the emitter's own guarantee, independent of that check.)
+func TestSVGDedupImportSpecifierIsEscaped(t *testing.T) {
+	const icon = `<svg viewBox="0 0 24 24"><path d="ABC"/></svg>`
+	assets := writeAssets(t, map[string]string{"icons/he'art.svg": icon})
+
+	src := "<puzzle-view>\n  {#svg \"icons/he'art.svg\"}\n</puzzle-view>\n" +
+		"\n<script>\nimport { PuzzleView } from '@magic-spells/puzzle';\nexport default class T extends PuzzleView {}\n</script>\n"
+	sec, err := parser.SplitSections(src, "T.pzl")
+	if err != nil {
+		t.Fatalf("split: %v", err)
+	}
+	res, err := Compile(sec, Options{Filename: "T.pzl", Mode: ModeView, AssetsDir: assets, SVGDedup: true})
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	want := `import __svg_0 from '` + SVGAssetSpecifierPrefix + `icons/he\'art.svg';`
+	if !strings.Contains(res.JS, want) {
+		t.Errorf("import specifier must be an escaped JS string literal, want %q:\n%s", want, res.JS)
+	}
+	// The unescaped form terminates the literal at the apostrophe — the exact
+	// breakage this guards.
+	if strings.Contains(res.JS, `from '`+SVGAssetSpecifierPrefix+`icons/he'art.svg';`) {
+		t.Errorf("import specifier was concatenated raw, breaking the literal:\n%s", res.JS)
+	}
+}
+
+// TestEmitSVGImportsEscapesEveryLiteralByte drives the emitter directly with
+// bytes no template can currently produce (backslash, newline, embedded quote):
+// escaping must be total, not tuned to the one character that happens to reach
+// it today. Also pins that a plain path is byte-identical to the concatenated
+// spelling, so no existing golden moves.
+func TestEmitSVGImportsEscapesEveryLiteralByte(t *testing.T) {
+	c := &compiler{}
+	c.svgImportIdent("icons/heart.svg")
+	c.svgImportIdent("a'b\\c\nd.svg")
+
+	got := c.emitSVGImports()
+	plain := "import __svg_0 from '" + SVGAssetSpecifierPrefix + "icons/heart.svg';\n"
+	if !strings.HasPrefix(got, plain) {
+		t.Errorf("a plain path must stay byte-identical to the concatenated form:\n%q", got)
+	}
+	nasty := "import __svg_1 from '" + SVGAssetSpecifierPrefix + `a\'b\\c\nd.svg` + "';\n"
+	if !strings.Contains(got, nasty) {
+		t.Errorf("quote/backslash/newline must all be escaped, want %q:\n%q", nasty, got)
+	}
+	// Every emitted line is a complete import statement: an unescaped byte would
+	// split one line's literal across the newline.
+	for _, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
+		if !strings.HasPrefix(line, "import __svg_") || !strings.HasSuffix(line, "';") {
+			t.Errorf("malformed import line %q in:\n%q", line, got)
+		}
+	}
+}
+
 // TestSVGAssetModule: the shared module the plugin serves builds a factory that
 // produces the SAME vnode shape as the inline path — `new ViewNode('svg', …)`
 // with the file's static attrs and its inner markup as string children — plus a

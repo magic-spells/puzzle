@@ -87,7 +87,7 @@ Supported:
 - **Bindings:** `value={ var }` (two-way on inputs), `checked={ expr }`, `disabled={ expr }`, and other dynamic attributes.
 - **Events:** `@event={ … }` per section 5.
 - **Components:** capitalized tags with props — `<UserProfile userId={selectedUserId} />` — imported in `<script>`.
-- **Component children (default slot):** children written at a component's call site render at the child's `<children/>` marker (D16; spelled `<slot />` until v1.41 — D74, §24) — `<Card><p>body</p></Card>`. Guidance: **props for data, slots for markup** — pass `label="Save"` when it's a string, pass children when the caller supplies actual content.
+- **Component children (default slot):** children written at a component's call site render at the child's `<Children/>` marker (D16; spelled `<slot />` until v1.41 — D74 — and `<children/>` until v1.64 — D134, §24) — `<Card><p>body</p></Card>`. Guidance: **props for data, slots for markup** — pass `label="Save"` when it's a string, pass children when the caller supplies actual content.
 - **Callback props:** `@name={ handler }` on a **component tag** passes the wrapped handler to the child as the prop `name`; the child receives it via `data(params, props)` and calls it like any function. DOM listeners belong to the child's own template — the event lands on the child's element first, the child's handler gates/shapes it, then invokes the parent's callback, which executes in the parent (D16).
 - **Layout slot:** `<Slot/>` inside layout components renders the routed view.
 - **DOM islands (v1.13, D44):** a bare static `island` attribute on a plain element makes its children browser-owned after mount — the template children render once as *seed content* and are never reconciled again, while the element's own attributes and listeners keep patching normally. See §17.
@@ -113,7 +113,7 @@ The declarative "this subtree's DOM is owned by someone else" primitive. Shipped
 - **Identity:** keyed islands move with their DOM subtree intact. A **tag or key change replaces the node and re-seeds from the template** — changing the key is the sanctioned "reset this island" lever.
 - **The attribute never reaches the DOM** — `island` is a framework directive, stripped like `key`. Style hooks belong to the author's own classes.
 
-**Compile errors (not warnings):** a dynamic value (`island={ expr }` — island-ness cannot toggle mid-life); `island` on a component tag (it is not a prop); a component tag or any composition marker (`<children/>`/`<slot name>`/`<Slot/>`) anywhere inside an island subtree (a live instance inside browser-owned DOM can be destroyed out from under the framework); `island` on the `<puzzle-view>` root (the view root is the navigation/animation boundary, D20/D28).
+**Compile errors (not warnings):** a dynamic value (`island={ expr }` — island-ness cannot toggle mid-life); `island` on a component tag (it is not a prop); a component tag or any composition marker (`<Children/>`/`<Slot/>`/`<Slot name="…"/>`) anywhere inside an island subtree (a live instance inside browser-owned DOM can be destroyed out from under the framework); `island` on the `<puzzle-view>` root (the view root is the navigation/animation boundary, D20/D28).
 
 **One-way flow, stated plainly:** after mount, data flows **out of** an island (input events → store), never into it. Listeners on seeded children *inside* the island are wired at mount and never swapped (arrow-field handlers stay correct; call-expression arguments are frozen at mount-time values). Programmatic content changes — a block merge, a "clear" action — must update **both** the island's DOM (imperatively) and the store; the framework deliberately will not re-sync store → island. When store-driven re-rendering of the content is what you want, you don't want an island.
 
@@ -141,33 +141,34 @@ The Shopify-snippet ergonomic for icons: one SVG file on disk, referenced by nam
 
 **Tooling.** `pzlc` grew `--assets <dir>` (default: the nearest ancestor `app` directory's `assets/`). `puzzle init` scaffolds `app/assets/icons/heart.svg` and uses it in the default template's `Home.pzl`. Related but distinct: `import data from './x.json'` in `<script>` has always worked (esbuild's built-in JSON loader) — see DOC-PUZZLE-FILE.
 
-## 24. Composition markers: `<children/>` + named slots (v1.21, amended v1.41)
+## 24. Composition markers: `<Children/>`, `<Slot/>`, `<Slot name>` (v1.21, amended v1.41, v1.64)
 
-Multi-region composition. Named slots shipped in v1.21 (D53); v1.41 (D74) retired the bare lowercase `<slot/>` and gave each spelling exactly one role: **`<children/>` is the default marker** (call-site children), **`<slot name>` is only ever a named slot** (`name` is now required), and **`<Slot/>` remains the router outlet** (D30). All three compile to the same marker vnode — the runtime kernel, ViewManager expansion, SSG serializer, and router are untouched, and templates already spelled `<Slot/>`/`<slot name>` compile **byte-identically**.
+Multi-region composition. Named slots shipped in v1.21 (D53); v1.41 (D74) retired the bare lowercase `<slot/>`; v1.64 (D134) capitalized the markers and retired fallback bodies. Two tags, three roles: **`<Children/>` is the default marker** (call-site content), **`<Slot/>` is the router outlet** (D30), and **`<Slot name="x"/>` is a named slot**. Every marker is **self-closing only** — a marker with content (even an empty paired form) is a positioned compile error, and the lowercase `<children>`/`<slot>` spellings are steering errors. Capitalization uniformly means "the framework resolves this tag": components from your imports, markers from the grammar (`Children` and `Slot` are reserved tag names — parseElement matches them before component resolution). All markers compile to the same marker vnode.
 
 ```html
 <!-- Card.pzl -->
 <puzzle-view class="card">
-  <header><slot name="header">Untitled</slot></header>
-  <div class="body"><children/></div>
-  <footer><slot name="footer"/></footer>
+  <header><Slot name="header"/></header>
+  <div class="body"><Children/></div>
+  <footer><Slot name="footer"/></footer>
 </puzzle-view>
 
 <!-- call site -->
 <Card>
   <h2 slot="header">{ post.title }</h2>
-  <p>{ post.excerpt }</p>            <!-- no slot attr → default content → <children/> -->
+  <p>{ post.excerpt }</p>            <!-- no slot attr → default content → <Children/> -->
   <Button slot="footer" @click={ open }>Read</Button>
 </Card>
 ```
 
-- **`<children/>` — the default marker.** Renders the invocation's untagged direct children (or, in a routed view/layout, whatever fills the default bucket). Takes **no attributes** (any attribute is a positioned compile error; `ref` gets the render-target message, D72). MAY carry fallback children — `<children><p>Nothing here</p></children>` renders the fallback when the call site supplies nothing (v1.41 un-freezes D53's deferred default-fallback with the exact semantics named slots always had). One default marker per body, counting `<Slot/>` too.
-- **`<Slot/>` — the router outlet.** The same marker, capitalized: the canonical spelling in routed shells/layouts (D30 fills it). Bare only — a `name` attribute is a compile error steering to lowercase `<slot name>`, and children remain rejected (no fallback; an index child route is the sanctioned empty-state). The compiler cannot tell a view from a component (same `.pzl` format), so `<Slot/>`-in-views vs `<children/>`-in-components is a documented convention over one mechanism, not an enforced split.
-- **`<slot name="x">…fallback…</slot>` — named slots only.** `name` is **required**, static, non-empty, unique per template body; `name="default"` and `name="children"` are reserved (compile errors — the latter steers to `<children/>`). A nameless `<slot>`/`<slot/>` is a positioned compile error naming both replacements. Fallback uses the full template grammar and renders when the call site fills nothing for that name.
+- **`<Children/>` — the default marker.** Renders the invocation's untagged direct children (or, in a routed view/layout, whatever fills the default bucket). Takes **no attributes** (any attribute is a positioned compile error; `ref` gets the render-target message, D72) and **no body**. Renders nothing when the call site supplies nothing — default content is the owning component's concern (a prop or `{#if}` in its own template; no is-slot-filled probe, deferred by D134). One default marker per body, counting `<Slot/>` too.
+- **`<Slot/>` — the router outlet.** Bare and self-closing: the canonical spelling in routed shells/layouts (D30 fills it). The compiler cannot tell a view from a component (same `.pzl` format), so `<Slot/>`-in-views vs `<Children/>`-in-components is a documented convention over one mechanism, not an enforced split.
+- **`<Slot name="x"/>` — a named slot.** `name` is static, non-empty, unique per template body; `name="default"` and `name="children"` are reserved (both steer to `<Children/>`). Renders the call-site children tagged `slot="x"`, and nothing when unfilled.
+- **Retired spellings (v1.64, D134):** any `<children…>` or `<slot…>` tag is a positioned compile error steering to the capitalized form — `<Children/>` for the default marker, `<Slot name="x"/>` for a named slot, with the bare-`<slot>` error naming both replacements. A body on any marker errors: markers are self-closing render targets; fallback content is not supported.
 - **Call-site side (unchanged, D53):** a **static** `slot="x"` attribute on a **direct child** (element or component tag) of a component invocation routes it to that region; the attribute is stripped from the rendered output. Direct children without one form the default content.
 - **Compile errors (unchanged, D53):** dynamic `slot={expr}` on a direct component child; a control-flow block at direct-child level containing top-level `slot`-attributed elements (put the condition inside the slotted element instead). Elsewhere, `slot` is the ordinary HTML global attribute and passes through.
-- **Views/layouts (unchanged):** one marker type, one expansion pass — but the router only ever fills the DEFAULT bucket; a named slot in a routed view's template just renders its fallback.
-- **Forwarding through a component (v1.38, D71 — respelled by v1.41):** a default marker placed INSIDE a component invocation forwards the enclosing template's default content through that component — `<Card><children/></Card>` in a layout hands the routed page to Card's default slot (`<Slot/>` works identically in that position — same node). The expansion walk substitutes the enclosing template's markers in call-site children before the inner component expands its own; a routed vnode's pinned instance rides along and mounts as usual. Only the default marker forwards: `<slot name="x">` inside a component invocation is a positioned compile error (no defined fill source — the router fills the default slot only), enforced through nested elements, control flow, and deeper invocations.
+- **Views/layouts (unchanged):** one marker type, one expansion pass — but the router only ever fills the DEFAULT bucket; a named slot in a routed view's template renders nothing.
+- **Forwarding through a component (v1.38, D71 — respelled by v1.64):** a default marker placed INSIDE a component invocation forwards the enclosing template's default content through that component — `<Card><Children/></Card>` in a layout hands the routed page to Card's default slot (`<Slot/>` works identically in that position — same node). The expansion walk substitutes the enclosing template's markers in call-site children before the inner component expands its own; a routed vnode's pinned instance rides along and mounts as usual. Only the default marker forwards: `<Slot name="x"/>` inside a component invocation is a positioned compile error (no defined fill source — the router fills the default slot only), enforced through nested elements, control flow, and deeper invocations.
 - Scoped slots (child data flowing back into parent-provided content) remain deferred.
 
 ## 28. List keying (v1.26)
@@ -201,7 +202,7 @@ The compiler emits **positioned, non-fatal warnings** (never errors) for five te
 
 - Rules: `<img>` without `alt`; `<input type="image">` without `alt` (only when `type` is statically `image`); `<iframe>` without `title`; `<a>` without `href`; a statically positive `tabindex`.
 - `alt=""` is valid (decorative images) and never warns. An attribute counts as **present** when any static, valueless, dynamic (`alt={expr}`), or mixed attribute carries the name — the rules never guess about runtime values, and a dynamic `type`/`tabindex` never warns.
-- Both the template and `<puzzle-skeleton>` are scanned, descending into `{#if}`/`{#for}`/`{#case}` bodies, component call-site children, and slot fallbacks.
+- Both the template and `<puzzle-skeleton>` are scanned, descending into `{#if}`/`{#for}`/`{#case}` bodies and component call-site children. (Slot fallbacks were scanned until v1.64 removed them — D134.)
 - No suppression syntax, no warning IDs, no ARIA role matrix, no click/keyboard heuristics — five reliable rules over a rules engine. Additions are SPEC amendments.
 
 ## 47. The `outside` event modifier: `@event:outside` (v1.52)
@@ -213,4 +214,3 @@ The compiler emits **positioned, non-fatal warnings** (never errors) for five te
 - **Lifecycle:** the framework owns the document listener. It attaches when the bound element mounts and detaches on every removal shape (conditional toggle, keyed-row removal, subtree teardown, full view destroy) and on the inline-null toggle (`@pointerdown:outside={ open ? close : null }`). The idiomatic form puts the binding on the panel root inside `{#if open}`, so the listener's lifetime tracks the panel; the always-mounted alternative is the root-element binding with the null-toggle.
 - `@click` and `@click:outside` on one element are independent bindings. Existing §5 compile errors are unchanged (`outside` on a component callback prop is rejected like every modifier).
 - **Documented limitations:** events inside an `<iframe>` never reach the parent document; on touch, `pointerdown` fires at scroll-start — prefer `@click:outside` where scroll tolerance matters. The event choice is the author's.
-

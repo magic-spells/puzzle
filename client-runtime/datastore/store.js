@@ -21,6 +21,7 @@ import {
 	DELETED_SAVE_MESSAGE,
 	PuzzleModel,
 	PuzzleValidationError,
+	recordKey,
 	recordMutationRevision,
 	safeMerge,
 } from '../model.js';
@@ -35,20 +36,6 @@ import {
 
 const REC_SEP = ' '; // never appears in a type name
 const noop = () => {}; // swallows a chained write's rejection (§22, D50)
-
-/**
- * Normalize the RECORD-MAP key only — never a record's fields (D112).
- *
- * Subscription keys (`type + REC_SEP + id`) and adapter URLs already string-coerce
- * identity, so the record Map was the only type-sensitive index in the datastore: a
- * string route param (`findOne('post', '1')`) missed the record a numeric-id JSON
- * payload created, while the subscription still fired.
- *
- * ONLY numbers convert. null/undefined/objects pass through untouched, which keeps
- * belongsTo's null-FK short-circuit intact and stops String(null) from colliding
- * with a real 'null' string id. Record fields keep whatever type the server sent.
- */
-const recordKey = (id) => (typeof id === 'number' ? String(id) : id);
 
 /**
  * Thrown by the write verbs — saveRecord/deleteRecord/request — when the server
@@ -356,6 +343,13 @@ export class Store {
 	 * Subscribers are notified as data lands (batched, as usual).
 	 */
 	async loadAll(type) {
+		const pk = this.modelFor(type).primaryKey();
+		const revisionsAtDispatch = new Map(
+			Array.from(this._typeMap(type).values(), (record) => [
+				recordKey(record[pk]),
+				recordMutationRevision(record),
+			])
+		);
 		const list = await this._fetchAdapter(type, '');
 		if (!Array.isArray(list)) {
 			throw new Error(`[puzzle] loadAll('${type}') expected a JSON array from the server`);
@@ -371,14 +365,23 @@ export class Store {
 					`[puzzle] loadAll('${type}') expected an array of JSON objects from the server`
 				);
 			}
+			if (data[pk] == null) {
+				throw new Error(
+					`[puzzle] loadAll('${type}') requires primary key "${pk}" on every record`
+				);
+			}
 		}
-		const records = list.map((data) => this._upsert(type, data));
+		const records = list.map((data) =>
+			this._upsert(type, data, revisionsAtDispatch.get(recordKey(data[pk])))
+		);
 		this._persist();
 		return records;
 	}
 
 	/** GET apiURL + adapter.endpoint + '/' + id and upsert the single record. */
 	async loadOne(type, id) {
+		const existing = this._typeMap(type).get(recordKey(id));
+		const revisionAtDispatch = existing ? recordMutationRevision(existing) : undefined;
 		const data = await this._fetchAdapter(type, '/' + encodeURIComponent(id));
 		// Response-shape guard (mirrors loadAll): a null/array/non-object body would
 		// slip through _upsert → _instantiate as a bogus record (200 null → an empty
@@ -386,7 +389,13 @@ export class Store {
 		if (data == null || typeof data !== 'object' || Array.isArray(data)) {
 			throw new Error(`[puzzle] loadOne('${type}', id) expected a JSON object from the server`);
 		}
-		const record = this._upsert(type, data);
+		const pk = this.modelFor(type).primaryKey();
+		if (data[pk] == null) {
+			throw new Error(
+				`[puzzle] loadOne('${type}', id) requires primary key "${pk}" on the record`
+			);
+		}
+		const record = this._upsert(type, data, revisionAtDispatch);
 		this._persist();
 		return record;
 	}
@@ -439,12 +448,18 @@ export class Store {
 		return readBody(res);
 	}
 
-	/** Create or update-in-place by primary key; notifies either way. Public callers use upsert(). */
-	_upsert(type, data) {
+	/**
+	 * Create or update-in-place by primary key; notifies either way.
+	 * @param {string} type
+	 * @param {object} data
+	 * @param {number} [throughRevision] D138 load-response revision boundary.
+	 * Public callers use upsert(), which deliberately leaves this undefined.
+	 */
+	_upsert(type, data, throughRevision) {
 		const pk = this.modelFor(type).primaryKey();
 		const existing = data?.[pk] != null ? this._typeMap(type).get(recordKey(data[pk])) : null;
 		if (existing) {
-			safeMerge(existing, data);
+			safeMerge(existing, data, throughRevision);
 			existing._synced = true; // came from the server (constellation/doc/DOC-SPEC.md §22, D50)
 			this._notify(type, data[pk]);
 			return existing;

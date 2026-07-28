@@ -18,7 +18,7 @@ package parser
 //      property access this.refs.<name>.
 //   4. ref on a Component tag — a ref wires a DOM node, not a child instance;
 //      the @ready callback-prop idiom is how a parent reaches into a child.
-//   5. ref on a <slot>/<Slot> — a slot is a render target, not a real element.
+//   5. ref on <Children>/<Slot> — a marker is a render target, not a real element.
 //   6. ref anywhere inside a {#for} body — per-iteration array refs are deferred
 //      (v1); key the data instead.
 //   7. ref anywhere inside a <puzzle-skeleton> body — skeleton nodes are
@@ -65,14 +65,6 @@ func walkRefs(nodes []Node, file string, seen map[string]Position, inFor, inSkel
 			if ref := findRefAttr(node.Props); ref != nil {
 				return errAt(file, attrPos(ref), "ref cannot be placed on the component <%s> — a ref wires a DOM node, not a child instance; use an @ready callback prop to reach into a child component", node.Name)
 			}
-			if perr := walkRefs(node.Children, file, seen, inFor, inSkeleton); perr != nil {
-				return perr
-			}
-		case *Slot:
-			// A marker's own attributes are validated in parseElement
-			// (childrenMarkerAttrs/slotOutletAttrs/namedSlotFromAttrs — each rejects
-			// a ref with a ref-specific message); only a <children>'s or named
-			// slot's fallback children reach here, and they are ordinary nodes.
 			if perr := walkRefs(node.Children, file, seen, inFor, inSkeleton); perr != nil {
 				return perr
 			}

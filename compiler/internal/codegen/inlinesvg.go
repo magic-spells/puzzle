@@ -122,6 +122,12 @@ func (c *compiler) resolveOneSVG(n *parser.InlineSVG, assetsDir string, inlined 
 	return &parser.Element{Tag: "svg", Attrs: attrs, RawInner: &seed, RawSrc: src, Pos: n.Pos}, nil
 }
 
+// ValidSVGPath is the exported form of validSVGPath, for callers outside this
+// package that resolve a {#svg} asset specifier against app/assets/ — the
+// esbuild plugin validates the virtual-module specifier with the SAME rule the
+// compile-time path uses, before it ever touches the filesystem.
+func ValidSVGPath(src string) bool { return validSVGPath(src) }
+
 // validSVGPath reports whether src is a plain, app/assets-relative forward-slash
 // path: not absolute, no "./"/"../" prefix, and a Clean that stays inside the
 // assets dir.
@@ -224,6 +230,11 @@ const SVGAssetSpecifierPrefix = "@magic-spells/puzzle/svg-asset/"
 
 // emitSVGImports returns the module-top import lines for every asset referenced
 // in dedup mode, in first-seen order (empty when none / inline mode).
+//
+// The specifier goes through jsString, not raw concatenation: validSVGPath vets
+// traversal, not bytes, so a filename carrying a quote/backslash/newline would
+// otherwise close the literal early and emit a broken module. Escaping is
+// defense in depth — plain paths are byte-identical to the concatenated form.
 func (c *compiler) emitSVGImports() string {
 	if len(c.svgOrder) == 0 {
 		return ""
@@ -232,10 +243,9 @@ func (c *compiler) emitSVGImports() string {
 	for _, src := range c.svgOrder {
 		b.WriteString("import ")
 		b.WriteString(c.svgIdent[src])
-		b.WriteString(" from '")
-		b.WriteString(SVGAssetSpecifierPrefix)
-		b.WriteString(src)
-		b.WriteString("';\n")
+		b.WriteString(" from ")
+		b.WriteString(jsString(SVGAssetSpecifierPrefix + src))
+		b.WriteString(";\n")
 	}
 	return b.String()
 }

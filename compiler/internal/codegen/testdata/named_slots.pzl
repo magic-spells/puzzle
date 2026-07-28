@@ -1,7 +1,7 @@
 <puzzle-view class="card">
-  <header><slot name="header">Untitled</slot></header>
-  <div class="body"><children/></div>
-  <footer><slot name="footer"/></footer>
+  <header><Slot name="header"/></header>
+  <div class="body"><Children/></div>
+  <footer><Slot name="footer"/></footer>
 </puzzle-view>
 
 <script>
