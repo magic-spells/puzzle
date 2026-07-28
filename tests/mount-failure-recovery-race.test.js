@@ -169,7 +169,10 @@ describe('first-mount failure recovery survives a same-turn parent re-render', (
 		await flush();
 
 		// Only now does the teardown run — against the orphaned vnode.
-		expect(err).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(err).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+			expect.any(Error)
+		);
 		expect(instances[0].isDestroyed).toBe(true);
 		expect(el.querySelector('.child')).toBeNull();
 
@@ -183,7 +186,10 @@ describe('first-mount failure recovery survives a same-turn parent re-render', (
 		const host = await new Host({ store }).mount(el);
 		await flush(); // the rejection microtask settles with no competing render
 
-		expect(err).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(err).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+			expect.any(Error)
+		);
 		expect(instances).toHaveLength(1);
 		expect(instances[0].isDestroyed).toBe(true);
 		// A bare comment holds the position until the next render.
@@ -321,7 +327,10 @@ describe('a router-preloaded instance is never torn down by the view manager', (
 		mount(vnode, el, null, { store });
 		await flush();
 
-		expect(err).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(err).toHaveBeenCalledWith(
+			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			expect.any(Error)
+		);
 
 		// The Router owns this lifetime: the view stays alive, subscribed, and committed
 		// until the next navigation replaces it.

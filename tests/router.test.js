@@ -1847,7 +1847,7 @@ describe('Router — router-owned mount() rejections are observed (Fix 1)', () =
 		await drainRejections();
 
 		expect(errSpy).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit:',
+			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
 			expect.any(Error)
 		);
 		expect(unhandled).toHaveLength(0);
@@ -1881,7 +1881,7 @@ describe('Router — router-owned mount() rejections are observed (Fix 1)', () =
 		await drainRejections();
 
 		expect(errSpy).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit:',
+			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
 			expect.any(Error)
 		);
 		expect(unhandled).toHaveLength(0);
@@ -1910,7 +1910,7 @@ describe('Router — router-owned mount() rejections are observed (Fix 1)', () =
 		await drainRejections();
 
 		expect(errSpy).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit:',
+			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
 			expect.any(Error)
 		);
 		expect(unhandled).toHaveLength(0);

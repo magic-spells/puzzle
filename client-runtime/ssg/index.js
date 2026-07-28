@@ -127,11 +127,11 @@ export async function prerender(config, opts = {}) {
 	}
 	const createPageContext = async (entry) => {
 		builtContext = true;
-		// Static mode threads the page's route snapshot into the router stub so the
-		// prerender ctx's router.current / url() match the client kernel's (facade
-		// parity). Hybrid ignores it (real memory Router). The beforeMount-only
-		// fallback below has no entry — it never renders, so a null route is fine.
-		const route = isStatic && entry ? makeRouteSnapshot(entry) : null;
+		// Both modes thread the page's route snapshot into their prerender router:
+		// static gives it to the throwing stub, while hybrid shadows current on the
+		// real unstarted memory Router. The beforeMount-only fallback below has no
+		// entry — it never renders, so a null route is fine.
+		const route = entry ? makeRouteSnapshot(entry) : null;
 		return buildContext(config, { mode, route });
 	};
 
@@ -431,7 +431,8 @@ async function buildContext(config, { mode = 'hybrid', route = null } = {}) {
 	if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;
 	const store = new Store(models, storeOptions);
 	// Router facade parity (D81): HYBRID keeps a real, unstarted memory Router because
-	// the SPA boots and takes over on load (current becomes real then). STATIC has no
+	// the SPA boots and takes over on load, but shadows current with this page's route
+	// snapshot so prerendered route-aware markup matches the live app. STATIC has no
 	// client router — the browser kernel (static/index.js) wires the base-aware
 	// makeRouterStub — so the prerender ctx uses that SAME stub over the SAME per-page
 	// snapshot here, or router.url()/current would differ between the prerendered HTML
@@ -453,14 +454,24 @@ async function buildContext(config, { mode = 'hybrid', route = null } = {}) {
 		// …but a memory router carries no URL, so its url() returns paths UNPREFIXED: a
 		// based app would prerender `/about` where the live app renders `/docs/about` —
 		// a broken href for crawlers, no-JS visitors, and anyone clicking before
-		// takeover. So url() ALONE is shadowed with the app's real mode/base, through
-		// the same encoder Router.url() and the static stub use; `current` and the
-		// compiled route table stay the real memory Router the takeover expects.
-		// (Wrapping the instance is not an option: `current` reads private fields, so a
-		// delegating facade would throw.)
+		// takeover. Shadow url() with the app's real mode/base through the same encoder
+		// Router.url() and the static stub use, and shadow current with the per-page
+		// snapshot. The compiled route table stays the real memory Router the takeover
+		// expects.
 		const base = normalizeBase(config.routerBase);
 		const routerMode = config.routerMode ?? 'history';
 		router.url = (path) => encodeURL(path, routerMode, base);
+		if (route) {
+			// Own property shadows the prototype getter — the same instance-shadowing
+			// trick url() uses above, and for the same reason: `current` reads private
+			// fields, so a delegating facade would throw. The takeover replaces the whole
+			// instance, so this never outlives the prerender.
+			Object.defineProperty(router, 'current', {
+				value: route,
+				enumerable: true,
+				configurable: true,
+			});
+		}
 	}
 	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 

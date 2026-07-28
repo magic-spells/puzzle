@@ -135,7 +135,10 @@ export async function mountStatic({
 	} catch (err) {
 		root.destroy();
 		targetEl.replaceChildren(...prerendered);
-		console.error('[puzzle] child mount failed:', err);
+		console.error(
+			'[puzzle] component mount failed — the component was destroyed and the prerendered content restored (static pages have no later patch/remount):',
+			err
+		);
 		return;
 	}
 	// Kept OUTSIDE the mount try: a rejected playIn() must never tear down a

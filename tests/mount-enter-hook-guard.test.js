@@ -108,7 +108,10 @@ describe('mountComponent — a throwing enter hook leaves the mounted tree alone
 				'[puzzle] child enter animation failed:',
 				expect.any(Error)
 			);
-			expect(err).not.toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+			expect(err).not.toHaveBeenCalledWith(
+				'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+				expect.any(Error)
+			);
 
 			// The child is still on screen — not swapped for a comment placeholder.
 			const child = el.querySelector('.child');
@@ -147,7 +150,10 @@ describe('mountComponent — a throwing enter hook leaves the mounted tree alone
 		const { el, store, instances } = await mountHost(Broken);
 
 		// The recovery branch ran — and only it.
-		expect(err).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(err).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+			expect.any(Error)
+		);
 		expect(err).not.toHaveBeenCalledWith(
 			'[puzzle] child enter animation failed:',
 			expect.any(Error)

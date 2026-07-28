@@ -5,10 +5,10 @@
 // build under `routerBase: '/docs'` has to emit `/docs/about`, not `/about` —
 // crawlers, no-JS visitors, and anyone clicking before SPA takeover only ever see
 // the prerendered markup. Hybrid's ctx router is an unstarted MEMORY Router (it
-// must keep real `current`/route-table semantics for the SPA takeover), and memory
-// mode carries no URL, so its url() alone is shadowed with the app's real
-// mode/base through the shared encodeURL — the same function Router.url() and the
-// static router stub (ssg/assemble.js) call.
+// must keep the real route table and navigable API for SPA takeover), with two
+// instance shadows for prerender parity: current is the page snapshot, and url()
+// uses the app's real mode/base through the shared encodeURL — the same function
+// Router.url() and the static router stub (ssg/assemble.js) call.
 //
 // Hash apps cannot reach hybrid at all (the history-only guard rejects them — a
 // hash router boots at '/' and would render home over every page). They CAN reach
@@ -48,7 +48,7 @@ class Direct extends PuzzleView {
 			'a',
 			{
 				href: router.url('/contact'),
-				'data-current': String(router.current),
+				'data-current': router.current?.path ?? 'null',
 				'data-push': typeof router.push,
 			},
 			[text('Contact')]
@@ -103,9 +103,9 @@ describe('hybrid prerender — default (no base, history) is unchanged', () => {
 		expect(await homeHtml(config({ routerMode: 'history' }))).toContain('href="/about"');
 	});
 
-	it('keeps the real memory Router beyond url() (null current, navigable API)', async () => {
+	it('keeps the real memory Router beyond its snapshot current (navigable API)', async () => {
 		const html = await homeHtml(config({ routes: [{ path: '/', view: Direct }] }));
-		expect(html).toContain('data-current="null"'); // unstarted — the SPA fills it in
+		expect(html).toContain('data-current="/"');
 		expect(html).toContain('data-push="function"'); // a Router, not the throwing static stub
 	});
 });
