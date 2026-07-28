@@ -105,6 +105,13 @@ Rules that bite:
   when nothing fills it (`<Slot name="trigger"><b>Open</b></Slot>`) — supplied
   content replaces the fallback entirely. Lowercase `<children>`/`<slot>` are
   compile errors.
+- **`<Portal>` teleports overlays.** `<Portal>…</Portal>` (paired-only,
+  attribute-free) mounts its children into a framework-created outlet beside
+  the app root while staying in the owner's component tree — for modals and
+  full-screen panels that must escape ancestor CSS. `@event:outside` treats
+  portaled content as inside its logical owner. Portals emit nothing in
+  prerendered HTML (content appears at takeover). For focus-trapped modals,
+  prefer native `<dialog>.showModal()` via a ref.
 - **`island` freezes children.** An element with the `island` attribute keeps
   its children untouched by patching after mount (for third-party DOM widgets);
   the element's own attrs/listeners still patch. Components, slots, and view

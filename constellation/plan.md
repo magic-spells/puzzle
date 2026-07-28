@@ -89,8 +89,9 @@ log in [[DOC-DECISIONS]] explains why the contract has its current shape.
     genuinely fail-soft, island validation descends into slot fallback, the
     lexer no longer panics on a trailing backslash, and generated static-page
     entries observe their own mount rejection.
-- Element actions, `<Portal>`, and lazy routes were reviewed and deferred (the
-  SPEC deferred list carries the rationale). Pieces migration to
+- Element actions and lazy routes were reviewed and deferred (the SPEC deferred
+  list carries the rationale). `<Portal>` shipped its scoped v1 in 0.5.0
+  ([[DECISION-D144-PORTAL]], v1.66) — named outlets remain the deferred half. Pieces migration to
   `@event:outside` is queued for AFTER 0.2.0 ships — older compilers reject
   unknown modifiers.
 - `examples/kanban` drives its drag-shift animation from the `flip` attribute

@@ -52,10 +52,13 @@ Cost: island children can never be data-reactive, and a composition marker
 error inside — content must be seeded from the wrapper's own template or managed
 fully imperatively.
 
-## The gap (unresolved)
+## The gap (narrowed by D144)
 
-A restructuring library that ALSO needs reactive content has no answer today —
-neither mode fits. Candidate primitives: a portal ("render vnodes into that
-foreign container") or an island with an explicit re-seed lever short of a key
-change. Until then, the shared-subtree mode is a handshake the compiler does not
-check — this card IS the contract.
+A restructuring library that ALSO needs reactive content: `<Portal>`
+([[DECISION-D144-PORTAL]], v1.66) now covers the overlay-container shape of
+this — reactive vnodes rendered into a framework-owned element outside the
+owner's DOM position. What remains open is projecting into an ARBITRARY
+library-owned container (v1 has one framework-created outlet; user-placed named
+outlets are the reserved extension) and the island re-seed lever. The
+shared-subtree mode is still a handshake the compiler does not check — this
+card IS the contract.

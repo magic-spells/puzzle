@@ -73,7 +73,9 @@ second specification. Decision cards hold rationale and git holds chronology.
   event attributes compile to callback props.
 - Composition: `<Children/>` default content, named `<Slot name="…"/>`,
   `<Slot/>` router outlets, unfilled-marker omission, and default-slot forwarding
-  through component invocations.
+  through component invocations. `<Portal>…</Portal>` (D144) teleports children
+  into a framework-created outlet at the app root — paired-only, attribute-free,
+  empty in prerendered HTML, with portal-aware `@event:outside` containment.
 - `key` overrides list auto-keying; `ref="name"` binds `this.refs`; `island`
   makes element children browser-owned after mount; `flip` FLIP-animates keyed
   reorders (translation-only, reduced-motion aware, D85).
