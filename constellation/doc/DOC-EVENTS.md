@@ -9,7 +9,6 @@ connections:
   - DOC-SPEC-TEMPLATE
   - DOC-TEMPLATE-SYNTAX
   - DOC-PUZZLE-FILE
-  - DOC-DECISIONS
 ---
 
 The `events` class field with the arrow-only rationale (field initializers run at construction with `this` bound to the instance), the two template forms (bare identifier vs call expression per [[DOC-SPEC-TEMPLATE]] §5), worked todos examples, setData-vs-store-mutation semantics, the component-events sequence (D16), and the common-mistakes list.

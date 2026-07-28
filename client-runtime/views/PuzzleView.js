@@ -77,6 +77,10 @@ export class PuzzleView {
 	// Nearest owning PuzzleView for error-boundary lookup. Set by the parent's
 	// ViewManager when it instantiates/adopts this component; null for app roots.
 	#errorParent = null;
+	// An error whose boundary resolved to THIS instance before it had a
+	// ViewManager (a pre-mount preload/data() rejection). mount() flushes it once
+	// the manager exists and the first render has been attempted.
+	#pendingBoundaryError = null;
 	#mounted = false;
 	// Anchor-race gate (Change A): set true when the non-skeleton async mount()
 	// branch resumes to find its first render superseded (no commit landed) —
@@ -314,7 +318,7 @@ export class PuzzleView {
 			if (typeof boundary.errorContent === 'function') {
 				try {
 					const tree = boundary.errorContent(boundaryError);
-					if (tree) return { boundary, tree };
+					if (tree) return { boundary, tree, error: boundaryError };
 				} catch (err) {
 					reportError(
 						boundary.ctx,
@@ -342,8 +346,31 @@ export class PuzzleView {
 				this.__failedFallback = mountedTree;
 				if (placeholder) placeholder.__failedFallback = mountedTree;
 			} else {
-				if (!boundary.#vm || boundary.#destroyed) return false;
-				boundary.#vm.render(tree);
+				if (!boundary.#vm || boundary.#destroyed) {
+					// PRE-MOUNT failure on this instance's own boundary: the router starts
+					// a skeleton view's preload() un-awaited, so a data() rejection can land
+					// before mount() ever creates the ViewManager. Buffer the error rather
+					// than dropping it — mount() flushes it once #vm exists, which is the
+					// difference between the declared errorContent() and an eternal
+					// skeleton. An ANCESTOR boundary is already mounted, so it renders
+					// immediately and never buffers (no double-fire).
+					if (boundary === this && !this.#vm && !this.#destroyed) {
+						this.#pendingBoundaryError = captured.error ?? null;
+					}
+					return false;
+				}
+				if (boundary !== this) {
+					// The ancestor's render unmounts — and DESTROYS — everything under it,
+					// including a routed chain the Router owns and still names in its
+					// committed state. Tell the router first so the next navigation
+					// rebuilds from scratch instead of reusing destroyed instances.
+					this.ctx?.router?.__invalidateChain?.(boundary);
+				}
+				// A patch threw partway through this manager's last render, so its tree
+				// no longer describes the DOM (D145/F7): mount the boundary face fresh
+				// over the corrupt range instead of diffing against a stale tree.
+				if (boundary.#vm.treeUnknown) boundary.#vm.renderFresh(tree);
+				else boundary.#vm.render(tree);
 			}
 			return true;
 		} catch (err) {
@@ -497,13 +524,27 @@ export class PuzzleView {
 				// refresh committed normally, #loaded is already true → complete inline.
 				if (!this.#loaded) {
 					this.#pendingMountHook = true;
+					this.#flushPendingBoundaryError();
 					return this;
 				}
 			}
 		}
 
 		this.#completeMount();
+		this.#flushPendingBoundaryError();
 		return this;
+	}
+
+	/**
+	 * Surface an error buffered before this instance had a ViewManager (see
+	 * #pendingBoundaryError). Runs once — the field is cleared BEFORE the render,
+	 * so a boundary that throws while drawing cannot re-enter this flush.
+	 */
+	#flushPendingBoundaryError() {
+		const err = this.#pendingBoundaryError;
+		if (err === null || this.#destroyed) return;
+		this.#pendingBoundaryError = null;
+		this.__renderErrorBoundary(err);
 	}
 
 	/**
@@ -521,7 +562,8 @@ export class PuzzleView {
 		// #mounted-true convergence point, so the snapshot can key and read this
 		// instance's state. Removed in destroy().
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) registerView(this);
-		this.mounted();
+		// D146: user code, fenced to committed params/route (see #withCommittedScope).
+		this.#withCommittedScope(() => this.mounted());
 	}
 
 	/**
@@ -603,6 +645,13 @@ export class PuzzleView {
 	 * supersedes an in-flight async one (stale results are discarded).
 	 */
 	refresh({ params, props, route } = {}) {
+		// D146: a refresh runs against this view's COMMITTED params/route, so a
+		// prepared async data() suspended on another route must not bleed its
+		// destination scope into this run's data() through the getters.
+		return this.#withCommittedScope(() => this.#refreshInner({ params, props, route }));
+	}
+
+	#refreshInner({ params, props, route } = {}) {
 		if (this.#destroyed || this.#leaving) return;
 		if (params) this.#params = params;
 		if (props) this.#props = props;
@@ -734,6 +783,11 @@ export class PuzzleView {
 			model = m;
 		});
 
+		// The token this prepare was evaluated against. Any COMMITTED refresh landing
+		// between here and commit() bumps it, which is exactly the "the prepared model
+		// is older than what is on screen" signal commit() converges on.
+		const preparedAt = this.#runToken;
+
 		let settled = false;
 		return {
 			ready,
@@ -753,10 +807,40 @@ export class PuzzleView {
 				// Bumping the token HERE (not at prepare) is what orders this commit
 				// against a mid-gate store-change refresh: while the gate is open the
 				// ancestor still shows the OLD route, so such a refresh runs and renders
-				// normally with the old params; when the navigation finally commits, this
-				// bump supersedes any of those still in flight — their params are stale by
-				// definition, and the prepared model is the newest state.
-				this.#commit(++this.#runToken, model);
+				// normally with the old params, and the bump below supersedes any of
+				// those still in flight — their params are stale by definition.
+				//
+				// But the prepared model is NOT automatically the newest state. A refresh
+				// that started (and possibly landed) after this prepare saw store data the
+				// prepared model predates — the D146 gate is exactly the window in which a
+				// user edit to a record the ancestor derives from can land. Committing the
+				// captured model then reverts the view to a pre-edit value and leaves it
+				// there until some unrelated later write. So: adopt the destination
+				// params/route/subscriptions either way, but when the token moved, RE-DERIVE
+				// instead of painting the stale capture. Costs one extra data() run and one
+				// tick of the older value on the rare interleaving; the alternative is
+				// indefinitely stale content.
+				if (this.#runToken !== preparedAt) {
+					this.#runToken++; // supersede anything still in flight
+					// Fire-and-forget, contained exactly like the store-change path: a
+					// data() failure here must not escape into the router's synchronous
+					// commit window (where it would strand the swap half-applied).
+					try {
+						this.refresh()?.catch((err) =>
+							this.#handleBackgroundRefreshFailure(
+								'[puzzle] data() failed during a prepared-commit re-derive:',
+								err
+							)
+						);
+					} catch (err) {
+						this.#handleBackgroundRefreshFailure(
+							'[puzzle] data() failed during a prepared-commit re-derive:',
+							err
+						);
+					}
+				} else {
+					this.#commit(++this.#runToken, model);
+				}
 			},
 			discard: () => {
 				if (settled) return;
@@ -771,6 +855,13 @@ export class PuzzleView {
 
 	/** Store subscription callback (Store.flush → subscribed components). */
 	onStoreChange() {
+		// D146: a store flush landing mid-gate is committed-state work (see
+		// #withCommittedScope) — refresh() fences its own body, but the reportError
+		// context and the boundary funnel below read this.route too.
+		return this.#withCommittedScope(() => this.#onStoreChangeInner());
+	}
+
+	#onStoreChangeInner() {
 		if (this.#destroyed || this.#leaving) return;
 		// Fire-and-forget: a data() failure on the store-change path is logged
 		// rather than escaping into Store.flush() (where an uncaught throw would
@@ -875,7 +966,8 @@ export class PuzzleView {
 		// logged/never-wedges posture as app.js's beforeUnmount guard. Stays
 		// synchronous: a returned promise is not awaited (destroy() is sync).
 		try {
-			this.destroyed();
+			// D146: user code, fenced to committed params/route.
+			this.#withCommittedScope(() => this.destroyed());
 		} catch (err) {
 			reportError(
 				this.ctx,
@@ -1457,6 +1549,45 @@ export class PuzzleView {
 		return (this.skeletonMinDuration ?? 0) - (Date.now() - this.#skeletonShownAt);
 	}
 
+	/**
+	 * Run fn with the DESTINATION eval scope (D146) fenced off, so `this.params` /
+	 * `this.route` inside it report the COMMITTED route.
+	 *
+	 * #evalScope exists so a PREPARED data() run sees the navigation it is gating
+	 * (D47). For a synchronous data() that window is one call frame. For an ASYNC
+	 * one it spans the whole suspension — the entire navigation gate — during which
+	 * the ancestor is still mounted, still on the old route, and fully interactive.
+	 * Every path where the runtime re-enters app code from the event loop in that
+	 * window must therefore read committed state, or a click handler doing
+	 * `store.upsert('item', { listId: this.params.listId })` writes against a route
+	 * the user has not navigated to (and which may never commit).
+	 *
+	 * Fenced here: renders, DOM event dispatch, flushUpdates (the setData path),
+	 * onStoreChange, refresh, and the mounted()/destroyed() lifecycle hooks
+	 * (beforeUpdate/afterUpdate run inside #renderNow, already fenced). NOT fenced,
+	 * and a known residue: app code that captures `this` into a setTimeout or a
+	 * fetch().then() DURING the gate and dereferences params/route after the fence
+	 * returns. There is no async-local scope primitive in the browser to close that.
+	 */
+	#withCommittedScope(fn) {
+		const prevScope = this.#evalScope;
+		this.#evalScope = null;
+		try {
+			return fn();
+		} finally {
+			this.#evalScope = prevScope;
+		}
+	}
+
+	/**
+	 * INTERNAL bridge to #withCommittedScope for the ViewManager, which wraps every
+	 * patch-managed DOM listener so the owner's handler runs against committed
+	 * params/route. Underscore-prefixed by the codebase's internal convention.
+	 */
+	__withCommittedScope(fn) {
+		return this.#withCommittedScope(fn);
+	}
+
 	#renderNow(preparedTree = undefined) {
 		// D146: a render always draws COMMITTED state. A prepared data() run whose
 		// promise is suspended leaves #evalScope set, so a render that lands inside
@@ -1464,13 +1595,7 @@ export class PuzzleView {
 		// open) would otherwise read the destination params/route through the getters
 		// and paint the route the router has not committed. Renders are synchronous,
 		// so clearing and restoring around the whole render is exact.
-		const prevScope = this.#evalScope;
-		this.#evalScope = null;
-		try {
-			this.#renderNowInner(preparedTree);
-		} finally {
-			this.#evalScope = prevScope;
-		}
+		this.#withCommittedScope(() => this.#renderNowInner(preparedTree));
 	}
 
 	#renderNowInner(preparedTree = undefined) {
@@ -1587,20 +1712,26 @@ export class PuzzleView {
 	 * wedges the scheduler (the flag clears first; the error is reported).
 	 */
 	flushUpdates() {
-		if (!this.#updateScheduled) return;
-		this.#updateScheduled = false;
-		try {
-			this.#renderNow();
-		} catch (err) {
-			reportError(
-				this.ctx,
-				err,
-				{ phase: 'render', view: this, route: this.route },
-				'[puzzle] render update failed:',
-				err
-			);
-			this.__renderErrorBoundary(err);
-		}
+		// D146: the setData re-render path re-enters from a rAF/timer callback, which
+		// can land inside a suspended prepared data()'s window. Fence the whole body
+		// (not just the render) so the error context and boundary funnel below read
+		// the committed route too.
+		this.#withCommittedScope(() => {
+			if (!this.#updateScheduled) return;
+			this.#updateScheduled = false;
+			try {
+				this.#renderNow();
+			} catch (err) {
+				reportError(
+					this.ctx,
+					err,
+					{ phase: 'render', view: this, route: this.route },
+					'[puzzle] render update failed:',
+					err
+				);
+				this.__renderErrorBoundary(err);
+			}
+		});
 	}
 }
 

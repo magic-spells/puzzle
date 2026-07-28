@@ -1,6 +1,6 @@
 ---
 name: D144 — Portal (scoped v1)
-status: built
+status: verified
 connections:
   - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
   - DECISION-D141-MARKER-FALLBACK-BODIES
@@ -8,8 +8,10 @@ connections:
   - DECISION-D44-DOM-ISLANDS
   - DOC-THIRD-PARTY-DOM
   - COMPONENT-VIEW-MANAGER
-  - COMPONENT-COMPILER-PARSER
-  - COMPONENT-COMPILER-CODEGEN
+  - COMPONENT-TEMPLATE-PARSER
+  - COMPONENT-CODEGEN
+verified_at: '2026-07-28T22:30:07.016Z'
+verified_sha: f639b5d1aa8f59ffe385936b7e5b5d66b1235da8
 ---
 
 # D144 — Portal (scoped v1)
@@ -66,6 +68,20 @@ binding and loop-variable name like `SLOT_TAG`.
   outlet. Both are documented behavior, not defects.
 
 ## Scope notes
+
+Portal state (host, outlet, range table, count) is module-scoped, not per-app:
+two simultaneous `PuzzleApp` instances on one page would share one outlet — a
+later mount retargets it for both, and either unmount tears down the other
+app's live portals. Multiple apps on a page are **not a supported shape**; the
+dev build warns when `setPortalHost()` would stomp live portal state. Scoping
+the state to ctx is the compatible upgrade if a real embedding case ever
+funds it.
+
+Compiler tree walkers all recurse into `*parser.Portal` except three that are
+deliberately exempt: loop-key roots (contractually elements/components),
+`buildTextRun` (receives pre-filtered text runs only), and `condStaticLen`
+(counts a Portal as one fixed vnode without descending — its local
+placeholder occupies exactly one position).
 
 `<dialog>.showModal()` remains the recommended tool for focus-trapped modals —
 the native top layer gives focus trap and Escape handling for free; Portal

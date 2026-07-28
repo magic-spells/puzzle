@@ -4,7 +4,6 @@ kind: reference
 status: verified
 connections:
   - DOC-SPEC
-  - DOC-DECISIONS
   - COMPONENT-PUZZLE-APP
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-PUZZLE-VIEW

@@ -1457,6 +1457,10 @@ func hasSlot(nodes []parser.Node) bool {
 		switch t := n.(type) {
 		case *parser.Slot:
 			return true
+		case *parser.Portal:
+			if hasSlot(t.Children) {
+				return true
+			}
 		case *parser.Element:
 			if hasSlot(t.Children) {
 				return true

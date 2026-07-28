@@ -1,0 +1,15 @@
+<puzzle-view>
+  <main>Ready</main>
+</puzzle-view>
+
+<puzzle-skeleton>
+  <Portal>
+    <Children/>
+  </Portal>
+</puzzle-skeleton>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class PortalSkeleton extends PuzzleView {}
+</script>

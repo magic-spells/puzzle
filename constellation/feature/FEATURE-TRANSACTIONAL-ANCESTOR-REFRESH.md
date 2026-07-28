@@ -1,6 +1,6 @@
 ---
 name: Transactional reused-ancestor refresh
-status: built
+status: verified
 connections:
   - DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH
   - DECISION-D19-NAVIGATION-COMMIT
@@ -11,6 +11,8 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-STORE
+verified_at: '2026-07-28T22:30:08.488Z'
+verified_sha: f639b5d1aa8f59ffe385936b7e5b5d66b1235da8
 ---
 
 # Transactional reused-ancestor refresh
@@ -55,7 +57,9 @@ unchanged — the existing router suites are that half of the net.
 
 ## Residual
 
-`#evalScope` persists across a prepared async `data()`'s awaits, so a DOM event
-handler firing in that window and reading `this.route` sees the destination
-snapshot. Renders are fenced; handler dispatch is not. Documented at the getter
-and in D146.
+`#evalScope` persists across a prepared async `data()`'s awaits. Renders, DOM
+event dispatch, `flushUpdates`, `refresh`/`onStoreChange`, and the
+`mounted`/`destroyed` hooks are all fenced through `#withCommittedScope`, so
+mid-gate app code reads the committed route; only closures app code itself
+schedules from inside the gate (`setTimeout`, `fetch().then`) escape the
+fence. Documented in D146.
