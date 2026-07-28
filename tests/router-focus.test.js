@@ -201,6 +201,58 @@ describe('Router focus — tabindex hygiene (D93)', () => {
 		expect(leaf.hasAttribute('tabindex')).toBe(false);
 	});
 
+	it('suppresses both focus-ring channels while the stamp is live (D139)', async () => {
+		// A keyboard-driven navigation makes :focus-visible match the freshly
+		// focused root, so without this the UA draws its outline around the ENTIRE
+		// view — and Tailwind's focus:ring-* utilities draw the same noise via
+		// box-shadow. Inline + !important so no app stylesheet wins.
+		const { router, el } = await boot();
+		await router.push('/about');
+
+		const leaf = el.querySelector('puzzle-view.about');
+		expect(leaf.style.getPropertyValue('outline')).toBe('none');
+		expect(leaf.style.getPropertyPriority('outline')).toBe('important');
+		expect(leaf.style.getPropertyValue('box-shadow')).toBe('none');
+		expect(leaf.style.getPropertyPriority('box-shadow')).toBe('important');
+	});
+
+	it('removes the ring suppression on the same blur that lifts the tabindex', async () => {
+		const { router, el } = await boot();
+		await router.push('/about');
+		const leaf = el.querySelector('puzzle-view.about');
+
+		leaf.blur();
+		await tick();
+		expect(leaf.hasAttribute('tabindex')).toBe(false);
+		expect(leaf.style.getPropertyValue('outline')).toBe('');
+		expect(leaf.style.getPropertyValue('box-shadow')).toBe('');
+	});
+
+	it('puts a pre-existing inline outline/box-shadow back exactly as found', async () => {
+		class StyledView extends PuzzleView {
+			render() {
+				return h(
+					'puzzle-view',
+					{ class: 'styled', style: 'outline: 2px dashed red; box-shadow: 0 0 4px blue;' },
+					[text('S')]
+				);
+			}
+		}
+		const { router, el } = await boot([
+			...ROUTES,
+			{ path: '/styled', name: 'styled', view: StyledView },
+		]);
+		await router.push('/styled');
+
+		const leaf = el.querySelector('puzzle-view.styled');
+		expect(leaf.style.getPropertyValue('outline')).toBe('none'); // suppressed while focused
+		leaf.blur();
+		await tick();
+		expect(leaf.style.getPropertyValue('outline')).toBe('2px dashed red');
+		expect(leaf.style.getPropertyValue('box-shadow')).toBe('0 0 4px blue');
+		expect(leaf.style.getPropertyPriority('outline')).toBe('');
+	});
+
 	it('leaves an author-set tabindex completely alone', async () => {
 		class TabbableView extends PuzzleView {
 			render() {
@@ -216,6 +268,10 @@ describe('Router focus — tabindex hygiene (D93)', () => {
 		const leaf = el.querySelector('puzzle-view.tabbable');
 		expect(document.activeElement).toBe(leaf);
 		expect(leaf.getAttribute('tabindex')).toBe('0');
+		// The author chose this element's focus semantics — including its visuals:
+		// no ring suppression either (D139).
+		expect(leaf.style.getPropertyValue('outline')).toBe('');
+		expect(leaf.style.getPropertyValue('box-shadow')).toBe('');
 		leaf.blur();
 		await tick();
 		expect(leaf.getAttribute('tabindex')).toBe('0'); // never stripped

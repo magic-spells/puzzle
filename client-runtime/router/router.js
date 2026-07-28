@@ -209,7 +209,10 @@
  * element, walking back up the chain when a leaf rendered no element (`.element`
  * is legitimately null) and doing nothing when no level has one. The root is not
  * natively focusable, so tabindex="-1" is stamped before focusing and removed on
- * the element's blur — no permanent tab stop, no attribute debris. The focus()
+ * the element's blur — no permanent tab stop, no attribute debris. The stamp also
+ * cuts both focus-ring channels (`outline` and `box-shadow`, inline + !important)
+ * for its lifetime, restored on the same blur — a programmatic-only target is not
+ * keyboard-operable, so a ring around the whole view is noise (D139). The focus()
  * call ALWAYS passes { preventScroll: true }: without it the browser scrolls the
  * element into view and fights the window.scrollTo above, breaking D33 restore
  * and D41 anchor landings. Announcement is a single framework-owned
@@ -1754,9 +1757,10 @@ export class Router {
 					if (keep === 0) {
 						// Mounted directly (the ViewManager does not auto-play it in) → the
 						// router plays it in as the animator.
-						this.#takeoverSSG(topView);
+						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
-							topView.mount(this.#container, { children: rootVnode.children, preloaded: true })
+							topView.mount(this.#container, { children: rootVnode.children, preloaded: true }),
+							restoreTakeover
 						);
 						this.#commitState(next);
 						this.#playInLogged(topView);
@@ -1790,17 +1794,24 @@ export class Router {
 						// Layout SWAP: the LAYOUT is the animator — suppress the whole fresh
 						// chain (topView + deeper) so the subtree does not double-animate.
 						topView.skipEnter();
+						// The marker can only be present here after a FAILED navigation-#0
+						// takeover restored it: clear the restored prerendered nodes again or
+						// this fresh layout mounts ALONGSIDE them (duplicated page). A marker-
+						// less app makes this a no-op and the branch stays byte-identical.
+						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
-							layout.mount(this.#container, { children: [rootVnode], preloaded: true })
+							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+							restoreTakeover
 						);
 						this.#commitState(next);
 						this.#playInLogged(layout);
 					} else {
 						// INITIAL nav: a layout does NOT animate on first paint — the topmost
 						// view plays in exactly once via the ViewManager's slot-child chain.
-						this.#takeoverSSG(topView);
+						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
-							layout.mount(this.#container, { children: [rootVnode], preloaded: true })
+							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+							restoreTakeover
 						);
 						this.#commitState(next);
 					}
@@ -1842,26 +1853,34 @@ export class Router {
 	 * throw — the commit block keeps running, no rollback: D19/D61). Left
 	 * unobserved that becomes an unhandled rejection; log it once here instead. The
 	 * failed view is still committed to #state, so a later navigation replaces and
-	 * destroys it normally. (Child views mounted through the ViewManager's keyed
+	 * destroys it normally. On navigation-zero SSG takeover, restoreTakeover puts
+	 * the exact prerendered nodes + marker back before logging — the committed
+	 * failed instance remains router-owned, but the user never gets a blank page.
+	 * (Child views mounted through the ViewManager's keyed
 	 * patch are already observed there — '[puzzle] child mount failed:'; this covers
 	 * the three mounts the router drives directly: bare root view, layout swap,
 	 * initial-nav layout.)
 	 */
-	#observeMount(p) {
-		Promise.resolve(p).catch((err) =>
-			console.error('[puzzle] view mount failed after commit:', err)
-		);
+	#observeMount(p, restoreTakeover = null) {
+		Promise.resolve(p).catch((err) => {
+			restoreTakeover?.();
+			console.error('[puzzle] view mount failed after commit:', err);
+		});
 	}
 
 	/**
 	 * SSG takeover (M2): when the container was server-prerendered, the SSG step
 	 * stamped `data-puzzle-ssg` on it and filled it with the rendered markup. The
-	 * marker is present only on navigation #0 of an SSG app; this runs immediately
-	 * before an initial-nav mount into the container (the no-layout keep-0 branch
-	 * and the initial-nav layout branch). Clear the prerendered content so the fresh
-	 * mount doesn't append alongside it (duplicating the page), drop the marker (a
-	 * later re-mount is a normal SPA mount), and suppress the incoming top view's
-	 * ENTER animation so content the user is already reading doesn't re-animate.
+	 * marker is present only on navigation #0 of an SSG app — or restored by a
+	 * FAILED takeover mount (below); this runs immediately before every mount
+	 * into the container (the no-layout keep-0 branch, the initial-nav layout
+	 * branch, and the layout-swap branch, where only the restored-marker case can
+	 * match). Snapshot then clear the prerendered
+	 * content so the fresh mount doesn't append alongside it (duplicating the
+	 * page), drop the marker (a later re-mount is a normal SPA mount), and suppress
+	 * the incoming top view's ENTER animation so content the user is already
+	 * reading doesn't re-animate. The returned callback restores the exact nodes
+	 * and marker if the async mount promise rejects on render()/mounted().
 	 * `topView` is views[keep] — the view the ViewManager auto-plays in (behind a
 	 * layout) or the router plays in directly (no layout). A non-SSG app has no
 	 * marker, so this is a no-op and behavior is byte-identical.
@@ -1874,9 +1893,15 @@ export class Router {
 	#takeoverSSG(topView) {
 		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
 			if (!this.#container.hasAttribute('data-puzzle-ssg')) return;
+			const marker = this.#container.getAttribute('data-puzzle-ssg');
+			const prerendered = [...this.#container.childNodes];
 			this.#container.replaceChildren();
 			this.#container.removeAttribute('data-puzzle-ssg');
 			topView.skipEnter();
+			return () => {
+				this.#container.replaceChildren(...prerendered);
+				this.#container.setAttribute('data-puzzle-ssg', marker);
+			};
 		}
 	}
 
@@ -2257,12 +2282,41 @@ export class Router {
 	 * element's blur so the DOM accumulates no attribute debris across navigations
 	 * and the root cannot linger in anyone's mental model of the tab order. An
 	 * author-set tabindex is left completely alone (they already chose this
-	 * element's focus semantics), which also means we add no listener there.
+	 * element's focus semantics — including its focus VISUALS), which also means
+	 * we add no listener there.
+	 *
+	 * The focus ring is suppressed for the stamp's lifetime (D139): a
+	 * keyboard-driven navigation (Enter on a link, back/forward) makes
+	 * :focus-visible match the freshly focused root, and the UA draws its outline
+	 * around the entire view — pure noise, because a programmatic-only target is
+	 * not keyboard-operable and there is nothing the ring could invite the user to
+	 * do. BOTH ring channels are cut: `outline` (the UA default and most app
+	 * `:focus` rules) and `box-shadow` (how Tailwind's `focus:ring-*` utilities
+	 * draw). Inline + !important so no app stylesheet can re-draw either, and
+	 * undone on the SAME blur that lifts the tabindex — a pre-existing inline
+	 * value is put back exactly as found, everything else is removed outright.
 	 */
 	#focusElement(el) {
 		if (!el.hasAttribute('tabindex')) {
 			el.setAttribute('tabindex', '-1');
-			el.addEventListener('blur', () => el.removeAttribute('tabindex'), { once: true });
+			const prior = ['outline', 'box-shadow'].map((prop) => [
+				prop,
+				el.style.getPropertyValue(prop),
+				el.style.getPropertyPriority(prop),
+			]);
+			el.style.setProperty('outline', 'none', 'important');
+			el.style.setProperty('box-shadow', 'none', 'important');
+			el.addEventListener(
+				'blur',
+				() => {
+					el.removeAttribute('tabindex');
+					for (const [prop, value, priority] of prior) {
+						if (value) el.style.setProperty(prop, value, priority);
+						else el.style.removeProperty(prop);
+					}
+				},
+				{ once: true }
+			);
 		}
 		// preventScroll is LOAD-BEARING, not a nicety: the default focus() scrolls
 		// the element into view, which would immediately fight the window.scrollTo

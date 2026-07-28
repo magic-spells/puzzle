@@ -976,12 +976,17 @@ function setAttr(el, name, value) {
 		const target = mods.includes('outside') ? document : el;
 		const opts = target === el ? undefined : OUTSIDE_OPTS;
 		const listeners = (el[LISTENERS] ??= {});
-		if (listeners[name]) target.removeEventListener(event, listeners[name], opts);
+		detachListener(el, name, event, mods, listeners);
 		if (typeof value === 'function') {
+			// A spent once-binding survives fresh handler closures across patches
+			// (D38). Its listener detached when it fired, so do not resurrect it.
+			if (mods.includes('once') && listeners[name + ONCE_SPENT]) return;
 			// An outside binding always wraps (mods is non-empty by construction —
 			// 'outside' itself is a modifier), so the gate below never needs a
 			// separate no-other-mods path.
-			const handler = mods.length ? withModifiers(name, mods, value, listeners, el) : value;
+			const handler = mods.length
+				? withModifiers(name, event, mods, value, listeners, el)
+				: value;
 			target.addEventListener(event, handler, opts);
 			listeners[name] = handler;
 		} else {
@@ -1037,14 +1042,10 @@ function removeAttr(el, name) {
 		// even when the key carries modifiers ('@event:mod' → event 'event').
 		const [event, ...mods] = name.slice(1).split(':');
 		const listeners = el[LISTENERS];
-		if (listeners?.[name]) {
-			// `outside` (D86) listeners live on document/capture — mirror setAttr's
-			// target + options exactly or removeEventListener silently misses.
-			if (mods.includes('outside')) document.removeEventListener(event, listeners[name], OUTSIDE_OPTS);
-			else el.removeEventListener(event, listeners[name]);
-			delete listeners[name];
-			// The listener is gone — drop its once-spent marker too (D38), else a later
-			// patch that re-adds this @event:once would read the stale flag and never fire.
+		if (listeners) {
+			detachListener(el, name, event, mods, listeners);
+			// Explicit removal resets a once-binding even when spend already detached
+			// its handler — a later re-add must start fresh (D38).
 			delete listeners[name + ONCE_SPENT];
 		}
 		return;
@@ -1058,6 +1059,19 @@ function removeAttr(el, name) {
 	el.removeAttribute(name);
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 		devperfMutation();
+}
+
+/**
+ * Detach one patch-managed listener and drop its live-handler entry. The
+ * once-spent marker is deliberately left alone; only an explicit binding
+ * removal resets it (D38).
+ */
+function detachListener(el, name, event, mods, listeners) {
+	const handler = listeners[name];
+	if (!handler) return;
+	if (mods.includes('outside')) document.removeEventListener(event, handler, OUTSIDE_OPTS);
+	else el.removeEventListener(event, handler);
+	delete listeners[name];
 }
 
 // Event-modifier key filters: modifier name → the KeyboardEvent.key it gates on
@@ -1093,12 +1107,13 @@ export const KEY_FILTERS = {
  *   5. stopPropagation;
  *   6. the handler.
  * @param {string} fullName the '@event:mod…' attr name (LISTENERS key)
+ * @param {string} eventName the bare DOM event name
  * @param {string[]} mods modifiers in written order
  * @param {Function} handler the compiled listener
  * @param {object} listeners the element's LISTENERS object (holds the spent flag)
  * @param {Element} el the bound element — the outside-gate's containment anchor
  */
-function withModifiers(fullName, mods, handler, listeners, el) {
+function withModifiers(fullName, eventName, mods, handler, listeners, el) {
 	const spentKey = fullName + ONCE_SPENT;
 	const outside = mods.includes('outside');
 	return (event) => {
@@ -1110,6 +1125,7 @@ function withModifiers(fullName, mods, handler, listeners, el) {
 		if (mods.includes('once')) {
 			if (listeners[spentKey]) return;
 			listeners[spentKey] = true;
+			detachListener(el, fullName, eventName, mods, listeners);
 		}
 		if (mods.includes('prevent')) event.preventDefault();
 		if (mods.includes('stop')) event.stopPropagation();

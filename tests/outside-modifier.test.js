@@ -215,6 +215,31 @@ describe('ViewManager — @event:outside (v1.52, D86)', () => {
 		vm.clear();
 	});
 
+	it(':outside:once detaches from document on spend and stays detached after a patch', () => {
+		const { container, vm } = setup();
+		const close = vi.fn();
+		const tree = () =>
+			h('div', {}, [
+				h('div', { class: 'panel', '@click:outside:once': () => close() }, [text('p')]),
+			]);
+		vm.render(tree());
+
+		const remove = vi.spyOn(document, 'removeEventListener');
+		document.body.click();
+		expect(close).toHaveBeenCalledTimes(1);
+		expect(remove).toHaveBeenCalledWith('click', expect.any(Function), { capture: true });
+
+		const add = vi.spyOn(document, 'addEventListener');
+		vm.render(tree());
+		expect(add).not.toHaveBeenCalled();
+		document.body.click();
+		expect(close).toHaveBeenCalledTimes(1);
+
+		add.mockRestore();
+		remove.mockRestore();
+		vm.clear();
+	});
+
 	it('@focusin:outside fires for outside focus, not inside', () => {
 		const { container, vm } = setup();
 		const blurred = vi.fn();

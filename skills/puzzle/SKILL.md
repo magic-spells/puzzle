@@ -178,7 +178,9 @@ Rules that bite:
   DOM after an in-app navigation; it will be navigation zero's value.
 - **Focus + route announcement are automatic** (puzzle ≥ 0.2.0): every committed
   navigation moves focus to the incoming view root (with `preventScroll`, under
-  a transient `tabindex="-1"`) and announces the committed title in a
+  a transient `tabindex="-1"` that also suppresses `outline`/`box-shadow` for
+  its lifetime — no focus ring around the view) and announces the committed
+  title in a
   framework-owned visually-hidden `aria-live` region. You get accessible SPA
   navigation for free — don't hand-roll it. `focusBehavior` mirrors
   `scrollBehavior`: omit for the default, `false` to disable entirely

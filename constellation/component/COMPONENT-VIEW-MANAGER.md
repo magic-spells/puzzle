@@ -112,9 +112,12 @@ Buckets are null-prototype objects and forwarding descends through component
 call-site children while preserving pinned routed instances.
 
 Host behavior includes SVG namespaces/`foreignObject`, per-node listener
-installation and removal, event modifiers with once-spend persistence, ref
-callbacks, boolean attrs/properties, and island children seeded once then never
-patched. Inline SVG uses the same island path with verbatim string children.
+installation and removal, event modifiers with once-spend persistence (the
+spend also detaches the listener and drops its map entry; the spent marker
+alone survives patches, so `setAttr` refuses to re-attach a spent `once`
+binding until an explicit removal resets it — D38 semantics, zero listener
+cost after the spend), ref callbacks, boolean attrs/properties, and island
+children seeded once then never patched. Inline SVG uses the same island path with verbatim string children.
 The `outside` modifier (D86) attaches its listener to `document` in the
 CAPTURE phase (one shared options object for add/remove so the capture flags
 can't mismatch); the containment gate runs before every other modifier step,
