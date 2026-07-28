@@ -67,6 +67,12 @@ the ancestor would commit subscribed to nothing for the new route and silently
 stop reacting. `unsubscribe()` clears held state, so a destroy between prepare
 and commit reconciles over an empty set.
 
+The DevTools bridge reports the hold: `snapshot:subscriptions` returns a third
+`held` map alongside `byKey`/`byView` (additive — a panel predating it renders
+unchanged). Held keys are real subscriptions and still appear in the other two,
+but splitting them out keeps an open navigation from reading as a leak in the
+Subscriptions panel.
+
 ## Ordering and visibility
 
 - **Token ordering.** Prepare deliberately does not touch `#runToken`. While

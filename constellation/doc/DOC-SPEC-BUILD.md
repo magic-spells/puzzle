@@ -180,8 +180,11 @@ derived by walking live views' vnode trees — never the router's private
 state) · `inspect:view { id }` → `{ name, module, params, props, model,
 local }` with the **model layer and `setData()` local layer reported
 separately**, JSON-safe filtered · `snapshot:records { type? }` ·
-`snapshot:subscriptions` (both directions, view ids; function subscribers
-labeled `'fn'` — one merged bucket, no per-function identity) ·
+`snapshot:subscriptions` → `{ byKey, byView, held }` (both directions, view
+ids; function subscribers labeled `'fn'` — one merged bucket, no per-function
+identity; `held` lists the keys a PREPARED but uncommitted `data()` run added
+per D146 — genuinely live, so they also appear in `byKey`/`byView`, but split
+out so an open navigation does not read as a leak) ·
 `snapshot:route` → a JSON-safe projection `{ path, pathname, query, hash,
 params, route, routes, chain, title }` — `route`/`routes` are path PATTERNS and
 `chain` is the committed view NAMES, never the live entry objects ·
