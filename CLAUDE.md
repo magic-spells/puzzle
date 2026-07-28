@@ -9,8 +9,17 @@ map.
 1. `constellation/doc/DOC-SPEC.md` is the source of truth; keep it current.
    When code and SPEC disagree, decide on the merits — usually the SPEC is
    right, but sometimes the SPEC should change to match a code decision.
-   Either way, a SPEC change requires a new numbered decision card and a new
-   entry in `constellation/doc/DOC-DECISIONS.md`.
+   Either way, a SPEC change must be reflected in a decision card and its
+   `constellation/doc/DOC-DECISIONS.md` entry — but pick the right card:
+   - **New decision** (a question nothing has answered yet) → new numbered card
+     plus a new DOC-DECISIONS entry.
+   - **Changed decision** (a question some card already owns, now answered
+     differently) → **rewrite that card in place** and edit its existing
+     DOC-DECISIONS entry. Do not add a second card superseding the first.
+     One decision, one card, forever; a chain of cards for a single question is
+     a defect, not a record. State the current design as if it were always the
+     design — the discarded approach belongs in that card's "Alternatives
+     rejected" as rationale, never as narration of what the card used to say.
 2. Read the relevant component, feature, decision, flow, and test cards before
    changing covered code. Update those cards as part of the same change.
 3. `constellation/doc/DOC-RELEASE-SURFACE.md` is the concise inventory of what
