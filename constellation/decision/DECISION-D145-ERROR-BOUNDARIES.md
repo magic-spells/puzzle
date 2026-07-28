@@ -1,14 +1,16 @@
 ---
 name: D145 — error boundaries + app-level onError
-status: built
+status: verified
 connections:
-  - DECISION-D115-FAILED-MOUNT-PLACEHOLDER
+  - DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT
   - DECISION-D136-VIEW-LIFECYCLE-CONVERGENCE
   - DECISION-D143-MOUNT-THROW-OWNERSHIP
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-APP
+verified_at: '2026-07-28T22:30:07.464Z'
+verified_sha: f639b5d1aa8f59ffe385936b7e5b5d66b1235da8
 ---
 
 # D145 — error boundaries + app-level `onError`

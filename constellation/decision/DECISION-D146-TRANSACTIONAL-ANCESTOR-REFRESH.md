@@ -1,6 +1,6 @@
 ---
 name: D146 — transactional reused-ancestor refresh (prepare/commit)
-status: built
+status: verified
 connections:
   - DECISION-D19-NAVIGATION-COMMIT
   - DECISION-D30-NESTED-ROUTES
@@ -12,6 +12,8 @@ connections:
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-STORE
+verified_at: '2026-07-28T22:30:08.394Z'
+verified_sha: f639b5d1aa8f59ffe385936b7e5b5d66b1235da8
 ---
 
 # D146 — transactional reused-ancestor refresh (prepare/commit)

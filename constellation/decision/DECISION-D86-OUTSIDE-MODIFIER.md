@@ -12,8 +12,8 @@ connections:
   - FILE-VIEW-MANAGER
   - FILE-PARSER
   - FEATURE-V1-52-OUTSIDE-MODIFIER
-verified_at: '2026-07-25T05:24:26.254Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-07-28T22:30:06.636Z'
+verified_sha: f639b5d1aa8f59ffe385936b7e5b5d66b1235da8
 ---
 
 # D86 — the `outside` event modifier: `@event:outside` declarative outside-dismiss (v1.52)
