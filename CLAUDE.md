@@ -35,8 +35,8 @@ run.
 
 - Published: `0.1.0` (2026-07-21), `0.1.1` (2026-07-22, D77 init prompts),
   `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), `0.2.0`
-  (2026-07-24), `0.3.0` (2026-07-25), and **`0.3.1` (2026-07-25, the current
-  `latest`)** are live on npm (all five packages, MIT, manual publish via
+  (2026-07-24), `0.3.0` (2026-07-25), `0.3.1` (2026-07-25), and **`0.4.0`
+  (2026-07-28, the current `latest`)** are live on npm (all five packages, MIT, manual publish via
   `npm run release:prep` — there is no CI publish). Everything from D88 onward
   shipped in `0.3.0` — minor, not patch: two new export subpaths (`./testing`,
   `./fixtures`) plus breaking changes in D110/D111/D112. **`0.3.0` is published
@@ -63,15 +63,15 @@ run.
   separate public repo `magic-spells/puzzle-devtools`), and a deep-review
   hardening round (D110 `dev.proxy` prefix
   validation, D111 managed head tags build-time only).
-- **`0.4.0` is STAGED, not published**: `release/0.4.0` carries the whole
-  release (perf round, Grok review rounds, D134 capitalized markers + the
-  ecosystem migration, D139–D143), the version sweep, `release:prep` output,
-  and `notes/RELEASE-NOTES-0.4.0.md`. The sibling repos' D134/D141 adoption
-  sits on unpushed `chore/d134-capitalized-markers` branches, and four sibling
-  `node_modules/@magic-spells/puzzle` dirs are symlinked to this checkout
-  (originals preserved as `*.bak`) — restore the symlinks and bump their
-  `^0.3.1` pins after 0.4.0 publishes. Delete this bullet once 0.4.0 is live
-  and verified.
+- `0.4.0` (2026-07-28): the perf round (D121/D122 profiler + DevTools
+  protocol), the Grok review rounds (D132/D133), D134 capitalized composition
+  markers + ecosystem migration, and D135–D143 (marker fallback bodies, hybrid
+  route snapshot, mount-throw ownership, and friends). Merged to `main` and
+  `verify:published`-clean. Editor grammars (vscode/sublime/zed), puzzle-pieces,
+  puzzle-music-demo, and the site adopted D134/D141; pieces' adoption branch
+  (`chore/d134-capitalized-markers`, pushed) is not yet merged into its
+  `main`/`release/0.2.0`, and the site's merge is pending an unrelated
+  in-progress worktree.
 - Product line: v1 through v1.65 (D134 = v1.64, D141 = v1.65), plus the July
   21 pre-release correctness/performance hardening pass and the July 24
   deep-review round. `constellation/doc/DOC-DECISIONS.md` is the authoritative
