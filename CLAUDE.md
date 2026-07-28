@@ -81,7 +81,15 @@ run.
   (`chore/d134-capitalized-markers`, pushed) is not yet merged into its
   `main`/`release/0.2.0`, and the site's merge is pending an unrelated
   in-progress worktree.
-- Product line: v1 through v1.65 (D134 = v1.64, D141 = v1.65), plus the July
+- `0.5.0` (in progress on `release/0.5.0`, unpublished): D144 Portal scoped v1
+  (`<Portal>` marker + framework outlet + portal-aware `@event:outside`), D145
+  error boundaries (`onError` funnel + script-side `errorContent()`), and D146
+  transactional reused-ancestor refresh (prepare/commit closes the D19/D30
+  soft-violation). Cards truthed. Remaining candidates: the DevTools
+  subscriptions-graph round 2.
+- Product line: v1 through v1.67 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
+  D145 = v1.67; D146 is a correctness amendment with no product-line entry),
+  plus the July
   21 pre-release correctness/performance hardening pass and the July 24
   deep-review round. `constellation/doc/DOC-DECISIONS.md` is the authoritative
   decision range — do not restate it here; it moves faster than this file.
@@ -191,8 +199,9 @@ run.
 - Store queries inside `data()` auto-subscribe. Record props carry identity;
   children that need live record data should re-query by id.
 - Navigation loads before commit. URL/title/history, mounted tree, route
-  snapshot, and outgoing scroll save commit together. Failed or superseded
-  pushes do not partially commit.
+  snapshot, outgoing scroll save, and reused-ancestor state (params, snapshot,
+  data, subscriptions — D146) commit together. Failed or superseded pushes do
+  not partially commit.
 - `<Children>` is the component default marker, `<Slot name="x">` is named
   composition, and `<Slot>` is the router outlet. A marker is self-closing or
   paired — a paired body is fallback content, rendered only when nothing fills

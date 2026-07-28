@@ -31,7 +31,11 @@ model layer, so omitted model keys disappear. `setData()` mutates a persistent
 local layer that wins over model values until the next successful model commit.
 It schedules a render but never reruns `data()`; call `refresh()` when local
 state feeds derived model values. Async refresh is last-wins and a destroyed
-view cannot be resubscribed by a late continuation.
+view cannot be resubscribed by a late continuation. `prepareRefresh()` is the
+router-internal two-phase form used for reused ancestors during a gated
+navigation — it evaluates `data()` against the destination without touching
+committed state and hands back commit/discard
+([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]).
 
 Lifecycle: `created` → awaited/tracked `data` → render → `mounted`, with
 `beforeUpdate`/`afterUpdate` around later patches and idempotent `destroyed`

@@ -39,5 +39,5 @@ The Stays account tabs (Profile/Trips/Wishlist — nested routes under a reused 
 ## Consequences
 
 - Additive: `data(params, props)` unchanged; views that never read `this.route` behave byte-identically.
-- Failure semantics inherited, not widened: a reused ancestor whose sibling's load rejects has already re-rendered with the target's params *and* snapshot — the pre-existing, documented D19/D30 soft-violation, with `route` now riding alongside `params`.
+- Failure semantics inherited, not widened: a reused ancestor whose sibling's load rejects keeps its committed params *and* snapshot — the snapshot rides the same transactional channel as `params` ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]), visible as the destination inside the gated `data()` run and swapped only when the navigation commits.
 - The examples' `location.pathname` active-nav idiom is retired everywhere (it was the bug); DOC-ROUTER now prescribes `this.route` + route names.
