@@ -35,7 +35,7 @@
  * `disabled=""`; they are equivalent HTML.
  */
 
-import { SLOT_TAG, PLACEHOLDER_TAG } from '../views/ViewNode.js';
+import { SLOT_TAG, PLACEHOLDER_TAG, PORTAL_TAG } from '../views/ViewNode.js';
 import { expandSlots } from '../views/viewManager.js';
 import { displayValue as stringify } from '../display.js';
 
@@ -149,6 +149,11 @@ async function serializeNode(vnode, ctx, selectState) {
 	// Slot markers are substituted by expandSlots() before serialization, so one
 	// never reaches here; guard defensively rather than emit a bogus <slot> tag.
 	if (vnode.tag === SLOT_TAG) return '';
+
+	// Portals emit NOTHING in prerendered HTML (D144): their content belongs to a
+	// framework-created outlet that only exists once the browser runtime mounts, so
+	// portaled markup appears at takeover, never in the static output.
+	if (vnode.tag === PORTAL_TAG) return '';
 
 	if (vnode.isComponent) return serializeComponent(vnode, ctx, selectState);
 

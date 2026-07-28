@@ -50,6 +50,13 @@ export const SLOT_TAG = 'slot';
 // arity stays constant. No attrs, no children, never keyed. `new ViewNode('#')`.
 export const PLACEHOLDER_TAG = '#';
 
+// Reserved tag marking a portal (<Portal>…</Portal>): its children are mounted
+// into the framework-created outlet element at the app root instead of at the
+// vnode's own position, which keeps only a comment placeholder (so sibling
+// insertion refs and conditional arity stay intact). Attribute-free by grammar;
+// `children` are the teleported subtree.
+export const PORTAL_TAG = 'portal';
+
 // A row whose key resolves to null/undefined drops the whole list to positional
 // diffing (silently, pre-v1.26). Warn at most once per session — a bounded
 // global, like viewManager's warnDuplicateKey and animate.js's malformed-spec
@@ -104,6 +111,11 @@ export class ViewNode {
 
 	get isSlot() {
 		return this.tag === SLOT_TAG;
+	}
+
+	/** A portal marker — children mount into the shared portal outlet. */
+	get isPortal() {
+		return this.tag === PORTAL_TAG;
 	}
 
 	// Internal surface (like SLOT_TAG): the compiled render() calls this for an

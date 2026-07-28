@@ -197,6 +197,11 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
 		}
+	case *parser.Portal:
+		// Portaled children are ordinary compiled content — same discovery.
+		for _, child := range node.Children {
+			collectUsage(child, usage, allow)
+		}
 	case *parser.Interpolation:
 		collectFormatterCalls(node.Formatters, usage.Formatters, allow)
 	case *parser.If:

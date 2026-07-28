@@ -693,8 +693,12 @@ export declare class ViewNode {
 	readonly isText: boolean;
 	readonly isComponent: boolean;
 	readonly isSlot: boolean;
+	readonly isPortal: boolean;
 	readonly props: Record<string, any>;
 }
 
 /** Reserved tag marking a composition-marker (`<children/>`/`<Slot/>`/`<slot name>`) substitution point. */
 export declare const SLOT_TAG: string;
+
+/** Reserved tag marking a `<Portal>…</Portal>` teleport (D144). */
+export declare const PORTAL_TAG: string;
