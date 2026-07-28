@@ -30,6 +30,7 @@ import { Router } from './router/router.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
 import { reportError, setErrorHandler } from './errors.js';
+import { setPortalHost, teardownPortals } from './views/viewManager.js';
 
 // Dev HMR guard (constellation/doc/DOC-SPEC.md §27, D57): gates the state-preserving reload
 // hooks on the __PUZZLE_DEV__ build define — "false" in production, where
@@ -241,6 +242,10 @@ export class PuzzleApp {
 		// 1. Resolve the mount element — a selector string or an Element.
 		const el = this.#resolveTarget(target);
 		this._container = el;
+		// Portal outlet host (D144): portals teleport into a framework-created
+		// element appended NEXT TO the mount container, so it survives the
+		// container.replaceChildren() in unmount() and is torn down explicitly there.
+		setPortalHost(el.parentNode ?? (typeof document !== 'undefined' ? document.body : null));
 
 		// 2. Store: models registry in; pass storage through only when provided so
 		//    the Store's own default (no persistence) stands otherwise. The adapter
@@ -530,6 +535,7 @@ export class PuzzleApp {
 			window.removeEventListener('pagehide', this.#pageHideFlush);
 			this.#pageHideFlush = null;
 		}
+		teardownPortals();
 		if (this._container) this._container.replaceChildren();
 
 		this.ctx = null;

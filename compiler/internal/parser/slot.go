@@ -40,6 +40,24 @@ func childrenMarkerAttrs(attrs []Attr, file string) *ParseError {
 	return nil
 }
 
+// portalMarkerAttrs validates a <Portal>'s attributes: v1 takes NONE. `to`/
+// `name` are reserved with a specific message so user-placed named outlets can
+// land later without breaking apps written against this grammar; `ref` gets the
+// D72-style render-target message.
+func portalMarkerAttrs(attrs []Attr, pos Position, file string) *ParseError {
+	for _, a := range attrs {
+		switch attrNameOf(a) {
+		case "to", "name":
+			return errAt(file, attrPos(a), "<Portal> takes no attributes — named outlets are not supported yet")
+		case "ref":
+			return errAt(file, attrPos(a), "ref cannot be placed on a <Portal> — a portal is a render target, not a real element")
+		default:
+			return errAt(file, attrPos(a), "<Portal> takes no attributes — every portal targets the app's single portal outlet")
+		}
+	}
+	return nil
+}
+
 // slotMarkerFromAttrs resolves <Slot/>'s role by attributes. No attrs means the
 // unnamed router outlet/default marker; one static name declares a named slot.
 // Every other shape is a positioned compile error.
@@ -127,8 +145,12 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 				seen["default"] = node.Pos
 			}
 			if nested := nestedFallbackMarker(node.Children); nested != nil {
-				return errAt(file, nested.Pos, "a composition marker cannot appear inside another marker's fallback body (D141)")
+				return fallbackMarkerErr(nested, file)
 			}
+			if perr := walkSlots(node.Children, file, seen, inCallSite); perr != nil {
+				return perr
+			}
+		case *Portal:
 			if perr := walkSlots(node.Children, file, seen, inCallSite); perr != nil {
 				return perr
 			}
@@ -178,10 +200,19 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 // body. D141 deliberately rejects recursive marker expansion; the error belongs
 // to the inner marker, even when it is nested through elements, components, or
 // control-flow branches.
-func nestedFallbackMarker(nodes []Node) *Slot {
+func fallbackMarkerErr(n Node, file string) *ParseError {
+	if p, ok := n.(*Portal); ok {
+		return errAt(file, p.Pos, "<Portal> cannot appear inside a marker's fallback body (D141/D144)")
+	}
+	return errAt(file, nodePos(n), "a composition marker cannot appear inside another marker's fallback body (D141)")
+}
+
+func nestedFallbackMarker(nodes []Node) Node {
 	for _, n := range nodes {
 		switch node := n.(type) {
 		case *Slot:
+			return node
+		case *Portal:
 			return node
 		case *Element:
 			if found := nestedFallbackMarker(node.Children); found != nil {

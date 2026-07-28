@@ -21,5 +21,5 @@ export { FormatterRegistry } from './formatters.js';
 // ViewNode/SLOT_TAG/displayValue from the package root — the injected render()
 // builds trees and applies the shared display-coercion rule with them. Not part
 // of the SPEC §1 user-facing surface.
-export { ViewNode, SLOT_TAG } from './views/ViewNode.js';
+export { ViewNode, SLOT_TAG, PORTAL_TAG } from './views/ViewNode.js';
 export { displayValue } from './display.js';

@@ -260,6 +260,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if hasSlot(root.Children) || (skel != nil && hasSlot(skel.Children)) {
 		imports = append(imports, "SLOT_TAG")
 	}
+	if hasPortal(root.Children) || (skel != nil && hasPortal(skel.Children)) {
+		imports = append(imports, "PORTAL_TAG")
+	}
 	if c.usesDisplayValue {
 		imports = append(imports, "displayValue as __s")
 	}
@@ -594,6 +597,11 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 		}
 		nameAttr := []parser.Attr{&parser.StaticAttr{Name: "name", Value: n.Name}}
 		return c.emitElement("SLOT_TAG", nameAttr, n.Children, ind, ind, false, scope)
+	case *parser.Portal:
+		// <Portal>…</Portal> (D144): one vnode carrying the teleported children;
+		// the runtime mounts them into the shared portal outlet and leaves a comment
+		// placeholder at this position. Attribute-free by grammar.
+		return c.emitElement("PORTAL_TAG", nil, n.Children, ind, ind, false, scope)
 	case *parser.If:
 		return c.emitIf(n, ind, scope)
 	case *parser.Case:
@@ -1396,6 +1404,47 @@ func trailingWSHasNewline(s string) bool {
 		}
 		if s[i] != ' ' && s[i] != '\t' {
 			return false
+		}
+	}
+	return false
+}
+
+// hasPortal reports whether any <Portal> appears in the tree (→ PORTAL_TAG
+// import). Mirrors hasSlot's shape.
+func hasPortal(nodes []parser.Node) bool {
+	for _, n := range nodes {
+		switch t := n.(type) {
+		case *parser.Portal:
+			return true
+		case *parser.Slot:
+			if hasPortal(t.Children) {
+				return true
+			}
+		case *parser.Element:
+			if hasPortal(t.Children) {
+				return true
+			}
+		case *parser.Component:
+			if hasPortal(t.Children) {
+				return true
+			}
+		case *parser.If:
+			if hasPortal(t.Then) || hasPortal(t.Else) {
+				return true
+			}
+		case *parser.For:
+			if hasPortal(t.Body) {
+				return true
+			}
+		case *parser.Case:
+			for _, cl := range t.Clauses {
+				if hasPortal(cl.Body) {
+					return true
+				}
+			}
+			if hasPortal(t.Else) {
+				return true
+			}
 		}
 	}
 	return false

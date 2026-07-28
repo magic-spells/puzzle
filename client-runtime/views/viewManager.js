@@ -22,7 +22,7 @@
  * substituted with the slot content captured at the call site before diffing.
  */
 
-import { ViewNode, PLACEHOLDER_TAG } from './ViewNode.js';
+import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import { devperfComponentPatch, devperfMutation } from '../devperf.js';
 import { displayValue as stringify } from '../display.js';
@@ -266,11 +266,170 @@ function expandChildList(kids, parts) {
 	return out;
 }
 
+// ---- portals (D144) ---------------------------------------------------------
+
+/**
+ * Portal (`<Portal>…</Portal>`) teleports its children to ONE framework-created
+ * outlet element (`<div data-puzzle-portal>`) appended as a sibling of the app
+ * mount container. There are no user-placed outlets in v1, so there is no outlet
+ * registry and no teardown-ordering race: the outlet is created lazily on the
+ * first portal mount and removed once the last portal unmounts (and on app
+ * unmount, via teardownPortals()).
+ *
+ * Each portal owns a comment-bracketed RANGE inside the shared outlet, so
+ * several live portals never fight over one childNodes list, and the portal
+ * vnode itself keeps a comment placeholder at its LOCAL position so sibling
+ * insertion refs and `{#if}` arity padding are unaffected.
+ */
+let portalHost = null;
+let portalOutlet = null;
+// Both bracket comments of every live range map to their record, so the
+// `outside`-modifier containment walk can resolve a target to its owner in one
+// backwards sibling scan.
+const portalRanges = new Map();
+let portalCount = 0;
+
+/**
+ * Point new portal outlets at the app's host (the mount container's parent).
+ * Called by PuzzleApp.mount() and mountStatic(); unset falls back to <body>.
+ */
+export function setPortalHost(el) {
+	portalHost = el || null;
+}
+
+/** Drop the outlet and all range bookkeeping (app unmount). */
+export function teardownPortals() {
+	portalOutlet?.remove();
+	portalOutlet = null;
+	portalRanges.clear();
+	portalCount = 0;
+	portalHost = null;
+}
+
+function ensurePortalOutlet() {
+	if (portalOutlet && portalOutlet.isConnected) return portalOutlet;
+	portalOutlet = document.createElement('div');
+	portalOutlet.setAttribute('data-puzzle-portal', '');
+	const host = portalHost && portalHost.isConnected ? portalHost : document.body;
+	host.appendChild(portalOutlet);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+	return portalOutlet;
+}
+
+/**
+ * Remove the outlet once nothing is portaled into it. An element lingering
+ * mid-leave-animation keeps it alive (its range markers are already gone, but
+ * the element is still painting) — the next release, or teardownPortals(),
+ * clears it.
+ */
+function releasePortalOutlet() {
+	if (portalCount > 0 || !portalOutlet || portalOutlet.firstChild) return;
+	portalOutlet.remove();
+	portalOutlet = null;
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+}
+
+function mountPortal(vnode, parent, ref, ctx, owner) {
+	const placeholder = document.createComment('puzzle-portal');
+	vnode.el = placeholder;
+	parent.insertBefore(placeholder, ref ?? null);
+	const outlet = ensurePortalOutlet();
+	const start = document.createComment('puzzle-portal-start');
+	const end = document.createComment('puzzle-portal-end');
+	outlet.appendChild(start);
+	outlet.appendChild(end);
+	const range = { start, end, placeholder };
+	vnode.portal = range;
+	portalRanges.set(start, range);
+	portalRanges.set(end, range);
+	portalCount++;
+	for (const child of vnode.children) mount(child, outlet, end, ctx, owner);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+	return placeholder;
+}
+
+function patchPortal(oldVnode, newVnode, ctx, owner) {
+	const range = (newVnode.portal = oldVnode.portal);
+	if (!range) return;
+	// The local placeholder moved onto the new vnode; the range must point at the
+	// live one so the `outside` containment walk keeps resolving.
+	range.placeholder = newVnode.el;
+	const outlet = range.end.parentNode;
+	if (!outlet) return;
+	patchChildren(outlet, oldVnode.children, newVnode.children, ctx, owner, range.end);
+}
+
+/**
+ * Portal teardown. The teleported children are NOT under `vnode.el` (that is the
+ * local placeholder comment), so removing the placeholder cascades to nothing —
+ * every removal shape has to unmount the remote children EXPLICITLY or their
+ * component instances, store subscriptions and document-level `outside`
+ * listeners leak. Reached from unmount() (patch-replace, keyed removal,
+ * `#vm.clear()`, router teardown) and from releaseSubtree()'s descent.
+ */
+function unmountPortal(vnode) {
+	for (const child of vnode.children) unmount(child);
+	const range = vnode.portal;
+	if (range) {
+		portalRanges.delete(range.start);
+		portalRanges.delete(range.end);
+		range.start.remove();
+		range.end.remove();
+		vnode.portal = null;
+		portalCount--;
+	}
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (vnode.el?.parentNode) devperfMutation();
+	}
+	vnode.el?.remove();
+	releasePortalOutlet();
+}
+
+/**
+ * The local placeholder of the portal that owns `target`, or null when the
+ * target is not inside any live portal range. Walks the target up to the
+ * outlet's direct child, then scans backwards to the nearest bracket comment:
+ * that comment is the owning range's `start` (an `end` first means the target
+ * sits between ranges, which is not portaled content).
+ */
+function owningPortalPlaceholder(target) {
+	if (!portalOutlet || portalRanges.size === 0 || !target) return null;
+	if (!portalOutlet.contains(target)) return null;
+	let node = target;
+	while (node && node.parentNode !== portalOutlet) node = node.parentNode;
+	if (!node) return null;
+	for (let n = node; n; n = n.previousSibling) {
+		const range = portalRanges.get(n);
+		if (range) return range.start === n ? range.placeholder : null;
+	}
+	return null;
+}
+
+/**
+ * LOGICAL containment for the `outside` modifier (D86): portaled content is
+ * physically in the outlet but logically still sits where its `<Portal>` marker
+ * is, so a click inside content portaled by a descendant of `el` counts as
+ * INSIDE. Re-tests containment against the owning local placeholder, iterating
+ * for portals nested inside portaled content. Zero cost with no live portals.
+ */
+export function portalAwareContains(el, target) {
+	let t = target;
+	for (let hops = 0; hops < 32; hops++) {
+		if (el.contains(t)) return true;
+		const placeholder = owningPortalPlaceholder(t);
+		if (!placeholder) return false;
+		t = placeholder;
+	}
+	return false;
+}
+
 // ---- mount ------------------------------------------------------------------
 
 /** Create the DOM for vnode and insert it into parent (before ref, or append). */
 export function mount(vnode, parent, ref, ctx, owner = null) {
 	if (vnode.isComponent) return mountComponent(vnode, parent, ref, ctx, owner);
+
+	if (vnode.tag === PORTAL_TAG) return mountPortal(vnode, parent, ref, ctx, owner);
 
 	let el;
 	if (vnode.tag === PLACEHOLDER_TAG) {
@@ -541,6 +700,13 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	// comment — releaseSubtree/remove handle a comment-el vnode with no children).
 	if (newVnode.tag === PLACEHOLDER_TAG) return;
 
+	// Portal → portal: the local placeholder transferred above; the teleported
+	// children patch against this portal's bracketed range inside the outlet.
+	if (newVnode.tag === PORTAL_TAG) {
+		patchPortal(oldVnode, newVnode, ctx, owner);
+		return;
+	}
+
 	if (newVnode.isText) {
 		const text = stringify(newVnode.attrs.value);
 		if (el.nodeValue !== text) {
@@ -660,6 +826,7 @@ const leavingEls = new WeakSet();
  * destroy them all, not just a top-level component vnode.
  */
 function unmount(vnode) {
+	if (vnode.tag === PORTAL_TAG) return unmountPortal(vnode);
 	if (vnode.isComponent) {
 		const child = vnode.component;
 		// A first-mount-failed component was already torn down, leaving only a comment
@@ -755,7 +922,11 @@ function releaseSubtree(vnode) {
 	// — no refs or component instances hide inside them.
 	if (typeof vnode.children === 'string') return;
 	for (const child of vnode.children) {
-		if (child.isComponent) child.component?.destroy();
+		// A portal inside a removed subtree: its teleported children live in the
+		// outlet, so the ancestor's el.remove() reaches neither their DOM nor their
+		// instances — tear the whole portal down explicitly.
+		if (child.tag === PORTAL_TAG) unmountPortal(child);
+		else if (child.isComponent) child.component?.destroy();
 		else if (!child.isText) releaseSubtree(child);
 	}
 }
@@ -816,22 +987,26 @@ function patchAttrs(el, oldAttrs, newAttrs) {
  * nodes are matched by (tag, key) and their DOM moved into position;
  * everything else falls back to index alignment.
  */
-function patchChildren(el, oldChildren, newChildren, ctx, owner) {
+function patchChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
 	const keyed = oldChildren.some((c) => c.key != null) || newChildren.some((c) => c.key != null);
 	if (keyed) {
-		patchKeyedChildren(el, oldChildren, newChildren, ctx, owner);
+		patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
 	} else {
-		patchIndexedChildren(el, oldChildren, newChildren, ctx, owner);
+		patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail);
 	}
 }
 
-function patchIndexedChildren(el, oldChildren, newChildren, ctx, owner) {
+// `tail` is the insertion reference for children appended at the END of the
+// list. Null (every ordinary element parent) appends to the parent; a portal
+// passes its range's closing comment so teleported children stay inside their
+// own bracketed span of the shared outlet.
+function patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
 	const common = Math.min(oldChildren.length, newChildren.length);
 	for (let i = 0; i < common; i++) {
 		patch(oldChildren[i], newChildren[i], el, ctx, owner);
 	}
 	for (let i = common; i < newChildren.length; i++) {
-		mount(newChildren[i], el, null, ctx, owner);
+		mount(newChildren[i], el, tail, ctx, owner);
 	}
 	for (let i = common; i < oldChildren.length; i++) {
 		if (
@@ -887,7 +1062,7 @@ function warnFlipCompiledOut() {
 	);
 }
 
-function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner) {
+function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
 	// Keyed identity is the pair (tag, key), with BOTH sides compared by native
 	// SameValueZero — never string concatenation. Partition by raw `tag` (a
 	// component's class object by identity, an element's tag string) into a nested
@@ -987,7 +1162,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner) {
 	// move-guard compares against the next PERSISTENT sibling — elements
 	// lingering mid-leave-animation don't count, so a pure removal leaves every
 	// survivor (and the fading element) exactly where it was.
-	let ref = null;
+	let ref = tail;
 	for (let i = pairs.length - 1; i >= 0; i--) {
 		const [oldChild, newChild] = pairs[i];
 		if (oldChild) {
@@ -1178,7 +1353,7 @@ function withModifiers(fullName, eventName, mods, handler, listeners, el) {
 	const spentKey = fullName + ONCE_SPENT;
 	const outside = mods.includes('outside');
 	return (event) => {
-		if (outside && el.contains(event.target)) return;
+		if (outside && portalAwareContains(el, event.target)) return;
 		for (const m of mods) {
 			const key = KEY_FILTERS[m];
 			if (key !== undefined && event.key !== key) return;
