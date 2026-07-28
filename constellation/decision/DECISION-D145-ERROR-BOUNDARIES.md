@@ -44,6 +44,42 @@ BEFORE the D115 teardown and mounted beside the recovery placeholder, so the
 owner's `refresh()` retries through the normal placeholder re-mount and
 removes the fallback.
 
+## Where and how the boundary face renders
+
+- **Never patched over an unknown tree.** A throw partway through a `patch()`
+  leaves the DOM matching neither the old nor the new tree, so the manager
+  marks its tree UNKNOWN (bracketing the managed range with the live siblings
+  outside it, the only trustworthy handles) and the boundary renders through
+  `ViewManager.renderFresh()`: release BOTH aborted trees' non-DOM resources
+  first (the trees lie about where nodes are, not about what exists — nested
+  instances, refs, `@event:outside` document listeners, and portaled content
+  all outlive raw node removal; the release walk is guarded per tree so a
+  throwing user hook cannot stop the face from mounting, and `clear()` runs
+  the same release so a destroy with no boundary reaches both trees), then
+  clear the bracketed range by DOM removal and mount the face fresh. Healthy
+  boundary renders keep the cheap diff path.
+- **A pre-mount failure is buffered, not lost.** A skeleton view's un-awaited
+  preload can reject before `mount()` creates the view's ViewManager; when the
+  boundary resolves to the failing view itself and no manager exists yet, the
+  error parks on the instance and `mount()` flushes it once after the first
+  render attempt. An ancestor boundary with a live manager still renders
+  immediately — no double-fire.
+- **SSG takeover: boundary first, restore as fallback.** When a takeover
+  mount fails, the router tries the error boundary before restoring the
+  prerendered nodes; only a boundary that did not render (absent, declined, or
+  itself threw) restores the prerendered page and marker exactly as before.
+- **A boundary over router-owned content invalidates the chain.** An ancestor
+  boundary render unmounts routed descendants it does not own, so
+  `__showErrorBoundary` first calls the router's internal chain invalidation
+  (via `ctx.router`; the `/static` stub has no router and the call no-ops).
+  Invalidation flags the chain (and the layout, when the boundary sits at or
+  above it) as non-reusable — the reuse prefix walk reads the route entry's
+  chain, so flags rather than emptied state arrays are what force `keep = 0` —
+  and truncates `#state.views`/`keys` only where instances were actually
+  destroyed, because `#swap` resolves outgoing teardown from `#state` and an
+  instance dropped from state would never be destroyed. The next navigation
+  rebuilds from scratch with a fresh layout whose `data()` re-runs.
+
 ## Deliberate exclusions (not funneled)
 
 Rethrow-to-caller paths (`beforeMount`, `router.start()` — the `mount()`

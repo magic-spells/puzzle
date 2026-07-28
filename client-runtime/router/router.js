@@ -1247,8 +1247,11 @@ export class Router {
 
 		// keep = shared chain PREFIX length by node object identity. Reused
 		// ancestors keep their instances; everything from `keep` down is fresh.
+		// An INVALIDATED chain (an error boundary rendered over router-owned
+		// content and destroyed it — __invalidateChain) can reuse nothing: keep
+		// stays 0 so every level is rebuilt.
 		let keep = 0;
-		if (cur) {
+		if (cur && !cur.chainInvalid) {
 			const a = cur.entry.chain;
 			const b = entry.chain;
 			const max = Math.min(a.length, b.length);
@@ -1284,6 +1287,7 @@ export class Router {
 			cur &&
 			cur.layout &&
 			!pendingLayoutOut &&
+			!cur.layoutInvalid &&
 			cur.layoutClass === entry.layout
 		);
 		const layout = reuseLayout
@@ -1367,7 +1371,13 @@ export class Router {
 								'[puzzle] skeleton view data() failed:',
 								err
 							);
-							queueMicrotask(() => v.__renderErrorBoundary?.(err));
+							// Straight through: preload() runs off-DOM, so this rejection can
+							// land before mount() ever creates the view's ViewManager. The
+							// view buffers the error in that window and flushes it at the end
+							// of mount() (PuzzleView #pendingBoundaryError) — deferring by a
+							// microtask never reached the mount and left the user on the
+							// skeleton forever.
+							v.__renderErrorBoundary?.(err);
 						});
 					} else {
 						loads.push(p);
@@ -1953,21 +1963,72 @@ export class Router {
 	}
 
 	/**
+	 * INTERNAL (D145) — an error boundary is about to render over content the
+	 * router owns. `boundaryView` is the boundary itself; everything the router
+	 * committed BELOW it is destroyed by that render, so the committed chain can
+	 * no longer be reused: drop the instance bookkeeping and force the next
+	 * navigation to rebuild every level (`keep` degrades to 0 via `chainInvalid`,
+	 * which is checked before the prefix walk so an emptied `views` array is never
+	 * indexed).
+	 *
+	 * Instances are dropped from `views`/`keys` only where they are actually
+	 * destroyed — the surviving prefix stays, because #swap resolves the OUTGOING
+	 * unit it tears down from `cur.layout`/`cur.views[keep]`. Dropping a live
+	 * instance there would strand its DOM (error face included) in the container
+	 * and the next navigation would mount alongside it. Same reason the layout
+	 * reference is kept when the layout is the boundary: it is flagged unreusable
+	 * (`layoutInvalid`) so a fresh one is built, while the old one still resolves
+	 * as the animator and is destroyed.
+	 *
+	 * Underscore-prefixed: internal runtime plumbing, not public router API.
+	 */
+	__invalidateChain(boundaryView) {
+		const st = this.#state;
+		if (!st) return;
+		st.chainInvalid = true;
+		const i = boundaryView ? st.views.indexOf(boundaryView) : -1;
+		if (i !== -1) {
+			// A routed ancestor is the boundary: it survives (it draws the face);
+			// every level below it is destroyed by that render.
+			st.views = st.views.slice(0, i + 1);
+			st.keys = st.keys.slice(0, i + 1);
+			return;
+		}
+		if (st.layout) {
+			// The layout — or a plain component between it and the chain — is the
+			// boundary, so no routed view survives. The layout instance itself is
+			// still on screen; keep the reference, refuse the reuse.
+			st.views = [];
+			st.keys = [];
+			st.layoutInvalid = true;
+			return;
+		}
+		// No layout: chain level 0 is router-mounted into the container, so a
+		// boundary nested inside it survives with it. Keep exactly that level.
+		st.views = st.views.slice(0, 1);
+		st.keys = st.keys.slice(0, 1);
+	}
+
+	/**
 	 * Observe a router-owned mount() promise. mount() is async, so a SYNCHRONOUS
 	 * render()/mounted() throw inside it surfaces as a REJECTED promise (not a sync
 	 * throw — the commit block keeps running, no rollback: D19/D61). Left
 	 * unobserved that becomes an unhandled rejection; log it once here instead. The
 	 * failed view is still committed to #state, so a later navigation replaces and
-	 * destroys it normally. On navigation-zero SSG takeover, restoreTakeover puts
-	 * the exact prerendered nodes + marker back before logging — the committed
-	 * failed instance remains router-owned, but the user never gets a blank page.
+	 * destroys it normally. On navigation-zero SSG takeover the error boundary gets
+	 * the first refusal: restoreTakeover puts the exact prerendered nodes + marker
+	 * back ONLY when no boundary rendered (including when the boundary's own render
+	 * threw), because the restore's replaceChildren() detaches the failed view's
+	 * ViewManager anchor — restoring first guaranteed the one path meant to surface
+	 * the failure could not draw. When a boundary does render, the prerendered
+	 * content stays cleared and the user sees the error face. The committed failed
+	 * instance remains router-owned either way.
 	 * (Child views mounted through the ViewManager's keyed patch are already observed
 	 * there; this covers the three mounts the router drives directly: bare root view,
 	 * layout swap, initial-nav layout.)
 	 */
 	#observeMount(p, view, route, restoreTakeover = null) {
 		Promise.resolve(p).catch((err) => {
-			restoreTakeover?.();
 			reportError(
 				this.#ctx,
 				err,
@@ -1975,7 +2036,8 @@ export class Router {
 				'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
 				err
 			);
-			view.__renderErrorBoundary?.(err);
+			const shown = view.__renderErrorBoundary?.(err);
+			if (!shown) restoreTakeover?.();
 		});
 	}
 
@@ -1991,7 +2053,9 @@ export class Router {
 	 * page), drop the marker (a later re-mount is a normal SPA mount), and suppress
 	 * the incoming top view's ENTER animation so content the user is already
 	 * reading doesn't re-animate. The returned callback restores the exact nodes
-	 * and marker if the async mount promise rejects on render()/mounted().
+	 * and marker if the async mount promise rejects on render()/mounted() AND no
+	 * error boundary drew a face in the cleared container (#observeMount decides —
+	 * the restore would detach the anchor the boundary needs).
 	 * `topView` is views[keep] — the view the ViewManager auto-plays in (behind a
 	 * layout) or the router plays in directly (no layout). A non-SSG app has no
 	 * marker, so this is a no-op and behavior is byte-identical.

@@ -189,6 +189,116 @@ describe('router SSG takeover (M2)', () => {
 		error.mockRestore();
 	});
 
+	it('shows the error boundary instead of restoring when the failed view declares one', async () => {
+		// The restore closure replaceChildren()s the prerendered nodes back, which
+		// DETACHES the failed view's ViewManager anchor — a boundary rendering after
+		// that could never insert anything. The boundary gets the first refusal
+		// (D145/F9): when it draws, the prerendered content stays cleared and the
+		// marker stays off, because the page is now the error face.
+		class BadMountedRoot extends PuzzleView {
+			mounted() {
+				throw new Error('takeover mounted failed');
+			}
+			errorContent(error) {
+				return h('p', { class: 'fallback' }, [text(error.message)]);
+			}
+			render() {
+				return h('h1', { class: 'home' }, [text('Home')]);
+			}
+		}
+		const el = ssgContainer('<h1 class="home">Home</h1>');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const app = boot({
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: BadMountedRoot }],
+			routerMode: 'memory',
+		});
+
+		await expect(app.mount()).resolves.toBe(app);
+		await tick();
+
+		expect(el.querySelector('.fallback').textContent).toBe('takeover mounted failed');
+		expect(el.querySelectorAll('.fallback')).toHaveLength(1);
+		expect(el.querySelector('h1.home')).toBeNull(); // prerendered content stays cleared
+		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false);
+		expect(error).toHaveBeenCalledWith(
+			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			expect.any(Error)
+		);
+		error.mockRestore();
+	});
+
+	it('falls back to the restore when the boundary render itself throws', async () => {
+		// `shown` is false for a boundary that could not draw, so the prerendered
+		// page still comes back — the fallback of last resort.
+		class BadMountedRoot extends PuzzleView {
+			mounted() {
+				throw new Error('takeover mounted failed');
+			}
+			errorContent() {
+				return h('p', {
+					class: 'fallback',
+					ref: () => {
+						throw new Error('fallback boom');
+					},
+				});
+			}
+			render() {
+				return h('h1', { class: 'home' }, [text('Home')]);
+			}
+		}
+		const el = ssgContainer('<h1 class="home">Prerendered</h1>');
+		const prerendered = el.firstElementChild;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const app = boot({
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: BadMountedRoot }],
+			routerMode: 'memory',
+		});
+
+		await expect(app.mount()).resolves.toBe(app);
+		await tick();
+
+		expect(el.querySelector('.fallback')).toBeNull();
+		expect(el.firstElementChild).toBe(prerendered);
+		expect(el.textContent).toBe('Prerendered');
+		expect(el.hasAttribute('data-puzzle-ssg')).toBe(true);
+		error.mockRestore();
+	});
+
+	it('restores the prerendered nodes and marker when the failed view has NO boundary', async () => {
+		// The no-boundary half of the pair above: behavior is unchanged — the exact
+		// nodes and the marker come back.
+		class BadMountedRoot extends PuzzleView {
+			mounted() {
+				throw new Error('takeover mounted failed');
+			}
+			render() {
+				return h('h1', { class: 'home' }, [text('Home')]);
+			}
+		}
+		const el = ssgContainer('<h1 class="home">Prerendered</h1>');
+		const prerendered = el.firstElementChild;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const app = boot({
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: BadMountedRoot }],
+			routerMode: 'memory',
+		});
+
+		await expect(app.mount()).resolves.toBe(app);
+		await tick();
+
+		expect(el.firstElementChild).toBe(prerendered);
+		expect(el.textContent).toBe('Prerendered');
+		expect(el.hasAttribute('data-puzzle-ssg')).toBe(true);
+		expect(error).toHaveBeenCalledWith(
+			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			expect.any(Error)
+		);
+		error.mockRestore();
+	});
+
 	it('a layout swap after a restored takeover does not duplicate the page', async () => {
 		// The failed-takeover restore puts the marker back, so the NEXT container
 		// mount must re-run the takeover clear — otherwise the fresh layout mounts

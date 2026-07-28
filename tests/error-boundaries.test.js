@@ -2,7 +2,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTestApp } from '../client-runtime/testing/index.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
+
+class Todo extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		title: Puzzle.string().required(),
+	};
+}
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -445,5 +453,341 @@ describe('PuzzleView errorContent boundaries', () => {
 		const node = app.find('.host').firstChild;
 		expect(node.nodeType).toBe(8);
 		expect(node.nodeValue).toBe('puzzle');
+	});
+
+	it('mounts the boundary face fresh after a mid-patch throw, leaving no orphans', async () => {
+		// A patch that throws PARTWAY leaves the DOM matching neither the old tree
+		// nor the new one. Here the first of five children changes tag, so it is
+		// REPLACED (its old element is detached) and then the third child's ref
+		// throws. Diffing the boundary face against that stale tree resolves its
+		// insertion ref to the detached element — insertBefore throws NotFoundError,
+		// the boundary is reported as a second 'boundary' failure, and the user is
+		// left with the half-patched DOM. The manager must clear its whole range and
+		// mount the face fresh instead.
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const reports = [];
+		let host;
+
+		class Poisoned extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				host = this;
+			}
+			errorContent(error) {
+				// Same root tag as render(), so patch() would descend into the stale
+				// children rather than replacing the root wholesale.
+				return h('section', { class: 'shell' }, [h('p', { class: 'fallback' }, [text(error.message)])]);
+			}
+			render() {
+				const poisoned = this.getData().poisoned ?? false;
+				const rows = [1, 2, 3, 4, 5].map((i) =>
+					h(
+						poisoned && i === 1 ? 'span' : 'div',
+						{
+							class: `row row-${i}`,
+							...(poisoned && i === 3
+								? {
+										ref: () => {
+											throw new Error('patch boom');
+										},
+									}
+								: {}),
+						},
+						[text(`row ${i}`)]
+					)
+				);
+				return h('section', { class: 'shell' }, rows);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/', view: Poisoned }],
+			onError(error, info) {
+				reports.push({ error, info });
+			},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.findAll('.row')).toHaveLength(5);
+
+		host.setData({ poisoned: true });
+		await flush();
+
+		expect(app.find('.fallback').textContent).toBe('patch boom');
+		// Nothing from the aborted patch survives beside the boundary face.
+		expect(app.findAll('.row')).toHaveLength(0);
+		expect(app.findAll('section')).toHaveLength(1);
+		expect(app.container.querySelectorAll('.fallback')).toHaveLength(1);
+		// One render report, and NO second 'boundary' report — the boundary drew
+		// successfully rather than throwing against a stale insertion ref.
+		expect(reports.map((r) => r.info.phase)).toEqual(['render']);
+	});
+
+	it('releases the aborted patch subtrees — subscriptions, instances and outside listeners', async () => {
+		// renderFresh() clears the corrupt range by raw DOM removal, which releases
+		// nothing that does not live in those nodes: component instances keep their
+		// store subscriptions, and `outside` listeners sit on document. The vnode
+		// trees still name WHAT exists (only WHERE is a lie), so both of them — the
+		// old one and the partially-applied new one — get the non-DOM release walk.
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		let host;
+		let outsideFired = 0;
+		let early;
+		let late;
+
+		class EarlyWatcher extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				early = this;
+			}
+			data() {
+				return { name: this.ctx.store.findOne('todo', '1')?.title ?? '?' };
+			}
+			render() {
+				return h('em', { class: 'early' }, [text(this.getData().name)]);
+			}
+		}
+		class LateWatcher extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				late = this;
+			}
+			data() {
+				return { name: this.ctx.store.findOne('todo', '2')?.title ?? '?' };
+			}
+			render() {
+				return h('em', { class: 'late' }, [text(this.getData().name)]);
+			}
+		}
+		class Poisoned extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				host = this;
+			}
+			errorContent(error) {
+				return h('section', { class: 'shell' }, [
+					h('p', { class: 'fallback' }, [text(error.message)]),
+				]);
+			}
+			render() {
+				const poisoned = this.getData().poisoned ?? false;
+				return h('section', { class: 'shell' }, [
+					// Only in the NEW tree: mounted (and subscribed) by the patch that
+					// then threw, so this instance is reachable from that tree alone.
+					poisoned ? comp(LateWatcher) : h('div', { class: 'row row-1' }, [text('one')]),
+					h('div', {
+						class: 'row row-2',
+						'@click:outside': () => {
+							outsideFired++;
+						},
+					}),
+					h(
+						'div',
+						{
+							class: 'row row-3',
+							...(poisoned
+								? {
+										ref: () => {
+											throw new Error('patch boom');
+										},
+									}
+								: {}),
+						},
+						[text('three')]
+					),
+					// Never reached by the aborted patch, so this one is reachable from
+					// the OLD tree alone.
+					comp(EarlyWatcher),
+				]);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/', view: Poisoned }],
+			models: { todo: Todo },
+		});
+		apps.push(app);
+		app.store.upsert('todo', { id: '1', title: 'one' });
+		await flush();
+
+		expect(app.find('.early')).not.toBeNull();
+		expect(app.store.keysBySubscriber.get(early)?.size ?? 0).toBeGreaterThan(0);
+
+		host.setData({ poisoned: true });
+		await flush();
+
+		expect(app.find('.fallback').textContent).toBe('patch boom');
+		// The new tree's component subscribed during the aborted patch...
+		expect(late).toBeDefined();
+		expect(late.isDestroyed).toBe(true);
+		expect(app.store.keysBySubscriber.get(late)?.size ?? 0).toBe(0);
+		// ...and the old tree's component was never reached by it.
+		expect(early.isDestroyed).toBe(true);
+		expect(app.store.keysBySubscriber.get(early)?.size ?? 0).toBe(0);
+		// A store write must not wake either of them.
+		app.store.upsert('todo', { id: '1', title: 'ONE!' });
+		await flush();
+		expect(app.find('.early')).toBeNull();
+		expect(app.find('.fallback')).not.toBeNull();
+
+		// The document-level `outside` listener is detached, not merely orphaned.
+		document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+		await flush();
+		expect(outsideFired).toBe(0);
+	});
+
+	it('surfaces a pre-mount data() rejection behind a skeleton through the boundary', async () => {
+		// The router starts a skeleton view's preload() un-awaited, so a prompt
+		// rejection lands BEFORE mount() ever creates the ViewManager — here the
+		// mount waits on the layout's gated data(). The error is buffered on the
+		// instance and flushed at the end of mount(); without that the user sits on
+		// the skeleton forever (F8).
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		class SlowShell extends PuzzleView {
+			async data() {
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				return {};
+			}
+			render() {
+				return h('div', { class: 'shell' }, [new ViewNode(SLOT_TAG)]);
+			}
+		}
+		class FastFail extends PuzzleView {
+			async data() {
+				throw new Error('missing id');
+			}
+			renderSkeleton() {
+				return h('div', { class: 'skeleton' });
+			}
+			errorContent(error) {
+				return h('p', { class: 'fallback' }, [text(error.message)]);
+			}
+			render() {
+				return h('puzzle-view', { class: 'post' });
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [
+				{ path: '/', view: Home },
+				{ path: '/post', view: FastFail, layout: SlowShell },
+			],
+		});
+		apps.push(app);
+
+		await app.router.push('/post');
+		await flush();
+
+		expect(app.find('.fallback').textContent).toBe('missing id');
+		expect(app.find('.skeleton')).toBeNull();
+		expect(app.container.querySelectorAll('.fallback')).toHaveLength(1);
+	});
+
+	it('still surfaces a SLOW skeleton data() rejection through the boundary', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		class SlowFail extends PuzzleView {
+			async data() {
+				await new Promise((resolve) => setTimeout(resolve, 10));
+				throw new Error('late boom');
+			}
+			renderSkeleton() {
+				return h('div', { class: 'skeleton' });
+			}
+			errorContent(error) {
+				return h('p', { class: 'fallback' }, [text(error.message)]);
+			}
+			render() {
+				return h('puzzle-view', { class: 'post' });
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [
+				{ path: '/', view: Home },
+				{ path: '/post', view: SlowFail },
+			],
+		});
+		apps.push(app);
+
+		await app.router.push('/post');
+		await flush();
+
+		expect(app.find('.fallback').textContent).toBe('late boom');
+		expect(app.find('.skeleton')).toBeNull();
+		expect(app.container.querySelectorAll('.fallback')).toHaveLength(1);
+	});
+
+	it('rebuilds the routed chain after a layout boundary swallowed it', async () => {
+		// The layout is the error parent of the whole routed chain, so its boundary
+		// render DESTROYS router-owned views. The router must be told, or the next
+		// navigation reuses the destroyed instances and the layout freezes on the
+		// old route forever (F2).
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const layouts = [];
+		let dataRuns = 0;
+		let thrown = false;
+
+		class ProjectLayout extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				layouts.push(this);
+			}
+			data(params) {
+				dataRuns++;
+				return { id: params.id ?? this.route?.params?.id ?? '?' };
+			}
+			errorContent(error) {
+				return h('p', { class: 'layout-fallback' }, [text(error.message)]);
+			}
+			render() {
+				return h('div', { class: 'layout' }, [
+					h('h1', { class: 'header' }, [text(String(this.getData().id))]),
+					new ViewNode(SLOT_TAG),
+				]);
+			}
+		}
+		class Leaf extends PuzzleView {
+			mounted() {
+				if (!thrown) {
+					thrown = true;
+					throw new Error('leaf boom');
+				}
+			}
+			render() {
+				return h('puzzle-view', { class: 'leaf' }, [text(`leaf ${this.params.id}`)]);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/projects/:id', view: Leaf, layout: ProjectLayout }],
+			routerInitialPath: '/projects/1',
+		});
+		apps.push(app);
+		await flush();
+
+		// The layout boundary took the whole page.
+		expect(app.find('.layout-fallback').textContent).toBe('leaf boom');
+		expect(app.find('.leaf')).toBeNull();
+		const runsAtFailure = dataRuns;
+
+		await app.router.push('/projects/2');
+		await flush();
+
+		// A FRESH layout whose data() re-ran — not the frozen destroyed chain.
+		expect(app.find('.layout-fallback')).toBeNull();
+		expect(app.find('.header').textContent).toBe('2');
+		expect(app.find('.leaf').textContent).toBe('leaf 2');
+		expect(dataRuns).toBeGreaterThan(runsAtFailure);
+		expect(layouts).toHaveLength(2);
+		expect(layouts[0].isDestroyed).toBe(true);
+		expect(layouts[1].isDestroyed).toBe(false);
+
+		// And the rebuilt chain keeps navigating normally.
+		await app.router.push('/projects/3');
+		await flush();
+		expect(app.find('.header').textContent).toBe('3');
+		expect(app.find('.leaf').textContent).toBe('leaf 3');
 	});
 });

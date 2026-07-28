@@ -64,6 +64,20 @@ export class ViewManager {
 		// lands — needed because a child's mount() awaits async data() while the
 		// synchronous parent patch must already have a stable insertion ref.
 		this.anchor = null;
+		// A patch() threw partway: the DOM matches NEITHER currentTree nor the tree
+		// that was being applied, so nothing may be diffed against it again. The
+		// error boundary renders through renderFresh() while this is set (D145).
+		this.treeUnknown = false;
+		// The two live siblings bracketing this manager's DOM range, captured
+		// immediately before the patch that threw. Both sit OUTSIDE the range, so an
+		// aborted patch cannot have moved or removed them — they are the only
+		// trustworthy handles on the corrupt range.
+		this.unknownRange = null;
+		// Both vnode trees involved in that aborted patch. Their DOM positions are
+		// lies, but their INSTANCE bookkeeping is not: nested component instances,
+		// element refs and document-level `outside` listeners are reachable only
+		// through them, and clearing the range by DOM removal releases none of it.
+		this.unknownTrees = null;
 	}
 
 	/**
@@ -92,7 +106,87 @@ export class ViewManager {
 				this.anchor = null;
 			}
 		} else {
-			patch(this.currentTree, newTree, this.container, this.ctx, this.owner);
+			// Bracket the managed range BEFORE patching. A throw partway through the
+			// patch leaves the DOM half-updated, and `currentTree` (assigned only
+			// below) would then describe a tree that no longer exists — diffing the
+			// error face against it resolves insertion refs to moved or removed
+			// nodes. Record the corrupt range instead and leave `currentTree` alone:
+			// neither tree is true, so the manager reports the tree as UNKNOWN and
+			// the next boundary render goes through renderFresh().
+			const el = this.currentTree.el ?? null;
+			const bracketed = el != null && el.parentNode === this.container;
+			const before = bracketed ? el.previousSibling : null;
+			const after = bracketed ? el.nextSibling : null;
+			try {
+				patch(this.currentTree, newTree, this.container, this.ctx, this.owner);
+			} catch (err) {
+				this.treeUnknown = true;
+				this.unknownRange = bracketed ? { before, after } : null;
+				// BOTH trees: the aborted patch may have mounted components from the
+				// new one and left components from the old one live.
+				this.unknownTrees = [this.currentTree, newTree];
+				throw err;
+			}
+		}
+		this.currentTree = newTree;
+		return newTree;
+	}
+
+	/**
+	 * Mount `rawTree` over a DOM range this manager can no longer describe (see
+	 * `treeUnknown`). The vnode tree is untrustworthy, so the old content is
+	 * cleared by DOM removal across the bracketed range rather than by an
+	 * unmount() walk, then the new tree is mounted from scratch. The anchor
+	 * comment, if this manager still holds one, survives the clear and is the
+	 * insertion ref (mount()'s normal first-render contract).
+	 *
+	 * DOM position is the only thing those trees lie about, so the non-DOM release
+	 * still runs over BOTH of them first (releaseAborted): nested component
+	 * instances keep their store subscriptions, `outside` listeners live on
+	 * document, and portaled content sits outside the range entirely — none of it
+	 * is reachable again once currentTree becomes the error face.
+	 */
+	renderFresh(rawTree) {
+		const newTree = expandSlots(rawTree, this.slotChildren);
+		releaseAborted(this.unknownTrees);
+		this.unknownTrees = null;
+		const range = this.unknownRange;
+		let removed = false;
+		if (range) {
+			const { before, after } = range;
+			const stop = after && after.parentNode === this.container ? after : null;
+			let node =
+				before && before.parentNode === this.container
+					? before.nextSibling
+					: this.container.firstChild;
+			while (node && node !== stop) {
+				const next = node.nextSibling;
+				// The anchor is this manager's position marker, not content.
+				if (node !== this.anchor) {
+					node.remove();
+					removed = true;
+				}
+				node = next;
+			}
+		}
+		if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && removed) devperfMutation();
+
+		const after = range?.after;
+		const ref =
+			this.anchor && this.anchor.parentNode === this.container
+				? this.anchor
+				: after && after.parentNode === this.container
+					? after
+					: null;
+
+		this.currentTree = null;
+		this.treeUnknown = false;
+		this.unknownRange = null;
+		mount(newTree, this.container, ref, this.ctx, this.owner);
+		if (this.anchor) {
+			this.anchor.remove();
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+			this.anchor = null;
 		}
 		this.currentTree = newTree;
 		return newTree;
@@ -116,6 +210,13 @@ export class ViewManager {
 
 	/** Remove everything this manager mounted. */
 	clear() {
+		// A destroy that arrives BEFORE any boundary render still has to release the
+		// aborted patch's two trees — unmount(currentTree) below reaches only the old
+		// one, and only through positions that may no longer be true.
+		if (this.unknownTrees) {
+			releaseAborted(this.unknownTrees);
+			this.unknownTrees = null;
+		}
 		if (this.currentTree) unmount(this.currentTree);
 		if (this.anchor) {
 			this.anchor.remove();
@@ -124,6 +225,8 @@ export class ViewManager {
 			this.anchor = null;
 		}
 		this.currentTree = null;
+		this.treeUnknown = false;
+		this.unknownRange = null;
 	}
 }
 
@@ -928,6 +1031,38 @@ function releaseSubtree(vnode) {
 		if (child.tag === PORTAL_TAG) unmountPortal(child);
 		else if (child.isComponent) child.component?.destroy();
 		else if (!child.isText) releaseSubtree(child);
+	}
+}
+
+/**
+ * Release the non-DOM resources held by the two vnode trees of a patch that threw
+ * partway (ViewManager.treeUnknown). The DOM is cleared separately, by range
+ * removal, because these trees no longer describe where anything IS — but they are
+ * still the only record of WHAT exists: nested component instances (and their store
+ * subscriptions), element refs (D72), `outside` listeners parked on document (D86),
+ * and portaled content living in the outlet. Raw node removal releases none of it,
+ * and once the manager adopts the boundary face nothing can reach these trees again.
+ *
+ * Both trees are walked because the aborted patch may have mounted components from
+ * the incoming tree while leaving the outgoing tree's components live. An instance
+ * carried across by patchComponent is reached twice; destroy() is idempotent
+ * (#destroyed guard), the ref setters are removal-guarded, and the listener sweep
+ * deletes the keys it detaches, so the second visit is a no-op.
+ *
+ * This runs on an already-failing path, so every subtree is guarded: a throwing
+ * user beforeDestroy()/ref must not stop the boundary face from mounting.
+ */
+function releaseAborted(trees) {
+	if (!trees) return;
+	for (const tree of trees) {
+		if (!tree) continue;
+		try {
+			if (tree.tag === PORTAL_TAG) unmountPortal(tree);
+			else if (tree.isComponent) tree.component?.destroy();
+			else if (!tree.isText) releaseSubtree(tree);
+		} catch (err) {
+			console.error('[puzzle] releasing an aborted render failed:', err);
+		}
 	}
 }
 

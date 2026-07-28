@@ -77,6 +77,10 @@ export class PuzzleView {
 	// Nearest owning PuzzleView for error-boundary lookup. Set by the parent's
 	// ViewManager when it instantiates/adopts this component; null for app roots.
 	#errorParent = null;
+	// An error whose boundary resolved to THIS instance before it had a
+	// ViewManager (a pre-mount preload/data() rejection). mount() flushes it once
+	// the manager exists and the first render has been attempted.
+	#pendingBoundaryError = null;
 	#mounted = false;
 	// Anchor-race gate (Change A): set true when the non-skeleton async mount()
 	// branch resumes to find its first render superseded (no commit landed) —
@@ -314,7 +318,7 @@ export class PuzzleView {
 			if (typeof boundary.errorContent === 'function') {
 				try {
 					const tree = boundary.errorContent(boundaryError);
-					if (tree) return { boundary, tree };
+					if (tree) return { boundary, tree, error: boundaryError };
 				} catch (err) {
 					reportError(
 						boundary.ctx,
@@ -342,8 +346,31 @@ export class PuzzleView {
 				this.__failedFallback = mountedTree;
 				if (placeholder) placeholder.__failedFallback = mountedTree;
 			} else {
-				if (!boundary.#vm || boundary.#destroyed) return false;
-				boundary.#vm.render(tree);
+				if (!boundary.#vm || boundary.#destroyed) {
+					// PRE-MOUNT failure on this instance's own boundary: the router starts
+					// a skeleton view's preload() un-awaited, so a data() rejection can land
+					// before mount() ever creates the ViewManager. Buffer the error rather
+					// than dropping it — mount() flushes it once #vm exists, which is the
+					// difference between the declared errorContent() and an eternal
+					// skeleton. An ANCESTOR boundary is already mounted, so it renders
+					// immediately and never buffers (no double-fire).
+					if (boundary === this && !this.#vm && !this.#destroyed) {
+						this.#pendingBoundaryError = captured.error ?? null;
+					}
+					return false;
+				}
+				if (boundary !== this) {
+					// The ancestor's render unmounts — and DESTROYS — everything under it,
+					// including a routed chain the Router owns and still names in its
+					// committed state. Tell the router first so the next navigation
+					// rebuilds from scratch instead of reusing destroyed instances.
+					this.ctx?.router?.__invalidateChain?.(boundary);
+				}
+				// A patch threw partway through this manager's last render, so its tree
+				// no longer describes the DOM (D145/F7): mount the boundary face fresh
+				// over the corrupt range instead of diffing against a stale tree.
+				if (boundary.#vm.treeUnknown) boundary.#vm.renderFresh(tree);
+				else boundary.#vm.render(tree);
 			}
 			return true;
 		} catch (err) {
@@ -497,13 +524,27 @@ export class PuzzleView {
 				// refresh committed normally, #loaded is already true → complete inline.
 				if (!this.#loaded) {
 					this.#pendingMountHook = true;
+					this.#flushPendingBoundaryError();
 					return this;
 				}
 			}
 		}
 
 		this.#completeMount();
+		this.#flushPendingBoundaryError();
 		return this;
+	}
+
+	/**
+	 * Surface an error buffered before this instance had a ViewManager (see
+	 * #pendingBoundaryError). Runs once — the field is cleared BEFORE the render,
+	 * so a boundary that throws while drawing cannot re-enter this flush.
+	 */
+	#flushPendingBoundaryError() {
+		const err = this.#pendingBoundaryError;
+		if (err === null || this.#destroyed) return;
+		this.#pendingBoundaryError = null;
+		this.__renderErrorBoundary(err);
 	}
 
 	/**
