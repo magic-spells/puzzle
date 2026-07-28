@@ -49,7 +49,7 @@
 
       <div class="mt-12 space-y-12">
         <ExampleBox id="custom-trigger" title="Custom trigger" code={ codeTrigger }>
-          <EmojiPicker customTrigger label="Add reaction" @change={ addEmoji }>
+          <EmojiPicker label="Add reaction" @change={ addEmoji }>
             <span slot="trigger" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken">
               React { lastEmoji }
             </span>
@@ -108,13 +108,14 @@ const codeHero = `<input value={ message } @input={ onMessageInput(event) } />
 
 // addEmoji: (char) => this.setData({ message: this.getData().message + char })`;
 
-const codeTrigger = `<EmojiPicker customTrigger label="Add reaction" @change={ addEmoji }>
+const codeTrigger = `<EmojiPicker label="Add reaction" @change={ addEmoji }>
   <span slot="trigger" class="…">React</span>
 </EmojiPicker>
 
-// \`customTrigger\` opts in to the named "trigger" slot, which replaces the default
-// smiley icon; the piece still owns the real <button> underneath, so the ARIA wiring
-// stays intact. \`label\` remains the accessible name, not visible text.`;
+// Filling the named "trigger" slot replaces the default smiley icon — that stock icon
+// is the slot's fallback body, so no flag is needed; the piece still owns the real
+// <button> underneath, so the ARIA wiring stays intact. \`label\` remains the
+// accessible name, not visible text.`;
 
 const codePlacement = `<EmojiPicker align="start" @change={ addEmoji }/>
 <EmojiPicker align="end" side="top" @change={ addEmoji }/>

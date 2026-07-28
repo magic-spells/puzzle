@@ -8,11 +8,7 @@
       aria-controls={ panelId }
       @click={ toggle }
       @keydown:escape={ onEscape(event) }>
-      {#if triggerLabel}
-        { triggerLabel }
-      {:else}
-        <Slot name="trigger"/>
-      {/if}
+      <Slot name="trigger">{ triggerLabel }</Slot>
     </span>
 
     {#if open}
@@ -82,11 +78,10 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // aria-controls/aria-expanded wiring. We do not render our own button, so there is no
 // nested-button problem.
 //
-// `label` and the "trigger" slot are EITHER/OR. Pass `label` for a bare text trigger,
-// or fill the slot for your own element. D134 retired slot fallback bodies, so the
-// choice is an explicit {#if triggerLabel} in this template rather than implicit
-// slot-emptiness — passing BOTH now shows the label and IGNORES the slot (previously
-// the filled slot won), and passing neither renders an empty, unclickable trigger.
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141):
+// the bare `label` text. Fill slot="trigger" with your own element and it REPLACES
+// that fallback — a filled slot wins over `label`. Pass neither and the trigger
+// renders empty and unclickable.
 //
 // open — OPTIONAL-CONTROLLED (HoverCard's shape): omit it and the piece owns its open
 // state; pass it and the parent owns it — the piece only ASKS to open/close via

@@ -9,11 +9,7 @@
       data-popover-trigger
       @click={ toggle }
       @keydown:escape={ onEscape(event) }>
-      {#if label}
-        { label }
-      {:else}
-        <Slot name="trigger"/>
-      {/if}
+      <Slot name="trigger">{ label }</Slot>
     </button>
 
     {#if open}
@@ -50,12 +46,10 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // arbitrary TRIGGER content goes inside it via the named "trigger" slot. Panel
 // content is the default <Slot/>.
 //
-// `label` and the "trigger" slot are EITHER/OR. Pass `label` for a plain text
-// trigger, or fill the slot for arbitrary trigger content. D134 retired slot
-// fallback bodies, so the choice is an explicit {#if label} in this template
-// rather than implicit slot-emptiness — passing BOTH now shows the label and
-// IGNORES the slot (previously the filled slot won), and passing neither renders
-// an empty, unclickable button.
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141):
+// the plain `label` text. Fill slot="trigger" for arbitrary trigger content and it
+// REPLACES that fallback — a filled slot wins over `label`. Pass neither and the
+// button renders empty and unclickable.
 //
 // Focus is deliberately NOT trapped — this is a popover, not a modal — and open
 // does not steal focus. The panel is rendered right after the trigger, so tabbing
