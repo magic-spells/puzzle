@@ -38,6 +38,7 @@ import type {
 	AdapterMockResult,
 	ModelAdapter,
 	FocusBehavior,
+	PuzzleErrorInfo,
 } from '@magic-spells/puzzle';
 import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
@@ -129,6 +130,11 @@ class TodoListView extends PuzzleView {
 		},
 		selectAll: () => this.setData({ filter: 'all', selectedId: null }),
 	};
+
+	errorContent(error: unknown) {
+		void error;
+		return undefined;
+	}
 
 	async data(params?: Record<string, string>, props?: any): Promise<object> {
 		const id = params?.id ?? props?.id;
@@ -277,6 +283,10 @@ const config: PuzzleAppConfig = {
 	},
 	beforeUnmount(app) {
 		void app.store.findMany('todo');
+	},
+	onError(error, info) {
+		const typedInfo: PuzzleErrorInfo = info;
+		void [error, typedInfo.phase, typedInfo.view, typedInfo.route];
 	},
 };
 
