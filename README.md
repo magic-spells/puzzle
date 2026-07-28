@@ -227,13 +227,14 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 </Card>
 ```
 
-**Named slots.** The child declares regions with `<Slot name="header"/>`, and the call site routes a direct child into one with a static `slot="header"` attribute (stripped from the rendered output). Unfilled markers render nothing; routed views fill the default marker only. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §24.
+**Named slots.** The child declares regions with `<Slot name="header"/>`, and the call site routes a direct child into one with a static `slot="header"` attribute (stripped from the rendered output). An unfilled marker renders its fallback body — the content between paired marker tags — or nothing when self-closing; routed views fill the default marker only. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §24.
 
-Reusable components declare default child content with `<Children/>`:
+Reusable components declare default child content with `<Children/>`, and a paired marker's body is the fallback shown when the caller supplies nothing:
 
 ```html
 <article class="card">
   <Children/>
+  <footer><Slot name="footer"><button>OK</button></Slot></footer>
 </article>
 ```
 
