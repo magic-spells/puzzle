@@ -425,11 +425,16 @@ function snapshotSubscriptions() {
 		for (const key of keys) if (!bucket.includes(key)) bucket.push(key);
 	}
 	const held = {};
-	for (const [sub, keys] of store._heldKeys ?? []) {
-		if (keys.size === 0) continue;
+	// _heldKeys is Map<subscriber, Map<key, {count, adopted}>> (D146 refcounting);
+	// the wire shape stays a flat array of key strings — the counts are internal.
+	for (const [sub, counts] of store._heldKeys ?? []) {
 		const id = subscriberId(sub);
-		const bucket = (held[id] ??= []);
-		for (const key of keys) if (!bucket.includes(key)) bucket.push(key);
+		let bucket = null;
+		for (const [key, { count }] of counts) {
+			if (count <= 0) continue;
+			bucket ??= held[id] ??= [];
+			if (!bucket.includes(key)) bucket.push(key);
+		}
 	}
 	return { byKey, byView, held };
 }

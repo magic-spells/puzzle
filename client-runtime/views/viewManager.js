@@ -451,7 +451,7 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
 			? document.createElementNS(SVG_NS, vnode.tag)
 			: document.createElement(vnode.tag);
 		for (const [name, value] of Object.entries(vnode.attrs)) {
-			setAttr(el, name, value);
+			setAttr(el, name, value, owner);
 		}
 		// Element ref (v1.39, D72): populate this.refs[name] with the live element the
 		// moment it is created, BEFORE children mount and BEFORE the owning view's
@@ -717,7 +717,7 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		return;
 	}
 
-	patchAttrs(el, oldVnode.attrs, newVnode.attrs);
+	patchAttrs(el, oldVnode.attrs, newVnode.attrs, owner);
 
 	// DOM island (constellation/doc/DOC-SPEC.md §17, D44): a static `island` attr
 	// makes this element's children browser-/component-owned after mount. The
@@ -931,7 +931,7 @@ function releaseSubtree(vnode) {
 	}
 }
 
-function patchAttrs(el, oldAttrs, newAttrs) {
+function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
 	for (const [name, value] of Object.entries(newAttrs)) {
 		// Element ref (v1.39, D72): the element PERSISTS through this patch. The
 		// normal case is a cached setter identical on both sides (===) → nothing to
@@ -962,11 +962,11 @@ function patchAttrs(el, oldAttrs, newAttrs) {
 		// a plain `value` (<li>, <progress>, <button>) keep the byte-identical vnode
 		// compare — they never drift out of band.
 		if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
-			if (el.value !== stringify(value)) setAttr(el, name, value);
+			if (el.value !== stringify(value)) setAttr(el, name, value, owner);
 		} else if (name === 'checked' && el.nodeName === 'INPUT') {
-			if (el.checked !== Boolean(value)) setAttr(el, name, value);
+			if (el.checked !== Boolean(value)) setAttr(el, name, value, owner);
 		} else if (oldAttrs[name] !== value) {
-			setAttr(el, name, value);
+			setAttr(el, name, value, owner);
 		}
 	}
 	for (const name of Object.keys(oldAttrs)) {
@@ -1193,7 +1193,7 @@ function nextPersistentSibling(node) {
 
 // ---- attributes / properties / listeners --------------------------------------
 
-function setAttr(el, name, value) {
+function setAttr(el, name, value, owner = null) {
 	// `key`, `island` (D44), `ref` (D72), and `flip` (D85) are framework
 	// directives, never DOM markup — the ref setter is invoked by
 	// mount()/patchAttrs, and flip by patchKeyedChildren, not written here.
@@ -1220,9 +1220,20 @@ function setAttr(el, name, value) {
 			// An outside binding always wraps (mods is non-empty by construction —
 			// 'outside' itself is a modifier), so the gate below never needs a
 			// separate no-other-mods path.
+			// D146: an event handler re-enters the owning view from the event loop,
+			// which may be INSIDE a suspended prepared data()'s window. Run it with
+			// the destination eval scope fenced off so `this.params`/`this.route`
+			// report the committed route — a handler writing `{ orgId: this.params.id }`
+			// must not write against a navigation that has not landed (and may never).
+			// The fence wraps the modifier chain too; those are framework steps and
+			// read no route state, so the ordering in withModifiers is unaffected.
+			const bound =
+				typeof owner?.__withCommittedScope === 'function'
+					? (event) => owner.__withCommittedScope(() => value(event))
+					: value;
 			const handler = mods.length
-				? withModifiers(name, event, mods, value, listeners, el)
-				: value;
+				? withModifiers(name, event, mods, bound, listeners, el)
+				: bound;
 			target.addEventListener(event, handler, opts);
 			listeners[name] = handler;
 		} else {

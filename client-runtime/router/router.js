@@ -1344,248 +1344,259 @@ export class Router {
 			!cur &&
 			this.#container != null &&
 			this.#container.hasAttribute('data-puzzle-ssg');
+		// EXCEPTION-SAFE handle sweep (D146). Every prepared handle is idempotent via
+		// its own `settled` flag, so discarding unconditionally on the way out is free
+		// on the success path (#commitState already committed them) and is the only
+		// thing that covers a THROW out of the synchronous commit block inside #swap —
+		// a user render()/afterUpdate() blowing up there reaches neither commit nor any
+		// of the explicit bail paths, and an unreleased hold fences the ancestor's keys
+		// in Store._heldKeys for the rest of the session.
 		try {
-			const loads = [];
-			const hasSkeleton = (v) =>
-				!isSSGTakeover && typeof v.renderSkeleton === 'function';
-			const start = (v) => {
-				const p = v.preload({ params, props: {}, route: to });
-				if (hasSkeleton(v)) {
-					p.catch((err) => {
-						reportError(
-							this.#ctx,
-							err,
-							{ phase: 'navigation', view: v, route: to },
-							'[puzzle] skeleton view data() failed:',
-							err
-						);
-						queueMicrotask(() => v.__renderErrorBoundary?.(err));
-					});
-				} else {
-					loads.push(p);
+			try {
+				const loads = [];
+				const hasSkeleton = (v) =>
+					!isSSGTakeover && typeof v.renderSkeleton === 'function';
+				const start = (v) => {
+					const p = v.preload({ params, props: {}, route: to });
+					if (hasSkeleton(v)) {
+						p.catch((err) => {
+							reportError(
+								this.#ctx,
+								err,
+								{ phase: 'navigation', view: v, route: to },
+								'[puzzle] skeleton view data() failed:',
+								err
+							);
+							queueMicrotask(() => v.__renderErrorBoundary?.(err));
+						});
+					} else {
+						loads.push(p);
+					}
+				};
+				// GATED loads start first, skeleton-exempt preloads LAST. An async
+				// data() holds the store's tracking scope open for its whole await
+				// (Store.withTracking serializes evaluations), so a skeleton view's
+				// un-awaited preload must open its scope only after every gated load
+				// has started — otherwise the gate queues behind the skeleton's own
+				// fetch and the commit (and the skeleton paint) waits on the very
+				// load the exemption exists to skip.
+				for (const v of freshViews) if (!hasSkeleton(v)) start(v);
+				// Reused ancestors PREPARE rather than refresh (D146): data() runs here with
+				// the destination params/route (so it still gates the URL exactly as before,
+				// and this.route still names the target — D47), but nothing about the
+				// ancestor changes until the commit window. Ordering inside the loads array
+				// is unchanged, so the store's tracking serialization behaves identically.
+				for (const v of reusedViews) {
+					const p = v.prepareRefresh({ params, route: to });
+					if (!p) continue; // destroyed/leaving/profiler-blocked — refresh() no-ops too
+					prepared.push(p);
+					loads.push(p.ready);
 				}
-			};
-			// GATED loads start first, skeleton-exempt preloads LAST. An async
-			// data() holds the store's tracking scope open for its whole await
-			// (Store.withTracking serializes evaluations), so a skeleton view's
-			// un-awaited preload must open its scope only after every gated load
-			// has started — otherwise the gate queues behind the skeleton's own
-			// fetch and the commit (and the skeleton paint) waits on the very
-			// load the exemption exists to skip.
-			for (const v of freshViews) if (!hasSkeleton(v)) start(v);
-			// Reused ancestors PREPARE rather than refresh (D146): data() runs here with
-			// the destination params/route (so it still gates the URL exactly as before,
-			// and this.route still names the target — D47), but nothing about the
-			// ancestor changes until the commit window. Ordering inside the loads array
-			// is unchanged, so the store's tracking serialization behaves identically.
-			for (const v of reusedViews) {
-				const p = v.prepareRefresh({ params, route: to });
-				if (!p) continue; // destroyed/leaving/profiler-blocked — refresh() no-ops too
-				prepared.push(p);
-				loads.push(p.ready);
+				if (layout && !reuseLayout && !hasSkeleton(layout)) start(layout);
+				for (const v of freshViews) if (hasSkeleton(v)) start(v);
+				if (layout && !reuseLayout && hasSkeleton(layout)) start(layout);
+				await Promise.all(loads);
+			} catch (err) {
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'navigation', route: to },
+					'[puzzle] navigation data() failed:',
+					err
+				);
+				for (const v of freshViews) v.destroy();
+				if (layout && !reuseLayout) layout.destroy();
+				// D146: unwind every prepared ancestor. Subscription-only — the ancestors
+				// were never touched, so nothing renders, no hook fires, and the D145 error
+				// funnel above stays the single report for this failure.
+				discardPrepared();
+				// Strand recovery: our token bump doomed any transition still animating
+				// out (its post-playOut check will #abandon against our newer token), but
+				// by failing here we never reach #swap — the only place that destroys a
+				// stalled #pendingOut. Left alone, that outgoing unit sits fully played
+				// out (held invisible by the out animation's `fill`) over an UNCHANGED
+				// #state that still claims it as the current view. Restore it: cancel the
+				// out animation (WAAPI cancel clears the effect, finished-and-filling
+				// included — and resolves a still-parked playOut await, so the doomed
+				// navigation abandons promptly) and clear #pendingOut. Only when WE are
+				// still the latest navigation — a newer one owns the cleanup via its own
+				// clamp + #swap skipOut path. The restored unit's playOut memo stays
+				// spent: a later navigation away swaps it out instantly, no second out
+				// animation.
+				this.#recoverFailedNavigation(token);
+				return; // stay put, no history entry (reused ancestors kept — soft-violation)
 			}
-			if (layout && !reuseLayout && !hasSkeleton(layout)) start(layout);
-			for (const v of freshViews) if (hasSkeleton(v)) start(v);
-			if (layout && !reuseLayout && hasSkeleton(layout)) start(layout);
-			await Promise.all(loads);
-		} catch (err) {
-			reportError(
-				this.#ctx,
-				err,
-				{ phase: 'navigation', route: to },
-				'[puzzle] navigation data() failed:',
-				err
+
+			// A newer navigation started while we awaited — discard this one.
+			if (token !== this.#token) {
+				for (const v of freshViews) v.destroy();
+				if (layout && !reuseLayout) layout.destroy();
+				discardPrepared(); // D146
+				return;
+			}
+
+			// LOCATION is NOT committed here anymore (D61): URL + memory stack + title/head (D84) all
+			// move into #commitLocation, called inside the synchronous #committing window
+			// — the params-only branch below and #swap's commit block — so they land
+			// ATOMICALLY with the mount/#state, one out-animation LATER in sequential mode.
+			// #resolveScroll STAYS here (it is pure over its arguments — reads only
+			// #scrollEnabled()/#scrollBehavior, never #scrollKey/#positions/history): the
+			// resolved { anchor } sentinel / {x,y} is threaded down to #commitState, which
+			// applies it after the new content is on screen.
+
+			const views = [...reusedViews, ...freshViews];
+
+			// Where the window should land once the new view is on screen (null =
+			// leave it alone). Resolved here, applied in #commitState. A `#anchor` suffix
+			// on the pushed path refines the default landing (D41): read off the fragment
+			// parseLocation already split (D83 — stripPath dropped it for matching).
+			const anchor = loc.hash ? loc.hash.slice(1) : null;
+			const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
+
+			// Whether this navigation moves focus + announces (v1.56, D93). Only the
+			// GATE is decided here — memory mode, `focusBehavior: false`, and nav #0 all
+			// resolve to null, exactly the shape #resolveScroll uses. The TARGET cannot
+			// be resolved off-DOM (the leaf's root element does not exist yet, and a
+			// custom focusBehavior wants to query the committed DOM), so the sentinel
+			// just carries the snapshots #commitState hands back to that function —
+			// the same pre-commit-sentinel/post-mount-resolution split D41's { anchor }
+			// scroll landing uses.
+			const focus = this.#resolveFocus({ to, from, push, pop, replace });
+
+			// Params-only degenerate case: keep === chain length ⇒ no fresh views, the
+			// whole chain was refreshed pre-commit. Just record state + refresh the
+			// reused layout (chrome). (Replaces the old dedicated params-only branch.)
+			if (keep === entry.chain.length) {
+				// No animation is involved on a params-only refresh, so the atomic commit
+				// (D61) is just these two adjacent synchronous calls: location (URL/title/
+				// memory stack) immediately before #state. Timing is unchanged from the
+				// old inline commit block.
+				this.#commitLocation({ rawPath, entry, push, replace, memoryIndex, departScroll });
+				this.#commitState({
+					rawPath,
+					pathname: loc.pathname,
+					query: loc.query,
+					hash: loc.hash,
+					entry,
+					params,
+					views,
+					keys: cur.keys,
+					layout,
+					scroll,
+					// D146: the whole chain was prepared above; #commitState commits every
+					// prepared ancestor immediately after #state, still adjacent to
+					// #commitLocation — the atomic block D61 opened, now covering ancestor
+					// params/route/data/subscriptions too.
+					prepared,
+					// A leaf-identical replace is URL-backed transient-state churn, not
+					// a route change: leave the user's current focus in place and make no
+					// live-region announcement. Params-only pushes still take the normal
+					// focus path, and full replaces never reach this branch.
+					focus: replace ? null : focus,
+				});
+				if (layout) this.#refreshLogged(layout, params, to);
+				return;
+			}
+
+			// Assemble the FULL chain LEAF-UP into nested keyed component vnodes — all
+			// levels, not just the fresh ones, so every host along the path (layout and
+			// reused ancestors alike) receives slot content whose descendants describe
+			// the NEW chain. Swapping only at the divergence level and leaving ancestors
+			// holding their old vnodes would let any later ancestor re-render (store
+			// change, setData) push the stale sub-chain back down and revert the swap.
+			//
+			// Keys: a REUSED level keeps its committed key, so the keyed patch reuses
+			// the instance (children pushed through, no data() re-run — props are just
+			// the key). A FRESH level gets its fullPaths pattern stamped with this nav's
+			// token: patchComponent adopts by tag+key and ignores a preattached
+			// .instance, so a fresh level must NEVER collide with an old key — not even
+			// re-entering the same path pattern whose previous instance was destroyed by
+			// an interrupted transition (the clamp above).
+			const keys = entry.chain.map((_, i) =>
+				i < keep ? cur.keys[i] : entry.fullPaths[i] + '\x00' + token
 			);
-			for (const v of freshViews) v.destroy();
-			if (layout && !reuseLayout) layout.destroy();
-			// D146: unwind every prepared ancestor. Subscription-only — the ancestors
-			// were never touched, so nothing renders, no hook fires, and the D145 error
-			// funnel above stays the single report for this failure.
-			discardPrepared();
-			// Strand recovery: our token bump doomed any transition still animating
-			// out (its post-playOut check will #abandon against our newer token), but
-			// by failing here we never reach #swap — the only place that destroys a
-			// stalled #pendingOut. Left alone, that outgoing unit sits fully played
-			// out (held invisible by the out animation's `fill`) over an UNCHANGED
-			// #state that still claims it as the current view. Restore it: cancel the
-			// out animation (WAAPI cancel clears the effect, finished-and-filling
-			// included — and resolves a still-parked playOut await, so the doomed
-			// navigation abandons promptly) and clear #pendingOut. Only when WE are
-			// still the latest navigation — a newer one owns the cleanup via its own
-			// clamp + #swap skipOut path. The restored unit's playOut memo stays
-			// spent: a later navigation away swaps it out instantly, no second out
-			// animation.
-			this.#recoverFailedNavigation(token);
-			return; // stay put, no history entry (reused ancestors kept — soft-violation)
-		}
+			let childVnode = null;
+			for (let i = entry.chain.length - 1; i >= 0; i--) {
+				const vnode = new ViewNode(
+					entry.chain[i].view,
+					{ key: keys[i] },
+					childVnode ? [childVnode] : []
+				);
+				if (i >= keep) vnode.instance = views[i]; // adopt, don't construct
+				childVnode = vnode;
+			}
+			const rootVnode = childVnode; // vnode for chain level 0
 
-		// A newer navigation started while we awaited — discard this one.
-		if (token !== this.#token) {
-			for (const v of freshViews) v.destroy();
-			if (layout && !reuseLayout) layout.destroy();
-			discardPrepared(); // D146
-			return;
-		}
+			// The routed chain/layout are already preloaded above, but their render
+			// trees can contain non-routed async components. Only an SSG navigation-zero
+			// marker opts into waiting for those descendants: ordinary SPA navigation
+			// keeps ViewManager's fire-and-forget component mounting unchanged.
+			//
+			// This is the branch that pays for itself: with __PUZZLE_TAKEOVER__ false the
+			// block folds away, `preloadTakeoverComponents` loses its only importer here,
+			// and ssg/preload.js tree-shakes out of the bundle ("sideEffects": false).
+			if (
+				(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
+				this.#container?.hasAttribute('data-puzzle-ssg')
+			) {
+				let takeoverVnode = rootVnode;
+				if (layout) {
+					takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
+					takeoverVnode.instance = layout;
+				}
+				const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
+				// A newer navigation may supersede us while a nested component loads.
+				// None of these instances mounted, so release each one's tracked state
+				// explicitly before discarding the routed chain.
+				if (token !== this.#token) {
+					for (const instance of nestedInstances) instance.destroy();
+					for (const v of freshViews) v.destroy();
+					if (layout && !reuseLayout) layout.destroy();
+					discardPrepared(); // D146
+					return;
+				}
+				// Same suppression the routed chain gets below: mountComponent auto-chains
+				// playIn() onto every component it mounts, and these are about to mount over
+				// prerendered markup that already shows them.
+				for (const instance of nestedInstances) instance.skipEnter();
+			}
 
-		// LOCATION is NOT committed here anymore (D61): URL + memory stack + title/head (D84) all
-		// move into #commitLocation, called inside the synchronous #committing window
-		// — the params-only branch below and #swap's commit block — so they land
-		// ATOMICALLY with the mount/#state, one out-animation LATER in sequential mode.
-		// #resolveScroll STAYS here (it is pure over its arguments — reads only
-		// #scrollEnabled()/#scrollBehavior, never #scrollKey/#positions/history): the
-		// resolved { anchor } sentinel / {x,y} is threaded down to #commitState, which
-		// applies it after the new content is on screen.
-
-		const views = [...reusedViews, ...freshViews];
-
-		// Where the window should land once the new view is on screen (null =
-		// leave it alone). Resolved here, applied in #commitState. A `#anchor` suffix
-		// on the pushed path refines the default landing (D41): read off the fragment
-		// parseLocation already split (D83 — stripPath dropped it for matching).
-		const anchor = loc.hash ? loc.hash.slice(1) : null;
-		const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
-
-		// Whether this navigation moves focus + announces (v1.56, D93). Only the
-		// GATE is decided here — memory mode, `focusBehavior: false`, and nav #0 all
-		// resolve to null, exactly the shape #resolveScroll uses. The TARGET cannot
-		// be resolved off-DOM (the leaf's root element does not exist yet, and a
-		// custom focusBehavior wants to query the committed DOM), so the sentinel
-		// just carries the snapshots #commitState hands back to that function —
-		// the same pre-commit-sentinel/post-mount-resolution split D41's { anchor }
-		// scroll landing uses.
-		const focus = this.#resolveFocus({ to, from, push, pop, replace });
-
-		// Params-only degenerate case: keep === chain length ⇒ no fresh views, the
-		// whole chain was refreshed pre-commit. Just record state + refresh the
-		// reused layout (chrome). (Replaces the old dedicated params-only branch.)
-		if (keep === entry.chain.length) {
-			// No animation is involved on a params-only refresh, so the atomic commit
-			// (D61) is just these two adjacent synchronous calls: location (URL/title/
-			// memory stack) immediately before #state. Timing is unchanged from the
-			// old inline commit block.
-			this.#commitLocation({ rawPath, entry, push, replace, memoryIndex, departScroll });
-			this.#commitState({
+			await this.#swap(token, cur, {
 				rawPath,
+				// The parsed URL parts (v1.49, D83) — #commitState records them on
+				// #state so the `current` getter never reparses.
 				pathname: loc.pathname,
 				query: loc.query,
 				hash: loc.hash,
 				entry,
 				params,
 				views,
-				keys: cur.keys,
+				keys,
 				layout,
+				reuseLayout,
+				keep,
+				rootVnode,
 				scroll,
-				// D146: the whole chain was prepared above; #commitState commits every
-				// prepared ancestor immediately after #state, still adjacent to
-				// #commitLocation — the atomic block D61 opened, now covering ancestor
-				// params/route/data/subscriptions too.
+				focus,
+				to,
+				// D146: prepared reused-ancestor refreshes, committed by #commitState inside
+				// #swap's synchronous #committing window — the same window as #commitLocation
+				// and the mount, so URL, DOM, and ancestor state move together or not at all.
 				prepared,
-				// A leaf-identical replace is URL-backed transient-state churn, not
-				// a route change: leave the user's current focus in place and make no
-				// live-region announcement. Params-only pushes still take the normal
-				// focus path, and full replaces never reach this branch.
-				focus: replace ? null : focus,
+				// D61: #commitLocation (run as the first statement inside #swap's commit
+				// window) reads these to move the URL/memory stack; null memoryIndex on a
+				// push/initial nav, set only for a memory-mode go/back/forward pop;
+				// replace (D83) selects the entry-swapping commit instead of a push.
+				// departScroll: the departure position captured at nav start, before the
+				// outgoing view's teardown collapsed the page (see #navigate).
+				push,
+				replace,
+				memoryIndex,
+				departScroll,
 			});
-			if (layout) this.#refreshLogged(layout, params, to);
-			return;
+		} finally {
+			discardPrepared();
 		}
-
-		// Assemble the FULL chain LEAF-UP into nested keyed component vnodes — all
-		// levels, not just the fresh ones, so every host along the path (layout and
-		// reused ancestors alike) receives slot content whose descendants describe
-		// the NEW chain. Swapping only at the divergence level and leaving ancestors
-		// holding their old vnodes would let any later ancestor re-render (store
-		// change, setData) push the stale sub-chain back down and revert the swap.
-		//
-		// Keys: a REUSED level keeps its committed key, so the keyed patch reuses
-		// the instance (children pushed through, no data() re-run — props are just
-		// the key). A FRESH level gets its fullPaths pattern stamped with this nav's
-		// token: patchComponent adopts by tag+key and ignores a preattached
-		// .instance, so a fresh level must NEVER collide with an old key — not even
-		// re-entering the same path pattern whose previous instance was destroyed by
-		// an interrupted transition (the clamp above).
-		const keys = entry.chain.map((_, i) =>
-			i < keep ? cur.keys[i] : entry.fullPaths[i] + '\x00' + token
-		);
-		let childVnode = null;
-		for (let i = entry.chain.length - 1; i >= 0; i--) {
-			const vnode = new ViewNode(
-				entry.chain[i].view,
-				{ key: keys[i] },
-				childVnode ? [childVnode] : []
-			);
-			if (i >= keep) vnode.instance = views[i]; // adopt, don't construct
-			childVnode = vnode;
-		}
-		const rootVnode = childVnode; // vnode for chain level 0
-
-		// The routed chain/layout are already preloaded above, but their render
-		// trees can contain non-routed async components. Only an SSG navigation-zero
-		// marker opts into waiting for those descendants: ordinary SPA navigation
-		// keeps ViewManager's fire-and-forget component mounting unchanged.
-		//
-		// This is the branch that pays for itself: with __PUZZLE_TAKEOVER__ false the
-		// block folds away, `preloadTakeoverComponents` loses its only importer here,
-		// and ssg/preload.js tree-shakes out of the bundle ("sideEffects": false).
-		if (
-			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
-			this.#container?.hasAttribute('data-puzzle-ssg')
-		) {
-			let takeoverVnode = rootVnode;
-			if (layout) {
-				takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
-				takeoverVnode.instance = layout;
-			}
-			const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
-			// A newer navigation may supersede us while a nested component loads.
-			// None of these instances mounted, so release each one's tracked state
-			// explicitly before discarding the routed chain.
-			if (token !== this.#token) {
-				for (const instance of nestedInstances) instance.destroy();
-				for (const v of freshViews) v.destroy();
-				if (layout && !reuseLayout) layout.destroy();
-				discardPrepared(); // D146
-				return;
-			}
-			// Same suppression the routed chain gets below: mountComponent auto-chains
-			// playIn() onto every component it mounts, and these are about to mount over
-			// prerendered markup that already shows them.
-			for (const instance of nestedInstances) instance.skipEnter();
-		}
-
-		await this.#swap(token, cur, {
-			rawPath,
-			// The parsed URL parts (v1.49, D83) — #commitState records them on
-			// #state so the `current` getter never reparses.
-			pathname: loc.pathname,
-			query: loc.query,
-			hash: loc.hash,
-			entry,
-			params,
-			views,
-			keys,
-			layout,
-			reuseLayout,
-			keep,
-			rootVnode,
-			scroll,
-			focus,
-			to,
-			// D146: prepared reused-ancestor refreshes, committed by #commitState inside
-			// #swap's synchronous #committing window — the same window as #commitLocation
-			// and the mount, so URL, DOM, and ancestor state move together or not at all.
-			prepared,
-			// D61: #commitLocation (run as the first statement inside #swap's commit
-			// window) reads these to move the URL/memory stack; null memoryIndex on a
-			// push/initial nav, set only for a memory-mode go/back/forward pop;
-			// replace (D83) selects the entry-swapping commit instead of a push.
-			// departScroll: the departure position captured at nav start, before the
-			// outgoing view's teardown collapsed the page (see #navigate).
-			push,
-			replace,
-			memoryIndex,
-			departScroll,
-		});
 	}
 
 	/**
