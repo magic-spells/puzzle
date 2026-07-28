@@ -93,3 +93,68 @@ caching them would fire stale values.
 - `this.__h` joins the emitted `__d`/`__f` as a reserved name (instance field).
 - `??=` requires ES2021; builds target ES2022 (dev and prod) — no lowering.
 - All goldens update; emitted bytes for non-cacheable sites are unchanged.
+
+## Measured: the prediction holds, and the idiom is what defeats the bailout
+
+This card's Context predicted the cost of a non-cacheable callback prop. It has
+now been measured end to end, in a 10,000-row list, both arms in one browser
+session — [[DOC-STRESS-EXAMPLE]]'s `?handlers=inline|stable` A/B, driven by
+[[DECISION-D128-BENCHMARK-METHODOLOGY]]. It settles a question that had been
+open as "is the per-row re-render cascade a framework bug?"
+
+**It is not a framework bug.** `patchComponent`'s `shallowEqual` prop bailout is
+correct and, given stable props, extremely effective. Structural counts at
+n=10,000 (exact, from a development build — properties of the render algorithm,
+not of the machine):
+
+| op | arm | child `data()` runs | renders | wasted | prop bailouts | DOM mutations |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `swap-rows` | inline | 10,000 | 10,001 | 10,000 | 0 | 997 |
+| `swap-rows` | stable | **0** | **1** | 0 | **10,000** | 997 |
+| `select-row` | inline | 10,000 | 10,001 | 10,000 | 0 | 1 |
+| `select-row` | stable | **1** | 2 | 1 | 9,999 | 1 |
+
+**The DOM work is identical in both arms** — the stable spelling is not skipping
+anything the user can see; it patches precisely the same nodes and stops waking
+the rows that had nothing to do. Production script time at 10,000 rows falls by
+more than half on every op that mutates an existing list (`select-row` 42.3ms →
+14.3ms, `update-every-10th` 46.7ms → 22.2ms, `swap-rows` 47.0ms → 18.5ms), and
+the renderer's own `task` accounting agrees. `create` is unchanged in both arms
+at both sizes — nothing can bail out on first mount.
+
+What the stable arm changes is only the *spelling*: `@select={ selectById }`
+instead of `@select={ selectRow(row) }`, with the row capture moved into the
+child (`props.select?.(props.id)`, parent re-queries by id). So the cascade is
+caused by the canonical Puzzle list idiom — the shape `examples/todos` uses —
+handing the patcher a brand-new function object per row per render, exactly as
+this decision's Context said it would. The rejected alternatives above
+(function-equality hacks in `shallowEqual`) remain rejected for the same reason;
+the remedy is on the authoring side, or in a future numbered decision, not in
+weakening prop equality.
+
+## Regression cover
+
+`tests/component-prop-bailout.test.js` holds this finding in place at test
+scale. The browser measurement above is not repeatable in CI, and until that
+file existed **nothing asserted the bailout fires at all** — a change to
+`shallowEqual`, or a newly added prop that is freshly allocated on every parent
+render, would have left the suite green while every list-shaped app quietly
+reverted to the `inline` column of the table.
+
+It covers both directions against a 20-row list, using
+`measureRenders().rendersByView` (keyed by constructor name, so each row gets
+its own generated subclass name and the report says WHICH row woke up):
+
+- **stable arm** — one row's `label` changes, one row re-renders, 19 do not, one
+  `data()` run, one DOM mutation.
+- **inline arm** — the same op with a per-row closure prop; all 20 re-run
+  `data()` and re-render for the *same single* DOM mutation. Committed
+  deliberately as characterization of a known cost, not as an endorsement, so
+  that "fixing" it by deep-comparing props or exempting function-valued props
+  fails loudly instead of changing behaviour in silence.
+- **DOM equivalence** — both arms produce byte-identical markup and the same
+  `domMutations`, which is the claim the table's last column makes.
+
+The comparator's own boundaries are pinned through the real patch path rather
+than by exporting `shallowEqual`, so a future `patchComponent` that stops
+consulting it fails too.

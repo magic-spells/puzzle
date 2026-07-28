@@ -24,12 +24,39 @@ notes:
       are ABSENT from a prod examples/todos app.js. Dev/test behavior (warn-once with suggestion)
       unchanged. Does NOT touch D31 manifest tree-shaking or the D43 pass-through contract.
     sha: d9591d6
+  - kind: gotcha
+    text: >-
+      Intl objects in the date family are CACHED in module-level Maps and reused for the app's
+      lifetime — `date` keyed on (locale, resolved preset), `timeago` on locale, `in_timezone` on
+      the tz argument. Constructing them per call cost ~37us each; measured against the real
+      exported date(), 100k calls went 3725ms -> 122ms (~30x). Anything added here must stay
+      stateless for reuse: Intl.DateTimeFormat/RelativeTimeFormat are safe because
+      format()/formatToParts() carry no per-call state. Do not cache anything that does.
+
+
+      Two non-obvious constraints hold the design together. (1) It must be a keyed Map, NOT a
+      single-slot last-used memo. A single slot benchmarks ~7% faster on a uniform workload and then
+      collapses to worse-than-uncached the moment a page renders two presets — measured 85ms vs
+      3450ms on an alternating workload, which is as ordinary as a table with a short date column
+      and a long date in its header. (2) The `.set()` must sit AFTER the constructor inside the
+      existing try, because an invalid locale (`en_US`, `!!`, `e`) and an unknown time zone both
+      throw at CONSTRUCTION. Insert-after-success is what keeps a throwing tag from poisoning the
+      entry and stops repeated bad tags from growing the Map unbounded; the surrounding catch still
+      fails soft to str(v). Note `not-a-locale` is a structurally valid BCP-47 tag and does NOT
+      throw — it resolves to the default locale, so it is useless as a negative test.
+
+
+      Preset resolution uses Object.hasOwn before the lookup, so an unknown preset name collapses
+      onto the `date` entry instead of minting one per typo.
 verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # Formatter registry
 
+
 Liquid-style, display-only transformations used by compiled template chains. The registry seeds built-ins, applies user registrations last (user overrides win), exposes the raw function map to render functions, and supports arbitrary string keys through bracket access.
+
+`register(name, fn)` validates both arguments and **throws** on a non-empty-string name or a non-function value. This closes the one gap in an otherwise established config-validation pattern — `PuzzleApp` already throws for non-function lifecycle hooks and the router for non-function guards. It throws rather than warning because a non-function formatter is a deterministic config error, and skipping it silently would fall through to `__missing` and disguise the broken config as a typo. Note the asymmetry with the paragraph below, which is deliberate: a bad *name* is a typo and renders through, a bad *value* is a config error and stops.
 
 An unknown formatter calls `__missing(name)`: warn once per registry, include a did-you-mean suggestion at edit distance at most two, and return a pass-through function. A typo therefore renders the original value instead of crashing the view.
 
@@ -48,3 +75,21 @@ Invalid-Date fail-soft path, and `in_timezone` passes it through UNSHIFTED —
 a day names no instant to re-express. The `iso` preset is idempotent on such
 inputs; Date instances, timestamps, and full ISO datetimes parse exactly as
 before.
+
+## Measured cost: the Intl cache, and what it bought
+
+Measured, not inferred, through [[DOC-STRESS-EXAMPLE]]'s `formatters` scenario
+and the production harness ([[DECISION-D128-BENCHMARK-METHODOLOGY]]). Before
+the date family cached its Intl objects, a 10,000-row re-render running
+`date('short')` and `timeago` on each row constructed **10,000
+`Intl.DateTimeFormat`** and **10,000 `Intl.RelativeTimeFormat`** objects — one
+per formatter call — and the formatters were **91.4%** of the re-render:
+376.1ms against 32.4ms for an identical tree rendering plain record strings.
+That measurement priced the cache; the gotcha note on this card carries its
+design constraints (keyed Maps, insert-after-success).
+
+With the cache shipped, the same A/B reads **40.8ms against 31.4ms** — the two
+formatters cost ~9ms, roughly a quarter of the formatted arm — and the
+scenario's `count-intl` op asserts **zero** Intl constructions across a warmed
+render. That op is the cache's regression pin in the production benchmark
+baseline: a count above zero fails the run.

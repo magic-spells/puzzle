@@ -1,0 +1,285 @@
+<puzzle-view>
+  <div class="aw-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="tabular-nums text-fg">{ count }</span> cells ·
+        <span class="tabular-nums">{ delay }ms</span> await each ·
+        parallel ≈ <span class="tabular-nums">{ delay }ms</span>,
+        serial ≈ <span class="tabular-nums">{ serialFloor }ms</span>
+      </div>
+      <div class="font-mono text-[11px] shrink-0 { statusCls }">{ statusText }</div>
+    </div>
+
+    <div class="aw-grid grid grid-cols-4 sm:grid-cols-8 lg:grid-cols-12 gap-px bg-line max-h-[420px] overflow-y-auto">
+      {#for cell in cells}
+        <AsyncCell index={ cell.index } delay={ delay } probe={ probe } />
+      {/for}
+    </div>
+
+    {#if cellCount === 0}
+      <div class="px-4 py-10 text-center text-sm text-faint">
+        Disarmed. Run <span class="font-mono text-muted">remount</span> to mount { count } cells and time it.
+      </div>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import AsyncCell from './AsyncCell.pzl';
+import { registerScenario } from '../stress-controller.js';
+import { afterPaint, intParam, ms1, settleFrames, viewRoot, withTimeout } from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// async-waterfall — do N independent async data() calls overlap, or queue?
+//
+// The hypothesis under test (already confirmed at the store level: 20 evals ×
+// 50ms took 1021ms) is that they SERIALIZE. The store keeps a single
+// `_asyncTrackingChain`, and `withTracking(subscriber, fn, expectsAsync)` defers
+// a known-async evaluation behind whatever async evaluation is already in
+// flight — one global chain, store-wide. Note the trigger is the SHAPE of
+// data() (an AsyncFunction), not whether it queries the store: a cell that
+// awaits and touches no record still takes its turn in the queue.
+//
+// Timing is measured from just before the render that creates the cells to the
+// moment the last cell's mounted() fires, which is the honest "time until the
+// user sees all of it" for this tree.
+//
+// The scenario mounts DISARMED. Auto-arming would make simply selecting the
+// scenario cost n × delay (5s at the defaults), which makes the harness feel
+// broken and slows down every unrelated interaction.
+// ---------------------------------------------------------------------------
+
+export default class AsyncWaterfall extends PuzzleView {
+  api = {
+    name: 'async-waterfall',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.probe = this.freshProbe();
+    this.cells = [];
+    this.runId = 0;
+    this.lastRun = null;
+    this.unregister = null;
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+    this.probe.onAllReady = null;
+  }
+
+  data() {
+    const run = this.lastRun;
+    const count = this.wantCount();
+    const delay = this.wantDelay();
+    return {
+      cells: this.cells,
+      cellCount: this.cells.length,
+      probe: this.probe,
+      count,
+      delay,
+      serialFloor: count * delay,
+      statusText: run
+        ? `${run.count} × ${run.delay}ms → ${run.verdict} · max ${run.maxInFlight} concurrent · ${ms1(run.mountMs)}ms`
+        : 'no timed run yet',
+      statusCls: run
+        ? run.verdict === 'SERIALIZED'
+          ? 'text-danger'
+          : 'text-accent'
+        : 'text-faint',
+    };
+  }
+
+  /** A zeroed probe. Shared by created() and every arm cycle. */
+  freshProbe() {
+    return {
+      ready: 0,
+      total: 0,
+      t0: 0,
+      onAllReady: null,
+      // concurrency census (see AsyncCell)
+      inFlight: 0,
+      maxInFlight: 0,
+      started: 0,
+      firstStartAt: 0,
+      lastStartAt: 0,
+    };
+  }
+
+  wantCount() {
+    return intParam(this.props?.count, 100, 0, 2000);
+  }
+
+  wantDelay() {
+    return intParam(this.props?.delay, 50, 0, 5000);
+  }
+
+  // ---- arm / disarm -------------------------------------------------------
+
+  async disarm() {
+    if (this.cells.length === 0) return;
+    this.cells = [];
+    this.probe.ready = 0;
+    this.probe.total = 0;
+    this.probe.onAllReady = null;
+    this.refresh();
+    await afterPaint();
+    await settleFrames(1);
+  }
+
+  /**
+   * Mount `count` cells and time until every one of them has fired mounted().
+   * Always disarms first, so the measurement is a cold mount and never a patch
+   * over surviving children.
+   */
+  async armCycle(count, delay) {
+    await this.disarm();
+
+    // Mutate in place — `probe` is a prop, and replacing the object would make
+    // the children's props unequal and trigger spurious re-evaluations.
+    const probe = this.probe;
+    Object.assign(probe, this.freshProbe());
+    probe.total = count;
+
+    let resolveAll;
+    const allReady = new Promise((resolve) => {
+      resolveAll = resolve;
+    });
+    probe.onAllReady = resolveAll;
+
+    this.runId += 1;
+    const runId = this.runId;
+    this.cells = Array.from({ length: count }, (_, index) => ({
+      id: `${runId}:${index}`,
+      index,
+    }));
+
+    probe.t0 = performance.now();
+    // data() is synchronous here, so refresh() renders and starts every child
+    // mount inside this call — t0 is genuinely "the instant the tree was asked
+    // for". The children's async data() resolve later, on their own schedule.
+    this.refresh();
+    if (count === 0) resolveAll(0);
+
+    const budget = Math.max(30000, count * (delay + 50) * 3);
+    const mountMs = await withTimeout(
+      allReady,
+      budget,
+      `[stress] async-waterfall: only ${probe.ready}/${count} cells mounted within ${budget}ms`
+    );
+
+    await afterPaint();
+    const paintedMs = performance.now() - probe.t0;
+    await settleFrames(1);
+    return {
+      mountMs,
+      paintedMs,
+      count,
+      delay,
+      maxInFlight: probe.maxInFlight,
+      started: probe.started,
+      // How long after the FIRST cell began evaluating did the LAST one begin.
+      // ~0 means they all launched together; ~(N-1)×delay means they queued.
+      startSpreadMs: probe.lastStartAt - probe.firstStartAt,
+    };
+  }
+
+  // ---- ops ----------------------------------------------------------------
+
+  async opRun(op) {
+    if (op !== 'remount') throw new Error(`[stress] async-waterfall has no op "${op}"`);
+    const count = this.wantCount();
+    const delay = this.wantDelay();
+    const result = await this.armCycle(count, delay);
+    const serialFloor = count * delay;
+
+    // The verdict comes from the concurrency census, NOT from the clock. Wall
+    // time is reported alongside but cannot decide the question on its own: a
+    // throttled tab (background tabs clamp setTimeout to ~1s) stretches every
+    // await, so a genuinely parallel implementation would also blow past the
+    // serial floor and read as "SERIALIZED".
+    let verdict = 'MIXED';
+    if (count === 0) verdict = 'EMPTY';
+    else if (count === 1) verdict = 'INCONCLUSIVE (n=1)';
+    else if (result.maxInFlight <= 1) verdict = 'SERIALIZED';
+    else if (result.maxInFlight >= count) verdict = 'PARALLEL';
+    else verdict = `PARTIAL (${result.maxInFlight} concurrent)`;
+
+    this.lastRun = { ...result, serialFloor, verdict };
+    this.refresh();
+
+    return {
+      op,
+      ms: result.mountMs,
+      detail:
+        `${count} independent async data() × ${delay}ms → ${verdict}: ` +
+        `max ${result.maxInFlight} of ${count} evaluating concurrently, ` +
+        `last cell started +${ms1(result.startSpreadMs)}ms after the first · ` +
+        `${ms1(result.mountMs)}ms wall (parallel ≈ ${delay}ms, serial ≈ ${serialFloor}ms)`,
+    };
+  }
+
+  async opReset() {
+    await this.disarm();
+    this.lastRun = null;
+    this.refresh();
+    await settleFrames(1);
+    return { detail: 'reset: disarmed, 0 cells mounted' };
+  }
+
+  async opWarmup() {
+    // A small cycle: warmup exists to warm the JIT, and at the defaults a full
+    // cycle would burn n × delay (5s) doing it.
+    const count = Math.min(this.wantCount(), 4);
+    if (count > 0) await this.armCycle(count, this.wantDelay());
+    await this.disarm();
+    return { detail: `warmup: one ${count}-cell arm/disarm cycle` };
+  }
+
+  // ---- verification -------------------------------------------------------
+
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const els = root.querySelectorAll('.aw-cell');
+    if (els.length !== this.cells.length) {
+      return { ok: false, detail: `DOM has ${els.length} cells, expected ${this.cells.length}` };
+    }
+    if (this.cells.length === 0) return { ok: true, detail: 'disarmed (0 cells mounted)' };
+
+    for (let i = 0; i < els.length; i += 1) {
+      const shown = els[i].querySelector('.aw-index')?.textContent?.trim();
+      if (shown !== `#${i}`) {
+        return { ok: false, detail: `cell at DOM position ${i} renders "${shown}" — order or resolution is wrong` };
+      }
+      if (!els[i].querySelector('.aw-waited')) {
+        return { ok: false, detail: `cell ${i} never replaced its placeholder — async data() did not commit` };
+      }
+    }
+
+    const run = this.lastRun;
+    if (!run) return { ok: true, detail: `${els.length} cells mounted and resolved; no timed run yet` };
+    // `ok` is about RENDER CORRECTNESS, not about the verdict. A SERIALIZED
+    // result is a valid measurement of a real behaviour, not a broken render.
+    return {
+      ok: true,
+      detail: `${els.length} cells resolved · max ${run.maxInFlight}/${run.count} concurrent · ${ms1(run.mountMs)}ms vs serial floor ${run.serialFloor}ms — ${run.verdict}`,
+    };
+  }
+
+  opStats() {
+    return { records: 0, views: this.cells.length + 1 };
+  }
+}
+</script>

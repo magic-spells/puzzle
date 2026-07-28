@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Store, PuzzleAdapterError } from '../client-runtime/datastore/store.js';
-import { PuzzleModel, Puzzle, PuzzleValidationError } from '../client-runtime/model.js';
+import {
+	PuzzleModel,
+	Puzzle,
+	PuzzleValidationError,
+	recordMutationRevision,
+} from '../client-runtime/model.js';
 import * as pkg from '../client-runtime/index.js';
 
 // Adapter write sync (constellation/doc/DOC-SPEC.md §22, D50): explicit
@@ -29,8 +34,7 @@ const makeRes = ({ ok = true, status = 200, statusText = 'OK', body = '' } = {})
 	status,
 	statusText,
 	text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
-	// The D21 read path (loadAll/loadOne) reads via res.json(); provide it too so
-	// the same mock serves both read and write paths.
+	// Keep json() too so this remains a complete Response-shaped test double.
 	json: async () => (typeof body === 'string' ? JSON.parse(body) : body),
 });
 
@@ -40,6 +44,12 @@ const mockFetch = (...responses) => {
 	const fn = vi.fn(async () => (queue.length > 1 ? queue.shift() : queue[0]));
 	vi.stubGlobal('fetch', fn);
 	return fn;
+};
+
+const deferred = () => {
+	let resolve;
+	const promise = new Promise((r) => (resolve = r));
+	return { promise, resolve };
 };
 
 afterEach(() => {
@@ -56,6 +66,73 @@ describe('adapter write sync — package surface', () => {
 		expect(err.status).toBe(500);
 		expect(err.statusText).toBe('Server Error');
 		expect(err.body).toEqual({ m: 1 });
+	});
+});
+
+describe('adapter read response bodies', () => {
+	it('loadAll reports its shape guard for a 204 response', async () => {
+		mockFetch(new Response(null, { status: 204 }));
+
+		await expect(apiStore().loadAll('todo')).rejects.toThrow(
+			"[puzzle] loadAll('todo') expected a JSON array from the server"
+		);
+	});
+
+	it('loadOne reports its shape guard for an empty 200 response', async () => {
+		mockFetch(new Response('', { status: 200 }));
+
+		await expect(apiStore().loadOne('todo', 't1')).rejects.toThrow(
+			"[puzzle] loadOne('todo', id) expected a JSON object from the server"
+		);
+	});
+
+	it('loadAll reports its shape guard for a non-JSON 200 response', async () => {
+		mockFetch(new Response('<html>not JSON</html>', { status: 200 }));
+
+		await expect(apiStore().loadAll('todo')).rejects.toThrow(
+			"[puzzle] loadAll('todo') expected a JSON array from the server"
+		);
+	});
+
+	it('loadAll and loadOne still accept valid JSON responses', async () => {
+		mockFetch(
+			new Response(JSON.stringify([{ id: 't1', text: 'all' }]), { status: 200 }),
+			new Response(JSON.stringify({ id: 't2', text: 'one' }), { status: 200 })
+		);
+		const store = apiStore();
+
+		const records = await store.loadAll('todo');
+		const record = await store.loadOne('todo', 't2');
+
+		expect(records.map((item) => item.toJSON())).toEqual([
+			{ id: 't1', text: 'all', completed: false },
+		]);
+		expect(record.toJSON()).toEqual({ id: 't2', text: 'one', completed: false });
+	});
+
+	it('loadAll rejects a pk-less element before storing any response records', async () => {
+		mockFetch({
+			body: [
+				{ id: 't1', text: 'valid but must not land' },
+				{ text: 'missing id' },
+			],
+		});
+		const store = apiStore();
+
+		await expect(store.loadAll('todo')).rejects.toThrow(
+			`[puzzle] loadAll('todo') requires primary key "id" on every record`
+		);
+		expect(store.findMany('todo')).toEqual([]);
+	});
+
+	it('loadOne rejects a pk-less server object', async () => {
+		mockFetch({ body: { text: 'missing id' } });
+		const store = apiStore();
+
+		await expect(store.loadOne('todo', 't1')).rejects.toThrow(
+			`[puzzle] loadOne('todo', id) requires primary key "id" on the record`
+		);
+		expect(store.findMany('todo')).toEqual([]);
 	});
 });
 
@@ -177,6 +254,246 @@ describe('save() — 2xx response merge', () => {
 		expect(notifySpy).not.toHaveBeenCalledWith('todo', null); // never notified under null
 		store.flush();
 		expect(sub.onStoreChange).toHaveBeenCalled(); // notified under the real pk
+	});
+});
+
+describe('save() — response reconciliation preserves in-flight edits', () => {
+	it('a single POST preserves a local edit made after dispatch', async () => {
+		const gate = deferred();
+		const fetchSpy = vi.fn(() => gate.promise);
+		vi.stubGlobal('fetch', fetchSpy);
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		const saving = todo.save();
+		await Promise.resolve(); // let _saveRecordNow serialize and dispatch A
+		expect(JSON.parse(fetchSpy.mock.calls[0][1].body).text).toBe('A');
+
+		todo.update({ text: 'B' });
+		gate.resolve(makeRes({ body: { id: 't1', text: 'A', completed: false } }));
+		await saving;
+
+		expect(todo.text).toBe('B');
+		expect(todo._synced).toBe(true);
+	});
+
+	it('a single PUT preserves a local edit made after dispatch', async () => {
+		const gate = deferred();
+		const fetchSpy = vi.fn(() => gate.promise);
+		vi.stubGlobal('fetch', fetchSpy);
+		const store = apiStore();
+		const todo = store.upsert('todo', { id: 't1', text: 'A', completed: false });
+
+		const saving = todo.save();
+		await Promise.resolve(); // let _saveRecordNow serialize and dispatch A
+		expect(fetchSpy.mock.calls[0][1].method).toBe('PUT');
+
+		todo.update({ text: 'B' });
+		gate.resolve(makeRes({ body: { id: 't1', text: 'A', completed: false } }));
+		await saving;
+
+		expect(todo.text).toBe('B');
+	});
+
+	it('a queued save sends the newer local value after the first response reconciles', async () => {
+		const first = deferred();
+		const sent = [];
+		const fetchSpy = vi.fn((_url, init) => {
+			const body = JSON.parse(init.body);
+			sent.push({ method: init.method, body });
+			if (sent.length === 1) return first.promise;
+			return Promise.resolve(makeRes({ body }));
+		});
+		vi.stubGlobal('fetch', fetchSpy);
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		const firstSave = todo.save();
+		await Promise.resolve(); // first POST has captured A
+		todo.update({ text: 'B' });
+		const queuedSave = todo.save();
+
+		first.resolve(makeRes({ body: { id: 't1', text: 'A', completed: false } }));
+		await Promise.all([firstSave, queuedSave]);
+
+		expect(sent.map(({ method, body }) => ({ method, text: body.text }))).toEqual([
+			{ method: 'POST', text: 'A' },
+			{ method: 'PUT', text: 'B' },
+		]);
+		expect(todo.text).toBe('B');
+	});
+
+	it('still merges server-computed fields that were untouched locally', async () => {
+		const gate = deferred();
+		vi.stubGlobal('fetch', vi.fn(() => gate.promise));
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		const saving = todo.save();
+		await Promise.resolve();
+		todo.update({ text: 'B' });
+		gate.resolve(
+			makeRes({ body: { id: 't1', text: 'A', completed: false, serverRevision: 7 } })
+		);
+		await saving;
+
+		expect(todo.text).toBe('B');
+		expect(todo.serverRevision).toBe(7);
+	});
+
+	it('keeps the 204/empty path unchanged when an edit happens in flight', async () => {
+		const gate = deferred();
+		vi.stubGlobal('fetch', vi.fn(() => gate.promise));
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		const saving = todo.save();
+		await Promise.resolve();
+		todo.update({ text: 'B' });
+		gate.resolve(makeRes({ status: 204, statusText: 'No Content', body: '' }));
+		await saving;
+
+		expect(todo.text).toBe('B');
+		expect(todo._synced).toBe(true);
+	});
+});
+
+// Construction no longer stamps a local-mutation revision — only update() does.
+// The stamp cost every hydrated record an array, a closure, a {current, fields}
+// state object and a Map entry per field, for data ONLY save()-response
+// reconciliation reads; a record loaded and never saved paid all of it for
+// nothing. An unstamped record reports revision 0, and safeMerge's filter then
+// tests `(fields.get(key) ?? 0) <= 0` → true for every field — the same verdict
+// stamping every constructor field at revision 1 and capturing requestRevision 1
+// produced. This matrix is the proof, one case per boundary the change touches.
+//
+// These are equivalence tests: they pass identically with the constructor stamp
+// restored (verified). What they fail on is the protection itself — drop
+// safeMerge's throughRevision filter and cases 3 and 4 go red. The one assertion
+// that IS specific to the change is the revision-invariant test at the end.
+describe('save() — reconciliation with an unstamped constructor (D125 matrix)', () => {
+	// 1. Nothing local has changed since dispatch, so the response is wholly
+	//    authoritative — including over fields the constructor itself set.
+	it('construct → save: the response merges every server field', async () => {
+		mockFetch({
+			body: { id: 't1', text: 'from-server', completed: true, serverRevision: 7 },
+		});
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'local' });
+
+		await todo.save();
+
+		expect(todo.text).toBe('from-server'); // a constructor-set field still yields
+		expect(todo.completed).toBe(true);
+		expect(todo.serverRevision).toBe(7); // a field the record never had
+		expect(todo._synced).toBe(true);
+	});
+
+	// 2. The edit happened BEFORE dispatch, so the server saw it and its echo wins
+	//    — the same as case 1, and untouched fields merge alongside it. (The edit
+	//    that must survive is the mid-flight one; that is case 3.)
+	it('construct → update → save: untouched fields merge and the pre-dispatch edit takes the echo', async () => {
+		const fetchSpy = mockFetch({
+			body: { id: 't1', text: 'server-normalized', completed: true, serverRevision: 9 },
+		});
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		todo.update({ text: 'B' });
+		await todo.save();
+
+		// The request carried the update, so the response is authoritative over it.
+		expect(JSON.parse(fetchSpy.mock.calls[0][1].body).text).toBe('B');
+		expect(todo.text).toBe('server-normalized');
+		expect(todo.completed).toBe(true); // untouched → merged
+		expect(todo.serverRevision).toBe(9); // untouched → merged
+	});
+
+	// 3. THE case the revision machinery exists for (finding O-1): the edit lands
+	//    after the body was serialized, so the server never saw it and its response
+	//    must not roll it back — while every field the user did NOT touch merges.
+	it('save → update mid-flight: the response never overwrites the mid-flight edit', async () => {
+		const gate = deferred();
+		vi.stubGlobal('fetch', vi.fn(() => gate.promise));
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A', completed: false });
+
+		const saving = todo.save();
+		await Promise.resolve(); // body serialized and dispatched with text 'A'
+		todo.update({ text: 'B' });
+
+		gate.resolve(
+			makeRes({ body: { id: 't1', text: 'A', completed: true, serverRevision: 3 } })
+		);
+		await saving;
+
+		expect(todo.text).toBe('B'); // mid-flight edit survives
+		expect(todo.completed).toBe(true); // untouched → server wins
+		expect(todo.serverRevision).toBe(3);
+		expect(todo._synced).toBe(true);
+	});
+
+	// 4. Identity is the store's to change, not the user's: the server-assigned pk
+	//    merges with NO throughRevision, so it lands even while a sibling field is
+	//    being held back by a mid-flight edit.
+	it('save → update mid-flight: a server-assigned pk is still adopted unconditionally', async () => {
+		const gate = deferred();
+		vi.stubGlobal('fetch', vi.fn(() => gate.promise));
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 'temp-1', text: 'A' });
+
+		const saving = todo.save();
+		await Promise.resolve();
+		todo.update({ text: 'B' });
+
+		gate.resolve(
+			makeRes({ body: { id: 'server-99', text: 'A', completed: true } })
+		);
+		await saving;
+
+		expect(todo.id).toBe('server-99'); // adoption is unconditional
+		expect(todo.text).toBe('B'); // mid-flight edit still held back
+		expect(todo.completed).toBe(true);
+		expect(store.findOne('todo', 'server-99')).toBe(todo);
+		expect(store.findOne('todo', 'temp-1')).toBeNull();
+	});
+
+	// 5. The path that used to pay for all of this and read none of it. A record
+	//    that never saves must behave exactly as before: updates apply, and the
+	//    server-authoritative merge sites (upsert/hydrate — no throughRevision)
+	//    stay server-authoritative, since no revision can leak into them.
+	it('a record never saved behaves identically: updates apply and upsert stays authoritative', async () => {
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+
+		todo.update({ text: 'B', completed: true });
+		expect(todo.text).toBe('B');
+		expect(todo.completed).toBe(true);
+
+		// upsert merges without a revision boundary — server wins even over the
+		// field just edited locally.
+		const same = store.upsert('todo', { id: 't1', text: 'server', completed: false });
+		expect(same).toBe(todo);
+		expect(todo.text).toBe('server');
+		expect(todo.completed).toBe(false);
+		expect(store.findOne('todo', 't1')).toBe(todo);
+	});
+
+	// The invariant the change actually introduces, asserted directly: restore the
+	// constructor stamp and this is the test that goes red.
+	it('reports revision 0 for a constructed record and advances only on update()', () => {
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'A' });
+		expect(recordMutationRevision(todo)).toBe(0);
+
+		todo.update({ text: 'B' });
+		expect(recordMutationRevision(todo)).toBe(1);
+
+		todo.update({ completed: true });
+		expect(recordMutationRevision(todo)).toBe(2);
+
+		// A store-less record constructed directly takes the same path.
+		expect(recordMutationRevision(new ApiTodo({ id: 'x', text: 'y' }))).toBe(0);
 	});
 });
 
@@ -382,12 +699,13 @@ describe('save() — mid-flight save-boundary hardening (§22, D50)', () => {
 		const notifySpy = vi.spyOn(store, '_notify');
 
 		const savePromise = todo.save();
+		// Let the serialized save chain reach _saveRecordNow's fetch (it runs a
+		// microtask later) BEFORE the removal, so the POST is genuinely in flight —
+		// a record removed before its request is dispatched never sends one at all.
+		await new Promise((r) => setTimeout(r, 0));
 		todo.destroy(); // removeRecord mid-flight — notifies once for the removal
 		const notifiesAfterRemoval = notifySpy.mock.calls.length;
 
-		// Let the serialized save chain reach _saveRecordNow's fetch (it runs a
-		// microtask later), so resolveFetch is wired before we release the response.
-		await new Promise((r) => setTimeout(r, 0));
 		resolveFetch(makeRes({ body: { id: 't1', text: 'x', completed: false } }));
 		await expect(savePromise).resolves.toBe(todo); // resolves with the detached record
 
@@ -420,10 +738,13 @@ describe('save() — mid-flight save-boundary hardening (§22, D50)', () => {
 });
 
 describe('delete()', () => {
+	// These exercise the SERVER delete path, so each record is marked synced: a
+	// never-synced record short-circuits to a local removal with no request (§22).
 	it('removes locally + notifies on a 2xx', async () => {
 		mockFetch({ status: 200, body: '' });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		todo._synced = true;
 		const sub = { onStoreChange: vi.fn() };
 		store.withTracking(sub, () => store.findMany('todo'));
 
@@ -437,6 +758,7 @@ describe('delete()', () => {
 		mockFetch({ ok: false, status: 404, statusText: 'Not Found', body: '' });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		todo._synced = true;
 
 		await todo.delete();
 		expect(store.findOne('todo', 't1')).toBeNull();
@@ -446,6 +768,7 @@ describe('delete()', () => {
 		mockFetch({ ok: false, status: 500, statusText: 'Server Error', body: 'boom' });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		todo._synced = true;
 
 		await expect(todo.delete()).rejects.toMatchObject({ name: 'PuzzleAdapterError', status: 500, body: 'boom' });
 		expect(store.findOne('todo', 't1')).toBe(todo);
@@ -455,6 +778,7 @@ describe('delete()', () => {
 		const fetchSpy = mockFetch({ body: '' });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 'a/b', text: 'x' });
+		todo._synced = true;
 		await todo.delete();
 		expect(fetchSpy).toHaveBeenCalledWith('https://x.test/v1/api/todos/a%2Fb', { method: 'DELETE' });
 	});
@@ -487,6 +811,7 @@ describe('delete()', () => {
 		const fetchSpy = mockFetch({ body: '' });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		todo._synced = true;
 
 		await todo.delete();
 		await expect(todo.save()).rejects.toThrow(/cannot save a deleted record/);
@@ -501,13 +826,15 @@ describe('delete()', () => {
 
 		const store = apiStore();
 		const a = store.createRecord('todo', { id: 't1', text: 'A' });
+		a._synced = true;
 
-		const delPromise = a.delete(); // DELETE in flight; requestKey 't1' captured
+		const delPromise = a.delete();
+		// Let the chained delete reach its fetch first: requestKey 't1' is captured
+		// when the link RUNS, and only then is the DELETE genuinely in flight.
+		await new Promise((r) => setTimeout(r, 0));
 		a.destroy(); // A removed locally
 		const b = store.createRecord('todo', { id: 't1', text: 'B' }); // reuse the id
 
-		// Let the deleteRecord await settle its wiring before releasing the response.
-		await new Promise((r) => setTimeout(r, 0));
 		resolveFetch(makeRes({ status: 200, body: '' }));
 		await expect(delPromise).resolves.toBe(a); // resolves with the detached record
 
@@ -515,6 +842,144 @@ describe('delete()', () => {
 		// the map no longer holds A at 't1'.
 		expect(store.findOne('todo', 't1')).toBe(b);
 		expect(b.text).toBe('B');
+	});
+});
+
+describe('save()/delete() — cross-verb write serialization (§22, D50)', () => {
+	// One chain per record covers BOTH verbs: a delete can no longer overtake an
+	// in-flight save (server orphan / silently-nothing-deleted), and a queued save
+	// can no longer resurrect a record that was removed while it waited.
+
+	// A fetch double that holds the first matching method open until the gate opens,
+	// so a later verb is provably queued rather than merely slower.
+	const gatedFetch = (gatedMethod, gatedResponse) => {
+		const gate = deferred();
+		const fn = vi.fn(async (_url, init) => {
+			if (init.method === gatedMethod) {
+				await gate.promise;
+				return makeRes(gatedResponse);
+			}
+			return makeRes({ status: 204, body: '' });
+		});
+		vi.stubGlobal('fetch', fn);
+		return { fetchSpy: fn, open: gate.resolve };
+	};
+
+	it('a delete() fired during a first save() DELETEs the SERVER-assigned id, not the client one', async () => {
+		const { fetchSpy, open } = gatedFetch('POST', {
+			body: { id: 'server-9', text: 'x', completed: false },
+		});
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 'temp-1', text: 'x' });
+
+		const savePromise = todo.save();
+		const deletePromise = todo.delete(); // same tick, behind the POST
+		open();
+
+		await expect(savePromise).resolves.toBe(todo);
+		await expect(deletePromise).resolves.toBe(todo);
+
+		expect(fetchSpy).toHaveBeenCalledTimes(2);
+		expect(fetchSpy.mock.calls[0][1].method).toBe('POST');
+		expect(fetchSpy.mock.calls[1][1].method).toBe('DELETE');
+		// The URL proves the delete read the post-reconciliation pk: it was built
+		// AFTER the POST adopted 'server-9', so the created row is the row removed.
+		expect(fetchSpy.mock.calls[1][0]).toBe('https://x.test/v1/api/todos/server-9');
+		expect(store.findOne('todo', 'server-9')).toBeNull();
+		expect(store.findOne('todo', 'temp-1')).toBeNull();
+		expect(todo._deleted).toBe(true);
+	});
+
+	it('delete() on a never-synced record removes it locally with NO request', async () => {
+		const fetchSpy = mockFetch({ body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		const sub = { onStoreChange: vi.fn() };
+		store.withTracking(sub, () => store.findMany('todo'));
+
+		// The server has never seen this record, so there is nothing to DELETE — and a
+		// 4xx from a doomed request would strand it locally.
+		await expect(todo.delete()).resolves.toBe(todo);
+
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(store.findOne('todo', 't1')).toBeNull();
+		expect(todo._deleted).toBe(true);
+		store.flush();
+		expect(sub.onStoreChange).toHaveBeenCalled(); // removal notifies as usual
+	});
+
+	it('a queued save() whose record was removed out of band rejects instead of re-POSTing', async () => {
+		const { fetchSpy, open } = gatedFetch('POST', { body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		const first = todo.save();
+		const queued = todo.save();
+		await new Promise((r) => setTimeout(r, 0)); // the POST is dispatched and held
+		todo.destroy(); // local removal while the first POST is still in flight
+		open();
+
+		await expect(first).resolves.toBe(todo); // reconciliation skipped, resolves detached
+		// Same rejection a fresh save() on a removed record gives — the queued caller
+		// cannot tell whether it discovered the removal before or after it was queued.
+		await expect(queued).rejects.toThrow(/cannot save a deleted record/);
+		expect(fetchSpy).toHaveBeenCalledTimes(1); // the POST only; no resurrecting write
+		expect(store.findMany('todo')).toEqual([]);
+	});
+
+	it('save(); save(); delete() issues POST, PUT, DELETE in that order', async () => {
+		const { fetchSpy, open } = gatedFetch('POST', { body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		const first = todo.save();
+		const second = todo.save();
+		const deletePromise = todo.delete();
+		open();
+
+		await expect(first).resolves.toBe(todo);
+		await expect(second).resolves.toBe(todo); // ran while the record was still live
+		await expect(deletePromise).resolves.toBe(todo);
+
+		expect(fetchSpy.mock.calls.map((call) => call[1].method)).toEqual([
+			'POST',
+			'PUT',
+			'DELETE',
+		]);
+		expect(store.findMany('todo')).toEqual([]);
+	});
+
+	it('two concurrent delete()s issue exactly one DELETE and both resolve', async () => {
+		const fetchSpy = mockFetch({ body: '' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		todo._synced = true; // server-known → delete() is a real request
+
+		const [a, b] = await Promise.all([todo.delete(), todo.delete()]);
+
+		expect(a).toBe(todo);
+		expect(b).toBe(todo); // idempotent: the queued one finds the record already gone
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		expect(store.findMany('todo')).toEqual([]);
+	});
+
+	it('a queued delete() does not inherit the prior save()\'s rejection', async () => {
+		const fetchSpy = mockFetch(
+			{ ok: false, status: 500, statusText: 'Server Error', body: 'boom' }, // POST
+			{ body: '' }
+		);
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		const savePromise = todo.save();
+		const deletePromise = todo.delete();
+
+		await expect(savePromise).rejects.toMatchObject({ name: 'PuzzleAdapterError', status: 500 });
+		// Each caller observes only its own promise. The failed create also left the
+		// record server-unknown, so the delete is local-only.
+		await expect(deletePromise).resolves.toBe(todo);
+		expect(fetchSpy).toHaveBeenCalledTimes(1); // the failed POST only
+		expect(store.findMany('todo')).toEqual([]);
 	});
 });
 

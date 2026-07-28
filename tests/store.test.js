@@ -789,6 +789,26 @@ describe('Store — public server-authoritative upsert (D21/D50)', () => {
 		});
 	});
 
+	it('public upsert remains an unconditional overwrite after a local edit', () => {
+		const store = makeStore();
+		const original = store.createRecord('todo', {
+			id: 't1',
+			text: 'local',
+			completed: false,
+		});
+		original.update({ text: 'typed', completed: true });
+
+		const upserted = store.upsert('todo', {
+			id: 't1',
+			text: 'server',
+			completed: false,
+		});
+		expect(upserted).toBe(original);
+		expect(original.text).toBe('server');
+		expect(original.completed).toBe(false);
+		expect(original._synced).toBe(true);
+	});
+
 	it('instantiates a real synced record under the server primary key without local validation', () => {
 		const store = makeStore();
 		const record = store.upsert('todo', { id: 'server-1', text: '' });
@@ -852,10 +872,25 @@ describe('Store — server read path (D21)', () => {
 			ok,
 			status,
 			statusText: ok ? 'OK' : 'Server Error',
+			text: async () => JSON.stringify(payload),
 			json: async () => payload,
 		}));
 		vi.stubGlobal('fetch', fn);
 		return fn;
+	};
+
+	const deferredFetch = () => {
+		let resolve;
+		const promise = new Promise((done) => (resolve = done));
+		vi.stubGlobal('fetch', vi.fn(() => promise));
+		return (payload) =>
+			resolve({
+				ok: true,
+				status: 200,
+				statusText: 'OK',
+				text: async () => JSON.stringify(payload),
+				json: async () => payload,
+			});
 	};
 
 	it('loadAll fetches apiURL + endpoint and creates real model instances', async () => {
@@ -884,6 +919,87 @@ describe('Store — server read path (D21)', () => {
 		expect(store.findMany('todo')).toHaveLength(1); // no dupe
 		expect(store.findOne('todo', 't1')).toBe(local); // same instance, updated
 		expect(local.text).toBe('server version');
+		vi.unstubAllGlobals();
+	});
+
+	it('loadAll preserves fields edited during its flight and merges untouched server fields', async () => {
+		const resolveFetch = deferredFetch();
+		const store = apiStore();
+		const local = store.createRecord('todo', {
+			id: 't1',
+			text: 'before request',
+			completed: false,
+		});
+
+		const loading = store.loadAll('todo');
+		local.update({ text: 'typed' });
+		resolveFetch([{ id: 't1', text: 'stale server text', completed: true }]);
+
+		const [loaded] = await loading;
+		expect(loaded).toBe(local);
+		expect(local.text).toBe('typed');
+		expect(local.completed).toBe(true);
+		expect(local._synced).toBe(true);
+		vi.unstubAllGlobals();
+	});
+
+	it('loadOne preserves fields edited during its flight and merges untouched server fields', async () => {
+		const resolveFetch = deferredFetch();
+		const store = apiStore();
+		const local = store.createRecord('todo', {
+			id: 't1',
+			text: 'before request',
+			completed: false,
+		});
+
+		const loading = store.loadOne('todo', 't1');
+		local.update({ text: 'typed' });
+		resolveFetch({ id: 't1', text: 'stale server text', completed: true });
+
+		const loaded = await loading;
+		expect(loaded).toBe(local);
+		expect(local.text).toBe('typed');
+		expect(local.completed).toBe(true);
+		expect(local._synced).toBe(true);
+		vi.unstubAllGlobals();
+	});
+
+	it('loadAll overwrites edits made before dispatch', async () => {
+		mockFetch([{ id: 't1', text: 'server text', completed: true }]);
+		const store = apiStore();
+		const local = store.createRecord('todo', {
+			id: 't1',
+			text: 'initial',
+			completed: false,
+		});
+		local.update({ text: 'edited before load' });
+
+		const [loaded] = await store.loadAll('todo');
+		expect(loaded).toBe(local);
+		expect(local.text).toBe('server text');
+		expect(local.completed).toBe(true);
+		expect(local._synced).toBe(true);
+		vi.unstubAllGlobals();
+	});
+
+	it('loadAll fully overwrites a colliding record created after dispatch', async () => {
+		const resolveFetch = deferredFetch();
+		const store = apiStore();
+
+		const loading = store.loadAll('todo');
+		const local = store.createRecord('todo', {
+			id: 't1',
+			text: 'created during load',
+			completed: false,
+		});
+		local.update({ text: 'typed during load' });
+		resolveFetch([{ id: 't1', text: 'server text', completed: true }]);
+
+		const [loaded] = await loading;
+		expect(loaded).toBe(local);
+		expect(local.text).toBe('server text');
+		expect(local.completed).toBe(true);
+		expect(local._synced).toBe(true);
 		vi.unstubAllGlobals();
 	});
 

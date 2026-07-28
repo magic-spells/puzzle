@@ -45,13 +45,47 @@ const prerenderTimeout = 120 * time.Second
 // bundle. It is deleted before the staging→dist swap so it never ships in dist/.
 const prerenderDir = ".puzzle-prerender"
 
+// checkPrerenderScratchCollision rejects a public/ asset that copyPublic already
+// materialized at staging/.puzzle-prerender. Both prerender modes use that path
+// as scratch and os.RemoveAll it before the swap, so without this guard a
+// public/.puzzle-prerender/ subtree would be silently consumed and deleted while
+// the build reported success. ValidatePublic cannot catch it: it only compares
+// ROOT-LEVEL FILE names against the compiler's own output names and skips
+// directories outright.
+//
+// The check reads the post-copyPublic STAGING state rather than the app tree, so
+// neither the app/public vs flat public/ resolution nor a file-instead-of-dir
+// spelling can dodge it. It mirrors the reserved-name guard the static mode
+// already applies to staging/_puzzle (prerender_pages.go). label names the mode
+// in the error, as elsewhere in this file.
+func checkPrerenderScratchCollision(absRoot, staging, label string) error {
+	scratch := filepath.Join(staging, prerenderDir)
+	if !dirExists(scratch) && !FileExists(scratch) {
+		return nil
+	}
+	// Name the user's file where it can be resolved; the staging copy is a temp
+	// path that is gone by the time the error is read.
+	source := prerenderDir
+	if pub := publicDir(absRoot); pub != "" {
+		if rel, err := filepath.Rel(absRoot, filepath.Join(pub, prerenderDir)); err == nil {
+			source = filepath.ToSlash(rel)
+		}
+	}
+	return fmt.Errorf(
+		"puzzle build %s: public asset %s would be consumed by the prerender step "+
+			"(%s is a reserved output name); rename or remove it",
+		label, source, prerenderDir,
+	)
+}
+
 // ssgSummary mirrors the JSON the SSG runtime's prerenderToDir prints after the
 // sentinel: the files written, the routes it skipped (dynamic routes in v1), and
-// any advisory warnings. `written` entries also carry the output file path and a
-// prerender flag — the Go side never reads them, so they are not modeled here.
+// any advisory warnings. The output file path lets the build compare each route
+// output with the public assets copied into staging before the prerender pass.
 type ssgSummary struct {
 	Written []struct {
 		Path string `json:"path"`
+		File string `json:"file"`
 		// false for a `prerender: false` route — the plain SPA shell was written
 		// at its path instead of rendered markup (an SPA island, SPEC §36).
 		Prerender bool `json:"prerender"`
@@ -69,7 +103,14 @@ type ssgSummary struct {
 // copyPublic just produced — it is the injection template. On any failure the
 // returned error surfaces node's stderr/stdout and staging is discarded by
 // Build's defer, so the previous dist/ is untouched.
-func prerenderHybrid(absRoot, staging string) error {
+func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool) error {
+	// A public/ asset copied to staging/.puzzle-prerender would be overwritten by
+	// the prerender bundle and then deleted with it — reject it before any of that
+	// happens. copyPublic has already run, so the collision is observable here.
+	if err := checkPrerenderScratchCollision(absRoot, staging, "--hybrid"); err != nil {
+		return err
+	}
+
 	// The generated prerender entry (the SSG contract): import the app's default
 	// export + prerenderToDir, run it against the outDir/shellPath passed on argv
 	// in the 'hybrid' mode (passed explicitly so the JS side is unambiguous — it
@@ -101,6 +142,12 @@ func prerenderHybrid(absRoot, staging string) error {
 	if err := json.Unmarshal([]byte(payload), &summary); err != nil {
 		return fmt.Errorf("puzzle build --hybrid: prerender summary was not readable JSON: %w", err)
 	}
+	owners := publicOwnership(publicFiles)
+	for _, page := range summary.Written {
+		if err := checkPrerenderCollision(absRoot, staging, owners, page.Path, page.File); err != nil {
+			return err
+		}
+	}
 
 	printPrerenderSummary(summary)
 
@@ -109,6 +156,54 @@ func prerenderHybrid(absRoot, staging string) error {
 		return fmt.Errorf("puzzle build --hybrid: cleaning %s: %w", prerenderDir, err)
 	}
 	return nil
+}
+
+// publicOwnership folds copyPublic's result into the lookup the collision check
+// needs: folded dist-relative path → the asset's ORIGINAL spelling. Output
+// ownership is case-insensitive — on the case-insensitive filesystems macOS and
+// Windows default to, public/404.HTML and a catch-all route's generated 404.html
+// are the same dist file — while the error must still name the file the user
+// wrote. copyPublic's own map keeps original case; the watch path mirrors
+// deletions from it.
+func publicOwnership(publicFiles map[string]bool) map[string]string {
+	owners := make(map[string]string, len(publicFiles))
+	for rel := range publicFiles {
+		fold := strings.ToLower(rel)
+		// Two spellings of one folded path can coexist only on a case-SENSITIVE
+		// filesystem; pick deterministically so the error text is stable.
+		if prev, ok := owners[fold]; !ok || rel < prev {
+			owners[fold] = rel
+		}
+	}
+	return owners
+}
+
+// checkPrerenderCollision rejects a route output owned by public/. The root
+// route is the one intentional overlap: it consumes the copied index.html as
+// its shell and writes the rendered page back to that same path.
+func checkPrerenderCollision(absRoot, staging string, publicOwners map[string]string, routePath, outputFile string) error {
+	rel, err := filepath.Rel(staging, outputFile)
+	if err != nil {
+		return fmt.Errorf("checking prerender output %s: %w", outputFile, err)
+	}
+	rel = filepath.ToSlash(rel)
+	if routePath == "/" && rel == "index.html" {
+		return nil
+	}
+	owner, ok := publicOwners[strings.ToLower(rel)]
+	if !ok {
+		return nil
+	}
+
+	publicPath, err := filepath.Rel(absRoot, filepath.Join(publicDir(absRoot), filepath.FromSlash(owner)))
+	if err != nil {
+		return fmt.Errorf("resolving public asset for prerender output %s: %w", outputFile, err)
+	}
+	return fmt.Errorf(
+		"[puzzle] prerendered route %q would overwrite public asset %s\n"+
+			"at dist/%s; rename the public asset or remove the route output",
+		routePath, filepath.ToSlash(publicPath), rel,
+	)
 }
 
 // appEntryPath is the app's default-export entry (app/app.js under absRoot),
@@ -146,8 +241,13 @@ func bundlePrerenderEntry(absRoot, stdin, outfile, label string) error {
 		// Inline sourcemap so `node --enable-source-maps` maps a data()/model
 		// throw back to the user's .pzl/.js without a sidecar file in staging.
 		Sourcemap: api.SourceMapInline,
-		// Build-time render: the runtime's dev-only HMR machinery folds away.
-		Define:   bundleDefines(pl, false),
+		// Build-time render: the runtime's dev-only HMR machinery folds away, and
+		// so does the router's takeover path — this bundle GENERATES the
+		// prerendered markup under node and never adopts it. It pulls in
+		// router.js only for route-shape validation and segment-regex compilation
+		// (ssg/index.js constructs an unstarted memory Router); nothing here
+		// navigates into a container.
+		Define:   bundleDefines(pl, bundleFlags{Dev: false, Takeover: false}),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 	}

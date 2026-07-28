@@ -18,6 +18,7 @@ import {
 } from './settled.js';
 
 export { settled } from './settled.js';
+export { measureRenders } from './render-profile.js';
 export { installFakeAnimate } from './fake-waapi.js';
 export { installFakeObserver } from './fake-observer.js';
 // Convenience re-export of the detachable fixtures module (D98) — same

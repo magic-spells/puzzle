@@ -1,6 +1,6 @@
 ---
 name: Reactivity flow
-status: verified
+status: built
 triggers:
   - { kind: event }
   - { kind: manual }
@@ -56,3 +56,28 @@ remount unrelated trailing siblings.
 Durable caveat: model records mutate in place. Passing a record as a prop alone
 does not defeat shallow prop equality; a child that needs live record changes
 should receive identity and query that record inside its own `data()`.
+
+## Measured: propagation is O(1) in depth and in forest size
+
+A standing worry — that one update walks the whole view forest, or costs one
+`data()` per level of nesting — is **refuted**. [[DOC-STRESS-EXAMPLE]]'s
+`deep-nest` scenario mounts 64 branches × 24 genuinely nested levels = **1,536
+real view instances** and counts node `data()` executions per op:
+
+| op | nodes that ran `data()` |
+| --- | ---: |
+| update the deepest node of one branch | **1 / 1,536** |
+| update the shallowest node of one branch | **1 / 1,536** |
+| update the record every node also queries (control) | 1,536 / 1,536 |
+
+One view re-evaluates and re-renders; its child receives shallow-equal props and
+takes the component bailout, so propagation stops dead at the node that changed.
+A branch-root update is also 1, not 24 — depth costs nothing unless the data
+being threaded down actually changes. The third row is the control that makes the
+other two worth anything: a scenario with quietly broken subscriptions would
+report a very impressive `1` and mean nothing.
+
+Two costs are *not* bounded this way and are recorded on the cards that own them:
+async `data()` evaluations serialize store-wide ([[COMPONENT-STORE]]), and a
+callback prop that captures loop data defeats the bailout above for every row in
+a list ([[DECISION-D62-HANDLER-CACHING]]).

@@ -77,7 +77,7 @@ created ──▶ loading ──▶ rendered ──▶ mounted ⇄ updating ─�
 
 - **created** — constructor ran, `created()` hook fired. Class fields (`events`) are now initialized; the runtime reads `this.events` lazily *after* this point, never in the base constructor.
 - **loading** — `data(params, props)` runs inside `store.withTracking(component, ...)`; if async, the component holds here until it resolves. On first load, a declared `<puzzle-skeleton>` renders immediately and is swapped for the real tree when the data commits (v1.8, D39; `mounted()` then fires against the skeleton DOM and the swap is bracketed by `beforeUpdate`/`afterUpdate`); without one, nothing is shown until the first tree lands. On *re*-runs the previous render stays visible until the new tree is ready — a skeleton never reappears (`loaded` latches on the first commit).
-- **rendered / mounted** — first tree rendered into the container; `mounted()` fires after DOM insertion.
+- **rendered / mounted** — first tree rendered into the container; `mounted()` fires after DOM insertion. A `mounted()` throw resolves by **owner** ([[DECISION-D143-MOUNT-THROW-OWNERSHIP]]): a component-owned view is destroyed, a comment placeholder holds its position, and the next parent patch mounts a fresh instance (D115); a router-owned (preloaded) view stays mounted and committed — the navigation's URL/title/history already moved atomically, and tearing the view down would strand a committed URL over an empty container (on a navigation-#0 takeover the prerendered content is restored instead, D140); a static-kernel root is destroyed and the prerendered content restored. Each path's console message names its outcome.
 - **updating** — either trigger (see §5) produces a new tree; `beforeUpdate()` → patch → `afterUpdate()`.
 - **destroyed** — `store.unsubscribe(component)`, ViewManager clears its subtree, `destroyed()` fires. Idempotent.
 
@@ -154,4 +154,4 @@ Subscriptions reset on every `data()` re-run: the component is subscribed to exa
 
 ---
 
-*Settled by D15–D19: plain-class PuzzleView, component composition via default marker (`<children/>` since v1.41/D74, spelled `<slot/>` originally) + callback props, vdom rendering, per-node listeners, and the navigation state machine. No frontend-architecture questions remain open for the 0.1 release.*
+*Settled by D15–D19: plain-class PuzzleView, component composition via default marker (`<Children/>` since v1.64/D134, `<children/>` in v1.41/D74, and `<slot/>` originally) + callback props, vdom rendering, per-node listeners, and the navigation state machine. No frontend-architecture questions remain open for the 0.1 release.*

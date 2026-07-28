@@ -1,10 +1,13 @@
 package build
 
 import (
+	"encoding/json"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -95,9 +98,14 @@ func TestBuildExample(t *testing.T) {
 func TestBuildDevDefineDCE(t *testing.T) {
 	root := exampleRoot(t)
 	distApp := filepath.Join(root, "dist", "app.js")
+	var devMetafile string
 
 	// Development: the guarded HMR code — and its sessionStorage key — survive.
-	if err := Build(root, Options{Development: true, Runner: &fakeRunner{css: "/* tw */"}}); err != nil {
+	if err := Build(root, Options{
+		Development: true,
+		Runner:      &fakeRunner{css: "/* tw */"},
+		Metafile:    &devMetafile,
+	}); err != nil {
 		t.Fatalf("dev Build failed: %v", err)
 	}
 	devJS, err := os.ReadFile(distApp)
@@ -113,10 +121,21 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if !strings.Contains(string(devJS), "__PUZZLE_DEVTOOLS_HOOK__") {
 		t.Errorf("dev bundle should retain the DevTools bridge hook global (__PUZZLE_DEV__ define = true)")
 	}
+	if !strings.Contains(string(devJS), devperfSentinel) {
+		t.Errorf("dev bundle should retain the dev performance sentinel (__PUZZLE_DEV__ define = true)")
+	}
+	if !strings.Contains(string(devJS), profileRequestSentinel) {
+		t.Errorf("dev bundle should retain the profiler bridge request %q (__PUZZLE_DEV__ define = true)", profileRequestSentinel)
+	}
 
 	// Production: DCE strips every DEV-guarded branch — no __puzzleHMR reaches
 	// the bundle (zero production cost).
-	if err := Build(root, Options{Development: false, Runner: &fakeRunner{css: "/* tw */"}}); err != nil {
+	var prodMetafile string
+	if err := Build(root, Options{
+		Development: false,
+		Runner:      &fakeRunner{css: "/* tw */"},
+		Metafile:    &prodMetafile,
+	}); err != nil {
 		t.Fatalf("prod Build failed: %v", err)
 	}
 	prodJS, err := os.ReadFile(distApp)
@@ -140,6 +159,200 @@ func TestBuildDevDefineDCE(t *testing.T) {
 	if strings.Contains(string(prodJS), "__PUZZLE_DEVTOOLS_HOOK__") {
 		t.Errorf("production bundle must DCE the DevTools bridge — found the __PUZZLE_DEVTOOLS_HOOK__ global present")
 	}
+	if strings.Contains(string(prodJS), devperfSentinel) {
+		t.Errorf("production bundle must DCE dev performance instrumentation — found %s present", devperfSentinel)
+	}
+	// The profiler seam leaves with the bridge (D121): the devperf sink
+	// devtools.js installs must not turn devtools.js into a live importer that
+	// drags devperf.js — or the profiler's own request strings — into production.
+	if strings.Contains(string(prodJS), profileRequestSentinel) {
+		t.Errorf("production bundle must DCE the profiler bridge — found the %q request present", profileRequestSentinel)
+	}
+	if bytes := metafileBytesInOutput(t, prodMetafile, "client-runtime/devperf.js"); bytes != 0 {
+		t.Errorf("production devperf.js bytesInOutput = %d, want 0", bytes)
+	}
+	if bytes := metafileBytesInOutput(t, devMetafile, "client-runtime/devperf.js"); bytes == 0 {
+		t.Errorf("development devperf.js bytesInOutput = 0, want a positive contribution")
+	}
+}
+
+// devperfSentinel is a minification-proof literal unique to devperf.js.
+const devperfSentinel = "__PUZZLE_PERF__"
+
+// profileRequestSentinel is a minification-proof literal unique to the profiler
+// half of the DevTools bridge (devtools.js, D121) — a request type, so minifying
+// cannot rename it away.
+const profileRequestSentinel = "snapshot:profile"
+
+// metafileBytesInOutput sums one source input's attributed bytes across every
+// esbuild output. An input omitted from an output contributes zero.
+func metafileBytesInOutput(t *testing.T, raw, sourceSuffix string) int {
+	t.Helper()
+	var meta struct {
+		Outputs map[string]struct {
+			Inputs map[string]struct {
+				BytesInOutput int `json:"bytesInOutput"`
+			} `json:"inputs"`
+		} `json:"outputs"`
+	}
+	if err := json.Unmarshal([]byte(raw), &meta); err != nil {
+		t.Fatalf("parsing esbuild metafile: %v", err)
+	}
+	total := 0
+	for _, output := range meta.Outputs {
+		for input, contribution := range output.Inputs {
+			if strings.HasSuffix(filepath.ToSlash(input), sourceSuffix) {
+				total += contribution.BytesInOutput
+			}
+		}
+	}
+	return total
+}
+
+// ssgTakeoverMarker is the attribute the prerender stamps on a hybrid page's
+// mount target — the router's ONLY takeover signal, and a string literal, so it
+// survives minification. Its ABSENCE from a bundle is real evidence the router's
+// three takeover branches folded away rather than merely got renamed.
+const ssgTakeoverMarker = "data-puzzle-ssg"
+
+// preloadModuleLinked reports whether ssg/preload.js is linked into a bundle.
+// `instance.__takeoverTree = expanded` (preload.js) is the only ASSIGNMENT to
+// that property anywhere in the runtime — PuzzleView.js reads and deletes it,
+// never writes it — and property names survive minification. So this one probe
+// works on minified and readable output alike, including the static per-page
+// bundles, for which no metafile is requested.
+func preloadModuleLinked(js string) bool {
+	return strings.Contains(js, "__takeoverTree =") || strings.Contains(js, "__takeoverTree=")
+}
+
+// TestBuildTakeoverDefineDCE proves the __PUZZLE_TAKEOVER__ build define keeps
+// prerender-takeover code out of the bundles that can never run it, and leaves it
+// in the ones that can. The gate is per-OUTPUT-MODE, not per-dev-mode: only
+// `output: 'hybrid'` emits a data-puzzle-ssg container for the router to adopt.
+//
+// The runtime probes it as `typeof __PUZZLE_TAKEOVER__ === 'undefined' ||
+// __PUZZLE_TAKEOVER__`, inline at each branch — hoisting it into a module const
+// would leave the branches in the bundle (the same trap TestBuildDevDefineDCE
+// documents for __PUZZLE_DEV__), so the SPA subtest below is what catches that.
+func TestBuildTakeoverDefineDCE(t *testing.T) {
+	// A plain SPA bundle can never take over: nothing ever stamps the marker, so
+	// all three branches are unreachable. Folding them drops
+	// preloadTakeoverComponents' last importer, and "sideEffects": false then lets
+	// ssg/preload.js leave the bundle entirely (metafile: zero attributed bytes).
+	//
+	// The name sweep is the stronger claim, and it only became true once EVERY
+	// takeover touchpoint was gated: the ViewNode constructor's two field stores,
+	// viewManager's stripSlotAttr/expandNode copies, mountComponent's reads and its
+	// mount-failure reset, and PuzzleView.mount's __takeoverTree probe+delete. Any
+	// ONE of those left ungated puts its property name back in the bundle —
+	// property names survive minification, so their absence is real evidence the
+	// stores are gone, not merely renamed.
+	t.Run("spa production build ships no takeover path", func(t *testing.T) {
+		root := writeSSGFixture(t, baseSSGFixture())
+		var meta string
+		if err := Build(root, Options{Development: false, Metafile: &meta}); err != nil {
+			t.Fatalf("SPA Build failed: %v", err)
+		}
+		js := readFile(t, filepath.Join(root, "dist", "app.js"))
+		for _, name := range []string{
+			ssgTakeoverMarker, // the router's only takeover signal
+			"takeoverPreloaded",
+			"takeoverFailed",
+			"__takeoverTree",
+		} {
+			if strings.Contains(js, name) {
+				t.Errorf("SPA bundle must DCE every takeover touchpoint — found %q present", name)
+			}
+		}
+		if preloadModuleLinked(js) {
+			t.Error("SPA bundle must tree-shake ssg/preload.js — found its __takeoverTree assignment")
+		}
+		if b := metafileBytesInOutput(t, meta, "client-runtime/ssg/preload.js"); b != 0 {
+			t.Errorf("SPA ssg/preload.js bytesInOutput = %d, want 0", b)
+		}
+	})
+
+	// Hybrid is the one browser bundle that adopts prerendered DOM. Asserting the
+	// emitted HTML carries the marker too keeps this honest: the retained branches
+	// are reachable, not just present.
+	t.Run("hybrid keeps the takeover path and marks the container", func(t *testing.T) {
+		requireSSGRuntime(t)
+		root := writeSSGFixture(t, baseSSGFixture())
+		var meta string
+		if err := Build(root, Options{Development: false, Output: "hybrid", Metafile: &meta}); err != nil {
+			t.Fatalf("hybrid Build failed: %v", err)
+		}
+		js := readFile(t, filepath.Join(root, "dist", "app.js"))
+		if !strings.Contains(js, ssgTakeoverMarker) {
+			t.Errorf("hybrid bundle must retain the router's takeover branches (%q)", ssgTakeoverMarker)
+		}
+		if !preloadModuleLinked(js) {
+			t.Error("hybrid bundle must retain ssg/preload.js")
+		}
+		if b := metafileBytesInOutput(t, meta, "client-runtime/ssg/preload.js"); b == 0 {
+			t.Error("hybrid ssg/preload.js bytesInOutput = 0, want a positive contribution")
+		}
+		home := readFile(t, filepath.Join(root, "dist", "index.html"))
+		if !strings.Contains(home, ssgTakeoverMarker) {
+			t.Errorf("prerendered dist/index.html must stamp %q for the router to adopt\n%s", ssgTakeoverMarker, home)
+		}
+	})
+
+	// True static pages boot through mountStatic, not the router, so they never
+	// carry data-puzzle-ssg (they stamp data-puzzle-static instead) — but they DO
+	// adopt prerendered DOM, so their per-page bundles must keep ssg/preload.js.
+	t.Run("static per-page bundles keep the takeover path", func(t *testing.T) {
+		requireStaticRuntime(t)
+		root := writeSSGFixture(t, baseSSGFixture())
+		if err := Build(root, Options{Development: false, Output: "static"}); err != nil {
+			t.Fatalf("static Build failed: %v", err)
+		}
+		pages := filepath.Join(root, "dist", staticPagesDir)
+		bundles, linked := 0, false
+		if err := filepath.WalkDir(pages, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if d.IsDir() || filepath.Ext(path) != ".js" {
+				return nil
+			}
+			bundles++
+			if preloadModuleLinked(readFile(t, path)) {
+				linked = true
+			}
+			return nil
+		}); err != nil {
+			t.Fatalf("walking %s: %v", pages, err)
+		}
+		if bundles == 0 {
+			t.Fatalf("no per-page bundles under %s", pages)
+		}
+		if !linked {
+			t.Errorf("static per-page bundles (%d of them) must retain ssg/preload.js — mountStatic adopts the prerendered page", bundles)
+		}
+	})
+
+	// `puzzle dev` resolves no output mode, so the watch builder defines the probe
+	// TRUE unconditionally: a dev bundle must never be the build that silently
+	// drops a code path the user is trying to exercise.
+	t.Run("dev watch build retains the takeover path", func(t *testing.T) {
+		root := writeSSGFixture(t, baseSSGFixture())
+		b, err := NewWatchBuilder(root, WatchOptions{})
+		if err != nil {
+			t.Fatalf("NewWatchBuilder: %v", err)
+		}
+		defer b.Dispose()
+		if err := b.Rebuild(); err != nil {
+			t.Fatalf("Rebuild: %v", err)
+		}
+		js := readDistBundle(t, root)
+		if !strings.Contains(js, ssgTakeoverMarker) {
+			t.Errorf("dev/watch bundle must retain the router's takeover branches (%q)", ssgTakeoverMarker)
+		}
+		if !preloadModuleLinked(js) {
+			t.Error("dev/watch bundle must retain ssg/preload.js")
+		}
+	})
 }
 
 // definesFixture parameterizes the throwaway one-route app the runtime-probe DCE
@@ -772,6 +985,96 @@ func TestSwapOutput(t *testing.T) {
 		}
 		assertNoOldResidue(t, root)
 	})
+
+	// The swap itself is what the build depends on; deleting the previous tree is
+	// housekeeping AFTER it succeeded. A failure there used to be returned, so a
+	// build with a correct, complete dist/ was reported as failed.
+	t.Run("old-tree cleanup failure warns and the build still succeeds", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("directory permissions do not block removal on Windows")
+		}
+		if os.Geteuid() == 0 {
+			t.Skip("running as root: directory permissions don't prevent removal")
+		}
+		root := t.TempDir()
+		dist := filepath.Join(root, "dist")
+		staging := filepath.Join(root, ".dist-staging-test")
+		locked := filepath.Join(dist, "locked")
+		if err := os.MkdirAll(locked, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(locked, "pinned.txt"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(staging, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(staging, "app.js"), []byte("new"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// A read-only directory inside the PREVIOUS dist: renaming the tree aside
+		// still works (its parent grants that), but the RemoveAll afterwards cannot
+		// unlink the file it holds.
+		if err := os.Chmod(locked, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+				if err == nil && d.IsDir() {
+					_ = os.Chmod(path, 0o755)
+				}
+				return nil
+			})
+		})
+
+		var swapErr error
+		stderr := captureStderr(t, func() { swapErr = swapOutput(staging, dist) })
+		if swapErr != nil {
+			t.Fatalf("swapOutput reported a failure for a build that succeeded: %v", swapErr)
+		}
+		if got, err := os.ReadFile(filepath.Join(dist, "app.js")); err != nil || string(got) != "new" {
+			t.Errorf("dist/app.js = %q, err=%v — the new build must be in place", got, err)
+		}
+		if !strings.Contains(stderr, "previous dist") {
+			t.Errorf("expected a warning naming the leftover dist, got: %q", stderr)
+		}
+		// The undeletable tree is left behind on purpose — it is named in the warning.
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var leftovers int
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), "dist.old-") {
+				leftovers++
+			}
+		}
+		if leftovers != 1 {
+			t.Errorf("expected the undeletable previous dist to remain, found %d", leftovers)
+		}
+	})
+}
+
+// captureStderr runs fn with os.Stderr redirected and returns what it wrote.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+	fn()
+	os.Stderr = orig
+	_ = w.Close()
+	out := <-done
+	_ = r.Close()
+	return out
 }
 
 // TestBuildFailedCompileLeavesDistIntact proves the staging-then-swap fix: a
@@ -919,6 +1222,154 @@ func TestBuildAllowsNestedReservedNames(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dist, "app.js")); err != nil {
 		t.Errorf("compiler dist/app.js missing: %v", err)
+	}
+}
+
+func TestBuildHybridRejectsPrerenderPublicAssetCollision(t *testing.T) {
+	requireSSGRuntime(t)
+	files := baseSSGFixture()
+	files["app/public/about/index.html"] = "PUBLIC ABOUT ASSET"
+	root := writeSSGFixture(t, files)
+
+	err := Build(root, Options{Development: true, Output: "hybrid"})
+	want := "[puzzle] prerendered route \"/about\" would overwrite public asset app/public/about/index.html\n" +
+		"at dist/about/index.html; rename the public asset or remove the route output"
+	if err == nil {
+		t.Fatal("expected the hybrid build to reject the route/public asset collision")
+	}
+	if err.Error() != want {
+		t.Fatalf("collision error:\n%s\nwant:\n%s", err, want)
+	}
+}
+
+func TestBuildStaticRejectsPrerenderPublicAssetCollision(t *testing.T) {
+	requireStaticRuntime(t)
+	files := baseSSGFixture()
+	files["app/public/about/index.html"] = "PUBLIC ABOUT ASSET"
+	root := writeSSGFixture(t, files)
+
+	err := Build(root, Options{Development: true, Output: "static"})
+	want := "[puzzle] prerendered route \"/about\" would overwrite public asset app/public/about/index.html\n" +
+		"at dist/about/index.html; rename the public asset or remove the route output"
+	if err == nil {
+		t.Fatal("expected the static build to reject the route/public asset collision")
+	}
+	if err.Error() != want {
+		t.Fatalf("collision error:\n%s\nwant:\n%s", err, want)
+	}
+}
+
+// TestBuildRejectsPrerenderScratchDirCollision proves BOTH prerender modes
+// reject a public/.puzzle-prerender subtree instead of silently eating it. That
+// path is each mode's scratch dir: the generated bundle is written into it and
+// the whole directory is RemoveAll'd before the staging→dist swap, so the copied
+// asset used to disappear while the build reported success. ValidatePublic can't
+// see it (root-level FILES only, directories skipped), so the guard reads the
+// post-copyPublic staging state — which is also why it can't be dodged by using
+// a flat public/ instead of app/public. No node run is involved: the guard fires
+// before the prerender bundle is built.
+func TestBuildRejectsPrerenderScratchDirCollision(t *testing.T) {
+	for _, tc := range []struct {
+		mode      string
+		publicDir string
+		asset     string
+	}{
+		{mode: "hybrid", publicDir: "app/public", asset: "app/public/.puzzle-prerender/keep.txt"},
+		{mode: "static", publicDir: "app/public", asset: "app/public/.puzzle-prerender/keep.txt"},
+		// A flat root-level public/ resolves to the same staging path.
+		{mode: "hybrid", publicDir: "public", asset: "public/.puzzle-prerender/keep.txt"},
+		// The collision is a plain FILE, not a directory.
+		{mode: "static", publicDir: "app/public", asset: "app/public/.puzzle-prerender"},
+	} {
+		t.Run(tc.mode+"/"+tc.asset, func(t *testing.T) {
+			files := baseSSGFixture()
+			if tc.publicDir != "app/public" {
+				files[tc.publicDir+"/index.html"] = files["app/public/index.html"]
+				delete(files, "app/public/index.html")
+			}
+			files[tc.asset] = "KEEP ME"
+			root := writeSSGFixture(t, files)
+
+			err := Build(root, Options{Development: true, Output: tc.mode})
+			if err == nil {
+				t.Fatalf("expected the %s build to reject the .puzzle-prerender collision", tc.mode)
+			}
+			want := "public asset " + tc.publicDir + "/.puzzle-prerender would be consumed by the prerender step " +
+				"(.puzzle-prerender is a reserved output name); rename or remove it"
+			if !strings.Contains(err.Error(), want) {
+				t.Fatalf("collision error:\n%s\nwant substring:\n%s", err, want)
+			}
+			if !strings.Contains(err.Error(), "puzzle build --"+tc.mode) {
+				t.Errorf("error should name the mode; got: %v", err)
+			}
+			// The failure is atomic: staging is discarded, so no dist/ was written.
+			if _, err := os.Stat(filepath.Join(root, "dist")); !os.IsNotExist(err) {
+				t.Errorf("failed build should not have produced dist/: %v", err)
+			}
+		})
+	}
+}
+
+func TestBuildHybridRejectsCatchAllPublicAssetCollision(t *testing.T) {
+	requireSSGRuntime(t)
+	files := baseSSGFixture()
+	files["app/public/404.html"] = "PUBLIC 404 ASSET"
+	root := writeSSGFixture(t, files)
+
+	err := Build(root, Options{Development: true, Output: "hybrid"})
+	want := "[puzzle] prerendered route \"*\" would overwrite public asset app/public/404.html\n" +
+		"at dist/404.html; rename the public asset or remove the route output"
+	if err == nil {
+		t.Fatal("expected the hybrid build to reject the catch-all/public asset collision")
+	}
+	if err.Error() != want {
+		t.Fatalf("collision error:\n%s\nwant:\n%s", err, want)
+	}
+}
+
+// TestBuildHybridRejectsCatchAllPublicAssetCollisionCaseInsensitive proves the
+// prerender ownership check folds case the way the reserved-output guard does:
+// on the case-insensitive filesystems macOS/Windows default to, public/404.HTML
+// and the catch-all's generated 404.html are ONE dist file, so the build must
+// fail instead of emitting host-dependent output. The fold is in the lookup, not
+// the filesystem, so this holds on case-sensitive CI too — and the message keeps
+// the asset's actual spelling.
+func TestBuildHybridRejectsCatchAllPublicAssetCollisionCaseInsensitive(t *testing.T) {
+	requireSSGRuntime(t)
+	files := baseSSGFixture()
+	files["app/public/404.HTML"] = "PUBLIC 404 ASSET"
+	root := writeSSGFixture(t, files)
+
+	err := Build(root, Options{Development: true, Output: "hybrid"})
+	want := "[puzzle] prerendered route \"*\" would overwrite public asset app/public/404.HTML\n" +
+		"at dist/404.html; rename the public asset or remove the route output"
+	if err == nil {
+		t.Fatal("expected the hybrid build to reject the case-folded catch-all collision")
+	}
+	if err.Error() != want {
+		t.Fatalf("collision error:\n%s\nwant:\n%s", err, want)
+	}
+}
+
+func TestBuildHybridAllowsRootRouteToRewritePublicIndexShell(t *testing.T) {
+	requireSSGRuntime(t)
+	files := baseSSGFixture()
+	files["app/routes.js"] = `import Home from './views/Home.pzl';
+import DefaultLayout from './layouts/Default.pzl';
+
+export default [
+  { path: '/', name: 'home', view: Home, layout: DefaultLayout, prerender: false },
+];
+`
+	root := writeSSGFixture(t, files)
+
+	if err := Build(root, Options{Development: true, Output: "hybrid"}); err != nil {
+		t.Fatalf("root route should be allowed to rewrite the public index shell: %v", err)
+	}
+	publicShell := readFile(t, filepath.Join(root, "app", "public", "index.html"))
+	distShell := readFile(t, filepath.Join(root, "dist", "index.html"))
+	if distShell != publicShell {
+		t.Error("prerender:false root route should rewrite the public index shell byte-for-byte")
 	}
 }
 

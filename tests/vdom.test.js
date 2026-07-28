@@ -339,6 +339,56 @@ describe('ViewManager — select controlled value', () => {
 		expect(select.selectedIndex).toBe(2);
 	});
 
+	// Instrument the `value` SETTER so a patch that writes nothing is observable.
+	// jsdom fronts a <select> with a Proxy (indexed option access), and its set trap
+	// rejects an own accessor redefined on the instance — so this patches the
+	// PROTOTYPE and restores it afterwards. Only one select exists per test.
+	const recordValueWrites = () => {
+		const desc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+		const writes = vi.fn();
+		Object.defineProperty(HTMLSelectElement.prototype, 'value', {
+			configurable: true,
+			enumerable: desc.enumerable,
+			get: desc.get,
+			set(v) {
+				writes(v);
+				desc.set.call(this, v);
+			},
+		});
+		writes.restore = () => Object.defineProperty(HTMLSelectElement.prototype, 'value', desc);
+		return writes;
+	};
+
+	it('writes nothing when a patch leaves the controlled value and options unchanged', () => {
+		const { container, vm } = setup();
+		vm.render(h('select', { value: 'b' }, [option('a'), option('b'), option('c')]));
+		const select = container.querySelector('select');
+		const writes = recordValueWrites();
+		try {
+			// Byte-identical re-render: the INPUT/TEXTAREA path already guards on the live
+			// property; the select re-assertion assigned unconditionally.
+			vm.render(h('select', { value: 'b' }, [option('a'), option('b'), option('c')]));
+			expect(writes).not.toHaveBeenCalled();
+			expect(select.value).toBe('b');
+		} finally {
+			writes.restore();
+		}
+	});
+
+	it('still writes when the controlled value actually changes', () => {
+		const { container, vm } = setup();
+		vm.render(h('select', { value: 'b' }, [option('a'), option('b'), option('c')]));
+		const select = container.querySelector('select');
+		const writes = recordValueWrites();
+		try {
+			vm.render(h('select', { value: 'c' }, [option('a'), option('b'), option('c')]));
+			expect(writes).toHaveBeenCalledWith('c');
+			expect(select.value).toBe('c');
+		} finally {
+			writes.restore();
+		}
+	});
+
 	it('removing the selected option follows native browser fallback', () => {
 		const { container, vm } = setup();
 		vm.render(h('select', { value: 'b' }, [option('a'), option('b'), option('c')]));

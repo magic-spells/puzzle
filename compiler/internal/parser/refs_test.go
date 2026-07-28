@@ -138,9 +138,9 @@ func TestParseRefErrors(t *testing.T) {
 			"<Chart>",
 		},
 		{
-			"ref on bare slot",
-			`<puzzle-view><slot ref="x"></slot></puzzle-view>` + "\n<script></script>",
-			"ref cannot be placed on a <slot>",
+			"ref on Children marker",
+			`<puzzle-view><Children ref="x"/></puzzle-view>` + "\n<script></script>",
+			"ref cannot be placed on a <Children>",
 		},
 		{
 			"ref on capitalized Slot",
@@ -155,6 +155,11 @@ func TestParseRefErrors(t *testing.T) {
 		{
 			"ref nested deep inside for block",
 			`<puzzle-view>{#for i in items}<ul><li><b ref="x"></b></li></ul>{/for}</puzzle-view>` + "\n<script></script>",
+			"not allowed inside a {#for}",
+		},
+		{
+			"ref inside for block in marker fallback",
+			`<puzzle-view><Children>{#for i in items}<span ref="x"></span>{/for}</Children></puzzle-view>` + "\n<script></script>",
 			"not allowed inside a {#for}",
 		},
 		{

@@ -1,0 +1,464 @@
+<puzzle-view>
+  <div class="loop-root">
+    <div class="flex flex-wrap items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        hard cap <span class="tabular-nums text-fg">{ cap }</span> iterations ·
+        detector <span class={ presenceCls }>{ presenceLabel }</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class={ recursiveCls } disabled={ running } @click={ startRecursive }>recursive-loop</button>
+        <button class={ runawayCls } disabled={ running } @click={ startRunaway }>runaway-rerender</button>
+        <button class={ stopCls } disabled={ idle } @click={ stopNow }>stop</button>
+      </div>
+    </div>
+
+    <!-- The live iteration counter. It has to be visible while a pathology is
+         running, which is why it is polled at 10Hz from the host rather than
+         rendered by the looping view itself: the looping view's output must stay
+         byte-identical for the runaway arm to mean anything. -->
+    <div class="flex flex-wrap items-baseline gap-6 px-4 py-3 border-b border-hairline">
+      <div>
+        <div class="loop-iterations font-mono text-2xl tabular-nums { iterationsCls }">{ iterations }</div>
+        <div class="mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-faint">iterations</div>
+      </div>
+      <div>
+        <div class="font-mono text-2xl tabular-nums text-muted">{ statusLabel }</div>
+        <div class="mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-faint">status</div>
+      </div>
+    </div>
+
+    <!-- The verdict. This is the whole point of the scenario, so it is on the
+         page and not only in the console — the detector also emits `perf-warning`
+         over the DevTools bridge, so an attached panel shows it under warnings. -->
+    <div class="loop-verdict px-4 py-3 border-b border-hairline font-mono text-[11px] leading-relaxed { verdictCls }">
+      { verdictText }
+    </div>
+
+    <div id="loop-cell-host" class="border-b border-hairline">
+      <LoopCell recordId={ recordId } cap={ cap } @ready={ onCellReady } @tick={ onCellTick } @stopped={ onCellStopped } />
+    </div>
+
+    <div class="px-4 py-3 font-mono text-[11px] leading-relaxed text-faint">{ explainText }</div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import LoopCell from './LoopCell.pzl';
+import { registerScenario } from '../stress-controller.js';
+import {
+  STRESS_SEED,
+  afterPaint,
+  clearType,
+  intParam,
+  ms1,
+  perfDelta,
+  perfSnapshot,
+  seqShapes,
+  settleFrames,
+  sleep,
+  viewRoot,
+} from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// loop-trap — the D121 loop detector's only real-browser exercise.
+//
+// The detector (client-runtime/devperf.js) had a unit test and had never fired
+// in a browser. This scenario runs both of its arms against a genuinely looping
+// view and REPORTS WHAT HAPPENED — including "it did not fire", which is a
+// finding about the detector and not something to work around.
+//
+// What is asserted, per arm:
+//   recursive-loop     kind 'recursive',   at depth 100 (RECURSION_LIMIT)
+//   runaway-rerender   kind 'cross-frame', at >= 60 renders in a rolling second
+//                      with >= 90% of them mutating no DOM
+//
+// ── Why the host makes no store query ────────────────────────────────────────
+// Exactly the reason Subscriptions.pzl does not: a query here would subscribe
+// THIS view to the record the recursive arm writes, so the host would be dragged
+// into the same causal chain and its own re-renders would inflate the very
+// counter being measured. The record id lives in an instance field instead.
+//
+// ── Why the host's 10Hz poll cannot perturb the measurement ──────────────────
+// The poll calls refresh() on the HOST. That re-renders <LoopCell/>, but every
+// prop it passes is either an unchanged primitive or a bare-reference callback
+// (cached in `this.__h`, identical object across renders), so shallowEqual
+// matches and the patch takes the component bailout: the cell runs neither
+// data() nor render(). Nothing enters the cell's causal chain or its rolling
+// render window. Passing `@tick={ onCellTick(...) }` in capturing form instead
+// would mint a fresh arrow per render, defeat the bailout, and silently make the
+// host the thing driving the loop.
+// ---------------------------------------------------------------------------
+
+const TYPE = 'loop';
+
+/** Never let an arm run forever even if both the detector and the cap fail. */
+const WATCHDOG_MS = 30000;
+
+/** The detector's own constants, restated so the verdict can name the target. */
+const RECURSION_LIMIT = 100;
+const RUNAWAY_RENDER_LIMIT = 60;
+const RUNAWAY_WINDOW_MS = 1000;
+
+const RUN_BTN =
+  'h-8 px-3 rounded-md border border-danger/50 bg-danger/10 font-mono text-xs text-danger hover:bg-danger/20 disabled:opacity-40';
+const STOP_BTN =
+  'h-8 px-3 rounded-md border border-warn bg-warn/20 font-mono text-xs font-semibold text-warn disabled:opacity-40';
+
+export default class LoopTrap extends PuzzleView {
+  api = {
+    name: 'loop-trap',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.cell = null;
+    this.recordId = null;
+    this.detection = null;
+    this.ticks = 0;
+    this.lastTicks = 0;
+    this.activeArm = null;
+    this.lastRun = null;
+    this.profilerPresent = false;
+    this.unsubPerf = null;
+    this.unregister = null;
+    this.pollTimer = null;
+    this.buildDataset();
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+
+    // devperf's sink is the SAME channel the DevTools bridge listens on, so what
+    // this scenario reports and what an attached Performance panel shows under
+    // warnings are the same event, not two independent detections.
+    const perf = typeof globalThis === 'undefined' ? null : globalThis.__PUZZLE_PERF__;
+    this.profilerPresent = typeof perf?.subscribe === 'function';
+    if (this.profilerPresent) {
+      this.unsubPerf = perf.subscribe((event, subject) => {
+        if (event.type !== 'loop') return;
+        // Attribute by INSTANCE. devperf passes the subject beside the event
+        // precisely so a sink can tell whose loop this is; a name match would
+        // also catch a loop in some other LoopCell.
+        if (this.cell && subject && subject !== this.cell) return;
+        if (this.detection) return; // first report wins; the rest are echoes
+        this.detection = {
+          kind: event.kind,
+          depth: event.depth,
+          viewName: event.viewName,
+          message: event.message,
+          atIteration: this.ticks,
+        };
+      });
+    }
+
+    // The live counter. 10Hz, not per frame: a per-frame host render would be
+    // 60 host renders a second competing with the arm being measured, for no
+    // extra information a human can actually read off the screen.
+    this.pollTimer = setInterval(() => {
+      if (this.isDestroyed) return;
+      if (this.ticks === this.lastTicks && !this.detection) return;
+      this.lastTicks = this.ticks;
+      this.refresh();
+    }, 100);
+  }
+
+  destroyed() {
+    if (this.pollTimer !== null) clearInterval(this.pollTimer);
+    this.pollTimer = null;
+    this.unsubPerf?.();
+    this.unsubPerf = null;
+    this.unregister?.();
+    this.unregister = null;
+    this.cell = null;
+  }
+
+  data() {
+    const running = !!this.activeArm;
+    const detection = this.detection;
+    return {
+      cap: this.cap(),
+      recordId: this.recordId,
+      running,
+      idle: !running,
+      iterations: this.ticks,
+      iterationsCls: running ? 'text-warn' : 'text-fg',
+      statusLabel: running ? this.activeArm : (this.lastRun?.outcome ?? 'idle'),
+
+      recursiveCls: RUN_BTN,
+      runawayCls: RUN_BTN,
+      stopCls: STOP_BTN,
+
+      presenceLabel: this.profilerPresent ? 'present' : 'compiled out',
+      presenceCls: this.profilerPresent ? 'text-accent' : 'text-danger',
+
+      verdictText: this.verdictText(),
+      verdictCls: detection ? 'text-accent' : this.lastRun ? 'text-danger' : 'text-faint',
+
+      explainText:
+        'recursive-loop writes the record its own data() just queried, so the batched flush wakes it again — ' +
+        `devperf counts those executions in ONE causal chain and must stop it at ${RECURSION_LIMIT}. ` +
+        'runaway-rerender calls refresh() at frame rate while data() returns a constant, so every render mutates ' +
+        `nothing — that shape spans frames, so only the rolling-window guard (>= ${RUNAWAY_RENDER_LIMIT} renders per ` +
+        'second at >= 90% wasted) can see it. Both are hard-capped and stoppable.',
+    };
+  }
+
+  events = {
+    startRecursive: () => this.fire('recursive-loop'),
+    startRunaway: () => this.fire('runaway-rerender'),
+    stopNow: () => this.fire('stop'),
+    // Bare references so the cell's props stay shallow-equal across host renders.
+    onCellReady: (cell) => {
+      this.cell = cell;
+    },
+    onCellTick: (n) => {
+      this.ticks = n;
+    },
+    onCellStopped: () => {},
+  };
+
+  /** In-page button path. Same op implementation the harness drives. */
+  fire(op) {
+    this.opRun(op).catch((err) => console.error('[stress] loop-trap:', err));
+  }
+
+  // ---- dataset -------------------------------------------------------------
+
+  cap() {
+    return intParam(this.props?.cap, 500, 10, 5000);
+  }
+
+  buildDataset() {
+    const store = this.ctx.store;
+    clearType(store, TYPE);
+    store.resetFixtureSeed(STRESS_SEED);
+    const [record] = store.seed(TYPE, seqShapes(1, 0));
+    this.recordId = record.id;
+  }
+
+  // ---- ops -----------------------------------------------------------------
+
+  async opRun(op) {
+    if (op === 'stop') {
+      this.cell?.stop('manual');
+      this.activeArm = null;
+      this.refresh();
+      await settleFrames(1);
+      return { op, ms: 0, scriptMs: 0, detail: 'stopped: any running pathology was cancelled' };
+    }
+    if (op === 'recursive-loop') return this.runArm(op, 'recursive');
+    if (op === 'runaway-rerender') return this.runArm(op, 'runaway');
+    throw new Error(`[stress] loop-trap has no op "${op}"`);
+  }
+
+  /**
+   * Run one pathology to its natural end — detector, cap, or watchdog — and
+   * report which of the three ended it. Resolves only after the DOM has settled.
+   */
+  async runArm(op, kind) {
+    if (!this.cell) throw new Error('[stress] loop-trap: the cell has not mounted');
+    if (this.activeArm) throw new Error(`[stress] loop-trap: "${this.activeArm}" is already running`);
+
+    // Drain the detector's rolling window before arming anything.
+    //
+    // checkRunaway keeps a 1000ms window of THIS view's renders and needs >= 90%
+    // of them to have mutated nothing. An arm started straight after another one
+    // therefore inherits the previous arm's renders — which DID mutate — and the
+    // ratio sits under the threshold until enough wasted renders pile up to
+    // outvote them. Measured back to back, runaway-rerender reported firing at
+    // 101 renders; with the window drained it fires at 60, which is the
+    // documented threshold. The wait is what makes the reported count a property
+    // of the DETECTOR rather than of whatever this scenario ran a second ago.
+    await sleep(RUNAWAY_WINDOW_MS + 150);
+
+    this.detection = null;
+    this.ticks = 0;
+    this.lastTicks = 0;
+    this.lastRun = null;
+    this.activeArm = op;
+
+    const before = perfSnapshot();
+    const t0 = performance.now();
+    if (kind === 'recursive') this.cell.startRecursive();
+    else this.cell.startRunaway();
+
+    const outcome = await this.awaitEnd();
+    const scriptMs = performance.now() - t0;
+    const perf = perfDelta(before);
+
+    this.activeArm = null;
+    await afterPaint();
+    await settleFrames(2);
+
+    const cap = this.cap();
+    const detection = this.detection;
+    const expectedKind = kind === 'recursive' ? 'recursive' : 'cross-frame';
+    const fired = !!detection && detection.kind === expectedKind;
+
+    this.lastRun = {
+      op,
+      kind,
+      expectedKind,
+      outcome,
+      fired,
+      detection,
+      iterations: this.ticks,
+      cap,
+      scriptMs,
+      perf,
+    };
+    this.refresh();
+    await settleFrames(1);
+
+    return {
+      op,
+      ms: scriptMs,
+      scriptMs,
+      detail: this.runDetail(),
+    };
+  }
+
+  /** Poll frames until the detector reports, the cell stops, or time runs out. */
+  async awaitEnd() {
+    const deadline = performance.now() + WATCHDOG_MS;
+    for (;;) {
+      if (this.detection) {
+        // Stop AT detection so the reported iteration count is the count at
+        // which the detector spoke, not wherever the cap happened to land.
+        this.cell.stop('detected');
+        return 'detector';
+      }
+      if (!this.cell.running) return this.cell.stoppedReason === 'cap' ? 'cap' : 'stopped';
+      if (performance.now() > deadline) {
+        this.cell.stop('watchdog');
+        return 'watchdog';
+      }
+      await settleFrames(1);
+    }
+  }
+
+  async opReset() {
+    this.cell?.stop('reset');
+    this.activeArm = null;
+    this.detection = null;
+    this.ticks = 0;
+    this.lastTicks = 0;
+    this.lastRun = null;
+    this.buildDataset();
+    this.ctx.store.flush();
+    this.refresh();
+    await afterPaint();
+    await settleFrames(1);
+    return { detail: 'reset: loop record reseeded, counters cleared' };
+  }
+
+  /**
+   * Deliberately does NOTHING but settle.
+   *
+   * Every other scenario warms up by running its real op once. Here the real op
+   * IS the pathology, and running one silently would both cost a second full arm
+   * and leave the detector's per-view state (blockedViews, the rolling render
+   * window, runawayUntil) primed — so the measured run would be reporting on a
+   * view that had already been stopped once.
+   */
+  async opWarmup() {
+    await settleFrames(2);
+    return { detail: 'warmup: skipped on purpose — warming this scenario means running the pathology' };
+  }
+
+  // ---- verification --------------------------------------------------------
+
+  verdictText() {
+    if (!this.profilerPresent) {
+      return 'devperf is compiled out of this build, so the loop detector does not exist here. Nothing can fire; the hard cap is the only backstop. Run this scenario against a development build.';
+    }
+    if (!this.lastRun) return 'no run yet — pick an arm above.';
+    return this.runDetail();
+  }
+
+  runDetail() {
+    const run = this.lastRun;
+    if (!run) return 'no run yet';
+    const where = `${run.iterations} iterations (cap ${run.cap}), ended by ${run.outcome}, ${ms1(run.scriptMs)}ms`;
+    if (!run.detection) {
+      return (
+        `${run.op}: DETECTOR DID NOT FIRE — expected kind "${run.expectedKind}" and got no loop event at all. ` +
+        `${where}. The loop was stopped by the scenario's own ${run.outcome}, not by the framework.`
+      );
+    }
+    const d = run.detection;
+    const target = run.expectedKind === 'recursive' ? `depth ${RECURSION_LIMIT}` : `>= ${RUNAWAY_RENDER_LIMIT} renders/second`;
+    if (!run.fired) {
+      return (
+        `${run.op}: DETECTOR FIRED WITH THE WRONG KIND — got "${d.kind}" at depth ${d.depth}, expected ` +
+        `"${run.expectedKind}" (${target}). ${where}.`
+      );
+    }
+    return (
+      `${run.op}: detector FIRED — kind "${d.kind}", depth ${d.depth}, on ${d.viewName}, ` +
+      `at iteration ${d.atIteration} of ${run.iterations} (cap ${run.cap}), target ${target}. ${where}.`
+    );
+  }
+
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const cell = root.querySelector('.loop-cell');
+    if (!cell) return { ok: false, detail: 'the LoopCell did not render' };
+    if (!root.querySelector('.loop-verdict')) return { ok: false, detail: 'the verdict panel is missing' };
+
+    const shown = root.querySelector('.loop-iterations')?.textContent?.trim();
+    if (shown !== String(this.ticks)) {
+      return { ok: false, detail: `the live counter shows "${shown}", the cell has run ${this.ticks} times` };
+    }
+
+    if (this.activeArm) return { ok: false, detail: `"${this.activeArm}" is still running` };
+
+    const run = this.lastRun;
+    if (!run) {
+      return {
+        ok: true,
+        detail: `idle; detector ${this.profilerPresent ? 'present' : 'compiled out of this build'}`,
+      };
+    }
+
+    // `ok` is about the tab still being usable, NOT about the verdict. A detector
+    // that fails to fire is a real finding to report loudly (see runDetail), not
+    // a broken render — but a loop that only the watchdog could stop IS broken,
+    // because in a real app nothing would have stopped it at all.
+    if (run.outcome === 'watchdog') {
+      return {
+        ok: false,
+        detail: `${run.op} ran to the ${WATCHDOG_MS}ms watchdog: neither the detector nor the hard cap ended it`,
+      };
+    }
+    if (run.iterations > run.cap) {
+      return { ok: false, detail: `${run.op} ran ${run.iterations} iterations, past its hard cap of ${run.cap}` };
+    }
+    return { ok: true, detail: this.runDetail() };
+  }
+
+  opStats() {
+    const run = this.lastRun;
+    return {
+      records: this.ctx.store.findMany(TYPE).length,
+      views: 2,
+      counters: {
+        detectorPresent: this.profilerPresent ? 1 : 0,
+        detectorFired: run?.fired ? 1 : 0,
+        detectorKind: run?.detection?.kind ?? 'none',
+        detectorDepth: run?.detection?.depth ?? 0,
+        loopIterations: run?.iterations ?? this.ticks,
+        loopOutcome: run?.outcome ?? 'none',
+      },
+      perf: run?.perf ?? null,
+    };
+  }
+}
+</script>

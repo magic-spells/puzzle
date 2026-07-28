@@ -32,8 +32,9 @@ const pathShapeMsg = `src must be a plain app/assets-relative path like "icons/h
 
 // resolveInlineSVG walks nodes in place, replacing every *parser.InlineSVG with a
 // resolved <svg> Element (RawInner set). It recurses through element/component
-// children, both {#if} branches (which also covers desugared {:else if} chains,
-// nested in Else), the {#for} body, and every {#case} clause body + Else. Each
+// children, marker fallbacks, both {#if} branches (which also covers desugared
+// {:else if} chains, nested in Else), the {#for} body, and every {#case} clause
+// body + Else. Each
 // resolved or attempted absolute file path is appended to *inlined. A validation,
 // missing-file, or malformed-svg failure returns a positioned error; *inlined
 // still holds whatever was recorded so far.
@@ -51,6 +52,10 @@ func (c *compiler) resolveInlineSVG(nodes []parser.Node, assetsDir string, inlin
 				return err
 			}
 		case *parser.Component:
+			if err := c.resolveInlineSVG(n.Children, assetsDir, inlined); err != nil {
+				return err
+			}
+		case *parser.Slot:
 			if err := c.resolveInlineSVG(n.Children, assetsDir, inlined); err != nil {
 				return err
 			}
@@ -121,6 +126,12 @@ func (c *compiler) resolveOneSVG(n *parser.InlineSVG, assetsDir string, inlined 
 	seed := inner
 	return &parser.Element{Tag: "svg", Attrs: attrs, RawInner: &seed, RawSrc: src, Pos: n.Pos}, nil
 }
+
+// ValidSVGPath is the exported form of validSVGPath, for callers outside this
+// package that resolve a {#svg} asset specifier against app/assets/ — the
+// esbuild plugin validates the virtual-module specifier with the SAME rule the
+// compile-time path uses, before it ever touches the filesystem.
+func ValidSVGPath(src string) bool { return validSVGPath(src) }
 
 // validSVGPath reports whether src is a plain, app/assets-relative forward-slash
 // path: not absolute, no "./"/"../" prefix, and a Clean that stays inside the
@@ -224,6 +235,11 @@ const SVGAssetSpecifierPrefix = "@magic-spells/puzzle/svg-asset/"
 
 // emitSVGImports returns the module-top import lines for every asset referenced
 // in dedup mode, in first-seen order (empty when none / inline mode).
+//
+// The specifier goes through jsString, not raw concatenation: validSVGPath vets
+// traversal, not bytes, so a filename carrying a quote/backslash/newline would
+// otherwise close the literal early and emit a broken module. Escaping is
+// defense in depth — plain paths are byte-identical to the concatenated form.
 func (c *compiler) emitSVGImports() string {
 	if len(c.svgOrder) == 0 {
 		return ""
@@ -232,10 +248,9 @@ func (c *compiler) emitSVGImports() string {
 	for _, src := range c.svgOrder {
 		b.WriteString("import ")
 		b.WriteString(c.svgIdent[src])
-		b.WriteString(" from '")
-		b.WriteString(SVGAssetSpecifierPrefix)
-		b.WriteString(src)
-		b.WriteString("';\n")
+		b.WriteString(" from ")
+		b.WriteString(jsString(SVGAssetSpecifierPrefix + src))
+		b.WriteString(";\n")
 	}
 	return b.String()
 }

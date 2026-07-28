@@ -1,0 +1,480 @@
+<puzzle-view>
+  <div class="storm-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="storm-count tabular-nums text-fg">{ recordCount }</span> records ·
+        <span class="tabular-nums text-accent">{ progress }</span> writes this run
+      </div>
+      <div class="font-mono text-[11px] shrink-0 { resultCls }">{ resultText }</div>
+    </div>
+
+    <div class="px-4 py-2 border-b border-line font-mono text-[11px] text-faint">{ explainText }</div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-px bg-line">
+      {#for cell in readout}
+        <div class="bg-surface px-4 py-3">
+          <div class="font-mono text-lg tabular-nums text-fg">{ cell.value }</div>
+          <div class="mt-0.5 font-mono text-[10px] uppercase tracking-[0.2em] text-faint">{ cell.label }</div>
+        </div>
+      {/for}
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { registerScenario } from '../stress-controller.js';
+import {
+  STRESS_SEED,
+  afterPaint,
+  clearAllTypes,
+  intParam,
+  ms1,
+  perfDelta,
+  perfSnapshot,
+  seqShapes,
+  settleFrames,
+  viewRoot,
+} from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// write-storm — two questions about the store under mutation pressure.
+//
+//   1. Does the rAF batching hold, or do flushes pile up? `sustained` writes at
+//      600/sec for 10s (ten per 60Hz frame) and counts FLUSHES against WRITES.
+//      Batching holds iff flushes track FRAMES, not writes. `burst` is the
+//      degenerate case: 5,000 synchronous writes in one tick must collapse into
+//      exactly ONE flush.
+//
+//   2. What does persistence cost? Store._persistNow() serializes the WHOLE
+//      store — every record of every type, through toJSON() — and JSON.stringify
+//      s it, once per dirty flush. That is O(store) per mutating FRAME, so at
+//      10,000 records a sustained write load pays it 60 times a second.
+//      Because that cost is store-WIDE, buildDataset() empties every registered
+//      type before seeding: the -persist arms only price 10,000 records if
+//      10,000 records are all the store holds. See buildDataset().
+//
+// ── The probes, and why they are instance patches ──────────────────────────
+// Both counters have to survive into a PRODUCTION bundle, because that is what
+// benchmarks/runner.mjs measures. devperf's storeFlushes/storeNotifications are
+// compiled out there, so this scenario wraps `store.flush` and `store._persistNow`
+// on the live instance for the duration of a run and restores them after. The
+// runtime is not touched.
+//
+// ── Why the persistence probe installs a MEMORY storage shim ────────────────
+// The store only persists when `storage` is configured, and this app configures
+// none — so _persistNow is a no-op by default and the cost would measure zero.
+// The shim is assigned AFTER construction on purpose: the constructor's _load()
+// only runs for storage present at construction, so nothing tries to hydrate.
+//
+// Real localStorage would be the wrong instrument here: 10,000 seeded records
+// serialize to several MB, well past the ~5MB quota, and _persistNow swallows
+// the resulting QuotaExceededError — so the run would be timing a write that
+// FAILED. The shim keeps the O(store) half honest (serialize + stringify, which
+// is the part that scales) and makes the storage write itself a constant-time
+// assignment. The reported persistence time therefore EXCLUDES the real
+// localStorage write, and is a lower bound.
+// ---------------------------------------------------------------------------
+
+const TYPE = 'storm';
+
+/** 600 writes/sec for 10s — ten per 60Hz frame. */
+const SUSTAINED_RATE_PER_SEC = 600;
+const SUSTAINED_MS = 10000;
+/** One tick, no frames in between. */
+const BURST_WRITES = 5000;
+
+export default class WriteStorm extends PuzzleView {
+  api = {
+    name: 'write-storm',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.records = [];
+    this.cursor = 0;
+    this.progress = 0;
+    this.wakeups = 0;
+    this.queryMs = 0;
+    this.lastResult = null;
+    this.unregister = null;
+    this.buildDataset();
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  /**
+   * The collection subscription is deliberate: this view is the thing that WAKES
+   * when the storm writes, so `wakeups` counts flushes that actually reached a
+   * subscriber — a production-visible stand-in for devperf's storeNotifications.
+   *
+   * findMany() over 10,000 records is not free, and it is paid once per flush,
+   * so it is timed separately (`queryMs`) rather than hidden inside the op's
+   * script time. That cost is a real property of "a view watching a big
+   * collection", not an artefact of the harness.
+   */
+  data() {
+    const t0 = performance.now();
+    const all = this.ctx.store.findMany(TYPE);
+    this.queryMs += performance.now() - t0;
+    this.wakeups += 1;
+
+    const result = this.lastResult;
+    return {
+      recordCount: all.length,
+      progress: this.progress,
+      explainText:
+        `sustained writes ${SUSTAINED_RATE_PER_SEC}/sec for ${SUSTAINED_MS / 1000}s; burst writes ${BURST_WRITES} in one tick. ` +
+        'Batching holds iff flushes track frames rather than writes. The -persist arms attach a memory storage shim so ' +
+        'Store._persistNow() actually runs — it serializes every record in the store on every dirty flush, which is why ' +
+        'this scenario empties every type before seeding its own.',
+      readout: [
+        { id: 'writes', label: 'writes', value: result ? result.writes : 0 },
+        { id: 'flushes', label: 'flushes', value: result ? result.flushes : 0 },
+        { id: 'wakeups', label: 'subscriber wakeups', value: result ? result.wakeups : 0 },
+        {
+          id: 'persist',
+          label: 'persist ms',
+          value: result ? (result.persistCalls ? ms1(result.persistMs) : 'off') : 0,
+        },
+      ],
+      resultText: result
+        ? `${result.op}: ${result.writes} writes → ${result.flushes} flushes · ${ms1(result.writeMs)}ms in writes`
+        : 'no run yet',
+      resultCls: result ? 'text-accent' : 'text-faint',
+    };
+  }
+
+  // ---- dataset -------------------------------------------------------------
+
+  wantRecords() {
+    return intParam(this.props?.n, 10000, 1, 200000);
+  }
+
+  buildDataset() {
+    const store = this.ctx.store;
+    // EVERY type, not just this one. The store is shared across scenarios and
+    // _persistNow() serializes all of it, so leaving another scenario's rows in
+    // place would put them in the blob the -persist arms time — measured, a
+    // full-suite run reached this point with 31,537 records, of which only
+    // 10,000 belonged here. Even a single-scenario run inherits keyed-list's
+    // auto-seeded 1,000 rows, because Home mounts that scenario first.
+    // Emptying the store makes "one serialize of 10,000 records" true rather
+    // than aspirational; every other scenario reseeds in its own created().
+    clearAllTypes(store);
+    store.resetFixtureSeed(STRESS_SEED);
+    // Hold the record objects, not ids: records mutate in place, so these
+    // references stay valid and a write costs no lookup. The lookup would
+    // otherwise be inside the measured loop and would be measuring the index.
+    this.records = store.seed(TYPE, seqShapes(this.wantRecords(), 0));
+    this.cursor = 0;
+    this.progress = 0;
+    this.lastResult = null;
+  }
+
+  writeNext() {
+    const record = this.records[this.cursor];
+    this.cursor = (this.cursor + 1) % this.records.length;
+    record.update({ version: (record.version || 0) + 1 });
+  }
+
+  // ---- probes --------------------------------------------------------------
+
+  /** Wrap flush + (optionally) persistence for the duration of one op. */
+  installProbes(withPersist) {
+    const store = this.ctx.store;
+    const stats = { flushes: 0, dirtyFlushes: 0, persistCalls: 0, persistMs: 0, persistBytes: 0 };
+
+    // `flush` and `_persistNow` live on the PROTOTYPE. Assigning here creates an
+    // own property that shadows it, so restoring has to DELETE the shadow rather
+    // than assign the original back — otherwise every run leaves the store one
+    // own property heavier and `validate()` could never prove the store was
+    // handed back unpatched.
+    const ownFlush = Object.prototype.hasOwnProperty.call(store, 'flush');
+    const originalFlush = store.flush;
+    store.flush = function probedFlush() {
+      // Sample BEFORE delegating: flush() clears both, so afterwards there is no
+      // way to tell a real delivery from a scheduler double-arming on an already
+      // clean store.
+      const dirty = this._pendingKeys.size > 0 || this._persistPending;
+      const out = originalFlush.call(this);
+      stats.flushes += 1;
+      if (dirty) stats.dirtyFlushes += 1;
+      return out;
+    };
+
+    let originalPersistNow = null;
+    let ownPersistNow = false;
+    let originalStorage = null;
+    if (withPersist) {
+      ownPersistNow = Object.prototype.hasOwnProperty.call(store, '_persistNow');
+      originalStorage = store.storage;
+      store.storage = {
+        value: null,
+        getItem() {
+          return this.value;
+        },
+        setItem(_key, value) {
+          this.value = value;
+          stats.persistBytes = value.length;
+        },
+      };
+      originalPersistNow = store._persistNow;
+      store._persistNow = function probedPersist() {
+        const t0 = performance.now();
+        originalPersistNow.call(this);
+        stats.persistMs += performance.now() - t0;
+        stats.persistCalls += 1;
+      };
+    }
+
+    return {
+      stats,
+      restore() {
+        if (ownFlush) store.flush = originalFlush;
+        else delete store.flush;
+        if (originalPersistNow) {
+          if (ownPersistNow) store._persistNow = originalPersistNow;
+          else delete store._persistNow;
+          store.storage = originalStorage;
+        }
+      },
+    };
+  }
+
+  // ---- ops -----------------------------------------------------------------
+
+  async opRun(op) {
+    if (op === 'sustained') return this.runSustained(op, false);
+    if (op === 'sustained-persist') return this.runSustained(op, true);
+    if (op === 'burst') return this.runBurst(op, false);
+    if (op === 'burst-persist') return this.runBurst(op, true);
+    throw new Error(`[stress] write-storm has no op "${op}"`);
+  }
+
+  /**
+   * Hold 600 writes/sec for 10 seconds.
+   *
+   * The rate is computed from ELAPSED TIME, not from a fixed per-frame count.
+   * A fixed count silently becomes a lower rate the moment frames stretch — and
+   * frames stretching under load is precisely what the persist arm causes, so
+   * the op would quietly stop testing the thing it claims to.
+   */
+  async runSustained(op, withPersist) {
+    const probes = this.installProbes(withPersist);
+    const before = perfSnapshot();
+    this.progress = 0;
+    this.wakeups = 0;
+    this.queryMs = 0;
+
+    let writes = 0;
+    let frames = 0;
+    let writeMs = 0;
+    const t0 = performance.now();
+    const deadline = t0 + SUSTAINED_MS;
+
+    try {
+      await new Promise((resolve) => {
+        const step = () => {
+          const now = performance.now();
+          if (now >= deadline || this.isDestroyed) {
+            resolve();
+            return;
+          }
+          frames += 1;
+          const due = Math.round(((now - t0) / 1000) * SUSTAINED_RATE_PER_SEC) - writes;
+          if (due > 0) {
+            const w0 = performance.now();
+            for (let i = 0; i < due; i += 1) this.writeNext();
+            writeMs += performance.now() - w0;
+            writes += due;
+            this.progress = writes;
+          }
+          requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      });
+
+      await afterPaint();
+      await settleFrames(2);
+    } finally {
+      probes.restore();
+    }
+
+    const wallMs = performance.now() - t0;
+    return this.finish(op, {
+      writes,
+      frames,
+      writeMs,
+      wallMs,
+      probes,
+      before,
+      note: `${Math.round((writes / wallMs) * 1000)} writes/sec actual over ${ms1(wallMs)}ms`,
+    });
+  }
+
+  /** 5,000 writes with no frame boundary anywhere inside them. */
+  async runBurst(op, withPersist) {
+    const probes = this.installProbes(withPersist);
+    const before = perfSnapshot();
+    this.progress = 0;
+    this.wakeups = 0;
+    this.queryMs = 0;
+
+    let writeMs = 0;
+    const t0 = performance.now();
+    try {
+      const w0 = performance.now();
+      for (let i = 0; i < BURST_WRITES; i += 1) this.writeNext();
+      writeMs = performance.now() - w0;
+      this.progress = BURST_WRITES;
+
+      // Deliberately NOT store.flush(): forcing delivery here would test this
+      // line rather than the scheduler. Letting the frame arrive is the whole
+      // assertion — 5,000 writes must collapse into one scheduled flush.
+      await afterPaint();
+      await settleFrames(2);
+    } finally {
+      probes.restore();
+    }
+
+    const wallMs = performance.now() - t0;
+    return this.finish(op, {
+      writes: BURST_WRITES,
+      frames: 1,
+      writeMs,
+      wallMs,
+      probes,
+      before,
+      note: `${BURST_WRITES} writes in one synchronous tick`,
+    });
+  }
+
+  finish(op, { writes, frames, writeMs, wallMs, probes, before, note }) {
+    const perf = perfDelta(before);
+    const s = probes.stats;
+    this.lastResult = {
+      op,
+      writes,
+      frames,
+      writeMs,
+      wallMs,
+      flushes: s.flushes,
+      dirtyFlushes: s.dirtyFlushes,
+      persistCalls: s.persistCalls,
+      persistMs: s.persistMs,
+      persistBytes: s.persistBytes,
+      wakeups: this.wakeups,
+      queryMs: this.queryMs,
+      perf,
+    };
+    this.refresh();
+
+    const persistPart = s.persistCalls
+      ? `, persistence ${s.persistCalls} writes / ${ms1(s.persistMs)}ms (${Math.round(s.persistBytes / 1024)}KB per serialize)`
+      : ', persistence off';
+    return {
+      op,
+      ms: wallMs,
+      scriptMs: writeMs,
+      detail:
+        `${note} → ${s.flushes} flushes (${s.dirtyFlushes} dirty), ${this.wakeups} subscriber wakeups, ` +
+        `${ms1(writeMs)}ms in writes, ${ms1(this.queryMs)}ms in findMany${persistPart}`,
+    };
+  }
+
+  async opReset() {
+    this.buildDataset();
+    this.ctx.store.flush();
+    this.refresh();
+    await afterPaint();
+    await settleFrames(1);
+    return { detail: `reset: ${this.records.length} records reseeded` };
+  }
+
+  /** A short burst, not a full sustained run — warming must not cost 10 seconds. */
+  async opWarmup() {
+    const probes = this.installProbes(false);
+    try {
+      for (let i = 0; i < 500; i += 1) this.writeNext();
+      await afterPaint();
+      await settleFrames(2);
+    } finally {
+      probes.restore();
+    }
+    this.progress = 0;
+    this.lastResult = null;
+    this.refresh();
+    await settleFrames(1);
+    return { detail: 'warmup: 500 writes, result discarded' };
+  }
+
+  // ---- verification --------------------------------------------------------
+
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const store = this.ctx.store;
+    const live = store.findMany(TYPE).length;
+    if (live !== this.records.length) {
+      return { ok: false, detail: `store holds ${live} records, the scenario tracks ${this.records.length}` };
+    }
+
+    const shown = root.querySelector('.storm-count')?.textContent?.trim();
+    if (shown !== String(live)) {
+      return { ok: false, detail: `DOM shows "${shown}" records, the store holds ${live}` };
+    }
+
+    // The storm must have actually landed in the records, not just in a counter.
+    const versions = this.records.reduce((sum, r) => sum + (r.version || 0), 0);
+    const result = this.lastResult;
+    if (result && versions < result.writes) {
+      return {
+        ok: false,
+        detail: `${result.writes} writes were issued but the records only carry ${versions} version bumps`,
+      };
+    }
+    // A persistence probe that never restored would leak into every later
+    // scenario, so prove the store is back to its unpatched shape.
+    if (store.storage) {
+      return { ok: false, detail: 'the persistence probe left a storage shim attached to the store' };
+    }
+
+    return {
+      ok: true,
+      detail: result
+        ? `${result.writes} writes → ${result.flushes} flushes, ${result.wakeups} wakeups; ${live} records carry ${versions} bumps`
+        : `${live} records, no run yet`,
+    };
+  }
+
+  opStats() {
+    const result = this.lastResult;
+    return {
+      mountedNodes: viewRoot(this)?.querySelectorAll('*').length ?? 0,
+      records: this.ctx.store.findMany(TYPE).length,
+      views: 1,
+      counters: {
+        stormWrites: result?.writes ?? 0,
+        stormFlushes: result?.flushes ?? 0,
+        stormDirtyFlushes: result?.dirtyFlushes ?? 0,
+        stormWakeups: result?.wakeups ?? 0,
+        stormPersistCalls: result?.persistCalls ?? 0,
+      },
+      perf: result?.perf ?? null,
+    };
+  }
+}
+</script>

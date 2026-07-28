@@ -2,7 +2,7 @@
 // (client-runtime/ssg/serialize.js). Node env: serialize + preload are DOM-free,
 // so no jsdom is needed. Hand-written ViewNode trees stand in for compiler output
 // (same convention as the other suites).
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
@@ -11,7 +11,7 @@ const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children)
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, props = {}, children = []) => new ViewNode(Class, props, children);
 const slot = () => new ViewNode(SLOT_TAG);
-const namedSlot = (name, fallback = []) => new ViewNode(SLOT_TAG, { name }, fallback);
+const namedSlot = (name) => new ViewNode(SLOT_TAG, { name });
 
 describe('SSG serializer (M1)', () => {
 	describe('escaping', () => {
@@ -99,9 +99,15 @@ describe('SSG serializer (M1)', () => {
 		});
 
 		it('true → bare attr; false/null/undefined omit', async () => {
-			expect(await serialize(h('details', { open: true }))).toBe('<details open></details>');
-			const tree = h('div', { id: 'a', 'data-x': false, 'data-y': null, 'data-z': undefined });
-			expect(await serialize(tree)).toBe('<div id="a"></div>');
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			try {
+				expect(await serialize(h('details', { open: true }))).toBe('<details open></details>');
+				const tree = h('div', { id: 'a', 'data-x': false, 'data-y': null, 'data-z': undefined });
+				expect(await serialize(tree)).toBe('<div id="a"></div>');
+				expect(warn).toHaveBeenCalledTimes(1);
+			} finally {
+				warn.mockRestore();
+			}
 		});
 
 		it('skips @event, key, and island directives', async () => {
@@ -128,7 +134,7 @@ describe('SSG serializer (M1)', () => {
 		class Card extends PuzzleView {
 			render() {
 				return h('div', { class: 'card' }, [
-					h('header', {}, [namedSlot('header', [text('Untitled')])]),
+					h('header', {}, [namedSlot('header')]),
 					h('div', { class: 'body' }, [slot()]),
 					h('footer', {}, [namedSlot('footer')]),
 				]);
@@ -147,11 +153,22 @@ describe('SSG serializer (M1)', () => {
 			);
 		});
 
-		it('renders slot fallbacks when a region is unfilled', async () => {
+		it('renders nothing when regions are unfilled', async () => {
 			const tree = comp(Card, {}, []);
 			expect(await serialize(tree)).toBe(
-				'<div class="card"><header>Untitled</header><div class="body"></div><footer></footer></div>'
+				'<div class="card"><header></header><div class="body"></div><footer></footer></div>'
 			);
+		});
+
+		it('serializes marker children as fallback', async () => {
+			class FallbackCard extends PuzzleView {
+				render() {
+					return h('section', {}, [
+						new ViewNode(SLOT_TAG, { name: 'missing' }, [text('fallback')]),
+					]);
+				}
+			}
+			expect(await serialize(comp(FallbackCard))).toBe('<section>fallback</section>');
 		});
 	});
 

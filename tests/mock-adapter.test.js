@@ -275,6 +275,21 @@ describe('latency — the knob that makes skeletons developable', () => {
 		// setTimeout would hang here under fake timers.
 		expect(await store.loadAll('todo')).toHaveLength(1);
 	});
+
+	it('a throwing handler with latency rejects instead of leaving the request pending', async () => {
+		vi.useFakeTimers();
+		const store = storeWith({
+			data: [],
+			latency: 50,
+			handler() {
+				throw new Error('handler blew up');
+			},
+		});
+		const pending = expect(store.request('todo', '/explode')).rejects.toThrow('handler blew up');
+
+		await vi.advanceTimersByTimeAsync(50);
+		await pending;
+	});
 });
 
 describe('failure — the only supported way to make data() reject on purpose', () => {
@@ -302,6 +317,7 @@ describe('failure — the only supported way to make data() reject on purpose', 
 	it('fail: true rejects delete() and keeps the record', async () => {
 		const store = storeWith({ data: [], fail: true });
 		const record = store.createRecord('todo', { id: 't1', text: 'a' });
+		record._synced = true; // a never-synced delete() skips the network entirely
 
 		await expect(record.delete()).rejects.toBeInstanceOf(PuzzleAdapterError);
 		expect(store.findOne('todo', 't1')).toBe(record);

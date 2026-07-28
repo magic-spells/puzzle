@@ -1,0 +1,89 @@
+<puzzle-view>
+  <div class="kl-row flex items-center gap-3 h-9 px-4 border-b border-line {#if selected}bg-accent/15{/if}">
+    <span class="kl-id font-mono text-[11px] tabular-nums text-faint w-20 shrink-0">{ id }</span>
+    <button type="button" class="kl-label flex-1 min-w-0 truncate text-left text-sm text-fg" @click:prevent={ onSelect }>{ label }</button>
+    <span class="kl-value font-mono text-[11px] tabular-nums text-muted w-10 shrink-0 text-right">{ value }</span>
+    <span class="kl-version font-mono text-[11px] tabular-nums text-faint w-10 shrink-0 text-right">v{ version }</span>
+    <button class="kl-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" @click:prevent={ onRemove }><span class="kl-x block leading-none text-base">&times;</span></button>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { rowMetrics } from '../row-metrics.js';
+
+// ---------------------------------------------------------------------------
+// The row, shared by keyed-list and virtual-list.
+//
+// It exists so the A/B is honest: if the windowed list rendered cheaper rows
+// than the full list, the comparison would measure the markup, not the
+// strategy. Both scenarios render THIS component, so the only difference
+// between them is how many of them exist at once.
+//
+// Row shape: 7 elements (root div, id, label button, value, version, remove
+// button, the × span). That matches js-framework-benchmark's row weight, so
+// `mountedNodes` divided by 7 is the row count.
+//
+// PRIMITIVE PROPS, NOT THE RECORD. This is the important design decision, and
+// it is forced by a framework rule: record props carry identity, not liveness.
+// Records mutate IN PLACE, so passing `row={ record }` would hand the patcher
+// the same object reference before and after an update — shallowEqual would
+// report "props unchanged", this view would never re-evaluate, and
+// `update-every-10th` would silently fail to repaint. Passing the fields
+// individually makes the change visible to the patcher.
+//
+// THE ROW REPORTS ITS OWN id BACK TO THE PARENT. `props.select?.(props.id)`
+// rather than `props.select?.()` is what lets a parent choose EITHER handler
+// shape without this component knowing which it got:
+//
+//   inline  parent passes `@select={ selectRow(row) }` — the row is captured in
+//           the closure, the id argument is surplus and simply ignored.
+//   stable  parent passes `@select={ selectRow }` — a bare method reference,
+//           which codegen caches in `this.__h` (D62), so the prop is the SAME
+//           function object on every parent render. The id argument is now the
+//           only thing identifying the row, and it arrives from here.
+//
+// That single extra argument is the entire cost of making the two variants
+// interchangeable, and it is paid identically by both — so keyed-list's `inline`
+// arm and virtual-list are behaviourally and structurally unchanged by it.
+//
+// Why it matters: the callback props participate in the patcher's
+// `shallowEqual(oldProps, newProps)` bailout. A data-capturing site compiles to
+// a fresh arrow per parent render, so equality ALWAYS fails and every mounted
+// row re-runs data() and re-renders even when none of its five primitive props
+// moved. A cached bare reference compares equal, and an unchanged row bails out
+// COMPLETELY — no data(), no render, no vnode allocation. `?handlers=stable` on
+// keyed-list selects the second shape; see KeyedList.pzl.
+//
+// `inline` remains the DEFAULT, and virtual-list uses it unconditionally. That
+// is deliberate: it is the canonical Puzzle list idiom (the same shape
+// examples/todos uses), both list scenarios pay it identically, and it is
+// therefore what makes the keyed-list/virtual-list windowing comparison an
+// honest one. The handler A/B is a SECOND, independent comparison layered on
+// keyed-list — not a correction to the first.
+// ---------------------------------------------------------------------------
+
+export default class ListRow extends PuzzleView {
+  data(params, props) {
+    // Counts child data() runs in PRODUCTION, where the framework's own devperf
+    // counters are compiled out. See ../row-metrics.js.
+    rowMetrics.dataRuns += 1;
+    return {
+      id: props.id,
+      label: props.label,
+      value: props.value,
+      version: props.version,
+      selected: props.selected === true,
+    };
+  }
+
+  events = {
+    onSelect: () => {
+      this.props.select?.(this.props.id);
+    },
+    onRemove: () => {
+      this.props.remove?.(this.props.id);
+    },
+  };
+}
+</script>

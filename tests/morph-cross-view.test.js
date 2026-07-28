@@ -242,6 +242,63 @@ describe('cross-view capture flights (v1.35, D68)', () => {
 		expect(engine.stopCalls).toBe(1);
 	});
 
+	it('snapshot clone preserves safe inline styles and applies every pin declaration', async () => {
+		const routes = [
+			{ path: '/a', name: 'a', view: morphLeaf('a', 'art-1') },
+			{ path: '/b', name: 'b', view: morphLeaf('b', 'art-1') },
+		];
+		const { app, engine } = await mountApp(routes, '/a');
+
+		const aArt = document.querySelector('.a-art');
+		aArt.style.cssText =
+			'background:linear-gradient(135deg,#f0f,#0ff); border-radius:12px; ' +
+			'position:absolute; top:999px; left:888px; right:7px; bottom:6px; ' +
+			'width:1px; height:2px; margin:9px; z-index:1; pointer-events:auto;';
+		expect(aArt.style.cssText.endsWith(';')).toBe(true);
+
+		await app.router.push('/b');
+
+		expect(engine.shows).toHaveLength(1);
+		const { from } = engine.shows[0].opts;
+		expect(from.style.background).toBe('linear-gradient(135deg,#f0f,#0ff)');
+		expect(from.style.borderRadius).toBe('12px');
+		expect(from.style.position).toBe('fixed');
+		expect(from.style.top).toBe('10px');
+		expect(from.style.left).toBe('20px');
+		expect(from.style.right).toBe('');
+		expect(from.style.bottom).toBe('');
+		expect(from.style.width).toBe('100px');
+		expect(from.style.height).toBe('80px');
+		expect(from.style.margin).toBe('0px');
+		expect(from.style.zIndex).toBe('55');
+		expect(from.style.pointerEvents).toBe('none');
+	});
+
+	it('snapshot clone drops the independent transform properties the rect already includes', async () => {
+		// translate/scale/rotate move the element exactly like `transform` does, and
+		// the captured rect is measured WITH them applied. Copying them onto a clone
+		// that is then pinned at that rect applies the same offset twice.
+		const routes = [
+			{ path: '/a', name: 'a', view: morphLeaf('a', 'art-1') },
+			{ path: '/b', name: 'b', view: morphLeaf('b', 'art-1') },
+		];
+		const { app, engine } = await mountApp(routes, '/a');
+
+		const aArt = document.querySelector('.a-art');
+		aArt.style.cssText = 'translate:40px 12px; scale:1.5; rotate:15deg; border-radius:8px;';
+
+		await app.router.push('/b');
+
+		const { from } = engine.shows[0].opts;
+		expect(from.style.translate).toBe('');
+		expect(from.style.scale).toBe('');
+		expect(from.style.rotate).toBe('');
+		// Author-owned presentation still rides along, and the pin still wins.
+		expect(from.style.borderRadius).toBe('8px');
+		expect(from.style.top).toBe('10px');
+		expect(from.style.left).toBe('20px');
+	});
+
 	it('back navigation flies a fresh clone the other direction', async () => {
 		const routes = [
 			{ path: '/a', name: 'a', view: morphLeaf('a', 'art-1') },
@@ -468,6 +525,44 @@ describe('cross-view capture flights (v1.35, D68)', () => {
 			expect(engine.shows).toHaveLength(1);
 			expect(engine.shows[0].opts.from).toBe(pinned);
 			expect(engine.shows[0].opts.to).toBe(document.querySelector('.b-art'));
+		} finally {
+			waapi.uninstall();
+		}
+	});
+
+	it('click-pinned clone drops morph-engine inline residue', async () => {
+		const waapi = installFakeAnimate();
+		try {
+			const routes = [
+				{ path: '/a', name: 'a', view: morphLeaf('a', 'art-1', { animated: true }) },
+				{ path: '/b', name: 'b', view: morphLeaf('b', 'art-1') },
+			];
+			const { app } = await mountApp(routes, '/a');
+
+			const aArt = document.querySelector('.a-art');
+			aArt.style.cssText =
+				'background:red; visibility:hidden; opacity:0; transform:translateX(40px); ' +
+				'transform-origin:10px 20px; display:none; transition:opacity 1s; will-change:transform;';
+			aArt.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+			const nav = app.router.push('/b');
+			await tick();
+
+			const pinned = [...document.body.children].find(
+				(c) => c.style && c.style.position === 'fixed'
+			);
+			expect(pinned).toBeTruthy();
+			expect(pinned.style.background).toBe('red');
+			expect(pinned.style.visibility).toBe('');
+			expect(pinned.style.opacity).toBe('');
+			expect(pinned.style.transform).toBe('');
+			expect(pinned.style.transformOrigin).toBe('');
+			expect(pinned.style.display).toBe('');
+			expect(pinned.style.transition).toBe('');
+			expect(pinned.style.willChange).toBe('');
+
+			waapi.finishAll();
+			await nav;
 		} finally {
 			waapi.uninstall();
 		}

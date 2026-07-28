@@ -1,0 +1,396 @@
+<puzzle-view>
+  <div class="fmt-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="fmt-count tabular-nums text-fg">{ rowCount }</span> rows ·
+        <span class={ armCls }>{ armLabel }</span>
+      </div>
+      <div class="font-mono text-[11px] shrink-0 { resultCls }">{ resultText }</div>
+    </div>
+
+    <div class="px-4 py-2 border-b border-line font-mono text-[11px] text-faint">{ explainText }</div>
+
+    <div class="fmt-list max-h-[380px] overflow-auto font-mono text-[11px]">
+      {#for row in rows}
+        <div class="fmt-row flex gap-4 px-4 py-0.5 border-b border-line/40">
+          <span class="fmt-seq w-12 shrink-0 text-faint tabular-nums">{ tick }</span>
+          {#if formatted}
+            <span class="fmt-date w-32 shrink-0 text-fg">{ row.createdAt | date('short') }</span>
+            <span class="fmt-ago flex-1 text-muted">{ row.createdAt | timeago }</span>
+          {:else}
+            <span class="fmt-date w-32 shrink-0 text-fg">{ row.label }</span>
+            <span class="fmt-ago flex-1 text-muted">{ row.text }</span>
+          {/if}
+        </div>
+      {/for}
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { registerScenario } from '../stress-controller.js';
+import {
+  STRESS_SEED,
+  afterPaint,
+  clearType,
+  intParam,
+  ms1,
+  perfDelta,
+  perfSnapshot,
+  seqShapes,
+  settleFrames,
+  viewRoot,
+} from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// formatters — what does the built-in formatter registry cost across a large
+// re-render, and how much of that is Intl object construction?
+//
+// `client-runtime/formatters/builtins.js` caches its Intl objects: `date()`'s
+// Intl.DateTimeFormat per (locale, options), `timeago()`'s RelativeTimeFormat
+// outright, both built on first use. Intl constructors are among the most
+// expensive objects in the platform (locale resolution, pattern compilation) —
+// before the cache, every single call built a fresh one and the two formatters
+// were ~90% of this re-render. count-intl is the cache's regression pin: a
+// warmed render must construct ZERO.
+//
+// ── Three ops, because one op cannot answer both questions honestly ─────────
+//   rerender      10,000 rows through `| date('short')` and `| timeago`.
+//                 NO instrumentation of any kind. This is the honest cost.
+//   rerender-raw  the identical tree with the identical per-row patch work, but
+//                 the two spans render plain record strings. The CONTROL: the
+//                 difference between the arms is the formatters, with nothing
+//                 measuring itself.
+//   count-intl    the formatted arm again, this time with Intl patched and the
+//                 registry entries wrapped. Its COUNTS are exact; its
+//                 milliseconds carry the probe's own overhead and are reported
+//                 as instrumented, never as the formatter cost.
+//
+// Timing a wrapped formatter would add two performance.now() calls to each of
+// 20,000 invocations — several milliseconds of pure instrument against the thing
+// being measured. That is why the share comes from the A/B and not from the
+// wrapper.
+//
+// The Intl patch lives HERE, in the scenario, on globalThis.Intl. The runtime is
+// not modified: the point is to find out what it currently does, not to change it.
+// ---------------------------------------------------------------------------
+
+const TYPE = 'fmt';
+
+export default class Formatters extends PuzzleView {
+  api = {
+    name: 'formatters',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.rows = [];
+    this.tick = 0;
+    this.formatted = true;
+    this.lastResult = null;
+    this.unregister = null;
+    // Captured before anything can wrap them, so validate() can prove by
+    // identity that every probe this scenario installs was also removed.
+    const all = this.ctx.formatters.getAll();
+    this.pristine = {
+      date: all.date,
+      timeago: all.timeago,
+      DateTimeFormat: Intl.DateTimeFormat,
+      RelativeTimeFormat: Intl.RelativeTimeFormat,
+    };
+    this.buildDataset();
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  /**
+   * No store query: the rows are held as record objects from created(). A
+   * collection subscription would re-render this view on unrelated writes and
+   * put renders the op never asked for inside the measured window.
+   */
+  data() {
+    const result = this.lastResult;
+    return {
+      rows: this.rows,
+      rowCount: this.rows.length,
+      tick: this.tick,
+      formatted: this.formatted,
+      armLabel: this.formatted ? 'date + timeago' : 'raw strings (control)',
+      armCls: this.formatted ? 'text-accent' : 'text-muted',
+      explainText:
+        'each row runs two built-in formatters. builtins.js caches its Intl objects — one DateTimeFormat per ' +
+        'locale+options, one RelativeTimeFormat — so a warmed 10,000-row re-render constructs zero of them. ' +
+        'rerender-raw is the same tree without the formatters; count-intl proves the construction count stays 0.',
+      resultText: result
+        ? `${result.op}: ${ms1(result.scriptMs)}ms script${result.intl ? ` · ${result.intl.dateTimeFormat + result.intl.relativeTimeFormat} Intl constructions` : ''}`
+        : 'no run yet',
+      resultCls: result ? 'text-accent' : 'text-faint',
+    };
+  }
+
+  // ---- dataset -------------------------------------------------------------
+
+  wantRows() {
+    return intParam(this.props?.n, 10000, 1, 100000);
+  }
+
+  buildDataset() {
+    const store = this.ctx.store;
+    clearType(store, TYPE);
+    store.resetFixtureSeed(STRESS_SEED);
+    // The generator derives createdAt from the fixture seed rather than the
+    // clock, so the dates — and therefore `date()`'s output — are identical on
+    // every run. (`timeago()` is relative to now by definition and is not.)
+    this.rows = store.seed(TYPE, seqShapes(this.wantRows(), 0));
+    this.tick = 0;
+    this.lastResult = null;
+  }
+
+  // ---- probes --------------------------------------------------------------
+
+  /** Count Intl constructions without touching the runtime. */
+  installIntlProbe() {
+    const counts = { dateTimeFormat: 0, relativeTimeFormat: 0 };
+    const RealDateTimeFormat = Intl.DateTimeFormat;
+    const RealRelativeTimeFormat = Intl.RelativeTimeFormat;
+
+    // A Proxy rather than a wrapper function: it forwards `prototype`, the
+    // statics (`supportedLocalesOf`) and instanceof unchanged, so nothing that
+    // merely LOOKS at Intl behaves differently while the probe is installed.
+    // Both traps are needed — these constructors are callable without `new`.
+    const spy = (target, key) =>
+      new Proxy(target, {
+        construct(t, args) {
+          counts[key] += 1;
+          return Reflect.construct(t, args);
+        },
+        apply(t, thisArg, args) {
+          counts[key] += 1;
+          return Reflect.apply(t, thisArg, args);
+        },
+      });
+
+    Intl.DateTimeFormat = spy(RealDateTimeFormat, 'dateTimeFormat');
+    Intl.RelativeTimeFormat = spy(RealRelativeTimeFormat, 'relativeTimeFormat');
+
+    return {
+      counts,
+      restore() {
+        Intl.DateTimeFormat = RealDateTimeFormat;
+        Intl.RelativeTimeFormat = RealRelativeTimeFormat;
+      },
+    };
+  }
+
+  /**
+   * Wrap the two registry entries so their calls and self-time are countable.
+   * Compiled render code reads `this.ctx.formatters.getAll()` once per render and
+   * indexes it, so re-registering replaces what every later render calls.
+   */
+  installFormatterProbe() {
+    const registry = this.ctx.formatters;
+    const all = registry.getAll();
+    const originals = { date: all.date, timeago: all.timeago };
+    const stats = { calls: 0, ms: 0 };
+
+    for (const name of ['date', 'timeago']) {
+      const original = originals[name];
+      if (typeof original !== 'function') continue;
+      registry.register(name, (...args) => {
+        const t0 = performance.now();
+        const out = original(...args);
+        stats.ms += performance.now() - t0;
+        stats.calls += 1;
+        return out;
+      });
+    }
+
+    return {
+      stats,
+      restore() {
+        for (const [name, fn] of Object.entries(originals)) {
+          if (typeof fn === 'function') registry.register(name, fn);
+        }
+      },
+    };
+  }
+
+  // ---- ops -----------------------------------------------------------------
+
+  async opRun(op) {
+    if (op === 'rerender') return this.runRender(op, { formatted: true, instrument: false });
+    if (op === 'rerender-raw') return this.runRender(op, { formatted: false, instrument: false });
+    if (op === 'count-intl') return this.runRender(op, { formatted: true, instrument: true });
+    throw new Error(`[stress] formatters has no op "${op}"`);
+  }
+
+  /**
+   * Settle into the requested arm UNTIMED, then time exactly one re-render.
+   *
+   * Switching arms changes the shape of every row, so the first render after a
+   * switch is a full replace. Timing that would compare a remount against a
+   * patch and attribute the whole difference to the formatters.
+   */
+  async runRender(op, { formatted, instrument }) {
+    if (this.formatted !== formatted) {
+      this.formatted = formatted;
+      this.tick += 1;
+      this.refresh();
+      await afterPaint();
+      await settleFrames(2);
+    }
+
+    const intl = instrument ? this.installIntlProbe() : null;
+    const probe = instrument ? this.installFormatterProbe() : null;
+    const before = perfSnapshot();
+
+    let scriptMs = 0;
+    try {
+      // Both arms mutate the same 10,000 `.fmt-seq` text nodes, so the patch
+      // work is identical and cancels in the subtraction; the only difference
+      // left between the arms is what the two other spans cost to BUILD.
+      const t0 = performance.now();
+      this.tick += 1;
+      this.refresh();
+      scriptMs = performance.now() - t0;
+
+      await afterPaint();
+      await settleFrames(1);
+    } finally {
+      probe?.restore();
+      intl?.restore();
+    }
+
+    const paintedMs = scriptMs;
+    const perf = perfDelta(before);
+    this.lastResult = {
+      op,
+      formatted,
+      rows: this.rows.length,
+      scriptMs,
+      intl: intl ? { ...intl.counts } : null,
+      formatterCalls: probe ? probe.stats.calls : null,
+      formatterMs: probe ? probe.stats.ms : null,
+      perf,
+    };
+    this.refresh();
+    await settleFrames(1);
+
+    const intlPart = intl
+      ? `, ${intl.counts.dateTimeFormat} Intl.DateTimeFormat + ${intl.counts.relativeTimeFormat} Intl.RelativeTimeFormat constructed`
+      : '';
+    const probePart = probe
+      ? `, ${probe.stats.calls} formatter calls taking ${ms1(probe.stats.ms)}ms INSTRUMENTED (includes probe overhead)`
+      : '';
+    return {
+      op,
+      ms: paintedMs,
+      scriptMs,
+      detail:
+        `${op}: ${this.rows.length} rows re-rendered ${formatted ? 'through date + timeago' : 'with raw strings'} ` +
+        `in ${ms1(scriptMs)}ms script${intlPart}${probePart}`,
+    };
+  }
+
+  async opReset() {
+    this.formatted = true;
+    this.buildDataset();
+    this.refresh();
+    await afterPaint();
+    await settleFrames(1);
+    return { detail: `reset: ${this.rows.length} rows, formatted arm` };
+  }
+
+  async opWarmup() {
+    await this.runRender('rerender', { formatted: true, instrument: false });
+    this.lastResult = null;
+    this.refresh();
+    await settleFrames(1);
+    return { detail: 'warmup: one formatted re-render, result discarded' };
+  }
+
+  // ---- verification --------------------------------------------------------
+
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const rows = root.querySelectorAll('.fmt-row');
+    if (rows.length !== this.rows.length) {
+      return { ok: false, detail: `DOM has ${rows.length} rows, the scenario holds ${this.rows.length}` };
+    }
+
+    const seq = rows[0]?.querySelector('.fmt-seq')?.textContent?.trim();
+    if (seq !== String(this.tick)) {
+      return { ok: false, detail: `row 0 shows tick "${seq}", the scenario is at ${this.tick}` };
+    }
+
+    // Check the formatter actually ran, against the registry's own output. Only
+    // `date` is checked: `timeago` is relative to Date.now() by construction, so
+    // a validate() microseconds after a render can legitimately disagree with it
+    // — asserting it would produce a flaky failure that means nothing.
+    if (this.formatted) {
+      const dateFn = this.ctx.formatters.get('date');
+      for (const index of [0, Math.floor(rows.length / 2), rows.length - 1]) {
+        const record = this.rows[index];
+        const shown = rows[index]?.querySelector('.fmt-date')?.textContent?.trim();
+        const want = String(dateFn(record.createdAt, 'short'));
+        if (shown !== want) {
+          return { ok: false, detail: `row ${index} renders date "${shown}", the formatter yields "${want}"` };
+        }
+      }
+    }
+
+    // A probe that failed to restore would silently corrupt every later run —
+    // and quietly add its own overhead to the arm that exists to be clean. The
+    // pristine references are captured once at created(), so this is an identity
+    // check rather than a guess about a function's shape.
+    const all = this.ctx.formatters.getAll();
+    if (all.date !== this.pristine.date || all.timeago !== this.pristine.timeago) {
+      return { ok: false, detail: 'a formatter probe was left installed on the registry' };
+    }
+    if (Intl.DateTimeFormat !== this.pristine.DateTimeFormat) {
+      return { ok: false, detail: 'the Intl probe was left installed on globalThis.Intl' };
+    }
+
+    const result = this.lastResult;
+    return {
+      ok: true,
+      detail: result
+        ? `${rows.length} rows, arm "${result.op}", ${ms1(result.scriptMs)}ms script`
+        : `${rows.length} rows; no run yet`,
+    };
+  }
+
+  opStats() {
+    const root = viewRoot(this);
+    const list = root?.querySelector('.fmt-list');
+    const result = this.lastResult;
+    return {
+      mountedNodes: list ? list.querySelectorAll('*').length : 0,
+      records: this.ctx.store.findMany(TYPE).length,
+      views: 1,
+      counters: {
+        fmtRows: this.rows.length,
+        fmtFormatted: this.formatted ? 1 : 0,
+        fmtDateTimeFormats: result?.intl?.dateTimeFormat ?? 0,
+        fmtRelativeTimeFormats: result?.intl?.relativeTimeFormat ?? 0,
+        fmtFormatterCalls: result?.formatterCalls ?? 0,
+      },
+      perf: result?.perf ?? null,
+    };
+  }
+}
+</script>

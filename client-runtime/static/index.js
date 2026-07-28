@@ -28,6 +28,7 @@ import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { mount } from '../views/viewManager.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
+import { preloadTakeoverComponents } from '../ssg/preload.js';
 
 /**
  * Mount a prerendered static page's interactive layer.
@@ -93,15 +94,60 @@ export async function mountStatic({
 
 	const { topVnode, instances } = await assembleChain(entry, ctx, routeSnapshot);
 
+	// A marked static page is replacing content-complete prerendered DOM. Prepare
+	// every nested non-routed component before that swap, and suppress its enter
+	// too — mountComponent auto-chains playIn() onto each one, and that content is
+	// already on screen. An unmarked prerender:false page keeps ordinary
+	// fire-and-forget component mounting AND its ordinary nested enters.
+	const isTakeover = targetEl.hasAttribute('data-puzzle-static');
+	if (isTakeover) {
+		const nested = await preloadTakeoverComponents(topVnode, ctx);
+		for (const instance of nested) instance.skipEnter();
+	}
+
 	// Initial paint must NOT animate — the content is already on screen (same posture
 	// as the SSG takeover: skipEnter every preloaded instance).
 	for (const instance of instances) instance.skipEnter();
 
-	// Clear the prerendered children, then mount the freshly-assembled tree. The markup
-	// re-renders identically from the same data, so the swap is flash-free. A
-	// prerender:false page's target is already empty; the same path handles it.
+	// An unmarked prerender:false page has no fallback DOM to preserve and keeps the
+	// original mount path byte-for-byte.
+	if (!isTakeover) {
+		targetEl.replaceChildren();
+		mount(topVnode, targetEl, null, ctx);
+		return;
+	}
+
+	// Mount in the real, connected container: mounted() hooks may focus or measure,
+	// and the lifecycle contract says they see connected DOM. Keep the exact
+	// prerendered nodes so a render()/mounted() rejection can restore visible
+	// content instead of stranding a blank page.
+	const prerendered = [...targetEl.childNodes];
 	targetEl.replaceChildren();
-	mount(topVnode, targetEl, null, ctx);
+	const root = topVnode.instance;
+	topVnode.component = root;
+	try {
+		await root.mount(targetEl, {
+			props: topVnode.props,
+			children: topVnode.children,
+			preloaded: true,
+		});
+		topVnode.el = root.element;
+	} catch (err) {
+		root.destroy();
+		targetEl.replaceChildren(...prerendered);
+		console.error(
+			'[puzzle] component mount failed — the component was destroyed and the prerendered content restored (static pages have no later patch/remount):',
+			err
+		);
+		return;
+	}
+	// Kept OUTSIDE the mount try: a rejected playIn() must never tear down a
+	// component that mounted successfully (mountComponent's two-arg then() rule).
+	// After the skipEnter above this is a no-op today; the guard is for whatever
+	// changes that.
+	await Promise.resolve(root.playIn()).catch((err) =>
+		console.error('[puzzle] child enter animation failed:', err)
+	);
 }
 
 /**

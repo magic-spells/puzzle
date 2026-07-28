@@ -16,10 +16,24 @@
  * - setData() → re-render only, data() does NOT re-run
  */
 
-import { ViewManager } from './viewManager.js';
+import { ViewManager, plantFailedMountPlaceholder } from './viewManager.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
+import {
+	devperfCanRender,
+	devperfMarkCause,
+	devperfMemo,
+	devperfPrepareData,
+	devperfRenderCancel,
+	devperfRenderEnd,
+	devperfRenderPrepare,
+	devperfRenderScheduled,
+	devperfRenderStart,
+	devperfRenderTreeBuilt,
+	devperfRunData,
+	devperfSlotRender,
+} from '../devperf.js';
 
 // Dev HMR guard (constellation/doc/DOC-SPEC.md §27, D57): a live-view registry feeds the
 // state snapshot/restore. Gated on the __PUZZLE_DEV__ build define (production
@@ -65,6 +79,10 @@ export class PuzzleView {
 	// #completeMount() is then deferred to the first #commit that DOES render, so
 	// mounted() never fires against the comment anchor. Cleared when it fires.
 	#pendingMountHook = false;
+	// ViewManager may request the one-shot enter after mount() resolves through
+	// the anchor-race branch above. Keep that request pending until the landing
+	// commit completes mounted() against the real root.
+	#enterPending = false;
 	#destroyed = false;
 	#updateScheduled = false;
 	#runToken = 0;
@@ -83,6 +101,10 @@ export class PuzzleView {
 	// Animation bookkeeping (constellation/doc/DOC-SPEC.md §12).
 	#playedIn = false; // playIn() runs at most once per mount
 	#currentAnimation = null; // live { finished, cancel, play } handle, for interruption
+	// The router may need to restore a committed view after its out animation
+	// finished under fill:'both'. Keep that Puzzle-owned handle past natural
+	// completion so recovery can cancel only it, never app-owned root animations.
+	#outHandle = null;
 	#leaving = null; // memoised playOut() promise — idempotent teardown
 	// Scroll-triggered enter (v1.40, D73). While a `trigger: 'visible'` enter is
 	// held waiting for the element to scroll into view: #disarmVisible stops the
@@ -127,6 +149,7 @@ export class PuzzleView {
 	 * beats the model; a data() commit beats an earlier setData).
 	 */
 	setData(key, value) {
+		if (this.#destroyed || this.#leaving) return;
 		if (typeof key === 'object' && key !== null) {
 			Object.assign(this.#local, key);
 			Object.assign(this.#data, key);
@@ -200,7 +223,13 @@ export class PuzzleView {
 			hit.deps.length === deps.length &&
 			hit.deps.every((d, i) => Object.is(d, deps[i]))
 		) {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				devperfMemo(this, key, true);
+			}
 			return hit.value;
+		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfMemo(this, key, false);
 		}
 		const value = factory();
 		cache.set(key, { deps, value });
@@ -306,7 +335,7 @@ export class PuzzleView {
 	 *
 	 * A parent's ViewManager also calls this to mount a child component
 	 * (constellation/doc/DOC-APP-ANATOMY.md §4): `children` is the slot content captured at the
-	 * call site (rendered at the child's `<children/>`) and `ref` is the DOM node
+	 * call site (rendered at the child's `<Children/>`) and `ref` is the DOM node
 	 * to insert before. The anchor placeholder reserves the position
 	 * synchronously so an async data() does not strand the parent's insertion
 	 * refs.
@@ -330,7 +359,21 @@ export class PuzzleView {
 		// §5) — just render the resolved model into the reserved position. This keeps
 		// the mount synchronous so the Router's COMMIT stays atomic (D19).
 		if (preloaded) {
-			this.#renderNow();
+			// Only a prerender takeover ever stamps __takeoverTree, so a bundle built
+			// without the takeover path folds this to the bare `#renderNow()` it was
+			// before the feature existed — no hasOwnProperty probe and, more to the
+			// point, no `delete` (which can push the instance into dictionary mode) on
+			// every router-preloaded mount. Probed INLINE: hoisting the define into a
+			// module const stops esbuild propagating it here (see build_test.go).
+			if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+				const takeoverTree = Object.prototype.hasOwnProperty.call(this, '__takeoverTree')
+					? this.__takeoverTree
+					: undefined;
+				delete this.__takeoverTree;
+				this.#renderNow(takeoverTree);
+			} else {
+				this.#renderNow();
+			}
 		} else {
 			this.created();
 			const pending = this.refresh();
@@ -410,7 +453,7 @@ export class PuzzleView {
 	 * content swap alone re-renders without re-running data().
 	 */
 	applyParentUpdate({ props, children }) {
-		if (this.#destroyed) return;
+		if (this.#destroyed || this.#leaving) return;
 		const hadSlots = this.#children.length > 0;
 		if (children !== undefined) {
 			this.#children = children;
@@ -426,10 +469,16 @@ export class PuzzleView {
 			// when destroyed) — hence the optional chain.
 			try {
 				this.refresh({ props })?.catch((err) =>
-					console.error('[puzzle] data() failed during a parent prop update:', err)
+					this.#handleBackgroundRefreshFailure(
+						'[puzzle] data() failed during a parent prop update:',
+						err
+					)
 				);
 			} catch (err) {
-				console.error('[puzzle] data() failed during a parent prop update:', err);
+				this.#handleBackgroundRefreshFailure(
+					'[puzzle] data() failed during a parent prop update:',
+					err
+				);
 			}
 		} else if (this.#mounted && (hadSlots || this.#children.length > 0)) {
 			// The #mounted gate: a slot-only re-render must NEVER run the real
@@ -444,6 +493,9 @@ export class PuzzleView {
 			// already stored above, so the pending first #commit renders them in
 			// anyway. A skeleton child reaches #mounted almost immediately (its mount
 			// branch never awaits), so its slot-only re-renders keep flowing.
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				devperfSlotRender(this);
+			}
 			this.#renderNow();
 		}
 	}
@@ -455,13 +507,31 @@ export class PuzzleView {
 	 * supersedes an in-flight async one (stale results are discarded).
 	 */
 	refresh({ params, props, route } = {}) {
-		if (this.#destroyed) return;
+		if (this.#destroyed || this.#leaving) return;
 		if (params) this.#params = params;
 		if (props) this.#props = props;
 		if (route !== undefined) this.#route = route;
 
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (
+				!devperfPrepareData(
+					this,
+					params || route !== undefined
+						? 'route'
+						: props !== undefined
+							? 'props'
+							: undefined
+				)
+			)
+				return;
+		}
 		const token = ++this.#runToken;
-		const run = () => this.data(this.#params, this.#props);
+		const run = () => {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				return devperfRunData(this, this.#params, this.#props);
+			}
+			return this.data(this.#params, this.#props);
+		};
 		const result = this.ctx.store
 			? this.ctx.store.withTracking(this, run, this.data.constructor.name === 'AsyncFunction')
 			: run();
@@ -474,6 +544,7 @@ export class PuzzleView {
 
 	/** Store subscription callback (Store.flush → subscribed components). */
 	onStoreChange() {
+		if (this.#destroyed || this.#leaving) return;
 		// Fire-and-forget: a data() failure on the store-change path is logged
 		// rather than escaping into Store.flush() (where an uncaught throw would
 		// abort delivery to every later subscriber). A rejecting ASYNC data() comes
@@ -484,12 +555,40 @@ export class PuzzleView {
 		// refresh()'s own return is unchanged: mount()/preload() await it and must
 		// keep seeing rejections.
 		try {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				devperfMarkCause(this, 'store');
+			}
 			this.refresh()?.catch((err) =>
-				console.error('[puzzle] data() failed during a store-change refresh:', err)
+				this.#handleBackgroundRefreshFailure(
+					'[puzzle] data() failed during a store-change refresh:',
+					err
+				)
 			);
 		} catch (err) {
-			console.error('[puzzle] data() failed during a store-change refresh:', err);
+			this.#handleBackgroundRefreshFailure(
+				'[puzzle] data() failed during a store-change refresh:',
+				err
+			);
 		}
+	}
+
+	/**
+	 * Contain a fire-and-forget refresh failure. Normally logging is enough, but
+	 * an anchor-race mount whose superseding first render failed can never reach
+	 * #completeMount(). Recover through the same instance-owned placeholder
+	 * contract mountComponent uses so the next parent patch creates a fresh view.
+	 *
+	 * Router-preloaded views never set #pendingMountHook: preload() resolves before
+	 * their synchronous mount, so Router ownership remains untouched.
+	 */
+	#handleBackgroundRefreshFailure(message, err) {
+		console.error(message, err);
+		if (!this.#pendingMountHook || this.#destroyed) return;
+		this.#pendingMountHook = false;
+		this.#enterPending = false;
+		const placeholder = plantFailedMountPlaceholder(this);
+		this.destroy();
+		if (placeholder) this.__failedPlaceholder = placeholder;
 	}
 
 	/**
@@ -518,6 +617,7 @@ export class PuzzleView {
 		// #currentAnimation.cancel() below (its finished then resolves).
 		this.#disarmObserver();
 		this.#settleEnter();
+		this._cancelOutAnimation();
 		this.#currentAnimation?.cancel();
 		this.#currentAnimation = null;
 		this.ctx.store?.unsubscribe(this);
@@ -607,6 +707,10 @@ export class PuzzleView {
 	 */
 	async playIn() {
 		if (this.#destroyed || this.#playedIn) return;
+		if (this.#pendingMountHook) {
+			this.#enterPending = true;
+			return;
+		}
 		this.#playedIn = true;
 		const spec = this.animations?.in;
 		if (this.#useVisibleTrigger(spec)) {
@@ -618,7 +722,10 @@ export class PuzzleView {
 		// and CSS animations keep working). Enter `to` keyframes should equal the
 		// element's natural styled state, so the handback is invisible.
 		await this.#runAnimation(spec, { release: true });
-		if (this.#destroyed) return; // destroyed mid-enter — skip the "did" hook
+		// Destroyed mid-enter, or a leave preempted it (playOut cancels the enter, which
+		// RESOLVES this await rather than rejecting) — either way the "show" sequence
+		// never completed, so its closing hook must not fire into a teardown or a leave.
+		if (this.#destroyed || this.#leaving) return;
 		this.viewDidShow();
 	}
 
@@ -801,7 +908,9 @@ export class PuzzleView {
 				// #settleEnter() below always runs. No .catch is needed on this chain.
 				handle.finished.then(() => {
 					if (this.#currentAnimation === handle) this.#currentAnimation = null;
-					if (!this.#destroyed) {
+					// Same rule as the mount path: destroyed OR preempted by a leave means
+					// the reveal never completed, so its closing hook is skipped.
+					if (!this.#destroyed && !this.#leaving) {
 						try {
 							this.viewDidShow(); // skipped entirely if destroyed mid-enter
 						} catch (err) {
@@ -862,6 +971,7 @@ export class PuzzleView {
 	 * the ViewManager's auto-chained slot-child playIn() therefore does nothing.
 	 */
 	skipEnter() {
+		this.#enterPending = false;
 		this.#playedIn = true;
 	}
 
@@ -876,11 +986,34 @@ export class PuzzleView {
 	 */
 	playOut() {
 		if (this.#leaving) return this.#leaving;
-		this.#leaving = (async () => {
+		let resolveLeaving;
+		let rejectLeaving;
+		this.#leaving = new Promise((resolve, reject) => {
+			resolveLeaving = resolve;
+			rejectLeaving = reject;
+		});
+		// Leaving views become inert immediately. Store.flush() snapshots its
+		// subscribers, so the method guards cover an already-snapshotted delivery;
+		// unsubscribing here prevents every later one. destroy() repeats this safely.
+		this.ctx.store?.unsubscribe(this);
+		// A new leave replaces any retained, finished out effect from an earlier
+		// run instead of accumulating another fill on the same root.
+		this._cancelOutAnimation();
+		const leavingTask = (async () => {
 			if (this.#destroyed) return;
 			// A held visible-trigger enter (D73) on this element must be unwound before
 			// the out animation runs on the same element — cancel the hold, proceed.
 			this.#abortEnter();
+			// …and #abortEnter only covers a VISIBLE-trigger enter. A mount-trigger enter
+			// still running is a live animation filling this same element (fill: 'both'),
+			// so the out spec would run CONCURRENTLY with it and #currentAnimation would
+			// simply be overwritten — the SPEC §12 one-animator rule. Cancel whatever
+			// still owns the element before the leave starts. That resolves the enter's
+			// finished promise (animate.js normalises WAAPI's cancel-time AbortError), so
+			// the awaiting playIn() resumes; its viewDidShow is suppressed by the #leaving
+			// check there.
+			this.#currentAnimation?.cancel();
+			this.#currentAnimation = null;
 			// A `trigger`/`triggerOffset`/`triggerAnchor` on the OUT spec is meaningless
 			// (leave is never scroll-gated) — warn once and ignore it; the leave path is
 			// unchanged (D73).
@@ -893,11 +1026,26 @@ export class PuzzleView {
 				warnOnceForSpec(out, `animation out.trigger/out.triggerOffset/out.triggerAnchor is ignored (triggers apply to enter animations only)`);
 			}
 			this.viewWillHide();
-			await this.#runAnimation(out);
+			await this.#runAnimation(out, { retainOut: true });
 			if (this.#destroyed) return; // interrupted by destroy() — order preserved by it
 			this.viewDidHide();
 		})();
+		leavingTask.then(resolveLeaving, rejectLeaving);
 		return this.#leaving;
+	}
+
+	/**
+	 * Router-only recovery seam: cancel the retained Puzzle-owned out animation,
+	 * including a naturally finished effect still filling the root. Never
+	 * enumerates Element.getAnimations(), so application-owned root motion is
+	 * untouched. A no-op when this view never created an out animation.
+	 */
+	_cancelOutAnimation() {
+		const handle = this.#outHandle;
+		this.#outHandle = null;
+		if (!handle) return;
+		if (this.#currentAnimation === handle) this.#currentAnimation = null;
+		handle.cancel();
 	}
 
 	/**
@@ -933,12 +1081,13 @@ export class PuzzleView {
 	 * the position is the comment anchor (data still in flight) — the surrounding
 	 * hooks always fire regardless (constellation/doc/DOC-SPEC.md §12 hook order).
 	 */
-	async #runAnimation(spec, { release = false } = {}) {
+	async #runAnimation(spec, { release = false, retainOut = false } = {}) {
 		if (!spec) return;
 		const el = this.element;
 		if (!el || el.nodeType !== 1 /* ELEMENT_NODE */) return;
 		const handle = playAnimation(el, spec, { reducedMotion: prefersReducedMotion(), release });
 		this.#currentAnimation = handle;
+		if (retainOut) this.#outHandle = handle;
 		await handle.finished;
 		if (this.#currentAnimation === handle) this.#currentAnimation = null;
 	}
@@ -999,6 +1148,12 @@ export class PuzzleView {
 		if (this.#pendingMountHook) {
 			this.#pendingMountHook = false;
 			this.#completeMount();
+			if (this.#enterPending) {
+				this.#enterPending = false;
+				Promise.resolve(this.playIn()).catch((err) =>
+					console.error('[puzzle] child enter animation failed:', err)
+				);
+			}
 		}
 	}
 
@@ -1030,8 +1185,21 @@ export class PuzzleView {
 		return (this.skeletonMinDuration ?? 0) - (Date.now() - this.#skeletonShownAt);
 	}
 
-	#renderNow() {
+	#renderNow(preparedTree = undefined) {
 		if (!this.#vm || this.#destroyed) return;
+		if (
+			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
+			!devperfCanRender(this)
+		) {
+			return;
+		}
+		// A render is landing NOW with the current state, so any frame #scheduleRender
+		// armed is already satisfied — clear the flag so its rAF no-ops instead of
+		// repeating this render with byte-identical state (a synchronous refresh() after
+		// a setData used to render twice). Deliberately AFTER both bails: clearing above
+		// them would silently drop a legitimately pending local-state render. A setData
+		// later in this same tick sees the flag false and re-arms normally.
+		this.#updateScheduled = false;
 		const isUpdate = this.#mounted;
 
 		if (isUpdate) this.beforeUpdate();
@@ -1040,8 +1208,48 @@ export class PuzzleView {
 		// renderSkeleton is compiled from <puzzle-skeleton> and attached by
 		// prototype assignment, exactly like render().
 		const showSkeleton = !this.#loaded && typeof this.renderSkeleton === 'function';
-		const tree = showSkeleton ? this.renderSkeleton() : this.render();
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfRenderPrepare(this);
+			// A throwing render()/renderSkeleton()/patch would skip devperfRenderEnd and
+			// strand the prepared mark's scope on devperf's stack — every later render in
+			// the process would then pile onto that abandoned causal chain (and eventually
+			// trip the recursion guard). The wrapper is dev-only: production folds this
+			// branch out and calls the span directly.
+			try {
+				this.#renderSpan(preparedTree, showSkeleton);
+			} catch (error) {
+				devperfRenderCancel(this);
+				throw error;
+			}
+		} else {
+			this.#renderSpan(preparedTree, showSkeleton);
+		}
+		// Timestamp the FIRST actual skeleton render so the hold measures from when
+		// the skeleton became visible, not from mount (v1.20, D52). Set once.
+		if (showSkeleton && this.#skeletonShownAt === 0) this.#skeletonShownAt = Date.now();
+		if (isUpdate) this.afterUpdate();
+	}
+
+	/**
+	 * The instrumented span of one render: build the tree, then patch it in (or
+	 * empty the view's DOM when a hand-written render() returns null). Everything
+	 * between devperfRenderPrepare and devperfRenderEnd lives here so #renderNow can
+	 * close the prepared mark on a throw without duplicating the body.
+	 */
+	#renderSpan(preparedTree, showSkeleton) {
+		const tree =
+			preparedTree !== undefined
+				? preparedTree
+				: showSkeleton
+					? this.renderSkeleton()
+					: this.render();
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfRenderTreeBuilt(this);
+		}
 		if (tree) {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				devperfRenderStart(this);
+			}
 			this.#vm.render(tree);
 		} else if (this.#vm.currentTree) {
 			// A HAND-WRITTEN render() that returned a tree before and returns null now
@@ -1067,15 +1275,17 @@ export class PuzzleView {
 			this.#vm.clear();
 			this.#vm.anchorAt(ref);
 		}
-		// Timestamp the FIRST actual skeleton render so the hold measures from when
-		// the skeleton became visible, not from mount (v1.20, D52). Set once.
-		if (showSkeleton && this.#skeletonShownAt === 0) this.#skeletonShownAt = Date.now();
-		if (isUpdate) this.afterUpdate();
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfRenderEnd(this);
+		}
 	}
 
 	#scheduleRender() {
 		if (!this.#mounted || this.#destroyed || this.#updateScheduled) return;
 		this.#updateScheduled = true;
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfRenderScheduled(this, 'local-state');
+		}
 
 		const schedule =
 			typeof requestAnimationFrame === 'function'

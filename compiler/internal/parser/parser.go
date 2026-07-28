@@ -1,6 +1,10 @@
 package parser
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/magic-spells/puzzle/compiler/internal/jsident"
+)
 
 // parser.go is the recursive-descent parser over the lexer's token stream
 // (constellation/doc/DOC-COMPILER-DESIGN.md §c). It produces the AST in ast.go. Blocks and
@@ -343,7 +347,7 @@ func (p *parser) unclosedErr(ctx openCtx) *ParseError {
 }
 
 // parseElement parses an element, component, or composition marker
-// (<children/>, <Slot/>, or a named <slot name>) starting at the current
+// (<Children>, <Slot>, or <Slot name="x">) starting at the current
 // TokTagOpen.
 func (p *parser) parseElement() (Node, *ParseError) {
 	open := p.cur
@@ -357,14 +361,35 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		return nil, perr
 	}
 
-	// Composition markers (v1.41, D74): each spelling now has exactly one role —
-	// <children/> is the default marker (call-site content), <Slot/> is the same
-	// marker capitalized (the router outlet), and lowercase <slot> is ONLY ever a
-	// named slot (name is required). All three emit the same marker vnode.
-	isChildren := name == "children"
-	isSlotTag := name == "slot"
-	isOutlet := name == "Slot"
-	isComp := isCapitalized(name)
+	// Composition markers are reserved capitalized tags matched before component
+	// resolution. Lowercase spellings remain positioned steering errors (D134).
+	// Paired capitalized forms carry ordinary template children as fallback
+	// content (D141); self-closing forms have no fallback.
+	var slotName string
+	if name == "children" {
+		return nil, errAt(p.file, pos, "the default marker is spelled <Children/> since v1.64 (D134)")
+	}
+	if name == "slot" {
+		for _, a := range attrs {
+			if attrNameOf(a) == "name" {
+				return nil, errAt(p.file, pos, `named slots are spelled <Slot name="…"/> since v1.64 (D134)`)
+			}
+		}
+		return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)")
+	}
+	if name == "Children" || name == "Slot" {
+		if name == "Children" {
+			if perr := childrenMarkerAttrs(attrs, p.file); perr != nil {
+				return nil, perr
+			}
+		} else {
+			var markerErr *ParseError
+			slotName, markerErr = slotMarkerFromAttrs(attrs, pos, p.file)
+			if markerErr != nil {
+				return nil, markerErr
+			}
+		}
+	}
 
 	var children []Node
 	if !selfClose {
@@ -378,43 +403,13 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		}
 	}
 
-	if isChildren {
-		// <children/> (D74): the DEFAULT marker. No attributes (any is a
-		// positioned error; ref gets the D72 render-target message). Fallback
-		// children ARE allowed — rendered when the default bucket is empty (this
-		// un-freezes D53's deferred default-slot fallback). Modeled as an unnamed
-		// *Slot so codegen and the runtime treat it exactly like a bare <Slot/>.
-		if perr := childrenMarkerAttrs(attrs, p.file); perr != nil {
-			return nil, perr
-		}
-		return &Slot{Name: "", Children: children, Pos: pos}, nil
+	if name == "Children" {
+		return &Slot{Children: children, Pos: pos}, nil
 	}
-	if isOutlet {
-		// <Slot/> (D30): the router outlet — the default marker, capitalized,
-		// canonical in routed views/layouts. Bare only: a `name` attr steers to
-		// lowercase <slot name>, and children are rejected (no fallback on the
-		// outlet — an index child route is the sanctioned empty-state; only
-		// <children> takes fallback).
-		if perr := slotOutletAttrs(attrs, p.file); perr != nil {
-			return nil, perr
-		}
-		if len(children) > 0 {
-			return nil, errAt(p.file, pos, "<Slot> cannot have children")
-		}
-		return &Slot{Pos: pos}, nil
-	}
-	if isSlotTag {
-		// Lowercase <slot> (D74): a NAMED slot only — `name` is REQUIRED. A
-		// nameless <slot>/<slot/> is a positioned error naming both replacements.
-		// Children are fallback content (full grammar), rendered when the call
-		// site fills nothing for this name (v1.21, D53).
-		slotName, perr := namedSlotFromAttrs(attrs, pos, p.file)
-		if perr != nil {
-			return nil, perr
-		}
+	if name == "Slot" {
 		return &Slot{Name: slotName, Children: children, Pos: pos}, nil
 	}
-	if isComp {
+	if isCapitalized(name) {
 		return &Component{Name: name, Props: attrs, Children: children, Pos: pos}, nil
 	}
 	return &Element{Tag: name, Attrs: attrs, Children: children, Pos: pos}, nil
@@ -879,8 +874,8 @@ func parseForHeader(rest string, pos Position, file string) (*For, *ParseError) 
 	if perr != nil {
 		return nil, perr
 	}
-	if isReservedLoopIdent(counter) {
-		return nil, reservedLoopIdentError(counter, pos, file)
+	if perr := loopBindingIdentError(counter, pos, file); perr != nil {
+		return nil, perr
 	}
 	if idx := topLevelIndex(rest, "..."); idx >= 0 {
 		from := strings.TrimSpace(rest[:idx])
@@ -901,8 +896,8 @@ func parseForHeader(rest string, pos Position, file string) (*For, *ParseError) 
 	if !isBareIdent(item) {
 		return nil, errAt(file, pos, "{#for} item must be a valid identifier (got %q)", item)
 	}
-	if isReservedLoopIdent(item) {
-		return nil, reservedLoopIdentError(item, pos, file)
+	if perr := loopBindingIdentError(item, pos, file); perr != nil {
+		return nil, perr
 	}
 	if counter != "" && counter == item {
 		return nil, errAt(file, pos, "{#for} loop counter %q duplicates the item name", counter)
@@ -953,12 +948,18 @@ func isBareIdent(s string) bool {
 	return true
 }
 
-func isReservedLoopIdent(s string) bool {
-	return s == "ViewNode" || strings.HasPrefix(s, "__")
-}
-
-func reservedLoopIdentError(name string, pos Position, file string) *ParseError {
-	return errAt(file, pos, "loop variable %q uses a reserved name (identifiers starting with %q and %q are reserved by the compiler)", name, "__", "ViewNode")
+// SLOT_TAG joins ViewNode as a compiler-emitted binding: codegen imports it
+// whenever the template contains a slot, and a loop variable of that name would
+// shadow the outlet marker inside the loop body (the row object silently becomes
+// the tag).
+func loopBindingIdentError(name string, pos Position, file string) *ParseError {
+	if name == "ViewNode" || name == "SLOT_TAG" || strings.HasPrefix(name, "__") {
+		return errAt(file, pos, "loop variable %q uses a reserved name (identifiers starting with %q and the names %q and %q are reserved by the compiler)", name, "__", "ViewNode", "SLOT_TAG")
+	}
+	if jsident.IsReservedBindingIdentifier(name) {
+		return errAt(file, pos, "loop variable %q is not a legal binding identifier in strict-mode JavaScript", name)
+	}
+	return nil
 }
 
 // splitForIn splits "item in collection": item is the leading whitespace-

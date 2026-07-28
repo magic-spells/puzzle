@@ -25,6 +25,20 @@ notes:
       An occluded Chrome window (not just a background tab — visibilityState goes hidden) freezes
       rAF, so a flight parks mid-air with show()'s promise pending and body scroll locked; on
       re-visibility the spring settles and the next enter's stop() recovers.
+  - kind: gotcha
+    text: >-
+      PIN_CLONE_EXCLUDED_STYLES must exclude the INDEPENDENT transform properties
+      translate/scale/rotate, not just 'transform' (added in the pre-release review): the pin rect
+      from getBoundingClientRect already includes them, so copying them onto the fixed-position
+      clone double-applies (verified in real Chromium: translate:70px drifted the clone +70px;
+      scale:2 doubled its size). Two adjacent claims were REFUTED during verification, don't
+      re-fund: logical inset/margin properties (inset-inline-start etc.) cause NO drift without
+      !important — the pin's later physical declarations win the cascade in LTR and RTL — and the
+      'margin' entry in the excluded set never matches anything (CSSStyleDeclaration enumerates
+      longhands only), which is harmless because margin:0 is re-applied after the copy loop. The
+      residual known gap: any author inline style with !important (logical OR physical) still beats
+      the pin's normal-priority declarations.
+    sha: ed27cae
 verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
 ---
 

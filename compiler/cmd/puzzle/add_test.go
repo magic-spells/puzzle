@@ -273,6 +273,66 @@ func TestAddTailwindConfigExistsWithoutTailwindPrintsSnippet(t *testing.T) {
 	}
 }
 
+// TestAddTailwindWritesConfigAtProjectRoot: `add tailwind` resolves the app root
+// by walking up for package.json / puzzle.config.js, exactly like `add piece`.
+// Run from app/, it used to write app/puzzle.config.js — a file the compiler
+// never loads (it reads the ROOT config), so the command reported success and
+// changed nothing about the build.
+func TestAddTailwindWritesConfigAtProjectRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"name":"app"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stylesDir := filepath.Join(root, "app", "styles")
+	if err := os.MkdirAll(stylesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	// Invoked from a SUBDIRECTORY of the project.
+	if err := runAdd(&buf, plainPrinter(), filepath.Join(root, "app"), []string{"tailwind"}, "", false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !fsFileExists(filepath.Join(root, config.ConfigFileName)) {
+		t.Errorf("config was not written at the project root:\n%s", buf.String())
+	}
+	if fsFileExists(filepath.Join(root, "app", config.ConfigFileName)) {
+		t.Error("config was written inside app/ — the compiler never loads that one")
+	}
+	// The entry stylesheet is seeded relative to the same root.
+	if !fsFileExists(filepath.Join(stylesDir, "styles.css")) {
+		t.Errorf("app/styles/styles.css was not created from the walked-up root:\n%s", buf.String())
+	}
+}
+
+// TestAddTailwindExistingRootConfigSeenFromSubdir: the walk-up also means an
+// EXISTING root config is found from a subdirectory, so the command no-ops
+// instead of writing a second, ignored config next to the user.
+func TestAddTailwindExistingRootConfigSeenFromSubdir(t *testing.T) {
+	addRequireNode(t)
+	root := t.TempDir()
+	cfg := "export default { styles: { use: ['tailwindcss'] } };\n"
+	if err := os.WriteFile(filepath.Join(root, config.ConfigFileName), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(root, "app", "views")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	if err := runAdd(&buf, plainPrinter(), sub, []string{"tailwind"}, "", false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(buf.String(), "already") {
+		t.Errorf("expected the root config to be found from a subdir, got:\n%s", buf.String())
+	}
+	if fsFileExists(filepath.Join(sub, config.ConfigFileName)) {
+		t.Error("a second config was written in the subdirectory")
+	}
+}
+
 // TestAddUnknownIntegrationListsPiece confirms the supported set now names piece.
 func TestAddUnknownIntegrationListsPiece(t *testing.T) {
 	var buf bytes.Buffer

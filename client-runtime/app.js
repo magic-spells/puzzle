@@ -358,7 +358,12 @@ export class PuzzleApp {
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) hmrBlob = restoreStoreFromStorage(this);
 
 		// 5. Start routing — registers listeners and runs navigation #0.
-		await this.router.start(el, this.ctx);
+		try {
+			await this.router.start(el, this.ctx);
+		} catch (err) {
+			if (this.#mountEpoch === epoch && this._mounted) this.#teardown();
+			throw err;
+		}
 
 		// The same staleness gate after start()'s initial navigation. unmount() may
 		// have run while it awaited data(): its router.stop() invalidated the nav (it

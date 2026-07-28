@@ -27,8 +27,9 @@ import (
 )
 
 // collectA11yWarnings walks nodes recursively — descending into If/For/Case
-// branches and Component/Slot children — appending one Warning per finding at
-// the offending element's own position. Run it on the freshly parsed AST,
+// branches, Component call-site children, and marker fallbacks — appending one
+// Warning per finding at the offending element's own position. Run it on the
+// freshly parsed AST,
 // BEFORE resolveInlineSVG: a resolved {#svg} element carries never-parsed raw
 // markup (RawInner) that must not be inspected, and pre-resolve those nodes are
 // still InlineSVG leaves the walk skips naturally.

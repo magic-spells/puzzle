@@ -1,6 +1,6 @@
 ---
 name: Puzzle datastore
-status: verified
+status: built
 verified_at: '2026-07-25T05:23:39.381Z'
 connections:
   - DOC-SPEC

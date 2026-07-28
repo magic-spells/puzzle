@@ -14,6 +14,25 @@
  * { valid, errors } without throwing.
  */
 
+/**
+ * Normalize record identity at every index/comparison boundary — never a
+ * record's fields (D112).
+ *
+ * Subscription keys (`type + REC_SEP + id`) and adapter URLs already
+ * string-coerce identity, so the record Map was the only type-sensitive index
+ * in the datastore: a string route param (`findOne('post', '1')`) missed the
+ * record a numeric-id JSON payload created, while the subscription still
+ * fired. update()'s pk-immutability guard compares through the same
+ * normalization, so `update({ id: '1' })` on a record keyed 1 is the no-op it
+ * reads as.
+ *
+ * ONLY numbers convert. null/undefined/objects pass through untouched, which
+ * keeps belongsTo's null-FK short-circuit intact and stops String(null) from
+ * colliding with a real 'null' string id. Record fields keep whatever type
+ * the server sent.
+ */
+export const recordKey = (id) => (typeof id === 'number' ? String(id) : id);
+
 class FieldBuilder {
 	constructor(type) {
 		this.def = { type, validate: [] };
@@ -260,13 +279,44 @@ const POLLUTION_SKIP = new Set(['__proto__', 'constructor', 'prototype']);
 // internals (`_store`/`_type`/`_synced`/`_deleted`).
 const MERGE_SKIP = new Set([...POLLUTION_SKIP, '_store', '_type', '_synced', '_deleted']);
 
-/** Shared body of safeAssign/safeMerge: assign every own key not in `skipSet`. */
-function assignSkipping(target, src, skipSet) {
+/**
+ * The one save-after-removal message. save() raises it at CALL time; the Store's
+ * _saveRecordNow raises the identical error when a save that was QUEUED behind
+ * another write discovers the removal only on reaching the front of the chain.
+ * Callers cannot tell those apart and must not have to, so the string lives here
+ * and the Store imports it. Not re-exported from index.js — internal, not API.
+ */
+export const DELETED_SAVE_MESSAGE = '[puzzle] cannot save a deleted record';
+
+// Per-record local-mutation state used by save-response reconciliation. Weak
+// storage keeps it off the deliberate record shape and releases it with the
+// record. Each update() advances the record revision once and stamps every field
+// in that patch, so a response can merge untouched fields while skipping only
+// fields edited after its request was dispatched. Construction does NOT stamp
+// (see safeAssignTracked), so a record that is never update()d never allocates
+// an entry here at all.
+const MUTATION_REVISIONS = new WeakMap();
+
+/** Shared body of safeAssign/safeMerge: assign every allowed own key. */
+function assignSkipping(target, src, skipSet, allow) {
 	for (const key of Object.keys(src)) {
 		if (skipSet.has(key)) continue;
+		if (allow && !allow(key)) continue;
 		target[key] = src[key];
 	}
 	return target;
+}
+
+/** Stamp one local-assignment revision across the fields accepted from a patch. */
+function recordMutation(target, fields) {
+	if (fields.length === 0) return;
+	let state = MUTATION_REVISIONS.get(target);
+	if (!state) {
+		state = { current: 0, fields: new Map() };
+		MUTATION_REVISIONS.set(target, state);
+	}
+	const revision = ++state.current;
+	for (const field of fields) state.fields.set(field, revision);
 }
 
 /**
@@ -292,6 +342,38 @@ function safeAssign(target, src) {
 }
 
 /**
+ * safeAssign plus the local-mutation stamp — the update() path only.
+ *
+ * Construction deliberately does NOT stamp. A stamp costs a key array, a
+ * `{current, fields: Map}` state object and one Map entry per field, and every
+ * record hydrated from the server pays it for data only save()-response
+ * reconciliation ever reads. It is also redundant: an unstamped record makes
+ * recordMutationRevision() return 0, and safeMerge's filter then tests
+ * `(fields.get(key) ?? 0) <= 0` → `0 <= 0` → true for every field. That is the
+ * right answer — a record with no local edits since dispatch should accept
+ * everything the server returns, which is exactly what stamping every
+ * constructor field at revision 1 and capturing requestRevision 1 also produced.
+ *
+ * The two schemes stay equivalent under later edits because the constructor
+ * stamp shifted EVERY revision by the same constant: a field stamped by update k
+ * compared `k+1 <= j+1` against a request dispatched after j updates, where it
+ * now compares `k <= j`. Same predicate.
+ */
+function safeAssignTracked(target, src) {
+	safeAssign(target, src);
+	recordMutation(
+		target,
+		Object.keys(src).filter((key) => !POLLUTION_SKIP.has(key))
+	);
+	return target;
+}
+
+/** Current local-mutation revision, captured when save() dispatches its body. */
+export function recordMutationRevision(record) {
+	return MUTATION_REVISIONS.get(record)?.current ?? 0;
+}
+
+/**
  * Merge `src`'s own enumerable keys onto a live store RECORD without triggering a
  * prototype setter OR clobbering a framework internal — the safe replacement for
  * `Object.assign(record, serverJSON)` at the store's upsert / save-reconciliation /
@@ -306,9 +388,20 @@ function safeAssign(target, src) {
  * legitimately set `_synced` do so explicitly right after this merge. All other keys
  * keep exact `record[key] = src[key]` assignment semantics; Object.keys preserves
  * enumeration order (identical to Object.assign for ordinary data).
+ *
+ * When `throughRevision` is provided by save reconciliation, a field changed by
+ * update() after that request's dispatch revision is skipped. Other merge sites
+ * omit it and remain server-authoritative exactly as before.
  */
-export function safeMerge(record, src) {
-	return assignSkipping(record, src, MERGE_SKIP);
+export function safeMerge(record, src, throughRevision) {
+	if (throughRevision === undefined) return assignSkipping(record, src, MERGE_SKIP);
+	const state = MUTATION_REVISIONS.get(record);
+	return assignSkipping(
+		record,
+		src,
+		MERGE_SKIP,
+		(key) => (state?.fields.get(key) ?? 0) <= throughRevision
+	);
 }
 
 export class PuzzleModel {
@@ -430,7 +523,7 @@ export class PuzzleModel {
 	 * @returns {{ valid: boolean, errors: Array<{field, rule, message}> }}
 	 */
 	static validate(data = {}, { fields } = {}) {
-		const errors = this._collectErrors(data, fields);
+		const errors = this._collectErrors(this.applyDefaults(data), fields);
 		return { valid: errors.length === 0, errors };
 	}
 
@@ -457,7 +550,7 @@ export class PuzzleModel {
 			const pk = this._store.modelFor(this._type).primaryKey();
 			if (
 				Object.prototype.hasOwnProperty.call(patch, pk) &&
-				patch[pk] !== this[pk]
+				recordKey(patch[pk]) !== recordKey(this[pk])
 			) {
 				throw new Error(
 					`Cannot change primary key "${pk}": primary keys are immutable after creation.`
@@ -475,7 +568,9 @@ export class PuzzleModel {
 		const errors = this.constructor._collectErrors(patch, patched);
 		if (errors.length) throw new PuzzleValidationError(errors);
 
-		safeAssign(this, patch);
+		// Tracked: this is a LOCAL edit, and its revision is what stops an
+		// in-flight save() response from clobbering it (D125).
+		safeAssignTracked(this, patch);
 		this._store?.recordChanged(this);
 		return this;
 	}
@@ -497,7 +592,7 @@ export class PuzzleModel {
 	 */
 	save() {
 		if (this._deleted) {
-			return Promise.reject(new Error('[puzzle] cannot save a deleted record'));
+			return Promise.reject(new Error(DELETED_SAVE_MESSAGE));
 		}
 		if (!this._store) {
 			return Promise.reject(

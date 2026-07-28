@@ -47,6 +47,11 @@ type Options struct {
 	// changes — the module is simply never imported, which is the whole
 	// tree-shake. Unsupported alongside either prerender output mode.
 	Fixtures bool
+
+	// Metafile receives esbuild's JSON metafile when non-nil. It is primarily a
+	// build-test seam for proving an input contributes zero production bytes;
+	// normal CLI builds leave it nil and pay nothing.
+	Metafile *string
 }
 
 // Build compiles the app rooted at root (the directory containing app/app.js)
@@ -141,7 +146,16 @@ func Build(root string, opts Options) error {
 		return err
 	}
 
-	buildOpts := newBundleOptions(absRoot, entry, staging, pl, opts.Development)
+	// Takeover is a HYBRID-only capability for this bundle: only `output:
+	// 'hybrid'` emits a `data-puzzle-ssg` container for the router to adopt. A
+	// plain SPA build (and a --static build, whose app.js is not what boots a
+	// static page — the per-page mountStatic bundles are) can never reach those
+	// branches, so the define folds them — and ssg/preload.js — away.
+	buildOpts := newBundleOptions(absRoot, entry, staging, pl, bundleFlags{
+		Dev:      opts.Development,
+		Takeover: mode == "hybrid",
+	})
+	buildOpts.Metafile = opts.Metafile != nil
 	if opts.Fixtures {
 		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())
 	}
@@ -167,6 +181,9 @@ func Build(root string, opts Options) error {
 	}
 
 	result := api.Build(buildOpts)
+	if opts.Metafile != nil {
+		*opts.Metafile = result.Metafile
+	}
 	if len(result.Errors) > 0 {
 		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
 			Kind:          api.ErrorMessage,
@@ -191,10 +208,10 @@ func Build(root string, opts Options) error {
 	}
 
 	// Static assets: index.html and anything else under the app's public/ dir,
-	// copied into staging. The copied set is only useful to the incremental dev
-	// path (deletion mirroring); the one-shot build starts from an empty staging
-	// tree, so stale outputs simply never make it in.
-	if _, err := copyPublic(absRoot, staging); err != nil {
+	// copied into staging. Keep the copied set so prerender modes can distinguish
+	// public-owned files from generated output before writing the final dist tree.
+	publicFiles, err := copyPublic(absRoot, staging)
+	if err != nil {
 		return fmt.Errorf("copying public assets: %w", err)
 	}
 
@@ -205,11 +222,11 @@ func Build(root string, opts Options) error {
 	// compile failure). mode was resolved up front, before any work.
 	switch mode {
 	case "hybrid":
-		if err := prerenderHybrid(absRoot, staging); err != nil {
+		if err := prerenderHybrid(absRoot, staging, publicFiles); err != nil {
 			return err
 		}
 	case "static":
-		if err := prerenderStaticPages(absRoot, staging, cfg, opts.Development); err != nil {
+		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development); err != nil {
 			return err
 		}
 		if !opts.Development && !cfg.Build.SourceMap {
@@ -325,8 +342,13 @@ func swapOutput(staging, outdir string) error {
 		}
 		return fmt.Errorf("finalizing dist %s: %w", outdir, err)
 	}
+	// The swap has ALREADY succeeded: dist/ is the new build. Deleting the
+	// previous tree is best-effort housekeeping — reporting its failure as a
+	// build error would fail a build whose output is correct and complete (and
+	// the user would still have the fresh dist/ on disk). Warn instead, naming
+	// the leftover directory so it can be removed by hand.
 	if err := os.RemoveAll(old); err != nil {
-		return fmt.Errorf("removing previous dist %s: %w", old, err)
+		fmt.Fprintf(os.Stderr, "warning: could not remove the previous dist %s: %v (the new build is in place; delete it by hand)\n", old, err)
 	}
 	return nil
 }
@@ -424,9 +446,9 @@ func ValidatePublic(root string) error {
 // copyPublic copies the app's static assets into dist and returns the set of
 // dist-relative paths (slash-separated, files only) it wrote this pass. The
 // examples/todos keeps them under app/public/; a flat public/ at the root is
-// also honored. The returned set lets the incremental dev path mirror
-// deletions across rebuilds (WatchBuilder.Rebuild); the one-shot build ignores
-// it (it starts from a freshly-wiped dist). Compiler outputs (app.js,
+// also honored. The returned set lets the incremental dev path mirror deletions
+// across rebuilds (WatchBuilder.Rebuild) and lets prerender builds reject route
+// outputs that would overwrite a copied asset. Compiler outputs (app.js,
 // app.js.map, styles.css) are never produced here, so they never appear in the
 // set — a mirror built from it can never delete a build output.
 func copyPublic(root, outdir string) (map[string]bool, error) {

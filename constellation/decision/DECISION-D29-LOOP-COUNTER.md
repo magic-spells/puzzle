@@ -9,6 +9,17 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
   - DECISION-D28-ANIMATIONS
+notes:
+  - kind: state
+    text: >-
+      SLOT_TAG joined ViewNode in the compiler-reserved loop-binding set (pre-release review,
+      fix/prerelease-review): {#for SLOT_TAG in rows} with a <Slot/> in the body previously compiled
+      without error to `rows.map((SLOT_TAG) => …new ViewNode(SLOT_TAG)…)` — the loop value silently
+      became the outlet tag (verified via pzlc). Both item and counter positions route through
+      loopBindingIdentError, and the error message now names both reserved identifiers alongside the
+      __ prefix rule. If the reserved-name list graduates into SPEC prose, this is the tightening to
+      record.
+    sha: 1c7b19e
 ---
 
 # D29 — Loop counter binding: trailing `, name` on `{#for}` (v1.2)

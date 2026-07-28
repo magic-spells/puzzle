@@ -20,7 +20,7 @@
  * - a component vnode renders inline with NO wrapper element (D20), adopting a
  *   pinned `instance` or constructing + preloading a fresh one;
  * - slot markers are expanded via the shared expandSlots() (viewManager.js), so
- *   named/default slots and fallbacks behave identically;
+ *   named/default slots and unfilled-marker omission behave identically;
  * - string children (an inlined `{#svg}` island seed, v1.14 D46) are emitted
  *   verbatim — they map to innerHTML seeding in the browser;
  * - `<script>`/`<style>` are RAWTEXT: their text is emitted unescaped (a JSON-typed
@@ -37,6 +37,7 @@
 
 import { SLOT_TAG, PLACEHOLDER_TAG } from '../views/ViewNode.js';
 import { expandSlots } from '../views/viewManager.js';
+import { displayValue as stringify } from '../display.js';
 
 // Void elements (HTML spec): self-closing, never carry children.
 const VOID_ELEMENTS = new Set([
@@ -47,11 +48,6 @@ const VOID_ELEMENTS = new Set([
 // Boolean element properties the ViewManager assigns AND reflects as bare attrs
 // (mirrors viewManager.js PROPS, minus `value`, which is handled on its own).
 const BOOLEAN_PROPS = new Set(['checked', 'disabled', 'selected', 'muted']);
-
-/** Coerce a text/attr value to a string the way viewManager.js stringify() does. */
-function stringify(v) {
-	return v == null ? '' : String(v);
-}
 
 /** Escape a text node's content: the three characters that would break HTML text. */
 export function escapeText(s) {
@@ -97,11 +93,16 @@ function serializeAttrs(tag, attrs, { selected = false, controlledSelect = false
 		} else if (BOOLEAN_PROPS.has(name)) {
 			if (value) out += ` ${name}`;
 		} else if (value === false || value == null) {
-			// omitted
+			// Omitted to mirror ViewManager attribute semantics, but an undefined
+			// binding still gets its development diagnostic — the result is
+			// discarded, the call is only there for the warning. The attribute NAME is
+			// the dedup label (display.js keys warned-once by it); without it every
+			// unlabeled undefined collapsed into one '' key and only the first warned.
+			if (value === undefined) stringify(value, name);
 		} else if (value === true) {
 			out += ` ${name}`;
 		} else {
-			out += ` ${name}="${escapeAttr(String(value))}"`;
+			out += ` ${name}="${escapeAttr(stringify(value))}"`;
 		}
 	}
 	if (selected) out += ' selected';
@@ -245,7 +246,10 @@ function rawtextContent(tag, attrs, text) {
 		}
 		return text;
 	}
-	const type = stringify(attrs.type).trim().toLowerCase();
+	// A missing type is the ordinary default JavaScript script kind, not a
+	// missing template value — do not route that internal absence through the
+	// undefined-display diagnostic.
+	const type = (attrs.type == null ? '' : stringify(attrs.type)).trim().toLowerCase();
 	if (type === 'application/json' || type.endsWith('+json')) return escapeScriptJson(text);
 	if (/<\/script/i.test(text)) {
 		throw new Error(

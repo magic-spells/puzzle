@@ -1,0 +1,76 @@
+<puzzle-view>
+  <div class="rc-node" data-rc-level={ level }>
+    <span class="rc-tick hidden">{ probe.tick }</span>
+    <Slot/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { rcMetrics, RC_TICK } from '../rc-metrics.js';
+
+// ---------------------------------------------------------------------------
+// One NESTED ANCESTOR level of the route-churn tree (levels 1…5).
+//
+// Five route nodes in the chain point at five subclasses of this view (see
+// ../rc-routes.js). They differ only in what `level` reports, which is what
+// lets every counter be attributed to a specific depth. Subclassing is safe
+// and deliberate: codegen attaches the compiled template as
+// `RcNode.prototype.render`, so a subclass inherits it untouched — and giving
+// each level its own class also gives each chain position its own vnode TAG,
+// which keeps the keyed component patch unambiguous.
+//
+// ── This view is the thing being measured, so it does as little as possible ──
+//
+// Its rendered output is CONSTANT. `level` never changes for an instance and
+// `probe.tick` is a fixed string, so every render this view performs SHOULD
+// produce zero DOM mutations — except at the divergence level, where the
+// cascade patches a different child into <Slot/>. That is precisely the
+// question: how many times does a reused ancestor render per committed
+// navigation, and how many of those renders changed nothing.
+//
+// A heavier ancestor would answer a different (and less useful) question,
+// because its cost would swamp the structure being counted.
+//
+// ── Two counters, deliberately not the same counter ────────────────────────
+//
+//   dataRuns[level]   incremented at the top of data()
+//   renders[level]    incremented by the `probe.tick` getter, read once per render
+//
+// They must be read as a PAIR. The router refreshes a reused ancestor
+// pre-commit (data() + render) and then pushes the newly assembled chain
+// through it post-commit via applyParentUpdate(), which re-renders WITHOUT
+// re-running data(). A single counter cannot tell those two apart; two
+// counters make the ratio visible.
+//
+// `probe.tick` hangs one level below the object data() returns because
+// PuzzleView.#recompose() SPREADS that object — a top-level getter would fire
+// on every data() run and silently re-count dataRuns. See ../rc-metrics.js.
+// ---------------------------------------------------------------------------
+
+export default class RcNode extends PuzzleView {
+  /**
+   * Chain depth, 1…5. Overridden by the generated per-level subclasses as a
+   * PROTOTYPE getter rather than a class field, so it is readable during
+   * construction — a field initializer would not have run yet when the base
+   * constructor's lifecycle hooks fire.
+   */
+  get level() {
+    return 1;
+  }
+
+  data() {
+    const level = this.level;
+    rcMetrics.dataRuns[level] += 1;
+    return {
+      level,
+      probe: {
+        get tick() {
+          rcMetrics.renders[level] += 1;
+          return RC_TICK;
+        },
+      },
+    };
+  }
+}
+</script>

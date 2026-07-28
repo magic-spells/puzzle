@@ -151,7 +151,10 @@ describe('first-mount failure recovery', () => {
 		await flush(); // let the rejected child-mount microtask settle
 
 		// First mount threw: error logged, no child content rendered, mounted() never fired.
-		expect(err).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(err).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+			expect.any(Error)
+		);
 		expect(el.querySelector('.child')).toBe(null);
 		expect(mountedInstances).toHaveLength(0);
 
@@ -169,6 +172,56 @@ describe('first-mount failure recovery', () => {
 		mountedInstances[0].setData({});
 		await flush();
 		expect(el.querySelector('.child').textContent).toBe('ok');
+	});
+
+	it('a nested component whose mounted() throws leaves a placeholder and remounts fresh on the next parent patch', async () => {
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		let shouldThrow = true;
+		const instances = [];
+
+		class Child extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				instances.push(this);
+			}
+			mounted() {
+				if (shouldThrow) throw new Error('mounted boom');
+			}
+			render() {
+				return h('span', { class: 'child' }, [text('ok')]);
+			}
+		}
+
+		class Host extends PuzzleView {
+			render() {
+				return h('div', { id: 'host' }, [comp(Child, { n: this.getData()?.n ?? 0 })]);
+			}
+		}
+
+		const el = document.createElement('div');
+		document.body.appendChild(el);
+		const host = await new Host().mount(el);
+		await flush();
+
+		expect(err).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+			expect.any(Error)
+		);
+		const placeholder = el.querySelector('#host').childNodes[0];
+		expect(placeholder.nodeType).toBe(8 /* COMMENT_NODE */);
+		expect(placeholder.nodeValue).toBe('puzzle');
+		expect(instances).toHaveLength(1);
+		expect(instances[0].isDestroyed).toBe(true);
+
+		shouldThrow = false;
+		host.setData({ n: 1 });
+		await flush();
+
+		expect(instances).toHaveLength(2);
+		expect(instances[1]).not.toBe(instances[0]);
+		expect(instances[1].isDestroyed).toBe(false);
+		expect(el.querySelector('.child').textContent).toBe('ok');
+		expect(el.innerHTML).not.toContain('<!--puzzle-->');
 	});
 
 	it('a failed-mount child that is removed before recovery leaves no stray placeholder', async () => {

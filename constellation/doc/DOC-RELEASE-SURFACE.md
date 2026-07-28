@@ -59,8 +59,10 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - One `<puzzle-view>` template; optional `<script>` and `<style>`; optional
   `<puzzle-skeleton min-duration="…">`.
-- `<script>` is real JS. `lang="ts"` enables esbuild transpilation only; the
-  build does not type-check `.pzl` bodies.
+- `<script>` is real JS. `lang="ts"` enables esbuild transpilation only; neither
+  the Puzzle build, scaffolded `tsc --noEmit`, nor editors type-check `.pzl`
+  `<script>` bodies. The scaffolded TypeScript config checks standalone
+  `.ts`/`.js` files and declarations.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and formatter chains; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.
@@ -69,8 +71,8 @@ second specification. Decision cards hold rationale and git holds chronology.
 - DOM events support bare/call handlers, `prevent`, `stop`, `once`, `outside`
   (document-capture outside-dismiss, D86), and keyboard filters. Component
   event attributes compile to callback props.
-- Composition: `<children/>` default content with fallback, named
-  `<slot name="…">`, `<Slot/>` router outlets, and default-slot forwarding
+- Composition: `<Children/>` default content, named `<Slot name="…"/>`,
+  `<Slot/>` router outlets, unfilled-marker omission, and default-slot forwarding
   through component invocations.
 - `key` overrides list auto-keying; `ref="name"` binds `this.refs`; `island`
   makes element children browser-owned after mount; `flip` FLIP-animates keyed

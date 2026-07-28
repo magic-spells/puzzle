@@ -4,9 +4,11 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
+import { installFakeAnimate } from './helpers/fake-waapi.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
+const comp = (Class, attrs = {}, children = []) => new ViewNode(Class, attrs, children);
 
 class Todo extends PuzzleModel {
 	static schema = {
@@ -27,6 +29,18 @@ const container = () => {
 };
 
 const ctxWith = (store) => ({ store, router: null, formatters: null });
+
+/**
+ * Wait past the animation frame #scheduleRender armed. The view's rAF callback was
+ * registered first, so ours runs after it in the same frame batch; the trailing
+ * setTimeout drains anything it queued.
+ */
+const afterFrame = () =>
+	new Promise((resolve) => {
+		const done = () => setTimeout(resolve, 0);
+		if (typeof requestAnimationFrame === 'function') requestAnimationFrame(done);
+		else setTimeout(done, 0);
+	});
 
 describe('PuzzleView — lifecycle', () => {
 	it('runs created → data → render → mounted, in order', async () => {
@@ -155,6 +169,105 @@ describe('PuzzleView — lifecycle', () => {
 		expect(mountedEl.textContent).toBe('fresh');
 	});
 
+	it('a nested superseded async mount enters only after mounted(), on the real root', async () => {
+		const waapi = installFakeAnimate();
+		const deferred = () => {
+			let resolve;
+			const promise = new Promise((r) => {
+				resolve = r;
+			});
+			return { promise, resolve };
+		};
+		const gates = { one: deferred(), two: deferred() };
+		const order = [];
+		const mounted = vi.fn((el) => order.push(['mounted', el]));
+		const willShow = vi.fn((el) => order.push(['viewWillShow', el]));
+		const didShow = vi.fn((el) => order.push(['viewDidShow', el]));
+		const instances = [];
+
+		class Child extends PuzzleView {
+			animations = {
+				in: {
+					from: { opacity: 0 },
+					to: { opacity: 1 },
+					duration: 100,
+				},
+			};
+			constructor(...args) {
+				super(...args);
+				instances.push(this);
+			}
+			async data(params, props) {
+				const value = await gates[props.which].promise;
+				return { value };
+			}
+			mounted() {
+				mounted(this.element);
+			}
+			viewWillShow() {
+				willShow(this.element);
+			}
+			viewDidShow() {
+				didShow(this.element);
+			}
+			render() {
+				return h('span', { class: 'async-child' }, [text(this.getData().value)]);
+			}
+		}
+		class Host extends PuzzleView {
+			created() {
+				this.setData('which', 'one');
+			}
+			render() {
+				return h('section', {}, [comp(Child, { which: this.getData().which })]);
+			}
+		}
+
+		try {
+			const el = container();
+			const host = await new Host().mount(el);
+			host.setData('which', 'two');
+			host.flushUpdates();
+
+			gates.one.resolve('stale');
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+			expect(order).toEqual([]);
+			expect(waapi.animations).toHaveLength(0);
+
+			gates.two.resolve('fresh');
+			await Promise.resolve();
+			await Promise.resolve();
+			await Promise.resolve();
+
+			const root = el.querySelector('.async-child');
+			expect(root.textContent).toBe('fresh');
+			expect(order).toEqual([
+				['mounted', root],
+				['viewWillShow', root],
+			]);
+			expect(mounted).toHaveBeenCalledTimes(1);
+			expect(willShow).toHaveBeenCalledTimes(1);
+			expect(didShow).not.toHaveBeenCalled();
+			expect(waapi.animations).toHaveLength(1);
+			expect(waapi.animations[0].target).toBe(root);
+			expect(instances).toHaveLength(1);
+
+			waapi.finishAll();
+			await Promise.resolve();
+			await Promise.resolve();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			expect(order).toEqual([
+				['mounted', root],
+				['viewWillShow', root],
+				['viewDidShow', root],
+			]);
+		} finally {
+			waapi.uninstall();
+		}
+	});
+
 	it('destroy() during async data() suppresses mounted() but still fires destroyed()', async () => {
 		const mounted = vi.fn();
 		const destroyed = vi.fn();
@@ -213,6 +326,55 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 		v.flushUpdates();
 		expect(el.textContent).toBe('count: 3');
 		expect(hooks).toEqual(['before', 'after']); // one update cycle
+	});
+
+	// #scheduleRender arms a rAF and sets #updateScheduled; only flushUpdates cleared
+	// it. A synchronous refresh() in the same tick renders immediately, so the still
+	// pending rAF fired a THIRD render with byte-identical state. Clearing the flag
+	// wherever a render actually lands makes any render satisfy the pending one.
+	it('a synchronous refresh() satisfies the render setData scheduled (no stale third pass)', async () => {
+		const renders = [];
+		class V extends PuzzleView {
+			data() { return { n: this.getData().n ?? 0 }; }
+			render() {
+				renders.push(this.getData().n);
+				return h('span', {}, [text(`n: ${this.getData().n}`)]);
+			}
+		}
+		const v = new V();
+		const el = container();
+		await v.mount(el);
+		expect(renders).toEqual([0]);
+
+		v.setData('n', 1);
+		expect(renders).toEqual([0]); // scheduled for the frame, not rendered yet
+		v.refresh(); // sync data() → commits and renders right now
+		expect(renders).toEqual([0, 1]);
+
+		await afterFrame();
+		expect(renders).toEqual([0, 1]); // the stale rAF must not re-render
+		expect(el.textContent).toBe('n: 1');
+	});
+
+	it('a setData issued after that synchronous refresh still re-arms the frame', async () => {
+		const renders = [];
+		class V extends PuzzleView {
+			data() { return { n: this.getData().n ?? 0 }; }
+			render() {
+				renders.push(this.getData().n);
+				return h('span', {}, [text(`n: ${this.getData().n}`)]);
+			}
+		}
+		const v = new V();
+		const el = container();
+		await v.mount(el);
+
+		v.setData('n', 1);
+		v.refresh();
+		v.setData('n', 2); // same tick, after the sync render
+		await afterFrame();
+		expect(renders).toEqual([0, 1, 2]);
+		expect(el.textContent).toBe('n: 2');
 	});
 
 	it('a throwing update never wedges the scheduler', async () => {

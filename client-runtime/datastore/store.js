@@ -17,25 +17,25 @@
  * optional (injectable) persistence.
  */
 
-import { PuzzleModel, PuzzleValidationError, safeMerge } from '../model.js';
+import {
+	DELETED_SAVE_MESSAGE,
+	PuzzleModel,
+	PuzzleValidationError,
+	recordKey,
+	recordMutationRevision,
+	safeMerge,
+} from '../model.js';
 import { devtoolsFlush } from '../devtools.js';
+import {
+	devperfStoreFlushEnd,
+	devperfStoreFlushNotifications,
+	devperfStoreFlushStart,
+	devperfStoreNotify,
+	devperfTrackingDeferred,
+} from '../devperf.js';
 
 const REC_SEP = ' '; // never appears in a type name
-const noop = () => {}; // swallows a chained save()'s rejection (§22, D50)
-
-/**
- * Normalize the RECORD-MAP key only — never a record's fields (D112).
- *
- * Subscription keys (`type + REC_SEP + id`) and adapter URLs already string-coerce
- * identity, so the record Map was the only type-sensitive index in the datastore: a
- * string route param (`findOne('post', '1')`) missed the record a numeric-id JSON
- * payload created, while the subscription still fired.
- *
- * ONLY numbers convert. null/undefined/objects pass through untouched, which keeps
- * belongsTo's null-FK short-circuit intact and stops String(null) from colliding
- * with a real 'null' string id. Record fields keep whatever type the server sent.
- */
-const recordKey = (id) => (typeof id === 'number' ? String(id) : id);
+const noop = () => {}; // swallows a chained write's rejection (§22, D50)
 
 /**
  * Thrown by the write verbs — saveRecord/deleteRecord/request — when the server
@@ -54,10 +54,11 @@ export class PuzzleAdapterError extends Error {
 	}
 }
 
+
 /**
  * Read a fetch Response body once: parsed JSON when it parses, raw text when it
- * doesn't, undefined when empty/unreadable (covers 204). Used by every write verb
- * for both the merge path and PuzzleAdapterError's `.body`.
+ * doesn't, undefined when empty/unreadable (covers 204). Used by adapter reads
+ * and every write verb for both the merge path and PuzzleAdapterError's `.body`.
  */
 async function readBody(res) {
 	let text;
@@ -110,7 +111,7 @@ export class Store {
 		this._flushScheduled = false;
 		this._flushTimer = null; // armed fallback timer (D63); cleared by flush()
 		this._persistPending = false; // dirty flag: storage write is batched into flush()
-		this._saveChains = new WeakMap(); // record → in-flight save() promise (§22, D50)
+		this._writeChains = new WeakMap(); // record → in-flight write promise, save AND delete (§22, D50)
 
 		this._installRelationships();
 
@@ -342,6 +343,13 @@ export class Store {
 	 * Subscribers are notified as data lands (batched, as usual).
 	 */
 	async loadAll(type) {
+		const pk = this.modelFor(type).primaryKey();
+		const revisionsAtDispatch = new Map(
+			Array.from(this._typeMap(type).values(), (record) => [
+				recordKey(record[pk]),
+				recordMutationRevision(record),
+			])
+		);
 		const list = await this._fetchAdapter(type, '');
 		if (!Array.isArray(list)) {
 			throw new Error(`[puzzle] loadAll('${type}') expected a JSON array from the server`);
@@ -357,14 +365,23 @@ export class Store {
 					`[puzzle] loadAll('${type}') expected an array of JSON objects from the server`
 				);
 			}
+			if (data[pk] == null) {
+				throw new Error(
+					`[puzzle] loadAll('${type}') requires primary key "${pk}" on every record`
+				);
+			}
 		}
-		const records = list.map((data) => this._upsert(type, data));
+		const records = list.map((data) =>
+			this._upsert(type, data, revisionsAtDispatch.get(recordKey(data[pk])))
+		);
 		this._persist();
 		return records;
 	}
 
 	/** GET apiURL + adapter.endpoint + '/' + id and upsert the single record. */
 	async loadOne(type, id) {
+		const existing = this._typeMap(type).get(recordKey(id));
+		const revisionAtDispatch = existing ? recordMutationRevision(existing) : undefined;
 		const data = await this._fetchAdapter(type, '/' + encodeURIComponent(id));
 		// Response-shape guard (mirrors loadAll): a null/array/non-object body would
 		// slip through _upsert → _instantiate as a bogus record (200 null → an empty
@@ -372,7 +389,13 @@ export class Store {
 		if (data == null || typeof data !== 'object' || Array.isArray(data)) {
 			throw new Error(`[puzzle] loadOne('${type}', id) expected a JSON object from the server`);
 		}
-		const record = this._upsert(type, data);
+		const pk = this.modelFor(type).primaryKey();
+		if (data[pk] == null) {
+			throw new Error(
+				`[puzzle] loadOne('${type}', id) requires primary key "${pk}" on the record`
+			);
+		}
+		const record = this._upsert(type, data, revisionAtDispatch);
 		this._persist();
 		return record;
 	}
@@ -422,15 +445,21 @@ export class Store {
 		if (!res.ok) {
 			throw new Error(`[puzzle] load '${type}' failed: ${res.status} ${res.statusText}`);
 		}
-		return res.json();
+		return readBody(res);
 	}
 
-	/** Create or update-in-place by primary key; notifies either way. Public callers use upsert(). */
-	_upsert(type, data) {
+	/**
+	 * Create or update-in-place by primary key; notifies either way.
+	 * @param {string} type
+	 * @param {object} data
+	 * @param {number} [throughRevision] D138 load-response revision boundary.
+	 * Public callers use upsert(), which deliberately leaves this undefined.
+	 */
+	_upsert(type, data, throughRevision) {
 		const pk = this.modelFor(type).primaryKey();
 		const existing = data?.[pk] != null ? this._typeMap(type).get(recordKey(data[pk])) : null;
 		if (existing) {
-			safeMerge(existing, data);
+			safeMerge(existing, data, throughRevision);
 			existing._synced = true; // came from the server (constellation/doc/DOC-SPEC.md §22, D50)
 			this._notify(type, data[pk]);
 			return existing;
@@ -533,20 +562,41 @@ export class Store {
 	 * re-keys the index atomically; an UPDATE-save with a differing pk warns and
 	 * drops it from the merge. On success the record is marked synced.
 	 *
-	 * Concurrent save()s on ONE record serialize through a per-record in-flight
-	 * chain: a second save waits for the first to settle, then re-evaluates
-	 * wasSynced — so a double-click POSTs once then PUTs, never double-creates. The
-	 * prior link's rejection is swallowed FOR CHAINING ONLY; its own caller still
-	 * observes it (they hold that promise).
+	 * Concurrent writes on ONE record serialize through its write chain (see
+	 * _chain): a second save waits for the first to settle, then re-evaluates
+	 * wasSynced — so a double-click POSTs once then PUTs, never double-creates.
+	 * A save that finds its record already removed when its turn comes sends
+	 * nothing and rejects with the same message record.save() gives at call time —
+	 * no write may create or revive a row for a record the app has discarded.
 	 */
 	saveRecord(record) {
-		const prev = this._saveChains.get(record);
-		const run = (prev ? prev.then(noop, noop) : Promise.resolve()).then(() =>
-			this._saveRecordNow(record)
-		);
-		this._saveChains.set(record, run);
+		return this._chain(record, () => this._saveRecordNow(record));
+	}
+
+	/**
+	 * Serialize one record's server writes — save AND delete — behind a single
+	 * per-record chain. Both verbs mutate the SAME server row and the same map
+	 * entry, so ordering them separately is not enough: an unchained delete
+	 * racing a first save either orphans the row the POST creates or builds its
+	 * URL from a client-side pk the POST is about to replace, and then removes
+	 * nothing anywhere while resolving successfully.
+	 *
+	 * Each link reads the record's state when it REACHES the front of the queue,
+	 * never when it was enqueued — that is what makes a queued delete see the
+	 * adopted primary key and a queued save see a removal that happened while it
+	 * waited.
+	 *
+	 * The prior link's rejection is swallowed FOR CHAINING ONLY; its own caller
+	 * still observes it (they hold that promise). This holds ACROSS verbs: a
+	 * queued delete does not inherit a failed save's rejection, and vice versa.
+	 * Every caller observes exactly its own outcome.
+	 */
+	_chain(record, fn) {
+		const prev = this._writeChains.get(record);
+		const run = (prev ? prev.then(noop, noop) : Promise.resolve()).then(fn);
+		this._writeChains.set(record, run);
 		const cleanup = () => {
-			if (this._saveChains.get(record) === run) this._saveChains.delete(record);
+			if (this._writeChains.get(record) === run) this._writeChains.delete(record);
 		};
 		run.then(cleanup, cleanup);
 		return run;
@@ -554,6 +604,16 @@ export class Store {
 
 	/** The actual save (network + merge); serialized per record by saveRecord(). */
 	async _saveRecordNow(record) {
+		// Removal check at RUN time, not call time: model.js's save() already
+		// rejects a record that was gone when save() was called, but a queued save
+		// can outlive its record — a delete or destroy() may land while it waits.
+		// removeRecord is the only path that evicts a record from the type map (the
+		// pk-adoption re-key below re-inserts synchronously), and it always sets
+		// _deleted, so this flag alone is the whole guard: no map lookup, and no
+		// chance of false-positiving a normal first save, which IS indexed under its
+		// client-side key before the POST goes out.
+		if (record._deleted) throw new Error(DELETED_SAVE_MESSAGE);
+
 		const type = record._type;
 		const Model = this.modelFor(type);
 		const endpoint = this._requireEndpoint(type);
@@ -572,12 +632,17 @@ export class Store {
 			? this.apiURL + endpoint + '/' + encodeURIComponent(record[pk])
 			: this.apiURL + endpoint;
 		const method = wasSynced ? 'PUT' : 'POST';
+		// Capture the local mutation revision beside the exact body sent. A later
+		// update() advances the edited fields beyond this boundary, so the response
+		// can still contribute untouched server fields without overwriting them.
+		const requestRevision = recordMutationRevision(record);
+		const requestBody = JSON.stringify(record.toJSON());
 		const res = await this._fetch(
 			url,
 			{
 				method,
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(record.toJSON()),
+				body: requestBody,
 			},
 			{ type, method, url }
 		);
@@ -622,7 +687,11 @@ export class Store {
 				}
 				const oldId = record[pk];
 				map.delete(recordKey(oldId));
-				safeMerge(record, body); // includes the new pk
+				// The server-assigned pk is the sanctioned identity change and must
+				// always land. Reconcile every other field against requestRevision.
+				const { [pk]: adoptedPk, ...rest } = body;
+				safeMerge(record, { [pk]: adoptedPk });
+				safeMerge(record, rest, requestRevision);
 				map.set(recordKey(record[pk]), record);
 				record._synced = true;
 				this._notify(type, oldId); // old key: subscribers of the gone id
@@ -636,17 +705,21 @@ export class Store {
 					`[puzzle] save() response for '${type}' carried a different primary key ${JSON.stringify(responsePk)} — ignoring; primary keys are immutable after creation`
 				);
 				const { [pk]: _ignored, ...rest } = body;
-				safeMerge(record, rest);
+				safeMerge(record, rest, requestRevision);
 			} else if (responsePk == null && pk in body) {
 				// An explicit-null (or undefined) pk present in the body would blank the
 				// record's local pk while the type map still keys it under the old id —
 				// index desync + a _notify(type, null). Drop it; keep the local pk (normal,
 				// no warn — an absent/missing pk in the body is expected).
 				const { [pk]: _ignored, ...rest } = body;
-				safeMerge(record, rest);
+				safeMerge(record, rest, requestRevision);
 			} else {
-				safeMerge(record, body);
+				safeMerge(record, body, requestRevision);
 			}
+			// _synced is server-provenance, not a clean/dirty bit: this request
+			// succeeded even when a newer local field was intentionally preserved.
+			// Keeping it true also makes a queued follow-up PUT instead of POSTing a
+			// duplicate after a successful first save.
 			record._synced = true;
 			this._notify(type, record[pk]);
 			this._persist();
@@ -664,12 +737,44 @@ export class Store {
 	 * record.delete(). DELETE endpoint/:id, then remove locally via the normal
 	 * notify path on 2xx OR 404 (already gone — idempotent). Any other status
 	 * rejects with PuzzleAdapterError and the record stays.
+	 *
+	 * Serialized behind the record's write chain (see _chain), so a delete fired
+	 * during a save waits for it: the URL below is then built from the primary key
+	 * the save reconciled, which is the row the server actually created.
+	 *
+	 * Two cases resolve without a request: a record already removed when the turn
+	 * comes (idempotent), and a NEVER-SYNCED record, which the server has no row
+	 * for — that one is removed locally, so a `delete()` on a freshly created
+	 * record is a local removal, not a doomed DELETE that can reject.
 	 */
-	async deleteRecord(record) {
+	deleteRecord(record) {
+		return this._chain(record, () => this._deleteRecordNow(record));
+	}
+
+	/** The actual delete (network + removal); serialized per record by deleteRecord(). */
+	async _deleteRecordNow(record) {
+		// a. already gone when this link reaches the front — a second delete, or a
+		// destroy()/delete() that landed while this one waited. Resolve idempotently
+		// with the detached record, exactly as model.js's call-time check does, and
+		// send nothing: the row is either already deleted or never existed.
+		if (record._deleted || !record._store) return record;
+
 		const type = record._type;
 		const Model = this.modelFor(type);
+		// Endpoint FIRST, before the never-synced short-circuit below: delete() is
+		// the server verb, so a model with no adapter reports that the same way it
+		// always has rather than quietly behaving like destroy().
 		const endpoint = this._requireEndpoint(type);
 		const pk = Model.primaryKey();
+
+		// b. never round-tripped with the server — nothing exists to DELETE. Remove
+		// locally (notifying as usual) and skip the network: the request could only
+		// 404, or worse 4xx on an id the server has never issued, and a rejection
+		// there would strand a record the app has already discarded.
+		if (!record._synced) {
+			this.removeRecord(record);
+			return record;
+		}
 
 		// Capture the key the record is indexed under NOW, before the await — the
 		// post-response identity check reconciles against exactly this key.
@@ -765,6 +870,14 @@ export class Store {
 		// then retry. Only async evals serialize — a sync eval is safe inline.
 		if (this._asyncTrackingChain && expectsAsync) {
 			const retry = () => this.withTracking(subscriber, fn, true);
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				return devperfTrackingDeferred(
+					subscriber,
+					this._asyncTrackingChain,
+					retry,
+					'known-async'
+				);
+			}
 			return this._asyncTrackingChain.then(retry, retry);
 		}
 
@@ -819,6 +932,14 @@ export class Store {
 				result.then(noop, noop); // observe the abandoned promise — no unhandled rejection
 				finalize(false);
 				const retry = () => this.withTracking(subscriber, fn, true);
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+					return devperfTrackingDeferred(
+						subscriber,
+						this._asyncTrackingChain,
+						retry,
+						'sync-shaped'
+					);
+				}
 				return this._asyncTrackingChain.then(retry, retry);
 			}
 
@@ -898,6 +1019,9 @@ export class Store {
 	_notify(type, id) {
 		this._pendingKeys.add(type);
 		this._pendingKeys.add(type + REC_SEP + id);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfStoreNotify(this, this._tracking);
+		}
 		this._scheduleFlush();
 	}
 
@@ -938,6 +1062,9 @@ export class Store {
 	 * a caller that needs storage current immediately calls flush().
 	 */
 	flush() {
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfStoreFlushStart(this);
+		}
 		this._flushScheduled = false;
 		// Clear any armed D63 fallback timer — whichever scheduler (rAF or the
 		// timer) reached flush() first cancels the other, so delivery is once-only.
@@ -956,6 +1083,9 @@ export class Store {
 		if (this._persistPending) {
 			this._persistPending = false;
 			this._persistNow();
+		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfStoreFlushEnd(this);
 		}
 	}
 
@@ -1011,6 +1141,7 @@ export class Store {
 		// (never hoisted into a shared const) so production DCE folds the whole
 		// statement and the devtools import tree-shakes away — see the note in app.js.
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			devperfStoreFlushNotifications(this, keys, notified);
 			devtoolsFlush(this, keys, notified);
 		}
 	}

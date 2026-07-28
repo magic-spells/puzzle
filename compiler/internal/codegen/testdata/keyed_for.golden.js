@@ -7,11 +7,10 @@ export default class KeyedFor extends PuzzleView {
   }
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 KeyedFor.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'list' }, [
     new ViewNode('ul', { class: 'items' },
@@ -20,7 +19,7 @@ KeyedFor.prototype.render = function () {
           key: ViewNode.keyOf(item),
           class: 'item',
         }, [
-          new ViewNode('text', { value: String(item.name) }),
+          new ViewNode('text', { value: __s(item.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name' : 0) }),
         ])
       )
     ),

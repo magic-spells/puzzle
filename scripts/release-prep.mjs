@@ -7,8 +7,11 @@
 //   0. Clear stale platform pins — an aborted pack can leave the pack-time
 //      optionalDependencies in the tracked manifest; restore before anything
 //      reads it.
-//   1. Version consistency — package.json vs compiler/internal/version/version.go
-//      and each npm/puzzle-*/package.json (all must agree).
+//   1. Version consistency — package.json vs compiler/internal/version/version.go,
+//      client-runtime/devtools.js FRAMEWORK_VERSION and each
+//      npm/puzzle-*/package.json (all must agree), plus the `@magic-spells/puzzle`
+//      dependency ranges no version field carries: the two go:embed-ed scaffold
+//      templates and examples/*/package.json.
 //   2. Pack allowlist — delegate to scripts/verify-pack.mjs (the tarball must ship
 //      only the runtime + declarations + bin shim).
 //   3. Cross-compile the four per-platform CLI binaries into npm/<pkg>/bin/puzzle,
@@ -25,7 +28,7 @@
 // Node builtins only. Any failure exits non-zero with a clear message.
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, copyFileSync, chmodSync, statSync } from 'node:fs';
+import { readFileSync, copyFileSync, chmodSync, statSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -118,6 +121,67 @@ for (const { pkg } of MATRIX) {
 		fail(`npm/${pkg}/package.json version is "${manifest.version}", expected "${version}"`);
 	}
 	console.log(`  OK  npm/${pkg}/package.json version = ${manifest.version}`);
+}
+
+// The `@magic-spells/puzzle` dependency RANGES no version field carries. The two
+// scaffold manifests are go:embed-ed into the CLI binary, so a stale range ships
+// a broken `puzzle init`: caret ranges do not cross a 0.x minor, so "^0.3.1"
+// installs 0.3.x into an app scaffolded by a 0.4.0 binary. It cannot be fixed by
+// republishing the JS — the four platform binaries have to be rebuilt. Same
+// class of drift as FRAMEWORK_VERSION above, so it gets the same assert.
+const SCAFFOLD_TEMPLATES = [
+	'compiler/internal/scaffold/templates/default/package.json',
+	'compiler/internal/scaffold/templates/todos/package.json',
+];
+
+// A range "resolves to" the release when its base version IS the release:
+// "0.4.0", "^0.4.0", "~0.4.0" and "=0.4.0" all install what is being published;
+// "^0.3.1" does not. Anything else (a tag, a URL, a compound range) is not the
+// release convention and is reported so a human looks at it.
+function puzzleRangeBase(range) {
+	return typeof range === 'string' ? range.trim().replace(/^[\^~=v]+/, '') : '';
+}
+
+function puzzleDepRange(relPath) {
+	const manifest = readJSON(relPath);
+	return (manifest.dependencies ?? {})['@magic-spells/puzzle'];
+}
+
+for (const rel of SCAFFOLD_TEMPLATES) {
+	const range = puzzleDepRange(rel);
+	if (!range) {
+		fail(`${rel} has no "@magic-spells/puzzle" entry in "dependencies" — a scaffolded app would not install the framework`);
+	}
+	if (puzzleRangeBase(range) !== version) {
+		fail(
+			`${rel} depends on @magic-spells/puzzle@"${range}", expected "^${version}"\n` +
+				'  This manifest is go:embed-ed into the CLI binary: a stale range ships a broken\n' +
+				'  `puzzle init` that no JS-only republish can fix (the binaries must be rebuilt).'
+		);
+	}
+	console.log(`  OK  ${rel} → @magic-spells/puzzle@${range}`);
+}
+
+// The examples install against what is actually published, so sweep them too.
+// They ship in no tarball, but a stale range is the same bump that was missed.
+{
+	const exampleManifests = readdirSync(join(repoRoot, 'examples'), { withFileTypes: true })
+		.filter(
+			(e) => e.isDirectory() && existsSync(join(repoRoot, 'examples', e.name, 'package.json'))
+		)
+		.map((e) => `examples/${e.name}/package.json`)
+		.sort();
+	const stale = exampleManifests
+		.map((rel) => [rel, puzzleDepRange(rel)])
+		.filter(([, range]) => range !== undefined && puzzleRangeBase(range) !== version)
+		.map(([rel, range]) => `    ${rel} → "${range}"`);
+	if (stale.length > 0) {
+		fail(
+			`${stale.length} example manifest(s) do not depend on @magic-spells/puzzle@^${version}:\n` +
+				stale.join('\n')
+		);
+	}
+	console.log(`  OK  ${exampleManifests.length} examples/*/package.json → @magic-spells/puzzle@^${version}`);
 }
 
 // --- 2. Pack allowlist check -----------------------------------------------

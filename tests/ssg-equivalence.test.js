@@ -23,7 +23,7 @@ const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children)
 const text = (value) => new ViewNode('text', { value });
 const comp = (Class, props = {}, children = []) => new ViewNode(Class, props, children);
 const slot = () => new ViewNode(SLOT_TAG);
-const namedSlot = (name, fallback = []) => new ViewNode(SLOT_TAG, { name }, fallback);
+const namedSlot = (name) => new ViewNode(SLOT_TAG, { name });
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 /** Round-trip a serialized string through jsdom to canonical browser markup. */
@@ -90,17 +90,17 @@ describe('SSG serializer ⟷ ViewManager equivalence (M1)', () => {
 		await assertEquivalent(h('section', { 'data-v-hash7': true, class: 'scoped' }, [text('x')]));
 	});
 
-	it('named + default slots with fallbacks', async () => {
+	it('named + default slots with an unfilled region', async () => {
 		class Card extends PuzzleView {
 			render() {
 				return h('div', { class: 'card' }, [
-					h('header', {}, [namedSlot('header', [text('Untitled')])]),
+					h('header', {}, [namedSlot('header')]),
 					h('div', { class: 'body' }, [slot()]),
 					h('footer', {}, [namedSlot('footer')]),
 				]);
 			}
 		}
-		// one region filled, one falling back
+		// one region filled, one omitted
 		await assertEquivalent(
 			h('main', {}, [
 				comp(Card, {}, [h('h2', { slot: 'header' }, [text('Title')]), h('p', {}, [text('body')])]),

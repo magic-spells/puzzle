@@ -24,7 +24,7 @@
 // the next inline element kept) and pure inter-element indentation
 // ("</h2>\n      <form>") drops entirely. Consecutive Text/Interpolation
 // siblings coalesce into ONE text vnode whose value is the `+`-concatenation of
-// quoted literals and `String(expr)` parts.
+// quoted literals and shared display-coercion calls.
 package codegen
 
 import (
@@ -124,7 +124,8 @@ type Warning struct {
 // app/layouts/** compile as views; everything else is a reusable component.
 func ModeForPath(path string) EmissionMode {
 	p := strings.ReplaceAll(path, "\\", "/")
-	if strings.Contains(p, "app/views/") || strings.Contains(p, "app/layouts/") {
+	if strings.HasPrefix(p, "app/views/") || strings.Contains(p, "/app/views/") ||
+		strings.HasPrefix(p, "app/layouts/") || strings.Contains(p, "/app/layouts/") {
 		return ModeView
 	}
 	return ModeComponent
@@ -255,9 +256,30 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		}
 	}
 
-	importLine := "import { ViewNode } from '@magic-spells/puzzle';"
+	imports := []string{"ViewNode"}
 	if hasSlot(root.Children) || (skel != nil && hasSlot(skel.Children)) {
-		importLine = "import { ViewNode, SLOT_TAG } from '@magic-spells/puzzle';"
+		imports = append(imports, "SLOT_TAG")
+	}
+	if c.usesDisplayValue {
+		imports = append(imports, "displayValue as __s")
+	}
+	importLine := "import { " + strings.Join(imports, ", ") + " } from '@magic-spells/puzzle';"
+
+	// Reserved module-scope names: everything the import line above binds locally,
+	// plus one `__svg_N` per unique {#svg} asset in dedup mode. A <script> that
+	// binds one of these at module scope is a duplicate declaration in the emitted
+	// module, so it is a positioned compile error here rather than an esbuild error
+	// against the injected line (see checkReservedScriptBindings). The list is
+	// built from what THIS file emits — nothing is reserved unconditionally.
+	emitted := make([]string, 0, len(imports)+len(c.svgOrder))
+	for _, spec := range imports {
+		emitted = append(emitted, importLocalName(spec))
+	}
+	for _, src := range c.svgOrder {
+		emitted = append(emitted, c.svgIdent[src])
+	}
+	if err := checkReservedScriptBindings(sec.Scripts, emitted, opts.Filename, sec.ScriptsPos); err != nil {
+		return "", err
 	}
 
 	var b strings.Builder
@@ -277,7 +299,13 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	b.WriteString(className)
 	b.WriteString(".prototype.render = function () {\n")
 	b.WriteString("  const __d = this.getData();\n")
-	b.WriteString("  const __f = this.ctx.formatters.getAll();\n\n")
+	// The formatter registry is read only by a formatter chain, so the binding is
+	// emitted only when one was compiled (usesFormatters, set by applyFormatters).
+	// rootExpr and skelExpr are both fully built above, so the flag is final here.
+	if c.usesFormatters {
+		b.WriteString("  const __f = this.ctx.formatters.getAll();\n")
+	}
+	b.WriteString("\n")
 	b.WriteString("  return ")
 	b.WriteString(rootExpr)
 	b.WriteString(";\n};\n")
@@ -296,7 +324,10 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		b.WriteString(className)
 		b.WriteString(".prototype.renderSkeleton = function () {\n")
 		b.WriteString("  const __d = this.getData();\n")
-		b.WriteString("  const __f = this.ctx.formatters.getAll();\n\n")
+		if c.usesFormatters {
+			b.WriteString("  const __f = this.ctx.formatters.getAll();\n")
+		}
+		b.WriteString("\n")
 		b.WriteString("  return ")
 		b.WriteString(skelExpr)
 		b.WriteString(";\n};\n")
@@ -341,6 +372,20 @@ type compiler struct {
 	// numbering is deterministic — recompiling an unchanged file is byte-stable.
 	// Non-cacheable sites consume no index and emit byte-identically to v1.28.
 	handlerSites int
+
+	// Set when an emitted text or quoted-attribute interpolation calls the
+	// package-root display helper. Static-only modules and modules whose dynamic
+	// values remain raw vnode attrs do not pay for an unused import.
+	usesDisplayValue bool
+
+	// Set when an emitted interpolation carries a non-empty formatter chain, which
+	// is the only thing that reads __f. It gates the `const __f =
+	// this.ctx.formatters.getAll()` line in BOTH render() and renderSkeleton() —
+	// module-wide, so a formatter in either body emits the line in both. A third
+	// tracker of the same signal is internal/plugin/scan.go collectFormatterCalls
+	// (the built-in tree-shaking allow-list); the two are kept in sync by
+	// plugin_test.go's built-in sync tests.
+	usesFormatters bool
 
 	// SVG-dedup emission state (v1.14 D46 amendment). svgDedup selects the
 	// import-a-shared-module strategy over inline; svgOrder/svgIdent accumulate the
@@ -533,23 +578,20 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 	case *parser.Component:
 		return c.emitElement(n.Name, n.Props, n.Children, ind, ind, true, scope)
 	case *parser.Slot:
-		// Bare default marker (<children/>/<Slot/>, D74; formerly bare <slot/>):
-		// emitted byte-for-byte as before so name-free templates (golden #1
-		// included) are unchanged.
+		// Empty default markers keep the minimal one-argument emission.
 		if n.Name == "" && len(n.Children) == 0 {
 			return "new ViewNode(SLOT_TAG)", nil
 		}
-		// Default marker WITH fallback (<children>…</children>, v1.41/D74): the
-		// runtime renders the fallback when the default bucket is empty. Emit
-		// `new ViewNode(SLOT_TAG, {}, [fallback])` via the element machinery with
-		// an EMPTY attrs list. MUST precede the named branch below — a Name=="" +
-		// children slot would otherwise mis-emit as `{ name: "" }`.
+		// A default marker with fallback emits `new ViewNode(SLOT_TAG, {},
+		// [fallback])` through the ordinary child-emission path (D141).
 		if n.Name == "" {
 			return c.emitElement("SLOT_TAG", nil, n.Children, ind, ind, false, scope)
 		}
-		// Named marker (v1.21, D53): `new ViewNode(SLOT_TAG, { name }, [fallback])`
-		// — same emission style as an element, with the name attr and the fallback
-		// children the ViewManager renders when the call site fills nothing.
+		// Named markers use the same path so their third argument carries fallback
+		// children. An empty paired body stays byte-equivalent to self-closing.
+		if len(n.Children) == 0 {
+			return "new ViewNode(SLOT_TAG, { name: " + jsString(n.Name) + " })", nil
+		}
 		nameAttr := []parser.Attr{&parser.StaticAttr{Name: "name", Value: n.Name}}
 		return c.emitElement("SLOT_TAG", nameAttr, n.Children, ind, ind, false, scope)
 	case *parser.If:
@@ -838,8 +880,12 @@ func (c *compiler) emitCase(n *parser.Case, ind int, scope map[string]bool) (str
 
 // emitFor compiles a {#for}. Named form → `<coll>.map((item) => <body>)` with
 // `key: ViewNode.keyOf(item)` prepended to the body's root element (pk-aware
-// auto-key, D58). Range form → `Array.from(…, (_, __i) => <body>)` keyed by
-// index. An explicit `key` attr on the body root suppresses the prepend (forBody).
+// auto-key, D58). Range form → `Array.from(…, (_, __i) => <body>)` keyed by the
+// generated VALUE (`<from> + __i`), never by __i: the range bounds are data, so
+// sliding the window (`5...7` → `6...8`) must not re-hand keys 0,1,2 to different
+// numbers and let the reconciler patch stale rows in place (D58 — range keys are
+// the generated numbers, unique by construction).
+// An explicit `key` attr on the body root suppresses the prepend (forBody).
 // An optional trailing counter binds the 0-based index (item form) or the
 // current number (range form): the item form adds the second .map parameter; the
 // range form maps the generated values (`… (_, __i) => <from> + __i).map((n) =>`)
@@ -861,7 +907,12 @@ func (c *compiler) emitFor(f *parser.For, ind int, scope map[string]bool) (strin
 			return gen + " " + from + " + __i).map((" + f.Counter + ") =>\n" +
 				sp(ind+2) + body + "\n" + sp(ind) + ")", nil
 		}
-		body, err := c.forBody(f, scopeAdd(scope, "__i"), "__i", ind+2)
+		// Counterless range: key by the generated VALUE, not the 0-based __i. The
+		// key expression is the RAW from-bound source — forBody hands it to the
+		// attribute emitter, which runs resolveExpr on it exactly once (resolving a
+		// second time would produce `__d.__d.x`), so it lands as the same
+		// `(<from>) + __i` the counter form emits as its value.
+		body, err := c.forBody(f, scopeAdd(scope, "__i"), "("+f.RangeFrom+") + __i", ind+2)
 		if err != nil {
 			return "", err
 		}
@@ -1123,9 +1174,9 @@ func (c *compiler) emitMixed(parts []parser.Part, scope map[string]bool) string 
 		case *parser.StaticPart:
 			b.WriteString(tplEscape(pp.Text))
 		case *parser.InterpPart:
-			expr := applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
+			expr := c.applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
 			b.WriteString("${")
-			b.WriteString(expr)
+			b.WriteString(c.displayValue(expr, pp.Interp.Expr))
 			b.WriteString("}")
 		case *parser.InlineIfPart:
 			cond := resolveExpr(pp.Cond, scope)
@@ -1156,8 +1207,8 @@ func (c *compiler) branchToStr(parts []parser.Part, scope map[string]bool) strin
 		case *parser.StaticPart:
 			segs = append(segs, jsString(pp.Text))
 		case *parser.InterpPart:
-			expr := applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
-			segs = append(segs, "String("+expr+")")
+			expr := c.applyFormatters(resolveExpr(pp.Interp.Expr, scope), pp.Interp.Formatters, scope)
+			segs = append(segs, c.displayValue(expr, pp.Interp.Expr))
 		case *parser.InlineIfPart:
 			cond := resolveExpr(pp.Cond, scope)
 			thenS := c.branchToStr(pp.Then, scope)
@@ -1231,8 +1282,8 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 			if startsWithObjectLiteral(t.Expr) {
 				return "", false, c.cgErr(t.Pos, objectLiteralMsg)
 			}
-			expr := applyFormatters(resolveExpr(t.Expr, scope), t.Formatters, scope)
-			segs = append(segs, seg{js: "String(" + expr + ")", static: false})
+			expr := c.applyFormatters(resolveExpr(t.Expr, scope), t.Formatters, scope)
+			segs = append(segs, seg{js: c.displayValue(expr, t.Expr), static: false})
 		}
 	}
 	if len(segs) == 0 {
@@ -1248,6 +1299,16 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 	return strings.Join(parts, " + "), true, nil
 }
 
+// displayValue emits the one shared display-coercion call. The raw expression
+// name reaches development builds for an actionable undefined warning, while
+// the bundle-time define folds the argument to 0 in production and lets esbuild
+// remove the name completely.
+func (c *compiler) displayValue(expr, source string) string {
+	c.usesDisplayValue = true
+	label := jsString(strings.TrimSpace(source))
+	return "__s(" + expr + ", typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? " + label + " : 0)"
+}
+
 // applyFormatters nests a formatter chain as calls into the raw formatter map:
 // `{ x | a | b(c) }` → `(__f["b"] || __f.__missing("b"))((__f["a"] || __f.__missing("a"))(x), c)`.
 // Access is BRACKETED with a JSON-quoted name, uniformly for every formatter —
@@ -1261,7 +1322,15 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 // a pass-through formatter, so a typo'd formatter renders the raw value instead
 // of crashing the view. The name is passed as a JS string literal so the runtime
 // error can identify it. See DOC-SPEC §6.
-func applyFormatters(base string, fmts []parser.FormatterCall, scope map[string]bool) string {
+//
+// An empty chain returns base untouched and records nothing: c.usesFormatters
+// gates the `const __f` line, so only a real formatter call pays for the
+// registry read.
+func (c *compiler) applyFormatters(base string, fmts []parser.FormatterCall, scope map[string]bool) string {
+	if len(fmts) == 0 {
+		return base
+	}
+	c.usesFormatters = true
 	out := base
 	for _, fc := range fmts {
 		name := strconv.Quote(fc.Name)
@@ -1332,8 +1401,8 @@ func trailingWSHasNewline(s string) bool {
 	return false
 }
 
-// hasSlot reports whether any composition marker (<children/>/<Slot/>/<slot
-// name>) appears in the tree (→ SLOT_TAG import). All spellings are *parser.Slot.
+// hasSlot reports whether any composition marker (<Children/> or <Slot/>) appears
+// in the tree (→ SLOT_TAG import). Both reserved tags parse as *parser.Slot.
 func hasSlot(nodes []parser.Node) bool {
 	for _, n := range nodes {
 		switch t := n.(type) {

@@ -54,7 +54,7 @@ islands, and deterministic teardown.
 
 Compiled conditionals preserve sibling positions with invisible placeholders.
 Children passed into a component execute in the parent scope; the child decides
-where they appear with `<children/>` or named `<slot name>` markers.
+where they appear with `<Children/>` or named `<Slot name="…"/>` markers.
 
 ## Data
 

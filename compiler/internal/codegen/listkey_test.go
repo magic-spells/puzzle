@@ -83,7 +83,7 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 	if strings.Count(got, "key:") != 1 {
 		t.Errorf("explicit mixed key must not double the key property:\n%s", got)
 	}
-	if !strings.Contains(got, "key: `row-${item.id}`") {
+	if !strings.Contains(got, "key: `row-${__s(item.id,") {
 		t.Errorf("author's mixed key must stand as a template literal:\n%s", got)
 	}
 }
@@ -129,7 +129,13 @@ export default class T extends PuzzleView { data() { return { count: 3 }; } }
 	}
 }
 
-func TestRangeFormKeyUnchanged(t *testing.T) {
+// TestRangeFormKeysByValue: the counterless range form keys by the GENERATED
+// NUMBER (`<from> + __i`), the same identity the counter form uses — never by
+// the 0-based __i. Keying by __i reuses 0,1,2 across a moved window, so sliding
+// `5...7` to `6...8` would let the reconciler patch each row in place and carry
+// stale per-row state onto a different number (D58: range keys are the generated
+// numbers, unique by construction).
+func TestRangeFormKeysByValue(t *testing.T) {
 	got := compileSrc(t, `<puzzle-view>
   {#for 1...count}<span class="dot"></span>{/for}
 </puzzle-view>
@@ -139,10 +145,43 @@ import { PuzzleView } from '@magic-spells/puzzle';
 export default class T extends PuzzleView { data() { return { count: 3 }; } }
 </script>
 `)
-	if !strings.Contains(got, "key: __i") {
-		t.Errorf("range form without explicit key must keep its number key:\n%s", got)
+	if !strings.Contains(got, "key: (1) + __i") {
+		t.Errorf("counterless range must key by the generated value, not the index:\n%s", got)
+	}
+	if strings.Contains(got, "key: __i") {
+		t.Errorf("counterless range must not key by the bare loop index:\n%s", got)
 	}
 	if strings.Contains(got, "ViewNode.keyOf") {
 		t.Errorf("range form must not call keyOf:\n%s", got)
+	}
+}
+
+// TestRangeFormValueKeyResolvesFromBoundOnce: a data-driven from-bound is
+// resolved EXACTLY once on its way into the key. The key expression is handed to
+// the attribute emitter as raw source, and that emitter runs resolveExpr itself
+// — pre-resolving it here would emit `__d.__d.start`. Also pins that a composite
+// bound stays parenthesized, so `start + 1 ... end` keys by `(start + 1) + __i`
+// and not the mis-associated `start + 1 + __i` arithmetic of an unparenthesized
+// splice.
+func TestRangeFormValueKeyResolvesFromBoundOnce(t *testing.T) {
+	got := compileSrc(t, `<puzzle-view>
+  {#for start + 1...end}<span class="dot"></span>{/for}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class T extends PuzzleView { data() { return { start: 4, end: 9 }; } }
+</script>
+`)
+	if !strings.Contains(got, "key: (__d.start + 1) + __i") {
+		t.Errorf("range key must resolve the from-bound once and parenthesize it:\n%s", got)
+	}
+	if strings.Contains(got, "__d.__d") {
+		t.Errorf("range key double-resolved the from-bound:\n%s", got)
+	}
+	// The row VALUE the counter form would bind and the row KEY must be the same
+	// expression — a counterless range is the counter form minus the binding.
+	if strings.Count(got, "(__d.start + 1) + __i") != 1 {
+		t.Errorf("counterless range must not also emit a .map() value pass:\n%s", got)
 	}
 }

@@ -27,6 +27,15 @@ notes:
       green; every respelled example .pzl compile-checked via pzlc (12/12). Runtime/SSG/router
       zero-diff as designed. Implementation by two Opus subagents against this card's contract;
       reviewed + verified by the session orchestrator.
+  - kind: state
+    text: >-
+      Superseded in part by D134 (v1.64): the markers are capitalized (`<Children/>` replaces
+      `<children/>`; named slots move from lowercase `<slot name>` to `<Slot name="x"/>`) and
+      fallback bodies — including the `<children>` fallback this card introduced — are retired;
+      markers are self-closing only. The role-split rationale, the one-default-marker rule, and
+      D71 forwarding mechanics all hold. This card's "capitalized means an imported component"
+      rejection is overturned: capitalization now uniformly means "framework-resolved tag". See
+      DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS.
 verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 

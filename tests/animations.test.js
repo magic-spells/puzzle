@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { playAnimation, prefersReducedMotion } from '../client-runtime/views/animate.js';
+import { Store } from '../client-runtime/datastore/store.js';
+import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 
 // Hand-written stand-ins for compiler output (SPEC §4), same style as the other
 // suites: render() returns a ViewNode tree; a component vnode is
@@ -199,6 +201,123 @@ describe('PuzzleView — enter/leave hooks (order, with & without animations)', 
 		expect(calls).toEqual(['willHide', 'didHide']);
 	});
 
+	// #abortEnter only unwinds a PENDING visible-trigger enter, so a running
+	// mount-trigger enter survived into the leave: playOut overwrote
+	// #currentAnimation and both fill:'both' animations owned the same element at
+	// once (SPEC §12 one-animator rule). Cancelling the enter also resolves its
+	// finished promise (animate.js normalises the AbortError), so the awaiting
+	// playIn() resumes — and must not fire viewDidShow into a leave.
+	it('playOut cancels a running mount-trigger enter and suppresses its viewDidShow', async () => {
+		installFakeAnimate();
+		const calls = [];
+		class V extends PuzzleView {
+			animations = { in: IN, out: OUT };
+			viewWillShow() { calls.push('willShow'); }
+			viewDidShow() { calls.push('didShow'); }
+			viewWillHide() { calls.push('willHide'); }
+			viewDidHide() { calls.push('didHide'); }
+			render() { return h('div', {}, [text('x')]); }
+		}
+		const v = await new V().mount(container());
+		const enter = v.playIn();
+		expect(fakeAnimations).toHaveLength(1);
+		const enterAnim = fakeAnimations[0];
+		expect(calls).toEqual(['willShow']);
+
+		const leave = v.playOut(); // interrupts mid-enter
+		const outAnim = fakeAnimations[1];
+		expect(outAnim.keyframes).toEqual([OUT.from, OUT.to]);
+		// The enter is gone before the out spec starts filling the same element.
+		expect(enterAnim.finishedState).toBe('cancelled');
+		expect(fakeAnimations.filter((a) => a.finishedState === 'running')).toEqual([outAnim]);
+
+		await enter; // resolves via the cancel
+		expect(calls).toEqual(['willShow', 'willHide']); // no didShow into the leave
+
+		outAnim.finish();
+		await leave;
+		expect(calls).toEqual(['willShow', 'willHide', 'didHide']);
+	});
+
+	it('an enter that COMPLETES before the leave still fires both hooks in SPEC order', async () => {
+		installFakeAnimate();
+		const calls = [];
+		class V extends PuzzleView {
+			animations = { in: IN, out: OUT };
+			viewWillShow() { calls.push('willShow'); }
+			viewDidShow() { calls.push('didShow'); }
+			viewWillHide() { calls.push('willHide'); }
+			viewDidHide() { calls.push('didHide'); }
+			render() { return h('div', {}, [text('x')]); }
+		}
+		const v = await new V().mount(container());
+		const enter = v.playIn();
+		fakeAnimations[0].finish();
+		await enter;
+		expect(calls).toEqual(['willShow', 'didShow']);
+
+		const leave = v.playOut();
+		const outAnim = fakeAnimations[fakeAnimations.length - 1];
+		outAnim.finish();
+		await leave;
+		expect(calls).toEqual(['willShow', 'didShow', 'willHide', 'didHide']);
+	});
+
+	it('a store mutation during leave neither re-runs data() nor re-renders the leaving view', async () => {
+		installFakeAnimate();
+		class Todo extends PuzzleModel {
+			static schema = {
+				id: Puzzle.string().primary(),
+				text: Puzzle.string(),
+			};
+		}
+		const store = new Store({ todo: Todo });
+		store.createRecord('todo', { id: 't1', text: 'before' });
+		store.flush();
+		const dataSpy = vi.fn();
+		const renderSpy = vi.fn();
+		const hooks = [];
+		class V extends PuzzleView {
+			animations = { out: OUT };
+			data() {
+				dataSpy();
+				return { todos: this.ctx.store.findMany('todo') };
+			}
+			render() {
+				renderSpy();
+				return h('div', {}, [text(this.getData().todos[0].text)]);
+			}
+			viewWillHide() {
+				hooks.push('willHide');
+			}
+			viewDidHide() {
+				hooks.push('didHide');
+			}
+		}
+		const v = await new V({ store }).mount(container());
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+		expect(renderSpy).toHaveBeenCalledTimes(1);
+
+		const leave = v.playOut();
+		expect(hooks).toEqual(['willHide']);
+		v.refresh();
+		v.setData('ignored', true);
+		v.onStoreChange();
+		v.applyParentUpdate({ props: { ignored: true } });
+		v.flushUpdates();
+		store.findOne('todo', 't1').update({ text: 'during leave' });
+		store.flush();
+
+		expect(dataSpy).toHaveBeenCalledTimes(1);
+		expect(renderSpy).toHaveBeenCalledTimes(1);
+		expect(v.element.textContent).toBe('before');
+
+		fakeAnimations[0].finish();
+		await leave;
+		expect(hooks).toEqual(['willHide', 'didHide']);
+		v.destroy();
+	});
+
 	it('playOut is idempotent — a second call returns the same promise', async () => {
 		installFakeAnimate();
 		const willHide = vi.fn();
@@ -369,6 +488,46 @@ describe('ViewManager — leave animation on component removal', () => {
 		data(params, props) { return { id: props.id }; }
 		render() { return h('li', { 'data-id': this.getData().id }, [text(this.getData().id)]); }
 	}
+
+	it('warns once for unkeyed out-animated removal and does not warn for keyed removal', async () => {
+		class KeyedHost extends PuzzleView {
+			created() { this.setData({ order: ['a', 'b'] }); }
+			data() { return { order: this.getData().order }; }
+			render() {
+				return h('ul', {}, this.getData().order.map((id) => comp(Row, { key: id, id })));
+			}
+		}
+		class UnkeyedHost extends PuzzleView {
+			created() { this.setData({ order: ['a', 'b', 'c'] }); }
+			data() { return { order: this.getData().order }; }
+			render() {
+				return h('ul', {}, this.getData().order.map((id) => comp(Row, { id })));
+			}
+		}
+		installFakeAnimate();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		const keyed = await new KeyedHost().mount(container());
+		await tick();
+		keyed.setData('order', ['a']);
+		keyed.flushUpdates();
+		expect(warn).not.toHaveBeenCalled();
+
+		const unkeyed = await new UnkeyedHost().mount(container());
+		await tick();
+		unkeyed.setData('order', ['a', 'b']);
+		unkeyed.flushUpdates();
+		unkeyed.setData('order', ['a']);
+		unkeyed.flushUpdates();
+
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn).toHaveBeenCalledWith(
+			'[puzzle] out animations in an unkeyed list can misorder siblings — ' +
+				'give the list items key attributes'
+		);
+		fakeAnimations.forEach((a) => a.finishedState === 'running' && a.finish());
+		await tick();
+	});
 
 	it('defers DOM removal until the out-animation finishes', async () => {
 		const destroyed = vi.fn();

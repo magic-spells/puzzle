@@ -110,6 +110,34 @@ func TestSplitSectionsScriptless(t *testing.T) {
 	}
 }
 
+func TestSplitSectionsLeadingBOM(t *testing.T) {
+	src := "\uFEFF<puzzle-view><p>hi</p></puzzle-view>"
+	sec, err := SplitSections(src, "BOM.pzl")
+	if err != nil {
+		t.Fatalf("leading UTF-8 BOM should be ignored, got: %v", err)
+	}
+	if !strings.Contains(sec.TemplateContent, "<p>hi</p>") {
+		t.Fatalf("template content missing markup: %q", sec.TemplateContent)
+	}
+}
+
+func TestSplitSectionsLeadingBOMPreservesErrorPosition(t *testing.T) {
+	src := "\uFEFF<puzzle-view></puzzle-view><styles></styles>"
+	_, err := SplitSections(src, "BOM.pzl")
+	if err == nil {
+		t.Fatal("expected a positioned error for the misnamed <styles> section")
+	}
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("error type = %T, want *ParseError", err)
+	}
+	// The BOM occupies the first three bytes. The <styles> tag begins after the
+	// 27-byte <puzzle-view></puzzle-view> section, at byte-based column 31.
+	if pe.Line != 1 || pe.Col != 31 {
+		t.Fatalf("position = %d:%d, want 1:31", pe.Line, pe.Col)
+	}
+}
+
 // TestSplitSectionsRootAttrPosition asserts a root attribute reports its true
 // starting column — the attribute char itself, not the whitespace after the tag
 // name that scanOpenTag trims (previously positions were shifted left by it).
@@ -369,6 +397,35 @@ func TestSplitSectionsScriptsCloseAware(t *testing.T) {
 			}
 			if !strings.Contains(sec.Scripts, "</script>") {
 				t.Fatalf("the literal </script> should be preserved verbatim in the body; got %q", sec.Scripts)
+			}
+		})
+	}
+}
+
+func TestSplitSectionsPostfixUpdateBeforeDivisionFindsScriptClose(t *testing.T) {
+	cases := []struct {
+		name string
+		op   string
+	}{
+		{"increment", "++"},
+		{"decrement", "--"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := `<puzzle-view><p>x</p></puzzle-view>
+<script>
+export default class A {
+  ratio(index, total) {
+    return index` + tc.op + ` / total;
+  }
+}
+</script>`
+			sec, err := SplitSections(src, "A.pzl")
+			if err != nil {
+				t.Fatalf("postfix update before division must not hide </script>: %v", err)
+			}
+			if want := "index" + tc.op + " / total"; !strings.Contains(sec.Scripts, want) {
+				t.Fatalf("script body missing %q: %q", want, sec.Scripts)
 			}
 		})
 	}

@@ -19,13 +19,14 @@
  * prerenderToDir(app.config, …); prerender() is the DOM-free, filesystem-free core
  * that returns the rendered pages for tests or a custom writer.
  *
- * v1 scope (DOC plan): static paths only — a route whose full path carries a
- * `:param` (or a `*` that is NOT the top-level catch-all) is skipped with a
- * warning; the bare top-level catch-all (`path: '*'`, D19) renders like any
- * static route and its output lands at `<outDir>/404.html` — the static-host
- * convention (GitHub Pages/Netlify/Render/Cloudflare serve it for unknown
- * URLs); a route flagged `prerender: false` gets the untouched shell written at
- * its path. Dynamic `staticPaths()` is an explicit follow-up.
+ * v1 scope (DOC plan): static paths only — a route with a complete `:param`
+ * segment is skipped with a warning. A `:` or `*` inside any other segment is
+ * literal static text, matching the Router's segment compiler. The bare
+ * top-level catch-all (`path: '*'`, D19) renders like any static route and its
+ * output lands at `<outDir>/404.html` — the static-host convention (GitHub
+ * Pages/Netlify/Render/Cloudflare serve it for unknown URLs); a route flagged
+ * `prerender: false` gets the untouched shell written at its path. Dynamic
+ * `staticPaths()` is an explicit follow-up.
  */
 
 import fs from 'node:fs';
@@ -34,6 +35,7 @@ import path from 'node:path';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { Router, encodeURL, normalizeBase } from '../router/router.js';
+import { findShadowedPaths, isDynamicSegment } from '../router/routePath.js';
 import { walkRouteTree } from '../router/routeTree.js';
 import { serialize, escapeText, escapeAttr, escapeScriptJson } from './serialize.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub } from './assemble.js';
@@ -88,6 +90,13 @@ export async function prerender(config, opts = {}) {
 	// supports '#id' targets only — the shell surgery keys on the id).
 	parseTargetId(config.target);
 
+	// One Router owns route-shape validation + regex compilation, so the SSG never
+	// compiles matchers independently — it reads this one's compiled leaves.
+	const routeRouter = new Router(config.routes ?? [], { mode: 'memory' });
+	const shadowedPaths = findShadowedPaths(routeRouter.routeEntries);
+	const shadowedByIndex = new Map(
+		shadowedPaths.map(({ index, shadowedBy }) => [index, shadowedBy])
+	);
 	const entries = enumerateRoutes(config.routes ?? []);
 
 	const pages = [];
@@ -95,6 +104,7 @@ export async function prerender(config, opts = {}) {
 	const warnings = [];
 	let hasCatchAll = false;
 	let builtContext = false;
+	let compiledEntryIndex = 0;
 	if (isStatic && hasGuard(config.routes ?? [])) {
 		const warning =
 			'[puzzle] static output declares route guards, but guards never run in static output (no router)';
@@ -117,31 +127,62 @@ export async function prerender(config, opts = {}) {
 	}
 	const createPageContext = async (entry) => {
 		builtContext = true;
-		// Static mode threads the page's route snapshot into the router stub so the
-		// prerender ctx's router.current / url() match the client kernel's (facade
-		// parity). Hybrid ignores it (real memory Router). The beforeMount-only
-		// fallback below has no entry — it never renders, so a null route is fine.
-		const route = isStatic && entry ? makeRouteSnapshot(entry) : null;
+		// Both modes thread the page's route snapshot into their prerender router:
+		// static gives it to the throwing stub, while hybrid shadows current on the
+		// real unstarted memory Router. The beforeMount-only fallback below has no
+		// entry — it never renders, so a null route is fine.
+		const route = entry ? makeRouteSnapshot(entry) : null;
 		return buildContext(config, { mode, route });
 	};
 
 	for (const entry of entries) {
 		const { fullPath, chain } = entry;
 
-		// The bare top-level catch-all (`path: '*'`, D19) is NOT dynamic in the
-		// skip sense — it renders like any static route and lands at 404.html
-		// (see pageOutputPath). The router construction-checks `'*'` anywhere else,
-		// so `fullPath === '*'` is the only legal `*` shape here.
+		// The bare top-level catch-all (`path: '*'`, D19) lands at 404.html (see
+		// pageOutputPath). Every non-bare '*' is ordinary literal segment text, just
+		// as it is in the Router's regex compiler.
 		const isCatchAll = fullPath === '*';
 		if (isCatchAll) hasCatchAll = true;
+		// The Router drops a catch-all that declares `children` WHOLESALE — its '*'
+		// branch stores the flat single-node chain and never walks the tree — so the
+		// leaves enumerated beneath it are routes the app can never navigate to. They
+		// must also not consume a compiled-entry index: entryIndex is the position in
+		// the Router's compiled leaf list, and one phantom index shifts every later
+		// leaf's shadow attribution by one.
+		const underCatchAll = !isCatchAll && chain[0].path === '*';
+		const entryIndex = isCatchAll || underCatchAll ? null : compiledEntryIndex++;
+		if (underCatchAll) {
+			skipped.push({ path: fullPath, reason: 'unreachable' });
+			warnings.push(
+				`[puzzle] skipped route "${fullPath}" — it is a child of the catch-all route ` +
+					"'*', which the Router matches as a single leaf, so this path is " +
+					'unreachable (declare it as a top-level route to prerender it)'
+			);
+			continue;
+		}
 
-		// Dynamic route (`:param`, or a `*` that is NOT the catch-all): v1 skips it
-		// with a warning (DOC plan).
-		if (!isCatchAll && (fullPath.includes(':') || fullPath.includes('*'))) {
+		// Only a complete `:name` segment is dynamic. Colons and stars in any
+		// other segment are regex-escaped literal text by the Router and therefore
+		// produce ordinary prerenderable static paths here.
+		if (!isCatchAll && fullPath.split('/').some(isDynamicSegment)) {
 			skipped.push({ path: fullPath, reason: 'dynamic' });
 			warnings.push(
 				`[puzzle] skipped dynamic route "${fullPath}" — SSG v1 renders static paths only ` +
-					'(a :param/* route needs a staticPaths() hook, a post-v1 follow-up)'
+					'(a :param route needs a staticPaths() hook, a post-v1 follow-up)'
+			);
+			continue;
+		}
+
+		// Hybrid pages are taken over by the live first-match-wins Router. Emitting a
+		// static page for a route an earlier matcher wins would make first paint and
+		// takeover disagree. True static output has no Router, so it deliberately
+		// keeps the page.
+		if (!isStatic && shadowedByIndex.has(entryIndex)) {
+			const shadowedBy = shadowedByIndex.get(entryIndex);
+			skipped.push({ path: fullPath, reason: 'shadowed' });
+			warnings.push(
+				`[puzzle] skipped shadowed route "${fullPath}" — earlier route "${shadowedBy}" ` +
+					'matches it first in hybrid output (routes match in declaration order)'
 			);
 			continue;
 		}
@@ -227,10 +268,11 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 	if (!outDir) throw new Error('[puzzle] prerenderToDir requires an outDir');
 	if (!shellPath) throw new Error('[puzzle] prerenderToDir requires a shellPath');
 
-	// Validate the complete route table even when enumeration will skip every
-	// page (for example, an all-dynamic app with no beforeMount hook). Per-page
-	// contexts also construct memory routers, but skipped routes never reach that
-	// path; this construction makes their config errors fail the static build.
+	// Validate the complete route table FIRST, before the target selector and the
+	// shell read: prerender() builds its own Router, but only after those checks,
+	// and a bad route table should be the error a build reports either way. (It is
+	// also the only route validation an all-dynamic app with no beforeMount hook
+	// ever gets — every page is skipped before a per-page context is built.)
 	new Router(config.routes ?? [], { mode: 'memory' });
 
 	const targetId = parseTargetId(config.target);
@@ -267,6 +309,9 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
  * marker, inline JSON data island, per-page module script), and collect the extended
  * summary the Go static build consumes (per page: `entry`, `modules`, `route`; top
  * level: `mode`, `target`, `apiURL`, `hasFormatters`).
+ *
+ * A page whose output file an earlier page already claimed is skipped here with
+ * reason `'duplicate'` rather than overwriting it (see claimedPaths below).
  */
 function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings }) {
 	// The app-bundle tag is stripped once (the shell is identical for every page) so
@@ -298,8 +343,30 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 	const base = normalizeBase(config.routerBase);
 
 	const slugCounts = new Map();
+	// outPath → the route path that already claimed it. Two routes can declare the
+	// SAME path, or two paths that normalize to one file (`/caf%C3%A9` and `/café`
+	// decode identically). Slugs are collision-suffixed but the output file is
+	// path-DERIVED, so the later page used to overwrite the earlier one's HTML while
+	// both bundles still shipped. Hybrid output never reaches this: the live
+	// first-match-wins Router makes the second route shadowed and prerender() skips
+	// it. Static output deliberately keeps shadowed pages (no router), so the writer
+	// itself refuses the second claim — the emitted HTML then belongs to the first
+	// route in reachable order and no dead second bundle is generated.
+	const claimedPaths = new Map();
 	const written = [];
 	for (const page of pages) {
+		const outPath = pageOutputPath(outDir, page.path);
+		if (claimedPaths.has(outPath)) {
+			skipped.push({ path: page.path, reason: 'duplicate' });
+			warnings.push(
+				`[puzzle] skipped duplicate route "${page.path}" — earlier route ` +
+					`"${claimedPaths.get(outPath)}" already writes ${path.relative(outDir, outPath)} ` +
+					'(two routes cannot own one static page; remove or rename one of them)'
+			);
+			continue;
+		}
+		claimedPaths.set(outPath, page.path);
+
 		const slug = uniqueSlug(computeSlug(page.path), slugCounts);
 		const html = injectStaticShell(baseShell, {
 			targetId,
@@ -310,7 +377,6 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 			slug,
 			data: page.data ?? {},
 		});
-		const outPath = pageOutputPath(outDir, page.path);
 		fs.mkdirSync(path.dirname(outPath), { recursive: true });
 		fs.writeFileSync(outPath, html);
 		written.push({
@@ -365,7 +431,8 @@ async function buildContext(config, { mode = 'hybrid', route = null } = {}) {
 	if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;
 	const store = new Store(models, storeOptions);
 	// Router facade parity (D81): HYBRID keeps a real, unstarted memory Router because
-	// the SPA boots and takes over on load (current becomes real then). STATIC has no
+	// the SPA boots and takes over on load, but shadows current with this page's route
+	// snapshot so prerendered route-aware markup matches the live app. STATIC has no
 	// client router — the browser kernel (static/index.js) wires the base-aware
 	// makeRouterStub — so the prerender ctx uses that SAME stub over the SAME per-page
 	// snapshot here, or router.url()/current would differ between the prerendered HTML
@@ -387,14 +454,24 @@ async function buildContext(config, { mode = 'hybrid', route = null } = {}) {
 		// …but a memory router carries no URL, so its url() returns paths UNPREFIXED: a
 		// based app would prerender `/about` where the live app renders `/docs/about` —
 		// a broken href for crawlers, no-JS visitors, and anyone clicking before
-		// takeover. So url() ALONE is shadowed with the app's real mode/base, through
-		// the same encoder Router.url() and the static stub use; `current` and the
-		// compiled route table stay the real memory Router the takeover expects.
-		// (Wrapping the instance is not an option: `current` reads private fields, so a
-		// delegating facade would throw.)
+		// takeover. Shadow url() with the app's real mode/base through the same encoder
+		// Router.url() and the static stub use, and shadow current with the per-page
+		// snapshot. The compiled route table stays the real memory Router the takeover
+		// expects.
 		const base = normalizeBase(config.routerBase);
 		const routerMode = config.routerMode ?? 'history';
 		router.url = (path) => encodeURL(path, routerMode, base);
+		if (route) {
+			// Own property shadows the prototype getter — the same instance-shadowing
+			// trick url() uses above, and for the same reason: `current` reads private
+			// fields, so a delegating facade would throw. The takeover replaces the whole
+			// instance, so this never outlives the prerender.
+			Object.defineProperty(router, 'current', {
+				value: route,
+				enumerable: true,
+				configurable: true,
+			});
+		}
 	}
 	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 
@@ -760,15 +837,26 @@ function managedTagRe(id) {
 
 /**
  * Directory-style output path: `/` → outDir/index.html, `/a/b` →
- * outDir/a/b/index.html. The bare catch-all (`path: '*'`) is the exception — it
- * writes `outDir/404.html`, the filename static hosts serve for unknown URLs.
+ * outDir/a/b/index.html. Percent-encoded route text is decoded to the UTF-8
+ * filesystem name a static server resolves from the browser's encoded request
+ * (`/caf%C3%A9/` → `outDir/café/index.html`); decodeURI deliberately preserves
+ * escaped URI delimiters such as `%2F`. Malformed percent text keeps its current
+ * literal-directory behavior. The bare catch-all (`path: '*'`) is the exception
+ * — it writes `outDir/404.html`, the filename static hosts serve for unknown URLs.
  */
 function pageOutputPath(outDir, routePath) {
 	let outPath;
 	if (routePath === '*') {
 		outPath = path.join(outDir, '404.html');
 	} else {
-		const clean = routePath.replace(/^\//, '').replace(/\/$/, '');
+		let filesystemPath = routePath;
+		try {
+			filesystemPath = decodeURI(routePath);
+		} catch {
+			// Preserve the pre-normalization output for a literal malformed '%'
+			// sequence; the Router also treats malformed literal text as bytes.
+		}
+		const clean = filesystemPath.replace(/^\//, '').replace(/\/$/, '');
 		const rel = clean === '' ? 'index.html' : path.join(clean, 'index.html');
 		outPath = path.join(outDir, rel);
 	}

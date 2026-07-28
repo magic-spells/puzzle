@@ -19,7 +19,7 @@
  *   (constellation/doc/DOC-APP-ANATOMY.md §4). Reusable components render inline — no wrapper
  *   element around the child's root (D20).
  * - Slot marker — `tag === SLOT_TAG`. A child's render tree emits one where
- *   `<children/>`/`<Slot/>` appeared; the ViewManager substitutes the slot content
+ *   `<Children/>`/`<Slot/>` appeared; the ViewManager substitutes the slot content
  *   captured at the call site (those vnodes carry parent-scope handlers).
  *
  * Conventions:
@@ -38,7 +38,7 @@
 
 import { PuzzleModel } from '../model.js';
 
-/** Reserved tag marking a composition-marker (`<children/>`/`<Slot/>`/`<slot name>`) substitution point. */
+/** Reserved tag marking a composition-marker (`<Children/>`/`<Slot/>`/`<Slot name="…"/>`) substitution point. */
 export const SLOT_TAG = 'slot';
 
 // Reserved tag marking a placeholder vnode — an empty, never-keyed comment node.
@@ -76,6 +76,21 @@ export class ViewNode {
 		// A pre-built child instance the ViewManager adopts (Router-preloaded
 		// views); null means construct a fresh instance on first encounter.
 		this.instance = null;
+		// SSG/static takeover preparation may pin a NON-routed instance too. The
+		// ownership flag keeps mount-failure recovery distinct from Router-owned
+		// routed instances, while takeoverFailed carries the same recoverable blank
+		// position as an ordinary first-mount rejection.
+		//
+		// Gated on the build define (probed INLINE — hoisting it into a module const
+		// stops esbuild propagating it into method scopes; see build_test.go): a
+		// bundle that can never take over stops paying two stores per vnode per
+		// render. The define folds to a LITERAL, so every ViewNode in a given build
+		// still gets the same shape — this must stay an all-or-nothing block, never
+		// lazy per-vnode assignment, which would fragment the hidden class.
+		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+			this.takeoverPreloaded = false;
+			this.takeoverFailed = false;
+		}
 	}
 
 	get isText() {

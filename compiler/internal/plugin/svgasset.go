@@ -17,6 +17,7 @@ package plugin
 // re-scans (same parser.ScanSVGFile) purely to build the shared module.
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,7 +39,10 @@ func (p *Plugin) setupSVGAssets(build api.PluginBuild) {
 		p.mu.Lock()
 		assetsDir := p.assetsDir
 		p.mu.Unlock()
-		abs := filepath.Join(assetsDir, filepath.FromSlash(src))
+		abs, err := resolveSVGAsset(assetsDir, src)
+		if err != nil {
+			return api.OnResolveResult{Errors: []api.Message{{Text: err.Error()}}}, nil
+		}
 		return api.OnResolveResult{
 			Path:      abs,
 			Namespace: svgAssetNamespace,
@@ -79,6 +83,28 @@ func (p *Plugin) setupSVGAssets(build api.PluginBuild) {
 			WatchFiles: []string{args.Path},
 		}, nil
 	})
+}
+
+// resolveSVGAsset maps a {#svg} virtual-module specifier to the asset file on
+// disk, CONTAINED to app/assets/. codegen only ever emits specifiers that
+// already passed the compile-time shape check, but this handler resolves the
+// specifier for ANY module in the bundle — a hand-written
+// `import '@magic-spells/puzzle/svg-asset/../../../../etc/passwd'` in app JS or
+// a dependency would otherwise be joined blind and read by OnLoad. The shape
+// rule is codegen's own (ValidSVGPath: relative, no "./"/"../", a Clean that
+// stays inside), plus a filepath.Rel containment check on the joined result so
+// nothing but a descendant of assetsDir is ever handed to OnLoad.
+func resolveSVGAsset(assetsDir, src string) (string, error) {
+	bad := fmt.Errorf("refusing to resolve %q — {#svg} assets must be plain paths inside app/assets/", codegen.SVGAssetSpecifierPrefix+src)
+	if !codegen.ValidSVGPath(src) {
+		return "", bad
+	}
+	abs := filepath.Join(assetsDir, filepath.FromSlash(src))
+	rel, err := filepath.Rel(assetsDir, abs)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", bad
+	}
+	return abs, nil
 }
 
 // escapeRegexp escapes the regexp metacharacters that can occur in the fixed

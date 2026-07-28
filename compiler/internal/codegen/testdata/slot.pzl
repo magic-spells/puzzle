@@ -1,6 +1,6 @@
 <puzzle-view class="shell">
   <main class="content">
-    <children/>
+    <Children/>
   </main>
 </puzzle-view>
 

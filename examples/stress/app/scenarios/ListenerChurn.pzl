@@ -1,0 +1,648 @@
+<puzzle-view>
+  <div class="lc-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="text-fg tabular-nums">{ rowCount }</span> rows ·
+        <span class="text-danger tabular-nums">{ elementCount }</span> elements ·
+        <span class="tabular-nums">{ listenerCount }</span> DOM listeners
+      </div>
+      <div class="font-mono text-[10px] uppercase tracking-[0.2em] text-faint shrink-0">binding: { bindingLabel }</div>
+    </div>
+
+    <!-- Three arms, branched OUTSIDE the loop so no arm pays for the branch per
+         row. All three render BYTE-IDENTICAL DOM: `@click` is a framework
+         directive, never markup, and `data-id` is present in every arm so the
+         stable arm's handler has somewhere to read the row identity from. The
+         only difference that reaches the patcher is whether the handler VALUE
+         is a fresh function object on every render. -->
+    <div class="lc-body max-h-[460px] overflow-y-auto overflow-x-hidden">
+      {#if isChurn}
+        {#for row in rows}
+          <div class={ row.cls } data-id={ row.id }>
+            <span class="lc-id font-mono text-[11px] tabular-nums text-faint w-20 shrink-0">{ row.id }</span>
+            <button type="button" class="lc-label flex-1 min-w-0 truncate text-left text-sm text-fg" data-id={ row.id } @click={ selectRow(row) }>{ row.label }</button>
+            <span class="lc-value font-mono text-[11px] tabular-nums text-muted w-10 shrink-0 text-right">{ row.value }</span>
+            <span class="lc-version font-mono text-[11px] tabular-nums text-faint w-10 shrink-0 text-right">v{ row.version }</span>
+            <button class="lc-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" data-id={ row.id } @click={ removeRow(row) }><span class="lc-x block leading-none text-base">&times;</span></button>
+          </div>
+        {/for}
+      {:else if isStable}
+        {#for row in rows}
+          <div class={ row.cls } data-id={ row.id }>
+            <span class="lc-id font-mono text-[11px] tabular-nums text-faint w-20 shrink-0">{ row.id }</span>
+            <button type="button" class="lc-label flex-1 min-w-0 truncate text-left text-sm text-fg" data-id={ row.id } @click={ selectAny }>{ row.label }</button>
+            <span class="lc-value font-mono text-[11px] tabular-nums text-muted w-10 shrink-0 text-right">{ row.value }</span>
+            <span class="lc-version font-mono text-[11px] tabular-nums text-faint w-10 shrink-0 text-right">v{ row.version }</span>
+            <button class="lc-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" data-id={ row.id } @click={ removeAny }><span class="lc-x block leading-none text-base">&times;</span></button>
+          </div>
+        {/for}
+      {:else}
+        {#for row in rows}
+          <div class={ row.cls } data-id={ row.id }>
+            <span class="lc-id font-mono text-[11px] tabular-nums text-faint w-20 shrink-0">{ row.id }</span>
+            <button type="button" class="lc-label flex-1 min-w-0 truncate text-left text-sm text-fg" data-id={ row.id }>{ row.label }</button>
+            <span class="lc-value font-mono text-[11px] tabular-nums text-muted w-10 shrink-0 text-right">{ row.value }</span>
+            <span class="lc-version font-mono text-[11px] tabular-nums text-faint w-10 shrink-0 text-right">v{ row.version }</span>
+            <button class="lc-remove w-6 h-6 shrink-0 rounded text-faint hover:text-danger" data-id={ row.id }><span class="lc-x block leading-none text-base">&times;</span></button>
+          </div>
+        {/for}
+      {/if}
+    </div>
+
+    <div class="px-4 py-2 border-t border-hairline font-mono text-[11px] text-muted">{ probe.tick }{ note }</div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { registerScenario } from '../stress-controller.js';
+import {
+  afterPaint,
+  intParam,
+  ms1,
+  perfDelta,
+  perfSnapshot,
+  settleFrames,
+  viewRoot,
+} from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// listener-churn — what does rebinding a DOM listener on every render cost?
+//
+// THE DECISION THIS EXISTS TO INFORM
+//
+// `client-runtime/views/viewManager.js` setAttr() removes and re-adds a DOM
+// listener whenever the handler's identity changes:
+//
+//     if (listeners[name]) target.removeEventListener(event, listeners[name], opts);
+//     ...
+//     target.addEventListener(event, handler, opts);
+//     listeners[name] = handler;
+//
+// Vue avoids this with an "invoker": attach one stable wrapper at mount, then
+// only reassign `wrapper.value` when the handler changes. Adopting that here is
+// a real change to the patcher with real regression risk, and nobody knew
+// whether it was worth 1% or 15%. This scenario measures it.
+//
+// FIRST, THE FRAMING THAT CHANGES THE QUESTION
+//
+// patchAttrs() only calls setAttr() when `oldAttrs[name] !== value`, so listener
+// churn requires the handler VALUE to be a fresh object every render. It is not,
+// for the two shapes that dominate real Puzzle code:
+//
+//   @click={ onSelect }        a bare method name — codegen emits
+//                              `((this.__h ??= {})[N] ??= (event) => this.events.onSelect(event))`,
+//                              one function object per site per view INSTANCE.
+//   @click={ save() }          a call whose arguments capture nothing from the
+//                              render scope — also cacheable (D62).
+//
+// Both compare `===` on the next render, so setAttr is never reached and the
+// listener is never touched. keyed-list's rows are exactly this shape, which is
+// why the arms below are a NEW scenario rather than a parameter on keyed-list:
+// there is no churn there to measure.
+//
+// The churn shape is a data-capturing call on a DOM ELEMENT inside a loop —
+// `@click={ selectRow(row) }` on a <button> — where `row` is a loop variable, so
+// codegen cannot cache the closure and mints a fresh arrow per row per render.
+// (On a COMPONENT that same spelling is a prop, and its cost is the
+// shallowEqual bailout being defeated, which is what the keyed-list handler A/B
+// already measures. This scenario is about the DOM-element case, which is a
+// different code path and a different cost.)
+//
+// THE THREE ARMS  (?binding=churn|stable|none)
+//
+//   churn    @click={ selectRow(row) }  fresh arrow per row per render
+//            ⇒ 2 removeEventListener + 2 addEventListener per row per render
+//   stable   @click={ selectAny }       one cached arrow per site per instance
+//            ⇒ 0 listener calls after mount. Row identity moves to `data-id`,
+//              read from event.currentTarget — the same trick ListRow uses when
+//              it reports props.id back to its parent.
+//   none     no @click at all           the floor: what the two attr entries
+//            themselves cost, with no handler and no listener anywhere.
+//
+// All three render IDENTICAL DOM, and churn/stable have identical vnode attr
+// KEY SETS. So `churn - stable` is exactly: two closure allocations, two attr
+// identity comparisons that fail instead of succeed, and two
+// removeEventListener + addEventListener pairs, per row per render. Nothing
+// else differs. `micro-listener-cost` then splits that delta into its parts, so
+// the invoker's share is not inferred from the whole.
+//
+// ROWS ARE PLAIN INSTANCE DATA, NOT STORE RECORDS. Deliberate, and the same
+// call `islands` makes: a reactive store would add query, sort and notification
+// cost to a measurement about attribute patching, and this scenario's whole
+// value is that its delta has one cause.
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders per timed op. One render is far below the harness's ~5ms floor, so the
+ * op has to batch — but the batch size is ALSO constrained from above.
+ *
+ * At 30 renders the churn arm landed at ~1,095ms for 10,000 rows, and
+ * benchmarks/runner.mjs guard 4 rejected the whole sample set: 8 of 8 samples
+ * within 60ms of a whole second is the signature of a throttled renderer, which
+ * is exactly what that guard exists to catch and it cannot tell a genuine 1.1s
+ * op from a clamped one. 20 renders puts the same arm at ~730ms, a quarter of a
+ * second clear of the boundary, and measures identically otherwise.
+ *
+ * Same reasoning, same fix as `async-waterfall` running at delay=35 rather than
+ * the example's default 50.
+ */
+const RERENDER_COUNT = 20;
+
+/** Rounds per timed batch, and batches per arm, in the micro decomposition. */
+const MICRO_ROUNDS = 30;
+const MICRO_BATCHES = 5;
+
+const BINDINGS = ['churn', 'stable', 'none'];
+
+export default class ListenerChurn extends PuzzleView {
+  api = {
+    name: 'listener-churn',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.buildRows();
+    this.unregister = null;
+    this.renderCount = 0;
+    this.lastCounters = null;
+    this.lastPerf = null;
+    this.note = '';
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  /**
+   * Build the dataset ONCE. `cls` is precomputed so the class attribute is a
+   * single stable string: a per-render string concat would make every render's
+   * class value a fresh — but EQUAL — string, which patchAttrs compares by
+   * value and would skip anyway, yet it would add allocation noise to a
+   * measurement whose whole point is a small delta.
+   */
+  buildRows() {
+    const count = this.wantRows();
+    const rows = new Array(count);
+    for (let i = 0; i < count; i += 1) {
+      rows[i] = {
+        id: `lc-${i}`,
+        label: `listener row ${i}`,
+        value: i % 97,
+        version: 1,
+        selected: false,
+        cls: this.rowClass(false),
+      };
+    }
+    this.rows = rows;
+    this.selectedId = null;
+  }
+
+  rowClass(selected) {
+    return `lc-row flex items-center gap-3 h-9 px-4 border-b border-line${selected ? ' bg-accent/15' : ''}`;
+  }
+
+  wantRows() {
+    return intParam(this.props?.n, 1000, 0, 50000);
+  }
+
+  /** `churn` (the pathology), `stable` (the current idiom), or `none` (the floor). */
+  bindingMode() {
+    const raw = this.props?.binding;
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    return BINDINGS.includes(value) ? value : 'churn';
+  }
+
+  data() {
+    const mode = this.bindingMode();
+    const rows = this.rows;
+    // Listeners the arm actually binds: 2 per row for churn/stable, 0 for none.
+    const perRow = mode === 'none' ? 0 : 2;
+    const self = this;
+    return {
+      rows,
+      rowCount: rows.length,
+      elementCount: rows.length * 7,
+      listenerCount: rows.length * perRow,
+      isChurn: mode === 'churn',
+      isStable: mode === 'stable',
+      bindingLabel:
+        mode === 'churn'
+          ? 'churn (fresh closure per row per render)'
+          : mode === 'stable'
+            ? 'stable (one cached arrow per site)'
+            : 'none (no @click bound at all)',
+      note: this.note,
+      // Renders, counted one level below the data object so PuzzleView's
+      // #recompose() spread cannot invoke it — a top-level getter would fire per
+      // data() RUN, which is not the same number. See ../rc-metrics.js.
+      probe: {
+        get tick() {
+          self.renderCount += 1;
+          return '';
+        },
+      },
+    };
+  }
+
+  events = {
+    // The CHURN arm: `row` is a loop variable, so this closure cannot be cached
+    // and a fresh arrow reaches the patcher on every render.
+    selectRow: (row) => this.applySelect(row),
+    removeRow: (row) => this.applyRemove(row),
+    // The STABLE arm: a bare reference, cached per site per instance. Identity
+    // comes off the DOM node the event fired on.
+    selectAny: (event) => this.applySelect(this.rowById(event?.currentTarget?.dataset?.id)),
+    removeAny: (event) => this.applyRemove(this.rowById(event?.currentTarget?.dataset?.id)),
+  };
+
+  rowById(id) {
+    if (!id) return null;
+    return this.rows.find((row) => row.id === id) ?? null;
+  }
+
+  applySelect(row) {
+    if (!row) return;
+    row.selected = !row.selected;
+    row.cls = this.rowClass(row.selected);
+    this.selectedId = row.selected ? row.id : null;
+    this.refresh();
+  }
+
+  applyRemove(row) {
+    if (!row) return;
+    const at = this.rows.indexOf(row);
+    if (at >= 0) this.rows.splice(at, 1);
+    if (this.selectedId === row.id) this.selectedId = null;
+    this.refresh();
+  }
+
+  // ---- ops ----------------------------------------------------------------
+
+  async opRun(op) {
+    if (op === 'rerender') return this.runRerender(op, false);
+    if (op === 'count-listeners') return this.runRerender(op, true);
+    if (op === 'micro-listener-cost') return this.runMicro(op);
+    if (op === 'click-select') return this.runClickGate(op);
+    throw new Error(`[stress] listener-churn has no op "${op}"`);
+  }
+
+  /**
+   * Patch addEventListener/removeEventListener ON Element.prototype.
+   *
+   * Element.prototype does not own these — they are inherited from
+   * EventTarget.prototype — so an own property SHADOWS them for elements only
+   * and `delete` restores the original lookup exactly. Patching
+   * EventTarget.prototype instead would also intercept document, window and
+   * XHR, including the harness's own plumbing.
+   *
+   * THE RUNTIME IS NOT TOUCHED. This is the scenario observing the DOM API from
+   * outside, the same way `formatters` patches globalThis.Intl.
+   */
+  installListenerProbe() {
+    const proto = Element.prototype;
+    const own = Object.prototype.hasOwnProperty;
+    if (own.call(proto, 'addEventListener') || own.call(proto, 'removeEventListener')) {
+      throw new Error('[stress] listener-churn: Element.prototype is already patched — refusing to nest probes');
+    }
+    const counts = { add: 0, remove: 0 };
+    const baseAdd = proto.addEventListener;
+    const baseRemove = proto.removeEventListener;
+    Object.defineProperty(proto, 'addEventListener', {
+      configurable: true,
+      writable: true,
+      enumerable: false,
+      value: function addEventListener(...args) {
+        counts.add += 1;
+        return baseAdd.apply(this, args);
+      },
+    });
+    Object.defineProperty(proto, 'removeEventListener', {
+      configurable: true,
+      writable: true,
+      enumerable: false,
+      value: function removeEventListener(...args) {
+        counts.remove += 1;
+        return baseRemove.apply(this, args);
+      },
+    });
+    return {
+      counts,
+      restore() {
+        delete proto.addEventListener;
+        delete proto.removeEventListener;
+      },
+    };
+  }
+
+  /**
+   * K renders with NO data change, so the DOM output is identical before and
+   * after and the only work that differs between arms is the handler binding.
+   *
+   * `instrument` selects the counting arm. Its counts are exact and its
+   * milliseconds carry the probe — never compare them against `rerender`.
+   */
+  async runRerender(op, instrument) {
+    const probe = instrument ? this.installListenerProbe() : null;
+    const perfBefore = perfSnapshot();
+    this.renderCount = 0;
+
+    const t0 = performance.now();
+    let scriptMs = 0;
+    try {
+      for (let i = 0; i < RERENDER_COUNT; i += 1) this.refresh();
+      scriptMs = performance.now() - t0;
+    } finally {
+      // finally, so a throw mid-loop cannot leave Element.prototype patched and
+      // poison every later measurement in the page. Restore is OUTSIDE the timed
+      // window either way — scriptMs is read as the last statement of the try.
+      probe?.restore();
+    }
+
+    await afterPaint();
+    const paintedMs = performance.now() - t0;
+    await settleFrames(1);
+
+    const renders = this.renderCount;
+    if (renders !== RERENDER_COUNT) {
+      throw new Error(
+        `[stress] listener-churn ${op}: ${renders} renders for ${RERENDER_COUNT} refresh() calls — the op is not measuring what it claims`
+      );
+    }
+
+    const perRender = probe ? (probe.counts.add + probe.counts.remove) / RERENDER_COUNT : null;
+    this.lastPerf = perfDelta(perfBefore);
+    this.lastCounters = {
+      rows: this.rows.length,
+      renders,
+      add: probe ? probe.counts.add : null,
+      remove: probe ? probe.counts.remove : null,
+      perRender,
+    };
+
+    const listenerDetail = probe
+      ? ` · listener calls: ${probe.counts.add} add + ${probe.counts.remove} remove = ` +
+        `${probe.counts.add + probe.counts.remove} over ${RERENDER_COUNT} renders (${perRender} per render, ` +
+        `${this.rows.length ? perRender / this.rows.length : 0} per row per render)`
+      : ' · uninstrumented (timing arm)';
+
+    return {
+      op,
+      ms: paintedMs,
+      scriptMs,
+      detail:
+        `${op} [${this.bindingMode()}]: ${RERENDER_COUNT} renders of ${this.rows.length} rows · ` +
+        `${ms1(scriptMs)}ms script / ${ms1(paintedMs)}ms to paint` +
+        listenerDetail +
+        this.perfDetail(),
+    };
+  }
+
+  /**
+   * Decompose the churn/stable delta over the REAL rendered elements.
+   *
+   * `churn - stable` bundles three costs together, and the invoker pattern only
+   * removes one of them. This prices each separately, per element per round,
+   * with one performance.now() pair around a whole batch rather than around
+   * each call — two timer reads per call would be several times the cost of the
+   * call being timed.
+   *
+   *   swap      removeEventListener + addEventListener   what churn pays today
+   *   invoker   one property write on a stable wrapper   what Vue pays instead
+   *   alloc     two arrow allocations                    what BOTH pay, and what
+   *                                                      the invoker cannot save
+   */
+  async runMicro(op) {
+    const root = viewRoot(this);
+    const els = [...(root?.querySelectorAll('.lc-label') ?? [])];
+    if (els.length < 2) throw new Error('[stress] listener-churn: no rows are rendered to measure against');
+
+    const h1 = () => {};
+    const h2 = () => {};
+    const invokers = els.map((el) => {
+      const inv = (event) => inv.value(event);
+      inv.value = h1;
+      el.addEventListener('pointerover', inv);
+      return inv;
+    });
+
+    // Warm all three paths before any of them is timed.
+    for (let r = 0; r < 3; r += 1) {
+      for (let i = 0; i < els.length; i += 1) {
+        els[i].removeEventListener('mouseenter', h1);
+        els[i].addEventListener('mouseenter', h2);
+        els[i].removeEventListener('mouseenter', h2);
+        els[i].addEventListener('mouseenter', h1);
+        invokers[i].value = h2;
+      }
+    }
+
+    // Time the WHOLE batch of rounds, then take the median of a few batches.
+    // Timing one round at a time put the invoker arm (a plain property write)
+    // under the performance.now() clamp, where it reported a flat 0.0ms and
+    // therefore 0.0ns — a floor artefact wearing the shape of a result. A batch
+    // is large enough to clear the clamp, and dividing afterwards is arithmetic
+    // rather than measurement.
+    const timeIt = (fn) => {
+      const samples = [];
+      for (let batch = 0; batch < MICRO_BATCHES; batch += 1) {
+        const t0 = performance.now();
+        for (let r = 0; r < MICRO_ROUNDS; r += 1) fn();
+        samples.push(performance.now() - t0);
+      }
+      samples.sort((a, b) => a - b);
+      return samples[Math.floor(samples.length / 2)] / MICRO_ROUNDS;
+    };
+
+    let sink = null;
+    const swapMs = timeIt(() => {
+      for (let i = 0; i < els.length; i += 1) {
+        els[i].removeEventListener('mouseenter', h1);
+        els[i].addEventListener('mouseenter', h2);
+        els[i].removeEventListener('mouseenter', h2);
+        els[i].addEventListener('mouseenter', h1);
+      }
+    });
+    const invokerMs = timeIt(() => {
+      for (let i = 0; i < els.length; i += 1) {
+        invokers[i].value = h2;
+        invokers[i].value = h1;
+      }
+    });
+    const allocMs = timeIt(() => {
+      for (let i = 0; i < els.length; i += 1) {
+        const a = () => els[i];
+        const b = () => els[i];
+        sink = a;
+        sink = b;
+      }
+    });
+
+    // Leave no listeners behind: a later timed arm must not be measuring the
+    // residue of this one.
+    for (let i = 0; i < els.length; i += 1) {
+      els[i].removeEventListener('pointerover', invokers[i]);
+      els[i].removeEventListener('mouseenter', h1);
+      els[i].removeEventListener('mouseenter', h2);
+    }
+    if (sink === undefined) throw new Error('unreachable');
+
+    const n = els.length;
+    // Each round does TWO swaps / TWO invoker writes / TWO allocations per
+    // element, matching a row's two bound handlers.
+    const perSwapNs = (swapMs * 1e6) / (n * 2);
+    const perInvokerNs = (invokerMs * 1e6) / (n * 2);
+    const perAllocNs = (allocMs * 1e6) / (n * 2);
+
+    this.lastCounters = { rows: this.rows.length, renders: 0, add: null, remove: null, perRender: null };
+    this.note = `micro: swap ${perSwapNs.toFixed(1)}ns · invoker ${perInvokerNs.toFixed(1)}ns · alloc ${perAllocNs.toFixed(1)}ns`;
+
+    return {
+      op,
+      ms: swapMs,
+      scriptMs: swapMs,
+      detail:
+        `${op}: ${n} elements x ${MICRO_ROUNDS} rounds x ${MICRO_BATCHES} batches, median batch / round · ` +
+        `remove+add ${ms1(swapMs)}ms (${perSwapNs.toFixed(1)}ns per handler) · ` +
+        `invoker property write ${ms1(invokerMs)}ms (${perInvokerNs.toFixed(1)}ns) · ` +
+        `arrow allocation ${ms1(allocMs)}ms (${perAllocNs.toFixed(1)}ns) · ` +
+        `an invoker would save ~${(perSwapNs - perInvokerNs).toFixed(1)}ns per changed handler, ` +
+        `and cannot save the ${perAllocNs.toFixed(1)}ns allocation`,
+    };
+  }
+
+  /**
+   * Behaviour gate, not a measurement. Each arm has to prove it does what its
+   * name says BEFORE any of its numbers are believed — including `none`, whose
+   * whole contract is that clicking does NOTHING. An arm that got faster by
+   * quietly not binding anything has to fail, not report a number.
+   */
+  async runClickGate(op) {
+    const root = viewRoot(this);
+    const rowEl = root?.querySelector('.lc-row');
+    if (!rowEl) throw new Error('[stress] click-select: no row is rendered');
+    const id = rowEl.getAttribute('data-id');
+    const before = this.rowById(id)?.selected === true;
+
+    rowEl.querySelector('.lc-label').click();
+    await settleFrames(1);
+
+    const after = this.rowById(id)?.selected === true;
+    const shown = root.querySelector('.lc-row')?.className.includes('bg-accent/15');
+    const mode = this.bindingMode();
+
+    if (mode === 'none') {
+      if (after !== before) {
+        throw new Error(`[stress] click-select [none]: the arm binds no handler, yet clicking changed row "${id}"`);
+      }
+    } else {
+      if (after === before) {
+        throw new Error(`[stress] click-select [${mode}]: clicking row "${id}" did not change its selection (still ${before})`);
+      }
+      if (shown !== after) {
+        throw new Error(`[stress] click-select [${mode}]: state says selected=${after} but the DOM says ${shown}`);
+      }
+      // Put it back, so the gate leaves no residue for a following timed op.
+      rowEl.querySelector('.lc-label').click();
+      await settleFrames(1);
+    }
+
+    return {
+      op,
+      ms: 0,
+      scriptMs: 0,
+      detail:
+        mode === 'none'
+          ? 'click-select [none]: BEHAVIOUR GATE — clicking is inert, as the arm requires. Ignore the timing.'
+          : `click-select [${mode}]: BEHAVIOUR GATE — a real click flipped the selection in state and in the DOM. Ignore the timing.`,
+    };
+  }
+
+  perfDetail() {
+    const perf = this.lastPerf;
+    if (!perf) return ' · framework counters unavailable (production build)';
+    return ` · ${perf.renders} renders (${perf.wastedRenders} wasted, ${perf.domMutations} DOM mutations)`;
+  }
+
+  async opReset() {
+    this.buildRows();
+    this.note = '';
+    this.refresh();
+    await afterPaint();
+    await settleFrames(1);
+    return { detail: `reset to ${this.rows.length} rows [${this.bindingMode()}]` };
+  }
+
+  async opWarmup() {
+    await this.runRerender('rerender', false);
+    await this.opReset();
+    return { detail: 'warmup: one uninstrumented rerender, then reset' };
+  }
+
+  // ---- verification -------------------------------------------------------
+
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const rowEls = root.querySelectorAll('.lc-row');
+    if (rowEls.length !== this.rows.length) {
+      return { ok: false, detail: `DOM has ${rowEls.length} rows, state has ${this.rows.length}` };
+    }
+    const limit = Math.min(rowEls.length, 200);
+    for (let i = 0; i < limit; i += 1) {
+      const want = this.rows[i];
+      if (rowEls[i].getAttribute('data-id') !== want.id) {
+        return { ok: false, detail: `row ${i} is "${rowEls[i].getAttribute('data-id')}", state says "${want.id}"` };
+      }
+    }
+    const elements = root.querySelectorAll('.lc-body *').length;
+    if (elements !== this.rows.length * 7) {
+      return { ok: false, detail: `${elements} elements for ${this.rows.length} rows (want ${this.rows.length * 7})` };
+    }
+    return {
+      ok: true,
+      detail:
+        `${this.rows.length} rows (${elements} elements), first ${limit} in state order · binding=${this.bindingMode()}` +
+        (limit < rowEls.length ? ` · order checked on the first ${limit} rows only, not all ${rowEls.length}` : ''),
+    };
+  }
+
+  opStats() {
+    const root = viewRoot(this);
+    const body = root ? root.querySelector('.lc-body') : null;
+    const c = this.lastCounters;
+    const counters = { lcRows: this.rows.length };
+    if (c) {
+      counters.lcRenders = c.renders;
+      // Only present when the counting arm ran. A fabricated zero and a measured
+      // zero mean opposite things here — the stable arm's REAL zero is the whole
+      // finding, so an uninstrumented op must not report one.
+      if (c.add !== null) {
+        counters.lcAddListener = c.add;
+        counters.lcRemoveListener = c.remove;
+        counters.lcListenerCallsPerRender = c.perRender;
+      }
+    }
+    return {
+      mountedNodes: body ? body.querySelectorAll('*').length : 0,
+      records: 0,
+      views: 1,
+      // Reuses the `handlers` channel so the report's existing column names the
+      // arm — an arm cannot be mislabelled if the scenario itself reports it.
+      handlers: this.bindingMode(),
+      perf: this.lastPerf,
+      counters,
+    };
+  }
+}
+</script>

@@ -1,6 +1,6 @@
 ---
 name: compiler build orchestrator
-status: verified
+status: built
 path: compiler/internal/build/build.go
 language: go
 summary: Staged browser builds, assets, styles, validation, and atomic dist swap.

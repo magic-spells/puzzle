@@ -65,7 +65,7 @@
  *   filter-typing keystroke must not jump to top); an explicit `#anchor` on the
  *   replace target still lands like push's, and a custom scrollBehavior
  *   (savedPosition null) still overrides. The same-path no-op, the #committing
- *   commit-window deferral (via the { path, replace } #pendingPush slot), and
+ *   commit-window deferral (via the shared #pendingPush slot), and
  *   pending-memory-pop supersession all mirror push() exactly.
  * - pushState fires for push()/link clicks ONLY, now via #commitLocation inside the
  *   synchronous commit window (D61) — never on the initial navigation or popstate
@@ -209,7 +209,10 @@
  * element, walking back up the chain when a leaf rendered no element (`.element`
  * is legitimately null) and doing nothing when no level has one. The root is not
  * natively focusable, so tabindex="-1" is stamped before focusing and removed on
- * the element's blur — no permanent tab stop, no attribute debris. The focus()
+ * the element's blur — no permanent tab stop, no attribute debris. The stamp also
+ * cuts both focus-ring channels (`outline` and `box-shadow`, inline + !important)
+ * for its lifetime, restored on the same blur — a programmatic-only target is not
+ * keyboard-operable, so a ring around the whole view is noise (D139). The focus()
  * call ALWAYS passes { preventScroll: true }: without it the browser scrolls the
  * element into view and fights the window.scrollTo above, breaking D33 restore
  * and D41 anchor landings. Announcement is a single framework-owned
@@ -283,10 +286,16 @@
  */
 
 import { ViewNode } from '../views/ViewNode.js';
-import { cancelAnimations } from '../views/animate.js';
 import { resolveHead, syncTitle } from '../head.js';
+import {
+	findShadowedPaths,
+	isDynamicSegment,
+	normalizeRoutePath,
+	validateTopLevelPath,
+} from './routePath.js';
 import { walkRouteTree } from './routeTree.js';
 import { devtoolsRouteCommit } from '../devtools.js';
+import { preloadTakeoverComponents } from '../ssg/preload.js';
 
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
 // { entryKey: {x,y} } under a single key; capped so a long session can't grow it
@@ -353,16 +362,16 @@ export class Router {
 	// While the router is inside the SYNCHRONOUS commit/mount section of a
 	// navigation — the region where a fresh view's mounted() (and viewWillShow)
 	// fire BEFORE #commitState has recorded the just-committed chain as
-	// #state/current — a push() from one of those hooks must NOT re-enter
+	// #state/current — a push()/replace()/memory go() from one of those hooks
+	// must NOT re-enter
 	// #navigate: it would read the stale #state as `cur`, compute its reuse
 	// prefix against the OLD chain, and double-mount the shared layout (the
-	// pyramid-puzzle redirect-from-mounted bug). Such a push is DEFERRED — its
-	// target recorded as { path, replace } (last-wins, single slot — a replace()
-	// arriving in the window shares the slot, D83) and re-dispatched the instant
-	// the in-flight commit completes and #state is consistent. No await runs
-	// inside the window, so only a synchronous reentrant push can land while the
-	// flag is set; a push arriving during the async LOAD or out-animation phases
-	// (flag off) keeps today's interruption semantics.
+	// pyramid-puzzle redirect-from-mounted bug). Such a navigation is DEFERRED —
+	// its verb + argument are recorded in one last-wins slot and re-dispatched
+	// the instant the in-flight commit completes and #state is consistent. No
+	// await runs inside the window, so only a synchronous reentrant navigation
+	// can land while the flag is set; one arriving during the async LOAD or
+	// out-animation phases (flag off) keeps today's interruption semantics.
 	#committing = false;
 	#pendingPush = null;
 
@@ -518,7 +527,7 @@ export class Router {
 			);
 		}
 		this.#mode = mode;
-		this.#initialPath = initialPath ?? '/';
+		this.#initialPath = normalizeRoutePath(initialPath ?? '/');
 		// Normalize + validate the base at construction (D51, config-error posture
 		// like the unknown-mode throw above): '#'/'?' in a base is a hard error, and
 		// '', '/', and a trailing '/' all collapse to the canonical form.
@@ -546,6 +555,9 @@ export class Router {
 				continue;
 			}
 			walkRouteTree(route, this.#routes, makeEntry);
+		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			warnShadowedPaths(findShadowedPaths(this.#routes));
 		}
 		// Bind once so start()/stop() add and remove the SAME reference — the
 		// prototype bound at addEventListener time and leaked (CODE_REVIEW §2.5).
@@ -778,8 +790,9 @@ export class Router {
 	 * returns a resolved promise since the deferred nav has not started yet.
 	 */
 	push(path) {
+		path = normalizeRoutePath(path);
 		if (this.#committing) {
-			this.#pendingPush = { path, replace: false }; // last-wins, single slot (no queue)
+			this.#pendingPush = { kind: 'push', path }; // last-wins, single slot (no queue)
 			return Promise.resolve();
 		}
 		// v-next same-path no-op: a push whose target matches the COMMITTED state's
@@ -842,8 +855,9 @@ export class Router {
 	 * — the auth-redirect case that must not leave the aborted page in history).
 	 */
 	replace(path) {
+		path = normalizeRoutePath(path);
 		if (this.#committing) {
-			this.#pendingPush = { path, replace: true }; // last-wins, shared slot with push
+			this.#pendingPush = { kind: 'replace', path }; // last-wins, shared slot with push/go
 			return Promise.resolve();
 		}
 		// Same-path no-op, exactly push()'s guard: replacing the committed entry
@@ -855,27 +869,29 @@ export class Router {
 	}
 
 	/**
-	 * Run a push/replace deferred during the commit window, now that
+	 * Run a push/replace/memory-go deferred during the commit window, now that
 	 * #state/current are consistent (the just-committed chain is recorded).
 	 * Fire-and-forget: the caller has already finished its own commit. Single
 	 * slot — last writer wins.
 	 */
 	#runPendingPush() {
 		if (this.#pendingPush == null) return;
-		const { path, replace } = this.#pendingPush;
+		const pending = this.#pendingPush;
 		this.#pendingPush = null;
-		// Re-dispatch through push()/replace(), NOT straight into #navigate: by now
+		// Re-dispatch through the public verbs, NOT straight into #navigate: by now
 		// the outer finally has cleared #committing and #commitState recorded the
 		// just-committed #state, so the normal entry point applies the same-path
 		// no-op guard. Without this, an auth guard in mounted()/viewWillShow that
 		// redirects to the very path being committed (landing on '/login' and
 		// pushing '/login') would run a full redundant navigation + duplicate
-		// history entry. #pendingPush carries { path, replace } (the sole argument
-		// plus which verb to re-dispatch, D83), so nothing is lost. Fire-and-forget.
-		if (replace) {
-			this.replace(path);
+		// history entry. go() likewise must recompute from the now-committed memory
+		// index so it preserves #pendingIndex's normal double-back semantics.
+		if (pending.kind === 'go') {
+			this.go(pending.n);
+		} else if (pending.kind === 'replace') {
+			this.replace(pending.path);
 		} else {
-			this.push(path);
+			this.push(pending.path);
 		}
 	}
 
@@ -892,6 +908,12 @@ export class Router {
 		if (this.#mode !== 'memory') {
 			// go(0) reloads the page in browsers; delegating preserves that parity.
 			history.go(n);
+			return;
+		}
+		if (this.#committing) {
+			this.#pendingPush = { kind: 'go', n }; // last-wins, shared slot with push/replace
+			// The deferred navigation has not started yet, so there is no nav promise
+			// to return; this matches push()/replace()'s commit-window posture.
 			return;
 		}
 		// Before start() (or after stop()) the in-memory stack is null (D42) — degrade
@@ -928,11 +950,21 @@ export class Router {
 	 * is used exactly as stored (D51 already normalized it — no re-normalization). A
 	 * string NOT starting with '/' is returned unchanged: the deliberate pass-through
 	 * for external URLs, `mailto:`/`tel:`, bare `#anchor` fragments, an already-encoded
-	 * `'#/x'`, and `''`. Query strings and `#anchor` suffixes inside a path survive
-	 * for free — this is pure prefixing and never parses them.
+	 * `'#/x'`, and `''`. Non-ASCII text in a path-shaped value is percent-encoded
+	 * idempotently before the mode/base prefix is applied; query strings and
+	 * `#anchor` suffixes ride through the same normalization.
 	 */
 	url(path) {
 		return encodeURL(path, this.#mode, this.#base);
+	}
+
+	/**
+	 * Ordered compiled leaf entries for build-time route analysis. The SSG pass
+	 * reads their regexes to detect precedence shadows instead of compiling a
+	 * second matcher table with rules that could drift from this Router.
+	 */
+	get routeEntries() {
+		return this.#routes;
 	}
 
 	/**
@@ -1012,7 +1044,7 @@ export class Router {
 		if (this.#pendingOut) {
 			const stalled = this.#pendingOut;
 			this.#pendingOut = null;
-			cancelAnimations(stalled.element);
+			stalled._cancelOutAnimation();
 		}
 		this.#pendingIndex = null;
 		// This navigation terminated without committing (guard block/failure, data
@@ -1187,8 +1219,12 @@ export class Router {
 				// (Fix 2); clear unconditionally after the await in case replace() was a
 				// no-op that never re-entered #navigate to consume the flag.
 				this.#guardRedirecting = true;
-				const redirected = await this.replace(guardVerdict);
-				this.#guardRedirecting = false;
+				let redirected;
+				try {
+					redirected = await this.replace(guardVerdict);
+				} finally {
+					this.#guardRedirecting = false;
+				}
 				this.#recoverFailedNavigation(token);
 				// A redirect that no-op'd (its target is already the committed route, or is
 				// unmatched) left #state and the URL untouched, so after a POPSTATE the
@@ -1280,8 +1316,16 @@ export class Router {
 		// prerendered DOM left intact). All other D39 behavior — SPA cold boot with a
 		// skeleton, subsequent client-side navigations to skeleton views — is
 		// byte-identical (isSSGTakeover false ⇒ skeletonExempt is the old check).
+		//
+		// __PUZZLE_TAKEOVER__ leads the conjunction so a plain SPA build folds the
+		// whole probe to `false` at compile time. Probed INLINE (never hoisted into
+		// a module const, which does not constant-propagate into method scopes);
+		// absent define ⇒ ON, so vitest and third-party bundlers keep the path.
 		const isSSGTakeover =
-			!cur && this.#container != null && this.#container.hasAttribute('data-puzzle-ssg');
+			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
+			!cur &&
+			this.#container != null &&
+			this.#container.hasAttribute('data-puzzle-ssg');
 		try {
 			const loads = [];
 			const hasSkeleton = (v) =>
@@ -1383,7 +1427,11 @@ export class Router {
 				keys: cur.keys,
 				layout,
 				scroll,
-				focus,
+				// A leaf-identical replace is URL-backed transient-state churn, not
+				// a route change: leave the user's current focus in place and make no
+				// live-region announcement. Params-only pushes still take the normal
+				// focus path, and full replaces never reach this branch.
+				focus: replace ? null : focus,
 			});
 			if (layout) this.#refreshLogged(layout, params, to);
 			return;
@@ -1417,6 +1465,39 @@ export class Router {
 			childVnode = vnode;
 		}
 		const rootVnode = childVnode; // vnode for chain level 0
+
+		// The routed chain/layout are already preloaded above, but their render
+		// trees can contain non-routed async components. Only an SSG navigation-zero
+		// marker opts into waiting for those descendants: ordinary SPA navigation
+		// keeps ViewManager's fire-and-forget component mounting unchanged.
+		//
+		// This is the branch that pays for itself: with __PUZZLE_TAKEOVER__ false the
+		// block folds away, `preloadTakeoverComponents` loses its only importer here,
+		// and ssg/preload.js tree-shakes out of the bundle ("sideEffects": false).
+		if (
+			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
+			this.#container?.hasAttribute('data-puzzle-ssg')
+		) {
+			let takeoverVnode = rootVnode;
+			if (layout) {
+				takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
+				takeoverVnode.instance = layout;
+			}
+			const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
+			// A newer navigation may supersede us while a nested component loads.
+			// None of these instances mounted, so release each one's tracked state
+			// explicitly before discarding the routed chain.
+			if (token !== this.#token) {
+				for (const instance of nestedInstances) instance.destroy();
+				for (const v of freshViews) v.destroy();
+				if (layout && !reuseLayout) layout.destroy();
+				return;
+			}
+			// Same suppression the routed chain gets below: mountComponent auto-chains
+			// playIn() onto every component it mounts, and these are about to mount over
+			// prerendered markup that already shows them.
+			for (const instance of nestedInstances) instance.skipEnter();
+		}
 
 		await this.#swap(token, cur, {
 			rawPath,
@@ -1676,9 +1757,10 @@ export class Router {
 					if (keep === 0) {
 						// Mounted directly (the ViewManager does not auto-play it in) → the
 						// router plays it in as the animator.
-						this.#takeoverSSG(topView);
+						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
-							topView.mount(this.#container, { children: rootVnode.children, preloaded: true })
+							topView.mount(this.#container, { children: rootVnode.children, preloaded: true }),
+							restoreTakeover
 						);
 						this.#commitState(next);
 						this.#playInLogged(topView);
@@ -1712,17 +1794,24 @@ export class Router {
 						// Layout SWAP: the LAYOUT is the animator — suppress the whole fresh
 						// chain (topView + deeper) so the subtree does not double-animate.
 						topView.skipEnter();
+						// The marker can only be present here after a FAILED navigation-#0
+						// takeover restored it: clear the restored prerendered nodes again or
+						// this fresh layout mounts ALONGSIDE them (duplicated page). A marker-
+						// less app makes this a no-op and the branch stays byte-identical.
+						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
-							layout.mount(this.#container, { children: [rootVnode], preloaded: true })
+							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+							restoreTakeover
 						);
 						this.#commitState(next);
 						this.#playInLogged(layout);
 					} else {
 						// INITIAL nav: a layout does NOT animate on first paint — the topmost
 						// view plays in exactly once via the ViewManager's slot-child chain.
-						this.#takeoverSSG(topView);
+						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
-							layout.mount(this.#container, { children: [rootVnode], preloaded: true })
+							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+							restoreTakeover
 						);
 						this.#commitState(next);
 					}
@@ -1764,35 +1853,58 @@ export class Router {
 	 * throw — the commit block keeps running, no rollback: D19/D61). Left
 	 * unobserved that becomes an unhandled rejection; log it once here instead. The
 	 * failed view is still committed to #state, so a later navigation replaces and
-	 * destroys it normally. (Child views mounted through the ViewManager's keyed
-	 * patch are already observed there — '[puzzle] child mount failed:'; this covers
-	 * the three mounts the router drives directly: bare root view, layout swap,
-	 * initial-nav layout.)
+	 * destroys it normally. On navigation-zero SSG takeover, restoreTakeover puts
+	 * the exact prerendered nodes + marker back before logging — the committed
+	 * failed instance remains router-owned, but the user never gets a blank page.
+	 * (Child views mounted through the ViewManager's keyed patch are already observed
+	 * there; this covers the three mounts the router drives directly: bare root view,
+	 * layout swap, initial-nav layout.)
 	 */
-	#observeMount(p) {
-		Promise.resolve(p).catch((err) =>
-			console.error('[puzzle] view mount failed after commit:', err)
-		);
+	#observeMount(p, restoreTakeover = null) {
+		Promise.resolve(p).catch((err) => {
+			restoreTakeover?.();
+			console.error(
+				'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+				err
+			);
+		});
 	}
 
 	/**
 	 * SSG takeover (M2): when the container was server-prerendered, the SSG step
 	 * stamped `data-puzzle-ssg` on it and filled it with the rendered markup. The
-	 * marker is present only on navigation #0 of an SSG app; this runs immediately
-	 * before an initial-nav mount into the container (the no-layout keep-0 branch
-	 * and the initial-nav layout branch). Clear the prerendered content so the fresh
-	 * mount doesn't append alongside it (duplicating the page), drop the marker (a
-	 * later re-mount is a normal SPA mount), and suppress the incoming top view's
-	 * ENTER animation so content the user is already reading doesn't re-animate.
+	 * marker is present only on navigation #0 of an SSG app — or restored by a
+	 * FAILED takeover mount (below); this runs immediately before every mount
+	 * into the container (the no-layout keep-0 branch, the initial-nav layout
+	 * branch, and the layout-swap branch, where only the restored-marker case can
+	 * match). Snapshot then clear the prerendered
+	 * content so the fresh mount doesn't append alongside it (duplicating the
+	 * page), drop the marker (a later re-mount is a normal SPA mount), and suppress
+	 * the incoming top view's ENTER animation so content the user is already
+	 * reading doesn't re-animate. The returned callback restores the exact nodes
+	 * and marker if the async mount promise rejects on render()/mounted().
 	 * `topView` is views[keep] — the view the ViewManager auto-plays in (behind a
 	 * layout) or the router plays in directly (no layout). A non-SSG app has no
 	 * marker, so this is a no-op and behavior is byte-identical.
+	 *
+	 * With __PUZZLE_TAKEOVER__ false the guarded block folds away and this is left
+	 * as an empty method — the two call sites stay, calling nothing. (Deleting the
+	 * method instead would change the class shape, exactly as __devSnapshot does
+	 * under __PUZZLE_DEV__.)
 	 */
 	#takeoverSSG(topView) {
-		if (!this.#container.hasAttribute('data-puzzle-ssg')) return;
-		this.#container.replaceChildren();
-		this.#container.removeAttribute('data-puzzle-ssg');
-		topView.skipEnter();
+		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+			if (!this.#container.hasAttribute('data-puzzle-ssg')) return;
+			const marker = this.#container.getAttribute('data-puzzle-ssg');
+			const prerendered = [...this.#container.childNodes];
+			this.#container.replaceChildren();
+			this.#container.removeAttribute('data-puzzle-ssg');
+			topView.skipEnter();
+			return () => {
+				this.#container.replaceChildren(...prerendered);
+				this.#container.setAttribute('data-puzzle-ssg', marker);
+			};
+		}
 	}
 
 	/**
@@ -2172,12 +2284,41 @@ export class Router {
 	 * element's blur so the DOM accumulates no attribute debris across navigations
 	 * and the root cannot linger in anyone's mental model of the tab order. An
 	 * author-set tabindex is left completely alone (they already chose this
-	 * element's focus semantics), which also means we add no listener there.
+	 * element's focus semantics — including its focus VISUALS), which also means
+	 * we add no listener there.
+	 *
+	 * The focus ring is suppressed for the stamp's lifetime (D139): a
+	 * keyboard-driven navigation (Enter on a link, back/forward) makes
+	 * :focus-visible match the freshly focused root, and the UA draws its outline
+	 * around the entire view — pure noise, because a programmatic-only target is
+	 * not keyboard-operable and there is nothing the ring could invite the user to
+	 * do. BOTH ring channels are cut: `outline` (the UA default and most app
+	 * `:focus` rules) and `box-shadow` (how Tailwind's `focus:ring-*` utilities
+	 * draw). Inline + !important so no app stylesheet can re-draw either, and
+	 * undone on the SAME blur that lifts the tabindex — a pre-existing inline
+	 * value is put back exactly as found, everything else is removed outright.
 	 */
 	#focusElement(el) {
 		if (!el.hasAttribute('tabindex')) {
 			el.setAttribute('tabindex', '-1');
-			el.addEventListener('blur', () => el.removeAttribute('tabindex'), { once: true });
+			const prior = ['outline', 'box-shadow'].map((prop) => [
+				prop,
+				el.style.getPropertyValue(prop),
+				el.style.getPropertyPriority(prop),
+			]);
+			el.style.setProperty('outline', 'none', 'important');
+			el.style.setProperty('box-shadow', 'none', 'important');
+			el.addEventListener(
+				'blur',
+				() => {
+					el.removeAttribute('tabindex');
+					for (const [prop, value, priority] of prior) {
+						if (value) el.style.setProperty(prop, value, priority);
+						else el.style.removeProperty(prop);
+					}
+				},
+				{ once: true }
+			);
 		}
 		// preventScroll is LOAD-BEARING, not a nicety: the default focus() scrolls
 		// the element into view, which would immediately fight the window.scrollTo
@@ -2392,16 +2533,22 @@ export class Router {
 	 * absolute-URL branches (D34/D51): given the fragment to test (a relative href
 	 * starting with '#', or an absolute same-page URL's `.hash`), route it if it
 	 * names an in-app fragment and return true. With a base the fragment must be
-	 * exactly '#' + base (→ '/') or under '#' + base + '/'; base-less, any '#/...'
-	 * is a route. A bare '#anchor' matches nothing → returns false (browser handles
-	 * it). preventDefault is called HERE, before push (its placement in the original
-	 * inlined cascades), so the return value is advisory.
+	 * exactly '#' + base (→ '/'), the base followed directly by a query (→ '/?...'),
+	 * or under '#' + base + '/'; base-less, any '#/...' is a route. A bare '#anchor'
+	 * matches nothing → returns false (browser handles it). preventDefault is called
+	 * HERE, before push (its placement in the original inlined cascades), so the
+	 * return value is advisory.
 	 */
 	#tryHashFragment(fragment, e) {
 		if (this.#base) {
 			if (fragment === '#' + this.#base) {
 				e.preventDefault();
 				this.push('/');
+				return true;
+			}
+			if (fragment.startsWith('#' + this.#base + '?')) {
+				e.preventDefault();
+				this.push('/' + fragment.slice(1 + this.#base.length));
 				return true;
 			}
 			if (fragment.startsWith('#' + this.#base + '/')) {
@@ -2500,10 +2647,11 @@ export class Router {
  * consumer that both validates the leaf's chain and compiles it into a matcher
  * Entry.
  *
- * Fail-fast config errors (throw at construction): a child path with a leading
- * '/', a `layout` on a non-root node, `path:'*'` inside children, a duplicate
- * `:param` name within one chain, an unknown `transitionMode` value (D65), and a
- * non-function `guard` (D87) on any node (root or child).
+ * Fail-fast config errors (throw at construction): a top-level path that is
+ * neither `'*'` nor rooted with '/', a child path with a leading '/', a `layout`
+ * on a non-root node, `path:'*'` inside children, a duplicate `:param` name
+ * within one chain, an unknown `transitionMode` value (D65), and a non-function
+ * `guard` (D87) on any node (root or child).
  *
  * Build a leaf Entry: validate the chain, then compile the leaf's full path to a
  * matcher + merged params.
@@ -2515,7 +2663,9 @@ function makeEntry(chain, fullPaths) {
 	// and route trees are tiny, and a bad node still throws the same error the
 	// first time DFS reaches a leaf under it.
 	chain.forEach((node, index) => {
-		if (index) {
+		if (index === 0) {
+			validateTopLevelPath(node.path);
+		} else {
 			if (typeof node.path === 'string' && node.path.startsWith('/')) {
 				throw new Error(
 					`[puzzle] child route path must be relative (no leading "/"): "${node.path}"`
@@ -2533,19 +2683,26 @@ function makeEntry(chain, fullPaths) {
 		validateTransitionMode(node.transitionMode, `route "${node.path}"`);
 		validateGuard(node.guard, `route "${node.path}"`);
 	});
-	const leafPath = fullPaths[fullPaths.length - 1];
+	// A DECLARED trailing slash is as insignificant as an incoming one: #match strips
+	// one from every pathname it tests, so a route compiled verbatim from '/docs/'
+	// would have a regex nothing could ever reach. Strip it once here (never from the
+	// root '/') so the declaration and the matcher agree.
+	const leafPath = stripTrailingSlash(fullPaths[fullPaths.length - 1]);
 	const paramNames = [];
 	// Compile ONE '/'-segment at a time: a segment that is a complete `:name`
-	// becomes a single-segment capture group; EVERY other segment is regex-escaped
-	// in full, so static path text with regex metacharacters ('.', '+', '(', '[',
-	// …) matches LITERALLY (`/docs.v1` matches only `/docs.v1`, not `/docsXv1`).
-	// The '/' separators are structural, re-joined below — never escaped. The
-	// top-level catch-all '*' never reaches here (handled in the constructor; a '*'
-	// inside children throws above), so '*' is escaped like any other literal.
+	// becomes a single-segment capture group; EVERY other segment first normalizes
+	// non-ASCII text to the browser's percent-encoded pathname form, then is
+	// regex-escaped in full. Static path text with regex metacharacters ('.', '+',
+	// '(', '[', …) still matches LITERALLY (`/docs.v1` matches only `/docs.v1`,
+	// not `/docsXv1`). Existing `%XX` escapes are ASCII and stay byte-identical, so
+	// this normalization is idempotent. The '/' separators are structural,
+	// re-joined below — never escaped. The top-level catch-all '*' never reaches
+	// here (handled in the constructor); a non-bare '*' inside a top-level path is
+	// escaped like any other literal, while a '*' child still throws above.
 	const regexPath = leafPath
 		.split('/')
 		.map((seg) => {
-			if (seg.length > 1 && seg[0] === ':') {
+			if (isDynamicSegment(seg)) {
 				const name = seg.slice(1);
 				if (paramNames.includes(name)) {
 					throw new Error(`[puzzle] duplicate route param ":${name}" in "${leafPath}"`);
@@ -2553,12 +2710,14 @@ function makeEntry(chain, fullPaths) {
 				paramNames.push(name);
 				return '([^/]+)';
 			}
-			return escapeRegExp(seg);
+			return escapeRegExp(normalizeRoutePath(seg));
 		})
 		.join('/');
 	return {
 		chain,
 		fullPaths,
+		fullPath: leafPath,
+		matchPath: normalizeRoutePath(leafPath),
 		regex: new RegExp('^' + regexPath + '$'),
 		paramNames,
 		layout: chain[0].layout ?? null,
@@ -2574,6 +2733,20 @@ function makeEntry(chain, fullPaths) {
 // by esbuild, so the class-member form would ship dead warning scaffolding.
 // Once-state is per-module (per page load), not per-router-instance — fine for
 // a dev diagnostic, and vitest isolates module state per test file.
+
+/** Warn once per shadow pair even when SSG builds several memory routers. */
+const warnedShadowedPaths = new Set();
+function warnShadowedPaths(shadowedPaths) {
+	for (const { path, shadowedBy } of shadowedPaths) {
+		const key = shadowedBy + '\0' + path;
+		if (warnedShadowedPaths.has(key)) continue;
+		warnedShadowedPaths.add(key);
+		console.warn(
+			`[puzzle] route "${path}" is unreachable because earlier route "${shadowedBy}" ` +
+				'matches it first (routes match in declaration order)'
+		);
+	}
+}
 
 /** One-shot "loaded outside the configured base" warning (D51). */
 let warnedOutsideBase = false;
@@ -2645,9 +2818,10 @@ function validateGuard(value, label) {
  * (no base — the default; every seam stays byte-identical to the base-less
  * router). Otherwise a leading '/' is ensured and every trailing '/' trimmed, so
  * `'myapp'`, `'/myapp'`, and `'/myapp/'` all normalize to `'/myapp'`; multi-
- * segment bases (`'/a/b'`) work. A base containing `'#'` or `'?'` is a
- * constructor throw (config-error posture, like an unknown mode) — those
- * characters would corrupt the mode-specific URL encoding.
+ * segment bases (`'/a/b'`) work. Non-ASCII base text is percent-encoded through
+ * the same idempotent path normalizer used by routes. A base containing `'#'` or
+ * `'?'` is a constructor throw (config-error posture, like an unknown mode) —
+ * those characters would corrupt the mode-specific URL encoding.
  */
 export function normalizeBase(base) {
 	if (!base) return '';
@@ -2656,7 +2830,7 @@ export function normalizeBase(base) {
 	}
 	let b = base[0] === '/' ? base : '/' + base;
 	b = b.replace(/\/+$/, ''); // trim trailing slash(es); '/' → ''
-	return b;
+	return normalizeRoutePath(b);
 }
 
 /**
@@ -2673,6 +2847,7 @@ export function encodeURL(path, mode, base) {
 		throw new Error(`[puzzle] router.url(path) expects a string path (got ${typeof path})`);
 	}
 	if (path[0] !== '/') return path;
+	path = normalizeRoutePath(path);
 	if (mode === 'memory') return path;
 	if (mode === 'hash') return '#' + base + path;
 	return base + path;

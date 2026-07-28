@@ -8,7 +8,7 @@
 // DOM, and (3) the store is rehydrated so data() sees the build-time records with no
 // network. Also: the router stub throws, and hydration is skipped when the island is
 // absent/empty.
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { prerender } from '../client-runtime/ssg/index.js';
 import { mountStatic } from '../client-runtime/static/index.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
@@ -19,6 +19,13 @@ const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children)
 const text = (value) => new ViewNode('text', { value });
 const slot = () => new ViewNode(SLOT_TAG);
 const tick = () => new Promise((r) => setTimeout(r, 0));
+function deferred() {
+	let resolve;
+	const promise = new Promise((r) => {
+		resolve = r;
+	});
+	return { promise, resolve };
+}
 // setData re-renders flush on the next animation frame (PuzzleView #scheduleRender).
 const frame = () =>
 	new Promise((r) =>
@@ -84,12 +91,15 @@ const config = () => ({
  */
 function seedDocument({ content, data }) {
 	document.body.innerHTML =
-		`<div id="app">${content}</div>` +
+		`<div id="app"${content ? ' data-puzzle-static' : ''}>${content}</div>` +
 		`<script type="application/json" data-puzzle-static-data>${JSON.stringify(data)}</script>`;
 	return document.querySelector('#app');
 }
 
+let nestedWillShow = 0;
+
 afterEach(() => {
+	nestedWillShow = 0;
 	document.body.innerHTML = '';
 });
 
@@ -116,6 +126,191 @@ describe('static kernel — mountStatic (D81)', () => {
 		expect(el.querySelectorAll('.counter li').length).toBe(2);
 		expect(el.textContent).toContain('alpha');
 		expect(el.textContent).toContain('beta');
+	});
+
+	it('restores the exact prerendered nodes when the root render throws', async () => {
+		let failOnClient = false;
+		class BadRenderPage extends PuzzleView {
+			render() {
+				if (failOnClient) throw new Error('static render failed');
+				return h('main', { class: 'prerendered-bad-render' }, [text('Still readable')]);
+			}
+		}
+		stamp(BadRenderPage, 'app/views/BadRenderPage.pzl');
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'bad-render', view: BadRenderPage }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+		const el = seedDocument({ content: page.html, data: page.data });
+		const prerendered = el.firstElementChild;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		failOnClient = true;
+
+		await expect(
+			mountStatic({ target: '#app', views: [BadRenderPage], route: page.route })
+		).resolves.toBeUndefined();
+
+		expect(el.firstElementChild).toBe(prerendered);
+		expect(el.textContent).toBe('Still readable');
+		expect(el.hasAttribute('data-puzzle-static')).toBe(true);
+		expect(error).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and the prerendered content restored (static pages have no later patch/remount):',
+			expect.any(Error)
+		);
+		error.mockRestore();
+	});
+
+	it('restores prerendered nodes and marker when the root mounted() throws', async () => {
+		class BadMountedPage extends PuzzleView {
+			render() {
+				return h('main', { class: 'bad-mounted' }, [text('Still readable')]);
+			}
+			mounted() {
+				throw new Error('static mounted failed');
+			}
+		}
+		stamp(BadMountedPage, 'app/views/BadMountedPage.pzl');
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'bad-mounted', view: BadMountedPage }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+		const el = seedDocument({ content: page.html, data: page.data });
+		const prerendered = el.firstElementChild;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		await expect(
+			mountStatic({ target: '#app', views: [BadMountedPage], route: page.route })
+		).resolves.toBeUndefined();
+
+		expect(el.firstElementChild).toBe(prerendered);
+		expect(el.textContent).toBe('Still readable');
+		expect(el.hasAttribute('data-puzzle-static')).toBe(true);
+		expect(error).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and the prerendered content restored (static pages have no later patch/remount):',
+			expect.any(Error)
+		);
+		error.mockRestore();
+	});
+
+	it('keeps prerendered deep async component content until static takeover commits', async () => {
+		let clientGate = null;
+		class AsyncLeaf extends PuzzleView {
+			async data() {
+				if (clientGate) await clientGate.promise;
+				return { label: 'ASYNC-CONTENT' };
+			}
+			render() {
+				return h('section', { class: 'async-leaf' }, [text(this.getData().label)]);
+			}
+		}
+		stamp(AsyncLeaf, 'app/components/AsyncLeaf.pzl');
+		class NestedShell extends PuzzleView {
+			render() {
+				return h('div', { class: 'nested-shell' }, [h(AsyncLeaf)]);
+			}
+		}
+		stamp(NestedShell, 'app/components/NestedShell.pzl');
+		class NestedPage extends PuzzleView {
+			render() {
+				return h('main', { class: 'nested-page' }, [h(NestedShell)]);
+			}
+		}
+		stamp(NestedPage, 'app/views/NestedPage.pzl');
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'nested', view: NestedPage }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+		const el = seedDocument({ content: page.html, data: page.data });
+		const prerendered = el.innerHTML;
+		clientGate = deferred();
+
+		const mounting = mountStatic({
+			target: '#app',
+			views: [NestedPage],
+			route: page.route,
+		});
+		await tick(); // a paint opportunity while the nested data() macrotask is pending
+		const firstPaint = el.innerHTML;
+		clientGate.resolve();
+		await mounting;
+
+		expect(firstPaint).toBe(prerendered);
+		expect(el.innerHTML).toBe(prerendered);
+	});
+
+	it('keeps the nested sync component control byte-identical during static takeover', async () => {
+		class SyncLeaf extends PuzzleView {
+			data() {
+				return { label: 'SYNC-CONTENT' };
+			}
+			render() {
+				return h('section', { class: 'sync-leaf' }, [text(this.getData().label)]);
+			}
+		}
+		stamp(SyncLeaf, 'app/components/SyncLeaf.pzl');
+		class SyncPage extends PuzzleView {
+			render() {
+				return h('main', { class: 'sync-page' }, [h(SyncLeaf)]);
+			}
+		}
+		stamp(SyncPage, 'app/views/SyncPage.pzl');
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'sync', view: SyncPage }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+		const el = seedDocument({ content: page.html, data: page.data });
+		const prerendered = el.innerHTML;
+
+		await mountStatic({ target: '#app', views: [SyncPage], route: page.route });
+
+		expect(el.innerHTML).toBe(prerendered);
+		expect(el.querySelector('.sync-leaf').textContent).toBe('SYNC-CONTENT');
+	});
+
+	it('mounts the static page when a nested component preload rejects', async () => {
+		let rejectOnClient = false;
+		class RejectingLeaf extends PuzzleView {
+			async data() {
+				await tick();
+				if (rejectOnClient) throw new Error('nested static takeover rejected');
+				return { label: 'BUILD-CONTENT' };
+			}
+			render() {
+				return h('section', { class: 'rejecting-leaf' }, [text(this.getData().label)]);
+			}
+		}
+		stamp(RejectingLeaf, 'app/components/RejectingLeaf.pzl');
+		class RejectingPage extends PuzzleView {
+			render() {
+				return h('main', { class: 'rejecting-page' }, [h(RejectingLeaf)]);
+			}
+		}
+		stamp(RejectingPage, 'app/views/RejectingPage.pzl');
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'rejecting', view: RejectingPage }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+		const el = seedDocument({ content: page.html, data: page.data });
+		rejectOnClient = true;
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		await expect(
+			mountStatic({ target: '#app', views: [RejectingPage], route: page.route })
+		).resolves.toBeUndefined();
+
+		expect(error).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(el.querySelector('.rejecting-page')).not.toBe(null);
+		expect(el.querySelector('.rejecting-leaf')).toBe(null);
 	});
 
 	it('rehydrates the store so data() sees the build-time records with no network', async () => {
@@ -178,6 +373,55 @@ describe('static kernel — mountStatic (D81)', () => {
 		await mountStatic({ target: '#app', views: [NoAnim], route: pages[0].route });
 		await tick();
 		expect(willShow).toBe(0);
+	});
+
+	// A NESTED (non-routed) component is not part of the route chain, so it is not
+	// in `instances` — mountComponent auto-chains playIn() onto it. Under takeover
+	// its markup is already on screen, so it must be skipEnter'd too.
+	class EnterLeaf extends PuzzleView {
+		animations = { in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 200 } };
+		viewWillShow() {
+			nestedWillShow++;
+		}
+		render() {
+			return h('section', { class: 'enter-leaf' }, [text('LEAF')]);
+		}
+	}
+	stamp(EnterLeaf, 'app/components/EnterLeaf.pzl');
+	class EnterPage extends PuzzleView {
+		render() {
+			return h('main', { class: 'enter-page' }, [h(EnterLeaf)]);
+		}
+	}
+	stamp(EnterPage, 'app/views/EnterPage.pzl');
+	const enterRoutes = [{ path: '/', name: 'home', view: EnterPage }];
+
+	it('does not animate a NESTED component on the initial paint either', async () => {
+		const { pages } = await prerender({ target: '#app', routes: enterRoutes }, { mode: 'static' });
+		const el = seedDocument({ content: pages[0].html, data: pages[0].data });
+
+		await mountStatic({ target: '#app', views: [EnterPage], route: pages[0].route });
+		await tick();
+
+		expect(el.querySelector('.enter-leaf')).not.toBe(null);
+		expect(nestedWillShow).toBe(0);
+	});
+
+	it('a prerender:false page still plays its nested component enter', async () => {
+		// No `data-puzzle-static` marker ⇒ nothing was prerendered into the target, so
+		// the nested enter is an ordinary first paint and must animate as usual.
+		const cfg = {
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: EnterPage, prerender: false }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const el = seedDocument({ content: '', data: pages[0].data });
+
+		await mountStatic({ target: '#app', views: [EnterPage], route: pages[0].route });
+		await tick();
+
+		expect(el.querySelector('.enter-leaf')).not.toBe(null);
+		expect(nestedWillShow).toBe(1);
 	});
 
 	it('mounts a prerender:false page into the empty target (same code path)', async () => {

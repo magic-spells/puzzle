@@ -28,8 +28,8 @@ export default class T extends PuzzleView { data() { return { items: [] }; } }
 	}
 	// The loop variable is in scope inside the body: a bare `{ $foo }` stays
 	// local — never rewritten to `__d.$foo` and never mangled.
-	if !strings.Contains(got, "String($foo)") {
-		t.Errorf("expected body reference `String($foo)` (loop var in scope), got:\n%s", got)
+	if !strings.Contains(got, "__s($foo,") {
+		t.Errorf("expected body reference `__s($foo, …)` (loop var in scope), got:\n%s", got)
 	}
 	if strings.Contains(got, "__d.$foo") || strings.Contains(got, "__d.foo") {
 		t.Errorf("loop variable `$foo` must not be rewritten to the data model:\n%s", got)

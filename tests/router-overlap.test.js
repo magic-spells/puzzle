@@ -277,6 +277,61 @@ describe('Router overlap — interruption stays instant', () => {
 	});
 });
 
+describe('Router overlap — a FAILED navigation mid-overlap', () => {
+	it('still tears the pinned leaver down when the interrupting nav rejects', async () => {
+		waapi = installFakeAnimate();
+		const log = [];
+		const A = makeView('a', log);
+		const B = makeView('b', log);
+		class Bad extends PuzzleView {
+			async data() {
+				throw new Error('boom');
+			}
+			render() {
+				return h('puzzle-view', { class: 'bad' }, [text('BAD')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'a', view: A, layout: PlainLayout },
+			{ path: '/b', name: 'b', view: B, layout: PlainLayout },
+			{ path: '/bad', name: 'bad', view: Bad, layout: PlainLayout },
+		];
+		const { router, el } = await boot(routes, { transitionMode: 'overlap' });
+		await settle();
+		log.length = 0;
+
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+		// A→B overlaps: A pinned and still fading, B committed and mounted.
+		const p1 = router.push('/b');
+		await tick();
+		expect(el.querySelector('.b')).not.toBeNull();
+		expect(el.querySelector('.a')).not.toBeNull();
+		expect(el.querySelector('.a').style.position).toBe('fixed'); // pinned, mid-fade
+
+		// The interrupting navigation's data() rejects, so it never reaches #swap —
+		// the only place that tears a stalled #pendingOut down. Recovery cancels the
+		// pinned leaver's out animation instead, and because #startOverlapLeave
+		// attaches destroy() OUTSIDE the `#pendingOut === oldAnimator` guard, that
+		// cancelled playOut still settles and A is still destroyed and removed. This
+		// pins that: a failed nav mid-overlap must not strand a pinned ghost element
+		// (position:fixed, pointer-events:none) over the committed view.
+		await router.push('/bad');
+		await p1;
+		await settle();
+
+		expect(errSpy).toHaveBeenCalledWith('[puzzle] navigation data() failed:', expect.any(Error));
+		expect(log.filter((e) => e === 'a:destroyed')).toHaveLength(1);
+		expect(el.querySelector('.a')).toBeNull();
+		expect(el.querySelector('.bad')).toBeNull();
+		// The failed navigation stays put on B, whose DOM is untouched.
+		expect(router.current.path).toBe('/b');
+		expect(location.pathname).toBe('/b');
+		expect(el.querySelector('.b')).not.toBeNull();
+		expect(el.querySelector('.b').textContent).toBe('B');
+	});
+});
+
 describe('Router overlap — reused layout (patch-driven leaver removal)', () => {
 	it('both view elements coexist during the fade inside the intact layout; leaver removed on settle', async () => {
 		waapi = installFakeAnimate();

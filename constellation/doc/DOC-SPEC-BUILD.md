@@ -1,7 +1,7 @@
 ---
 name: SPEC — build, output modes, dev loop, and tooling
 kind: reference
-status: verified
+status: built
 connections:
   - DOC-SPEC
   - COMPONENT-COMPILER-CLI
@@ -56,15 +56,17 @@ An additive build OUTPUT mode that prerenders every static route to its own HTML
 
 **Activation:** `puzzle build --static` / `--hybrid`, or `output: 'static'` / `'hybrid'` in `puzzle.config.js` (those are the only two legal values; anything else is a config error). The two flags are mutually exclusive, and a flag disagreeing with the config value is an error. Either flag or config key is sufficient. `puzzle dev` and a plain `puzzle build` (no `output`) are unchanged (SPA).
 
-**Shared prerender pipeline:** after the normal bundle + Tailwind + `public/` copy into the staging dir, the CLI bundles a second node-platform entry (same `.pzl` plugin, `__PUZZLE_DEV__=false`) that imports the app's **default-exported PuzzleApp** from `app/app.js` (required convention: `export default app`) plus `@magic-spells/puzzle/ssg`, and runs it under `node` once (with the mode passed through). A prerender failure fails the build; the staging swap guarantees the last good `dist/` is untouched. The summary (pages written, skipped routes, warnings) rides a stdout JSON sentinel (`__PUZZLE_SSG_JSON__`), same pattern as the config loader.
+**Shared prerender pipeline:** after the normal bundle + Tailwind + `public/` copy into the staging dir, the CLI bundles a second node-platform entry (same `.pzl` plugin, `__PUZZLE_DEV__=false`, and `__PUZZLE_TAKEOVER__=false` since it generates markup and never adopts it — D130) that imports the app's **default-exported PuzzleApp** from `app/app.js` (required convention: `export default app`) plus `@magic-spells/puzzle/ssg`, and runs it under `node` once (with the mode passed through). A prerender failure fails the build; the staging swap guarantees the last good `dist/` is untouched. The summary (pages written, skipped routes, warnings) rides a stdout JSON sentinel (`__PUZZLE_SSG_JSON__`), same pattern as the config loader.
+
+**Prerendered output may not overwrite a `public/` asset (D126).** `app/public/` is copied into staging before the prerender pass, and a route page whose output path collides with a copied asset is a **build error** naming both the route and the asset — previously the page silently won and the public file's contents were lost. The likely case is `public/404.html` plus a `*` catch-all. Exactly one collision is exempt: route `/` writing `index.html`, which *is* the copied SPA shell and is read into memory before the write loop, so rewriting it is a byte no-op. This is separate from the root-level reserved-name check (`app.js`, `app.js.map`, `styles.css`), which stays files-only and root-only — nested `public/vendor/app.js` remains legal.
 
 **Per-route output** is directory-style in both modes: `/` → `dist/index.html`, `/components/badge` → `dist/components/badge/index.html`. Each page is the `public/index.html` shell with the rendered markup injected into the (required, empty, `#id`-form `config.target`) element and the first `<title>` replaced by the route's `meta.title` (nearest-defined leaf → root; shell title kept when absent). Pages link absolute paths, so they work at any depth.
 
 **Render semantics** (`client-runtime/ssg/`, both modes): each route's layout + view chain is instantiated and loaded via `preload()` — `created()` + awaited `data()`, with `this.route` populated — so **no `mounted()`, no animations, no DOM runs at build time**; `data()` executes once per page under Node (global `fetch` serves adapters; browser globals in module scope must be guarded). `render()` always, never `renderSkeleton()`. The serializer mirrors the ViewManager byte-for-byte where it matters: slot expansion is the SAME `expandSlots`, `@event`/`key`/`island` attrs are dropped, boolean props emit bare attrs, `{#svg}` island seeds emit verbatim, scoped-style `data-<scopeId>` stamps pass through. Principled difference: `value` serializes as an attribute (pre-JS display) where the browser assigns a property. Second principled difference (D113): `<script>`/`<style>` are RAWTEXT — their text is **not** entity-escaped, because the HTML parser never entity-decodes it. JSON-typed scripts (`type` of `application/json` or any `+json` suffix) emit with `<` escaped to `\u003c` — the same JSON-transparent, breakout-proof rule as the static data island; all other script/style content emits raw, and the build **fails** if it contains `</script`/`</style` (case-insensitive) or the `<!--` + `<script` double-escaped pair, since the parser would end (or refuse to end) the element mid-content. `config.beforeMount` is awaited once with a `{ store, config }` facade — **build-time only in both modes** (the Astro-frontmatter policy).
 
-**Hybrid takeover contract (router):** the target is stamped `data-puzzle-ssg` and pages link the shared `/app.js` + `/styles.css`. On navigation #0, a mount container carrying `data-puzzle-ssg` is cleared (`replaceChildren`), the marker removed, and the incoming top view's enter animation suppressed (`skipEnter()`) — the swap happens inside the commit window after the data gate, with identical markup, so there is no flash and no duplication. Containers without the marker behave byte-identically to v1.32.
+**Hybrid takeover contract (router):** the target is stamped `data-puzzle-ssg` and pages link the shared `/app.js` + `/styles.css`. On navigation #0, a mount container carrying `data-puzzle-ssg` is cleared (`replaceChildren`), the marker removed, and the incoming top view's enter animation suppressed (`skipEnter()`) — the swap happens inside the commit window after the data gate, with identical markup, so there is no flash and no duplication. Containers without the marker behave byte-identically to v1.32. *(Amended, D140: the prerendered child nodes + marker are snapshotted before the clear and restored exactly when the mount promise rejects — a `render()`/`mounted()` throw no longer leaves a blank page; the restored marker makes the next container mount (including a layout swap) re-run the takeover clear.)*
 
-**Static contract (per-page modules, D81):** the target is stamped `data-puzzle-static` (never taken over by a router). Codegen stamps every compiled class with `Class.__pzlModule` (its app-root-relative source path); the build (`compiler/internal/build/prerender_pages.go`) generates one per-page ES module `dist/_puzzle/<slug>.js` (slug: `/`→`index`, `*`→`404`, else path `/`→`--`, collisions suffixed `-2`,`-3`…) importing `mountStatic` from `@magic-spells/puzzle/static` plus exactly that page's view/layout/component classes; esbuild code-splitting factors shared components + the router-free view-layer runtime into `dist/_puzzle/chunks/`. Each page's context store is serialized (`store._serializeAll()`) into an inline `<script type="application/json" data-puzzle-static-data>` island; the shell's `/app.js` tag is swapped for the page's module and `staging/app.js` is dropped. `mountStatic` wires the same build-time ctx (Store + FormatterRegistry; `ctx.router` is the D79 link stub — `url()`/`current` work so `{ path | link }` resolves, navigation methods throw), rehydrates the data island (replace mode), assembles + preloads the chain via the shared `assembleChain`, `skipEnter()`s every instance, then `replaceChildren()` + mounts over the prerendered markup — flash-free because it re-renders identically. *(Amended, D117: the stub's mode is forced to `'history'` on BOTH sides — prerender and kernel — regardless of `routerMode`, which static output ignores with a build warning: static pages are path-shaped files with no click interception, so a hash-shaped href is a dead link. `routerBase` still applies.)* `models` load from `app/models/index.js` and `formatters` from `app/formatters.js` when those files exist; formatters registered only in the app.js config warn (available at build time, missing client-side).
+**Static contract (per-page modules, D81):** the target is stamped `data-puzzle-static` (never taken over by a router). Codegen stamps every compiled class with `Class.__pzlModule` (its app-root-relative source path); the build (`compiler/internal/build/prerender_pages.go`) generates one per-page ES module `dist/_puzzle/<slug>.js` (slug: `/`→`index`, `*`→`404`, else path `/`→`--`, collisions suffixed `-2`,`-3`…) importing `mountStatic` from `@magic-spells/puzzle/static` plus exactly that page's view/layout/component classes; esbuild code-splitting factors shared components + the router-free view-layer runtime into `dist/_puzzle/chunks/`. Each page's context store is serialized (`store._serializeAll()`) into an inline `<script type="application/json" data-puzzle-static-data>` island; the shell's `/app.js` tag is swapped for the page's module and `staging/app.js` is dropped. `mountStatic` wires the same build-time ctx (Store + FormatterRegistry; `ctx.router` is the D79 link stub — `url()`/`current` work so `{ path | link }` resolves, navigation methods throw), rehydrates the data island (replace mode), assembles + preloads the chain via the shared `assembleChain`, `skipEnter()`s every instance, then `replaceChildren()` + mounts over the prerendered markup — flash-free because it re-renders identically. *(Amended, D140: on a marked page the prerendered nodes are snapshotted first and restored exactly — with the failed root destroyed — when the mount rejects; `prerender: false` pages keep the original path byte-for-byte.)* *(Amended, D117: the stub's mode is forced to `'history'` on BOTH sides — prerender and kernel — regardless of `routerMode`, which static output ignores with a build warning: static pages are path-shaped files with no click interception, so a hash-shaped href is a dead link. `routerBase` still applies.)* `models` load from `app/models/index.js` and `formatters` from `app/formatters.js` when those files exist; formatters registered only in the app.js config warn (available at build time, missing client-side).
 
 **Route matching amendment (all modes):** a single trailing `/` is no longer significant — `/docs/` matches the `/docs` route and a `:param` capture never swallows the slash. Static hosts serve directory URLs (`/components/badge/`), so the prerendered pages' own load paths must match their routes.
 
@@ -120,11 +122,12 @@ A failed `puzzle dev` build is reported **in the browser**, not only on the term
 
 ## 53. App-author test utilities: `@magic-spells/puzzle/testing` (v1.58)
 
-A fifth export subpath (D94) — `mountView`, `createTestApp`, `settled`, `installFakeAnimate`, `installFakeObserver`.
+A fifth export subpath (D94, amended by D121) — `mountView`, `createTestApp`, `settled`, `measureRenders`, `installFakeAnimate`, `installFakeObserver`.
 
 - **`mountView(ViewClass, opts)`** mounts one view against a detached container with the three-service ctx; the handle exposes `element`/`find`/`findAll`/`click`/`setProps`/`destroy`. **`createTestApp(config)`** runs a real app in `routerMode: 'memory'` (§15's stated purpose) so `visit(path)` drives the real load-then-commit pipeline, guards, and lifecycle.
 - **`settled()`** drains to a fixed point: stores through the public idempotent `flush()`, rAF-scheduled `setData` renders, and the current last-wins `data()`/navigation promises — repeating until two microtask-stable passes add no work (two, so work created by a promise continuation is caught without depending on rAF or §31's fallback timer).
 - **It is bounded** (`settled({ maxPasses })`, default 100) and **throws** on exhaustion, naming the churn sources. Unbounded, a `data()` → store-write → `data()` cycle hangs until the runner's global timeout and reports nothing.
+- **`measureRenders(handle, callback)`** installs a temporary §56 performance sink, runs and awaits the callback, then awaits `settled()` before detaching in `finally`. Its deeply frozen report is `{ renders, wastedRenders, domMutations, rendersByView, causes, maxRecursiveDepth, storeNotifications }`. A render means an entry into `ViewManager.render`, not a `refresh()` call; a render is wasted only when its DOM-mutation delta is zero. The helper is assertion-library-neutral and does not mutate the supplied handle.
 - **Its boundaries are contract, not omission.** `settled()` does not advance arbitrary user timers or `min-duration` holds, resolve promises `data()`/navigation never awaited, fire IntersectionObserver callbacks, or finish CSS/fire-and-forget enter animations. An outgoing animation *is* part of an awaited navigation, so that navigation stays unsettled until the test finishes or cancels it.
 - The shipped module **must not import `vitest`** — a published package cannot depend on a test runner.
 - `/testing` also re-exports `installFixtures` from the §52 module (v1.61, D98), so a test file needs one import for helpers *and* fixtures; the canonical pairing is `const uninstall = installFixtures({ seed })` in setup, `uninstall()` in teardown.
@@ -161,7 +164,14 @@ frameworkVersion }` · `app-mounted` / `app-unmounted` · `view-mounted { id,
 name, module }` / `view-destroyed { id }` · `flush { keys, notified }` (one
 per store flush batch — rides D63's scheduling, no extra throttling) ·
 `route-commit { pathname, query, params, chain, title }` (emitted in the same
-post-mount pre-paint window as scroll/focus).
+post-mount pre-paint window as scroll/focus) · `perf-warning { kind, viewId,
+name, detail, count }` (D122 — fired only when a §56 loop guard trips, never
+per render).
+
+There is deliberately **no per-render event**. The page hook buffers 500
+messages pre-attach and the panel ring holds 200, so a render firehose would
+evict the events every other panel depends on; render data is PULLED via
+`snapshot:profile` while recording and not at all otherwise.
 
 **Requests (extension → runtime, via `hook.onRequest` handler):**
 `snapshot:views` (recursive `{ id, name, module, children }` tree; roots
@@ -177,9 +187,78 @@ params, route, routes, chain, title }` — `route`/`routes` are path PATTERNS an
 `edit:record { type, id, patch }` —
 applied through the real `record.update()`, so §20 validation applies and a
 throw returns `{ error }` · `highlight:view { id, on }` (page overlay) ·
-`log:view` / `log:record` (logs the live object and binds `window.$p`).
+`log:view` / `log:record` (logs the live object and binds `window.$p`) ·
+`perf:start` / `perf:stop` → `{ ok: true }` · `snapshot:profile` → `{ recording,
+durationMs, totals, views[], flushes[], warnings[] }` (D122).
+
+**Additive growth.** The message set grows WITHOUT a `PROTOCOL_VERSION` bump:
+unknown events fall through the extension's `receive()` default into the ring
+and unknown requests fail per-call with `{ error }`, so both ends already
+tolerate names they do not know. A bump forces every published app into the hard
+`MISMATCH` state and blanks every panel.
+
+**Profile aggregation lives in the bridge, not in the §56 collector**, so rows
+carry the bridge's own view ids (the panel cross-links into `snapshot:views` by
+them) and a recording retains no view references — otherwise a long recording
+would pin every view destroyed during it.
 
 **Identity.** View ids are session-scoped integers (WeakMap-assigned); `name`
 is the compiled class name (dev builds are unminified), `module` is the
 codegen `__pzlModule` stamp (app-relative `.pzl` path).
 
+## 56. Dev-only runtime performance profiling + render assertions
+
+Development builds instrument the render/data/Store pipeline through one
+collector module (D121). Production builds contain **zero bytes** from that
+module: every class-method call site uses the inline positive
+`typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__` probe, module-scope
+functions may use the equivalent module constant, and esbuild syntax folding
+must remove every importer before tree-shaking. Undefined means enabled for
+unbundled tests. No profiler state is stored on PuzzleView, ViewManager, Store,
+or Router; per-view identity, counters, causes, and rolling windows live in
+WeakMaps in the collector.
+The enforced regression oracle is attribution, not artifact identity (D131,
+correcting the original D121 consequence): a production build's esbuild
+metafile must attribute zero `bytesInOutput` to `client-runtime/devperf.js`,
+and the bundle must be free of the profiler sentinel and bridge request
+strings. Identity to a remembered build is NOT the contract — unrelated work
+legitimately moves the bundle, and minified-identifier allocation can shift
+gzip output by a few bytes with zero retained instrumentation.
+
+- A render record is one entry into `ViewManager.render`. It times the owning
+  view's tree build separately from diff/patch, and its mutation delta counts
+  actual text/property/attribute writes plus node insert/remove/move operations.
+  Delta zero means a **wasted render**. Refresh requests are not renders because
+  they may coalesce.
+- `data()` records wall time and sync/async shape. Component reuse records
+  shallow-props bailouts versus data reruns; slot-only updates and
+  `memo(key, ...)` hits/misses are attributed per view/key. Store flush records
+  whole-flush time, pending-key count, and unique notified subscribers.
+  Serialized async tracking records every head-of-line deferral and its wait
+  time so concurrent async `data()` serialization is visible rather than folded
+  into generic data latency.
+- A causal token follows Store write/flush → view refresh → render → writes and
+  framework work scheduled by those steps. Per-view execution depth resets only
+  when that chain is quiescent. The two loop guards over that token are
+  deliberately asymmetric:
+  - **Recursive, per chain — stops.** At 100 executions of one view inside a
+    single non-quiescent chain the view is reported (`console.error`) and its
+    further renders in that chain are suppressed. That many executions in one
+    causal chain is proof of a loop, and stopping it rather than hanging the tab
+    is the point.
+  - **Cross-frame, rolling one second — warns only.** A view that renders at
+    least 60 times in a rolling second with at least 90% of those renders making
+    zero DOM mutations, and no recorded cause being animation or morph work, is
+    reported (`console.warn`) and nothing more. It **must not** suppress the
+    render. That threshold is a heuristic about waste, not proof of a loop, and
+    ordinary framework behaviour reaches it: a route ancestor renders `depth + 2`
+    times per navigation and most of those renders legitimately mutate nothing,
+    so a five-level route tree crosses 60-per-second at roughly 8.6 navigations
+    per second. When this guard did suppress, the tripped ancestor stopped
+    re-rendering its `<Slot/>` and the routed child never mounted. A
+    development-only instrument may not change what the app does. The warning
+    therefore describes the waste and never claims the framework intervened.
+- The development collector exposes temporary event sinks for §53's
+  `measureRenders`; no test framework is imported. Production DCE is proved by a
+  dev-only sentinel scan and an esbuild metafile assertion that attributes zero
+  production `bytesInOutput` to `client-runtime/devperf.js`.

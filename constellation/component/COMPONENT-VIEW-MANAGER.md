@@ -1,6 +1,6 @@
 ---
 name: ViewManager and ViewNode
-status: verified
+status: built
 connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-CODEGEN
@@ -67,6 +67,20 @@ instance; shallow-different props rerun `data()`, while slot-only changes only
 rerender. Async mounts use comment anchors and resolve insertion references from
 the live element to survive parent updates.
 
+`patchComponent`'s `shallowEqual` bailout is regression-covered by
+`tests/component-prop-bailout.test.js`, which pins both directions of the
+[[DECISION-D62-HANDLER-CACHING]] measurement at test scale: with stable props
+one changed child re-renders and its siblings do not; with a freshly allocated
+callback prop per row every child re-runs `data()` for the same single DOM
+mutation. Before those tests nothing asserted the bailout fired, so weakening it
+would have been invisible — green suite, slower apps. The comparator's exact
+contract is pinned too, through the real patch path rather than a direct import:
+the key-COUNT guard is what makes a present-but-`undefined` key differ from an
+absent one; values compare by strict `!==`, so a `NaN` prop never bails out
+(unlike `sameNode`, which compares keys by SameValueZero on purpose) while `+0`
+and `-0` do bail out; and equal key counts with disjoint all-`undefined` key
+sets compare equal, because key sets themselves are never compared.
+
 `mountComponent` chains the enter animation onto the mount promise with a
 **two-argument** `then(onFulfilled, onRejected)`, not a trailing `.catch()`. The
 distinction is load-bearing: the rejection handler is the mount-failure recovery
@@ -91,16 +105,21 @@ guard. Router-preloaded instances are exempt from the teardown entirely — the
 Router owns that lifetime and expects a failed committed view to stand until
 the next navigation replaces it.
 
-Composition uses `SLOT_TAG` and shared `expandSlots`: `<children/>` fills the
-default bucket, `<slot name>` fills named buckets with fallback, and `<Slot/>`
-is the router outlet by convention. Buckets are null-prototype objects and
-forwarding descends through component call-site children while preserving
-pinned routed instances.
+Composition uses `SLOT_TAG` and shared `expandSlots`: `<Children/>` fills
+the default bucket, `<Slot name="x"/>` fills named buckets, and `<Slot/>` is
+the router outlet by convention. An unfilled marker expands its fallback
+children — supplied content wins completely — and contributes no nodes when it
+has none (D141).
+Buckets are null-prototype objects and forwarding descends through component
+call-site children while preserving pinned routed instances.
 
 Host behavior includes SVG namespaces/`foreignObject`, per-node listener
-installation and removal, event modifiers with once-spend persistence, ref
-callbacks, boolean attrs/properties, and island children seeded once then never
-patched. Inline SVG uses the same island path with verbatim string children.
+installation and removal, event modifiers with once-spend persistence (the
+spend also detaches the listener and drops its map entry; the spent marker
+alone survives patches, so `setAttr` refuses to re-attach a spent `once`
+binding until an explicit removal resets it — D38 semantics, zero listener
+cost after the spend), ref callbacks, boolean attrs/properties, and island
+children seeded once then never patched. Inline SVG uses the same island path with verbatim string children.
 The `outside` modifier (D86) attaches its listener to `document` in the
 CAPTURE phase (one shared options object for add/remove so the capture flags
 can't mismatch); the containment gate runs before every other modifier step,
@@ -122,6 +141,32 @@ a `flip` attr, dropping the module. The `'flip' in attrs` detection itself is
 intentionally un-probed (it holds no import alive, so gating it would only skip
 an `in` check). Detection covers component props too, not just element attrs.
 
+D121 instruments actual DOM write/insert/remove/move sites and component-props
+bailouts during `ViewManager.render`. Nested component render scopes attribute
+mutations to the innermost render; a zero mutation delta is the durable
+wasted-render definition. The collector and all per-view state live in
+[[FILE-DEVPERF]], not on ViewManager.
+
 Teardown destroys nested component instances, unsubscribes views, removes
 listeners/refs, and tolerates failing leave hooks. All DOM links transfer to the
 next vnode tree so repeated patches remain live.
+
+## Measured: `island` saves patching, not allocation
+
+The island branch runs inside `patch()`, which is reached only **after**
+`render()` has already built the entire new tree — so an island's children are
+constructed on every render and then thrown away
+(`newVnode.children = oldVnode.children`). [[DOC-STRESS-EXAMPLE]]'s `islands`
+scenario puts a number on both halves over 600 shell renders across 100 islands
+of 200 descendants each: **0** DOM mutations below an island boundary (measured
+with a real `MutationObserver`, with the shell's own 600 mutations as the
+control, so the zero means something), and **20,000 of 20,000 child vnodes
+rebuilt per render** — 12,000,000 across the window, counted by read-counting
+getters on each descendant rather than inferred from the source. Cost is ~8.7ms
+per shell render in a production bundle while holding 20,000 frozen nodes, and
+the same assertions hold in the minified bundle, which matters because it takes
+a different path through the DCE'd devperf branches.
+
+So the [[DECISION-D44-DOM-ISLANDS]] contract holds exactly, and its price is
+allocation: islanding a large subtree to avoid patch cost still pays full
+construction every render.

@@ -169,7 +169,10 @@ describe('first-mount failure recovery survives a same-turn parent re-render', (
 		await flush();
 
 		// Only now does the teardown run — against the orphaned vnode.
-		expect(err).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(err).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+			expect.any(Error)
+		);
 		expect(instances[0].isDestroyed).toBe(true);
 		expect(el.querySelector('.child')).toBeNull();
 
@@ -183,7 +186,10 @@ describe('first-mount failure recovery survives a same-turn parent re-render', (
 		const host = await new Host({ store }).mount(el);
 		await flush(); // the rejection microtask settles with no competing render
 
-		expect(err).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(err).toHaveBeenCalledWith(
+			'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+			expect.any(Error)
+		);
 		expect(instances).toHaveLength(1);
 		expect(instances[0].isDestroyed).toBe(true);
 		// A bare comment holds the position until the next render.
@@ -191,6 +197,99 @@ describe('first-mount failure recovery survives a same-turn parent re-render', (
 		expect(hostEl.childNodes[1].nodeType).toBe(8 /* COMMENT_NODE */);
 
 		await expectRecovered({ host, el, instances });
+	});
+});
+
+describe('a superseding first-mount refresh failure recovers from the anchor race', () => {
+	it('plants a placeholder and a later parent render mounts a fresh working instance', async () => {
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const deferred = () => {
+			let resolve;
+			const promise = new Promise((r) => {
+				resolve = r;
+			});
+			return { promise, resolve };
+		};
+		const gates = { one: deferred(), two: deferred() };
+		const instances = [];
+
+		class Child extends PuzzleView {
+			mountedCount = 0;
+			constructor(...args) {
+				super(...args);
+				instances.push(this);
+			}
+			async data(params, props) {
+				if (props.which === 'one') {
+					await gates.one.promise;
+					return { label: 'stale' };
+				}
+				if (props.which === 'two') {
+					await gates.two.promise;
+					throw new Error('boom (superseding data)');
+				}
+				return { label: 'fresh' };
+			}
+			mounted() {
+				this.mountedCount++;
+			}
+			render() {
+				return h('span', { class: 'child' }, [text(this.getData().label)]);
+			}
+		}
+		class Host extends PuzzleView {
+			created() {
+				this.setData('which', 'one');
+			}
+			render() {
+				return h('div', { id: 'pending-host' }, [
+					comp(Child, { which: this.getData().which }),
+				]);
+			}
+		}
+
+		const el = document.createElement('div');
+		document.body.appendChild(el);
+		const host = await new Host().mount(el);
+		host.setData('which', 'two');
+		host.flushUpdates();
+
+		// The original run resolves stale, so mount() takes Change A's early
+		// resolution path and defers mounted()/enter to the superseding run.
+		gates.one.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		expect(instances[0].mountedCount).toBe(0);
+
+		gates.two.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(err).toHaveBeenCalledWith(
+			'[puzzle] data() failed during a parent prop update:',
+			expect.any(Error)
+		);
+		const failed = instances[0];
+		const placeholder = el.querySelector('#pending-host').childNodes[0];
+		expect(placeholder.nodeType).toBe(8 /* COMMENT_NODE */);
+		expect(placeholder.nodeValue).toBe('puzzle');
+		expect(failed.isDestroyed).toBe(true);
+		expect(failed.__failedPlaceholder).toBe(placeholder);
+
+		host.setData('which', 'three');
+		host.flushUpdates();
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(instances).toHaveLength(2);
+		const fresh = instances[1];
+		expect(fresh).not.toBe(failed);
+		expect(fresh.isDestroyed).toBe(false);
+		expect(fresh.mountedCount).toBe(1);
+		expect(el.querySelector('.child').textContent).toBe('fresh');
+		expect(el.innerHTML).not.toContain('<!--puzzle-->');
 	});
 });
 
@@ -228,7 +327,10 @@ describe('a router-preloaded instance is never torn down by the view manager', (
 		mount(vnode, el, null, { store });
 		await flush();
 
-		expect(err).toHaveBeenCalledWith('[puzzle] child mount failed:', expect.any(Error));
+		expect(err).toHaveBeenCalledWith(
+			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			expect.any(Error)
+		);
 
 		// The Router owns this lifetime: the view stays alive, subscribed, and committed
 		// until the next navigation replaces it.

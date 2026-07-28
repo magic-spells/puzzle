@@ -261,7 +261,13 @@ export function mockFetch(store, type, config, url, init) {
 	};
 
 	if (wait <= 0) return Promise.resolve(respond());
-	return new Promise((resolve) => {
-		setTimeout(() => resolve(respond()), wait);
+	return new Promise((resolve, reject) => {
+		setTimeout(() => {
+			try {
+				resolve(respond());
+			} catch (err) {
+				reject(err);
+			}
+		}, wait);
 	});
 }

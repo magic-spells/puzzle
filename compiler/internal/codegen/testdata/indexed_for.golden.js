@@ -7,11 +7,10 @@ export default class IndexedFor extends PuzzleView {
   }
 }
 
-import { ViewNode } from '@magic-spells/puzzle';
+import { ViewNode, displayValue as __s } from '@magic-spells/puzzle';
 
 IndexedFor.prototype.render = function () {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
 
   return new ViewNode('puzzle-view', { class: 'list' }, [
     new ViewNode('ul', { class: 'items' },
@@ -20,7 +19,7 @@ IndexedFor.prototype.render = function () {
           key: ViewNode.keyOf(item),
           class: 'item',
         }, [
-          new ViewNode('text', { value: String(i + 1) + '. ' + String(item.name) }),
+          new ViewNode('text', { value: __s(i + 1, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'i + 1' : 0) + '. ' + __s(item.name, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'item.name' : 0) }),
         ])
       )
     ),

@@ -72,6 +72,34 @@ const CAPTURE_TTL_MS = 2000;
 // Fade duration for discarding an unclaimed clone.
 const FADE_MS = 150;
 
+// A pinned clone keeps author-owned inline presentation, but never geometry the
+// pin replaces or residue the morph engine writes during a flight. The
+// independent transform properties (`translate`/`scale`/`rotate`) count as
+// geometry too: the captured rect ALREADY reflects them, so copying them onto
+// the clone would apply the same offset a second time.
+const PIN_CLONE_EXCLUDED_STYLES = new Set([
+	'position',
+	'top',
+	'left',
+	'right',
+	'bottom',
+	'width',
+	'height',
+	'margin',
+	'z-index',
+	'pointer-events',
+	'transform',
+	'transform-origin',
+	'translate',
+	'scale',
+	'rotate',
+	'opacity',
+	'visibility',
+	'display',
+	'transition',
+	'will-change',
+]);
+
 // app → its live teardown, so a second enableMorph on the same app disposes the
 // first (never stacking a duplicate document click listener), and app.unmount()
 // can reach the teardown through the handler object. WeakMap: a discarded app and
@@ -179,9 +207,24 @@ export function enableMorph(app, options = {}) {
 		clone.removeAttribute(attribute);
 		clone.removeAttribute(triggerAttribute);
 		clone.removeAttribute(targetAttribute);
-		clone.style.cssText =
-			`position:fixed; top:${rect.top}px; left:${rect.left}px; width:${rect.width}px; ` +
-			`height:${rect.height}px; margin:0; z-index:55; pointer-events:none;`;
+		clone.removeAttribute('style');
+		for (let i = 0; i < el.style.length; i += 1) {
+			const property = el.style[i];
+			if (PIN_CLONE_EXCLUDED_STYLES.has(property)) continue;
+			clone.style.setProperty(
+				property,
+				el.style.getPropertyValue(property),
+				el.style.getPropertyPriority(property)
+			);
+		}
+		clone.style.setProperty('position', 'fixed');
+		clone.style.setProperty('top', `${rect.top}px`);
+		clone.style.setProperty('left', `${rect.left}px`);
+		clone.style.setProperty('width', `${rect.width}px`);
+		clone.style.setProperty('height', `${rect.height}px`);
+		clone.style.setProperty('margin', '0');
+		clone.style.setProperty('z-index', '55');
+		clone.style.setProperty('pointer-events', 'none');
 		document.body.appendChild(clone);
 		return clone;
 	};

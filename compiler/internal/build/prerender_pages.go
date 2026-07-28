@@ -75,6 +75,7 @@ type staticSummary struct {
 // staticPage is one written page in the static summary.
 type staticPage struct {
 	Path string `json:"path"`
+	File string `json:"file"`
 	// false for a `prerender: false` route — an empty, unmarked target is written
 	// and the per-page script populates it client-side.
 	Prerender bool `json:"prerender"`
@@ -100,7 +101,7 @@ type staticModules struct {
 // at absRoot, writing content-complete HTML pages (via the node prerender pass)
 // plus one per-page ES-module bundle under staging/_puzzle. cfg + dev select the
 // same minify/define/dropConsole policy as the main app.js pass.
-func prerenderStaticPages(absRoot, staging string, cfg config.Config, dev bool) error {
+func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, cfg config.Config, dev bool) error {
 	// A public/ asset that already produced a staging/_puzzle would be clobbered
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
@@ -110,6 +111,11 @@ func prerenderStaticPages(absRoot, staging string, cfg config.Config, dev bool) 
 			"public asset would overwrite compiler output dist/%s (a reserved output name in static mode); rename or remove it",
 			staticPagesDir,
 		)
+	}
+	// Same class of collision for the prerender scratch dir, which is overwritten
+	// by the generated bundle and then deleted before the swap.
+	if err := checkPrerenderScratchCollision(absRoot, staging, "--static"); err != nil {
+		return err
 	}
 
 	// 1. Node prerender pass in mode 'static': the JS side renders each static
@@ -139,6 +145,12 @@ func prerenderStaticPages(absRoot, staging string, cfg config.Config, dev bool) 
 	var summary staticSummary
 	if err := json.Unmarshal([]byte(payload), &summary); err != nil {
 		return fmt.Errorf("puzzle build --static: prerender summary was not readable JSON: %w", err)
+	}
+	owners := publicOwnership(publicFiles)
+	for _, page := range summary.Written {
+		if err := checkPrerenderCollision(absRoot, staging, owners, page.Path, page.File); err != nil {
+			return err
+		}
 	}
 
 	// 2. Generate one mountStatic entry file per written page. Whether the app
@@ -298,9 +310,14 @@ func staticEntrySource(absRoot string, page staticPage, summary staticSummary, m
 	// throwing data() during rehydration, or a corrupt chain would otherwise
 	// surface only as an unobserved rejection. The prerendered markup is still on
 	// screen at that point (replaceChildren has not run), so the page LOOKS right
-	// while nothing is interactive. Log it like every other entry point does.
+	// while nothing is interactive. Log it like every other entry point does, then
+	// rethrow from a fresh task: production strips console.* (bundleStaticPages
+	// sets Drop: api.DropConsole), which would leave an EMPTY handler that swallows
+	// the failure outright. The async throw reaches window.onerror instead, so
+	// production still reports it and dev keeps the readable log.
 	b.WriteString("}).catch((err) => {\n")
 	b.WriteString("  console.error('[puzzle] static page mount failed:', err);\n")
+	b.WriteString("  setTimeout(() => { throw err; });\n")
 	b.WriteString("});\n")
 	return b.String(), nil
 }
@@ -357,9 +374,12 @@ func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg c
 		Sourcemap:   api.SourceMapLinked,
 		EntryNames:  "[name]",
 		ChunkNames:  "chunks/[name]-[hash]",
-		Define:      bundleDefines(pl, dev),
-		Plugins:     []api.Plugin{pl.ESBuild()},
-		LogLevel:    api.LogLevelSilent,
+		// Takeover: true — a static page's whole job is adopting the prerendered
+		// markup it was emitted alongside (mountStatic rehydrates the data island
+		// and mounts over it), so these bundles must keep the preload path.
+		Define:   bundleDefines(pl, bundleFlags{Dev: dev, Takeover: true}),
+		Plugins:  []api.Plugin{pl.ESBuild()},
+		LogLevel: api.LogLevelSilent,
 	}
 	// Production (dev=false) matches the main bundle: minify everything and strip
 	// console.* unless build.dropConsole: false opts out.

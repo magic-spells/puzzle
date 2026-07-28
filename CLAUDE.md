@@ -63,10 +63,19 @@ run.
   separate public repo `magic-spells/puzzle-devtools`), and a deep-review
   hardening round (D110 `dev.proxy` prefix
   validation, D111 managed head tags build-time only).
-- Product line: v1 through v1.63, plus the July 21 pre-release
-  correctness/performance hardening pass and the July 24 deep-review round.
-  `constellation/doc/DOC-DECISIONS.md` is the authoritative decision range —
-  do not restate it here; it moves faster than this file.
+- **`0.4.0` is STAGED, not published**: `release/0.4.0` carries the whole
+  release (perf round, Grok review rounds, D134 capitalized markers + the
+  ecosystem migration, D139–D143), the version sweep, `release:prep` output,
+  and `notes/RELEASE-NOTES-0.4.0.md`. The sibling repos' D134/D141 adoption
+  sits on unpushed `chore/d134-capitalized-markers` branches, and four sibling
+  `node_modules/@magic-spells/puzzle` dirs are symlinked to this checkout
+  (originals preserved as `*.bak`) — restore the symlinks and bump their
+  `^0.3.1` pins after 0.4.0 publishes. Delete this bullet once 0.4.0 is live
+  and verified.
+- Product line: v1 through v1.65 (D134 = v1.64, D141 = v1.65), plus the July
+  21 pre-release correctness/performance hardening pass and the July 24
+  deep-review round. `constellation/doc/DOC-DECISIONS.md` is the authoritative
+  decision range — do not restate it here; it moves faster than this file.
 - Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`,
   `./static`, and `./puzzle-env` exports plus a `puzzle` binary shim and four
   optional platform binary packages (macOS/Linux, arm64/x64).
@@ -175,9 +184,11 @@ run.
 - Navigation loads before commit. URL/title/history, mounted tree, route
   snapshot, and outgoing scroll save commit together. Failed or superseded
   pushes do not partially commit.
-- `<children/>` is the component default marker, `<slot name="x">` is named
-  composition, and `<Slot/>` is the router outlet. Bare lowercase `<slot/>` is
-  a compile error.
+- `<Children>` is the component default marker, `<Slot name="x">` is named
+  composition, and `<Slot>` is the router outlet. A marker is self-closing or
+  paired — a paired body is fallback content, rendered only when nothing fills
+  the position (D141) — and any lowercase `<slot>`/`<children>` is a
+  positioned compile error steering to the capitalized form (D134).
 - DOM listeners are per-node and patch-managed. Component `@event` bindings
   are callback props, not custom DOM events; there is no `$emit`.
 - Template text is not HTML-entity decoded and interpolations become text

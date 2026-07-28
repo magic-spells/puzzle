@@ -1,26 +1,21 @@
 package parser
 
 // slot.go — compile-time validation for the composition markers (named slots
-// v1.21/D53; the <children/> default marker + role split v1.41/D74). See
-// [[DOC-SPEC]] §24, [[DECISION-D53-NAMED-SLOTS]], and [[DECISION-D74-CHILDREN-MARKER]].
+// v1.21/D53; capitalized grammar v1.64/D134; fallback bodies D141). See
+// [[DOC-SPEC]] §24 and [[DECISION-D141-MARKER-FALLBACK-BODIES]].
 //
-// The three spellings (D74), each with exactly one role:
+// Two reserved tags have three roles:
 //
-//   <children/> — the DEFAULT marker (call-site content). No attributes; MAY
-//   carry fallback children. Validated by childrenMarkerAttrs in parseElement.
+//   <Children>…fallback…</Children> — the DEFAULT marker (call-site content).
+//   It takes no attributes.
 //
-//   <Slot/> — the same default marker capitalized, the ROUTER OUTLET (D30).
-//   Bare only: no `name` (steer to lowercase), no children (no fallback on the
-//   outlet). Validated by slotOutletAttrs in parseElement.
+//   <Slot>…fallback…</Slot> — the same unnamed marker used as the ROUTER OUTLET
+//   (D30).
 //
-//   <slot name="x">…fallback…</slot> — a NAMED slot, and nothing else. `name`
-//   is REQUIRED, static, non-empty, per-template-unique; "default" and
-//   "children" are reserved (both steer to <children/>). A nameless <slot> is a
-//   positioned error naming both replacements. Local shape checks run in
-//   namedSlotFromAttrs during parseElement; the per-body uniqueness check runs
-//   in the validateSlots post-pass (each template body — the <puzzle-view>
-//   template and its <puzzle-skeleton> — is validated separately, so the same
-//   name may appear once in each).
+//   <Slot name="x">…fallback…</Slot> — a NAMED slot. `name` is static,
+//   non-empty, and per-template-unique; "default" and "children" are reserved
+//   and steer to <Children/>. Local shape checks run in slotMarkerFromAttrs; the
+//   per-body uniqueness check runs in validateSlots.
 //
 //   Call site (<Card><h2 slot="header">…</h2></Card>): the parser's job is
 //   VALIDATION ONLY — a static `slot` attribute rides through codegen unchanged
@@ -31,82 +26,63 @@ package parser
 //   default-routing would misroute). Anywhere else `slot` is the ordinary HTML
 //   global attribute and passes through untouched.
 
-// childrenMarkerAttrs validates a <children/>'s attributes (D74): the default
+// childrenMarkerAttrs validates a <Children>'s attributes: the default
 // marker takes NO attributes. A `ref` gets the D72-style render-target message;
 // any other attribute is the generic no-attributes error. Fallback children are
-// handled by the caller, not here.
+// handled by parseElement.
 func childrenMarkerAttrs(attrs []Attr, file string) *ParseError {
 	for _, a := range attrs {
 		if attrNameOf(a) == "ref" {
-			return errAt(file, attrPos(a), "ref cannot be placed on a <children> — a children marker is a render target, not a real element")
+			return errAt(file, attrPos(a), "ref cannot be placed on a <Children> — a children marker is a render target, not a real element")
 		}
-		return errAt(file, attrPos(a), "<children> takes no attributes — call-site content needs no configuration")
+		return errAt(file, attrPos(a), "<Children> takes no attributes — call-site content needs no configuration")
 	}
 	return nil
 }
 
-// slotOutletAttrs validates a <Slot/>'s attributes (D74): the router outlet is
-// bare only. A `ref` gets the render-target message (D72); a `name` steers to
-// the lowercase named-slot spelling; any other attribute is rejected.
-func slotOutletAttrs(attrs []Attr, file string) *ParseError {
-	for _, a := range attrs {
-		switch attrNameOf(a) {
-		case "ref":
-			return errAt(file, attrPos(a), "ref cannot be placed on a <Slot> — a slot is a render target, not a real element")
-		case "name":
-			return errAt(file, attrPos(a), `named slots are spelled lowercase — <slot name="…"> declares a named slot; <Slot/> is the router outlet`)
-		default:
-			return errAt(file, attrPos(a), "<Slot> is the router outlet and takes no attributes")
-		}
-	}
-	return nil
-}
-
-// namedSlotFromAttrs validates a lowercase <slot>'s attributes and returns its
-// name (D74: `name` is REQUIRED). The only permitted attribute is a static
-// `name`; a nameless <slot>, a dynamic/interpolated name, an empty name, the
-// reserved "default"/"children", or any other attribute is a positioned compile
-// error.
-func namedSlotFromAttrs(attrs []Attr, pos Position, file string) (name string, perr *ParseError) {
+// slotMarkerFromAttrs resolves <Slot/>'s role by attributes. No attrs means the
+// unnamed router outlet/default marker; one static name declares a named slot.
+// Every other shape is a positioned compile error.
+func slotMarkerFromAttrs(attrs []Attr, pos Position, file string) (name string, perr *ParseError) {
 	hasName := false
 	for _, a := range attrs {
 		if attrNameOf(a) == "ref" {
-			// ref on a <slot> (v1.39, D72): a slot is a render target, not a real
+			// ref on a <Slot> (v1.39, D72): a slot is a render target, not a real
 			// element — reject with a ref-specific message before the generic one.
-			return "", errAt(file, attrPos(a), "ref cannot be placed on a <slot> — a slot is a render target, not a real element")
+			return "", errAt(file, attrPos(a), "ref cannot be placed on a <Slot> — a slot is a render target, not a real element")
 		}
 		switch at := a.(type) {
 		case *StaticAttr:
 			if at.Name != "name" {
-				return "", errAt(file, at.Pos, "<slot> only takes a static name attribute")
+				return "", errAt(file, at.Pos, "<Slot> only takes a static name attribute")
 			}
 			hasName = true
 			name = at.Value
 		case *DynamicAttr:
 			if at.Name == "name" {
-				return "", errAt(file, at.Pos, "<slot> name must be a static string, not name={ ... }")
+				return "", errAt(file, at.Pos, "<Slot> name must be a static string, not name={ ... }")
 			}
-			return "", errAt(file, at.Pos, "<slot> only takes a static name attribute")
+			return "", errAt(file, at.Pos, "<Slot> only takes a static name attribute")
 		case *MixedAttr:
 			if at.Name == "name" {
-				return "", errAt(file, at.Pos, "<slot> name must be a static string, not an interpolated value")
+				return "", errAt(file, at.Pos, "<Slot> name must be a static string, not an interpolated value")
 			}
-			return "", errAt(file, at.Pos, "<slot> only takes a static name attribute")
+			return "", errAt(file, at.Pos, "<Slot> only takes a static name attribute")
 		case *EventAttr:
-			return "", errAt(file, at.Pos, "<slot> does not take event handlers")
+			return "", errAt(file, at.Pos, "<Slot> does not take event handlers")
 		}
 	}
 	if !hasName {
-		return "", errAt(file, pos, "bare <slot/> was replaced in v1.41 (D74) — use <children/> for call-site children, or <Slot/> for the router outlet in a routed view/layout")
+		return "", nil
 	}
 	if name == "" {
-		return "", errAt(file, pos, "<slot name> cannot be empty")
+		return "", errAt(file, pos, "<Slot name> cannot be empty")
 	}
 	if name == "default" {
-		return "", errAt(file, pos, `<slot name="default"> is reserved — use <children/>`)
+		return "", errAt(file, pos, `<Slot name="default"> is reserved — use <Children/>`)
 	}
 	if name == "children" {
-		return "", errAt(file, pos, `<slot name="children"> is reserved — use <children/>`)
+		return "", errAt(file, pos, `<Slot name="children"> is reserved — use <Children/>`)
 	}
 	return name, nil
 }
@@ -122,33 +98,36 @@ func validateSlots(root *Element, file string) *ParseError {
 // walkSlots descends the node list collecting named-slot declarations (rejecting
 // duplicates via seen) and validating each component's direct-child slot usage.
 // inCallSite is true while walking a component invocation's subtree (call-site
-// content): only the default marker (<children/>/<Slot/>) may forward through a
+// content): only the default marker (<Children/>/<Slot/>) may forward through a
 // component (v1.38, D71) — a NAMED slot there has no defined fill source (the
 // router fills the default slot only, and named forwarding semantics are
 // deliberately unspecified), so it is a positioned compile error instead of a
-// silent literal-<slot>-element render.
+// silent marker render.
 func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite bool) *ParseError {
 	for _, n := range nodes {
 		switch node := n.(type) {
 		case *Slot:
 			if node.Name != "" {
 				if inCallSite {
-					return errAt(file, node.Pos, "<slot name=%q> inside a component invocation is not supported — only the bare default <slot/> forwards through a component", node.Name)
+					return errAt(file, node.Pos, "<Slot name=%q> inside a component invocation is not supported — only the bare default <Children/> or <Slot/> forwards through a component", node.Name)
 				}
 				if prev, dup := seen[node.Name]; dup {
 					return errAt(file, node.Pos, "duplicate slot name %q — already declared at %d:%d", node.Name, prev.Line, prev.Col)
 				}
 				seen[node.Name] = node.Pos
 			} else {
-				// The default marker (<children/> or <Slot/>, D74) is unique per
+				// The default marker (<Children/> or <Slot/>, D134) is unique per
 				// body too: two of them would splice the SAME slotChildren vnodes
 				// into both markers at runtime, corrupting the DOM. Both spellings
 				// produce a Name-less *Slot and key under "default" (a reserved,
-				// unreachable name — namedSlotFromAttrs rejects name="default").
+				// unreachable name — slotMarkerFromAttrs rejects name="default").
 				if prev, dup := seen["default"]; dup {
-					return errAt(file, node.Pos, "duplicate default marker (<children/>/<Slot/>) — already declared at %d:%d", prev.Line, prev.Col)
+					return errAt(file, node.Pos, "duplicate default marker (<Children/>/<Slot/>) — already declared at %d:%d", prev.Line, prev.Col)
 				}
 				seen["default"] = node.Pos
+			}
+			if nested := nestedFallbackMarker(node.Children); nested != nil {
+				return errAt(file, nested.Pos, "a composition marker cannot appear inside another marker's fallback body (D141)")
 			}
 			if perr := walkSlots(node.Children, file, seen, inCallSite); perr != nil {
 				return perr
@@ -164,7 +143,7 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 			// Everything under a component invocation is call-site content — the
 			// D71 named-forwarding rejection applies through nested elements,
 			// control flow, and deeper component invocations alike. `seen` still
-			// flows through: a default <slot/> inside AND outside the invocation
+			// flows through: a default marker inside AND outside the invocation
 			// would splice the same default bucket twice, so the per-body
 			// uniqueness check must keep counting in here.
 			if perr := walkSlots(node.Children, file, seen, true); perr != nil {
@@ -189,6 +168,48 @@ func walkSlots(nodes []Node, file string, seen map[string]Position, inCallSite b
 			}
 			if perr := walkSlots(node.Else, file, seen, inCallSite); perr != nil {
 				return perr
+			}
+		}
+	}
+	return nil
+}
+
+// nestedFallbackMarker returns the first marker anywhere inside a fallback
+// body. D141 deliberately rejects recursive marker expansion; the error belongs
+// to the inner marker, even when it is nested through elements, components, or
+// control-flow branches.
+func nestedFallbackMarker(nodes []Node) *Slot {
+	for _, n := range nodes {
+		switch node := n.(type) {
+		case *Slot:
+			return node
+		case *Element:
+			if found := nestedFallbackMarker(node.Children); found != nil {
+				return found
+			}
+		case *Component:
+			if found := nestedFallbackMarker(node.Children); found != nil {
+				return found
+			}
+		case *If:
+			if found := nestedFallbackMarker(node.Then); found != nil {
+				return found
+			}
+			if found := nestedFallbackMarker(node.Else); found != nil {
+				return found
+			}
+		case *For:
+			if found := nestedFallbackMarker(node.Body); found != nil {
+				return found
+			}
+		case *Case:
+			for _, clause := range node.Clauses {
+				if found := nestedFallbackMarker(clause.Body); found != nil {
+					return found
+				}
+			}
+			if found := nestedFallbackMarker(node.Else); found != nil {
+				return found
 			}
 		}
 	}

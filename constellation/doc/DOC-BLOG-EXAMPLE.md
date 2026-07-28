@@ -66,7 +66,7 @@ data application.
   adapters; comment deliberately has none, demonstrating that adapters are
   opt-in per model;
 - reusable components with props, callback events, default
-  `<children/>` content, and loop counters;
+  `<Children/>` content, and loop counters;
 - a custom `byline` formatter;
 - Tailwind v4 through `puzzle.config.js`;
 - public JSON seed assets copied into `dist/api/`.

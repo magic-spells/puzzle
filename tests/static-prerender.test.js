@@ -1,14 +1,17 @@
+// @vitest-environment jsdom
 // Static output mode (D81) — the prerender + shell-surgery half
 // (client-runtime/ssg/index.js `mode: 'static'`): per-page store snapshot capture,
 // __pzlModule stamp collection (+ the missing-stamp error), slug rules + collision
 // suffixing, static shell surgery (app.js tag stripped, data + entry scripts
 // injected, `</script>` in a record cannot break the JSON island, data-puzzle-static
-// marker), and the extended summary fields. Node env: prerender is DOM-free.
+// marker), and the extended summary fields. Prerender remains DOM-free; jsdom is
+// present only for the hybrid/static/live-router markup parity assertion.
 import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { prerender, prerenderToDir, injectStaticShell } from '../client-runtime/ssg/index.js';
+import { Router } from '../client-runtime/router/router.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
@@ -95,6 +98,27 @@ function writeShell(dir, shell = SHELL) {
 }
 
 describe('static prerender (D81)', () => {
+	it('keeps a static page shadowed under SPA precedence because static output has no router', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-shadow-'));
+		const shellPath = writeShell(outDir);
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const cfg = {
+			target: '#app',
+			routes: [
+				{ path: '/user/:id', name: 'user', view: Home, layout: Layout },
+				{ path: '/user/new', name: 'new-user', view: Home, layout: Layout },
+			],
+		};
+
+		const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+		expect(summary.skipped).toEqual([{ path: '/user/:id', reason: 'dynamic' }]);
+		expect(summary.warnings.some((warning) => warning.includes('shadowed route'))).toBe(false);
+		expect(summary.written.some((page) => page.path === '/user/new')).toBe(true);
+		expect(fs.existsSync(path.join(outDir, 'user', 'new', 'index.html'))).toBe(true);
+		warn.mockRestore();
+	});
+
 	describe('per-page store snapshot capture', () => {
 		it('warns once when any static route declares a guard', async () => {
 			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -263,6 +287,86 @@ describe('static prerender (D81)', () => {
 		});
 	});
 
+	describe('duplicate output paths', () => {
+		// Two routes declaring the SAME path get distinct slugs (about, about-2) but a
+		// path-DERIVED output file, so both wrote dist/about/index.html and the second
+		// silently won — while the Go build still generated the dead about-2 bundle.
+		// Hybrid catches this via shadow detection; static deliberately keeps shadowed
+		// pages, so the writer itself has to refuse the second claim.
+		it('skips a second route claiming an already-written file instead of overwriting it', async () => {
+			class First extends PuzzleView {
+				render() {
+					return h('p', { class: 'first' }, [text('first')]);
+				}
+			}
+			class Second extends PuzzleView {
+				render() {
+					return h('p', { class: 'second' }, [text('second')]);
+				}
+			}
+			stamp(First, 'app/views/First.pzl');
+			stamp(Second, 'app/views/Second.pzl');
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-dup-'));
+			const shellPath = writeShell(outDir);
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/about', name: 'about', view: First },
+					{ path: '/about', name: 'about-again', view: Second },
+				],
+			};
+
+			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+			// The FIRST (reachable-order) route owns the file and the emitted module href.
+			const html = fs.readFileSync(path.join(outDir, 'about', 'index.html'), 'utf8');
+			expect(html).toContain('first');
+			expect(html).not.toContain('second');
+			expect(html).toContain('/_puzzle/about.js');
+			expect(html).not.toContain('/_puzzle/about-2.js');
+
+			// …and the counts stay truthful: one page, one bundle, one skip.
+			expect(summary.written.filter((w) => w.path === '/about')).toHaveLength(1);
+			expect(summary.written[0].entry).toBe('_puzzle/about.js');
+			expect(summary.count).toBe(1);
+			expect(summary.skipped).toContainEqual({ path: '/about', reason: 'duplicate' });
+			expect(
+				summary.warnings.some(
+					(w) => w.includes('duplicate route "/about"') && w.includes('about/index.html')
+				)
+			).toBe(true);
+		});
+
+		it('treats two different route paths that normalize to one file as duplicates', async () => {
+			class Only extends PuzzleView {
+				render() {
+					return h('p', {}, [text('only')]);
+				}
+			}
+			stamp(Only, 'app/views/Only.pzl');
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-dup2-'));
+			const shellPath = writeShell(outDir);
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/caf%C3%A9', name: 'cafe-encoded', view: Only },
+					{ path: '/café', name: 'cafe-literal', view: Only },
+				],
+			};
+
+			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+			expect(summary.count).toBe(1);
+			expect(summary.written[0].path).toBe('/caf%C3%A9');
+			expect(summary.skipped).toContainEqual({ path: '/café', reason: 'duplicate' });
+			expect(
+				summary.warnings.some(
+					(w) => w.includes('duplicate route "/café"') && w.includes('"/caf%C3%A9"')
+				)
+			).toBe(true);
+		});
+	});
+
 	describe('static shell surgery', () => {
 		it('strips /app.js, injects data + entry scripts, marks data-puzzle-static', async () => {
 			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-'));
@@ -420,11 +524,42 @@ describe('static prerender router facade parity (D81, item B4)', () => {
 		expect(pages[0].html).toContain('>/</a>'); // current.path === '/', not 'NULL'
 	});
 
-	it('hybrid mode still uses the unstarted memory router — url() unprefixed, current null', async () => {
+	it('hybrid prerender router.current is the page snapshot while url() stays unprefixed', async () => {
 		const cfg = { target: '#app', routes: [{ path: '/', name: 'home', view: Linked }] };
 		const { pages } = await prerender(cfg); // hybrid default, history-mode
 		expect(pages[0].html).toContain('href="/next"');
-		expect(pages[0].html).toContain('>NULL</a>'); // memory router unstarted → current null
+		expect(pages[0].html).toContain('>/</a>'); // current.path === '/', not 'NULL'
+	});
+
+	it('hybrid, static, and a started live router render matching current-aware markup', async () => {
+		let liveView = null;
+		class ParityLinked extends Linked {
+			constructor(ctx) {
+				super(ctx);
+				liveView = this;
+			}
+		}
+		const routes = [{ path: '/', name: 'home', view: ParityLinked }];
+		const cfg = { target: '#app', routes };
+		const [{ pages: hybridPages }, { pages: staticPages }] = await Promise.all([
+			prerender(cfg),
+			prerender(cfg, { mode: 'static' }),
+		]);
+		const target = document.createElement('div');
+		document.body.appendChild(target);
+		const router = new Router(routes, { mode: 'memory' });
+
+		try {
+			await router.start(target, { store: null, router, formatters: null });
+			// Navigation mounts before #commitState advances current. Re-render after
+			// start resolves to compare against the started router's public state.
+			await liveView.refresh();
+			expect(hybridPages[0].html).toBe(staticPages[0].html);
+			expect(hybridPages[0].html).toBe(target.innerHTML);
+		} finally {
+			router.stop();
+			target.remove();
+		}
 	});
 });
 

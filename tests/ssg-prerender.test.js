@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { prerender, prerenderToDir, injectShell } from '../client-runtime/ssg/index.js';
+import { Router } from '../client-runtime/router/router.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
@@ -117,6 +118,113 @@ describe('SSG prerender (M1)', () => {
 		expect(skipped).toEqual([{ path: '/user/:id', reason: 'dynamic' }]);
 		expect(warnings.some((w) => w.includes('/user/:id'))).toBe(true);
 		expect(pages.some((p) => p.path === '/user/:id')).toBe(false);
+	});
+
+	describe('route precedence shadows (hybrid only)', () => {
+		it('skips a static route shadowed by an earlier dynamic matcher in hybrid output', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/user/:id', name: 'user', view: UserView, layout: Layout },
+					{ path: '/user/new', name: 'new-user', view: Home, layout: Layout },
+				],
+			};
+
+			const { skipped, warnings, pages } = await prerender(cfg);
+
+			expect(skipped).toContainEqual({ path: '/user/:id', reason: 'dynamic' });
+			expect(skipped).toContainEqual({ path: '/user/new', reason: 'shadowed' });
+			expect(
+				warnings.some((warning) =>
+					warning.includes(
+						'skipped shadowed route "/user/new" — earlier route "/user/:id"'
+					)
+				)
+			).toBe(true);
+			expect(pages.some((page) => page.path === '/user/new')).toBe(false);
+			warn.mockRestore();
+		});
+
+		it('keeps the static page when it is declared before the dynamic matcher', async () => {
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '/user/new', name: 'new-user', view: Home, layout: Layout },
+					{ path: '/user/:id', name: 'user', view: UserView, layout: Layout },
+				],
+			};
+
+			const { skipped, warnings, pages } = await prerender(cfg);
+
+			expect(skipped).toEqual([{ path: '/user/:id', reason: 'dynamic' }]);
+			expect(warnings.some((warning) => warning.includes('shadowed route'))).toBe(false);
+			expect(pages.some((page) => page.path === '/user/new')).toBe(true);
+			expect(warn).not.toHaveBeenCalled();
+			warn.mockRestore();
+		});
+
+		it('skips the leaves of a catch-all that declares children, and never consumes their compiled index', async () => {
+			// The Router stores `{ path: '*', children }` as a flat single-node chain and
+			// never walks the tree, so '*/x' is a page nothing could ever navigate to.
+			// Emitting it would also write a literal `*/x/index.html` AND shift the
+			// compiled-entry index every later leaf's shadow attribution reads, which
+			// inverted this pair: the reachable /docs was skipped and the shadowed one
+			// rendered.
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+			const cfg = {
+				target: '#app',
+				routes: [
+					{ path: '*', name: 'nf', view: NotFound, children: [{ path: 'x', view: Home }] },
+					{ path: '/docs', name: 'docs-first', view: Home },
+					{ path: '/docs', name: 'docs-second', view: SettingsIndex },
+				],
+			};
+
+			const { pages, skipped, warnings } = await prerender(cfg);
+
+			expect(skipped).toContainEqual({ path: '*/x', reason: 'unreachable' });
+			expect(warnings.some((warning) => warning.includes('child of the catch-all'))).toBe(true);
+			expect(pages.some((page) => page.path.includes('*'))).toBe(false);
+
+			// The FIRST /docs is the reachable one and renders; the duplicate behind it
+			// is the shadowed one.
+			const docs = pages.filter((page) => page.path === '/docs');
+			expect(docs).toHaveLength(1);
+			expect(docs[0].html).toBe('<h1>Home</h1>');
+			expect(skipped).toContainEqual({ path: '/docs', reason: 'shadowed' });
+			warn.mockRestore();
+		});
+	});
+
+	it('names a non-ASCII route the way the live Router does in the prerender snapshot', async () => {
+		// A prerendered view reads this.route.path; the Router that takes the page over
+		// exposes the percent-encoded form. A raw snapshot would make the same
+		// expression render differently before and after takeover.
+		class ShowsPath extends PuzzleView {
+			render() {
+				return h('p', {}, [text(this.route.path)]);
+			}
+		}
+		const routes = [{ path: '/café', name: 'cafe', view: ShowsPath }];
+		const { pages } = await prerender({ target: '#app', routes });
+		const canonical = new Router(routes, { mode: 'memory' }).routeEntries[0].matchPath;
+
+		expect(canonical).toBe('/caf%C3%A9');
+		expect(pages[0].html).toBe('<p>/caf%C3%A9</p>');
+		// The emitted FILE path keeps the route-table spelling — only the snapshot the
+		// views read is canonicalized.
+		expect(pages[0].path).toBe('/café');
+	});
+
+	it('rejects a relative top-level path before route enumeration', async () => {
+		await expect(
+			prerender({
+				target: '#app',
+				routes: [{ path: 'about', name: 'about', view: Home, layout: Layout }],
+			})
+		).rejects.toThrow(/top-level route path must be "\*" or start with "\/"/);
 	});
 
 	it('flags prerender:false routes as shell-only pages', async () => {
@@ -400,6 +508,30 @@ describe('SSG prerender (M1)', () => {
 			expect(summary.skipped).toEqual([{ path: '/user/:id', reason: 'dynamic' }]);
 		});
 
+		it('writes a percent-encoded non-ASCII route to its decoded UTF-8 directory name', async () => {
+			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-ssg-unicode-'));
+			const shellPath = path.join(outDir, 'shell.html');
+			fs.writeFileSync(shellPath, SHELL);
+			const unicodeConfig = {
+				target: '#app',
+				routes: [
+					{
+						path: '/caf%C3%A9',
+						name: 'cafe',
+						view: Home,
+						layout: Layout,
+						meta: { title: 'Café' },
+					},
+				],
+			};
+
+			const summary = await prerenderToDir(unicodeConfig, { outDir, shellPath });
+
+			expect(fs.existsSync(path.join(outDir, 'café', 'index.html'))).toBe(true);
+			expect(fs.existsSync(path.join(outDir, 'caf%C3%A9', 'index.html'))).toBe(false);
+			expect(summary.written[0].file).toBe(path.join(outDir, 'café', 'index.html'));
+		});
+
 		it('rejects a route whose path escapes the output directory, writing nothing outside it (FIX 12)', async () => {
 			// Nest outDir one level down so its `..` target is unique to this run (a
 			// shared tmpdir sibling would be polluted by any other run).
@@ -493,17 +625,24 @@ describe('SSG prerender (M1)', () => {
 			).toBe(true);
 		});
 
-		it('still skips a non-bare "*" route (only the exact catch-all renders)', async () => {
+		it("prerenders literal ':' and '*' text outside complete dynamic segments", async () => {
 			const cfg = {
 				target: '#app',
 				routes: [
 					{ path: '/', name: 'home', view: Home, layout: Layout, meta: { title: 'Home' } },
+					{
+						path: '/releases/v1:beta',
+						name: 'release',
+						view: UserView,
+						layout: Layout,
+					},
 					{ path: '/files/*', name: 'files', view: UserView, layout: Layout },
 				],
 			};
 			const { skipped, pages } = await prerender(cfg);
-			expect(skipped).toEqual([{ path: '/files/*', reason: 'dynamic' }]);
-			expect(pages.some((p) => p.path === '/files/*')).toBe(false);
+			expect(skipped).toEqual([]);
+			expect(pages.some((p) => p.path === '/releases/v1:beta')).toBe(true);
+			expect(pages.some((p) => p.path === '/files/*')).toBe(true);
 		});
 	});
 

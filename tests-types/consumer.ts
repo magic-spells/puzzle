@@ -20,6 +20,7 @@ import {
 	Puzzle,
 	PuzzleValidationError,
 	PuzzleAdapterError,
+	displayValue,
 } from '@magic-spells/puzzle';
 import type {
 	PuzzleAppConfig,
@@ -56,6 +57,13 @@ import type {
 } from '@magic-spells/puzzle/ssg';
 import { mountStatic } from '@magic-spells/puzzle/static';
 import type { MountStaticOptions, StaticRoute } from '@magic-spells/puzzle/static';
+import { createTestApp, measureRenders, mountView } from '@magic-spells/puzzle/testing';
+import type { RenderProfile } from '@magic-spells/puzzle/testing';
+
+const renderedNull: string = displayValue(null);
+const renderedNamedValue: string = displayValue(0, 'count');
+void renderedNull;
+void renderedNamedValue;
 
 // ---------------------------------------------------------------------------
 // PuzzleModel + schema builders (§7, §20–§22)
@@ -277,14 +285,12 @@ const app = new PuzzleApp(config);
 // mount() resolves to the app; store/router usable after.
 app.mount().then((mounted) => {
 	const todos = mounted.store.findMany('todo', { filter: (t) => !t.done });
+	const seeded = mounted.store.createRecord('todo', { title: 'a' });
+	void seeded;
 	mounted.router?.push('/todos');
 	mounted.router?.go(1);
 	return todos.length;
 });
-
-// store is readable off the constructed app too (typed non-null).
-const seeded = app.store.createRecord('todo', { title: 'a' });
-void seeded;
 
 // ---------------------------------------------------------------------------
 // fixtures subpath: installFixtures() attaches seed()/resetFixtureSeed() (D98)
@@ -453,6 +459,29 @@ mountStatic(staticOptions).then(() => {
 		routerBase: '',
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Testing helpers (D94/D121) — both measureRenders call shapes
+// ---------------------------------------------------------------------------
+
+async function profileRenders(): Promise<void> {
+	const view = await mountView(TodoListView);
+	// Callback-only form: the handle is optional (the sink is global).
+	const bare: Readonly<RenderProfile> = await measureRenders(async () => {
+		await view.click('.toggle');
+	});
+	// Handle + callback form, unchanged.
+	const named: Readonly<RenderProfile> = await measureRenders(view, () => {
+		view.find('.toggle');
+	});
+	const app = await createTestApp({ routes: [{ path: '/', view: TodoListView }] });
+	const appProfile: Readonly<RenderProfile> = await measureRenders(app, async () => {
+		await app.visit('/');
+	});
+	const renders: number = bare.renders + named.wastedRenders + appProfile.domMutations;
+	void renders;
+}
+void profileRenders;
 
 // ---------------------------------------------------------------------------
 // Error shapes (§20, §22)

@@ -24,6 +24,8 @@
 
 import { ViewNode, PLACEHOLDER_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
+import { devperfComponentPatch, devperfMutation } from '../devperf.js';
+import { displayValue as stringify } from '../display.js';
 
 // these must be assigned as element properties, not attributes
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'muted']);
@@ -68,6 +70,8 @@ export class ViewManager {
 	anchorAt(ref) {
 		this.anchor = document.createComment('puzzle');
 		this.container.insertBefore(this.anchor, ref ?? null);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			devperfMutation();
 	}
 
 	/**
@@ -80,6 +84,8 @@ export class ViewManager {
 			mount(newTree, this.container, this.anchor, this.ctx);
 			if (this.anchor) {
 				this.anchor.remove();
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+					devperfMutation();
 				this.anchor = null;
 			}
 		} else {
@@ -99,6 +105,8 @@ export class ViewManager {
 		if (this.currentTree) unmount(this.currentTree);
 		if (this.anchor) {
 			this.anchor.remove();
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				devperfMutation();
 			this.anchor = null;
 		}
 		this.currentTree = null;
@@ -111,10 +119,10 @@ export class ViewManager {
  * Substitute the slot markers in `vnode`'s tree with the call-site content
  * captured in `slotChildren`. Named slots (v1.21, D53) partition the content
  * once per render (partitionSlots) by each direct child's stripped `slot`
- * attribute; the bare default marker takes the unattributed remainder exactly as
- * before. Name-free templates AND slot-attr-free call sites take the same fast
- * path they always did — the default bucket is the original `slotChildren` array
- * (no clones) and no vnode changes unless a marker is actually present.
+ * attribute; <Children/> and the bare <Slot/> take the unattributed remainder.
+ * Name-free templates AND slot-attr-free call sites take the same fast path they
+ * always did — the default bucket is the original `slotChildren` array (no
+ * clones) and no vnode changes unless a marker is actually present.
  */
 export function expandSlots(vnode, slotChildren) {
 	return expandNode(vnode, partitionSlots(slotChildren));
@@ -165,20 +173,24 @@ function stripSlotAttr(vnode) {
 	clone.el = vnode.el;
 	clone.component = vnode.component;
 	clone.instance = vnode.instance;
+	if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+		clone.takeoverPreloaded = vnode.takeoverPreloaded;
+		clone.takeoverFailed = vnode.takeoverFailed;
+	}
 	return clone;
 }
 
 /**
  * Replace slot markers anywhere in `vnode` against the partitioned `parts`. Only
  * nodes on the path to a marker are cloned; everything else is returned untouched
- * so DOM links survive. A named marker substitutes its named bucket when
- * non-empty, else its OWN fallback children (recursively expanded); the bare
- * marker substitutes the default bucket. Content is already parent-expanded —
- * spliced in as-is.
+ * so DOM links survive. A named marker substitutes its named bucket; the bare
+ * marker substitutes the default bucket. When the selected bucket is empty, the
+ * marker's own children expand as fallback content (D141). Supplied content wins
+ * completely. Content is already parent-expanded — spliced in as-is.
  *
  * Component vnodes (v1.38, D71): the walk descends into a component's CALL-SITE
  * children — they are authored in THIS template, so this template's markers
- * there must be substituted (`<Card><children/></Card>` in a layout forwards the
+ * there must be substituted (`<Card><Children/></Card>` in a layout forwards the
  * routed page into Card's default slot). The component's own TEMPLATE is never
  * entered — it expands its own slots against these children at render time.
  * Substituted content becomes ordinary slot content for the component; the
@@ -202,6 +214,10 @@ function expandNode(vnode, parts) {
 		clone.el = vnode.el;
 		clone.component = vnode.component;
 		clone.instance = vnode.instance;
+		if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) {
+			clone.takeoverPreloaded = vnode.takeoverPreloaded;
+			clone.takeoverFailed = vnode.takeoverFailed;
+		}
 	}
 	return clone;
 }
@@ -222,9 +238,6 @@ function expandChildList(kids, parts) {
 			if (bucket && bucket.length) {
 				for (const sc of bucket) out.push(sc);
 			} else {
-				// Unfilled: render the marker's own fallback children (empty for the
-				// bare default marker). Router-filled views/layouts only ever fill the
-				// default, so a named marker there renders its fallback naturally (D53).
 				for (const fb of k.children) out.push(expandNode(fb, parts));
 			}
 			continue;
@@ -254,6 +267,8 @@ export function mount(vnode, parent, ref, ctx) {
 		el = document.createComment('');
 		vnode.el = el;
 		parent.insertBefore(el, ref ?? null);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			devperfMutation();
 		return el;
 	}
 	if (vnode.isText) {
@@ -280,6 +295,8 @@ export function mount(vnode, parent, ref, ctx) {
 		// never reconciles it (see patch()).
 		if (typeof vnode.children === 'string') {
 			el.innerHTML = vnode.children;
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				devperfMutation();
 		} else {
 			for (const child of vnode.children) {
 				mount(child, el, null, ctx);
@@ -292,6 +309,8 @@ export function mount(vnode, parent, ref, ctx) {
 	}
 	vnode.el = el;
 	parent.insertBefore(el, ref ?? null);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+		devperfMutation();
 	return el;
 }
 
@@ -307,8 +326,33 @@ export function mount(vnode, parent, ref, ctx) {
  * created()/data() are not run twice and its mount is synchronous — the
  * atomic-commit contract in constellation/doc/DOC-VIEW-LIFECYCLE.md §4.
  */
+export function plantFailedMountPlaceholder(child) {
+	const anchor = child.element;
+	const placeholder =
+		anchor && anchor.parentNode
+			? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
+			: null;
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (placeholder) devperfMutation();
+	}
+	return placeholder;
+}
+
 function mountComponent(vnode, parent, ref, ctx) {
+	if ((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverFailed) {
+		const placeholder = document.createComment('puzzle');
+		vnode.el = placeholder;
+		parent.insertBefore(placeholder, ref ?? null);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			devperfMutation();
+		return placeholder;
+	}
 	const preloaded = vnode.instance != null;
+	// Gated HERE rather than at the `preloaded && !takeoverPreloaded` use below, so
+	// a non-takeover build folds this to `false` and that test collapses to plain
+	// `preloaded` — the pre-takeover behavior, with the property read gone.
+	const takeoverPreloaded =
+		(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
 	const child = vnode.instance ?? new vnode.tag(ctx);
 	vnode.component = child;
 	child
@@ -340,7 +384,6 @@ function mountComponent(vnode, parent, ref, ctx) {
 				);
 			},
 			(err) => {
-				console.error('[puzzle] child mount failed:', err);
 				// A ROUTER-PRELOADED instance (`vnode.instance`, pinned by router.js) is not
 				// ours to tear down: the Router owns that lifetime, committed the view
 				// SYNCHRONOUSLY, and its own #observeMount logs a post-commit mount failure
@@ -349,7 +392,17 @@ function mountComponent(vnode, parent, ref, ctx) {
 				// pointing at a dead, unrefreshable view the Router knows nothing about — and
 				// would swap the committed markup for a comment behind its back. Log only;
 				// the instance and the vnode's links are left exactly as they are.
-				if (preloaded) return;
+				if (preloaded && !takeoverPreloaded) {
+					console.error(
+						'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+						err
+					);
+					return;
+				}
+				console.error(
+					'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+					err
+				);
 				// The instance never reached a working mounted state (data()/render()/
 				// mounted() threw on the first mount). Left as-is, patchComponent would REUSE
 				// this dead instance on every later render without ever re-mounting it, so a
@@ -369,11 +422,7 @@ function mountComponent(vnode, parent, ref, ctx) {
 				// placeholder on it so patch() finds it through WHICHEVER vnode holds the
 				// component. The vnode nulls below stay: they are correct (and the cheaper
 				// path) whenever nothing raced.
-				const anchor = child.element; // the child's current root — its anchor comment unless a render landed
-				const placeholder =
-					anchor && anchor.parentNode
-						? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
-						: null;
+				const placeholder = plantFailedMountPlaceholder(child);
 				child.destroy(); // release any partial subscriptions; removes the child's own anchor
 				if (placeholder) {
 					vnode.el = placeholder;
@@ -381,6 +430,11 @@ function mountComponent(vnode, parent, ref, ctx) {
 				}
 				vnode.component = null;
 				vnode.instance = null;
+				// Gated: ungated this would ADD the property outside the constructor in a
+				// non-takeover build — exactly the hidden-class transition the gate above
+				// exists to avoid.
+				if (typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__)
+					vnode.takeoverPreloaded = false;
 			}
 		);
 	vnode.el = child.element;
@@ -431,6 +485,9 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 			// Only an ATTACHED node is a usable insertion ref — insertBefore against a
 			// detached one throws NotFoundError and empties the container.
 			mount(newVnode, parent, placeholder?.parentNode === parent ? placeholder : null, ctx);
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				if (placeholder?.parentNode) devperfMutation();
+			}
 			placeholder?.remove();
 			return;
 		}
@@ -448,7 +505,11 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 
 	if (newVnode.isText) {
 		const text = stringify(newVnode.attrs.value);
-		if (el.nodeValue !== text) el.nodeValue = text;
+		if (el.nodeValue !== text) {
+			el.nodeValue = text;
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				devperfMutation();
+		}
 		return;
 	}
 
@@ -472,7 +533,11 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 	// same-node patch carrying a new file's markup); an identical seed leaves the
 	// live DOM untouched. Dev live-reload of the .svg remounts anyway.
 	if (typeof newVnode.children === 'string') {
-		if (newVnode.children !== oldVnode.children) el.innerHTML = newVnode.children;
+		if (newVnode.children !== oldVnode.children) {
+			el.innerHTML = newVnode.children;
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				devperfMutation();
+		}
 		return;
 	}
 
@@ -493,7 +558,16 @@ export function patch(oldVnode, newVnode, parent, ctx) {
  */
 function reassertSelectValue(el, attrs) {
 	if (el.nodeName !== 'SELECT' || !('value' in attrs)) return;
-	el.value = stringify(attrs.value);
+	// Compare against the LIVE property first, exactly as the INPUT/TEXTAREA branch of
+	// patchAttrs does: a settled select re-asserted on every patch wrote the value it
+	// already had and charged devperf a phantom DOM mutation. When the option list
+	// churned (or the user changed the selection out of band) the live value differs
+	// and the write still happens.
+	const next = stringify(attrs.value);
+	if (el.value === next) return;
+	el.value = next;
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+		devperfMutation();
 }
 
 /**
@@ -505,6 +579,9 @@ function reassertSelectValue(el, attrs) {
 function patchComponent(oldVnode, newVnode) {
 	const child = (newVnode.component = oldVnode.component);
 	const props = shallowEqual(oldVnode.props, newVnode.props) ? undefined : newVnode.props;
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		devperfComponentPatch(child, props === undefined);
+	}
 	child.applyParentUpdate({ props, children: newVnode.children });
 	newVnode.el = child.element;
 }
@@ -551,6 +628,9 @@ function unmount(vnode) {
 		// placeholder (mountComponent's catch nulled `component`). No instance to
 		// destroy — just drop the placeholder node so it doesn't linger in the DOM.
 		if (!child) {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				if (vnode.el?.parentNode) devperfMutation();
+			}
 			vnode.el?.remove();
 			return;
 		}
@@ -580,6 +660,9 @@ function unmount(vnode) {
 		return;
 	}
 	releaseSubtree(vnode);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (vnode.el?.parentNode) devperfMutation();
+	}
 	vnode.el?.remove();
 }
 
@@ -702,8 +785,25 @@ function patchIndexedChildren(el, oldChildren, newChildren, ctx) {
 		mount(newChildren[i], el, null, ctx);
 	}
 	for (let i = common; i < oldChildren.length; i++) {
+		if (
+			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
+			oldChildren[i].isComponent &&
+			oldChildren[i].component?.animations?.out
+		) {
+			warnUnkeyedOutAnimation();
+		}
 		unmount(oldChildren[i]);
 	}
+}
+
+let warnedUnkeyedOutAnimation = false;
+function warnUnkeyedOutAnimation() {
+	if (warnedUnkeyedOutAnimation) return;
+	warnedUnkeyedOutAnimation = true;
+	console.warn(
+		'[puzzle] out animations in an unkeyed list can misorder siblings — ' +
+			'give the list items key attributes'
+	);
 }
 
 // Two siblings with the SAME tag and SAME key silently collapse (the per-tag Map
@@ -845,6 +945,9 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 			patch(oldChild, newChild, el, ctx);
 			if (nextPersistentSibling(newChild.el) !== ref) {
 				el.insertBefore(newChild.el, ref);
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+					devperfMutation();
+				}
 			}
 		} else {
 			mount(newChild, el, ref, ctx);
@@ -885,12 +988,17 @@ function setAttr(el, name, value) {
 		const target = mods.includes('outside') ? document : el;
 		const opts = target === el ? undefined : OUTSIDE_OPTS;
 		const listeners = (el[LISTENERS] ??= {});
-		if (listeners[name]) target.removeEventListener(event, listeners[name], opts);
+		detachListener(el, name, event, mods, listeners);
 		if (typeof value === 'function') {
+			// A spent once-binding survives fresh handler closures across patches
+			// (D38). Its listener detached when it fired, so do not resurrect it.
+			if (mods.includes('once') && listeners[name + ONCE_SPENT]) return;
 			// An outside binding always wraps (mods is non-empty by construction —
 			// 'outside' itself is a modifier), so the gate below never needs a
 			// separate no-other-mods path.
-			const handler = mods.length ? withModifiers(name, mods, value, listeners, el) : value;
+			const handler = mods.length
+				? withModifiers(name, event, mods, value, listeners, el)
+				: value;
 			target.addEventListener(event, handler, opts);
 			listeners[name] = handler;
 		} else {
@@ -904,21 +1012,38 @@ function setAttr(el, name, value) {
 
 	if (PROPS.has(name)) {
 		el[name] = name === 'value' ? stringify(value) : Boolean(value);
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			devperfMutation();
 		// keep boolean ATTRIBUTES coherent for CSS selectors like [disabled]
 		if (name !== 'value') {
 			if (value) el.setAttribute(name, '');
 			else el.removeAttribute(name);
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+				devperfMutation();
 		}
 		return;
 	}
 
 	if (value === false || value == null) {
+		// Preserve attribute-removal semantics, but still hand an undefined binding
+		// to the shared display policy for its development diagnostic. The RESULT is
+		// discarded — the call exists only for that warning — so the probe leads and
+		// production pays nothing per nullish attribute. The attribute NAME rides
+		// along as the label: display.js dedups warnings by label, so without it every
+		// brace-only undefined in the app collapsed into the one '' key and only the
+		// first ever warned. Production is byte-neutral — the whole call folds away
+		// with this dev gate.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (value === undefined) stringify(value, name);
+		}
 		el.removeAttribute(name);
 	} else if (value === true) {
 		el.setAttribute(name, '');
 	} else {
-		el.setAttribute(name, String(value));
+		el.setAttribute(name, stringify(value));
 	}
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+		devperfMutation();
 }
 
 function removeAttr(el, name) {
@@ -929,14 +1054,10 @@ function removeAttr(el, name) {
 		// even when the key carries modifiers ('@event:mod' → event 'event').
 		const [event, ...mods] = name.slice(1).split(':');
 		const listeners = el[LISTENERS];
-		if (listeners?.[name]) {
-			// `outside` (D86) listeners live on document/capture — mirror setAttr's
-			// target + options exactly or removeEventListener silently misses.
-			if (mods.includes('outside')) document.removeEventListener(event, listeners[name], OUTSIDE_OPTS);
-			else el.removeEventListener(event, listeners[name]);
-			delete listeners[name];
-			// The listener is gone — drop its once-spent marker too (D38), else a later
-			// patch that re-adds this @event:once would read the stale flag and never fire.
+		if (listeners) {
+			detachListener(el, name, event, mods, listeners);
+			// Explicit removal resets a once-binding even when spend already detached
+			// its handler — a later re-add must start fresh (D38).
 			delete listeners[name + ONCE_SPENT];
 		}
 		return;
@@ -944,8 +1065,25 @@ function removeAttr(el, name) {
 
 	if (PROPS.has(name)) {
 		el[name] = name === 'value' ? '' : false;
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+			devperfMutation();
 	}
 	el.removeAttribute(name);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
+		devperfMutation();
+}
+
+/**
+ * Detach one patch-managed listener and drop its live-handler entry. The
+ * once-spent marker is deliberately left alone; only an explicit binding
+ * removal resets it (D38).
+ */
+function detachListener(el, name, event, mods, listeners) {
+	const handler = listeners[name];
+	if (!handler) return;
+	if (mods.includes('outside')) document.removeEventListener(event, handler, OUTSIDE_OPTS);
+	else el.removeEventListener(event, handler);
+	delete listeners[name];
 }
 
 // Event-modifier key filters: modifier name → the KeyboardEvent.key it gates on
@@ -981,12 +1119,13 @@ export const KEY_FILTERS = {
  *   5. stopPropagation;
  *   6. the handler.
  * @param {string} fullName the '@event:mod…' attr name (LISTENERS key)
+ * @param {string} eventName the bare DOM event name
  * @param {string[]} mods modifiers in written order
  * @param {Function} handler the compiled listener
  * @param {object} listeners the element's LISTENERS object (holds the spent flag)
  * @param {Element} el the bound element — the outside-gate's containment anchor
  */
-function withModifiers(fullName, mods, handler, listeners, el) {
+function withModifiers(fullName, eventName, mods, handler, listeners, el) {
 	const spentKey = fullName + ONCE_SPENT;
 	const outside = mods.includes('outside');
 	return (event) => {
@@ -998,6 +1137,7 @@ function withModifiers(fullName, mods, handler, listeners, el) {
 		if (mods.includes('once')) {
 			if (listeners[spentKey]) return;
 			listeners[spentKey] = true;
+			detachListener(el, fullName, eventName, mods, listeners);
 		}
 		if (mods.includes('prevent')) event.preventDefault();
 		if (mods.includes('stop')) event.stopPropagation();
@@ -1016,10 +1156,6 @@ function withModifiers(fullName, mods, handler, listeners, el) {
 function inSvgNamespace(tag, parent) {
 	if (tag === 'svg') return true;
 	return parent.namespaceURI === SVG_NS && parent.nodeName.toLowerCase() !== 'foreignobject';
-}
-
-function stringify(v) {
-	return v == null ? '' : String(v);
 }
 
 export default ViewManager;

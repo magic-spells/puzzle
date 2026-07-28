@@ -1,6 +1,6 @@
 ---
 name: Render-function codegen
-status: verified
+status: built
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-VIEW-MANAGER
@@ -9,6 +9,32 @@ connections:
   - FILE-CODEGEN-EXPRESSIONS
 verified_at: '2026-07-24T23:40:00.000Z'
 verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+notes:
+  - kind: gotcha
+    text: >-
+      Two independent JS scanners exist and MUST agree: parser/lexskip.go (LexSkip, a skipper) and
+      codegen/expr.go (resolveExpr, a rewriter). They carry byte-identical regex-preceding-keyword
+      tables under different names with no shared symbol, and scanRegexLiteral has a twin in
+      lexskip.go. That sync was manual and undefended, and it silently drifted: neither scanner
+      handled postfix ++/-- , so `a++ / b` read the `/` as a regex opener. In the parser that
+      surfaced as `missing </script>` pointed at the tag five lines away; in the rewriter it
+      produced NO diagnostic at all — `{ a++ / b / c }` compiled clean and emitted `String(__d.a++ /
+      b / __d.c)` with `b` unscoped, failing at runtime with ReferenceError.
+
+
+      The fix had to be a 2-byte munch in LexSkip returning pee = prevEndsExpr, NOT a change to
+      LexPlainEndsExpr: that helper's signature is (c byte, prev bool) with no lookahead, so a
+      per-byte "neighbour is also +" heuristic cannot express it and would misclassify
+      `a+++/re/.source`, which is valid JS meaning `a++ + /re/.source` where the slash genuinely
+      does open a regex.
+
+
+      A differential corpus test now runs both scanners over shared fixtures and asserts identical
+      regex/division classification. Keep it: it is the only thing standing between the two scanners
+      and the next silent drift. The larger unification (a byte-preserving token/span API
+      resolveExpr could consume) is deliberately NOT done — resolveExpr rewrites rather than skips,
+      which is why it is the holdout. Note codegen already imports parser and routes five other call
+      sites through LexSkip, so there is no layering obstacle if that refactor is ever funded.
 ---
 
 # Render-function codegen
@@ -38,7 +64,11 @@ the copy path slices `expr[i:j]`.
 
 Emission covers host/component vnodes, coalesced text/interpolation,
 formatters, dynamic/mixed attrs, events, slots, refs, islands, inline SVG,
-conditionals/case, and item/range loops. Formatter calls use bracket access and
+conditionals/case, and item/range loops. Markers emit `new ViewNode(SLOT_TAG)`
+/ `new ViewNode(SLOT_TAG, { name })` when self-closing (or empty-paired), and
+carry their fallback body as the marker vnode's children through the ordinary
+child-emission path when paired (D141) — formatters, control flow, components,
+and `{#svg}` all work inside a fallback. Formatter calls use bracket access and
 the runtime missing-name guard. Item loops auto-key through `ViewNode.keyOf`;
 an explicit root `key` replaces the synthetic key. Valueless attrs follow a
 strict contract: a bare attribute emits `true`, an explicit `=""` emits an empty

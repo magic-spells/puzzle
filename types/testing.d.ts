@@ -105,6 +105,33 @@ export interface SettledOptions {
  */
 export declare function settled(options?: SettledOptions): Promise<void>;
 
+export interface RenderProfile {
+	readonly renders: number;
+	readonly wastedRenders: number;
+	readonly domMutations: number;
+	readonly rendersByView: Readonly<Record<string, number>>;
+	readonly causes: Readonly<Record<string, number>>;
+	readonly maxRecursiveDepth: number;
+	readonly storeNotifications: number;
+}
+
+/**
+ * Measure actual ViewManager.render entries caused by callback, then drain
+ * framework work with settled(). A render with no DOM writes is wasted.
+ *
+ * The returned report and its nested records are frozen.
+ *
+ * The instrumentation sink is global, so the handle is optional — pass one only
+ * when naming the subject makes the call site clearer.
+ */
+export declare function measureRenders(
+	callback: () => void | Promise<void>
+): Promise<Readonly<RenderProfile>>;
+export declare function measureRenders(
+	handle: MountedView | TestApp,
+	callback: () => void | Promise<void>
+): Promise<Readonly<RenderProfile>>;
+
 export interface RecordedMethod {
 	(...args: any[]): any;
 	readonly calls?: any[][];

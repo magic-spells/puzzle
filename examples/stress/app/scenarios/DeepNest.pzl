@@ -1,0 +1,300 @@
+<puzzle-view>
+  <div class="deep-root">
+    <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-hairline">
+      <div class="font-mono text-xs text-muted">
+        <span class="tabular-nums text-fg">{ branches }</span> branches x
+        <span class="tabular-nums text-fg">{ depth }</span> levels =
+        <span class="tabular-nums text-accent">{ nodeCount }</span> nested views
+      </div>
+      <div class="font-mono text-[11px] shrink-0 { resultCls }">{ resultText }</div>
+    </div>
+
+    <div class="px-4 py-2 border-b border-line font-mono text-[11px] text-faint">{ explainText }</div>
+
+    <div class="nest-forest max-h-[420px] overflow-auto px-4 py-2 font-mono text-[10px] leading-tight">
+      {#for branch in branchList}
+        <NestNode chain={ branch.chain } level={ 0 } globalId={ globalId } />
+      {/for}
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import NestNode from './NestNode.pzl';
+import { registerScenario } from '../stress-controller.js';
+import { nestMetrics, resetNestMetrics } from '../nest-metrics.js';
+import {
+  STRESS_SEED,
+  afterPaint,
+  clearType,
+  intParam,
+  ms1,
+  perfDelta,
+  perfSnapshot,
+  seqShapes,
+  settleFrames,
+  viewRoot,
+} from '../scenario-utils.js';
+
+// ---------------------------------------------------------------------------
+// deep-nest — is the cost of one update proportional to DEPTH, or does it
+// traverse the whole forest?
+//
+// 64 branches x 24 levels = 1,536 REAL PuzzleView instances (NestNode renders
+// itself; see that file). Three writes, one decisive counter:
+//
+//   update-leaf         write the deepest node of branch 0
+//   update-branch-root  write the shallowest node of branch 0
+//   update-global       write the one record every node also queries
+//
+// The counter is `nestMetrics.dataRuns` — node data() executions across the op,
+// the same shape of evidence the keyed-list handler A/B used, and readable from
+// a production bundle where the framework's own counters do not exist.
+//
+// `update-global` is the CONTROL. It must read 1,536. A scenario whose
+// subscriptions were quietly broken would report a very impressive `1` for the
+// leaf write and mean nothing at all; the control is what makes the small
+// numbers trustworthy.
+//
+// This view's own data() makes no store query — same reason as Subscriptions.pzl:
+// a host subscribed to the collection would re-render on every write, and though
+// its children would still take the props bailout, the host would be sitting
+// inside the measured causal chain for no reason.
+// ---------------------------------------------------------------------------
+
+const TYPE = 'nest';
+
+export default class DeepNest extends PuzzleView {
+  api = {
+    name: 'deep-nest',
+    run: (op) => this.opRun(op),
+    reset: () => this.opReset(),
+    warmup: () => this.opWarmup(),
+    validate: () => this.opValidate(),
+    stats: () => this.opStats(),
+  };
+
+  created() {
+    this.branchList = [];
+    this.branches = 0;
+    this.depth = 0;
+    this.globalId = null;
+    this.leafId = null;
+    this.rootId = null;
+    this.lastResult = null;
+    this.unregister = null;
+    this.buildDataset();
+  }
+
+  mounted() {
+    this.unregister = registerScenario(this.api);
+  }
+
+  destroyed() {
+    this.unregister?.();
+    this.unregister = null;
+  }
+
+  data() {
+    const result = this.lastResult;
+    return {
+      branches: this.branches,
+      depth: this.depth,
+      nodeCount: this.branches * this.depth,
+      branchList: this.branchList,
+      globalId: this.globalId,
+      explainText:
+        'every node subscribes to its OWN record (precise) and to one SHARED record (the control). ' +
+        'A node re-render hands its child shallow-equal props, so the child takes the component bailout — ' +
+        'which is what makes "how many views ran data()" the whole answer.',
+      resultText: result
+        ? `${result.op}: ${result.dataRuns}/${this.branches * this.depth} nodes ran data() · ${ms1(result.scriptMs)}ms`
+        : 'no run yet',
+      resultCls: result ? 'text-accent' : 'text-faint',
+    };
+  }
+
+  // ---- dataset -------------------------------------------------------------
+
+  wantBranches() {
+    return intParam(this.props?.branches, 64, 1, 256);
+  }
+
+  wantDepth() {
+    return intParam(this.props?.depth, 24, 1, 40);
+  }
+
+  /**
+   * One flat seed, sliced into branch chains.
+   *
+   * Each chain is allocated ONCE here and threaded down the whole branch by
+   * reference. That is load-bearing: rebuilding the array in data() would hand
+   * every child a new array object, shallowEqual would fail at every level, and
+   * a single write would re-run data() the entire depth of the branch — the
+   * scenario would then be measuring its own prop churn.
+   */
+  buildDataset() {
+    const store = this.ctx.store;
+    const branches = this.wantBranches();
+    const depth = this.wantDepth();
+
+    clearType(store, TYPE);
+    store.resetFixtureSeed(STRESS_SEED);
+    const total = branches * depth;
+    const records = store.seed(TYPE, seqShapes(total + 1, 0));
+
+    this.branches = branches;
+    this.depth = depth;
+    // The extra record past the grid: the shared control every node queries.
+    this.globalId = records[total].id;
+
+    this.branchList = new Array(branches);
+    for (let b = 0; b < branches; b += 1) {
+      const chain = new Array(depth);
+      for (let level = 0; level < depth; level += 1) chain[level] = records[b * depth + level].id;
+      this.branchList[b] = { id: b, chain };
+    }
+
+    this.rootId = this.branchList[0].chain[0];
+    this.leafId = this.branchList[0].chain[depth - 1];
+    this.lastResult = null;
+  }
+
+  targetFor(op) {
+    if (op === 'update-leaf') return { id: this.leafId, what: `branch 0 level ${this.depth - 1} (the leaf)` };
+    if (op === 'update-branch-root') return { id: this.rootId, what: 'branch 0 level 0 (the branch root)' };
+    if (op === 'update-global') return { id: this.globalId, what: 'the shared record every node queries' };
+    return null;
+  }
+
+  // ---- ops -----------------------------------------------------------------
+
+  async opRun(op) {
+    const target = this.targetFor(op);
+    if (!target) throw new Error(`[stress] deep-nest has no op "${op}"`);
+
+    const store = this.ctx.store;
+    const record = store.findOne(TYPE, target.id);
+    if (!record) throw new Error('[stress] deep-nest: the write target is gone — reset the scenario');
+
+    resetNestMetrics();
+    const before = perfSnapshot();
+
+    const t0 = performance.now();
+    record.update({ version: (record.version || 0) + 1 });
+    // Synchronous delivery: every woken node re-evaluates inside this call, so
+    // the counter below is final the instant flush() returns.
+    store.flush();
+    const scriptMs = performance.now() - t0;
+    const dataRuns = nestMetrics.dataRuns;
+    const perf = perfDelta(before);
+
+    await afterPaint();
+    const paintedMs = performance.now() - t0;
+    await settleFrames(1);
+
+    const nodes = this.branches * this.depth;
+    this.lastResult = { op, what: target.what, dataRuns, nodes, scriptMs, paintedMs, perf };
+    // Safe after the capture: the host's data() makes no store query, and every
+    // branch root's props are shallow-equal, so this re-renders nothing below.
+    this.refresh();
+    await settleFrames(1);
+
+    return {
+      op,
+      ms: paintedMs,
+      scriptMs,
+      detail:
+        `${op} (${target.what}) → ${dataRuns}/${nodes} nodes ran data() ` +
+        `at depth ${this.depth} across ${this.branches} branches, ${ms1(scriptMs)}ms script`,
+    };
+  }
+
+  async opReset() {
+    this.buildDataset();
+    this.ctx.store.flush();
+    this.refresh();
+    await afterPaint();
+    await settleFrames(1);
+    return { detail: `reset: ${this.branches} x ${this.depth} = ${this.branches * this.depth} nodes` };
+  }
+
+  /** Warm the widest path so the JIT has seen a full-forest wake. */
+  async opWarmup() {
+    await this.opRun('update-global');
+    this.lastResult = null;
+    this.refresh();
+    await settleFrames(1);
+    return { detail: 'warmup: one update-global cycle, result discarded' };
+  }
+
+  // ---- verification --------------------------------------------------------
+
+  opValidate() {
+    const root = viewRoot(this);
+    if (!root) return { ok: false, detail: 'no DOM root to inspect' };
+
+    const nodes = root.querySelectorAll('.nest-node');
+    const want = this.branches * this.depth;
+    if (nodes.length !== want) {
+      return { ok: false, detail: `DOM has ${nodes.length} nested nodes, expected ${want}` };
+    }
+
+    const store = this.ctx.store;
+    const global = store.findOne(TYPE, this.globalId);
+    if (!global) return { ok: false, detail: 'the shared control record is missing from the store' };
+
+    // Every node renders the SHARED record's version. If a write woke only some
+    // of them, the DOM disagrees with itself here — which is exactly the failure
+    // an update-global that reported less than the full count would produce.
+    const globals = root.querySelectorAll('.nest-global');
+    const wantGlobal = String(global.version);
+    for (let i = 0; i < globals.length; i += 1) {
+      const shown = globals[i].textContent.trim();
+      if (shown !== wantGlobal) {
+        return { ok: false, detail: `node ${i} renders global version "${shown}", the store holds "${wantGlobal}"` };
+      }
+    }
+
+    // Spot-check the two write targets against their own records.
+    for (const [name, id] of [['leaf', this.leafId], ['branch root', this.rootId]]) {
+      const record = store.findOne(TYPE, id);
+      if (!record) return { ok: false, detail: `the ${name} record is missing from the store` };
+    }
+
+    const leafRecord = store.findOne(TYPE, this.leafId);
+    const leafLabel = nodes[this.depth - 1]?.querySelector('.nest-label')?.textContent?.trim();
+    const wantLeaf = `${this.depth - 1}·v${leafRecord.version}`;
+    if (leafLabel !== wantLeaf) {
+      return { ok: false, detail: `branch 0's leaf renders "${leafLabel}", its record says "${wantLeaf}"` };
+    }
+
+    const result = this.lastResult;
+    return {
+      ok: true,
+      detail: result
+        ? `${want} nested views; last op ${result.op} ran data() on ${result.dataRuns} of them`
+        : `${want} nested views over ${this.depth} levels; no run yet`,
+    };
+  }
+
+  opStats() {
+    const root = viewRoot(this);
+    const forest = root?.querySelector('.nest-forest');
+    const result = this.lastResult;
+    return {
+      mountedNodes: forest ? forest.querySelectorAll('*').length : 0,
+      records: this.ctx.store.findMany(TYPE).length,
+      views: this.branches * this.depth + 1,
+      counters: {
+        nodeDataRuns: result?.dataRuns ?? 0,
+        nodes: this.branches * this.depth,
+        nestDepth: this.depth,
+        nestBranches: this.branches,
+      },
+      perf: result?.perf ?? null,
+    };
+  }
+}
+</script>

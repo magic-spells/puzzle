@@ -11,6 +11,19 @@ connections:
   - DOC-SPEC-VIEW
   - DECISION-D20-PUZZLE-VIEW-ELEMENT
   - DECISION-D19-NAVIGATION-COMMIT
+notes:
+  - kind: gotcha
+    text: >-
+      One-animator enforcement had a hole fixed in the pre-release review (fix/prerelease-review):
+      #abortEnter only unwound a pending VISIBLE-trigger enter, so a running mount-trigger enter was
+      never cancelled when playOut() began — enter and out ran CONCURRENTLY on the same element,
+      both fill:'both' (reproduced; destroy() then cancelled only the out handle). playOut() now
+      cancels #currentAnimation after #abortEnter(). The trap for future edits: cancelling a Puzzle
+      animation RESOLVES its finished promise (animate.js normalizes AbortError away), so the
+      awaiting playIn() resumes and would have fired viewDidShow() mid-leave — the guard there must
+      check #leaving alongside #destroyed, and the same guard now protects the visible-trigger
+      reveal path. Any future "cancel the current animation" change must audit who is awaiting that
+      handle's finished.
 ---
 
 # D28 — View & component animations: no-wrapper WAAPI, sequential transitions, fill-release
