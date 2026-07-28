@@ -395,8 +395,23 @@ let portalCount = 0;
 /**
  * Point new portal outlets at the app's host (the mount container's parent).
  * Called by PuzzleApp.mount() and mountStatic(); unset falls back to <body>.
+ *
+ * Portal state is MODULE-scoped, so two PuzzleApp instances on one page share
+ * one host/outlet/range table — a later mount retargets the outlet for both,
+ * and either unmount's teardownPortals() removes the other app's live portals.
+ * Multiple apps on a page are not a supported shape (D144); the dev build
+ * warns when a mount would stomp live portal state.
  */
 export function setPortalHost(el) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (portalRanges.size > 0 && el !== portalHost) {
+			console.warn(
+				'[puzzle] setPortalHost() called while another mounted app has live portals. ' +
+					'Portal state is shared per page: multiple simultaneous PuzzleApp instances ' +
+					'are not supported, and unmounting either app will tear down the other\'s portals.'
+			);
+		}
+	}
 	portalHost = el || null;
 }
 

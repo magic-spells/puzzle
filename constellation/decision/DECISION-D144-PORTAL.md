@@ -67,6 +67,20 @@ binding and loop-variable name like `SLOT_TAG`.
 
 ## Scope notes
 
+Portal state (host, outlet, range table, count) is module-scoped, not per-app:
+two simultaneous `PuzzleApp` instances on one page would share one outlet — a
+later mount retargets it for both, and either unmount tears down the other
+app's live portals. Multiple apps on a page are **not a supported shape**; the
+dev build warns when `setPortalHost()` would stomp live portal state. Scoping
+the state to ctx is the compatible upgrade if a real embedding case ever
+funds it.
+
+Compiler tree walkers all recurse into `*parser.Portal` except three that are
+deliberately exempt: loop-key roots (contractually elements/components),
+`buildTextRun` (receives pre-filtered text runs only), and `condStaticLen`
+(counts a Portal as one fixed vnode without descending — its local
+placeholder occupies exactly one position).
+
 `<dialog>.showModal()` remains the recommended tool for focus-trapped modals —
 the native top layer gives focus trap and Escape handling for free; Portal
 covers non-modal overlays, full-screen panels, and reactive content in foreign
