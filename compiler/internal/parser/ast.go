@@ -43,12 +43,15 @@ type Component struct {
 	Pos      Position
 }
 
-// Slot is a self-closing composition render target (v1.64, D134). <Children/>
-// and <Slot/> have an empty Name and substitute the default bucket;
-// <Slot name="x"/> carries a static, non-empty Name.
+// Slot is a composition render target (D141). <Children> and bare <Slot> have
+// an empty Name and substitute the default bucket; <Slot name="x"> carries a
+// static, non-empty Name. Paired forms carry ordinary template Children that
+// render as fallback content when the bucket is unfilled. Self-closing and
+// empty paired forms have no fallback.
 type Slot struct {
-	Name string
-	Pos  Position
+	Name     string
+	Children []Node
+	Pos      Position
 }
 
 // Text is literal text between tags/directives. Brace escapes (\{ \}) are

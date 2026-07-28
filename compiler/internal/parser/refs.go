@@ -68,6 +68,12 @@ func walkRefs(nodes []Node, file string, seen map[string]Position, inFor, inSkel
 			if perr := walkRefs(node.Children, file, seen, inFor, inSkeleton); perr != nil {
 				return perr
 			}
+		case *Slot:
+			// Marker attributes are validated in parseElement; fallback children
+			// are ordinary template content and participate in ref validation.
+			if perr := walkRefs(node.Children, file, seen, inFor, inSkeleton); perr != nil {
+				return perr
+			}
 		case *If:
 			if perr := walkRefs(node.Then, file, seen, inFor, inSkeleton); perr != nil {
 				return perr

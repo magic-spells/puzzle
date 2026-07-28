@@ -1,0 +1,34 @@
+<puzzle-view class="fallbacks">
+  <Children>
+    <p class="pzl-test-fallback">{ n | number }</p>
+  </Children>
+  <Slot name="control">
+    {#if show}
+      <button ref="fallbackButton" @click={ activate }>Ready</button>
+    {:else}
+      <span>Waiting</span>
+    {/if}
+  </Slot>
+  <Slot name="component">
+    <Badge label={ label }/>
+  </Slot>
+  <Slot name="icon">
+    {#svg 'icons/heart.svg'}
+  </Slot>
+  <Slot name="empty"></Slot>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Badge from './Badge.pzl';
+
+export default class MarkerFallbacks extends PuzzleView {
+  events = {
+    activate: () => {},
+  };
+
+  data() {
+    return { n: 42, show: true, label: 'New' };
+  }
+}
+</script>

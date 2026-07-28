@@ -227,6 +227,16 @@ func TestA11yWarnings(t *testing.T) {
 			wantMsg: "<a> has no href attribute", wantLine: 4, wantCol: 7,
 		},
 		{
+			name: "fires inside a marker fallback",
+			src: `<puzzle-view>
+  <Slot name="empty">
+    <img src="/fallback.png"/>
+  </Slot>
+</puzzle-view>
+`,
+			wantMsg: "<img> has no alt attribute", wantLine: 3, wantCol: 5,
+		},
+		{
 			name: "fires inside the skeleton",
 			src: `<puzzle-view>
   <p>hi</p>

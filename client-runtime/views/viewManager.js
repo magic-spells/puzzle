@@ -184,8 +184,9 @@ function stripSlotAttr(vnode) {
  * Replace slot markers anywhere in `vnode` against the partitioned `parts`. Only
  * nodes on the path to a marker are cloned; everything else is returned untouched
  * so DOM links survive. A named marker substitutes its named bucket; the bare
- * marker substitutes the default bucket. An unfilled marker contributes no
- * nodes (v1.64, D134). Content is already parent-expanded — spliced in as-is.
+ * marker substitutes the default bucket. When the selected bucket is empty, the
+ * marker's own children expand as fallback content (D141). Supplied content wins
+ * completely. Content is already parent-expanded — spliced in as-is.
  *
  * Component vnodes (v1.38, D71): the walk descends into a component's CALL-SITE
  * children — they are authored in THIS template, so this template's markers
@@ -236,6 +237,8 @@ function expandChildList(kids, parts) {
 			const bucket = name ? parts.named && parts.named[name] : parts.default;
 			if (bucket && bucket.length) {
 				for (const sc of bucket) out.push(sc);
+			} else {
+				for (const fb of k.children) out.push(expandNode(fb, parts));
 			}
 			continue;
 		}

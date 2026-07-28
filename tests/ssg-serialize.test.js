@@ -160,11 +160,15 @@ describe('SSG serializer (M1)', () => {
 			);
 		});
 
-		it('ignores legacy marker children instead of serializing them as fallback', async () => {
-			const tree = h('section', {}, [
-				new ViewNode(SLOT_TAG, { name: 'missing' }, [text('legacy fallback')]),
-			]);
-			expect(await serialize(tree)).toBe('<section></section>');
+		it('serializes marker children as fallback', async () => {
+			class FallbackCard extends PuzzleView {
+				render() {
+					return h('section', {}, [
+						new ViewNode(SLOT_TAG, { name: 'missing' }, [text('fallback')]),
+					]);
+				}
+			}
+			expect(await serialize(comp(FallbackCard))).toBe('<section>fallback</section>');
 		});
 	});
 

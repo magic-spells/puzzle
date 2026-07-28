@@ -107,7 +107,9 @@ the next navigation replaces it.
 
 Composition uses `SLOT_TAG` and shared `expandSlots`: `<Children/>` fills
 the default bucket, `<Slot name="x"/>` fills named buckets, and `<Slot/>` is
-the router outlet by convention. Unfilled markers contribute no nodes (D134).
+the router outlet by convention. An unfilled marker expands its fallback
+children — supplied content wins completely — and contributes no nodes when it
+has none (D141).
 Buckets are null-prototype objects and forwarding descends through component
 call-site children while preserving pinned routed instances.
 

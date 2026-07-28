@@ -64,9 +64,11 @@ the copy path slices `expr[i:j]`.
 
 Emission covers host/component vnodes, coalesced text/interpolation,
 formatters, dynamic/mixed attrs, events, slots, refs, islands, inline SVG,
-conditionals/case, and item/range loops. D134 markers emit only
-`new ViewNode(SLOT_TAG)` or `new ViewNode(SLOT_TAG, { name })`; fallback
-child arrays are not part of the grammar or emission. Formatter calls use bracket access and
+conditionals/case, and item/range loops. Markers emit `new ViewNode(SLOT_TAG)`
+/ `new ViewNode(SLOT_TAG, { name })` when self-closing (or empty-paired), and
+carry their fallback body as the marker vnode's children through the ordinary
+child-emission path when paired (D141) — formatters, control flow, components,
+and `{#svg}` all work inside a fallback. Formatter calls use bracket access and
 the runtime missing-name guard. Item loops auto-key through `ViewNode.keyOf`;
 an explicit root `key` replaces the synthetic key. Valueless attrs follow a
 strict contract: a bare attribute emits `true`, an explicit `=""` emits an empty

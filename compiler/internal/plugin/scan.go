@@ -191,6 +191,12 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
 		}
+	case *parser.Slot:
+		// Fallback bodies compile through the ordinary child-emission path, so
+		// build-wide formatter/feature discovery must descend into them too.
+		for _, child := range node.Children {
+			collectUsage(child, usage, allow)
+		}
 	case *parser.Interpolation:
 		collectFormatterCalls(node.Formatters, usage.Formatters, allow)
 	case *parser.If:

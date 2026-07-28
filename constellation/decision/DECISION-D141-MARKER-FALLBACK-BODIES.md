@@ -1,6 +1,6 @@
 ---
-name: 'D141 — Fallback bodies return to the capitalized markers'
-status: planned
+name: 'D141 — Marker fallback bodies'
+status: built
 connections:
   - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
   - COMPONENT-TEMPLATE-PARSER
@@ -9,87 +9,64 @@ connections:
   - DOC-SPEC-TEMPLATE
 ---
 
-**PLANNED — not shipped.** Targeted at the first minor after 0.4.0. Nothing
-below is in the compiler or runtime yet; 0.4.0 ships D134's self-closing-only
-markers exactly as documented.
+Composition markers accept a paired form whose body is fallback content —
+`<Children>…</Children>`, `<Slot name="x">…</Slot>`, `<Slot>…</Slot>`. The
+fallback renders only when nothing fills that position; content supplied by the
+call site (or the router) replaces it entirely. Self-closing markers are the
+empty form — no fallback, render nothing when unfilled — and an empty paired
+body means the same. Markers are capitalized; lowercase spellings are
+positioned compile errors steering to the capitalized forms (D134).
 
-The composition markers regain paired forms carrying fallback content —
-`<Children>…</Children>`, `<Slot name="x">…</Slot>`, and bare `<Slot>…</Slot>` —
-rendered only when the call site (or the router) supplies nothing for that
-position, and replaced entirely when it does. The capitalization rule, the
-one-mechanism marker vnode, and the lowercase steering errors are all D134
-unchanged; only the no-fallback rule is reversed.
+## Contract
 
-## Context
-
-D134 removed fallback bodies and deferred the is-slot-filled probe "until real
-demand." The D134 ecosystem migration (2026-07-27) supplied that demand
-immediately: six registry components (HoverCard, Popover, Popconfirm,
-DropdownMenu, EmojiPicker, EmojiPickerSimple) relied on trigger-slot fallbacks,
-four live call sites relied on the fill-wins swap, and the prop-opt-in
-replacement pattern failed outright for the emoji pickers (`label` is their
-always-set aria-label, so `{#if label}` can never reach the slot) — two
-migration agents independently had to invent a `customTrigger` boolean. Vue,
-native web components, Astro, and Angular 18+ all support slot fallback with
-these exact semantics; Svelte 5 removed it but shipped a testable-children
-probe as the replacement. Puzzle post-D134 has neither.
-
-## Decision (planned)
-
-- **Paired forms carry fallback; self-closing stays the empty form.** An empty
-  paired body (`<Children></Children>`) means no fallback, same as
-  self-closing (Vue's rule). D134's "paired form is a compile error" is
-  reversed; its capitalization errors are not.
 - **Uniform across the one mechanism.** `<Children>` and bare `<Slot>` are the
-  same AST node (D134 kept the split as convention, not enforcement), so
-  fallback applies uniformly: component default content, named-slot fallback,
-  and — deliberately — the router outlet, where fallback renders when no child
-  route content occupies the slot (a parent route rendering as the leaf).
-- **No public is-slot-filled probe.** The runtime's marker expansion already
-  knows whether a name was filled — that is all fallback needs. The probe stays
-  deferred (D134's reasoning stands; Svelte-5-style testable slots remain a
-  separate, unclaimed decision).
-- **A fallback body is ordinary template content — no restricted subset.**
-  Interpolations (including formatter pipes), `{#if}`/`{#for}`/`{#case}`
-  blocks, components, event bindings, refs, and `{#svg}` inline SVG (D46) all
-  parse and compile inside a fallback body through the SAME parser and codegen
-  paths as any element body — the fallback children ride the existing
-  `emitElement` child emission, so nothing is special-cased. One new rule to
-  enforce: a composition marker may not appear inside another marker's
-  fallback body (positioned compile error) — nested markers there have no
-  coherent expansion order; relaxable later if a real case appears.
-- **Mechanically, this is a scoped restore** of what D134 deleted, respelled:
-  `Slot.Children` in the AST, the parser's paired-marker acceptance, codegen's
-  fallback emission, and the runtime `expandChildList` fallback branch — plus
-  the D134 self-close-required error's removal. Golden churn expected and
-  acceptable (compiler-over-runtime-bytes: the runtime cost is one branch).
+  same AST node, so fallback behaves identically in all three positions:
+  component default content, named-slot fallback, and the router outlet — which
+  shows its fallback when no child route occupies it (a parent route rendering
+  as the leaf).
+- **A fallback body is ordinary template content.** Interpolations (including
+  formatter pipes), `{#if}`/`{#for}`/`{#case}` blocks, components, event
+  bindings, refs, and `{#svg}` inline SVG (D46) all parse and compile through
+  the same paths as any element body — the fallback children ride
+  `emitElement`'s child emission; nothing is special-cased. A composition
+  marker inside another marker's fallback body is a positioned compile error
+  (no coherent expansion order; relaxable if a real case appears).
+- **No public is-slot-filled probe.** The runtime's marker expansion knows
+  whether a position was filled, which is all fallback needs. A testable-slots
+  API remains a separate, unclaimed decision.
+- **Implementation surface:** `Slot.Children` in the AST, paired-marker
+  parsing, codegen fallback emission, the runtime `expandChildList` fallback
+  branch, and fallback-content traversal in a11y, refs, and the class scan.
+  Golden churn is acceptable (compiler-over-runtime-bytes: the runtime cost is
+  one branch).
 
-## Consequences (when built)
+## Rationale
 
-- The six trigger components can return to declarative fallback
-  (`<Slot name="trigger">…stock chrome…</Slot>`) and drop the migration-era
-  `customTrigger` opt-in / label-wins gating; their `label`-as-visible-text
-  props can stay as sugar or go — per-component call at implementation time.
-  Registry, demo, and docs-site copies move in lockstep (they are mirrors).
-- The docs-site "Default content" section (written for D134) needs rewriting
-  again to teach fallback-first with the prop pattern as the alternative.
-- Fill-wins swap semantics restore the pre-D134 behavior the four migrated call
-  sites originally relied on.
-- Test obligations: compiler golden fixtures for fallback bodies containing a
-  formatter interpolation, a control block, a component, and `{#svg}`; runtime
-  tests for the swap in all three positions (component default content, named
-  slot, empty router outlet) and for the nested-marker compile error. The
-  DOC-DECISIONS.md entry and the SPEC §24 amendment land when this builds, not
-  before.
+Component-owned default content — stock chrome unless the caller supplies its
+own — is the standard slot contract (Vue, native web components, Astro,
+Angular 18+), and the registry needs it: six pieces (HoverCard, Popover,
+Popconfirm, DropdownMenu, EmojiPicker, EmojiPickerSimple) carry either/or
+trigger contracts that prop-conditionals cannot express when the gating prop
+always has a value (the emoji pickers' `label` is their aria-label). Fallback
+bodies cover that need with zero new public API.
+
+## Consequences
+
+- The six trigger pieces (registry + demo + docs-site copies, kept in
+  lockstep as mirrors) express their stock trigger chrome as declarative
+  fallback; filled slot content wins over any label prop.
+- The docs-site Templates "Default content" section teaches fallback bodies,
+  with the prop-conditional as an alternative pattern.
+- Ships in the first minor after 0.4.0. The SPEC §24 amendment and the
+  `DOC-DECISIONS.md` entry land when this builds.
 
 ## Alternatives rejected
 
-- **Prop-opt-in as the permanent answer** — proved unable to express
-  icon-as-default (emoji pickers) without inventing per-component boolean
-  props; pushes a framework-shaped problem onto every component author.
-- **Public is-slot-filled probe instead of fallback bodies** (Svelte 5's shape)
-  — more API surface for the same six components' need; fallback bodies cover
-  the demonstrated demand with zero new public API.
+- **Prop-opt-in defaults as the permanent answer** — cannot express
+  icon-as-default when the gating prop always has a value; pushes a
+  framework-shaped problem onto every component author.
+- **A public is-slot-filled probe instead of fallback bodies** — more API
+  surface for the same need.
 - **Fallback on named slots only (outlet excluded)** — would enforce a
-  Slot/Children split the compiler deliberately keeps as one mechanism, and
-  discards the genuinely useful empty-outlet case.
+  Slot/Children split the compiler keeps as one mechanism, and discards the
+  empty-outlet case.
