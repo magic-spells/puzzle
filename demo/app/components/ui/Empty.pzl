@@ -1,7 +1,7 @@
 <puzzle-view>
   <div class={ classes }>
     <div class="mb-4 flex items-center justify-center text-muted [&>svg]:size-10 empty:hidden">
-      <slot name="icon"/>
+      <Slot name="icon"/>
     </div>
     {#if title}
       <p class="font-medium text-ink">{ title }</p>

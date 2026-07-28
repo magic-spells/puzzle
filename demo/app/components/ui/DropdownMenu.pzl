@@ -13,7 +13,7 @@
       @keydown:down:prevent={ onTriggerDown(event) }
       @keydown:up:prevent={ onTriggerUp(event) }
       @keydown:escape={ onTriggerEscape(event) }>
-      <slot name="trigger">
+      {#if label}
         <span>{ label }</span>
         <svg
           class="size-4 shrink-0 transition-[rotate] {#if open}rotate-180{/if}"
@@ -22,7 +22,9 @@
           aria-hidden="true">
           <path d="M4 6l4 4 4-4z" />
         </svg>
-      </slot>
+      {:else}
+        <Slot name="trigger"/>
+      {/if}
     </button>
 
     {#if open}
@@ -89,6 +91,15 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <DropdownMenu align="end" items={ items } @select={ pick }>
 //     <span slot="trigger">Custom trigger</span>
 //   </DropdownMenu>
+//
+// TRIGGER CHROME — `label` and the "trigger" slot are EITHER/OR. Pass `label` and
+// the button renders the stock chrome (the label text plus the rotating chevron);
+// omit it and the button renders the "trigger" slot instead. D134 retired slot
+// fallback bodies, so the choice is an explicit {#if label} in this template
+// rather than implicit slot-emptiness. Consequence: passing BOTH now shows the
+// label and IGNORES the slot — previously the filled slot won. A custom trigger
+// must therefore carry its own accessible name (aria-label or an .sr-only span)
+// instead of leaning on `label`. Passing neither renders an empty button.
 //
 // items entries:
 //   { label, value?, href?, danger?, disabled? }  interactive (href → <a>)

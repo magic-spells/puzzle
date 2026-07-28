@@ -139,6 +139,21 @@ Rules that follow from this:
   can't be routed to a slot (compile error: "ambiguous"). Make the condition internal —
   either a direct-child wrapper that carries the `slot` attribute with the control flow
   inside it, or branch the entire component call.
+- **Composition markers are capitalized and self-closing (D134, puzzle 0.4.0).**
+  `<Children/>` receives untagged call-site content, `<Slot/>` is the router outlet, and
+  `<Slot name="x"/>` is a named slot. The `slot="x"` call-site attribute is unchanged.
+  Lowercase `<slot>`/`<children>` are compile errors in every form.
+- **Marker fallback bodies do not exist**, and there is no is-slot-filled probe. A piece
+  that wants default chrome when a slot is unfilled makes the choice EXPLICIT with a prop
+  and an `{#if}` — the two shapes in use here:
+  - the slot's content is *visible text* (HoverCard, Popover, Popconfirm, DropdownMenu):
+    the text prop is the opt-in — `{#if label} …stock chrome… {:else} <Slot name="trigger"/> {/if}`;
+  - the default chrome is an *icon* and the label prop is only an accessible name
+    (EmojiPicker, EmojiPickerSimple): a dedicated `customTrigger` boolean is the opt-in —
+    `{#if customTrigger} <Slot name="trigger"/> {:else} …stock icon… {/if}`.
+  Either way the prop and the slot are EITHER/OR: passing both shows the prop branch and
+  ignores the slot, so a custom trigger must carry its own accessible name. Document that
+  precedence in the piece's header comment.
 - **A component's `@event` name must not equal one of its prop names.** `@sort={…}` on a
   component tag compiles to a bare `sort` key in the same props object as a `sort={…}`
   value prop — a duplicate key where the last one silently wins, breaking controlled

@@ -49,7 +49,7 @@
 
       <div class="mt-12 space-y-12">
         <ExampleBox id="custom-trigger" title="Custom trigger" code={ codeTrigger }>
-          <EmojiPickerSimple label="Add reaction" @change={ addEmoji }>
+          <EmojiPickerSimple customTrigger label="Add reaction" @change={ addEmoji }>
             <span slot="trigger" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken">
               React { lastEmoji }
             </span>
@@ -98,9 +98,12 @@ const codeHero = `<input value={ message } @input={ onMessageInput(event) } />
 
 // addEmoji: (char) => this.setData({ message: this.getData().message + char })`;
 
-const codeTrigger = `<EmojiPickerSimple label="Add reaction" @change={ addEmoji }>
+const codeTrigger = `<EmojiPickerSimple customTrigger label="Add reaction" @change={ addEmoji }>
   <span slot="trigger" class="…">React</span>
-</EmojiPickerSimple>`;
+</EmojiPickerSimple>
+
+// \`customTrigger\` opts in to the named "trigger" slot; \`label\` remains the
+// accessible name, not visible text.`;
 
 const codeControlled = `<EmojiPickerSimple open={ pickerOpen } @change={ addEmoji }
                    @show={ openPicker } @hide={ closePicker }/>

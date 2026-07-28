@@ -12,7 +12,9 @@
       disabled={ disabled }
       @click={ toggle }
       @keydown={ onTriggerKey(event) }>
-      <slot name="trigger">
+      {#if customTrigger}
+        <Slot name="trigger"/>
+      {:else}
         <svg
           class="size-5"
           viewBox="0 0 20 20"
@@ -25,7 +27,7 @@
           <circle cx="7.5" cy="8" r="0.5" fill="currentColor" stroke="none" />
           <circle cx="12.5" cy="8" r="0.5" fill="currentColor" stroke="none" />
         </svg>
-      </slot>
+      {/if}
     </button>
 
     {#if open}
@@ -102,7 +104,7 @@ import { EMOJI_GROUPS } from '../../lib/emoji-data.js';
 // roving tabindex; Left/Right arrows walk it and switch groups immediately.
 //
 //   <EmojiPickerSimple @change={ addEmoji } />
-//   <EmojiPickerSimple label="Add reaction" align="end" @change={ addEmoji }>
+//   <EmojiPickerSimple customTrigger label="Add reaction" align="end" @change={ addEmoji }>
 //     <span slot="trigger" class="…">Custom trigger</span>
 //   </EmojiPickerSimple>
 //   <EmojiPickerSimple open={ open } @change={ addEmoji }
@@ -112,7 +114,10 @@ import { EMOJI_GROUPS } from '../../lib/emoji-data.js';
 // and returns focus to the trigger — no selected state to control.
 //
 // PROPS — identical to EmojiPicker minus `placeholder`/`emptyText` (no search):
-//   open, label ('Choose emoji'), side, align, morph, disabled, class, triggerClass.
+//   open, label ('Choose emoji'), customTrigger, side, align, morph, disabled,
+//   class, triggerClass. `label` is the ACCESSIBLE name only (never visible text);
+//   `customTrigger` is the explicit opt-in to the named "trigger" slot, since D134
+//   markers have no fallback bodies. Omit it for the stock SVG smiley chrome.
 //
 // The selected category persists across close/reopen for the instance's lifetime
 // (a picker reopened mid-conversation lands where the user left it).
@@ -272,6 +277,7 @@ export default class EmojiPickerSimple extends PuzzleView {
       groupName: group.name,
       activeId: activeOpt ? activeOpt.id : false,
       label: props.label || 'Choose emoji',
+      customTrigger: !!props.customTrigger,
       disabled: !!props.disabled,
       triggerId: `${base}-trigger`,
       panelId: `${base}-panel`,

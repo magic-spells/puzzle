@@ -12,7 +12,9 @@
       disabled={ disabled }
       @click={ toggle }
       @keydown={ onTriggerKey(event) }>
-      <slot name="trigger">
+      {#if customTrigger}
+        <Slot name="trigger"/>
+      {:else}
         <svg
           class="size-5"
           viewBox="0 0 20 20"
@@ -25,7 +27,7 @@
           <circle cx="7.5" cy="8" r="0.5" fill="currentColor" stroke="none" />
           <circle cx="12.5" cy="8" r="0.5" fill="currentColor" stroke="none" />
         </svg>
-      </slot>
+      {/if}
     </button>
 
     {#if open}
@@ -104,7 +106,7 @@ import { EMOJI_KEYWORDS } from '../../lib/emoji-keywords.js';
 //                      morph via @magic-spells/morph-engine.
 //
 //   <EmojiPicker @change={ addEmoji } />
-//   <EmojiPicker label="Add reaction" align="end" @change={ addEmoji }>
+//   <EmojiPicker customTrigger label="Add reaction" align="end" @change={ addEmoji }>
 //     <span slot="trigger" class="…">Custom trigger</span>
 //   </EmojiPicker>
 //   <EmojiPicker open={ open } @change={ addEmoji }
@@ -120,10 +122,15 @@ import { EMOJI_KEYWORDS } from '../../lib/emoji-keywords.js';
 //   open        boolean  OPTIONAL-CONTROLLED (DatePicker's shape): omit it and the
 //                        picker owns its open state; pass it and the parent owns it
 //                        (the picker only asks via @show/@hide and reflects the prop).
-//   label       string   trigger + panel aria-label (default 'Choose emoji'). The
-//                        named "trigger" slot overrides the trigger's VISUAL content
-//                        (default: a currentColor SVG smiley, not an emoji char, so
-//                        the resting button follows the token palette).
+//   label       string   trigger + panel aria-label (default 'Choose emoji'). This
+//                        is the ACCESSIBLE name only — it is never rendered as
+//                        visible text, so it does not select the trigger chrome.
+//   customTrigger boolean opt in to the named "trigger" slot (D134: markers have no
+//                        fallback bodies, so the choice is explicit). Omit it and the
+//                        trigger renders the stock chrome — a currentColor SVG smiley,
+//                        not an emoji char, so the resting button follows the token
+//                        palette. Pass it AND fill slot="trigger" to supply your own;
+//                        passing it without filling the slot renders an empty trigger.
 //   placeholder string   search input placeholder (default 'Search emoji…').
 //   emptyText   string   no-results row (default 'No emoji found.').
 //   side        string   'bottom' (default) or 'top'; auto-flips when out of room.
@@ -382,6 +389,7 @@ export default class EmojiPicker extends PuzzleView {
       query,
       activeId: activeOpt ? activeOpt.id : false,
       label: props.label || 'Choose emoji',
+      customTrigger: !!props.customTrigger,
       placeholder: props.placeholder || 'Search emoji…',
       emptyText: props.emptyText || 'No emoji found.',
       disabled: !!props.disabled,

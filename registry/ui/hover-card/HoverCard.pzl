@@ -8,7 +8,11 @@
       @focusin={ onFocusIn }
       @focusout={ onFocusOut(event) }
       @keydown:escape={ onEscape(event) }>
-      <slot name="trigger">{ label }</slot>
+      {#if label}
+        { label }
+      {:else}
+        <Slot name="trigger"/>
+      {/if}
     </span>
 
     {#if open}
@@ -42,6 +46,13 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   </HoverCard>
 //   <HoverCard openDelay={ 200 } closeDelay={ 100 }>…</HoverCard>
 //   <HoverCard open={ open } @show={ onShow } @hide={ onHide }>…</HoverCard>
+//
+// TRIGGER CHROME — `label` and the "trigger" slot are EITHER/OR. Pass `label` for a
+// plain text trigger, or fill the slot with your own element (the usual case: a
+// real <a> for a link preview). D134 retired slot fallback bodies, so the choice is
+// an explicit {#if label} in this template rather than implicit slot-emptiness —
+// passing BOTH now shows the label and IGNORES the slot (previously the filled slot
+// won), and passing neither renders an empty trigger with nothing to hover.
 //
 // TIMING — the hoverable-panel rule. pointerenter (or focusin) on the trigger
 // starts an `openDelay` timer (default 600ms); leaving before it fires cancels the
