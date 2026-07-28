@@ -1,6 +1,6 @@
 {
 	"name": "@magic-spells/puzzle",
-	"version": "0.3.1",
+	"version": "0.4.0",
 	"description": "SPA-first JavaScript framework — single-file .pzl components, reactive data() components, Go + esbuild compiler",
 	"type": "module",
 	"main": "./client-runtime/index.js",
