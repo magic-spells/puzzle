@@ -100,7 +100,11 @@ const codeHero = `<input value={ message } @input={ onMessageInput(event) } />
 
 const codeTrigger = `<EmojiPickerSimple label="Add reaction" @change={ addEmoji }>
   <span slot="trigger" class="…">React</span>
-</EmojiPickerSimple>`;
+</EmojiPickerSimple>
+
+// Filling the named "trigger" slot replaces the default smiley icon — that stock icon
+// is the slot's fallback body, so no flag is needed. \`label\` remains the accessible
+// name, not visible text.`;
 
 const codeControlled = `<EmojiPickerSimple open={ pickerOpen } @change={ addEmoji }
                    @show={ openPicker } @hide={ closePicker }/>

@@ -5,7 +5,7 @@
     {/if}
     <div class={ groupClass }>
       <div class="flex items-center px-3 text-sm text-muted select-none border-r border-border empty:hidden">
-        <slot name="prefix"/>
+        <Slot name="prefix"/>
       </div>
       <input
         id={ id }
@@ -22,7 +22,7 @@
         @blur={ handleBlur(event) }
         @focus={ handleFocus(event) } />
       <div class="flex items-center px-3 text-sm text-muted select-none border-l border-border empty:hidden">
-        <slot name="suffix"/>
+        <Slot name="suffix"/>
       </div>
     </div>
     {#if error}

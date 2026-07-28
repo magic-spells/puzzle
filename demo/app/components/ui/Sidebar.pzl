@@ -1,7 +1,7 @@
 <puzzle-view>
   <nav class={ rootClass } aria-label={ navLabel }>
     <div class="shrink-0 empty:hidden">
-      <slot name="header"/>
+      <Slot name="header"/>
     </div>
 
     <ul class="flex-1 min-h-0 space-y-0.5 overflow-y-auto overflow-x-hidden p-2">
@@ -116,7 +116,7 @@
 
     <div class="mt-auto shrink-0 border-t border-border p-2">
       <div class="empty:hidden">
-        <slot name="footer"/>
+        <Slot name="footer"/>
       </div>
       <button
         type="button"

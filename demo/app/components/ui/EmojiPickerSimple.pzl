@@ -12,7 +12,7 @@
       disabled={ disabled }
       @click={ toggle }
       @keydown={ onTriggerKey(event) }>
-      <slot name="trigger">
+      <Slot name="trigger">
         <svg
           class="size-5"
           viewBox="0 0 20 20"
@@ -25,7 +25,7 @@
           <circle cx="7.5" cy="8" r="0.5" fill="currentColor" stroke="none" />
           <circle cx="12.5" cy="8" r="0.5" fill="currentColor" stroke="none" />
         </svg>
-      </slot>
+      </Slot>
     </button>
 
     {#if open}
@@ -111,8 +111,14 @@ import { EMOJI_GROUPS } from '../../lib/emoji-data.js';
 // NO VALUE. Same contract as EmojiPicker: emits @change(char, event), closes,
 // and returns focus to the trigger — no selected state to control.
 //
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141): a
+// currentColor SVG smiley, not an emoji char, so the resting button follows the token
+// palette. Fill slot="trigger" and it REPLACES that fallback — filling the slot IS the
+// opt-in, no flag needed. The button keeps its `label` aria-label either way.
+//
 // PROPS — identical to EmojiPicker minus `placeholder`/`emptyText` (no search):
 //   open, label ('Choose emoji'), side, align, morph, disabled, class, triggerClass.
+//   `label` is the ACCESSIBLE name only (never visible text).
 //
 // The selected category persists across close/reopen for the instance's lifetime
 // (a picker reopened mid-conversation lands where the user left it).

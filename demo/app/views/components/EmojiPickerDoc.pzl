@@ -112,8 +112,10 @@ const codeTrigger = `<EmojiPicker label="Add reaction" @change={ addEmoji }>
   <span slot="trigger" class="…">React</span>
 </EmojiPicker>
 
-// The named "trigger" slot replaces the default smiley icon; the piece still
-// owns the real <button> underneath, so the ARIA wiring stays intact.`;
+// Filling the named "trigger" slot replaces the default smiley icon — that stock icon
+// is the slot's fallback body, so no flag is needed; the piece still owns the real
+// <button> underneath, so the ARIA wiring stays intact. \`label\` remains the
+// accessible name, not visible text.`;
 
 const codePlacement = `<EmojiPicker align="start" @change={ addEmoji }/>
 <EmojiPicker align="end" side="top" @change={ addEmoji }/>

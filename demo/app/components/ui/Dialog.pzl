@@ -17,7 +17,7 @@
     {/if}
     <Slot/>
     <div class="mt-6 flex justify-end gap-2 empty:mt-0 empty:hidden">
-      <slot name="footer"/>
+      <Slot name="footer"/>
     </div>
   </dialog>
 </puzzle-view>

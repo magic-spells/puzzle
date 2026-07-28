@@ -12,7 +12,7 @@
       disabled={ disabled }
       @click={ toggle }
       @keydown={ onTriggerKey(event) }>
-      <slot name="trigger">
+      <Slot name="trigger">
         <svg
           class="size-5"
           viewBox="0 0 20 20"
@@ -25,7 +25,7 @@
           <circle cx="7.5" cy="8" r="0.5" fill="currentColor" stroke="none" />
           <circle cx="12.5" cy="8" r="0.5" fill="currentColor" stroke="none" />
         </svg>
-      </slot>
+      </Slot>
     </button>
 
     {#if open}
@@ -116,14 +116,18 @@ import { EMOJI_KEYWORDS } from '../../lib/emoji-keywords.js';
 // to the trigger. The parent decides what to do with the character (append it
 // to an input, react to a message, …) — there is no selected state to control.
 //
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141): a
+// currentColor SVG smiley, not an emoji char, so the resting button follows the token
+// palette. Fill slot="trigger" and it REPLACES that fallback — filling the slot IS the
+// opt-in, no flag needed. The button keeps its `label` aria-label either way.
+//
 // PROPS
 //   open        boolean  OPTIONAL-CONTROLLED (DatePicker's shape): omit it and the
 //                        picker owns its open state; pass it and the parent owns it
 //                        (the picker only asks via @show/@hide and reflects the prop).
-//   label       string   trigger + panel aria-label (default 'Choose emoji'). The
-//                        named "trigger" slot overrides the trigger's VISUAL content
-//                        (default: a currentColor SVG smiley, not an emoji char, so
-//                        the resting button follows the token palette).
+//   label       string   trigger + panel aria-label (default 'Choose emoji'). This
+//                        is the ACCESSIBLE name only — it is never rendered as
+//                        visible text, so it does not select the trigger chrome.
 //   placeholder string   search input placeholder (default 'Search emoji…').
 //   emptyText   string   no-results row (default 'No emoji found.').
 //   side        string   'bottom' (default) or 'top'; auto-flips when out of room.

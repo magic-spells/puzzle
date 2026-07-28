@@ -9,7 +9,7 @@
       data-popover-trigger
       @click={ toggle }
       @keydown:escape={ onEscape(event) }>
-      <slot name="trigger">{ label }</slot>
+      <Slot name="trigger">{ label }</Slot>
     </button>
 
     {#if open}
@@ -43,8 +43,13 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // The component owns a real <button type="button"> so ARIA lives on a genuine
 // control (aria-expanded / aria-haspopup="dialog" / aria-controls); the caller's
-// arbitrary TRIGGER content goes inside it via the named "trigger" slot (falling
-// back to the `label` prop). Panel content is the default <Slot/>.
+// arbitrary TRIGGER content goes inside it via the named "trigger" slot. Panel
+// content is the default <Slot/>.
+//
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141):
+// the plain `label` text. Fill slot="trigger" for arbitrary trigger content and it
+// REPLACES that fallback — a filled slot wins over `label`. Pass neither and the
+// button renders empty and unclickable.
 //
 // Focus is deliberately NOT trapped — this is a popover, not a modal — and open
 // does not steal focus. The panel is rendered right after the trigger, so tabbing
