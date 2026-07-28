@@ -1329,6 +1329,16 @@ export class Router {
 		// whole probe to `false` at compile time. Probed INLINE (never hoisted into
 		// a module const, which does not constant-propagate into method scopes);
 		// absent define ⇒ ON, so vitest and third-party bundlers keep the path.
+		// Prepared (run but NOT committed) reused-ancestor refreshes — D146. Filled by
+		// the load phase below, committed inside #commitState (the synchronous
+		// #committing window, atomically with #commitLocation + mount), and discarded
+		// on every path that does not reach a commit.
+		const prepared = [];
+		const discardPrepared = () => {
+			for (const p of prepared) p.discard();
+			prepared.length = 0;
+		};
+
 		const isSSGTakeover =
 			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
 			!cur &&
@@ -1363,7 +1373,17 @@ export class Router {
 			// fetch and the commit (and the skeleton paint) waits on the very
 			// load the exemption exists to skip.
 			for (const v of freshViews) if (!hasSkeleton(v)) start(v);
-			for (const v of reusedViews) loads.push(v.refresh({ params, route: to }));
+			// Reused ancestors PREPARE rather than refresh (D146): data() runs here with
+			// the destination params/route (so it still gates the URL exactly as before,
+			// and this.route still names the target — D47), but nothing about the
+			// ancestor changes until the commit window. Ordering inside the loads array
+			// is unchanged, so the store's tracking serialization behaves identically.
+			for (const v of reusedViews) {
+				const p = v.prepareRefresh({ params, route: to });
+				if (!p) continue; // destroyed/leaving/profiler-blocked — refresh() no-ops too
+				prepared.push(p);
+				loads.push(p.ready);
+			}
 			if (layout && !reuseLayout && !hasSkeleton(layout)) start(layout);
 			for (const v of freshViews) if (hasSkeleton(v)) start(v);
 			if (layout && !reuseLayout && hasSkeleton(layout)) start(layout);
@@ -1378,6 +1398,10 @@ export class Router {
 			);
 			for (const v of freshViews) v.destroy();
 			if (layout && !reuseLayout) layout.destroy();
+			// D146: unwind every prepared ancestor. Subscription-only — the ancestors
+			// were never touched, so nothing renders, no hook fires, and the D145 error
+			// funnel above stays the single report for this failure.
+			discardPrepared();
 			// Strand recovery: our token bump doomed any transition still animating
 			// out (its post-playOut check will #abandon against our newer token), but
 			// by failing here we never reach #swap — the only place that destroys a
@@ -1399,6 +1423,7 @@ export class Router {
 		if (token !== this.#token) {
 			for (const v of freshViews) v.destroy();
 			if (layout && !reuseLayout) layout.destroy();
+			discardPrepared(); // D146
 			return;
 		}
 
@@ -1450,6 +1475,11 @@ export class Router {
 				keys: cur.keys,
 				layout,
 				scroll,
+				// D146: the whole chain was prepared above; #commitState commits every
+				// prepared ancestor immediately after #state, still adjacent to
+				// #commitLocation — the atomic block D61 opened, now covering ancestor
+				// params/route/data/subscriptions too.
+				prepared,
 				// A leaf-identical replace is URL-backed transient-state churn, not
 				// a route change: leave the user's current focus in place and make no
 				// live-region announcement. Params-only pushes still take the normal
@@ -1514,6 +1544,7 @@ export class Router {
 				for (const instance of nestedInstances) instance.destroy();
 				for (const v of freshViews) v.destroy();
 				if (layout && !reuseLayout) layout.destroy();
+				discardPrepared(); // D146
 				return;
 			}
 			// Same suppression the routed chain gets below: mountComponent auto-chains
@@ -1540,6 +1571,10 @@ export class Router {
 			scroll,
 			focus,
 			to,
+			// D146: prepared reused-ancestor refreshes, committed by #commitState inside
+			// #swap's synchronous #committing window — the same window as #commitLocation
+			// and the mount, so URL, DOM, and ancestor state move together or not at all.
+			prepared,
 			// D61: #commitLocation (run as the first statement inside #swap's commit
 			// window) reads these to move the URL/memory stack; null memoryIndex on a
 			// push/initial nav, set only for a memory-mode go/back/forward pop;
@@ -1830,7 +1865,11 @@ export class Router {
 					// Commit BEFORE the chrome refresh (v1.15, D47) — matching the
 					// params-only branch — so the layout's post-commit data() reads a
 					// fresh router.current. Safe: applyParentUpdate patched the DOM
-					// above, so #commitState's mount-first invariant holds.
+					// above, so #commitState's mount-first invariant holds. The D47
+					// ordering survives D146's deferred ancestor commit unchanged: the
+					// prepared ancestors commit INSIDE #commitState (after #state), so the
+					// chrome refresh below still runs last and now also sees ancestors
+					// whose params/route/data already name this route.
 					this.#commitState(next);
 					this.#refreshLogged(layout, params, next.to);
 				} else {
@@ -2110,6 +2149,17 @@ export class Router {
 		// #commitState): clear its pending target — #state now names it.
 		this.#pendingNavPath = null;
 		this.#pendingNavPromise = null;
+		// D146 — COMMIT the prepared reused ancestors: swap params/route/model/store
+		// subscriptions and re-render, synchronously here so ancestor state lands in the
+		// same window as #commitLocation, the mount, and #state. Deliberately AFTER
+		// #state is assigned (D47's reuseLayout ordering, generalized): a committing
+		// ancestor's render must read a router.current that already names this route.
+		// Their data() is NOT re-run — it ran during the gate. In #swap the DOM
+		// patch/mount already happened above, so each ancestor re-renders over the new
+		// chain, not the old one; on the D39 skeleton-leaf path the commit still lands
+		// here, in the immediate (un-awaited-leaf) commit, exactly like the old inline
+		// ancestor refresh did.
+		if (next.prepared) for (const p of next.prepared) p.commit();
 		// Dev-only missing-<Slot/> diagnostic — the module helper (and this whole
 		// per-commit walk) DCEs away in production (§27 define pattern).
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -2501,6 +2551,10 @@ export class Router {
 	#abandon(next) {
 		for (let i = next.keep; i < next.views.length; i++) next.views[i]?.destroy();
 		if (next.layout && !next.reuseLayout) next.layout.destroy();
+		// D146: a navigation superseded during its out phase never reaches
+		// #commitState, so its prepared ancestor runs are unwound here — otherwise
+		// their tracked subscriptions would be stranded on a live ancestor.
+		if (next.prepared) for (const p of next.prepared) p.discard();
 	}
 
 	#match(pathname) {

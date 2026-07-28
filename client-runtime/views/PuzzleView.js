@@ -90,6 +90,12 @@ export class PuzzleView {
 	#destroyed = false;
 	#updateScheduled = false;
 	#runToken = 0;
+
+	// D146: the { params, props, route } a PREPARED (not yet committed) data() run
+	// evaluates against. Non-null only while such an evaluation is in flight; the
+	// params/route getters read it, and every entry point save/restores it (exact
+	// stack discipline for nested synchronous evals, mirroring Store._tracking).
+	#evalScope = null;
 	// False until the FIRST data() result actually SWAPS in (v1.8, D39; v1.20
 	// D52 moves the flip from data-commit to swap time). While false and a
 	// renderSkeleton() is declared (compiled from <puzzle-skeleton>), renders
@@ -389,7 +395,7 @@ export class PuzzleView {
 	}
 
 	get params() {
-		return this.#params;
+		return this.#evalScope ? this.#evalScope.params : this.#params;
 	}
 
 	get props() {
@@ -406,7 +412,13 @@ export class PuzzleView {
 	 * across store-change refreshes; overwritten by the next navigation.
 	 */
 	get route() {
-		return this.#route;
+		// D146: inside a PREPARED data() evaluation the view must see the DESTINATION
+		// snapshot (D47's invariant — data() describes the navigation it is gating)
+		// while its COMMITTED #route still names the live route, so a failed navigation
+		// has nothing to roll back. #evalScope is that window; #renderNow() clears it
+		// for the duration of a render so a paint that lands mid-gate (a store-change
+		// refresh while a prepared async data() is suspended) reads committed state.
+		return this.#evalScope ? this.#evalScope.route : this.#route;
 	}
 
 	// ---- lifecycle -------------------------------------------------------------
@@ -624,6 +636,137 @@ export class PuzzleView {
 			return result.then((model) => this.#commit(token, model));
 		}
 		this.#commit(token, result);
+	}
+
+	/**
+	 * TRANSACTIONAL refresh (D146) — the two-phase form the router uses for a REUSED
+	 * ancestor inside a gated navigation. PREPARE runs data() against the destination
+	 * params/route (visible to the run through the params/route getters) and captures
+	 * both the model result and the store subscriptions the run tracked; it renders
+	 * nothing and mutates no committed field. The returned handle then either
+	 *
+	 *   commit()  — swap params/route/model/subscriptions and re-render, or
+	 *   discard() — drop only the subscriptions this run added, leaving the view's
+	 *               committed params, route snapshot, data, DOM, and live
+	 *               subscription set exactly as they were.
+	 *
+	 * so a navigation that rejects or is superseded leaves the ancestor entirely on
+	 * the old route (closing the D19/D30 soft-violation).
+	 *
+	 * Returns null when there is nothing to prepare (destroyed/leaving view, or a
+	 * profiler-blocked data() run) — the same no-op refresh() performs in those
+	 * states; the caller simply has nothing to commit.
+	 *
+	 * A SYNCHRONOUS data() throw propagates out of this call exactly as it does out
+	 * of refresh() (withTracking rethrows), already reconciled as a failure.
+	 *
+	 * @returns {?{ready: Promise<void>, commit: function(): void, discard: function(): void}}
+	 */
+	prepareRefresh({ params, props, route } = {}) {
+		if (this.#destroyed || this.#leaving) return null;
+
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (
+				!devperfPrepareData(
+					this,
+					params || route !== undefined
+						? 'route'
+						: props !== undefined
+							? 'props'
+							: undefined
+				)
+			)
+				return null;
+		}
+
+		const scope = {
+			params: params ?? this.#params,
+			props: props ?? this.#props,
+			route: route !== undefined ? route : this.#route,
+		};
+		// The held-eval channel: withTracking parks its success reconcile here instead
+		// of applying it, so the subscription swap lands with the commit (or is
+		// unwound by the discard) rather than at evaluation time.
+		const pending = {};
+
+		// Establish/restore #evalScope around EVERY invocation (withTracking may retry
+		// fn behind an in-flight async chain) and across the async tail.
+		const run = () => {
+			const prev = this.#evalScope;
+			this.#evalScope = scope;
+			let out;
+			try {
+				out =
+					typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
+						? devperfRunData(this, scope.params, scope.props)
+						: this.data(scope.params, scope.props);
+			} catch (err) {
+				this.#evalScope = prev;
+				throw err;
+			}
+			if (out && typeof out.then === 'function') {
+				return out.then(
+					(model) => {
+						this.#evalScope = prev;
+						return model;
+					},
+					(err) => {
+						this.#evalScope = prev;
+						throw err;
+					}
+				);
+			}
+			this.#evalScope = prev;
+			return out;
+		};
+
+		const result = this.ctx.store
+			? this.ctx.store.withTracking(
+					this,
+					run,
+					this.data.constructor.name === 'AsyncFunction',
+					pending
+				)
+			: run();
+
+		let model;
+		const ready = Promise.resolve(result).then((m) => {
+			model = m;
+		});
+
+		let settled = false;
+		return {
+			ready,
+			commit: () => {
+				if (settled) return;
+				settled = true;
+				// Torn down between prepare and commit: unwind the prepared subscriptions
+				// and touch nothing else (destroy() already dropped this subscriber).
+				if (this.#destroyed || this.#leaving) {
+					pending.reconcile?.(false);
+					return;
+				}
+				pending.reconcile?.(true);
+				this.#params = scope.params;
+				this.#props = scope.props;
+				this.#route = scope.route;
+				// Bumping the token HERE (not at prepare) is what orders this commit
+				// against a mid-gate store-change refresh: while the gate is open the
+				// ancestor still shows the OLD route, so such a refresh runs and renders
+				// normally with the old params; when the navigation finally commits, this
+				// bump supersedes any of those still in flight — their params are stale by
+				// definition, and the prepared model is the newest state.
+				this.#commit(++this.#runToken, model);
+			},
+			discard: () => {
+				if (settled) return;
+				settled = true;
+				// Subscription-only unwind: drops just this run's own additions. No
+				// render, no lifecycle hook, no error-boundary/onStoreChange side effect —
+				// a discarded prepare must be invisible to the app (D145).
+				pending.reconcile?.(false);
+			},
+		};
 	}
 
 	/** Store subscription callback (Store.flush → subscribed components). */
@@ -1315,6 +1458,22 @@ export class PuzzleView {
 	}
 
 	#renderNow(preparedTree = undefined) {
+		// D146: a render always draws COMMITTED state. A prepared data() run whose
+		// promise is suspended leaves #evalScope set, so a render that lands inside
+		// that window (a store-change refresh on this same view while the gate is
+		// open) would otherwise read the destination params/route through the getters
+		// and paint the route the router has not committed. Renders are synchronous,
+		// so clearing and restoring around the whole render is exact.
+		const prevScope = this.#evalScope;
+		this.#evalScope = null;
+		try {
+			this.#renderNowInner(preparedTree);
+		} finally {
+			this.#evalScope = prevScope;
+		}
+	}
+
+	#renderNowInner(preparedTree = undefined) {
 		if (!this.#vm || this.#destroyed) return;
 		if (
 			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
