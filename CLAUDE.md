@@ -9,13 +9,13 @@ map.
 1. `constellation/doc/DOC-SPEC.md` is the source of truth; keep it current.
    When code and SPEC disagree, decide on the merits — usually the SPEC is
    right, but sometimes the SPEC should change to match a code decision.
-   Either way, a SPEC change must be reflected in a decision card and its
-   `constellation/doc/DOC-DECISIONS.md` entry — but pick the right card:
-   - **New decision** (a question nothing has answered yet) → new numbered card
-     plus a new DOC-DECISIONS entry.
+   Either way, a SPEC change must be reflected in a decision card — but pick
+   the right card:
+   - **New decision** (a question nothing has answered yet) → new numbered
+     card.
    - **Changed decision** (a question some card already owns, now answered
-     differently) → **rewrite that card in place** and edit its existing
-     DOC-DECISIONS entry. Do not add a second card superseding the first.
+     differently) → **rewrite that card in place**.
+     Do not add a second card superseding the first.
      One decision, one card, forever; a chain of cards for a single question is
      a defect, not a record. State the current design as if it were always the
      design — the discarded approach belongs in that card's "Alternatives
@@ -91,8 +91,10 @@ run.
   D145 = v1.67; D146 is a correctness amendment with no product-line entry),
   plus the July
   21 pre-release correctness/performance hardening pass and the July 24
-  deep-review round. `constellation/doc/DOC-DECISIONS.md` is the authoritative
-  decision range — do not restate it here; it moves faster than this file.
+  deep-review round. The `constellation/decision/` cards are the authoritative
+  decision record — do not restate them here; they move faster than this file.
+  (There is deliberately no DOC-DECISIONS index card: each decision lives in
+  its numbered card only, never in two spots.)
 - Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`,
   `./static`, and `./puzzle-env` exports plus a `puzzle` binary shim and four
   optional platform binary packages (macOS/Linux, arm64/x64).

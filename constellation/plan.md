@@ -19,8 +19,8 @@ Puzzle is a SPA-first JavaScript framework with `.pzl` single-file components,
 a reactive browser runtime, and a Go + esbuild compiler/CLI. Optional static
 generation prerenders routes without adding an SSR server or hydration layer.
 
-[[DOC-SPEC]] is the enforceable contract and wins all conflicts. The decision
-log in [[DOC-DECISIONS]] explains why the contract has its current shape.
+[[DOC-SPEC]] is the enforceable contract and wins all conflicts. The
+decision cards explain why the contract has its current shape.
 [[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
 
 ## Current state
@@ -244,7 +244,6 @@ collections; and a WASM playground.
     modes, base path, transitions, atomic commit, head, guards, focus.
   - [[DOC-SPEC-BUILD]] — CLI, HMR, static/hybrid output, upgrade, dev build
     errors, `/testing`, `--fixtures`, the DevTools bridge.
-- [[DOC-DECISIONS]] — numeric decision index and links to ADR cards.
 - [[DOC-RELEASE-SURFACE]] — complete, compact shipped-surface inventory.
 - [[DOC-BUILD-PLAN]] — v1 implementation plan and release-phase status.
 

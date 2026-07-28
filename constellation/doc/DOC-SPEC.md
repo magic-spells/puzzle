@@ -4,7 +4,6 @@ status: built
 verified_at: '2026-07-25T05:53:25.564Z'
 connections:
   - DOC-VIEW-LIFECYCLE
-  - DOC-DECISIONS
 verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
 notes:
   - kind: verified

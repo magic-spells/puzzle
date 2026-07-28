@@ -57,8 +57,8 @@ bodies cover that need with zero new public API.
   fallback; filled slot content wins over any label prop.
 - The docs-site Templates "Default content" section teaches fallback bodies,
   with the prop-conditional as an alternative pattern.
-- Ships in the first minor after 0.4.0. The SPEC §24 amendment and the
-  `DOC-DECISIONS.md` entry land when this builds.
+- Ships in the first minor after 0.4.0. The SPEC §24 amendment lands when
+  this builds.
 
 ## Alternatives rejected
 

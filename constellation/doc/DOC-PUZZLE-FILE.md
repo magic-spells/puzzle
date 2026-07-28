@@ -7,7 +7,6 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
   - DOC-SPEC-VIEW
-  - DOC-DECISIONS
   - DOC-USER-GUIDE
   - DOC-DATASTORE
   - DOC-COMPILATION-FLOW
@@ -51,7 +50,7 @@ export default class ComponentName extends PuzzleView {
 
 Only the `<puzzle-view>` block is required.
 
-**Emission modes (D20):** files under `app/views/**` and `app/layouts/**` compile to a real `<puzzle-view>` DOM element carrying the tag's attributes; **reusable components render inline** — no wrapper element, template contents only — so nested components never stack wrappers. For components, `<puzzle-view>` is just the template delimiter: it must carry no attributes (compile error) and the template needs a single root element in v1. See [[DOC-SPEC-ANATOMY]] §3 and [[DOC-DECISIONS]] D20.
+**Emission modes (D20):** files under `app/views/**` and `app/layouts/**` compile to a real `<puzzle-view>` DOM element carrying the tag's attributes; **reusable components render inline** — no wrapper element, template contents only — so nested components never stack wrappers. For components, `<puzzle-view>` is just the template delimiter: it must carry no attributes (compile error) and the template needs a single root element in v1. See [[DOC-SPEC-ANATOMY]] §3 and [[DECISION-D20-PUZZLE-VIEW-ELEMENT]].
 
 ---
 

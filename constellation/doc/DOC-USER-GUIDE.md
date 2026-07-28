@@ -5,7 +5,6 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - DOC-BLOG-EXAMPLE
   - DOC-SPEC
-  - DOC-DECISIONS
   - DOC-PUZZLE-FILE
   - DOC-DATASTORE
   - DOC-COMPILATION-FLOW
@@ -342,7 +341,7 @@ export const models = {
 export default models;
 ```
 
-**The `adapter` drives both the read and write paths.** A model's `static adapter = { endpoint }` is consumed on the read path by `store.loadAll(type)` / `store.loadOne(type, id)`, which GET `apiURL + endpoint` and upsert the results (D21). A model with no `adapter` (like `comment` above) simply opts out of that path. Write sync shipped in v1.18 (D50): `record.save()` POSTs a never-synced record and PUTs a synced one (local-first — a failed save keeps the dirty state and rejects), `record.delete()` DELETEs then removes locally, and `store.request()` reaches custom endpoints; `record.destroy()` stays local-only. Validation enforces too — since v1.16 (D48) `createRecord`/`update` throw `PuzzleValidationError` on invalid data, while `Model.validate(data)` / `record.validate()` return `{ valid, errors }` without throwing for form UX (server upserts and storage hydration stay exempt). See [[DOC-SPEC]] §20/§22 and [[DOC-DECISIONS]] D21/D48/D50.
+**The `adapter` drives both the read and write paths.** A model's `static adapter = { endpoint }` is consumed on the read path by `store.loadAll(type)` / `store.loadOne(type, id)`, which GET `apiURL + endpoint` and upsert the results (D21). A model with no `adapter` (like `comment` above) simply opts out of that path. Write sync shipped in v1.18 (D50): `record.save()` POSTs a never-synced record and PUTs a synced one (local-first — a failed save keeps the dirty state and rejects), `record.delete()` DELETEs then removes locally, and `store.request()` reaches custom endpoints; `record.destroy()` stays local-only. Validation enforces too — since v1.16 (D48) `createRecord`/`update` throw `PuzzleValidationError` on invalid data, while `Model.validate(data)` / `record.validate()` return `{ valid, errors }` without throwing for form UX (server upserts and storage hydration stay exempt). See [[DOC-SPEC]] §20/§22 and the D21/D48/D50 decision cards.
 
 ---
 
@@ -660,7 +659,7 @@ Notes on this view:
 - The comment form uses one-way `value={ … }` bindings plus manual `@input` handlers that `setData` local state, then `createRecord('comment', …)` on submit.
 - `<CommentItem @remove={ removeComment(comment) }>` is a **callback prop** carrying the loop variable; the child reports intent and the **parent owns the mutation** (`comment.destroy()`).
 - The nested conditional shown (`{#if post}…{:else}{#if loaded}…{/if}{/if}`) predates v1.9 — since `{:else if}` chaining shipped (D40) you can flatten it to `{#if post}…{:else if loaded}…{:else}…{/if}`.
-- The `<style>` block above is abridged and is a standalone walkthrough of the `<style>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see [[DOC-DECISIONS]] D27), so this section no longer mirrors that file verbatim.
+- The `<style>` block above is abridged and is a standalone walkthrough of the `<style>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see the D27 decision card), so this section no longer mirrors that file verbatim.
 
 ---
 
@@ -799,7 +798,7 @@ export default class PostCard extends PuzzleView {
 `<a href="/posts/{ post.id }">`; the router intercepts the click for SPA
 navigation. The `<style>` block is abridged here to illustrate the feature;
 the shipped `examples/blog/app/components/PostCard.pzl` now uses Tailwind
-utilities instead (see [[DOC-DECISIONS]] D27).
+utilities instead (see the D27 decision card).
 
 ### components/CommentItem.pzl
 ```html
