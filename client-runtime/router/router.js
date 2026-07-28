@@ -296,6 +296,7 @@ import {
 import { walkRouteTree } from './routeTree.js';
 import { devtoolsRouteCommit } from '../devtools.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
+import { reportError } from '../errors.js';
 
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
 // { entryKey: {x,y} } under a single key; capped so a long session can't grow it
@@ -1008,7 +1009,13 @@ export class Router {
 				// Rejection is still the completion of an await: a newer
 				// navigation makes it stale and therefore silent.
 				if (token !== this.#token) return null;
-				console.error('[puzzle] navigation guard failed:', err);
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'navigation', route: to },
+					'[puzzle] navigation guard failed:',
+					err
+				);
 				return false;
 			}
 
@@ -1021,9 +1028,10 @@ export class Router {
 				// boundary. Same-path replace remains its normal no-op, but still
 				// counts because the guard initiated it and no commit reset occurred.
 				if (this.#guardRedirectCount >= 10) {
-					console.error(
+					const err = new Error(
 						'[puzzle] navigation guard redirect limit exceeded (10) — staying on the current route'
 					);
+					reportError(this.#ctx, err, { phase: 'navigation', route: to }, err.message);
 					return false;
 				}
 				this.#guardRedirectCount++;
@@ -1333,7 +1341,16 @@ export class Router {
 			const start = (v) => {
 				const p = v.preload({ params, props: {}, route: to });
 				if (hasSkeleton(v)) {
-					p.catch((err) => console.error('[puzzle] skeleton view data() failed:', err));
+					p.catch((err) => {
+						reportError(
+							this.#ctx,
+							err,
+							{ phase: 'navigation', view: v, route: to },
+							'[puzzle] skeleton view data() failed:',
+							err
+						);
+						queueMicrotask(() => v.__renderErrorBoundary?.(err));
+					});
 				} else {
 					loads.push(p);
 				}
@@ -1352,7 +1369,13 @@ export class Router {
 			if (layout && !reuseLayout && hasSkeleton(layout)) start(layout);
 			await Promise.all(loads);
 		} catch (err) {
-			console.error('[puzzle] navigation data() failed:', err);
+			reportError(
+				this.#ctx,
+				err,
+				{ phase: 'navigation', route: to },
+				'[puzzle] navigation data() failed:',
+				err
+			);
 			for (const v of freshViews) v.destroy();
 			if (layout && !reuseLayout) layout.destroy();
 			// Strand recovery: our token bump doomed any transition still animating
@@ -1673,7 +1696,7 @@ export class Router {
 		// byte-identical to v1.23.
 		if (!skipOut && cur && oldAnimator) {
 			if (overlap) {
-				this.#startOverlapLeave(oldAnimator);
+				this.#startOverlapLeave(oldAnimator, next.to);
 			} else {
 				this.#pendingOut = oldAnimator;
 				// Morph-leave (v1.23, D55): starts synchronously alongside the WAAPI out.
@@ -1686,9 +1709,23 @@ export class Router {
 				if (this.#morphHandler) {
 					try {
 						const p = this.#morphHandler.leave(oldAnimator.element);
-						if (p) morphOut = Promise.resolve(p).catch(() => {});
+						if (p) {
+							morphOut = Promise.resolve(p).catch((err) =>
+								reportError(this.#ctx, err, {
+									phase: 'transition',
+									view: oldAnimator,
+									route: next.to,
+								})
+							);
+						}
 					} catch (err) {
-						console.error('[puzzle] morph leave handler threw', err);
+						reportError(
+							this.#ctx,
+							err,
+							{ phase: 'transition', view: oldAnimator, route: next.to },
+							'[puzzle] morph leave handler threw',
+							err
+						);
 					}
 				}
 				// A user viewWillHide()/viewDidHide() hook can throw, rejecting playOut().
@@ -1706,7 +1743,13 @@ export class Router {
 				try {
 					await oldAnimator.playOut();
 				} catch (err) {
-					console.error('[puzzle] leave hook failed during navigation:', err);
+					reportError(
+						this.#ctx,
+						err,
+						{ phase: 'leave', view: oldAnimator, route: next.to },
+						'[puzzle] leave hook failed during navigation:',
+						err
+					);
 				}
 				// Superseded while the outgoing unit was still animating out: bail NOW,
 				// BEFORE awaiting the fly-back. The loser must not be held hostage by its
@@ -1760,6 +1803,8 @@ export class Router {
 						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
 							topView.mount(this.#container, { children: rootVnode.children, preloaded: true }),
+							topView,
+							next.to,
 							restoreTakeover
 						);
 						this.#commitState(next);
@@ -1801,6 +1846,8 @@ export class Router {
 						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
 							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+							layout,
+							next.to,
 							restoreTakeover
 						);
 						this.#commitState(next);
@@ -1811,6 +1858,8 @@ export class Router {
 						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
 							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+							layout,
+							next.to,
 							restoreTakeover
 						);
 						this.#commitState(next);
@@ -1829,7 +1878,13 @@ export class Router {
 				try {
 					this.#morphHandler.enter(newAnimator?.element ?? null, { initial: !cur });
 				} catch (err) {
-					console.error('[puzzle] morph enter handler threw', err);
+					reportError(
+						this.#ctx,
+						err,
+						{ phase: 'transition', view: newAnimator, route: next.to },
+						'[puzzle] morph enter handler threw',
+						err
+					);
 				}
 			}
 		} finally {
@@ -1860,13 +1915,17 @@ export class Router {
 	 * there; this covers the three mounts the router drives directly: bare root view,
 	 * layout swap, initial-nav layout.)
 	 */
-	#observeMount(p, restoreTakeover = null) {
+	#observeMount(p, view, route, restoreTakeover = null) {
 		Promise.resolve(p).catch((err) => {
 			restoreTakeover?.();
-			console.error(
+			reportError(
+				this.#ctx,
+				err,
+				{ phase: 'mount', view, route },
 				'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
 				err
 			);
+			view.__renderErrorBoundary?.(err);
 		});
 	}
 
@@ -1931,7 +1990,7 @@ export class Router {
 	 * promise is awaited alongside playOut before the leaver is removed; a throwing
 	 * handler is logged and never wedges navigation.
 	 */
-	#startOverlapLeave(oldAnimator) {
+	#startOverlapLeave(oldAnimator, route) {
 		this.#pendingOut = oldAnimator;
 		this.#pinLeaver(oldAnimator.element);
 		// Morph-leave (v1.23, D55): same posture as the sequential path — start it
@@ -1940,9 +1999,23 @@ export class Router {
 		if (this.#morphHandler) {
 			try {
 				const p = this.#morphHandler.leave(oldAnimator.element);
-				if (p) morphOut = Promise.resolve(p).catch(() => {});
+				if (p) {
+					morphOut = Promise.resolve(p).catch((err) =>
+						reportError(this.#ctx, err, {
+							phase: 'transition',
+							view: oldAnimator,
+							route,
+						})
+					);
+				}
 			} catch (err) {
-				console.error('[puzzle] morph leave handler threw', err);
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'transition', view: oldAnimator, route },
+					'[puzzle] morph leave handler threw',
+					err
+				);
 			}
 		}
 		// Fire-and-forget: the out runs concurrently with the incoming in. On settle
@@ -1954,7 +2027,15 @@ export class Router {
 		// leaver must never be stranded on screen (#playInLogged's never-throw
 		// posture, applied to the leave side).
 		Promise.all([oldAnimator.playOut(), morphOut])
-			.catch((err) => console.error('[puzzle] leave hook failed mid-overlap:', err))
+			.catch((err) =>
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'leave', view: oldAnimator, route },
+					'[puzzle] leave hook failed mid-overlap:',
+					err
+				)
+			)
 			.then(() => {
 				if (this.#pendingOut === oldAnimator) this.#pendingOut = null;
 				oldAnimator.destroy(); // cascades to inner/deeper old instances
@@ -1996,7 +2077,13 @@ export class Router {
 	 */
 	#playInLogged(instance) {
 		Promise.resolve(instance.playIn()).catch((err) =>
-			console.error('[puzzle] view enter animation failed:', err)
+			reportError(
+				this.#ctx,
+				err,
+				{ phase: 'enter', view: instance, route: instance.route },
+				'[puzzle] view enter animation failed:',
+				err
+			)
 		);
 	}
 
@@ -2108,7 +2195,13 @@ export class Router {
 				const pos = this.#scrollBehavior(to, from, pop ? savedPosition : null);
 				return pos ? { x: pos.x ?? 0, y: pos.y ?? 0 } : null;
 			} catch (err) {
-				console.error('[puzzle] scrollBehavior failed:', err);
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'navigation', route: to },
+					'[puzzle] scrollBehavior failed:',
+					err
+				);
 				return null;
 			}
 		}
@@ -2265,7 +2358,13 @@ export class Router {
 			try {
 				el = this.#focusBehavior(spec.to, spec.from);
 			} catch (err) {
-				console.error('[puzzle] focusBehavior failed:', err);
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'navigation', route: spec.to },
+					'[puzzle] focusBehavior failed:',
+					err
+				);
 				return null;
 			}
 			return el && typeof el.focus === 'function' ? el : null;
@@ -2442,10 +2541,26 @@ export class Router {
 		try {
 			const p = view.refresh({ params, route });
 			if (p && typeof p.catch === 'function') {
-				p.catch((err) => console.error('[puzzle] layout refresh failed:', err));
+				p.catch((err) => {
+					reportError(
+						this.#ctx,
+						err,
+						{ phase: 'refresh', view, route },
+						'[puzzle] layout refresh failed:',
+						err
+					);
+					view.__renderErrorBoundary?.(err);
+				});
 			}
 		} catch (err) {
-			console.error('[puzzle] layout refresh failed:', err);
+			reportError(
+				this.#ctx,
+				err,
+				{ phase: 'refresh', view, route },
+				'[puzzle] layout refresh failed:',
+				err
+			);
+			view.__renderErrorBoundary?.(err);
 		}
 	}
 

@@ -26,6 +26,7 @@ import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import { devperfComponentPatch, devperfMutation } from '../devperf.js';
 import { displayValue as stringify } from '../display.js';
+import { reportError } from '../errors.js';
 
 // these must be assigned as element properties, not attributes
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'muted']);
@@ -49,10 +50,12 @@ export class ViewManager {
 	 * @param {Element} container host element this manager renders into
 	 * @param {object} ctx owner's { store, router, formatters } — passed to
 	 *   any child components this tree instantiates (constellation/doc/DOC-APP-ANATOMY.md §4)
+	 * @param {object|null} owner view whose render tree this manager patches
 	 */
-	constructor(container, ctx = {}) {
+	constructor(container, ctx = {}, owner = null) {
 		this.container = container;
 		this.ctx = ctx;
+		this.owner = owner;
 		this.currentTree = null;
 		// slot content injected at this component's composition markers (set by the
 		// owning PuzzleView before each render; empty for views/layouts roots).
@@ -81,7 +84,7 @@ export class ViewManager {
 	render(rawTree) {
 		const newTree = expandSlots(rawTree, this.slotChildren);
 		if (!this.currentTree) {
-			mount(newTree, this.container, this.anchor, this.ctx);
+			mount(newTree, this.container, this.anchor, this.ctx, this.owner);
 			if (this.anchor) {
 				this.anchor.remove();
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
@@ -89,10 +92,21 @@ export class ViewManager {
 				this.anchor = null;
 			}
 		} else {
-			patch(this.currentTree, newTree, this.container, this.ctx);
+			patch(this.currentTree, newTree, this.container, this.ctx, this.owner);
 		}
 		this.currentTree = newTree;
 		return newTree;
+	}
+
+	/**
+	 * Mount a failed view's own boundary face beside the D115 placeholder. The
+	 * failed instance is already destroyed, so nested fallback components belong
+	 * to its surviving owner (the parent view), not to the dead view.
+	 */
+	mountErrorFallback(rawTree, ref, owner) {
+		const tree = expandSlots(rawTree, []);
+		mount(tree, this.container, ref, this.ctx, owner);
+		return tree;
 	}
 
 	/** The DOM node currently occupying this subtree's position (or null). */
@@ -315,7 +329,7 @@ function releasePortalOutlet() {
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
 }
 
-function mountPortal(vnode, parent, ref, ctx) {
+function mountPortal(vnode, parent, ref, ctx, owner) {
 	const placeholder = document.createComment('puzzle-portal');
 	vnode.el = placeholder;
 	parent.insertBefore(placeholder, ref ?? null);
@@ -329,12 +343,12 @@ function mountPortal(vnode, parent, ref, ctx) {
 	portalRanges.set(start, range);
 	portalRanges.set(end, range);
 	portalCount++;
-	for (const child of vnode.children) mount(child, outlet, end, ctx);
+	for (const child of vnode.children) mount(child, outlet, end, ctx, owner);
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
 	return placeholder;
 }
 
-function patchPortal(oldVnode, newVnode, ctx) {
+function patchPortal(oldVnode, newVnode, ctx, owner) {
 	const range = (newVnode.portal = oldVnode.portal);
 	if (!range) return;
 	// The local placeholder moved onto the new vnode; the range must point at the
@@ -342,7 +356,7 @@ function patchPortal(oldVnode, newVnode, ctx) {
 	range.placeholder = newVnode.el;
 	const outlet = range.end.parentNode;
 	if (!outlet) return;
-	patchChildren(outlet, oldVnode.children, newVnode.children, ctx, range.end);
+	patchChildren(outlet, oldVnode.children, newVnode.children, ctx, owner, range.end);
 }
 
 /**
@@ -412,10 +426,10 @@ export function portalAwareContains(el, target) {
 // ---- mount ------------------------------------------------------------------
 
 /** Create the DOM for vnode and insert it into parent (before ref, or append). */
-export function mount(vnode, parent, ref, ctx) {
-	if (vnode.isComponent) return mountComponent(vnode, parent, ref, ctx);
+export function mount(vnode, parent, ref, ctx, owner = null) {
+	if (vnode.isComponent) return mountComponent(vnode, parent, ref, ctx, owner);
 
-	if (vnode.tag === PORTAL_TAG) return mountPortal(vnode, parent, ref, ctx);
+	if (vnode.tag === PORTAL_TAG) return mountPortal(vnode, parent, ref, ctx, owner);
 
 	let el;
 	if (vnode.tag === PLACEHOLDER_TAG) {
@@ -456,10 +470,10 @@ export function mount(vnode, parent, ref, ctx) {
 			el.innerHTML = vnode.children;
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 				devperfMutation();
-		} else {
-			for (const child of vnode.children) {
-				mount(child, el, null, ctx);
-			}
+			} else {
+				for (const child of vnode.children) {
+					mount(child, el, null, ctx, owner);
+				}
 		}
 		// A <select>'s controlled `value` is applied by setAttr above, BEFORE its
 		// <option> children exist, so the browser silently falls back to the first
@@ -497,7 +511,7 @@ export function plantFailedMountPlaceholder(child) {
 	return placeholder;
 }
 
-function mountComponent(vnode, parent, ref, ctx) {
+function mountComponent(vnode, parent, ref, ctx, owner) {
 	if ((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverFailed) {
 		const placeholder = document.createComment('puzzle');
 		vnode.el = placeholder;
@@ -513,6 +527,7 @@ function mountComponent(vnode, parent, ref, ctx) {
 	const takeoverPreloaded =
 		(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
 	const child = vnode.instance ?? new vnode.tag(ctx);
+	child.__setErrorParent?.(owner);
 	vnode.component = child;
 	child
 		.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded })
@@ -539,10 +554,17 @@ function mountComponent(vnode, parent, ref, ctx) {
 				// PuzzleView.destroyAnimated()'s leave-hook guard, and what router.js
 				// #playInLogged already does for router-mounted animators).
 				return Promise.resolve(child.playIn()).catch((err) =>
-					console.error('[puzzle] child enter animation failed:', err)
+					reportError(
+						ctx,
+						err,
+						{ phase: 'enter', view: child, route: child.route },
+						'[puzzle] child enter animation failed:',
+						err
+					)
 				);
 			},
 			(err) => {
+				const boundary = child.__prepareErrorBoundary?.(err);
 				// A ROUTER-PRELOADED instance (`vnode.instance`, pinned by router.js) is not
 				// ours to tear down: the Router owns that lifetime, committed the view
 				// SYNCHRONOUSLY, and its own #observeMount logs a post-commit mount failure
@@ -552,13 +574,20 @@ function mountComponent(vnode, parent, ref, ctx) {
 				// would swap the committed markup for a comment behind its back. Log only;
 				// the instance and the vnode's links are left exactly as they are.
 				if (preloaded && !takeoverPreloaded) {
-					console.error(
+					reportError(
+						ctx,
+						err,
+						{ phase: 'mount', view: child, route: child.route },
 						'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
 						err
 					);
+					child.__showErrorBoundary?.(boundary);
 					return;
 				}
-				console.error(
+				reportError(
+					ctx,
+					err,
+					{ phase: 'mount', view: child, route: child.route },
 					'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
 					err
 				);
@@ -587,6 +616,7 @@ function mountComponent(vnode, parent, ref, ctx) {
 					vnode.el = placeholder;
 					child.__failedPlaceholder = placeholder;
 				}
+				child.__showErrorBoundary?.(boundary, { failedMount: true, placeholder });
 				vnode.component = null;
 				vnode.instance = null;
 				// Gated: ungated this would ADD the property outside the constructor in a
@@ -606,7 +636,7 @@ function mountComponent(vnode, parent, ref, ctx) {
  * Patch oldVnode's DOM to match newVnode. Transfers `el` onto newVnode.
  * Falls back to replace when tag or key differ.
  */
-export function patch(oldVnode, newVnode, parent, ctx) {
+export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	if (!sameNode(oldVnode, newVnode)) {
 		// Resolve the insertion reference from the LIVE DOM node, not the cached
 		// vnode.el. For a component with async data(), mountComponent cached
@@ -617,7 +647,7 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 		// child's element getter always tracks its current root, so prefer it; fall
 		// back to vnode.el for non-component (or not-yet-mounted) vnodes.
 		const ref = (oldVnode.isComponent && oldVnode.component?.element) || oldVnode.el;
-		mount(newVnode, parent, ref, ctx);
+		mount(newVnode, parent, ref, ctx, owner);
 		unmount(oldVnode);
 		return;
 	}
@@ -643,7 +673,15 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 			const placeholder = dead?.__failedPlaceholder ?? oldVnode.el;
 			// Only an ATTACHED node is a usable insertion ref — insertBefore against a
 			// detached one throws NotFoundError and empties the container.
-			mount(newVnode, parent, placeholder?.parentNode === parent ? placeholder : null, ctx);
+			mount(
+				newVnode,
+				parent,
+				placeholder?.parentNode === parent ? placeholder : null,
+				ctx,
+				owner
+			);
+			const fallback = dead?.__failedFallback ?? placeholder?.__failedFallback;
+			if (fallback) unmount(fallback);
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				if (placeholder?.parentNode) devperfMutation();
 			}
@@ -665,7 +703,7 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 	// Portal → portal: the local placeholder transferred above; the teleported
 	// children patch against this portal's bracketed range inside the outlet.
 	if (newVnode.tag === PORTAL_TAG) {
-		patchPortal(oldVnode, newVnode, ctx);
+		patchPortal(oldVnode, newVnode, ctx, owner);
 		return;
 	}
 
@@ -707,7 +745,7 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 		return;
 	}
 
-	patchChildren(el, oldVnode.children, newVnode.children, ctx);
+	patchChildren(el, oldVnode.children, newVnode.children, ctx, owner);
 
 	// The option list may have changed under a <select> whose controlled `value`
 	// was unchanged (patchAttrs skips it) or churned entirely — either way the
@@ -795,10 +833,21 @@ function unmount(vnode) {
 		// placeholder (mountComponent's catch nulled `component`). No instance to
 		// destroy — just drop the placeholder node so it doesn't linger in the DOM.
 		if (!child) {
+			const fallback = vnode.el?.__failedFallback;
+			if (fallback) unmount(fallback);
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				if (vnode.el?.parentNode) devperfMutation();
 			}
 			vnode.el?.remove();
+			return;
+		}
+		// A boundary face mounted beside a destroyed instance's recovery comment is
+		// outside the child's cleared ViewManager tree. If the owner removes this
+		// position instead of retrying it, tear that face down explicitly.
+		if (child.isDestroyed && child.__failedFallback) {
+			unmount(child.__failedFallback);
+			child.__failedPlaceholder?.remove();
+			child.__failedFallback = null;
 			return;
 		}
 		// LEAVE animation (constellation/doc/DOC-SPEC.md §12): when the leaving
@@ -938,12 +987,12 @@ function patchAttrs(el, oldAttrs, newAttrs) {
  * nodes are matched by (tag, key) and their DOM moved into position;
  * everything else falls back to index alignment.
  */
-function patchChildren(el, oldChildren, newChildren, ctx, tail = null) {
+function patchChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
 	const keyed = oldChildren.some((c) => c.key != null) || newChildren.some((c) => c.key != null);
 	if (keyed) {
-		patchKeyedChildren(el, oldChildren, newChildren, ctx, tail);
+		patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
 	} else {
-		patchIndexedChildren(el, oldChildren, newChildren, ctx, tail);
+		patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail);
 	}
 }
 
@@ -951,13 +1000,13 @@ function patchChildren(el, oldChildren, newChildren, ctx, tail = null) {
 // list. Null (every ordinary element parent) appends to the parent; a portal
 // passes its range's closing comment so teleported children stay inside their
 // own bracketed span of the shared outlet.
-function patchIndexedChildren(el, oldChildren, newChildren, ctx, tail = null) {
+function patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
 	const common = Math.min(oldChildren.length, newChildren.length);
 	for (let i = 0; i < common; i++) {
-		patch(oldChildren[i], newChildren[i], el, ctx);
+		patch(oldChildren[i], newChildren[i], el, ctx, owner);
 	}
 	for (let i = common; i < newChildren.length; i++) {
-		mount(newChildren[i], el, tail, ctx);
+		mount(newChildren[i], el, tail, ctx, owner);
 	}
 	for (let i = common; i < oldChildren.length; i++) {
 		if (
@@ -1013,7 +1062,7 @@ function warnFlipCompiledOut() {
 	);
 }
 
-function patchKeyedChildren(el, oldChildren, newChildren, ctx, tail = null) {
+function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
 	// Keyed identity is the pair (tag, key), with BOTH sides compared by native
 	// SameValueZero — never string concatenation. Partition by raw `tag` (a
 	// component's class object by identity, an element's tag string) into a nested
@@ -1117,7 +1166,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, tail = null) {
 	for (let i = pairs.length - 1; i >= 0; i--) {
 		const [oldChild, newChild] = pairs[i];
 		if (oldChild) {
-			patch(oldChild, newChild, el, ctx);
+			patch(oldChild, newChild, el, ctx, owner);
 			if (nextPersistentSibling(newChild.el) !== ref) {
 				el.insertBefore(newChild.el, ref);
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -1125,7 +1174,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx, tail = null) {
 				}
 			}
 		} else {
-			mount(newChild, el, ref, ctx);
+			mount(newChild, el, ref, ctx, owner);
 		}
 		ref = newChild.el;
 	}

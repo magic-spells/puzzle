@@ -20,6 +20,7 @@ import { ViewManager, plantFailedMountPlaceholder } from './viewManager.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
+import { reportError } from '../errors.js';
 import {
 	devperfCanRender,
 	devperfMarkCause,
@@ -73,6 +74,9 @@ export class PuzzleView {
 	// so the setter identity is memoised per name for this instance's lifetime.
 	#refSetters = null;
 	#vm = null;
+	// Nearest owning PuzzleView for error-boundary lookup. Set by the parent's
+	// ViewManager when it instantiates/adopts this component; null for app roots.
+	#errorParent = null;
 	#mounted = false;
 	// Anchor-race gate (Change A): set true when the non-skeleton async mount()
 	// branch resumes to find its first render superseded (no commit landed) —
@@ -276,6 +280,84 @@ export class PuzzleView {
 	}
 
 	/**
+	 * INTERNAL — record the owning view for nearest-boundary lookup. ViewManager
+	 * calls this when it creates or adopts a child component.
+	 */
+	__setErrorParent(parent) {
+		this.#errorParent = parent ?? null;
+	}
+
+	/**
+	 * Resolve and render the nearest optional `errorContent(error)` boundary.
+	 *
+	 * `errorContent` is a script-side member returning one ViewNode tree; it needs
+	 * no compiler syntax. A boundary handles its own failures and descendants,
+	 * with the nearest implementation winning. Returning null declines the error
+	 * and lets lookup continue outward.
+	 *
+	 * The two-step prepare/show split preserves D115/D136 ownership: component
+	 * mount recovery captures the fallback before destroying the failed instance,
+	 * then mounts that face beside the existing recovery placeholder. The owning
+	 * parent retries by calling refresh(), whose next patch mounts a fresh instance
+	 * through that same placeholder and removes the fallback.
+	 */
+	__prepareErrorBoundary(error) {
+		let boundary = this;
+		let boundaryError = error;
+		while (boundary) {
+			if (typeof boundary.errorContent === 'function') {
+				try {
+					const tree = boundary.errorContent(boundaryError);
+					if (tree) return { boundary, tree };
+				} catch (err) {
+					reportError(
+						boundary.ctx,
+						err,
+						{ phase: 'boundary', view: boundary, route: boundary.route },
+						'[puzzle] errorContent() failed:',
+						err
+					);
+					boundaryError = err;
+				}
+			}
+			boundary = boundary.#errorParent;
+		}
+		return null;
+	}
+
+	/** INTERNAL — display a boundary result prepared by __prepareErrorBoundary. */
+	__showErrorBoundary(captured, { failedMount = false, placeholder = null } = {}) {
+		if (!captured) return false;
+		const { boundary, tree } = captured;
+		try {
+			if (failedMount && boundary === this) {
+				const mountedTree = this.#vm?.mountErrorFallback(tree, placeholder, this.#errorParent);
+				if (!mountedTree) return false;
+				this.__failedFallback = mountedTree;
+				if (placeholder) placeholder.__failedFallback = mountedTree;
+			} else {
+				if (!boundary.#vm || boundary.#destroyed) return false;
+				boundary.#vm.render(tree);
+			}
+			return true;
+		} catch (err) {
+			reportError(
+				boundary.ctx,
+				err,
+				{ phase: 'boundary', view: boundary, route: boundary.route },
+				'[puzzle] errorContent() render failed:',
+				err
+			);
+			return false;
+		}
+	}
+
+	/** INTERNAL convenience for live failures that need no D115 teardown first. */
+	__renderErrorBoundary(error) {
+		return this.__showErrorBoundary(this.__prepareErrorBoundary(error));
+	}
+
+	/**
 	 * The DOM node occupying this component's position (null before mount).
 	 * While an async data() is in flight this is the anchor placeholder, so
 	 * a parent's sibling insertion refs stay valid (constellation/doc/DOC-APP-ANATOMY.md §4).
@@ -346,7 +428,7 @@ export class PuzzleView {
 	 * timers, or grab focus from a mounted() hook (constellation/doc/DOC-VIEW-LIFECYCLE.md §3).
 	 */
 	async mount(container, { params = {}, props = {}, children = [], ref = null, preloaded = false } = {}) {
-		this.#vm = new ViewManager(container, this.ctx);
+		this.#vm = new ViewManager(container, this.ctx, this);
 		this.#vm.slotChildren = children;
 		if (!preloaded) {
 			this.#params = params;
@@ -383,7 +465,9 @@ export class PuzzleView {
 				// patches over it when data() commits. The mount promise no longer
 				// waits on data, so a data() rejection surfaces here (logged), not to
 				// the caller; the skeleton stays up.
-				pending.catch((err) => console.error('[puzzle] data() failed behind a skeleton:', err));
+				pending.catch((err) =>
+					this.#handleViewFailure('[puzzle] data() failed behind a skeleton:', err, 'mount')
+				);
 				this.#renderNow();
 			} else {
 				await pending;
@@ -582,13 +666,28 @@ export class PuzzleView {
 	 * their synchronous mount, so Router ownership remains untouched.
 	 */
 	#handleBackgroundRefreshFailure(message, err) {
-		console.error(message, err);
-		if (!this.#pendingMountHook || this.#destroyed) return;
+		this.#handleViewFailure(message, err, 'refresh');
+	}
+
+	#handleViewFailure(message, err, phase) {
+		reportError(
+			this.ctx,
+			err,
+			{ phase, view: this, route: this.route },
+			message,
+			err
+		);
+		const boundary = this.__prepareErrorBoundary(err);
+		if (!this.#pendingMountHook || this.#destroyed) {
+			this.__showErrorBoundary(boundary);
+			return;
+		}
 		this.#pendingMountHook = false;
 		this.#enterPending = false;
 		const placeholder = plantFailedMountPlaceholder(this);
 		this.destroy();
 		if (placeholder) this.__failedPlaceholder = placeholder;
+		this.__showErrorBoundary(boundary, { failedMount: true, placeholder });
 	}
 
 	/**
@@ -635,7 +734,13 @@ export class PuzzleView {
 		try {
 			this.destroyed();
 		} catch (err) {
-			console.error('[puzzle] destroyed hook error:', err);
+			reportError(
+				this.ctx,
+				err,
+				{ phase: 'unmount', view: this, route: this.route },
+				'[puzzle] destroyed hook error:',
+				err
+			);
 		}
 	}
 
@@ -893,30 +998,42 @@ export class PuzzleView {
 				// delivery, long after playIn() returned, so no caller can see the throw:
 				// an unguarded viewWillShow() would skip handle.play() and leave the enter
 				// held PAUSED at its `from` keyframe (typically opacity 0) — content
-				// stranded hidden forever, the §39 hard rule this function exists to keep
-				// — and both hooks would skip #settleEnter(), leaving playIn() pending.
-				// Log and continue instead; the sequence is never aborted by a user hook.
-				try {
-					this.viewWillShow();
-				} catch (err) {
-					console.error('[puzzle] enter hook failed during a visible-trigger reveal:', err);
-				}
-				handle.play();
+					// stranded hidden forever, the §39 hard rule this function exists to keep
+					// — and both hooks would skip #settleEnter(), leaving playIn() pending.
+					// Log and continue instead; the sequence is never aborted by a user hook.
+					try {
+						this.viewWillShow();
+					} catch (err) {
+						reportError(
+							this.ctx,
+							err,
+							{ phase: 'enter', view: this, route: this.route },
+							'[puzzle] enter hook failed during a visible-trigger reveal:',
+							err
+						);
+					}
+					handle.play();
 				// handle.finished NEVER rejects — playAnimation normalises WAAPI's
 				// cancel-time AbortError away (animate.js, "Cancellation resolves") — so
 				// the only throw reachable in here is the user hook, guarded so
 				// #settleEnter() below always runs. No .catch is needed on this chain.
 				handle.finished.then(() => {
-					if (this.#currentAnimation === handle) this.#currentAnimation = null;
-					// Same rule as the mount path: destroyed OR preempted by a leave means
-					// the reveal never completed, so its closing hook is skipped.
-					if (!this.#destroyed && !this.#leaving) {
-						try {
-							this.viewDidShow(); // skipped entirely if destroyed mid-enter
-						} catch (err) {
-							console.error('[puzzle] enter hook failed during a visible-trigger reveal:', err);
+						if (this.#currentAnimation === handle) this.#currentAnimation = null;
+						// Same rule as the mount path: destroyed OR preempted by a leave means
+						// the reveal never completed, so its closing hook is skipped.
+						if (!this.#destroyed && !this.#leaving) {
+							try {
+								this.viewDidShow(); // skipped entirely if destroyed mid-enter
+							} catch (err) {
+								reportError(
+									this.ctx,
+									err,
+									{ phase: 'enter', view: this, route: this.route },
+									'[puzzle] enter hook failed during a visible-trigger reveal:',
+									err
+								);
+							}
 						}
-					}
 					this.#settleEnter();
 				});
 			};
@@ -1070,7 +1187,13 @@ export class PuzzleView {
 			// leave-hook guard, router.js #startOverlapLeave). The destroyed-mid-playOut
 			// interrupt path resolves (never rejects), so its early-return / did-hook-skip
 			// semantics are untouched — only the throw path lands here.
-			console.error('[puzzle] leave hook failed during teardown:', err);
+			reportError(
+				this.ctx,
+				err,
+				{ phase: 'leave', view: this, route: this.route },
+				'[puzzle] leave hook failed during teardown:',
+				err
+			);
 		}
 		this.destroy();
 	}
@@ -1151,7 +1274,13 @@ export class PuzzleView {
 			if (this.#enterPending) {
 				this.#enterPending = false;
 				Promise.resolve(this.playIn()).catch((err) =>
-					console.error('[puzzle] child enter animation failed:', err)
+					reportError(
+						this.ctx,
+						err,
+						{ phase: 'enter', view: this, route: this.route },
+						'[puzzle] child enter animation failed:',
+						err
+					)
 				);
 			}
 		}
@@ -1304,7 +1433,14 @@ export class PuzzleView {
 		try {
 			this.#renderNow();
 		} catch (err) {
-			console.error('[puzzle] render update failed:', err);
+			reportError(
+				this.ctx,
+				err,
+				{ phase: 'render', view: this, route: this.route },
+				'[puzzle] render update failed:',
+				err
+			);
+			this.__renderErrorBoundary(err);
 		}
 	}
 }
