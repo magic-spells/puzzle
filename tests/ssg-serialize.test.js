@@ -5,7 +5,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG, PORTAL_TAG } from '../client-runtime/views/ViewNode.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -169,6 +169,18 @@ describe('SSG serializer (M1)', () => {
 				}
 			}
 			expect(await serialize(comp(FallbackCard))).toBe('<section>fallback</section>');
+		});
+
+		it('emits nothing for a <Portal> (D144)', async () => {
+			class WithPortal extends PuzzleView {
+				render() {
+					return h('section', {}, [
+						text('page'),
+						new ViewNode(PORTAL_TAG, {}, [h('div', { class: 'overlay' }, [text('modal')])]),
+					]);
+				}
+			}
+			expect(await serialize(comp(WithPortal))).toBe('<section>page</section>');
 		});
 	});
 

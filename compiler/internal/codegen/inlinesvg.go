@@ -59,6 +59,10 @@ func (c *compiler) resolveInlineSVG(nodes []parser.Node, assetsDir string, inlin
 			if err := c.resolveInlineSVG(n.Children, assetsDir, inlined); err != nil {
 				return err
 			}
+		case *parser.Portal:
+			if err := c.resolveInlineSVG(n.Children, assetsDir, inlined); err != nil {
+				return err
+			}
 		case *parser.If:
 			if err := c.resolveInlineSVG(n.Then, assetsDir, inlined); err != nil {
 				return err

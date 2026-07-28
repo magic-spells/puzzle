@@ -26,7 +26,7 @@
 
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
-import { mount } from '../views/viewManager.js';
+import { mount, setPortalHost } from '../views/viewManager.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
 
@@ -74,6 +74,10 @@ export async function mountStatic({
 	// Rebuild the chain defs by zipping each view class back onto its serialized route
 	// def, then hand the assembled entry to the SHARED assembleChain — the exact
 	// assembly the prerenderer ran, so the client tree matches the prerendered markup.
+	// Portal outlet host (D144): the same lazy outlet the SPA runtime creates, as a
+	// sibling of the static page's mount target.
+	setPortalHost(targetEl.parentNode ?? document.body);
+
 	const chain = route.chain.map((def, i) => ({ ...def, view: views[i] }));
 	const entry = { fullPath: route.path, chain, layout };
 	const routeSnapshot = makeRouteSnapshot(entry);
