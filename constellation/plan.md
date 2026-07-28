@@ -172,12 +172,16 @@ half is merged and suite-verified: `client-runtime/devtools.js` speaks SPEC
 §55's wire protocol, registers only when an extension injects
 `window.__PUZZLE_DEVTOOLS_HOOK__`, and DCEs out of production entirely. The
 extension lives in its own public repo `magic-spells/puzzle-devtools` (MV3,
-panel UI dogfooded as a Puzzle app), and its v1 — Views + Store panels — is
-built, unit-tested, and smoke-verified against a live `puzzle dev` app in real
-Chrome. The store's `subscribersByKey`/`keysBySubscriber` pair is the asset —
-it answers "which views re-render when this record changes" exactly, which
-React and Svelte users answer by guessing; the subscriptions-graph panel that
-exploits it is the named round 2.
+panel UI dogfooded as a Puzzle app), unit-tested and smoke-verified against a
+live `puzzle dev` app in real Chrome. Its panels are Views, Store,
+Subscriptions, Router, Performance, and Connection. The store's
+`subscribersByKey`/`keysBySubscriber` pair is the asset — it answers "which
+views re-render when this record changes" exactly, which React and Svelte users
+answer by guessing; the Subscriptions panel reads it through
+`snapshot:subscriptions` and re-requests on each `flush`. That snapshot
+separates `held` keys — those a prepared, uncommitted `data()` run added
+([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]) — so an open navigation does
+not read as a leak.
 
 A **deep-review round** followed (2026-07-24), reading the merged tree rather
 than adding features. It produced two decision cards — D110 (`dev.proxy` rejects
