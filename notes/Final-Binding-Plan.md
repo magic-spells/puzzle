@@ -485,13 +485,13 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 - Test: extend `tests/binding.test.js`
 
 **Steps:**
-- [ ] **Failing test:** `await type(handle, 'hello')` on a bound input leaves
+- [x] **Failing test:** `await type(handle, 'hello')` on a bound input leaves
       `getData().draft === 'hello'` after `settled()`.
-- [ ] Implement `type(target, text)`: set `.value`, dispatch bubbling `input` (and
+- [x] Implement `type(target, text)`: set `.value`, dispatch bubbling `input` (and
       `change` for completeness on blur-style controls), `await settled()`.
-- [ ] Export + `npm run test:types` green (public `/testing` surface — add the d.ts
+- [x] Export + `npm run test:types` green (public `/testing` surface — add the d.ts
       signature).
-- [ ] Commit: `testing: type() helper for two-way-bound inputs`
+- [x] Commit: `testing: type() helper for two-way-bound inputs`
 
 ### Task 7: Dev-only clobber diagnostic
 

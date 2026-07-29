@@ -13,7 +13,7 @@
 // (setData + refresh), a duck-typed record (update + string _type) →
 // PuzzleModel.update(), anything else → direct property mutation + refresh.
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mountView, measureRenders, settled } from '../client-runtime/testing/index.js';
+import { mountView, measureRenders, settled, type } from '../client-runtime/testing/index.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { setErrorHandler } from '../client-runtime/errors.js';
@@ -393,5 +393,35 @@ describe('implicit binding — plain-object arm', () => {
 
 		expect(update).toHaveBeenCalledWith({ label: 'quack again' });
 		expect(view.instance.ducky.label).toBe('moo'); // the stub update() writes nothing
+	});
+});
+
+describe('implicit binding — the type() test helper', () => {
+	it('types into a bound input and settles the write', async () => {
+		const view = await mount(LocalForm);
+
+		await type(view.find('input.draft'), 'hello');
+
+		expect(view.instance.getData().draft).toBe('hello');
+		// the same settle the hand-rolled tests above do explicitly
+		expect(view.find('p.matches').textContent).toBe('0');
+	});
+
+	it('resolves a selector against the handle and drives change-committed controls', async () => {
+		const view = await mount(LocalForm);
+
+		await view.type('input.age', '42');
+		await view.type('select.sort', 'done');
+
+		// `input` alone would never commit these two — the helper fires `change` too
+		expect(view.instance.getData().age).toBe(42);
+		expect(view.instance.getData().sort).toBe('done');
+	});
+
+	it('reports an unmatched selector the same way click() does', async () => {
+		const view = await mount(LocalForm);
+		await expect(view.type('input.missing', 'x')).rejects.toThrow(
+			/no element matches selector/
+		);
 	});
 });

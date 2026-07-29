@@ -58,7 +58,7 @@ import type {
 } from '@magic-spells/puzzle/ssg';
 import { mountStatic } from '@magic-spells/puzzle/static';
 import type { MountStaticOptions, StaticRoute } from '@magic-spells/puzzle/static';
-import { createTestApp, measureRenders, mountView } from '@magic-spells/puzzle/testing';
+import { createTestApp, measureRenders, mountView, type } from '@magic-spells/puzzle/testing';
 import type { RenderProfile } from '@magic-spells/puzzle/testing';
 
 const renderedNull: string = displayValue(null);
@@ -471,8 +471,22 @@ mountStatic(staticOptions).then(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Testing helpers (D94/D121) — both measureRenders call shapes
+// Testing helpers (D94/D121) — both measureRenders call shapes, plus type()
 // ---------------------------------------------------------------------------
+
+async function typeIntoBoundInput(): Promise<void> {
+	const view = await mountView(TodoListView);
+	// Handle form: selector or element, chainable like click().
+	await view.type('input.draft', 'hello');
+	await (await createTestApp({ routes: [{ path: '/', view: TodoListView }] })).type(
+		'input.draft',
+		'hello'
+	);
+	// Free form (D147): the element itself, resolved by the caller.
+	const input = view.find('input.draft');
+	if (input) await type(input, 'hello');
+}
+void typeIntoBoundInput;
 
 async function profileRenders(): Promise<void> {
 	const view = await mountView(TodoListView);

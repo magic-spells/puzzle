@@ -47,6 +47,7 @@ export interface MountedView<T extends PuzzleView = PuzzleView> {
 	find(selector: string): Element | null;
 	findAll(selector: string): Element[];
 	click(target: string | Element): Promise<this>;
+	type(target: string | Element, text: string): Promise<this>;
 	setProps(props: any): Promise<this>;
 	destroy(): void;
 }
@@ -63,6 +64,7 @@ export interface TestApp {
 	find(selector: string): Element | null;
 	findAll(selector: string): Element[];
 	click(target: string | Element): Promise<this>;
+	type(target: string | Element, text: string): Promise<this>;
 	visit(path: string): Promise<this>;
 	destroy(): void;
 }
@@ -81,6 +83,13 @@ export declare function mountView<T extends PuzzleView>(
  * `'memory'`; visit() uses the real guard/load/commit router pipeline.
  */
 export declare function createTestApp(config?: TestAppConfig): Promise<TestApp>;
+
+/**
+ * Type `text` into a two-way-bound form control (D147): replace its value, fire
+ * the bubbling `input` and `change` events a real edit-then-leave produces, then
+ * settle. Selectors resolve through `MountedView.type`/`TestApp.type` instead.
+ */
+export declare function type(target: Element, text: string): Promise<void>;
 
 export interface SettledOptions {
 	/**
