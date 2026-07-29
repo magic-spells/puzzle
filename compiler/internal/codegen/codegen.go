@@ -453,6 +453,11 @@ func (c *compiler) emitComponentRoot(root *parser.Element, startCol int, scope m
 			n.Props = append(n.Props, scopeStamp)
 		}
 		return c.emitElement(n.Name, n.Props, n.Children, 2, startCol, true, scope)
+	case *parser.Portal:
+		// The root is where call-site attributes merge and where the D59 scope
+		// stamp lands; a portal teleports its children away and keeps only a
+		// comment placeholder locally, so there is no element to do either job.
+		return "", c.cgErr(root.Pos, `a component template's root cannot be <Portal> — wrap it in a root element (e.g. <div style="display: contents">), which stays local while the portal's children teleport`)
 	default:
 		return "", c.cgErr(root.Pos, "a component template's root must be an element or component")
 	}

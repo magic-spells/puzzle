@@ -111,7 +111,10 @@ Rules that bite:
   full-screen panels that must escape ancestor CSS. `@event:outside` treats
   portaled content as inside its logical owner. Portals emit nothing in
   prerendered HTML (content appears at takeover). For focus-trapped modals,
-  prefer native `<dialog>.showModal()` via a ref.
+  prefer native `<dialog>.showModal()` via a ref. A `<Portal>` cannot be a
+  COMPONENT's template root (the root receives call-site attrs and the scoped
+  style stamp) — wrap it: `<div style="display: contents"><Portal>…</Portal></div>`.
+  A portal-only view is fine.
 - **Error handling.** `new PuzzleApp({ onError(error, { phase, view, route }) })`
   hears every framework-contained failure (mount, refresh, navigation);
   a view's script-side `errorContent(error)` renders fallback UI where the view
@@ -430,6 +433,12 @@ to `dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
   then the full SPA bundle takes over on load and re-renders (not true
   DOM-adoption hydration); all later navigation is client-side (transitions,
   morphs work). Pick this for apps that want SEO'd entry pages.
+
+`puzzle dev` on a static-mode project serves the REAL static output (clean
+URLs, full page loads, real 404s, prerender on every rebuild); hybrid projects
+dev as the SPA. `puzzle preview` serves an existing `dist/` with
+production-host semantics for any mode (SPA deep-link fallback, static real
+404s) — use `puzzle build && puzzle preview` to check the shipped artifact.
 
 1. **`data()` and `beforeMount` run under Node at build time** (both modes).
    Guard every browser global: `typeof document !== 'undefined'` before touching

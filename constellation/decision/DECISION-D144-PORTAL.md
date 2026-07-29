@@ -31,7 +31,14 @@ error (a portal exists to carry children). Attribute-free: `to`/`name` are
 positioned compile errors reserved for future named outlets; lowercase
 `<portal>` gets the D134 steering error. Rejected inside a marker fallback body
 (D141 rule) and inside an island (an unreconciled subtree would never mount or
-tear down the portal). Portal-in-portal is allowed. `PORTAL_TAG` is a reserved
+tear down the portal). Also rejected as a COMPONENT template's root: the D20
+inline root is where call-site attributes merge and where the D59 scope stamp
+lands, and a portal keeps only a comment placeholder locally, so there is no
+element to do either job — the steering error names the wrapper idiom
+(`<div style="display: contents">` around the `<Portal>`). Portal-only
+components (toast stacks, slide-overs) hit this on the first try, so the error
+message carries the fix. A portal-only VIEW is legal — views keep their
+`<puzzle-view>` root. Portal-in-portal is allowed. `PORTAL_TAG` is a reserved
 binding and loop-variable name like `SLOT_TAG`.
 
 ## Runtime contract

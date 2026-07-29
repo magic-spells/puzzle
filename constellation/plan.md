@@ -68,8 +68,13 @@ decision cards explain why the contract has its current shape.
   bodies (D141), and the D135–D143 hardening set.
 - **`0.5.0` is in progress on `release/0.5.0`**: D144 `<Portal>` scoped v1
   (v1.66), D145 error boundaries (v1.67), D146 transactional reused-ancestor
-  refresh, and D147 implicit two-way form binding
-  ([[FEATURE-IMPLICIT-BINDING]], v1.68).
+  refresh, D147 implicit two-way form binding
+  ([[FEATURE-IMPLICIT-BINDING]], v1.68), and D148 `puzzle preview` + real
+  static serving in dev ([[DECISION-D148-PREVIEW-AND-STATIC-DEV]], v1.69).
+  `examples/overlays` is the Portal showcase (toasts, clipped-ancestor menu
+  with `@event:outside` logical containment, Portal slide-over vs native
+  `<dialog>` modal); its dogfooding pass produced the Portal
+  component-root steering error (wrapper idiom documented in D144).
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
@@ -213,8 +218,12 @@ two-way form binding, inferred with no sugar syntax — is in 0.5.0 as
 stays unscheduled); `<svelte:window>`-style global event bindings;
 per-subtree provide/inject;
 `puzzle check` / an LSP over the compiler's existing positioned diagnostics;
-i18n; `build --analyze`; `puzzle preview`; deploy presets; Astro-style content
-collections; and a WASM playground.
+i18n; `build --analyze`; deploy presets; Astro-style content
+collections; and a WASM playground. (`puzzle preview` left this list in 0.5.0
+— [[DECISION-D148-PREVIEW-AND-STATIC-DEV]]/v1.69. Dynamic components were
+re-reviewed 2026-07-28 and stay cut: `{#if}`/`{#case}` over imported
+components covers the enumerable case, and compile-time import resolution
+makes an open-ended `is={}` real design work, not sugar.)
 
 ## Release checklist
 

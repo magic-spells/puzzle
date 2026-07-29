@@ -195,6 +195,9 @@ second specification. Decision cards hold rationale and git holds chronology.
   stage and atomically swap `dist`, preserving the last good build on failure.
 - `puzzle dev` uses incremental esbuild, recursive watch, warm Tailwind watch,
   a localhost static server, SPA fallback, SSE reload, and graceful shutdown.
+  An `output: 'static'` project instead gets the real pipeline per rebuild —
+  full build + prerender, clean URLs, real 404s, serve-time reload injection
+  into every HTML page (D148); hybrid devs as the SPA.
 - Build failures reach the browser, not just the terminal (D92): the SSE channel
   carries typed `reload`/`builderror`/`clear` frames with JSON payloads and
   last-write-wins client buffers, the server retains the current error and
@@ -225,6 +228,10 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - `puzzle init` (`default`/`todos`, optional TypeScript project config).
 - `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
+- `puzzle preview [--port] [--strict-port]` (D148): serves an existing `dist/`
+  with production-host semantics per output mode — SPA history fallback,
+  hybrid prerendered-page-first, static clean URLs + real 404s. Port 4000
+  default; flag-only builds self-identify via the artifact's prerender marker.
 - `puzzle dev --fixtures` / `puzzle build --fixtures` (D98): wire
   `app/fixtures.js` through a generated wrapper entry so the `/fixtures`
   module installs before the app entry runs; rejected alongside
