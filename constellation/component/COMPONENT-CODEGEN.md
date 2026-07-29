@@ -79,6 +79,18 @@ stabilizing DOM listeners and callback props. Sites that capture model or loop
 values emit fresh closures so their captured values stay correct. Modifiers
 remain encoded in vnode attribute names for ViewManager to apply.
 
+Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) lives in
+`binding.go`: `classifyBindExpr` accepts exactly `ident`/`ident.ident` (keyword,
+global, and reserved-`event` roots never classify; a bare loop variable never
+classifies, a loop-var-rooted member path does) and `detectAutoBind` applies the
+element-level conditions (form-control tag, no author `@input`/`@change`, no
+static `readonly`/`disabled`, static classifiable `type`). Both `attrsMultiline`
+and `emitAttrs` consume it — inline SVG calls that pair directly — appending
+`'@<event>:bind': this.__bind(target, field, spec)` after the authored attrs.
+The synthesized attr counts toward the width trial (layout stays deterministic)
+and consumes no `__h` site index; `attrKV` runs twice per attr, so a counter
+there would drift every golden. Non-classifying templates emit byte-identically.
+
 Conditional branches are arity-stabilized when occupancy is provably fixed.
 `if`/`unless`/`case` compute their maximum static child count recursively and
 pad shorter/implicit-empty branches with `new ViewNode('#')` — but only when

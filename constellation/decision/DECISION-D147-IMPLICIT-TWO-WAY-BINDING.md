@@ -1,6 +1,6 @@
 ---
 name: D147 — implicit two-way form binding
-status: planned
+status: built
 connections:
   - DECISION-D04-EVENT-HANDLER-CONVENTION
   - DECISION-D16-COMPOSITION-SLOTS-CALLBACKS

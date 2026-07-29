@@ -1,6 +1,6 @@
 ---
 name: Implicit two-way form binding
-status: building
+status: built
 branch: feat/two-way-binding
 connections:
   - DECISION-D147-IMPLICIT-TWO-WAY-BINDING

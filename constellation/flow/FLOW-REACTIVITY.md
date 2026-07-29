@@ -39,6 +39,14 @@ Puzzle has two intentionally asymmetric update paths:
    does not rerun `data()`; call `refresh()` when derived model data must be
    recomputed.
 
+Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) feeds
+both paths without adding a third: a bound form control's synthesized handler
+writes local state through `setData` + `refresh` (path 2 plus the rerun, so
+`data()`-derived values track typing) or writes a record through validated
+`update()`, which re-enters as an ordinary store notification (path 1). The
+controlled-property echo compares against the live DOM, so the keystroke that
+caused the write patches nothing back into the input.
+
 Queries made inside `data()` register the evaluating component with
 [[COMPONENT-STORE]]. Record and collection keys are batched into one flush,
 each subscriber is isolated from failures, and subscriptions are replaced on

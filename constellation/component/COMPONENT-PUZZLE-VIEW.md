@@ -57,6 +57,22 @@ the ref; removals and destroy clear it. Development builds register mounted
 views with [[COMPONENT-DEVSTATE]] so only JSON-safe local state crosses a live
 reload.
 
+`__bind(target, key, spec)` is the write-back dispatch for implicit two-way
+binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]), memoized on the same
+principle as `__ref` (a Map for null-target locals, a WeakMap-of-Maps for
+member targets) so patches see one stable handler identity per (target, key,
+spec). The handler ignores mid-IME-composition events, applies the compile-time
+coercion (`v` string, `vn` numeric with `''`→`null` and NaN skipped, `c`
+boolean), then `#bindWrite` picks an arm at write time: local → `setData` +
+`refresh`; record (duck-typed `update` + string `_type` — this file never
+imports model.js) → validated `update()` with a rejected write reported through
+`reportError` as `phase: 'bind'`, mutating nothing; plain object → mutate +
+repaint. A dev-only diagnostic arms `#bindPending` before the refresh and, at
+the tail of `#recompose`, warns once per key (`#bindWarned`) when a `data()`
+commit reverts a bound local key — the value compare keeps the legitimate
+read-own-write echo idiom silent. Every touchpoint gates inline on
+`__PUZZLE_DEV__`.
+
 D121 adds development-only attribution around `data()`, render-tree
 construction, patching, memo, slot-only updates, and scheduled causes. All
 profiler state remains in [[FILE-DEVPERF]] WeakMaps: PuzzleView has no profiler
