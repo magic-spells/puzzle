@@ -418,31 +418,31 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 ```
 
 **Steps:**
-- [ ] **Failing golden:** write `binding.pzl` covering every matrix row + the negative
+- [x] **Failing golden:** write `binding.pzl` covering every matrix row + the negative
       space — text input bare, number (change/vn), range (input/vn), checkbox `checked`
       on loop var, select single, textarea, member path on a data root; suppression by
       author `@input`, suppression by author `@change:prevent`, non-suppression by
       `@keydown:enter`; `readonly` opt-out; dynamic `type={t}` skip; radio/file skip;
       `<select multiple>` skip; component `<Foo value={x}/>` skip; `value={ x.trim() }`
       one-way. Hand-write `binding.golden.js` to the emitted shapes in the contract.
-- [ ] Implement `detectAutoBind` per the trigger conditions (static-type lookup mirrors
+- [x] Implement `detectAutoBind` per the trigger conditions (static-type lookup mirrors
       the a11y pass, `a11y.go:36` — never guess runtime values). Event-attr matching
       strips modifiers: base name before the first `:` decides `@input`/`@change`.
-- [ ] Wire into `attrsMultiline` AND `emitAttrs`: after the authored attrs, emit the KV
+- [x] Wire into `attrsMultiline` AND `emitAttrs`: after the authored attrs, emit the KV
       `'@<event>:bind': this.__bind(<target>, '<field>', '<spec>')`, where `<target>` is
       `null` (bare), the bare scope var, or `__d.<root>`. The width trial must count the
       synthesized attr so single/multi-line layout stays deterministic. No `__h` index.
-- [ ] Add a width-trial canary test: a template mixing one auto-bind with several cached
+- [x] Add a width-trial canary test: a template mixing one auto-bind with several cached
       `@click` handlers asserts `__h` indices run `0..n` with no gap.
-- [ ] `go test ./compiler/internal/codegen -run TestGoldens -update`; **expected churn:
+- [x] `go test ./compiler/internal/codegen -run TestGoldens -update`; **expected churn:
       the new pair + `boolean_attr.golden.js` gains exactly
       `'@input:bind': this.__bind(null, 'name', 'v')` (its `value={ name }` is
       handler-less — verified) — audit any OTHER modified golden line-by-line; each diff
       must be exactly a synthesized bind attr or its multiline reflow.** `TestNodeCheck`,
       `TestGoldenHome`, `TestGoldenDefault` still green (todos is handler-paired ⇒
       suppressed ⇒ untouched at this task).
-- [ ] `cd compiler && go test ./...` green.
-- [ ] Commit: `compiler: synthesize implicit two-way bind handlers on form controls`
+- [x] `cd compiler && go test ./...` green.
+- [x] Commit: `compiler: synthesize implicit two-way bind handlers on form controls`
 
 ### Task 5: Runtime `__bind` + `#bindWrite` + error phase
 

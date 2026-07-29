@@ -512,11 +512,15 @@ func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []pa
 	if err != nil {
 		return "", err
 	}
-	multiline, err := c.attrsMultiline(attrs, tagStr, startCol, len(processed) == 0, scope, isComponent)
+	tag := ""
+	if !isComponent && len(tagStr) >= 2 && tagStr[0] == '\'' && tagStr[len(tagStr)-1] == '\'' {
+		tag = tagStr[1 : len(tagStr)-1]
+	}
+	multiline, err := c.attrsMultiline(tag, attrs, tagStr, startCol, len(processed) == 0, scope, isComponent)
 	if err != nil {
 		return "", err
 	}
-	attrsSeg, err := c.emitAttrs(attrs, ind, multiline, scope, isComponent)
+	attrsSeg, err := c.emitAttrs(tag, attrs, ind, multiline, scope, isComponent)
 	if err != nil {
 		return "", err
 	}
@@ -1055,11 +1059,16 @@ const printWidth = 120
 // lines: always when there are ≥2 attributes or any mixed (template-literal)
 // value; for a single simple attribute, only when the inline first line would
 // exceed printWidth.
-func (c *compiler) attrsMultiline(attrs []parser.Attr, tagStr string, startCol int, emptyChildren bool, scope map[string]bool, isComponent bool) (bool, error) {
-	if len(attrs) == 0 {
+func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string, startCol int, emptyChildren bool, scope map[string]bool, isComponent bool) (bool, error) {
+	bind := detectAutoBind(tag, attrs, scope)
+	attrCount := len(attrs)
+	if bind != nil {
+		attrCount++
+	}
+	if attrCount == 0 {
 		return false, nil
 	}
-	if len(attrs) >= 2 || anyMixed(attrs) {
+	if attrCount >= 2 || anyMixed(attrs) {
 		return true, nil
 	}
 	kv, err := c.attrKV(attrs[0], scope, isComponent, false)
@@ -1076,16 +1085,28 @@ func (c *compiler) attrsMultiline(attrs []parser.Attr, tagStr string, startCol i
 
 // emitAttrs emits the attribute object either inline `{ k: v }` or multi-line
 // (one attribute per line, trailing comma), per the precomputed decision.
-func (c *compiler) emitAttrs(attrs []parser.Attr, ind int, multiline bool, scope map[string]bool, isComponent bool) (string, error) {
-	if len(attrs) == 0 {
+func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline bool, scope map[string]bool, isComponent bool) (string, error) {
+	bind := detectAutoBind(tag, attrs, scope)
+	attrCount := len(attrs)
+	if bind != nil {
+		attrCount++
+	}
+	if attrCount == 0 {
 		return "{}", nil
 	}
 	if !multiline {
-		kv, err := c.attrKV(attrs[0], scope, isComponent, true)
-		if err != nil {
-			return "", err
+		kvs := make([]string, 0, attrCount)
+		for _, a := range attrs {
+			kv, err := c.attrKV(a, scope, isComponent, true)
+			if err != nil {
+				return "", err
+			}
+			kvs = append(kvs, kv)
 		}
-		return "{ " + kv + " }", nil
+		if bind != nil {
+			kvs = append(kvs, autoBindKV(bind, scope))
+		}
+		return "{ " + strings.Join(kvs, ", ") + " }", nil
 	}
 	var b strings.Builder
 	b.WriteString("{\n")
@@ -1096,6 +1117,11 @@ func (c *compiler) emitAttrs(attrs []parser.Attr, ind int, multiline bool, scope
 		}
 		b.WriteString(sp(ind + 2))
 		b.WriteString(kv)
+		b.WriteString(",\n")
+	}
+	if bind != nil {
+		b.WriteString(sp(ind + 2))
+		b.WriteString(autoBindKV(bind, scope))
 		b.WriteString(",\n")
 	}
 	b.WriteString(sp(ind))
