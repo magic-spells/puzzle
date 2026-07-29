@@ -519,14 +519,14 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
   static-output integration case
 
 **Steps:**
-- [ ] **Failing tests:** serialized HTML for a bound input contains the controlled
+- [x] **Failing tests:** serialized HTML for a bound input contains the controlled
       initial value but **no** `@input:bind`/`@change:bind` (the `@` prefix strip rule
       covers it — pin it); textarea text content, selected option, and `checked`
       serialize as today; hybrid takeover and `mountStatic` both attach the bind listener
       (type after mount → state updates).
-- [ ] Fix anything the pins surface (expected: nothing).
-- [ ] `npx vitest run` green.
-- [ ] Commit: `ssg: pin bind-listener stripping and post-takeover binding`
+- [x] Fix anything the pins surface (expected: nothing).
+- [x] `npx vitest run` green.
+- [x] Commit: `ssg: pin bind-listener stripping and post-takeover binding`
 
 ### Task 9: Examples, scaffold, and fixture migration
 
