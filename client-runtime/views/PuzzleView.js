@@ -44,6 +44,11 @@ import {
 // DCEs the calls and the registry import tree-shakes away. An undefined
 // define (unbundled vitest) reads as true.
 
+// The write-back for a bind whose resolved root is a primitive (D147; see
+// __bind). One shared function for the whole module: identity-stable by
+// definition, so the differ never churns the listener, and typing does nothing.
+const INERT_BIND = () => {};
+
 export class PuzzleView {
 	// Two-layer component state (Change C, SPEC §4). #local holds values written
 	// via setData() (and created()-seeded state, which uses setData); #model holds
@@ -328,6 +333,16 @@ export class PuzzleView {
 	 * never spelled in a template. Not part of the public typed API.
 	 */
 	__bind(target, key, spec) {
+		// A member path whose ROOT resolves to a primitive is not a writable target
+		// — `value={ title.length }` over a string `title` is the classic case. The
+		// compiler cannot see runtime types, so it emits the bind for any qualifying
+		// one-member path; the primitive-rooted ones degrade here to the one-way
+		// display binding they always were, instead of throwing at render (a
+		// primitive is not a legal WeakMap key). No memo entry: INERT_BIND is a
+		// single shared function, so the identity is stable without one.
+		if (target != null && typeof target !== 'object' && typeof target !== 'function') {
+			return INERT_BIND;
+		}
 		let store;
 		if (target == null) {
 			store = (this.#bindLocalMemo ??= new Map());

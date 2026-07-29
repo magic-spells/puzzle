@@ -22,6 +22,7 @@ import RecordForm from './fixtures/binding/RecordForm.compiled.js';
 import PlainForm from './fixtures/binding/PlainForm.compiled.js';
 import TodoTitles from './fixtures/binding/TodoTitles.compiled.js';
 import ClobberForm from './fixtures/binding/ClobberForm.compiled.js';
+import PrimitiveForm from './fixtures/binding/PrimitiveForm.compiled.js';
 
 class Todo extends PuzzleModel {
 	static schema = {
@@ -258,6 +259,47 @@ describe('implicit binding — handler memoization', () => {
 		expect(view.instance.__bind(first, 'rank', 'vn')).not.toBe(handler);
 		// a DIFFERENT record object is a different memo bucket
 		expect(view.instance.__bind(second, 'text', 'v')).not.toBe(handler);
+	});
+});
+
+describe('implicit binding — a primitive bind root', () => {
+	// `value={ title.length }` over a string title: a legal one-way display
+	// binding whose shape the compiler cannot distinguish from a writable member
+	// path, so the runtime has to degrade rather than throw.
+	it('renders instead of throwing, and typing writes nothing', async () => {
+		// mount() renders, and render CALLS __bind — a throw here fails the mount.
+		const view = await mount(PrimitiveForm);
+		expect(view.find('input.len').value).toBe('4');
+
+		const input = view.find('input.len');
+		input.value = '9';
+		fire(input, 'input');
+		fire(input, 'change');
+		await settled();
+
+		expect(view.instance.getData().title).toBe('wash');
+		expect(view.find('p.title').textContent).toBe('wash');
+		// still a live DISPLAY binding: the next render re-asserts the derived value
+		view.instance.refresh();
+		await settled();
+		expect(view.find('input.len').value).toBe('4');
+	});
+
+	it('hands back one identity-stable inert handler for every primitive root', async () => {
+		const view = await mount(PrimitiveForm);
+		const first = view.instance.__bind('wash', 'length', 'vn');
+
+		view.instance.refresh();
+		await settled();
+
+		// stable across renders, so the differ never churns the listener...
+		expect(view.instance.__bind('wash', 'length', 'vn')).toBe(first);
+		// ...and shared across roots, keys and specs, since it writes nothing
+		expect(view.instance.__bind('other', 'length', 'vn')).toBe(first);
+		expect(view.instance.__bind(7, 'toFixed', 'v')).toBe(first);
+		expect(view.instance.__bind(true, 'valueOf', 'c')).toBe(first);
+		// and it is genuinely inert
+		expect(first({ target: { value: 'x' } })).toBeUndefined();
 	});
 });
 
@@ -521,5 +563,13 @@ describe('implicit binding — the type() test helper', () => {
 		await expect(view.type('input.missing', 'x')).rejects.toThrow(
 			/no element matches selector/
 		);
+	});
+
+	it('steers to click() when asked to type into a checkable control', async () => {
+		const view = await mount(LocalForm);
+		// Setting .value on a checkbox names its submitted value and moves nothing
+		// the bind reads, so this would silently pass while writing nothing.
+		await expect(view.type('input.agree', 'true')).rejects.toThrow(/use click\(\)/);
+		expect(view.instance.getData().agree).toBe(false);
 	});
 });

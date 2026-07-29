@@ -79,7 +79,7 @@ const makeRows = (count) =>
  * `stableHandlers: false` → `@select={ selectRow(row) }`: the row is captured,
  *   so codegen emits a FRESH arrow per row per parent render (see the emitted
  *   shape in tests/fixtures/todos/Home.compiled.js, where TodoItem receives
- *   `toggle: (event) => this.events.toggleTodo(todo)`).
+ *   `remove: (event) => this.events.deleteTodo(todo)`).
  */
 function makeList(rowClasses, { stableHandlers }) {
 	return class RowList extends PuzzleView {

@@ -72,10 +72,12 @@ export async function mountView(ViewClass, options = {}) {
 }
 
 /**
- * Type `text` into a two-way-bound form control (D147): replace its value and
- * fire the bubbling `input` and `change` events a real edit-then-leave produces,
- * then settle. Takes the element itself; the mounted handles expose the same
- * helper as `handle.type(selectorOrElement, text)`.
+ * Type `text` into a two-way-bound TEXT-VALUED form control (D147) — an input
+ * carrying a value, a textarea, a select, a range: replace its value and fire the
+ * bubbling `input` and `change` events a real edit-then-leave produces, then
+ * settle. Takes the element itself; the mounted handles expose the same helper as
+ * `handle.type(selectorOrElement, text)`. Checkboxes and radios have no text
+ * value — toggle those with `click()`; type() throws on one.
  */
 export async function type(target, text) {
 	dispatchType(target, text);
@@ -299,6 +301,14 @@ function dispatchClick(element) {
 function dispatchType(element, text) {
 	if (!element || typeof element.dispatchEvent !== 'function') {
 		throw new Error('[puzzle/testing] type() expects a selector or DOM Element');
+	}
+	// A checkable control has no text value to type into: `.value` names what it
+	// submits when checked, and a bound checkbox's write re-reads `.checked`, so
+	// this would look like it worked while changing nothing. Steer, don't no-op.
+	if (element.tagName === 'INPUT' && (element.type === 'checkbox' || element.type === 'radio')) {
+		throw new Error(
+			`[puzzle/testing] type() works on text-valued controls; use click() to toggle an <input type="${element.type}">`
+		);
 	}
 	element.value = text;
 	// A bound text input, textarea or range commits on `input`; number, select

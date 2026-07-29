@@ -47,6 +47,7 @@ export interface MountedView<T extends PuzzleView = PuzzleView> {
 	find(selector: string): Element | null;
 	findAll(selector: string): Element[];
 	click(target: string | Element): Promise<this>;
+	/** Text-valued controls only; use click() for a checkbox or radio. */
 	type(target: string | Element, text: string): Promise<this>;
 	setProps(props: any): Promise<this>;
 	destroy(): void;
@@ -64,6 +65,7 @@ export interface TestApp {
 	find(selector: string): Element | null;
 	findAll(selector: string): Element[];
 	click(target: string | Element): Promise<this>;
+	/** Text-valued controls only; use click() for a checkbox or radio. */
 	type(target: string | Element, text: string): Promise<this>;
 	visit(path: string): Promise<this>;
 	destroy(): void;
@@ -85,9 +87,12 @@ export declare function mountView<T extends PuzzleView>(
 export declare function createTestApp(config?: TestAppConfig): Promise<TestApp>;
 
 /**
- * Type `text` into a two-way-bound form control (D147): replace its value, fire
- * the bubbling `input` and `change` events a real edit-then-leave produces, then
+ * Type `text` into a two-way-bound TEXT-VALUED form control (D147) — an input
+ * carrying a value, a textarea, a select, a range: replace its value, fire the
+ * bubbling `input` and `change` events a real edit-then-leave produces, then
  * settle. Selectors resolve through `MountedView.type`/`TestApp.type` instead.
+ * Checkboxes and radios have no text value — toggle those with `click()`;
+ * type() throws on one.
  */
 export declare function type(target: Element, text: string): Promise<void>;
 
