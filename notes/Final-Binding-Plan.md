@@ -383,16 +383,16 @@ func classifyBindExpr(raw string, scope map[string]bool) (target, field string, 
 ```
 
 **Steps:**
-- [ ] **Failing table test** (reuse `isIdentStart`/`isIdentChar` from `expr.go:57-63`):
+- [x] **Failing table test** (reuse `isIdentStart`/`isIdentChar` from `expr.go:57-63`):
       accept `draft`, ` draft `, `todo.completed`, `profile.displayName`, `_x.y`;
       reject `a.b.c`, `fmt(x)`, `x.trim()`, `a + b`, `a ?? ''`, `a ? b : c`,
       `todo[k]`, `a?.b`, `x | money`, `this.x`, `true`, `window`, `event.target`,
       `''`, `{ a: 1 }`, and bare `todo` when `scope = {"todo": true}` — but accept
       `todo.completed` under the same scope with `target == "todo"`.
-- [ ] Implement: trim; split on `.`; 1–2 segments; each segment a full identifier; root
+- [x] Implement: trim; split on `.`; 1–2 segments; each segment a full identifier; root
       not in `jsKeywords`/`jsGlobals` (`expr.go:19-46`); bare root not in `scope`.
-- [ ] `go test ./compiler/internal/codegen -run TestClassifyBindExpr` green.
-- [ ] Commit: `compiler: bind-target classifier for implicit two-way binding`
+- [x] `go test ./compiler/internal/codegen -run TestClassifyBindExpr` green.
+- [x] Commit: `compiler: bind-target classifier for implicit two-way binding`
 
 ### Task 4: Synthesis in codegen + goldens
 
