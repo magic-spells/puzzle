@@ -245,37 +245,72 @@ Bind an attribute to an expression by using braces as the entire attribute value
 ```
 
 ```html
-<!-- From Home.pzl: checkbox reflects the record -->
+<!-- From TodoItem.pzl: checkbox reflects the record -->
 <input
   type="checkbox"
-  checked={ todo.completed }
-  @change={ toggleTodo(todo) } />
+  checked={ todo.completed } />
 ```
 
-Any attribute can be bound this way, not just booleans.
+Any attribute can be bound this way, not just booleans. On a plain form control,
+`value=` and `checked=` do double duty — they also carry the user's edit back
+into the source, which is the next section.
 
-## Controlled form values: `value={ var }`
+## Two-way form binding: `value={ … }`, `checked={ … }` (v1.68, D147)
 
-On form inputs, `value={ variable }` keeps the DOM property synchronized from component data. Puzzle does not infer the write-back expression: pair it with an `@input` handler that updates local or store state, keeping application data as the source of truth:
+On a plain form control, `value={ … }` and `checked={ … }` are **two-way**: the attribute reads the source into the DOM property, and the compiler synthesizes the write-back handler that carries the user's edit back. There is no directive, no `bind:` prefix, no marker word — the shape of the expression is the whole signal:
 
 ```html
-<!-- From Home.pzl -->
+<!-- From Home.pzl: the whole binding. No handler. -->
 <input
   type="text"
-  placeholder="Add a new todo..."
-  value={ newTodoText }
-  @input={ updateNewTodoText(event) } />
+  placeholder="What needs doing?"
+  value={ newTodoText } />
 ```
 
-```js
-events = {
-  updateNewTodoText: (event) => {
-    this.setData('newTodoText', event.target.value);
-  },
-};
+```html
+<!-- From TodoItem.pzl: binds the record field itself -->
+<input type="checkbox" checked={ todo.completed } />
 ```
 
-Because `setData()` updates the component state directly (without re-running `data()`), this stays cheap on every keystroke.
+A **bare identifier** writes local state (`setData` plus `refresh`, so values `data()` derives stay live — the `disabled={ !newTodoText.trim() }` button next to that input stays honest keystroke by keystroke). A **member path** writes the resolved root: a store record goes through validated `update()`, so every subscribed view re-renders; a plain object is mutated and its owner repaints. Bind the path you want written.
+
+### When an attribute binds
+
+Every condition must hold. Anything else compiles as a plain one-way display binding, silently — computed values are a legitimate thing to display:
+
+| Condition | Binds | Stays one-way |
+| --------- | ----- | ------------- |
+| Element | plain `<input>`, `<textarea>`, `<select>` | any component tag — `<Field value={ x } />` passes an ordinary prop |
+| Expression | a bare identifier or one-member path: `draft`, `todo.completed`, `profile.name` | anything else: `draft \|\| ''`, `String(x)`, `a.b.c`, `items[i]`, `x?.y`, `this.x`, ternaries, calls, formatter chains |
+| Handlers | no `@input` or `@change` on the element | an author-written `@input` / `@change` (with any modifiers) — you own the write |
+| Attributes | no static `readonly` or `disabled` | either one present |
+| `type` | absent, or a static string the matrix below classifies | dynamic `type={ … }`; `file`, `radio`, `submit`, `button`, `reset`, `image`, `hidden`; `<select multiple>`; `value=` on a checkbox (that is the submit value) |
+
+A **bare** loop variable never binds — `value={ item }` has nothing writable behind it. A loop variable as the **root of a path** does: `checked={ todo.completed }` inside `{#for todo in todos}`.
+
+### Which event commits, and what gets written
+
+| Control | Commits on | Written value |
+| ------- | ---------- | ------------- |
+| `<input>` with no `type`, or text / search / email / password / url / tel / color | `input` | string |
+| `<textarea>` | `input` | string |
+| `<input type="range">` | `input` | number |
+| `<input type="number">` | `change` | number; an emptied field writes `null`, and `NaN` is skipped |
+| `<input type="checkbox">` (on `checked=`) | `change` | boolean |
+| date / time / month / week / datetime-local | `change` | string |
+| `<select>` (single) | `change` | string |
+
+Numbers commit on `change` rather than `input` because coercion breaks the round-trip mid-typing: `"1.20"` coerces to `1.2`, which no longer matches what is on screen, so the patcher would rewrite the field under the caret and eat the trailing zero. Ranges have no caret, so they commit on `input`. A keystroke that is part of an in-progress IME composition never writes; the composed text lands with the input that follows `compositionend`.
+
+### Opting out
+
+Three escapes, all of them syntax you already have:
+
+1. **Write the handler.** An `@input` or `@change` you author suppresses the synthesized write completely — nothing double-fires. Handlers on *other* events (`@keydown:enter`, `@blur`, `@focus`) coexist with the bind.
+2. **Use a non-path expression.** `value={ String(draft) }` or `value={ draft || '' }` is one-way by construction — the classifier only accepts a bare identifier or a one-member path.
+3. **Add static `readonly`.** Reads the source, refuses edits.
+
+See [[DOC-EVENTS]] for how binding and handwritten handlers interact, and [[DOC-USER-GUIDE]] for the form idioms (record fields, local drafts, validation on submit).
 
 ## Event bindings: `@event={ … }`
 
@@ -287,10 +322,12 @@ Attach handlers with `@` followed by the DOM event name. Two forms:
 ```html
 <!-- From Home.pzl -->
 <form @submit={ addTodo(event) }>
-<input type="checkbox" @change={ toggleTodo(todo) } />
+<TodoItem todo={ todo } @remove={ deleteTodo(todo) } />
 <button @click={ setFilter('all') }>All</button>
 <button @click={ clearCompleted }>Clear</button>
 ```
+
+Reading a form control back into state is not on this list, because it needs no handler — that is what the two-way bindings above do.
 
 Handlers live in the `events` class field of the component (arrow functions only). See [[DOC-EVENTS]] for the full guide — handler declaration rules, `this` binding, state updates, and common mistakes.
 
@@ -503,7 +540,8 @@ modifiers, and `{:else if}` are shipped and documented above.
 | Attr interpolation | `attr="text { expr }"` | `title="Delete { todo.text }"` |
 | Conditional classes | `class="base {#if expr}extra{/if}"` | `class="text-gray-900 {#if todo.completed}line-through{/if}"` |
 | Dynamic attribute | `attr={ expr }` | `disabled={ !newTodoText.trim() }`, `checked={ todo.completed }` |
-| Two-way input | `value={ var }` | `value={ newTodoText }` |
+| Two-way binding (automatic) | `value={ path }` / `checked={ path }` on a plain form control, where `path` is `ident` or `ident.ident` | `value={ newTodoText }`, `checked={ todo.completed }` |
+| Opt out of two-way | author `@input`/`@change`, a non-path expression, or static `readonly` | `value={ String(draft) }`, `<input value={ x } readonly>` |
 | Event (bare) | `@event={ handler }` | `@click={ clearCompleted }` |
 | Event (call) | `@event={ handler(args) }` | `@click={ setFilter('all') }`, `@submit={ addTodo(event) }` |
 | Event + modifiers | `@event:mod[:mod]={ handler }` | `@keydown:enter={ addTodo(event) }`, `@click:prevent:stop={ nav }` |
