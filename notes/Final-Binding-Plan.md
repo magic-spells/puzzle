@@ -592,11 +592,11 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
   true; touch only if its prose reads as fiction-era
 
 **Steps:**
-- [ ] Rewrite each doc to state the current design as if it were always the design (no
+- [x] Rewrite each doc to state the current design as if it were always the design (no
       "previously"/"we changed" narration). Teach: the trigger conditions, the matrix,
       the three escapes, bind-the-source-path rule, local-draft idiom for constrained
       fields, `type()` helper.
-- [ ] Skill: add the input-binding section (when it binds, when it doesn't, the
+- [x] Skill: add the input-binding section (when it binds, when it doesn't, the
       record-vs-draft choice, the suppression rule).
 - [ ] `mcp` card updates + connections; product line v1.68 entry; stamp cards by release
       (`0.5.0` + `verified_sha` convention) **after** Task 11 verification, not before.

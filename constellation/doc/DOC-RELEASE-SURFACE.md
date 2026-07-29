@@ -39,9 +39,9 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Subpaths: `@magic-spells/puzzle/morph`, `/ssg`, `/static`, `/testing`,
   `/fixtures`, and `/puzzle-env`. (`/static` exports `mountStatic`, the
   per-page kernel for `output: 'static'`; `/testing` exports the app-author
-  test utilities — `mountView`, `createTestApp`, `settled`,
-  `installFakeAnimate`, `installFakeObserver`, D94 — and re-exports
-  `installFixtures`; `/fixtures` is the self-contained fixtures + mock-adapter
+  test utilities — `mountView`, `createTestApp`, `settled`, `type` (drives a
+  two-way-bound control, D147), `installFakeAnimate`, `installFakeObserver`,
+  D94 — and re-exports `installFixtures`; `/fixtures` is the self-contained fixtures + mock-adapter
   module, D98, bundled into an app only by the `--fixtures` flag.)
 - `puzzle` binary shim selects an optional platform binary for macOS/Linux on
   arm64/x64. Unsupported systems get a Go-install fallback message.
@@ -65,6 +65,16 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and formatter chains; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.
+- Implicit two-way binding (D147): a path-shaped `value=`/`checked=`
+  (`ident` or `ident.ident`) on a plain form control synthesizes its own
+  write-back handler (`@input:bind`/`@change:bind`) — suppressed by an author
+  `@input`/`@change`, static `readonly`/`disabled`, a non-path expression, a
+  dynamic or excluded `type`, or a component tag. Number, checkbox, date
+  kinds, and select commit on `change`; numeric `''` writes `null`, NaN is
+  skipped; IME composition never mid-writes. Records write through validated
+  `update()` (rejections report to `onError` as `phase: 'bind'`); bare locals
+  write `setData` + refresh. Attr namespaces (`bind:value`) are a positioned
+  compile error reserving the space (`xml`/`xlink`/`xmlns` allowlisted).
 - `{#if}` with `{:else if}`/`{:else}`, `{#unless}`, `{#case}` with `{:when}`,
   item/range `{#for}` with optional counters, template comments, and inline SVG.
 - DOM events support bare/call handlers, `prevent`, `stop`, `once`, `outside`
