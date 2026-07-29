@@ -324,7 +324,7 @@ roadmap item — bind is the substrate, forms are a later product layer); explic
 - Modify: `constellation/plan.md` (roadmap line ~:202; 0.5.0 section; card index)
 
 **Steps:**
-- [ ] Write D147 from "The contract" above, plus Alternatives rejected: `bind:value`
+- [x] Write D147 from "The contract" above, plus Alternatives rejected: `bind:value`
       (re-litigates D85's namespace rejection + 3 editor grammars), bare `bind`/`sync`
       marker, options-object `bind={{…}}` (compile error, `codegen.go:1130`), Ember-Octane
       `<Input>` component (no spread-props; D134 case trap), runtime-only helper,
@@ -334,11 +334,11 @@ roadmap item — bind is the substrate, forms are a later product layer); explic
       Scope line verbatim from "Out of scope". Connect: D04/D16/D18/D23/D38/D44/D48/D62/
       D85/D125/D133/D134/D145/D146, COMPONENT-CODEGEN, COMPONENT-PUZZLE-VIEW,
       FLOW-REACTIVITY, DOC-SPEC-TEMPLATE.
-- [ ] Feature card `planned`, connected to the decision + the files this plan touches.
-- [ ] `plan.md`: move "two-way `bind` sugar" out of identified-not-scheduled (note the
+- [x] Feature card `planned`, connected to the decision + the files this plan touches.
+- [x] `plan.md`: move "two-way `bind` sugar" out of identified-not-scheduled (note the
       shipped shape is no-sugar inference); keep "schema-derived forms helper" as its own
       unscheduled line; add D147 to the 0.5.0 section and card index.
-- [ ] Commit: `docs: D147 implicit two-way binding — decision + planned feature card`
+- [x] Commit: `docs: D147 implicit two-way binding — decision + planned feature card`
 
 ### Task 2: Reserved attr-namespace compile error (standalone; ship regardless)
 
