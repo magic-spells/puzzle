@@ -4,6 +4,8 @@
       <label for={ id } class="mb-1.5 block text-sm font-medium text-ink">{ label }</label>
     {/if}
     <div class={ groupClass }>
+      <!-- String(): non-path expr keeps this a display-only buffer. `display` is derived
+           from props.value in data(); the raw text is committed by Enter/blur, not live-bound (D147). -->
       <input
         data-numberfield-input
         id={ id }
@@ -11,7 +13,7 @@
         inputmode="decimal"
         role="spinbutton"
         class={ inputClass }
-        value={ display }
+        value={ String(display) }
         placeholder={ placeholder }
         name={ name }
         disabled={ disabled }

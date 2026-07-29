@@ -4496,7 +4496,7 @@ var ViewNode = class {
     this.el = null;
     this.component = null;
     this.instance = null;
-    if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) {
+    if (true) {
       this.takeoverPreloaded = false;
       this.takeoverFailed = false;
     }
@@ -4953,7 +4953,7 @@ function stripSlotAttr(vnode) {
   clone.el = vnode.el;
   clone.component = vnode.component;
   clone.instance = vnode.instance;
-  if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) {
+  if (true) {
     clone.takeoverPreloaded = vnode.takeoverPreloaded;
     clone.takeoverFailed = vnode.takeoverFailed;
   }
@@ -4973,7 +4973,7 @@ function expandNode(vnode, parts) {
     clone.el = vnode.el;
     clone.component = vnode.component;
     clone.instance = vnode.instance;
-    if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) {
+    if (true) {
       clone.takeoverPreloaded = vnode.takeoverPreloaded;
       clone.takeoverFailed = vnode.takeoverFailed;
     }
@@ -5056,7 +5056,7 @@ function plantFailedMountPlaceholder(child) {
   return placeholder;
 }
 function mountComponent(vnode, parent, ref, ctx) {
-  if ((typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) && vnode.takeoverFailed) {
+  if (vnode.takeoverFailed) {
     const placeholder = document.createComment("puzzle");
     vnode.el = placeholder;
     parent.insertBefore(placeholder, ref ?? null);
@@ -5065,7 +5065,7 @@ function mountComponent(vnode, parent, ref, ctx) {
     return placeholder;
   }
   const preloaded = vnode.instance != null;
-  const takeoverPreloaded = (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
+  const takeoverPreloaded = vnode.takeoverPreloaded;
   const child = vnode.instance ?? new vnode.tag(ctx);
   vnode.component = child;
   child.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded }).then(
@@ -5099,7 +5099,7 @@ function mountComponent(vnode, parent, ref, ctx) {
       }
       vnode.component = null;
       vnode.instance = null;
-      if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__)
+      if (true)
         vnode.takeoverPreloaded = false;
     }
   );
@@ -6276,7 +6276,7 @@ var Router = class {
     }
     const reuseLayout = !!(cur && cur.layout && !pendingLayoutOut && cur.layoutClass === entry.layout);
     const layout = reuseLayout ? cur.layout : entry.layout ? new entry.layout(this.#ctx) : null;
-    const isSSGTakeover = (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) && !cur && this.#container != null && this.#container.hasAttribute("data-puzzle-ssg");
+    const isSSGTakeover = !cur && this.#container != null && this.#container.hasAttribute("data-puzzle-ssg");
     try {
       const loads = [];
       const hasSkeleton = (v) => !isSSGTakeover && typeof v.renderSkeleton === "function";
@@ -6359,7 +6359,7 @@ var Router = class {
       childVnode = vnode;
     }
     const rootVnode = childVnode;
-    if ((typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) && this.#container?.hasAttribute("data-puzzle-ssg")) {
+    if (this.#container?.hasAttribute("data-puzzle-ssg")) {
       let takeoverVnode = rootVnode;
       if (layout) {
         takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
@@ -6632,7 +6632,7 @@ var Router = class {
    * under __PUZZLE_DEV__.)
    */
   #takeoverSSG(topView) {
-    if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) {
+    if (true) {
       if (!this.#container.hasAttribute("data-puzzle-ssg"))
         return;
       const marker = this.#container.getAttribute("data-puzzle-ssg");
@@ -8152,7 +8152,7 @@ var PuzzleView = class {
     this.#children = children;
     this.#vm.anchorAt(ref);
     if (preloaded) {
-      if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) {
+      if (true) {
         const takeoverTree = Object.prototype.hasOwnProperty.call(this, "__takeoverTree") ? this.__takeoverTree : void 0;
         delete this.__takeoverTree;
         this.#renderNow(takeoverTree);
@@ -9067,7 +9067,6 @@ var Toaster = class extends PuzzleView {
 };
 Toaster.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "div",
     {
@@ -9080,7 +9079,7 @@ Toaster.prototype.render = function() {
     __d.items.map(
       (item) => new ViewNode("div", {
         key: ViewNode.keyOf(item),
-        class: `pointer-events-auto flex items-start gap-3 rounded-lg border bg-surface p-4 shadow-lg text-sm transition-all duration-[180ms] motion-reduce:transition-none starting:opacity-0 starting:scale-95 ${item.border} ${item.leaving ? "pointer-events-none opacity-0 scale-95" : ""}`,
+        class: `pointer-events-auto flex items-start gap-3 rounded-lg border bg-surface p-4 shadow-lg text-sm transition-all duration-[180ms] motion-reduce:transition-none starting:opacity-0 starting:scale-95 ${displayValue(item.border, true ? "item.border" : 0)} ${item.leaving ? "pointer-events-none opacity-0 scale-95" : ""}`,
         role: item.role,
         "aria-live": item.ariaLive
       }, [
@@ -9130,7 +9129,7 @@ Toaster.prototype.render = function() {
         new ViewNode("div", { class: "min-w-0 flex-1" }, [
           ...item.title ? [
             new ViewNode("div", { class: "font-medium text-ink" }, [
-              new ViewNode("text", { value: String(item.title) })
+              new ViewNode("text", { value: displayValue(item.title, true ? "item.title" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -9139,7 +9138,7 @@ Toaster.prototype.render = function() {
             new ViewNode("div", {
               class: `text-body ${item.title ? "mt-0.5" : ""}`
             }, [
-              new ViewNode("text", { value: String(item.message) })
+              new ViewNode("text", { value: displayValue(item.message, true ? "item.message" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -9275,7 +9274,6 @@ var Collapsible = class extends PuzzleView {
 };
 Collapsible.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("button", {
       type: "button",
@@ -9286,7 +9284,7 @@ Collapsible.prototype.render = function() {
       "@click": (this.__h ??= {})[0] ??= (event) => this.events.toggle(event)
     }, [
       new ViewNode("span", { class: "min-w-0 text-left" }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ]),
       new ViewNode("span", {
         class: "relative size-4 shrink-0 text-muted",
@@ -9535,7 +9533,6 @@ var DropdownMenu = class extends PuzzleView {
 };
 DropdownMenu.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("button", {
       id: __d.triggerId,
@@ -9553,7 +9550,7 @@ DropdownMenu.prototype.render = function() {
     }, [
       new ViewNode(SLOT_TAG, { name: "trigger" }, [
         new ViewNode("span", {}, [
-          new ViewNode("text", { value: String(__d.label) })
+          new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
         ]),
         new ViewNode("svg", {
           class: `size-4 shrink-0 transition-[rotate] ${__d.open ? "rotate-180" : ""}`,
@@ -9590,7 +9587,7 @@ DropdownMenu.prototype.render = function() {
                 new ViewNode("div", {
                   class: "px-2.5 pt-2 pb-1 text-xs font-medium text-muted uppercase tracking-wide"
                 }, [
-                  new ViewNode("text", { value: String(item.label) })
+                  new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                 ])
               ] : [
                 ...item.kind === "link" ? [
@@ -9602,7 +9599,7 @@ DropdownMenu.prototype.render = function() {
                     class: `block w-full text-left rounded-md px-2.5 py-1.5 text-sm ${item.danger ? "text-danger hover:bg-danger-tint" : "text-body hover:bg-surface-sunken hover:text-ink"} ${item.disabled ? "opacity-50 pointer-events-none" : ""} focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring`,
                     "@click": (event) => this.events.onItemClick(i2, event)
                   }, [
-                    new ViewNode("text", { value: String(item.label) })
+                    new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                   ])
                 ] : [
                   new ViewNode("button", {
@@ -9613,7 +9610,7 @@ DropdownMenu.prototype.render = function() {
                     class: `block w-full text-left rounded-md px-2.5 py-1.5 text-sm cursor-pointer disabled:opacity-50 disabled:pointer-events-none ${item.danger ? "text-danger hover:bg-danger-tint" : "text-body hover:bg-surface-sunken hover:text-ink"} focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring`,
                     "@click": (event) => this.events.onItemClick(i2, event)
                   }, [
-                    new ViewNode("text", { value: String(item.label) })
+                    new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                   ])
                 ]
               ]
@@ -10229,7 +10226,6 @@ var SideNav = class extends PuzzleView {
 };
 SideNav.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("nav", {
     class: __d.rootClass,
     "aria-label": "Components"
@@ -10243,10 +10239,10 @@ SideNav.prototype.render = function() {
       __d.started.map(
         (item) => new ViewNode("li", { key: item.path }, [
           new ViewNode("a", {
-            href: `#${item.path}`,
+            href: `#${displayValue(item.path, true ? "item.path" : 0)}`,
             class: item.class
           }, [
-            new ViewNode("text", { value: String(item.title) })
+            new ViewNode("text", { value: displayValue(item.title, true ? "item.title" : 0) })
           ])
         ])
       )
@@ -10257,7 +10253,7 @@ SideNav.prototype.render = function() {
         class: "mt-6"
       }, [
         new ViewNode("p", { class: "mb-2 px-3 text-xs font-semibold uppercase tracking-[0.16em] text-ink" }, [
-          new ViewNode("text", { value: String(section.label) })
+          new ViewNode("text", { value: displayValue(section.label, true ? "section.label" : 0) })
         ]),
         new ViewNode(
           "ul",
@@ -10265,10 +10261,10 @@ SideNav.prototype.render = function() {
           section.items.map(
             (item) => new ViewNode("li", { key: item.path }, [
               new ViewNode("a", {
-                href: `#${item.path}`,
+                href: `#${displayValue(item.path, true ? "item.path" : 0)}`,
                 class: item.class
               }, [
-                new ViewNode("text", { value: String(item.title) })
+                new ViewNode("text", { value: displayValue(item.title, true ? "item.title" : 0) })
               ])
             ])
           )
@@ -12824,7 +12820,6 @@ var Kbd = class extends PuzzleView {
 };
 Kbd.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("kbd", { class: __d.classes }, [
     new ViewNode(SLOT_TAG)
   ]);
@@ -13145,7 +13140,6 @@ var SearchDialog = class extends PuzzleView {
 };
 SearchDialog.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: "contents" }, [
     new ViewNode("button", {
       "data-search-open": true,
@@ -13211,7 +13205,7 @@ SearchDialog.prototype.render = function() {
           new ViewNode("input", {
             "data-search-input": true,
             type: "search",
-            value: __d.query,
+            value: String(__d.query),
             placeholder: "Search components, demos, and pages\u2026",
             autocomplete: "off",
             spellcheck: "false",
@@ -13232,14 +13226,14 @@ SearchDialog.prototype.render = function() {
         }, [
           ...__d.showHint ? [
             new ViewNode("p", { class: "px-2 py-8 text-center text-sm text-muted" }, [
-              new ViewNode("text", { value: "Search " + String(__d.indexCount) + " components, demos, and pages by name or description." })
+              new ViewNode("text", { value: "Search " + displayValue(__d.indexCount, true ? "indexCount" : 0) + " components, demos, and pages by name or description." })
             ])
           ] : [
             new ViewNode("#")
           ],
           ...__d.showEmpty ? [
             new ViewNode("p", { class: "px-2 py-8 text-center text-sm text-muted" }, [
-              new ViewNode("text", { value: "No matches for \u201C" + String(__d.query) + "\u201D." })
+              new ViewNode("text", { value: "No matches for \u201C" + displayValue(__d.query, true ? "query" : 0) + "\u201D." })
             ])
           ] : [
             new ViewNode("#")
@@ -13257,15 +13251,15 @@ SearchDialog.prototype.render = function() {
                 }, [
                   new ViewNode("span", { class: "flex items-baseline gap-2" }, [
                     new ViewNode("span", { class: "font-medium text-ink" }, [
-                      new ViewNode("text", { value: String(result.title) })
+                      new ViewNode("text", { value: displayValue(result.title, true ? "result.title" : 0) })
                     ]),
                     new ViewNode("span", { class: "text-xs text-faint" }, [
-                      new ViewNode("text", { value: String(result.section) })
+                      new ViewNode("text", { value: displayValue(result.section, true ? "result.section" : 0) })
                     ])
                   ]),
                   ...result.description ? [
                     new ViewNode("span", { class: "mt-1 block text-sm/relaxed text-muted" }, [
-                      new ViewNode("text", { value: String(result.description) })
+                      new ViewNode("text", { value: displayValue(result.description, true ? "result.description" : 0) })
                     ])
                   ] : [
                     new ViewNode("#")
@@ -13374,7 +13368,6 @@ var DefaultLayout = class extends PuzzleView {
 };
 DefaultLayout.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "min-h-screen bg-page text-body" }, [
     new ViewNode("header", { class: "sticky top-0 z-40 border-b border-border bg-page/85 backdrop-blur" }, [
       new ViewNode("div", { class: "flex h-14 w-full items-center justify-between px-gutter" }, [
@@ -13387,10 +13380,9 @@ DefaultLayout.prototype.render = function() {
         new ViewNode("div", { class: "flex items-center gap-4" }, [
           new ViewNode(SearchDialog, {}, []),
           new ViewNode("span", { class: "hidden text-xs text-muted sm:inline" }, [
-            new ViewNode("text", { value: String(__d.pieceCount) + " pieces \xB7 v0.2" })
+            new ViewNode("text", { value: displayValue(__d.pieceCount, true ? "pieceCount" : 0) + " pieces \xB7 v0.2" })
           ]),
           new ViewNode(DropdownMenu, {
-            label: "Color scheme",
             align: "end",
             items: __d.schemeItems,
             triggerClass: "h-auto! rounded-md! border-0! bg-transparent! p-1.5! text-muted! hover:border-transparent! hover:bg-surface-sunken! hover:text-ink! outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
@@ -13519,7 +13511,7 @@ DefaultLayout.prototype.render = function() {
       new ViewNode("main", { class: "min-w-0 flex-1 py-10 lg:pl-10" }, [
         new ViewNode(SLOT_TAG),
         new ViewNode("footer", { class: "mt-16 border-t border-border pt-6 text-sm text-muted" }, [
-          new ViewNode("text", { value: "Puzzle Pieces \xB7 " + String(__d.pieceCount) + " copy-in components, rendered live from the registry \xB7 built with the Puzzle framework." })
+          new ViewNode("text", { value: "Puzzle Pieces \xB7 " + displayValue(__d.pieceCount, true ? "pieceCount" : 0) + " copy-in components, rendered live from the registry \xB7 built with the Puzzle framework." })
         ])
       ])
     ]),
@@ -13570,7 +13562,6 @@ var Button = class extends PuzzleView {
 };
 Button.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("button", {
     class: __d.classes,
     type: __d.type,
@@ -13612,7 +13603,6 @@ var Badge = class extends PuzzleView {
 };
 Badge.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("span", { class: __d.classes }, [
     new ViewNode(SLOT_TAG)
   ]);
@@ -16341,7 +16331,6 @@ var Code = class extends PuzzleView {
 };
 Code.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("div", {
       "data-code-scroll": true,
@@ -16354,7 +16343,7 @@ Code.prototype.render = function() {
           "aria-hidden": "true",
           class: "sticky left-0 z-10 shrink-0 select-none bg-surface py-4 pl-4 pr-3 text-right font-mono text-[13px]/relaxed text-faint whitespace-pre"
         }, [
-          new ViewNode("text", { value: String(__d.lineNumbers) })
+          new ViewNode("text", { value: displayValue(__d.lineNumbers, true ? "lineNumbers" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -16363,7 +16352,7 @@ Code.prototype.render = function() {
         "data-code-pre": true,
         class: __d.codeClass
       }, [
-        new ViewNode("text", { value: String(__d.code) })
+        new ViewNode("text", { value: displayValue(__d.code, true ? "code" : 0) })
       ])
     ]),
     ...__d.collapsedNow ? [
@@ -16470,7 +16459,6 @@ var CodeBlock = class extends PuzzleView {
 };
 CodeBlock.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(Code, {
     code: __d.code,
     lang: __d.lang,
@@ -16498,7 +16486,6 @@ var Introduction = class extends PuzzleView {
 };
 Introduction.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "xl:pr-60" }, [
       new ViewNode("article", { class: "mx-auto w-full max-w-5xl min-w-0" }, [
@@ -16598,7 +16585,6 @@ var ComponentsIndex = class extends PuzzleView {
 };
 ComponentsIndex.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "xl:pr-60" }, [
       new ViewNode("article", { class: "mx-auto w-full max-w-5xl min-w-0" }, [
@@ -16615,15 +16601,15 @@ ComponentsIndex.prototype.render = function() {
           { class: "grid gap-4 sm:grid-cols-2 xl:grid-cols-3" },
           __d.components.map(
             (item) => new ViewNode("a", {
-              href: `#${item.path}`,
+              href: `#${displayValue(item.path, true ? "item.path" : 0)}`,
               key: item.name,
               class: "block rounded-xl border border-border bg-surface p-5 transition-colors hover:border-border-strong outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             }, [
               new ViewNode("h2", { class: "text-sm font-semibold text-ink" }, [
-                new ViewNode("text", { value: String(item.title) })
+                new ViewNode("text", { value: displayValue(item.title, true ? "item.title" : 0) })
               ]),
               new ViewNode("p", { class: "mt-1.5 text-sm/relaxed text-muted" }, [
-                new ViewNode("text", { value: String(item.description) })
+                new ViewNode("text", { value: displayValue(item.description, true ? "item.description" : 0) })
               ])
             ])
           )
@@ -16654,20 +16640,19 @@ var Card = class extends PuzzleView {
 };
 Card.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.classes }, [
     ...__d.hasHeader ? [
       new ViewNode("div", { class: "flex flex-col gap-1.5 p-6 pb-0" }, [
         ...__d.title ? [
           new ViewNode("h3", { class: "font-semibold text-ink" }, [
-            new ViewNode("text", { value: String(__d.title) })
+            new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
           ])
         ] : [
           new ViewNode("#")
         ],
         ...__d.description ? [
           new ViewNode("p", { class: "text-sm text-muted" }, [
-            new ViewNode("text", { value: String(__d.description) })
+            new ViewNode("text", { value: displayValue(__d.description, true ? "description" : 0) })
           ])
         ] : [
           new ViewNode("#")
@@ -16680,7 +16665,7 @@ Card.prototype.render = function() {
       new ViewNode(SLOT_TAG)
     ]),
     new ViewNode("div", { class: "flex items-center gap-2 p-6 pt-0 empty:hidden" }, [
-      new ViewNode(SLOT_TAG, { name: "footer" }, [])
+      new ViewNode(SLOT_TAG, { name: "footer" })
     ])
   ]);
 };
@@ -16694,7 +16679,6 @@ var Demos = class extends PuzzleView {
 };
 Demos.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "xl:pr-60" }, [
       new ViewNode("article", { class: "mx-auto w-full max-w-5xl min-w-0" }, [
@@ -16717,10 +16701,10 @@ Demos.prototype.render = function() {
               class: "h-full"
             }, [
               new ViewNode("a", {
-                href: `#${demo.path}`,
+                href: `#${displayValue(demo.path, true ? "demo.path" : 0)}`,
                 class: "text-sm font-medium text-brand hover:text-brand-dark"
               }, [
-                new ViewNode("text", { value: "Open " + String(demo.title) + " \u2192" })
+                new ViewNode("text", { value: "Open " + displayValue(demo.title, true ? "demo.title" : 0) + " \u2192" })
               ])
             ])
           )
@@ -16751,7 +16735,6 @@ var Toc = class extends PuzzleView {
 };
 Toc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("nav", {
     class: __d.rootClass,
     "aria-label": "On this page"
@@ -16769,7 +16752,7 @@ Toc.prototype.render = function() {
             class: "-ml-px block border-l border-transparent pl-4 text-sm text-muted transition-colors hover:border-border-strong hover:text-ink",
             "@click": (event) => this.events.jump(item.href, event)
           }, [
-            new ViewNode("text", { value: String(item.label) })
+            new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
           ])
         ])
       )
@@ -16890,7 +16873,6 @@ var Theming = class extends PuzzleView {
 };
 Theming.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full max-w-5xl min-w-0" }, [
@@ -16925,7 +16907,7 @@ Theming.prototype.render = function() {
             ]),
             new ViewNode("text", { value: " Each chip is a bare" }),
             new ViewNode("code", { class: "rounded bg-surface px-1.5 py-0.5 font-mono text-[12px] text-ink" }, [
-              new ViewNode("text", { value: String(__d.bgToken) })
+              new ViewNode("text", { value: displayValue(__d.bgToken, true ? "bgToken" : 0) })
             ]),
             new ViewNode("text", { value: "div rendered in this page\u2019s own theme. Flip the theme toggle in the header and watch them all resolve to their dark values \u2014 that is the entire mechanism, on display." })
           ])
@@ -16956,7 +16938,7 @@ Theming.prototype.render = function() {
             ]),
             new ViewNode("text", { value: "on " }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String(__d.htmlTag) })
+              new ViewNode("text", { value: displayValue(__d.htmlTag, true ? "htmlTag" : 0) })
             ]),
             new ViewNode("text", { value: " \u2014 that flips " }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -16998,7 +16980,7 @@ Theming.prototype.render = function() {
           new ViewNode("p", { class: "mb-5 max-w-2xl text-sm/relaxed text-body" }, [
             new ViewNode("text", { value: "Four text weights, darkest to faintest. Apply them with" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String(__d.textToken) })
+              new ViewNode("text", { value: displayValue(__d.textToken, true ? "textToken" : 0) })
             ]),
             new ViewNode("text", { value: "." })
           ]),
@@ -17014,10 +16996,10 @@ Theming.prototype.render = function() {
                   new ViewNode("text", { value: "Ag" })
                 ]),
                 new ViewNode("p", { class: "mt-3 font-mono text-[13px] text-ink" }, [
-                  new ViewNode("text", { value: String(t2.cls) })
+                  new ViewNode("text", { value: displayValue(t2.cls, true ? "t.cls" : 0) })
                 ]),
                 new ViewNode("p", { class: "mt-0.5 text-xs/relaxed text-muted" }, [
-                  new ViewNode("text", { value: String(t2.role) })
+                  new ViewNode("text", { value: displayValue(t2.role, true ? "t.role" : 0) })
                 ])
               ])
             )
@@ -17030,10 +17012,10 @@ Theming.prototype.render = function() {
             class: "mt-14 scroll-mt-20"
           }, [
             new ViewNode("h2", { class: "mb-2 text-xl font-semibold tracking-tight text-ink" }, [
-              new ViewNode("text", { value: String(g.title) })
+              new ViewNode("text", { value: displayValue(g.title, true ? "g.title" : 0) })
             ]),
             new ViewNode("p", { class: "mb-5 max-w-2xl text-sm/relaxed text-body" }, [
-              new ViewNode("text", { value: String(g.desc) })
+              new ViewNode("text", { value: displayValue(g.desc, true ? "g.desc" : 0) })
             ]),
             new ViewNode(
               "div",
@@ -17045,10 +17027,10 @@ Theming.prototype.render = function() {
                 }, [
                   new ViewNode("div", { class: t2.chip }, []),
                   new ViewNode("p", { class: "mt-2.5 font-mono text-[13px] text-ink" }, [
-                    new ViewNode("text", { value: String(t2.cls) })
+                    new ViewNode("text", { value: displayValue(t2.cls, true ? "t.cls" : 0) })
                   ]),
                   new ViewNode("p", { class: "mt-0.5 text-xs/relaxed text-muted" }, [
-                    new ViewNode("text", { value: String(t2.role) })
+                    new ViewNode("text", { value: displayValue(t2.role, true ? "t.role" : 0) })
                   ])
                 ])
               )
@@ -17083,7 +17065,7 @@ Theming.prototype.render = function() {
               }, [
                 new ViewNode("div", { class: t2.chip }, []),
                 new ViewNode("p", { class: "mt-2.5 font-mono text-[12px] text-ink" }, [
-                  new ViewNode("text", { value: String(t2.short) })
+                  new ViewNode("text", { value: displayValue(t2.short, true ? "t.short" : 0) })
                 ])
               ])
             )
@@ -17316,13 +17298,12 @@ var Sidebar = class extends PuzzleView {
 };
 Sidebar.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("nav", {
     class: __d.rootClass,
     "aria-label": __d.navLabel
   }, [
     new ViewNode("div", { class: "shrink-0 empty:hidden" }, [
-      new ViewNode(SLOT_TAG, { name: "header" }, [])
+      new ViewNode(SLOT_TAG, { name: "header" })
     ]),
     new ViewNode(
       "ul",
@@ -17351,7 +17332,7 @@ Sidebar.prototype.render = function() {
                 new ViewNode("p", {
                   class: "px-3 pb-1 pt-4 text-xs font-semibold uppercase tracking-wide text-muted"
                 }, [
-                  new ViewNode("text", { value: String(item.label) })
+                  new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                 ])
               ],
               new ViewNode("#")
@@ -17384,7 +17365,7 @@ Sidebar.prototype.render = function() {
                       }, [])
                     ],
                     new ViewNode("span", { class: "sr-only" }, [
-                      new ViewNode("text", { value: String(item.label) })
+                      new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                     ])
                   ]),
                   new ViewNode("#")
@@ -17417,11 +17398,11 @@ Sidebar.prototype.render = function() {
                       }, [])
                     ],
                     new ViewNode("span", { class: "min-w-0 flex-1 truncate text-left" }, [
-                      new ViewNode("text", { value: String(item.label) })
+                      new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                     ]),
                     ...item.badge ? [
                       new ViewNode("span", { class: __d.badgeClass }, [
-                        new ViewNode("text", { value: String(item.badge) })
+                        new ViewNode("text", { value: displayValue(item.badge, true ? "item.badge" : 0) })
                       ])
                     ] : [
                       new ViewNode("#")
@@ -17458,11 +17439,11 @@ Sidebar.prototype.render = function() {
                             "aria-current": child.active ? "page" : false
                           }, [
                             new ViewNode("span", { class: "min-w-0 flex-1 truncate text-left" }, [
-                              new ViewNode("text", { value: String(child.label) })
+                              new ViewNode("text", { value: displayValue(child.label, true ? "child.label" : 0) })
                             ]),
                             ...child.badge ? [
                               new ViewNode("span", { class: __d.badgeClass }, [
-                                new ViewNode("text", { value: String(child.badge) })
+                                new ViewNode("text", { value: displayValue(child.badge, true ? "child.badge" : 0) })
                               ])
                             ] : [
                               new ViewNode("#")
@@ -17501,16 +17482,16 @@ Sidebar.prototype.render = function() {
                   ],
                   ...__d.collapsed ? [
                     new ViewNode("span", { class: "sr-only" }, [
-                      new ViewNode("text", { value: String(item.label) })
+                      new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                     ]),
                     new ViewNode("#")
                   ] : [
                     new ViewNode("span", { class: "min-w-0 flex-1 truncate text-left" }, [
-                      new ViewNode("text", { value: String(item.label) })
+                      new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                     ]),
                     ...item.badge ? [
                       new ViewNode("span", { class: __d.badgeClass }, [
-                        new ViewNode("text", { value: String(item.badge) })
+                        new ViewNode("text", { value: displayValue(item.badge, true ? "item.badge" : 0) })
                       ])
                     ] : [
                       new ViewNode("#")
@@ -17526,7 +17507,7 @@ Sidebar.prototype.render = function() {
     ),
     new ViewNode("div", { class: "mt-auto shrink-0 border-t border-border p-2" }, [
       new ViewNode("div", { class: "empty:hidden" }, [
-        new ViewNode(SLOT_TAG, { name: "footer" }, [])
+        new ViewNode(SLOT_TAG, { name: "footer" })
       ]),
       new ViewNode("button", {
         type: "button",
@@ -17683,7 +17664,6 @@ var Tabs = class extends PuzzleView {
 };
 Tabs.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     id: __d.rootId,
     class: __d.rootClass
@@ -17699,16 +17679,16 @@ Tabs.prototype.render = function() {
           type: "button",
           role: "tab",
           key: tab.value,
-          id: `${__d.rootId}-tab-${tab.value}`,
-          "aria-controls": `${__d.rootId}-panel-${tab.value}`,
+          id: `${displayValue(__d.rootId, true ? "rootId" : 0)}-tab-${displayValue(tab.value, true ? "tab.value" : 0)}`,
+          "aria-controls": `${displayValue(__d.rootId, true ? "rootId" : 0)}-panel-${displayValue(tab.value, true ? "tab.value" : 0)}`,
           "aria-selected": tab.value === __d.value ? "true" : "false",
           tabindex: tab.value === __d.rovingValue ? "0" : "-1",
           disabled: tab.disabled,
-          class: `${__d.tabBase} ${tab.value === __d.value ? String(__d.tabActive) : ""}${tab.value !== __d.value ? String(__d.tabInactive) : ""}`,
+          class: `${displayValue(__d.tabBase, true ? "tabBase" : 0)} ${tab.value === __d.value ? displayValue(__d.tabActive, true ? "tabActive" : 0) : ""}${tab.value !== __d.value ? displayValue(__d.tabInactive, true ? "tabInactive" : 0) : ""}`,
           "@click": (event) => this.events.selectTab(tab.value, event),
           "@keydown": (event) => this.events.handleKeydown(tab.value, event)
         }, [
-          new ViewNode("text", { value: String(tab.label) })
+          new ViewNode("text", { value: displayValue(tab.label, true ? "tab.label" : 0) })
         ])
       )
     )
@@ -17812,7 +17792,6 @@ var Pagination = class extends PuzzleView {
 };
 Pagination.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("nav", {
     "aria-label": "Pagination",
     class: __d.rootClass
@@ -17877,7 +17856,7 @@ Pagination.prototype.render = function() {
               "aria-current": item.ariaCurrent,
               "@click": (event) => this.events.go(item.page, event)
             }, [
-              new ViewNode("text", { value: String(item.page) })
+              new ViewNode("text", { value: displayValue(item.page, true ? "item.page" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -18154,13 +18133,12 @@ var DataTable = class extends PuzzleView {
 };
 DataTable.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.wrapperClass }, [
     new ViewNode("div", { class: "overflow-x-auto" }, [
       new ViewNode("table", { class: "w-full border-collapse text-left" }, [
         ...__d.caption ? [
           new ViewNode("caption", { class: "caption-bottom px-4 py-3 text-left text-sm text-muted" }, [
-            new ViewNode("text", { value: String(__d.caption) })
+            new ViewNode("text", { value: displayValue(__d.caption, true ? "caption" : 0) })
           ])
         ] : [
           new ViewNode("#")
@@ -18227,7 +18205,7 @@ DataTable.prototype.render = function() {
                     "@click": (event) => this.events.sortBy(col.dataKey, event)
                   }, [
                     new ViewNode("span", {}, [
-                      new ViewNode("text", { value: String(col.label) })
+                      new ViewNode("text", { value: displayValue(col.label, true ? "col.label" : 0) })
                     ]),
                     new ViewNode("svg", {
                       class: "size-3.5 shrink-0",
@@ -18250,7 +18228,7 @@ DataTable.prototype.render = function() {
                     ])
                   ])
                 ] : [
-                  new ViewNode("text", { value: String(col.label) })
+                  new ViewNode("text", { value: displayValue(col.label, true ? "col.label" : 0) })
                 ]
               ])
             )
@@ -18297,7 +18275,7 @@ DataTable.prototype.render = function() {
                     class: cell.tdClass,
                     key: cell.key
                   }, [
-                    new ViewNode("text", { value: String(cell.value) })
+                    new ViewNode("text", { value: displayValue(cell.value, true ? "cell.value" : 0) })
                   ])
                 )
               ])
@@ -18308,7 +18286,7 @@ DataTable.prototype.render = function() {
                 class: "px-4 py-8 text-center text-sm text-muted",
                 colspan: __d.colspan
               }, [
-                new ViewNode("text", { value: String(__d.emptyText) })
+                new ViewNode("text", { value: displayValue(__d.emptyText, true ? "emptyText" : 0) })
               ])
             ])
           ]
@@ -18318,7 +18296,7 @@ DataTable.prototype.render = function() {
     ...__d.paginated ? [
       new ViewNode("div", { class: "flex items-center justify-between gap-4 border-t border-border px-4 py-3" }, [
         new ViewNode("p", { class: "text-sm text-muted" }, [
-          new ViewNode("text", { value: String(__d.rangeLabel) })
+          new ViewNode("text", { value: displayValue(__d.rangeLabel, true ? "rangeLabel" : 0) })
         ]),
         ...__d.showPager ? [
           new ViewNode(Pagination, {
@@ -18495,7 +18473,6 @@ var Toolbar = class extends PuzzleView {
 };
 Toolbar.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "div",
     {
@@ -18545,7 +18522,7 @@ Toolbar.prototype.render = function() {
               new ViewNode("#")
             ],
             new ViewNode("span", { class: item.labelClass }, [
-              new ViewNode("text", { value: String(item.label) })
+              new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
             ])
           ])
         ]
@@ -18595,7 +18572,6 @@ var SearchField = class extends PuzzleView {
 };
 SearchField.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("div", { class: "relative" }, [
       new ViewNode("span", {
@@ -19101,9 +19077,8 @@ var Select = class extends PuzzleView {
 };
 Select.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
-    class: `relative ${__d.rootClass}`,
+    class: `relative ${displayValue(__d.rootClass, true ? "rootClass" : 0)}`,
     id: __d.rootId
   }, [
     new ViewNode("button", {
@@ -19119,9 +19094,9 @@ Select.prototype.render = function() {
       "@keydown": (this.__h ??= {})[1] ??= (event) => this.events.onKey(event)
     }, [
       new ViewNode("span", {
-        class: `flex-1 truncate text-left ${__d.placeholderClass}`
+        class: `flex-1 truncate text-left ${displayValue(__d.placeholderClass, true ? "placeholderClass" : 0)}`
       }, [
-        new ViewNode("text", { value: String(__d.triggerLabel) })
+        new ViewNode("text", { value: displayValue(__d.triggerLabel, true ? "triggerLabel" : 0) })
       ]),
       ...__d.indicator === "chevrons" ? [
         new ViewNode("svg", {
@@ -19207,7 +19182,7 @@ Select.prototype.render = function() {
           }, [
             ...row.kind === "option" ? [
               new ViewNode("span", { class: "flex-1 truncate" }, [
-                new ViewNode("text", { value: String(row.label) })
+                new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) })
               ]),
               ...row.selected ? [
                 new ViewNode("svg", {
@@ -19229,7 +19204,7 @@ Select.prototype.render = function() {
               ]
             ] : [
               ...row.kind === "group" ? [
-                new ViewNode("text", { value: String(row.label) })
+                new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) })
               ] : [
                 new ViewNode("#")
               ],
@@ -19482,7 +19457,6 @@ var SplitButton = class extends PuzzleView {
 };
 SplitButton.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("button", {
       type: "button",
@@ -19490,7 +19464,7 @@ SplitButton.prototype.render = function() {
       disabled: __d.disabled,
       "@click": (this.__h ??= {})[0] ??= (event) => this.events.onPrimary(event)
     }, [
-      new ViewNode("text", { value: String(__d.label) })
+      new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
     ]),
     new ViewNode("button", {
       id: __d.triggerId,
@@ -19545,7 +19519,7 @@ SplitButton.prototype.render = function() {
                 class: `block w-full text-left rounded-md px-2.5 py-1.5 text-sm cursor-pointer disabled:opacity-50 disabled:pointer-events-none ${item.danger ? "text-danger hover:bg-danger-tint" : "text-body hover:bg-surface-sunken hover:text-ink"} focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring`,
                 "@click": (event) => this.events.onItemClick(i2, event)
               }, [
-                new ViewNode("text", { value: String(item.label) })
+                new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
               ])
             ]
           ])
@@ -19573,7 +19547,6 @@ var AspectRatio = class extends PuzzleView {
 };
 AspectRatio.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.classes,
     style: __d.padStyle
@@ -19614,7 +19587,6 @@ var Checkbox = class extends PuzzleView {
 };
 Checkbox.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("label", { class: __d.wrapperClass }, [
     new ViewNode("span", { class: "relative inline-flex shrink-0 mt-0.5" }, [
       new ViewNode("input", {
@@ -19644,11 +19616,11 @@ Checkbox.prototype.render = function() {
     ...__d.label ? [
       new ViewNode("span", { class: "min-w-0" }, [
         new ViewNode("span", { class: "block text-sm text-ink" }, [
-          new ViewNode("text", { value: String(__d.label) })
+          new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
         ]),
         ...__d.hint ? [
           new ViewNode("span", { class: "block text-sm text-muted" }, [
-            new ViewNode("text", { value: String(__d.hint) })
+            new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
           ])
         ] : [
           new ViewNode("#")
@@ -19674,21 +19646,20 @@ var Empty = class extends PuzzleView {
 };
 Empty.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.classes }, [
     new ViewNode("div", { class: "mb-4 flex items-center justify-center text-muted [&>svg]:size-10 empty:hidden" }, [
-      new ViewNode(SLOT_TAG, { name: "icon" }, [])
+      new ViewNode(SLOT_TAG, { name: "icon" })
     ]),
     ...__d.title ? [
       new ViewNode("p", { class: "font-medium text-ink" }, [
-        new ViewNode("text", { value: String(__d.title) })
+        new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
       ])
     ] : [
       new ViewNode("#")
     ],
     ...__d.description ? [
       new ViewNode("p", { class: "mt-1.5 max-w-sm text-sm text-muted" }, [
-        new ViewNode("text", { value: String(__d.description) })
+        new ViewNode("text", { value: displayValue(__d.description, true ? "description" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -19719,7 +19690,6 @@ var Breadcrumb = class extends PuzzleView {
 };
 Breadcrumb.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("nav", {
     "aria-label": "Breadcrumb",
     class: __d.navClass
@@ -19737,7 +19707,7 @@ Breadcrumb.prototype.render = function() {
               class: "font-medium text-ink",
               "aria-current": "page"
             }, [
-              new ViewNode("text", { value: String(item.label) })
+              new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
             ]),
             new ViewNode("#")
           ] : [
@@ -19745,7 +19715,7 @@ Breadcrumb.prototype.render = function() {
               href: item.href,
               class: "rounded text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring"
             }, [
-              new ViewNode("text", { value: String(item.label) })
+              new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
             ]),
             new ViewNode("svg", {
               class: "size-3.5 shrink-0 text-faint",
@@ -19976,7 +19946,6 @@ var Popconfirm = class extends PuzzleView {
 };
 Popconfirm.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("span", {
       class: "inline-flex",
@@ -19988,7 +19957,7 @@ Popconfirm.prototype.render = function() {
       "@keydown:escape": (this.__h ??= {})[1] ??= (event) => this.events.onEscape(event)
     }, [
       new ViewNode(SLOT_TAG, { name: "trigger" }, [
-        new ViewNode("text", { value: String(__d.triggerLabel) })
+        new ViewNode("text", { value: displayValue(__d.triggerLabel, true ? "triggerLabel" : 0) })
       ])
     ]),
     ...__d.open ? [
@@ -20005,14 +19974,14 @@ Popconfirm.prototype.render = function() {
           id: __d.messageId,
           class: "text-sm font-medium text-ink"
         }, [
-          new ViewNode("text", { value: String(__d.message) })
+          new ViewNode("text", { value: displayValue(__d.message, true ? "message" : 0) })
         ]),
         ...__d.description ? [
           new ViewNode("p", {
             id: __d.descId,
             class: "mt-1 text-sm text-muted"
           }, [
-            new ViewNode("text", { value: String(__d.description) })
+            new ViewNode("text", { value: displayValue(__d.description, true ? "description" : 0) })
           ])
         ] : [
           new ViewNode("#")
@@ -20024,7 +19993,7 @@ Popconfirm.prototype.render = function() {
             "data-popconfirm-cancel": true,
             "@click": (this.__h ??= {})[3] ??= (event) => this.events.handleCancel(event)
           }, [
-            new ViewNode("text", { value: String(__d.cancelLabel) })
+            new ViewNode("text", { value: displayValue(__d.cancelLabel, true ? "cancelLabel" : 0) })
           ]),
           new ViewNode("button", {
             type: "button",
@@ -20032,7 +20001,7 @@ Popconfirm.prototype.render = function() {
             "data-popconfirm-confirm": true,
             "@click": (this.__h ??= {})[4] ??= (event) => this.events.handleConfirm(event)
           }, [
-            new ViewNode("text", { value: String(__d.confirmLabel) })
+            new ViewNode("text", { value: displayValue(__d.confirmLabel, true ? "confirmLabel" : 0) })
           ])
         ])
       ])
@@ -20093,14 +20062,13 @@ var Field = class extends PuzzleView {
 };
 Field.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.id,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -20126,7 +20094,7 @@ Field.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -20134,7 +20102,7 @@ Field.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -20174,16 +20142,15 @@ var Switch = class extends PuzzleView {
 };
 Switch.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("label", { class: __d.wrapperClass }, [
     ...__d.label ? [
       new ViewNode("span", { class: "min-w-0 flex-1" }, [
         new ViewNode("span", { class: "block text-sm text-ink" }, [
-          new ViewNode("text", { value: String(__d.label) })
+          new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
         ]),
         ...__d.hint ? [
           new ViewNode("span", { class: "block text-sm text-muted" }, [
-            new ViewNode("text", { value: String(__d.hint) })
+            new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
           ])
         ] : [
           new ViewNode("#")
@@ -20388,14 +20355,13 @@ var NumberField = class extends PuzzleView {
 };
 NumberField.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.id,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -20408,7 +20374,7 @@ NumberField.prototype.render = function() {
         inputmode: "decimal",
         role: "spinbutton",
         class: __d.inputClass,
-        value: __d.display,
+        value: String(__d.display),
         placeholder: __d.placeholder,
         name: __d.name,
         disabled: __d.disabled,
@@ -20475,7 +20441,7 @@ NumberField.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -20483,7 +20449,7 @@ NumberField.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -20670,14 +20636,13 @@ var TagsInput = class extends PuzzleView {
 };
 TagsInput.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.inputId,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -20694,7 +20659,7 @@ TagsInput.prototype.render = function() {
           role: "listitem"
         }, [
           new ViewNode("span", { class: "truncate" }, [
-            new ViewNode("text", { value: String(chip.label) })
+            new ViewNode("text", { value: displayValue(chip.label, true ? "chip.label" : 0) })
           ]),
           new ViewNode("button", {
             type: "button",
@@ -20755,7 +20720,7 @@ TagsInput.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -20763,7 +20728,7 @@ TagsInput.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -20822,14 +20787,13 @@ var Textarea = class extends PuzzleView {
 };
 Textarea.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.id,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -20848,14 +20812,14 @@ Textarea.prototype.render = function() {
       "@blur": (this.__h ??= {})[1] ??= (event) => this.events.handleBlur(event),
       "@focus": (this.__h ??= {})[2] ??= (event) => this.events.handleFocus(event)
     }, [
-      new ViewNode("text", { value: String(__d.value) })
+      new ViewNode("text", { value: displayValue(__d.value, true ? "value" : 0) })
     ]),
     ...__d.error ? [
       new ViewNode("p", {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -20863,7 +20827,7 @@ Textarea.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -20909,7 +20873,6 @@ var DescriptionList = class extends PuzzleView {
 };
 DescriptionList.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "dl",
     { class: __d.rootClass },
@@ -20919,10 +20882,10 @@ DescriptionList.prototype.render = function() {
         key: item.key
       }, [
         new ViewNode("dt", { class: item.dtClass }, [
-          new ViewNode("text", { value: String(item.term) })
+          new ViewNode("text", { value: displayValue(item.term, true ? "item.term" : 0) })
         ]),
         new ViewNode("dd", { class: item.ddClass }, [
-          new ViewNode("text", { value: String(item.description) })
+          new ViewNode("text", { value: displayValue(item.description, true ? "item.description" : 0) })
         ])
       ])
     )
@@ -20938,7 +20901,6 @@ var DemoHeader = class extends PuzzleView {
 };
 DemoHeader.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("header", { class: "mb-8" }, [
     new ViewNode("a", {
       href: "#/demos",
@@ -20959,7 +20921,7 @@ DemoHeader.prototype.render = function() {
       new ViewNode("text", { value: "Demos" })
     ]),
     new ViewNode("h1", { class: "mt-2 text-3xl font-semibold tracking-tight text-ink" }, [
-      new ViewNode("text", { value: String(__d.title) })
+      new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
     ]),
     new ViewNode("p", { class: "mt-2 max-w-3xl text-body" }, [
       new ViewNode(SLOT_TAG)
@@ -21359,7 +21321,6 @@ var AdminDemo = class extends PuzzleView {
 };
 AdminDemo.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
       new ViewNode(DemoHeader, { title: "Commerce Admin" }, [
@@ -21443,14 +21404,14 @@ AdminDemo.prototype.render = function() {
                     key: m.label
                   }, [
                     new ViewNode("p", { class: "text-sm text-muted" }, [
-                      new ViewNode("text", { value: String(m.label) })
+                      new ViewNode("text", { value: displayValue(m.label, true ? "m.label" : 0) })
                     ]),
                     new ViewNode("p", { class: "mt-1 text-2xl font-semibold text-ink" }, [
-                      new ViewNode("text", { value: String(m.value) })
+                      new ViewNode("text", { value: displayValue(m.value, true ? "m.value" : 0) })
                     ]),
                     new ViewNode("div", { class: "mt-2" }, [
                       new ViewNode(Badge, { variant: m.variant }, [
-                        new ViewNode("text", { value: String(m.delta) })
+                        new ViewNode("text", { value: displayValue(m.delta, true ? "m.delta" : 0) })
                       ])
                     ])
                   ])
@@ -21556,7 +21517,7 @@ AdminDemo.prototype.render = function() {
                     new ViewNode("text", { value: "Products" })
                   ]),
                   new ViewNode("p", { class: "text-sm text-muted" }, [
-                    new ViewNode("text", { value: String(__d.shownCount) + " of " + String(__d.totalProducts) + " products" })
+                    new ViewNode("text", { value: displayValue(__d.shownCount, true ? "shownCount" : 0) + " of " + displayValue(__d.totalProducts, true ? "totalProducts" : 0) + " products" })
                   ])
                 ]),
                 new ViewNode(SplitButton, {
@@ -21599,7 +21560,7 @@ AdminDemo.prototype.render = function() {
                 ...__d.selectedCount > 0 ? [
                   new ViewNode("div", { class: "flex items-center gap-3" }, [
                     new ViewNode("span", { class: "text-sm text-muted" }, [
-                      new ViewNode("text", { value: String(__d.selectedCount) + " selected" })
+                      new ViewNode("text", { value: displayValue(__d.selectedCount, true ? "selectedCount" : 0) + " selected" })
                     ]),
                     new ViewNode(Toolbar, {
                       label: "Bulk actions",
@@ -21688,25 +21649,25 @@ AdminDemo.prototype.render = function() {
                             class: "overflow-hidden rounded-md"
                           }, [
                             new ViewNode("div", {
-                              class: `flex items-center justify-center ${p.thumbClass} text-base font-semibold text-body`
+                              class: `flex items-center justify-center ${displayValue(p.thumbClass, true ? "p.thumbClass" : 0)} text-base font-semibold text-body`
                             }, [
-                              new ViewNode("text", { value: String(p.initial) })
+                              new ViewNode("text", { value: displayValue(p.initial, true ? "p.initial" : 0) })
                             ])
                           ])
                         ]),
                         new ViewNode("div", { class: "min-w-0 flex-1" }, [
                           new ViewNode("p", { class: "truncate text-sm font-medium text-ink" }, [
-                            new ViewNode("text", { value: String(p.title) })
+                            new ViewNode("text", { value: displayValue(p.title, true ? "p.title" : 0) })
                           ]),
                           new ViewNode("p", { class: "truncate text-xs text-muted" }, [
-                            new ViewNode("text", { value: String(p.vendor) + " \xB7 " + String(p.inventory) + " in stock" })
+                            new ViewNode("text", { value: displayValue(p.vendor, true ? "p.vendor" : 0) + " \xB7 " + displayValue(p.inventory, true ? "p.inventory" : 0) + " in stock" })
                           ])
                         ]),
                         new ViewNode(Badge, { variant: p.badgeVariant }, [
-                          new ViewNode("text", { value: String(p.status) })
+                          new ViewNode("text", { value: displayValue(p.status, true ? "p.status" : 0) })
                         ]),
                         new ViewNode("span", { class: "text-sm tabular-nums text-ink" }, [
-                          new ViewNode("text", { value: "$" + String(p.price) })
+                          new ViewNode("text", { value: "$" + displayValue(p.price, true ? "p.price" : 0) })
                         ]),
                         new ViewNode(DropdownMenu, {
                           label: "Manage",
@@ -21767,22 +21728,22 @@ AdminDemo.prototype.render = function() {
                         class: "w-full overflow-hidden rounded-lg"
                       }, [
                         new ViewNode("div", {
-                          class: `flex items-center justify-center ${c2.thumbClass} text-sm font-semibold text-body`
+                          class: `flex items-center justify-center ${displayValue(c2.thumbClass, true ? "c.thumbClass" : 0)} text-sm font-semibold text-body`
                         }, [
-                          new ViewNode("text", { value: String(c2.name) })
+                          new ViewNode("text", { value: displayValue(c2.name, true ? "c.name" : 0) })
                         ])
                       ]),
                       new ViewNode("div", { class: "mt-3 flex items-start justify-between gap-2" }, [
                         new ViewNode("div", { class: "min-w-0" }, [
                           new ViewNode("p", { class: "truncate text-sm font-medium text-ink" }, [
-                            new ViewNode("text", { value: String(c2.name) })
+                            new ViewNode("text", { value: displayValue(c2.name, true ? "c.name" : 0) })
                           ]),
                           new ViewNode("p", { class: "text-xs text-muted" }, [
-                            new ViewNode("text", { value: String(c2.count) + " products" })
+                            new ViewNode("text", { value: displayValue(c2.count, true ? "c.count" : 0) + " products" })
                           ])
                         ]),
                         new ViewNode(Badge, { variant: c2.badgeVariant }, [
-                          new ViewNode("text", { value: String(c2.status) })
+                          new ViewNode("text", { value: displayValue(c2.status, true ? "c.status" : 0) })
                         ])
                       ]),
                       new ViewNode("div", { class: "mt-3 flex items-center justify-between gap-2" }, [
@@ -22300,7 +22261,6 @@ var Sparkline = class extends PuzzleView {
 };
 Sparkline.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("svg", {
     class: __d.rootClass,
     role: "img",
@@ -22375,13 +22335,12 @@ var StatCard = class extends PuzzleView {
 };
 StatCard.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("p", { class: "text-sm text-muted" }, [
-      new ViewNode("text", { value: String(__d.label) })
+      new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
     ]),
     new ViewNode("p", { class: "mt-1 text-3xl font-semibold text-ink" }, [
-      new ViewNode("text", { value: String(__d.value) })
+      new ViewNode("text", { value: displayValue(__d.value, true ? "value" : 0) })
     ]),
     ...__d.hasFooter ? [
       new ViewNode("div", { class: "mt-3 flex items-center justify-between gap-3" }, [
@@ -22401,10 +22360,10 @@ StatCard.prototype.render = function() {
                 new ViewNode("#")
               ],
               new ViewNode("span", { "aria-hidden": "true" }, [
-                new ViewNode("text", { value: String(__d.deltaText) })
+                new ViewNode("text", { value: displayValue(__d.deltaText, true ? "deltaText" : 0) })
               ]),
               new ViewNode("span", { class: "sr-only" }, [
-                new ViewNode("text", { value: String(__d.srText) })
+                new ViewNode("text", { value: displayValue(__d.srText, true ? "srText" : 0) })
               ])
             ])
           ] : [
@@ -22412,7 +22371,7 @@ StatCard.prototype.render = function() {
           ],
           ...__d.showDeltaLabel ? [
             new ViewNode("span", { class: "truncate text-xs text-muted" }, [
-              new ViewNode("text", { value: String(__d.deltaLabel) })
+              new ViewNode("text", { value: displayValue(__d.deltaLabel, true ? "deltaLabel" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -22661,7 +22620,6 @@ var LineChart = class extends PuzzleView {
 };
 LineChart.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("figure", {
     class: __d.rootClass,
     "aria-label": __d.label
@@ -22676,10 +22634,10 @@ LineChart.prototype.render = function() {
             key: item.key
           }, [
             new ViewNode("span", {
-              class: `size-2 shrink-0 rounded-[2px] ${item.swatchClass}`
+              class: `size-2 shrink-0 rounded-[2px] ${displayValue(item.swatchClass, true ? "item.swatchClass" : 0)}`
             }, []),
             new ViewNode("span", { class: "text-sm text-body" }, [
-              new ViewNode("text", { value: String(item.label) })
+              new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
             ])
           ])
         )
@@ -22744,7 +22702,7 @@ LineChart.prototype.render = function() {
           __d.seriesPaths.map(
             (s2) => new ViewNode("path", {
               d: s2.path,
-              class: `fill-none ${s2.strokeClass}`,
+              class: `fill-none ${displayValue(s2.strokeClass, true ? "s.strokeClass" : 0)}`,
               "stroke-width": "2",
               "stroke-linecap": "round",
               "stroke-linejoin": "round",
@@ -22761,7 +22719,7 @@ LineChart.prototype.render = function() {
                 cx: m.cx,
                 cy: m.cy,
                 r: "3.5",
-                class: `stroke-surface ${m.fillClass}`,
+                class: `stroke-surface ${displayValue(m.fillClass, true ? "m.fillClass" : 0)}`,
                 "stroke-width": "2",
                 key: m.key
               }, [])
@@ -22784,7 +22742,7 @@ LineChart.prototype.render = function() {
               style: g.style,
               key: g.key
             }, [
-              new ViewNode("text", { value: String(g.label) })
+              new ViewNode("text", { value: displayValue(g.label, true ? "g.label" : 0) })
             ])
           )
         )
@@ -22803,7 +22761,7 @@ LineChart.prototype.render = function() {
             style: x.style,
             key: x.key
           }, [
-            new ViewNode("text", { value: String(x.label) })
+            new ViewNode("text", { value: displayValue(x.label, true ? "x.label" : 0) })
           ])
         )
       ),
@@ -22813,7 +22771,7 @@ LineChart.prototype.render = function() {
           style: __d.tooltipStyle
         }, [
           new ViewNode("div", { class: "mb-1 text-muted" }, [
-            new ViewNode("text", { value: String(__d.tooltipX) })
+            new ViewNode("text", { value: displayValue(__d.tooltipX, true ? "tooltipX" : 0) })
           ]),
           ...__d.tooltipRows.map(
             (row) => new ViewNode("div", {
@@ -22821,13 +22779,13 @@ LineChart.prototype.render = function() {
               key: row.key
             }, [
               new ViewNode("span", {
-                class: `size-2 shrink-0 rounded-full ${row.swatchClass}`
+                class: `size-2 shrink-0 rounded-full ${displayValue(row.swatchClass, true ? "row.swatchClass" : 0)}`
               }, []),
               new ViewNode("span", { class: "text-body" }, [
-                new ViewNode("text", { value: String(row.label) })
+                new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) })
               ]),
               new ViewNode("span", { class: "ml-auto font-medium text-ink" }, [
-                new ViewNode("text", { value: String(row.value) })
+                new ViewNode("text", { value: displayValue(row.value, true ? "row.value" : 0) })
               ])
             ])
           )
@@ -22838,19 +22796,19 @@ LineChart.prototype.render = function() {
     ]),
     new ViewNode("table", { class: "sr-only" }, [
       new ViewNode("caption", {}, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ]),
       new ViewNode("thead", {}, [
         new ViewNode("tr", {}, [
           new ViewNode("th", { scope: "col" }, [
-            new ViewNode("text", { value: String(__d.xHeader) })
+            new ViewNode("text", { value: displayValue(__d.xHeader, true ? "xHeader" : 0) })
           ]),
           ...__d.tableHead.map(
             (h) => new ViewNode("th", {
               scope: "col",
               key: h.key
             }, [
-              new ViewNode("text", { value: String(h.label) })
+              new ViewNode("text", { value: displayValue(h.label, true ? "h.label" : 0) })
             ])
           )
         ])
@@ -22861,11 +22819,11 @@ LineChart.prototype.render = function() {
         __d.tableRows.map(
           (r2) => new ViewNode("tr", { key: r2.key }, [
             new ViewNode("th", { scope: "row" }, [
-              new ViewNode("text", { value: String(r2.x) })
+              new ViewNode("text", { value: displayValue(r2.x, true ? "r.x" : 0) })
             ]),
             ...r2.cells.map(
               (c2) => new ViewNode("td", { key: c2.key }, [
-                new ViewNode("text", { value: String(c2.value) })
+                new ViewNode("text", { value: displayValue(c2.value, true ? "c.value" : 0) })
               ])
             )
           ])
@@ -23159,7 +23117,6 @@ var AreaChart = class extends PuzzleView {
 };
 AreaChart.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("figure", {
     class: __d.rootClass,
     "aria-label": __d.label
@@ -23174,10 +23131,10 @@ AreaChart.prototype.render = function() {
             key: item.key
           }, [
             new ViewNode("span", {
-              class: `size-2 shrink-0 rounded-[2px] ${item.swatchClass}`
+              class: `size-2 shrink-0 rounded-[2px] ${displayValue(item.swatchClass, true ? "item.swatchClass" : 0)}`
             }, []),
             new ViewNode("span", { class: "text-sm text-body" }, [
-              new ViewNode("text", { value: String(item.label) })
+              new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
             ])
           ])
         )
@@ -23254,7 +23211,7 @@ AreaChart.prototype.render = function() {
           __d.seriesPaths.map(
             (s2) => new ViewNode("path", {
               d: s2.path,
-              class: `fill-none ${s2.strokeClass}`,
+              class: `fill-none ${displayValue(s2.strokeClass, true ? "s.strokeClass" : 0)}`,
               "stroke-width": "2",
               "stroke-linecap": "round",
               "stroke-linejoin": "round",
@@ -23271,7 +23228,7 @@ AreaChart.prototype.render = function() {
                 cx: m.cx,
                 cy: m.cy,
                 r: "3.5",
-                class: `stroke-surface ${m.fillClass}`,
+                class: `stroke-surface ${displayValue(m.fillClass, true ? "m.fillClass" : 0)}`,
                 "stroke-width": "2",
                 key: m.key
               }, [])
@@ -23294,7 +23251,7 @@ AreaChart.prototype.render = function() {
               style: g.style,
               key: g.key
             }, [
-              new ViewNode("text", { value: String(g.label) })
+              new ViewNode("text", { value: displayValue(g.label, true ? "g.label" : 0) })
             ])
           )
         )
@@ -23313,7 +23270,7 @@ AreaChart.prototype.render = function() {
             style: x.style,
             key: x.key
           }, [
-            new ViewNode("text", { value: String(x.label) })
+            new ViewNode("text", { value: displayValue(x.label, true ? "x.label" : 0) })
           ])
         )
       ),
@@ -23323,7 +23280,7 @@ AreaChart.prototype.render = function() {
           style: __d.tooltipStyle
         }, [
           new ViewNode("div", { class: "mb-1 text-muted" }, [
-            new ViewNode("text", { value: String(__d.tooltipX) })
+            new ViewNode("text", { value: displayValue(__d.tooltipX, true ? "tooltipX" : 0) })
           ]),
           ...__d.tooltipRows.map(
             (row) => new ViewNode("div", {
@@ -23331,13 +23288,13 @@ AreaChart.prototype.render = function() {
               key: row.key
             }, [
               new ViewNode("span", {
-                class: `size-2 shrink-0 rounded-full ${row.swatchClass}`
+                class: `size-2 shrink-0 rounded-full ${displayValue(row.swatchClass, true ? "row.swatchClass" : 0)}`
               }, []),
               new ViewNode("span", { class: "text-body" }, [
-                new ViewNode("text", { value: String(row.label) })
+                new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) })
               ]),
               new ViewNode("span", { class: "ml-auto font-medium text-ink" }, [
-                new ViewNode("text", { value: String(row.value) })
+                new ViewNode("text", { value: displayValue(row.value, true ? "row.value" : 0) })
               ])
             ])
           )
@@ -23348,19 +23305,19 @@ AreaChart.prototype.render = function() {
     ]),
     new ViewNode("table", { class: "sr-only" }, [
       new ViewNode("caption", {}, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ]),
       new ViewNode("thead", {}, [
         new ViewNode("tr", {}, [
           new ViewNode("th", { scope: "col" }, [
-            new ViewNode("text", { value: String(__d.xHeader) })
+            new ViewNode("text", { value: displayValue(__d.xHeader, true ? "xHeader" : 0) })
           ]),
           ...__d.tableHead.map(
             (h) => new ViewNode("th", {
               scope: "col",
               key: h.key
             }, [
-              new ViewNode("text", { value: String(h.label) })
+              new ViewNode("text", { value: displayValue(h.label, true ? "h.label" : 0) })
             ])
           )
         ])
@@ -23371,11 +23328,11 @@ AreaChart.prototype.render = function() {
         __d.tableRows.map(
           (r2) => new ViewNode("tr", { key: r2.key }, [
             new ViewNode("th", { scope: "row" }, [
-              new ViewNode("text", { value: String(r2.x) })
+              new ViewNode("text", { value: displayValue(r2.x, true ? "r.x" : 0) })
             ]),
             ...r2.cells.map(
               (c2) => new ViewNode("td", { key: c2.key }, [
-                new ViewNode("text", { value: String(c2.value) })
+                new ViewNode("text", { value: displayValue(c2.value, true ? "c.value" : 0) })
               ])
             )
           ])
@@ -23648,7 +23605,6 @@ var BarChart = class extends PuzzleView {
 };
 BarChart.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("figure", {
     class: __d.figureClass,
     "aria-label": __d.label
@@ -23664,7 +23620,7 @@ BarChart.prototype.render = function() {
           }, [
             new ViewNode("span", { class: item.swatchClass }, []),
             new ViewNode("span", { class: "text-sm text-body" }, [
-              new ViewNode("text", { value: String(item.label) })
+              new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
             ])
           ])
         )
@@ -23718,7 +23674,7 @@ BarChart.prototype.render = function() {
               style: g.style,
               key: g.key
             }, [
-              new ViewNode("text", { value: String(g.label) })
+              new ViewNode("text", { value: displayValue(g.label, true ? "g.label" : 0) })
             ])
           )
         )
@@ -23737,7 +23693,7 @@ BarChart.prototype.render = function() {
             style: x.style,
             key: x.key
           }, [
-            new ViewNode("text", { value: String(x.label) })
+            new ViewNode("text", { value: displayValue(x.label, true ? "x.label" : 0) })
           ])
         )
       ),
@@ -23747,10 +23703,10 @@ BarChart.prototype.render = function() {
           style: __d.tipStyle
         }, [
           new ViewNode("div", { class: "text-muted" }, [
-            new ViewNode("text", { value: String(__d.tip.label) })
+            new ViewNode("text", { value: displayValue(__d.tip.label, true ? "tip.label" : 0) })
           ]),
           new ViewNode("div", { class: "font-medium text-ink tabular-nums" }, [
-            new ViewNode("text", { value: String(__d.tip.value) })
+            new ViewNode("text", { value: displayValue(__d.tip.value, true ? "tip.value" : 0) })
           ])
         ])
       ] : [
@@ -23759,19 +23715,19 @@ BarChart.prototype.render = function() {
     ]),
     new ViewNode("table", { class: "sr-only" }, [
       new ViewNode("caption", {}, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ]),
       new ViewNode("thead", {}, [
         new ViewNode("tr", {}, [
           new ViewNode("th", { scope: "col" }, [
-            new ViewNode("text", { value: String(__d.xLabel) })
+            new ViewNode("text", { value: displayValue(__d.xLabel, true ? "xLabel" : 0) })
           ]),
           ...__d.seriesHeaders.map(
             (h) => new ViewNode("th", {
               scope: "col",
               key: h.key
             }, [
-              new ViewNode("text", { value: String(h.label) })
+              new ViewNode("text", { value: displayValue(h.label, true ? "h.label" : 0) })
             ])
           )
         ])
@@ -23782,11 +23738,11 @@ BarChart.prototype.render = function() {
         __d.tableRows.map(
           (r2) => new ViewNode("tr", { key: r2.key }, [
             new ViewNode("th", { scope: "row" }, [
-              new ViewNode("text", { value: String(r2.cat) })
+              new ViewNode("text", { value: displayValue(r2.cat, true ? "r.cat" : 0) })
             ]),
             ...r2.cells.map(
               (c2) => new ViewNode("td", { key: c2.key }, [
-                new ViewNode("text", { value: String(c2.value) })
+                new ViewNode("text", { value: displayValue(c2.value, true ? "c.value" : 0) })
               ])
             )
           ])
@@ -23963,7 +23919,6 @@ var PieChart = class extends PuzzleView {
 };
 PieChart.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("figure", {
     class: __d.figureClass,
     "aria-label": __d.label
@@ -23996,10 +23951,10 @@ PieChart.prototype.render = function() {
           class: "pointer-events-none absolute inset-0 flex flex-col items-center justify-center"
         }, [
           new ViewNode("span", { class: "text-2xl font-semibold text-ink" }, [
-            new ViewNode("text", { value: String(__d.totalValue) })
+            new ViewNode("text", { value: displayValue(__d.totalValue, true ? "totalValue" : 0) })
           ]),
           new ViewNode("span", { class: "mt-0.5 text-xs text-muted" }, [
-            new ViewNode("text", { value: String(__d.totalLabel) })
+            new ViewNode("text", { value: displayValue(__d.totalLabel, true ? "totalLabel" : 0) })
           ])
         ])
       ] : [
@@ -24011,12 +23966,12 @@ PieChart.prototype.render = function() {
           style: __d.tipStyle
         }, [
           new ViewNode("div", { class: "text-muted" }, [
-            new ViewNode("text", { value: String(__d.tip.label) })
+            new ViewNode("text", { value: displayValue(__d.tip.label, true ? "tip.label" : 0) })
           ]),
           new ViewNode("div", { class: "font-medium text-ink tabular-nums" }, [
-            new ViewNode("text", { value: String(__d.tip.value) + " " }),
+            new ViewNode("text", { value: displayValue(__d.tip.value, true ? "tip.value" : 0) + " " }),
             new ViewNode("span", { class: "font-normal text-muted" }, [
-              new ViewNode("text", { value: String(__d.tip.percent) })
+              new ViewNode("text", { value: displayValue(__d.tip.percent, true ? "tip.percent" : 0) })
             ])
           ])
         ])
@@ -24035,10 +23990,10 @@ PieChart.prototype.render = function() {
           }, [
             new ViewNode("span", { class: item.swatchClass }, []),
             new ViewNode("span", { class: "text-sm text-body" }, [
-              new ViewNode("text", { value: String(item.label) })
+              new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
             ]),
             new ViewNode("span", { class: "ml-auto pl-3 text-sm text-muted tabular-nums" }, [
-              new ViewNode("text", { value: String(item.value) })
+              new ViewNode("text", { value: displayValue(item.value, true ? "item.value" : 0) })
             ])
           ])
         )
@@ -24048,7 +24003,7 @@ PieChart.prototype.render = function() {
     ],
     new ViewNode("table", { class: "sr-only" }, [
       new ViewNode("caption", {}, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ]),
       new ViewNode("thead", {}, [
         new ViewNode("tr", {}, [
@@ -24069,13 +24024,13 @@ PieChart.prototype.render = function() {
         __d.tableRows.map(
           (r2) => new ViewNode("tr", { key: r2.key }, [
             new ViewNode("th", { scope: "row" }, [
-              new ViewNode("text", { value: String(r2.label) })
+              new ViewNode("text", { value: displayValue(r2.label, true ? "r.label" : 0) })
             ]),
             new ViewNode("td", {}, [
-              new ViewNode("text", { value: String(r2.value) })
+              new ViewNode("text", { value: displayValue(r2.value, true ? "r.value" : 0) })
             ]),
             new ViewNode("td", {}, [
-              new ViewNode("text", { value: String(r2.percent) })
+              new ViewNode("text", { value: displayValue(r2.percent, true ? "r.percent" : 0) })
             ])
           ])
         )
@@ -24133,7 +24088,6 @@ var ProgressRing = class extends PuzzleView {
 };
 ProgressRing.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     style: __d.rootStyle,
@@ -24180,11 +24134,11 @@ ProgressRing.prototype.render = function() {
           class: "font-semibold leading-none text-ink",
           style: __d.valueStyle
         }, [
-          new ViewNode("text", { value: String(__d.valueLabel) })
+          new ViewNode("text", { value: displayValue(__d.valueLabel, true ? "valueLabel" : 0) })
         ]),
         ...__d.showCaption ? [
           new ViewNode("span", { class: "mt-1 text-xs leading-none text-muted" }, [
-            new ViewNode("text", { value: String(__d.label) })
+            new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
           ])
         ] : [
           new ViewNode("#")
@@ -24252,7 +24206,6 @@ var AnalyticsDemo = class extends PuzzleView {
 };
 AnalyticsDemo.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
       new ViewNode(DemoHeader, { title: "Analytics" }, [
@@ -25066,7 +25019,6 @@ var Calendar = class extends PuzzleView {
 };
 Calendar.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     role: "group",
@@ -25104,7 +25056,7 @@ Calendar.prototype.render = function() {
         "@click": (this.__h ??= {})[1] ??= (event) => this.events.onZoomOut(event)
       }, [
         new ViewNode("span", {}, [
-          new ViewNode("text", { value: String(__d.monthLabel) })
+          new ViewNode("text", { value: displayValue(__d.monthLabel, true ? "monthLabel" : 0) })
         ]),
         ...__d.showChevron ? [
           new ViewNode("svg", {
@@ -25171,7 +25123,7 @@ Calendar.prototype.render = function() {
                 class: "no-underline",
                 title: wd.long
               }, [
-                new ViewNode("text", { value: String(wd.narrow) })
+                new ViewNode("text", { value: displayValue(wd.narrow, true ? "wd.narrow" : 0) })
               ])
             ])
           )
@@ -25201,7 +25153,7 @@ Calendar.prototype.render = function() {
                   "aria-disabled": d.ariaDisabled,
                   "@click": (event) => this.events.onDay(d, event)
                 }, [
-                  new ViewNode("text", { value: String(d.dayNum) })
+                  new ViewNode("text", { value: displayValue(d.dayNum, true ? "d.dayNum" : 0) })
                 ])
               ])
             )
@@ -25242,7 +25194,7 @@ Calendar.prototype.render = function() {
                     "aria-disabled": m.ariaDisabled,
                     "@click": (event) => this.events.onMonth(m, event)
                   }, [
-                    new ViewNode("text", { value: String(m.label) })
+                    new ViewNode("text", { value: displayValue(m.label, true ? "m.label" : 0) })
                   ])
                 ])
               )
@@ -25282,7 +25234,7 @@ Calendar.prototype.render = function() {
                     "aria-disabled": y.ariaDisabled,
                     "@click": (event) => this.events.onYear(y, event)
                   }, [
-                    new ViewNode("text", { value: String(y.label) })
+                    new ViewNode("text", { value: displayValue(y.label, true ? "y.label" : 0) })
                   ])
                 ])
               )
@@ -25591,14 +25543,13 @@ var DateRangePicker = class extends PuzzleView {
 };
 DateRangePicker.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.triggerId,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -25619,9 +25570,9 @@ DateRangePicker.prototype.render = function() {
         "@keydown": (this.__h ??= {})[1] ??= (event) => this.events.onTriggerKey(event)
       }, [
         new ViewNode("span", {
-          class: `flex-1 truncate text-left ${__d.placeholderClass}`
+          class: `flex-1 truncate text-left ${displayValue(__d.placeholderClass, true ? "placeholderClass" : 0)}`
         }, [
-          new ViewNode("text", { value: String(__d.triggerLabel) })
+          new ViewNode("text", { value: displayValue(__d.triggerLabel, true ? "triggerLabel" : 0) })
         ]),
         new ViewNode("svg", {
           class: "size-4 shrink-0 text-muted",
@@ -25687,7 +25638,7 @@ DateRangePicker.prototype.render = function() {
                     "@click": (event) => this.events.onPreset(p, event),
                     key: p.key
                   }, [
-                    new ViewNode("text", { value: String(p.label) })
+                    new ViewNode("text", { value: displayValue(p.label, true ? "p.label" : 0) })
                   ])
                 )
               )
@@ -25753,7 +25704,7 @@ DateRangePicker.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -25761,7 +25712,7 @@ DateRangePicker.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -25834,7 +25785,6 @@ var Meter = class extends PuzzleView {
 };
 Meter.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     role: "meter",
@@ -25847,10 +25797,10 @@ Meter.prototype.render = function() {
     ...__d.showHeader ? [
       new ViewNode("div", { class: "flex justify-between mb-1.5" }, [
         new ViewNode("span", { class: "text-sm font-medium text-ink" }, [
-          new ViewNode("text", { value: String(__d.label) })
+          new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
         ]),
         new ViewNode("span", { class: "text-sm text-muted" }, [
-          new ViewNode("text", { value: String(__d.valueLabel) })
+          new ViewNode("text", { value: displayValue(__d.valueLabel, true ? "valueLabel" : 0) })
         ])
       ])
     ] : [
@@ -25910,7 +25860,6 @@ var Avatar = class extends PuzzleView {
 };
 Avatar.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("span", {
     class: __d.rootClass,
     style: __d.fallbackStyle
@@ -25924,7 +25873,7 @@ Avatar.prototype.render = function() {
       }, [])
     ] : [
       ...__d.hasName ? [
-        new ViewNode("text", { value: String(__d.initials) })
+        new ViewNode("text", { value: displayValue(__d.initials, true ? "initials" : 0) })
       ] : [
         new ViewNode("svg", {
           class: "w-1/2 h-1/2",
@@ -25998,7 +25947,6 @@ var AvatarGroup = class extends PuzzleView {
 };
 AvatarGroup.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "div",
     {
@@ -26022,7 +25970,7 @@ AvatarGroup.prototype.render = function() {
             class: item.chipClass,
             "aria-label": item.chipLabel
           }, [
-            new ViewNode("text", { value: String(item.chipText) })
+            new ViewNode("text", { value: displayValue(item.chipText, true ? "item.chipText" : 0) })
           ])
         ]
       ])
@@ -26210,7 +26158,6 @@ var Dialog = class extends PuzzleView {
 };
 Dialog.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("dialog", {
     class: __d.panelClass,
     "aria-labelledby": __d.labelledby,
@@ -26225,7 +26172,7 @@ Dialog.prototype.render = function() {
             id: __d.titleId,
             class: "text-lg font-semibold text-ink"
           }, [
-            new ViewNode("text", { value: String(__d.title) })
+            new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
           ])
         ] : [
           new ViewNode("#")
@@ -26235,7 +26182,7 @@ Dialog.prototype.render = function() {
             id: __d.descId,
             class: "mt-1.5 text-sm text-muted"
           }, [
-            new ViewNode("text", { value: String(__d.description) })
+            new ViewNode("text", { value: displayValue(__d.description, true ? "description" : 0) })
           ])
         ] : [
           new ViewNode("#")
@@ -26246,7 +26193,7 @@ Dialog.prototype.render = function() {
     ],
     new ViewNode(SLOT_TAG),
     new ViewNode("div", { class: "mt-6 flex justify-end gap-2 empty:mt-0 empty:hidden" }, [
-      new ViewNode(SLOT_TAG, { name: "footer" }, [])
+      new ViewNode(SLOT_TAG, { name: "footer" })
     ])
   ]);
 };
@@ -26332,7 +26279,6 @@ var CopyButton = class extends PuzzleView {
 };
 CopyButton.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("button", {
     type: "button",
     class: __d.classes,
@@ -26376,7 +26322,7 @@ CopyButton.prototype.render = function() {
     ],
     ...__d.label ? [
       new ViewNode("span", {}, [
-        new ViewNode("text", { value: String(__d.displayLabel) })
+        new ViewNode("text", { value: displayValue(__d.displayLabel, true ? "displayLabel" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -26385,7 +26331,7 @@ CopyButton.prototype.render = function() {
       class: "sr-only",
       "aria-live": "polite"
     }, [
-      new ViewNode("text", { value: String(__d.liveText) })
+      new ViewNode("text", { value: displayValue(__d.liveText, true ? "liveText" : 0) })
     ])
   ]);
 };
@@ -26412,7 +26358,6 @@ var Separator = class extends PuzzleView {
 };
 Separator.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.classes,
     role: "separator",
@@ -26551,7 +26496,6 @@ var Tooltip = class extends PuzzleView {
 };
 Tooltip.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("span", {
     class: "relative inline-flex",
     "@pointerenter": (this.__h ??= {})[0] ??= (event) => this.events.onEnter(event),
@@ -26568,7 +26512,7 @@ Tooltip.prototype.render = function() {
         role: "tooltip",
         "data-tooltip-panel": true
       }, [
-        new ViewNode("text", { value: String(__d.text) }),
+        new ViewNode("text", { value: displayValue(__d.text, true ? "text" : 0) }),
         new ViewNode("span", {
           class: __d.arrowClass,
           "aria-hidden": "true"
@@ -26910,7 +26854,6 @@ var BankingDemo = class extends PuzzleView {
 };
 BankingDemo.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
       new ViewNode(DemoHeader, { title: "Banking dashboard" }, [
@@ -27136,19 +27079,19 @@ BankingDemo.prototype.render = function() {
                             }, []),
                             new ViewNode("div", { class: "min-w-0 flex-1" }, [
                               new ViewNode("p", { class: "truncate text-sm font-medium text-ink" }, [
-                                new ViewNode("text", { value: String(t2.merchant) })
+                                new ViewNode("text", { value: displayValue(t2.merchant, true ? "t.merchant" : 0) })
                               ]),
                               new ViewNode("p", { class: "truncate text-xs text-muted" }, [
-                                new ViewNode("text", { value: String(t2.category) + " \xB7 " + String(t2.dateLabel) })
+                                new ViewNode("text", { value: displayValue(t2.category, true ? "t.category" : 0) + " \xB7 " + displayValue(t2.dateLabel, true ? "t.dateLabel" : 0) })
                               ])
                             ]),
                             new ViewNode(Badge, { variant: t2.badgeVariant }, [
-                              new ViewNode("text", { value: String(t2.status) })
+                              new ViewNode("text", { value: displayValue(t2.status, true ? "t.status" : 0) })
                             ]),
                             new ViewNode("span", {
-                              class: `w-28 shrink-0 text-right text-sm font-medium tabular-nums ${t2.amountClass}`
+                              class: `w-28 shrink-0 text-right text-sm font-medium tabular-nums ${displayValue(t2.amountClass, true ? "t.amountClass" : 0)}`
                             }, [
-                              new ViewNode("text", { value: String(t2.amountLabel) })
+                              new ViewNode("text", { value: displayValue(t2.amountLabel, true ? "t.amountLabel" : 0) })
                             ])
                           ])
                         )
@@ -27260,7 +27203,7 @@ BankingDemo.prototype.render = function() {
                     ]),
                     new ViewNode("div", { class: "flex items-center gap-3 pb-1" }, [
                       new ViewNode("p", { class: "text-sm text-muted" }, [
-                        new ViewNode("text", { value: String(__d.txCountLabel) })
+                        new ViewNode("text", { value: displayValue(__d.txCountLabel, true ? "txCountLabel" : 0) })
                       ]),
                       ...__d.hasRangeFilter ? [
                         new ViewNode(Button, {
@@ -27308,14 +27251,14 @@ BankingDemo.prototype.render = function() {
                       new ViewNode("div", { class: "mb-5 flex items-start justify-between gap-3" }, [
                         new ViewNode("div", {}, [
                           new ViewNode("p", { class: "text-sm font-medium text-ink" }, [
-                            new ViewNode("text", { value: String(c2.name) })
+                            new ViewNode("text", { value: displayValue(c2.name, true ? "c.name" : 0) })
                           ]),
                           new ViewNode("p", { class: "mt-0.5 font-mono text-sm text-muted" }, [
-                            new ViewNode("text", { value: String(c2.number) })
+                            new ViewNode("text", { value: displayValue(c2.number, true ? "c.number" : 0) })
                           ])
                         ]),
                         new ViewNode(Badge, { variant: c2.badgeVariant }, [
-                          new ViewNode("text", { value: String(c2.state) })
+                          new ViewNode("text", { value: displayValue(c2.state, true ? "c.state" : 0) })
                         ])
                       ]),
                       new ViewNode("div", { class: "mb-5 flex items-center justify-between gap-2" }, [
@@ -27362,7 +27305,7 @@ BankingDemo.prototype.render = function() {
                         showValue: false
                       }, []),
                       new ViewNode("p", { class: "mt-2 text-xs text-muted" }, [
-                        new ViewNode("text", { value: String(c2.usageText) + " used" })
+                        new ViewNode("text", { value: displayValue(c2.usageText, true ? "c.usageText" : 0) + " used" })
                       ]),
                       new ViewNode(Separator, { class: "my-5" }, []),
                       new ViewNode("div", { class: "flex items-center gap-2" }, [
@@ -27371,7 +27314,7 @@ BankingDemo.prototype.render = function() {
                           size: "sm",
                           press: (this.__h ??= {})[9] ??= (event) => this.events.noop(event)
                         }, [
-                          new ViewNode("text", { value: String(c2.action) })
+                          new ViewNode("text", { value: displayValue(c2.action, true ? "c.action" : 0) })
                         ]),
                         new ViewNode(Button, {
                           variant: "ghost",
@@ -27451,7 +27394,7 @@ BankingDemo.prototype.render = function() {
         disabled: !__d.transferValid,
         press: (this.__h ??= {})[17] ??= (event) => this.events.submitTransfer(event)
       }, [
-        new ViewNode("text", { value: String(__d.sendLabel) })
+        new ViewNode("text", { value: displayValue(__d.sendLabel, true ? "sendLabel" : 0) })
       ])
     ])
   ]);
@@ -27559,7 +27502,6 @@ var ChatScroller = class extends PuzzleView {
 };
 ChatScroller.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("div", {
       "data-scroll-viewport": true,
@@ -27653,7 +27595,6 @@ var ChatMessage = class extends PuzzleView {
 };
 ChatMessage.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rowClass }, [
     ...__d.showMeta ? [
       new ViewNode("span", {
@@ -27669,7 +27610,7 @@ ChatMessage.prototype.render = function() {
           }, [])
         ] : [
           ...__d.hasName ? [
-            new ViewNode("text", { value: String(__d.initials) })
+            new ViewNode("text", { value: displayValue(__d.initials, true ? "initials" : 0) })
           ] : [
             new ViewNode("svg", {
               class: "w-1/2 h-1/2",
@@ -27694,11 +27635,11 @@ ChatMessage.prototype.render = function() {
       ...__d.showMeta ? [
         new ViewNode("div", { class: "mb-1 flex items-baseline gap-2" }, [
           new ViewNode("span", { class: "text-sm font-medium text-ink" }, [
-            new ViewNode("text", { value: String(__d.author) })
+            new ViewNode("text", { value: displayValue(__d.author, true ? "author" : 0) })
           ]),
           ...__d.time ? [
             new ViewNode("time", { class: "text-xs text-muted" }, [
-              new ViewNode("text", { value: String(__d.time) })
+              new ViewNode("text", { value: displayValue(__d.time, true ? "time" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -27713,7 +27654,7 @@ ChatMessage.prototype.render = function() {
         ])
       ]),
       new ViewNode("div", { class: __d.attachClass }, [
-        new ViewNode(SLOT_TAG, { name: "attachments" }, [])
+        new ViewNode(SLOT_TAG, { name: "attachments" })
       ])
     ])
   ]);
@@ -27822,7 +27763,6 @@ var ChatAttachment = class extends PuzzleView {
 };
 ChatAttachment.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.href ? [
       new ViewNode("a", {
@@ -27852,11 +27792,11 @@ ChatAttachment.prototype.render = function() {
         ),
         new ViewNode("span", { class: "min-w-0 flex flex-col" }, [
           new ViewNode("span", { class: "truncate text-sm text-ink" }, [
-            new ViewNode("text", { value: String(__d.name) })
+            new ViewNode("text", { value: displayValue(__d.name, true ? "name" : 0) })
           ]),
           ...__d.size ? [
             new ViewNode("span", { class: "text-xs text-muted" }, [
-              new ViewNode("text", { value: String(__d.size) })
+              new ViewNode("text", { value: displayValue(__d.size, true ? "size" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -27889,11 +27829,11 @@ ChatAttachment.prototype.render = function() {
         ),
         new ViewNode("span", { class: "min-w-0 flex flex-col" }, [
           new ViewNode("span", { class: "truncate text-sm text-ink" }, [
-            new ViewNode("text", { value: String(__d.name) })
+            new ViewNode("text", { value: displayValue(__d.name, true ? "name" : 0) })
           ]),
           ...__d.size ? [
             new ViewNode("span", { class: "text-xs text-muted" }, [
-              new ViewNode("text", { value: String(__d.size) })
+              new ViewNode("text", { value: displayValue(__d.size, true ? "size" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -28005,7 +27945,6 @@ var ChatDemo = class extends PuzzleView {
 };
 ChatDemo.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
       new ViewNode(DemoHeader, { title: "Chat" }, [
@@ -28054,7 +27993,7 @@ ChatDemo.prototype.render = function() {
                   variant: m.variant,
                   showMeta: m.showMeta
                 }, [
-                  new ViewNode("text", { value: String(m.body) }),
+                  new ViewNode("text", { value: displayValue(m.body, true ? "m.body" : 0) }),
                   new ViewNode(ChatAttachment, {
                     slot: "attachments",
                     name: "q3-dashboard.png",
@@ -28075,7 +28014,7 @@ ChatDemo.prototype.render = function() {
                   variant: m.variant,
                   showMeta: m.showMeta
                 }, [
-                  new ViewNode("text", { value: String(m.body) })
+                  new ViewNode("text", { value: displayValue(m.body, true ? "m.body" : 0) })
                 ])
               ]
             ])
@@ -28295,7 +28234,6 @@ var Tree = class extends PuzzleView {
 };
 Tree.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "ul",
     {
@@ -28352,7 +28290,7 @@ Tree.prototype.render = function() {
           new ViewNode("#")
         ],
         new ViewNode("span", { class: "min-w-0 flex-1 truncate" }, [
-          new ViewNode("text", { value: String(row.label) })
+          new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) })
         ])
       ])
     )
@@ -28421,7 +28359,6 @@ var KanbanCard = class extends PuzzleView {
 };
 KanbanCard.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     "data-kb-card": __d.cardId,
@@ -28434,11 +28371,11 @@ KanbanCard.prototype.render = function() {
   }, [
     new ViewNode("div", { class: "flex items-start justify-between gap-2" }, [
       new ViewNode("p", { class: "text-sm font-medium text-ink" }, [
-        new ViewNode("text", { value: String(__d.title) })
+        new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
       ]),
       ...__d.badge ? [
         new ViewNode("span", { class: __d.badgeClass }, [
-          new ViewNode("text", { value: String(__d.badge) })
+          new ViewNode("text", { value: displayValue(__d.badge, true ? "badge" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -28446,7 +28383,7 @@ KanbanCard.prototype.render = function() {
     ]),
     ...__d.meta ? [
       new ViewNode("p", { class: "mt-1 text-xs text-muted" }, [
-        new ViewNode("text", { value: String(__d.meta) })
+        new ViewNode("text", { value: displayValue(__d.meta, true ? "meta" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -28457,10 +28394,10 @@ KanbanCard.prototype.render = function() {
           class: "inline-flex size-5 items-center justify-center rounded-full text-[10px] font-medium text-white",
           style: __d.avatarStyle
         }, [
-          new ViewNode("text", { value: String(__d.initials) })
+          new ViewNode("text", { value: displayValue(__d.initials, true ? "initials" : 0) })
         ]),
         new ViewNode("span", { class: "text-xs text-muted" }, [
-          new ViewNode("text", { value: String(__d.assignee) })
+          new ViewNode("text", { value: displayValue(__d.assignee, true ? "assignee" : 0) })
         ])
       ])
     ] : [
@@ -28944,7 +28881,6 @@ var Kanban = class extends PuzzleView {
 };
 Kanban.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("div", {
       class: "sr-only",
@@ -28952,7 +28888,7 @@ Kanban.prototype.render = function() {
       "aria-live": "polite",
       "data-kb-live": true
     }, [
-      new ViewNode("text", { value: String(__d.announce) })
+      new ViewNode("text", { value: displayValue(__d.announce, true ? "announce" : 0) })
     ]),
     new ViewNode(
       "div",
@@ -28970,12 +28906,12 @@ Kanban.prototype.render = function() {
         }, [
           new ViewNode("header", { class: "flex items-center justify-between gap-2 px-3 py-2.5" }, [
             new ViewNode("h3", { class: "text-sm font-semibold text-ink" }, [
-              new ViewNode("text", { value: String(column.title) })
+              new ViewNode("text", { value: displayValue(column.title, true ? "column.title" : 0) })
             ]),
             new ViewNode("span", {
               class: "inline-flex min-w-5 items-center justify-center rounded-full bg-surface px-1.5 text-xs font-medium text-muted"
             }, [
-              new ViewNode("text", { value: String(column.count) })
+              new ViewNode("text", { value: displayValue(column.count, true ? "column.count" : 0) })
             ])
           ]),
           new ViewNode(
@@ -29062,7 +28998,6 @@ var Progress = class extends PuzzleView {
 };
 Progress.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     role: "progressbar",
@@ -29074,10 +29009,10 @@ Progress.prototype.render = function() {
     ...__d.showHeader ? [
       new ViewNode("div", { class: "flex justify-between mb-1.5" }, [
         new ViewNode("span", { class: "text-sm font-medium text-ink" }, [
-          new ViewNode("text", { value: String(__d.label) })
+          new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
         ]),
         new ViewNode("span", { class: "text-sm text-muted" }, [
-          new ViewNode("text", { value: String(__d.valueLabel) })
+          new ViewNode("text", { value: displayValue(__d.valueLabel, true ? "valueLabel" : 0) })
         ])
       ])
     ] : [
@@ -29167,7 +29102,6 @@ var Timeline = class extends PuzzleView {
 };
 Timeline.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "ol",
     {
@@ -29206,7 +29140,7 @@ Timeline.prototype.render = function() {
           ] : [
             ...item.hasNumber ? [
               new ViewNode("span", { class: item.numberClass }, [
-                new ViewNode("text", { value: String(item.number) })
+                new ViewNode("text", { value: displayValue(item.number, true ? "item.number" : 0) })
               ])
             ] : [
               new ViewNode("span", { class: "grid size-6 place-items-center" }, [
@@ -29218,11 +29152,11 @@ Timeline.prototype.render = function() {
         new ViewNode("div", { class: "min-w-0 flex-1" }, [
           new ViewNode("div", { class: "flex flex-wrap items-baseline gap-x-2 gap-y-0.5" }, [
             new ViewNode("span", { class: "text-sm font-medium text-ink" }, [
-              new ViewNode("text", { value: String(item.title) })
+              new ViewNode("text", { value: displayValue(item.title, true ? "item.title" : 0) })
             ]),
             ...item.time ? [
               new ViewNode("time", { class: "text-xs text-muted" }, [
-                new ViewNode("text", { value: String(item.time) })
+                new ViewNode("text", { value: displayValue(item.time, true ? "item.time" : 0) })
               ])
             ] : [
               new ViewNode("#")
@@ -29230,7 +29164,7 @@ Timeline.prototype.render = function() {
           ]),
           ...item.description ? [
             new ViewNode("p", { class: "mt-1 text-sm text-body" }, [
-              new ViewNode("text", { value: String(item.description) })
+              new ViewNode("text", { value: displayValue(item.description, true ? "item.description" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -29590,7 +29524,6 @@ var ProjectDemo = class extends PuzzleView {
 };
 ProjectDemo.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
       new ViewNode(DemoHeader, { title: "Project board" }, [
@@ -29682,7 +29615,7 @@ ProjectDemo.prototype.render = function() {
                     new ViewNode("text", { value: "Aurora 2.0" })
                   ]),
                   new ViewNode("p", { class: "text-xs text-muted" }, [
-                    new ViewNode("text", { value: String(__d.headerMeta) })
+                    new ViewNode("text", { value: displayValue(__d.headerMeta, true ? "headerMeta" : 0) })
                   ])
                 ]),
                 new ViewNode("div", { class: "ml-auto flex items-center gap-3" }, [
@@ -29730,7 +29663,6 @@ ProjectDemo.prototype.render = function() {
                     ])
                   ]),
                   new ViewNode(DropdownMenu, {
-                    label: "Board actions",
                     align: "end",
                     items: __d.boardActions,
                     triggerClass: "inline-flex items-center justify-center rounded-lg border border-border bg-surface px-2.5 py-1.5 text-body hover:bg-surface-sunken hover:text-ink",
@@ -29838,7 +29770,7 @@ ProjectDemo.prototype.render = function() {
                           new ViewNode("text", { value: "Project completion" })
                         ]),
                         new ViewNode(Badge, { variant: "brand" }, [
-                          new ViewNode("text", { value: String(__d.completionLabel) })
+                          new ViewNode("text", { value: displayValue(__d.completionLabel, true ? "completionLabel" : 0) })
                         ])
                       ]),
                       new ViewNode(Progress, {
@@ -29847,7 +29779,7 @@ ProjectDemo.prototype.render = function() {
                         showValue: true
                       }, []),
                       new ViewNode("p", { class: "mt-2 text-xs text-muted" }, [
-                        new ViewNode("text", { value: String(__d.doneCount) + " of " + String(__d.totalCount) + " issues done \xB7 target ship Aug 30" })
+                        new ViewNode("text", { value: displayValue(__d.doneCount, true ? "doneCount" : 0) + " of " + displayValue(__d.totalCount, true ? "totalCount" : 0) + " issues done \xB7 target ship Aug 30" })
                       ])
                     ]),
                     new ViewNode("div", {}, [
@@ -29938,12 +29870,12 @@ ProjectDemo.prototype.render = function() {
                           "aria-hidden": "true"
                         }, []),
                         new ViewNode("h3", { class: "text-sm font-semibold text-ink" }, [
-                          new ViewNode("text", { value: String(group.title) })
+                          new ViewNode("text", { value: displayValue(group.title, true ? "group.title" : 0) })
                         ]),
                         new ViewNode("span", {
                           class: "inline-flex min-w-5 items-center justify-center rounded-full bg-surface-sunken px-1.5 text-xs font-medium text-muted"
                         }, [
-                          new ViewNode("text", { value: String(group.count) })
+                          new ViewNode("text", { value: displayValue(group.count, true ? "group.count" : 0) })
                         ])
                       ]),
                       ...group.count === 0 ? [
@@ -29960,20 +29892,20 @@ ProjectDemo.prototype.render = function() {
                               key: row.id
                             }, [
                               new ViewNode("span", { class: "w-16 shrink-0 font-mono text-xs text-muted" }, [
-                                new ViewNode("text", { value: String(row.code) })
+                                new ViewNode("text", { value: displayValue(row.code, true ? "row.code" : 0) })
                               ]),
                               new ViewNode("span", {
                                 class: "min-w-0 flex-1 truncate text-sm font-medium text-ink"
                               }, [
-                                new ViewNode("text", { value: String(row.title) })
+                                new ViewNode("text", { value: displayValue(row.title, true ? "row.title" : 0) })
                               ]),
                               new ViewNode(Badge, { variant: row.badgeVariant }, [
-                                new ViewNode("text", { value: String(row.badge) })
+                                new ViewNode("text", { value: displayValue(row.badge, true ? "row.badge" : 0) })
                               ]),
                               new ViewNode("span", {
                                 class: "hidden w-24 shrink-0 text-xs text-muted sm:block"
                               }, [
-                                new ViewNode("text", { value: String(row.assignee) })
+                                new ViewNode("text", { value: displayValue(row.assignee, true ? "row.assignee" : 0) })
                               ]),
                               new ViewNode(Avatar, {
                                 name: row.assignee,
@@ -30304,7 +30236,6 @@ var Marquee = class extends PuzzleView {
 };
 Marquee.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     style: __d.rootStyle,
@@ -30630,7 +30561,6 @@ var Carousel = class extends PuzzleView {
 };
 Carousel.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     role: "region",
@@ -30648,7 +30578,7 @@ Carousel.prototype.render = function() {
       "aria-live": "polite",
       "data-carousel-status": true
     }, [
-      new ViewNode("text", { value: String(__d.statusText) })
+      new ViewNode("text", { value: displayValue(__d.statusText, true ? "statusText" : 0) })
     ]),
     new ViewNode("div", {
       class: __d.trackClass,
@@ -30876,7 +30806,6 @@ function formatNum(n2) {
 }
 Rating.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     role: __d.rootRole,
@@ -31025,7 +30954,6 @@ var QuantityInput = class extends PuzzleView {
 };
 QuantityInput.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("button", {
       type: "button",
@@ -31235,7 +31163,6 @@ var Accordion = class extends PuzzleView {
 };
 Accordion.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "div",
     { class: __d.rootClass },
@@ -31251,7 +31178,7 @@ Accordion.prototype.render = function() {
             "@click": (event) => this.events.handleToggle(row.id, event)
           }, [
             new ViewNode("span", { class: "min-w-0" }, [
-              new ViewNode("text", { value: String(row.title) })
+              new ViewNode("text", { value: displayValue(row.title, true ? "row.title" : 0) })
             ]),
             new ViewNode("span", {
               class: "relative size-4 shrink-0 text-muted",
@@ -31276,7 +31203,7 @@ Accordion.prototype.render = function() {
           inert: !row.open
         }, [
           new ViewNode("div", { class: "px-4 pb-4 text-sm text-body" }, [
-            new ViewNode("text", { value: String(row.content) })
+            new ViewNode("text", { value: displayValue(row.content, true ? "row.content" : 0) })
           ])
         ])
       ])
@@ -31470,7 +31397,6 @@ var StorefrontDemo = class extends PuzzleView {
 };
 StorefrontDemo.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-7xl" }, [
       new ViewNode(DemoHeader, { title: "Storefront" }, [
@@ -31488,7 +31414,7 @@ StorefrontDemo.prototype.render = function() {
             class: "flex items-center gap-8 text-sm font-medium"
           }, [
             new ViewNode("span", {}, [
-              new ViewNode("text", { value: String(promo.text) })
+              new ViewNode("text", { value: displayValue(promo.text, true ? "promo.text" : 0) })
             ]),
             new ViewNode("span", {
               "aria-hidden": "true",
@@ -31551,7 +31477,7 @@ StorefrontDemo.prototype.render = function() {
                       }, [])
                     ]),
                     new ViewNode("span", { class: "text-xs font-medium uppercase tracking-wide text-muted" }, [
-                      new ViewNode("text", { value: String(slide.caption) })
+                      new ViewNode("text", { value: displayValue(slide.caption, true ? "slide.caption" : 0) })
                     ])
                   ])
                 ])
@@ -31621,7 +31547,7 @@ StorefrontDemo.prototype.render = function() {
               new ViewNode("text", { value: "In stock" })
             ]),
             new ViewNode(Badge, { variant: "danger" }, [
-              new ViewNode("text", { value: "Save " + String(__d.savePct) + "%" })
+              new ViewNode("text", { value: "Save " + displayValue(__d.savePct, true ? "savePct" : 0) + "%" })
             ]),
             new ViewNode(Badge, { variant: "outline" }, [
               new ViewNode("text", { value: "Free shipping" })
@@ -31640,21 +31566,21 @@ StorefrontDemo.prototype.render = function() {
               size: "sm"
             }, []),
             new ViewNode("span", { class: "text-sm font-medium text-ink" }, [
-              new ViewNode("text", { value: String(__d.avgRatingLabel) })
+              new ViewNode("text", { value: displayValue(__d.avgRatingLabel, true ? "avgRatingLabel" : 0) })
             ]),
             new ViewNode("a", {
               href: "#reviews",
               class: "text-sm text-muted underline-offset-2 hover:text-ink hover:underline"
             }, [
-              new ViewNode("text", { value: String(__d.reviewCountLabel) })
+              new ViewNode("text", { value: displayValue(__d.reviewCountLabel, true ? "reviewCountLabel" : 0) })
             ])
           ]),
           new ViewNode("div", { class: "mt-5 flex items-baseline gap-3" }, [
             new ViewNode("span", { class: "text-3xl font-semibold text-ink" }, [
-              new ViewNode("text", { value: String(__d.unitPriceLabel) })
+              new ViewNode("text", { value: displayValue(__d.unitPriceLabel, true ? "unitPriceLabel" : 0) })
             ]),
             new ViewNode("span", { class: "text-lg text-faint line-through" }, [
-              new ViewNode("text", { value: String(__d.listPriceLabel) })
+              new ViewNode("text", { value: displayValue(__d.listPriceLabel, true ? "listPriceLabel" : 0) })
             ])
           ]),
           new ViewNode(Separator, { class: "my-6" }, []),
@@ -31703,7 +31629,7 @@ StorefrontDemo.prototype.render = function() {
                 new ViewNode("text", { value: "Subtotal" })
               ]),
               new ViewNode("span", { class: "text-xl font-semibold text-ink" }, [
-                new ViewNode("text", { value: String(__d.subtotalLabel) })
+                new ViewNode("text", { value: displayValue(__d.subtotalLabel, true ? "subtotalLabel" : 0) })
               ])
             ])
           ]),
@@ -31739,21 +31665,21 @@ StorefrontDemo.prototype.render = function() {
                   fill: "currentColor"
                 }, [])
               ]),
-              new ViewNode("text", { value: String(__d.addLabel) })
+              new ViewNode("text", { value: displayValue(__d.addLabel, true ? "addLabel" : 0) })
             ]),
             new ViewNode(Button, {
               size: "lg",
               variant: "outline",
               press: (this.__h ??= {})[5] ??= (event) => this.events.toggleWishlist(event)
             }, [
-              new ViewNode("text", { value: String(__d.wishlistLabel) })
+              new ViewNode("text", { value: displayValue(__d.wishlistLabel, true ? "wishlistLabel" : 0) })
             ])
           ]),
           new ViewNode("p", {
             "aria-live": "polite",
             class: "mt-3 min-h-5 text-sm text-success"
           }, [
-            new ViewNode("text", { value: String(__d.cartNotice) })
+            new ViewNode("text", { value: displayValue(__d.cartNotice, true ? "cartNotice" : 0) })
           ]),
           new ViewNode(Separator, { class: "my-6" }, []),
           new ViewNode(DescriptionList, {
@@ -31810,7 +31736,7 @@ StorefrontDemo.prototype.render = function() {
                         }, [])
                       ]),
                       new ViewNode("span", {}, [
-                        new ViewNode("text", { value: String(hl) })
+                        new ViewNode("text", { value: displayValue(hl, true ? "hl" : 0) })
                       ])
                     ])
                   )
@@ -31862,7 +31788,7 @@ StorefrontDemo.prototype.render = function() {
                 }, [
                   new ViewNode("div", { class: "text-center" }, [
                     new ViewNode("div", { class: "text-4xl font-semibold text-ink" }, [
-                      new ViewNode("text", { value: String(__d.avgRatingLabel) })
+                      new ViewNode("text", { value: displayValue(__d.avgRatingLabel, true ? "avgRatingLabel" : 0) })
                     ]),
                     new ViewNode(Rating, {
                       value: __d.avgRating,
@@ -31871,7 +31797,7 @@ StorefrontDemo.prototype.render = function() {
                       class: "mt-1"
                     }, []),
                     new ViewNode("div", { class: "mt-1 text-xs text-muted" }, [
-                      new ViewNode("text", { value: String(__d.reviewCountLabel) })
+                      new ViewNode("text", { value: displayValue(__d.reviewCountLabel, true ? "reviewCountLabel" : 0) })
                     ])
                   ]),
                   new ViewNode(Separator, {
@@ -31887,7 +31813,7 @@ StorefrontDemo.prototype.render = function() {
                         class: "flex items-center gap-3 text-xs text-muted"
                       }, [
                         new ViewNode("dt", { class: "w-10 shrink-0 text-right" }, [
-                          new ViewNode("text", { value: String(bar.label) })
+                          new ViewNode("text", { value: displayValue(bar.label, true ? "bar.label" : 0) })
                         ]),
                         new ViewNode("dd", { class: "flex flex-1 items-center gap-2" }, [
                           new ViewNode("span", {
@@ -31899,7 +31825,7 @@ StorefrontDemo.prototype.render = function() {
                             }, [])
                           ]),
                           new ViewNode("span", { class: "w-6 shrink-0 text-right tabular-nums" }, [
-                            new ViewNode("text", { value: String(bar.count) })
+                            new ViewNode("text", { value: displayValue(bar.count, true ? "bar.count" : 0) })
                           ])
                         ])
                       ])
@@ -31919,7 +31845,7 @@ StorefrontDemo.prototype.render = function() {
                         new ViewNode("div", { class: "min-w-0" }, [
                           new ViewNode("div", { class: "flex items-center gap-2" }, [
                             new ViewNode("span", { class: "text-sm font-medium text-ink" }, [
-                              new ViewNode("text", { value: String(review.name) })
+                              new ViewNode("text", { value: displayValue(review.name, true ? "review.name" : 0) })
                             ]),
                             ...review.verified ? [
                               new ViewNode(Badge, {
@@ -31933,7 +31859,7 @@ StorefrontDemo.prototype.render = function() {
                             ]
                           ]),
                           new ViewNode("span", { class: "text-xs text-muted" }, [
-                            new ViewNode("text", { value: String(review.date) })
+                            new ViewNode("text", { value: displayValue(review.date, true ? "review.date" : 0) })
                           ])
                         ])
                       ]),
@@ -31944,11 +31870,11 @@ StorefrontDemo.prototype.render = function() {
                           size: "sm"
                         }, []),
                         new ViewNode("span", { class: "text-sm font-medium text-ink" }, [
-                          new ViewNode("text", { value: String(review.title) })
+                          new ViewNode("text", { value: displayValue(review.title, true ? "review.title" : 0) })
                         ])
                       ]),
                       new ViewNode("p", { class: "mt-2 text-sm leading-relaxed text-body" }, [
-                        new ViewNode("text", { value: String(review.body) })
+                        new ViewNode("text", { value: displayValue(review.body, true ? "review.body" : 0) })
                       ])
                     ])
                   )
@@ -31985,14 +31911,13 @@ var ExampleBox = class extends PuzzleView {
 };
 ExampleBox.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("section", {
     class: __d.sectionClass,
     id: __d.sectionId
   }, [
     ...__d.title ? [
       new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
-        new ViewNode("text", { value: String(__d.title) })
+        new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -32091,7 +32016,6 @@ var AccordionDoc = class extends PuzzleView {
 };
 AccordionDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -32216,7 +32140,6 @@ var Alert = class extends PuzzleView {
 };
 Alert.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.classes,
     role: __d.role
@@ -32278,7 +32201,7 @@ Alert.prototype.render = function() {
     new ViewNode("div", { class: "min-w-0" }, [
       ...__d.title ? [
         new ViewNode("p", { class: "font-medium text-ink" }, [
-          new ViewNode("text", { value: String(__d.title) })
+          new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -32323,7 +32246,6 @@ var AlertDoc = class extends PuzzleView {
 };
 AlertDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -32502,7 +32424,6 @@ var AlertDialog = class extends PuzzleView {
 };
 AlertDialog.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("dialog", {
     role: "alertdialog",
     class: __d.panelClass,
@@ -32515,7 +32436,7 @@ AlertDialog.prototype.render = function() {
         id: __d.titleId,
         class: "text-lg font-semibold text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.title) })
+        new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -32525,7 +32446,7 @@ AlertDialog.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-muted"
       }, [
-        new ViewNode("text", { value: String(__d.description) })
+        new ViewNode("text", { value: displayValue(__d.description, true ? "description" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -32537,14 +32458,14 @@ AlertDialog.prototype.render = function() {
         autofocus: true,
         "@click": (this.__h ??= {})[1] ??= (event) => this.events.handleCancel(event)
       }, [
-        new ViewNode("text", { value: String(__d.cancelLabel) })
+        new ViewNode("text", { value: displayValue(__d.cancelLabel, true ? "cancelLabel" : 0) })
       ]),
       new ViewNode("button", {
         type: "button",
         class: __d.confirmClass,
         "@click": (this.__h ??= {})[2] ??= (event) => this.events.handleConfirm(event)
       }, [
-        new ViewNode("text", { value: String(__d.confirmLabel) })
+        new ViewNode("text", { value: displayValue(__d.confirmLabel, true ? "confirmLabel" : 0) })
       ])
     ])
   ]);
@@ -32619,7 +32540,6 @@ var AlertDialogDoc = class extends PuzzleView {
 };
 AlertDialogDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -32814,7 +32734,6 @@ var AreaChartDoc = class extends PuzzleView {
 };
 AreaChartDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -32975,7 +32894,6 @@ var AspectRatioDoc = class extends PuzzleView {
 };
 AspectRatioDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -33054,7 +32972,7 @@ AspectRatioDoc.prototype.render = function() {
                   new ViewNode("div", {
                     class: "flex items-center justify-center bg-surface-sunken text-xs font-medium text-muted"
                   }, [
-                    new ViewNode("text", { value: String(r2.label) })
+                    new ViewNode("text", { value: displayValue(r2.label, true ? "r.label" : 0) })
                   ])
                 ])
               )
@@ -33145,7 +33063,6 @@ var AvatarDoc = class extends PuzzleView {
 };
 AvatarDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -33335,7 +33252,6 @@ var AvatarGroupDoc = class extends PuzzleView {
 };
 AvatarGroupDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -33491,7 +33407,6 @@ var BadgeDoc = class extends PuzzleView {
 };
 BadgeDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -33699,7 +33614,6 @@ var BarChartDoc = class extends PuzzleView {
 };
 BarChartDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -33803,7 +33717,7 @@ BarChartDoc.prototype.render = function() {
               new ViewNode("code", {
                 class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink"
               }, [
-                new ViewNode("text", { value: String("<figure>") })
+                new ViewNode("text", { value: displayValue("<figure>", true ? "'<figure>'" : 0) })
               ]),
               new ViewNode("text", { value: "with an" }),
               new ViewNode("code", {
@@ -33827,7 +33741,7 @@ BarChartDoc.prototype.render = function() {
               new ViewNode("code", {
                 class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink"
               }, [
-                new ViewNode("text", { value: String("<table>") })
+                new ViewNode("text", { value: displayValue("<table>", true ? "'<table>'" : 0) })
               ]),
               new ViewNode("text", { value: "after the plot, so the data is reachable by screen readers and never gated behind a hover tooltip. Colors carry series identity, but the legend and table carry it too \u2014 nothing depends on color alone." })
             ]),
@@ -33903,7 +33817,6 @@ var BreadcrumbDoc = class extends PuzzleView {
 };
 BreadcrumbDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -34040,7 +33953,6 @@ var ButtonDoc = class extends PuzzleView {
 };
 ButtonDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -34255,7 +34167,6 @@ var ButtonGroup = class extends PuzzleView {
 };
 ButtonGroup.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "div",
     {
@@ -34289,7 +34200,7 @@ ButtonGroup.prototype.render = function() {
           new ViewNode("#")
         ],
         new ViewNode("span", { class: item.labelClass }, [
-          new ViewNode("text", { value: String(item.label) })
+          new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
         ])
       ])
     )
@@ -34372,7 +34283,6 @@ var ButtonGroupDoc = class extends PuzzleView {
 };
 ButtonGroupDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -34529,7 +34439,7 @@ ButtonGroupDoc.prototype.render = function() {
             ]),
             new ViewNode("text", { value: ", so the control keeps both a visible affordance and a screen-reader name. The rendered" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String("<svg>") })
+              new ViewNode("text", { value: displayValue("<svg>", true ? "'<svg>'" : 0) })
             ]),
             new ViewNode("text", { value: " is" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -34856,14 +34766,13 @@ var DatePicker = class extends PuzzleView {
 };
 DatePicker.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.triggerId,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -34884,9 +34793,9 @@ DatePicker.prototype.render = function() {
         "@keydown": (this.__h ??= {})[1] ??= (event) => this.events.onTriggerKey(event)
       }, [
         new ViewNode("span", {
-          class: `flex-1 truncate text-left ${__d.placeholderClass}`
+          class: `flex-1 truncate text-left ${displayValue(__d.placeholderClass, true ? "placeholderClass" : 0)}`
         }, [
-          new ViewNode("text", { value: String(__d.triggerLabel) })
+          new ViewNode("text", { value: displayValue(__d.triggerLabel, true ? "triggerLabel" : 0) })
         ]),
         new ViewNode("svg", {
           class: "size-4 shrink-0 text-muted",
@@ -34931,7 +34840,7 @@ DatePicker.prototype.render = function() {
         }, [
           ...__d.panelHeader ? [
             new ViewNode("div", { class: "border-b border-border px-4 py-2.5 text-sm font-medium text-ink" }, [
-              new ViewNode("text", { value: String(__d.panelHeader) })
+              new ViewNode("text", { value: displayValue(__d.panelHeader, true ? "panelHeader" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -34957,7 +34866,7 @@ DatePicker.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -34965,7 +34874,7 @@ DatePicker.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -35044,7 +34953,6 @@ var CalendarDoc = class extends PuzzleView {
 };
 CalendarDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -35077,7 +34985,7 @@ CalendarDoc.prototype.render = function() {
             new ViewNode("p", { class: "text-sm text-muted" }, [
               new ViewNode("text", { value: "Selected: " }),
               new ViewNode("code", { class: "font-mono text-ink" }, [
-                new ViewNode("text", { value: String(__d.date || "none") })
+                new ViewNode("text", { value: displayValue(__d.date || "none", true ? "date || 'none'" : 0) })
               ])
             ])
           ])
@@ -35284,7 +35192,6 @@ var CardDoc = class extends PuzzleView {
 };
 CardDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -35470,7 +35377,6 @@ var CarouselDoc = class extends PuzzleView {
 };
 CarouselDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -35610,7 +35516,7 @@ CarouselDoc.prototype.render = function() {
                 ])
               ]),
               new ViewNode("p", { class: "text-center text-sm text-muted" }, [
-                new ViewNode("text", { value: "Active slide: " + String(__d.loopIdx + 1) + " of 3" })
+                new ViewNode("text", { value: "Active slide: " + displayValue(__d.loopIdx + 1, true ? "loopIdx + 1" : 0) + " of 3" })
               ])
             ])
           ]),
@@ -35771,7 +35677,6 @@ var ChatAttachmentDoc = class extends PuzzleView {
 };
 ChatAttachmentDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -36009,7 +35914,6 @@ var ChatMessageDoc = class extends PuzzleView {
 };
 ChatMessageDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -36020,7 +35924,7 @@ ChatMessageDoc.prototype.render = function() {
           new ViewNode("p", { class: "mt-2 text-body" }, [
             new ViewNode("text", { value: "One message row \u2014 avatar with an initials fallback, an author/time meta line, and a sent/received bubble. Group consecutive messages from the same author with" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: "showMeta=" + String(false) })
+              new ViewNode("text", { value: "showMeta=" + displayValue(false, true ? "false" : 0) })
             ]),
             new ViewNode("text", { value: "for a compact follow-up, and drop ChatAttachment chips into the" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -36281,7 +36185,6 @@ var ChatScrollerDoc = class extends PuzzleView {
 };
 ChatScrollerDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -36316,7 +36219,7 @@ ChatScrollerDoc.prototype.render = function() {
                   variant: m.variant,
                   showMeta: m.showMeta
                 }, [
-                  new ViewNode("text", { value: String(m.body) })
+                  new ViewNode("text", { value: displayValue(m.body, true ? "m.body" : 0) })
                 ])
               )
             ),
@@ -36328,7 +36231,7 @@ ChatScrollerDoc.prototype.render = function() {
                 new ViewNode("text", { value: "Add message" })
               ]),
               new ViewNode("span", { class: "text-xs text-muted" }, [
-                new ViewNode("text", { value: String(__d.pinLabel) })
+                new ViewNode("text", { value: displayValue(__d.pinLabel, true ? "pinLabel" : 0) })
               ])
             ])
           ])
@@ -36420,7 +36323,7 @@ ChatScrollerDoc.prototype.render = function() {
             ]),
             new ViewNode("text", { value: '(default "Messages") so the region is named. The Jump to latest pill is a real' }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink" }, [
-              new ViewNode("text", { value: String("<button>") })
+              new ViewNode("text", { value: displayValue("<button>", true ? "'<button>'" : 0) })
             ]),
             new ViewNode("text", { value: "with a visible focus ring, reachable by keyboard." })
           ])
@@ -36485,7 +36388,6 @@ var CheckboxDoc = class extends PuzzleView {
 };
 CheckboxDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -36656,7 +36558,6 @@ var CodeDoc = class extends PuzzleView {
 };
 CodeDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -36688,7 +36589,7 @@ CodeDoc.prototype.render = function() {
           ]),
           new ViewNode(CodeBlock, { code: __d.installCmd }, []),
           new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
-            new ViewNode("text", { value: "The highlighter registers only the javascript, xml, and bash grammars (about 13 KB gzipped total) \u2014 add more in app/lib/highlight.js if your snippets need them. The token colors travel inside Code.pzl in a global " + String("<style>") + " block, so there is nothing to merge into pieces.css \u2014 retheme the palette by editing the --hl- variables at the bottom of the file." })
+            new ViewNode("text", { value: "The highlighter registers only the javascript, xml, and bash grammars (about 13 KB gzipped total) \u2014 add more in app/lib/highlight.js if your snippets need them. The token colors travel inside Code.pzl in a global " + displayValue("<style>", true ? "'<style>'" : 0) + " block, so there is nothing to merge into pieces.css \u2014 retheme the palette by editing the --hl- variables at the bottom of the file." })
           ])
         ]),
         new ViewNode("section", {
@@ -36841,7 +36742,6 @@ var CollapsibleDoc = class extends PuzzleView {
 };
 CollapsibleDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -36937,7 +36837,7 @@ CollapsibleDoc.prototype.render = function() {
                     change: (event) => this.events.toggleGroup(item.id)
                   }, [
                     new ViewNode("p", {}, [
-                      new ViewNode("text", { value: String(item.body) })
+                      new ViewNode("text", { value: displayValue(item.body, true ? "item.body" : 0) })
                     ])
                   ])
                 )
@@ -37524,14 +37424,13 @@ var Combobox = class extends PuzzleView {
 };
 Combobox.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.inputId,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -37602,7 +37501,7 @@ Combobox.prototype.render = function() {
               role: "presentation",
               class: "px-3 py-6 text-center text-sm text-muted"
             }, [
-              new ViewNode("text", { value: String(__d.emptyText) })
+              new ViewNode("text", { value: displayValue(__d.emptyText, true ? "emptyText" : 0) })
             ])
           ] : [
             ...__d.rows.map(
@@ -37619,7 +37518,7 @@ Combobox.prototype.render = function() {
               }, [
                 ...row.kind === "option" ? [
                   new ViewNode("span", { class: "flex-1 truncate" }, [
-                    new ViewNode("text", { value: String(row.label) })
+                    new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) })
                   ]),
                   ...row.selected ? [
                     new ViewNode("svg", {
@@ -37641,7 +37540,7 @@ Combobox.prototype.render = function() {
                   ]
                 ] : [
                   ...row.kind === "group" ? [
-                    new ViewNode("text", { value: String(row.label) })
+                    new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) })
                   ] : [
                     new ViewNode("#")
                   ],
@@ -37660,7 +37559,7 @@ Combobox.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -37668,7 +37567,7 @@ Combobox.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -37831,7 +37730,6 @@ var ComboboxDoc = class extends PuzzleView {
 };
 ComboboxDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -38002,7 +37900,7 @@ ComboboxDoc.prototype.render = function() {
                 new ViewNode("p", { class: "text-sm text-muted" }, [
                   new ViewNode("text", { value: "Parent open state:" }),
                   new ViewNode("span", { class: "font-medium text-ink" }, [
-                    new ViewNode("text", { value: String(__d.cbOpen ? "open" : "closed") })
+                    new ViewNode("text", { value: displayValue(__d.cbOpen ? "open" : "closed", true ? "cbOpen ? 'open' : 'closed'" : 0) })
                   ])
                 ])
               ])
@@ -38353,7 +38251,6 @@ var Command = class extends PuzzleView {
 };
 Command.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("dialog", {
     class: __d.panelClass,
     role: "dialog",
@@ -38409,7 +38306,7 @@ Command.prototype.render = function() {
     }, [
       ...__d.empty ? [
         new ViewNode("p", { class: "py-6 text-center text-sm text-muted" }, [
-          new ViewNode("text", { value: String(__d.emptyText) })
+          new ViewNode("text", { value: displayValue(__d.emptyText, true ? "emptyText" : 0) })
         ])
       ] : [
         ...__d.rows.map(
@@ -38426,17 +38323,17 @@ Command.prototype.render = function() {
           }, [
             ...row.kind === "option" ? [
               new ViewNode("span", { class: "truncate" }, [
-                new ViewNode("text", { value: String(row.label) })
+                new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) })
               ]),
               ...row.hint ? [
                 new ViewNode("span", { class: "shrink-0 text-xs text-muted" }, [
-                  new ViewNode("text", { value: String(row.hint) })
+                  new ViewNode("text", { value: displayValue(row.hint, true ? "row.hint" : 0) })
                 ])
               ] : [
                 new ViewNode("#")
               ]
             ] : [
-              new ViewNode("text", { value: String(row.label) }),
+              new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) }),
               new ViewNode("#")
             ]
           ])
@@ -38509,7 +38406,6 @@ var CommandDoc = class extends PuzzleView {
 };
 CommandDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -38818,7 +38714,6 @@ var ContextMenu = class extends PuzzleView {
 };
 ContextMenu.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("div", {
       "data-cm-surface": true,
@@ -38853,7 +38748,7 @@ ContextMenu.prototype.render = function() {
                 new ViewNode("div", {
                   class: "px-2.5 pt-2 pb-1 text-xs font-medium text-muted uppercase tracking-wide"
                 }, [
-                  new ViewNode("text", { value: String(item.label) })
+                  new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                 ])
               ] : [
                 ...item.kind === "link" ? [
@@ -38866,7 +38761,7 @@ ContextMenu.prototype.render = function() {
                     class: `block w-full text-left rounded-md px-2.5 py-1.5 text-sm ${item.danger ? "text-danger hover:bg-danger-tint" : "text-body hover:bg-surface-sunken hover:text-ink"} ${item.disabled ? "opacity-50 pointer-events-none" : ""} focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring`,
                     "@click": (event) => this.events.onItemClick(i2, event)
                   }, [
-                    new ViewNode("text", { value: String(item.label) })
+                    new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                   ])
                 ] : [
                   new ViewNode("button", {
@@ -38878,7 +38773,7 @@ ContextMenu.prototype.render = function() {
                     class: `block w-full text-left rounded-md px-2.5 py-1.5 text-sm cursor-pointer disabled:opacity-50 disabled:pointer-events-none ${item.danger ? "text-danger hover:bg-danger-tint" : "text-body hover:bg-surface-sunken hover:text-ink"} focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring`,
                     "@click": (event) => this.events.onItemClick(i2, event)
                   }, [
-                    new ViewNode("text", { value: String(item.label) })
+                    new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                   ])
                 ]
               ]
@@ -38978,7 +38873,6 @@ var ContextMenuDoc = class extends PuzzleView {
 };
 ContextMenuDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -39191,7 +39085,6 @@ var CopyButtonDoc = class extends PuzzleView {
 };
 CopyButtonDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -39344,7 +39237,7 @@ CopyButtonDoc.prototype.render = function() {
                 class: "flex items-center justify-between rounded-lg border border-border bg-surface-sunken px-3 py-2"
               }, [
                 new ViewNode("code", { class: "truncate font-mono text-[13px] text-ink" }, [
-                  new ViewNode("text", { value: String(__d.installSnippet) })
+                  new ViewNode("text", { value: displayValue(__d.installSnippet, true ? "installSnippet" : 0) })
                 ]),
                 new ViewNode(CopyButton, {
                   value: __d.installSnippet,
@@ -39491,7 +39384,6 @@ var DataTableDoc = class extends PuzzleView {
 };
 DataTableDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -39565,7 +39457,7 @@ DataTableDoc.prototype.render = function() {
                 sortChange: (this.__h ??= {})[0] ??= (event) => this.events.setSort(event)
               }, []),
               new ViewNode("p", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: "Sort: " + String(__d.sortLabel) })
+                new ViewNode("text", { value: "Sort: " + displayValue(__d.sortLabel, true ? "sortLabel" : 0) })
               ])
             ])
           ]),
@@ -39584,7 +39476,7 @@ DataTableDoc.prototype.render = function() {
                 select: (this.__h ??= {})[1] ??= (event) => this.events.setSelected(event)
               }, []),
               new ViewNode("p", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: String(__d.selectedCount) + " selected" })
+                new ViewNode("text", { value: displayValue(__d.selectedCount, true ? "selectedCount" : 0) + " selected" })
               ])
             ])
           ]),
@@ -39603,7 +39495,7 @@ DataTableDoc.prototype.render = function() {
                 pageChange: (this.__h ??= {})[2] ??= (event) => this.events.setPageNum(event)
               }, []),
               new ViewNode("p", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: "Page " + String(__d.pageNum) })
+                new ViewNode("text", { value: "Page " + displayValue(__d.pageNum, true ? "pageNum" : 0) })
               ])
             ])
           ])
@@ -39639,7 +39531,7 @@ DataTableDoc.prototype.render = function() {
               new ViewNode("code", {
                 class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink"
               }, [
-                new ViewNode("text", { value: String("<th>") })
+                new ViewNode("text", { value: displayValue("<th>", true ? "'<th>'" : 0) })
               ]),
               new ViewNode("text", { value: '; the attribute is omitted (not set to "none") while unsorted.' })
             ]),
@@ -39648,7 +39540,7 @@ DataTableDoc.prototype.render = function() {
               new ViewNode("code", {
                 class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink"
               }, [
-                new ViewNode("text", { value: String("<button>") })
+                new ViewNode("text", { value: displayValue("<button>", true ? "'<button>'" : 0) })
               ]),
               new ViewNode("text", { value: ", so headers are reachable with Tab and cycle asc \u2192 desc \u2192 off on Enter or Space. Non-sortable headers stay plain text." })
             ]),
@@ -39657,7 +39549,7 @@ DataTableDoc.prototype.render = function() {
               new ViewNode("code", {
                 class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink"
               }, [
-                new ViewNode("text", { value: String('<input type="checkbox">') })
+                new ViewNode("text", { value: displayValue('<input type="checkbox">', true ? `'<input type="checkbox">'` : 0) })
               ]),
               new ViewNode("text", { value: ": keyboard-toggleable, each row checkbox carries an" }),
               new ViewNode("code", {
@@ -39759,7 +39651,6 @@ var DatePickerDoc = class extends PuzzleView {
 };
 DatePickerDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -40040,7 +39931,6 @@ var DateRangePickerDoc = class extends PuzzleView {
 };
 DateRangePickerDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -40051,7 +39941,7 @@ DateRangePickerDoc.prototype.render = function() {
           new ViewNode("p", { class: "mt-2 text-body" }, [
             new ViewNode("text", { value: "A Field-shaped trigger and popover for start/end selection that composes the Calendar piece: a controlled" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String("{ start, end }") })
+              new ViewNode("text", { value: displayValue("{ start, end }", true ? "'{ start, end }'" : 0) })
             ]),
             new ViewNode("text", { value: "ISO value, in-between range shading with a live hover preview, optional-controlled open, one or two months, and an optional presets rail. It is parent-owned \u2014 it emits" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -40155,7 +40045,7 @@ DateRangePickerDoc.prototype.render = function() {
                 variant: "secondary",
                 press: (this.__h ??= {})[4] ??= (event) => this.events.toggleOpen(event)
               }, [
-                new ViewNode("text", { value: String(__d.openLabel) })
+                new ViewNode("text", { value: displayValue(__d.openLabel, true ? "openLabel" : 0) })
               ]),
               new ViewNode(DateRangePicker, {
                 label: "Booking",
@@ -40249,7 +40139,6 @@ var DescriptionListDoc = class extends PuzzleView {
 };
 DescriptionListDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -40456,7 +40345,6 @@ var DialogDoc = class extends PuzzleView {
 };
 DialogDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -40747,7 +40635,6 @@ var DropdownMenuDoc = class extends PuzzleView {
 };
 DropdownMenuDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -41001,14 +40888,13 @@ var Dropzone2 = class extends PuzzleView {
 };
 Dropzone2.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.inputId,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -41087,7 +40973,7 @@ Dropzone2.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-danger"
         }, [
-          new ViewNode("text", { value: String(__d.error) })
+          new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
         ])
       ] : [
         ...__d.hasRejections ? [
@@ -41102,7 +40988,7 @@ Dropzone2.prototype.render = function() {
                 key: ViewNode.keyOf(m),
                 class: "text-sm text-danger"
               }, [
-                new ViewNode("text", { value: String(m) })
+                new ViewNode("text", { value: displayValue(m, true ? "m" : 0) })
               ])
             )
           )
@@ -41112,7 +40998,7 @@ Dropzone2.prototype.render = function() {
               id: __d.descId,
               class: "mt-1.5 text-sm text-muted"
             }, [
-              new ViewNode("text", { value: String(__d.hint) })
+              new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -41217,7 +41103,6 @@ var DropzoneDoc = class extends PuzzleView {
 };
 DropzoneDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -41228,7 +41113,7 @@ DropzoneDoc.prototype.render = function() {
           new ViewNode("p", { class: "mt-2 text-body" }, [
             new ViewNode("text", { value: "A file-upload area \u2014 drag and drop or click to browse over a hidden" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String('<input type="file">') })
+              new ViewNode("text", { value: displayValue('<input type="file">', true ? `'<input type="file">'` : 0) })
             ]),
             new ViewNode("text", { value: ", with a dragover highlight, a removable list of chosen files, and" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -41362,7 +41247,7 @@ DropzoneDoc.prototype.render = function() {
           new ViewNode("p", { class: "mb-3 text-sm text-body" }, [
             new ViewNode("text", { value: "The real" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String('<input type="file">') })
+              new ViewNode("text", { value: displayValue('<input type="file">', true ? `'<input type="file">'` : 0) })
             ]),
             new ViewNode("text", { value: "stays visually hidden but reachable, so keyboard and assistive-tech users tab to it (it carries the label," }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -45361,7 +45246,6 @@ var EmojiPicker = class extends PuzzleView {
 };
 EmojiPicker.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("button", {
       type: "button",
@@ -45452,7 +45336,7 @@ EmojiPicker.prototype.render = function() {
               role: "presentation",
               class: "col-span-full px-3 py-6 text-center text-sm text-muted"
             }, [
-              new ViewNode("text", { value: String(__d.emptyText) })
+              new ViewNode("text", { value: displayValue(__d.emptyText, true ? "emptyText" : 0) })
             ])
           ] : [
             ...__d.rows.map(
@@ -45467,7 +45351,7 @@ EmojiPicker.prototype.render = function() {
                 "@click": (event) => this.events.choose(row, event),
                 "@mouseenter": (event) => this.events.hover(row)
               }, [
-                new ViewNode("text", { value: String(row.text) })
+                new ViewNode("text", { value: displayValue(row.text, true ? "row.text" : 0) })
               ])
             )
           ]
@@ -45494,8 +45378,10 @@ var codeTrigger = `<EmojiPicker label="Add reaction" @change={ addEmoji }>
   <span slot="trigger" class="\u2026">React</span>
 </EmojiPicker>
 
-// The named "trigger" slot replaces the default smiley icon; the piece still
-// owns the real <button> underneath, so the ARIA wiring stays intact.`;
+// Filling the named "trigger" slot replaces the default smiley icon \u2014 that stock icon
+// is the slot's fallback body, so no flag is needed; the piece still owns the real
+// <button> underneath, so the ARIA wiring stays intact. \`label\` remains the
+// accessible name, not visible text.`;
 var codePlacement = `<EmojiPicker align="start" @change={ addEmoji }/>
 <EmojiPicker align="end" side="top" @change={ addEmoji }/>
 
@@ -45559,7 +45445,6 @@ var EmojiPickerDoc = class extends PuzzleView {
 };
 EmojiPickerDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -45638,7 +45523,7 @@ EmojiPickerDoc.prototype.render = function() {
                 slot: "trigger",
                 class: "inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken"
               }, [
-                new ViewNode("text", { value: "React " + String(__d.lastEmoji) })
+                new ViewNode("text", { value: "React " + displayValue(__d.lastEmoji, true ? "lastEmoji" : 0) })
               ])
             ])
           ]),
@@ -45672,7 +45557,7 @@ EmojiPickerDoc.prototype.render = function() {
                 hide: (this.__h ??= {})[7] ??= (event) => this.events.closePicker(event)
               }, []),
               new ViewNode("span", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: String(__d.pickerOpen ? "open" : "closed") })
+                new ViewNode("text", { value: displayValue(__d.pickerOpen ? "open" : "closed", true ? "pickerOpen ? 'open' : 'closed'" : 0) })
               ])
             ])
           ]),
@@ -46131,7 +46016,6 @@ var EmojiPickerSimple = class extends PuzzleView {
 };
 EmojiPickerSimple.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode("button", {
       type: "button",
@@ -46195,7 +46079,7 @@ EmojiPickerSimple.prototype.render = function() {
         new ViewNode("div", {
           class: "px-2 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none"
         }, [
-          new ViewNode("text", { value: String(__d.groupName) })
+          new ViewNode("text", { value: displayValue(__d.groupName, true ? "groupName" : 0) })
         ]),
         new ViewNode(
           "ul",
@@ -46221,7 +46105,7 @@ EmojiPickerSimple.prototype.render = function() {
               "@click": (event) => this.events.choose(cell, event),
               "@mouseenter": (event) => this.events.hover(cell)
             }, [
-              new ViewNode("text", { value: String(cell.char) })
+              new ViewNode("text", { value: displayValue(cell.char, true ? "cell.char" : 0) })
             ])
           )
         ),
@@ -46248,7 +46132,7 @@ EmojiPickerSimple.prototype.render = function() {
               "@click": (event) => this.events.pickTab(tab),
               "@keydown": (this.__h ??= {})[4] ??= (event) => this.events.onTabKey(event)
             }, [
-              new ViewNode("text", { value: String(tab.icon) })
+              new ViewNode("text", { value: displayValue(tab.icon, true ? "tab.icon" : 0) })
             ])
           )
         )
@@ -46272,7 +46156,11 @@ var codeHero34 = `<input value={ message } @input={ onMessageInput(event) } />
 // addEmoji: (char) => this.setData({ message: this.getData().message + char })`;
 var codeTrigger2 = `<EmojiPickerSimple label="Add reaction" @change={ addEmoji }>
   <span slot="trigger" class="\u2026">React</span>
-</EmojiPickerSimple>`;
+</EmojiPickerSimple>
+
+// Filling the named "trigger" slot replaces the default smiley icon \u2014 that stock icon
+// is the slot's fallback body, so no flag is needed. \`label\` remains the accessible
+// name, not visible text.`;
 var codeControlled4 = `<EmojiPickerSimple open={ pickerOpen } @change={ addEmoji }
                    @show={ openPicker } @hide={ closePicker }/>
 
@@ -46320,7 +46208,6 @@ var EmojiPickerSimpleDoc = class extends PuzzleView {
 };
 EmojiPickerSimpleDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -46399,7 +46286,7 @@ EmojiPickerSimpleDoc.prototype.render = function() {
                 slot: "trigger",
                 class: "inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink hover:bg-surface-sunken"
               }, [
-                new ViewNode("text", { value: "React " + String(__d.lastEmoji) })
+                new ViewNode("text", { value: "React " + displayValue(__d.lastEmoji, true ? "lastEmoji" : 0) })
               ])
             ])
           ]),
@@ -46416,7 +46303,7 @@ EmojiPickerSimpleDoc.prototype.render = function() {
                 hide: (this.__h ??= {})[5] ??= (event) => this.events.closePicker(event)
               }, []),
               new ViewNode("span", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: String(__d.pickerOpen ? "open" : "closed") })
+                new ViewNode("text", { value: displayValue(__d.pickerOpen ? "open" : "closed", true ? "pickerOpen ? 'open' : 'closed'" : 0) })
               ])
             ])
           ])
@@ -46490,7 +46377,6 @@ var EmptyDoc = class extends PuzzleView {
 };
 EmptyDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -47156,7 +47042,6 @@ var Fader = class extends PuzzleView {
 };
 Fader.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     id: __d.rootId,
@@ -47199,11 +47084,11 @@ Fader.prototype.render = function() {
       "aria-hidden": "true"
     }, [
       new ViewNode("span", { class: __d.labelClass }, [
-        new ViewNode("text", { value: String(__d.labelText) })
+        new ViewNode("text", { value: displayValue(__d.labelText, true ? "labelText" : 0) })
       ]),
       ...__d.showValue ? [
         new ViewNode("span", { class: __d.valueClass }, [
-          new ViewNode("text", { value: String(__d.readout) })
+          new ViewNode("text", { value: displayValue(__d.readout, true ? "readout" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -47392,7 +47277,6 @@ var FaderDoc = class extends PuzzleView {
 };
 FaderDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -47693,7 +47577,6 @@ var FieldDoc = class extends PuzzleView {
 };
 FieldDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -48007,7 +47890,6 @@ var HoverCard = class extends PuzzleView {
 };
 HoverCard.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("span", { class: "relative inline-flex" }, [
     new ViewNode("span", {
       class: "inline-flex",
@@ -48019,7 +47901,7 @@ HoverCard.prototype.render = function() {
       "@keydown:escape": (this.__h ??= {})[4] ??= (event) => this.events.onEscape(event)
     }, [
       new ViewNode(SLOT_TAG, { name: "trigger" }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ]),
     ...__d.open ? [
@@ -48116,7 +47998,6 @@ var HoverCardDoc = class extends PuzzleView {
 };
 HoverCardDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -48236,7 +48117,7 @@ HoverCardDoc.prototype.render = function() {
                 class: "inline-flex h-9 items-center rounded-lg border border-border bg-surface px-4 font-medium text-ink hover:bg-surface-sunken outline-ring focus-visible:outline-2 focus-visible:outline-offset-2",
                 "@click": (this.__h ??= {})[0] ??= (event) => this.events.toggleCard(event)
               }, [
-                new ViewNode("text", { value: String(__d.cardOpen ? "Force close" : "Force open") })
+                new ViewNode("text", { value: displayValue(__d.cardOpen ? "Force close" : "Force open", true ? "cardOpen ? 'Force close' : 'Force open'" : 0) })
               ]),
               new ViewNode("p", {}, [
                 new ViewNode("text", { value: "Hover this" }),
@@ -48262,7 +48143,7 @@ HoverCardDoc.prototype.render = function() {
                 ]),
                 new ViewNode("text", { value: "\u2014 the card is currently " }),
                 new ViewNode("span", { class: "font-medium text-ink" }, [
-                  new ViewNode("text", { value: String(__d.cardOpen ? "open" : "closed") })
+                  new ViewNode("text", { value: displayValue(__d.cardOpen ? "open" : "closed", true ? "cardOpen ? 'open' : 'closed'" : 0) })
                 ]),
                 new ViewNode("text", { value: "." })
               ])
@@ -48394,14 +48275,13 @@ var InputGroup = class extends PuzzleView {
 };
 InputGroup.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.id,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -48410,7 +48290,7 @@ InputGroup.prototype.render = function() {
       new ViewNode("div", {
         class: "flex items-center px-3 text-sm text-muted select-none border-r border-border empty:hidden"
       }, [
-        new ViewNode(SLOT_TAG, { name: "prefix" }, [])
+        new ViewNode(SLOT_TAG, { name: "prefix" })
       ]),
       new ViewNode("input", {
         id: __d.id,
@@ -48430,7 +48310,7 @@ InputGroup.prototype.render = function() {
       new ViewNode("div", {
         class: "flex items-center px-3 text-sm text-muted select-none border-l border-border empty:hidden"
       }, [
-        new ViewNode(SLOT_TAG, { name: "suffix" }, [])
+        new ViewNode(SLOT_TAG, { name: "suffix" })
       ])
     ]),
     ...__d.error ? [
@@ -48438,7 +48318,7 @@ InputGroup.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -48446,7 +48326,7 @@ InputGroup.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -48512,7 +48392,6 @@ var InputGroupDoc = class extends PuzzleView {
 };
 InputGroupDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -48653,7 +48532,7 @@ InputGroupDoc.prototype.render = function() {
             ]),
             new ViewNode("text", { value: "is a real" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String("<label for>") })
+              new ViewNode("text", { value: displayValue("<label for>", true ? "'<label for>'" : 0) })
             ]),
             new ViewNode("text", { value: "tied to the input's id (a stable per-instance id is generated when you don't pass one). An" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -48676,7 +48555,7 @@ InputGroupDoc.prototype.render = function() {
           new ViewNode("p", { class: "text-sm text-muted" }, [
             new ViewNode("text", { value: "Focus lands on the real" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String("<input>") })
+              new ViewNode("text", { value: displayValue("<input>", true ? "'<input>'" : 0) })
             ]),
             new ViewNode("text", { value: ", but the ring is painted on the wrapper with" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -48875,7 +48754,6 @@ var InputOtp = class extends PuzzleView {
 };
 InputOtp.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     role: "group",
@@ -49008,7 +48886,6 @@ var InputOtpDoc = class extends PuzzleView {
 };
 InputOtpDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -49132,7 +49009,7 @@ InputOtpDoc.prototype.render = function() {
                 }, []),
                 ...__d.confirmed ? [
                   new ViewNode("p", { class: "text-sm font-medium text-success" }, [
-                    new ViewNode("text", { value: "Code " + String(__d.otp) + " submitted" })
+                    new ViewNode("text", { value: "Code " + displayValue(__d.otp, true ? "otp" : 0) + " submitted" })
                   ])
                 ] : [
                   new ViewNode("p", { class: "text-sm text-muted" }, [
@@ -49348,7 +49225,6 @@ var KanbanDoc = class extends PuzzleView {
 };
 KanbanDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -49382,7 +49258,7 @@ KanbanDoc.prototype.render = function() {
           ])
         ]),
         new ViewNode("p", { class: "mt-4 text-sm text-muted" }, [
-          new ViewNode("text", { value: "Last move: " + String(__d.lastMove) })
+          new ViewNode("text", { value: "Last move: " + displayValue(__d.lastMove, true ? "lastMove" : 0) })
         ]),
         new ViewNode("section", {
           id: "installation",
@@ -49460,7 +49336,7 @@ KanbanDoc.prototype.render = function() {
           new ViewNode(CodeBlock, { code: __d.codeData }, []),
           new ViewNode("p", { class: "mt-3 text-sm text-body" }, [
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: "@move(" + String(__d.cardId, __d.toColumnId, __d.toIndex, __d.event) + ")" })
+              new ViewNode("text", { value: "@move(" + displayValue(__d.cardId, __d.toColumnId, __d.toIndex, __d.event, true ? "cardId, toColumnId, toIndex, event" : 0) + ")" })
             ]),
             new ViewNode("text", { value: "hands you a " }),
             new ViewNode("em", {}, [
@@ -49668,7 +49544,6 @@ var KbdDoc = class extends PuzzleView {
 };
 KbdDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -49792,7 +49667,6 @@ var Label = class extends PuzzleView {
 };
 Label.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("label", {
     for: __d.forId,
     class: __d.classes
@@ -49840,7 +49714,6 @@ var LabelDoc = class extends PuzzleView {
 };
 LabelDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -50001,7 +49874,6 @@ var LineChartDoc = class extends PuzzleView {
 };
 LineChartDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -50206,7 +50078,6 @@ var MarqueeDoc = class extends PuzzleView {
 };
 MarqueeDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -50408,7 +50279,7 @@ MarqueeDoc.prototype.render = function() {
                 new ViewNode("code", {
                   class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink"
                 }, [
-                  new ViewNode("text", { value: "pauseOnHover=" + String(false) })
+                  new ViewNode("text", { value: "pauseOnHover=" + displayValue(false, true ? "false" : 0) })
                 ])
               ]),
               new ViewNode("li", {}, [
@@ -50551,7 +50422,6 @@ var Masonry = class extends PuzzleView {
 };
 Masonry.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     new ViewNode(SLOT_TAG)
   ]);
@@ -50608,7 +50478,6 @@ var MasonryDoc = class extends PuzzleView {
 };
 MasonryDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -51192,7 +51061,6 @@ var Menubar = class extends PuzzleView {
 };
 Menubar.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "div",
     {
@@ -51222,7 +51090,7 @@ Menubar.prototype.render = function() {
           "@pointerenter": (event) => this.events.onTopEnter(mi, event),
           "@keydown": (event) => this.events.onTopKeydown(mi, event)
         }, [
-          new ViewNode("text", { value: String(menu.label) })
+          new ViewNode("text", { value: displayValue(menu.label, true ? "menu.label" : 0) })
         ]),
         ...__d.openIndex === mi ? [
           new ViewNode(
@@ -51253,7 +51121,7 @@ Menubar.prototype.render = function() {
                       class: "px-2.5 pt-2 pb-1 text-xs font-medium text-muted uppercase tracking-wide",
                       role: "presentation"
                     }, [
-                      new ViewNode("text", { value: String(item.label) })
+                      new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                     ])
                   ] : [
                     new ViewNode("button", {
@@ -51266,11 +51134,11 @@ Menubar.prototype.render = function() {
                       "@click": (event) => this.events.onItemClick(ii, event)
                     }, [
                       new ViewNode("span", { class: "flex-1 text-left" }, [
-                        new ViewNode("text", { value: String(item.label) })
+                        new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
                       ]),
                       ...item.shortcut ? [
                         new ViewNode("kbd", { class: __d.kbdClass }, [
-                          new ViewNode("text", { value: String(item.shortcut) })
+                          new ViewNode("text", { value: displayValue(item.shortcut, true ? "item.shortcut" : 0) })
                         ])
                       ] : [
                         new ViewNode("#")
@@ -51461,7 +51329,6 @@ var MenubarDoc = class extends PuzzleView {
 };
 MenubarDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -51486,7 +51353,7 @@ MenubarDoc.prototype.render = function() {
             new ViewNode("p", { class: "mt-6 text-sm text-muted" }, [
               new ViewNode("text", { value: "Last action:" }),
               new ViewNode("span", { class: "font-medium text-ink" }, [
-                new ViewNode("text", { value: String(__d.lastAction) })
+                new ViewNode("text", { value: displayValue(__d.lastAction, true ? "lastAction" : 0) })
               ])
             ])
           ])
@@ -51696,7 +51563,6 @@ var MeterDoc = class extends PuzzleView {
 };
 MeterDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -52519,14 +52385,13 @@ var MultiSelect = class extends PuzzleView {
 };
 MultiSelect.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.inputId,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -52542,7 +52407,7 @@ MultiSelect.prototype.render = function() {
             class: __d.chipClass
           }, [
             new ViewNode("span", { class: "truncate" }, [
-              new ViewNode("text", { value: String(chip.label) })
+              new ViewNode("text", { value: displayValue(chip.label, true ? "chip.label" : 0) })
             ]),
             new ViewNode("button", {
               type: "button",
@@ -52627,7 +52492,7 @@ MultiSelect.prototype.render = function() {
               role: "presentation",
               class: "px-3 py-6 text-center text-sm text-muted"
             }, [
-              new ViewNode("text", { value: String(__d.emptyText) })
+              new ViewNode("text", { value: displayValue(__d.emptyText, true ? "emptyText" : 0) })
             ])
           ] : [
             ...__d.rows.map(
@@ -52644,11 +52509,11 @@ MultiSelect.prototype.render = function() {
               }, [
                 ...row.kind === "option" ? [
                   new ViewNode("span", { class: "flex-1 truncate" }, [
-                    new ViewNode("text", { value: String(row.label) })
+                    new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) })
                   ])
                 ] : [
                   ...row.kind === "group" ? [
-                    new ViewNode("text", { value: String(row.label) })
+                    new ViewNode("text", { value: displayValue(row.label, true ? "row.label" : 0) })
                   ] : [
                     new ViewNode("#")
                   ]
@@ -52666,7 +52531,7 @@ MultiSelect.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -52674,7 +52539,7 @@ MultiSelect.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -52828,7 +52693,6 @@ var MultiSelectDoc = class extends PuzzleView {
 };
 MultiSelectDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -52995,7 +52859,7 @@ MultiSelectDoc.prototype.render = function() {
                 new ViewNode("p", { class: "text-sm text-muted" }, [
                   new ViewNode("text", { value: "Parent open state:" }),
                   new ViewNode("span", { class: "font-medium text-ink" }, [
-                    new ViewNode("text", { value: String(__d.msOpen ? "open" : "closed") })
+                    new ViewNode("text", { value: displayValue(__d.msOpen ? "open" : "closed", true ? "msOpen ? 'open' : 'closed'" : 0) })
                   ])
                 ])
               ])
@@ -53301,7 +53165,6 @@ var NavigationMenu = class extends PuzzleView {
 };
 NavigationMenu.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("nav", {
     "aria-label": __d.navLabel,
     class: __d.rootClass,
@@ -53323,7 +53186,7 @@ NavigationMenu.prototype.render = function() {
               "aria-current": item.current,
               class: item.linkClass
             }, [
-              new ViewNode("text", { value: String(item.label) })
+              new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
             ]),
             new ViewNode("#")
           ] : [
@@ -53338,7 +53201,7 @@ NavigationMenu.prototype.render = function() {
               "@keydown:down:prevent": (event) => this.events.onTriggerDown(i2, event)
             }, [
               new ViewNode("span", {}, [
-                new ViewNode("text", { value: String(item.label) })
+                new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
               ]),
               new ViewNode("svg", {
                 class: `size-4 shrink-0 transition-[rotate] motion-reduce:transition-none ${__d.openIndex === i2 ? "rotate-180" : ""}`,
@@ -53369,11 +53232,11 @@ NavigationMenu.prototype.render = function() {
                     class: child.cardClass
                   }, [
                     new ViewNode("span", { class: child.labelClass }, [
-                      new ViewNode("text", { value: String(child.label) })
+                      new ViewNode("text", { value: displayValue(child.label, true ? "child.label" : 0) })
                     ]),
                     ...child.description ? [
                       new ViewNode("span", { class: "mt-1 block text-sm text-muted line-clamp-2" }, [
-                        new ViewNode("text", { value: String(child.description) })
+                        new ViewNode("text", { value: displayValue(child.description, true ? "child.description" : 0) })
                       ])
                     ] : [
                       new ViewNode("#")
@@ -53504,7 +53367,6 @@ var NavigationMenuDoc = class extends PuzzleView {
 };
 NavigationMenuDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -53523,7 +53385,7 @@ NavigationMenuDoc.prototype.render = function() {
             ]),
             new ViewNode("text", { value: "buttons over plain" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String("<a>") })
+              new ViewNode("text", { value: displayValue("<a>", true ? "'<a>'" : 0) })
             ]),
             new ViewNode("text", { value: "links, not menubar roles." })
           ])
@@ -53742,7 +53604,6 @@ var NumberFieldDoc = class extends PuzzleView {
 };
 NumberFieldDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -53775,7 +53636,7 @@ NumberFieldDoc.prototype.render = function() {
               }, [])
             ]),
             new ViewNode("p", { class: "text-sm text-muted" }, [
-              new ViewNode("text", { value: "Current: " + String(__d.qtyLabel) })
+              new ViewNode("text", { value: "Current: " + displayValue(__d.qtyLabel, true ? "qtyLabel" : 0) })
             ])
           ])
         ]),
@@ -53825,7 +53686,7 @@ NumberFieldDoc.prototype.render = function() {
                 }, [])
               ]),
               new ViewNode("p", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: "Current: " + String(__d.weightLabel) })
+                new ViewNode("text", { value: "Current: " + displayValue(__d.weightLabel, true ? "weightLabel" : 0) })
               ])
             ])
           ]),
@@ -53856,7 +53717,7 @@ NumberFieldDoc.prototype.render = function() {
                 }, [])
               ]),
               new ViewNode("p", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: "1\u20135 \xB7 Current: " + String(__d.ratingLabel) })
+                new ViewNode("text", { value: "1\u20135 \xB7 Current: " + displayValue(__d.ratingLabel, true ? "ratingLabel" : 0) })
               ])
             ])
           ]),
@@ -53882,7 +53743,7 @@ NumberFieldDoc.prototype.render = function() {
                 }, [])
               ]),
               new ViewNode("p", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: "Emitted: " + String(__d.discountLabel) })
+                new ViewNode("text", { value: "Emitted: " + displayValue(__d.discountLabel, true ? "discountLabel" : 0) })
               ])
             ])
           ]),
@@ -53992,7 +53853,7 @@ NumberFieldDoc.prototype.render = function() {
                   }, [])
                 ]),
                 new ViewNode("p", { class: "text-sm text-muted" }, [
-                  new ViewNode("text", { value: "Current: " + String(__d.levelLabel) })
+                  new ViewNode("text", { value: "Current: " + displayValue(__d.levelLabel, true ? "levelLabel" : 0) })
                 ])
               ])
             ])
@@ -54063,7 +53924,6 @@ var PaginationDoc = class extends PuzzleView {
 };
 PaginationDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -54091,7 +53951,7 @@ PaginationDoc.prototype.render = function() {
               change: (this.__h ??= {})[0] ??= (event) => this.events.setPage(event)
             }, []),
             new ViewNode("p", { class: "text-sm text-muted" }, [
-              new ViewNode("text", { value: "Page " + String(__d.page) + " of 12" })
+              new ViewNode("text", { value: "Page " + displayValue(__d.page, true ? "page" : 0) + " of 12" })
             ])
           ])
         ]),
@@ -54301,7 +54161,6 @@ var PanelStack = class extends PuzzleView {
 };
 PanelStack.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     "data-panel-stack-effect": __d.effect,
@@ -54446,7 +54305,6 @@ var PanelStackDoc = class extends PuzzleView {
 };
 PanelStackDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -54470,7 +54328,7 @@ PanelStackDoc.prototype.render = function() {
                 "data-stack-panel": "menu-root",
                 role: "group",
                 "aria-label": "Main menu",
-                class: `${__d.panelClasses(__d.menuStack, "menu-root")} bg-surface p-6`,
+                class: `${displayValue(__d.panelClasses(__d.menuStack, "menu-root"), true ? "panelClasses(menuStack, 'menu-root')" : 0)} bg-surface p-6`,
                 inert: __d.panelIsInert(__d.menuStack, "menu-root")
               }, [
                 new ViewNode("p", { class: "text-xs font-medium uppercase tracking-wide text-muted" }, [
@@ -54509,7 +54367,7 @@ PanelStackDoc.prototype.render = function() {
                 "data-stack-panel": "menu-shop",
                 role: "group",
                 "aria-label": "Shop menu",
-                class: `${__d.panelClasses(__d.menuStack, "menu-shop")} bg-surface p-6`,
+                class: `${displayValue(__d.panelClasses(__d.menuStack, "menu-shop"), true ? "panelClasses(menuStack, 'menu-shop')" : 0)} bg-surface p-6`,
                 inert: __d.panelIsInert(__d.menuStack, "menu-shop")
               }, [
                 new ViewNode("button", {
@@ -54548,7 +54406,7 @@ PanelStackDoc.prototype.render = function() {
                 "data-stack-panel": "menu-categories",
                 role: "group",
                 "aria-label": "Categories menu",
-                class: `${__d.panelClasses(__d.menuStack, "menu-categories")} bg-surface p-6`,
+                class: `${displayValue(__d.panelClasses(__d.menuStack, "menu-categories"), true ? "panelClasses(menuStack, 'menu-categories')" : 0)} bg-surface p-6`,
                 inert: __d.panelIsInert(__d.menuStack, "menu-categories")
               }, [
                 new ViewNode("button", {
@@ -54629,7 +54487,7 @@ PanelStackDoc.prototype.render = function() {
                   "data-stack-panel": "settings-root",
                   role: "group",
                   "aria-label": "Settings",
-                  class: `${__d.panelClasses(__d.settingsStack, "settings-root", "stack")} bg-surface p-6`,
+                  class: `${displayValue(__d.panelClasses(__d.settingsStack, "settings-root", "stack"), true ? "panelClasses(settingsStack, 'settings-root', 'stack')" : 0)} bg-surface p-6`,
                   inert: __d.panelIsInert(__d.settingsStack, "settings-root")
                 }, [
                   new ViewNode("p", { class: "text-xs font-medium uppercase tracking-wide text-muted" }, [
@@ -54657,7 +54515,7 @@ PanelStackDoc.prototype.render = function() {
                   "data-stack-panel": "settings-appearance",
                   role: "group",
                   "aria-label": "Appearance settings",
-                  class: `${__d.panelClasses(__d.settingsStack, "settings-appearance", "stack")} bg-surface p-6`,
+                  class: `${displayValue(__d.panelClasses(__d.settingsStack, "settings-appearance", "stack"), true ? "panelClasses(settingsStack, 'settings-appearance', 'stack')" : 0)} bg-surface p-6`,
                   inert: __d.panelIsInert(__d.settingsStack, "settings-appearance")
                 }, [
                   new ViewNode("button", {
@@ -54712,7 +54570,7 @@ PanelStackDoc.prototype.render = function() {
                     "data-stack-panel": "dialog-root",
                     role: "group",
                     "aria-label": "Preference categories",
-                    class: `${__d.panelClasses(__d.dialogStack, "dialog-root")} bg-surface p-5`,
+                    class: `${displayValue(__d.panelClasses(__d.dialogStack, "dialog-root"), true ? "panelClasses(dialogStack, 'dialog-root')" : 0)} bg-surface p-5`,
                     inert: __d.panelIsInert(__d.dialogStack, "dialog-root")
                   }, [
                     new ViewNode("p", { class: "text-sm text-body" }, [
@@ -54737,7 +54595,7 @@ PanelStackDoc.prototype.render = function() {
                     "data-stack-panel": "dialog-notifications",
                     role: "group",
                     "aria-label": "Notification preferences",
-                    class: `${__d.panelClasses(__d.dialogStack, "dialog-notifications")} bg-surface p-5`,
+                    class: `${displayValue(__d.panelClasses(__d.dialogStack, "dialog-notifications"), true ? "panelClasses(dialogStack, 'dialog-notifications')" : 0)} bg-surface p-5`,
                     inert: __d.panelIsInert(__d.dialogStack, "dialog-notifications")
                   }, [
                     new ViewNode("button", {
@@ -54837,14 +54695,13 @@ var PasswordField = class extends PuzzleView {
 };
 PasswordField.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.id,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -54917,7 +54774,7 @@ PasswordField.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -54925,7 +54782,7 @@ PasswordField.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -54974,7 +54831,6 @@ var PasswordFieldDoc = class extends PuzzleView {
 };
 PasswordFieldDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -55136,7 +54992,6 @@ var PieChartDoc = class extends PuzzleView {
 };
 PieChartDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -55147,7 +55002,7 @@ PieChartDoc.prototype.render = function() {
           new ViewNode("p", { class: "mt-2 text-body" }, [
             new ViewNode("text", { value: "A config-first part-to-whole donut. Hand it an array of" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String(__d.label, __d.value) })
+              new ViewNode("text", { value: displayValue(__d.label, __d.value, true ? "label, value" : 0) })
             ]),
             new ViewNode("text", { value: "and it renders slices in fixed slot colors, an always-present legend, per-slice hover tooltips with percent-of-total, and an accessible data table. Pass" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -55327,7 +55182,6 @@ var PopconfirmDoc = class extends PuzzleView {
 };
 PopconfirmDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -55353,7 +55207,7 @@ PopconfirmDoc.prototype.render = function() {
             ])
           ]),
           new ViewNode("p", { class: "mt-4 text-sm text-muted" }, [
-            new ViewNode("text", { value: "Deleted " + String(__d.deleteCount) + " time" + String(__d.deleteCount === 1 ? "" : "s") + " this session." })
+            new ViewNode("text", { value: "Deleted " + displayValue(__d.deleteCount, true ? "deleteCount" : 0) + " time" + displayValue(__d.deleteCount === 1 ? "" : "s", true ? "deleteCount === 1 ? '' : 's'" : 0) + " this session." })
           ])
         ]),
         new ViewNode("section", {
@@ -55479,9 +55333,9 @@ PopconfirmDoc.prototype.render = function() {
                 ]),
                 new ViewNode("text", { value: " \u2014 it is currently" }),
                 new ViewNode("span", { class: "font-medium text-ink" }, [
-                  new ViewNode("text", { value: String(__d.confirmOpen ? "open" : "closed") })
+                  new ViewNode("text", { value: displayValue(__d.confirmOpen ? "open" : "closed", true ? "confirmOpen ? 'open' : 'closed'" : 0) })
                 ]),
-                new ViewNode("text", { value: "." + String(__d.published ? " Changes published." : "") })
+                new ViewNode("text", { value: "." + displayValue(__d.published ? " Changes published." : "", true ? "published ? ' Changes published.' : ''" : 0) })
               ])
             ])
           ])
@@ -55613,7 +55467,6 @@ var Popover = class extends PuzzleView {
 };
 Popover.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: "relative inline-block" }, [
     new ViewNode("button", {
       type: "button",
@@ -55626,7 +55479,7 @@ Popover.prototype.render = function() {
       "@keydown:escape": (this.__h ??= {})[1] ??= (event) => this.events.onEscape(event)
     }, [
       new ViewNode(SLOT_TAG, { name: "trigger" }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ]),
     ...__d.open ? [
@@ -55683,7 +55536,6 @@ var PopoverDoc = class extends PuzzleView {
 };
 PopoverDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -55852,7 +55704,6 @@ var ProgressDoc = class extends PuzzleView {
 };
 ProgressDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -56014,7 +55865,6 @@ var ProgressRingDoc = class extends PuzzleView {
 };
 ProgressRingDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -56255,7 +56105,6 @@ var QuantityInputDoc = class extends PuzzleView {
 };
 QuantityInputDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -56280,7 +56129,7 @@ QuantityInputDoc.prototype.render = function() {
               change: (this.__h ??= {})[0] ??= (event) => this.events.setQty(event)
             }, []),
             new ViewNode("p", { class: "text-sm text-muted" }, [
-              new ViewNode("text", { value: "Current: " + String(__d.qty) })
+              new ViewNode("text", { value: "Current: " + displayValue(__d.qty, true ? "qty" : 0) })
             ])
           ])
         ]),
@@ -56326,7 +56175,7 @@ QuantityInputDoc.prototype.render = function() {
                 change: (this.__h ??= {})[1] ??= (event) => this.events.setBoxes(event)
               }, []),
               new ViewNode("p", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: "2\u20136 \xB7 Current: " + String(__d.boxes) })
+                new ViewNode("text", { value: "2\u20136 \xB7 Current: " + displayValue(__d.boxes, true ? "boxes" : 0) })
               ])
             ])
           ])
@@ -56374,14 +56223,13 @@ var RadioGroup = class extends PuzzleView {
 };
 RadioGroup.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("fieldset", {
     class: __d.fieldsetClass,
     disabled: __d.disabled
   }, [
     ...__d.label ? [
       new ViewNode("legend", { class: "mb-2 text-sm font-medium text-ink" }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -56410,11 +56258,11 @@ RadioGroup.prototype.render = function() {
           ]),
           new ViewNode("span", { class: "min-w-0" }, [
             new ViewNode("span", { class: "block text-sm text-ink" }, [
-              new ViewNode("text", { value: String(opt.label) })
+              new ViewNode("text", { value: displayValue(opt.label, true ? "opt.label" : 0) })
             ]),
             ...opt.hint ? [
               new ViewNode("span", { class: "block text-sm text-muted" }, [
-                new ViewNode("text", { value: String(opt.hint) })
+                new ViewNode("text", { value: displayValue(opt.hint, true ? "opt.hint" : 0) })
               ])
             ] : [
               new ViewNode("#")
@@ -56510,7 +56358,6 @@ var RadioGroupDoc = class extends PuzzleView {
 };
 RadioGroupDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -56672,7 +56519,6 @@ var RatingDoc = class extends PuzzleView {
 };
 RatingDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -56706,7 +56552,7 @@ RatingDoc.prototype.render = function() {
             new ViewNode("p", { class: "text-sm text-muted" }, [
               new ViewNode("text", { value: "Value: " }),
               new ViewNode("span", { class: "font-medium text-ink" }, [
-                new ViewNode("text", { value: String(__d.scoreLabel) })
+                new ViewNode("text", { value: displayValue(__d.scoreLabel, true ? "scoreLabel" : 0) })
               ])
             ])
           ])
@@ -56828,7 +56674,7 @@ RatingDoc.prototype.render = function() {
                 new ViewNode("code", {
                   class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink"
                 }, [
-                  new ViewNode("text", { value: "rating=" + String(__d.formScore) })
+                  new ViewNode("text", { value: "rating=" + displayValue(__d.formScore, true ? "formScore" : 0) })
                 ])
               ])
             ])
@@ -56878,7 +56724,7 @@ RatingDoc.prototype.render = function() {
                 new ViewNode("p", { class: "text-sm text-muted" }, [
                   new ViewNode("text", { value: "Selected: " }),
                   new ViewNode("span", { class: "font-medium text-ink" }, [
-                    new ViewNode("text", { value: String(__d.kbdLabel) })
+                    new ViewNode("text", { value: displayValue(__d.kbdLabel, true ? "kbdLabel" : 0) })
                   ])
                 ])
               ])
@@ -57173,7 +57019,6 @@ var ScrollArea = class extends PuzzleView {
 };
 ScrollArea.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     "@pointerenter": (this.__h ??= {})[0] ??= (event) => this.events.onEnter(event),
@@ -57304,7 +57149,6 @@ var ScrollAreaDoc = class extends PuzzleView {
 };
 ScrollAreaDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -57338,7 +57182,7 @@ ScrollAreaDoc.prototype.render = function() {
                   key: ViewNode.keyOf(item),
                   class: "px-4 py-3 text-sm text-body"
                 }, [
-                  new ViewNode("text", { value: String(item) })
+                  new ViewNode("text", { value: displayValue(item, true ? "item" : 0) })
                 ])
               )
             )
@@ -57391,7 +57235,7 @@ ScrollAreaDoc.prototype.render = function() {
                     key: ViewNode.keyOf(card),
                     class: "flex h-24 w-32 shrink-0 items-center justify-center rounded-md bg-surface-sunken text-sm font-medium text-body"
                   }, [
-                    new ViewNode("text", { value: String(card) })
+                    new ViewNode("text", { value: displayValue(card, true ? "card" : 0) })
                   ])
                 )
               )
@@ -57416,7 +57260,7 @@ ScrollAreaDoc.prototype.render = function() {
                     key: ViewNode.keyOf(line),
                     class: "whitespace-nowrap font-mono text-[13px] text-body"
                   }, [
-                    new ViewNode("text", { value: String(line) })
+                    new ViewNode("text", { value: displayValue(line, true ? "line" : 0) })
                   ])
                 )
               )
@@ -57550,7 +57394,6 @@ var SearchFieldDoc = class extends PuzzleView {
 };
 SearchFieldDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -57578,7 +57421,7 @@ SearchFieldDoc.prototype.render = function() {
               change: (this.__h ??= {})[0] ??= (event) => this.events.setQuery(event)
             }, []),
             new ViewNode("p", { class: "text-sm text-muted" }, [
-              new ViewNode("text", { value: "Query: " + String(__d.query || "\u2014") })
+              new ViewNode("text", { value: "Query: " + displayValue(__d.query || "\u2014", true ? "query || '\u2014'" : 0) })
             ])
           ])
         ]),
@@ -57738,7 +57581,6 @@ var SelectDoc = class extends PuzzleView {
 };
 SelectDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -57976,7 +57818,6 @@ var SeparatorDoc = class extends PuzzleView {
 };
 SeparatorDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -58431,7 +58272,6 @@ var Sheet = class extends PuzzleView {
 };
 Sheet.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("dialog", {
     class: __d.panelClass,
     "aria-labelledby": __d.labelledby,
@@ -58459,7 +58299,7 @@ Sheet.prototype.render = function() {
             id: __d.titleId,
             class: "px-4 pb-3 text-base font-semibold text-ink text-center"
           }, [
-            new ViewNode("text", { value: String(__d.title) })
+            new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
           ])
         ] : [
           new ViewNode("#")
@@ -58471,7 +58311,7 @@ Sheet.prototype.render = function() {
           id: __d.titleId,
           class: "px-4 pt-5 pb-2 text-base font-semibold text-ink"
         }, [
-          new ViewNode("text", { value: String(__d.title) })
+          new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -58530,7 +58370,6 @@ var SheetDoc = class extends PuzzleView {
 };
 SheetDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -58559,7 +58398,7 @@ SheetDoc.prototype.render = function() {
               { class: "space-y-4 text-sm text-body" },
               __d.paragraphs.map(
                 (n2) => new ViewNode("p", { key: ViewNode.keyOf(n2) }, [
-                  new ViewNode("text", { value: "Section " + String(n2) + " \u2014 filler content to make the sheet scroll. On narrow viewports the sheet pins to the bottom with a drag handle; on wide viewports it becomes a centered modal. Drag it down or press Escape to dismiss." })
+                  new ViewNode("text", { value: "Section " + displayValue(n2, true ? "n" : 0) + " \u2014 filler content to make the sheet scroll. On narrow viewports the sheet pins to the bottom with a drag handle; on wide viewports it becomes a centered modal. Drag it down or press Escape to dismiss." })
                 ])
               )
             )
@@ -58740,7 +58579,6 @@ var SidebarDoc = class extends PuzzleView {
 };
 SidebarDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -58854,7 +58692,7 @@ SidebarDoc.prototype.render = function() {
                   class: "inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-surface px-4 text-sm font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                   "@click": (this.__h ??= {})[0] ??= (event) => this.events.toggleCollapsed(event)
                 }, [
-                  new ViewNode("text", { value: String(__d.collapsed ? "Expand" : "Collapse") + " sidebar" })
+                  new ViewNode("text", { value: displayValue(__d.collapsed ? "Expand" : "Collapse", true ? "collapsed ? 'Expand' : 'Collapse'" : 0) + " sidebar" })
                 ])
               ]),
               new ViewNode("div", { class: "flex h-[380px] overflow-hidden rounded-xl border border-border" }, [
@@ -58946,7 +58784,7 @@ SidebarDoc.prototype.render = function() {
             new ViewNode("li", {}, [
               new ViewNode("text", { value: "The rail is a real" }),
               new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
-                new ViewNode("text", { value: String("<nav>") })
+                new ViewNode("text", { value: displayValue("<nav>", true ? "'<nav>'" : 0) })
               ]),
               new ViewNode("text", { value: "with an accessible " }),
               new ViewNode("strong", { class: "font-medium text-ink" }, [
@@ -58958,7 +58796,7 @@ SidebarDoc.prototype.render = function() {
               ]),
               new ViewNode("text", { value: "), and links live in a semantic" }),
               new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
-                new ViewNode("text", { value: String("<ul>") })
+                new ViewNode("text", { value: displayValue("<ul>", true ? "'<ul>'" : 0) })
               ]),
               new ViewNode("text", { value: "." })
             ]),
@@ -59042,7 +58880,6 @@ var Skeleton = class extends PuzzleView {
 };
 Skeleton.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.classes,
     "aria-hidden": "true"
@@ -59089,7 +58926,6 @@ var SkeletonDoc = class extends PuzzleView {
 };
 SkeletonDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -59768,7 +59604,6 @@ var Slider = class extends PuzzleView {
 };
 Slider.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     id: __d.rootId,
@@ -59863,7 +59698,7 @@ Slider.prototype.render = function() {
               style: t2.style,
               key: t2.key
             }, [
-              new ViewNode("text", { value: String(t2.label) })
+              new ViewNode("text", { value: displayValue(t2.label, true ? "t.label" : 0) })
             ])
           )
         )
@@ -60096,7 +59931,6 @@ var SliderDoc = class extends PuzzleView {
 };
 SliderDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -60123,7 +59957,7 @@ SliderDoc.prototype.render = function() {
                 new ViewNode("text", { value: "Volume" })
               ]),
               new ViewNode("p", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: String(__d.volume) })
+                new ViewNode("text", { value: displayValue(__d.volume, true ? "volume" : 0) })
               ])
             ]),
             new ViewNode(Slider, {
@@ -60175,7 +60009,7 @@ SliderDoc.prototype.render = function() {
                   new ViewNode("text", { value: "Price range" })
                 ]),
                 new ViewNode("p", { class: "text-sm text-muted" }, [
-                  new ViewNode("text", { value: "$" + String(__d.priceMin) + " \u2013 $" + String(__d.priceMax) })
+                  new ViewNode("text", { value: "$" + displayValue(__d.priceMin, true ? "priceMin" : 0) + " \u2013 $" + displayValue(__d.priceMax, true ? "priceMax" : 0) })
                 ])
               ]),
               new ViewNode(Slider, {
@@ -60201,7 +60035,7 @@ SliderDoc.prototype.render = function() {
                     new ViewNode("text", { value: "Step 10" })
                   ]),
                   new ViewNode("p", { class: "text-sm text-muted" }, [
-                    new ViewNode("text", { value: String(__d.stepped) })
+                    new ViewNode("text", { value: displayValue(__d.stepped, true ? "stepped" : 0) })
                   ])
                 ]),
                 new ViewNode(Slider, {
@@ -60219,7 +60053,7 @@ SliderDoc.prototype.render = function() {
                     new ViewNode("text", { value: 'Continuous (step="any")' })
                   ]),
                   new ViewNode("p", { class: "text-sm text-muted" }, [
-                    new ViewNode("text", { value: String(__d.fine) })
+                    new ViewNode("text", { value: displayValue(__d.fine, true ? "fine" : 0) })
                   ])
                 ]),
                 new ViewNode(Slider, {
@@ -60245,7 +60079,7 @@ SliderDoc.prototype.render = function() {
                     new ViewNode("text", { value: "Auto grid" })
                   ]),
                   new ViewNode("p", { class: "text-sm text-muted" }, [
-                    new ViewNode("text", { value: String(__d.autoTicked) })
+                    new ViewNode("text", { value: displayValue(__d.autoTicked, true ? "autoTicked" : 0) })
                   ])
                 ]),
                 new ViewNode(Slider, {
@@ -60263,7 +60097,7 @@ SliderDoc.prototype.render = function() {
                     new ViewNode("text", { value: "Explicit values" })
                   ]),
                   new ViewNode("p", { class: "text-sm text-muted" }, [
-                    new ViewNode("text", { value: String(__d.quarter) })
+                    new ViewNode("text", { value: displayValue(__d.quarter, true ? "quarter" : 0) })
                   ])
                 ]),
                 new ViewNode(Slider, {
@@ -60282,7 +60116,7 @@ SliderDoc.prototype.render = function() {
                     new ViewNode("text", { value: "Every 10, snapping" })
                   ]),
                   new ViewNode("p", { class: "text-sm text-muted" }, [
-                    new ViewNode("text", { value: String(__d.stepTen) })
+                    new ViewNode("text", { value: displayValue(__d.stepTen, true ? "stepTen" : 0) })
                   ])
                 ]),
                 new ViewNode(Slider, {
@@ -60310,7 +60144,7 @@ SliderDoc.prototype.render = function() {
                     new ViewNode("text", { value: "Labelled grid" })
                   ]),
                   new ViewNode("p", { class: "text-sm text-muted" }, [
-                    new ViewNode("text", { value: String(__d.labeled) })
+                    new ViewNode("text", { value: displayValue(__d.labeled, true ? "labeled" : 0) })
                   ])
                 ]),
                 new ViewNode(Slider, {
@@ -60331,7 +60165,7 @@ SliderDoc.prototype.render = function() {
                     new ViewNode("text", { value: "Formatted" })
                   ]),
                   new ViewNode("p", { class: "text-sm text-muted" }, [
-                    new ViewNode("text", { value: String(__d.zoom) + "%" })
+                    new ViewNode("text", { value: displayValue(__d.zoom, true ? "zoom" : 0) + "%" })
                   ])
                 ]),
                 new ViewNode(Slider, {
@@ -60418,7 +60252,7 @@ SliderDoc.prototype.render = function() {
                     new ViewNode("text", { value: "Redline at 90" })
                   ]),
                   new ViewNode("p", { class: "text-sm text-muted" }, [
-                    new ViewNode("text", { value: String(__d.redline) })
+                    new ViewNode("text", { value: displayValue(__d.redline, true ? "redline" : 0) })
                   ])
                 ]),
                 new ViewNode(Slider, {
@@ -60438,7 +60272,7 @@ SliderDoc.prototype.render = function() {
                     new ViewNode("text", { value: "Named endpoints" })
                   ]),
                   new ViewNode("p", { class: "text-sm text-muted" }, [
-                    new ViewNode("text", { value: String(__d.mode) })
+                    new ViewNode("text", { value: displayValue(__d.mode, true ? "mode" : 0) })
                   ])
                 ]),
                 new ViewNode(Slider, {
@@ -60523,7 +60357,6 @@ var SparklineDoc = class extends PuzzleView {
 };
 SparklineDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -60656,9 +60489,8 @@ var Spinner = class extends PuzzleView {
 };
 Spinner.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("span", {
-    class: `inline-block animate-spin rounded-full border-2 border-border border-t-brand ${__d.sizeClass} ${__d.extraClass}`,
+    class: `inline-block animate-spin rounded-full border-2 border-border border-t-brand ${displayValue(__d.sizeClass, true ? "sizeClass" : 0)} ${displayValue(__d.extraClass, true ? "extraClass" : 0)}`,
     role: "status",
     "aria-label": __d.label
   }, []);
@@ -60708,7 +60540,6 @@ var SpinnerDoc = class extends PuzzleView {
 };
 SpinnerDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -60875,7 +60706,6 @@ var SplitButtonDoc = class extends PuzzleView {
 };
 SplitButtonDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -61030,7 +60860,7 @@ SplitButtonDoc.prototype.render = function() {
           new ViewNode("p", { class: "mb-3 text-sm text-body" }, [
             new ViewNode("text", { value: "The two halves are real" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String("<button>") })
+              new ViewNode("text", { value: displayValue("<button>", true ? "'<button>'" : 0) })
             ]),
             new ViewNode("text", { value: "elements. The caret carries" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -61649,7 +61479,6 @@ var SplitPanel = class extends PuzzleView {
 };
 SplitPanel.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", {
     class: __d.rootClass,
     id: __d.rootId,
@@ -61662,7 +61491,7 @@ SplitPanel.prototype.render = function() {
       style: __d.firstStyle,
       "data-split-pane": "first"
     }, [
-      new ViewNode(SLOT_TAG, { name: "first" }, [])
+      new ViewNode(SLOT_TAG, { name: "first" })
     ]),
     new ViewNode("div", {
       class: __d.dividerClass,
@@ -61690,7 +61519,7 @@ SplitPanel.prototype.render = function() {
       style: __d.secondStyle,
       "data-split-pane": "second"
     }, [
-      new ViewNode(SLOT_TAG, { name: "second" }, [])
+      new ViewNode(SLOT_TAG, { name: "second" })
     ])
   ]);
 };
@@ -61808,7 +61637,6 @@ var SplitPanelDoc = class extends PuzzleView {
 };
 SplitPanelDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -61972,7 +61800,7 @@ SplitPanelDoc.prototype.render = function() {
                   new ViewNode("text", { value: "Collapse left \xB7 Center \xB7 Collapse right" })
                 ]),
                 new ViewNode("span", { class: "font-mono text-ink" }, [
-                  new ViewNode("text", { value: String(__d.snapFirst) + " / " + String(__d.snapSecond) })
+                  new ViewNode("text", { value: displayValue(__d.snapFirst, true ? "snapFirst" : 0) + " / " + displayValue(__d.snapSecond, true ? "snapSecond" : 0) })
                 ])
               ]),
               new ViewNode(SplitPanel, {
@@ -62119,7 +61947,6 @@ var StatCardDoc = class extends PuzzleView {
 };
 StatCardDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -62376,7 +62203,6 @@ var Stepper = class extends PuzzleView {
 };
 Stepper.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "ol",
     {
@@ -62414,7 +62240,7 @@ Stepper.prototype.render = function() {
                   }, [])
                 ])
               ] : [
-                new ViewNode("text", { value: String(step.number) })
+                new ViewNode("text", { value: displayValue(step.number, true ? "step.number" : 0) })
               ]
             ])
           ] : [
@@ -62439,7 +62265,7 @@ Stepper.prototype.render = function() {
                   }, [])
                 ])
               ] : [
-                new ViewNode("text", { value: String(step.number) })
+                new ViewNode("text", { value: displayValue(step.number, true ? "step.number" : 0) })
               ]
             ])
           ],
@@ -62455,17 +62281,17 @@ Stepper.prototype.render = function() {
         new ViewNode("div", { class: step.labelWrapClass }, [
           ...step.statusLabel ? [
             new ViewNode("span", { class: "sr-only" }, [
-              new ViewNode("text", { value: String(step.statusLabel) })
+              new ViewNode("text", { value: displayValue(step.statusLabel, true ? "step.statusLabel" : 0) })
             ])
           ] : [
             new ViewNode("#")
           ],
           new ViewNode("div", { class: step.labelClass }, [
-            new ViewNode("text", { value: String(step.label) })
+            new ViewNode("text", { value: displayValue(step.label, true ? "step.label" : 0) })
           ]),
           ...step.description ? [
             new ViewNode("div", { class: step.descClass }, [
-              new ViewNode("text", { value: String(step.description) })
+              new ViewNode("text", { value: displayValue(step.description, true ? "step.description" : 0) })
             ])
           ] : [
             new ViewNode("#")
@@ -62558,7 +62384,6 @@ var StepperDoc = class extends PuzzleView {
 };
 StepperDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -62670,7 +62495,7 @@ StepperDoc.prototype.render = function() {
             ]),
             new ViewNode("text", { value: "mode every reachable step (completed or current) is a real" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: String("<button>") })
+              new ViewNode("text", { value: displayValue("<button>", true ? "'<button>'" : 0) })
             ]),
             new ViewNode("text", { value: "and activating one fires" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -62772,7 +62597,6 @@ var SwitchDoc = class extends PuzzleView {
 };
 SwitchDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -62937,12 +62761,11 @@ var Table = class extends PuzzleView {
 };
 Table.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.wrapperClass }, [
     new ViewNode("table", { class: "w-full border-collapse text-left" }, [
       ...__d.caption ? [
         new ViewNode("caption", { class: "caption-bottom px-4 py-3 text-left text-sm text-muted" }, [
-          new ViewNode("text", { value: String(__d.caption) })
+          new ViewNode("text", { value: displayValue(__d.caption, true ? "caption" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -62957,7 +62780,7 @@ Table.prototype.render = function() {
               class: col.thClass,
               key: col.key
             }, [
-              new ViewNode("text", { value: String(col.label) })
+              new ViewNode("text", { value: displayValue(col.label, true ? "col.label" : 0) })
             ])
           )
         )
@@ -62976,7 +62799,7 @@ Table.prototype.render = function() {
                   class: cell.tdClass,
                   key: cell.key
                 }, [
-                  new ViewNode("text", { value: String(cell.value) })
+                  new ViewNode("text", { value: displayValue(cell.value, true ? "cell.value" : 0) })
                 ])
               )
             )
@@ -62987,7 +62810,7 @@ Table.prototype.render = function() {
               class: "px-4 py-8 text-center text-sm text-muted",
               colspan: __d.colspan
             }, [
-              new ViewNode("text", { value: String(__d.emptyText) })
+              new ViewNode("text", { value: displayValue(__d.emptyText, true ? "emptyText" : 0) })
             ])
           ])
         ]
@@ -63069,7 +62892,6 @@ var TableDoc = class extends PuzzleView {
 };
 TableDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -63244,7 +63066,6 @@ var TabsDoc = class extends PuzzleView {
 };
 TabsDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -63526,7 +63347,6 @@ var TagsInputDoc = class extends PuzzleView {
 };
 TagsInputDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -63781,7 +63601,6 @@ var TextareaDoc = class extends PuzzleView {
 };
 TextareaDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -64318,14 +64137,13 @@ var TimePicker = class extends PuzzleView {
 };
 TimePicker.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("div", { class: __d.rootClass }, [
     ...__d.label ? [
       new ViewNode("label", {
         for: __d.triggerId,
         class: "mb-1.5 block text-sm font-medium text-ink"
       }, [
-        new ViewNode("text", { value: String(__d.label) })
+        new ViewNode("text", { value: displayValue(__d.label, true ? "label" : 0) })
       ])
     ] : [
       new ViewNode("#")
@@ -64365,9 +64183,9 @@ TimePicker.prototype.render = function() {
           }, [])
         ]),
         new ViewNode("span", {
-          class: `flex-1 truncate text-left ${__d.placeholderClass}`
+          class: `flex-1 truncate text-left ${displayValue(__d.placeholderClass, true ? "placeholderClass" : 0)}`
         }, [
-          new ViewNode("text", { value: String(__d.triggerLabel) })
+          new ViewNode("text", { value: displayValue(__d.triggerLabel, true ? "triggerLabel" : 0) })
         ])
       ]),
       ...__d.name ? [
@@ -64402,7 +64220,7 @@ TimePicker.prototype.render = function() {
                   class: "px-1 pb-1 text-center text-[11px] font-medium uppercase tracking-wide text-muted",
                   "aria-hidden": "true"
                 }, [
-                  new ViewNode("text", { value: String(col.name) })
+                  new ViewNode("text", { value: displayValue(col.name, true ? "col.name" : 0) })
                 ]),
                 new ViewNode(
                   "ul",
@@ -64426,7 +64244,7 @@ TimePicker.prototype.render = function() {
                       "@click": (event) => this.events.onPick(col, opt, event)
                     }, [
                       new ViewNode("span", { class: "tabular-nums" }, [
-                        new ViewNode("text", { value: String(opt.label) })
+                        new ViewNode("text", { value: displayValue(opt.label, true ? "opt.label" : 0) })
                       ])
                     ])
                   )
@@ -64444,7 +64262,7 @@ TimePicker.prototype.render = function() {
         id: __d.descId,
         class: "mt-1.5 text-sm text-danger"
       }, [
-        new ViewNode("text", { value: String(__d.error) })
+        new ViewNode("text", { value: displayValue(__d.error, true ? "error" : 0) })
       ])
     ] : [
       ...__d.hint ? [
@@ -64452,7 +64270,7 @@ TimePicker.prototype.render = function() {
           id: __d.descId,
           class: "mt-1.5 text-sm text-muted"
         }, [
-          new ViewNode("text", { value: String(__d.hint) })
+          new ViewNode("text", { value: displayValue(__d.hint, true ? "hint" : 0) })
         ])
       ] : [
         new ViewNode("#")
@@ -64561,7 +64379,6 @@ var TimePickerDoc = class extends PuzzleView {
 };
 TimePickerDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -64681,7 +64498,7 @@ TimePickerDoc.prototype.render = function() {
                 hide: (this.__h ??= {})[6] ??= (event) => this.events.closeDeparture(event)
               }, []),
               new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
-                new ViewNode("text", { value: "Panel is " + String(__d.depOpen ? "open" : "closed") + " \xB7 value " + String(__d.departure || "\u2014") })
+                new ViewNode("text", { value: "Panel is " + displayValue(__d.depOpen ? "open" : "closed", true ? "depOpen ? 'open' : 'closed'" : 0) + " \xB7 value " + displayValue(__d.departure || "\u2014", true ? "departure || '\u2014'" : 0) })
               ])
             ])
           ]),
@@ -64717,11 +64534,11 @@ TimePickerDoc.prototype.render = function() {
                         new ViewNode("kbd", {
                           class: "rounded border border-border bg-surface-sunken px-1.5 py-0.5 font-mono text-xs text-ink"
                         }, [
-                          new ViewNode("text", { value: String(row.key) })
+                          new ViewNode("text", { value: displayValue(row.key, true ? "row.key" : 0) })
                         ])
                       ]),
                       new ViewNode("td", { class: "px-4 py-2.5 text-body" }, [
-                        new ViewNode("text", { value: String(row.desc) })
+                        new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
                       ])
                     ])
                   )
@@ -64943,7 +64760,6 @@ var TimelineDoc = class extends PuzzleView {
 };
 TimelineDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -64982,7 +64798,7 @@ TimelineDoc.prototype.render = function() {
           new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
             new ViewNode("text", { value: "Each item is" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink" }, [
-              new ViewNode("text", { value: String(__d.itemShape) })
+              new ViewNode("text", { value: displayValue(__d.itemShape, true ? "itemShape" : 0) })
             ]),
             new ViewNode("text", { value: ". The last item drops its connector automatically. The piece never formats dates \u2014 pass" }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[12px] text-ink" }, [
@@ -65116,7 +64932,6 @@ var ToastDoc = class extends PuzzleView {
 };
 ToastDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -65281,7 +65096,6 @@ var Toggle = class extends PuzzleView {
 };
 Toggle.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("button", {
     type: "button",
     class: __d.classes,
@@ -65352,7 +65166,6 @@ var ToggleDoc = class extends PuzzleView {
 };
 ToggleDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -65389,7 +65202,7 @@ ToggleDoc.prototype.render = function() {
               new ViewNode("text", { value: "I" })
             ]),
             new ViewNode("p", { class: "text-sm text-muted" }, [
-              new ViewNode("text", { value: "Bold: " + String(__d.bold ? "on" : "off") + " \xB7 Italic: " + String(__d.italic ? "on" : "off") })
+              new ViewNode("text", { value: "Bold: " + displayValue(__d.bold ? "on" : "off", true ? "bold ? 'on' : 'off'" : 0) + " \xB7 Italic: " + displayValue(__d.italic ? "on" : "off", true ? "italic ? 'on' : 'off'" : 0) })
             ])
           ])
         ]),
@@ -65539,7 +65352,6 @@ var ToggleGroup = class extends PuzzleView {
 };
 ToggleGroup.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode(
     "div",
     {
@@ -65556,7 +65368,7 @@ ToggleGroup.prototype.render = function() {
         disabled: item.disabled,
         "@click": (event) => this.events.toggle(item.value, event)
       }, [
-        new ViewNode("text", { value: String(item.label) })
+        new ViewNode("text", { value: displayValue(item.label, true ? "item.label" : 0) })
       ])
     )
   );
@@ -65637,7 +65449,6 @@ var ToggleGroupDoc = class extends PuzzleView {
 };
 ToggleGroupDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -65666,7 +65477,7 @@ ToggleGroupDoc.prototype.render = function() {
               label: "Text alignment"
             }, []),
             new ViewNode("p", { class: "text-sm text-muted" }, [
-              new ViewNode("text", { value: "Alignment: " + String(__d.align || "none") })
+              new ViewNode("text", { value: "Alignment: " + displayValue(__d.align || "none", true ? "align || 'none'" : 0) })
             ])
           ])
         ]),
@@ -65713,7 +65524,7 @@ ToggleGroupDoc.prototype.render = function() {
                 label: "Text formatting"
               }, []),
               new ViewNode("p", { class: "text-sm text-muted" }, [
-                new ViewNode("text", { value: "Marks: " + String(__d.marksLabel) })
+                new ViewNode("text", { value: "Marks: " + displayValue(__d.marksLabel, true ? "marksLabel" : 0) })
               ])
             ])
           ])
@@ -65847,7 +65658,6 @@ var ToolbarDoc = class extends PuzzleView {
 };
 ToolbarDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -66060,7 +65870,7 @@ ToolbarDoc.prototype.render = function() {
             ]),
             new ViewNode("text", { value: " state and writes it back from " }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
-              new ViewNode("text", { value: "@toggle(" + String(__d.value, __d.pressed) + ")" })
+              new ViewNode("text", { value: "@toggle(" + displayValue(__d.value, __d.pressed, true ? "value, pressed" : 0) + ")" })
             ]),
             new ViewNode("text", { value: ". Separators are " }),
             new ViewNode("code", { class: "rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink" }, [
@@ -66142,7 +65952,6 @@ var TooltipDoc = class extends PuzzleView {
 };
 TooltipDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -66452,7 +66261,6 @@ var TreeDoc = class extends PuzzleView {
 };
 TreeDoc.prototype.render = function() {
   const __d = this.getData();
-  const __f = this.ctx.formatters.getAll();
   return new ViewNode("puzzle-view", { class: "w-full" }, [
     new ViewNode("div", { class: "flex gap-12" }, [
       new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
@@ -66487,7 +66295,7 @@ TreeDoc.prototype.render = function() {
             new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
               new ViewNode("text", { value: "Selected: " }),
               new ViewNode("span", { class: "font-mono text-ink" }, [
-                new ViewNode("text", { value: String(__d.selected || "\u2014") })
+                new ViewNode("text", { value: displayValue(__d.selected || "\u2014", true ? "selected || '\u2014'" : 0) })
               ])
             ])
           ])
@@ -66564,7 +66372,7 @@ TreeDoc.prototype.render = function() {
               new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
                 new ViewNode("text", { value: "Expanded: " }),
                 new ViewNode("span", { class: "font-mono text-ink" }, [
-                  new ViewNode("text", { value: String(__d.expandedReadout) })
+                  new ViewNode("text", { value: displayValue(__d.expandedReadout, true ? "expandedReadout" : 0) })
                 ])
               ])
             ])
@@ -66626,11 +66434,11 @@ TreeDoc.prototype.render = function() {
                       new ViewNode("kbd", {
                         class: "rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-xs text-ink"
                       }, [
-                        new ViewNode("text", { value: String(k.key) })
+                        new ViewNode("text", { value: displayValue(k.key, true ? "k.key" : 0) })
                       ])
                     ]),
                     new ViewNode("td", { class: "px-4 py-2.5" }, [
-                      new ViewNode("text", { value: String(k.action) })
+                      new ViewNode("text", { value: displayValue(k.action, true ? "k.action" : 0) })
                     ])
                   ])
                 )

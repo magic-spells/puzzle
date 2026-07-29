@@ -115,6 +115,19 @@ Rules that follow from this:
   color set only under `focus-visible:` flashes from the default on every focus. Set the
   outline COLOR unconditionally (`outline-ring` / `outline-danger`) alongside the
   `focus-visible:outline-2` reveal.
+- **Implicit two-way binding is ON (D147, puzzle ≥ 0.5.0) — pieces must stay handler-owned.**
+  The compiler auto-binds a `value=`/`checked=` on a plain `<input>`/`<textarea>`/`<select>`
+  when the expression is exactly `ident` or `ident.ident` AND the element has no author
+  `@input`/`@change`. Component tags never bind (props are props). Nearly every piece is
+  already suppressed because it carries the `@change` that routes through its callback
+  prop — that is the correct pattern, not legacy, and the handler must never be deleted to
+  "modernize". The trap is a piece whose inner control binds a **prop-derived** key: the
+  synthesized write lands in the piece's LOCAL state and the next `data()` commit reverts
+  it (dev warns `a data() commit reverted the bound key`). Note `@keydown`/`@blur` do NOT
+  suppress — so an edit BUFFER committed on Enter/blur is exactly the shape that silently
+  starts live-binding. Escape with a non-path expression: `value={ String(x) }` plus a
+  one-line comment (see NumberField). Verify with the compiler, never by eye: compile the
+  `.pzl` and grep the output for `__bind(`.
 - **Morph:** overlay pieces expose an opt-in `morph` prop. Morphable roots must not use
   transform positioning, stylesheet `opacity`, a changing dynamic `style={}` binding, or
   `animations.in/out`. Trigger↔panel morph imports `@magic-spells/morph-engine` (declare it

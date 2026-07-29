@@ -26,10 +26,13 @@
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-4-4" />
           </svg>
+          <!-- String(): non-path expr keeps this one-way. The `input` listener wired in
+               mounted() owns `query` — it also recomputes results, so a bare bind would
+               write query without them (D147). -->
           <input
             data-search-input
             type="search"
-            value={ query }
+            value={ String(query) }
             placeholder="Search components, demos, and pages…"
             autocomplete="off"
             spellcheck="false"
