@@ -1,0 +1,40 @@
+<puzzle-view class="local-form">
+  <input class="draft" value={ draft } />
+  <input class="age" type="number" value={ age } />
+  <input class="volume" type="range" value={ volume } />
+  <input class="agree" type="checkbox" checked={ agree } />
+  <textarea class="notes" value={ notes }></textarea>
+  <select class="sort" value={ sort }>
+    <option value="all">All</option>
+    <option value="done">Done</option>
+  </select>
+  <p class="matches">{ matches }</p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+const WORDS = ['alpha', 'beta', 'gamma', 'delta'];
+
+// The local-state arm of implicit binding (D147). `draft` lives ONLY in the local
+// layer (seeded in created(), written by the synthesized bind handler); data()
+// derives `matches` from it, which is the search-box case the bind write's
+// refresh() must keep live.
+export default class LocalForm extends PuzzleView {
+	created() {
+		this.setData({
+			draft: '',
+			age: null,
+			volume: 0,
+			agree: false,
+			notes: '',
+			sort: 'all',
+		});
+	}
+
+	data() {
+		const draft = this.getData().draft ?? '';
+		return { matches: WORDS.filter((word) => word.includes(draft)).length };
+	}
+}
+</script>

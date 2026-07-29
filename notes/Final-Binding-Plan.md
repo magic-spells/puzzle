@@ -454,7 +454,7 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 - Test: `tests/binding.test.js` (new)
 
 **Steps:**
-- [ ] **Failing tests** (compile small fixtures via the existing pretest pipeline, mount
+- [x] **Failing tests** (compile small fixtures via the existing pretest pipeline, mount
       with `client-runtime/testing`):
   - local arm: dispatch `input` on a bound text input → `getData().draft` updates →
     a derived value computed in `data()` from `draft` also updates (refresh proof) →
@@ -473,10 +473,10 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
   - `event.isComposing` true → no write.
   - caret regression: value-setter spy asserts `writes === 0` on the echo render
     (mirror `tests/vdom.test.js:147-179`).
-- [ ] Implement `__bind` and `#bindWrite` exactly as in the contract (memo maps, IME
+- [x] Implement `__bind` and `#bindWrite` exactly as in the contract (memo maps, IME
       guard, three arms, `reportError` with `phase: 'bind'`).
-- [ ] `npx vitest run` + `npm run test:types` green.
-- [ ] Commit: `runtime: memoized __bind write-back dispatch for implicit binding`
+- [x] `npx vitest run` + `npm run test:types` green.
+- [x] Commit: `runtime: memoized __bind write-back dispatch for implicit binding`
 
 ### Task 6: `type()` testing helper
 

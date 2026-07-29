@@ -1,0 +1,20 @@
+<puzzle-view class="todo-titles">
+  <span class="titles">{ titles }</span>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A sibling view subscribed to the same records RecordForm binds: its data()
+// query auto-subscribes, so a bind write through update() must re-render it.
+export default class TodoTitles extends PuzzleView {
+	data() {
+		return {
+			titles: this.ctx.store
+				.findMany('todo')
+				.map((todo) => todo.text)
+				.join('|'),
+		};
+	}
+}
+</script>

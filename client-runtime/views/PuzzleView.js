@@ -73,6 +73,20 @@ export class PuzzleView {
 	// SAME attrs.ref value across renders (a fresh closure would churn every patch),
 	// so the setter identity is memoised per name for this instance's lifetime.
 	#refSetters = null;
+	// Per-instance write-back handler caches for implicit two-way binding (D147),
+	// on the same memo principle as #refSetters: the differ must see the SAME
+	// '@input:bind' value across renders or patchAttrs detaches and re-attaches the
+	// listener on every patch. #bindLocalMemo keys the null-target (local state)
+	// handlers by "field spec"; #bindMemberMemo keys member handlers by the target
+	// OBJECT first — weakly, so a discarded record's handlers go with it — then by
+	// the same string. Both lazily created on first use.
+	#bindLocalMemo = null;
+	#bindMemberMemo = null;
+	// Dev-only: the value each local bind write last wrote, keyed by field. The
+	// layer-clobber diagnostic reads it at the next recompose to notice a data()
+	// commit reverting a bound key. Never allocated in production — the write is
+	// gated INLINE on __PUZZLE_DEV__.
+	#bindPending = null;
 	#vm = null;
 	// Nearest owning PuzzleView for error-boundary lookup. Set by the parent's
 	// ViewManager when it instantiates/adopts this component; null for app roots.
@@ -287,6 +301,109 @@ export class PuzzleView {
 			cache.set(name, setter);
 		}
 		return setter;
+	}
+
+	/**
+	 * INTERNAL — the write-back handler for one implicitly-bound form control
+	 * (D147, SPEC §6). The compiler emits this inline in a vnode's attrs on a
+	 * qualifying `<input>`/`<textarea>`/`<select>`:
+	 * `'@input:bind': this.__bind(null, 'draft', 'v')`.
+	 *
+	 * - `target` is null for a bare identifier bind (local component state) or the
+	 *   resolved ROOT object of a one-member path (`todo.completed` → the loop
+	 *   variable, `profile.hue` → the data() value). The write arm is chosen from
+	 *   the target at write time, not here — a data() commit can swap a plain
+	 *   object for a record between renders.
+	 * - `key` is the field to write.
+	 * - `spec` is the compile-time coercion: 'v' string, 'vn' numeric, 'c' boolean.
+	 *
+	 * Memoized on (target, key, spec) so the identity is stable across renders;
+	 * see the #bindLocalMemo/#bindMemberMemo field notes. It consumes no `__h`
+	 * handler-site index.
+	 *
+	 * INTERNAL — underscore-prefixed like the rest of the compiler-facing surface;
+	 * never spelled in a template. Not part of the public typed API.
+	 */
+	__bind(target, key, spec) {
+		let store;
+		if (target == null) {
+			store = (this.#bindLocalMemo ??= new Map());
+		} else {
+			const byTarget = (this.#bindMemberMemo ??= new WeakMap());
+			store = byTarget.get(target);
+			if (!store) byTarget.set(target, (store = new Map()));
+		}
+		// Neither a field name nor a spec code can contain a space, so this is an
+		// unambiguous composite key.
+		const memoKey = key + ' ' + spec;
+		let fn = store.get(memoKey);
+		if (!fn) {
+			fn = (event) => {
+				// IME guard: once the framework owns the listener it owns this. Writing
+				// state mid-composition re-asserts the input's value and aborts the IME
+				// session in Chrome/Safari. The final `input` after compositionend
+				// carries isComposing:false, so the composed text still lands.
+				if (event.isComposing) return;
+				const el = event.target;
+				let value;
+				if (spec === 'c') value = !!el.checked;
+				else if (spec === 'vn') {
+					// Number('') is 0 — writing it would rewrite a just-cleared field to
+					// "0" and jump the caret, so an emptied numeric field writes null
+					// (displayValue(null) is '', so the echo compare stays equal).
+					if (el.value === '') value = null;
+					else {
+						value = Number(el.value);
+						// Number('-') is NaN, which PASSES the model's bound checks and
+						// would render the literal "NaN". Skip the whole write instead.
+						if (Number.isNaN(value)) return;
+					}
+				} else value = el.value;
+				this.#bindWrite(target, key, value);
+			};
+			store.set(memoKey, fn);
+		}
+		return fn;
+	}
+
+	/**
+	 * Apply one bind write. Three arms, decided by the target:
+	 *
+	 * 1. null → local component state. refresh(), not a bare setData: a bound
+	 *    filter field feeding a data()-derived list must narrow it as you type, and
+	 *    setData never re-runs data(). #renderNow disarms the frame setData armed,
+	 *    so this still costs exactly one render.
+	 * 2. a PuzzleModel record → its validated update(). Duck-typed on `update` and
+	 *    a string `_type` TOGETHER (this file must not import model.js); a plain
+	 *    object that merely owns an update() method is not a record. update()
+	 *    validates and throws BEFORE mutating, so a rejected write leaves the
+	 *    record — and the typed text on screen — untouched.
+	 * 3. anything else → direct mutation plus a repaint of the owning view.
+	 */
+	#bindWrite(target, key, value) {
+		if (target == null) {
+			this.setData(key, value);
+			this.refresh();
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				(this.#bindPending ??= new Map()).set(key, value);
+			}
+		} else if (typeof target.update === 'function' && typeof target._type === 'string') {
+			try {
+				// The store's batched flush drives the re-render and the persistence write.
+				target.update({ [key]: value });
+			} catch (err) {
+				reportError(
+					this.ctx,
+					err,
+					{ phase: 'bind', view: this, route: this.route },
+					'[puzzle] bound write rejected:',
+					err
+				);
+			}
+		} else {
+			target[key] = value;
+			this.refresh();
+		}
 	}
 
 	/**
