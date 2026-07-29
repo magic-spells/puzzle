@@ -500,17 +500,17 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 - Test: extend `tests/binding.test.js`
 
 **Steps:**
-- [ ] **Failing tests:** (a) bind a key that `data()` derives from a record → trigger a
+- [x] **Failing tests:** (a) bind a key that `data()` derives from a record → trigger a
       store flush → exactly one console warning naming the key; second flush warns
       nothing. (b) the legitimate echo idiom (`data()` re-reads `getData().text`,
       Playground-style) never warns. (c) production build path (`__PUZZLE_DEV__` false)
       emits nothing.
-- [ ] Implement: `#bindPending` map written in the local arm (already stubbed in Task 5);
+- [x] Implement: `#bindPending` map written in the local arm (already stubbed in Task 5);
       at recompose, for each pending key, if `#data[key] !== written` warn once per key
       (`#bindWarned` set) with the taught fix ("bind the source path, or stop deriving
       '<key>' in data()"); clear pending. Inline `__PUZZLE_DEV__` gates.
-- [ ] `npx vitest run` green.
-- [ ] Commit: `runtime: dev warning when a data() commit reverts a bound local key`
+- [x] `npx vitest run` green.
+- [x] Commit: `runtime: dev warning when a data() commit reverts a bound local key`
 
 ### Task 8: SSG / static / hybrid coverage
 

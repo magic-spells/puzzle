@@ -21,6 +21,7 @@ import LocalForm from './fixtures/binding/LocalForm.compiled.js';
 import RecordForm from './fixtures/binding/RecordForm.compiled.js';
 import PlainForm from './fixtures/binding/PlainForm.compiled.js';
 import TodoTitles from './fixtures/binding/TodoTitles.compiled.js';
+import ClobberForm from './fixtures/binding/ClobberForm.compiled.js';
 
 class Todo extends PuzzleModel {
 	static schema = {
@@ -393,6 +394,103 @@ describe('implicit binding — plain-object arm', () => {
 
 		expect(update).toHaveBeenCalledWith({ label: 'quack again' });
 		expect(view.instance.ducky.label).toBe('moo'); // the stub update() writes nothing
+	});
+});
+
+describe('implicit binding — the layer-clobber diagnostic', () => {
+	// Hazard #4: a bare bind writes the LOCAL layer, but #recompose composes
+	// { ...local, ...model } with the model LAST — so a key data() also derives
+	// from a record is silently reverted on the next commit. Dev-only.
+	const clobberWarnings = (spy) =>
+		spy.mock.calls.filter((call) => String(call[0]).includes('reverted the bound key'));
+
+	it('warns once, naming the key, when a data() commit reverts a bound local write', async () => {
+		const store = todoStore();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const view = await mount(ClobberForm, { store });
+
+		const title = view.find('input.title');
+		title.value = 'wash up';
+		fire(title, 'input');
+		await settled();
+
+		// the hazard itself: data() re-derived `title` from the record and the
+		// composition put the model's value back over the typed one
+		expect(view.instance.getData().title).toBe('wash');
+		const warnings = clobberWarnings(warn);
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0][0]).toContain('[puzzle]');
+		expect(warnings[0][0]).toContain("'title'");
+		// and it teaches the fix rather than just reporting
+		expect(warnings[0][0]).toContain('bind the source path');
+
+		// the next keystroke arms and reverts all over again — once per KEY per view,
+		// not once per clobbered commit, or every character would print a line
+		title.value = 'wash up again';
+		fire(title, 'input');
+		await settled();
+		expect(clobberWarnings(warn)).toHaveLength(1);
+
+		// and an unrelated store-driven commit recomposes the same way
+		store.findOne('todo', '1').update({ rank: 9 });
+		await settled();
+		expect(clobberWarnings(warn)).toHaveLength(1);
+	});
+
+	it('never warns for the echo idiom, where data() returns its own bound local back', async () => {
+		// `note` IS present in the model layer — a naive `key in model` check would
+		// false-positive here. The composed value equals what the bind wrote, so
+		// nothing was reverted and nothing is reported.
+		const store = todoStore();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const view = await mount(ClobberForm, { store });
+
+		const note = view.find('input.note');
+		note.value = 'hello';
+		fire(note, 'input');
+		await settled();
+
+		expect(view.instance.getData().note).toBe('hello');
+		expect(clobberWarnings(warn)).toHaveLength(0);
+
+		// a store-driven commit re-runs data(), which echoes the local write again
+		store.findOne('todo', '1').update({ rank: 9 });
+		await settled();
+		expect(view.instance.getData().note).toBe('hello');
+		expect(clobberWarnings(warn)).toHaveLength(0);
+	});
+
+	it('records and reports nothing when __PUZZLE_DEV__ is false', async () => {
+		// The whole diagnostic gates inline on the build define, so a production
+		// bundle DCEs it — no pending map, no compare, no warning.
+		globalThis.__PUZZLE_DEV__ = false;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const store = todoStore();
+			const view = await mount(ClobberForm, { store });
+
+			const title = view.find('input.title');
+			title.value = 'wash up';
+			fire(title, 'input');
+			await settled();
+
+			// the clobber still HAPPENS — only the diagnostic is gone
+			expect(view.instance.getData().title).toBe('wash');
+			expect(clobberWarnings(warn)).toHaveLength(0);
+
+			store.findOne('todo', '1').update({ rank: 9 });
+			await settled();
+			expect(clobberWarnings(warn)).toHaveLength(0);
+
+			// nothing was RECORDED either: with the probe back on, the next commit
+			// finds no pending bind write to compare against and stays silent.
+			delete globalThis.__PUZZLE_DEV__;
+			store.findOne('todo', '1').update({ rank: 10 });
+			await settled();
+			expect(clobberWarnings(warn)).toHaveLength(0);
+		} finally {
+			delete globalThis.__PUZZLE_DEV__;
+		}
 	});
 });
 

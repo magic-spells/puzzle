@@ -84,9 +84,12 @@ export class PuzzleView {
 	#bindMemberMemo = null;
 	// Dev-only: the value each local bind write last wrote, keyed by field. The
 	// layer-clobber diagnostic reads it at the next recompose to notice a data()
-	// commit reverting a bound key. Never allocated in production — the write is
-	// gated INLINE on __PUZZLE_DEV__.
+	// commit reverting a bound key, and #bindWarned holds the keys it has already
+	// reported so the warning is once per key per view rather than once per commit.
+	// Neither is ever allocated in production — every touchpoint is gated INLINE on
+	// __PUZZLE_DEV__.
 	#bindPending = null;
+	#bindWarned = null;
 	#vm = null;
 	// Nearest owning PuzzleView for error-boundary lookup. Set by the parent's
 	// ViewManager when it instantiates/adopts this component; null for app roots.
@@ -383,10 +386,14 @@ export class PuzzleView {
 	#bindWrite(target, key, value) {
 		if (target == null) {
 			this.setData(key, value);
-			this.refresh();
+			// Arm the clobber diagnostic BEFORE the refresh: the commit this refresh
+			// drives is the one that can revert the write, so it is the commit that
+			// must see the pending value. A Map keyed by field keeps only the LATEST
+			// write per key, which is exactly the "no later bind superseded it" rule.
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				(this.#bindPending ??= new Map()).set(key, value);
 			}
+			this.refresh();
 		} else if (typeof target.update === 'function' && typeof target._type === 'string') {
 			try {
 				// The store's batched flush drives the re-render and the persistence write.
@@ -1649,6 +1656,28 @@ export class PuzzleView {
 			if (!(key in composed)) delete this.#data[key];
 		}
 		Object.assign(this.#data, composed);
+		// Layer-clobber diagnostic (D147 hazard 4, dev only). A bare bind writes the
+		// LOCAL layer, but the composition above puts the MODEL last — so a key data()
+		// also derives from a record or prop is reverted the moment data() commits, and
+		// the user's typing snaps back with nothing to explain it. The compiler cannot
+		// see this (data() is opaque bytes, D03), so catch it here, against what the
+		// commit ACTUALLY composed: a bind write's own commit compares equal in the
+		// legitimate echo idiom (data() reads its own local back out through getData()
+		// and returns it unchanged) and only differs when something really overwrote it.
+		// Testing `key in #model` instead would flag every echo view in the corpus.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (this.#bindPending) {
+				for (const [key, written] of this.#bindPending) {
+					if (this.#data[key] === written || this.#bindWarned?.has(key)) continue;
+					(this.#bindWarned ??= new Set()).add(key);
+					console.warn(
+						`[puzzle] a data() commit reverted the bound key '${key}' — bind the source ` +
+							`path instead (value={ record.${key} }), or stop deriving '${key}' in data().`
+					);
+				}
+				this.#bindPending.clear();
+			}
+		}
 	}
 
 	/**
