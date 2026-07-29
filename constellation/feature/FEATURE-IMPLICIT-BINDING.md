@@ -1,6 +1,6 @@
 ---
 name: Implicit two-way form binding
-status: built
+status: verified
 branch: feat/two-way-binding
 connections:
   - DECISION-D147-IMPLICIT-TWO-WAY-BINDING
@@ -10,6 +10,16 @@ connections:
   - COMPONENT-SSG
   - FLOW-REACTIVITY
   - DOC-SPEC-TEMPLATE
+verified_at: '2026-07-29T05:19:18.215Z'
+verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
+notes:
+  - kind: verified
+    text: >-
+      All acceptance lines checked: golden pair + boolean_attr only; runtime
+      arms/coercion/identity/IME/validation tests (1561 vitest, zero skips); go test ./...,
+      test:types, verify:pack green; scaffolded todos demos handler-less binding out of the box;
+      real-browser pass done.
+    sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
 ---
 
 # Implicit two-way form binding

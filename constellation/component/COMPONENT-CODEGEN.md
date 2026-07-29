@@ -1,14 +1,14 @@
 ---
 name: Render-function codegen
-status: built
+status: verified
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-29T05:19:19.240Z'
+verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
 notes:
   - kind: gotcha
     text: >-

@@ -1,6 +1,6 @@
 ---
 name: PuzzleView
-status: built
+status: verified
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ANIMATIONS
@@ -16,8 +16,8 @@ notes:
       Keep raw source values and data()-derived display values under different
       keys. A successful data() replaces the model layer, so reusing one key for
       raw local state and a reshaped model value loses the raw value by design.
-verified_at: '2026-07-25T05:23:57.003Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-07-29T05:19:19.600Z'
+verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
 ---
 
 # PuzzleView

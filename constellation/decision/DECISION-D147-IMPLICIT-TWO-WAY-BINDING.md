@@ -1,6 +1,6 @@
 ---
 name: D147 — implicit two-way form binding
-status: built
+status: verified
 connections:
   - DECISION-D04-EVENT-HANDLER-CONVENTION
   - DECISION-D16-COMPOSITION-SLOTS-CALLBACKS
@@ -20,6 +20,16 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - FLOW-REACTIVITY
   - DOC-SPEC-TEMPLATE
+verified_at: '2026-07-29T05:19:15.902Z'
+verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
+notes:
+  - kind: verified
+    text: >-
+      Verified against the implemented branch: classifier/synthesis (binding.go, both emitters),
+      runtime __bind/#bindWrite with the primitive-target inert-handler guard, suppression/goldens
+      byte-exact, real-Chrome pass (caret, IME composition events, number-on-change, ''→null,
+      range). Final whole-branch review + scoped re-review clean.
+    sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
 ---
 
 # D147 — implicit two-way form binding

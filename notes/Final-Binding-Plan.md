@@ -598,24 +598,26 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
       fields, `type()` helper.
 - [x] Skill: add the input-binding section (when it binds, when it doesn't, the
       record-vs-draft choice, the suppression rule).
-- [ ] `mcp` card updates + connections; product line v1.68 entry; stamp cards by release
+- [x] `mcp` card updates + connections; product line v1.68 entry; stamp cards by release
       (`0.5.0` + `verified_sha` convention) **after** Task 11 verification, not before.
-- [ ] Commit: `docs: implicit two-way binding — SPEC §6, glossary, guides, skill, cards`
+- [x] Commit: `docs: implicit two-way binding — SPEC §6, glossary, guides, skill, cards`
 
 ### Task 11: Full verification sweep
 
 **Steps:**
-- [ ] `npx vitest run` — green, zero skips introduced.
-- [ ] `cd compiler && go test ./...` — green.
-- [ ] `npm run test:types` && `npm run verify:pack` — green.
-- [ ] Rebuild the repo-root `./puzzle` binary; `puzzle init` a scratch app in the
+- [x] `npx vitest run` — green, zero skips introduced.
+- [x] `cd compiler && go test ./...` — green.
+- [x] `npm run test:types` && `npm run verify:pack` — green.
+- [x] Rebuild the repo-root `./puzzle` binary; `puzzle init` a scratch app in the
       scratchpad; confirm the scaffolded todos demos handler-less binding out of the box.
-- [ ] Real-browser pass (todos + binding, per Task 9): caret, IME, number commit, select,
+- [x] Real-browser pass (todos + binding, per Task 9): caret, IME, number commit, select,
       checkbox, range; DevTools extension still shows the views/store panels sane with
-      `:bind` listeners present.
-- [ ] Constellation `check_integrity` + `check_sync`; stamp D147/feature/component cards
+      `:bind` listeners present. *(Panel check NOT run — needs a human-opened
+      DevTools window; the bridge is suite-covered and `:bind` rides the
+      standard listener channel the Views panel reads.)*
+- [x] Constellation `check_integrity` + `check_sync`; stamp D147/feature/component cards
       `verified`.
-- [ ] Report anything not run.
+- [x] Report anything not run.
 
 ---
 
