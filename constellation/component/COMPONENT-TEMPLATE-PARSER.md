@@ -55,10 +55,12 @@ instead of a positioned "unclosed `{`" error. Four scanners share the rule —
 two here, two in [[COMPONENT-CODEGEN]] — and they must be fixed together.
 
 Attributes are static, dynamic, mixed, event, or valueless-static values.
-Parser helpers enforce event/modifier grammar (generic modifiers: `prevent`,
-`stop`, `once`, and since D86 `outside` — valid on any event; key filters stay
-keyboard-only), static islands, literal inline SVG roots/paths, list
-identifiers/keys, and unique static refs.
+Non-event names containing `:` are reserved unless their prefix is `xml`,
+`xlink`, or `xmlns`; invalid namespaces fail at the attribute name's source
+position. Parser helpers enforce event/modifier grammar (generic modifiers:
+`prevent`, `stop`, `once`, and since D86 `outside` — valid on any event; key
+filters stay keyboard-only), static islands, literal inline SVG roots/paths,
+list identifiers/keys, and unique static refs.
 
 Composition grammar (D134/D141): `<Children>` is the default marker,
 `<Slot>` is the router outlet, and `<Slot name="x">` is a named marker.

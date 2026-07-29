@@ -499,6 +499,13 @@ func buildAttr(name string, npos Position, v Token, file string) (Attr, *ParseEr
 		}
 		return &EventAttr{Name: event, Modifiers: mods, Expr: expr, Pos: npos}, nil
 	}
+	if i := strings.IndexByte(name, ':'); i >= 0 {
+		switch name[:i] {
+		case "xml", "xlink", "xmlns":
+		default:
+			return nil, errAt(file, npos, "attribute namespaces are reserved; two-way binding is automatic on form controls — see template SPEC §6")
+		}
+	}
 	switch v.Type {
 	case TokAttrBrace:
 		expr := strings.TrimSpace(v.Value)

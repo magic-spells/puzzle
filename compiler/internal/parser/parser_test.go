@@ -1511,6 +1511,42 @@ func TestParseBooleanAndDynamicAttrs(t *testing.T) {
 	}
 }
 
+func TestParseReservedAttributeNamespaces(t *testing.T) {
+	t.Run("non-XML namespace is a positioned error", func(t *testing.T) {
+		src := "<puzzle-view>\n  <input bind:value={ x } />\n</puzzle-view>\n<script></script>"
+		_, err := Parse([]byte(src), "Binding.pzl")
+		if err == nil {
+			t.Fatal("expected parse error, got nil")
+		}
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Fatalf("expected *ParseError, got %T (%v)", err, err)
+		}
+		wantMessage := "attribute namespaces are reserved; two-way binding is automatic on form controls — see template SPEC §6"
+		if pe.Message != wantMessage {
+			t.Errorf("message: got %q, want %q", pe.Message, wantMessage)
+		}
+		if pe.File != "Binding.pzl" || pe.Line != 2 || pe.Col != 10 {
+			t.Errorf("position: got %s:%d:%d, want Binding.pzl:2:10", pe.File, pe.Line, pe.Col)
+		}
+	})
+
+	t.Run("XML namespaces remain valid", func(t *testing.T) {
+		root := parseContent(t, `<svg xlink:href="#icon" xml:lang="en" xmlns:icons="urn:icons"></svg>`)
+		svg := elementChildren(root.Children)[0].(*Element)
+		want := []string{"xlink:href", "xml:lang", "xmlns:icons"}
+		if len(svg.Attrs) != len(want) {
+			t.Fatalf("attrs: got %d, want %d", len(svg.Attrs), len(want))
+		}
+		for i, name := range want {
+			attr, ok := svg.Attrs[i].(*StaticAttr)
+			if !ok || attr.Name != name {
+				t.Errorf("attr %d: got %#v, want StaticAttr %q", i, svg.Attrs[i], name)
+			}
+		}
+	})
+}
+
 // TestParseErrors asserts message content + line/col for malformed input.
 func TestParseErrors(t *testing.T) {
 	tests := []struct {

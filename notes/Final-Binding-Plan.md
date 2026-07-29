@@ -353,18 +353,18 @@ attribute.
 - Test: `compiler/internal/parser/parser_test.go`
 
 **Steps:**
-- [ ] **Failing test first:** `bind:value={ x }` on an element produces a positioned
+- [x] **Failing test first:** `bind:value={ x }` on an element produces a positioned
       `ParseError` naming the reserved namespace; `xlink:href="…"`, `xml:lang="…"`, and
       `xmlns:*` still parse (SVG passes through `attrsMultiline`/`emitAttrs` via
       `inlinesvg.go:185/189` — grep the examples for colon-named SVG attrs and cover
       every prefix found).
-- [ ] Implement in `buildAttr`: non-`@` attr name containing `:` errors unless the prefix
+- [x] Implement in `buildAttr`: non-`@` attr name containing `:` errors unless the prefix
       is in the XML allowlist (`xml`, `xlink`, `xmlns`). Error text steers: "attribute
       namespaces are reserved; two-way binding is automatic on form controls — see
       template SPEC §6".
-- [ ] `go test ./compiler/internal/parser/...` green; full `go test ./...` green (proves
+- [x] `go test ./compiler/internal/parser/...` green; full `go test ./...` green (proves
       no existing example/golden uses a non-allowlisted colon attr).
-- [ ] Commit: `compiler: reserve non-XML attr namespaces with a positioned error`
+- [x] Commit: `compiler: reserve non-XML attr namespaces with a positioned error`
 
 ### Task 3: Bind classifier (Go, pure function + table test)
 

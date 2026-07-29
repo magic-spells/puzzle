@@ -173,9 +173,9 @@ type StaticAttr struct {
 	Pos       Position
 }
 
-// DynamicAttr is `name={ expr }` — a single unquoted brace expression. This
-// covers dynamic attributes and two-way bindings alike (value={var}); the
-// property-vs-attribute distinction is a runtime concern.
+// DynamicAttr is `name={ expr }` — a single unquoted brace expression. Binding
+// classification and the property-vs-attribute distinction are downstream
+// compiler/runtime concerns.
 type DynamicAttr struct {
 	Name string
 	Expr string
