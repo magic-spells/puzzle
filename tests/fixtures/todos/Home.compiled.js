@@ -45,12 +45,13 @@ export default class TodoHome extends PuzzleView {
   }
 
   // Event handlers — class field of arrow functions so `this` is always
-  // the component instance (see constellation/doc/DOC-SPEC.md §4–5)
+  // the component instance (see constellation/doc/DOC-SPEC.md §4–5).
+  //
+  // There is no handler for the new-todo field: `value={ newTodoText }` binds
+  // it, and the checkbox in TodoItem binds `todo.completed` straight to the
+  // record. What is left here is the work binding cannot do for you — creating
+  // and destroying records, and choosing a filter.
   events = {
-    updateNewTodoText: (event) => {
-      this.setData('newTodoText', event.target.value);
-    },
-
     addTodo: (event) => {
       event.preventDefault();
       const text = this.getData().newTodoText.trim();
@@ -60,10 +61,6 @@ export default class TodoHome extends PuzzleView {
         store.createRecord('todo', { text });
         this.setData('newTodoText', '');
       }
-    },
-
-    toggleTodo: (todo) => {
-      todo.toggle();
     },
 
     deleteTodo: (todo) => {
@@ -137,8 +134,8 @@ TodoHome.prototype.render = function () {
             class: 'flex-1 h-12 px-4 rounded-xl bg-ink border border-hairline text-fg placeholder-faint focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/20 transition-colors',
             placeholder: 'What needs doing?',
             value: __d.newTodoText,
-            '@input': ((this.__h ??= {})[1] ??= (event) => this.events.updateNewTodoText(event)),
             autofocus: true,
+            '@input:bind': this.__bind(null, 'newTodoText', 'v'),
           }, []),
           new ViewNode('button', {
             type: 'submit',
@@ -180,7 +177,7 @@ TodoHome.prototype.render = function () {
             new ViewNode('div', { class: 'flex border-b border-line px-2' }, [
               new ViewNode('button', {
                 class: `relative flex-1 py-3.5 text-sm font-medium transition-colors ${__d.currentFilter === 'all' ? 'text-accent' : ''}${__d.currentFilter !== 'all' ? 'text-muted hover:text-fg' : ''}`,
-                '@click': ((this.__h ??= {})[2] ??= (event) => this.events.setFilter('all')),
+                '@click': ((this.__h ??= {})[1] ??= (event) => this.events.setFilter('all')),
               }, [
                 new ViewNode('text', { value: 'All' }),
                 ...(__d.currentFilter === 'all'
@@ -193,7 +190,7 @@ TodoHome.prototype.render = function () {
               ]),
               new ViewNode('button', {
                 class: `relative flex-1 py-3.5 text-sm font-medium transition-colors ${__d.currentFilter === 'active' ? 'text-accent' : ''}${__d.currentFilter !== 'active' ? 'text-muted hover:text-fg' : ''}`,
-                '@click': ((this.__h ??= {})[3] ??= (event) => this.events.setFilter('active')),
+                '@click': ((this.__h ??= {})[2] ??= (event) => this.events.setFilter('active')),
               }, [
                 new ViewNode('text', { value: 'Active' }),
                 ...(__d.currentFilter === 'active'
@@ -206,7 +203,7 @@ TodoHome.prototype.render = function () {
               ]),
               new ViewNode('button', {
                 class: `relative flex-1 py-3.5 text-sm font-medium transition-colors ${__d.currentFilter === 'completed' ? 'text-accent' : ''}${__d.currentFilter !== 'completed' ? 'text-muted hover:text-fg' : ''}`,
-                '@click': ((this.__h ??= {})[4] ??= (event) => this.events.setFilter('completed')),
+                '@click': ((this.__h ??= {})[3] ??= (event) => this.events.setFilter('completed')),
               }, [
                 new ViewNode('text', { value: 'Completed' }),
                 ...(__d.currentFilter === 'completed'
@@ -223,7 +220,6 @@ TodoHome.prototype.render = function () {
                 new ViewNode(TodoItem, {
                   key: ViewNode.keyOf(todo),
                   todo: todo,
-                  toggle: (event) => this.events.toggleTodo(todo),
                   remove: (event) => this.events.deleteTodo(todo),
                 }, [])
               )
@@ -233,7 +229,7 @@ TodoHome.prototype.render = function () {
                 ? [
                     new ViewNode('button', {
                       class: 'px-4 py-2.5 rounded-xl border border-hairline text-muted hover:text-fg hover:border-white/20 text-sm font-medium transition-colors',
-                      '@click': ((this.__h ??= {})[5] ??= (event) => this.events.clearCompleted(event)),
+                      '@click': ((this.__h ??= {})[4] ??= (event) => this.events.clearCompleted(event)),
                     }, [
                       new ViewNode('text', { value: 'Clear completed (' + __s(__d.completedTodos.length, typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__ ? 'completedTodos.length' : 0) + ')' }),
                     ]),
@@ -245,7 +241,7 @@ TodoHome.prototype.render = function () {
                 ? [
                     new ViewNode('button', {
                       class: 'px-4 py-2.5 rounded-xl border border-accent/40 text-accent hover:bg-accent/10 text-sm font-medium transition-colors',
-                      '@click': ((this.__h ??= {})[6] ??= (event) => this.events.markAllComplete(event)),
+                      '@click': ((this.__h ??= {})[5] ??= (event) => this.events.markAllComplete(event)),
                     }, [
                       new ViewNode('text', { value: 'Complete all' }),
                     ]),

@@ -978,6 +978,25 @@ Production medians, 15 iterations: `rerender` ~18ms, `rerender-dirty` ~26ms,
 `type-local` ~128ms, `type-store` ~130ms. All four carry the probes, so none of
 those numbers is a clean framework cost.
 
+### The grid's bound values are wrapped in `String(...)` on purpose
+
+The 200 grid rows read `value={ String(row.text) }` and
+`value={ String(row.choice) }`, not the bare member paths they look like they
+should be. A bare `value={ row.text }` on an `<input>` or `<select>` with no
+author `@input`/`@change` is exactly the shape the compiler auto-binds (D147),
+so 400 write-back listeners would attach to the grid and this scenario would
+stop measuring controlled-value *patching* and start measuring *binding* — a
+different question, and one the two typing arms above already answer on purpose
+rather than by accident.
+
+A call expression does not classify, so the wrapper is the documented opt-out
+and costs nothing: both fields are already strings. `readonly` — the other
+no-syntax escape — is not usable here: it is not a valid `<select>` attribute,
+and on the inputs it would remove the interactivity that `type-event` and
+`opValidate()` rely on. The two typing targets need no escape at all; their
+author-written `@input` handlers suppress synthesis by themselves, which is also
+what keeps `.fs-draft` on the local layer and `.fs-bound` on the model layer.
+
 ### Both controlled form properties write only on a real change
 
 `viewManager.js` handles the two controlled form properties in two different

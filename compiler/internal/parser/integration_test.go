@@ -114,9 +114,10 @@ func TestIntegrationHomePzl(t *testing.T) {
 	if mixedClass < 3 {
 		t.Errorf("expected at least 3 mixed class attrs, got %d", mixedClass)
 	}
-	// Event handlers: @submit, @input, @click x3(filters) + clear/markAll. The
-	// row's @change/@delete moved into TodoItem; @toggle/@remove now ride on the
-	// <TodoItem> component tag (component props, not element EventAttrs).
+	// Event handlers: @submit + @click x3 (filters) + clear/markAll. The new-todo
+	// field carries no @input — `value={ newTodoText }` binds it — and the row's
+	// markup lives in TodoItem, whose @remove rides on the <TodoItem> component
+	// tag (a component prop, not an element EventAttr).
 	if events < 5 {
 		t.Errorf("expected several event handlers, got %d", events)
 	}
@@ -167,9 +168,8 @@ func TestIntegrationTodoItemPzl(t *testing.T) {
 	if !strings.Contains(pf.Scripts, "export default class TodoItem extends PuzzleView") {
 		t.Errorf("scripts must contain the TodoItem class")
 	}
-	if !strings.Contains(pf.Scripts, "this.props.toggle(event)") ||
-		!strings.Contains(pf.Scripts, "this.props.remove(event)") {
-		t.Errorf("scripts must invoke the toggle/remove callback props")
+	if !strings.Contains(pf.Scripts, "this.props.remove(event)") {
+		t.Errorf("scripts must invoke the remove callback prop")
 	}
 	if !strings.Contains(pf.Scripts, "animations = {") {
 		t.Errorf("scripts must declare the animations field")
@@ -206,19 +206,30 @@ func TestIntegrationTodoItemPzl(t *testing.T) {
 		t.Errorf("expected the { todo.createdAt | date('short') } interpolation")
 	}
 
-	// The checkbox @change handler is present as an element EventAttr.
-	var sawChange bool
+	// The checkbox carries a bare `checked={ todo.completed }` and NO author
+	// @change: that pairing is what makes codegen synthesize the write-back, so
+	// an @change reappearing here would silently suppress the binding this row
+	// exists to demonstrate.
+	var sawBoundChecked, sawChange bool
 	walk(root, func(n Node) {
-		if el, ok := n.(*Element); ok {
-			for _, a := range el.Attrs {
-				if ev, ok := a.(*EventAttr); ok && ev.Name == "change" {
-					sawChange = true
-				}
+		el, ok := n.(*Element)
+		if !ok || el.Tag != "input" {
+			return
+		}
+		for _, a := range el.Attrs {
+			if d, ok := a.(*DynamicAttr); ok && d.Name == "checked" && strings.TrimSpace(d.Expr) == "todo.completed" {
+				sawBoundChecked = true
+			}
+			if ev, ok := a.(*EventAttr); ok && ev.Name == "change" {
+				sawChange = true
 			}
 		}
 	})
-	if !sawChange {
-		t.Errorf("expected the checkbox @change handler")
+	if !sawBoundChecked {
+		t.Errorf("expected the checkbox's bare checked={ todo.completed } binding")
+	}
+	if sawChange {
+		t.Errorf("an author @change on the checkbox would suppress the synthesized write-back")
 	}
 }
 

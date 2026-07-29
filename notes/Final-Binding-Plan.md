@@ -541,32 +541,39 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 - Test: `tests/helpers/todos-suite.js` lanes, `npm run lint:examples`
 
 **Steps:**
-- [ ] **FormState first (benchmark preservation):** its handler-less `value={ row.text }`
+- [x] **FormState first (benchmark preservation):** its handler-less `value={ row.text }`
       / `value={ row.choice }` would now auto-bind and change what the benchmark
       measures. Make both intentionally non-classifying — `value={ String(row.text) }`
       and `value={ String(row.choice) }` — with a one-line comment (`readonly` is not
       valid on `<select>`, and it would change the demo's interactivity). Note the
       escape in the stress README.
-- [ ] **binding example:** rewrite as the record-path showcase — `data()` returns the
+- [x] **binding example:** rewrite as the record-path showcase — `data()` returns the
       `profile` record; bind `value={ profile.displayName }`, `value={ profile.hue }`
       (a `Puzzle.number()` field — exercises `vn` coercion end-to-end), textarea, color,
       range; delete the entire mirror-handler `events` block. This is the
       `#bindWrite` record-arm regression app.
-- [ ] **todos + scaffold (the flagship must demo the flagship feature):** drop
+- [x] **todos + scaffold (the flagship must demo the flagship feature):** drop
       `@input={ updateNewTodoText(event) }` + the handler from both Home.pzl copies
       (keep `created()` seeding); in both TodoItem.pzl copies, `checked={ todo.completed }`
       bare, drop the `@change` toggle plumbing. Hand-edit
       `tests/fixtures/todos/Home.compiled.js` to the new compiled output (compile with
       `pzlc`, then apply the documented normalizations); `TestGoldenHome` +
       `parser/integration_test.go` + `build_test.go` green.
-- [ ] Audit the remaining corpus: `rg -n 'value=\{|checked=\{' examples -g '*.pzl'`,
+- [x] Audit the remaining corpus: `rg -n 'value=\{|checked=\{' examples -g '*.pzl'`,
       inspect every handler-less hit for unintended new binding; fix or bless each.
+      (One real catch: `music/Playlist.pzl`'s inline rename. Its `@keydown:enter`
+      / `@keydown:escape` do NOT suppress, so it newly bound live and Escape
+      could no longer cancel — escaped with `String(playlist.name)`.)
 - [ ] Build todos + binding with the repo-root `./puzzle` binary; click through in a real
       browser: typing (caret never jumps mid-word), checkbox, select, number commit on
       change, range slider live. **IME check:** compose Japanese into a bound input — no
       dropped characters. (jsdom can't do composition or number-input sanitization.)
-- [ ] `npx vitest run` && `cd compiler && go test ./...` && `npm run lint:examples` green.
-- [ ] Commit: `examples: adopt implicit binding (todos, scaffold, binding); preserve stress benchmark`
+- [x] `npx vitest run` && `cd compiler && go test ./...` && `npm run lint:examples` green.
+      (`lint:examples` is not a script in this repo — no `lint*` script exists.
+      Stood in for it: `npm run pretest`, which recompiles every example through
+      the compiler, plus full `./puzzle build` runs of todos and binding in both
+      development and production, and `npm run test:types`.)
+- [x] Commit: `examples: adopt implicit binding (todos, scaffold, binding); preserve stress benchmark`
 
 ### Task 10: Docs truthing + skill + card stamps
 

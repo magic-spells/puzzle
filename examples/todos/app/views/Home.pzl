@@ -2,12 +2,14 @@
   <div class="bg-surface border border-hairline rounded-2xl overflow-hidden shadow-2xl shadow-black/50">
     <div class="p-5 border-b border-line">
       <form class="flex items-center gap-2.5" @submit={ addTodo(event) }>
+        <!-- `value={ newTodoText }` is the whole binding. `newTodoText` is a
+             bare local key, so every keystroke lands in setData() and data()
+             re-runs — which is what keeps the disabled= below honest. -->
         <input
           type="text"
           class="flex-1 h-12 px-4 rounded-xl bg-ink border border-hairline text-fg placeholder-faint focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/20 transition-colors"
           placeholder="What needs doing?"
           value={ newTodoText }
-          @input={ updateNewTodoText(event) }
           autofocus
         />
         <button
@@ -58,7 +60,7 @@
 
       <div class="max-h-96 overflow-y-auto">
         {#for todo in filteredTodos}
-          <TodoItem todo={ todo } @toggle={ toggleTodo(todo) } @remove={ deleteTodo(todo) } />
+          <TodoItem todo={ todo } @remove={ deleteTodo(todo) } />
         {/for}
       </div>
 
@@ -132,12 +134,13 @@ export default class TodoHome extends PuzzleView {
   }
 
   // Event handlers — class field of arrow functions so `this` is always
-  // the component instance (see constellation/doc/DOC-SPEC.md §4–5)
+  // the component instance (see constellation/doc/DOC-SPEC.md §4–5).
+  //
+  // There is no handler for the new-todo field: `value={ newTodoText }` binds
+  // it, and the checkbox in TodoItem binds `todo.completed` straight to the
+  // record. What is left here is the work binding cannot do for you — creating
+  // and destroying records, and choosing a filter.
   events = {
-    updateNewTodoText: (event) => {
-      this.setData('newTodoText', event.target.value);
-    },
-
     addTodo: (event) => {
       event.preventDefault();
       const text = this.getData().newTodoText.trim();
@@ -147,10 +150,6 @@ export default class TodoHome extends PuzzleView {
         store.createRecord('todo', { text });
         this.setData('newTodoText', '');
       }
-    },
-
-    toggleTodo: (todo) => {
-      todo.toggle();
     },
 
     deleteTodo: (todo) => {
