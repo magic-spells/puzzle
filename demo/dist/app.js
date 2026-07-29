@@ -678,15 +678,15 @@ var require_core = __commonJS({
     function remapScopeNames(mode, regexes, { key }) {
       let offset = 0;
       const scopeNames = mode[key];
-      const emit2 = {};
+      const emit3 = {};
       const positions = {};
       for (let i2 = 1; i2 <= regexes.length; i2++) {
         positions[i2 + offset] = scopeNames[i2];
-        emit2[i2 + offset] = true;
+        emit3[i2 + offset] = true;
         offset += countMatchGroups(regexes[i2 - 1]);
       }
       mode[key] = positions;
-      mode[key]._emit = emit2;
+      mode[key]._emit = emit3;
       mode[key]._multi = true;
     }
     function beginMultiClass(mode) {
@@ -1607,6 +1607,7 @@ var require_core = __commonJS({
 });
 
 // node_modules/@magic-spells/puzzle/client-runtime/model.js
+var recordKey = (id) => typeof id === "number" ? String(id) : id;
 var FieldBuilder = class {
   constructor(type) {
     this.def = { type, validate: [] };
@@ -1742,19 +1743,54 @@ function resolveDefault(value) {
 }
 var POLLUTION_SKIP = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
 var MERGE_SKIP = /* @__PURE__ */ new Set([...POLLUTION_SKIP, "_store", "_type", "_synced", "_deleted"]);
-function assignSkipping(target, src, skipSet) {
+var DELETED_SAVE_MESSAGE = "[puzzle] cannot save a deleted record";
+var MUTATION_REVISIONS = /* @__PURE__ */ new WeakMap();
+function assignSkipping(target, src, skipSet, allow) {
   for (const key of Object.keys(src)) {
     if (skipSet.has(key))
+      continue;
+    if (allow && !allow(key))
       continue;
     target[key] = src[key];
   }
   return target;
 }
+function recordMutation(target, fields) {
+  if (fields.length === 0)
+    return;
+  let state = MUTATION_REVISIONS.get(target);
+  if (!state) {
+    state = { current: 0, fields: /* @__PURE__ */ new Map() };
+    MUTATION_REVISIONS.set(target, state);
+  }
+  const revision = ++state.current;
+  for (const field of fields)
+    state.fields.set(field, revision);
+}
 function safeAssign(target, src) {
   return assignSkipping(target, src, POLLUTION_SKIP);
 }
-function safeMerge(record, src) {
-  return assignSkipping(record, src, MERGE_SKIP);
+function safeAssignTracked(target, src) {
+  safeAssign(target, src);
+  recordMutation(
+    target,
+    Object.keys(src).filter((key) => !POLLUTION_SKIP.has(key))
+  );
+  return target;
+}
+function recordMutationRevision(record) {
+  return MUTATION_REVISIONS.get(record)?.current ?? 0;
+}
+function safeMerge(record, src, throughRevision) {
+  if (throughRevision === void 0)
+    return assignSkipping(record, src, MERGE_SKIP);
+  const state = MUTATION_REVISIONS.get(record);
+  return assignSkipping(
+    record,
+    src,
+    MERGE_SKIP,
+    (key) => (state?.fields.get(key) ?? 0) <= throughRevision
+  );
 }
 var PuzzleModel = class {
   /**
@@ -1854,7 +1890,7 @@ var PuzzleModel = class {
    * @returns {{ valid: boolean, errors: Array<{field, rule, message}> }}
    */
   static validate(data = {}, { fields } = {}) {
-    const errors = this._collectErrors(data, fields);
+    const errors = this._collectErrors(this.applyDefaults(data), fields);
     return { valid: errors.length === 0, errors };
   }
   /**
@@ -1873,7 +1909,7 @@ var PuzzleModel = class {
   update(patch2 = {}) {
     if (this._store) {
       const pk = this._store.modelFor(this._type).primaryKey();
-      if (Object.prototype.hasOwnProperty.call(patch2, pk) && patch2[pk] !== this[pk]) {
+      if (Object.prototype.hasOwnProperty.call(patch2, pk) && recordKey(patch2[pk]) !== recordKey(this[pk])) {
         throw new Error(
           `Cannot change primary key "${pk}": primary keys are immutable after creation.`
         );
@@ -1883,7 +1919,7 @@ var PuzzleModel = class {
     const errors = this.constructor._collectErrors(patch2, patched);
     if (errors.length)
       throw new PuzzleValidationError(errors);
-    safeAssign(this, patch2);
+    safeAssignTracked(this, patch2);
     this._store?.recordChanged(this);
     return this;
   }
@@ -1903,7 +1939,7 @@ var PuzzleModel = class {
    */
   save() {
     if (this._deleted) {
-      return Promise.reject(new Error("[puzzle] cannot save a deleted record"));
+      return Promise.reject(new Error(DELETED_SAVE_MESSAGE));
     }
     if (!this._store) {
       return Promise.reject(
@@ -1933,8 +1969,637 @@ var PuzzleModel = class {
   }
 };
 
-// node_modules/@magic-spells/puzzle/client-runtime/devstate.js
+// node_modules/@magic-spells/puzzle/client-runtime/devperf.js
 var DEV = false ? true : true;
+var PERF_SENTINEL = "__PUZZLE_PERF__";
+var RECURSION_LIMIT = 100;
+var RUNAWAY_WINDOW_MS = 1e3;
+var RUNAWAY_RENDER_LIMIT = 60;
+var RUNAWAY_WASTED_RATIO = 0.9;
+var sinks = /* @__PURE__ */ new Set();
+var viewStates = /* @__PURE__ */ new WeakMap();
+var preparedData = /* @__PURE__ */ new WeakMap();
+var activeRenders = /* @__PURE__ */ new WeakMap();
+var storeChains = /* @__PURE__ */ new WeakMap();
+var activeStoreFlushes = /* @__PURE__ */ new WeakMap();
+var activeScopes = [];
+var totals = {
+  renders: 0,
+  wastedRenders: 0,
+  domMutations: 0,
+  dataRuns: 0,
+  asyncDataRuns: 0,
+  storeFlushes: 0,
+  storeNotifications: 0,
+  componentPropBailouts: 0,
+  componentPropReruns: 0,
+  slotRenders: 0,
+  memoHits: 0,
+  memoMisses: 0,
+  asyncTrackingDeferrals: 0,
+  asyncTrackingDeferredMs: 0,
+  maxRecursiveDepth: 0
+};
+var nextViewId = 1;
+var nextChainId = 1;
+if (DEV && typeof globalThis !== "undefined") {
+  try {
+    Object.defineProperty(globalThis, PERF_SENTINEL, {
+      configurable: true,
+      value: Object.freeze({
+        snapshot: snapshotImpl,
+        subscribe: installSinkImpl
+      })
+    });
+  } catch {
+  }
+}
+function devperfInstallSink(sink) {
+  if (DEV)
+    return installSinkImpl(sink);
+  return () => {
+  };
+}
+function devperfPrepareData(view, cause) {
+  return prepareDataImpl(view, cause);
+}
+function devperfRunData(view, params, props) {
+  return runDataImpl(view, params, props);
+}
+function devperfRenderScheduled(view, cause) {
+  if (DEV)
+    renderScheduledImpl(view, cause);
+}
+function devperfMarkCause(view, cause) {
+  if (DEV)
+    markCauseImpl(view, cause);
+}
+function devperfCanRender(view) {
+  return canRenderImpl(view);
+}
+function devperfRenderPrepare(view) {
+  return renderPrepareImpl(view);
+}
+function devperfRenderTreeBuilt(view) {
+  if (DEV)
+    renderTreeBuiltImpl(view);
+}
+function devperfRenderStart(view) {
+  if (DEV)
+    renderStartImpl(view);
+}
+function devperfRenderEnd(view) {
+  if (DEV)
+    renderEndImpl(view);
+}
+function devperfRenderCancel(view) {
+  if (DEV)
+    renderCancelImpl(view);
+}
+function devperfMutation(count = 1) {
+  if (DEV)
+    mutationImpl(count);
+}
+function devperfComponentPatch(view, bailedOut) {
+  if (DEV)
+    componentPatchImpl(view, bailedOut);
+}
+function devperfSlotRender(view) {
+  if (DEV)
+    slotRenderImpl(view);
+}
+function devperfMemo(view, key, hit) {
+  if (DEV)
+    memoImpl(view, key, hit);
+}
+function devperfStoreNotify(store, subscriber) {
+  if (DEV)
+    storeNotifyImpl(store, subscriber);
+}
+function devperfStoreFlushStart(store) {
+  if (DEV)
+    storeFlushStartImpl(store);
+}
+function devperfStoreFlushNotifications(store, keys2, notified) {
+  if (DEV)
+    storeFlushNotificationsImpl(store, keys2, notified);
+}
+function devperfStoreFlushEnd(store) {
+  if (DEV)
+    storeFlushEndImpl(store);
+}
+function devperfTrackingDeferred(subscriber, pending, retry, kind) {
+  return trackingDeferredImpl(subscriber, pending, retry, kind);
+}
+function installSinkImpl(sink) {
+  if (typeof sink !== "function") {
+    throw new TypeError("[puzzle perf] sink must be a function");
+  }
+  sinks.add(sink);
+  let attached = true;
+  return () => {
+    if (!attached)
+      return;
+    attached = false;
+    sinks.delete(sink);
+  };
+}
+function snapshotImpl() {
+  return Object.freeze({ ...totals });
+}
+function emit(type, payload, subject = null) {
+  const event = Object.freeze({ type, ...payload });
+  for (const sink of [...sinks]) {
+    try {
+      sink(event, subject);
+    } catch (error) {
+      console.error("[puzzle perf] sink failed:", error);
+    }
+  }
+}
+function newChain() {
+  return {
+    id: nextChainId++,
+    executions: /* @__PURE__ */ new Map(),
+    blockedViews: /* @__PURE__ */ new Set(),
+    pendingStores: /* @__PURE__ */ new Set(),
+    pendingViews: /* @__PURE__ */ new Set(),
+    pendingData: 0,
+    pendingAsync: 0,
+    active: 0,
+    version: 0,
+    quiescent: false
+  };
+}
+function currentChain() {
+  for (let i2 = activeScopes.length - 1; i2 >= 0; i2--) {
+    const chain = activeScopes[i2].chain;
+    if (!chain.quiescent)
+      return chain;
+  }
+  return null;
+}
+function viewState(view) {
+  let state = viewStates.get(view);
+  if (state)
+    return state;
+  state = {
+    id: nextViewId++,
+    name: view?.constructor?.name || "anonymous",
+    pendingChain: null,
+    pendingCauses: /* @__PURE__ */ new Set(),
+    dataExecutionChain: null,
+    activeDataChain: null,
+    dataRuns: 0,
+    renderWindow: [],
+    // Re-warn throttle for the cross-frame guard only — never a render gate.
+    runawayUntil: 0
+  };
+  viewStates.set(view, state);
+  return state;
+}
+function chainForView(state) {
+  const active = currentChain();
+  if (active)
+    return active;
+  if (state.pendingChain && !state.pendingChain.quiescent)
+    return state.pendingChain;
+  return newChain();
+}
+function touch(chain) {
+  chain.version++;
+}
+function pushScope(chain, render = null) {
+  chain.active++;
+  touch(chain);
+  const scope = { chain, render };
+  activeScopes.push(scope);
+  return scope;
+}
+function popScope(scope) {
+  const index = activeScopes.lastIndexOf(scope);
+  if (index !== -1)
+    activeScopes.splice(index, 1);
+  scope.chain.active = Math.max(0, scope.chain.active - 1);
+  touch(scope.chain);
+  maybeQuiesce(scope.chain);
+}
+function maybeQuiesce(chain) {
+  if (chain.quiescent || chain.active > 0 || chain.pendingStores.size > 0 || chain.pendingViews.size > 0 || chain.pendingData > 0 || chain.pendingAsync > 0) {
+    return;
+  }
+  const version = chain.version;
+  queueMicrotask(() => {
+    if (chain.quiescent || chain.version !== version || chain.active > 0 || chain.pendingStores.size > 0 || chain.pendingViews.size > 0 || chain.pendingData > 0 || chain.pendingAsync > 0) {
+      return;
+    }
+    chain.quiescent = true;
+    chain.executions.clear();
+    chain.blockedViews.clear();
+  });
+}
+function claimExecution(state, chain, view) {
+  if (chain.blockedViews.has(state.id))
+    return 0;
+  const depth = (chain.executions.get(state.id) ?? 0) + 1;
+  chain.executions.set(state.id, depth);
+  totals.maxRecursiveDepth = Math.max(totals.maxRecursiveDepth, depth);
+  if (depth === RECURSION_LIMIT) {
+    chain.blockedViews.add(state.id);
+    const message = `[puzzle perf] ${PERF_SENTINEL}: stopped ${state.name} after ${RECURSION_LIMIT} executions in one causal chain`;
+    console.error(message);
+    emit(
+      "loop",
+      {
+        viewId: state.id,
+        viewName: state.name,
+        chainId: chain.id,
+        depth,
+        kind: "recursive",
+        message
+      },
+      view ?? null
+    );
+  }
+  return depth;
+}
+function prepareDataImpl(view, cause) {
+  const state = viewState(view);
+  const chain = chainForView(state);
+  if (chain.blockedViews.has(state.id))
+    return null;
+  const resolvedCause = cause || (state.pendingCauses.size > 0 ? [...state.pendingCauses][state.pendingCauses.size - 1] : state.dataRuns === 0 ? "initial" : "refresh");
+  const depth = claimExecution(state, chain, view);
+  if (!depth)
+    return null;
+  state.pendingChain = chain;
+  state.pendingCauses.add(resolvedCause);
+  state.dataExecutionChain = chain;
+  chain.pendingData++;
+  touch(chain);
+  let queue = preparedData.get(view);
+  if (!queue) {
+    queue = [];
+    preparedData.set(view, queue);
+  }
+  queue.push({ view, state, chain, cause: resolvedCause, depth, started: false });
+  return true;
+}
+function runDataImpl(view, params, props) {
+  const queue = preparedData.get(view);
+  const prepared = queue?.shift();
+  if (queue?.length === 0)
+    preparedData.delete(view);
+  if (!prepared)
+    return view.data(params, props);
+  const { state, chain, cause } = prepared;
+  if (!prepared.started) {
+    prepared.started = true;
+    chain.pendingData = Math.max(0, chain.pendingData - 1);
+  }
+  state.dataRuns++;
+  totals.dataRuns++;
+  const startedAt = now();
+  const scope = pushScope(chain);
+  let result;
+  try {
+    result = view.data(params, props);
+  } catch (error) {
+    popScope(scope);
+    recordData(prepared, startedAt, false, true);
+    throw error;
+  }
+  popScope(scope);
+  if (result && typeof result.then === "function") {
+    totals.asyncDataRuns++;
+    chain.pendingAsync++;
+    touch(chain);
+    state.activeDataChain = chain;
+    const finish = (failed) => {
+      recordData(prepared, startedAt, true, failed);
+      chain.pendingAsync = Math.max(0, chain.pendingAsync - 1);
+      if (state.activeDataChain === chain)
+        state.activeDataChain = null;
+      touch(chain);
+      maybeQuiesce(chain);
+    };
+    result.then(
+      () => finish(false),
+      () => finish(true)
+    );
+  } else {
+    recordData(prepared, startedAt, false, false);
+  }
+  state.pendingCauses.add(cause);
+  return result;
+}
+function recordData(prepared, startedAt, async, failed) {
+  emit(
+    "data",
+    {
+      viewId: prepared.state.id,
+      viewName: prepared.state.name,
+      chainId: prepared.chain.id,
+      cause: prepared.cause,
+      duration: now() - startedAt,
+      async,
+      failed
+    },
+    prepared.view
+  );
+  prepared.state.pendingCauses.add(prepared.cause);
+}
+function renderScheduledImpl(view, cause) {
+  const state = viewState(view);
+  const chain = chainForView(state);
+  state.pendingChain = chain;
+  state.pendingCauses.add(cause || "local-state");
+  chain.pendingViews.add(state.id);
+  touch(chain);
+}
+function markCauseImpl(view, cause) {
+  const state = viewState(view);
+  const chain = chainForView(state);
+  state.pendingChain = chain;
+  state.pendingCauses.add(cause);
+  touch(chain);
+}
+function canRenderImpl(view) {
+  const state = viewState(view);
+  const chain = chainForView(state);
+  const recursiveBlocked = chain.blockedViews.has(state.id) && state.dataExecutionChain !== chain;
+  if (!recursiveBlocked)
+    return true;
+  chain.pendingViews.delete(state.id);
+  state.pendingCauses.clear();
+  touch(chain);
+  maybeQuiesce(chain);
+  return false;
+}
+function renderPrepareImpl(view) {
+  const state = viewState(view);
+  const chain = chainForView(state);
+  state.pendingChain = chain;
+  chain.pendingViews.delete(state.id);
+  const causes = state.pendingCauses.size > 0 ? [...state.pendingCauses] : ["render"];
+  state.pendingCauses.clear();
+  touch(chain);
+  const mark = {
+    view,
+    state,
+    chain,
+    causes,
+    scope: null,
+    treeStartedAt: now(),
+    treeDuration: 0,
+    patchStartedAt: 0,
+    mutations: 0,
+    depth: chain.executions.get(state.id) ?? 0,
+    entered: false,
+    ended: false
+  };
+  mark.scope = pushScope(chain, mark);
+  let stack = activeRenders.get(view);
+  if (!stack) {
+    stack = [];
+    activeRenders.set(view, stack);
+  }
+  stack.push(mark);
+}
+function currentRender(view) {
+  const stack = activeRenders.get(view);
+  return stack?.[stack.length - 1] ?? null;
+}
+function renderTreeBuiltImpl(view) {
+  const mark = currentRender(view);
+  if (!mark || mark.ended)
+    return;
+  mark.treeDuration = now() - mark.treeStartedAt;
+}
+function renderStartImpl(view) {
+  const mark = currentRender(view);
+  if (!mark || mark.ended)
+    return;
+  mark.entered = true;
+  if (mark.state.dataExecutionChain === mark.chain) {
+    mark.state.dataExecutionChain = null;
+    mark.depth = mark.chain.executions.get(mark.state.id) ?? 1;
+  } else {
+    mark.depth = claimExecution(mark.state, mark.chain, mark.view);
+  }
+  mark.patchStartedAt = now();
+}
+function renderEndImpl(view) {
+  const stack = activeRenders.get(view);
+  const mark = stack?.[stack.length - 1];
+  if (!mark || mark.ended)
+    return;
+  mark.ended = true;
+  stack.pop();
+  if (stack.length === 0)
+    activeRenders.delete(view);
+  const timestamp = now();
+  const patchDuration = mark.patchStartedAt ? timestamp - mark.patchStartedAt : 0;
+  if (mark.entered) {
+    const wasted = mark.mutations === 0;
+    totals.renders++;
+    totals.domMutations += mark.mutations;
+    if (wasted)
+      totals.wastedRenders++;
+    emit(
+      "render",
+      {
+        viewId: mark.state.id,
+        viewName: mark.state.name,
+        chainId: mark.chain.id,
+        causes: Object.freeze([...mark.causes]),
+        depth: mark.depth,
+        treeDuration: mark.treeDuration,
+        patchDuration,
+        domMutations: mark.mutations,
+        wasted,
+        timestamp
+      },
+      mark.view
+    );
+    checkRunaway(mark, timestamp, wasted);
+  }
+  popScope(mark.scope);
+}
+function renderCancelImpl(view) {
+  renderEndImpl(view);
+}
+function mutationImpl(count) {
+  for (let i2 = activeScopes.length - 1; i2 >= 0; i2--) {
+    const mark = activeScopes[i2].render;
+    if (!mark || mark.ended)
+      continue;
+    mark.mutations += count;
+    return;
+  }
+}
+function checkRunaway(mark, timestamp, wasted) {
+  const window2 = mark.state.renderWindow;
+  window2.push({
+    timestamp,
+    wasted,
+    animated: mark.causes.includes("animation") || mark.causes.includes("morph")
+  });
+  while (window2.length && timestamp - window2[0].timestamp > RUNAWAY_WINDOW_MS)
+    window2.shift();
+  if (window2.length < RUNAWAY_RENDER_LIMIT || mark.state.runawayUntil > timestamp)
+    return;
+  const wastedCount = window2.reduce((sum, entry) => sum + (entry.wasted ? 1 : 0), 0);
+  const hasAnimationCause = window2.some((entry) => entry.animated);
+  if (hasAnimationCause || wastedCount / window2.length < RUNAWAY_WASTED_RATIO)
+    return;
+  mark.state.runawayUntil = timestamp + RUNAWAY_WINDOW_MS;
+  const message = `[puzzle perf] ${PERF_SENTINEL}: ${mark.state.name} rendered ${window2.length} times in one second and ${Math.round(wastedCount / window2.length * 100)}% produced no DOM change \u2014 likely a render loop`;
+  console.warn(message);
+  emit(
+    "loop",
+    {
+      viewId: mark.state.id,
+      viewName: mark.state.name,
+      chainId: mark.chain.id,
+      depth: mark.depth,
+      kind: "cross-frame",
+      message
+    },
+    mark.view
+  );
+}
+function componentPatchImpl(view, bailedOut) {
+  if (bailedOut)
+    totals.componentPropBailouts++;
+  else
+    totals.componentPropReruns++;
+  const state = viewState(view);
+  emit(
+    "component-props",
+    {
+      viewId: state.id,
+      viewName: state.name,
+      bailedOut
+    },
+    view
+  );
+}
+function slotRenderImpl(view) {
+  totals.slotRenders++;
+  markCauseImpl(view, "slots");
+  const state = viewState(view);
+  emit("slot-render", { viewId: state.id, viewName: state.name }, view);
+}
+function memoImpl(view, key, hit) {
+  if (hit)
+    totals.memoHits++;
+  else
+    totals.memoMisses++;
+  const state = viewState(view);
+  emit(
+    "memo",
+    {
+      viewId: state.id,
+      viewName: state.name,
+      key,
+      hit
+    },
+    view
+  );
+}
+function storeNotifyImpl(store, subscriber) {
+  const state = subscriber && typeof subscriber === "object" ? viewStates.get(subscriber) : null;
+  const chain = (state?.activeDataChain && !state.activeDataChain.quiescent ? state.activeDataChain : currentChain()) || (storeChains.get(store)?.quiescent ? null : storeChains.get(store)) || newChain();
+  storeChains.set(store, chain);
+  chain.pendingStores.add(store);
+  touch(chain);
+}
+function storeFlushStartImpl(store) {
+  const chain = (storeChains.get(store)?.quiescent ? null : storeChains.get(store)) || currentChain() || newChain();
+  storeChains.set(store, chain);
+  chain.pendingStores.delete(store);
+  touch(chain);
+  const mark = {
+    store,
+    chain,
+    scope: pushScope(chain),
+    startedAt: now(),
+    keys: store?._pendingKeys?.size ?? 0,
+    notified: 0
+  };
+  let stack = activeStoreFlushes.get(store);
+  if (!stack) {
+    stack = [];
+    activeStoreFlushes.set(store, stack);
+  }
+  stack.push(mark);
+  return mark;
+}
+function storeFlushNotificationsImpl(store, keys2, notified) {
+  const stack = activeStoreFlushes.get(store);
+  const mark = stack?.[stack.length - 1];
+  if (!mark)
+    return;
+  mark.keys = keys2.length;
+  mark.notified = notified.size;
+}
+function storeFlushEndImpl(store) {
+  const stack = activeStoreFlushes.get(store);
+  const mark = stack?.pop();
+  if (!mark)
+    return;
+  if (stack.length === 0)
+    activeStoreFlushes.delete(store);
+  totals.storeFlushes++;
+  totals.storeNotifications += mark.notified;
+  emit("store-flush", {
+    chainId: mark.chain.id,
+    duration: now() - mark.startedAt,
+    keys: mark.keys,
+    notified: mark.notified
+  });
+  popScope(mark.scope);
+  if (!mark.chain.pendingStores.has(mark.store))
+    storeChains.delete(mark.store);
+  maybeQuiesce(mark.chain);
+}
+function trackingDeferredImpl(subscriber, pending, retry, kind) {
+  const state = subscriber && typeof subscriber === "object" ? viewState(subscriber) : null;
+  const chain = state ? chainForView(state) : currentChain() || newChain();
+  const startedAt = now();
+  totals.asyncTrackingDeferrals++;
+  chain.pendingAsync++;
+  touch(chain);
+  const resume = () => {
+    const duration = now() - startedAt;
+    totals.asyncTrackingDeferredMs += duration;
+    chain.pendingAsync = Math.max(0, chain.pendingAsync - 1);
+    touch(chain);
+    emit(
+      "tracking-deferral",
+      {
+        viewId: state?.id ?? null,
+        viewName: state?.name ?? "anonymous",
+        chainId: chain.id,
+        kind,
+        duration,
+        count: totals.asyncTrackingDeferrals,
+        totalDuration: totals.asyncTrackingDeferredMs
+      },
+      state ? subscriber : null
+    );
+    maybeQuiesce(chain);
+    return retry();
+  };
+  return pending.then(resume, resume);
+}
+function now() {
+  return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+}
+
+// node_modules/@magic-spells/puzzle/client-runtime/devstate.js
+var DEV2 = false ? true : true;
 var HMR_KEY = "__puzzleHMR";
 var MAX_AGE_MS = 1e4;
 var MAX_DEPTH = 8;
@@ -1942,23 +2607,23 @@ var DROP = Symbol("drop");
 var liveViews = /* @__PURE__ */ new Set();
 var viewObserver = null;
 function registerView(view) {
-  if (DEV) {
+  if (DEV2) {
     liveViews.add(view);
     viewObserver?.(view, true);
   }
 }
 function unregisterView(view) {
-  if (DEV) {
+  if (DEV2) {
     if (liveViews.delete(view))
       viewObserver?.(view, false);
   }
 }
 function setViewObserver(fn) {
-  if (DEV)
+  if (DEV2)
     viewObserver = typeof fn === "function" ? fn : null;
 }
 function liveViewList() {
-  return DEV ? [...liveViews] : [];
+  return DEV2 ? [...liveViews] : [];
 }
 function keyedViews() {
   const counts = /* @__PURE__ */ Object.create(null);
@@ -2025,10 +2690,10 @@ function walk(value, depth, seen) {
   }
 }
 function snapshotToStorage(app2) {
-  if (DEV)
-    snapshotImpl(app2);
+  if (DEV2)
+    snapshotImpl2(app2);
 }
-function snapshotImpl(app2) {
+function snapshotImpl2(app2) {
   try {
     const storage = getSessionStorage();
     if (!storage)
@@ -2050,7 +2715,7 @@ function snapshotImpl(app2) {
   }
 }
 function restoreStoreFromStorage(app2) {
-  if (DEV)
+  if (DEV2)
     return restoreStoreImpl(app2);
   return null;
 }
@@ -2086,7 +2751,7 @@ function restoreStoreImpl(app2) {
   }
 }
 function restoreViewsFromStorage(blob) {
-  if (DEV)
+  if (DEV2)
     restoreViewsImpl(blob);
 }
 function restoreViewsImpl(blob) {
@@ -2109,9 +2774,9 @@ function restoreViewsImpl(blob) {
 }
 
 // node_modules/@magic-spells/puzzle/client-runtime/devtools.js
-var DEV2 = false ? true : true;
+var DEV3 = false ? true : true;
 var PROTOCOL_VERSION = 1;
-var FRAMEWORK_VERSION = "0.3.1";
+var FRAMEWORK_VERSION = "0.4.0";
 var HOOK_KEY = "__PUZZLE_DEVTOOLS_HOOK__";
 var OVERLAY_MARK = "data-puzzle-devtools";
 var hook = null;
@@ -2119,21 +2784,24 @@ var boundApp = null;
 var overlay = null;
 var lastChain = [];
 var viewIds = /* @__PURE__ */ new WeakMap();
-var nextViewId = 1;
+var nextViewId2 = 1;
+var perfDetach = null;
+var profile = null;
+var pendingFlushRow = null;
 function devtoolsAppMounted(app2) {
-  if (DEV2)
+  if (DEV3)
     appMountedImpl(app2);
 }
 function devtoolsAppUnmounted(app2) {
-  if (DEV2)
+  if (DEV3)
     appUnmountedImpl(app2);
 }
 function devtoolsFlush(store, keys2, notified) {
-  if (DEV2)
+  if (DEV3)
     flushImpl(store, keys2, notified);
 }
 function devtoolsRouteCommit(next) {
-  if (DEV2)
+  if (DEV3)
     routeCommitImpl(next);
 }
 function appMountedImpl(app2) {
@@ -2146,18 +2814,20 @@ function appMountedImpl(app2) {
     }
     hook = candidate;
     boundApp = app2;
-    emit("hello", {
+    emit2("hello", {
       protocolVersion: PROTOCOL_VERSION,
       frameworkVersion: FRAMEWORK_VERSION
     });
-    emit("app-mounted", {});
+    emit2("app-mounted", {});
     try {
       hook.onRequest(handleRequest);
     } catch {
     }
     setViewObserver(onViewChange);
+    perfDetach?.();
+    perfDetach = devperfInstallSink(onPerfEvent);
     for (const view of liveViewList())
-      emit("view-mounted", viewInfo(view));
+      emit2("view-mounted", viewInfo(view));
   } catch {
   }
 }
@@ -2165,8 +2835,12 @@ function appUnmountedImpl(app2) {
   try {
     if (!hook || boundApp !== null && boundApp !== app2)
       return;
-    emit("app-unmounted", {});
+    emit2("app-unmounted", {});
     setViewObserver(null);
+    perfDetach?.();
+    perfDetach = null;
+    profile = null;
+    pendingFlushRow = null;
     removeOverlay();
     hook = null;
     boundApp = null;
@@ -2174,7 +2848,7 @@ function appUnmountedImpl(app2) {
   } catch {
   }
 }
-function emit(type, payload) {
+function emit2(type, payload) {
   if (!hook)
     return;
   try {
@@ -2184,9 +2858,9 @@ function emit(type, payload) {
 }
 function onViewChange(view, mounted) {
   if (mounted)
-    emit("view-mounted", viewInfo(view));
+    emit2("view-mounted", viewInfo(view));
   else
-    emit("view-destroyed", { id: viewId(view) });
+    emit2("view-destroyed", { id: viewId(view) });
 }
 function flushImpl(store, keys2, notified) {
   try {
@@ -2195,7 +2869,9 @@ function flushImpl(store, keys2, notified) {
     const ids = [];
     for (const sub of notified)
       ids.push(subscriberId(sub));
-    emit("flush", { keys: [...keys2], notified: ids });
+    if (profile?.recording)
+      recordProfileFlush(keys2, ids.length);
+    emit2("flush", { keys: [...keys2], notified: ids });
   } catch {
   }
 }
@@ -2204,7 +2880,7 @@ function routeCommitImpl(next) {
     lastChain = chainNames(next?.views);
     if (!hook)
       return;
-    emit("route-commit", {
+    emit2("route-commit", {
       pathname: next?.pathname ?? null,
       query: { ...next?.query ?? {} },
       params: { ...next?.params ?? {} },
@@ -2229,6 +2905,12 @@ function handleRequest(message) {
         return snapshotSubscriptions();
       case "snapshot:route":
         return snapshotRoute();
+      case "perf:start":
+        return startProfile();
+      case "perf:stop":
+        return stopProfile();
+      case "snapshot:profile":
+        return profileReport();
       case "edit:record":
         return editRecord(payload.type, payload.id, payload.patch);
       case "highlight:view":
@@ -2377,6 +3059,221 @@ function snapshotRoute() {
     title: typeof document !== "undefined" ? document.title : null
   };
 }
+var FLUSH_RING = 200;
+var CAUSE_KEYS = ["data", "store", "parent", "route", "manual", "slot"];
+var CAUSE_BUCKET = {
+  initial: "data",
+  // the mount's first data() run
+  refresh: "data",
+  // an explicit refresh() re-ran data()
+  store: "store",
+  props: "parent",
+  // a parent re-render passed new props down
+  route: "route",
+  "local-state": "manual",
+  // setData()
+  render: "manual",
+  // a direct rerender() with nothing else pending
+  slots: "slot"
+};
+var WARNING_KIND = {
+  recursive: "recursive-loop",
+  "cross-frame": "runaway-rerender"
+};
+function startProfile() {
+  profile = {
+    startedAt: Date.now(),
+    stoppedAt: 0,
+    recording: true,
+    views: /* @__PURE__ */ new Map(),
+    dataRuns: 0,
+    storeFlushes: 0,
+    storeNotifications: 0,
+    flushes: [],
+    warnings: /* @__PURE__ */ new Map()
+  };
+  pendingFlushRow = null;
+  return { ok: true };
+}
+function stopProfile() {
+  if (profile?.recording) {
+    profile.recording = false;
+    profile.stoppedAt = Date.now();
+  }
+  pendingFlushRow = null;
+  return { ok: true };
+}
+function profileReport() {
+  if (!profile) {
+    return {
+      recording: false,
+      durationMs: 0,
+      totals: emptyProfileTotals(),
+      views: [],
+      flushes: [],
+      warnings: []
+    };
+  }
+  const totals2 = emptyProfileTotals();
+  const views = [];
+  for (const row of profile.views.values()) {
+    totals2.renders += row.renders;
+    totals2.wastedRenders += row.wastedRenders;
+    totals2.domMutations += row.domMutations;
+    views.push({
+      ...row,
+      renderMs: round2(row.renderMs),
+      patchMs: round2(row.patchMs),
+      dataMs: round2(row.dataMs),
+      causes: { ...row.causes }
+    });
+  }
+  totals2.dataRuns = profile.dataRuns;
+  totals2.storeFlushes = profile.storeFlushes;
+  totals2.storeNotifications = profile.storeNotifications;
+  return {
+    recording: profile.recording,
+    durationMs: (profile.recording ? Date.now() : profile.stoppedAt) - profile.startedAt,
+    totals: totals2,
+    views,
+    flushes: profile.flushes.map((flush) => ({ ...flush, keys: [...flush.keys] })),
+    warnings: [...profile.warnings.values()].map((warning) => ({ ...warning }))
+  };
+}
+function emptyProfileTotals() {
+  return {
+    renders: 0,
+    wastedRenders: 0,
+    domMutations: 0,
+    dataRuns: 0,
+    storeFlushes: 0,
+    storeNotifications: 0
+  };
+}
+function onPerfEvent(event, subject) {
+  try {
+    if (event.type === "loop") {
+      profileWarning(event, subject);
+      return;
+    }
+    if (!profile?.recording)
+      return;
+    switch (event.type) {
+      case "render": {
+        const row = profileRow(subject);
+        if (!row)
+          return;
+        row.renders++;
+        if (event.wasted)
+          row.wastedRenders++;
+        row.domMutations += event.domMutations;
+        row.renderMs += event.treeDuration;
+        row.patchMs += event.patchDuration;
+        for (const cause of event.causes)
+          countCause(row, cause);
+        return;
+      }
+      case "data": {
+        profile.dataRuns++;
+        const row = profileRow(subject);
+        if (row)
+          row.dataMs += event.duration;
+        return;
+      }
+      case "memo": {
+        const row = profileRow(subject);
+        if (!row)
+          return;
+        if (event.hit)
+          row.memoHits++;
+        else
+          row.memoMisses++;
+        return;
+      }
+      case "component-props": {
+        const row = profileRow(subject);
+        if (!row)
+          return;
+        if (event.bailedOut)
+          row.propsBailouts++;
+        else
+          row.propsReruns++;
+        return;
+      }
+      case "store-flush": {
+        if (pendingFlushRow) {
+          pendingFlushRow.durationMs = round2(event.duration);
+          pendingFlushRow = null;
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  } catch {
+  }
+}
+function profileRow(view) {
+  if (!view || !profile)
+    return null;
+  const id = viewId(view);
+  let row = profile.views.get(id);
+  if (row)
+    return row;
+  const causes = {};
+  for (const key of CAUSE_KEYS)
+    causes[key] = 0;
+  row = {
+    ...viewInfo(view),
+    renders: 0,
+    wastedRenders: 0,
+    domMutations: 0,
+    renderMs: 0,
+    patchMs: 0,
+    dataMs: 0,
+    causes,
+    memoHits: 0,
+    memoMisses: 0,
+    propsBailouts: 0,
+    propsReruns: 0
+  };
+  profile.views.set(id, row);
+  return row;
+}
+function countCause(row, cause) {
+  const bucket = CAUSE_BUCKET[cause] ?? cause;
+  row.causes[bucket] = (row.causes[bucket] ?? 0) + 1;
+}
+function profileWarning(event, subject) {
+  const kind = WARNING_KIND[event.kind] ?? event.kind ?? "unknown";
+  const id = subject ? viewId(subject) : null;
+  const name = subject ? viewName(subject) : event.viewName ?? null;
+  const detail = event.message ?? "";
+  let count = 1;
+  if (profile?.recording) {
+    const key = `${kind}#${id ?? "?"}`;
+    const existing = profile.warnings.get(key);
+    if (existing) {
+      existing.count++;
+      count = existing.count;
+    } else {
+      profile.warnings.set(key, { kind, viewId: id, name, detail, count });
+    }
+  }
+  emit2("perf-warning", { kind, viewId: id, name, detail, count });
+}
+function recordProfileFlush(keys2, notified) {
+  profile.storeFlushes++;
+  profile.storeNotifications += notified;
+  const row = { at: Date.now(), keys: [...keys2], notified, durationMs: 0 };
+  profile.flushes.push(row);
+  if (profile.flushes.length > FLUSH_RING)
+    profile.flushes.shift();
+  pendingFlushRow = row;
+}
+function round2(value) {
+  return Math.round(value * 100) / 100;
+}
 function highlightView(id, on) {
   if (on === false) {
     removeOverlay();
@@ -2446,7 +3343,7 @@ function viewId(view) {
     return null;
   let id = viewIds.get(view);
   if (id === void 0) {
-    id = nextViewId++;
+    id = nextViewId2++;
     viewIds.set(view, id);
   }
   return id;
@@ -2489,7 +3386,6 @@ function requireStore() {
 var REC_SEP = " ";
 var noop = () => {
 };
-var recordKey = (id) => typeof id === "number" ? String(id) : id;
 var PuzzleAdapterError = class extends Error {
   constructor(status, statusText, body) {
     super(`[puzzle] adapter request failed: ${status} ${statusText || ""}`.trimEnd());
@@ -2539,7 +3435,7 @@ var Store = class {
     this._flushScheduled = false;
     this._flushTimer = null;
     this._persistPending = false;
-    this._saveChains = /* @__PURE__ */ new WeakMap();
+    this._writeChains = /* @__PURE__ */ new WeakMap();
     this._installRelationships();
     if (this.storage)
       this._load();
@@ -2725,6 +3621,13 @@ var Store = class {
    * Subscribers are notified as data lands (batched, as usual).
    */
   async loadAll(type) {
+    const pk = this.modelFor(type).primaryKey();
+    const revisionsAtDispatch = new Map(
+      Array.from(this._typeMap(type).values(), (record) => [
+        recordKey(record[pk]),
+        recordMutationRevision(record)
+      ])
+    );
     const list = await this._fetchAdapter(type, "");
     if (!Array.isArray(list)) {
       throw new Error(`[puzzle] loadAll('${type}') expected a JSON array from the server`);
@@ -2735,18 +3638,33 @@ var Store = class {
           `[puzzle] loadAll('${type}') expected an array of JSON objects from the server`
         );
       }
+      if (data[pk] == null) {
+        throw new Error(
+          `[puzzle] loadAll('${type}') requires primary key "${pk}" on every record`
+        );
+      }
     }
-    const records = list.map((data) => this._upsert(type, data));
+    const records = list.map(
+      (data) => this._upsert(type, data, revisionsAtDispatch.get(recordKey(data[pk])))
+    );
     this._persist();
     return records;
   }
   /** GET apiURL + adapter.endpoint + '/' + id and upsert the single record. */
   async loadOne(type, id) {
+    const existing = this._typeMap(type).get(recordKey(id));
+    const revisionAtDispatch = existing ? recordMutationRevision(existing) : void 0;
     const data = await this._fetchAdapter(type, "/" + encodeURIComponent(id));
     if (data == null || typeof data !== "object" || Array.isArray(data)) {
       throw new Error(`[puzzle] loadOne('${type}', id) expected a JSON object from the server`);
     }
-    const record = this._upsert(type, data);
+    const pk = this.modelFor(type).primaryKey();
+    if (data[pk] == null) {
+      throw new Error(
+        `[puzzle] loadOne('${type}', id) requires primary key "${pk}" on the record`
+      );
+    }
+    const record = this._upsert(type, data, revisionAtDispatch);
     this._persist();
     return record;
   }
@@ -2787,14 +3705,20 @@ var Store = class {
     if (!res.ok) {
       throw new Error(`[puzzle] load '${type}' failed: ${res.status} ${res.statusText}`);
     }
-    return res.json();
+    return readBody(res);
   }
-  /** Create or update-in-place by primary key; notifies either way. Public callers use upsert(). */
-  _upsert(type, data) {
+  /**
+   * Create or update-in-place by primary key; notifies either way.
+   * @param {string} type
+   * @param {object} data
+   * @param {number} [throughRevision] D138 load-response revision boundary.
+   * Public callers use upsert(), which deliberately leaves this undefined.
+   */
+  _upsert(type, data, throughRevision) {
     const pk = this.modelFor(type).primaryKey();
     const existing = data?.[pk] != null ? this._typeMap(type).get(recordKey(data[pk])) : null;
     if (existing) {
-      safeMerge(existing, data);
+      safeMerge(existing, data, throughRevision);
       existing._synced = true;
       this._notify(type, data[pk]);
       return existing;
@@ -2894,27 +3818,49 @@ var Store = class {
    * re-keys the index atomically; an UPDATE-save with a differing pk warns and
    * drops it from the merge. On success the record is marked synced.
    *
-   * Concurrent save()s on ONE record serialize through a per-record in-flight
-   * chain: a second save waits for the first to settle, then re-evaluates
-   * wasSynced — so a double-click POSTs once then PUTs, never double-creates. The
-   * prior link's rejection is swallowed FOR CHAINING ONLY; its own caller still
-   * observes it (they hold that promise).
+   * Concurrent writes on ONE record serialize through its write chain (see
+   * _chain): a second save waits for the first to settle, then re-evaluates
+   * wasSynced — so a double-click POSTs once then PUTs, never double-creates.
+   * A save that finds its record already removed when its turn comes sends
+   * nothing and rejects with the same message record.save() gives at call time —
+   * no write may create or revive a row for a record the app has discarded.
    */
   saveRecord(record) {
-    const prev = this._saveChains.get(record);
-    const run = (prev ? prev.then(noop, noop) : Promise.resolve()).then(
-      () => this._saveRecordNow(record)
-    );
-    this._saveChains.set(record, run);
+    return this._chain(record, () => this._saveRecordNow(record));
+  }
+  /**
+   * Serialize one record's server writes — save AND delete — behind a single
+   * per-record chain. Both verbs mutate the SAME server row and the same map
+   * entry, so ordering them separately is not enough: an unchained delete
+   * racing a first save either orphans the row the POST creates or builds its
+   * URL from a client-side pk the POST is about to replace, and then removes
+   * nothing anywhere while resolving successfully.
+   *
+   * Each link reads the record's state when it REACHES the front of the queue,
+   * never when it was enqueued — that is what makes a queued delete see the
+   * adopted primary key and a queued save see a removal that happened while it
+   * waited.
+   *
+   * The prior link's rejection is swallowed FOR CHAINING ONLY; its own caller
+   * still observes it (they hold that promise). This holds ACROSS verbs: a
+   * queued delete does not inherit a failed save's rejection, and vice versa.
+   * Every caller observes exactly its own outcome.
+   */
+  _chain(record, fn) {
+    const prev = this._writeChains.get(record);
+    const run = (prev ? prev.then(noop, noop) : Promise.resolve()).then(fn);
+    this._writeChains.set(record, run);
     const cleanup = () => {
-      if (this._saveChains.get(record) === run)
-        this._saveChains.delete(record);
+      if (this._writeChains.get(record) === run)
+        this._writeChains.delete(record);
     };
     run.then(cleanup, cleanup);
     return run;
   }
   /** The actual save (network + merge); serialized per record by saveRecord(). */
   async _saveRecordNow(record) {
+    if (record._deleted)
+      throw new Error(DELETED_SAVE_MESSAGE);
     const type = record._type;
     const Model = this.modelFor(type);
     const endpoint = this._requireEndpoint(type);
@@ -2926,12 +3872,14 @@ var Store = class {
     const requestKey = recordKey(record[pk]);
     const url = wasSynced ? this.apiURL + endpoint + "/" + encodeURIComponent(record[pk]) : this.apiURL + endpoint;
     const method = wasSynced ? "PUT" : "POST";
+    const requestRevision = recordMutationRevision(record);
+    const requestBody = JSON.stringify(record.toJSON());
     const res = await this._fetch(
       url,
       {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(record.toJSON())
+        body: requestBody
       },
       { type, method, url }
     );
@@ -2955,7 +3903,9 @@ var Store = class {
         }
         const oldId = record[pk];
         map.delete(recordKey(oldId));
-        safeMerge(record, body);
+        const { [pk]: adoptedPk, ...rest } = body;
+        safeMerge(record, { [pk]: adoptedPk });
+        safeMerge(record, rest, requestRevision);
         map.set(recordKey(record[pk]), record);
         record._synced = true;
         this._notify(type, oldId);
@@ -2968,12 +3918,12 @@ var Store = class {
           `[puzzle] save() response for '${type}' carried a different primary key ${JSON.stringify(responsePk)} \u2014 ignoring; primary keys are immutable after creation`
         );
         const { [pk]: _ignored, ...rest } = body;
-        safeMerge(record, rest);
+        safeMerge(record, rest, requestRevision);
       } else if (responsePk == null && pk in body) {
         const { [pk]: _ignored, ...rest } = body;
-        safeMerge(record, rest);
+        safeMerge(record, rest, requestRevision);
       } else {
-        safeMerge(record, body);
+        safeMerge(record, body, requestRevision);
       }
       record._synced = true;
       this._notify(type, record[pk]);
@@ -2989,12 +3939,31 @@ var Store = class {
    * record.delete(). DELETE endpoint/:id, then remove locally via the normal
    * notify path on 2xx OR 404 (already gone — idempotent). Any other status
    * rejects with PuzzleAdapterError and the record stays.
+   *
+   * Serialized behind the record's write chain (see _chain), so a delete fired
+   * during a save waits for it: the URL below is then built from the primary key
+   * the save reconciled, which is the row the server actually created.
+   *
+   * Two cases resolve without a request: a record already removed when the turn
+   * comes (idempotent), and a NEVER-SYNCED record, which the server has no row
+   * for — that one is removed locally, so a `delete()` on a freshly created
+   * record is a local removal, not a doomed DELETE that can reject.
    */
-  async deleteRecord(record) {
+  deleteRecord(record) {
+    return this._chain(record, () => this._deleteRecordNow(record));
+  }
+  /** The actual delete (network + removal); serialized per record by deleteRecord(). */
+  async _deleteRecordNow(record) {
+    if (record._deleted || !record._store)
+      return record;
     const type = record._type;
     const Model = this.modelFor(type);
     const endpoint = this._requireEndpoint(type);
     const pk = Model.primaryKey();
+    if (!record._synced) {
+      this.removeRecord(record);
+      return record;
+    }
     const requestKey = recordKey(record[pk]);
     const url = this.apiURL + endpoint + "/" + encodeURIComponent(record[pk]);
     const res = await this._fetch(url, { method: "DELETE" }, { type, method: "DELETE", url });
@@ -3068,6 +4037,14 @@ var Store = class {
       return fn();
     if (this._asyncTrackingChain && expectsAsync) {
       const retry = () => this.withTracking(subscriber, fn, true);
+      if (true) {
+        return devperfTrackingDeferred(
+          subscriber,
+          this._asyncTrackingChain,
+          retry,
+          "known-async"
+        );
+      }
       return this._asyncTrackingChain.then(retry, retry);
     }
     const before = new Set(this.keysBySubscriber.get(subscriber) ?? []);
@@ -3101,6 +4078,14 @@ var Store = class {
         result.then(noop, noop);
         finalize(false);
         const retry = () => this.withTracking(subscriber, fn, true);
+        if (true) {
+          return devperfTrackingDeferred(
+            subscriber,
+            this._asyncTrackingChain,
+            retry,
+            "sync-shaped"
+          );
+        }
         return this._asyncTrackingChain.then(retry, retry);
       }
       let release;
@@ -3172,6 +4157,9 @@ var Store = class {
   _notify(type, id) {
     this._pendingKeys.add(type);
     this._pendingKeys.add(type + REC_SEP + id);
+    if (true) {
+      devperfStoreNotify(this, this._tracking);
+    }
     this._scheduleFlush();
   }
   /**
@@ -3210,6 +4198,9 @@ var Store = class {
    * a caller that needs storage current immediately calls flush().
    */
   flush() {
+    if (true) {
+      devperfStoreFlushStart(this);
+    }
     this._flushScheduled = false;
     if (this._flushTimer) {
       clearTimeout(this._flushTimer);
@@ -3219,6 +4210,9 @@ var Store = class {
     if (this._persistPending) {
       this._persistPending = false;
       this._persistNow();
+    }
+    if (true) {
+      devperfStoreFlushEnd(this);
     }
   }
   /** Notify each pending subscriber exactly once. Extracted from flush(). */
@@ -3253,6 +4247,7 @@ var Store = class {
       }
     }
     if (true) {
+      devperfStoreFlushNotifications(this, keys2, notified);
       devtoolsFlush(this, keys2, notified);
     }
   }
@@ -3347,11 +4342,11 @@ var Store = class {
       if (!Array.isArray(records))
         continue;
       const pk = this.modelFor(type).primaryKey();
-      for (const recordData of records) {
-        if (!recordData || typeof recordData !== "object" || Array.isArray(recordData))
+      for (const recordData2 of records) {
+        if (!recordData2 || typeof recordData2 !== "object" || Array.isArray(recordData2))
           continue;
-        const hasMarker = Object.prototype.hasOwnProperty.call(recordData, "__synced");
-        const { __synced: marker, ...fields } = recordData;
+        const hasMarker = Object.prototype.hasOwnProperty.call(recordData2, "__synced");
+        const { __synced: marker, ...fields } = recordData2;
         const syncedTo = hasMarker ? marker === true : true;
         const id = fields[pk];
         const existing = id != null ? this._typeMap(type).get(recordKey(id)) : null;
@@ -3448,6 +4443,12 @@ var FormatterRegistry = class {
     };
   }
   register(name, fn) {
+    if (typeof name !== "string" || name === "") {
+      throw new Error("[puzzle] formatter name must be a non-empty string");
+    }
+    if (typeof fn !== "function") {
+      throw new Error(`[puzzle] formatter "${name}" must be a function (got ${typeof fn})`);
+    }
     this.formatters[name] = fn;
   }
   get(name) {
@@ -3495,6 +4496,10 @@ var ViewNode = class {
     this.el = null;
     this.component = null;
     this.instance = null;
+    if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) {
+      this.takeoverPreloaded = false;
+      this.takeoverFailed = false;
+    }
   }
   get isText() {
     return this.tag === "text";
@@ -3527,6 +4532,84 @@ var ViewNode = class {
     return this.attrs;
   }
 };
+
+// node_modules/@magic-spells/puzzle/client-runtime/head.js
+var HEAD_FIELDS = ["title", "description", "canonical", "socialImage"];
+function resolveHead(chain) {
+  const out = {};
+  for (const field of HEAD_FIELDS) {
+    out[field] = resolveField(chain, field);
+  }
+  return out;
+}
+function resolveField(chain, field) {
+  for (let i2 = chain.length - 1; i2 >= 0; i2--) {
+    const meta = chain[i2].meta;
+    if (!meta)
+      continue;
+    const value = meta[field];
+    if (value !== void 0)
+      return value;
+  }
+  return null;
+}
+function syncTitle(resolved) {
+  if (resolved.title != null)
+    document.title = String(resolved.title);
+}
+
+// node_modules/@magic-spells/puzzle/client-runtime/router/routePath.js
+function isDynamicSegment(segment) {
+  return segment.length > 1 && segment[0] === ":";
+}
+function normalizeRoutePath(path) {
+  return path.replace(/[^\x00-\x7F]+|[ "<>`{}^]/g, (literal) => encodeURIComponent(literal));
+}
+function validateTopLevelPath(path) {
+  if (path === "*")
+    return;
+  if (typeof path !== "string" || path === "" || path[0] !== "/") {
+    throw new Error(
+      `[puzzle] top-level route path must be "*" or start with "/": "${String(path)}"`
+    );
+  }
+}
+function findShadowedPaths(entries) {
+  const shadowed = [];
+  for (let index = 0; index < entries.length; index++) {
+    const { fullPath, matchPath } = entries[index];
+    if (fullPath.split("/").some(isDynamicSegment))
+      continue;
+    for (let earlierIndex = 0; earlierIndex < index; earlierIndex++) {
+      const earlier = entries[earlierIndex];
+      if (!earlier.regex.test(matchPath))
+        continue;
+      shadowed.push({ index, path: fullPath, shadowedBy: earlier.fullPath });
+      break;
+    }
+  }
+  return shadowed;
+}
+
+// node_modules/@magic-spells/puzzle/client-runtime/router/routeTree.js
+function joinPath(parentPath, childPath) {
+  if (childPath === "")
+    return parentPath;
+  return parentPath.replace(/\/$/, "") + "/" + childPath;
+}
+function walkRouteTree(node, out, makeLeaf, ancestors = [], fullPaths = []) {
+  const isRoot = ancestors.length === 0;
+  const parentPath = isRoot ? null : fullPaths[fullPaths.length - 1];
+  const fullPath = isRoot ? node.path : joinPath(parentPath, node.path);
+  const chain = [...ancestors, node];
+  const paths = [...fullPaths, fullPath];
+  if (node.children && node.children.length) {
+    for (const child of node.children)
+      walkRouteTree(child, out, makeLeaf, chain, paths);
+  } else {
+    out.push(makeLeaf(chain, paths));
+  }
+}
 
 // node_modules/@magic-spells/puzzle/client-runtime/views/animate.js
 var warnedSpecs = /* @__PURE__ */ new WeakSet();
@@ -3588,22 +4671,6 @@ function playAnimation(el, spec, { reducedMotion = false, release = false, pause
     }
   };
 }
-function cancelAnimations(el) {
-  if (!el || typeof el.getAnimations !== "function")
-    return;
-  let animations;
-  try {
-    animations = el.getAnimations();
-  } catch {
-    return;
-  }
-  for (const animation of animations) {
-    try {
-      animation.cancel();
-    } catch {
-    }
-  }
-}
 function prefersReducedMotion() {
   if (typeof matchMedia !== "function")
     return false;
@@ -3652,49 +4719,854 @@ function warnOnceForSpec(spec, message) {
 function noop2() {
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/head.js
-var HEAD_FIELDS = ["title", "description", "canonical", "socialImage"];
-function resolveHead(chain) {
-  const out = {};
-  for (const field of HEAD_FIELDS) {
-    out[field] = resolveField(chain, field);
+// node_modules/@magic-spells/puzzle/client-runtime/views/flip.js
+var DEFAULT_DURATION = 250;
+var DEFAULT_EASING = "cubic-bezier(0.2, 0, 0, 1)";
+var MIN_DELTA = 0.5;
+var activeFlips = /* @__PURE__ */ new WeakMap();
+var warnedUnkeyedFlip = false;
+function warnUnkeyedFlip() {
+  if (warnedUnkeyedFlip)
+    return;
+  warnedUnkeyedFlip = true;
+  console.warn(
+    "[puzzle] `flip` requires a keyed row \u2014 this list child has no usable key, so it diffs positionally and cannot FLIP-animate; add key={ \u2026 } to the row root."
+  );
+}
+function beginFlip(pairs) {
+  let candidates = null;
+  for (const [oldChild, newChild] of pairs) {
+    const spec = newChild.attrs.flip;
+    if (spec == null || spec === false)
+      continue;
+    if (newChild.key == null) {
+      warnUnkeyedFlip();
+      continue;
+    }
+    if (!oldChild)
+      continue;
+    const componentEl = oldChild.isComponent ? oldChild.component?.element : null;
+    const el = componentEl?.nodeType === 1 && componentEl.isConnected ? componentEl : oldChild.el;
+    if (!el || el.nodeType !== 1)
+      continue;
+    (candidates ??= []).push({ el, newChild, spec, first: null });
+  }
+  if (!candidates)
+    return null;
+  if (prefersReducedMotion())
+    return null;
+  if (typeof candidates[0].el.animate !== "function")
+    return null;
+  for (const c2 of candidates) {
+    try {
+      c2.first = c2.el.getBoundingClientRect();
+    } catch {
+    }
+  }
+  for (const c2 of candidates)
+    cancelTrackedFlip(c2.el);
+  return candidates;
+}
+function playFlip(candidates) {
+  for (const c2 of candidates) {
+    const el = c2.newChild.el;
+    if (!c2.first || !el || el.nodeType !== 1 || typeof el.animate !== "function")
+      continue;
+    let last;
+    try {
+      last = el.getBoundingClientRect();
+    } catch {
+      continue;
+    }
+    const dx = c2.first.left - last.left;
+    const dy = c2.first.top - last.top;
+    if (Math.abs(dx) < MIN_DELTA && Math.abs(dy) < MIN_DELTA)
+      continue;
+    const { duration, easing } = resolveFlipOptions(c2.spec);
+    const translate = `translate(${dx}px, ${dy}px)`;
+    let base = "none";
+    try {
+      base = getComputedStyle(el).transform || "none";
+    } catch {
+    }
+    const from = base !== "none" ? `${translate} ${base}` : translate;
+    const to = base !== "none" ? base : "none";
+    let animation;
+    try {
+      animation = el.animate([{ transform: from }, { transform: to }], { duration, easing });
+    } catch {
+      continue;
+    }
+    activeFlips.set(el, animation);
+    const done = () => {
+      if (activeFlips.get(el) === animation)
+        activeFlips.delete(el);
+    };
+    try {
+      animation.finished.then(done, done);
+    } catch {
+    }
+  }
+}
+function cancelTrackedFlip(el) {
+  const prior = activeFlips.get(el);
+  if (!prior)
+    return;
+  activeFlips.delete(el);
+  try {
+    prior.cancel();
+  } catch {
+  }
+}
+function resolveFlipOptions(spec) {
+  let duration = DEFAULT_DURATION;
+  let easing = DEFAULT_EASING;
+  if (spec && typeof spec === "object") {
+    if (typeof spec.duration === "number" && Number.isFinite(spec.duration) && spec.duration > 0) {
+      duration = spec.duration;
+    }
+    if (typeof spec.easing === "string" && spec.easing !== "") {
+      easing = spec.easing;
+    }
+  }
+  return { duration, easing };
+}
+
+// node_modules/@magic-spells/puzzle/client-runtime/display.js
+var warnedUndefined;
+function warnUndefined(expression) {
+  const key = expression || "";
+  const warned = warnedUndefined ??= /* @__PURE__ */ new Set();
+  if (warned.has(key))
+    return;
+  warned.add(key);
+  const where = expression ? ` for "${expression}"` : "";
+  console.warn(`[puzzle] undefined template value${where}; rendering an empty string`);
+}
+function displayValue(value, expression = 0) {
+  if (value === void 0) {
+    if (true) {
+      warnUndefined(expression);
+    }
+    return "";
+  }
+  return value === null ? "" : String(value);
+}
+
+// node_modules/@magic-spells/puzzle/client-runtime/views/viewManager.js
+var PROPS = /* @__PURE__ */ new Set(["value", "checked", "disabled", "selected", "muted"]);
+var SVG_NS = "http://www.w3.org/2000/svg";
+var LISTENERS = Symbol("puzzle-listeners");
+var ONCE_SPENT = "\0once";
+var OUTSIDE_OPTS = { capture: true };
+var ViewManager = class {
+  /**
+   * @param {Element} container host element this manager renders into
+   * @param {object} ctx owner's { store, router, formatters } — passed to
+   *   any child components this tree instantiates (constellation/doc/DOC-APP-ANATOMY.md §4)
+   */
+  constructor(container, ctx = {}) {
+    this.container = container;
+    this.ctx = ctx;
+    this.currentTree = null;
+    this.slotChildren = [];
+    this.anchor = null;
+  }
+  /**
+   * Reserve a DOM position synchronously, before async data() resolves. A
+   * comment node marks the spot; the first render replaces it in place.
+   */
+  anchorAt(ref) {
+    this.anchor = document.createComment("puzzle");
+    this.container.insertBefore(this.anchor, ref ?? null);
+    if (true)
+      devperfMutation();
+  }
+  /**
+   * Render a new tree: first call mounts, subsequent calls diff + patch.
+   * Slot markers are expanded against `slotChildren` before diffing.
+   */
+  render(rawTree) {
+    const newTree = expandSlots(rawTree, this.slotChildren);
+    if (!this.currentTree) {
+      mount(newTree, this.container, this.anchor, this.ctx);
+      if (this.anchor) {
+        this.anchor.remove();
+        if (true)
+          devperfMutation();
+        this.anchor = null;
+      }
+    } else {
+      patch(this.currentTree, newTree, this.container, this.ctx);
+    }
+    this.currentTree = newTree;
+    return newTree;
+  }
+  /** The DOM node currently occupying this subtree's position (or null). */
+  get element() {
+    return this.currentTree?.el ?? this.anchor ?? null;
+  }
+  /** Remove everything this manager mounted. */
+  clear() {
+    if (this.currentTree)
+      unmount(this.currentTree);
+    if (this.anchor) {
+      this.anchor.remove();
+      if (true)
+        devperfMutation();
+      this.anchor = null;
+    }
+    this.currentTree = null;
+  }
+};
+function expandSlots(vnode, slotChildren) {
+  return expandNode(vnode, partitionSlots(slotChildren));
+}
+function partitionSlots(slotChildren) {
+  let named = null;
+  let def = null;
+  for (let i2 = 0; i2 < slotChildren.length; i2++) {
+    const sc = slotChildren[i2];
+    const name = sc.attrs && sc.attrs.slot;
+    if (name != null && name !== "") {
+      if (!named)
+        named = /* @__PURE__ */ Object.create(null);
+      if (def === null)
+        def = slotChildren.slice(0, i2);
+      (named[name] ??= []).push(stripSlotAttr(sc));
+    } else if (def !== null) {
+      def.push(sc);
+    }
+  }
+  if (named === null)
+    return { default: slotChildren, named: null };
+  return { default: def ?? [], named };
+}
+function stripSlotAttr(vnode) {
+  const attrs = {};
+  for (const k in vnode.attrs) {
+    if (k !== "slot")
+      attrs[k] = vnode.attrs[k];
+  }
+  const clone = new ViewNode(vnode.tag, attrs, vnode.children);
+  clone.key = vnode.key;
+  clone.el = vnode.el;
+  clone.component = vnode.component;
+  clone.instance = vnode.instance;
+  if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) {
+    clone.takeoverPreloaded = vnode.takeoverPreloaded;
+    clone.takeoverFailed = vnode.takeoverFailed;
+  }
+  return clone;
+}
+function expandNode(vnode, parts) {
+  if (vnode.isText || vnode.isSlot)
+    return vnode;
+  if (typeof vnode.children === "string")
+    return vnode;
+  const out = expandChildList(vnode.children, parts);
+  if (!out)
+    return vnode;
+  const clone = new ViewNode(vnode.tag, vnode.attrs, out);
+  clone.key = vnode.key;
+  if (vnode.isComponent) {
+    clone.el = vnode.el;
+    clone.component = vnode.component;
+    clone.instance = vnode.instance;
+    if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) {
+      clone.takeoverPreloaded = vnode.takeoverPreloaded;
+      clone.takeoverFailed = vnode.takeoverFailed;
+    }
+  }
+  return clone;
+}
+function expandChildList(kids, parts) {
+  let out = null;
+  for (let i2 = 0; i2 < kids.length; i2++) {
+    const k = kids[i2];
+    if (k.isSlot) {
+      if (!out)
+        out = kids.slice(0, i2);
+      const name = k.attrs && k.attrs.name;
+      const bucket = name ? parts.named && parts.named[name] : parts.default;
+      if (bucket && bucket.length) {
+        for (const sc of bucket)
+          out.push(sc);
+      } else {
+        for (const fb of k.children)
+          out.push(expandNode(fb, parts));
+      }
+      continue;
+    }
+    const ek = expandNode(k, parts);
+    if (out)
+      out.push(ek);
+    else if (ek !== k) {
+      out = kids.slice(0, i2);
+      out.push(ek);
+    }
   }
   return out;
 }
-function resolveField(chain, field) {
-  for (let i2 = chain.length - 1; i2 >= 0; i2--) {
-    const meta = chain[i2].meta;
-    if (!meta)
-      continue;
-    const value = meta[field];
-    if (value !== void 0)
-      return value;
+function mount(vnode, parent, ref, ctx) {
+  if (vnode.isComponent)
+    return mountComponent(vnode, parent, ref, ctx);
+  let el;
+  if (vnode.tag === PLACEHOLDER_TAG) {
+    el = document.createComment("");
+    vnode.el = el;
+    parent.insertBefore(el, ref ?? null);
+    if (true)
+      devperfMutation();
+    return el;
   }
-  return null;
+  if (vnode.isText) {
+    el = document.createTextNode(displayValue(vnode.attrs.value));
+  } else {
+    el = inSvgNamespace(vnode.tag, parent) ? document.createElementNS(SVG_NS, vnode.tag) : document.createElement(vnode.tag);
+    for (const [name, value] of Object.entries(vnode.attrs)) {
+      setAttr(el, name, value);
+    }
+    if (typeof vnode.attrs.ref === "function")
+      vnode.attrs.ref(el);
+    if (typeof vnode.children === "string") {
+      el.innerHTML = vnode.children;
+      if (true)
+        devperfMutation();
+    } else {
+      for (const child of vnode.children) {
+        mount(child, el, null, ctx);
+      }
+    }
+    reassertSelectValue(el, vnode.attrs);
+  }
+  vnode.el = el;
+  parent.insertBefore(el, ref ?? null);
+  if (true)
+    devperfMutation();
+  return el;
 }
-function syncTitle(resolved) {
-  if (resolved.title != null)
-    document.title = String(resolved.title);
+function plantFailedMountPlaceholder(child) {
+  const anchor = child.element;
+  const placeholder = anchor && anchor.parentNode ? anchor.parentNode.insertBefore(document.createComment("puzzle"), anchor) : null;
+  if (true) {
+    if (placeholder)
+      devperfMutation();
+  }
+  return placeholder;
+}
+function mountComponent(vnode, parent, ref, ctx) {
+  if ((typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) && vnode.takeoverFailed) {
+    const placeholder = document.createComment("puzzle");
+    vnode.el = placeholder;
+    parent.insertBefore(placeholder, ref ?? null);
+    if (true)
+      devperfMutation();
+    return placeholder;
+  }
+  const preloaded = vnode.instance != null;
+  const takeoverPreloaded = (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
+  const child = vnode.instance ?? new vnode.tag(ctx);
+  vnode.component = child;
+  child.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded }).then(
+    // ENTER animation (constellation/doc/DOC-SPEC.md §12): once the first
+    // real render has landed (mount() resolved → this.element is the rendered
+    // root, not the anchor), run the child's playIn(). Chained here so it
+    // never blocks the synchronous patcher.
+    () => {
+      vnode.el = child.element;
+      return Promise.resolve(child.playIn()).catch(
+        (err) => console.error("[puzzle] child enter animation failed:", err)
+      );
+    },
+    (err) => {
+      if (preloaded && !takeoverPreloaded) {
+        console.error(
+          "[puzzle] view mount failed after commit \u2014 the view stays mounted (router owns its lifetime):",
+          err
+        );
+        return;
+      }
+      console.error(
+        "[puzzle] component mount failed \u2014 the component was destroyed and will remount on the next patch:",
+        err
+      );
+      const placeholder = plantFailedMountPlaceholder(child);
+      child.destroy();
+      if (placeholder) {
+        vnode.el = placeholder;
+        child.__failedPlaceholder = placeholder;
+      }
+      vnode.component = null;
+      vnode.instance = null;
+      if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__)
+        vnode.takeoverPreloaded = false;
+    }
+  );
+  vnode.el = child.element;
+  return vnode.el;
+}
+function patch(oldVnode, newVnode, parent, ctx) {
+  if (!sameNode(oldVnode, newVnode)) {
+    const ref = oldVnode.isComponent && oldVnode.component?.element || oldVnode.el;
+    mount(newVnode, parent, ref, ctx);
+    unmount(oldVnode);
+    return;
+  }
+  if (newVnode.isComponent) {
+    const dead = oldVnode.component;
+    if (dead == null || dead.isDestroyed) {
+      const placeholder = dead?.__failedPlaceholder ?? oldVnode.el;
+      mount(newVnode, parent, placeholder?.parentNode === parent ? placeholder : null, ctx);
+      if (true) {
+        if (placeholder?.parentNode)
+          devperfMutation();
+      }
+      placeholder?.remove();
+      return;
+    }
+    patchComponent(oldVnode, newVnode);
+    return;
+  }
+  const el = newVnode.el = oldVnode.el;
+  if (newVnode.tag === PLACEHOLDER_TAG)
+    return;
+  if (newVnode.isText) {
+    const text = displayValue(newVnode.attrs.value);
+    if (el.nodeValue !== text) {
+      el.nodeValue = text;
+      if (true)
+        devperfMutation();
+    }
+    return;
+  }
+  patchAttrs(el, oldVnode.attrs, newVnode.attrs);
+  if ("island" in newVnode.attrs) {
+    newVnode.children = oldVnode.children;
+    return;
+  }
+  if (typeof newVnode.children === "string") {
+    if (newVnode.children !== oldVnode.children) {
+      el.innerHTML = newVnode.children;
+      if (true)
+        devperfMutation();
+    }
+    return;
+  }
+  patchChildren(el, oldVnode.children, newVnode.children, ctx);
+  reassertSelectValue(el, newVnode.attrs);
+}
+function reassertSelectValue(el, attrs) {
+  if (el.nodeName !== "SELECT" || !("value" in attrs))
+    return;
+  const next = displayValue(attrs.value);
+  if (el.value === next)
+    return;
+  el.value = next;
+  if (true)
+    devperfMutation();
+}
+function patchComponent(oldVnode, newVnode) {
+  const child = newVnode.component = oldVnode.component;
+  const props = shallowEqual(oldVnode.props, newVnode.props) ? void 0 : newVnode.props;
+  if (true) {
+    devperfComponentPatch(child, props === void 0);
+  }
+  child.applyParentUpdate({ props, children: newVnode.children });
+  newVnode.el = child.element;
+}
+function sameNode(a2, b2) {
+  return a2.tag === b2.tag && (a2.key === b2.key || a2.key !== a2.key && b2.key !== b2.key);
+}
+function shallowEqual(a2, b2) {
+  if (a2 === b2)
+    return true;
+  if (!a2 || !b2)
+    return false;
+  const ak = Object.keys(a2);
+  if (ak.length !== Object.keys(b2).length)
+    return false;
+  for (const k of ak) {
+    if (a2[k] !== b2[k])
+      return false;
+  }
+  return true;
+}
+var leavingEls = /* @__PURE__ */ new WeakSet();
+function unmount(vnode) {
+  if (vnode.isComponent) {
+    const child = vnode.component;
+    if (!child) {
+      if (true) {
+        if (vnode.el?.parentNode)
+          devperfMutation();
+      }
+      vnode.el?.remove();
+      return;
+    }
+    if (child?.animations?.out) {
+      const leavingEl = child.element;
+      if (leavingEl && leavingEl.nodeType === 1) {
+        leavingEls.add(leavingEl);
+        child.destroyAnimated().finally(() => leavingEls.delete(leavingEl));
+      } else {
+        child.destroyAnimated();
+      }
+    } else {
+      child?.destroy();
+    }
+    return;
+  }
+  releaseSubtree(vnode);
+  if (true) {
+    if (vnode.el?.parentNode)
+      devperfMutation();
+  }
+  vnode.el?.remove();
+}
+function releaseSubtree(vnode) {
+  const ref = vnode.attrs.ref;
+  if (typeof ref === "function")
+    ref(null, vnode.el);
+  const listeners = vnode.el?.[LISTENERS];
+  if (listeners) {
+    for (const key of Object.keys(listeners)) {
+      if (key.endsWith(ONCE_SPENT))
+        continue;
+      const [event, ...mods] = key.slice(1).split(":");
+      if (!mods.includes("outside"))
+        continue;
+      document.removeEventListener(event, listeners[key], OUTSIDE_OPTS);
+      delete listeners[key];
+      delete listeners[key + ONCE_SPENT];
+    }
+  }
+  if (typeof vnode.children === "string")
+    return;
+  for (const child of vnode.children) {
+    if (child.isComponent)
+      child.component?.destroy();
+    else if (!child.isText)
+      releaseSubtree(child);
+  }
+}
+function patchAttrs(el, oldAttrs, newAttrs) {
+  for (const [name, value] of Object.entries(newAttrs)) {
+    if (name === "ref") {
+      const old = oldAttrs.ref;
+      if (old !== value) {
+        if (typeof old === "function")
+          old(null, el);
+        if (typeof value === "function")
+          value(el);
+      }
+      continue;
+    }
+    if (name === "value" && (el.nodeName === "INPUT" || el.nodeName === "TEXTAREA")) {
+      if (el.value !== displayValue(value))
+        setAttr(el, name, value);
+    } else if (name === "checked" && el.nodeName === "INPUT") {
+      if (el.checked !== Boolean(value))
+        setAttr(el, name, value);
+    } else if (oldAttrs[name] !== value) {
+      setAttr(el, name, value);
+    }
+  }
+  for (const name of Object.keys(oldAttrs)) {
+    if (name in newAttrs)
+      continue;
+    if (name === "ref") {
+      const old = oldAttrs.ref;
+      if (typeof old === "function")
+        old(null, el);
+    } else {
+      removeAttr(el, name);
+    }
+  }
+}
+function patchChildren(el, oldChildren, newChildren, ctx) {
+  const keyed = oldChildren.some((c2) => c2.key != null) || newChildren.some((c2) => c2.key != null);
+  if (keyed) {
+    patchKeyedChildren(el, oldChildren, newChildren, ctx);
+  } else {
+    patchIndexedChildren(el, oldChildren, newChildren, ctx);
+  }
+}
+function patchIndexedChildren(el, oldChildren, newChildren, ctx) {
+  const common = Math.min(oldChildren.length, newChildren.length);
+  for (let i2 = 0; i2 < common; i2++) {
+    patch(oldChildren[i2], newChildren[i2], el, ctx);
+  }
+  for (let i2 = common; i2 < newChildren.length; i2++) {
+    mount(newChildren[i2], el, null, ctx);
+  }
+  for (let i2 = common; i2 < oldChildren.length; i2++) {
+    if (oldChildren[i2].isComponent && oldChildren[i2].component?.animations?.out) {
+      warnUnkeyedOutAnimation();
+    }
+    unmount(oldChildren[i2]);
+  }
+}
+var warnedUnkeyedOutAnimation = false;
+function warnUnkeyedOutAnimation() {
+  if (warnedUnkeyedOutAnimation)
+    return;
+  warnedUnkeyedOutAnimation = true;
+  console.warn(
+    "[puzzle] out animations in an unkeyed list can misorder siblings \u2014 give the list items key attributes"
+  );
+}
+var warnedDuplicateKey = false;
+function warnDuplicateKey(key) {
+  if (warnedDuplicateKey)
+    return;
+  warnedDuplicateKey = true;
+  console.warn(
+    `[puzzle] duplicate key ${JSON.stringify(key)} among keyed siblings \u2014 keys must be unique within a list; duplicates cause elements to be dropped or reordered unexpectedly.`
+  );
+}
+function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
+  const oldKeyed = /* @__PURE__ */ new Map();
+  for (const child of oldChildren) {
+    if (child.key != null) {
+      let byKey = oldKeyed.get(child.tag);
+      if (!byKey)
+        oldKeyed.set(child.tag, byKey = /* @__PURE__ */ new Map());
+      byKey.set(child.key, child);
+    }
+  }
+  const matched = /* @__PURE__ */ new Set();
+  let oldUnkeyed = oldChildren.filter((c2) => c2.key == null);
+  let unkeyedIdx = 0;
+  const seenNewKeys = /* @__PURE__ */ new Map();
+  let hasFlip = false;
+  const pairs = newChildren.map((newChild) => {
+    if (!hasFlip && "flip" in newChild.attrs)
+      hasFlip = true;
+    if (newChild.key != null) {
+      let seen = seenNewKeys.get(newChild.tag);
+      if (!seen)
+        seenNewKeys.set(newChild.tag, seen = /* @__PURE__ */ new Set());
+      if (seen.has(newChild.key))
+        warnDuplicateKey(newChild.key);
+      else
+        seen.add(newChild.key);
+      const byKey = oldKeyed.get(newChild.tag);
+      const match = byKey ? byKey.get(newChild.key) : void 0;
+      if (match)
+        matched.add(match);
+      return [match ?? null, newChild];
+    }
+    if (unkeyedIdx < oldUnkeyed.length) {
+      const candidate = oldUnkeyed[unkeyedIdx++];
+      matched.add(candidate);
+      return [candidate, newChild];
+    }
+    return [null, newChild];
+  });
+  const flip = hasFlip ? beginFlip(pairs) : null;
+  if (false) {
+    warnFlipCompiledOut();
+  }
+  for (const child of oldChildren) {
+    if (!matched.has(child))
+      unmount(child);
+  }
+  let ref = null;
+  for (let i2 = pairs.length - 1; i2 >= 0; i2--) {
+    const [oldChild, newChild] = pairs[i2];
+    if (oldChild) {
+      patch(oldChild, newChild, el, ctx);
+      if (nextPersistentSibling(newChild.el) !== ref) {
+        el.insertBefore(newChild.el, ref);
+        if (true) {
+          devperfMutation();
+        }
+      }
+    } else {
+      mount(newChild, el, ref, ctx);
+    }
+    ref = newChild.el;
+  }
+  if (flip)
+    playFlip(flip);
+}
+function nextPersistentSibling(node) {
+  let n2 = node.nextSibling;
+  while (n2 && leavingEls.has(n2))
+    n2 = n2.nextSibling;
+  return n2;
+}
+function setAttr(el, name, value) {
+  if (name === "key" || name === "island" || name === "ref" || name === "flip")
+    return;
+  if (name.startsWith("@")) {
+    const [event, ...mods] = name.slice(1).split(":");
+    const target = mods.includes("outside") ? document : el;
+    const opts = target === el ? void 0 : OUTSIDE_OPTS;
+    const listeners = el[LISTENERS] ??= {};
+    detachListener(el, name, event, mods, listeners);
+    if (typeof value === "function") {
+      if (mods.includes("once") && listeners[name + ONCE_SPENT])
+        return;
+      const handler = mods.length ? withModifiers(name, event, mods, value, listeners, el) : value;
+      target.addEventListener(event, handler, opts);
+      listeners[name] = handler;
+    } else {
+      delete listeners[name];
+      delete listeners[name + ONCE_SPENT];
+    }
+    return;
+  }
+  if (PROPS.has(name)) {
+    el[name] = name === "value" ? displayValue(value) : Boolean(value);
+    if (true)
+      devperfMutation();
+    if (name !== "value") {
+      if (value)
+        el.setAttribute(name, "");
+      else
+        el.removeAttribute(name);
+      if (true)
+        devperfMutation();
+    }
+    return;
+  }
+  if (value === false || value == null) {
+    if (true) {
+      if (value === void 0)
+        displayValue(value, name);
+    }
+    el.removeAttribute(name);
+  } else if (value === true) {
+    el.setAttribute(name, "");
+  } else {
+    el.setAttribute(name, displayValue(value));
+  }
+  if (true)
+    devperfMutation();
+}
+function removeAttr(el, name) {
+  if (name === "key" || name === "island" || name === "ref" || name === "flip")
+    return;
+  if (name.startsWith("@")) {
+    const [event, ...mods] = name.slice(1).split(":");
+    const listeners = el[LISTENERS];
+    if (listeners) {
+      detachListener(el, name, event, mods, listeners);
+      delete listeners[name + ONCE_SPENT];
+    }
+    return;
+  }
+  if (PROPS.has(name)) {
+    el[name] = name === "value" ? "" : false;
+    if (true)
+      devperfMutation();
+  }
+  el.removeAttribute(name);
+  if (true)
+    devperfMutation();
+}
+function detachListener(el, name, event, mods, listeners) {
+  const handler = listeners[name];
+  if (!handler)
+    return;
+  if (mods.includes("outside"))
+    document.removeEventListener(event, handler, OUTSIDE_OPTS);
+  else
+    el.removeEventListener(event, handler);
+  delete listeners[name];
+}
+var KEY_FILTERS = {
+  enter: "Enter",
+  escape: "Escape",
+  tab: "Tab",
+  space: " ",
+  up: "ArrowUp",
+  down: "ArrowDown",
+  left: "ArrowLeft",
+  right: "ArrowRight",
+  backspace: "Backspace",
+  delete: "Delete"
+};
+function withModifiers(fullName, eventName, mods, handler, listeners, el) {
+  const spentKey = fullName + ONCE_SPENT;
+  const outside = mods.includes("outside");
+  return (event) => {
+    if (outside && el.contains(event.target))
+      return;
+    for (const m of mods) {
+      const key = KEY_FILTERS[m];
+      if (key !== void 0 && event.key !== key)
+        return;
+    }
+    if (mods.includes("once")) {
+      if (listeners[spentKey])
+        return;
+      listeners[spentKey] = true;
+      detachListener(el, fullName, eventName, mods, listeners);
+    }
+    if (mods.includes("prevent"))
+      event.preventDefault();
+    if (mods.includes("stop"))
+      event.stopPropagation();
+    handler(event);
+  };
+}
+function inSvgNamespace(tag, parent) {
+  if (tag === "svg")
+    return true;
+  return parent.namespaceURI === SVG_NS && parent.nodeName.toLowerCase() !== "foreignobject";
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/router/routeTree.js
-function joinPath(parentPath, childPath) {
-  if (childPath === "")
-    return parentPath;
-  return parentPath.replace(/\/$/, "") + "/" + childPath;
+// node_modules/@magic-spells/puzzle/client-runtime/ssg/preload.js
+async function preloadTakeoverComponents(vnode, ctx) {
+  const instances = [];
+  await preloadNode(vnode, ctx, instances);
+  return instances;
 }
-function walkRouteTree(node, out, makeLeaf, ancestors = [], fullPaths = []) {
-  const isRoot = ancestors.length === 0;
-  const parentPath = isRoot ? null : fullPaths[fullPaths.length - 1];
-  const fullPath = isRoot ? node.path : joinPath(parentPath, node.path);
-  const chain = [...ancestors, node];
-  const paths = [...fullPaths, fullPath];
-  if (node.children && node.children.length) {
-    for (const child of node.children)
-      walkRouteTree(child, out, makeLeaf, chain, paths);
-  } else {
-    out.push(makeLeaf(chain, paths));
+async function preloadNode(vnode, ctx, instances) {
+  if (vnode == null || typeof vnode === "string" || vnode.isText || vnode.isSlot)
+    return;
+  if (!vnode.isComponent) {
+    if (typeof vnode.children === "string")
+      return;
+    for (const child of vnode.children)
+      await preloadNode(child, ctx, instances);
+    return;
   }
+  const nested = vnode.instance == null;
+  let instance = vnode.instance;
+  if (nested) {
+    try {
+      instance = new vnode.tag(ctx);
+      await instance.preload({ params: {}, props: vnode.attrs, route: null });
+    } catch (err) {
+      console.error("[puzzle] child mount failed:", err);
+      instance?.destroy();
+      vnode.takeoverFailed = true;
+      return;
+    }
+  }
+  let tree;
+  try {
+    tree = instance.render();
+  } catch (err) {
+    if (!nested)
+      return;
+    console.error("[puzzle] child mount failed:", err);
+    instance.destroy();
+    vnode.takeoverFailed = true;
+    return;
+  }
+  if (nested) {
+    vnode.instance = instance;
+    vnode.takeoverPreloaded = true;
+    instances.push(instance);
+  }
+  const expanded = tree == null ? tree : expandSlots(tree, vnode.children);
+  instance.__takeoverTree = expanded;
+  await preloadNode(expanded, ctx, instances);
 }
 
 // node_modules/@magic-spells/puzzle/client-runtime/router/router.js
@@ -3759,16 +5631,16 @@ var Router = class {
   // While the router is inside the SYNCHRONOUS commit/mount section of a
   // navigation — the region where a fresh view's mounted() (and viewWillShow)
   // fire BEFORE #commitState has recorded the just-committed chain as
-  // #state/current — a push() from one of those hooks must NOT re-enter
+  // #state/current — a push()/replace()/memory go() from one of those hooks
+  // must NOT re-enter
   // #navigate: it would read the stale #state as `cur`, compute its reuse
   // prefix against the OLD chain, and double-mount the shared layout (the
-  // pyramid-puzzle redirect-from-mounted bug). Such a push is DEFERRED — its
-  // target recorded as { path, replace } (last-wins, single slot — a replace()
-  // arriving in the window shares the slot, D83) and re-dispatched the instant
-  // the in-flight commit completes and #state is consistent. No await runs
-  // inside the window, so only a synchronous reentrant push can land while the
-  // flag is set; a push arriving during the async LOAD or out-animation phases
-  // (flag off) keeps today's interruption semantics.
+  // pyramid-puzzle redirect-from-mounted bug). Such a navigation is DEFERRED —
+  // its verb + argument are recorded in one last-wins slot and re-dispatched
+  // the instant the in-flight commit completes and #state is consistent. No
+  // await runs inside the window, so only a synchronous reentrant navigation
+  // can land while the flag is set; one arriving during the async LOAD or
+  // out-animation phases (flag off) keeps today's interruption semantics.
   #committing = false;
   #pendingPush = null;
   #onClick;
@@ -3913,7 +5785,7 @@ var Router = class {
       );
     }
     this.#mode = mode;
-    this.#initialPath = initialPath ?? "/";
+    this.#initialPath = normalizeRoutePath(initialPath ?? "/");
     this.#base = normalizeBase(base);
     this.#scrollBehavior = scrollBehavior;
     this.#focusBehavior = focusBehavior;
@@ -3932,6 +5804,9 @@ var Router = class {
         continue;
       }
       walkRouteTree(route, this.#routes, makeEntry);
+    }
+    if (true) {
+      warnShadowedPaths(findShadowedPaths(this.#routes));
     }
     this.#onClick = this.#handleClick.bind(this);
     this.#onPopState = this.#handlePopState.bind(this);
@@ -4086,8 +5961,9 @@ var Router = class {
    * returns a resolved promise since the deferred nav has not started yet.
    */
   push(path) {
+    path = normalizeRoutePath(path);
     if (this.#committing) {
-      this.#pendingPush = { path, replace: false };
+      this.#pendingPush = { kind: "push", path };
       return Promise.resolve();
     }
     const key = sameNavKey(path);
@@ -4116,8 +5992,9 @@ var Router = class {
    * — the auth-redirect case that must not leave the aborted page in history).
    */
   replace(path) {
+    path = normalizeRoutePath(path);
     if (this.#committing) {
-      this.#pendingPush = { path, replace: true };
+      this.#pendingPush = { kind: "replace", path };
       return Promise.resolve();
     }
     if (this.#state && sameNavKey(path) === sameNavKey(this.#state.path)) {
@@ -4126,7 +6003,7 @@ var Router = class {
     return this.#navigate(path, { push: false, replace: true });
   }
   /**
-   * Run a push/replace deferred during the commit window, now that
+   * Run a push/replace/memory-go deferred during the commit window, now that
    * #state/current are consistent (the just-committed chain is recorded).
    * Fire-and-forget: the caller has already finished its own commit. Single
    * slot — last writer wins.
@@ -4134,12 +6011,14 @@ var Router = class {
   #runPendingPush() {
     if (this.#pendingPush == null)
       return;
-    const { path, replace } = this.#pendingPush;
+    const pending = this.#pendingPush;
     this.#pendingPush = null;
-    if (replace) {
-      this.replace(path);
+    if (pending.kind === "go") {
+      this.go(pending.n);
+    } else if (pending.kind === "replace") {
+      this.replace(pending.path);
     } else {
-      this.push(path);
+      this.push(pending.path);
     }
   }
   /**
@@ -4154,6 +6033,10 @@ var Router = class {
   go(n2) {
     if (this.#mode !== "memory") {
       history.go(n2);
+      return;
+    }
+    if (this.#committing) {
+      this.#pendingPush = { kind: "go", n: n2 };
       return;
     }
     if (!this.#stack)
@@ -4180,11 +6063,20 @@ var Router = class {
    * is used exactly as stored (D51 already normalized it — no re-normalization). A
    * string NOT starting with '/' is returned unchanged: the deliberate pass-through
    * for external URLs, `mailto:`/`tel:`, bare `#anchor` fragments, an already-encoded
-   * `'#/x'`, and `''`. Query strings and `#anchor` suffixes inside a path survive
-   * for free — this is pure prefixing and never parses them.
+   * `'#/x'`, and `''`. Non-ASCII text in a path-shaped value is percent-encoded
+   * idempotently before the mode/base prefix is applied; query strings and
+   * `#anchor` suffixes ride through the same normalization.
    */
   url(path) {
     return encodeURL(path, this.#mode, this.#base);
+  }
+  /**
+   * Ordered compiled leaf entries for build-time route analysis. The SSG pass
+   * reads their regexes to detect precedence shadows instead of compiling a
+   * second matcher table with rules that could drift from this Router.
+   */
+  get routeEntries() {
+    return this.#routes;
   }
   /**
    * Current route info: { path, pathname, query, hash, route, params, chain }
@@ -4257,7 +6149,7 @@ var Router = class {
     if (this.#pendingOut) {
       const stalled = this.#pendingOut;
       this.#pendingOut = null;
-      cancelAnimations(stalled.element);
+      stalled._cancelOutAnimation();
     }
     this.#pendingIndex = null;
     this.#pendingNavPath = null;
@@ -4346,8 +6238,12 @@ var Router = class {
       }
       if (typeof guardVerdict === "string") {
         this.#guardRedirecting = true;
-        const redirected = await this.replace(guardVerdict);
-        this.#guardRedirecting = false;
+        let redirected;
+        try {
+          redirected = await this.replace(guardVerdict);
+        } finally {
+          this.#guardRedirecting = false;
+        }
         this.#recoverFailedNavigation(token);
         if (pop && cur && this.#state === cur)
           this.#restoreCommittedUrl(cur.path);
@@ -4380,7 +6276,7 @@ var Router = class {
     }
     const reuseLayout = !!(cur && cur.layout && !pendingLayoutOut && cur.layoutClass === entry.layout);
     const layout = reuseLayout ? cur.layout : entry.layout ? new entry.layout(this.#ctx) : null;
-    const isSSGTakeover = !cur && this.#container != null && this.#container.hasAttribute("data-puzzle-ssg");
+    const isSSGTakeover = (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) && !cur && this.#container != null && this.#container.hasAttribute("data-puzzle-ssg");
     try {
       const loads = [];
       const hasSkeleton = (v) => !isSSGTakeover && typeof v.renderSkeleton === "function";
@@ -4438,7 +6334,11 @@ var Router = class {
         keys: cur.keys,
         layout,
         scroll,
-        focus
+        // A leaf-identical replace is URL-backed transient-state churn, not
+        // a route change: leave the user's current focus in place and make no
+        // live-region announcement. Params-only pushes still take the normal
+        // focus path, and full replaces never reach this branch.
+        focus: replace ? null : focus
       });
       if (layout)
         this.#refreshLogged(layout, params, to);
@@ -4459,6 +6359,25 @@ var Router = class {
       childVnode = vnode;
     }
     const rootVnode = childVnode;
+    if ((typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) && this.#container?.hasAttribute("data-puzzle-ssg")) {
+      let takeoverVnode = rootVnode;
+      if (layout) {
+        takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
+        takeoverVnode.instance = layout;
+      }
+      const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
+      if (token !== this.#token) {
+        for (const instance of nestedInstances)
+          instance.destroy();
+        for (const v of freshViews)
+          v.destroy();
+        if (layout && !reuseLayout)
+          layout.destroy();
+        return;
+      }
+      for (const instance of nestedInstances)
+        instance.skipEnter();
+    }
     await this.#swap(token, cur, {
       rawPath,
       // The parsed URL parts (v1.49, D83) — #commitState records them on
@@ -4620,9 +6539,10 @@ var Router = class {
         this.#commitLocation(next);
         if (!entry.layout) {
           if (keep === 0) {
-            this.#takeoverSSG(topView);
+            const restoreTakeover = this.#takeoverSSG(topView);
             this.#observeMount(
-              topView.mount(this.#container, { children: rootVnode.children, preloaded: true })
+              topView.mount(this.#container, { children: rootVnode.children, preloaded: true }),
+              restoreTakeover
             );
             this.#commitState(next);
             this.#playInLogged(topView);
@@ -4637,15 +6557,18 @@ var Router = class {
         } else {
           if (cur) {
             topView.skipEnter();
+            const restoreTakeover = this.#takeoverSSG(topView);
             this.#observeMount(
-              layout.mount(this.#container, { children: [rootVnode], preloaded: true })
+              layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+              restoreTakeover
             );
             this.#commitState(next);
             this.#playInLogged(layout);
           } else {
-            this.#takeoverSSG(topView);
+            const restoreTakeover = this.#takeoverSSG(topView);
             this.#observeMount(
-              layout.mount(this.#container, { children: [rootVnode], preloaded: true })
+              layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+              restoreTakeover
             );
             this.#commitState(next);
           }
@@ -4670,35 +6593,58 @@ var Router = class {
    * throw — the commit block keeps running, no rollback: D19/D61). Left
    * unobserved that becomes an unhandled rejection; log it once here instead. The
    * failed view is still committed to #state, so a later navigation replaces and
-   * destroys it normally. (Child views mounted through the ViewManager's keyed
-   * patch are already observed there — '[puzzle] child mount failed:'; this covers
-   * the three mounts the router drives directly: bare root view, layout swap,
-   * initial-nav layout.)
+   * destroys it normally. On navigation-zero SSG takeover, restoreTakeover puts
+   * the exact prerendered nodes + marker back before logging — the committed
+   * failed instance remains router-owned, but the user never gets a blank page.
+   * (Child views mounted through the ViewManager's keyed patch are already observed
+   * there; this covers the three mounts the router drives directly: bare root view,
+   * layout swap, initial-nav layout.)
    */
-  #observeMount(p) {
-    Promise.resolve(p).catch(
-      (err) => console.error("[puzzle] view mount failed after commit:", err)
-    );
+  #observeMount(p, restoreTakeover = null) {
+    Promise.resolve(p).catch((err) => {
+      restoreTakeover?.();
+      console.error(
+        "[puzzle] view mount failed after commit \u2014 the view stays mounted (router owns its lifetime):",
+        err
+      );
+    });
   }
   /**
    * SSG takeover (M2): when the container was server-prerendered, the SSG step
    * stamped `data-puzzle-ssg` on it and filled it with the rendered markup. The
-   * marker is present only on navigation #0 of an SSG app; this runs immediately
-   * before an initial-nav mount into the container (the no-layout keep-0 branch
-   * and the initial-nav layout branch). Clear the prerendered content so the fresh
-   * mount doesn't append alongside it (duplicating the page), drop the marker (a
-   * later re-mount is a normal SPA mount), and suppress the incoming top view's
-   * ENTER animation so content the user is already reading doesn't re-animate.
+   * marker is present only on navigation #0 of an SSG app — or restored by a
+   * FAILED takeover mount (below); this runs immediately before every mount
+   * into the container (the no-layout keep-0 branch, the initial-nav layout
+   * branch, and the layout-swap branch, where only the restored-marker case can
+   * match). Snapshot then clear the prerendered
+   * content so the fresh mount doesn't append alongside it (duplicating the
+   * page), drop the marker (a later re-mount is a normal SPA mount), and suppress
+   * the incoming top view's ENTER animation so content the user is already
+   * reading doesn't re-animate. The returned callback restores the exact nodes
+   * and marker if the async mount promise rejects on render()/mounted().
    * `topView` is views[keep] — the view the ViewManager auto-plays in (behind a
    * layout) or the router plays in directly (no layout). A non-SSG app has no
    * marker, so this is a no-op and behavior is byte-identical.
+   *
+   * With __PUZZLE_TAKEOVER__ false the guarded block folds away and this is left
+   * as an empty method — the two call sites stay, calling nothing. (Deleting the
+   * method instead would change the class shape, exactly as __devSnapshot does
+   * under __PUZZLE_DEV__.)
    */
   #takeoverSSG(topView) {
-    if (!this.#container.hasAttribute("data-puzzle-ssg"))
-      return;
-    this.#container.replaceChildren();
-    this.#container.removeAttribute("data-puzzle-ssg");
-    topView.skipEnter();
+    if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) {
+      if (!this.#container.hasAttribute("data-puzzle-ssg"))
+        return;
+      const marker = this.#container.getAttribute("data-puzzle-ssg");
+      const prerendered = [...this.#container.childNodes];
+      this.#container.replaceChildren();
+      this.#container.removeAttribute("data-puzzle-ssg");
+      topView.skipEnter();
+      return () => {
+        this.#container.replaceChildren(...prerendered);
+        this.#container.setAttribute("data-puzzle-ssg", marker);
+      };
+    }
   }
   /**
    * Overlap mode (v1.24, D56, constellation/doc/DOC-SPEC.md §26): start the
@@ -5027,12 +6973,43 @@ var Router = class {
    * element's blur so the DOM accumulates no attribute debris across navigations
    * and the root cannot linger in anyone's mental model of the tab order. An
    * author-set tabindex is left completely alone (they already chose this
-   * element's focus semantics), which also means we add no listener there.
+   * element's focus semantics — including its focus VISUALS), which also means
+   * we add no listener there.
+   *
+   * The focus ring is suppressed for the stamp's lifetime (D139): a
+   * keyboard-driven navigation (Enter on a link, back/forward) makes
+   * :focus-visible match the freshly focused root, and the UA draws its outline
+   * around the entire view — pure noise, because a programmatic-only target is
+   * not keyboard-operable and there is nothing the ring could invite the user to
+   * do. BOTH ring channels are cut: `outline` (the UA default and most app
+   * `:focus` rules) and `box-shadow` (how Tailwind's `focus:ring-*` utilities
+   * draw). Inline + !important so no app stylesheet can re-draw either, and
+   * undone on the SAME blur that lifts the tabindex — a pre-existing inline
+   * value is put back exactly as found, everything else is removed outright.
    */
   #focusElement(el) {
     if (!el.hasAttribute("tabindex")) {
       el.setAttribute("tabindex", "-1");
-      el.addEventListener("blur", () => el.removeAttribute("tabindex"), { once: true });
+      const prior = ["outline", "box-shadow"].map((prop) => [
+        prop,
+        el.style.getPropertyValue(prop),
+        el.style.getPropertyPriority(prop)
+      ]);
+      el.style.setProperty("outline", "none", "important");
+      el.style.setProperty("box-shadow", "none", "important");
+      el.addEventListener(
+        "blur",
+        () => {
+          el.removeAttribute("tabindex");
+          for (const [prop, value, priority] of prior) {
+            if (value)
+              el.style.setProperty(prop, value, priority);
+            else
+              el.style.removeProperty(prop);
+          }
+        },
+        { once: true }
+      );
     }
     el.focus({ preventScroll: true });
   }
@@ -5215,16 +7192,22 @@ var Router = class {
    * absolute-URL branches (D34/D51): given the fragment to test (a relative href
    * starting with '#', or an absolute same-page URL's `.hash`), route it if it
    * names an in-app fragment and return true. With a base the fragment must be
-   * exactly '#' + base (→ '/') or under '#' + base + '/'; base-less, any '#/...'
-   * is a route. A bare '#anchor' matches nothing → returns false (browser handles
-   * it). preventDefault is called HERE, before push (its placement in the original
-   * inlined cascades), so the return value is advisory.
+   * exactly '#' + base (→ '/'), the base followed directly by a query (→ '/?...'),
+   * or under '#' + base + '/'; base-less, any '#/...' is a route. A bare '#anchor'
+   * matches nothing → returns false (browser handles it). preventDefault is called
+   * HERE, before push (its placement in the original inlined cascades), so the
+   * return value is advisory.
    */
   #tryHashFragment(fragment, e2) {
     if (this.#base) {
       if (fragment === "#" + this.#base) {
         e2.preventDefault();
         this.push("/");
+        return true;
+      }
+      if (fragment.startsWith("#" + this.#base + "?")) {
+        e2.preventDefault();
+        this.push("/" + fragment.slice(1 + this.#base.length));
         return true;
       }
       if (fragment.startsWith("#" + this.#base + "/")) {
@@ -5297,7 +7280,9 @@ var Router = class {
 };
 function makeEntry(chain, fullPaths) {
   chain.forEach((node, index) => {
-    if (index) {
+    if (index === 0) {
+      validateTopLevelPath(node.path);
+    } else {
       if (typeof node.path === "string" && node.path.startsWith("/")) {
         throw new Error(
           `[puzzle] child route path must be relative (no leading "/"): "${node.path}"`
@@ -5315,10 +7300,10 @@ function makeEntry(chain, fullPaths) {
     validateTransitionMode(node.transitionMode, `route "${node.path}"`);
     validateGuard(node.guard, `route "${node.path}"`);
   });
-  const leafPath = fullPaths[fullPaths.length - 1];
+  const leafPath = stripTrailingSlash(fullPaths[fullPaths.length - 1]);
   const paramNames = [];
   const regexPath = leafPath.split("/").map((seg) => {
-    if (seg.length > 1 && seg[0] === ":") {
+    if (isDynamicSegment(seg)) {
       const name = seg.slice(1);
       if (paramNames.includes(name)) {
         throw new Error(`[puzzle] duplicate route param ":${name}" in "${leafPath}"`);
@@ -5326,16 +7311,30 @@ function makeEntry(chain, fullPaths) {
       paramNames.push(name);
       return "([^/]+)";
     }
-    return escapeRegExp(seg);
+    return escapeRegExp(normalizeRoutePath(seg));
   }).join("/");
   return {
     chain,
     fullPaths,
+    fullPath: leafPath,
+    matchPath: normalizeRoutePath(leafPath),
     regex: new RegExp("^" + regexPath + "$"),
     paramNames,
     layout: chain[0].layout ?? null,
     guards: chain.map((node) => node.guard).filter(Boolean)
   };
+}
+var warnedShadowedPaths = /* @__PURE__ */ new Set();
+function warnShadowedPaths(shadowedPaths) {
+  for (const { path, shadowedBy } of shadowedPaths) {
+    const key = shadowedBy + "\0" + path;
+    if (warnedShadowedPaths.has(key))
+      continue;
+    warnedShadowedPaths.add(key);
+    console.warn(
+      `[puzzle] route "${path}" is unreachable because earlier route "${shadowedBy}" matches it first (routes match in declaration order)`
+    );
+  }
 }
 var warnedOutsideBase = false;
 function warnOutsideBaseOnce(pathname, base) {
@@ -5390,7 +7389,7 @@ function normalizeBase(base) {
   }
   let b2 = base[0] === "/" ? base : "/" + base;
   b2 = b2.replace(/\/+$/, "");
-  return b2;
+  return normalizeRoutePath(b2);
 }
 function encodeURL(path, mode, base) {
   if (typeof path !== "string") {
@@ -5398,6 +7397,7 @@ function encodeURL(path, mode, base) {
   }
   if (path[0] !== "/")
     return path;
+  path = normalizeRoutePath(path);
   if (mode === "memory")
     return path;
   if (mode === "hash")
@@ -5660,7 +7660,13 @@ var PuzzleApp = class {
     let hmrBlob = null;
     if (true)
       hmrBlob = restoreStoreFromStorage(this);
-    await this.router.start(el, this.ctx);
+    try {
+      await this.router.start(el, this.ctx);
+    } catch (err) {
+      if (this.#mountEpoch === epoch && this._mounted)
+        this.#teardown();
+      throw err;
+    }
     if (this.#mountEpoch !== epoch || !this._mounted)
       return this;
     if (true)
@@ -5756,674 +7762,6 @@ var PuzzleApp = class {
     );
   }
 };
-
-// node_modules/@magic-spells/puzzle/client-runtime/views/flip.js
-var DEFAULT_DURATION = 250;
-var DEFAULT_EASING = "cubic-bezier(0.2, 0, 0, 1)";
-var MIN_DELTA = 0.5;
-var activeFlips = /* @__PURE__ */ new WeakMap();
-var warnedUnkeyedFlip = false;
-function warnUnkeyedFlip() {
-  if (warnedUnkeyedFlip)
-    return;
-  warnedUnkeyedFlip = true;
-  console.warn(
-    "[puzzle] `flip` requires a keyed row \u2014 this list child has no usable key, so it diffs positionally and cannot FLIP-animate; add key={ \u2026 } to the row root."
-  );
-}
-function beginFlip(pairs) {
-  let candidates = null;
-  for (const [oldChild, newChild] of pairs) {
-    const spec = newChild.attrs.flip;
-    if (spec == null || spec === false)
-      continue;
-    if (newChild.key == null) {
-      warnUnkeyedFlip();
-      continue;
-    }
-    if (!oldChild || !oldChild.el || oldChild.el.nodeType !== 1)
-      continue;
-    (candidates ??= []).push({ el: oldChild.el, newChild, spec, first: null });
-  }
-  if (!candidates)
-    return null;
-  if (prefersReducedMotion())
-    return null;
-  if (typeof candidates[0].el.animate !== "function")
-    return null;
-  for (const c2 of candidates) {
-    try {
-      c2.first = c2.el.getBoundingClientRect();
-    } catch {
-    }
-  }
-  for (const c2 of candidates)
-    cancelTrackedFlip(c2.el);
-  return candidates;
-}
-function playFlip(candidates) {
-  for (const c2 of candidates) {
-    const el = c2.newChild.el;
-    if (!c2.first || !el || el.nodeType !== 1 || typeof el.animate !== "function")
-      continue;
-    let last;
-    try {
-      last = el.getBoundingClientRect();
-    } catch {
-      continue;
-    }
-    const dx = c2.first.left - last.left;
-    const dy = c2.first.top - last.top;
-    if (Math.abs(dx) < MIN_DELTA && Math.abs(dy) < MIN_DELTA)
-      continue;
-    const { duration, easing } = resolveFlipOptions(c2.spec);
-    const translate = `translate(${dx}px, ${dy}px)`;
-    let base = "none";
-    try {
-      base = getComputedStyle(el).transform || "none";
-    } catch {
-    }
-    const from = base !== "none" ? `${translate} ${base}` : translate;
-    const to = base !== "none" ? base : "none";
-    let animation;
-    try {
-      animation = el.animate([{ transform: from }, { transform: to }], { duration, easing });
-    } catch {
-      continue;
-    }
-    activeFlips.set(el, animation);
-    const done = () => {
-      if (activeFlips.get(el) === animation)
-        activeFlips.delete(el);
-    };
-    try {
-      animation.finished.then(done, done);
-    } catch {
-    }
-  }
-}
-function cancelTrackedFlip(el) {
-  const prior = activeFlips.get(el);
-  if (!prior)
-    return;
-  activeFlips.delete(el);
-  try {
-    prior.cancel();
-  } catch {
-  }
-}
-function resolveFlipOptions(spec) {
-  let duration = DEFAULT_DURATION;
-  let easing = DEFAULT_EASING;
-  if (spec && typeof spec === "object") {
-    if (typeof spec.duration === "number" && Number.isFinite(spec.duration) && spec.duration > 0) {
-      duration = spec.duration;
-    }
-    if (typeof spec.easing === "string" && spec.easing !== "") {
-      easing = spec.easing;
-    }
-  }
-  return { duration, easing };
-}
-
-// node_modules/@magic-spells/puzzle/client-runtime/views/viewManager.js
-var PROPS = /* @__PURE__ */ new Set(["value", "checked", "disabled", "selected", "muted"]);
-var SVG_NS = "http://www.w3.org/2000/svg";
-var LISTENERS = Symbol("puzzle-listeners");
-var ONCE_SPENT = "\0once";
-var OUTSIDE_OPTS = { capture: true };
-var ViewManager = class {
-  /**
-   * @param {Element} container host element this manager renders into
-   * @param {object} ctx owner's { store, router, formatters } — passed to
-   *   any child components this tree instantiates (constellation/doc/DOC-APP-ANATOMY.md §4)
-   */
-  constructor(container, ctx = {}) {
-    this.container = container;
-    this.ctx = ctx;
-    this.currentTree = null;
-    this.slotChildren = [];
-    this.anchor = null;
-  }
-  /**
-   * Reserve a DOM position synchronously, before async data() resolves. A
-   * comment node marks the spot; the first render replaces it in place.
-   */
-  anchorAt(ref) {
-    this.anchor = document.createComment("puzzle");
-    this.container.insertBefore(this.anchor, ref ?? null);
-  }
-  /**
-   * Render a new tree: first call mounts, subsequent calls diff + patch.
-   * Slot markers are expanded against `slotChildren` before diffing.
-   */
-  render(rawTree) {
-    const newTree = expandSlots(rawTree, this.slotChildren);
-    if (!this.currentTree) {
-      mount(newTree, this.container, this.anchor, this.ctx);
-      if (this.anchor) {
-        this.anchor.remove();
-        this.anchor = null;
-      }
-    } else {
-      patch(this.currentTree, newTree, this.container, this.ctx);
-    }
-    this.currentTree = newTree;
-    return newTree;
-  }
-  /** The DOM node currently occupying this subtree's position (or null). */
-  get element() {
-    return this.currentTree?.el ?? this.anchor ?? null;
-  }
-  /** Remove everything this manager mounted. */
-  clear() {
-    if (this.currentTree)
-      unmount(this.currentTree);
-    if (this.anchor) {
-      this.anchor.remove();
-      this.anchor = null;
-    }
-    this.currentTree = null;
-  }
-};
-function expandSlots(vnode, slotChildren) {
-  return expandNode(vnode, partitionSlots(slotChildren));
-}
-function partitionSlots(slotChildren) {
-  let named = null;
-  let def = null;
-  for (let i2 = 0; i2 < slotChildren.length; i2++) {
-    const sc = slotChildren[i2];
-    const name = sc.attrs && sc.attrs.slot;
-    if (name != null && name !== "") {
-      if (!named)
-        named = /* @__PURE__ */ Object.create(null);
-      if (def === null)
-        def = slotChildren.slice(0, i2);
-      (named[name] ??= []).push(stripSlotAttr(sc));
-    } else if (def !== null) {
-      def.push(sc);
-    }
-  }
-  if (named === null)
-    return { default: slotChildren, named: null };
-  return { default: def ?? [], named };
-}
-function stripSlotAttr(vnode) {
-  const attrs = {};
-  for (const k in vnode.attrs) {
-    if (k !== "slot")
-      attrs[k] = vnode.attrs[k];
-  }
-  const clone = new ViewNode(vnode.tag, attrs, vnode.children);
-  clone.key = vnode.key;
-  clone.el = vnode.el;
-  clone.component = vnode.component;
-  clone.instance = vnode.instance;
-  return clone;
-}
-function expandNode(vnode, parts) {
-  if (vnode.isText || vnode.isSlot)
-    return vnode;
-  if (typeof vnode.children === "string")
-    return vnode;
-  const out = expandChildList(vnode.children, parts);
-  if (!out)
-    return vnode;
-  const clone = new ViewNode(vnode.tag, vnode.attrs, out);
-  clone.key = vnode.key;
-  if (vnode.isComponent) {
-    clone.el = vnode.el;
-    clone.component = vnode.component;
-    clone.instance = vnode.instance;
-  }
-  return clone;
-}
-function expandChildList(kids, parts) {
-  let out = null;
-  for (let i2 = 0; i2 < kids.length; i2++) {
-    const k = kids[i2];
-    if (k.isSlot) {
-      if (!out)
-        out = kids.slice(0, i2);
-      const name = k.attrs && k.attrs.name;
-      const bucket = name ? parts.named && parts.named[name] : parts.default;
-      if (bucket && bucket.length) {
-        for (const sc of bucket)
-          out.push(sc);
-      } else {
-        for (const fb of k.children)
-          out.push(expandNode(fb, parts));
-      }
-      continue;
-    }
-    const ek = expandNode(k, parts);
-    if (out)
-      out.push(ek);
-    else if (ek !== k) {
-      out = kids.slice(0, i2);
-      out.push(ek);
-    }
-  }
-  return out;
-}
-function mount(vnode, parent, ref, ctx) {
-  if (vnode.isComponent)
-    return mountComponent(vnode, parent, ref, ctx);
-  let el;
-  if (vnode.tag === PLACEHOLDER_TAG) {
-    el = document.createComment("");
-    vnode.el = el;
-    parent.insertBefore(el, ref ?? null);
-    return el;
-  }
-  if (vnode.isText) {
-    el = document.createTextNode(stringify(vnode.attrs.value));
-  } else {
-    el = inSvgNamespace(vnode.tag, parent) ? document.createElementNS(SVG_NS, vnode.tag) : document.createElement(vnode.tag);
-    for (const [name, value] of Object.entries(vnode.attrs)) {
-      setAttr(el, name, value);
-    }
-    if (typeof vnode.attrs.ref === "function")
-      vnode.attrs.ref(el);
-    if (typeof vnode.children === "string") {
-      el.innerHTML = vnode.children;
-    } else {
-      for (const child of vnode.children) {
-        mount(child, el, null, ctx);
-      }
-    }
-    reassertSelectValue(el, vnode.attrs);
-  }
-  vnode.el = el;
-  parent.insertBefore(el, ref ?? null);
-  return el;
-}
-function mountComponent(vnode, parent, ref, ctx) {
-  const preloaded = vnode.instance != null;
-  const child = vnode.instance ?? new vnode.tag(ctx);
-  vnode.component = child;
-  child.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded }).then(
-    // ENTER animation (constellation/doc/DOC-SPEC.md §12): once the first
-    // real render has landed (mount() resolved → this.element is the rendered
-    // root, not the anchor), run the child's playIn(). Chained here so it
-    // never blocks the synchronous patcher.
-    () => {
-      vnode.el = child.element;
-      return Promise.resolve(child.playIn()).catch(
-        (err) => console.error("[puzzle] child enter animation failed:", err)
-      );
-    },
-    (err) => {
-      console.error("[puzzle] child mount failed:", err);
-      if (preloaded)
-        return;
-      const anchor = child.element;
-      const placeholder = anchor && anchor.parentNode ? anchor.parentNode.insertBefore(document.createComment("puzzle"), anchor) : null;
-      child.destroy();
-      if (placeholder) {
-        vnode.el = placeholder;
-        child.__failedPlaceholder = placeholder;
-      }
-      vnode.component = null;
-      vnode.instance = null;
-    }
-  );
-  vnode.el = child.element;
-  return vnode.el;
-}
-function patch(oldVnode, newVnode, parent, ctx) {
-  if (!sameNode(oldVnode, newVnode)) {
-    const ref = oldVnode.isComponent && oldVnode.component?.element || oldVnode.el;
-    mount(newVnode, parent, ref, ctx);
-    unmount(oldVnode);
-    return;
-  }
-  if (newVnode.isComponent) {
-    const dead = oldVnode.component;
-    if (dead == null || dead.isDestroyed) {
-      const placeholder = dead?.__failedPlaceholder ?? oldVnode.el;
-      mount(newVnode, parent, placeholder?.parentNode === parent ? placeholder : null, ctx);
-      placeholder?.remove();
-      return;
-    }
-    patchComponent(oldVnode, newVnode);
-    return;
-  }
-  const el = newVnode.el = oldVnode.el;
-  if (newVnode.tag === PLACEHOLDER_TAG)
-    return;
-  if (newVnode.isText) {
-    const text = stringify(newVnode.attrs.value);
-    if (el.nodeValue !== text)
-      el.nodeValue = text;
-    return;
-  }
-  patchAttrs(el, oldVnode.attrs, newVnode.attrs);
-  if ("island" in newVnode.attrs) {
-    newVnode.children = oldVnode.children;
-    return;
-  }
-  if (typeof newVnode.children === "string") {
-    if (newVnode.children !== oldVnode.children)
-      el.innerHTML = newVnode.children;
-    return;
-  }
-  patchChildren(el, oldVnode.children, newVnode.children, ctx);
-  reassertSelectValue(el, newVnode.attrs);
-}
-function reassertSelectValue(el, attrs) {
-  if (el.nodeName !== "SELECT" || !("value" in attrs))
-    return;
-  el.value = stringify(attrs.value);
-}
-function patchComponent(oldVnode, newVnode) {
-  const child = newVnode.component = oldVnode.component;
-  const props = shallowEqual(oldVnode.props, newVnode.props) ? void 0 : newVnode.props;
-  child.applyParentUpdate({ props, children: newVnode.children });
-  newVnode.el = child.element;
-}
-function sameNode(a2, b2) {
-  return a2.tag === b2.tag && (a2.key === b2.key || a2.key !== a2.key && b2.key !== b2.key);
-}
-function shallowEqual(a2, b2) {
-  if (a2 === b2)
-    return true;
-  if (!a2 || !b2)
-    return false;
-  const ak = Object.keys(a2);
-  if (ak.length !== Object.keys(b2).length)
-    return false;
-  for (const k of ak) {
-    if (a2[k] !== b2[k])
-      return false;
-  }
-  return true;
-}
-var leavingEls = /* @__PURE__ */ new WeakSet();
-function unmount(vnode) {
-  if (vnode.isComponent) {
-    const child = vnode.component;
-    if (!child) {
-      vnode.el?.remove();
-      return;
-    }
-    if (child?.animations?.out) {
-      const leavingEl = child.element;
-      if (leavingEl && leavingEl.nodeType === 1) {
-        leavingEls.add(leavingEl);
-        child.destroyAnimated().finally(() => leavingEls.delete(leavingEl));
-      } else {
-        child.destroyAnimated();
-      }
-    } else {
-      child?.destroy();
-    }
-    return;
-  }
-  releaseSubtree(vnode);
-  vnode.el?.remove();
-}
-function releaseSubtree(vnode) {
-  const ref = vnode.attrs.ref;
-  if (typeof ref === "function")
-    ref(null, vnode.el);
-  const listeners = vnode.el?.[LISTENERS];
-  if (listeners) {
-    for (const key of Object.keys(listeners)) {
-      if (key.endsWith(ONCE_SPENT))
-        continue;
-      const [event, ...mods] = key.slice(1).split(":");
-      if (!mods.includes("outside"))
-        continue;
-      document.removeEventListener(event, listeners[key], OUTSIDE_OPTS);
-      delete listeners[key];
-      delete listeners[key + ONCE_SPENT];
-    }
-  }
-  if (typeof vnode.children === "string")
-    return;
-  for (const child of vnode.children) {
-    if (child.isComponent)
-      child.component?.destroy();
-    else if (!child.isText)
-      releaseSubtree(child);
-  }
-}
-function patchAttrs(el, oldAttrs, newAttrs) {
-  for (const [name, value] of Object.entries(newAttrs)) {
-    if (name === "ref") {
-      const old = oldAttrs.ref;
-      if (old !== value) {
-        if (typeof old === "function")
-          old(null, el);
-        if (typeof value === "function")
-          value(el);
-      }
-      continue;
-    }
-    if (name === "value" && (el.nodeName === "INPUT" || el.nodeName === "TEXTAREA")) {
-      if (el.value !== stringify(value))
-        setAttr(el, name, value);
-    } else if (name === "checked" && el.nodeName === "INPUT") {
-      if (el.checked !== Boolean(value))
-        setAttr(el, name, value);
-    } else if (oldAttrs[name] !== value) {
-      setAttr(el, name, value);
-    }
-  }
-  for (const name of Object.keys(oldAttrs)) {
-    if (name in newAttrs)
-      continue;
-    if (name === "ref") {
-      const old = oldAttrs.ref;
-      if (typeof old === "function")
-        old(null, el);
-    } else {
-      removeAttr(el, name);
-    }
-  }
-}
-function patchChildren(el, oldChildren, newChildren, ctx) {
-  const keyed = oldChildren.some((c2) => c2.key != null) || newChildren.some((c2) => c2.key != null);
-  if (keyed) {
-    patchKeyedChildren(el, oldChildren, newChildren, ctx);
-  } else {
-    patchIndexedChildren(el, oldChildren, newChildren, ctx);
-  }
-}
-function patchIndexedChildren(el, oldChildren, newChildren, ctx) {
-  const common = Math.min(oldChildren.length, newChildren.length);
-  for (let i2 = 0; i2 < common; i2++) {
-    patch(oldChildren[i2], newChildren[i2], el, ctx);
-  }
-  for (let i2 = common; i2 < newChildren.length; i2++) {
-    mount(newChildren[i2], el, null, ctx);
-  }
-  for (let i2 = common; i2 < oldChildren.length; i2++) {
-    unmount(oldChildren[i2]);
-  }
-}
-var warnedDuplicateKey = false;
-function warnDuplicateKey(key) {
-  if (warnedDuplicateKey)
-    return;
-  warnedDuplicateKey = true;
-  console.warn(
-    `[puzzle] duplicate key ${JSON.stringify(key)} among keyed siblings \u2014 keys must be unique within a list; duplicates cause elements to be dropped or reordered unexpectedly.`
-  );
-}
-function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
-  const oldKeyed = /* @__PURE__ */ new Map();
-  for (const child of oldChildren) {
-    if (child.key != null) {
-      let byKey = oldKeyed.get(child.tag);
-      if (!byKey)
-        oldKeyed.set(child.tag, byKey = /* @__PURE__ */ new Map());
-      byKey.set(child.key, child);
-    }
-  }
-  const matched = /* @__PURE__ */ new Set();
-  let oldUnkeyed = oldChildren.filter((c2) => c2.key == null);
-  let unkeyedIdx = 0;
-  const seenNewKeys = /* @__PURE__ */ new Map();
-  let hasFlip = false;
-  const pairs = newChildren.map((newChild) => {
-    if (!hasFlip && "flip" in newChild.attrs)
-      hasFlip = true;
-    if (newChild.key != null) {
-      let seen = seenNewKeys.get(newChild.tag);
-      if (!seen)
-        seenNewKeys.set(newChild.tag, seen = /* @__PURE__ */ new Set());
-      if (seen.has(newChild.key))
-        warnDuplicateKey(newChild.key);
-      else
-        seen.add(newChild.key);
-      const byKey = oldKeyed.get(newChild.tag);
-      const match = byKey ? byKey.get(newChild.key) : void 0;
-      if (match)
-        matched.add(match);
-      return [match ?? null, newChild];
-    }
-    if (unkeyedIdx < oldUnkeyed.length) {
-      const candidate = oldUnkeyed[unkeyedIdx++];
-      matched.add(candidate);
-      return [candidate, newChild];
-    }
-    return [null, newChild];
-  });
-  const flip = hasFlip ? beginFlip(pairs) : null;
-  if (false) {
-    warnFlipCompiledOut();
-  }
-  for (const child of oldChildren) {
-    if (!matched.has(child))
-      unmount(child);
-  }
-  let ref = null;
-  for (let i2 = pairs.length - 1; i2 >= 0; i2--) {
-    const [oldChild, newChild] = pairs[i2];
-    if (oldChild) {
-      patch(oldChild, newChild, el, ctx);
-      if (nextPersistentSibling(newChild.el) !== ref) {
-        el.insertBefore(newChild.el, ref);
-      }
-    } else {
-      mount(newChild, el, ref, ctx);
-    }
-    ref = newChild.el;
-  }
-  if (flip)
-    playFlip(flip);
-}
-function nextPersistentSibling(node) {
-  let n2 = node.nextSibling;
-  while (n2 && leavingEls.has(n2))
-    n2 = n2.nextSibling;
-  return n2;
-}
-function setAttr(el, name, value) {
-  if (name === "key" || name === "island" || name === "ref" || name === "flip")
-    return;
-  if (name.startsWith("@")) {
-    const [event, ...mods] = name.slice(1).split(":");
-    const target = mods.includes("outside") ? document : el;
-    const opts = target === el ? void 0 : OUTSIDE_OPTS;
-    const listeners = el[LISTENERS] ??= {};
-    if (listeners[name])
-      target.removeEventListener(event, listeners[name], opts);
-    if (typeof value === "function") {
-      const handler = mods.length ? withModifiers(name, mods, value, listeners, el) : value;
-      target.addEventListener(event, handler, opts);
-      listeners[name] = handler;
-    } else {
-      delete listeners[name];
-      delete listeners[name + ONCE_SPENT];
-    }
-    return;
-  }
-  if (PROPS.has(name)) {
-    el[name] = name === "value" ? stringify(value) : Boolean(value);
-    if (name !== "value") {
-      if (value)
-        el.setAttribute(name, "");
-      else
-        el.removeAttribute(name);
-    }
-    return;
-  }
-  if (value === false || value == null) {
-    el.removeAttribute(name);
-  } else if (value === true) {
-    el.setAttribute(name, "");
-  } else {
-    el.setAttribute(name, String(value));
-  }
-}
-function removeAttr(el, name) {
-  if (name === "key" || name === "island" || name === "ref" || name === "flip")
-    return;
-  if (name.startsWith("@")) {
-    const [event, ...mods] = name.slice(1).split(":");
-    const listeners = el[LISTENERS];
-    if (listeners?.[name]) {
-      if (mods.includes("outside"))
-        document.removeEventListener(event, listeners[name], OUTSIDE_OPTS);
-      else
-        el.removeEventListener(event, listeners[name]);
-      delete listeners[name];
-      delete listeners[name + ONCE_SPENT];
-    }
-    return;
-  }
-  if (PROPS.has(name)) {
-    el[name] = name === "value" ? "" : false;
-  }
-  el.removeAttribute(name);
-}
-var KEY_FILTERS = {
-  enter: "Enter",
-  escape: "Escape",
-  tab: "Tab",
-  space: " ",
-  up: "ArrowUp",
-  down: "ArrowDown",
-  left: "ArrowLeft",
-  right: "ArrowRight",
-  backspace: "Backspace",
-  delete: "Delete"
-};
-function withModifiers(fullName, mods, handler, listeners, el) {
-  const spentKey = fullName + ONCE_SPENT;
-  const outside = mods.includes("outside");
-  return (event) => {
-    if (outside && el.contains(event.target))
-      return;
-    for (const m of mods) {
-      const key = KEY_FILTERS[m];
-      if (key !== void 0 && event.key !== key)
-        return;
-    }
-    if (mods.includes("once")) {
-      if (listeners[spentKey])
-        return;
-      listeners[spentKey] = true;
-    }
-    if (mods.includes("prevent"))
-      event.preventDefault();
-    if (mods.includes("stop"))
-      event.stopPropagation();
-    handler(event);
-  };
-}
-function inSvgNamespace(tag, parent) {
-  if (tag === "svg")
-    return true;
-  return parent.namespaceURI === SVG_NS && parent.nodeName.toLowerCase() !== "foreignobject";
-}
-function stringify(v) {
-  return v == null ? "" : String(v);
-}
 
 // node_modules/@magic-spells/puzzle/client-runtime/views/visibility.js
 var registry = /* @__PURE__ */ new Map();
@@ -6555,6 +7893,10 @@ var PuzzleView = class {
   // #completeMount() is then deferred to the first #commit that DOES render, so
   // mounted() never fires against the comment anchor. Cleared when it fires.
   #pendingMountHook = false;
+  // ViewManager may request the one-shot enter after mount() resolves through
+  // the anchor-race branch above. Keep that request pending until the landing
+  // commit completes mounted() against the real root.
+  #enterPending = false;
   #destroyed = false;
   #updateScheduled = false;
   #runToken = 0;
@@ -6575,6 +7917,10 @@ var PuzzleView = class {
   // playIn() runs at most once per mount
   #currentAnimation = null;
   // live { finished, cancel, play } handle, for interruption
+  // The router may need to restore a committed view after its out animation
+  // finished under fill:'both'. Keep that Puzzle-owned handle past natural
+  // completion so recovery can cancel only it, never app-owned root animations.
+  #outHandle = null;
   #leaving = null;
   // memoised playOut() promise — idempotent teardown
   // Scroll-triggered enter (v1.40, D73). While a `trigger: 'visible'` enter is
@@ -6615,6 +7961,8 @@ var PuzzleView = class {
    * beats the model; a data() commit beats an earlier setData).
    */
   setData(key, value) {
+    if (this.#destroyed || this.#leaving)
+      return;
     if (typeof key === "object" && key !== null) {
       Object.assign(this.#local, key);
       Object.assign(this.#data, key);
@@ -6680,7 +8028,13 @@ var PuzzleView = class {
     const cache = this.#memo ??= /* @__PURE__ */ new Map();
     const hit = cache.get(key);
     if (hit && hit.deps.length === deps.length && hit.deps.every((d, i2) => Object.is(d, deps[i2]))) {
+      if (true) {
+        devperfMemo(this, key, true);
+      }
       return hit.value;
+    }
+    if (true) {
+      devperfMemo(this, key, false);
     }
     const value = factory();
     cache.set(key, { deps, value });
@@ -6778,7 +8132,7 @@ var PuzzleView = class {
    *
    * A parent's ViewManager also calls this to mount a child component
    * (constellation/doc/DOC-APP-ANATOMY.md §4): `children` is the slot content captured at the
-   * call site (rendered at the child's `<children/>`) and `ref` is the DOM node
+   * call site (rendered at the child's `<Children/>`) and `ref` is the DOM node
    * to insert before. The anchor placeholder reserves the position
    * synchronously so an async data() does not strand the parent's insertion
    * refs.
@@ -6798,7 +8152,13 @@ var PuzzleView = class {
     this.#children = children;
     this.#vm.anchorAt(ref);
     if (preloaded) {
-      this.#renderNow();
+      if (typeof __PUZZLE_TAKEOVER__ === "undefined" || __PUZZLE_TAKEOVER__) {
+        const takeoverTree = Object.prototype.hasOwnProperty.call(this, "__takeoverTree") ? this.__takeoverTree : void 0;
+        delete this.__takeoverTree;
+        this.#renderNow(takeoverTree);
+      } else {
+        this.#renderNow();
+      }
     } else {
       this.created();
       const pending = this.refresh();
@@ -6860,7 +8220,7 @@ var PuzzleView = class {
    * content swap alone re-renders without re-running data().
    */
   applyParentUpdate({ props, children }) {
-    if (this.#destroyed)
+    if (this.#destroyed || this.#leaving)
       return;
     const hadSlots = this.#children.length > 0;
     if (children !== void 0) {
@@ -6871,12 +8231,21 @@ var PuzzleView = class {
     if (props !== void 0) {
       try {
         this.refresh({ props })?.catch(
-          (err) => console.error("[puzzle] data() failed during a parent prop update:", err)
+          (err) => this.#handleBackgroundRefreshFailure(
+            "[puzzle] data() failed during a parent prop update:",
+            err
+          )
         );
       } catch (err) {
-        console.error("[puzzle] data() failed during a parent prop update:", err);
+        this.#handleBackgroundRefreshFailure(
+          "[puzzle] data() failed during a parent prop update:",
+          err
+        );
       }
     } else if (this.#mounted && (hadSlots || this.#children.length > 0)) {
+      if (true) {
+        devperfSlotRender(this);
+      }
       this.#renderNow();
     }
   }
@@ -6887,7 +8256,7 @@ var PuzzleView = class {
    * supersedes an in-flight async one (stale results are discarded).
    */
   refresh({ params, props, route } = {}) {
-    if (this.#destroyed)
+    if (this.#destroyed || this.#leaving)
       return;
     if (params)
       this.#params = params;
@@ -6895,8 +8264,20 @@ var PuzzleView = class {
       this.#props = props;
     if (route !== void 0)
       this.#route = route;
+    if (true) {
+      if (!devperfPrepareData(
+        this,
+        params || route !== void 0 ? "route" : props !== void 0 ? "props" : void 0
+      ))
+        return;
+    }
     const token = ++this.#runToken;
-    const run = () => this.data(this.#params, this.#props);
+    const run = () => {
+      if (true) {
+        return devperfRunData(this, this.#params, this.#props);
+      }
+      return this.data(this.#params, this.#props);
+    };
     const result = this.ctx.store ? this.ctx.store.withTracking(this, run, this.data.constructor.name === "AsyncFunction") : run();
     if (result && typeof result.then === "function") {
       return result.then((model) => this.#commit(token, model));
@@ -6905,13 +8286,44 @@ var PuzzleView = class {
   }
   /** Store subscription callback (Store.flush → subscribed components). */
   onStoreChange() {
+    if (this.#destroyed || this.#leaving)
+      return;
     try {
+      if (true) {
+        devperfMarkCause(this, "store");
+      }
       this.refresh()?.catch(
-        (err) => console.error("[puzzle] data() failed during a store-change refresh:", err)
+        (err) => this.#handleBackgroundRefreshFailure(
+          "[puzzle] data() failed during a store-change refresh:",
+          err
+        )
       );
     } catch (err) {
-      console.error("[puzzle] data() failed during a store-change refresh:", err);
+      this.#handleBackgroundRefreshFailure(
+        "[puzzle] data() failed during a store-change refresh:",
+        err
+      );
     }
+  }
+  /**
+   * Contain a fire-and-forget refresh failure. Normally logging is enough, but
+   * an anchor-race mount whose superseding first render failed can never reach
+   * #completeMount(). Recover through the same instance-owned placeholder
+   * contract mountComponent uses so the next parent patch creates a fresh view.
+   *
+   * Router-preloaded views never set #pendingMountHook: preload() resolves before
+   * their synchronous mount, so Router ownership remains untouched.
+   */
+  #handleBackgroundRefreshFailure(message, err) {
+    console.error(message, err);
+    if (!this.#pendingMountHook || this.#destroyed)
+      return;
+    this.#pendingMountHook = false;
+    this.#enterPending = false;
+    const placeholder = plantFailedMountPlaceholder(this);
+    this.destroy();
+    if (placeholder)
+      this.__failedPlaceholder = placeholder;
   }
   /**
    * Tear down: unsubscribe, clear DOM, fire destroyed(). Idempotent, and it
@@ -6933,6 +8345,7 @@ var PuzzleView = class {
     }
     this.#disarmObserver();
     this.#settleEnter();
+    this._cancelOutAnimation();
     this.#currentAnimation?.cancel();
     this.#currentAnimation = null;
     this.ctx.store?.unsubscribe(this);
@@ -7016,6 +8429,10 @@ var PuzzleView = class {
   async playIn() {
     if (this.#destroyed || this.#playedIn)
       return;
+    if (this.#pendingMountHook) {
+      this.#enterPending = true;
+      return;
+    }
     this.#playedIn = true;
     const spec = this.animations?.in;
     if (this.#useVisibleTrigger(spec)) {
@@ -7023,7 +8440,7 @@ var PuzzleView = class {
     }
     this.viewWillShow();
     await this.#runAnimation(spec, { release: true });
-    if (this.#destroyed)
+    if (this.#destroyed || this.#leaving)
       return;
     this.viewDidShow();
   }
@@ -7171,7 +8588,7 @@ var PuzzleView = class {
         handle.finished.then(() => {
           if (this.#currentAnimation === handle)
             this.#currentAnimation = null;
-          if (!this.#destroyed) {
+          if (!this.#destroyed && !this.#leaving) {
             try {
               this.viewDidShow();
             } catch (err) {
@@ -7227,6 +8644,7 @@ var PuzzleView = class {
    * the ViewManager's auto-chained slot-child playIn() therefore does nothing.
    */
   skipEnter() {
+    this.#enterPending = false;
     this.#playedIn = true;
   }
   /**
@@ -7241,21 +8659,47 @@ var PuzzleView = class {
   playOut() {
     if (this.#leaving)
       return this.#leaving;
-    this.#leaving = (async () => {
+    let resolveLeaving;
+    let rejectLeaving;
+    this.#leaving = new Promise((resolve, reject) => {
+      resolveLeaving = resolve;
+      rejectLeaving = reject;
+    });
+    this.ctx.store?.unsubscribe(this);
+    this._cancelOutAnimation();
+    const leavingTask = (async () => {
       if (this.#destroyed)
         return;
       this.#abortEnter();
+      this.#currentAnimation?.cancel();
+      this.#currentAnimation = null;
       const out = this.animations?.out;
       if (out && typeof out === "object" && (out.trigger !== void 0 || out.triggerOffset !== void 0 || out.triggerAnchor !== void 0)) {
         warnOnceForSpec(out, `animation out.trigger/out.triggerOffset/out.triggerAnchor is ignored (triggers apply to enter animations only)`);
       }
       this.viewWillHide();
-      await this.#runAnimation(out);
+      await this.#runAnimation(out, { retainOut: true });
       if (this.#destroyed)
         return;
       this.viewDidHide();
     })();
+    leavingTask.then(resolveLeaving, rejectLeaving);
     return this.#leaving;
+  }
+  /**
+   * Router-only recovery seam: cancel the retained Puzzle-owned out animation,
+   * including a naturally finished effect still filling the root. Never
+   * enumerates Element.getAnimations(), so application-owned root motion is
+   * untouched. A no-op when this view never created an out animation.
+   */
+  _cancelOutAnimation() {
+    const handle = this.#outHandle;
+    this.#outHandle = null;
+    if (!handle)
+      return;
+    if (this.#currentAnimation === handle)
+      this.#currentAnimation = null;
+    handle.cancel();
   }
   /**
    * Animated teardown: play the leave sequence, THEN destroy() (which removes
@@ -7282,7 +8726,7 @@ var PuzzleView = class {
    * the position is the comment anchor (data still in flight) — the surrounding
    * hooks always fire regardless (constellation/doc/DOC-SPEC.md §12 hook order).
    */
-  async #runAnimation(spec, { release = false } = {}) {
+  async #runAnimation(spec, { release = false, retainOut = false } = {}) {
     if (!spec)
       return;
     const el = this.element;
@@ -7290,6 +8734,8 @@ var PuzzleView = class {
       return;
     const handle = playAnimation(el, spec, { reducedMotion: prefersReducedMotion(), release });
     this.#currentAnimation = handle;
+    if (retainOut)
+      this.#outHandle = handle;
     await handle.finished;
     if (this.#currentAnimation === handle)
       this.#currentAnimation = null;
@@ -7326,6 +8772,12 @@ var PuzzleView = class {
     if (this.#pendingMountHook) {
       this.#pendingMountHook = false;
       this.#completeMount();
+      if (this.#enterPending) {
+        this.#enterPending = false;
+        Promise.resolve(this.playIn()).catch(
+          (err) => console.error("[puzzle] child enter animation failed:", err)
+        );
+      }
     }
   }
   /**
@@ -7354,30 +8806,65 @@ var PuzzleView = class {
   #holdRemaining() {
     return (this.skeletonMinDuration ?? 0) - (Date.now() - this.#skeletonShownAt);
   }
-  #renderNow() {
+  #renderNow(preparedTree = void 0) {
     if (!this.#vm || this.#destroyed)
       return;
+    if (!devperfCanRender(this)) {
+      return;
+    }
+    this.#updateScheduled = false;
     const isUpdate = this.#mounted;
     if (isUpdate)
       this.beforeUpdate();
     const showSkeleton = !this.#loaded && typeof this.renderSkeleton === "function";
-    const tree = showSkeleton ? this.renderSkeleton() : this.render();
-    if (tree) {
-      this.#vm.render(tree);
-    } else if (this.#vm.currentTree) {
-      const ref = this.#vm.element?.nextSibling ?? null;
-      this.#vm.clear();
-      this.#vm.anchorAt(ref);
+    if (true) {
+      devperfRenderPrepare(this);
+      try {
+        this.#renderSpan(preparedTree, showSkeleton);
+      } catch (error) {
+        devperfRenderCancel(this);
+        throw error;
+      }
+    } else {
+      this.#renderSpan(preparedTree, showSkeleton);
     }
     if (showSkeleton && this.#skeletonShownAt === 0)
       this.#skeletonShownAt = Date.now();
     if (isUpdate)
       this.afterUpdate();
   }
+  /**
+   * The instrumented span of one render: build the tree, then patch it in (or
+   * empty the view's DOM when a hand-written render() returns null). Everything
+   * between devperfRenderPrepare and devperfRenderEnd lives here so #renderNow can
+   * close the prepared mark on a throw without duplicating the body.
+   */
+  #renderSpan(preparedTree, showSkeleton) {
+    const tree = preparedTree !== void 0 ? preparedTree : showSkeleton ? this.renderSkeleton() : this.render();
+    if (true) {
+      devperfRenderTreeBuilt(this);
+    }
+    if (tree) {
+      if (true) {
+        devperfRenderStart(this);
+      }
+      this.#vm.render(tree);
+    } else if (this.#vm.currentTree) {
+      const ref = this.#vm.element?.nextSibling ?? null;
+      this.#vm.clear();
+      this.#vm.anchorAt(ref);
+    }
+    if (true) {
+      devperfRenderEnd(this);
+    }
+  }
   #scheduleRender() {
     if (!this.#mounted || this.#destroyed || this.#updateScheduled)
       return;
     this.#updateScheduled = true;
+    if (true) {
+      devperfRenderScheduled(this, "local-state");
+    }
     const schedule = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (cb) => setTimeout(cb, 0);
     schedule(() => this.flushUpdates());
   }
@@ -20613,11 +22100,11 @@ function extent(values) {
     return [0, 1];
   return [min, max];
 }
-function niceNum(range2, round3) {
+function niceNum(range2, round4) {
   const exp = Math.floor(Math.log10(range2));
   const frac = range2 / Math.pow(10, exp);
   let niceFrac;
-  if (round3) {
+  if (round4) {
     if (frac < 1.5)
       niceFrac = 1;
     else if (frac < 3)
@@ -20658,13 +22145,13 @@ function niceDomain(min, max, count = 5) {
   const niceMin = Math.floor(min / step) * step;
   const niceMax = Math.ceil(max / step) * step;
   const decimals = Math.max(0, -Math.floor(Math.log10(step)));
-  const round3 = (v) => {
+  const round4 = (v) => {
     const p = Math.pow(10, decimals);
     return Math.round(v * p) / p;
   };
   const ticks = [];
   for (let v = niceMin; v <= niceMax + step * 0.5; v += step)
-    ticks.push(round3(v));
+    ticks.push(round4(v));
   return { min: niceMin, max: niceMax, ticks };
 }
 function linearScale(d0, d1, r0, r1) {
@@ -45162,7 +46649,7 @@ function quantize(v, cfg) {
 function clampBounds(v, cfg) {
   return Math.max(cfg.min, Math.min(v, cfg.max));
 }
-function round2(v, cfg) {
+function round3(v, cfg) {
   return parseFloat(v.toFixed(cfg.dec));
 }
 function normalize2(value, thumb, cfg, committed) {
@@ -45172,7 +46659,7 @@ function normalize2(value, thumb, cfg, committed) {
     v = Math.min(v, committed.valueMax);
   if (thumb === "max")
     v = Math.max(v, committed.valueMin);
-  return round2(v, cfg);
+  return round3(v, cfg);
 }
 function valueToPercent(value, cfg) {
   const range2 = cfg.max - cfg.min;
@@ -45384,8 +46871,8 @@ var Fader = class extends PuzzleView {
     this._pendingClearCheck = true;
     queueMicrotask(() => {
       this._pendingClearCheck = false;
-      const now = this.getData();
-      if (now.draftValue !== null && !now.dragging) {
+      const now2 = this.getData();
+      if (now2.draftValue !== null && !now2.dragging) {
         this.setData({ draftValue: null });
         this.refresh();
       }
@@ -45398,7 +46885,7 @@ var Fader = class extends PuzzleView {
   // The committed value straight from props, normalized.
   _committed(props, cfg) {
     const raw2 = Number(props.value);
-    return round2(clampBounds(quantize(Number.isFinite(raw2) ? raw2 : cfg.min, cfg), cfg), cfg);
+    return round3(clampBounds(quantize(Number.isFinite(raw2) ? raw2 : cfg.min, cfg), cfg), cfg);
   }
   _format(value, props) {
     const fn = props.formatValue;
@@ -57902,8 +59389,8 @@ var Slider = class extends PuzzleView {
     this._pendingClearCheck = true;
     queueMicrotask(() => {
       this._pendingClearCheck = false;
-      const now = this.getData();
-      if (now.draftThumb != null && !now.dragging) {
+      const now2 = this.getData();
+      if (now2.draftThumb != null && !now2.dragging) {
         this.setData({ draftThumb: null, draftValue: null });
         this.refresh();
       }
@@ -57919,14 +59406,14 @@ var Slider = class extends PuzzleView {
     if (this._isRange(props)) {
       const rawMin = Number(props.valueMin);
       const rawMax = Number(props.valueMax);
-      let valueMin = round2(clampBounds(quantize(Number.isFinite(rawMin) ? rawMin : cfg.min, cfg), cfg), cfg);
-      let valueMax = round2(clampBounds(quantize(Number.isFinite(rawMax) ? rawMax : cfg.max, cfg), cfg), cfg);
+      let valueMin = round3(clampBounds(quantize(Number.isFinite(rawMin) ? rawMin : cfg.min, cfg), cfg), cfg);
+      let valueMax = round3(clampBounds(quantize(Number.isFinite(rawMax) ? rawMax : cfg.max, cfg), cfg), cfg);
       if (valueMin > valueMax)
         valueMin = valueMax;
       return { valueMin, valueMax };
     }
     const raw2 = Number(props.value);
-    return { value: round2(clampBounds(quantize(Number.isFinite(raw2) ? raw2 : cfg.min, cfg), cfg), cfg) };
+    return { value: round3(clampBounds(quantize(Number.isFinite(raw2) ? raw2 : cfg.min, cfg), cfg), cfg) };
   }
   _channel(state, thumb) {
     return thumb === "min" ? state.valueMin : thumb === "max" ? state.valueMax : state.value;
@@ -59742,8 +61229,8 @@ var SplitPanel = class extends PuzzleView {
     this._pendingClearCheck = true;
     queueMicrotask(() => {
       this._pendingClearCheck = false;
-      const now = this.getData();
-      if (Array.isArray(now.draftSizes) && !now.dragging && samePair(this._committed(this.props), now.draftSizes)) {
+      const now2 = this.getData();
+      if (Array.isArray(now2.draftSizes) && !now2.dragging && samePair(this._committed(this.props), now2.draftSizes)) {
         this.setData("draftSizes", null);
         this.refresh();
       }
