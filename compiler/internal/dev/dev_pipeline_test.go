@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/magic-spells/puzzle/compiler/internal/serve"
 )
 
 // TestRecompose asserts the pipeline writes dist/styles.css = Tailwind layer
@@ -72,7 +74,7 @@ func TestRecomposeOnTailwindWrite(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := newServer(dist, ctx, nil)
+	srv := newServer(dist, serve.ModeSPA, ctx, nil)
 	ts := httptest.NewServer(srv.handler())
 	defer ts.Close()
 

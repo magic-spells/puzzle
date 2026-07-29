@@ -1,0 +1,124 @@
+<puzzle-view>
+  <!-- The local root: a component template's root must be an element or a
+       component, so a fully-teleported component still needs one element to be
+       rooted at. `display: contents` keeps it out of the layout. -->
+  <div class="slideover-mount">
+    {#if open}
+    <Portal>
+      <aside class="slideover" role="complementary" aria-label={ title }>
+        <header class="slideover-head">
+          <h2 class="slideover-title">{ title }</h2>
+          <button class="slideover-x" @click={ requestClose } aria-label="Close panel">×</button>
+        </header>
+
+        <div class="slideover-body">
+          <!--
+            <Children/> INSIDE <Portal>. The panel's content is written by the
+            caller, in the caller's file, with the caller's data and handlers —
+            and it renders here, in a DOM node the caller is not an ancestor of.
+            The component tree and the DOM tree disagree on purpose; that
+            disagreement is the whole feature.
+          -->
+          <Children/>
+        </div>
+      </aside>
+    </Portal>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// A NON-MODAL panel: the page behind it stays scrollable, focusable and
+// clickable. That is the shape Portal is for. Anything that needs a focus
+// trap and Escape-to-close should be a native <dialog>.showModal() instead
+// (see NativeModal.pzl) — the top layer gives both for free.
+export default class SlideOver extends PuzzleView {
+  data(params, props) {
+    return {
+      open: !!props.open,
+      title: props.title || 'Panel',
+    };
+  }
+
+  events = {
+    requestClose: () => {
+      this.props.close?.();
+    },
+  };
+
+  animations = {
+    in: {
+      from: { opacity: 0, transform: 'translateX(100%)' },
+      to: { opacity: 1, transform: 'translateX(0)' },
+      duration: 260,
+      easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+    },
+    out: {
+      from: { opacity: 1, transform: 'translateX(0)' },
+      to: { opacity: 0, transform: 'translateX(100%)' },
+      duration: 200,
+      easing: 'ease-in',
+    },
+  };
+}
+</script>
+
+<style>
+.slideover-mount { display: contents; }
+
+.slideover {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  width: min(400px, 100vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: -30px 0 70px -30px rgba(0, 0, 0, 0.9);
+}
+
+.slideover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.slideover-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.slideover-x {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.slideover-x:hover { color: var(--fg); background: #262630; }
+
+.slideover-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 22px 24px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+</style>

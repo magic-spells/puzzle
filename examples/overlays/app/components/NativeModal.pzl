@@ -1,0 +1,90 @@
+<puzzle-view>
+  <!--
+    NO <Portal> here, deliberately. `showModal()` promotes the element into the
+    browser's TOP LAYER, which already escapes every ancestor stacking context,
+    transform and overflow — the exact problem Portal solves for non-modal
+    overlays. On top of that the top layer hands you a focus trap, inert
+    background, Escape-to-close and ::backdrop for free. D144's guidance is
+    explicit: <dialog>.showModal() for focus-trapped modals, Portal for
+    everything else.
+  -->
+  <dialog ref="dialog" class="modal" @close={ onClose }>
+    <h2 class="modal-title">{ title }</h2>
+    <div class="modal-body"><Children/></div>
+    <div class="modal-actions">
+      <button class="btn" @click={ dismiss }>Cancel</button>
+      <button class="btn btn-accent" @click={ confirm }>Confirm</button>
+    </div>
+  </dialog>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class NativeModal extends PuzzleView {
+  data(params, props) {
+    return { title: props.title || 'Confirm' };
+  }
+
+  events = {
+    // Fired by the native `close` event — covers the Escape key, which no
+    // code here has to handle.
+    onClose: () => {
+      this.props.closed?.();
+    },
+    dismiss: () => {
+      this.refs.dialog?.close('cancel');
+    },
+    confirm: () => {
+      this.refs.dialog?.close('confirm');
+      this.props.confirm?.();
+    },
+  };
+
+  // The imperative handle goes UP once via an @ready callback prop — `ref` is
+  // not allowed on component tags, so this is how a parent gets to call
+  // showModal() on a child's element.
+  mounted() {
+    this.props.ready?.({
+      open: () => this.refs.dialog?.showModal(),
+      close: () => this.refs.dialog?.close(),
+    });
+  }
+}
+</script>
+
+<style>
+.modal {
+  width: min(440px, calc(100vw - 32px));
+  padding: 22px 24px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.modal::backdrop {
+  background: rgba(6, 6, 9, 0.66);
+  backdrop-filter: blur(2px);
+}
+
+.modal-title {
+  margin: 0 0 10px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.modal-body {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+</style>

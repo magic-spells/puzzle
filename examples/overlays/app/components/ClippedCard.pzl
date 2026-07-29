@@ -1,0 +1,248 @@
+<puzzle-view>
+  <!--
+    `@click:outside` is bound on the CARD, not on the menu. The menu is
+    teleported out of this element's DOM subtree — physically it is a child of
+    <div data-puzzle-portal> at the end of <body> — yet clicking it does NOT
+    dismiss. D144's outside-modifier uses LOGICAL containment: a target inside
+    the outlet is resolved back to its owning portal's placeholder, and the
+    containment test re-runs from there. The placeholder sits right below, so
+    the menu counts as "inside this card".
+  -->
+  <div class="clip-card" @click:outside={ menuOpen ? closeMenu : null }>
+    <div class="clip-card-head">
+      <div>
+        <div class="eyebrow">clipping ancestor</div>
+        <h3 class="clip-card-title">{ title }</h3>
+      </div>
+
+      <button
+        ref="trigger"
+        class="dots"
+        @click={ toggleMenu }
+        aria-haspopup="menu"
+        aria-expanded={ menuExpanded }>⋯</button>
+    </div>
+
+    <p class="clip-card-body">
+      This card sets <code>overflow: hidden</code> AND
+      <code>transform: rotate(-0.25deg)</code>. The transform makes it a
+      containing block, so even <code>position: fixed</code> inside it would be
+      trapped here — and the overflow would clip whatever survived.
+    </p>
+
+    <div class="clip-proof">
+      <span class="clip-proof-label">not portaled ↓</span>
+      <div class="clip-ghost">a menu positioned in here gets cut off at the card's edge —</div>
+    </div>
+
+    {#if menuOpen}
+      <Portal>
+        <div class="menu" style={ menuStyle } role="menu">
+          <button class="menu-item" role="menuitem" @click={ pick('Duplicate') }>Duplicate</button>
+          <button class="menu-item" role="menuitem" @click={ pick('Move to…') }>Move to…</button>
+          <button class="menu-item" role="menuitem" @click={ pick('Export') }>Export</button>
+          <div class="menu-sep"></div>
+          <button class="menu-item menu-item-danger" role="menuitem" @click={ pick('Delete') }>Delete</button>
+          <div class="menu-note">
+            Click me — I stay open. I'm portaled to <code>body</code>,
+            but logically I'm still inside the card.
+          </div>
+        </div>
+      </Portal>
+    {/if}
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class ClippedCard extends PuzzleView {
+  created() {
+    this.setData({ menuOpen: false, menuExpanded: 'false', menuStyle: '' });
+  }
+
+  data(params, props) {
+    return { title: props.title || 'Untitled card' };
+  }
+
+  events = {
+    toggleMenu: () => {
+      if (this.getData().menuOpen) return this.events.closeMenu();
+
+      // Measure the trigger and pin the portaled menu to it. The menu is
+      // `position: fixed` in the outlet, whose containing block is the
+      // viewport — so a viewport-relative rect is exactly the right frame,
+      // with no offsetParent walk and no ancestor scroll math.
+      const rect = this.refs.trigger.getBoundingClientRect();
+      const width = 232;
+      const left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12));
+      const top = rect.bottom + 8;
+
+      this.setData({
+        menuOpen: true,
+        menuExpanded: 'true',
+        menuStyle: `left:${Math.round(left)}px;top:${Math.round(top)}px;width:${width}px`,
+      });
+    },
+
+    closeMenu: () => {
+      this.setData({ menuOpen: false, menuExpanded: 'false' });
+    },
+
+    pick: (label) => {
+      this.events.closeMenu();
+      this.ctx.store.createRecord('toast', {
+        kind: label === 'Delete' ? 'error' : 'info',
+        message: `“${label}” from ${this.getData().title}`,
+      });
+    },
+  };
+
+  // A pinned overlay has to react to the page moving under it. Closing on
+  // scroll is the honest cheap answer; the alternative is re-measuring on
+  // every frame.
+  handleReflow = () => {
+    if (this.getData().menuOpen) this.events.closeMenu();
+  };
+
+  mounted() {
+    window.addEventListener('scroll', this.handleReflow, true);
+    window.addEventListener('resize', this.handleReflow);
+  }
+
+  destroyed() {
+    window.removeEventListener('scroll', this.handleReflow, true);
+    window.removeEventListener('resize', this.handleReflow);
+  }
+}
+</script>
+
+<style>
+.clip-card {
+  position: relative;
+  overflow: hidden;                 /* would clip a non-portaled menu */
+  transform: rotate(-0.25deg);      /* …and this makes it a containing block */
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 24px 28px 26px;
+}
+
+.clip-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.clip-card-title {
+  margin: 8px 0 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.clip-card-body {
+  margin: 14px 0 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--muted);
+  max-width: 60ch;
+}
+
+.dots {
+  appearance: none;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dots:hover { background: #262630; }
+
+/* A visual stand-in for what a non-portaled menu would suffer: a box that
+   visibly runs off past the card's clipped edge. Its height overshoots on
+   purpose — `overflow: hidden` on the card does the slicing. */
+.clip-proof {
+  position: relative;
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
+  height: 46px;
+}
+
+.clip-proof-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.clip-ghost {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 34px;
+  height: 90px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px dashed rgba(224, 121, 107, 0.4);
+  color: rgba(224, 121, 107, 0.75);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ---------------------------------------------------------------------
+   The portaled menu. These rules are collected into the app's single
+   stylesheet like any other <style> block — a portaled subtree is styled
+   from its owner's file even though it lands elsewhere in the document.
+   --------------------------------------------------------------------- */
+.menu {
+  position: fixed;
+  z-index: 50;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  box-shadow: 0 24px 56px -20px rgba(0, 0, 0, 0.9);
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.menu-item:hover { background: rgba(255, 255, 255, 0.08); }
+.menu-item-danger { color: var(--danger); }
+.menu-item-danger:hover { background: rgba(224, 121, 107, 0.12); }
+
+.menu-sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--line);
+}
+
+.menu-note {
+  padding: 8px 10px 4px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+</style>

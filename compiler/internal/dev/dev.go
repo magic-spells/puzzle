@@ -30,14 +30,12 @@ import (
 	"fmt"
 	"html"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -50,6 +48,7 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
+	"github.com/magic-spells/puzzle/compiler/internal/serve"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
@@ -187,7 +186,28 @@ func Serve(root string, opts Options) error {
 		logWarning(stderr, "%s", configFallbackWarning(cfgErr))
 	}
 
-	srv := newServer(dist, ctx, cfg.Dev.Proxy)
+	// Serving mode (D81). `output: 'static'` projects get the REAL static build in
+	// dev — prerendered pages, clean URLs, full page loads, per-page mountStatic
+	// modules — because that is what ships; serving them through the SPA runtime
+	// would make dev a different application from the build. `hybrid` deliberately
+	// stays on the SPA dev loop: its shipped runtime IS the SPA bundle after
+	// takeover, so the SPA loop already shows what ships (and dev never prerenders
+	// for it, so there would be no pages to serve).
+	staticMode := cfg.Output == "static"
+	serveMode := serve.ModeSPA
+	if staticMode {
+		serveMode = serve.ModeStatic
+		// --fixtures is rejected alongside an output mode (D98); fail here rather
+		// than let every rebuild fail with the same message.
+		if opts.Fixtures {
+			return fmt.Errorf(
+				"puzzle dev --fixtures cannot be combined with output: 'static' in %s — prerender + fixtures interplay is not supported",
+				config.ConfigFileName,
+			)
+		}
+	}
+
+	srv := newServer(dist, serveMode, ctx, cfg.Dev.Proxy)
 
 	// Reload broadcasts are coalesced (D27): one .pzl edit triggers BOTH an
 	// esbuild rebuild AND a Tailwind rescan — two recompositions of styles.css.
@@ -208,19 +228,33 @@ func Serve(root string, opts Options) error {
 	pl := &pipeline{dist: dist}
 	stylesStatus := ""
 
-	tailwindEnabled := cfgErr == nil && cfg.TailwindEnabled()
+	// Static output runs the full one-shot build per rebuild (see the rebuild
+	// closure): the prerender pass needs a complete, atomically swapped dist tree,
+	// which the incremental in-place builder deliberately does not produce. That
+	// path runs Tailwind itself, so neither the warm watcher nor the incremental
+	// context is started here.
+	tailwindEnabled := cfgErr == nil && cfg.TailwindEnabled() && !staticMode
+	if staticMode && cfgErr == nil && cfg.TailwindEnabled() {
+		// build.Build runs the Tailwind CLI itself, once per rebuild — say so
+		// rather than dropping the Styles line and implying no pipeline.
+		stylesStatus = tailwindStatus(resolveTailwindName(absRoot), false)
+	}
 
-	builder, builderErr := build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures})
-	if builderErr != nil {
-		// No incremental context: degrade fully to the non-incremental one-shot
-		// build.Build per change (slower, but correct — including its own Tailwind).
-		logWarning(stderr, "%v (falling back to non-incremental rebuilds)", builderErr)
-		if tailwindEnabled {
-			stylesStatus = tailwindStatus(resolveTailwindName(absRoot), false)
+	var builder *build.WatchBuilder
+	if !staticMode {
+		var builderErr error
+		builder, builderErr = build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures})
+		if builderErr != nil {
+			// No incremental context: degrade fully to the non-incremental one-shot
+			// build.Build per change (slower, but correct — including its own Tailwind).
+			logWarning(stderr, "%v (falling back to non-incremental rebuilds)", builderErr)
+			if tailwindEnabled {
+				stylesStatus = tailwindStatus(resolveTailwindName(absRoot), false)
+			}
+		} else {
+			defer builder.Dispose()
+			pl.collectedCSS = builder.CSS
 		}
-	} else {
-		defer builder.Dispose()
-		pl.collectedCSS = builder.CSS
 	}
 
 	// The warm Tailwind watcher's child process must be reaped on EVERY exit
@@ -317,14 +351,22 @@ func Serve(root string, opts Options) error {
 			return
 		}
 		var err error
-		if builder != nil {
+		switch {
+		case staticMode:
+			// The real static pipeline: bundle, Tailwind, public copy, node
+			// prerender pass, per-page mountStatic bundles — all into a staging dir
+			// that is atomically swapped in. A failed compile OR a failed prerender
+			// discards staging, so the last good pages keep serving and the browser
+			// gets the diagnostic through the D92 channel below.
+			err = build.Build(absRoot, build.Options{Development: true, Output: "static"})
+		case builder != nil:
 			if err = builder.ScanUsage(); err == nil {
 				err = builder.Rebuild()
 			}
 			if err == nil {
 				err = pl.recompose()
 			}
-		} else {
+		default:
 			err = build.Build(absRoot, build.Options{Development: true, Fixtures: opts.Fixtures})
 		}
 		if err != nil {
@@ -351,20 +393,23 @@ func Serve(root string, opts Options) error {
 	}
 
 	// Initial build: keep serving even if it fails (retry on next change).
+	if staticMode {
+		logInfo(stdout, "static output — prerendering every route on each rebuild (no router, plain page loads)")
+	}
 	rebuild(nil, false)
 
 	// Bind synchronously BEFORE the ready banner: a failed bind must surface as a
 	// clean error, with no false "ready" line printed and no browser opened on a
 	// dead port. A port already in use is not a failure — listenDev scans upward
 	// for a free one — but an exhausted scan still lands here.
-	ln, err := listenDev(opts.Port, opts.StrictPort)
+	ln, err := serve.Listen(opts.Port, opts.StrictPort)
 	if err != nil {
 		return fmt.Errorf("dev server: %w", err)
 	}
 	// Everything downstream (banner, browser-open) must report the port actually
 	// BOUND, not the one requested: they differ whenever the scan moved on, and
 	// `--port 0` never had a real number to begin with.
-	port := boundPort(ln, opts.Port)
+	port := serve.BoundPort(ln, opts.Port)
 	if port != opts.Port && opts.Port != 0 {
 		logWarning(stderr, "port %d in use — serving on %d instead", opts.Port, port)
 	}
@@ -407,7 +452,11 @@ func Serve(root string, opts Options) error {
 	}
 
 	url := fmt.Sprintf("http://localhost:%d/", port)
-	printReady(stdout, url, watchLabel(absRoot, appDir), stylesStatus, time.Since(serveStart), quitCh != nil)
+	outputStatus := ""
+	if staticMode {
+		outputStatus = "static (prerendered pages, no router)"
+	}
+	printReady(stdout, url, watchLabel(absRoot, appDir), stylesStatus, outputStatus, time.Since(serveStart), quitCh != nil)
 	if opts.OnReady != nil {
 		opts.OnReady()
 	}
@@ -448,7 +497,12 @@ func Serve(root string, opts Options) error {
 // its handler can be driven directly by httptest without a real listener,
 // watcher, or build.
 type server struct {
-	dist     string
+	dist string
+	// mode is the serving mode from serve: ModeSPA for a default or hybrid
+	// project, ModeStatic for `output: 'static'`. It decides both URL resolution
+	// and where the live-reload client is injected — a static site has no shell,
+	// so every page it serves carries the client.
+	mode     string
 	hub      *hub
 	proxies  map[string]string
 	proxyLog io.Writer
@@ -462,8 +516,8 @@ type server struct {
 	ctx context.Context
 }
 
-func newServer(dist string, ctx context.Context, proxies map[string]string) *server {
-	return &server{dist: dist, hub: newHub(), proxies: proxies, proxyLog: os.Stderr, ctx: ctx}
+func newServer(dist, mode string, ctx context.Context, proxies map[string]string) *server {
+	return &server{dist: dist, mode: mode, hub: newHub(), proxies: proxies, proxyLog: os.Stderr, ctx: ctx}
 }
 
 func (s *server) rememberBuildError(message string) {
@@ -541,51 +595,57 @@ func (s *server) reverseProxy(prefix, targetURL string) http.Handler {
 	return proxy
 }
 
-// serveStatic serves an existing regular file under dist verbatim; any other
-// path (unknown route, extension-less path, missing file) falls back to a
-// freshly-injected index.html so the SPA router owns client-side routes.
+// serveStatic answers a request against dist/ per the serving mode. serve.Resolve
+// owns the URL→file mapping (SPA history fallback vs static clean URLs + a real
+// 404); this method only decides how the chosen file is written:
+//
+//   - the root SPA shell goes through serveIndex, which injects the live-reload
+//     client and degrades to the D92 build-error page when the file is missing;
+//   - an HTML page is written out directly — verbatim in SPA mode (a nested
+//     dist/docs/index.html is a real page, not the shell), with the reload client
+//     injected in static mode, where every page is a real page and there is no
+//     shell to carry the client;
+//   - anything else is streamed by http.ServeFile.
+//
+// http.ServeFile cannot serve the HTML pages: it 301-redirects any
+// ".../index.html" request to ".../" (its documented index-page special case).
 func (s *server) serveStatic(w http.ResponseWriter, r *http.Request) {
-	clean := path.Clean(r.URL.Path)
-	if clean == "/" || clean == "." {
+	res := serve.Resolve(s.dist, s.mode, r.URL.Path)
+	switch {
+	case res.Shell:
 		s.serveIndex(w, r)
-		return
+	case res.File == "":
+		// Static-mode miss with no built 404.html.
+		s.serveStaticMiss(w)
+	case res.HTML:
+		s.serveHTMLFile(w, res.File, res.Status)
+	default:
+		http.ServeFile(w, r, res.File)
 	}
+}
 
-	candidate := filepath.Join(s.dist, filepath.FromSlash(strings.TrimPrefix(clean, "/")))
-	if !withinDir(s.dist, candidate) {
-		s.serveIndex(w, r)
+// serveStaticMiss answers a static-mode URL that resolves to no file. A broken
+// build is reported the same way the SPA path reports it (D92); otherwise the
+// answer is a real 404 — that is what the host would do — but the reload client
+// rides along so the page self-heals once the route exists.
+func (s *server) serveStaticMiss(w http.ResponseWriter) {
+	if message := s.currentBuildError(); message != "" {
+		s.serveBuildErrorShell(w, message)
 		return
 	}
-	if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-		// Defense in depth: withinDir above is lexical, so a symlink under dist
-		// pointing outside it still passes that check and http.ServeFile would
-		// follow it. Resolve the real path and re-check before serving.
-		if !withinDirResolved(s.dist, candidate) {
-			s.serveIndex(w, r)
-			return
-		}
-		// The ROOT index.html is the SPA shell: read dist/index.html and inject the
-		// live-reload client. Requesting it directly ("/index.html") is equivalent
-		// to "/". A NESTED index.html (dist/docs/index.html) is a real page and is
-		// NOT the shell — serving the injected root shell there would shadow it.
-		if candidate == filepath.Join(s.dist, "index.html") {
-			s.serveIndex(w, r)
-			return
-		}
-		// Serve a nested index.html verbatim (no injection). http.ServeFile can't
-		// be used: it 301-redirects any ".../index.html" request to ".../" (its
-		// documented index-page special case), which then resolves to a directory
-		// and falls through to the root shell — the exact shadowing we are fixing.
-		if filepath.Base(candidate) == "index.html" {
-			s.serveRawHTML(w, candidate)
-			return
-		}
-		http.ServeFile(w, r, candidate)
-		return
-	}
-
-	// History-API fallback: non-file paths render the SPA shell.
-	s.serveIndex(w, r)
+	page := `<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>404 — not found</title></head>
+<body>
+<h1>404</h1>
+<p>No page was prerendered for this URL. In static output every URL is a file, so
+this is what a static host would answer too.</p>
+</body>
+</html>`
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = w.Write(injectReload([]byte(page)))
 }
 
 // serveIndex reads dist/index.html, injects the live-reload client, and writes
@@ -631,20 +691,28 @@ func (s *server) serveBuildErrorShell(w http.ResponseWriter, message string) {
 	_, _ = w.Write(injectReload([]byte(page)))
 }
 
-// serveRawHTML writes an on-disk .html file verbatim, with NO live-reload
-// injection. It exists for NESTED index.html files: http.ServeFile would
-// 301-redirect any ".../index.html" request to ".../" (its "/index.html" → "./"
-// special case), which resolves to a directory and falls through to the root SPA
-// shell — so those files must be written out directly instead.
-func (s *server) serveRawHTML(w http.ResponseWriter, path string) {
+// serveHTMLFile writes an on-disk .html file with the given status. In SPA mode
+// it is verbatim — a nested dist/docs/index.html is a real page and injecting
+// into it would be a surprise. In static mode the live-reload client is injected
+// (serve-time only; dist/ on disk stays production-clean), because every static
+// page is served this way and none of them would otherwise reach the SSE channel
+// that drives reload and the D92 error overlay.
+func (s *server) serveHTMLFile(w http.ResponseWriter, path string, status int) {
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if s.mode == serve.ModeStatic {
+			s.serveStaticMiss(w)
+			return
+		}
 		http.Error(w, "puzzle dev: file not found", http.StatusNotFound)
 		return
 	}
+	if s.mode == serve.ModeStatic {
+		data = injectReload(data)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(status)
 	_, _ = w.Write(data)
 }
 
@@ -1070,62 +1138,7 @@ func pollFile(ctx context.Context, path string, interval time.Duration, onChange
 	}
 }
 
-// portScanLimit is how many consecutive ports listenDev tries before giving up.
-// A busy default port is a papercut, not a failure (the same posture as Vite,
-// Next, and Astro), but the scan is bounded so a wedged machine reports a real
-// error instead of walking the port space.
-const portScanLimit = 10
-
-// listenDev binds the first free loopback port at or above `port`, returning the
-// listener. With strict set, only `port` itself is tried.
-//
-// Loopback only: the dev server (and its live-reload SSE endpoint) is a local
-// convenience, not a LAN service. The banner prints localhost, so the bind must
-// match. No host config option in v1.
-//
-// Any bind failure advances the scan, and the FIRST error is what surfaces once
-// the range is exhausted — it belongs to the port the user actually asked for.
-// Testing for EADDRINUSE specifically would need per-OS errno handling (Windows
-// reports WSAEADDRINUSE), and it buys nothing: a failure that is not "in use"
-// (permission, unavailable interface) fails identically on every candidate, so
-// the scan costs a few syscalls and still reports the right error.
-//
-// Port 0 is passed through untouched — the kernel picks a free port and the one
-// attempt always succeeds, so there is nothing to scan.
-func listenDev(port int, strict bool) (net.Listener, error) {
-	const maxPort = 65535
-
-	if port < 0 || port > maxPort {
-		return nil, fmt.Errorf("invalid port %d: must be between 0 and %d", port, maxPort)
-	}
-
-	var firstErr error
-	for candidate := port; candidate <= maxPort; candidate++ {
-		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candidate))
-		if err == nil {
-			return ln, nil
-		}
-		if firstErr == nil {
-			firstErr = err
-		}
-		if strict || port == 0 || candidate-port >= portScanLimit-1 {
-			break
-		}
-	}
-	return nil, firstErr
-}
-
-// boundPort reports the port a listener actually bound, falling back to fallback
-// for a non-TCP address that could never occur through listenDev but should not
-// panic a type assertion if it ever did.
-func boundPort(ln net.Listener, fallback int) int {
-	if tcp, ok := ln.Addr().(*net.TCPAddr); ok {
-		return tcp.Port
-	}
-	return fallback
-}
-
-func printReady(p *ui.Printer, url, watching, stylesText string, elapsed time.Duration, showQuitHint bool) {
+func printReady(p *ui.Printer, url, watching, stylesText, outputText string, elapsed time.Duration, showQuitHint bool) {
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintf(
 		os.Stdout,
@@ -1138,6 +1151,9 @@ func printReady(p *ui.Printer, url, watching, stylesText string, elapsed time.Du
 	printInfoLine(p, "Watching:", p.Dim(watching))
 	if stylesText != "" {
 		printInfoLine(p, "Styles:", p.Dim(stylesText))
+	}
+	if outputText != "" {
+		printInfoLine(p, "Output:", p.Dim(outputText))
 	}
 	// Only advertise 'q' when the key listener is actually active (a real TTY).
 	if showQuitHint {
@@ -1198,6 +1214,18 @@ func configFallbackWarning(err error) string {
 	return fmt.Sprintf(
 		"%v — continuing with defaults: no Tailwind pipeline and no dev.proxy (proxied paths will fall through to the SPA shell); fix the config and restart",
 		err,
+	)
+}
+
+// logInfo prints a dimmed status line in the rebuild-line style — used for facts
+// about the loop itself (the static-output notice), not for build results.
+func logInfo(p *ui.Printer, format string, args ...any) {
+	fmt.Fprintf(
+		os.Stdout,
+		"%s %s %s\n",
+		p.Dim(ui.Clock()),
+		p.Bold(p.Cyan("[puzzle]")),
+		p.Dim(fmt.Sprintf(format, args...)),
 	)
 }
 
