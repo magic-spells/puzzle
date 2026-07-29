@@ -564,7 +564,7 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
       (One real catch: `music/Playlist.pzl`'s inline rename. Its `@keydown:enter`
       / `@keydown:escape` do NOT suppress, so it newly bound live and Escape
       could no longer cancel — escaped with `String(playlist.name)`.)
-- [ ] Build todos + binding with the repo-root `./puzzle` binary; click through in a real
+- [x] Build todos + binding with the repo-root `./puzzle` binary; click through in a real
       browser: typing (caret never jumps mid-word), checkbox, select, number commit on
       change, range slider live. **IME check:** compose Japanese into a bound input — no
       dropped characters. (jsdom can't do composition or number-input sanitization.)
