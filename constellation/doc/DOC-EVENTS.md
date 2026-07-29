@@ -290,15 +290,15 @@ events = {
 // Wrong — removed pattern; the handler would receive `todo` and return
 // an unused inner function
 events = {
-  toggleTodo: (todo) => () => {
-    todo.toggle();
+  togglePinned: (todo) => () => {
+    todo.update({ pinned: !todo.pinned });
   },
 };
 
 // Right
 events = {
-  toggleTodo: (todo) => {
-    todo.toggle();
+  togglePinned: (todo) => {
+    todo.update({ pinned: !todo.pinned });
   },
 };
 ```

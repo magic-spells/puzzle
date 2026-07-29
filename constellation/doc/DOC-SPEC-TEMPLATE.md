@@ -31,8 +31,8 @@ Three forms in templates, one rule each:
 
 ```html
 <form @submit={ addTodo(event) }>
-<input @input={ updateNewTodoText(event) } />
-<input type="checkbox" @change={ toggleTodo(todo) } />
+<input @keydown:enter={ addTodo(event) } />
+<button @click={ deleteTodo(todo) }>×</button>
 <button @click={ setFilter('all') }>All</button>
 <button @click={ clearCompleted }>Clear</button>
 ```
@@ -40,14 +40,16 @@ Three forms in templates, one rule each:
 ```js
 events = {
   addTodo: (event) => { event.preventDefault(); /* … */ },
-  updateNewTodoText: (event) => { this.setData('newTodoText', event.target.value); },
-  toggleTodo: (todo) => { todo.toggle(); },
+  deleteTodo: (todo) => { todo.destroy(); },
   setFilter: (filter) => { this.setData('currentFilter', filter); },
   clearCompleted: () => { /* … */ },
 };
 ```
 
-The curried pattern from older examples (`toggleTodo: (todo) => () => { ... }`) is removed.
+Form controls carrying a path-shaped `value=`/`checked=` need no handler —
+they two-way bind (§6, D147); an author `@input`/`@change` on the control
+suppresses the synthesis and owns the write. The curried pattern from older
+examples (`deleteTodo: (todo) => () => { ... }`) is removed.
 
 ### Event modifiers (v1.7, D38)
 
