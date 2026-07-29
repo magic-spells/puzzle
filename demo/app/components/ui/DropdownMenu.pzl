@@ -13,7 +13,7 @@
       @keydown:down:prevent={ onTriggerDown(event) }
       @keydown:up:prevent={ onTriggerUp(event) }
       @keydown:escape={ onTriggerEscape(event) }>
-      <slot name="trigger">
+      <Slot name="trigger">
         <span>{ label }</span>
         <svg
           class="size-4 shrink-0 transition-[rotate] {#if open}rotate-180{/if}"
@@ -22,7 +22,7 @@
           aria-hidden="true">
           <path d="M4 6l4 4 4-4z" />
         </svg>
-      </slot>
+      </Slot>
     </button>
 
     {#if open}
@@ -89,6 +89,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   <DropdownMenu align="end" items={ items } @select={ pick }>
 //     <span slot="trigger">Custom trigger</span>
 //   </DropdownMenu>
+//
+// TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141):
+// the `label` text plus the rotating chevron. Fill slot="trigger" and it REPLACES
+// that fallback — a filled slot wins over `label`, so a custom trigger must carry
+// its own accessible name (aria-label or an .sr-only span) instead of leaning on
+// `label`. Passing neither renders an empty button.
 //
 // items entries:
 //   { label, value?, href?, danger?, disabled? }  interactive (href → <a>)

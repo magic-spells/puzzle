@@ -14,7 +14,7 @@
       <Slot/>
     </div>
     <div class="flex items-center gap-2 p-6 pt-0 empty:hidden">
-      <slot name="footer"/>
+      <Slot name="footer"/>
     </div>
   </div>
 </puzzle-view>

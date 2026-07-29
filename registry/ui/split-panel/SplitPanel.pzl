@@ -7,7 +7,7 @@
     @keydown={ onKeyDown(event) }>
 
     <div class={ paneClass } style={ firstStyle } data-split-pane="first">
-      <slot name="first"/>
+      <Slot name="first"/>
     </div>
 
     <div
@@ -26,7 +26,7 @@
     </div>
 
     <div class={ paneClass } style={ secondStyle } data-split-pane="second">
-      <slot name="second"/>
+      <Slot name="second"/>
     </div>
   </div>
 </puzzle-view>

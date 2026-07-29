@@ -28,7 +28,7 @@
 
       <div class={ bubbleClass }><div class="text-sm leading-relaxed whitespace-pre-wrap"><Slot/></div></div>
 
-      <div class={ attachClass }><slot name="attachments"/></div>
+      <div class={ attachClass }><Slot name="attachments"/></div>
     </div>
   </div>
 </puzzle-view>
