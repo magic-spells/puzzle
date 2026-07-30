@@ -79,6 +79,8 @@ export const SECTIONS = [
 		items: [
 		{ name: "alert-dialog", title: "Alert Dialog", path: "/components/alert-dialog",
 			description: "Confirm/cancel modal for destructive or consequential actions on the native <dialog role=\"alertdialog\"> element — no backdrop dismiss, no close X, Escape cancels, initial focus on Cancel" },
+		{ name: "bottom-sheet", title: "Bottom Sheet", path: "/components/bottom-sheet",
+			description: "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state" },
 		{ name: "command", title: "Command", path: "/components/command",
 			description: "Command palette — filtered, grouped, keyboard-driven quick actions in a modal" },
 		{ name: "context-menu", title: "Context Menu", path: "/components/context-menu",
@@ -96,7 +98,7 @@ export const SECTIONS = [
 		{ name: "popover", title: "Popover", path: "/components/popover",
 			description: "Click-toggled floating panel with slot trigger, auto-flip, and outside-click dismiss" },
 		{ name: "sheet", title: "Sheet", path: "/components/sheet",
-			description: "Bottom sheet with drag-to-dismiss physics; becomes a centered modal on wide viewports" },
+			description: "One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, entrance and exit effects, a dismiss policy, and parent-controlled open state" },
 		{ name: "tooltip", title: "Tooltip", path: "/components/tooltip",
 			description: "Hover/focus text hint with delay and four placements" },
 		],

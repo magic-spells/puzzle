@@ -1,0 +1,14 @@
+{
+  "name": "bottom-sheet",
+  "description": "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state",
+  "files": [
+    "BottomSheet.pzl"
+  ],
+  "registryDependencies": [
+    "lib/sheet-math.js"
+  ],
+  "dependencies": [
+    "@magic-spells/physics-engine"
+  ],
+  "targetDir": "app/components/ui"
+}

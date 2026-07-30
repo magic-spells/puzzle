@@ -30,7 +30,7 @@ connections:
 # Puzzle Pieces
 
 A **copy-in** UI component registry for the [Puzzle framework](../puzzle):
-85 Tailwind-styled, accessible, morph-aware `.pzl` pieces distributed as **source you
+90 Tailwind-styled, accessible, morph-aware `.pzl` pieces distributed as **source you
 copy into a consumer app**, not packages you install. This card is the map; the
 always-load rules, conventions, and hard-won gotchas live in `CLAUDE.md` (read it every
 session) and are not duplicated here.
@@ -65,7 +65,7 @@ registry shape, the CLI, the native rebuilds — follows from it. See
 
 ## Current state
 
-All 85 pieces are built, compile-verified against the real compiler, and demo-verified.
+All 90 pieces are built, compile-verified against the real compiler, and demo-verified.
 The [[FEATURE-ADD-CLI]] shipped in the Puzzle Go CLI (`puzzle add piece`). Publishing
 v0.1.0 means making this repo public — no npm package — and is tracked in
 [[RELEASE-V0-1-0]]. Sibling repos are linked in `connected_repos` above (`repo:`

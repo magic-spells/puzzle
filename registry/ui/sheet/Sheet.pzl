@@ -1,468 +1,1320 @@
 <puzzle-view>
   <dialog
-    class={ panelClass }
+    class={ dialogClass }
     aria-labelledby={ labelledby }
-    @cancel={ handleCancel(event) }
-    @click={ handleBackdropClick(event) }>
-
-    {#if mobile}
-      <div
-        class="flex-shrink-0 touch-none select-none {#if canDrag}cursor-grab{/if}"
-        @pointerdown={ dragStart(event, true) }
-        @pointermove={ dragMove }
-        @pointerup={ dragEnd }
-        @pointercancel={ dragEnd }>
-        {#if canDrag}
-          <div class="mx-auto my-3 h-1 w-10 rounded-full bg-faint" aria-hidden="true"></div>
-        {/if}
-        {#if title}
-          <h2 id={ titleId } class="px-4 pb-3 text-base font-semibold text-ink text-center">{ title }</h2>
-        {/if}
-      </div>
-    {:else}
-      {#if title}
-        <h2 id={ titleId } class="px-4 pt-5 pb-2 text-base font-semibold text-ink">{ title }</h2>
-      {/if}
-    {/if}
+    @cancel={ handleCancel }>
 
     <div
-      class="overflow-y-auto overscroll-contain px-4 pb-4 max-h-[80vh]"
-      @pointerdown={ dragStart(event, false) }
-      @pointermove={ dragMove }
-      @pointerup={ dragEnd }
-      @pointercancel={ dragEnd }>
-      <Slot/>
+      ref="backdrop"
+      data-sheet-surface="backdrop"
+      class={ backdropClass }></div>
+
+    <div ref="panel" class={ panelClass }>
+      <div
+        ref="header"
+        data-sheet-surface="header"
+        class={ headerClass }>
+        <Slot name="header">
+          {#if showGrabber}
+            <div class={ grabberClass } aria-hidden="true"></div>
+          {/if}
+          {#if title}
+            <h2 id={ titleId } class={ titleClass }>{ title }</h2>
+          {/if}
+        </Slot>
+      </div>
+
+      <div
+        ref="content"
+        data-sheet-surface="content"
+        class={ contentClass }
+        @touchmove={ scrollVeto }>
+        <Children/>
+      </div>
+
+      <div
+        ref="footer"
+        data-sheet-surface="footer"
+        class={ footerClass }>
+        <Slot name="footer"/>
+      </div>
     </div>
   </dialog>
 </puzzle-view>
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
+import {
+  awayOffset,
+  dismissAxis,
+  EXIT_CUSHION,
+  parseDismiss,
+  parseSpring,
+  SheetEngine,
+} from '../../lib/sheet-engine.js';
+import {
+  contentClaimDirection,
+  normalizeScrollLeft,
+  resolveInitialSnap,
+  resolveSnapPoints,
+  resolveSnapTarget,
+} from '../../lib/sheet-policy.js';
+import { DragGesture } from '../../lib/sheet-drag.js';
 
-// Sheet — a bottom sheet with drag-to-dismiss, built on the native <dialog>
-// element (a behavioral port of @magic-spells/bottom-sheet, which layered touch
-// physics on top of @magic-spells/dialog-panel). Native showModal() gives us
-// focus trapping, page inerting, Escape-as-`cancel`, and the top-layer backdrop
-// for free; this component adds the drag gesture and the mobile/desktop split.
+// Sheet — a one-component Puzzle port of the @magic-spells/sheet web-component
+// family. The native <dialog> is a transparent, full-viewport top-layer shell;
+// the engine animates the inner panel div, and a real backdrop div makes the
+// overlay a gesture surface while the native ::backdrop remains transparent.
 //
-// CONTROLLED BY THE PARENT (same contract as Dialog). The parent owns `open`;
-// Sheet reconciles the native element to it in mounted()/afterUpdate() via
-// syncOpen(). Sheet never sets `open` itself — it only asks the parent to close
-// through the `close` callback, tagging every dismissal with a reason.
+// CONTROLLED CONTRACT. `open` is required and is never mutated here. Escape,
+// a backdrop tap, or an allowed swipe calls @close(reason), where reason is
+// 'escape', 'backdrop', or 'swipe'. The parent flips `open`; syncOpen() then
+// asks SheetEngine to hide, and only the engine's `hidden` event closes the
+// native dialog. Native `cancel` is always preventDefault'd. maxDisplayWidth is
+// an opening ceiling: above it a closed open intent is suppressed without
+// manufacturing a user-dismissal reason. It never tears down an already-open
+// controlled sheet; shrinking below the ceiling opens while `open` remains true.
 //
-//   <Sheet open={ open } title="Filters"
-//          @close={ (reason) => setData('open', false) }>
-//     <FilterList/>
-//   </Sheet>
+// SNAP CONTRACT. `snapPoints` accepts a space-separated CSS-length string or an
+// array of lengths (px, vh/dvh/svh/lvh, vw, rem, or %); default '85vh'. calc()
+// is intentionally unsupported because this port resolves through the pure
+// policy helper instead of a browser CSS probe. Mobile bottom profiles use the
+// full ascending list. Desktop bottom keeps only the largest snap and is
+// dismiss-only. Left/right/center ignore snapPoints: sides use their measured
+// fixed width and center uses its measured intrinsic height. `snap` is
+// optional-controlled: when present, the parent owns the index through
+// @snapChange(index); when absent, the piece commits releases locally.
+// `initialSnap` selects the first uncontrolled index and defaults to largest.
 //
-// @close(reason) fires for user-driven dismissal only — reason is
-// 'escape' (native cancel), 'backdrop' (click on the dialog/backdrop region), or
-// 'drag' (dragged past the dismiss threshold) — and only when `dismissible`
-// (default true). When dismissible is false all three are disabled and the drag
-// handle affordance is removed.
+// SLOTS. The named header slot replaces the ENTIRE stock header fallback —
+// grabber and title together. Because Puzzle has no slot-filled probe, a custom
+// header must bring its own accessible heading and pass `labelledby`; otherwise
+// the title fallback supplies the generated heading id. The footer wrapper is
+// `empty:hidden`. Untagged call-site content renders through <Children/>.
 //
-// MOBILE vs DESKTOP (the source's max-display-width, reinterpreted). At viewports
-// wider than `maxDisplayWidth` (px, default 640) the sheet renders as a centered
-// modal (rounded-xl, max-w-lg, m-auto) with no handle and no drag; escape/backdrop
-// still dismiss. A matchMedia listener (wired in mounted(), torn down in
-// destroyed()) drives the reactive `mobile` flag. Native <dialog>:modal is
-// position:fixed inset:0 with margin:auto; `m-0 mt-auto` turns that centering
-// into a bottom pin, `m-auto` keeps it centered for the modal form.
+// MEASUREMENT. CSS-token probing from the source is gone. prepareOpen() lays out
+// the real panel (temporarily display:flex + visibility:hidden while the dialog
+// is closed), then reads getBoundingClientRect(). Side width, center height, and
+// every card-mode edge inset therefore match the caller's actual Tailwind
+// overrides exactly. Bottom snaps use live viewport/root-font metrics. Numeric
+// props replace the remaining probes: exitCushion defaults to 28px;
+// morphDuration defaults to 420ms and collapses to 0 under reduced motion.
 //
-// PORTED DRAG STATE MACHINE (from bottom-sheet.js). Thresholds/physics are
-// identical: dismiss past #dragThreshold = 100px of downward travel; upward
-// drags get rubber-band resistance sqrt(|d|) * 10 * #overscrollResistance (0.1);
-// on release, dismiss (>threshold, downward) or spring back to rest (everything
-// else). Disambiguation mirrors the source: the header is always a drag surface;
-// the content region only starts a sheet-drag when it is scrolled to the top
-// (scrollTop === 0) AND the finger moves downward — otherwise it is a normal
-// content scroll and we bail, leaving the browser to handle it.
+// GESTURES AND DISMISS POLICY. Four DragGesture instances preserve the source's
+// continuous tracking, independent axes, rolling velocity, and deferred pointer
+// capture. Header/footer/backdrop always claim; content snapshots its complete
+// scroll chain at pointerdown and delegates the finger-space decision to
+// sheet-policy. The one template touchmove listener prevents native scrolling
+// only after the sheet claims. `dismiss` is parsed LIVE at every escape,
+// backdrop, and swipe guard. A refused swipe is redirected to the active snap
+// and reports snapRelease({ prevented: true }); an allowed swipe queues release
+// velocity on SheetEngine before asking the parent to close.
 //
-// POINTER, NOT TOUCH (modernization). The source used raw touch events with
-// { passive: false } + preventDefault to arbitrate scroll-vs-drag. This port uses
-// pointer events with setPointerCapture: the header (touch-action: none via
-// `touch-none`) is the rock-solid primary drag surface; content-drag captures
-// lazily only once a downward-at-top move is confirmed, so taps and clicks inside
-// the content still reach their targets and ordinary scrolling is untouched.
+// PROFILE MORPH. A breakpoint/profile-key crossing while open is a synchronous
+// FLIP split across Puzzle's patcher: beginMorph() parks the spring and pins the
+// backdrop; the live FROM box is read; new literal class maps are patched; then
+// afterUpdate() measures the unpinned TO box and transitions explicit
+// top/left/width/height/border-radius pixels. transitionend and a duration+120ms
+// timeout share one teardown. Re-entrant crossings always retarget from the
+// currently painted box. Same-profile resizes remeasure without morphing.
 //
-// IMPERATIVE TRANSFORM ESCAPE HATCH. During a live gesture the finger position is
-// applied straight to the <dialog> with `element.style.transform` — a native-API
-// imperative write confined to the drag, NEVER setData (a pointermove at 60fps
-// must not re-render). At gesture end the inline transform is cleared (or held at
-// translateY(100%) through the dismiss animation, then cleared in syncOpen on the
-// native close) so classes own the resting state again. No morph here, so the
-// morph-engine no-transform constraint does not apply — the transform is strictly
-// transient.
-const BACKDROP =
-  '[&::backdrop]:bg-black/50 [&::backdrop]:backdrop-blur-sm ' +
-  '[&::backdrop]:transition-opacity [&::backdrop]:duration-150 ' +
-  '[&[data-closing]::backdrop]:opacity-0';
-
-// Display is gated on open: — a bare `flex` on a <dialog> would override the
-// UA's `dialog:not([open]) { display: none }` and leave the closed sheet
-// visible in the page flow.
-const SHEET =
-  'm-0 mt-auto w-full max-w-full rounded-t-2xl border-t border-border bg-surface ' +
-  'p-0 open:flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] ' +
-  'text-body will-change-transform';
-
-const MODAL =
-  'm-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border border-border bg-surface ' +
-  'p-0 open:flex flex-col overflow-hidden shadow-xl text-body';
-
+// IMPERATIVE INLINE STYLES. The panel and backdrop deliberately have NO
+// `style={}` bindings and there is no <style> block. SheetEngine/DragGesture/
+// morph code own panel inline styles between renders; the engine change listener
+// alone writes backdrop opacity. The source's public --sheet-progress and
+// --sheet-backdrop-progress CSS tokens are deliberately dropped: the real
+// backdrop consumes engine.backdropProgress directly.
 let uid = 0;
 
-export default class Sheet extends PuzzleView {
-  // physics constants (ported verbatim from bottom-sheet.js)
-  #dragThreshold = 100;
-  #overscrollResistance = 0.1;
+const POSITIONS = new Set(['bottom', 'left', 'right', 'center']);
+const MODES = new Set(['edge', 'card']);
+const EFFECTS = new Set(['slide', 'fade-scale', 'slide-fade', 'pop']);
+const SCROLLABLE_OVERFLOW = new Set(['auto', 'scroll']);
 
-  // transient gesture state — instance-local, never setData (would re-render mid-drag)
-  #drag = {
-    active: false,
-    pointerId: null,
-    startY: 0,
-    delta: 0,
-    direction: null,
-    isHeader: false,
-    isAtTop: false,
-    captured: false,
-    captureEl: null,
+const RESIZE_THROTTLE_MS = 100;
+const FLICK_VELOCITY = 0.5;
+const OVERSCROLL_RESISTANCE = 0.2;
+const MORPH_TIMEOUT_PADDING_MS = 120;
+const DEFAULT_MORPH_DURATION = 420;
+const DEFAULT_MORPH_EASING = 'cubic-bezier(0.34, 1.32, 0.52, 1)';
+
+const DIALOG =
+  'fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-transparent p-0 ' +
+  'open:flex overflow-hidden text-body [&::backdrop]:bg-transparent';
+
+const DIALOG_PROFILE = {
+  bottom: 'flex-col justify-end',
+  left: 'flex-row justify-start',
+  right: 'flex-row justify-end',
+  center: 'items-center justify-center',
+};
+
+const BACKDROP =
+  'absolute inset-0 bg-black/50 backdrop-blur-sm touch-none';
+
+const PANEL_BASE =
+  'relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface will-change-transform';
+
+// A shadow is always transparent BLACK, never a theme colour. `--color-faint`
+// is a text token and becomes light in dark mode, which paints a white halo.
+// These recipes keep the source/BottomSheet ambient pair literally visible to
+// Tailwind's scanner. The edge recipes add a surface-colour bleed skirt so
+// rubber-band travel cannot expose the backdrop past a flush screen edge.
+const PANEL_BOTTOM_EDGE =
+  'h-[85dvh] max-h-[100dvh] w-full rounded-t-2xl border-t border-border ' +
+  'pb-[env(safe-area-inset-bottom,0px)] ' +
+  'shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
+
+const PANEL_BOTTOM_CARD =
+  'mx-auto mb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] h-[85dvh] max-h-[calc(100dvh-1.5rem)] ' +
+  'w-[calc(100%-1.5rem)] rounded-2xl border border-border ' +
+  'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
+
+const PANEL_LEFT_EDGE =
+  'h-full w-[min(26rem,90vw)] rounded-r-2xl border-r border-border ' +
+  'pl-[env(safe-area-inset-left,0px)] ' +
+  'shadow-[-120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
+
+const PANEL_RIGHT_EDGE =
+  'h-full w-[min(26rem,90vw)] rounded-l-2xl border-l border-border ' +
+  'pr-[env(safe-area-inset-right,0px)] ' +
+  'shadow-[120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
+
+const PANEL_LEFT_CARD =
+  'my-[0.75rem] ml-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] ' +
+  'w-[min(26rem,90vw)] rounded-2xl border border-border ' +
+  'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
+
+const PANEL_RIGHT_CARD =
+  'my-[0.75rem] mr-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] ' +
+  'w-[min(26rem,90vw)] rounded-2xl border border-border ' +
+  'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
+
+const PANEL_CENTER =
+  'm-auto h-fit w-[min(28rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-1.5rem)] ' +
+  'rounded-2xl border border-border ' +
+  'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
+
+const PANEL_PROFILE = {
+  'bottom:edge': PANEL_BOTTOM_EDGE,
+  'bottom:card': PANEL_BOTTOM_CARD,
+  'left:edge': PANEL_LEFT_EDGE,
+  'left:card': PANEL_LEFT_CARD,
+  'right:edge': PANEL_RIGHT_EDGE,
+  'right:card': PANEL_RIGHT_CARD,
+};
+
+// Desktop bottom cards yield this default cap outright when the caller supplies
+// any max-width utility. Registry class strings have no conflict resolver, and
+// Tailwind's generated selector order otherwise makes a plain override win for
+// some utility spellings and lose for others.
+const PANEL_WIDTH_CAP = 'max-w-[26rem]';
+const CALLER_MAX_WIDTH = /(?:^|\s)\S*max-w-/;
+
+const HEADER = 'shrink-0 touch-none select-none px-4';
+const CONTENT =
+  'min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain touch-pan-x touch-pan-y px-4 py-4';
+const FOOTER = 'shrink-0 touch-none bg-surface p-4 empty:hidden';
+
+const GRABBER_BOTTOM =
+  'pointer-fine:hidden mx-auto my-3 h-1 w-10 rounded-full bg-faint';
+const GRABBER_LEFT =
+  'pointer-fine:hidden absolute right-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint';
+const GRABBER_RIGHT =
+  'pointer-fine:hidden absolute left-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint';
+
+const TITLE_BOTTOM = 'pb-3 text-center text-base font-semibold text-ink';
+const TITLE_SIDE = 'py-4 text-left text-base font-semibold text-ink';
+const TITLE_CENTER = 'pt-4 text-center text-base font-semibold text-ink';
+
+const MORPH_PROPERTIES = [
+  'position',
+  'top',
+  'left',
+  'right',
+  'bottom',
+  'width',
+  'height',
+  'maxWidth',
+  'maxHeight',
+  'margin',
+  'borderRadius',
+  'transition',
+];
+
+const MORPH_TRANSITION_PROPERTIES = [
+  'top',
+  'left',
+  'width',
+  'height',
+  'border-radius',
+];
+
+function scrollMetrics(element) {
+  const rtl = getComputedStyle(element).direction === 'rtl';
+  return {
+    scrollTop: element.scrollTop,
+    scrollLeft: normalizeScrollLeft(
+      element.scrollLeft,
+      element.scrollWidth,
+      element.clientWidth,
+      rtl
+    ),
+    scrollHeight: element.scrollHeight,
+    scrollWidth: element.scrollWidth,
+    clientHeight: element.clientHeight,
+    clientWidth: element.clientWidth,
+  };
+}
+
+function scrollsOnAxis(element, axis) {
+  const style = getComputedStyle(element);
+  return SCROLLABLE_OVERFLOW.has(axis === 'x' ? style.overflowX : style.overflowY);
+}
+
+export default class Sheet extends PuzzleView {
+  #mounted = false;
+  #engine = null;
+  #gestures = [];
+  #profile = null;
+  #renderProfile = null;
+  #queuedProfile = null;
+  #snaps = [];
+  #drag = { active: false };
+  #localSnap = null;
+  #settleTarget = null;
+  #programmaticSnap = null;
+  #snapRun = 0;
+  #bodyOverflow = null;
+  #returnFocus = null;
+  #resizeHandler = null;
+  #resizeTimer = null;
+  #centerObserver = null;
+  #centerTimer = null;
+  #pendingMorph = null;
+  #morph = null;
+  #measureSignature = null;
+  #needsRemeasure = false;
+  #springSignature = null;
+  #appliedProfileSignature = null;
+
+  #engineChange = ({ backdropProgress }) => {
+    if (this.refs.backdrop) {
+      const value = Number.isFinite(backdropProgress) ? backdropProgress : 0;
+      this.refs.backdrop.style.opacity = String(Math.min(1, Math.max(0, value)));
+    }
   };
 
-  // matchMedia plumbing for the mobile/desktop split
-  #mql = null;
-  #mqlHandler = null;
+  #engineShown = () => {
+    if (this.refs.backdrop) this.refs.backdrop.style.opacity = '1';
+    this.#syncCenterObserver();
+    const { shown } = this.props;
+    if (typeof shown === 'function') shown();
+  };
 
-  // exit-animation state: the running out animation, and a flag set by the
-  // drag-dismiss path (which has already animated the slide) so syncOpen()
-  // closes immediately instead of animating a second time.
-  #exit = null;
-  #skipExit = false;
+  #engineHidden = () => {
+    const dialog = this.element;
+    if (dialog?.open) dialog.close();
+    if (this.refs.backdrop) this.refs.backdrop.style.opacity = '0';
+    this.#drag = { active: false };
+    this.#settleTarget = null;
+    this.#programmaticSnap = null;
+    this.#syncCenterObserver();
+    this.#unlockBody();
+    this.#restoreFocus();
+    const { hidden } = this.props;
+    if (typeof hidden === 'function') hidden();
+  };
+
+  #engineSnapChange = (detail) => {
+    const to = detail.to;
+    const programmatic = this.#programmaticSnap === to;
+    this.#settleTarget = null;
+    this.#programmaticSnap = null;
+
+    if (!this.#controlledSnap()) this.#localSnap = to;
+    if (!programmatic) {
+      const { snapChange } = this.props;
+      if (typeof snapChange === 'function') snapChange(to);
+    }
+  };
 
   data(params, props) {
     const id = (this._id ??= `pp-sheet-${++uid}`);
-    const mobile = this.#currentMobile(props);
-    const title = props.title || '';
-    // no drag / no handle affordance when not dismissible, and never on desktop
-    const canDrag = mobile && props.dismissible !== false;
-    return {
-      // `open` is read imperatively in syncOpen(), not by the template — returning
-      // it keeps the afterUpdate() cycle firing when the parent flips it.
-      open: !!props.open,
-      mobile,
-      title,
-      canDrag,
-      titleId: `${id}-title`,
-      labelledby: title ? `${id}-title` : false,
-      panelClass: this.#panelClass(mobile, props),
-    };
-  }
+    const requestedProfile = this.#resolveProfile(props);
+    let renderedProfile = requestedProfile;
 
-  // ---- mobile/desktop resolution --------------------------------------------
-
-  #currentMobile(props = this.props) {
-    const max = Number(props.maxDisplayWidth) || 640;
-    if (typeof window === 'undefined' || !window.matchMedia) return true;
-    return window.matchMedia(`(max-width: ${max}px)`).matches;
-  }
-
-  #panelClass(mobile, props = this.props) {
-    return [BACKDROP, mobile ? SHEET : MODAL, props.class || ''].join(' ');
-  }
-
-  #setupMediaQuery() {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const max = Number(this.props.maxDisplayWidth) || 640;
-    this.#mql = window.matchMedia(`(max-width: ${max}px)`);
-    this.#mqlHandler = (event) => {
-      const mobile = event.matches;
-      // A crossing can strand an inline drag transform — clear it defensively.
-      if (this.element) this.element.style.transform = '';
-      this.setData({
-        mobile,
-        canDrag: mobile && this.props.dismissible !== false,
-        panelClass: this.#panelClass(mobile),
-      });
-    };
-    this.#mql.addEventListener('change', this.#mqlHandler);
-  }
-
-  // ---- open/close reconciliation (native <dialog>) --------------------------
-
-  // Idempotent: the dialog.open / animation guards make repeat afterUpdate()
-  // calls safe. Closing is asynchronous: the element holds open through an out
-  // animation (slide-down as a sheet, scale+fade as a modal) before the native
-  // close() runs — except after a drag dismiss, which already animated the
-  // slide and just needs the immediate close. The inline drag transform is
-  // cleared on every close path so the next open starts clean.
-  syncOpen() {
-    const dialog = this.element;
-    if (!dialog) return;
-    const shouldOpen = !!this.props.open;
-
-    if (shouldOpen) {
-      // Reopening mid-exit: cancel the out animation — the element never closed.
-      if (this.#exit) {
-        this.#exit.cancel();
-        this.#exit = null;
-        delete dialog.dataset.closing;
-        dialog.style.transform = '';
-      }
-      if (!dialog.open) {
-        dialog.showModal();
-        this.#playEnter(dialog);
-      }
-    } else if (dialog.open) {
-      if (this.#exit) return; // exit already playing
-      if (this.#skipExit || this.#reducedMotion()) {
-        this.#skipExit = false;
-        dialog.close();
-        dialog.style.transform = '';
-        return;
-      }
-      this.#playExit(dialog);
-    }
-  }
-
-  // Hold the element open through the out animation, then close. data-closing
-  // fades the ::backdrop via CSS (pseudo-elements are out of WAAPI's reach).
-  #playExit(dialog) {
-    dialog.dataset.closing = '';
-    const anim = this.getData().mobile
-      ? dialog.animate(
-          [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }],
-          { duration: 220, easing: 'ease-in', fill: 'forwards' }
-        )
-      : dialog.animate(
-          [
-            { opacity: 1, transform: 'scale(1)' },
-            { opacity: 0, transform: 'scale(0.96)' },
-          ],
-          { duration: 150, easing: 'ease-in', fill: 'forwards' }
-        );
-    this.#exit = anim;
-    anim.onfinish = () => {
-      if (this.#exit !== anim) return; // superseded by a reopen
-      this.#exit = null;
-      dialog.close();
-      anim.cancel(); // drop the forwards fill now that the element is closed
-      delete dialog.dataset.closing;
-      dialog.style.transform = '';
-    };
-  }
-
-  #playEnter(dialog) {
-    if (this.#reducedMotion()) return;
-    if (this.getData().mobile) {
-      dialog.animate(
-        [{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }],
-        { duration: 260, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' }
-      );
+    if (!this.#renderProfile) {
+      this.#renderProfile = requestedProfile;
+    } else if (
+      this.#mounted &&
+      this.element?.open &&
+      !!props.open &&
+      this.#profileKey(requestedProfile) !== this.#profileKey(this.#renderProfile)
+    ) {
+      // Keep the old geometry through this patch. afterUpdate() reads its live
+      // box, then performs a second class-only patch for the FLIP destination.
+      this.#queuedProfile = requestedProfile;
+      renderedProfile = this.#renderProfile;
+    } else if (this.#pendingMorph || this.#morph) {
+      renderedProfile = this.#renderProfile;
     } else {
-      dialog.animate(
-        [
-          { opacity: 0, transform: 'scale(0.96)' },
-          { opacity: 1, transform: 'scale(1)' },
-        ],
-        { duration: 180, easing: 'ease-out' }
-      );
+      this.#renderProfile = requestedProfile;
     }
+
+    const signature = this.#measurementSignature(props);
+    if (this.#mounted && this.#measureSignature !== signature) {
+      this.#needsRemeasure = true;
+    }
+    this.#measureSignature = signature;
+
+    const title = props.title || '';
+    return {
+      // Read imperatively by syncOpen(); returned so a prop flip still schedules
+      // the afterUpdate reconciliation.
+      open: !!props.open,
+      title,
+      titleId: `${id}-title`,
+      labelledby: props.labelledby || (title ? `${id}-title` : false),
+      ...this.#classData(renderedProfile, props),
+    };
+  }
+
+  #classData(profile, props = this.props) {
+    const callerClass = props.class || '';
+    const position = profile.position;
+    const cardKey = `${position}:${profile.mode}`;
+    const showGrabber =
+      props.showGrabber !== false && !profile.desktop && position !== 'center';
+    const desktopBottomCap =
+      profile.desktop && position === 'bottom' && profile.mode === 'card';
+
+    let grabberClass = GRABBER_BOTTOM;
+    if (position === 'left') grabberClass = GRABBER_LEFT;
+    if (position === 'right') grabberClass = GRABBER_RIGHT;
+
+    let titleClass = TITLE_BOTTOM;
+    if (position === 'left' || position === 'right') titleClass = TITLE_SIDE;
+    if (position === 'center') titleClass = TITLE_CENTER;
+
+    return {
+      showGrabber,
+      dialogClass: [DIALOG, DIALOG_PROFILE[position]].filter(Boolean).join(' '),
+      backdropClass: [BACKDROP, props.backdropClass || ''].filter(Boolean).join(' '),
+      panelClass: [
+        PANEL_BASE,
+        position === 'center' ? PANEL_CENTER : PANEL_PROFILE[cardKey],
+        desktopBottomCap && !CALLER_MAX_WIDTH.test(callerClass)
+          ? PANEL_WIDTH_CAP
+          : '',
+        callerClass,
+      ]
+        .filter(Boolean)
+        .join(' '),
+      headerClass: HEADER,
+      contentClass: CONTENT,
+      footerClass: FOOTER,
+      grabberClass,
+      titleClass,
+    };
+  }
+
+  #resolveProfile(props = this.props) {
+    const position = POSITIONS.has(props.position) ? props.position : 'bottom';
+    const mode = MODES.has(props.mode) ? props.mode : 'edge';
+    const effect = EFFECTS.has(props.effect) ? props.effect : 'slide';
+    const breakpointValue = Number(props.breakpoint);
+    const breakpoint = Number.isFinite(breakpointValue) ? breakpointValue : 768;
+    const desktop =
+      typeof window !== 'undefined' && window.innerWidth >= breakpoint;
+    const desktopPosition = POSITIONS.has(props.desktopPosition)
+      ? props.desktopPosition
+      : position;
+    const desktopMode = MODES.has(props.desktopMode)
+      ? props.desktopMode
+      : 'card';
+    const explicitDesktopEffect = EFFECTS.has(props.desktopEffect)
+      ? props.desktopEffect
+      : null;
+    const desktopEffect =
+      explicitDesktopEffect ||
+      (desktopPosition === 'center' ? 'fade-scale' : effect);
+    const exitEffect = EFFECTS.has(props.exitEffect)
+      ? props.exitEffect
+      : effect;
+    let desktopExitEffect;
+    if (EFFECTS.has(props.desktopExitEffect)) {
+      desktopExitEffect = props.desktopExitEffect;
+    } else if (EFFECTS.has(props.exitEffect)) {
+      desktopExitEffect = props.exitEffect;
+    } else {
+      desktopExitEffect = desktopEffect;
+    }
+    const cushion = Number(props.exitCushion);
+
+    return {
+      desktop,
+      position: desktop ? desktopPosition : position,
+      mode: desktop ? desktopMode : mode,
+      effect: desktop ? desktopEffect : effect,
+      exitEffect: desktop ? desktopExitEffect : exitEffect,
+      edgeInset: 0,
+      exitCushion:
+        Number.isFinite(cushion) && cushion >= 0 ? cushion : EXIT_CUSHION,
+      viewportWidth:
+        typeof window === 'undefined' ? 0 : window.innerWidth,
+      viewportHeight:
+        typeof window === 'undefined' ? 0 : window.innerHeight,
+    };
+  }
+
+  #profileKey(profile) {
+    return `${profile.desktop}:${profile.position}:${profile.mode}:${profile.effect}`;
+  }
+
+  #profileSignature(profile) {
+    return [
+      this.#profileKey(profile),
+      profile.exitEffect,
+      profile.edgeInset,
+      profile.exitCushion,
+      profile.viewportWidth,
+      profile.viewportHeight,
+    ].join(':');
+  }
+
+  #measurementSignature(props = this.props) {
+    const snaps = Array.isArray(props.snapPoints)
+      ? JSON.stringify(props.snapPoints)
+      : String(props.snapPoints ?? '85vh');
+    return [
+      snaps,
+      props.initialSnap ?? '',
+      props.class || '',
+      props.exitCushion ?? '',
+    ].join('|');
+  }
+
+  #withinMaxDisplayWidth() {
+    if (typeof window === 'undefined') return true;
+    const raw = this.props.maxDisplayWidth;
+    if (
+      raw === undefined ||
+      raw === null ||
+      raw === '' ||
+      raw === 'none' ||
+      raw === Infinity
+    ) {
+      return true;
+    }
+    const value = Number(raw);
+    return !Number.isFinite(value) || window.innerWidth <= value;
+  }
+
+  #shouldDisplayOpen() {
+    if (!this.props.open) return false;
+    // The controlled contract wins once the native dialog is open. There is no
+    // resize close reason in the public callback union, so crossing the display
+    // ceiling must not close behind the parent's still-true `open` prop.
+    if (this.element?.open) return true;
+    return this.#withinMaxDisplayWidth();
   }
 
   #reducedMotion() {
     return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   }
 
+  #morphDuration() {
+    if (this.#reducedMotion()) return 0;
+    const value = Number(this.props.morphDuration);
+    return Number.isFinite(value) && value >= 0
+      ? value
+      : DEFAULT_MORPH_DURATION;
+  }
+
+  #morphEasing() {
+    return this.props.morphEasing || DEFAULT_MORPH_EASING;
+  }
+
+  #lockBody() {
+    if (this.#bodyOverflow !== null) return;
+    this.#bodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+  }
+
+  #unlockBody() {
+    if (this.#bodyOverflow === null) return;
+    document.body.style.overflow = this.#bodyOverflow;
+    this.#bodyOverflow = null;
+  }
+
+  #restoreFocus() {
+    const target = this.#returnFocus;
+    this.#returnFocus = null;
+    if (!target?.isConnected || typeof target.focus !== 'function') return;
+    target.focus({ preventScroll: true });
+  }
+
+  #requestClose(reason) {
+    const { close } = this.props;
+    if (typeof close === 'function') close(reason);
+  }
+
+  #dismissPolicy() {
+    // Deliberately parsed at the event site. `dismiss` is live policy, not
+    // configuration cached at mount/profile resolution time.
+    return parseDismiss(this.props.dismiss);
+  }
+
+  #syncSpring() {
+    if (!this.#engine) return;
+    let parsed = null;
+    const value = this.props.spring;
+    if (typeof value === 'string') {
+      parsed = parseSpring(value);
+    } else if (value && typeof value === 'object') {
+      parsed = parseSpring(`${value.attraction} ${value.friction}`);
+    }
+    const signature = parsed
+      ? `${parsed.attraction}:${parsed.friction}`
+      : 'presets';
+    if (signature === this.#springSignature) return;
+    this.#springSignature = signature;
+    this.#engine.setSpring(parsed);
+  }
+
+  #snapPointValue() {
+    const value = this.props.snapPoints ?? '85vh';
+    return Array.isArray(value) ? value.join(' ') : String(value);
+  }
+
+  #resolveBottomSnaps() {
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    const rootFontSize =
+      Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    let snaps = resolveSnapPoints(this.#snapPointValue(), {
+      viewportHeight,
+      viewportWidth,
+      rootFontSize,
+      percentageBase: viewportHeight,
+    });
+    if (!snaps.length) {
+      snaps = resolveSnapPoints('85vh', {
+        viewportHeight,
+        viewportWidth,
+        rootFontSize,
+        percentageBase: viewportHeight,
+      });
+    }
+    return snaps;
+  }
+
+  #controlledSnap() {
+    return this.props.snap !== undefined;
+  }
+
+  #desiredSnap(snaps = this.#snaps) {
+    if (!snaps.length) return -1;
+    if (this.#controlledSnap()) {
+      return resolveInitialSnap(this.props.snap, snaps);
+    }
+    if (this.#localSnap === null) {
+      this.#localSnap = resolveInitialSnap(this.props.initialSnap, snaps);
+    }
+    this.#localSnap = resolveInitialSnap(this.#localSnap, snaps);
+    return this.#localSnap;
+  }
+
+  #measurePanelBox() {
+    const dialog = this.element;
+    const panel = this.refs.panel;
+    if (!dialog || !panel) {
+      return {
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        borderRadius: '0px',
+      };
+    }
+
+    const closed = !dialog.open;
+    const savedDisplay = dialog.style.display;
+    const savedVisibility = dialog.style.visibility;
+    if (closed) {
+      dialog.style.display = 'flex';
+      dialog.style.visibility = 'hidden';
+    }
+
+    const rect = panel.getBoundingClientRect();
+    const borderRadius = getComputedStyle(panel).borderRadius;
+
+    if (closed) {
+      dialog.style.display = savedDisplay;
+      dialog.style.visibility = savedVisibility;
+    }
+
+    return {
+      top: rect.top,
+      left: rect.left,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+      borderRadius,
+    };
+  }
+
+  #edgeInset(profile, box) {
+    if (profile.mode !== 'card') return 0;
+    if (profile.position === 'bottom') {
+      return Math.max(0, profile.viewportHeight - box.bottom);
+    }
+    if (profile.position === 'left') return Math.max(0, box.left);
+    if (profile.position === 'right') {
+      return Math.max(0, profile.viewportWidth - box.right);
+    }
+    return 0;
+  }
+
+  #prepareOpen(requestedProfile = this.#resolveProfile()) {
+    if (!this.#engine) return;
+
+    const box = this.#measurePanelBox();
+    const profile = {
+      ...requestedProfile,
+      edgeInset: this.#edgeInset(requestedProfile, box),
+    };
+    this.#profile = profile;
+    this.#engine.setProfile(profile);
+
+    let snaps;
+    if (profile.position === 'bottom') {
+      snaps = this.#resolveBottomSnaps();
+      if (profile.desktop) snaps = [snaps[snaps.length - 1]];
+    } else if (profile.position === 'center') {
+      snaps = [
+        box.height > 0
+          ? box.height
+          : Math.max(1, profile.viewportHeight * 0.5),
+      ];
+    } else {
+      snaps = [
+        box.width > 0
+          ? box.width
+          : Math.max(1, Math.min(26 * 16, profile.viewportWidth * 0.9)),
+      ];
+    }
+
+    const alreadyOpen =
+      this.element?.open && this.#engine.state !== 'hidden';
+    let active = 0;
+    if (profile.position === 'bottom' && !profile.desktop) {
+      active = alreadyOpen
+        ? Math.min(this.#engine.activeSnap, snaps.length - 1)
+        : this.#desiredSnap(snaps);
+    }
+
+    this.#snaps = snaps;
+    this.#engine.setSnaps(snaps, active);
+    // While beginMorph() has the engine parked, setSnaps() deliberately writes
+    // no frame. A bottom destination still needs its resolved snap height under
+    // the TO measurement; otherwise the class fallback (85dvh) is measured and
+    // endMorph() snaps to the real active snap after the FLIP has finished.
+    if (this.#engine.morphing && profile.position === 'bottom') {
+      this.refs.panel.style.height = `${snaps[active]}px`;
+    }
+    this.#appliedProfileSignature = this.#profileSignature(profile);
+    this.#needsRemeasure = false;
+    this.#syncCenterObserver();
+  }
+
+  #syncProfileWithoutMeasure(profile) {
+    if (!this.#engine || !this.#profile) return;
+    const next = { ...profile, edgeInset: this.#profile.edgeInset };
+    const signature = this.#profileSignature(next);
+    if (signature === this.#appliedProfileSignature) return;
+    this.#profile = next;
+    this.#engine.setProfile(next);
+    this.#appliedProfileSignature = signature;
+  }
+
+  #reconcileSnap() {
+    const profile = this.#profile;
+    if (
+      !profile ||
+      profile.position !== 'bottom' ||
+      profile.desktop ||
+      !this.element?.open ||
+      this.#engine?.state !== 'shown' ||
+      this.#engine.morphing ||
+      this.#drag.active
+    ) {
+      return;
+    }
+
+    const desired = this.#desiredSnap();
+    if (
+      desired < 0 ||
+      desired === this.#engine.activeSnap ||
+      desired === this.#settleTarget
+    ) {
+      return;
+    }
+
+    this.#settleTarget = desired;
+    this.#programmaticSnap = desired;
+    const run = ++this.#snapRun;
+    this.#engine.settleTo(desired, 0).then(() => {
+      if (run !== this.#snapRun) return;
+      this.#settleTarget = null;
+      this.#programmaticSnap = null;
+    });
+  }
+
+  syncOpen() {
+    const dialog = this.element;
+    if (!dialog || !this.#engine) return;
+    const shouldOpen = this.#shouldDisplayOpen();
+
+    if (shouldOpen) {
+      if (dialog.open) {
+        if (
+          this.#engine.state === 'hiding' ||
+          this.#engine.state === 'hidden'
+        ) {
+          this.#engine.show({ to: this.refs.panel, display: 'flex' });
+          this.refs.backdrop.style.opacity = String(
+            this.#engine.backdropProgress
+          );
+        }
+        return;
+      }
+
+      const profile = this.#resolveProfile();
+      this.#renderProfile = profile;
+      this.#prepareOpen(profile);
+      this.#returnFocus =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      this.#lockBody();
+      this.refs.backdrop.style.opacity = '0';
+
+      // showModal() and the synchronous frame-0 write inside engine.show() stay
+      // in this task, so the browser never paints the resting panel first.
+      dialog.showModal();
+      this.#engine.show({ to: this.refs.panel, display: 'flex' });
+      this.refs.backdrop.style.opacity = String(
+        this.#engine.backdropProgress
+      );
+      this.#syncCenterObserver();
+      return;
+    }
+
+    if (!dialog.open) return;
+    this.#finishMorph();
+    this.#drag = { active: false };
+    this.#engine.hide();
+  }
+
   mounted() {
-    this.#setupMediaQuery();
+    this.#mounted = true;
+    this.#engine = new SheetEngine();
+    this.#engine.on('change', this.#engineChange);
+    this.#engine.on('shown', this.#engineShown);
+    this.#engine.on('hidden', this.#engineHidden);
+    this.#engine.on('snapchange', this.#engineSnapChange);
+    this.#syncSpring();
+
+    for (const [surface, element] of [
+      ['backdrop', this.refs.backdrop],
+      ['header', this.refs.header],
+      ['content', this.refs.content],
+      ['footer', this.refs.footer],
+    ]) {
+      this.#gestures.push(
+        new DragGesture(element, this.#surfaceCallbacks(surface))
+      );
+    }
+
+    this.#resizeHandler = () => {
+      if (this.#resizeTimer !== null) return;
+      this.#resizeTimer = setTimeout(() => {
+        this.#resizeTimer = null;
+        this.#handleResize();
+      }, RESIZE_THROTTLE_MS);
+    };
+    window.addEventListener('resize', this.#resizeHandler);
     this.syncOpen();
   }
 
   afterUpdate() {
+    if (!this.#mounted) return;
+    this.#syncSpring();
+
+    if (!this.#shouldDisplayOpen()) {
+      this.#queuedProfile = null;
+      this.syncOpen();
+      return;
+    }
+
+    if (this.#pendingMorph) {
+      this.#continueMorph();
+      return;
+    }
+
+    if (this.#queuedProfile && this.element?.open) {
+      const next = this.#queuedProfile;
+      this.#queuedProfile = null;
+      this.#startProfileMorph(next);
+      return;
+    }
+
+    const next = this.#resolveProfile();
+    if (
+      this.element?.open &&
+      this.#profile &&
+      this.#profileKey(next) !== this.#profileKey(this.#profile)
+    ) {
+      this.#startProfileMorph(next);
+      return;
+    }
+
+    if (
+      this.#needsRemeasure &&
+      this.element?.open &&
+      !this.#drag.active &&
+      !this.#engine.morphing
+    ) {
+      this.#prepareOpen(next);
+    } else if (this.element?.open && this.#profile) {
+      this.#syncProfileWithoutMeasure(next);
+    }
+
+    this.#reconcileSnap();
     this.syncOpen();
   }
 
   destroyed() {
-    this.#mql?.removeEventListener('change', this.#mqlHandler);
-    this.#mql = null;
-    this.#mqlHandler = null;
-  }
+    this.#mounted = false;
+    window.removeEventListener('resize', this.#resizeHandler);
+    if (this.#resizeTimer !== null) clearTimeout(this.#resizeTimer);
+    this.#resizeTimer = null;
+    this.#resizeHandler = null;
 
-  // ---- drag gesture ---------------------------------------------------------
+    if (this.#centerTimer !== null) clearTimeout(this.#centerTimer);
+    this.#centerTimer = null;
+    this.#centerObserver?.disconnect();
+    this.#centerObserver = null;
 
-  #capture(event) {
-    const d = this.#drag;
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch (_) {
-      /* capture is best-effort */
+    this.#finishMorph();
+    for (const gesture of this.#gestures) gesture.destroy();
+    this.#gestures = [];
+    this.#drag = { active: false };
+
+    if (this.#engine) {
+      this.#engine.off('change', this.#engineChange);
+      this.#engine.off('shown', this.#engineShown);
+      this.#engine.off('hidden', this.#engineHidden);
+      this.#engine.off('snapchange', this.#engineSnapChange);
+      this.#engine.destroy();
+      this.#engine = null;
     }
-    d.captured = true;
-    d.captureEl = event.currentTarget;
+
+    if (this.refs.backdrop) this.refs.backdrop.style.opacity = '';
+    if (this.element?.open) this.element.close();
+    this.#unlockBody();
+    this.#restoreFocus();
   }
 
-  #resetDrag() {
-    const d = this.#drag;
-    d.active = false;
-    d.pointerId = null;
-    d.startY = 0;
-    d.delta = 0;
-    d.direction = null;
-    d.isHeader = false;
-    d.isAtTop = false;
-    d.captured = false;
-    d.captureEl = null;
+  #surfaceCallbacks(surface) {
+    return {
+      onStart: (info) => this.#dragStart(surface, info?.event),
+      onMove: (info) => this.#dragMove(surface, info),
+      onEnd: (info) => this.#dragEnd(surface, info),
+    };
   }
 
-  #dismiss(delta) {
-    const dialog = this.element;
-    if (!dialog || this.#reducedMotion()) {
-      if (dialog) dialog.style.transform = '';
-      this.#finishClose('drag');
+  #dragStart(surface, event) {
+    if (this.#engine?.state !== 'shown' || this.#engine.morphing) {
+      this.#drag = { active: false };
       return;
     }
-    const anim = dialog.animate(
-      [
-        { transform: `translate3d(0,${delta}px,0)` },
-        { transform: 'translate3d(0,100%,0)' },
-      ],
-      { duration: 200, easing: 'ease-in' }
+    this.#settleTarget = null;
+    this.#programmaticSnap = null;
+    this.#drag = {
+      active: true,
+      claimed: false,
+      direction: 0,
+      scrollChain: this.#scrollChain(event?.target),
+    };
+  }
+
+  #scrollChain(target) {
+    const content = this.refs.content;
+    if (!content) return [];
+
+    const axis = dismissAxis(this.#profile.position);
+    const chain = [];
+    let node = target instanceof Element ? target : null;
+    while (node && node !== content && content.contains(node)) {
+      if (scrollsOnAxis(node, axis)) chain.push(scrollMetrics(node));
+      node = node.parentElement;
+    }
+    if (scrollsOnAxis(content, axis)) chain.push(scrollMetrics(content));
+    return chain;
+  }
+
+  #matchesActiveAxis(direction) {
+    if (dismissAxis(this.#profile.position) === 'y') {
+      return direction === 'up' || direction === 'down';
+    }
+    return direction === 'left' || direction === 'right';
+  }
+
+  #dragMove(surface, info) {
+    const drag = this.#drag;
+    if (!drag.active) return;
+
+    const offset = awayOffset(
+      this.#profile.position,
+      info.deltaX,
+      info.deltaY
     );
-    // Hold the end state under the (fill:none) animation so nothing snaps back up
-    // when it clears; syncOpen() clears this on the native close.
-    dialog.style.transform = 'translate3d(0,100%,0)';
-    anim.finished.then(() => this.#finishClose('drag')).catch(() => this.#finishClose('drag'));
+    if (!drag.claimed) {
+      if (surface === 'content') {
+        if (!this.#matchesActiveAxis(info.direction)) return;
+        const position = this.#profile.position;
+        const direction = contentClaimDirection(
+          drag.scrollChain,
+          dismissAxis(position),
+          position,
+          offset
+        );
+        if (!direction) return;
+        drag.direction = direction;
+      } else {
+        if (!offset) return;
+        drag.direction = Math.sign(offset);
+      }
+      drag.claimed = true;
+    }
+
+    this.#applyLiveOffset(offset);
   }
 
-  #finishClose(reason) {
-    const { close } = this.props;
-    // The drag path animated its own slide-out — tell syncOpen() to close
-    // immediately instead of playing the standard exit a second time.
-    this.#skipExit = true;
-    // Parent flips `open` false → afterUpdate → syncOpen() runs dialog.close()
-    // and clears the held inline transform.
-    if (typeof close === 'function') close(reason);
+  #applyLiveOffset(offset) {
+    const activeSize = this.#snaps[this.#engine.activeSnap];
+    if (!Number.isFinite(activeSize)) return;
+    const maximum = this.#snaps[this.#snaps.length - 1];
+    let size = activeSize - offset;
+    if (size > maximum) {
+      size =
+        maximum +
+        Math.sqrt(size - maximum) * 10 * OVERSCROLL_RESISTANCE;
+    }
+    if (size < 0) {
+      size = -Math.sqrt(-size) * 10 * OVERSCROLL_RESISTANCE;
+    }
+    this.#engine.dragBy(activeSize - size);
   }
 
-  #springBack(delta) {
-    const dialog = this.element;
-    if (!dialog) return;
-    if (this.#reducedMotion()) {
-      dialog.style.transform = '';
+  #dragEnd(surface, info) {
+    const drag = this.#drag;
+    if (!drag.active) return;
+    this.#drag = { active: false };
+
+    if (
+      !info.cancelled &&
+      surface === 'backdrop' &&
+      Math.hypot(info.deltaX, info.deltaY) < 10 &&
+      info.duration < 300
+    ) {
+      if (this.#dismissPolicy().backdrop) {
+        this.#requestClose('backdrop');
+      }
       return;
     }
-    const from =
-      delta < 0
-        ? `translate3d(0,${-(Math.sqrt(Math.abs(delta)) * 10 * this.#overscrollResistance)}px,0)`
-        : `translate3d(0,${delta}px,0)`;
-    dialog.style.transform = ''; // rest state; the animation masks it during playback
-    dialog.animate(
-      [{ transform: from }, { transform: 'translate3d(0,0,0)' }],
-      { duration: 200, easing: 'ease-out' }
+    if (!drag.claimed) return;
+
+    if (info.cancelled) {
+      if (this.#profile.position === 'bottom') {
+        this.#engine.settleTo(this.#engine.activeSnap, 0);
+      } else {
+        this.#engine.returnToRest(0);
+      }
+      return;
+    }
+
+    const velocityAway = awayOffset(
+      this.#profile.position,
+      info.velocityX,
+      info.velocityY
     );
+    const releasedSize = this.#engine.currentSize;
+    const resolved = resolveSnapTarget({
+      currentSize: releasedSize,
+      velocityAway,
+      snaps: this.#snaps,
+      flickVelocity: FLICK_VELOCITY,
+    });
+    const prevented = resolved === null && !this.#dismissPolicy().swipe;
+    const target = prevented ? this.#engine.activeSnap : resolved;
+
+    const detail = {
+      velocity: velocityAway,
+      flick: Math.abs(velocityAway) > FLICK_VELOCITY,
+      direction:
+        velocityAway > 0
+          ? 'away'
+          : velocityAway < 0
+            ? 'toward'
+            : 'none',
+      size: releasedSize,
+      target,
+      prevented,
+    };
+    const { snapRelease } = this.props;
+    if (typeof snapRelease === 'function') snapRelease(detail);
+
+    if (target === null) {
+      this.#engine.setDismissVelocity(Math.max(0, velocityAway));
+      this.#requestClose('swipe');
+      return;
+    }
+
+    this.#settleTarget = target;
+    const run = ++this.#snapRun;
+    let settle;
+    if (this.#profile.position === 'bottom') {
+      settle = this.#engine.settleTo(target, -velocityAway);
+    } else {
+      settle = this.#engine.returnToRest(-velocityAway);
+    }
+    settle.then(() => {
+      if (run === this.#snapRun) this.#settleTarget = null;
+    });
+  }
+
+  #handleResize() {
+    if (!this.#mounted) return;
+    if (!this.#shouldDisplayOpen()) {
+      this.syncOpen();
+      return;
+    }
+
+    const next = this.#resolveProfile();
+    if (!this.element?.open) {
+      this.#renderProfile = next;
+      this.setData(this.#classData(next));
+      this.syncOpen();
+      return;
+    }
+
+    if (
+      this.#profile &&
+      this.#profileKey(next) !== this.#profileKey(this.#profile)
+    ) {
+      this.#startProfileMorph(next);
+      return;
+    }
+    if (this.#drag.active) return;
+
+    this.#renderProfile = next;
+    this.#prepareOpen(next);
+  }
+
+  #startProfileMorph(next) {
+    const panel = this.refs.panel;
+    if (!panel || !this.#engine || !this.element?.open) {
+      this.#renderProfile = next;
+      this.setData(this.#classData(next));
+      this.#prepareOpen(next);
+      return;
+    }
+
+    this.#drag = { active: false };
+    let from;
+    if (this.#engine.morphing) {
+      // Read before removing an active transition: the animated rect is the
+      // exact re-entrant starting point.
+      from = this.#readBox(panel);
+      this.#clearMorphTimers();
+      this.#pendingMorph = null;
+    } else {
+      if (!this.#engine.beginMorph()) {
+        this.#renderProfile = next;
+        this.setData(this.#classData(next));
+        this.#prepareOpen(next);
+        return;
+      }
+      from = this.#readBox(panel);
+    }
+
+    this.refs.backdrop.style.opacity = '1';
+    this.#stripMorphPins(panel);
+    this.#pendingMorph = { from, profile: next };
+    this.#renderProfile = next;
+    this.setData(this.#classData(next));
+  }
+
+  #continueMorph() {
+    const pending = this.#pendingMorph;
+    if (!pending) return;
+    this.#pendingMorph = null;
+
+    const panel = this.refs.panel;
+    this.#prepareOpen(pending.profile);
+    const to = this.#readBox(panel);
+    const duration = this.#morphDuration();
+    if (duration <= 0) {
+      this.#finishMorph();
+      return;
+    }
+
+    this.#pinBox(panel, pending.from);
+    void panel.offsetWidth;
+
+    const easing = this.#morphEasing();
+    panel.style.transition = MORPH_TRANSITION_PROPERTIES.map(
+      (property) => `${property} ${duration}ms ${easing}`
+    ).join(', ');
+    this.#pinBox(panel, to);
+
+    const finish = () => this.#finishMorph();
+    const onEnd = (event) => {
+      if (
+        event.target === panel &&
+        MORPH_TRANSITION_PROPERTIES.includes(event.propertyName)
+      ) {
+        finish();
+      }
+    };
+    this.#morph = {
+      panel,
+      onEnd,
+      timer: setTimeout(
+        finish,
+        duration + MORPH_TIMEOUT_PADDING_MS
+      ),
+    };
+    panel.addEventListener('transitionend', onEnd);
+  }
+
+  #readBox(panel) {
+    const rect = panel.getBoundingClientRect();
+    return {
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+      borderRadius: getComputedStyle(panel).borderRadius,
+    };
+  }
+
+  #pinBox(panel, box) {
+    Object.assign(panel.style, {
+      position: 'fixed',
+      top: `${box.top}px`,
+      left: `${box.left}px`,
+      right: 'auto',
+      bottom: 'auto',
+      width: `${box.width}px`,
+      height: `${box.height}px`,
+      maxWidth: 'none',
+      maxHeight: 'none',
+      margin: '0',
+      borderRadius: box.borderRadius,
+    });
+  }
+
+  #stripMorphPins(panel) {
+    for (const property of MORPH_PROPERTIES) panel.style[property] = '';
+  }
+
+  #clearMorphTimers() {
+    if (!this.#morph) return;
+    clearTimeout(this.#morph.timer);
+    this.#morph.panel.removeEventListener(
+      'transitionend',
+      this.#morph.onEnd
+    );
+    this.#morph = null;
+  }
+
+  #finishMorph() {
+    if (
+      !this.#pendingMorph &&
+      !this.#morph &&
+      !this.#engine?.morphing
+    ) {
+      return;
+    }
+    this.#pendingMorph = null;
+    this.#clearMorphTimers();
+    if (this.refs.panel) this.#stripMorphPins(this.refs.panel);
+    if (this.#engine?.morphing) this.#engine.endMorph();
+    if (this.refs.backdrop && this.element?.open) {
+      this.refs.backdrop.style.opacity = '1';
+    }
+  }
+
+  #syncCenterObserver() {
+    const want =
+      this.#profile?.position === 'center' &&
+      !!this.element?.open &&
+      typeof ResizeObserver === 'function';
+    if (want && !this.#centerObserver) {
+      this.#centerObserver = new ResizeObserver(() => {
+        this.#scheduleCenterRemeasure();
+      });
+      this.#centerObserver.observe(this.refs.panel);
+    } else if (!want && this.#centerObserver) {
+      this.#centerObserver.disconnect();
+      this.#centerObserver = null;
+      if (this.#centerTimer !== null) clearTimeout(this.#centerTimer);
+      this.#centerTimer = null;
+    }
+  }
+
+  #scheduleCenterRemeasure() {
+    if (this.#centerTimer !== null) clearTimeout(this.#centerTimer);
+    this.#centerTimer = setTimeout(() => {
+      this.#centerTimer = null;
+      if (
+        this.#profile?.position !== 'center' ||
+        !this.element?.open
+      ) {
+        return;
+      }
+      if (
+        this.#drag.active ||
+        this.#engine?.morphing ||
+        this.#engine?.state !== 'shown' ||
+        this.#settleTarget !== null
+      ) {
+        this.#scheduleCenterRemeasure();
+        return;
+      }
+      const height = this.#measurePanelBox().height;
+      if (Math.abs(height - (this.#snaps[0] ?? 0)) <= 1) return;
+      this.#prepareOpen(this.#resolveProfile());
+    }, RESIZE_THROTTLE_MS);
   }
 
   events = {
-    // Escape key arrives as the native `cancel` event. Always preventDefault so
-    // the browser can't close the element behind the vdom's back; then ask the
-    // parent to close if dismissible. Not dismissible → Escape is a no-op.
     handleCancel: (event) => {
       event.preventDefault();
-      if (this.props.dismissible === false) return;
-      const { close } = this.props;
-      if (typeof close === 'function') close('escape');
+      if (!this.#dismissPolicy().escape) return;
+      this.#requestClose('escape');
     },
-
-    // The click lands on the <dialog> element itself only when it hit the
-    // backdrop region (inner content has a deeper target).
-    handleBackdropClick: (event) => {
-      if (event.target !== this.element) return;
-      if (this.props.dismissible === false) return;
-      const { close } = this.props;
-      if (typeof close === 'function') close('backdrop');
-    },
-
-    // pointerdown on the header (isHeader = true) or content (false). The header
-    // is always a drag surface and captures immediately; content only arms — it
-    // captures lazily in dragMove once a downward-at-top move is confirmed, so
-    // taps/clicks and normal scrolling inside the content are never hijacked.
-    dragStart: (event, isHeader) => {
-      if (!this.getData().mobile) return; // desktop modal: no drag
-      if (this.props.dismissible === false) return; // not dismissible: no drag
-      if (!event.isPrimary) return;
-      if (event.pointerType === 'mouse' && event.button !== 0) return;
-
-      const d = this.#drag;
-      d.active = true;
-      d.pointerId = event.pointerId;
-      d.startY = event.clientY;
-      d.delta = 0;
-      d.direction = null;
-      d.isHeader = isHeader;
-      d.isAtTop = isHeader ? true : event.currentTarget.scrollTop === 0;
-      d.captured = false;
-      d.captureEl = null;
-
-      if (isHeader) {
-        this.#capture(event);
-        if (event.cancelable) event.preventDefault();
-      }
-    },
-
-    dragMove: (event) => {
-      const d = this.#drag;
-      if (!d.active || event.pointerId !== d.pointerId) return;
-
-      d.delta = event.clientY - d.startY;
-      if (d.direction === null && d.delta !== 0) {
-        d.direction = d.delta < 0 ? 'up' : 'down';
-      }
-
-      // Content region: only the sheet-drags when at the top AND pulling down —
-      // otherwise bail and let the browser scroll the content normally.
-      if (!d.isHeader && (!d.isAtTop || d.direction === 'up')) {
-        d.active = false;
-        return;
-      }
-
-      if (!d.captured) this.#capture(event);
-      if (event.cancelable) event.preventDefault();
-
-      const dialog = this.element;
-      if (!dialog) return;
-      if (d.delta < 0) {
-        // upward overscroll: rubber-band resistance (ported formula)
-        const resisted = Math.sqrt(Math.abs(d.delta)) * 10 * this.#overscrollResistance;
-        dialog.style.transform = `translate3d(0,${-resisted}px,0)`;
-      } else {
-        dialog.style.transform = `translate3d(0,${d.delta}px,0)`;
-      }
-    },
-
-    dragEnd: (event) => {
-      const d = this.#drag;
-      if (d.pointerId === null || event.pointerId !== d.pointerId) {
-        this.#resetDrag();
-        return;
-      }
-      const captured = d.captured;
-      const delta = d.delta;
-      if (d.captureEl) {
-        try {
-          d.captureEl.releasePointerCapture(d.pointerId);
-        } catch (_) {
-          /* release is best-effort */
-        }
-      }
-      this.#resetDrag();
-
-      if (!captured) return; // never dragged the sheet → nothing to animate
-
-      if (delta > this.#dragThreshold) {
-        this.#dismiss(delta); // past threshold, downward → dismiss('drag')
-      } else {
-        this.#springBack(delta); // short / upward drag → snap back to rest
+    scrollVeto: (event) => {
+      if (this.#drag.active && this.#drag.claimed && event.cancelable) {
+        event.preventDefault();
       }
     },
   };

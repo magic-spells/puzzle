@@ -4,20 +4,26 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Sheet</h1>
         <p class="mt-2 text-body">
-          A bottom sheet with drag-to-dismiss on the native dialog element. It pins to
-          the bottom on narrow viewports and becomes a centered modal on wide ones. The
-          parent owns the open flag; the piece only asks to close.
+          One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, entrance and exit effects, a dismiss policy, and parent-controlled open state
         </p>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <Button variant="outline" @press={ openSheet }>Open sheet</Button>
-        <Sheet open={ sheetOpen } title="Terms of service" @close={ closeSheet }>
-          <div class="space-y-4 text-sm text-body">
+        <Button variant="outline" @press={ openHero }>Open sheet</Button>
+        <Sheet
+          open={ heroOpen }
+          title="Your cart"
+          snapPoints="85vh 55vh 25vh"
+          desktopPosition="right"
+          @close={ closeHero }>
+          <div class="space-y-4 py-4 text-sm text-body">
+            <p>On a phone this is a bottom sheet with three snap points — drag the header and flick between them. On a wide window it is a right-side drawer.</p>
+            <p>Open it, then resize the window across 768px and watch it morph between the two profiles in place. It never closes, never re-opens — the panel animates from one resting geometry to the other while you watch.</p>
             {#for n in paragraphs}
-              <p>Section { n } — filler content to make the sheet scroll. On narrow viewports the sheet pins to the bottom with a drag handle; on wide viewports it becomes a centered modal. Drag it down or press Escape to dismiss.</p>
+              <p key={ n }>Cart line { n } — filler content so the sheet scrolls. Scroll to the top before dragging down from the content surface.</p>
             {/for}
           </div>
+          <Button slot="footer" class="w-full" @press={ closeHero }>Checkout</Button>
         </Sheet>
       </ExampleBox>
 
@@ -28,7 +34,9 @@
         </p>
         <CodeBlock code={ installCmd }/>
         <p class="mt-3 text-sm text-muted">
-          Requires the pieces.css tokens merged into your app styles (see Introduction).
+          The CLI prints the npm installs for @magic-spells/physics-engine and
+          @magic-spells/frame-engine, and copies lib/sheet-engine.js, lib/sheet-policy.js,
+          and lib/sheet-drag.js into app/lib/.
         </p>
       </section>
 
@@ -39,19 +47,171 @@
       </section>
 
       <div class="mt-12 space-y-12">
-        <section id="responsive" class="scroll-mt-20">
-          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Responsive behavior</h2>
-          <p class="mb-3 text-sm text-body">
-            Below 640px the Sheet renders as a bottom sheet — pinned to the bottom edge
-            with a drag handle; drag it past the threshold to dismiss, or press Escape.
-            At wider viewports the same piece becomes a centered modal with no handle and
-            no drag, though Escape and backdrop clicks still dismiss it. Open the sheet
-            above and resize the window across 640px to watch it switch.
-          </p>
-          <p class="text-sm text-muted">
-            The breakpoint is the maxDisplayWidth prop (default 640). A matchMedia
-            listener drives the switch reactively, so no reload is needed.
-          </p>
+        <ExampleBox id="snaps" title="Controlled snaps" code={ codeSnaps }>
+          <div class="flex items-center gap-4">
+            <Button variant="outline" @press={ openSnaps }>Open snapping sheet</Button>
+            <span class="text-sm text-muted">snap index: { snapIndex }</span>
+          </div>
+          <Sheet
+            open={ snapsOpen }
+            title="Filters"
+            snapPoints="85vh 55vh 25vh"
+            snap={ snapIndex }
+            @snapChange={ setSnapIndex }
+            @close={ closeSnaps }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>A slow release settles on the nearest snap; a flick steps exactly one snap in its direction, measured from wherever the panel actually is.</p>
+              <p>snap is optional-controlled: pass it with @snapChange to own the committed index, or omit it and the sheet tracks its snap locally. The counter next to the trigger reflects each commit.</p>
+            </div>
+          </Sheet>
+        </ExampleBox>
+
+        <ExampleBox id="positions" title="Positions" code={ codePositions }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <Button variant="outline" @press={ openLeft }>Left drawer</Button>
+            <Button variant="outline" @press={ openRight }>Right drawer</Button>
+            <Button variant="outline" @press={ openCenter }>Centered dialog</Button>
+          </div>
+          <Sheet open={ leftOpen } title="Navigation" position="left" @close={ closeLeft }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>A left drawer slides in from its edge and is fixed width — snap points do not apply to the sides.</p>
+              <p>Swipe it back toward its edge, tap the backdrop, or press Escape to dismiss.</p>
+            </div>
+          </Sheet>
+          <Sheet open={ rightOpen } title="Cart" position="right" @close={ closeRight }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Same drawer, opposite edge. position sets the mobile profile and desktopPosition falls back to it, so this is a right drawer at every width.</p>
+            </div>
+          </Sheet>
+          <Sheet open={ centerOpen } title="Heads up" position="center" @close={ closeCenter }>
+            <div class="space-y-2 py-2 text-sm text-body">
+              <p>A centered dialog hugs its content height.</p>
+              <p>Two short lines stay two short lines.</p>
+            </div>
+          </Sheet>
+        </ExampleBox>
+
+        <ExampleBox id="modes" title="Card mode vs edge" code={ codeModes }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <Button variant="outline" @press={ openCard }>Card mode</Button>
+            <Button variant="outline" @press={ openEdge }>Edge mode</Button>
+          </div>
+          <Sheet open={ cardOpen } title="Card mode" mode="card" @close={ closeCard }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Card mode floats the panel inside a small margin with rounded corners on every side — it reads as a floating surface rather than a slab welded to the edge.</p>
+            </div>
+          </Sheet>
+          <Sheet open={ edgeOpen } title="Edge mode" desktopMode="edge" @close={ closeEdge }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Edge mode sits flush against the screen edge. It is the mobile default; desktopMode defaults to card, so this sheet forces desktopMode="edge" to stay flush at every width.</p>
+            </div>
+          </Sheet>
+        </ExampleBox>
+
+        <ExampleBox id="effects" title="Entrance and exit effects" code={ codeEffects }>
+          <div class="flex flex-wrap items-center justify-center gap-3">
+            <Button variant="outline" @press={ openPop }>Pop dialog</Button>
+            <Button variant="outline" @press={ openAsym }>Slide in, fade out</Button>
+          </div>
+          <Sheet open={ popOpen } title="Saved" position="center" effect="pop" @close={ closePop }>
+            <div class="space-y-2 py-2 text-sm text-body">
+              <p>pop arrives with a small visible bounce.</p>
+              <p>The bounce lives in the keyframes, not the spring.</p>
+            </div>
+          </Sheet>
+          <Sheet
+            open={ asymOpen }
+            title="Details"
+            desktopPosition="right"
+            desktopExitEffect="fade-scale"
+            @close={ closeAsym }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Arriving and leaving are separate questions. On desktop this card slides in from the right, but closing it fades and shrinks it away instead of sliding it back across the screen.</p>
+              <p>Say nothing and leaving mirrors arriving — the exit props only exist for when the mirror reads wrong.</p>
+            </div>
+          </Sheet>
+        </ExampleBox>
+
+        <ExampleBox id="dismiss" title="A sheet that may not be waved away" code={ codeDismiss }>
+          <Button variant="outline" @press={ openConfirm }>Delete project</Button>
+          <Sheet
+            open={ confirmOpen }
+            title="Delete project?"
+            position="center"
+            dismiss="none"
+            @close={ closeConfirm }>
+            <div class="space-y-2 py-2 text-sm text-body">
+              <p>This cannot be undone.</p>
+              <p>Swipe, backdrop tap, and Escape are all refused — a refused swipe settles back and reports prevented: true on @snapRelease. The button below is the only way out.</p>
+            </div>
+            <Button slot="footer" variant="secondary" class="w-full" @press={ closeConfirm }>Delete project</Button>
+          </Sheet>
+        </ExampleBox>
+
+        <ExampleBox id="spring" title="Spring override" code={ codeSpring }>
+          <Button variant="outline" @press={ openSpring }>Open floaty sheet</Button>
+          <Sheet
+            open={ springOpen }
+            title="Floaty"
+            spring="0.08 0.4"
+            @close={ closeSpring }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>spring="attraction friction" retunes how the sheet arrives — both dials exclusive of 0 and 1. This one is looser and floatier than the default entrance.</p>
+              <p>The override governs the entrance only; exits and snap settles keep their tuned presets.</p>
+            </div>
+          </Sheet>
+        </ExampleBox>
+
+        <ExampleBox id="header-slot" title="Custom header" code={ codeHeader }>
+          <Button variant="outline" @press={ openHeader }>Open with custom header</Button>
+          <Sheet
+            open={ headerOpen }
+            labelledby="promo-sheet-title"
+            desktopPosition="right"
+            @close={ closeHeader }>
+            <div slot="header" class="flex items-center justify-between border-b border-border px-5 py-4">
+              <h2 id="promo-sheet-title" class="text-base font-semibold text-ink">Summer promo</h2>
+              <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-surface">New</span>
+            </div>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Filling the header slot replaces the stock grabber and title entirely, so a custom header brings its own heading and points labelledby at it.</p>
+              <p>The header is still an unconditional drag surface.</p>
+            </div>
+          </Sheet>
+        </ExampleBox>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">Props</h3>
+          <div class="text-sm">
+            {#for row in propRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Callbacks</h3>
+          <div class="text-sm">
+            {#for row in callbackRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Slots</h3>
+          <div class="text-sm">
+            {#for row in slotRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
         </section>
       </div>
     </article>
@@ -62,30 +222,142 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import Button from '@/components/ui/Button.pzl';
 import Sheet from '@/components/ui/Sheet.pzl';
+import Button from '@/components/ui/Button.pzl';
 import ExampleBox from '@/components/docs/ExampleBox.pzl';
 import CodeBlock from '@/components/docs/CodeBlock.pzl';
 import Toc from '@/components/docs/Toc.pzl';
 
 const installCmd = 'puzzle add piece sheet';
 const usageImport = `import Sheet from '@/components/ui/Sheet.pzl';`;
-const usageMarkup = `<Sheet open={ sheetOpen } title="Terms of service" @close={ closeSheet }></Sheet>`;
+const usageMarkup = `<Sheet open={ sheetOpen } title="Your cart" @close={ () => this.setData('sheetOpen', false) }>
+  <CartLines/>
+  <Button slot="footer" @press={ checkout }>Checkout</Button>
+</Sheet>`;
 
 const codeHero = `<Button variant="outline" @press={ openSheet }>Open sheet</Button>
-<Sheet open={ sheetOpen } title="Terms of service" @close={ closeSheet }>
-  <p>…scrollable content…</p>
+<Sheet
+  open={ sheetOpen }
+  title="Your cart"
+  snapPoints="85vh 55vh 25vh"
+  desktopPosition="right"
+  @close={ () => this.setData('sheetOpen', false) }>
+  <CartLines/>
+  <Button slot="footer" class="w-full" @press={ checkout }>Checkout</Button>
 </Sheet>
 
-// parent owns open; @close(reason) fires for escape | backdrop | drag
-events = {
-  openSheet: () => this.setData('sheetOpen', true),
-  closeSheet: () => this.setData('sheetOpen', false),
-};`;
+// Bottom sheet with three snaps below 768px; right drawer above it.
+// Resize across the breakpoint while it is open and it morphs in place.`;
+
+const codeSnaps = `<Button variant="outline" @press={ openSheet }>Open snapping sheet</Button>
+<span class="text-sm text-muted">snap index: { snapIndex }</span>
+
+<Sheet
+  open={ sheetOpen }
+  title="Filters"
+  snapPoints="85vh 55vh 25vh"
+  snap={ snapIndex }
+  @snapChange={ (index) => this.setData('snapIndex', index) }
+  @close={ () => this.setData('sheetOpen', false) }>
+  <FilterList/>
+</Sheet>
+
+// snap is optional-controlled: omit it and the sheet tracks its own snap.
+// snapChange fires only when a release commits a snap, never mid-drag.`;
+
+const codePositions = `<Sheet open={ leftOpen } title="Navigation" position="left" @close={ closeLeft }>
+  <NavLinks/>
+</Sheet>
+
+<Sheet open={ rightOpen } title="Cart" position="right" @close={ closeRight }>
+  <CartLines/>
+</Sheet>
+
+<Sheet open={ centerOpen } title="Heads up" position="center" @close={ closeCenter }>
+  <p>A centered dialog hugs its content height.</p>
+  <p>Two short lines stay two short lines.</p>
+</Sheet>
+
+// Sides take a single fixed width; center takes its intrinsic height.
+// All three ignore snapPoints — snaps belong to bottom sheets only.`;
+
+const codeModes = `<Sheet open={ cardOpen } title="Card mode" mode="card" @close={ closeCard }>
+  <p>Floats inside a margin with rounded corners on every side.</p>
+</Sheet>
+
+<Sheet open={ edgeOpen } title="Edge mode" desktopMode="edge" @close={ closeEdge }>
+  <p>Flush against the screen edge at every width.</p>
+</Sheet>
+
+// mode is the mobile profile (default "edge"); desktopMode defaults to "card".`;
+
+const codeEffects = `<Sheet open={ popOpen } title="Saved" position="center" effect="pop" @close={ closePop }>
+  <p>pop arrives with a small visible bounce.</p>
+</Sheet>
+
+<Sheet
+  open={ detailsOpen }
+  title="Details"
+  desktopPosition="right"
+  desktopExitEffect="fade-scale"
+  @close={ closeDetails }>
+  <p>Slides in from the right, fades and shrinks away on close.</p>
+</Sheet>
+
+// Effects: slide | fade-scale | slide-fade | pop.
+// exitEffect / desktopExitEffect fall back to the entrance effects,
+// so saying nothing keeps leaving as the mirror of arriving.`;
+
+const codeDismiss = `<Sheet
+  open={ confirmOpen }
+  title="Delete project?"
+  position="center"
+  dismiss="none"
+  @close={ closeConfirm }>
+  <p>This cannot be undone.</p>
+  <Button slot="footer" class="w-full" @press={ confirmDelete }>Delete project</Button>
+</Sheet>
+
+// dismiss is a token list: "swipe backdrop escape" (default all) or "none".
+// A refused swipe settles back to its snap and @snapRelease reports
+// prevented: true, so you can shake the panel or flag the field.`;
+
+const codeSpring = `<Sheet open={ sheetOpen } title="Floaty" spring="0.08 0.4" @close={ close }>
+  <p>Looser attraction, lighter friction — a floatier arrival.</p>
+</Sheet>
+
+// spring="attraction friction", both dials exclusive of 0 and 1.
+// Overrides the entrance only; exits and snaps keep their presets.`;
+
+const codeHeader = `<Sheet open={ sheetOpen } labelledby="promo-sheet-title" desktopPosition="right" @close={ close }>
+  <div slot="header" class="flex items-center justify-between border-b border-border px-5 py-4">
+    <h2 id="promo-sheet-title" class="text-base font-semibold text-ink">Summer promo</h2>
+    <span class="rounded-full bg-brand px-2 py-0.5 text-xs text-surface">New</span>
+  </div>
+  <PromoDetails/>
+</Sheet>
+
+// A filled header slot replaces the grabber + title entirely, so it must
+// bring its own heading and point labelledby at that heading's id.
+// slot="header" must sit on a direct child of the Sheet tag.`;
 
 export default class SheetDoc extends PuzzleView {
   created() {
-    this.setData({ sheetOpen: false });
+    this.setData({
+      heroOpen: false,
+      snapsOpen: false,
+      leftOpen: false,
+      rightOpen: false,
+      centerOpen: false,
+      cardOpen: false,
+      edgeOpen: false,
+      popOpen: false,
+      asymOpen: false,
+      confirmOpen: false,
+      springOpen: false,
+      headerOpen: false,
+      snapIndex: 0,
+    });
   }
 
   data(params, props) {
@@ -95,18 +367,92 @@ export default class SheetDoc extends PuzzleView {
       usageImport,
       usageMarkup,
       codeHero,
+      codeSnaps,
+      codePositions,
+      codeModes,
+      codeEffects,
+      codeDismiss,
+      codeSpring,
+      codeHeader,
       paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
+      propRows: [
+        { name: 'open', desc: 'Required, controlled. The parent owns it; flip it in @close.' },
+        { name: 'title', desc: 'Heading text rendered by the default header.' },
+        { name: 'labelledby', desc: 'Id of the labelling heading when the header slot is filled.' },
+        { name: 'position', desc: 'Mobile profile: bottom, left, right, or center. Default bottom.' },
+        { name: 'mode', desc: 'Mobile profile mode: edge or card. Default edge.' },
+        { name: 'breakpoint', desc: 'Pixel width where the desktop profile takes over. Default 768.' },
+        { name: 'desktopPosition', desc: 'Desktop position; falls back to position.' },
+        { name: 'desktopMode', desc: 'Desktop mode. Default card.' },
+        { name: 'effect', desc: 'Entrance: slide, fade-scale, slide-fade, or pop. Default slide.' },
+        { name: 'exitEffect', desc: 'Exit effect; falls back to effect.' },
+        { name: 'desktopEffect', desc: 'Desktop entrance; falls back to effect, except a centered desktop defaults to fade-scale.' },
+        { name: 'desktopExitEffect', desc: 'Desktop exit; falls back to exitEffect, then desktopEffect.' },
+        { name: 'snapPoints', desc: 'CSS lengths, e.g. "85vh 55vh 25vh". Default "85vh". Bottom-mobile only; a desktop bottom keeps its largest snap and is dismiss-only, and sides/center ignore snaps.' },
+        { name: 'snap', desc: 'Snap index. Optional-controlled with @snapChange.' },
+        { name: 'initialSnap', desc: 'Index to open at when snap is uncontrolled.' },
+        { name: 'dismiss', desc: 'Token list of swipe, backdrop, escape; or "all" (default) or "none".' },
+        { name: 'spring', desc: '"attraction friction" entrance override, both dials in (0, 1).' },
+        { name: 'showGrabber', desc: 'Show the grabber in the default header. Default true.' },
+        { name: 'exitCushion', desc: 'Extra pixels of exit runway to clear the shadow. Default 28.' },
+        { name: 'morphDuration', desc: 'Profile morph duration in ms. Default 420.' },
+        { name: 'morphEasing', desc: 'Profile morph easing.' },
+        { name: 'class', desc: 'Merged onto the panel; a caller width utility replaces the default width.' },
+        { name: 'backdropClass', desc: 'Merged onto the backdrop.' },
+      ],
+      callbackRows: [
+        { name: '@close(reason)', desc: 'reason is swipe, backdrop, or escape. The sheet never closes itself — the parent flips open here.' },
+        { name: '@snapChange(index)', desc: 'A release committed a snap; fires only on commit, never mid-drag.' },
+        { name: '@snapRelease(detail)', desc: 'Every claimed release: { velocity, flick, direction, size, target, prevented }. prevented is true when the dismiss policy refused a swipe.' },
+        { name: '@shown()', desc: 'The entrance settled.' },
+        { name: '@hidden()', desc: 'The exit finished and the dialog closed.' },
+      ],
+      slotRows: [
+        { name: 'header', desc: 'Replaces the grabber and title heading; a filled header brings its own heading and labelledby. Always a drag surface.' },
+        { name: 'footer', desc: 'Pinned below the content; hidden when empty.' },
+        { name: 'default', desc: 'Untagged children become the scrollable content region.' },
+      ],
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
-        { label: 'Responsive behavior', href: '#responsive' },
+        { label: 'Controlled snaps', href: '#snaps' },
+        { label: 'Positions', href: '#positions' },
+        { label: 'Card mode vs edge', href: '#modes' },
+        { label: 'Effects', href: '#effects' },
+        { label: 'Dismiss policy', href: '#dismiss' },
+        { label: 'Spring override', href: '#spring' },
+        { label: 'Custom header', href: '#header-slot' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
 
   events = {
-    openSheet: () => this.setData('sheetOpen', true),
-    closeSheet: () => this.setData('sheetOpen', false),
+    openHero: () => this.setData('heroOpen', true),
+    closeHero: () => this.setData('heroOpen', false),
+    openSnaps: () => this.setData('snapsOpen', true),
+    closeSnaps: () => this.setData('snapsOpen', false),
+    setSnapIndex: (index) => this.setData('snapIndex', index),
+    openLeft: () => this.setData('leftOpen', true),
+    closeLeft: () => this.setData('leftOpen', false),
+    openRight: () => this.setData('rightOpen', true),
+    closeRight: () => this.setData('rightOpen', false),
+    openCenter: () => this.setData('centerOpen', true),
+    closeCenter: () => this.setData('centerOpen', false),
+    openCard: () => this.setData('cardOpen', true),
+    closeCard: () => this.setData('cardOpen', false),
+    openEdge: () => this.setData('edgeOpen', true),
+    closeEdge: () => this.setData('edgeOpen', false),
+    openPop: () => this.setData('popOpen', true),
+    closePop: () => this.setData('popOpen', false),
+    openAsym: () => this.setData('asymOpen', true),
+    closeAsym: () => this.setData('asymOpen', false),
+    openConfirm: () => this.setData('confirmOpen', true),
+    closeConfirm: () => this.setData('confirmOpen', false),
+    openSpring: () => this.setData('springOpen', true),
+    closeSpring: () => this.setData('springOpen', false),
+    openHeader: () => this.setData('headerOpen', true),
+    closeHeader: () => this.setData('headerOpen', false),
   };
 }
 </script>

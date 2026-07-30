@@ -1,0 +1,194 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Bottom Sheet</h1>
+        <p class="mt-2 text-body">
+          Gesture-driven native-dialog bottom sheet with snap points, velocity-aware
+          spring settling, pinned header/footer slots, backdrop dragging, inset mode,
+          and controlled open state.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <Button variant="outline" @press={ openSnapping }>Open snapping sheet</Button>
+        <BottomSheet
+          open={ snappingOpen }
+          title="Filters"
+          snapPoints={ snapPoints }
+          snap={ snap }
+          @snapChange={ setSnap }
+          @close={ closeSnapping }>
+          <div class="space-y-4 py-4 text-sm text-body">
+            <p>Drag the header, footer, or backdrop. Slow releases choose the nearest snap; a flick moves exactly one step.</p>
+            {#for n in paragraphs}
+              <p key={ n }>Filter group { n } — scroll this content, then return to the top before dragging downward from the content surface.</p>
+            {/for}
+          </div>
+          <Button slot="footer" class="w-full" @press={ closeSnapping }>Apply filters</Button>
+        </BottomSheet>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece and its math helper into your app:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <p class="mt-3 text-sm text-muted">
+          The manifest also declares @magic-spells/physics-engine. Install the package
+          printed by the Puzzle CLI and merge the pieces.css tokens into your app styles.
+        </p>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="binary" title="Binary sheet" code={ codeBinary }>
+          <Button variant="outline" @press={ openBinary }>Open binary sheet</Button>
+          <BottomSheet open={ binaryOpen } title="Quick actions" @close={ closeBinary }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Without snapPoints, the sheet uses its content height.</p>
+              <p>Drag down more than 100px or flick downward to dismiss. A shorter drag returns to rest.</p>
+            </div>
+            <Button slot="footer" variant="secondary" class="w-full" @press={ closeBinary }>Done</Button>
+          </BottomSheet>
+        </ExampleBox>
+
+        <ExampleBox id="inset" title="Inset without spring" code={ codeInset }>
+          <Button variant="outline" @press={ openInset }>Open inset sheet</Button>
+          <BottomSheet
+            open={ insetOpen }
+            title="Delivery options"
+            snapPoints="45,80"
+            spring="none"
+            inset
+            @close={ closeInset }>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Inset detaches the panel from the viewport edges and rounds all four corners.</p>
+              <p>spring="none" keeps the tuned overshooting arrival, but runs it on a fixed 400ms WAAPI clock.</p>
+            </div>
+          </BottomSheet>
+        </ExampleBox>
+
+        <section id="behavior" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Behavior notes</h2>
+          <div class="space-y-3 text-sm text-body">
+            <p>
+              The parent owns open. Escape, a short backdrop tap, or an accepted drag
+              calls @close with escape, backdrop, or drag; the piece never mutates open.
+              Set dismissible to false to disable all three paths and hide the grabber.
+            </p>
+            <p>
+              snap is optional-controlled. Pass it with @snapChange to own the committed
+              snap, or omit it and the sheet keeps the current snap locally. snapChange
+              fires only when a release commits, never during pointer movement.
+            </p>
+            <p class="text-muted">
+              Mouse and pen can hand a content drag to the sheet when scrollTop reaches
+              zero mid-gesture. Native touch scrolling cannot change pointer owner after
+              a pan begins, so touch requires lifting and starting a second gesture at
+              the top. This matches the source component.
+            </p>
+          </div>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import BottomSheet from '@/components/ui/BottomSheet.pzl';
+import Button from '@/components/ui/Button.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+const installCmd = 'puzzle add piece bottom-sheet';
+const usageImport = `import BottomSheet from '@/components/ui/BottomSheet.pzl';`;
+const usageMarkup = `<BottomSheet
+  open={ open }
+  title="Filters"
+  snapPoints={ [40, 70, 100] }
+  snap={ snap }
+  @snapChange={ setSnap }
+  @close={ close }>
+  <FilterList/>
+  <Button slot="footer" @press={ close }>Apply</Button>
+</BottomSheet>`;
+
+const codeHero = `<Button variant="outline" @press={ openSheet }>Open snapping sheet</Button>
+<BottomSheet
+  open={ sheetOpen }
+  title="Filters"
+  snapPoints={ [40, 70, 100] }
+  snap={ snap }
+  @snapChange={ (value) => this.setData('snap', value) }
+  @close={ () => this.setData('sheetOpen', false) }>
+  <FilterList/>
+  <Button slot="footer" @press={ apply }>Apply filters</Button>
+</BottomSheet>`;
+
+const codeBinary = `<BottomSheet open={ open } title="Quick actions" @close={ close }>
+  <QuickActions/>
+</BottomSheet>`;
+
+const codeInset = `<BottomSheet
+  open={ open }
+  title="Delivery options"
+  snapPoints="45,80"
+  spring="none"
+  inset
+  @close={ close }>
+  <DeliveryOptions/>
+</BottomSheet>`;
+
+export default class BottomSheetDoc extends PuzzleView {
+  created() {
+    this.setData({
+      snappingOpen: false,
+      binaryOpen: false,
+      insetOpen: false,
+      snap: 70,
+    });
+  }
+
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd,
+      usageImport,
+      usageMarkup,
+      codeHero,
+      codeBinary,
+      codeInset,
+      snapPoints: [40, 70, 100],
+      paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
+      toc: [
+        { label: 'Installation', href: '#installation' },
+        { label: 'Usage', href: '#usage' },
+        { label: 'Binary sheet', href: '#binary' },
+        { label: 'Inset without spring', href: '#inset' },
+        { label: 'Behavior notes', href: '#behavior' },
+      ],
+    };
+  }
+
+  events = {
+    openSnapping: () => this.setData('snappingOpen', true),
+    closeSnapping: () => this.setData('snappingOpen', false),
+    setSnap: (value) => this.setData('snap', value),
+    openBinary: () => this.setData('binaryOpen', true),
+    closeBinary: () => this.setData('binaryOpen', false),
+    openInset: () => this.setData('insetOpen', true),
+    closeInset: () => this.setData('insetOpen', false),
+  };
+}
+</script>

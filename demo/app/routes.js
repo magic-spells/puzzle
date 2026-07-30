@@ -18,6 +18,7 @@ import AvatarDoc from './views/components/AvatarDoc.pzl';
 import AvatarGroupDoc from './views/components/AvatarGroupDoc.pzl';
 import BadgeDoc from './views/components/BadgeDoc.pzl';
 import BarChartDoc from './views/components/BarChartDoc.pzl';
+import BottomSheetDoc from './views/components/BottomSheetDoc.pzl';
 import BreadcrumbDoc from './views/components/BreadcrumbDoc.pzl';
 import ButtonDoc from './views/components/ButtonDoc.pzl';
 import ButtonGroupDoc from './views/components/ButtonGroupDoc.pzl';
@@ -232,6 +233,13 @@ export default [
 		view: BarChartDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Bar Chart — Puzzle Pieces' },
+	},
+	{
+		path: '/components/bottom-sheet',
+		name: 'bottom-sheet',
+		view: BottomSheetDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Bottom Sheet — Puzzle Pieces' },
 	},
 	{
 		path: '/components/breadcrumb',

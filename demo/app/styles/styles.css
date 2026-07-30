@@ -9,6 +9,16 @@
 @source "../**/*.js";
 @source "../public/**/*.html";
 
+/*
+ * dist/ is COMMITTED (GitHub Pages serves it), so it is not gitignored — which
+ * means v4's automatic content detection also scans the PREVIOUS build's own
+ * output. A class deleted from source then keeps its rule for exactly one more
+ * build, and a malformed class literal can look like it works because the older
+ * bundle still carried the correct one. Exclude it so the generated CSS reflects
+ * source alone. Requires Tailwind >= 4.1 (this project is on 4.3).
+ */
+@source not "../../dist/**";
+
 /* Gutter system (Luna-theme pattern, same as magic-spells-puzzle-site): one
    responsive variable drives side padding via Tailwind utilities (px-gutter). */
 :root {

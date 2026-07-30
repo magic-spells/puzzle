@@ -522,7 +522,7 @@ var require_core = __commonJS({
         }
       );
     };
-    var MODES2 = /* @__PURE__ */ Object.freeze({
+    var MODES3 = /* @__PURE__ */ Object.freeze({
       __proto__: null,
       APOS_STRING_MODE,
       BACKSLASH_ESCAPE,
@@ -1590,12 +1590,12 @@ var require_core = __commonJS({
         optional,
         anyNumberOfTimes
       };
-      for (const key in MODES2) {
-        if (typeof MODES2[key] === "object") {
-          deepFreeze(MODES2[key]);
+      for (const key in MODES3) {
+        if (typeof MODES3[key] === "object") {
+          deepFreeze(MODES3[key]);
         }
       }
-      Object.assign(hljs, MODES2);
+      Object.assign(hljs, MODES3);
       return hljs;
     };
     var highlight2 = HLJS({});
@@ -9828,6 +9828,12 @@ var SECTIONS = [
         description: 'Confirm/cancel modal for destructive or consequential actions on the native <dialog role="alertdialog"> element \u2014 no backdrop dismiss, no close X, Escape cancels, initial focus on Cancel'
       },
       {
+        name: "bottom-sheet",
+        title: "Bottom Sheet",
+        path: "/components/bottom-sheet",
+        description: "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state"
+      },
+      {
         name: "command",
         title: "Command",
         path: "/components/command",
@@ -9879,7 +9885,7 @@ var SECTIONS = [
         name: "sheet",
         title: "Sheet",
         path: "/components/sheet",
-        description: "Bottom sheet with drag-to-dismiss physics; becomes a centered modal on wide viewports"
+        description: "One component that is a snap-point bottom sheet on phones and morphs \u2014 live, in place, while open \u2014 into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, entrance and exit effects, a dismiss policy, and parent-controlled open state"
       },
       {
         name: "tooltip",
@@ -10337,11 +10343,11 @@ var f = class {
 };
 var b = class extends f {
   #t;
-  #m;
+  #u;
   #o;
-  #n;
-  #s;
   #e;
+  #s;
+  #n;
   #r;
   #h;
   #i;
@@ -10355,7 +10361,7 @@ var b = class extends f {
       throw new Error("Attraction must be a number between 0 and 1 (exclusive).");
     if (!Number.isFinite(i2) || i2 <= 0 || i2 >= 1)
       throw new Error("Friction must be a number between 0 and 1 (exclusive).");
-    this.#t = t2, this.#m = i2, this.#o = 1 - i2, this.#n = 0, this.#s = 0, this.#e = 0, this.isAnimating = false, this.#r = null, this.#h = 0, this.#i = null;
+    this.#t = t2, this.#u = i2, this.#o = 1 - i2, this.#e = 0, this.#s = 0, this.#n = 0, this.isAnimating = false, this.#r = null, this.#h = 0, this.#i = null;
   }
   /**
    * Animates from a start value to an end value.
@@ -10371,9 +10377,9 @@ var b = class extends f {
       throw new Error("endValue must be a finite number.");
     if (!Number.isFinite(s2))
       throw new Error("velocity must be a finite number.");
-    if (this.isAnimating && this.#u(), t2 === i2 && s2 === 0)
+    if (this.isAnimating && this.#m(), t2 === i2 && s2 === 0)
       return this.emit("change", { position: i2, progress: 1 }), this.emit("complete", { position: i2, progress: 1 }), Promise.resolve();
-    this.#s = t2, this.#e = i2, this.#n = s2, this.isAnimating = true, this.#r = null;
+    this.#s = t2, this.#n = i2, this.#e = s2, this.isAnimating = true, this.#r = null;
     const e2 = ++this.#h;
     return new Promise((n2) => {
       this.#i = n2;
@@ -10386,14 +10392,14 @@ var b = class extends f {
         }
         const o2 = Math.min(h - this.#r, 64) / 16.66;
         this.#r = h;
-        const l = (this.#e - this.#s) * this.#t;
-        this.#n += l * o2, this.#n *= Math.pow(this.#o, o2), this.#s += this.#n * o2;
-        const m = this.#e - t2;
-        let u = 0;
-        if (m !== 0 && (u = (this.#s - t2) / m), this.emit("change", { position: this.#s, progress: u }), Math.abs(this.#s - this.#e) < 0.01 && Math.abs(this.#n) < 0.01) {
+        const a2 = (this.#n - this.#s) * this.#t;
+        this.#e += a2 * o2, this.#e *= Math.pow(this.#o, o2), this.#s += this.#e * o2;
+        const u = this.#n - t2;
+        let m = 0;
+        if (u !== 0 && (m = (this.#s - t2) / u), this.emit("change", { position: this.#s, progress: m }), Math.abs(this.#s - this.#n) < 0.01 && Math.abs(this.#e) < 0.01) {
           this.isAnimating = false;
           const c2 = this.#i;
-          this.#i = null, this.emit("change", { position: this.#e, progress: 1 }), this.emit("complete", { position: this.#e, progress: 1 }), c2();
+          this.#i = null, this.emit("change", { position: this.#n, progress: 1 }), this.emit("complete", { position: this.#n, progress: 1 }), c2();
           return;
         }
         requestAnimationFrame(r2);
@@ -10405,7 +10411,7 @@ var b = class extends f {
    * Internal stop — resolves Promise without emitting 'stop'.
    * Used when a new animateTo supersedes the current one.
    */
-  #u() {
+  #m() {
     this.isAnimating = false, this.#i && (this.#i(), this.#i = null);
   }
   /**
@@ -10418,6 +10424,15 @@ var b = class extends f {
     this.isAnimating = false, this.#h++;
     const t2 = this.#i;
     this.#i = null, this.emit("stop", { position: this.#s }), t2 && t2();
+  }
+  /**
+   * Gets the current velocity, in units per 16.66ms frame.
+   * Same units animateTo() accepts, so it can be handed straight back in
+   * to retarget an animation without losing momentum.
+   * @returns {number} The current velocity.
+   */
+  getVelocity() {
+    return this.#e;
   }
   /**
    * Sets the attraction value
@@ -10435,7 +10450,7 @@ var b = class extends f {
   setFriction(t2) {
     if (!Number.isFinite(t2) || t2 <= 0 || t2 >= 1)
       throw new Error("Friction must be a number between 0 and 1 (exclusive).");
-    this.#m = t2, this.#o = 1 - t2;
+    this.#u = t2, this.#o = 1 - t2;
   }
 };
 
@@ -16504,7 +16519,7 @@ Introduction.prototype.render = function() {
               new ViewNode("text", { value: "Browse components" })
             ]),
             new ViewNode(Badge, { variant: "outline" }, [
-              new ViewNode("text", { value: "89 pieces" })
+              new ViewNode("text", { value: "90 pieces" })
             ])
           ])
         ]),
@@ -16593,7 +16608,7 @@ ComponentsIndex.prototype.render = function() {
             new ViewNode("text", { value: "Components" })
           ]),
           new ViewNode("p", { class: "mt-2 text-body" }, [
-            new ViewNode("text", { value: "All 89 pieces in the registry. Every one is a native Puzzle component you copy into your app \u2014 click through for live examples and usage." })
+            new ViewNode("text", { value: "All 90 pieces in the registry. Every one is a native Puzzle component you copy into your app \u2014 click through for live examples and usage." })
           ])
         ]),
         new ViewNode(
@@ -33766,11 +33781,1073 @@ BarChartDoc.prototype.render = function() {
 };
 BarChartDoc.__pzlModule = "app/views/components/BarChartDoc.pzl";
 
+// app/lib/sheet-math.js
+var SNAP_EPSILON = 1;
+var SPRING_DEFAULTS = { attraction: 0.065, friction: 0.3 };
+var FRAME_MS = 16.66;
+var VELOCITY_BOOST = 1.1;
+function parseSnapPoints(value) {
+  if (!value)
+    return [];
+  const tokens = Array.isArray(value) ? value : String(value).split(/[\s,]+/);
+  const seen = /* @__PURE__ */ new Set();
+  for (const token of tokens) {
+    if (token === "")
+      continue;
+    const parsed = Number(token);
+    if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 100)
+      continue;
+    seen.add(parsed);
+  }
+  return [...seen].sort((a2, b2) => a2 - b2);
+}
+function resolveSnapTarget({ currentPx, velocityY, snapsPx, flickVelocity }) {
+  if (!snapsPx.length)
+    return null;
+  if (velocityY > flickVelocity) {
+    const below = snapsPx.filter((px) => px < currentPx - SNAP_EPSILON);
+    return below.length ? below[below.length - 1] : null;
+  }
+  if (velocityY < -flickVelocity) {
+    const above = snapsPx.find((px) => px > currentPx + SNAP_EPSILON);
+    return above ?? snapsPx[snapsPx.length - 1];
+  }
+  return snapsPx.reduce(
+    (best, px) => Math.abs(px - currentPx) < Math.abs(best - currentPx) ? px : best
+  );
+}
+var VelocityTracker = class {
+  #samples = [];
+  #windowMs;
+  constructor(windowMs = 100) {
+    this.#windowMs = windowMs;
+  }
+  add(y, t2) {
+    this.#samples.push({ y, t: t2 });
+    const cutoff = t2 - this.#windowMs;
+    while (this.#samples.length > 2 && this.#samples[0].t < cutoff) {
+      this.#samples.shift();
+    }
+  }
+  get velocity() {
+    const samples = this.#samples;
+    if (samples.length < 2)
+      return 0;
+    const last = samples[samples.length - 1];
+    let direction = 0;
+    let start = samples.length - 1;
+    while (start > 0) {
+      const step = Math.sign(samples[start].y - samples[start - 1].y);
+      if (step !== 0) {
+        if (direction === 0)
+          direction = step;
+        else if (step !== direction)
+          break;
+      }
+      start--;
+    }
+    const first = samples[start];
+    const deltaTime = last.t - first.t;
+    return deltaTime === 0 ? 0 : (last.y - first.y) / deltaTime;
+  }
+  reset() {
+    this.#samples = [];
+  }
+};
+function applyResistance(v) {
+  return Math.sqrt(v) * 10 * 0.1;
+}
+function seedVelocity(velocityY) {
+  return -velocityY * FRAME_MS * VELOCITY_BOOST;
+}
+
+// app/components/ui/BottomSheet.pzl
+var uid20 = 0;
+var ENTER_DURATION = 400;
+var EXIT_DURATION = 400;
+var MOTION_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
+var SNAP_EASING = "cubic-bezier(0.2, 1.25, 0.3, 1)";
+var HIDDEN_OFFSET = 20;
+var SLOP = 5;
+var DRAG_THRESHOLD2 = 100;
+var FLICK_VELOCITY = 0.5;
+var DIALOG = "fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-transparent p-0 open:flex flex-col justify-end overflow-hidden text-body [&::backdrop]:bg-transparent";
+var BACKDROP = "absolute inset-0 bg-black/50 backdrop-blur-sm touch-none";
+var PANEL_WIDTH_CAP = "max-w-[480px]";
+var CALLER_MAX_WIDTH = /(?:^|\s)\S*max-w-/;
+var PANEL_BASE5 = "relative z-10 mx-auto flex flex-col overflow-hidden bg-surface will-change-transform";
+var PANEL_EDGE = "w-full rounded-t-2xl border-t border-border pb-[env(safe-area-inset-bottom,0px)] shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_INSET = "mb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] w-[calc(100%-1.5rem)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var HEADER = "shrink-0 touch-none select-none px-4";
+var CONTENT = "min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4";
+var FOOTER = "shrink-0 touch-none bg-surface p-4 empty:hidden";
+var BottomSheet = class extends PuzzleView {
+  #enter = null;
+  #exit = null;
+  #move = null;
+  #snapAnimation = null;
+  #settleTarget = null;
+  #engine = null;
+  #springTarget = null;
+  #springSpec = null;
+  #carriedVelocity = 0;
+  #bodyOverflow = null;
+  #drag = { active: false };
+  #snapPoints = [];
+  #localSnap = null;
+  #committedSnap = null;
+  data(params, props) {
+    const id = this._id ??= `pp-bottom-sheet-${++uid20}`;
+    const title = props.title || "";
+    const inset = !!props.inset;
+    const callerClass = props.class || "";
+    this.#snapPoints = parseSnapPoints(props.snapPoints);
+    const hasSnaps = this.#snapPoints.length > 0;
+    return {
+      // Read imperatively in syncOpen(); returned so prop changes still drive
+      // the update cycle that calls afterUpdate().
+      open: !!props.open,
+      title,
+      titleId: `${id}-title`,
+      labelledby: props.labelledby || (title ? `${id}-title` : false),
+      showGrabber: props.dismissible !== false && props.showGrabber !== false,
+      dialogClass: DIALOG,
+      backdropClass: [
+        BACKDROP,
+        props.dismissible === false ? "" : "cursor-grab",
+        props.backdropClass || ""
+      ].filter(Boolean).join(" "),
+      panelClass: [
+        PANEL_BASE5,
+        inset ? PANEL_INSET : PANEL_EDGE,
+        hasSnaps ? "max-h-none" : "max-h-[85dvh]",
+        // Yield the default cap outright when the caller sets their own width.
+        CALLER_MAX_WIDTH.test(callerClass) ? "" : PANEL_WIDTH_CAP,
+        callerClass
+      ].filter(Boolean).join(" "),
+      headerClass: [HEADER, props.dismissible === false ? "" : "cursor-grab"].filter(Boolean).join(" "),
+      contentClass: CONTENT,
+      footerClass: [FOOTER, props.dismissible === false ? "" : "cursor-grab"].filter(Boolean).join(" ")
+    };
+  }
+  #reducedMotion() {
+    return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  }
+  #lockBody() {
+    if (this.#bodyOverflow !== null)
+      return;
+    this.#bodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+  }
+  #unlockBody() {
+    if (this.#bodyOverflow === null)
+      return;
+    document.body.style.overflow = this.#bodyOverflow;
+    this.#bodyOverflow = null;
+  }
+  #hiddenDistance() {
+    const panel = this.refs.panel;
+    if (!panel)
+      return HIDDEN_OFFSET;
+    const gapBelow = Math.max(0, window.innerHeight - panel.getBoundingClientRect().bottom);
+    return panel.offsetHeight + gapBelow + HIDDEN_OFFSET;
+  }
+  #cancelAnimations() {
+    if (this.#enter) {
+      this.#enter.panel.cancel();
+      this.#enter.backdrop.cancel();
+      this.#enter = null;
+    }
+    if (this.#exit) {
+      this.#exit.panel.cancel();
+      this.#exit.backdrop.cancel();
+      this.#exit = null;
+    }
+    if (this.#move) {
+      this.#move.cancel();
+      this.#move = null;
+    }
+    if (this.#snapAnimation) {
+      this.#snapAnimation.cancel();
+      this.#snapAnimation = null;
+      this.#settleTarget = null;
+    }
+    this.#stopSpring();
+  }
+  #finishClose(dialog) {
+    this.refs.panel.style.transform = "";
+    this.refs.backdrop.style.opacity = "";
+    dialog.close();
+    this.#unlockBody();
+    const { hidden } = this.props;
+    if (typeof hidden === "function")
+      hidden();
+  }
+  #playEnter() {
+    const panel = this.refs.panel;
+    const backdrop = this.refs.backdrop;
+    panel.style.transform = "";
+    backdrop.style.opacity = "";
+    if (this.#reducedMotion()) {
+      const { shown } = this.props;
+      if (typeof shown === "function")
+        shown();
+      return;
+    }
+    const distance = this.#hiddenDistance();
+    const panelAnim = panel.animate(
+      [
+        { transform: `translate3d(0, ${distance}px, 0)` },
+        { transform: "translate3d(0, 0, 0)" }
+      ],
+      { duration: ENTER_DURATION, easing: MOTION_EASING }
+    );
+    const backdropAnim = backdrop.animate(
+      [{ opacity: 0 }, { opacity: 1 }],
+      { duration: ENTER_DURATION, easing: MOTION_EASING }
+    );
+    const entry = { panel: panelAnim, backdrop: backdropAnim };
+    this.#enter = entry;
+    panelAnim.onfinish = () => {
+      if (this.#enter !== entry)
+        return;
+      this.#enter = null;
+      const { shown } = this.props;
+      if (typeof shown === "function")
+        shown();
+    };
+  }
+  #playExit(dialog) {
+    if (this.#reducedMotion()) {
+      this.#finishClose(dialog);
+      return;
+    }
+    const panel = this.refs.panel;
+    const backdrop = this.refs.backdrop;
+    const from = panel.style.transform || "translate3d(0, 0, 0)";
+    const distance = this.#hiddenDistance();
+    const panelAnim = panel.animate(
+      [
+        { transform: from },
+        { transform: `translate3d(0, ${distance}px, 0)` }
+      ],
+      { duration: EXIT_DURATION, easing: MOTION_EASING, fill: "forwards" }
+    );
+    const backdropAnim = backdrop.animate(
+      [{ opacity: 1 }, { opacity: 0 }],
+      { duration: EXIT_DURATION, easing: MOTION_EASING, fill: "forwards" }
+    );
+    const exit = { panel: panelAnim, backdrop: backdropAnim };
+    this.#exit = exit;
+    panelAnim.onfinish = () => {
+      if (this.#exit !== exit)
+        return;
+      this.#exit = null;
+      this.#finishClose(dialog);
+      panelAnim.cancel();
+      backdropAnim.cancel();
+    };
+  }
+  // Reconciles the native element to the controlled open prop. The dialog stays
+  // open through its exit animation; a reopen cancels that exit in place.
+  syncOpen() {
+    const dialog = this.element;
+    if (!dialog)
+      return;
+    const shouldOpen = !!this.props.open;
+    if (shouldOpen) {
+      if (this.#exit) {
+        this.#exit.panel.cancel();
+        this.#exit.backdrop.cancel();
+        this.#exit = null;
+        this.refs.panel.style.transform = "";
+        this.refs.backdrop.style.opacity = "";
+        this.#applyRestingHeight();
+      }
+      if (!dialog.open) {
+        this.#applyRestingHeight();
+        this.#lockBody();
+        dialog.showModal();
+        this.#playEnter();
+      }
+      return;
+    }
+    if (this.#move) {
+      this.#move.cancel();
+      this.#move = null;
+    }
+    if (this.#snapAnimation)
+      this.#haltSnapSettle(true);
+    if (this.#springTarget !== null)
+      this.#haltSpring(true);
+    if (this.#enter) {
+      this.#enter.panel.cancel();
+      this.#enter.backdrop.cancel();
+      this.#enter = null;
+    }
+    if (dialog.open && !this.#exit)
+      this.#playExit(dialog);
+  }
+  mounted() {
+    this.#springSpec = this.#springValue();
+    this.#committedSnap = this.#desiredSnap();
+    this.#applyRestingHeight();
+    this.syncOpen();
+  }
+  afterUpdate() {
+    this.#reconcileSpring();
+    this.#reconcileSnap();
+    this.syncOpen();
+  }
+  destroyed() {
+    this.#cancelAnimations();
+    this.#drag = { active: false };
+    this.#engine?.removeAllListeners();
+    this.#engine = null;
+    if (this.element?.open)
+      this.element.close();
+    this.#unlockBody();
+  }
+  // ---- drag gesture ---------------------------------------------------------
+  #capturePointer(event) {
+    const drag = this.#drag;
+    try {
+      drag.captureEl.setPointerCapture(event.pointerId);
+    } catch (_) {
+    }
+    drag.captured = true;
+  }
+  #releasePointer(drag) {
+    if (!drag.captured || !drag.captureEl)
+      return;
+    try {
+      drag.captureEl.releasePointerCapture(drag.pointerId);
+    } catch (_) {
+    }
+  }
+  #shouldClaim(surface, moveY) {
+    if (surface !== "content")
+      return true;
+    if (moveY === 0)
+      return false;
+    if (moveY > 0)
+      return this.refs.content.scrollTop === 0;
+    const current = this.#currentSnap();
+    return this.#snapPoints.length > 0 && current < this.#snapPoints[this.#snapPoints.length - 1];
+  }
+  #moveByTransform(travel) {
+    const panel = this.refs.panel;
+    if (travel < 0) {
+      panel.style.transform = `translate3d(0, ${-applyResistance(-travel)}px, 0)`;
+    } else {
+      panel.style.transform = `translate3d(0, ${travel}px, 0)`;
+    }
+  }
+  #moveBySnap(travel) {
+    const panel = this.refs.panel;
+    const snapsPx = this.#snapsPx();
+    const minPx = snapsPx[0];
+    const maxPx = snapsPx[snapsPx.length - 1];
+    const height = this.#drag.startHeight - travel;
+    if (height > maxPx) {
+      panel.style.height = `${maxPx + applyResistance(height - maxPx)}px`;
+      panel.style.transform = "";
+      this.#drag.belowLowest = 0;
+      return;
+    }
+    if (height < minPx) {
+      const below = minPx - height;
+      panel.style.height = `${minPx}px`;
+      panel.style.transform = `translate3d(0, ${below}px, 0)`;
+      this.#drag.belowLowest = below;
+      return;
+    }
+    panel.style.height = `${height}px`;
+    panel.style.transform = "";
+    this.#drag.belowLowest = 0;
+  }
+  #settleTransform(fromTransform = null) {
+    const panel = this.refs.panel;
+    const from = fromTransform ?? panel.style.transform;
+    if (!from || this.#reducedMotion()) {
+      panel.style.transform = "";
+      return;
+    }
+    panel.style.transform = "";
+    const anim = panel.animate(
+      [{ transform: from }, { transform: "translate3d(0, 0, 0)" }],
+      { duration: EXIT_DURATION, easing: MOTION_EASING }
+    );
+    this.#move = anim;
+    anim.onfinish = () => {
+      if (this.#move !== anim)
+        return;
+      this.#move = null;
+    };
+  }
+  #requestClose(reason) {
+    const { close } = this.props;
+    if (typeof close === "function")
+      close(reason);
+  }
+  // ---- snap points ----------------------------------------------------------
+  #controlledSnap() {
+    return this.props.snap !== void 0;
+  }
+  #desiredSnap() {
+    if (!this.#snapPoints.length)
+      return null;
+    const raw2 = this.#controlledSnap() ? this.props.snap : this.#localSnap;
+    const value = Number(raw2);
+    return Number.isFinite(value) && this.#snapPoints.includes(value) ? value : this.#snapPoints[0];
+  }
+  #currentSnap() {
+    return this.#snapPoints.includes(this.#committedSnap) ? this.#committedSnap : this.#desiredSnap();
+  }
+  #snapsPx() {
+    return this.#snapPoints.map((value) => value / 100 * window.innerHeight);
+  }
+  #applyRestingHeight() {
+    if (this.#settleTarget !== null || this.#springTarget !== null)
+      return;
+    const snap2 = this.#currentSnap();
+    this.refs.panel.style.height = snap2 === null ? "" : `${snap2}dvh`;
+  }
+  #haltSnapSettle(pinPainted) {
+    if (!this.#snapAnimation)
+      return;
+    const height = this.refs.panel.getBoundingClientRect().height;
+    this.#snapAnimation.cancel();
+    this.#snapAnimation = null;
+    this.#settleTarget = null;
+    if (pinPainted)
+      this.refs.panel.style.height = `${height}px`;
+  }
+  #settleToSnap(value, velocityY = 0, forceWAAPI = false) {
+    const panel = this.refs.panel;
+    const startPx = panel.getBoundingClientRect().height;
+    const targetPx = value / 100 * window.innerHeight;
+    const fromTransform = panel.style.transform;
+    if (this.#move) {
+      this.#move.cancel();
+      this.#move = null;
+    }
+    if (this.#snapAnimation)
+      this.#haltSnapSettle(true);
+    this.#carriedVelocity = 0;
+    if (this.#springTarget !== null)
+      this.#haltSpring(true);
+    panel.style.transform = "";
+    const springSeed = velocityY !== 0 ? seedVelocity(velocityY) : this.#carriedVelocity;
+    if (this.#reducedMotion()) {
+      this.#settleTarget = null;
+      this.#springTarget = null;
+      panel.style.height = `${value}dvh`;
+      return;
+    }
+    if (this.#springEnabled() && !forceWAAPI) {
+      if (Math.abs(startPx - targetPx) < 0.5 && springSeed === 0) {
+        panel.style.height = `${value}dvh`;
+        return;
+      }
+      const engine = this.#ensureEngine();
+      panel.style.height = `${startPx}px`;
+      this.#springTarget = targetPx;
+      engine.animateTo(startPx, targetPx, springSeed);
+      this.#settleTransform(fromTransform);
+      return;
+    }
+    if (Math.abs(startPx - targetPx) < 0.5 && !fromTransform) {
+      panel.style.height = `${value}dvh`;
+      return;
+    }
+    panel.style.height = `${value}dvh`;
+    const anim = panel.animate(
+      [
+        {
+          height: `${startPx}px`,
+          transform: fromTransform || "translate3d(0, 0, 0)"
+        },
+        {
+          height: `${targetPx}px`,
+          transform: "translate3d(0, 0, 0)"
+        }
+      ],
+      { duration: EXIT_DURATION, easing: SNAP_EASING }
+    );
+    this.#snapAnimation = anim;
+    this.#settleTarget = targetPx;
+    anim.onfinish = () => {
+      if (this.#snapAnimation !== anim)
+        return;
+      this.#snapAnimation = null;
+      this.#settleTarget = null;
+      this.#applyRestingHeight();
+    };
+  }
+  #commitSnap(value, velocityY = 0) {
+    if (!this.#snapPoints.includes(value))
+      return;
+    const from = this.#currentSnap();
+    if (!this.#controlledSnap())
+      this.#localSnap = value;
+    this.#committedSnap = value;
+    this.#settleToSnap(value, velocityY);
+    if (from !== value) {
+      const { snapChange } = this.props;
+      if (typeof snapChange === "function")
+        snapChange(value);
+    }
+  }
+  #releaseToSnap(drag, velocityY, cancelled) {
+    if (cancelled) {
+      this.#commitSnap(this.#currentSnap());
+      return;
+    }
+    if (drag.belowLowest > 0) {
+      const flick = velocityY > FLICK_VELOCITY;
+      const pastThreshold = drag.belowLowest > DRAG_THRESHOLD2 && velocityY > -0.05;
+      if (flick || pastThreshold)
+        this.#requestClose("drag");
+      else
+        this.#commitSnap(this.#snapPoints[0], velocityY);
+      return;
+    }
+    const snapsPx = this.#snapsPx();
+    const targetPx = resolveSnapTarget({
+      currentPx: this.refs.panel.getBoundingClientRect().height,
+      velocityY,
+      snapsPx,
+      flickVelocity: FLICK_VELOCITY
+    });
+    if (targetPx === null) {
+      this.#requestClose("drag");
+      return;
+    }
+    this.#commitSnap(this.#snapPoints[snapsPx.indexOf(targetPx)], velocityY);
+  }
+  #reconcileSnap() {
+    if (!this.#snapPoints.length) {
+      if (this.#snapAnimation)
+        this.#haltSnapSettle(false);
+      this.#stopSpring();
+      this.#committedSnap = null;
+      this.refs.panel.style.height = "";
+      this.refs.panel.style.transform = "";
+      return;
+    }
+    const desired = this.#desiredSnap();
+    if (this.#committedSnap === null) {
+      this.#committedSnap = desired;
+      this.#applyRestingHeight();
+      return;
+    }
+    if (desired !== this.#committedSnap) {
+      this.#committedSnap = desired;
+      if (this.element.open)
+        this.#settleToSnap(desired);
+      else {
+        if (this.#snapAnimation)
+          this.#haltSnapSettle(false);
+        this.#applyRestingHeight();
+      }
+    }
+  }
+  // ---- spring settling ------------------------------------------------------
+  #springValue() {
+    return this.props.spring === void 0 ? "" : String(this.props.spring);
+  }
+  #springEnabled() {
+    return this.props.spring !== "none";
+  }
+  #ensureEngine() {
+    if (this.#engine)
+      return this.#engine;
+    const [attraction, friction] = this.#springValue().split(/[\s,]+/).map(Number);
+    const options = { ...SPRING_DEFAULTS };
+    if (Number.isFinite(attraction) && attraction > 0 && attraction < 1) {
+      options.attraction = attraction;
+    }
+    if (Number.isFinite(friction) && friction > 0 && friction < 1) {
+      options.friction = friction;
+    }
+    const engine = new b(options);
+    engine.on("change", ({ position }) => {
+      if (!this.#drag.active && this.#springTarget !== null) {
+        this.refs.panel.style.height = `${position}px`;
+      }
+    });
+    engine.on("complete", () => {
+      if (this.#springTarget === null)
+        return;
+      this.#springTarget = null;
+      this.#applyRestingHeight();
+    });
+    this.#engine = engine;
+    return engine;
+  }
+  #stopSpring() {
+    this.#springTarget = null;
+    this.#engine?.stop();
+  }
+  #haltSpring(pinPainted) {
+    if (this.#springTarget === null)
+      return false;
+    const height = this.refs.panel.getBoundingClientRect().height;
+    this.#carriedVelocity = typeof this.#engine?.getVelocity === "function" ? this.#engine.getVelocity() : 0;
+    this.#stopSpring();
+    if (pinPainted)
+      this.refs.panel.style.height = `${height}px`;
+    return true;
+  }
+  #reconcileSpring() {
+    const next = this.#springValue();
+    if (next === this.#springSpec)
+      return;
+    const target = this.#committedSnap;
+    const wasSpringing = this.#haltSpring(true);
+    const wasWAAPI = !!this.#snapAnimation;
+    if (wasWAAPI)
+      this.#haltSnapSettle(true);
+    this.#engine?.removeAllListeners();
+    this.#engine = null;
+    this.#springSpec = next;
+    if ((wasSpringing || wasWAAPI) && this.#snapPoints.includes(target)) {
+      this.#settleToSnap(target, 0, true);
+    }
+  }
+  events = {
+    handleCancel: (event) => {
+      event.preventDefault();
+      if (this.props.dismissible === false)
+        return;
+      this.#requestClose("escape");
+    },
+    dragStart: (event) => {
+      if (this.props.dismissible === false)
+        return;
+      if (!event.isPrimary)
+        return;
+      if (event.pointerType === "mouse" && event.button !== 0)
+        return;
+      if (this.#drag.active && this.#drag.captured)
+        return;
+      if (this.#move) {
+        this.#move.cancel();
+        this.#move = null;
+        this.refs.panel.style.transform = "";
+      }
+      const startHeight = this.refs.panel.getBoundingClientRect().height;
+      if (this.#snapAnimation)
+        this.#haltSnapSettle(true);
+      if (this.#springTarget !== null)
+        this.#haltSpring(true);
+      this.#carriedVelocity = 0;
+      if (this.#snapPoints.length) {
+        this.refs.panel.style.height = `${startHeight}px`;
+      }
+      const tracker = new VelocityTracker();
+      tracker.add(event.clientY, event.timeStamp);
+      this.#drag = {
+        active: true,
+        claimed: false,
+        captured: false,
+        captureEl: event.currentTarget,
+        pointerId: event.pointerId,
+        surface: event.currentTarget.dataset.bsSurface,
+        startY: event.clientY,
+        lastY: event.clientY,
+        startTime: event.timeStamp,
+        claimOffset: 0,
+        startHeight,
+        belowLowest: 0,
+        tracker
+      };
+    },
+    dragMove: (event) => {
+      const drag = this.#drag;
+      if (!drag.active || event.pointerId !== drag.pointerId)
+        return;
+      const deltaY = event.clientY - drag.startY;
+      const moveY = event.clientY - drag.lastY;
+      drag.lastY = event.clientY;
+      drag.tracker.add(event.clientY, event.timeStamp);
+      if (!drag.captured && Math.abs(deltaY) > SLOP) {
+        this.#capturePointer(event);
+      }
+      if (!drag.claimed) {
+        if (!this.#shouldClaim(drag.surface, moveY))
+          return;
+        drag.claimed = true;
+        drag.claimOffset = deltaY;
+      }
+      const travel = deltaY - drag.claimOffset;
+      if (this.#snapPoints.length)
+        this.#moveBySnap(travel);
+      else
+        this.#moveByTransform(travel);
+    },
+    dragEnd: (event) => {
+      const drag = this.#drag;
+      if (!drag.active || event.pointerId !== drag.pointerId)
+        return;
+      drag.tracker.add(event.clientY, event.timeStamp);
+      const cancelled = event.type === "pointercancel";
+      const deltaY = event.clientY - drag.startY;
+      const velocityY = cancelled ? 0 : drag.tracker.velocity;
+      const duration = event.timeStamp - drag.startTime;
+      this.#releasePointer(drag);
+      this.#drag = { active: false };
+      if (drag.surface === "backdrop" && !cancelled && Math.abs(deltaY) < 10 && duration < 300) {
+        this.#requestClose("backdrop");
+        return;
+      }
+      if (!drag.claimed)
+        return;
+      if (this.#snapPoints.length) {
+        this.#releaseToSnap(drag, velocityY, cancelled);
+        return;
+      }
+      const travel = deltaY - drag.claimOffset;
+      const flick = !cancelled && velocityY > FLICK_VELOCITY;
+      const pastThreshold = !cancelled && travel > DRAG_THRESHOLD2 && velocityY > -0.05;
+      if (flick || pastThreshold)
+        this.#requestClose("drag");
+      else
+        this.#settleTransform();
+    },
+    scrollVeto: (event) => {
+      if (this.#drag.active && this.#drag.claimed && event.cancelable) {
+        event.preventDefault();
+      }
+    }
+  };
+};
+BottomSheet.prototype.render = function() {
+  const __d = this.getData();
+  return new ViewNode("dialog", {
+    class: __d.dialogClass,
+    "aria-labelledby": __d.labelledby,
+    "@cancel": (this.__h ??= {})[0] ??= (event) => this.events.handleCancel(event)
+  }, [
+    new ViewNode("div", {
+      ref: this.__ref("backdrop"),
+      "data-bs-surface": "backdrop",
+      class: __d.backdropClass,
+      "@pointerdown": (this.__h ??= {})[1] ??= (event) => this.events.dragStart(event),
+      "@pointermove": (this.__h ??= {})[2] ??= (event) => this.events.dragMove(event),
+      "@pointerup": (this.__h ??= {})[3] ??= (event) => this.events.dragEnd(event),
+      "@pointercancel": (this.__h ??= {})[4] ??= (event) => this.events.dragEnd(event)
+    }, []),
+    new ViewNode("div", {
+      ref: this.__ref("panel"),
+      class: __d.panelClass
+    }, [
+      new ViewNode("div", {
+        "data-bs-surface": "header",
+        class: __d.headerClass,
+        "@pointerdown": (this.__h ??= {})[5] ??= (event) => this.events.dragStart(event),
+        "@pointermove": (this.__h ??= {})[6] ??= (event) => this.events.dragMove(event),
+        "@pointerup": (this.__h ??= {})[7] ??= (event) => this.events.dragEnd(event),
+        "@pointercancel": (this.__h ??= {})[8] ??= (event) => this.events.dragEnd(event)
+      }, [
+        ...__d.showGrabber ? [
+          new ViewNode("div", {
+            class: "mx-auto my-3 h-1 w-10 rounded-full bg-faint",
+            "aria-hidden": "true"
+          }, [])
+        ] : [
+          new ViewNode("#")
+        ],
+        new ViewNode(SLOT_TAG, { name: "header" }, [
+          ...__d.title ? [
+            new ViewNode("h2", {
+              id: __d.titleId,
+              class: "pb-3 text-center text-base font-semibold text-ink"
+            }, [
+              new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
+            ])
+          ] : [
+            new ViewNode("#")
+          ]
+        ])
+      ]),
+      new ViewNode("div", {
+        ref: this.__ref("content"),
+        "data-bs-surface": "content",
+        class: __d.contentClass,
+        "@pointerdown": (this.__h ??= {})[9] ??= (event) => this.events.dragStart(event),
+        "@pointermove": (this.__h ??= {})[10] ??= (event) => this.events.dragMove(event),
+        "@pointerup": (this.__h ??= {})[11] ??= (event) => this.events.dragEnd(event),
+        "@pointercancel": (this.__h ??= {})[12] ??= (event) => this.events.dragEnd(event),
+        "@touchmove": (this.__h ??= {})[13] ??= (event) => this.events.scrollVeto(event)
+      }, [
+        new ViewNode(SLOT_TAG)
+      ]),
+      new ViewNode("div", {
+        "data-bs-surface": "footer",
+        class: __d.footerClass,
+        "@pointerdown": (this.__h ??= {})[14] ??= (event) => this.events.dragStart(event),
+        "@pointermove": (this.__h ??= {})[15] ??= (event) => this.events.dragMove(event),
+        "@pointerup": (this.__h ??= {})[16] ??= (event) => this.events.dragEnd(event),
+        "@pointercancel": (this.__h ??= {})[17] ??= (event) => this.events.dragEnd(event)
+      }, [
+        new ViewNode(SLOT_TAG, { name: "footer" })
+      ])
+    ])
+  ]);
+};
+BottomSheet.__pzlModule = "app/components/ui/BottomSheet.pzl";
+
+// app/views/components/BottomSheetDoc.pzl
+var installCmd10 = "puzzle add piece bottom-sheet";
+var usageImport10 = `import BottomSheet from '@/components/ui/BottomSheet.pzl';`;
+var usageMarkup10 = `<BottomSheet
+  open={ open }
+  title="Filters"
+  snapPoints={ [40, 70, 100] }
+  snap={ snap }
+  @snapChange={ setSnap }
+  @close={ close }>
+  <FilterList/>
+  <Button slot="footer" @press={ close }>Apply</Button>
+</BottomSheet>`;
+var codeHero10 = `<Button variant="outline" @press={ openSheet }>Open snapping sheet</Button>
+<BottomSheet
+  open={ sheetOpen }
+  title="Filters"
+  snapPoints={ [40, 70, 100] }
+  snap={ snap }
+  @snapChange={ (value) => this.setData('snap', value) }
+  @close={ () => this.setData('sheetOpen', false) }>
+  <FilterList/>
+  <Button slot="footer" @press={ apply }>Apply filters</Button>
+</BottomSheet>`;
+var codeBinary = `<BottomSheet open={ open } title="Quick actions" @close={ close }>
+  <QuickActions/>
+</BottomSheet>`;
+var codeInset = `<BottomSheet
+  open={ open }
+  title="Delivery options"
+  snapPoints="45,80"
+  spring="none"
+  inset
+  @close={ close }>
+  <DeliveryOptions/>
+</BottomSheet>`;
+var BottomSheetDoc = class extends PuzzleView {
+  created() {
+    this.setData({
+      snappingOpen: false,
+      binaryOpen: false,
+      insetOpen: false,
+      snap: 70
+    });
+  }
+  data(params, props) {
+    return {
+      ...this.getData(),
+      installCmd: installCmd10,
+      usageImport: usageImport10,
+      usageMarkup: usageMarkup10,
+      codeHero: codeHero10,
+      codeBinary,
+      codeInset,
+      snapPoints: [40, 70, 100],
+      paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
+      toc: [
+        { label: "Installation", href: "#installation" },
+        { label: "Usage", href: "#usage" },
+        { label: "Binary sheet", href: "#binary" },
+        { label: "Inset without spring", href: "#inset" },
+        { label: "Behavior notes", href: "#behavior" }
+      ]
+    };
+  }
+  events = {
+    openSnapping: () => this.setData("snappingOpen", true),
+    closeSnapping: () => this.setData("snappingOpen", false),
+    setSnap: (value) => this.setData("snap", value),
+    openBinary: () => this.setData("binaryOpen", true),
+    closeBinary: () => this.setData("binaryOpen", false),
+    openInset: () => this.setData("insetOpen", true),
+    closeInset: () => this.setData("insetOpen", false)
+  };
+};
+BottomSheetDoc.prototype.render = function() {
+  const __d = this.getData();
+  return new ViewNode("puzzle-view", { class: "w-full" }, [
+    new ViewNode("div", { class: "flex gap-12" }, [
+      new ViewNode("article", { class: "mx-auto w-full min-w-0 max-w-5xl" }, [
+        new ViewNode("header", { class: "mb-8" }, [
+          new ViewNode("h1", { class: "text-3xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Bottom Sheet" })
+          ]),
+          new ViewNode("p", { class: "mt-2 text-body" }, [
+            new ViewNode("text", { value: "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state." })
+          ])
+        ]),
+        new ViewNode(ExampleBox, { code: __d.codeHero }, [
+          new ViewNode(Button, {
+            variant: "outline",
+            press: (this.__h ??= {})[0] ??= (event) => this.events.openSnapping(event)
+          }, [
+            new ViewNode("text", { value: "Open snapping sheet" })
+          ]),
+          new ViewNode(BottomSheet, {
+            open: __d.snappingOpen,
+            title: "Filters",
+            snapPoints: __d.snapPoints,
+            snap: __d.snap,
+            snapChange: (this.__h ??= {})[1] ??= (event) => this.events.setSnap(event),
+            close: (this.__h ??= {})[2] ??= (event) => this.events.closeSnapping(event)
+          }, [
+            new ViewNode("div", { class: "space-y-4 py-4 text-sm text-body" }, [
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "Drag the header, footer, or backdrop. Slow releases choose the nearest snap; a flick moves exactly one step." })
+              ]),
+              ...__d.paragraphs.map(
+                (n2) => new ViewNode("p", { key: n2 }, [
+                  new ViewNode("text", { value: "Filter group " + displayValue(n2, true ? "n" : 0) + " \u2014 scroll this content, then return to the top before dragging downward from the content surface." })
+                ])
+              )
+            ]),
+            new ViewNode(Button, {
+              slot: "footer",
+              class: "w-full",
+              press: (this.__h ??= {})[3] ??= (event) => this.events.closeSnapping(event)
+            }, [
+              new ViewNode("text", { value: "Apply filters" })
+            ])
+          ])
+        ]),
+        new ViewNode("section", {
+          id: "installation",
+          class: "mt-12 scroll-mt-20"
+        }, [
+          new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Installation" })
+          ]),
+          new ViewNode("p", { class: "mb-3 text-sm text-body" }, [
+            new ViewNode("text", { value: "Copy the piece and its math helper into your app:" })
+          ]),
+          new ViewNode(CodeBlock, { code: __d.installCmd }, []),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "The manifest also declares @magic-spells/physics-engine. Install the package printed by the Puzzle CLI and merge the pieces.css tokens into your app styles." })
+          ])
+        ]),
+        new ViewNode("section", {
+          id: "usage",
+          class: "mt-12 scroll-mt-20"
+        }, [
+          new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
+            new ViewNode("text", { value: "Usage" })
+          ]),
+          new ViewNode(CodeBlock, { code: __d.usageImport }, []),
+          new ViewNode(CodeBlock, {
+            code: __d.usageMarkup,
+            class: "mt-3"
+          }, [])
+        ]),
+        new ViewNode("div", { class: "mt-12 space-y-12" }, [
+          new ViewNode(ExampleBox, {
+            id: "binary",
+            title: "Binary sheet",
+            code: __d.codeBinary
+          }, [
+            new ViewNode(Button, {
+              variant: "outline",
+              press: (this.__h ??= {})[4] ??= (event) => this.events.openBinary(event)
+            }, [
+              new ViewNode("text", { value: "Open binary sheet" })
+            ]),
+            new ViewNode(BottomSheet, {
+              open: __d.binaryOpen,
+              title: "Quick actions",
+              close: (this.__h ??= {})[5] ??= (event) => this.events.closeBinary(event)
+            }, [
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Without snapPoints, the sheet uses its content height." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Drag down more than 100px or flick downward to dismiss. A shorter drag returns to rest." })
+                ])
+              ]),
+              new ViewNode(Button, {
+                slot: "footer",
+                variant: "secondary",
+                class: "w-full",
+                press: (this.__h ??= {})[6] ??= (event) => this.events.closeBinary(event)
+              }, [
+                new ViewNode("text", { value: "Done" })
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "inset",
+            title: "Inset without spring",
+            code: __d.codeInset
+          }, [
+            new ViewNode(Button, {
+              variant: "outline",
+              press: (this.__h ??= {})[7] ??= (event) => this.events.openInset(event)
+            }, [
+              new ViewNode("text", { value: "Open inset sheet" })
+            ]),
+            new ViewNode(BottomSheet, {
+              open: __d.insetOpen,
+              title: "Delivery options",
+              snapPoints: "45,80",
+              spring: "none",
+              inset: true,
+              close: (this.__h ??= {})[8] ??= (event) => this.events.closeInset(event)
+            }, [
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Inset detaches the panel from the viewport edges and rounds all four corners." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: 'spring="none" keeps the tuned overshooting arrival, but runs it on a fixed 400ms WAAPI clock.' })
+                ])
+              ])
+            ])
+          ]),
+          new ViewNode("section", {
+            id: "behavior",
+            class: "scroll-mt-20"
+          }, [
+            new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
+              new ViewNode("text", { value: "Behavior notes" })
+            ]),
+            new ViewNode("div", { class: "space-y-3 text-sm text-body" }, [
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "The parent owns open. Escape, a short backdrop tap, or an accepted drag calls @close with escape, backdrop, or drag; the piece never mutates open. Set dismissible to false to disable all three paths and hide the grabber." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "snap is optional-controlled. Pass it with @snapChange to own the committed snap, or omit it and the sheet keeps the current snap locally. snapChange fires only when a release commits, never during pointer movement." })
+              ]),
+              new ViewNode("p", { class: "text-muted" }, [
+                new ViewNode("text", { value: "Mouse and pen can hand a content drag to the sheet when scrollTop reaches zero mid-gesture. Native touch scrolling cannot change pointer owner after a pan begins, so touch requires lifting and starting a second gesture at the top. This matches the source component." })
+              ])
+            ])
+          ])
+        ])
+      ]),
+      new ViewNode(Toc, {
+        class: "sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block",
+        items: __d.toc
+      }, [])
+    ])
+  ]);
+};
+BottomSheetDoc.__pzlModule = "app/views/components/BottomSheetDoc.pzl";
+
 // app/views/components/BreadcrumbDoc.pzl
-var installCmd10 = "puzzle add piece breadcrumb";
-var usageImport10 = `import Breadcrumb from '@/components/ui/Breadcrumb.pzl';`;
-var usageMarkup10 = `<Breadcrumb items={ trail } />`;
-var codeHero10 = `const trail = [
+var installCmd11 = "puzzle add piece breadcrumb";
+var usageImport11 = `import Breadcrumb from '@/components/ui/Breadcrumb.pzl';`;
+var usageMarkup11 = `<Breadcrumb items={ trail } />`;
+var codeHero11 = `const trail = [
   { label: 'Home', href: '/' },
   { label: 'Projects', href: '/projects' },
   { label: 'puzzle-pieces', href: '/projects/puzzle-pieces' },
@@ -33791,10 +34868,10 @@ var BreadcrumbDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd10,
-      usageImport: usageImport10,
-      usageMarkup: usageMarkup10,
-      codeHero: codeHero10,
+      installCmd: installCmd11,
+      usageImport: usageImport11,
+      usageMarkup: usageMarkup11,
+      codeHero: codeHero11,
       codeCurrent,
       trail: [
         { label: "Home", href: "/" },
@@ -33894,10 +34971,10 @@ BreadcrumbDoc.prototype.render = function() {
 BreadcrumbDoc.__pzlModule = "app/views/components/BreadcrumbDoc.pzl";
 
 // app/views/components/ButtonDoc.pzl
-var installCmd11 = "puzzle add piece button";
-var usageImport11 = `import Button from '@/components/ui/Button.pzl';`;
-var usageMarkup11 = `<Button variant="primary" @press={ getStarted }>Get started</Button>`;
-var codeHero11 = `<Button variant="primary" @press={ getStarted }>Get started</Button>
+var installCmd12 = "puzzle add piece button";
+var usageImport12 = `import Button from '@/components/ui/Button.pzl';`;
+var usageMarkup12 = `<Button variant="primary" @press={ getStarted }>Get started</Button>`;
+var codeHero12 = `<Button variant="primary" @press={ getStarted }>Get started</Button>
 <Button variant="outline" @press={ learnMore }>Learn more</Button>`;
 var codeVariants2 = `<Button variant="primary" @press={ save }>Primary</Button>
 <Button variant="secondary" @press={ save }>Secondary</Button>
@@ -33927,10 +35004,10 @@ var ButtonDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd11,
-      usageImport: usageImport11,
-      usageMarkup: usageMarkup11,
-      codeHero: codeHero11,
+      installCmd: installCmd12,
+      usageImport: usageImport12,
+      usageMarkup: usageMarkup12,
+      codeHero: codeHero12,
       codeVariants: codeVariants2,
       codeSizes: codeSizes3,
       codeStates,
@@ -34209,9 +35286,9 @@ ButtonGroup.prototype.render = function() {
 ButtonGroup.__pzlModule = "app/components/ui/ButtonGroup.pzl";
 
 // app/views/components/ButtonGroupDoc.pzl
-var installCmd12 = "puzzle add piece button-group";
-var usageImport12 = `import ButtonGroup from '@/components/ui/ButtonGroup.pzl';`;
-var usageMarkup12 = `<ButtonGroup label="Text formatting" @press={ format } items={[ { value: 'bold', label: 'Bold', icon: BOLD, iconOnly: true }, { value: 'italic', label: 'Italic', icon: ITALIC, iconOnly: true }, { value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true }, ]}/>`;
+var installCmd13 = "puzzle add piece button-group";
+var usageImport13 = `import ButtonGroup from '@/components/ui/ButtonGroup.pzl';`;
+var usageMarkup13 = `<ButtonGroup label="Text formatting" @press={ format } items={[ { value: 'bold', label: 'Bold', icon: BOLD, iconOnly: true }, { value: 'italic', label: 'Italic', icon: ITALIC, iconOnly: true }, { value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true }, ]}/>`;
 var BOLD = "M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8";
 var ITALIC = "M19 4h-9 M14 20H5 M15 4 9 20";
 var UNDERLINE = "M6 4v6a6 6 0 0 0 12 0V4 M4 20h16";
@@ -34233,7 +35310,7 @@ var actionItems = [
   { value: "cut", label: "Cut" },
   { value: "paste", label: "Paste" }
 ];
-var codeHero12 = `const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
+var codeHero13 = `const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
 const ITALIC = 'M19 4h-9 M14 20H5 M15 4 9 20';
 const UNDERLINE = 'M6 4v6a6 6 0 0 0 12 0V4 M4 20h16';
 
@@ -34260,10 +35337,10 @@ var ButtonGroupDoc = class extends PuzzleView {
       formatItems,
       alignItems,
       actionItems,
-      installCmd: installCmd12,
-      usageImport: usageImport12,
-      usageMarkup: usageMarkup12,
-      codeHero: codeHero12,
+      installCmd: installCmd13,
+      usageImport: usageImport13,
+      usageMarkup: usageMarkup13,
+      codeHero: codeHero13,
       codeVariants: codeVariants3,
       codeSizes: codeSizes4,
       codeIconOnly,
@@ -34470,7 +35547,7 @@ ButtonGroupDoc.prototype.render = function() {
 ButtonGroupDoc.__pzlModule = "app/views/components/ButtonGroupDoc.pzl";
 
 // app/components/ui/DatePicker.pzl
-var uid20 = 0;
+var uid21 = 0;
 var VALID_FORMATS2 = /* @__PURE__ */ new Set(["full", "long", "medium", "short"]);
 var PANEL_EST_HEIGHT2 = 340;
 var TRIGGER_BASE2 = "flex h-9 w-full items-center justify-between gap-2 rounded-lg border bg-surface px-3 text-sm text-ink select-none transition-colors cursor-pointer hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-default";
@@ -34481,7 +35558,7 @@ var PANEL_DROPDOWN = "left-0";
 var PANEL_MORPH = "inset-x-0 mx-auto w-fit";
 var DatePicker = class extends PuzzleView {
   created() {
-    this._uid = ++uid20;
+    this._uid = ++uid21;
     this._morph = null;
     this._wasOpen = false;
     this._pendingRestoreFocus = true;
@@ -34885,15 +35962,15 @@ DatePicker.prototype.render = function() {
 DatePicker.__pzlModule = "app/components/ui/DatePicker.pzl";
 
 // app/views/components/CalendarDoc.pzl
-var installCmd13 = "puzzle add piece calendar";
-var usageImport13 = `import Calendar from '@/components/ui/Calendar.pzl';`;
-var usageMarkup13 = `<Calendar value={ date } @change={ setDate } />`;
+var installCmd14 = "puzzle add piece calendar";
+var usageImport14 = `import Calendar from '@/components/ui/Calendar.pzl';`;
+var usageMarkup14 = `<Calendar value={ date } @change={ setDate } />`;
 var weekends = (iso, date) => {
   const day = date.getDay();
   return day === 0 || day === 6;
 };
 var KEY_CLASS = "inline-flex min-w-[1.75rem] items-center justify-center rounded border border-border bg-surface-sunken px-1.5 py-0.5 font-mono text-xs text-ink";
-var codeHero13 = `<Calendar value={ date } @change={ setDate } />
+var codeHero14 = `<Calendar value={ date } @change={ setDate } />
 
 // parent \u2014 Calendar never mutates value; it asks and you write it back
 events = {
@@ -34925,12 +36002,12 @@ var CalendarDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd13,
-      usageImport: usageImport13,
-      usageMarkup: usageMarkup13,
+      installCmd: installCmd14,
+      usageImport: usageImport14,
+      usageMarkup: usageMarkup14,
       weekends,
       keyClass: KEY_CLASS,
-      codeHero: codeHero13,
+      codeHero: codeHero14,
       codeBounds,
       codeFirstDay,
       codeMorph,
@@ -35149,10 +36226,10 @@ CalendarDoc.prototype.render = function() {
 CalendarDoc.__pzlModule = "app/views/components/CalendarDoc.pzl";
 
 // app/views/components/CardDoc.pzl
-var installCmd14 = "puzzle add piece card";
-var usageImport14 = `import Card from '@/components/ui/Card.pzl';`;
-var usageMarkup14 = `<Card title="Team workspace" description="Manage members, roles, and billing for this project."></Card>`;
-var codeHero14 = `<Card title="Team workspace" description="Manage members, roles, and billing for this project.">
+var installCmd15 = "puzzle add piece card";
+var usageImport15 = `import Card from '@/components/ui/Card.pzl';`;
+var usageMarkup15 = `<Card title="Team workspace" description="Manage members, roles, and billing for this project."></Card>`;
+var codeHero15 = `<Card title="Team workspace" description="Manage members, roles, and billing for this project.">
   <p>Nine people currently have access. Invites expire after seven days.</p>
   <Button slot="footer" variant="ghost" @press={ manage }>Manage</Button>
   <Button slot="footer" variant="primary" @press={ invite }>Invite</Button>
@@ -35169,10 +36246,10 @@ var CardDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd14,
-      usageImport: usageImport14,
-      usageMarkup: usageMarkup14,
-      codeHero: codeHero14,
+      installCmd: installCmd15,
+      usageImport: usageImport15,
+      usageMarkup: usageMarkup15,
+      codeHero: codeHero15,
       codePlain,
       codeFooter,
       toc: [
@@ -35312,10 +36389,10 @@ CardDoc.prototype.render = function() {
 CardDoc.__pzlModule = "app/views/components/CardDoc.pzl";
 
 // app/views/components/CarouselDoc.pzl
-var installCmd15 = "puzzle add piece carousel";
-var usageImport15 = `import Carousel from '@/components/ui/Carousel.pzl';`;
-var usageMarkup15 = `<Carousel class="w-full max-w-xl"></Carousel>`;
-var codeHero15 = `// Slides are the default-slot children \u2014 one direct child per slide.
+var installCmd16 = "puzzle add piece carousel";
+var usageImport16 = `import Carousel from '@/components/ui/Carousel.pzl';`;
+var usageMarkup16 = `<Carousel class="w-full max-w-xl"></Carousel>`;
+var codeHero16 = `// Slides are the default-slot children \u2014 one direct child per slide.
 // Uncontrolled: the carousel owns its own index.
 <Carousel class="w-full max-w-xl">
   <div class="flex h-56 w-full items-center justify-center bg-brand-tint text-ink">Mountains</div>
@@ -35354,10 +36431,10 @@ var CarouselDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd15,
-      usageImport: usageImport15,
-      usageMarkup: usageMarkup15,
-      codeHero: codeHero15,
+      installCmd: installCmd16,
+      usageImport: usageImport16,
+      usageMarkup: usageMarkup16,
+      codeHero: codeHero16,
       codeAutoplay,
       codeLoop,
       codeDots,
@@ -35606,10 +36683,10 @@ CarouselDoc.prototype.render = function() {
 CarouselDoc.__pzlModule = "app/views/components/CarouselDoc.pzl";
 
 // app/views/components/ChatAttachmentDoc.pzl
-var installCmd16 = "puzzle add piece chat-attachment";
-var usageImport16 = `import ChatAttachment from '@/components/ui/ChatAttachment.pzl';`;
-var usageMarkup16 = `<ChatAttachment name="proposal.pdf" size="2.4 MB" />`;
-var codeHero16 = `<ChatAttachment name="proposal.pdf" size="2.4 MB" />
+var installCmd17 = "puzzle add piece chat-attachment";
+var usageImport17 = `import ChatAttachment from '@/components/ui/ChatAttachment.pzl';`;
+var usageMarkup17 = `<ChatAttachment name="proposal.pdf" size="2.4 MB" />`;
+var codeHero17 = `<ChatAttachment name="proposal.pdf" size="2.4 MB" />
 <ChatAttachment name="hero.png" size="840 KB" />
 <ChatAttachment name="assets.zip" size="18 MB" />`;
 var codeRemovable = `// The chip is value-first: it fires @remove(name, event). The parent owns
@@ -35653,10 +36730,10 @@ var ChatAttachmentDoc = class extends PuzzleView {
   data(params, props) {
     const prev = this.getData();
     return {
-      installCmd: installCmd16,
-      usageImport: usageImport16,
-      usageMarkup: usageMarkup16,
-      codeHero: codeHero16,
+      installCmd: installCmd17,
+      usageImport: usageImport17,
+      usageMarkup: usageMarkup17,
+      codeHero: codeHero17,
       codeRemovable,
       codeTypes,
       codeLinks,
@@ -35848,10 +36925,10 @@ ChatAttachmentDoc.prototype.render = function() {
 ChatAttachmentDoc.__pzlModule = "app/views/components/ChatAttachmentDoc.pzl";
 
 // app/views/components/ChatMessageDoc.pzl
-var installCmd17 = "puzzle add piece chat-message";
-var usageImport17 = `import ChatMessage from '@/components/ui/ChatMessage.pzl';`;
-var usageMarkup17 = `<ChatMessage author="Ada Lovelace" time="9:41 AM" avatarName="Ada Lovelace"></ChatMessage>`;
-var codeHero17 = `<!-- A message group: a meta row, a compact follow-up, then the reply. -->
+var installCmd18 = "puzzle add piece chat-message";
+var usageImport18 = `import ChatMessage from '@/components/ui/ChatMessage.pzl';`;
+var usageMarkup18 = `<ChatMessage author="Ada Lovelace" time="9:41 AM" avatarName="Ada Lovelace"></ChatMessage>`;
+var codeHero18 = `<!-- A message group: a meta row, a compact follow-up, then the reply. -->
 <ChatMessage author="Ada Lovelace" time="9:41 AM" avatarName="Ada Lovelace">
   Are we still on for the design review at 3?
 </ChatMessage>
@@ -35895,10 +36972,10 @@ var ChatMessageDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd17,
-      usageImport: usageImport17,
-      usageMarkup: usageMarkup17,
-      codeHero: codeHero17,
+      installCmd: installCmd18,
+      usageImport: usageImport18,
+      usageMarkup: usageMarkup18,
+      codeHero: codeHero18,
       codeAlignment,
       codeCompact,
       codeAttachments,
@@ -36088,10 +37165,10 @@ ChatMessageDoc.prototype.render = function() {
 ChatMessageDoc.__pzlModule = "app/views/components/ChatMessageDoc.pzl";
 
 // app/views/components/ChatScrollerDoc.pzl
-var installCmd18 = "puzzle add piece chat-scroller";
-var usageImport18 = `import ChatScroller from '@/components/ui/ChatScroller.pzl';`;
-var usageMarkup18 = `<ChatScroller height={ 360 } @pin={ setPinned }></ChatScroller>`;
-var codeHero18 = `// The scroller owns scrolling; the parent owns the messages. Appending
+var installCmd19 = "puzzle add piece chat-scroller";
+var usageImport19 = `import ChatScroller from '@/components/ui/ChatScroller.pzl';`;
+var usageMarkup19 = `<ChatScroller height={ 360 } @pin={ setPinned }></ChatScroller>`;
+var codeHero19 = `// The scroller owns scrolling; the parent owns the messages. Appending
 // while pinned auto-follows; scroll up and the "Jump to latest" pill appears.
 data() {
   return { log: seededMessages() /* ~15 rows */ };
@@ -36160,10 +37237,10 @@ var ChatScrollerDoc = class extends PuzzleView {
       pinned,
       rows: decorate(log),
       pinLabel: pinned ? "Pinned \u2014 following new messages" : "Scrolled up \u2014 auto-follow paused",
-      installCmd: installCmd18,
-      usageImport: usageImport18,
-      usageMarkup: usageMarkup18,
-      codeHero: codeHero18,
+      installCmd: installCmd19,
+      usageImport: usageImport19,
+      usageMarkup: usageMarkup19,
+      codeHero: codeHero19,
       codePinning,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -36339,10 +37416,10 @@ ChatScrollerDoc.prototype.render = function() {
 ChatScrollerDoc.__pzlModule = "app/views/components/ChatScrollerDoc.pzl";
 
 // app/views/components/CheckboxDoc.pzl
-var installCmd19 = "puzzle add piece checkbox";
-var usageImport19 = `import Checkbox from '@/components/ui/Checkbox.pzl';`;
-var usageMarkup19 = `<Checkbox label="Subscribe to the newsletter" checked={ subscribe } @change={ setSubscribe } />`;
-var codeHero19 = `<Checkbox label="Subscribe to the newsletter" checked={ subscribe } @change={ setSubscribe } />
+var installCmd20 = "puzzle add piece checkbox";
+var usageImport20 = `import Checkbox from '@/components/ui/Checkbox.pzl';`;
+var usageMarkup20 = `<Checkbox label="Subscribe to the newsletter" checked={ subscribe } @change={ setSubscribe } />`;
+var codeHero20 = `<Checkbox label="Subscribe to the newsletter" checked={ subscribe } @change={ setSubscribe } />
 
 // parent
 events = {
@@ -36361,10 +37438,10 @@ var CheckboxDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd19,
-      usageImport: usageImport19,
-      usageMarkup: usageMarkup19,
-      codeHero: codeHero19,
+      installCmd: installCmd20,
+      usageImport: usageImport20,
+      usageMarkup: usageMarkup20,
+      codeHero: codeHero20,
       codeHint,
       codeDisabled,
       toc: [
@@ -36480,9 +37557,9 @@ CheckboxDoc.prototype.render = function() {
 CheckboxDoc.__pzlModule = "app/views/components/CheckboxDoc.pzl";
 
 // app/views/components/CodeDoc.pzl
-var installCmd20 = "puzzle add piece code";
-var usageImport20 = `import Code from '@/components/ui/Code.pzl';`;
-var usageMarkup20 = `<Code code={ snippet }/>`;
+var installCmd21 = "puzzle add piece code";
+var usageImport21 = `import Code from '@/components/ui/Code.pzl';`;
+var usageMarkup21 = `<Code code={ snippet }/>`;
 var heroSnippet = `export function debounce(fn, wait = 150) {
   let timer = null;
   return (...args) => {
@@ -36518,7 +37595,7 @@ export default class Counter extends PuzzleView {
 }`;
 var bashSnippet = `cp registry/ui/button/Button.pzl app/components/ui/`;
 var markupSnippet = `<Select options={ opts } value={ pet } @change={ setPet } />`;
-var codeHero20 = `const snippet = \`export function debounce(fn, wait = 150) {
+var codeHero21 = `const snippet = \`export function debounce(fn, wait = 150) {
   \u2026
 }\`;
 
@@ -36534,15 +37611,15 @@ var codeLang = `<Code code={ bashSnippet } numbers={ false }/>   // guessed: bas
 var CodeDoc = class extends PuzzleView {
   data(params, props) {
     return {
-      installCmd: installCmd20,
-      usageImport: usageImport20,
-      usageMarkup: usageMarkup20,
+      installCmd: installCmd21,
+      usageImport: usageImport21,
+      usageMarkup: usageMarkup21,
       heroSnippet,
       commandSnippet,
       longSnippet,
       bashSnippet,
       markupSnippet,
-      codeHero: codeHero20,
+      codeHero: codeHero21,
       codeCommand,
       codeCollapsible,
       codeLang,
@@ -36674,10 +37751,10 @@ CodeDoc.prototype.render = function() {
 CodeDoc.__pzlModule = "app/views/components/CodeDoc.pzl";
 
 // app/views/components/CollapsibleDoc.pzl
-var installCmd21 = "puzzle add piece collapsible";
-var usageImport21 = `import Collapsible from '@/components/ui/Collapsible.pzl';`;
-var usageMarkup21 = `<Collapsible label="Shipping and returns" open={ open } @change={ setOpen }></Collapsible>`;
-var codeHero21 = `<Collapsible label="Shipping and returns" open={ open } @change={ setOpen }>
+var installCmd22 = "puzzle add piece collapsible";
+var usageImport22 = `import Collapsible from '@/components/ui/Collapsible.pzl';`;
+var usageMarkup22 = `<Collapsible label="Shipping and returns" open={ open } @change={ setOpen }></Collapsible>`;
+var codeHero22 = `<Collapsible label="Shipping and returns" open={ open } @change={ setOpen }>
   <div class="space-y-2">
     <p>Free standard shipping on orders over 50 dollars.</p>
     <ul class="list-disc pl-5">
@@ -36718,10 +37795,10 @@ var CollapsibleDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd21,
-      usageImport: usageImport21,
-      usageMarkup: usageMarkup21,
-      codeHero: codeHero21,
+      installCmd: installCmd22,
+      usageImport: usageImport22,
+      usageMarkup: usageMarkup22,
+      codeHero: codeHero22,
       codeExclusivity,
       richFaq: [
         { id: "r1", label: "When should I reach for Accordion?", body: "When a set of plain-text panels should coordinate \u2014 opening one closes the rest." },
@@ -36865,11 +37942,11 @@ CollapsibleDoc.prototype.render = function() {
 CollapsibleDoc.__pzlModule = "app/views/components/CollapsibleDoc.pzl";
 
 // app/components/ui/Combobox.pzl
-var uid21 = 0;
+var uid22 = 0;
 var INPUT_BASE6 = "h-9 w-full rounded-lg border bg-surface pl-3 pr-9 text-sm text-ink placeholder:text-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:pointer-events-none";
 var INPUT_OK3 = "border-border outline-ring focus-visible:outline-ring";
 var INPUT_ERROR3 = "border-danger outline-danger focus-visible:outline-danger";
-var PANEL_BASE5 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
+var PANEL_BASE6 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
 var PANEL_PLACEMENT2 = { bottom: "top-full mt-1", top: "bottom-full mb-1" };
 var OPTION_BASE2 = "relative flex items-center gap-2 px-3 py-1.5 text-sm select-none";
 var GROUP_CLASS2 = "px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none";
@@ -36889,7 +37966,7 @@ function wordPrefix(text, q) {
 }
 var Combobox = class extends PuzzleView {
   created() {
-    this._uid = ++uid21;
+    this._uid = ++uid22;
     this._base = `pp-combobox-${this._uid}`;
     this._wasOpen = false;
     this._scrollActive = false;
@@ -37135,7 +38212,7 @@ var Combobox = class extends PuzzleView {
       hiddenValue: selectedOpt ? selectedOpt.value : "",
       rootClass: props.class || "",
       inputClass: [INPUT_BASE6, error ? INPUT_ERROR3 : INPUT_OK3].join(" "),
-      panelClass: [PANEL_BASE5, PANEL_PLACEMENT2[placement]].filter(Boolean).join(" "),
+      panelClass: [PANEL_BASE6, PANEL_PLACEMENT2[placement]].filter(Boolean).join(" "),
       panelStyle: prev.maxHeight ? `max-height:${prev.maxHeight}px;` : ""
     };
   }
@@ -37578,10 +38655,10 @@ Combobox.prototype.render = function() {
 Combobox.__pzlModule = "app/components/ui/Combobox.pzl";
 
 // app/views/components/ComboboxDoc.pzl
-var installCmd22 = "puzzle add piece combobox";
-var usageImport22 = `import Combobox from '@/components/ui/Combobox.pzl';`;
-var usageMarkup22 = `<Combobox options={ frameworks } value={ framework } @change={ setFramework } />`;
-var codeHero22 = `const frameworks = [
+var installCmd23 = "puzzle add piece combobox";
+var usageImport23 = `import Combobox from '@/components/ui/Combobox.pzl';`;
+var usageMarkup23 = `<Combobox options={ frameworks } value={ framework } @change={ setFramework } />`;
+var codeHero23 = `const frameworks = [
   { value: 'next', label: 'Next.js' },
   { value: 'svelte', label: 'SvelteKit' },
   { value: 'nuxt', label: 'Nuxt' },
@@ -37650,10 +38727,10 @@ var ComboboxDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd22,
-      usageImport: usageImport22,
-      usageMarkup: usageMarkup22,
-      codeHero: codeHero22,
+      installCmd: installCmd23,
+      usageImport: usageImport23,
+      usageMarkup: usageMarkup23,
+      codeHero: codeHero23,
       codeGroups,
       codeFilter,
       codeError,
@@ -37977,8 +39054,8 @@ ComboboxDoc.prototype.render = function() {
 ComboboxDoc.__pzlModule = "app/views/components/ComboboxDoc.pzl";
 
 // app/components/ui/Command.pzl
-var uid22 = 0;
-var PANEL_BASE6 = "m-auto mt-[15vh] w-full max-w-lg rounded-xl border border-border bg-surface p-0 text-body shadow-xl overflow-hidden [&::backdrop]:bg-black/50";
+var uid23 = 0;
+var PANEL_BASE7 = "m-auto mt-[15vh] w-full max-w-lg rounded-xl border border-border bg-surface p-0 text-body shadow-xl overflow-hidden [&::backdrop]:bg-black/50";
 var OPTION_BASE3 = "flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm select-none";
 var GROUP_CLS = "px-2 pt-2 pb-1 text-xs font-medium text-muted";
 function wordPrefix2(text, q) {
@@ -37988,7 +39065,7 @@ function wordPrefix2(text, q) {
 }
 var Command = class extends PuzzleView {
   created() {
-    this._uid = ++uid22;
+    this._uid = ++uid23;
     this._base = `pp-command-${this._uid}`;
     this._scrollActive = false;
     this.setData({ query: "", activeIndex: -1 });
@@ -38106,7 +39183,7 @@ var Command = class extends PuzzleView {
       placeholder: props.placeholder || "Type a command or search\u2026",
       emptyText: props.emptyText || "No results found.",
       ariaLabel: props.label || "Command palette",
-      panelClass: [PANEL_BASE6, props.class || ""].join(" ")
+      panelClass: [PANEL_BASE7, props.class || ""].join(" ")
     };
   }
   // ---- open / close (native <dialog> reconciled with the `open` prop) -------
@@ -38345,10 +39422,10 @@ Command.prototype.render = function() {
 Command.__pzlModule = "app/components/ui/Command.pzl";
 
 // app/views/components/CommandDoc.pzl
-var installCmd23 = "puzzle add piece command";
-var usageImport23 = `import Command from '@/components/ui/Command.pzl';`;
-var usageMarkup23 = `<Command open={ commandOpen } items={ commandItems } @select={ runCommand } @close={ closeCommand } />`;
-var codeHero23 = `<Button variant="outline" @press={ openCommand }>Open command palette</Button>
+var installCmd24 = "puzzle add piece command";
+var usageImport24 = `import Command from '@/components/ui/Command.pzl';`;
+var usageMarkup24 = `<Command open={ commandOpen } items={ commandItems } @select={ runCommand } @close={ closeCommand } />`;
+var codeHero24 = `<Button variant="outline" @press={ openCommand }>Open command palette</Button>
 <Command
   open={ commandOpen }
   items={ commandItems }
@@ -38372,10 +39449,10 @@ var CommandDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd23,
-      usageImport: usageImport23,
-      usageMarkup: usageMarkup23,
-      codeHero: codeHero23,
+      installCmd: installCmd24,
+      usageImport: usageImport24,
+      usageMarkup: usageMarkup24,
+      codeHero: codeHero24,
       commandItems: [
         { value: "new-file", label: "New file", group: "General", hint: "\u2318 N" },
         { value: "new-window", label: "New window", group: "General" },
@@ -38789,10 +39866,10 @@ ContextMenu.prototype.render = function() {
 ContextMenu.__pzlModule = "app/components/ui/ContextMenu.pzl";
 
 // app/views/components/ContextMenuDoc.pzl
-var installCmd24 = "puzzle add piece context-menu";
-var usageImport24 = `import ContextMenu from '@/components/ui/ContextMenu.pzl';`;
-var usageMarkup24 = `<ContextMenu items={ fileItems } @select={ onSelect }></ContextMenu>`;
-var codeHero24 = `<ContextMenu items={ fileItems } @select={ onSelect }>
+var installCmd25 = "puzzle add piece context-menu";
+var usageImport25 = `import ContextMenu from '@/components/ui/ContextMenu.pzl';`;
+var usageMarkup25 = `<ContextMenu items={ fileItems } @select={ onSelect }></ContextMenu>`;
+var codeHero25 = `<ContextMenu items={ fileItems } @select={ onSelect }>
   <div class="\u2026">Right-click anywhere in this box</div>
 </ContextMenu>
 
@@ -38835,10 +39912,10 @@ var ContextMenuDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd24,
-      usageImport: usageImport24,
-      usageMarkup: usageMarkup24,
-      codeHero: codeHero24,
+      installCmd: installCmd25,
+      usageImport: usageImport25,
+      usageMarkup: usageMarkup25,
+      codeHero: codeHero25,
       codeGroups: codeGroups2,
       codeDisabled: codeDisabled2,
       codeKeyboard: codeKeyboard2,
@@ -39030,13 +40107,13 @@ ContextMenuDoc.prototype.render = function() {
 ContextMenuDoc.__pzlModule = "app/views/components/ContextMenuDoc.pzl";
 
 // app/views/components/CopyButtonDoc.pzl
-var installCmd25 = "puzzle add piece copy-button";
-var usageImport25 = `import CopyButton from '@/components/ui/CopyButton.pzl';`;
-var usageMarkup25 = `<CopyButton value={ apiKey } @copy={ onCopied }/>`;
+var installCmd26 = "puzzle add piece copy-button";
+var usageImport26 = `import CopyButton from '@/components/ui/CopyButton.pzl';`;
+var usageMarkup26 = `<CopyButton value={ apiKey } @copy={ onCopied }/>`;
 var apiKey = "sk_live_51H8x2KJvR9pT4mQdZfL7bN0";
 var shareUrl = "https://puzzle-pieces.dev/components/copy-button";
 var installSnippet = "npm install @magic-spells/puzzle";
-var codeHero25 = `<CopyButton value={ apiKey } @copy={ onCopied }/>
+var codeHero26 = `<CopyButton value={ apiKey } @copy={ onCopied }/>
 <CopyButton value={ shareUrl } label="Copy link" @copy={ onCopied }/>`;
 var codeIconOnly2 = `<CopyButton value={ apiKey } @copy={ onCopied }/>`;
 var codeWithLabel = `<CopyButton value={ shareUrl } label="Copy link" @copy={ onCopied }/>`;
@@ -39057,10 +40134,10 @@ var CopyButtonDoc = class extends PuzzleView {
       apiKey,
       shareUrl,
       installSnippet,
-      installCmd: installCmd25,
-      usageImport: usageImport25,
-      usageMarkup: usageMarkup25,
-      codeHero: codeHero25,
+      installCmd: installCmd26,
+      usageImport: usageImport26,
+      usageMarkup: usageMarkup26,
+      codeHero: codeHero26,
       codeIconOnly: codeIconOnly2,
       codeWithLabel,
       codeVariants: codeVariants4,
@@ -39273,10 +40350,10 @@ CopyButtonDoc.prototype.render = function() {
 CopyButtonDoc.__pzlModule = "app/views/components/CopyButtonDoc.pzl";
 
 // app/views/components/DataTableDoc.pzl
-var installCmd26 = "puzzle add piece data-table";
-var usageImport26 = `import DataTable from '@/components/ui/DataTable.pzl';`;
-var usageMarkup26 = `<DataTable columns={ columns } rows={ rows } rowKey="invoice" selectable pageSize={ 5 } />`;
-var codeHero26 = `const columns = [
+var installCmd27 = "puzzle add piece data-table";
+var usageImport27 = `import DataTable from '@/components/ui/DataTable.pzl';`;
+var usageMarkup27 = `<DataTable columns={ columns } rows={ rows } rowKey="invoice" selectable pageSize={ 5 } />`;
+var codeHero27 = `const columns = [
   { key: 'invoice', label: 'Invoice', sortable: true },
   { key: 'client', label: 'Client', sortable: true },
   { key: 'status', label: 'Status' },
@@ -39345,10 +40422,10 @@ var DataTableDoc = class extends PuzzleView {
     const sortState = d.sortState || null;
     return {
       ...d,
-      installCmd: installCmd26,
-      usageImport: usageImport26,
-      usageMarkup: usageMarkup26,
-      codeHero: codeHero26,
+      installCmd: installCmd27,
+      usageImport: usageImport27,
+      usageMarkup: usageMarkup27,
+      codeHero: codeHero27,
       codeSorting,
       codeSelection,
       codePagination,
@@ -39575,11 +40652,11 @@ DataTableDoc.prototype.render = function() {
 DataTableDoc.__pzlModule = "app/views/components/DataTableDoc.pzl";
 
 // app/views/components/DatePickerDoc.pzl
-var installCmd27 = "puzzle add piece date-picker";
-var usageImport27 = `import DatePicker from '@/components/ui/DatePicker.pzl';`;
-var usageMarkup27 = `<DatePicker label="Ship date" hint="We deliver Monday through Friday." value={ shipDate } @change={ setShipDate } />`;
+var installCmd28 = "puzzle add piece date-picker";
+var usageImport28 = `import DatePicker from '@/components/ui/DatePicker.pzl';`;
+var usageMarkup28 = `<DatePicker label="Ship date" hint="We deliver Monday through Friday." value={ shipDate } @change={ setShipDate } />`;
 var morphInstall = "npm install @magic-spells/morph-engine";
-var codeHero27 = `<DatePicker
+var codeHero28 = `<DatePicker
   label="Ship date"
   hint="We deliver Monday through Friday."
   value={ shipDate }
@@ -39622,11 +40699,11 @@ var DatePickerDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd27,
-      usageImport: usageImport27,
-      usageMarkup: usageMarkup27,
+      installCmd: installCmd28,
+      usageImport: usageImport28,
+      usageMarkup: usageMarkup28,
       morphInstall,
-      codeHero: codeHero27,
+      codeHero: codeHero28,
       codeError: codeError2,
       codeMorph: codeMorph2,
       codeBounds: codeBounds2,
@@ -39806,10 +40883,10 @@ DatePickerDoc.prototype.render = function() {
 DatePickerDoc.__pzlModule = "app/views/components/DatePickerDoc.pzl";
 
 // app/views/components/DateRangePickerDoc.pzl
-var installCmd28 = "puzzle add piece date-range-picker";
-var usageImport28 = `import DateRangePicker from '@/components/ui/DateRangePicker.pzl';`;
-var usageMarkup28 = `<DateRangePicker label="Stay dates" hint="Pick a check-in and check-out day." value={ range } @change={ setRange } />`;
-var codeHero28 = `<DateRangePicker
+var installCmd29 = "puzzle add piece date-range-picker";
+var usageImport29 = `import DateRangePicker from '@/components/ui/DateRangePicker.pzl';`;
+var usageMarkup29 = `<DateRangePicker label="Stay dates" hint="Pick a check-in and check-out day." value={ range } @change={ setRange } />`;
+var codeHero29 = `<DateRangePicker
   label="Stay dates"
   hint="Pick a check-in and check-out day."
   value={ range }
@@ -39888,10 +40965,10 @@ var DateRangePickerDoc = class extends PuzzleView {
       ...d,
       presets,
       openLabel: d.controlledOpen ? "Close picker" : "Open picker",
-      installCmd: installCmd28,
-      usageImport: usageImport28,
-      usageMarkup: usageMarkup28,
-      codeHero: codeHero28,
+      installCmd: installCmd29,
+      usageImport: usageImport29,
+      usageMarkup: usageMarkup29,
+      codeHero: codeHero29,
       codeTwo,
       codePresets,
       codeBounds: codeBounds3,
@@ -40083,10 +41160,10 @@ DateRangePickerDoc.prototype.render = function() {
 DateRangePickerDoc.__pzlModule = "app/views/components/DateRangePickerDoc.pzl";
 
 // app/views/components/DescriptionListDoc.pzl
-var installCmd29 = "puzzle add piece description-list";
-var usageImport29 = `import DescriptionList from '@/components/ui/DescriptionList.pzl';`;
-var usageMarkup29 = `<DescriptionList items={ items } />`;
-var codeHero29 = `const items = [
+var installCmd30 = "puzzle add piece description-list";
+var usageImport30 = `import DescriptionList from '@/components/ui/DescriptionList.pzl';`;
+var usageMarkup30 = `<DescriptionList items={ items } />`;
+var codeHero30 = `const items = [
   { term: 'Status', description: 'Paid' },
   { term: 'Customer', description: 'Ada Lovelace' },
   { term: 'Placed', description: 'Jan 3, 2026' },
@@ -40110,10 +41187,10 @@ var DescriptionListDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd29,
-      usageImport: usageImport29,
-      usageMarkup: usageMarkup29,
-      codeHero: codeHero29,
+      installCmd: installCmd30,
+      usageImport: usageImport30,
+      usageMarkup: usageMarkup30,
+      codeHero: codeHero30,
       codeInline,
       codeDividers,
       codeSizes: codeSizes6,
@@ -40258,10 +41335,10 @@ DescriptionListDoc.prototype.render = function() {
 DescriptionListDoc.__pzlModule = "app/views/components/DescriptionListDoc.pzl";
 
 // app/views/components/DialogDoc.pzl
-var installCmd30 = "puzzle add piece dialog";
-var usageImport30 = `import Dialog from '@/components/ui/Dialog.pzl';`;
-var usageMarkup30 = `<Dialog open={ dialogOpen } title="Delete project?" description="This permanently removes the project and all of its data." @close={ closeDialog }></Dialog>`;
-var codeHero30 = `<Button variant="outline" @press={ openDialog }>Open dialog</Button>
+var installCmd31 = "puzzle add piece dialog";
+var usageImport31 = `import Dialog from '@/components/ui/Dialog.pzl';`;
+var usageMarkup31 = `<Dialog open={ dialogOpen } title="Delete project?" description="This permanently removes the project and all of its data." @close={ closeDialog }></Dialog>`;
+var codeHero31 = `<Button variant="outline" @press={ openDialog }>Open dialog</Button>
 <Dialog
   open={ dialogOpen }
   title="Delete project?"
@@ -40304,10 +41381,10 @@ var DialogDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd30,
-      usageImport: usageImport30,
-      usageMarkup: usageMarkup30,
-      codeHero: codeHero30,
+      installCmd: installCmd31,
+      usageImport: usageImport31,
+      usageMarkup: usageMarkup31,
+      codeHero: codeHero31,
       codeLocked,
       codeFooter: codeFooter2,
       codeMorph: codeMorph3,
@@ -40543,10 +41620,10 @@ DialogDoc.prototype.render = function() {
 DialogDoc.__pzlModule = "app/views/components/DialogDoc.pzl";
 
 // app/views/components/DropdownMenuDoc.pzl
-var installCmd31 = "puzzle add piece dropdown-menu";
-var usageImport31 = `import DropdownMenu from '@/components/ui/DropdownMenu.pzl';`;
-var usageMarkup31 = `<DropdownMenu label="Account" items={ menuItems } @select={ onSelect } />`;
-var codeHero31 = `<DropdownMenu label="Account" items={ menuItems } @select={ onSelect } />
+var installCmd32 = "puzzle add piece dropdown-menu";
+var usageImport32 = `import DropdownMenu from '@/components/ui/DropdownMenu.pzl';`;
+var usageMarkup32 = `<DropdownMenu label="Account" items={ menuItems } @select={ onSelect } />`;
+var codeHero32 = `<DropdownMenu label="Account" items={ menuItems } @select={ onSelect } />
 
 // items: interactive rows, { group } headings, { divider } separators
 data() {
@@ -40591,10 +41668,10 @@ var DropdownMenuDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd31,
-      usageImport: usageImport31,
-      usageMarkup: usageMarkup31,
-      codeHero: codeHero31,
+      installCmd: installCmd32,
+      usageImport: usageImport32,
+      usageMarkup: usageMarkup32,
+      codeHero: codeHero32,
       codeGroups: codeGroups3,
       codeDanger,
       menuItems: [
@@ -40717,7 +41794,7 @@ DropdownMenuDoc.prototype.render = function() {
 DropdownMenuDoc.__pzlModule = "app/views/components/DropdownMenuDoc.pzl";
 
 // app/components/ui/Dropzone.pzl
-var uid23 = 0;
+var uid24 = 0;
 function formatBytes(bytes) {
   const n2 = Number(bytes);
   if (bytes == null || Number.isNaN(n2))
@@ -40748,7 +41825,7 @@ function acceptsFile(file2, accept) {
 }
 var Dropzone2 = class extends PuzzleView {
   data(params, props) {
-    const inputId = props.id || (this._fallbackId ??= `pp-dropzone-${++uid23}`);
+    const inputId = props.id || (this._fallbackId ??= `pp-dropzone-${++uid24}`);
     const error = props.error || "";
     const hint = props.hint || "";
     const disabled = !!props.disabled;
@@ -41011,10 +42088,10 @@ Dropzone2.prototype.render = function() {
 Dropzone2.__pzlModule = "app/components/ui/Dropzone.pzl";
 
 // app/views/components/DropzoneDoc.pzl
-var installCmd32 = "puzzle add piece dropzone";
-var usageImport32 = `import Dropzone from '@/components/ui/Dropzone.pzl';`;
-var usageMarkup32 = `<Dropzone label="Attachment" files={ files } accept=".pdf,.doc,.docx" @change={ setFiles } />`;
-var codeHero32 = `<Dropzone label="Attachment" files={ files } accept=".pdf,.doc,.docx" @change={ setFiles } />
+var installCmd33 = "puzzle add piece dropzone";
+var usageImport33 = `import Dropzone from '@/components/ui/Dropzone.pzl';`;
+var usageMarkup33 = `<Dropzone label="Attachment" files={ files } accept=".pdf,.doc,.docx" @change={ setFiles } />`;
+var codeHero33 = `<Dropzone label="Attachment" files={ files } accept=".pdf,.doc,.docx" @change={ setFiles } />
 
 // parent
 created() {
@@ -41066,10 +42143,10 @@ var DropzoneDoc = class extends PuzzleView {
     return {
       ...this.getData(),
       oneMB: 1024 * 1024,
-      installCmd: installCmd32,
-      usageImport: usageImport32,
-      usageMarkup: usageMarkup32,
-      codeHero: codeHero32,
+      installCmd: installCmd33,
+      usageImport: usageImport33,
+      usageMarkup: usageMarkup33,
+      codeHero: codeHero33,
       codeMultiple: codeMultiple2,
       codeValidation,
       codeError: codeError4,
@@ -44769,7 +45846,7 @@ var EMOJI_KEYWORDS = {
 };
 
 // app/components/ui/EmojiPicker.pzl
-var uid24 = 0;
+var uid25 = 0;
 var COLS = 8;
 var PANEL_EST_HEIGHT3 = 340;
 var TRIGGER_BASE3 = "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface text-muted cursor-pointer transition-colors hover:text-ink hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none";
@@ -44809,7 +45886,7 @@ for (const g of EMOJI_GROUPS) {
 }
 var EmojiPicker = class extends PuzzleView {
   created() {
-    this._uid = ++uid24;
+    this._uid = ++uid25;
     this._morph = null;
     this._wasOpen = false;
     this._scrollActive = false;
@@ -45365,12 +46442,12 @@ EmojiPicker.prototype.render = function() {
 EmojiPicker.__pzlModule = "app/components/ui/EmojiPicker.pzl";
 
 // app/views/components/EmojiPickerDoc.pzl
-var installCmd33 = "puzzle add piece emoji-picker";
-var usageImport33 = `import EmojiPicker from '@/components/ui/EmojiPicker.pzl';`;
-var usageMarkup33 = `<EmojiPicker @change={ addEmoji }/>
+var installCmd34 = "puzzle add piece emoji-picker";
+var usageImport34 = `import EmojiPicker from '@/components/ui/EmojiPicker.pzl';`;
+var usageMarkup34 = `<EmojiPicker @change={ addEmoji }/>
 
 // events: { addEmoji: (char) => { \u2026append char to your state\u2026 } }`;
-var codeHero33 = `<input value={ message } @input={ onMessageInput(event) } />
+var codeHero34 = `<input value={ message } @input={ onMessageInput(event) } />
 <EmojiPicker align="end" @change={ addEmoji }/>
 
 // addEmoji: (char) => this.setData({ message: this.getData().message + char })`;
@@ -45405,10 +46482,10 @@ var EmojiPickerDoc = class extends PuzzleView {
       lastEmoji: "",
       pickerOpen: false,
       ...this.getData(),
-      installCmd: installCmd33,
-      usageImport: usageImport33,
-      usageMarkup: usageMarkup33,
-      codeHero: codeHero33,
+      installCmd: installCmd34,
+      usageImport: usageImport34,
+      usageMarkup: usageMarkup34,
+      codeHero: codeHero34,
       codeTrigger,
       codePlacement,
       codeControlled: codeControlled3,
@@ -45594,7 +46671,7 @@ EmojiPickerDoc.prototype.render = function() {
 EmojiPickerDoc.__pzlModule = "app/views/components/EmojiPickerDoc.pzl";
 
 // app/components/ui/EmojiPickerSimple.pzl
-var uid25 = 0;
+var uid26 = 0;
 var COLS2 = 8;
 var PANEL_EST_HEIGHT4 = 340;
 var TAB_ICONS = ["\u{1F600}", "\u{1F44B}", "\u{1F43B}", "\u{1F354}", "\u2708\uFE0F", "\u26BD", "\u{1F4A1}", "\u{1F523}", "\u{1F6A9}"];
@@ -45623,7 +46700,7 @@ function tabClass(selected) {
 }
 var EmojiPickerSimple = class extends PuzzleView {
   created() {
-    this._uid = ++uid25;
+    this._uid = ++uid26;
     this._morph = null;
     this._wasOpen = false;
     this._scrollActive = false;
@@ -46145,12 +47222,12 @@ EmojiPickerSimple.prototype.render = function() {
 EmojiPickerSimple.__pzlModule = "app/components/ui/EmojiPickerSimple.pzl";
 
 // app/views/components/EmojiPickerSimpleDoc.pzl
-var installCmd34 = "puzzle add piece emoji-picker-simple";
-var usageImport34 = `import EmojiPickerSimple from '@/components/ui/EmojiPickerSimple.pzl';`;
-var usageMarkup34 = `<EmojiPickerSimple @change={ addEmoji }/>
+var installCmd35 = "puzzle add piece emoji-picker-simple";
+var usageImport35 = `import EmojiPickerSimple from '@/components/ui/EmojiPickerSimple.pzl';`;
+var usageMarkup35 = `<EmojiPickerSimple @change={ addEmoji }/>
 
 // events: { addEmoji: (char) => { \u2026append char to your state\u2026 } }`;
-var codeHero34 = `<input value={ message } @input={ onMessageInput(event) } />
+var codeHero35 = `<input value={ message } @input={ onMessageInput(event) } />
 <EmojiPickerSimple align="end" @change={ addEmoji }/>
 
 // addEmoji: (char) => this.setData({ message: this.getData().message + char })`;
@@ -46172,10 +47249,10 @@ var EmojiPickerSimpleDoc = class extends PuzzleView {
       lastEmoji: "",
       pickerOpen: false,
       ...this.getData(),
-      installCmd: installCmd34,
-      usageImport: usageImport34,
-      usageMarkup: usageMarkup34,
-      codeHero: codeHero34,
+      installCmd: installCmd35,
+      usageImport: usageImport35,
+      usageMarkup: usageMarkup35,
+      codeHero: codeHero35,
       codeTrigger: codeTrigger2,
       codeControlled: codeControlled4,
       toc: [
@@ -46330,10 +47407,10 @@ EmojiPickerSimpleDoc.prototype.render = function() {
 EmojiPickerSimpleDoc.__pzlModule = "app/views/components/EmojiPickerSimpleDoc.pzl";
 
 // app/views/components/EmptyDoc.pzl
-var installCmd35 = "puzzle add piece empty";
-var usageImport35 = `import Empty from '@/components/ui/Empty.pzl';`;
-var usageMarkup35 = `<Empty title="No projects yet" description="Create your first project to get started."></Empty>`;
-var codeHero35 = `<Empty title="No projects yet"
+var installCmd36 = "puzzle add piece empty";
+var usageImport36 = `import Empty from '@/components/ui/Empty.pzl';`;
+var usageMarkup36 = `<Empty title="No projects yet" description="Create your first project to get started."></Empty>`;
+var codeHero36 = `<Empty title="No projects yet"
        description="Create your first project to get started.">
   <svg slot="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
        stroke-width="1.5" aria-hidden="true">
@@ -46357,10 +47434,10 @@ var EmptyDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd35,
-      usageImport: usageImport35,
-      usageMarkup: usageMarkup35,
-      codeHero: codeHero35,
+      installCmd: installCmd36,
+      usageImport: usageImport36,
+      usageMarkup: usageMarkup36,
+      codeHero: codeHero36,
       codeBare,
       codeIcon,
       toc: [
@@ -46620,7 +47697,7 @@ function edgeShift(percent2) {
 }
 
 // app/components/ui/Fader.pzl
-var DRAG_THRESHOLD2 = 3;
+var DRAG_THRESHOLD3 = 3;
 var NO_PAIR = Object.freeze({});
 function flipShift(shift) {
   return shift === "0%" ? "0%" : shift.slice(1);
@@ -46912,7 +47989,7 @@ var Fader = class extends PuzzleView {
         this._teardownGesture();
         return;
       }
-      if (deltaMain <= DRAG_THRESHOLD2)
+      if (deltaMain <= DRAG_THRESHOLD3)
         return;
       drag.startValue = this._committed(props, cfg);
       drag.dragging = true;
@@ -47112,11 +48189,11 @@ var thresholdTicks = [0, 25, 50, 75, { value: 90, class: "bg-danger" }];
 var ratio = (v) => v + ":1";
 var gainText = (v) => v <= -60 ? "Off" : v + " dB";
 var oneDp = (v) => v.toFixed(1);
-var installCmd36 = "puzzle add piece fader";
-var usageImport36 = `import Fader from '@/components/ui/Fader.pzl';`;
-var usageMarkup36 = `<Fader label="Feather" value={ feather } min={ 0 } max={ 20 } step={ 0.5 } unit="px"
+var installCmd37 = "puzzle add piece fader";
+var usageImport37 = `import Fader from '@/components/ui/Fader.pzl';`;
+var usageMarkup37 = `<Fader label="Feather" value={ feather } min={ 0 } max={ 20 } step={ 0.5 } unit="px"
   @input={ setFeather } @change={ setFeather } />`;
-var codeHero36 = `<Fader label="Rest" value={ rest } min={ 0 } max={ 100 } unit="%" @input={ setRest } @change={ setRest } />
+var codeHero37 = `<Fader label="Rest" value={ rest } min={ 0 } max={ 100 } unit="%" @input={ setRest } @change={ setRest } />
 <Fader label="Arc" value={ arc } min={ 0 } max={ 360 } unit="\xB0" @input={ setArc } @change={ setArc } />
 <Fader label="Feather" value={ feather } min={ 0 } max={ 20 } step={ 0.5 } unit="px"
   @input={ setFeather } @change={ setFeather } />
@@ -47192,10 +48269,10 @@ var FaderDoc = class extends PuzzleView {
       ratio,
       gainText,
       oneDp,
-      installCmd: installCmd36,
-      usageImport: usageImport36,
-      usageMarkup: usageMarkup36,
-      codeHero: codeHero36,
+      installCmd: installCmd37,
+      usageImport: usageImport37,
+      usageMarkup: usageMarkup37,
+      codeHero: codeHero37,
       codeSteps,
       codeVertical,
       codeTicks,
@@ -47536,10 +48613,10 @@ FaderDoc.prototype.render = function() {
 FaderDoc.__pzlModule = "app/views/components/FaderDoc.pzl";
 
 // app/views/components/FieldDoc.pzl
-var installCmd37 = "puzzle add piece field";
-var usageImport37 = `import Field from '@/components/ui/Field.pzl';`;
-var usageMarkup37 = `<Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />`;
-var codeHero37 = `<Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />
+var installCmd38 = "puzzle add piece field";
+var usageImport38 = `import Field from '@/components/ui/Field.pzl';`;
+var usageMarkup38 = `<Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />`;
+var codeHero38 = `<Field label="Full name" placeholder="Ada Lovelace" value={ name } @change={ setName } />
 
 // parent
 events = {
@@ -47555,10 +48632,10 @@ var FieldDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd37,
-      usageImport: usageImport37,
-      usageMarkup: usageMarkup37,
-      codeHero: codeHero37,
+      installCmd: installCmd38,
+      usageImport: usageImport38,
+      usageMarkup: usageMarkup38,
+      codeHero: codeHero38,
       codeHint: codeHint2,
       codeError: codeError5,
       codeDisabled: codeDisabled6,
@@ -47682,8 +48759,8 @@ FieldDoc.prototype.render = function() {
 FieldDoc.__pzlModule = "app/views/components/FieldDoc.pzl";
 
 // app/components/ui/HoverCard.pzl
-var uid26 = 0;
-var PANEL_BASE7 = "absolute z-50 w-72 rounded-lg border border-border bg-surface p-4 shadow-md text-sm text-body";
+var uid27 = 0;
+var PANEL_BASE8 = "absolute z-50 w-72 rounded-lg border border-border bg-surface p-4 shadow-md text-sm text-body";
 var ALIGN5 = {
   start: "left-0",
   center: "left-1/2 -translate-x-1/2",
@@ -47691,7 +48768,7 @@ var ALIGN5 = {
 };
 var HoverCard = class extends PuzzleView {
   created() {
-    this._uid = ++uid26;
+    this._uid = ++uid27;
     this._openTimer = null;
     this._closeTimer = null;
     this._wasOpen = false;
@@ -47748,7 +48825,7 @@ var HoverCard = class extends PuzzleView {
       label: props.label != null ? String(props.label) : "",
       panelId: props.id || `pieces-hover-card-${this._uid}`,
       panelClass: [
-        PANEL_BASE7,
+        PANEL_BASE8,
         placement === "top" ? "bottom-full mb-2" : "top-full mt-2",
         ALIGN5[align],
         props.class || ""
@@ -47923,10 +49000,10 @@ HoverCard.prototype.render = function() {
 HoverCard.__pzlModule = "app/components/ui/HoverCard.pzl";
 
 // app/views/components/HoverCardDoc.pzl
-var installCmd38 = "puzzle add piece hover-card";
-var usageImport38 = `import HoverCard from '@/components/ui/HoverCard.pzl';`;
-var usageMarkup38 = `<HoverCard></HoverCard>`;
-var codeHero38 = `<HoverCard>
+var installCmd39 = "puzzle add piece hover-card";
+var usageImport39 = `import HoverCard from '@/components/ui/HoverCard.pzl';`;
+var usageMarkup39 = `<HoverCard></HoverCard>`;
+var codeHero39 = `<HoverCard>
   <a slot="trigger" href="/u/ada" class="\u2026">@ada</a>
   <div class="flex items-start gap-3">
     <span class="\u2026">A</span>
@@ -47965,10 +49042,10 @@ var HoverCardDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd38,
-      usageImport: usageImport38,
-      usageMarkup: usageMarkup38,
-      codeHero: codeHero38,
+      installCmd: installCmd39,
+      usageImport: usageImport39,
+      usageMarkup: usageMarkup39,
+      codeHero: codeHero39,
       codeDelays,
       codeControlled: codeControlled5,
       codeA11y,
@@ -48220,14 +49297,14 @@ HoverCardDoc.prototype.render = function() {
 HoverCardDoc.__pzlModule = "app/views/components/HoverCardDoc.pzl";
 
 // app/components/ui/InputGroup.pzl
-var uid27 = 0;
+var uid28 = 0;
 var GROUP_BASE2 = "flex items-stretch rounded-lg border bg-surface overflow-hidden transition-colors focus-within:outline-2 focus-within:outline-offset-2";
 var GROUP_OK2 = "border-border outline-ring focus-within:outline-ring";
 var GROUP_ERROR2 = "border-danger outline-danger focus-within:outline-danger";
 var INPUT_BASE7 = "h-9 min-w-0 flex-1 bg-transparent px-3 text-sm text-ink placeholder:text-muted focus:outline-none disabled:cursor-not-allowed";
 var InputGroup = class extends PuzzleView {
   data(params, props) {
-    const id = props.id || (this._fallbackId ??= `pp-inputgroup-${++uid27}`);
+    const id = props.id || (this._fallbackId ??= `pp-inputgroup-${++uid28}`);
     const error = props.error || "";
     const hint = props.hint || "";
     const described = !!(error || hint);
@@ -48337,10 +49414,10 @@ InputGroup.prototype.render = function() {
 InputGroup.__pzlModule = "app/components/ui/InputGroup.pzl";
 
 // app/views/components/InputGroupDoc.pzl
-var installCmd39 = "puzzle add piece input-group";
-var usageImport39 = `import InputGroup from '@/components/ui/InputGroup.pzl';`;
-var usageMarkup39 = `<InputGroup label="Website" value={ site } @change={ setSite }></InputGroup>`;
-var codeHero39 = `<InputGroup label="Website" value={ site } @change={ setSite }>
+var installCmd40 = "puzzle add piece input-group";
+var usageImport40 = `import InputGroup from '@/components/ui/InputGroup.pzl';`;
+var usageMarkup40 = `<InputGroup label="Website" value={ site } @change={ setSite }></InputGroup>`;
+var codeHero40 = `<InputGroup label="Website" value={ site } @change={ setSite }>
   <span slot="prefix">https://</span>
   <span slot="suffix">.com</span>
 </InputGroup>
@@ -48366,10 +49443,10 @@ var InputGroupDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd39,
-      usageImport: usageImport39,
-      usageMarkup: usageMarkup39,
-      codeHero: codeHero39,
+      installCmd: installCmd40,
+      usageImport: usageImport40,
+      usageMarkup: usageMarkup40,
+      codeHero: codeHero40,
       codeButton,
       codeKbd,
       codeError: codeError6,
@@ -48583,7 +49660,7 @@ InputGroupDoc.prototype.render = function() {
 InputGroupDoc.__pzlModule = "app/views/components/InputGroupDoc.pzl";
 
 // app/components/ui/InputOtp.pzl
-var uid28 = 0;
+var uid29 = 0;
 var CELL_BASE3 = "size-10 rounded-lg border bg-surface text-center text-lg font-medium text-ink transition-colors caret-brand focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
 var CELL_OK = "border-border outline-ring focus-visible:outline-ring";
 var CELL_ERROR = "border-danger outline-danger focus-visible:outline-danger";
@@ -48593,7 +49670,7 @@ function sanitize(str2, type) {
 }
 var InputOtp = class extends PuzzleView {
   data(params, props) {
-    const id = props.id || (this._fallbackId ??= `pp-otp-${++uid28}`);
+    const id = props.id || (this._fallbackId ??= `pp-otp-${++uid29}`);
     const length = Number.isInteger(props.length) && props.length > 0 ? props.length : 6;
     const type = props.type === "alphanumeric" ? "alphanumeric" : "numeric";
     const value = sanitize(props.value ?? "", type).slice(0, length);
@@ -48807,10 +49884,10 @@ InputOtp.prototype.render = function() {
 InputOtp.__pzlModule = "app/components/ui/InputOtp.pzl";
 
 // app/views/components/InputOtpDoc.pzl
-var installCmd40 = "puzzle add piece input-otp";
-var usageImport40 = `import InputOtp from '@/components/ui/InputOtp.pzl';`;
-var usageMarkup40 = `<InputOtp value={ code } @change={ setCode } />`;
-var codeHero40 = `<InputOtp value={ code } @change={ setCode } />
+var installCmd41 = "puzzle add piece input-otp";
+var usageImport41 = `import InputOtp from '@/components/ui/InputOtp.pzl';`;
+var usageMarkup41 = `<InputOtp value={ code } @change={ setCode } />`;
+var codeHero41 = `<InputOtp value={ code } @change={ setCode } />
 
 // parent
 events = {
@@ -48837,10 +49914,10 @@ var InputOtpDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd40,
-      usageImport: usageImport40,
-      usageMarkup: usageMarkup40,
-      codeHero: codeHero40,
+      installCmd: installCmd41,
+      usageImport: usageImport41,
+      usageMarkup: usageMarkup41,
+      codeHero: codeHero41,
       codeGroups: codeGroups4,
       codeAlnum,
       codeError: codeError7,
@@ -49083,10 +50160,10 @@ InputOtpDoc.prototype.render = function() {
 InputOtpDoc.__pzlModule = "app/views/components/InputOtpDoc.pzl";
 
 // app/views/components/KanbanDoc.pzl
-var installCmd41 = "puzzle add piece kanban";
-var usageImport41 = `import Kanban from '@/components/ui/Kanban.pzl';`;
-var usageMarkup41 = `<Kanban columns={ columns } @move={ onMove } label="Sprint board"/>`;
-var codeHero41 = `const columns = [
+var installCmd42 = "puzzle add piece kanban";
+var usageImport42 = `import Kanban from '@/components/ui/Kanban.pzl';`;
+var usageMarkup42 = `<Kanban columns={ columns } @move={ onMove } label="Sprint board"/>`;
+var codeHero42 = `const columns = [
   { id: 'todo', title: 'To do', cards: [
     { id: 'c1', title: 'Design empty states', badge: 'Design', assignee: 'Ada Lovelace' },
     { id: 'c2', title: 'Fix drag on Safari', badge: 'Bug', badgeVariant: 'danger', meta: 'Due Fri' },
@@ -49180,10 +50257,10 @@ var KanbanDoc = class extends PuzzleView {
       ...d,
       board: d.board || INITIAL_BOARD,
       staticBoard: STATIC_BOARD,
-      installCmd: installCmd41,
-      usageImport: usageImport41,
-      usageMarkup: usageMarkup41,
-      codeHero: codeHero41,
+      installCmd: installCmd42,
+      usageImport: usageImport42,
+      usageMarkup: usageMarkup42,
+      codeHero: codeHero42,
       codeData,
       codeDisabled: codeDisabled7,
       lastMove: d.lastMove || "none",
@@ -49515,10 +50592,10 @@ KanbanDoc.prototype.render = function() {
 KanbanDoc.__pzlModule = "app/views/components/KanbanDoc.pzl";
 
 // app/views/components/KbdDoc.pzl
-var installCmd42 = "puzzle add piece kbd";
-var usageImport42 = `import Kbd from '@/components/ui/Kbd.pzl';`;
-var usageMarkup42 = `<Kbd>\u2318</Kbd>`;
-var codeHero42 = `<span><Kbd>\u2318</Kbd> <Kbd>K</Kbd> Command palette</span>
+var installCmd43 = "puzzle add piece kbd";
+var usageImport43 = `import Kbd from '@/components/ui/Kbd.pzl';`;
+var usageMarkup43 = `<Kbd>\u2318</Kbd>`;
+var codeHero43 = `<span><Kbd>\u2318</Kbd> <Kbd>K</Kbd> Command palette</span>
 <span><Kbd>\u2318</Kbd> <Kbd>S</Kbd> Save</span>
 <span><Kbd>Esc</Kbd> Close</span>`;
 var codeProse = `<p>
@@ -49529,10 +50606,10 @@ var KbdDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd42,
-      usageImport: usageImport42,
-      usageMarkup: usageMarkup42,
-      codeHero: codeHero42,
+      installCmd: installCmd43,
+      usageImport: usageImport43,
+      usageMarkup: usageMarkup43,
+      codeHero: codeHero43,
       codeProse,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -49677,10 +50754,10 @@ Label.prototype.render = function() {
 Label.__pzlModule = "app/components/ui/Label.pzl";
 
 // app/views/components/LabelDoc.pzl
-var installCmd43 = "puzzle add piece label";
-var usageImport43 = `import Label from '@/components/ui/Label.pzl';`;
-var usageMarkup43 = `<Label for="email">Email address</Label>`;
-var codeHero43 = `<Label for="email">Email address</Label>
+var installCmd44 = "puzzle add piece label";
+var usageImport44 = `import Label from '@/components/ui/Label.pzl';`;
+var usageMarkup44 = `<Label for="email">Email address</Label>`;
+var codeHero44 = `<Label for="email">Email address</Label>
 <input id="email" type="email" placeholder="you@example.com" />`;
 var codeWithPieces = `<Label for="site-search">Search</Label>
 <SearchField id="site-search" value={ query } @change={ setQuery } />
@@ -49696,10 +50773,10 @@ var LabelDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd43,
-      usageImport: usageImport43,
-      usageMarkup: usageMarkup43,
-      codeHero: codeHero43,
+      installCmd: installCmd44,
+      usageImport: usageImport44,
+      usageMarkup: usageMarkup44,
+      codeHero: codeHero44,
       codeWithPieces,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -49800,11 +50877,11 @@ LabelDoc.prototype.render = function() {
 LabelDoc.__pzlModule = "app/views/components/LabelDoc.pzl";
 
 // app/views/components/LineChartDoc.pzl
-var installCmd44 = "puzzle add piece line-chart";
-var usageImport44 = `import LineChart from '@/components/ui/LineChart.pzl';`;
-var usageMarkup44 = `<LineChart data={ data } xKey="month" series={ series } />`;
+var installCmd45 = "puzzle add piece line-chart";
+var usageImport45 = `import LineChart from '@/components/ui/LineChart.pzl';`;
+var usageMarkup45 = `<LineChart data={ data } xKey="month" series={ series } />`;
 var money2 = (n2) => "$" + Number(n2).toLocaleString();
-var codeHero44 = `const data = [
+var codeHero45 = `const data = [
   { month: 'Jan', revenue: 42000, target: 40000 },
   { month: 'Feb', revenue: 45000, target: 44000 },
   { month: 'Mar', revenue: 48000, target: 46000 },
@@ -49852,11 +50929,11 @@ var LineChartDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd44,
-      usageImport: usageImport44,
-      usageMarkup: usageMarkup44,
+      installCmd: installCmd45,
+      usageImport: usageImport45,
+      usageMarkup: usageMarkup45,
       money: money2,
-      codeHero: codeHero44,
+      codeHero: codeHero45,
       codeSingle,
       codeFormatting: codeFormatting2,
       revenueData,
@@ -50022,10 +51099,10 @@ LineChartDoc.prototype.render = function() {
 LineChartDoc.__pzlModule = "app/views/components/LineChartDoc.pzl";
 
 // app/views/components/MarqueeDoc.pzl
-var installCmd45 = "puzzle add piece marquee";
-var usageImport45 = `import Marquee from '@/components/ui/Marquee.pzl';`;
-var usageMarkup45 = `<Marquee class="w-full rounded-xl border border-border bg-surface py-4"></Marquee>`;
-var codeHero45 = `// Items are the default-slot children \u2014 the piece clones them to loop.
+var installCmd46 = "puzzle add piece marquee";
+var usageImport46 = `import Marquee from '@/components/ui/Marquee.pzl';`;
+var usageMarkup46 = `<Marquee class="w-full rounded-xl border border-border bg-surface py-4"></Marquee>`;
+var codeHero46 = `// Items are the default-slot children \u2014 the piece clones them to loop.
 <Marquee class="w-full rounded-xl border border-border bg-surface py-4">
   <span class="px-4 text-lg font-semibold text-ink">Acme</span>
   <span class="px-4 text-lg font-semibold text-ink">Globex</span>
@@ -50056,10 +51133,10 @@ var codeSpeed = `// speed is pixels per second (default 40; larger = faster).
 var MarqueeDoc = class extends PuzzleView {
   data(params, props) {
     return {
-      installCmd: installCmd45,
-      usageImport: usageImport45,
-      usageMarkup: usageMarkup45,
-      codeHero: codeHero45,
+      installCmd: installCmd46,
+      usageImport: usageImport46,
+      usageMarkup: usageMarkup46,
+      codeHero: codeHero46,
       codeDirection,
       codeAnnouncement,
       codePause,
@@ -50429,10 +51506,10 @@ Masonry.prototype.render = function() {
 Masonry.__pzlModule = "app/components/ui/Masonry.pzl";
 
 // app/views/components/MasonryDoc.pzl
-var installCmd46 = "puzzle add piece masonry";
-var usageImport46 = `import Masonry from '@/components/ui/Masonry.pzl';`;
-var usageMarkup46 = `<Masonry columns={ 3 } gap={ 4 }></Masonry>`;
-var codeHero46 = `<Masonry columns={ 3 } gap={ 4 }>
+var installCmd47 = "puzzle add piece masonry";
+var usageImport47 = `import Masonry from '@/components/ui/Masonry.pzl';`;
+var usageMarkup47 = `<Masonry columns={ 3 } gap={ 4 }></Masonry>`;
+var codeHero47 = `<Masonry columns={ 3 } gap={ 4 }>
   <div class="rounded-lg border border-border bg-surface p-4">\u2026short card\u2026</div>
   <div class="rounded-lg border border-border bg-surface p-4">\u2026taller card\u2026</div>
   <div class="rounded-lg border border-border bg-surface p-4">\u2026card\u2026</div>
@@ -50459,10 +51536,10 @@ var MasonryDoc = class extends PuzzleView {
     return {
       ...this.getData(),
       responsiveCols: { base: 1, sm: 2, lg: 3 },
-      installCmd: installCmd46,
-      usageImport: usageImport46,
-      usageMarkup: usageMarkup46,
-      codeHero: codeHero46,
+      installCmd: installCmd47,
+      usageImport: usageImport47,
+      usageMarkup: usageMarkup47,
+      codeHero: codeHero47,
       codeResponsive,
       codeGap,
       codeColumns,
@@ -51159,10 +52236,10 @@ Menubar.prototype.render = function() {
 Menubar.__pzlModule = "app/components/ui/Menubar.pzl";
 
 // app/views/components/MenubarDoc.pzl
-var installCmd47 = "puzzle add piece menubar";
-var usageImport47 = `import Menubar from '@/components/ui/Menubar.pzl';`;
-var usageMarkup47 = `<Menubar menus={ appMenus } @select={ onSelect } />`;
-var codeHero47 = `<Menubar menus={ appMenus } @select={ onSelect } />
+var installCmd48 = "puzzle add piece menubar";
+var usageImport48 = `import Menubar from '@/components/ui/Menubar.pzl';`;
+var usageMarkup48 = `<Menubar menus={ appMenus } @select={ onSelect } />`;
+var codeHero48 = `<Menubar menus={ appMenus } @select={ onSelect } />
 
 // menus: an array of { label, items }. Items are leaf actions, { divider }
 // separators, and optional { group } headings. @select is value-first.
@@ -51228,10 +52305,10 @@ var MenubarDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd47,
-      usageImport: usageImport47,
-      usageMarkup: usageMarkup47,
-      codeHero: codeHero47,
+      installCmd: installCmd48,
+      usageImport: usageImport48,
+      usageMarkup: usageMarkup48,
+      codeHero: codeHero48,
       codeShortcuts,
       codeStates: codeStates2,
       codeKeyboard: codeKeyboard4,
@@ -51480,10 +52557,10 @@ MenubarDoc.prototype.render = function() {
 MenubarDoc.__pzlModule = "app/views/components/MenubarDoc.pzl";
 
 // app/views/components/MeterDoc.pzl
-var installCmd48 = "puzzle add piece meter";
-var usageImport48 = `import Meter from '@/components/ui/Meter.pzl';`;
-var usageMarkup48 = `<Meter value={ disk } low={ 60 } high={ 85 } optimum={ 0 } label="Disk usage" valueText={ \`\${disk}% used\` }/>`;
-var codeHero48 = `<Meter
+var installCmd49 = "puzzle add piece meter";
+var usageImport49 = `import Meter from '@/components/ui/Meter.pzl';`;
+var usageMarkup49 = `<Meter value={ disk } low={ 60 } high={ 85 } optimum={ 0 } label="Disk usage" valueText={ \`\${disk}% used\` }/>`;
+var codeHero49 = `<Meter
   value={ disk }
   low={ 60 }
   high={ 85 }
@@ -51532,10 +52609,10 @@ var MeterDoc = class extends PuzzleView {
     return {
       ...this.getData(),
       diskText: `${disk}% used`,
-      installCmd: installCmd48,
-      usageImport: usageImport48,
-      usageMarkup: usageMarkup48,
-      codeHero: codeHero48,
+      installCmd: installCmd49,
+      usageImport: usageImport49,
+      usageMarkup: usageMarkup49,
+      codeHero: codeHero49,
       codeBands,
       codeCustomRange,
       codeValueText,
@@ -51753,14 +52830,14 @@ MeterDoc.prototype.render = function() {
 MeterDoc.__pzlModule = "app/views/components/MeterDoc.pzl";
 
 // app/components/ui/MultiSelect.pzl
-var uid29 = 0;
+var uid30 = 0;
 var CONTROL_BASE2 = "relative flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-lg border bg-surface py-1 pl-2 pr-9 text-sm transition-colors focus-within:outline-2 focus-within:outline-offset-2";
 var CONTROL_OK2 = "border-border outline-ring focus-within:outline-ring";
 var CONTROL_ERROR2 = "border-danger outline-danger focus-within:outline-danger";
 var INPUT_BASE8 = "h-7 min-w-[4rem] flex-1 bg-transparent text-sm text-ink placeholder:text-muted focus:outline-none disabled:cursor-not-allowed";
 var CHIP_CLASS2 = "inline-flex max-w-full items-center gap-1 rounded-full bg-brand-tint py-0.5 pl-2 pr-1 text-xs font-medium text-brand";
 var CHIP_REMOVE_CLASS2 = "inline-flex size-4 shrink-0 items-center justify-center rounded-full text-brand transition-colors hover:bg-brand hover:text-brand-ink disabled:pointer-events-none";
-var PANEL_BASE8 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
+var PANEL_BASE9 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
 var PANEL_PLACEMENT3 = { bottom: "top-full mt-1", top: "bottom-full mb-1" };
 var OPTION_BASE4 = "relative flex items-center gap-2 px-3 py-1.5 text-sm select-none";
 var GROUP_CLASS3 = "px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none";
@@ -51813,7 +52890,7 @@ function pruneStructure(rows) {
 }
 var MultiSelect = class extends PuzzleView {
   created() {
-    this._uid = ++uid29;
+    this._uid = ++uid30;
     this._base = `pp-multiselect-${this._uid}`;
     this._wasOpen = false;
     this._scrollActive = false;
@@ -52071,7 +53148,7 @@ var MultiSelect = class extends PuzzleView {
         disabled ? "opacity-50 pointer-events-none" : ""
       ].filter(Boolean).join(" "),
       inputClass: INPUT_BASE8,
-      panelClass: [PANEL_BASE8, PANEL_PLACEMENT3[placement]].filter(Boolean).join(" "),
+      panelClass: [PANEL_BASE9, PANEL_PLACEMENT3[placement]].filter(Boolean).join(" "),
       panelStyle: prev.maxHeight ? `max-height:${prev.maxHeight}px;` : ""
     };
   }
@@ -52550,10 +53627,10 @@ MultiSelect.prototype.render = function() {
 MultiSelect.__pzlModule = "app/components/ui/MultiSelect.pzl";
 
 // app/views/components/MultiSelectDoc.pzl
-var installCmd49 = "puzzle add piece multi-select";
-var usageImport49 = `import MultiSelect from '@/components/ui/MultiSelect.pzl';`;
-var usageMarkup49 = `<MultiSelect options={ frameworks } value={ picks } @change={ setPicks } />`;
-var codeHero49 = `const frameworks = [
+var installCmd50 = "puzzle add piece multi-select";
+var usageImport50 = `import MultiSelect from '@/components/ui/MultiSelect.pzl';`;
+var usageMarkup50 = `<MultiSelect options={ frameworks } value={ picks } @change={ setPicks } />`;
+var codeHero50 = `const frameworks = [
   { value: 'next', label: 'Next.js' },
   { value: 'svelte', label: 'SvelteKit' },
   { value: 'nuxt', label: 'Nuxt' },
@@ -52622,10 +53699,10 @@ var MultiSelectDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd49,
-      usageImport: usageImport49,
-      usageMarkup: usageMarkup49,
-      codeHero: codeHero49,
+      installCmd: installCmd50,
+      usageImport: usageImport50,
+      usageMarkup: usageMarkup50,
+      codeHero: codeHero50,
       codeBasic,
       codeGroups: codeGroups5,
       codeError: codeError8,
@@ -52946,14 +54023,14 @@ var TRIGGER_BASE5 = "inline-flex items-center gap-1 whitespace-nowrap select-non
 var LINK_BASE = "inline-flex items-center whitespace-nowrap select-none rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
 var LINK_ACTIVE = "text-ink underline decoration-2 underline-offset-8 decoration-brand";
 var LINK_INACTIVE = "text-body hover:text-ink";
-var PANEL_BASE9 = "absolute left-0 top-full mt-2 z-40 w-max max-w-lg rounded-lg border border-border bg-surface p-2 shadow-md";
+var PANEL_BASE10 = "absolute left-0 top-full mt-2 z-40 w-max max-w-lg rounded-lg border border-border bg-surface p-2 shadow-md";
 var CARD_BASE2 = "block rounded-md p-3 transition-colors hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
 var CARD_LABEL = "block text-sm font-medium text-ink";
 var CARD_LABEL_ACTIVE = "underline decoration-2 underline-offset-4 decoration-brand";
-var uid30 = 0;
+var uid31 = 0;
 var NavigationMenu = class extends PuzzleView {
   created() {
-    this._uid = ++uid30;
+    this._uid = ++uid31;
     this._openTimer = null;
     this._closeTimer = null;
     this._docBound = false;
@@ -53003,7 +54080,7 @@ var NavigationMenu = class extends PuzzleView {
         triggerId: `nav-trigger-${seed}-${i2}`,
         panelId: `nav-panel-${seed}-${i2}`,
         triggerClass: TRIGGER_BASE5,
-        panelClass: [PANEL_BASE9, grid].join(" ")
+        panelClass: [PANEL_BASE10, grid].join(" ")
       };
     });
     const prev = this.getData();
@@ -53256,10 +54333,10 @@ NavigationMenu.prototype.render = function() {
 NavigationMenu.__pzlModule = "app/components/ui/NavigationMenu.pzl";
 
 // app/views/components/NavigationMenuDoc.pzl
-var installCmd50 = "puzzle add piece navigation-menu";
-var usageImport50 = `import NavigationMenu from '@/components/ui/NavigationMenu.pzl';`;
-var usageMarkup50 = `<NavigationMenu items={ nav } />`;
-var codeHero50 = `const nav = [
+var installCmd51 = "puzzle add piece navigation-menu";
+var usageImport51 = `import NavigationMenu from '@/components/ui/NavigationMenu.pzl';`;
+var usageMarkup51 = `<NavigationMenu items={ nav } />`;
+var codeHero51 = `const nav = [
   {
     label: 'Products',
     children: [
@@ -53301,10 +54378,10 @@ var codeKeyboard6 = `<NavigationMenu items={ nav } />`;
 var NavigationMenuDoc = class extends PuzzleView {
   data(params, props) {
     return {
-      installCmd: installCmd50,
-      usageImport: usageImport50,
-      usageMarkup: usageMarkup50,
-      codeHero: codeHero50,
+      installCmd: installCmd51,
+      usageImport: usageImport51,
+      usageMarkup: usageMarkup51,
+      codeHero: codeHero51,
       codeActive,
       codeSingle: codeSingle2,
       codeKeyboard: codeKeyboard6,
@@ -53525,10 +54602,10 @@ NavigationMenuDoc.prototype.render = function() {
 NavigationMenuDoc.__pzlModule = "app/views/components/NavigationMenuDoc.pzl";
 
 // app/views/components/NumberFieldDoc.pzl
-var installCmd51 = "puzzle add piece number-field";
-var usageImport51 = `import NumberField from '@/components/ui/NumberField.pzl';`;
-var usageMarkup51 = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />`;
-var codeHero51 = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />
+var installCmd52 = "puzzle add piece number-field";
+var usageImport52 = `import NumberField from '@/components/ui/NumberField.pzl';`;
+var usageMarkup52 = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />`;
+var codeHero52 = `<NumberField label="Quantity" value={ qty } min={ 0 } max={ 20 } step={ 1 } @change={ setQty } />
 
 // parent \u2014 @change emits a number, or null when the field is cleared
 events = {
@@ -53557,10 +54634,10 @@ var NumberFieldDoc = class extends PuzzleView {
       ratingLabel: show(state.rating),
       discountLabel: show(state.discount),
       levelLabel: show(state.level),
-      installCmd: installCmd51,
-      usageImport: usageImport51,
-      usageMarkup: usageMarkup51,
-      codeHero: codeHero51,
+      installCmd: installCmd52,
+      usageImport: usageImport52,
+      usageMarkup: usageMarkup52,
+      codeHero: codeHero52,
       codeDecimals,
       codeBounds: codeBounds4,
       codeEmpty,
@@ -53870,10 +54947,10 @@ NumberFieldDoc.prototype.render = function() {
 NumberFieldDoc.__pzlModule = "app/views/components/NumberFieldDoc.pzl";
 
 // app/views/components/PaginationDoc.pzl
-var installCmd52 = "puzzle add piece pagination";
-var usageImport52 = `import Pagination from '@/components/ui/Pagination.pzl';`;
-var usageMarkup52 = `<Pagination page={ page } count={ 12 } @change={ setPage } />`;
-var codeHero52 = `<Pagination page={ page } count={ 12 } @change={ setPage } />
+var installCmd53 = "puzzle add piece pagination";
+var usageImport53 = `import Pagination from '@/components/ui/Pagination.pzl';`;
+var usageMarkup53 = `<Pagination page={ page } count={ 12 } @change={ setPage } />`;
+var codeHero53 = `<Pagination page={ page } count={ 12 } @change={ setPage } />
 <p>Page { page } of 12</p>
 
 // parent
@@ -53893,10 +54970,10 @@ var PaginationDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd52,
-      usageImport: usageImport52,
-      usageMarkup: usageMarkup52,
-      codeHero: codeHero52,
+      installCmd: installCmd53,
+      usageImport: usageImport53,
+      usageMarkup: usageMarkup53,
+      codeHero: codeHero53,
       codeWindowing,
       codeSmall,
       toc: [
@@ -54201,10 +55278,10 @@ function panelInert(stack, handle) {
 }
 
 // app/views/components/PanelStackDoc.pzl
-var installCmd53 = "puzzle add piece panel-stack";
-var usageImport53 = `import PanelStack from '@/components/ui/PanelStack.pzl';`;
-var usageMarkup53 = `<PanelStack stack={ stack } @change={ setStack }></PanelStack>`;
-var codeHero53 = `import PanelStack from '@/components/ui/PanelStack.pzl';
+var installCmd54 = "puzzle add piece panel-stack";
+var usageImport54 = `import PanelStack from '@/components/ui/PanelStack.pzl';`;
+var usageMarkup54 = `<PanelStack stack={ stack } @change={ setStack }></PanelStack>`;
+var codeHero54 = `import PanelStack from '@/components/ui/PanelStack.pzl';
 import { panelClass, panelInert } from '@/lib/panel-stack.js';
 
 <div class="h-[360px] rounded-2xl">
@@ -54275,10 +55352,10 @@ var PanelStackDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd53,
-      usageImport: usageImport53,
-      usageMarkup: usageMarkup53,
-      codeHero: codeHero53,
+      installCmd: installCmd54,
+      usageImport: usageImport54,
+      usageMarkup: usageMarkup54,
+      codeHero: codeHero54,
       codeStack,
       codeDialog,
       panelClasses: panelClass,
@@ -54639,7 +55716,7 @@ PanelStackDoc.prototype.render = function() {
 PanelStackDoc.__pzlModule = "app/views/components/PanelStackDoc.pzl";
 
 // app/components/ui/PasswordField.pzl
-var uid31 = 0;
+var uid32 = 0;
 var INPUT_BASE9 = "h-9 w-full rounded-lg border bg-surface pl-3 pr-10 text-sm text-ink placeholder:text-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50";
 var INPUT_OK4 = "border-border outline-ring focus-visible:outline-ring";
 var INPUT_ERROR4 = "border-danger outline-danger focus-visible:outline-danger";
@@ -54649,7 +55726,7 @@ var PasswordField = class extends PuzzleView {
   }
   data(params, props) {
     const { visible = false } = this.getData();
-    const id = props.id || (this._fallbackId ??= `pp-password-${++uid31}`);
+    const id = props.id || (this._fallbackId ??= `pp-password-${++uid32}`);
     const error = props.error || "";
     const hint = props.hint || "";
     const described = !!(error || hint);
@@ -54793,10 +55870,10 @@ PasswordField.prototype.render = function() {
 PasswordField.__pzlModule = "app/components/ui/PasswordField.pzl";
 
 // app/views/components/PasswordFieldDoc.pzl
-var installCmd54 = "puzzle add piece password-field";
-var usageImport54 = `import PasswordField from '@/components/ui/PasswordField.pzl';`;
-var usageMarkup54 = `<PasswordField label="Password" value={ password } @change={ setPassword } />`;
-var codeHero54 = `<PasswordField label="Password" value={ password } @change={ setPassword } />
+var installCmd55 = "puzzle add piece password-field";
+var usageImport55 = `import PasswordField from '@/components/ui/PasswordField.pzl';`;
+var usageMarkup55 = `<PasswordField label="Password" value={ password } @change={ setPassword } />`;
+var codeHero55 = `<PasswordField label="Password" value={ password } @change={ setPassword } />
 
 // parent
 events = {
@@ -54811,10 +55888,10 @@ var PasswordFieldDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd54,
-      usageImport: usageImport54,
-      usageMarkup: usageMarkup54,
-      codeHero: codeHero54,
+      installCmd: installCmd55,
+      usageImport: usageImport55,
+      usageMarkup: usageMarkup55,
+      codeHero: codeHero55,
       codeHint: codeHint3,
       codeError: codeError10,
       toc: [
@@ -54922,10 +55999,10 @@ PasswordFieldDoc.prototype.render = function() {
 PasswordFieldDoc.__pzlModule = "app/views/components/PasswordFieldDoc.pzl";
 
 // app/views/components/PieChartDoc.pzl
-var installCmd55 = "puzzle add piece pie-chart";
-var usageImport55 = `import PieChart from '@/components/ui/PieChart.pzl';`;
-var usageMarkup55 = `<PieChart data={ trafficData } label="Traffic by source" totalLabel="Sessions" />`;
-var codeHero55 = `const trafficData = [
+var installCmd56 = "puzzle add piece pie-chart";
+var usageImport56 = `import PieChart from '@/components/ui/PieChart.pzl';`;
+var usageMarkup56 = `<PieChart data={ trafficData } label="Traffic by source" totalLabel="Sessions" />`;
+var codeHero56 = `const trafficData = [
   { label: 'Organic', value: 4200 },
   { label: 'Direct', value: 3100 },
   { label: 'Referral', value: 1900 },
@@ -54956,10 +56033,10 @@ var PieChartDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd55,
-      usageImport: usageImport55,
-      usageMarkup: usageMarkup55,
-      codeHero: codeHero55,
+      installCmd: installCmd56,
+      usageImport: usageImport56,
+      usageMarkup: usageMarkup56,
+      codeHero: codeHero56,
       codePlain: codePlain2,
       codeFolding,
       trafficData: [
@@ -55092,10 +56169,10 @@ PieChartDoc.prototype.render = function() {
 PieChartDoc.__pzlModule = "app/views/components/PieChartDoc.pzl";
 
 // app/views/components/PopconfirmDoc.pzl
-var installCmd56 = "puzzle add piece popconfirm";
-var usageImport56 = `import Popconfirm from '@/components/ui/Popconfirm.pzl';`;
-var usageMarkup56 = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }></Popconfirm>`;
-var codeHero56 = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }>
+var installCmd57 = "puzzle add piece popconfirm";
+var usageImport57 = `import Popconfirm from '@/components/ui/Popconfirm.pzl';`;
+var usageMarkup57 = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }></Popconfirm>`;
+var codeHero57 = `<Popconfirm message="Delete this item?" confirmLabel="Delete" @confirm={ onDelete }>
   <button slot="trigger" class="\u2026">Delete item</button>
 </Popconfirm>
 
@@ -55145,10 +56222,10 @@ var PopconfirmDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd56,
-      usageImport: usageImport56,
-      usageMarkup: usageMarkup56,
-      codeHero: codeHero56,
+      installCmd: installCmd57,
+      usageImport: usageImport57,
+      usageMarkup: usageMarkup57,
+      codeHero: codeHero57,
       codeDanger: codeDanger2,
       codePlacement: codePlacement2,
       codeControlled: codeControlled7,
@@ -55351,9 +56428,9 @@ PopconfirmDoc.prototype.render = function() {
 PopconfirmDoc.__pzlModule = "app/views/components/PopconfirmDoc.pzl";
 
 // app/components/ui/Popover.pzl
-var uid32 = 0;
+var uid33 = 0;
 var TRIGGER_BASE6 = "inline-flex items-center gap-1 text-sm text-body cursor-pointer transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
-var PANEL_BASE10 = "absolute z-50 w-max max-w-xs rounded-lg border border-border bg-surface p-4 shadow-lg text-sm text-body";
+var PANEL_BASE11 = "absolute z-50 w-max max-w-xs rounded-lg border border-border bg-surface p-4 shadow-lg text-sm text-body";
 var ALIGN6 = {
   start: "left-0",
   center: "left-1/2 -translate-x-1/2",
@@ -55361,7 +56438,7 @@ var ALIGN6 = {
 };
 var Popover = class extends PuzzleView {
   created() {
-    this._uid = ++uid32;
+    this._uid = ++uid33;
     this.setData({ open: false, placement: null });
   }
   // Outside-click close: attached only while open (see show/hide). Guarded by
@@ -55393,7 +56470,7 @@ var Popover = class extends PuzzleView {
       panelId: props.id || `pieces-popover-${this._uid}`,
       triggerClass: [TRIGGER_BASE6, props.triggerClass || ""].join(" "),
       panelClass: [
-        PANEL_BASE10,
+        PANEL_BASE11,
         placement === "top" ? "bottom-full mb-1" : "top-full mt-1",
         ALIGN6[align],
         props.class || ""
@@ -55500,10 +56577,10 @@ Popover.prototype.render = function() {
 Popover.__pzlModule = "app/components/ui/Popover.pzl";
 
 // app/views/components/PopoverDoc.pzl
-var installCmd57 = "puzzle add piece popover";
-var usageImport57 = `import Popover from '@/components/ui/Popover.pzl';`;
-var usageMarkup57 = `<Popover align="start"></Popover>`;
-var codeHero57 = `<Popover align="start">
+var installCmd58 = "puzzle add piece popover";
+var usageImport58 = `import Popover from '@/components/ui/Popover.pzl';`;
+var usageMarkup58 = `<Popover align="start"></Popover>`;
+var codeHero58 = `<Popover align="start">
   <span slot="trigger" class="\u2026">Show details</span>
   <div class="space-y-2">
     <p class="font-medium text-ink">Dimensions</p>
@@ -55521,10 +56598,10 @@ var PopoverDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd57,
-      usageImport: usageImport57,
-      usageMarkup: usageMarkup57,
-      codeHero: codeHero57,
+      installCmd: installCmd58,
+      usageImport: usageImport58,
+      usageMarkup: usageMarkup58,
+      codeHero: codeHero58,
       codePlacement: codePlacement3,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -55656,10 +56733,10 @@ PopoverDoc.prototype.render = function() {
 PopoverDoc.__pzlModule = "app/views/components/PopoverDoc.pzl";
 
 // app/views/components/ProgressDoc.pzl
-var installCmd58 = "puzzle add piece progress";
-var usageImport58 = `import Progress from '@/components/ui/Progress.pzl';`;
-var usageMarkup58 = `<Progress value={ pct } max={ 100 } label="Uploading" showValue />`;
-var codeHero58 = `<Progress value={ pct } max={ 100 } label="Uploading" showValue />
+var installCmd59 = "puzzle add piece progress";
+var usageImport59 = `import Progress from '@/components/ui/Progress.pzl';`;
+var usageMarkup59 = `<Progress value={ pct } max={ 100 } label="Uploading" showValue />`;
+var codeHero59 = `<Progress value={ pct } max={ 100 } label="Uploading" showValue />
 
 // parent
 events = {
@@ -55677,10 +56754,10 @@ var ProgressDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd58,
-      usageImport: usageImport58,
-      usageMarkup: usageMarkup58,
-      codeHero: codeHero58,
+      installCmd: installCmd59,
+      usageImport: usageImport59,
+      usageMarkup: usageMarkup59,
+      codeHero: codeHero59,
       codeIndeterminate,
       codeSizes: codeSizes8,
       toc: [
@@ -55813,10 +56890,10 @@ ProgressDoc.prototype.render = function() {
 ProgressDoc.__pzlModule = "app/views/components/ProgressDoc.pzl";
 
 // app/views/components/ProgressRingDoc.pzl
-var installCmd59 = "puzzle add piece progress-ring";
-var usageImport59 = `import ProgressRing from '@/components/ui/ProgressRing.pzl';`;
-var usageMarkup59 = `<ProgressRing value={ 73 } />`;
-var codeHero59 = `<ProgressRing value={ 73 } />`;
+var installCmd60 = "puzzle add piece progress-ring";
+var usageImport60 = `import ProgressRing from '@/components/ui/ProgressRing.pzl';`;
+var usageMarkup60 = `<ProgressRing value={ 73 } />`;
+var codeHero60 = `<ProgressRing value={ 73 } />`;
 var codeSizes9 = `// size is a px diameter or a preset: sm/md/lg = 48/96/128.
 <ProgressRing value={ 66 } size="sm" />
 <ProgressRing value={ 66 } size="md" />
@@ -55843,10 +56920,10 @@ var ProgressRingDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd59,
-      usageImport: usageImport59,
-      usageMarkup: usageMarkup59,
-      codeHero: codeHero59,
+      installCmd: installCmd60,
+      usageImport: usageImport60,
+      usageMarkup: usageMarkup60,
+      codeHero: codeHero60,
       codeSizes: codeSizes9,
       codeColors: codeColors2,
       codeThickness,
@@ -56062,10 +57139,10 @@ ProgressRingDoc.prototype.render = function() {
 ProgressRingDoc.__pzlModule = "app/views/components/ProgressRingDoc.pzl";
 
 // app/views/components/QuantityInputDoc.pzl
-var installCmd60 = "puzzle add piece quantity-input";
-var usageImport60 = `import QuantityInput from '@/components/ui/QuantityInput.pzl';`;
-var usageMarkup60 = `<QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />`;
-var codeHero60 = `<QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />
+var installCmd61 = "puzzle add piece quantity-input";
+var usageImport61 = `import QuantityInput from '@/components/ui/QuantityInput.pzl';`;
+var usageMarkup61 = `<QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />`;
+var codeHero61 = `<QuantityInput value={ qty } min={ 1 } max={ 10 } @change={ setQty } />
 
 // parent
 events = {
@@ -56080,10 +57157,10 @@ var QuantityInputDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd60,
-      usageImport: usageImport60,
-      usageMarkup: usageMarkup60,
-      codeHero: codeHero60,
+      installCmd: installCmd61,
+      usageImport: usageImport61,
+      usageMarkup: usageMarkup61,
+      codeHero: codeHero61,
       codeBounds: codeBounds5,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -56195,10 +57272,10 @@ var ORIENTATION3 = {
   vertical: "flex flex-col gap-2",
   horizontal: "flex flex-wrap gap-x-6 gap-y-2"
 };
-var uid33 = 0;
+var uid34 = 0;
 var RadioGroup = class extends PuzzleView {
   data(params, props) {
-    const name = props.name || (this._name ??= `pieces-radio-${++uid33}`);
+    const name = props.name || (this._name ??= `pieces-radio-${++uid34}`);
     return {
       fieldsetClass: [
         "min-w-0 border-0 p-0 m-0",
@@ -56276,10 +57353,10 @@ RadioGroup.prototype.render = function() {
 RadioGroup.__pzlModule = "app/components/ui/RadioGroup.pzl";
 
 // app/views/components/RadioGroupDoc.pzl
-var installCmd61 = "puzzle add piece radio-group";
-var usageImport61 = `import RadioGroup from '@/components/ui/RadioGroup.pzl';`;
-var usageMarkup61 = `<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />`;
-var codeHero61 = `<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />
+var installCmd62 = "puzzle add piece radio-group";
+var usageImport62 = `import RadioGroup from '@/components/ui/RadioGroup.pzl';`;
+var usageMarkup62 = `<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />`;
+var codeHero62 = `<RadioGroup label="Plan" options={ planOptions } value={ plan } @change={ setPlan } />
 
 // parent
 data() {
@@ -56312,10 +57389,10 @@ var RadioGroupDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd61,
-      usageImport: usageImport61,
-      usageMarkup: usageMarkup61,
-      codeHero: codeHero61,
+      installCmd: installCmd62,
+      usageImport: usageImport62,
+      usageMarkup: usageMarkup62,
+      codeHero: codeHero62,
       codeHorizontal,
       codeHints,
       planOptions: [
@@ -56447,10 +57524,10 @@ RadioGroupDoc.prototype.render = function() {
 RadioGroupDoc.__pzlModule = "app/views/components/RadioGroupDoc.pzl";
 
 // app/views/components/RatingDoc.pzl
-var installCmd62 = "puzzle add piece rating";
-var usageImport62 = `import Rating from '@/components/ui/Rating.pzl';`;
-var usageMarkup62 = `<Rating value={ score } size="lg" @change={ setScore } />`;
-var codeHero62 = `<Rating value={ score } size="lg" @change={ setScore } />
+var installCmd63 = "puzzle add piece rating";
+var usageImport63 = `import Rating from '@/components/ui/Rating.pzl';`;
+var usageMarkup63 = `<Rating value={ score } size="lg" @change={ setScore } />`;
+var codeHero63 = `<Rating value={ score } size="lg" @change={ setScore } />
 
 // parent \u2014 input mode commits whole-star values
 events = {
@@ -56480,10 +57557,10 @@ var RatingDoc = class extends PuzzleView {
     const d = this.getData();
     return {
       ...d,
-      installCmd: installCmd62,
-      usageImport: usageImport62,
-      usageMarkup: usageMarkup62,
-      codeHero: codeHero62,
+      installCmd: installCmd63,
+      usageImport: usageImport63,
+      usageMarkup: usageMarkup63,
+      codeHero: codeHero63,
       codeDisplay,
       codeSizes: codeSizes10,
       codeColors: codeColors3,
@@ -57069,10 +58146,10 @@ ScrollArea.prototype.render = function() {
 ScrollArea.__pzlModule = "app/components/ui/ScrollArea.pzl";
 
 // app/views/components/ScrollAreaDoc.pzl
-var installCmd63 = "puzzle add piece scroll-area";
-var usageImport63 = `import ScrollArea from '@/components/ui/ScrollArea.pzl';`;
-var usageMarkup63 = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface"></ScrollArea>`;
-var codeHero63 = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface">
+var installCmd64 = "puzzle add piece scroll-area";
+var usageImport64 = `import ScrollArea from '@/components/ui/ScrollArea.pzl';`;
+var usageMarkup64 = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface"></ScrollArea>`;
+var codeHero64 = `<ScrollArea maxHeight={ 256 } label="Ingredients" class="w-72 rounded-lg border border-border bg-surface">
   <ul class="divide-y divide-border">
     {#for item in ingredients}
       <li class="px-4 py-3 text-sm text-body">{ item }</li>
@@ -57100,10 +58177,10 @@ var ScrollAreaDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd63,
-      usageImport: usageImport63,
-      usageMarkup: usageMarkup63,
-      codeHero: codeHero63,
+      installCmd: installCmd64,
+      usageImport: usageImport64,
+      usageMarkup: usageMarkup64,
+      codeHero: codeHero64,
       codeHorizontal: codeHorizontal2,
       codeBoth,
       ingredients: [
@@ -57350,10 +58427,10 @@ ScrollAreaDoc.prototype.render = function() {
 ScrollAreaDoc.__pzlModule = "app/views/components/ScrollAreaDoc.pzl";
 
 // app/views/components/SearchFieldDoc.pzl
-var installCmd64 = "puzzle add piece search-field";
-var usageImport64 = `import SearchField from '@/components/ui/SearchField.pzl';`;
-var usageMarkup64 = `<SearchField value={ query } placeholder="Filter results\u2026" @change={ setQuery } />`;
-var codeHero64 = `<SearchField value={ query } placeholder="Filter results\u2026" @change={ setQuery } />
+var installCmd65 = "puzzle add piece search-field";
+var usageImport65 = `import SearchField from '@/components/ui/SearchField.pzl';`;
+var usageMarkup65 = `<SearchField value={ query } placeholder="Filter results\u2026" @change={ setQuery } />`;
+var codeHero65 = `<SearchField value={ query } placeholder="Filter results\u2026" @change={ setQuery } />
 <p>Query: { query }</p>
 
 // parent
@@ -57374,10 +58451,10 @@ var SearchFieldDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd64,
-      usageImport: usageImport64,
-      usageMarkup: usageMarkup64,
-      codeHero: codeHero64,
+      installCmd: installCmd65,
+      usageImport: usageImport65,
+      usageMarkup: usageMarkup65,
+      codeHero: codeHero65,
       codeSubmit,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -57483,10 +58560,10 @@ SearchFieldDoc.prototype.render = function() {
 SearchFieldDoc.__pzlModule = "app/views/components/SearchFieldDoc.pzl";
 
 // app/views/components/SelectDoc.pzl
-var installCmd65 = "puzzle add piece select";
-var usageImport65 = `import Select from '@/components/ui/Select.pzl';`;
-var usageMarkup65 = `<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />`;
-var codeHero65 = `const fruitOptions = [
+var installCmd66 = "puzzle add piece select";
+var usageImport66 = `import Select from '@/components/ui/Select.pzl';`;
+var usageMarkup66 = `<Select options={ fruitOptions } value={ fruit } @change={ setFruit } />`;
+var codeHero66 = `const fruitOptions = [
   { value: 'apple', label: 'Apple' },
   { value: 'banana', label: 'Banana' },
   { value: 'cherry', label: 'Cherry' },
@@ -57525,10 +58602,10 @@ var SelectDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd65,
-      usageImport: usageImport65,
-      usageMarkup: usageMarkup65,
-      codeHero: codeHero65,
+      installCmd: installCmd66,
+      usageImport: usageImport66,
+      usageMarkup: usageMarkup66,
+      codeHero: codeHero66,
       codeGroups: codeGroups6,
       codeMorph: codeMorph5,
       codePosition,
@@ -57778,10 +58855,10 @@ SelectDoc.prototype.render = function() {
 SelectDoc.__pzlModule = "app/views/components/SelectDoc.pzl";
 
 // app/views/components/SeparatorDoc.pzl
-var installCmd66 = "puzzle add piece separator";
-var usageImport66 = `import Separator from '@/components/ui/Separator.pzl';`;
-var usageMarkup66 = `<Separator class="my-3" />`;
-var codeHero66 = `<p>Save your work often.</p>
+var installCmd67 = "puzzle add piece separator";
+var usageImport67 = `import Separator from '@/components/ui/Separator.pzl';`;
+var usageMarkup67 = `<Separator class="my-3" />`;
+var codeHero67 = `<p>Save your work often.</p>
 <Separator class="my-3" />
 <p>Publishing makes it public.</p>
 <Separator class="my-3" />
@@ -57803,10 +58880,10 @@ var SeparatorDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd66,
-      usageImport: usageImport66,
-      usageMarkup: usageMarkup66,
-      codeHero: codeHero66,
+      installCmd: installCmd67,
+      usageImport: usageImport67,
+      usageMarkup: usageMarkup67,
+      codeHero: codeHero67,
       codeOrientation,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -57940,332 +59017,2360 @@ SeparatorDoc.prototype.render = function() {
 };
 SeparatorDoc.__pzlModule = "app/views/components/SeparatorDoc.pzl";
 
-// app/components/ui/Sheet.pzl
-var BACKDROP = "[&::backdrop]:bg-black/50 [&::backdrop]:backdrop-blur-sm [&::backdrop]:transition-opacity [&::backdrop]:duration-150 [&[data-closing]::backdrop]:opacity-0";
-var SHEET = "m-0 mt-auto w-full max-w-full rounded-t-2xl border-t border-border bg-surface p-0 open:flex flex-col overflow-hidden pb-[env(safe-area-inset-bottom)] text-body will-change-transform";
-var MODAL = "m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border border-border bg-surface p-0 open:flex flex-col overflow-hidden shadow-xl text-body";
-var uid34 = 0;
-var Sheet = class extends PuzzleView {
-  // physics constants (ported verbatim from bottom-sheet.js)
-  #dragThreshold = 100;
-  #overscrollResistance = 0.1;
-  // transient gesture state — instance-local, never setData (would re-render mid-drag)
-  #drag = {
-    active: false,
-    pointerId: null,
-    startY: 0,
-    delta: 0,
-    direction: null,
-    isHeader: false,
-    isAtTop: false,
-    captured: false,
-    captureEl: null
-  };
-  // matchMedia plumbing for the mobile/desktop split
-  #mql = null;
-  #mqlHandler = null;
-  // exit-animation state: the running out animation, and a flag set by the
-  // drag-dismiss path (which has already animated the slide) so syncOpen()
-  // closes immediately instead of animating a second time.
-  #exit = null;
-  #skipExit = false;
-  data(params, props) {
-    const id = this._id ??= `pp-sheet-${++uid34}`;
-    const mobile = this.#currentMobile(props);
-    const title = props.title || "";
-    const canDrag = mobile && props.dismissible !== false;
+// app/lib/sheet-engine.js
+var EventEmitter2 = class {
+  #events;
+  constructor() {
+    this.#events = /* @__PURE__ */ new Map();
+  }
+  /**
+   * Binds a listener to an event.
+   * @param {string} event - The event to bind the listener to.
+   * @param {Function} listener - The listener function to bind.
+   * @returns {EventEmitter} The current instance for chaining.
+   */
+  on(event, listener) {
+    if (typeof listener !== "function") {
+      throw new TypeError("Listener must be a function");
+    }
+    const listeners = this.#events.get(event) || [];
+    if (!listeners.includes(listener))
+      listeners.push(listener);
+    this.#events.set(event, listeners);
+    return this;
+  }
+  /**
+   * Unbinds a listener from an event.
+   * @param {string} event - The event to unbind.
+   * @param {Function} listener - The listener function to unbind.
+   * @returns {EventEmitter} The current instance for chaining.
+   */
+  off(event, listener) {
+    const listeners = this.#events.get(event);
+    if (!listeners)
+      return this;
+    const index = listeners.indexOf(listener);
+    if (index !== -1) {
+      listeners.splice(index, 1);
+      if (listeners.length === 0)
+        this.#events.delete(event);
+      else
+        this.#events.set(event, listeners);
+    }
+    return this;
+  }
+  /**
+   * Emits an event.
+   * @param {string} event - Event name.
+   * @param {...*} args - Listener arguments.
+   * @returns {boolean} Whether the event had listeners.
+   */
+  emit(event, ...args) {
+    const listeners = this.#events.get(event);
+    if (!listeners || listeners.length === 0)
+      return false;
+    for (const listener of listeners.slice()) {
+      try {
+        listener.apply(this, args);
+      } catch (error) {
+        console.error(`Error in listener for event '${event}':`, error);
+      }
+    }
+    return true;
+  }
+  /**
+   * Removes listeners for one event or all events.
+   * @param {string} [event] - Optional event name.
+   * @returns {EventEmitter} The current instance for chaining.
+   */
+  removeAllListeners(event) {
+    if (event)
+      this.#events.delete(event);
+    else
+      this.#events.clear();
+    return this;
+  }
+};
+var FRAME_MS2 = 16.66;
+var VELOCITY_BOOST2 = 1.1;
+var TRAVEL2 = 100;
+var SETTLE_POSITION_EPSILON2 = 0.3;
+var SETTLE_DELTA_EPSILON2 = 0.15;
+var CLAMP_POSITIVE2 = [
+  "width",
+  "height",
+  "borderTopLeftRadius",
+  "borderTopRightRadius",
+  "borderBottomRightRadius",
+  "borderBottomLeftRadius",
+  "borderTopWidth",
+  "borderRightWidth",
+  "borderBottomWidth",
+  "borderLeftWidth"
+];
+var MANAGED_PROPERTIES2 = [
+  "display",
+  "opacity",
+  "transform",
+  "transformOrigin",
+  "willChange",
+  "width",
+  "height"
+];
+var SPRING_PRESETS = {
+  entrance: { attraction: 0.055, friction: 0.32 },
+  pop: { attraction: 0.055, friction: 0.325 },
+  exit: { attraction: 0.3, friction: 0.56 },
+  snap: { attraction: 0.065, friction: 0.3 },
+  rest: { attraction: 0.15, friction: 0.455 }
+};
+var MIN_SPRING = 1e-3;
+var MAX_SPRING = 0.999;
+function isSpringDial(value) {
+  return Number.isFinite(value) && value > 0 && value < 1;
+}
+function parseSpring(value) {
+  if (typeof value !== "string")
+    return null;
+  const parts = value.trim().split(/[\s,]+/).filter(Boolean);
+  if (parts.length !== 2)
+    return null;
+  const [attraction, friction] = parts.map(Number);
+  if (!isSpringDial(attraction) || !isSpringDial(friction))
+    return null;
+  return { attraction, friction };
+}
+var DISMISS_ROUTES = ["swipe", "backdrop", "escape"];
+function parseDismiss(value) {
+  const all = (allowed) => Object.fromEntries(DISMISS_ROUTES.map((route) => [route, allowed]));
+  if (value === null || value === void 0)
+    return all(true);
+  const tokens = String(value).trim().toLowerCase().split(/[\s,]+/).filter(Boolean);
+  if (!tokens.length || tokens.includes("none"))
+    return all(false);
+  if (tokens.includes("all"))
+    return all(true);
+  return Object.fromEntries(DISMISS_ROUTES.map((route) => [route, tokens.includes(route)]));
+}
+var EXIT_CUSHION = 28;
+function exitCushion(profile2) {
+  const value = profile2.exitCushion;
+  return Number.isFinite(value) && value >= 0 ? value : EXIT_CUSHION;
+}
+var REVEAL_PERCENT = { pop: 30 };
+var DEFAULT_REVEAL_PERCENT = 55;
+var REST_OVERSHOOT_PERCENT = 150;
+var MIN_SPRING_SPAN = 1;
+function velocityToSpring(velocityPxMs, spanPx) {
+  if (!Number.isFinite(velocityPxMs) || !Number.isFinite(spanPx))
+    return 0;
+  if (Math.abs(spanPx) < MIN_SPRING_SPAN)
+    return 0;
+  return velocityPxMs * FRAME_MS2 * VELOCITY_BOOST2 * TRAVEL2 / spanPx;
+}
+var POP_OVERSHOOT_PERCENT = 70;
+var POP_OVERSHOOT_SCALE = 1.05;
+var POP_ENTER_SCALE = 0.85;
+var POP_EXIT_SCALE = 0.9;
+function clamp7(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+function dismissalZoneProgress(visibleExtent, restExtent) {
+  if (!Number.isFinite(restExtent) || restExtent <= 0)
+    return 0;
+  return clamp7(visibleExtent / restExtent, 0, 1);
+}
+function paintedProgress(position, p) {
+  return Math.max(0, position === "bottom" ? p : Math.min(1, p));
+}
+function dismissAxis(position) {
+  return position === "bottom" || position === "center" ? "y" : "x";
+}
+function awayOffset(position, deltaX, deltaY) {
+  if (dismissAxis(position) === "y")
+    return deltaY;
+  if (position === "left")
+    return -deltaX;
+  return deltaX;
+}
+function awayVector(position, distance) {
+  if (dismissAxis(position) === "y")
+    return { x: 0, y: distance };
+  return { x: (position === "left" ? -1 : 1) * distance, y: 0 };
+}
+function paintedExtent(profile2, size, restSize, lowestSize = 0) {
+  return profile2.position === "bottom" ? Math.max(size, lowestSize) : restSize;
+}
+function awayTranslation(profile2, size, restSize, lowestSize = 0) {
+  if (profile2.position === "bottom")
+    return Math.max(0, lowestSize - size);
+  return restSize - size;
+}
+function transformOrigin(profile2) {
+  if (profile2.position === "left")
+    return "left center";
+  if (profile2.position === "right")
+    return "right center";
+  if (profile2.position === "center")
+    return "center center";
+  return "center bottom";
+}
+function restStyles(profile2, size, restSize, lowestSize = 0) {
+  const base = { opacity: "1", transformOrigin: transformOrigin(profile2) };
+  if (profile2.position === "bottom") {
+    const paintedSize = Math.max(size, lowestSize);
+    const shift2 = Math.max(0, lowestSize - size);
     return {
-      // `open` is read imperatively in syncOpen(), not by the template — returning
-      // it keeps the afterUpdate() cycle firing when the parent flips it.
-      open: !!props.open,
-      mobile,
-      title,
-      canDrag,
-      titleId: `${id}-title`,
-      labelledby: title ? `${id}-title` : false,
-      panelClass: this.#panelClass(mobile, props)
+      ...base,
+      height: `${paintedSize}px`,
+      transform: `translate3d(0px, ${shift2}px, 0px) scale(1)`
     };
   }
-  // ---- mobile/desktop resolution --------------------------------------------
-  #currentMobile(props = this.props) {
-    const max = Number(props.maxDisplayWidth) || 640;
-    if (typeof window === "undefined" || !window.matchMedia)
-      return true;
-    return window.matchMedia(`(max-width: ${max}px)`).matches;
+  const shift = restSize - size;
+  if (profile2.position === "center") {
+    return { ...base, transform: `translate3d(0px, ${shift}px, 0px) scale(1)` };
   }
-  #panelClass(mobile, props = this.props) {
-    return [BACKDROP, mobile ? SHEET : MODAL, props.class || ""].join(" ");
+  return {
+    ...base,
+    transform: `translate3d(${(profile2.position === "left" ? -1 : 1) * shift}px, 0px, 0px) scale(1)`
+  };
+}
+function slideInset(profile2, size) {
+  if (profile2.position === "center") {
+    return Math.max(0, ((profile2.viewportHeight || 0) - size) / 2);
   }
-  #setupMediaQuery() {
-    if (typeof window === "undefined" || !window.matchMedia)
-      return;
-    const max = Number(this.props.maxDisplayWidth) || 640;
-    this.#mql = window.matchMedia(`(max-width: ${max}px)`);
-    this.#mqlHandler = (event) => {
-      const mobile = event.matches;
-      if (this.element)
-        this.element.style.transform = "";
-      this.setData({
-        mobile,
-        canDrag: mobile && this.props.dismissible !== false,
-        panelClass: this.#panelClass(mobile)
-      });
-    };
-    this.#mql.addEventListener("change", this.#mqlHandler);
+  return profile2.edgeInset ?? 0;
+}
+function effectValues(profile2, { size, hidden, exiting = false, floorDistance = 0 }) {
+  const { effect, position } = profile2;
+  let distance = 0;
+  let scale = 1;
+  let opacity = 1;
+  if (hidden && effect === "slide") {
+    distance = Math.max(size + slideInset(profile2, size) + exitCushion(profile2), 1);
   }
-  // ---- open/close reconciliation (native <dialog>) --------------------------
-  // Idempotent: the dialog.open / animation guards make repeat afterUpdate()
-  // calls safe. Closing is asynchronous: the element holds open through an out
-  // animation (slide-down as a sheet, scale+fade as a modal) before the native
-  // close() runs — except after a drag dismiss, which already animated the
-  // slide and just needs the immediate close. The inline drag transform is
-  // cleared on every close path so the next open starts clean.
-  syncOpen() {
-    const dialog = this.element;
-    if (!dialog)
-      return;
-    const shouldOpen = !!this.props.open;
-    if (shouldOpen) {
-      if (this.#exit) {
-        this.#exit.cancel();
-        this.#exit = null;
-        delete dialog.dataset.closing;
-        dialog.style.transform = "";
-      }
-      if (!dialog.open) {
-        dialog.showModal();
-        this.#playEnter(dialog);
-      }
-    } else if (dialog.open) {
-      if (this.#exit)
-        return;
-      if (this.#skipExit || this.#reducedMotion()) {
-        this.#skipExit = false;
-        dialog.close();
-        dialog.style.transform = "";
-        return;
-      }
-      this.#playExit(dialog);
+  if (hidden && effect === "slide-fade") {
+    distance = 24;
+    opacity = 0;
+  }
+  if (hidden && effect === "fade-scale") {
+    scale = 0.95;
+    opacity = 0;
+  }
+  if (hidden && effect === "pop") {
+    scale = exiting ? POP_EXIT_SCALE : POP_ENTER_SCALE;
+    opacity = 0;
+  }
+  if (hidden)
+    distance = Math.max(distance, floorDistance);
+  return { ...awayVector(position, distance), scale, opacity };
+}
+function styleFromValues(profile2, values) {
+  return {
+    opacity: String(values.opacity),
+    transform: `translate3d(${values.x}px, ${values.y}px, 0px) scale(${values.scale})`,
+    transformOrigin: transformOrigin(profile2)
+  };
+}
+function assembleKeyframes(profile2, restFrame, from, to, { effect, exiting = false }) {
+  const frame = (values) => ({ ...restFrame, ...styleFromValues(profile2, values) });
+  const at = (percent2, overrides) => {
+    const factor = percent2 / 100;
+    const lerp = (a2, b2) => a2 + (b2 - a2) * factor;
+    return frame({
+      x: lerp(from.x, to.x),
+      y: lerp(from.y, to.y),
+      scale: lerp(from.scale, to.scale),
+      opacity: lerp(from.opacity, to.opacity),
+      ...overrides
+    });
+  };
+  const keyframes = { 0: frame(from), 100: frame(to) };
+  if (effect === "pop" && !exiting) {
+    keyframes[POP_OVERSHOOT_PERCENT] = at(POP_OVERSHOOT_PERCENT, {
+      scale: POP_OVERSHOOT_SCALE,
+      opacity: to.opacity
+    });
+  }
+  if (from.opacity !== to.opacity) {
+    const reveal = REVEAL_PERCENT[effect] ?? DEFAULT_REVEAL_PERCENT;
+    keyframes[reveal] = at(reveal, { opacity: to.opacity });
+  }
+  return keyframes;
+}
+function buildOpenKeyframes(profile2, size, restSize, lowestSize = 0) {
+  const from = effectValues(profile2, { size, hidden: true });
+  const to = {
+    ...awayVector(profile2.position, awayTranslation(profile2, size, restSize, lowestSize)),
+    scale: 1,
+    opacity: 1
+  };
+  return assembleKeyframes(profile2, restStyles(profile2, size, restSize, lowestSize), from, to, {
+    effect: profile2.effect
+  });
+}
+function exitValues(profile2, size, restSize, lowestSize = 0, effect = profile2.effect) {
+  const away = awayTranslation(profile2, size, restSize, lowestSize);
+  const hidden = effectValues(
+    { ...profile2, effect },
+    {
+      size: paintedExtent(profile2, size, restSize, lowestSize),
+      hidden: true,
+      exiting: true,
+      // An exit must never end closer to rest than the pose it started from:
+      // when it starts displaced it ends at least one cushion further out.
+      //
+      // The `away > 0` guard is load-bearing. From rest there is no
+      // displacement and so no floor — without the guard every fade-scale and
+      // pop exit would acquire a cushion of stray drift, and those effects
+      // scale down IN PLACE. It also subsumes the old negative-size guard:
+      // #applyLiveOffset rubber-bands an overpull to about -68px, and `away`
+      // then exceeds the slide runway on its own, so this is what keeps the
+      // runway pointing away from rest rather than back toward it.
+      floorDistance: away > 0 ? away + exitCushion(profile2) : 0
     }
-  }
-  // Hold the element open through the out animation, then close. data-closing
-  // fades the ::backdrop via CSS (pseudo-elements are out of WAAPI's reach).
-  #playExit(dialog) {
-    dialog.dataset.closing = "";
-    const anim = this.getData().mobile ? dialog.animate(
-      [{ transform: "translateY(0)" }, { transform: "translateY(100%)" }],
-      { duration: 220, easing: "ease-in", fill: "forwards" }
-    ) : dialog.animate(
-      [
-        { opacity: 1, transform: "scale(1)" },
-        { opacity: 0, transform: "scale(0.96)" }
-      ],
-      { duration: 150, easing: "ease-in", fill: "forwards" }
+  );
+  return {
+    away,
+    hidden,
+    hiddenAway: awayOffset(profile2.position, hidden.x, hidden.y),
+    live: { ...awayVector(profile2.position, away), scale: 1, opacity: 1 }
+  };
+}
+function buildExitKeyframes(profile2, size, restSize, lowestSize = 0, { effect } = {}) {
+  const resolved = effect || profile2.effect;
+  const { live, hidden } = exitValues(profile2, size, restSize, lowestSize, resolved);
+  return assembleKeyframes(profile2, restStyles(profile2, size, restSize, lowestSize), hidden, live, {
+    effect: resolved,
+    exiting: true
+  });
+}
+function exitTravel(profile2, size, restSize, lowestSize = 0, effect = profile2.effect) {
+  const { away, hiddenAway } = exitValues(profile2, size, restSize, lowestSize, effect);
+  return Math.max(hiddenAway - away, Math.max(size, 0));
+}
+function exitClearProgress(profile2, size, restSize, lowestSize = 0, effect = profile2.effect) {
+  if (effect !== "slide")
+    return 0;
+  const extent2 = paintedExtent(profile2, size, restSize, lowestSize);
+  const { away, hiddenAway } = exitValues(profile2, size, restSize, lowestSize, effect);
+  const travel = hiddenAway - away;
+  if (travel <= 0)
+    return 0;
+  const clearAway = extent2 + slideInset(profile2, extent2);
+  return clamp7((hiddenAway - clearAway) / travel, 0, 1);
+}
+function buildDragKeyframes(profile2, activeSize, maxSize, restSize, lowestSize = 0) {
+  const keyframes = {
+    0: restStyles(profile2, 0, restSize, lowestSize),
+    100: restStyles(profile2, activeSize, restSize, lowestSize)
+  };
+  if (profile2.position === "bottom" && lowestSize > 0 && lowestSize < activeSize) {
+    keyframes[lowestSize / activeSize * 100] = restStyles(
+      profile2,
+      lowestSize,
+      restSize,
+      lowestSize
     );
-    this.#exit = anim;
-    anim.onfinish = () => {
-      if (this.#exit !== anim)
+  }
+  if (maxSize > activeSize && activeSize > 0) {
+    keyframes[maxSize / activeSize * 100] = restStyles(profile2, maxSize, restSize, lowestSize);
+  } else if (profile2.position === "bottom" && activeSize > 0 && lowestSize >= activeSize) {
+    keyframes[150] = restStyles(profile2, activeSize * 1.5, restSize, lowestSize);
+  }
+  return keyframes;
+}
+function buildRestKeyframes(profile2, fromSize, toSize, restSize, lowestSize = 0) {
+  if (profile2.position !== "bottom")
+    return {};
+  const keyframes = {
+    0: restStyles(profile2, fromSize, restSize, lowestSize),
+    100: restStyles(profile2, toSize, restSize, lowestSize)
+  };
+  const span = toSize - fromSize;
+  if (span === 0)
+    return keyframes;
+  const floorPercent = (lowestSize - fromSize) / span * 100;
+  if (floorPercent > 0 && floorPercent !== 100) {
+    keyframes[floorPercent] = restStyles(profile2, lowestSize, restSize, lowestSize);
+  }
+  const endPercent = floorPercent > 100 ? floorPercent + REST_OVERSHOOT_PERCENT - 100 : REST_OVERSHOOT_PERCENT;
+  keyframes[endPercent] = restStyles(
+    profile2,
+    fromSize + span * (endPercent / 100),
+    restSize,
+    lowestSize
+  );
+  return keyframes;
+}
+function normalizeSnaps(snaps) {
+  return [
+    ...new Set(
+      snaps.map(Number).filter((value) => Number.isFinite(value) && value > 0).sort((a2, b2) => a2 - b2)
+    )
+  ];
+}
+var SheetEngine = class extends EventEmitter2 {
+  #spring;
+  #frames = null;
+  #dialog = null;
+  #state = "hidden";
+  #phase = "hidden";
+  #p = 0;
+  #profile = {
+    position: "bottom",
+    mode: "edge",
+    effect: "slide",
+    edgeInset: 0,
+    viewportWidth: 0,
+    viewportHeight: 0
+  };
+  #snaps = [1];
+  #activeSnap = 0;
+  #currentSize = 1;
+  #display = "flex";
+  #springTarget = 0;
+  #lastPosition = 0;
+  #settleCount = 0;
+  #settleAction = null;
+  #pendingDismissVelocity = 0;
+  #savedInline = null;
+  #backdropProgress = 0;
+  #springOverride = null;
+  #morphing = false;
+  /**
+   * @param {Object} [options] - Spring tuning. Each run retunes the spring
+   *   from SPRING_PRESETS, so these only seed the initial values.
+   * @param {number} [options.attraction=0.07] - Spring attraction.
+   * @param {number} [options.friction=0.52] - Spring friction.
+   */
+  constructor({
+    attraction = SPRING_PRESETS.entrance.attraction,
+    friction = SPRING_PRESETS.entrance.friction
+  } = {}) {
+    super();
+    const _ = this;
+    _.#spring = new b({ attraction, friction });
+    _.#spring.on("change", ({ position }) => _.#handleSpringChange(position));
+    _.#spring.on("complete", () => _.#settle());
+  }
+  /** @returns {'hidden'|'showing'|'shown'|'hiding'} Current transport state. */
+  get state() {
+    return this.#state;
+  }
+  /** @returns {number} Current frame progress. Spring overshoot is preserved. */
+  get progress() {
+    return this.#p;
+  }
+  /** @returns {number} Active snap index. */
+  get activeSnap() {
+    return this.#activeSnap;
+  }
+  /** @returns {number} Current visible size in pixels. */
+  get currentSize() {
+    return this.#currentSize;
+  }
+  /**
+   * @returns {number} Backdrop opacity in [0, 1], driven by the dismissal
+   *   zone rather than raw progress. Recomputed with every applied frame, so
+   *   it can never disagree with the panel styles.
+   */
+  get backdropProgress() {
+    return this.#backdropProgress;
+  }
+  /** @returns {number[]} Copy of the current sorted snap list. */
+  get snaps() {
+    return this.#snaps.slice();
+  }
+  /**
+   * Sets the resolved visual profile used for the next keyframe build.
+   * @param {Object} profile - Position, mode, effect, and viewport geometry.
+   * @param {number} [profile.edgeInset] - Pixels the panel rests from its
+   *   screen edge, which a slide has to clear on top of its own size. Optional:
+   *   an absent value means edge-mounted.
+   */
+  setProfile(profile2) {
+    const _ = this;
+    _.#landPendingSettle();
+    const previousPosition = _.#profile.position;
+    _.#profile = { ..._.#profile, ...profile2 };
+    if (_.#profile.position !== previousPosition)
+      _.#clearManagedSize();
+    _.#rebuildOpenTrack();
+  }
+  /**
+   * Drops the size properties a previous profile's track wrote.
+   *
+   * Only a bottom sheet emits `height`, and `#applyFrame`'s `Object.assign`
+   * cannot clear a property the new track never mentions — so a pixel height
+   * would survive onto a side drawer and pin it to the geometry it just left
+   * (`inset: 0 auto 0 0` over-constrains, `bottom` is dropped, and the drawer
+   * renders at the old snap height). Clearing hands the box back to the new
+   * track and the stylesheet. Never during a morph: the host owns every inline
+   * box property while one runs.
+   */
+  #clearManagedSize() {
+    const _ = this;
+    if (!_.#dialog || _.#morphing)
+      return;
+    _.#dialog.style.width = "";
+    _.#dialog.style.height = "";
+  }
+  /**
+   * Repaints the open track after a profile or snap change.
+   *
+   * `'showing'` is included deliberately. A profile change arriving mid-entrance
+   * cannot morph — `beginMorph` refuses any state but `'shown'` — so without a
+   * rebuild the still-running spring keeps painting the OLD profile's track (and
+   * keeps re-writing its size properties) all the way to the end of the run,
+   * then snaps into the new geometry at settle. Rebuilding retargets the run in
+   * flight instead, which is what the host asked for.
+   */
+  #rebuildOpenTrack() {
+    const _ = this;
+    if (!_.#dialog || _.#morphing)
+      return;
+    if (_.#state !== "shown" && _.#state !== "showing")
+      return;
+    if (_.#state === "shown")
+      _.#p = 1;
+    _.#frames = _.#makeOpenFrames(_.#currentSize);
+    _.#applyFrame(_.#p);
+  }
+  /** @returns {boolean} True while a host-driven profile morph owns the dialog. */
+  get morphing() {
+    return this.#morphing;
+  }
+  /**
+   * Parks the engine so the host can morph the dialog between two profile
+   * geometries.
+   *
+   * The two resting geometries share almost no CSS properties — `inset: auto 0 0`
+   * with a pixel height versus `inset: 0` with `margin: auto` and an intrinsic
+   * one — and `auto` is not interpolable, so the morph cannot be expressed as
+   * keyframes here. The host measures both boxes and transitions explicit pixel
+   * values instead. This method's whole job is to get the engine out of the way
+   * of those writes: the spring stops, `#applyFrame` goes inert, and the gesture
+   * entry points refuse.
+   *
+   * The panel is landed at rest in the CURRENT profile first. A resize that
+   * arrives mid-drag would otherwise bake a half-finished transform into the
+   * `from` box the host is about to measure, and that offset would snap away at
+   * endMorph.
+   * @returns {boolean} True when the engine parked; false when it was not in a
+   *   state that can morph.
+   */
+  beginMorph() {
+    const _ = this;
+    if (_.#state !== "shown" || _.#morphing || !_.#dialog)
+      return false;
+    if (_.#spring.isAnimating)
+      _.#spring.stop();
+    _.#currentSize = _.#restSize();
+    _.#p = 1;
+    _.#frames = _.#makeOpenFrames(_.#currentSize);
+    _.#applyFrame(1);
+    _.#morphing = true;
+    _.#phase = "morphing";
+    _.#settleAction = null;
+    _.#backdropProgress = 1;
+    return true;
+  }
+  /**
+   * Resumes engine control once the host has landed the new geometry.
+   *
+   * Rebuilds the open frames against the new profile and repaints at rest, so
+   * the next drag starts from a track that matches what is on screen.
+   */
+  endMorph() {
+    const _ = this;
+    if (!_.#morphing)
+      return;
+    _.#morphing = false;
+    _.#phase = _.#state === "shown" ? "shown" : _.#phase;
+    _.#currentSize = _.#restSize();
+    _.#p = 1;
+    if (_.#dialog && _.#state === "shown") {
+      _.#frames = _.#makeOpenFrames(_.#currentSize);
+      _.#applyFrame(1);
+    }
+  }
+  /**
+   * Configures bottom snap heights, or the single resting size of a profile
+   * that has none — a side sheet's CSS width, a centered dialog's intrinsic
+   * height.
+   * @param {number[]} pixelSizes - Resolved sizes in pixels.
+   * @param {number} activeIndex - Active snap index.
+   */
+  setSnaps(pixelSizes, activeIndex = pixelSizes.length - 1) {
+    const _ = this;
+    let snaps = normalizeSnaps(pixelSizes);
+    if (!snaps.length)
+      return;
+    if (_.#profile.position !== "bottom")
+      snaps = [snaps[snaps.length - 1]];
+    _.#landPendingSettle();
+    _.#snaps = snaps;
+    const requestedIndex = Number.isFinite(activeIndex) ? Math.trunc(activeIndex) : snaps.length - 1;
+    _.#activeSnap = clamp7(requestedIndex, 0, snaps.length - 1);
+    if (_.#state !== "hiding")
+      _.#currentSize = snaps[_.#activeSnap];
+    _.#rebuildOpenTrack();
+  }
+  /**
+   * Opens the dialog through the dialog-panel engine transport.
+   * @param {Object} options - Transport values supplied by dialog-panel.
+   * @param {HTMLElement} options.to - Dialog element to animate.
+   * @param {string} [options.display='flex'] - Display value during closed-dialog flight.
+   * @returns {Promise<boolean>} Resolves when the run settles or is superseded.
+   */
+  show({ to, display = "flex" } = {}) {
+    const _ = this;
+    if (!to)
+      throw new Error("SheetEngine: show() requires a target dialog.");
+    if (_.#state === "shown")
+      return Promise.resolve(false);
+    _.#dialog = to;
+    _.#display = display || "flex";
+    _.#saveInline();
+    _.#prepareDialog();
+    if (_.#state === "hiding") {
+      const start = _.#openProgressFromExit(_.#snaps[_.#activeSnap]);
+      _.#state = "showing";
+      _.#phase = "showing";
+      _.#currentSize = _.#snaps[_.#activeSnap];
+      _.#frames = _.#makeOpenFrames(_.#currentSize);
+      _.#p = start;
+      _.#settleAction = { type: "shown" };
+      _.#applyFrame(start);
+      _.#tuneSpring("entrance");
+      return _.#animate(start * TRAVEL2, TRAVEL2, 0);
+    }
+    if (_.#state === "showing")
+      return Promise.resolve(false);
+    _.#tuneSpring("entrance");
+    _.#state = "showing";
+    _.#phase = "showing";
+    _.#currentSize = _.#snaps[_.#activeSnap];
+    _.#frames = _.#makeOpenFrames(_.#currentSize);
+    _.#p = 0;
+    _.#applyFrame(0);
+    _.#settleAction = { type: "shown" };
+    return _.#animate(0, TRAVEL2, 0);
+  }
+  /**
+   * Hides the dialog. Called during show, this reverses the current spring.
+   * @returns {Promise<boolean>} Resolves when hidden or superseded.
+   */
+  hide() {
+    const _ = this;
+    if (_.#state === "hidden" || _.#state === "hiding")
+      return Promise.resolve(false);
+    const velocity = _.#pendingDismissVelocity;
+    _.#pendingDismissVelocity = 0;
+    if (_.#state === "showing") {
+      _.#state = "hiding";
+      _.#phase = "hiding";
+      _.#settleAction = { type: "hidden" };
+      _.#tuneSpring("exit");
+      return _.#animate(_.#p * TRAVEL2, 0, velocityToSpring(-Math.abs(velocity), _.#restSize()));
+    }
+    return _.dismiss(velocity);
+  }
+  /**
+   * Stores velocity for the next dialog-panel-driven hide.
+   * @param {number} velocityPxMs - Velocity toward the dismiss edge.
+   */
+  setDismissVelocity(velocityPxMs) {
+    this.#pendingDismissVelocity = Number.isFinite(velocityPxMs) ? velocityPxMs : 0;
+  }
+  /**
+   * Applies a live gesture offset. Positive values move toward dismissal.
+   * @param {number} offsetPx - Offset from the active snap in pixels.
+   */
+  dragBy(offsetPx) {
+    const _ = this;
+    if (!_.#dialog || _.#state !== "shown" || _.#morphing)
+      return;
+    if (_.#spring.isAnimating)
+      _.#spring.stop();
+    const activeSize = _.#snaps[_.#activeSnap];
+    _.#currentSize = activeSize - offsetPx;
+    _.#frames = _.#makeDragFrames(activeSize);
+    _.#p = activeSize === 0 ? 1 : _.#currentSize / activeSize;
+    _.#phase = "dragging";
+    _.#applyFrame(_.#p);
+    _.emit("change", {
+      progress: _.#p,
+      backdropProgress: _.#backdropProgress,
+      phase: _.#phase
+    });
+  }
+  /**
+   * Springs from the live size to a snap point.
+   * @param {number} snapIndex - Destination snap index.
+   * @param {number} [velocityPxMs=0] - Velocity toward larger snap sizes.
+   * @returns {Promise<boolean>} Resolves when the snap settles.
+   */
+  settleTo(snapIndex, velocityPxMs = 0) {
+    const _ = this;
+    if (_.#profile.position !== "bottom" || !_.#dialog || _.#state !== "shown") {
+      return Promise.resolve(false);
+    }
+    if (_.#morphing)
+      return Promise.resolve(false);
+    const to = clamp7(Math.trunc(snapIndex), 0, _.#snaps.length - 1);
+    const from = _.#activeSnap;
+    const targetSize = _.#snaps[to];
+    const startSize = _.#currentSize;
+    _.#frames = _.#makeRestFrames(startSize, targetSize);
+    _.#p = 0;
+    _.#phase = "snapping";
+    _.#settleAction = { type: "snap", from, to, targetSize, startSize };
+    _.#tuneSpring("snap");
+    return _.#animate(0, TRAVEL2, velocityToSpring(velocityPxMs, targetSize - startSize));
+  }
+  /**
+   * Returns a snapless profile from its live drag position back to rest.
+   *
+   * Side sheets and centered dialogs both land here: neither has snap points,
+   * so a release that does not dismiss is always a return to the one resting
+   * geometry. Bottom sheets go through settleTo instead.
+   * @param {number} [velocityPxMs=0] - Velocity toward the resting edge.
+   * @returns {Promise<boolean>} Resolves when the sheet returns to rest.
+   */
+  returnToRest(velocityPxMs = 0) {
+    const _ = this;
+    if (_.#profile.position === "bottom" || !_.#dialog || _.#state !== "shown") {
+      return Promise.resolve(false);
+    }
+    if (_.#morphing)
+      return Promise.resolve(false);
+    const targetSize = _.#restSize();
+    const start = clamp7(_.#currentSize / targetSize, 0, 1) * TRAVEL2;
+    _.#frames = _.#makeDragFrames(targetSize);
+    _.#p = start / TRAVEL2;
+    _.#phase = "returning";
+    _.#settleAction = { type: "rest", targetSize };
+    _.#tuneSpring("rest");
+    return _.#animate(start, TRAVEL2, velocityToSpring(velocityPxMs, targetSize));
+  }
+  /**
+   * Springs to the configured exit keyframe and emits `hidden`.
+   * @param {number} [velocityPxMs=0] - Velocity toward the dismiss edge.
+   * @returns {Promise<boolean>} Resolves when hidden.
+   */
+  dismiss(velocityPxMs = 0) {
+    const _ = this;
+    if (!_.#dialog || _.#state === "hidden")
+      return Promise.resolve(false);
+    _.#prepareDialog();
+    _.#state = "hiding";
+    _.#phase = "hiding";
+    _.#frames = _.#makeExitFrames(_.#currentSize);
+    _.#p = 1;
+    _.#settleAction = {
+      type: "hidden",
+      backdropClearProgress: _.#exitClearProgress(_.#currentSize)
+    };
+    _.#applyFrame(1);
+    _.#tuneSpring("exit");
+    return _.#animate(
+      TRAVEL2,
+      0,
+      velocityToSpring(-Math.abs(velocityPxMs), _.#exitTravel(_.#currentSize))
+    );
+  }
+  /**
+   * Stops motion, restores inline styles, and notifies dialog-panel.
+   */
+  stop() {
+    const _ = this;
+    if (_.#state === "hidden")
+      return;
+    if (_.#spring.isAnimating)
+      _.#spring.stop();
+    _.#state = "hidden";
+    _.#phase = "hidden";
+    _.#p = 0;
+    _.#settleAction = null;
+    _.#restoreInline();
+    _.emit("stop", { progress: 0 });
+  }
+  /**
+   * Releases spring and event listeners.
+   */
+  destroy() {
+    const _ = this;
+    _.stop();
+    _.#spring.removeAllListeners();
+    _.removeAllListeners();
+  }
+  #handleSpringChange(position) {
+    const _ = this;
+    if (!_.#settleAction)
+      return;
+    const p = position / TRAVEL2;
+    _.#p = p;
+    const action = _.#settleAction;
+    if (action.type === "snap") {
+      const t2 = clamp7(p, 0, 1);
+      _.#currentSize = action.targetSize * t2 + action.startSize * (1 - t2);
+    }
+    if (action.type === "rest") {
+      _.#currentSize = action.targetSize * clamp7(p, 0, 1);
+    }
+    _.#applyFrame(p);
+    _.emit("change", {
+      progress: p,
+      backdropProgress: _.#backdropProgress,
+      phase: _.#phase
+    });
+    if (Math.abs(position - _.#springTarget) < SETTLE_POSITION_EPSILON2 && Math.abs(position - _.#lastPosition) < SETTLE_DELTA_EPSILON2) {
+      if (++_.#settleCount >= 2) {
+        _.#p = _.#springTarget / TRAVEL2;
+        _.#applyFrame(_.#p);
+        _.#spring.stop();
+        _.#settle();
         return;
-      this.#exit = null;
-      dialog.close();
-      anim.cancel();
-      delete dialog.dataset.closing;
-      dialog.style.transform = "";
+      }
+    } else {
+      _.#settleCount = 0;
+    }
+    _.#lastPosition = position;
+  }
+  #animate(start, target, velocity) {
+    const _ = this;
+    _.#springTarget = target;
+    _.#lastPosition = start;
+    _.#settleCount = 0;
+    if (start === target && velocity === 0) {
+      if (_.#spring.isAnimating)
+        _.#spring.stop();
+      const action = _.#settleAction;
+      _.#p = target / TRAVEL2;
+      _.#applyFrame(_.#p);
+      return Promise.resolve().then(() => {
+        if (_.#settleAction === action)
+          _.#settle();
+        return true;
+      });
+    }
+    return _.#spring.animateTo(start, target, velocity).then(() => true);
+  }
+  #landPendingSettle() {
+    const _ = this;
+    const action = _.#settleAction;
+    if (!_.#spring.isAnimating || !action || action.type !== "snap" && action.type !== "rest") {
+      return;
+    }
+    _.#spring.stop();
+    _.#settle();
+  }
+  #settle() {
+    const _ = this;
+    const action = _.#settleAction;
+    if (!action)
+      return;
+    _.#settleAction = null;
+    if (action.type === "shown") {
+      _.#state = "shown";
+      _.#phase = "shown";
+      _.#p = 1;
+      _.#currentSize = _.#snaps[_.#activeSnap];
+      _.#frames = _.#makeOpenFrames(_.#currentSize);
+      _.#applyFrame(1);
+      _.emit("shown");
+      _.#dialog.style.display = _.#savedInline?.display || "";
+      return;
+    }
+    if (action.type === "snap") {
+      _.#activeSnap = action.to;
+      _.#currentSize = action.targetSize;
+      _.#phase = "shown";
+      _.#p = 1;
+      _.#frames = _.#makeOpenFrames(_.#currentSize);
+      _.#applyFrame(1);
+      _.#emitChange();
+      if (action.from !== action.to) {
+        _.emit("snapchange", { from: action.from, to: action.to });
+      }
+      return;
+    }
+    if (action.type === "rest") {
+      _.#currentSize = action.targetSize;
+      _.#phase = "shown";
+      _.#p = 1;
+      _.#frames = _.#makeOpenFrames(_.#currentSize);
+      _.#applyFrame(1);
+      _.#emitChange();
+      return;
+    }
+    _.#state = "hidden";
+    _.#phase = "hidden";
+    _.#p = 0;
+    _.emit("hidden");
+    _.#restoreInline();
+  }
+  /**
+   * Resting size along the dismiss axis.
+   *
+   * Bottom sheets rest at the active snap height. Everything else carries a
+   * single size the host measured — a side sheet's CSS `--sheet-active-size`
+   * width, a centered dialog's intrinsic height.
+   * @returns {number} Resting size in pixels.
+   */
+  #restSize() {
+    const _ = this;
+    if (_.#profile.position === "bottom")
+      return _.#snaps[_.#activeSnap];
+    return _.#snaps[0];
+  }
+  #makeOpenFrames(size) {
+    const _ = this;
+    return new c(buildOpenKeyframes(_.#profile, size, _.#restSize(), _.#snaps[0]));
+  }
+  #openProgressFromExit(size) {
+    const _ = this;
+    const progress = clamp7(paintedProgress(_.#profile.position, _.#p), 0, 1);
+    const { away, hiddenAway } = exitValues(
+      _.#profile,
+      _.#currentSize,
+      _.#restSize(),
+      _.#snaps[0],
+      _.#profile.exitEffect || _.#profile.effect
+    );
+    const paintedAway = hiddenAway * (1 - progress) + away * progress;
+    const hidden = effectValues(_.#profile, { size, hidden: true });
+    const openAway = awayOffset(_.#profile.position, hidden.x, hidden.y);
+    if (openAway <= 0)
+      return progress;
+    return clamp7(1 - paintedAway / openAway, 0, 1);
+  }
+  #makeDragFrames(activeSize) {
+    const _ = this;
+    const maximum = Math.max(activeSize, ..._.#snaps);
+    return new c(
+      buildDragKeyframes(_.#profile, activeSize, maximum, _.#restSize(), _.#snaps[0])
+    );
+  }
+  #makeExitFrames(size) {
+    const _ = this;
+    return new c(
+      buildExitKeyframes(_.#profile, size, _.#restSize(), _.#snaps[0], {
+        effect: _.#profile.exitEffect
+      })
+    );
+  }
+  #exitTravel(size) {
+    const _ = this;
+    return exitTravel(
+      _.#profile,
+      size,
+      _.#restSize(),
+      _.#snaps[0],
+      _.#profile.exitEffect || _.#profile.effect
+    );
+  }
+  #exitClearProgress(size) {
+    const _ = this;
+    return exitClearProgress(
+      _.#profile,
+      size,
+      _.#restSize(),
+      _.#snaps[0],
+      _.#profile.exitEffect || _.#profile.effect
+    );
+  }
+  #makeRestFrames(fromSize, toSize) {
+    const _ = this;
+    return new c(
+      buildRestKeyframes(_.#profile, fromSize, toSize, _.#restSize(), _.#snaps[0])
+    );
+  }
+  /**
+   * Overrides the built-in spring tuning for this instance.
+   *
+   * Governs how the sheet arrives. Exits and snaps keep their presets, so
+   * leaving stays brisk whatever the entrance is set to. Pass null to return
+   * to the presets.
+   * @param {{attraction: number, friction: number}|null} override - Spring tuning.
+   */
+  setSpring(override) {
+    const _ = this;
+    if (!override) {
+      _.#springOverride = null;
+      return;
+    }
+    const { attraction, friction } = override;
+    if (!isSpringDial(attraction) || !isSpringDial(friction))
+      return;
+    _.#springOverride = { attraction, friction };
+  }
+  /** @returns {{attraction: number, friction: number}|null} Active override. */
+  get spring() {
+    return this.#springOverride ? { ...this.#springOverride } : null;
+  }
+  /**
+   * Resolves the tuning for a phase, honouring any instance override.
+   *
+   * The override governs how the sheet ARRIVES — the entrance, including
+   * pop's. Exits and snaps keep their presets.
+   *
+   * Scaling those phases proportionally was tried and abandoned: the exit
+   * preset's attraction is ~5.5x the entrance's, so any brisk override pushed
+   * it past the dial's ceiling, and the clamped result was a badly overdamped
+   * spring — `spring="0.3 0.55"` measured a 2933ms exit. The dials are bounded,
+   * so no proportional rule can survive a fast entrance. Pinning exits to
+   * their presets keeps leaving brisk for every override instead.
+   * @param {'entrance'|'exit'|'snap'|'pop'} kind - Motion phase.
+   * @returns {{attraction: number, friction: number}} Spring tuning.
+   */
+  #springFor(kind) {
+    const _ = this;
+    const preset = SPRING_PRESETS[kind] || SPRING_PRESETS.entrance;
+    const override = _.#springOverride;
+    if (!override)
+      return preset;
+    if (kind !== "entrance" && kind !== "pop")
+      return preset;
+    return {
+      attraction: clamp7(override.attraction, MIN_SPRING, MAX_SPRING),
+      friction: clamp7(override.friction, MIN_SPRING, MAX_SPRING)
     };
   }
-  #playEnter(dialog) {
-    if (this.#reducedMotion())
+  /**
+   * Retunes the spring for the next run.
+   * @param {'entrance'|'exit'|'snap'} kind - Motion phase.
+   */
+  #tuneSpring(kind) {
+    const _ = this;
+    const preset = _.#springFor(kind === "entrance" && _.#profile.effect === "pop" ? "pop" : kind);
+    _.#spring.setAttraction(preset.attraction);
+    _.#spring.setFriction(preset.friction);
+  }
+  /**
+   * Recomputes backdrop opacity from the panel's live position.
+   *
+   * During the opening and closing flight the panel is at full size but only
+   * partly on screen, so the flight progress is what scales the visible
+   * extent. Once it has landed (shown, dragging, snapping) the live size is
+   * the visible extent directly — which is why a snap-to-snap drag or settle
+   * leaves the overlay alone, and why upward overscroll saturates instead of
+   * lightening it.
+   *
+   * A slide's hidden frame includes a cushion past the point where its box clears
+   * the viewport. Following p all the way to 0 leaves a dim overlay hanging over
+   * an empty screen, so the exit action carries that edge-crossing progress and
+   * remaps [1 -> crossing] onto [release opacity -> 0]. The p=1 endpoint is still
+   * the live drag pose, so the release remains continuous. Other effects remain
+   * tied to their full timeline because they disappear by fading or scaling
+   * rather than by crossing an edge.
+   * @param {number} p - Frame progress.
+   */
+  #syncBackdropProgress(p) {
+    const _ = this;
+    const flight = _.#phase === "showing" || _.#phase === "hiding" ? clamp7(p, 0, 1) : 1;
+    const clear = _.#settleAction?.backdropClearProgress;
+    if (clear > 0 && clear < 1) {
+      const visibleFlight = clamp7((flight - clear) / (1 - clear), 0, 1);
+      _.#backdropProgress = dismissalZoneProgress(_.#currentSize * visibleFlight, _.#snaps[0]);
       return;
-    if (this.getData().mobile) {
-      dialog.animate(
-        [{ transform: "translateY(100%)" }, { transform: "translateY(0)" }],
-        { duration: 260, easing: "cubic-bezier(0.16, 1, 0.3, 1)" }
-      );
-    } else {
-      dialog.animate(
-        [
-          { opacity: 0, transform: "scale(0.96)" },
-          { opacity: 1, transform: "scale(1)" }
-        ],
-        { duration: 180, easing: "ease-out" }
-      );
     }
+    _.#backdropProgress = dismissalZoneProgress(_.#currentSize * flight, _.#snaps[0]);
+  }
+  #emitChange() {
+    const _ = this;
+    _.emit("change", {
+      progress: _.#p,
+      backdropProgress: _.#backdropProgress,
+      phase: _.#phase
+    });
+  }
+  #applyFrame(p) {
+    const _ = this;
+    if (_.#morphing)
+      return;
+    _.#syncBackdropProgress(p);
+    if (!_.#frames || !_.#dialog)
+      return;
+    const styles = _.#frames.getFrame(paintedProgress(_.#profile.position, p));
+    for (const property of CLAMP_POSITIVE2) {
+      if (property in styles && parseFloat(styles[property]) < 0)
+        styles[property] = "0px";
+    }
+    Object.assign(_.#dialog.style, styles);
+  }
+  #saveInline() {
+    const _ = this;
+    if (_.#savedInline || !_.#dialog)
+      return;
+    _.#savedInline = {};
+    for (const property of MANAGED_PROPERTIES2) {
+      _.#savedInline[property] = _.#dialog.style[property];
+    }
+  }
+  #prepareDialog() {
+    const _ = this;
+    if (!_.#dialog)
+      return;
+    _.#dialog.style.display = _.#display;
+    _.#dialog.style.willChange = _.#profile.position === "bottom" ? "transform, opacity, height" : "transform, opacity";
+  }
+  #restoreInline() {
+    const _ = this;
+    if (!_.#dialog || !_.#savedInline)
+      return;
+    for (const property of MANAGED_PROPERTIES2) {
+      _.#dialog.style[property] = _.#savedInline[property];
+    }
+    _.#savedInline = null;
+  }
+};
+
+// app/lib/sheet-policy.js
+var SCROLL_EDGE_TOLERANCE = 1;
+function fingerFromAway(position, awayDirection) {
+  return position === "left" ? -awayDirection : awayDirection;
+}
+function normalizeScrollLeft(scrollLeft, scrollWidth, clientWidth, rtl) {
+  if (!rtl)
+    return scrollLeft;
+  return scrollLeft + Math.max(0, scrollWidth - clientWidth);
+}
+function canScrollFurther(metrics, axis, scrollSign) {
+  if (!metrics || !scrollSign)
+    return false;
+  const horizontal = axis === "x";
+  const position = (horizontal ? metrics.scrollLeft : metrics.scrollTop) || 0;
+  if (scrollSign < 0)
+    return position > 0;
+  const visible = (horizontal ? metrics.clientWidth : metrics.clientHeight) || 0;
+  const extent2 = (horizontal ? metrics.scrollWidth : metrics.scrollHeight) || 0;
+  return position + visible < extent2 - SCROLL_EDGE_TOLERANCE;
+}
+function scrollChainConsumes(chain, axis, fingerDelta) {
+  if (!fingerDelta || !chain)
+    return false;
+  const scrollSign = fingerDelta < 0 ? 1 : -1;
+  for (const metrics of chain) {
+    if (canScrollFurther(metrics, axis, scrollSign))
+      return true;
+  }
+  return false;
+}
+var CLAIM_SLOP = 5;
+function contentClaimDirection(chain, axis, position, awayOffset2, slop = CLAIM_SLOP) {
+  if (Math.abs(awayOffset2) <= slop)
+    return 0;
+  const direction = Math.sign(awayOffset2);
+  const fingerDelta = fingerFromAway(position, direction);
+  return scrollChainConsumes(chain, axis, fingerDelta) ? 0 : direction;
+}
+var SIMPLE_LENGTH = /^(-?\d*\.?\d+)(px|vh|dvh|svh|lvh|vw|rem|%)?$/i;
+var SNAP_EPSILON2 = 1;
+function resolveSnapPoints(value, {
+  viewportHeight,
+  viewportWidth = viewportHeight,
+  rootFontSize = 16,
+  percentageBase = viewportHeight,
+  measure
+}) {
+  const tokens = String(value || "").trim().split(/\s+/).filter(Boolean);
+  const pixels = tokens.map((token) => {
+    if (measure)
+      return measure(token);
+    const match = token.match(SIMPLE_LENGTH);
+    if (!match)
+      return NaN;
+    const number = Number(match[1]);
+    const unit = (match[2] || "px").toLowerCase();
+    if (unit === "px")
+      return number;
+    if (unit === "vw")
+      return number / 100 * viewportWidth;
+    if (unit === "rem")
+      return number * rootFontSize;
+    if (unit === "%")
+      return number / 100 * percentageBase;
+    return number / 100 * viewportHeight;
+  }).filter((number) => Number.isFinite(number) && number > 0).map((number) => Math.round(number * 100) / 100).sort((a2, b2) => a2 - b2);
+  return [...new Set(pixels)];
+}
+function resolveInitialSnap(value, snaps) {
+  if (!snaps.length)
+    return -1;
+  if (value === null || value === void 0 || value === "")
+    return snaps.length - 1;
+  const index = Number.parseInt(value, 10);
+  if (!Number.isFinite(index))
+    return snaps.length - 1;
+  return Math.min(snaps.length - 1, Math.max(0, index));
+}
+function resolveSnapTarget2({ currentSize, velocityAway, snaps, flickVelocity }) {
+  if (!snaps.length)
+    return null;
+  currentSize = Math.min(currentSize, snaps[snaps.length - 1]);
+  if (velocityAway > flickVelocity) {
+    let below = null;
+    for (let index = 0; index < snaps.length; index++) {
+      if (snaps[index] >= currentSize - SNAP_EPSILON2)
+        break;
+      below = index;
+    }
+    return below;
+  }
+  if (velocityAway < -flickVelocity) {
+    const above = snaps.findIndex((size) => size > currentSize + SNAP_EPSILON2);
+    return above === -1 ? snaps.length - 1 : above;
+  }
+  let nearest = null;
+  let nearestDistance = Math.abs(currentSize);
+  for (let index = 0; index < snaps.length; index++) {
+    const distance = Math.abs(snaps[index] - currentSize);
+    if (distance < nearestDistance) {
+      nearest = index;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+// app/lib/sheet-drag.js
+var VelocityTracker2 = class {
+  #samples = [];
+  #windowMs;
+  /**
+   * @param {number} [windowMs=100] - Rolling sample window.
+   */
+  constructor(windowMs = 100) {
+    this.#windowMs = windowMs;
+  }
+  /**
+   * Adds one position sample.
+   * @param {number} value - Axis position.
+   * @param {number} t - Event timestamp.
+   */
+  add(value, t2) {
+    const _ = this;
+    _.#samples.push({ value, t: t2 });
+    const cutoff = t2 - _.#windowMs;
+    while (_.#samples.length > 2 && _.#samples[0].t < cutoff) {
+      _.#samples.shift();
+    }
+  }
+  /** @returns {number} Current pixels-per-millisecond velocity. */
+  get velocity() {
+    const samples = this.#samples;
+    if (samples.length < 2)
+      return 0;
+    const last = samples[samples.length - 1];
+    let direction = 0;
+    let start = samples.length - 1;
+    while (start > 0) {
+      const step = Math.sign(samples[start].value - samples[start - 1].value);
+      if (step !== 0) {
+        if (direction === 0)
+          direction = step;
+        else if (step !== direction)
+          break;
+      }
+      start--;
+    }
+    const first = samples[start];
+    const deltaTime = last.t - first.t;
+    return deltaTime === 0 ? 0 : (last.value - first.value) / deltaTime;
+  }
+  /** Clears all samples. */
+  reset() {
+    this.#samples = [];
+  }
+};
+var SLOP2 = 5;
+function directionFromDelta(deltaX, deltaY) {
+  if (Math.abs(deltaX) > Math.abs(deltaY)) {
+    return deltaX < 0 ? "left" : "right";
+  }
+  return deltaY < 0 ? "up" : "down";
+}
+var DragGesture = class {
+  #active = false;
+  #captured = false;
+  #el;
+  #handlers;
+  #onStart;
+  #onMove;
+  #onEnd;
+  #pointerId = null;
+  #startX = 0;
+  #startY = 0;
+  #startTime = 0;
+  #trackerX = new VelocityTracker2();
+  #trackerY = new VelocityTracker2();
+  /**
+   * @param {HTMLElement} el - Pointer event surface.
+   * @param {Object} [callbacks] - Gesture lifecycle callbacks.
+   * @param {Function} [callbacks.onStart] - Pointer start callback.
+   * @param {Function} [callbacks.onMove] - Pointer move callback.
+   * @param {Function} [callbacks.onEnd] - Pointer end/cancel callback.
+   */
+  constructor(el, { onStart, onMove, onEnd } = {}) {
+    const _ = this;
+    _.#el = el;
+    _.#onStart = onStart;
+    _.#onMove = onMove;
+    _.#onEnd = onEnd;
+    _.#handlers = {
+      pointerdown: _.#handlePointerDown.bind(_),
+      pointermove: _.#handlePointerMove.bind(_),
+      pointerup: (event) => _.#handlePointerEnd(event, false),
+      pointercancel: (event) => _.#handlePointerEnd(event, true)
+    };
+    for (const [type, handler] of Object.entries(_.#handlers)) {
+      el.addEventListener(type, handler);
+    }
+  }
+  #handlePointerDown(event) {
+    const _ = this;
+    if (!event.isPrimary || _.#active && _.#captured)
+      return;
+    _.#active = true;
+    _.#captured = false;
+    _.#pointerId = event.pointerId;
+    _.#startX = event.clientX;
+    _.#startY = event.clientY;
+    _.#startTime = event.timeStamp;
+    _.#trackerX.reset();
+    _.#trackerY.reset();
+    _.#trackerX.add(event.clientX, event.timeStamp);
+    _.#trackerY.add(event.clientY, event.timeStamp);
+    _.#onStart?.({ event, x: event.clientX, y: event.clientY });
+  }
+  #handlePointerMove(event) {
+    const _ = this;
+    if (!_.#active || event.pointerId !== _.#pointerId)
+      return;
+    const deltaX = event.clientX - _.#startX;
+    const deltaY = event.clientY - _.#startY;
+    if (!_.#captured && Math.hypot(deltaX, deltaY) > SLOP2) {
+      _.#captured = true;
+      _.#el.setPointerCapture?.(event.pointerId);
+    }
+    _.#trackerX.add(event.clientX, event.timeStamp);
+    _.#trackerY.add(event.clientY, event.timeStamp);
+    _.#onMove?.({
+      event,
+      deltaX,
+      deltaY,
+      direction: directionFromDelta(deltaX, deltaY),
+      velocityX: _.#trackerX.velocity,
+      velocityY: _.#trackerY.velocity
+    });
+  }
+  #handlePointerEnd(event, cancelled) {
+    const _ = this;
+    if (!_.#active || event.pointerId !== _.#pointerId)
+      return;
+    const deltaX = event.clientX - _.#startX;
+    const deltaY = event.clientY - _.#startY;
+    _.#active = false;
+    _.#captured = false;
+    _.#trackerX.add(event.clientX, event.timeStamp);
+    _.#trackerY.add(event.clientY, event.timeStamp);
+    _.#onEnd?.({
+      event,
+      deltaX,
+      deltaY,
+      direction: directionFromDelta(deltaX, deltaY),
+      velocityX: cancelled ? 0 : _.#trackerX.velocity,
+      velocityY: cancelled ? 0 : _.#trackerY.velocity,
+      duration: event.timeStamp - _.#startTime,
+      cancelled
+    });
+    _.#pointerId = null;
+  }
+  /** Removes every pointer listener and resets tracking state. */
+  destroy() {
+    const _ = this;
+    for (const [type, handler] of Object.entries(_.#handlers)) {
+      _.#el.removeEventListener(type, handler);
+    }
+    _.#active = false;
+    _.#captured = false;
+    _.#pointerId = null;
+    _.#trackerX.reset();
+    _.#trackerY.reset();
+  }
+};
+
+// app/components/ui/Sheet.pzl
+var uid35 = 0;
+var POSITIONS = /* @__PURE__ */ new Set(["bottom", "left", "right", "center"]);
+var MODES2 = /* @__PURE__ */ new Set(["edge", "card"]);
+var EFFECTS = /* @__PURE__ */ new Set(["slide", "fade-scale", "slide-fade", "pop"]);
+var SCROLLABLE_OVERFLOW = /* @__PURE__ */ new Set(["auto", "scroll"]);
+var RESIZE_THROTTLE_MS = 100;
+var FLICK_VELOCITY2 = 0.5;
+var OVERSCROLL_RESISTANCE = 0.2;
+var MORPH_TIMEOUT_PADDING_MS = 120;
+var DEFAULT_MORPH_DURATION = 420;
+var DEFAULT_MORPH_EASING = "cubic-bezier(0.34, 1.32, 0.52, 1)";
+var DIALOG2 = "fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-transparent p-0 open:flex overflow-hidden text-body [&::backdrop]:bg-transparent";
+var DIALOG_PROFILE = {
+  bottom: "flex-col justify-end",
+  left: "flex-row justify-start",
+  right: "flex-row justify-end",
+  center: "items-center justify-center"
+};
+var BACKDROP2 = "absolute inset-0 bg-black/50 backdrop-blur-sm touch-none";
+var PANEL_BASE12 = "relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface will-change-transform";
+var PANEL_BOTTOM_EDGE = "h-[85dvh] max-h-[100dvh] w-full rounded-t-2xl border-t border-border pb-[env(safe-area-inset-bottom,0px)] shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_BOTTOM_CARD = "mx-auto mb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] h-[85dvh] max-h-[calc(100dvh-1.5rem)] w-[calc(100%-1.5rem)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_LEFT_EDGE = "h-full w-[min(26rem,90vw)] rounded-r-2xl border-r border-border pl-[env(safe-area-inset-left,0px)] shadow-[-120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_RIGHT_EDGE = "h-full w-[min(26rem,90vw)] rounded-l-2xl border-l border-border pr-[env(safe-area-inset-right,0px)] shadow-[120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_LEFT_CARD = "my-[0.75rem] ml-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] w-[min(26rem,90vw)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_RIGHT_CARD = "my-[0.75rem] mr-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] w-[min(26rem,90vw)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_CENTER = "m-auto h-fit w-[min(28rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-1.5rem)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_PROFILE = {
+  "bottom:edge": PANEL_BOTTOM_EDGE,
+  "bottom:card": PANEL_BOTTOM_CARD,
+  "left:edge": PANEL_LEFT_EDGE,
+  "left:card": PANEL_LEFT_CARD,
+  "right:edge": PANEL_RIGHT_EDGE,
+  "right:card": PANEL_RIGHT_CARD
+};
+var PANEL_WIDTH_CAP2 = "max-w-[26rem]";
+var CALLER_MAX_WIDTH2 = /(?:^|\s)\S*max-w-/;
+var HEADER2 = "shrink-0 touch-none select-none px-4";
+var CONTENT2 = "min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain touch-pan-x touch-pan-y px-4 py-4";
+var FOOTER2 = "shrink-0 touch-none bg-surface p-4 empty:hidden";
+var GRABBER_BOTTOM = "pointer-fine:hidden mx-auto my-3 h-1 w-10 rounded-full bg-faint";
+var GRABBER_LEFT = "pointer-fine:hidden absolute right-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint";
+var GRABBER_RIGHT = "pointer-fine:hidden absolute left-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint";
+var TITLE_BOTTOM = "pb-3 text-center text-base font-semibold text-ink";
+var TITLE_SIDE = "py-4 text-left text-base font-semibold text-ink";
+var TITLE_CENTER = "pt-4 text-center text-base font-semibold text-ink";
+var MORPH_PROPERTIES = [
+  "position",
+  "top",
+  "left",
+  "right",
+  "bottom",
+  "width",
+  "height",
+  "maxWidth",
+  "maxHeight",
+  "margin",
+  "borderRadius",
+  "transition"
+];
+var MORPH_TRANSITION_PROPERTIES = [
+  "top",
+  "left",
+  "width",
+  "height",
+  "border-radius"
+];
+function scrollMetrics(element) {
+  const rtl = getComputedStyle(element).direction === "rtl";
+  return {
+    scrollTop: element.scrollTop,
+    scrollLeft: normalizeScrollLeft(
+      element.scrollLeft,
+      element.scrollWidth,
+      element.clientWidth,
+      rtl
+    ),
+    scrollHeight: element.scrollHeight,
+    scrollWidth: element.scrollWidth,
+    clientHeight: element.clientHeight,
+    clientWidth: element.clientWidth
+  };
+}
+function scrollsOnAxis(element, axis) {
+  const style = getComputedStyle(element);
+  return SCROLLABLE_OVERFLOW.has(axis === "x" ? style.overflowX : style.overflowY);
+}
+var Sheet = class extends PuzzleView {
+  #mounted = false;
+  #engine = null;
+  #gestures = [];
+  #profile = null;
+  #renderProfile = null;
+  #queuedProfile = null;
+  #snaps = [];
+  #drag = { active: false };
+  #localSnap = null;
+  #settleTarget = null;
+  #programmaticSnap = null;
+  #snapRun = 0;
+  #bodyOverflow = null;
+  #returnFocus = null;
+  #resizeHandler = null;
+  #resizeTimer = null;
+  #centerObserver = null;
+  #centerTimer = null;
+  #pendingMorph = null;
+  #morph = null;
+  #measureSignature = null;
+  #needsRemeasure = false;
+  #springSignature = null;
+  #appliedProfileSignature = null;
+  #engineChange = ({ backdropProgress }) => {
+    if (this.refs.backdrop) {
+      const value = Number.isFinite(backdropProgress) ? backdropProgress : 0;
+      this.refs.backdrop.style.opacity = String(Math.min(1, Math.max(0, value)));
+    }
+  };
+  #engineShown = () => {
+    if (this.refs.backdrop)
+      this.refs.backdrop.style.opacity = "1";
+    this.#syncCenterObserver();
+    const { shown } = this.props;
+    if (typeof shown === "function")
+      shown();
+  };
+  #engineHidden = () => {
+    const dialog = this.element;
+    if (dialog?.open)
+      dialog.close();
+    if (this.refs.backdrop)
+      this.refs.backdrop.style.opacity = "0";
+    this.#drag = { active: false };
+    this.#settleTarget = null;
+    this.#programmaticSnap = null;
+    this.#syncCenterObserver();
+    this.#unlockBody();
+    this.#restoreFocus();
+    const { hidden } = this.props;
+    if (typeof hidden === "function")
+      hidden();
+  };
+  #engineSnapChange = (detail) => {
+    const to = detail.to;
+    const programmatic = this.#programmaticSnap === to;
+    this.#settleTarget = null;
+    this.#programmaticSnap = null;
+    if (!this.#controlledSnap())
+      this.#localSnap = to;
+    if (!programmatic) {
+      const { snapChange } = this.props;
+      if (typeof snapChange === "function")
+        snapChange(to);
+    }
+  };
+  data(params, props) {
+    const id = this._id ??= `pp-sheet-${++uid35}`;
+    const requestedProfile = this.#resolveProfile(props);
+    let renderedProfile = requestedProfile;
+    if (!this.#renderProfile) {
+      this.#renderProfile = requestedProfile;
+    } else if (this.#mounted && this.element?.open && !!props.open && this.#profileKey(requestedProfile) !== this.#profileKey(this.#renderProfile)) {
+      this.#queuedProfile = requestedProfile;
+      renderedProfile = this.#renderProfile;
+    } else if (this.#pendingMorph || this.#morph) {
+      renderedProfile = this.#renderProfile;
+    } else {
+      this.#renderProfile = requestedProfile;
+    }
+    const signature = this.#measurementSignature(props);
+    if (this.#mounted && this.#measureSignature !== signature) {
+      this.#needsRemeasure = true;
+    }
+    this.#measureSignature = signature;
+    const title = props.title || "";
+    return {
+      // Read imperatively by syncOpen(); returned so a prop flip still schedules
+      // the afterUpdate reconciliation.
+      open: !!props.open,
+      title,
+      titleId: `${id}-title`,
+      labelledby: props.labelledby || (title ? `${id}-title` : false),
+      ...this.#classData(renderedProfile, props)
+    };
+  }
+  #classData(profile2, props = this.props) {
+    const callerClass = props.class || "";
+    const position = profile2.position;
+    const cardKey = `${position}:${profile2.mode}`;
+    const showGrabber = props.showGrabber !== false && !profile2.desktop && position !== "center";
+    const desktopBottomCap = profile2.desktop && position === "bottom" && profile2.mode === "card";
+    let grabberClass = GRABBER_BOTTOM;
+    if (position === "left")
+      grabberClass = GRABBER_LEFT;
+    if (position === "right")
+      grabberClass = GRABBER_RIGHT;
+    let titleClass = TITLE_BOTTOM;
+    if (position === "left" || position === "right")
+      titleClass = TITLE_SIDE;
+    if (position === "center")
+      titleClass = TITLE_CENTER;
+    return {
+      showGrabber,
+      dialogClass: [DIALOG2, DIALOG_PROFILE[position]].filter(Boolean).join(" "),
+      backdropClass: [BACKDROP2, props.backdropClass || ""].filter(Boolean).join(" "),
+      panelClass: [
+        PANEL_BASE12,
+        position === "center" ? PANEL_CENTER : PANEL_PROFILE[cardKey],
+        desktopBottomCap && !CALLER_MAX_WIDTH2.test(callerClass) ? PANEL_WIDTH_CAP2 : "",
+        callerClass
+      ].filter(Boolean).join(" "),
+      headerClass: HEADER2,
+      contentClass: CONTENT2,
+      footerClass: FOOTER2,
+      grabberClass,
+      titleClass
+    };
+  }
+  #resolveProfile(props = this.props) {
+    const position = POSITIONS.has(props.position) ? props.position : "bottom";
+    const mode = MODES2.has(props.mode) ? props.mode : "edge";
+    const effect = EFFECTS.has(props.effect) ? props.effect : "slide";
+    const breakpointValue = Number(props.breakpoint);
+    const breakpoint = Number.isFinite(breakpointValue) ? breakpointValue : 768;
+    const desktop = typeof window !== "undefined" && window.innerWidth >= breakpoint;
+    const desktopPosition = POSITIONS.has(props.desktopPosition) ? props.desktopPosition : position;
+    const desktopMode = MODES2.has(props.desktopMode) ? props.desktopMode : "card";
+    const explicitDesktopEffect = EFFECTS.has(props.desktopEffect) ? props.desktopEffect : null;
+    const desktopEffect = explicitDesktopEffect || (desktopPosition === "center" ? "fade-scale" : effect);
+    const exitEffect = EFFECTS.has(props.exitEffect) ? props.exitEffect : effect;
+    let desktopExitEffect;
+    if (EFFECTS.has(props.desktopExitEffect)) {
+      desktopExitEffect = props.desktopExitEffect;
+    } else if (EFFECTS.has(props.exitEffect)) {
+      desktopExitEffect = props.exitEffect;
+    } else {
+      desktopExitEffect = desktopEffect;
+    }
+    const cushion = Number(props.exitCushion);
+    return {
+      desktop,
+      position: desktop ? desktopPosition : position,
+      mode: desktop ? desktopMode : mode,
+      effect: desktop ? desktopEffect : effect,
+      exitEffect: desktop ? desktopExitEffect : exitEffect,
+      edgeInset: 0,
+      exitCushion: Number.isFinite(cushion) && cushion >= 0 ? cushion : EXIT_CUSHION,
+      viewportWidth: typeof window === "undefined" ? 0 : window.innerWidth,
+      viewportHeight: typeof window === "undefined" ? 0 : window.innerHeight
+    };
+  }
+  #profileKey(profile2) {
+    return `${profile2.desktop}:${profile2.position}:${profile2.mode}:${profile2.effect}`;
+  }
+  #profileSignature(profile2) {
+    return [
+      this.#profileKey(profile2),
+      profile2.exitEffect,
+      profile2.edgeInset,
+      profile2.exitCushion,
+      profile2.viewportWidth,
+      profile2.viewportHeight
+    ].join(":");
+  }
+  #measurementSignature(props = this.props) {
+    const snaps = Array.isArray(props.snapPoints) ? JSON.stringify(props.snapPoints) : String(props.snapPoints ?? "85vh");
+    return [
+      snaps,
+      props.initialSnap ?? "",
+      props.class || "",
+      props.exitCushion ?? ""
+    ].join("|");
+  }
+  #withinMaxDisplayWidth() {
+    if (typeof window === "undefined")
+      return true;
+    const raw2 = this.props.maxDisplayWidth;
+    if (raw2 === void 0 || raw2 === null || raw2 === "" || raw2 === "none" || raw2 === Infinity) {
+      return true;
+    }
+    const value = Number(raw2);
+    return !Number.isFinite(value) || window.innerWidth <= value;
+  }
+  #shouldDisplayOpen() {
+    if (!this.props.open)
+      return false;
+    if (this.element?.open)
+      return true;
+    return this.#withinMaxDisplayWidth();
   }
   #reducedMotion() {
     return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   }
-  mounted() {
-    this.#setupMediaQuery();
-    this.syncOpen();
+  #morphDuration() {
+    if (this.#reducedMotion())
+      return 0;
+    const value = Number(this.props.morphDuration);
+    return Number.isFinite(value) && value >= 0 ? value : DEFAULT_MORPH_DURATION;
   }
-  afterUpdate() {
-    this.syncOpen();
+  #morphEasing() {
+    return this.props.morphEasing || DEFAULT_MORPH_EASING;
   }
-  destroyed() {
-    this.#mql?.removeEventListener("change", this.#mqlHandler);
-    this.#mql = null;
-    this.#mqlHandler = null;
-  }
-  // ---- drag gesture ---------------------------------------------------------
-  #capture(event) {
-    const d = this.#drag;
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch (_) {
-    }
-    d.captured = true;
-    d.captureEl = event.currentTarget;
-  }
-  #resetDrag() {
-    const d = this.#drag;
-    d.active = false;
-    d.pointerId = null;
-    d.startY = 0;
-    d.delta = 0;
-    d.direction = null;
-    d.isHeader = false;
-    d.isAtTop = false;
-    d.captured = false;
-    d.captureEl = null;
-  }
-  #dismiss(delta) {
-    const dialog = this.element;
-    if (!dialog || this.#reducedMotion()) {
-      if (dialog)
-        dialog.style.transform = "";
-      this.#finishClose("drag");
+  #lockBody() {
+    if (this.#bodyOverflow !== null)
       return;
-    }
-    const anim = dialog.animate(
-      [
-        { transform: `translate3d(0,${delta}px,0)` },
-        { transform: "translate3d(0,100%,0)" }
-      ],
-      { duration: 200, easing: "ease-in" }
-    );
-    dialog.style.transform = "translate3d(0,100%,0)";
-    anim.finished.then(() => this.#finishClose("drag")).catch(() => this.#finishClose("drag"));
+    this.#bodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
   }
-  #finishClose(reason) {
+  #unlockBody() {
+    if (this.#bodyOverflow === null)
+      return;
+    document.body.style.overflow = this.#bodyOverflow;
+    this.#bodyOverflow = null;
+  }
+  #restoreFocus() {
+    const target = this.#returnFocus;
+    this.#returnFocus = null;
+    if (!target?.isConnected || typeof target.focus !== "function")
+      return;
+    target.focus({ preventScroll: true });
+  }
+  #requestClose(reason) {
     const { close } = this.props;
-    this.#skipExit = true;
     if (typeof close === "function")
       close(reason);
   }
-  #springBack(delta) {
-    const dialog = this.element;
-    if (!dialog)
+  #dismissPolicy() {
+    return parseDismiss(this.props.dismiss);
+  }
+  #syncSpring() {
+    if (!this.#engine)
       return;
-    if (this.#reducedMotion()) {
-      dialog.style.transform = "";
+    let parsed = null;
+    const value = this.props.spring;
+    if (typeof value === "string") {
+      parsed = parseSpring(value);
+    } else if (value && typeof value === "object") {
+      parsed = parseSpring(`${value.attraction} ${value.friction}`);
+    }
+    const signature = parsed ? `${parsed.attraction}:${parsed.friction}` : "presets";
+    if (signature === this.#springSignature)
+      return;
+    this.#springSignature = signature;
+    this.#engine.setSpring(parsed);
+  }
+  #snapPointValue() {
+    const value = this.props.snapPoints ?? "85vh";
+    return Array.isArray(value) ? value.join(" ") : String(value);
+  }
+  #resolveBottomSnaps() {
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+    const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    let snaps = resolveSnapPoints(this.#snapPointValue(), {
+      viewportHeight,
+      viewportWidth,
+      rootFontSize,
+      percentageBase: viewportHeight
+    });
+    if (!snaps.length) {
+      snaps = resolveSnapPoints("85vh", {
+        viewportHeight,
+        viewportWidth,
+        rootFontSize,
+        percentageBase: viewportHeight
+      });
+    }
+    return snaps;
+  }
+  #controlledSnap() {
+    return this.props.snap !== void 0;
+  }
+  #desiredSnap(snaps = this.#snaps) {
+    if (!snaps.length)
+      return -1;
+    if (this.#controlledSnap()) {
+      return resolveInitialSnap(this.props.snap, snaps);
+    }
+    if (this.#localSnap === null) {
+      this.#localSnap = resolveInitialSnap(this.props.initialSnap, snaps);
+    }
+    this.#localSnap = resolveInitialSnap(this.#localSnap, snaps);
+    return this.#localSnap;
+  }
+  #measurePanelBox() {
+    const dialog = this.element;
+    const panel = this.refs.panel;
+    if (!dialog || !panel) {
+      return {
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        borderRadius: "0px"
+      };
+    }
+    const closed = !dialog.open;
+    const savedDisplay = dialog.style.display;
+    const savedVisibility = dialog.style.visibility;
+    if (closed) {
+      dialog.style.display = "flex";
+      dialog.style.visibility = "hidden";
+    }
+    const rect = panel.getBoundingClientRect();
+    const borderRadius = getComputedStyle(panel).borderRadius;
+    if (closed) {
+      dialog.style.display = savedDisplay;
+      dialog.style.visibility = savedVisibility;
+    }
+    return {
+      top: rect.top,
+      left: rect.left,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+      borderRadius
+    };
+  }
+  #edgeInset(profile2, box) {
+    if (profile2.mode !== "card")
+      return 0;
+    if (profile2.position === "bottom") {
+      return Math.max(0, profile2.viewportHeight - box.bottom);
+    }
+    if (profile2.position === "left")
+      return Math.max(0, box.left);
+    if (profile2.position === "right") {
+      return Math.max(0, profile2.viewportWidth - box.right);
+    }
+    return 0;
+  }
+  #prepareOpen(requestedProfile = this.#resolveProfile()) {
+    if (!this.#engine)
+      return;
+    const box = this.#measurePanelBox();
+    const profile2 = {
+      ...requestedProfile,
+      edgeInset: this.#edgeInset(requestedProfile, box)
+    };
+    this.#profile = profile2;
+    this.#engine.setProfile(profile2);
+    let snaps;
+    if (profile2.position === "bottom") {
+      snaps = this.#resolveBottomSnaps();
+      if (profile2.desktop)
+        snaps = [snaps[snaps.length - 1]];
+    } else if (profile2.position === "center") {
+      snaps = [
+        box.height > 0 ? box.height : Math.max(1, profile2.viewportHeight * 0.5)
+      ];
+    } else {
+      snaps = [
+        box.width > 0 ? box.width : Math.max(1, Math.min(26 * 16, profile2.viewportWidth * 0.9))
+      ];
+    }
+    const alreadyOpen = this.element?.open && this.#engine.state !== "hidden";
+    let active = 0;
+    if (profile2.position === "bottom" && !profile2.desktop) {
+      active = alreadyOpen ? Math.min(this.#engine.activeSnap, snaps.length - 1) : this.#desiredSnap(snaps);
+    }
+    this.#snaps = snaps;
+    this.#engine.setSnaps(snaps, active);
+    if (this.#engine.morphing && profile2.position === "bottom") {
+      this.refs.panel.style.height = `${snaps[active]}px`;
+    }
+    this.#appliedProfileSignature = this.#profileSignature(profile2);
+    this.#needsRemeasure = false;
+    this.#syncCenterObserver();
+  }
+  #syncProfileWithoutMeasure(profile2) {
+    if (!this.#engine || !this.#profile)
+      return;
+    const next = { ...profile2, edgeInset: this.#profile.edgeInset };
+    const signature = this.#profileSignature(next);
+    if (signature === this.#appliedProfileSignature)
+      return;
+    this.#profile = next;
+    this.#engine.setProfile(next);
+    this.#appliedProfileSignature = signature;
+  }
+  #reconcileSnap() {
+    const profile2 = this.#profile;
+    if (!profile2 || profile2.position !== "bottom" || profile2.desktop || !this.element?.open || this.#engine?.state !== "shown" || this.#engine.morphing || this.#drag.active) {
       return;
     }
-    const from = delta < 0 ? `translate3d(0,${-(Math.sqrt(Math.abs(delta)) * 10 * this.#overscrollResistance)}px,0)` : `translate3d(0,${delta}px,0)`;
-    dialog.style.transform = "";
-    dialog.animate(
-      [{ transform: from }, { transform: "translate3d(0,0,0)" }],
-      { duration: 200, easing: "ease-out" }
+    const desired = this.#desiredSnap();
+    if (desired < 0 || desired === this.#engine.activeSnap || desired === this.#settleTarget) {
+      return;
+    }
+    this.#settleTarget = desired;
+    this.#programmaticSnap = desired;
+    const run = ++this.#snapRun;
+    this.#engine.settleTo(desired, 0).then(() => {
+      if (run !== this.#snapRun)
+        return;
+      this.#settleTarget = null;
+      this.#programmaticSnap = null;
+    });
+  }
+  syncOpen() {
+    const dialog = this.element;
+    if (!dialog || !this.#engine)
+      return;
+    const shouldOpen = this.#shouldDisplayOpen();
+    if (shouldOpen) {
+      if (dialog.open) {
+        if (this.#engine.state === "hiding" || this.#engine.state === "hidden") {
+          this.#engine.show({ to: this.refs.panel, display: "flex" });
+          this.refs.backdrop.style.opacity = String(
+            this.#engine.backdropProgress
+          );
+        }
+        return;
+      }
+      const profile2 = this.#resolveProfile();
+      this.#renderProfile = profile2;
+      this.#prepareOpen(profile2);
+      this.#returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      this.#lockBody();
+      this.refs.backdrop.style.opacity = "0";
+      dialog.showModal();
+      this.#engine.show({ to: this.refs.panel, display: "flex" });
+      this.refs.backdrop.style.opacity = String(
+        this.#engine.backdropProgress
+      );
+      this.#syncCenterObserver();
+      return;
+    }
+    if (!dialog.open)
+      return;
+    this.#finishMorph();
+    this.#drag = { active: false };
+    this.#engine.hide();
+  }
+  mounted() {
+    this.#mounted = true;
+    this.#engine = new SheetEngine();
+    this.#engine.on("change", this.#engineChange);
+    this.#engine.on("shown", this.#engineShown);
+    this.#engine.on("hidden", this.#engineHidden);
+    this.#engine.on("snapchange", this.#engineSnapChange);
+    this.#syncSpring();
+    for (const [surface, element] of [
+      ["backdrop", this.refs.backdrop],
+      ["header", this.refs.header],
+      ["content", this.refs.content],
+      ["footer", this.refs.footer]
+    ]) {
+      this.#gestures.push(
+        new DragGesture(element, this.#surfaceCallbacks(surface))
+      );
+    }
+    this.#resizeHandler = () => {
+      if (this.#resizeTimer !== null)
+        return;
+      this.#resizeTimer = setTimeout(() => {
+        this.#resizeTimer = null;
+        this.#handleResize();
+      }, RESIZE_THROTTLE_MS);
+    };
+    window.addEventListener("resize", this.#resizeHandler);
+    this.syncOpen();
+  }
+  afterUpdate() {
+    if (!this.#mounted)
+      return;
+    this.#syncSpring();
+    if (!this.#shouldDisplayOpen()) {
+      this.#queuedProfile = null;
+      this.syncOpen();
+      return;
+    }
+    if (this.#pendingMorph) {
+      this.#continueMorph();
+      return;
+    }
+    if (this.#queuedProfile && this.element?.open) {
+      const next2 = this.#queuedProfile;
+      this.#queuedProfile = null;
+      this.#startProfileMorph(next2);
+      return;
+    }
+    const next = this.#resolveProfile();
+    if (this.element?.open && this.#profile && this.#profileKey(next) !== this.#profileKey(this.#profile)) {
+      this.#startProfileMorph(next);
+      return;
+    }
+    if (this.#needsRemeasure && this.element?.open && !this.#drag.active && !this.#engine.morphing) {
+      this.#prepareOpen(next);
+    } else if (this.element?.open && this.#profile) {
+      this.#syncProfileWithoutMeasure(next);
+    }
+    this.#reconcileSnap();
+    this.syncOpen();
+  }
+  destroyed() {
+    this.#mounted = false;
+    window.removeEventListener("resize", this.#resizeHandler);
+    if (this.#resizeTimer !== null)
+      clearTimeout(this.#resizeTimer);
+    this.#resizeTimer = null;
+    this.#resizeHandler = null;
+    if (this.#centerTimer !== null)
+      clearTimeout(this.#centerTimer);
+    this.#centerTimer = null;
+    this.#centerObserver?.disconnect();
+    this.#centerObserver = null;
+    this.#finishMorph();
+    for (const gesture of this.#gestures)
+      gesture.destroy();
+    this.#gestures = [];
+    this.#drag = { active: false };
+    if (this.#engine) {
+      this.#engine.off("change", this.#engineChange);
+      this.#engine.off("shown", this.#engineShown);
+      this.#engine.off("hidden", this.#engineHidden);
+      this.#engine.off("snapchange", this.#engineSnapChange);
+      this.#engine.destroy();
+      this.#engine = null;
+    }
+    if (this.refs.backdrop)
+      this.refs.backdrop.style.opacity = "";
+    if (this.element?.open)
+      this.element.close();
+    this.#unlockBody();
+    this.#restoreFocus();
+  }
+  #surfaceCallbacks(surface) {
+    return {
+      onStart: (info) => this.#dragStart(surface, info?.event),
+      onMove: (info) => this.#dragMove(surface, info),
+      onEnd: (info) => this.#dragEnd(surface, info)
+    };
+  }
+  #dragStart(surface, event) {
+    if (this.#engine?.state !== "shown" || this.#engine.morphing) {
+      this.#drag = { active: false };
+      return;
+    }
+    this.#settleTarget = null;
+    this.#programmaticSnap = null;
+    this.#drag = {
+      active: true,
+      claimed: false,
+      direction: 0,
+      scrollChain: this.#scrollChain(event?.target)
+    };
+  }
+  #scrollChain(target) {
+    const content = this.refs.content;
+    if (!content)
+      return [];
+    const axis = dismissAxis(this.#profile.position);
+    const chain = [];
+    let node = target instanceof Element ? target : null;
+    while (node && node !== content && content.contains(node)) {
+      if (scrollsOnAxis(node, axis))
+        chain.push(scrollMetrics(node));
+      node = node.parentElement;
+    }
+    if (scrollsOnAxis(content, axis))
+      chain.push(scrollMetrics(content));
+    return chain;
+  }
+  #matchesActiveAxis(direction) {
+    if (dismissAxis(this.#profile.position) === "y") {
+      return direction === "up" || direction === "down";
+    }
+    return direction === "left" || direction === "right";
+  }
+  #dragMove(surface, info) {
+    const drag = this.#drag;
+    if (!drag.active)
+      return;
+    const offset = awayOffset(
+      this.#profile.position,
+      info.deltaX,
+      info.deltaY
     );
+    if (!drag.claimed) {
+      if (surface === "content") {
+        if (!this.#matchesActiveAxis(info.direction))
+          return;
+        const position = this.#profile.position;
+        const direction = contentClaimDirection(
+          drag.scrollChain,
+          dismissAxis(position),
+          position,
+          offset
+        );
+        if (!direction)
+          return;
+        drag.direction = direction;
+      } else {
+        if (!offset)
+          return;
+        drag.direction = Math.sign(offset);
+      }
+      drag.claimed = true;
+    }
+    this.#applyLiveOffset(offset);
+  }
+  #applyLiveOffset(offset) {
+    const activeSize = this.#snaps[this.#engine.activeSnap];
+    if (!Number.isFinite(activeSize))
+      return;
+    const maximum = this.#snaps[this.#snaps.length - 1];
+    let size = activeSize - offset;
+    if (size > maximum) {
+      size = maximum + Math.sqrt(size - maximum) * 10 * OVERSCROLL_RESISTANCE;
+    }
+    if (size < 0) {
+      size = -Math.sqrt(-size) * 10 * OVERSCROLL_RESISTANCE;
+    }
+    this.#engine.dragBy(activeSize - size);
+  }
+  #dragEnd(surface, info) {
+    const drag = this.#drag;
+    if (!drag.active)
+      return;
+    this.#drag = { active: false };
+    if (!info.cancelled && surface === "backdrop" && Math.hypot(info.deltaX, info.deltaY) < 10 && info.duration < 300) {
+      if (this.#dismissPolicy().backdrop) {
+        this.#requestClose("backdrop");
+      }
+      return;
+    }
+    if (!drag.claimed)
+      return;
+    if (info.cancelled) {
+      if (this.#profile.position === "bottom") {
+        this.#engine.settleTo(this.#engine.activeSnap, 0);
+      } else {
+        this.#engine.returnToRest(0);
+      }
+      return;
+    }
+    const velocityAway = awayOffset(
+      this.#profile.position,
+      info.velocityX,
+      info.velocityY
+    );
+    const releasedSize = this.#engine.currentSize;
+    const resolved = resolveSnapTarget2({
+      currentSize: releasedSize,
+      velocityAway,
+      snaps: this.#snaps,
+      flickVelocity: FLICK_VELOCITY2
+    });
+    const prevented = resolved === null && !this.#dismissPolicy().swipe;
+    const target = prevented ? this.#engine.activeSnap : resolved;
+    const detail = {
+      velocity: velocityAway,
+      flick: Math.abs(velocityAway) > FLICK_VELOCITY2,
+      direction: velocityAway > 0 ? "away" : velocityAway < 0 ? "toward" : "none",
+      size: releasedSize,
+      target,
+      prevented
+    };
+    const { snapRelease } = this.props;
+    if (typeof snapRelease === "function")
+      snapRelease(detail);
+    if (target === null) {
+      this.#engine.setDismissVelocity(Math.max(0, velocityAway));
+      this.#requestClose("swipe");
+      return;
+    }
+    this.#settleTarget = target;
+    const run = ++this.#snapRun;
+    let settle;
+    if (this.#profile.position === "bottom") {
+      settle = this.#engine.settleTo(target, -velocityAway);
+    } else {
+      settle = this.#engine.returnToRest(-velocityAway);
+    }
+    settle.then(() => {
+      if (run === this.#snapRun)
+        this.#settleTarget = null;
+    });
+  }
+  #handleResize() {
+    if (!this.#mounted)
+      return;
+    if (!this.#shouldDisplayOpen()) {
+      this.syncOpen();
+      return;
+    }
+    const next = this.#resolveProfile();
+    if (!this.element?.open) {
+      this.#renderProfile = next;
+      this.setData(this.#classData(next));
+      this.syncOpen();
+      return;
+    }
+    if (this.#profile && this.#profileKey(next) !== this.#profileKey(this.#profile)) {
+      this.#startProfileMorph(next);
+      return;
+    }
+    if (this.#drag.active)
+      return;
+    this.#renderProfile = next;
+    this.#prepareOpen(next);
+  }
+  #startProfileMorph(next) {
+    const panel = this.refs.panel;
+    if (!panel || !this.#engine || !this.element?.open) {
+      this.#renderProfile = next;
+      this.setData(this.#classData(next));
+      this.#prepareOpen(next);
+      return;
+    }
+    this.#drag = { active: false };
+    let from;
+    if (this.#engine.morphing) {
+      from = this.#readBox(panel);
+      this.#clearMorphTimers();
+      this.#pendingMorph = null;
+    } else {
+      if (!this.#engine.beginMorph()) {
+        this.#renderProfile = next;
+        this.setData(this.#classData(next));
+        this.#prepareOpen(next);
+        return;
+      }
+      from = this.#readBox(panel);
+    }
+    this.refs.backdrop.style.opacity = "1";
+    this.#stripMorphPins(panel);
+    this.#pendingMorph = { from, profile: next };
+    this.#renderProfile = next;
+    this.setData(this.#classData(next));
+  }
+  #continueMorph() {
+    const pending = this.#pendingMorph;
+    if (!pending)
+      return;
+    this.#pendingMorph = null;
+    const panel = this.refs.panel;
+    this.#prepareOpen(pending.profile);
+    const to = this.#readBox(panel);
+    const duration = this.#morphDuration();
+    if (duration <= 0) {
+      this.#finishMorph();
+      return;
+    }
+    this.#pinBox(panel, pending.from);
+    void panel.offsetWidth;
+    const easing = this.#morphEasing();
+    panel.style.transition = MORPH_TRANSITION_PROPERTIES.map(
+      (property) => `${property} ${duration}ms ${easing}`
+    ).join(", ");
+    this.#pinBox(panel, to);
+    const finish = () => this.#finishMorph();
+    const onEnd = (event) => {
+      if (event.target === panel && MORPH_TRANSITION_PROPERTIES.includes(event.propertyName)) {
+        finish();
+      }
+    };
+    this.#morph = {
+      panel,
+      onEnd,
+      timer: setTimeout(
+        finish,
+        duration + MORPH_TIMEOUT_PADDING_MS
+      )
+    };
+    panel.addEventListener("transitionend", onEnd);
+  }
+  #readBox(panel) {
+    const rect = panel.getBoundingClientRect();
+    return {
+      top: rect.top,
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+      borderRadius: getComputedStyle(panel).borderRadius
+    };
+  }
+  #pinBox(panel, box) {
+    Object.assign(panel.style, {
+      position: "fixed",
+      top: `${box.top}px`,
+      left: `${box.left}px`,
+      right: "auto",
+      bottom: "auto",
+      width: `${box.width}px`,
+      height: `${box.height}px`,
+      maxWidth: "none",
+      maxHeight: "none",
+      margin: "0",
+      borderRadius: box.borderRadius
+    });
+  }
+  #stripMorphPins(panel) {
+    for (const property of MORPH_PROPERTIES)
+      panel.style[property] = "";
+  }
+  #clearMorphTimers() {
+    if (!this.#morph)
+      return;
+    clearTimeout(this.#morph.timer);
+    this.#morph.panel.removeEventListener(
+      "transitionend",
+      this.#morph.onEnd
+    );
+    this.#morph = null;
+  }
+  #finishMorph() {
+    if (!this.#pendingMorph && !this.#morph && !this.#engine?.morphing) {
+      return;
+    }
+    this.#pendingMorph = null;
+    this.#clearMorphTimers();
+    if (this.refs.panel)
+      this.#stripMorphPins(this.refs.panel);
+    if (this.#engine?.morphing)
+      this.#engine.endMorph();
+    if (this.refs.backdrop && this.element?.open) {
+      this.refs.backdrop.style.opacity = "1";
+    }
+  }
+  #syncCenterObserver() {
+    const want = this.#profile?.position === "center" && !!this.element?.open && typeof ResizeObserver === "function";
+    if (want && !this.#centerObserver) {
+      this.#centerObserver = new ResizeObserver(() => {
+        this.#scheduleCenterRemeasure();
+      });
+      this.#centerObserver.observe(this.refs.panel);
+    } else if (!want && this.#centerObserver) {
+      this.#centerObserver.disconnect();
+      this.#centerObserver = null;
+      if (this.#centerTimer !== null)
+        clearTimeout(this.#centerTimer);
+      this.#centerTimer = null;
+    }
+  }
+  #scheduleCenterRemeasure() {
+    if (this.#centerTimer !== null)
+      clearTimeout(this.#centerTimer);
+    this.#centerTimer = setTimeout(() => {
+      this.#centerTimer = null;
+      if (this.#profile?.position !== "center" || !this.element?.open) {
+        return;
+      }
+      if (this.#drag.active || this.#engine?.morphing || this.#engine?.state !== "shown" || this.#settleTarget !== null) {
+        this.#scheduleCenterRemeasure();
+        return;
+      }
+      const height = this.#measurePanelBox().height;
+      if (Math.abs(height - (this.#snaps[0] ?? 0)) <= 1)
+        return;
+      this.#prepareOpen(this.#resolveProfile());
+    }, RESIZE_THROTTLE_MS);
   }
   events = {
-    // Escape key arrives as the native `cancel` event. Always preventDefault so
-    // the browser can't close the element behind the vdom's back; then ask the
-    // parent to close if dismissible. Not dismissible → Escape is a no-op.
     handleCancel: (event) => {
       event.preventDefault();
-      if (this.props.dismissible === false)
+      if (!this.#dismissPolicy().escape)
         return;
-      const { close } = this.props;
-      if (typeof close === "function")
-        close("escape");
+      this.#requestClose("escape");
     },
-    // The click lands on the <dialog> element itself only when it hit the
-    // backdrop region (inner content has a deeper target).
-    handleBackdropClick: (event) => {
-      if (event.target !== this.element)
-        return;
-      if (this.props.dismissible === false)
-        return;
-      const { close } = this.props;
-      if (typeof close === "function")
-        close("backdrop");
-    },
-    // pointerdown on the header (isHeader = true) or content (false). The header
-    // is always a drag surface and captures immediately; content only arms — it
-    // captures lazily in dragMove once a downward-at-top move is confirmed, so
-    // taps/clicks and normal scrolling inside the content are never hijacked.
-    dragStart: (event, isHeader) => {
-      if (!this.getData().mobile)
-        return;
-      if (this.props.dismissible === false)
-        return;
-      if (!event.isPrimary)
-        return;
-      if (event.pointerType === "mouse" && event.button !== 0)
-        return;
-      const d = this.#drag;
-      d.active = true;
-      d.pointerId = event.pointerId;
-      d.startY = event.clientY;
-      d.delta = 0;
-      d.direction = null;
-      d.isHeader = isHeader;
-      d.isAtTop = isHeader ? true : event.currentTarget.scrollTop === 0;
-      d.captured = false;
-      d.captureEl = null;
-      if (isHeader) {
-        this.#capture(event);
-        if (event.cancelable)
-          event.preventDefault();
-      }
-    },
-    dragMove: (event) => {
-      const d = this.#drag;
-      if (!d.active || event.pointerId !== d.pointerId)
-        return;
-      d.delta = event.clientY - d.startY;
-      if (d.direction === null && d.delta !== 0) {
-        d.direction = d.delta < 0 ? "up" : "down";
-      }
-      if (!d.isHeader && (!d.isAtTop || d.direction === "up")) {
-        d.active = false;
-        return;
-      }
-      if (!d.captured)
-        this.#capture(event);
-      if (event.cancelable)
+    scrollVeto: (event) => {
+      if (this.#drag.active && this.#drag.claimed && event.cancelable) {
         event.preventDefault();
-      const dialog = this.element;
-      if (!dialog)
-        return;
-      if (d.delta < 0) {
-        const resisted = Math.sqrt(Math.abs(d.delta)) * 10 * this.#overscrollResistance;
-        dialog.style.transform = `translate3d(0,${-resisted}px,0)`;
-      } else {
-        dialog.style.transform = `translate3d(0,${d.delta}px,0)`;
-      }
-    },
-    dragEnd: (event) => {
-      const d = this.#drag;
-      if (d.pointerId === null || event.pointerId !== d.pointerId) {
-        this.#resetDrag();
-        return;
-      }
-      const captured = d.captured;
-      const delta = d.delta;
-      if (d.captureEl) {
-        try {
-          d.captureEl.releasePointerCapture(d.pointerId);
-        } catch (_) {
-        }
-      }
-      this.#resetDrag();
-      if (!captured)
-        return;
-      if (delta > this.#dragThreshold) {
-        this.#dismiss(delta);
-      } else {
-        this.#springBack(delta);
       }
     }
   };
@@ -58273,99 +61378,280 @@ var Sheet = class extends PuzzleView {
 Sheet.prototype.render = function() {
   const __d = this.getData();
   return new ViewNode("dialog", {
-    class: __d.panelClass,
+    class: __d.dialogClass,
     "aria-labelledby": __d.labelledby,
-    "@cancel": (this.__h ??= {})[0] ??= (event) => this.events.handleCancel(event),
-    "@click": (this.__h ??= {})[1] ??= (event) => this.events.handleBackdropClick(event)
+    "@cancel": (this.__h ??= {})[0] ??= (event) => this.events.handleCancel(event)
   }, [
-    ...__d.mobile ? [
-      new ViewNode("div", {
-        class: `flex-shrink-0 touch-none select-none ${__d.canDrag ? "cursor-grab" : ""}`,
-        "@pointerdown": (this.__h ??= {})[2] ??= (event) => this.events.dragStart(event, true),
-        "@pointermove": (this.__h ??= {})[3] ??= (event) => this.events.dragMove(event),
-        "@pointerup": (this.__h ??= {})[4] ??= (event) => this.events.dragEnd(event),
-        "@pointercancel": (this.__h ??= {})[5] ??= (event) => this.events.dragEnd(event)
-      }, [
-        ...__d.canDrag ? [
-          new ViewNode("div", {
-            class: "mx-auto my-3 h-1 w-10 rounded-full bg-faint",
-            "aria-hidden": "true"
-          }, [])
-        ] : [
-          new ViewNode("#")
-        ],
-        ...__d.title ? [
-          new ViewNode("h2", {
-            id: __d.titleId,
-            class: "px-4 pb-3 text-base font-semibold text-ink text-center"
-          }, [
-            new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
-          ])
-        ] : [
-          new ViewNode("#")
-        ]
-      ])
-    ] : [
-      ...__d.title ? [
-        new ViewNode("h2", {
-          id: __d.titleId,
-          class: "px-4 pt-5 pb-2 text-base font-semibold text-ink"
-        }, [
-          new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
-        ])
-      ] : [
-        new ViewNode("#")
-      ]
-    ],
     new ViewNode("div", {
-      class: "overflow-y-auto overscroll-contain px-4 pb-4 max-h-[80vh]",
-      "@pointerdown": (this.__h ??= {})[6] ??= (event) => this.events.dragStart(event, false),
-      "@pointermove": (this.__h ??= {})[7] ??= (event) => this.events.dragMove(event),
-      "@pointerup": (this.__h ??= {})[8] ??= (event) => this.events.dragEnd(event),
-      "@pointercancel": (this.__h ??= {})[9] ??= (event) => this.events.dragEnd(event)
+      ref: this.__ref("backdrop"),
+      "data-sheet-surface": "backdrop",
+      class: __d.backdropClass
+    }, []),
+    new ViewNode("div", {
+      ref: this.__ref("panel"),
+      class: __d.panelClass
     }, [
-      new ViewNode(SLOT_TAG)
+      new ViewNode("div", {
+        ref: this.__ref("header"),
+        "data-sheet-surface": "header",
+        class: __d.headerClass
+      }, [
+        new ViewNode(SLOT_TAG, { name: "header" }, [
+          ...__d.showGrabber ? [
+            new ViewNode("div", {
+              class: __d.grabberClass,
+              "aria-hidden": "true"
+            }, [])
+          ] : [
+            new ViewNode("#")
+          ],
+          ...__d.title ? [
+            new ViewNode("h2", {
+              id: __d.titleId,
+              class: __d.titleClass
+            }, [
+              new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
+            ])
+          ] : [
+            new ViewNode("#")
+          ]
+        ])
+      ]),
+      new ViewNode("div", {
+        ref: this.__ref("content"),
+        "data-sheet-surface": "content",
+        class: __d.contentClass,
+        "@touchmove": (this.__h ??= {})[1] ??= (event) => this.events.scrollVeto(event)
+      }, [
+        new ViewNode(SLOT_TAG)
+      ]),
+      new ViewNode("div", {
+        ref: this.__ref("footer"),
+        "data-sheet-surface": "footer",
+        class: __d.footerClass
+      }, [
+        new ViewNode(SLOT_TAG, { name: "footer" })
+      ])
     ])
   ]);
 };
 Sheet.__pzlModule = "app/components/ui/Sheet.pzl";
 
 // app/views/components/SheetDoc.pzl
-var installCmd67 = "puzzle add piece sheet";
-var usageImport67 = `import Sheet from '@/components/ui/Sheet.pzl';`;
-var usageMarkup67 = `<Sheet open={ sheetOpen } title="Terms of service" @close={ closeSheet }></Sheet>`;
-var codeHero67 = `<Button variant="outline" @press={ openSheet }>Open sheet</Button>
-<Sheet open={ sheetOpen } title="Terms of service" @close={ closeSheet }>
-  <p>\u2026scrollable content\u2026</p>
+var installCmd68 = "puzzle add piece sheet";
+var usageImport68 = `import Sheet from '@/components/ui/Sheet.pzl';`;
+var usageMarkup68 = `<Sheet open={ sheetOpen } title="Your cart" @close={ () => this.setData('sheetOpen', false) }>
+  <CartLines/>
+  <Button slot="footer" @press={ checkout }>Checkout</Button>
+</Sheet>`;
+var codeHero68 = `<Button variant="outline" @press={ openSheet }>Open sheet</Button>
+<Sheet
+  open={ sheetOpen }
+  title="Your cart"
+  snapPoints="85vh 55vh 25vh"
+  desktopPosition="right"
+  @close={ () => this.setData('sheetOpen', false) }>
+  <CartLines/>
+  <Button slot="footer" class="w-full" @press={ checkout }>Checkout</Button>
 </Sheet>
 
-// parent owns open; @close(reason) fires for escape | backdrop | drag
-events = {
-  openSheet: () => this.setData('sheetOpen', true),
-  closeSheet: () => this.setData('sheetOpen', false),
-};`;
+// Bottom sheet with three snaps below 768px; right drawer above it.
+// Resize across the breakpoint while it is open and it morphs in place.`;
+var codeSnaps = `<Button variant="outline" @press={ openSheet }>Open snapping sheet</Button>
+<span class="text-sm text-muted">snap index: { snapIndex }</span>
+
+<Sheet
+  open={ sheetOpen }
+  title="Filters"
+  snapPoints="85vh 55vh 25vh"
+  snap={ snapIndex }
+  @snapChange={ (index) => this.setData('snapIndex', index) }
+  @close={ () => this.setData('sheetOpen', false) }>
+  <FilterList/>
+</Sheet>
+
+// snap is optional-controlled: omit it and the sheet tracks its own snap.
+// snapChange fires only when a release commits a snap, never mid-drag.`;
+var codePositions = `<Sheet open={ leftOpen } title="Navigation" position="left" @close={ closeLeft }>
+  <NavLinks/>
+</Sheet>
+
+<Sheet open={ rightOpen } title="Cart" position="right" @close={ closeRight }>
+  <CartLines/>
+</Sheet>
+
+<Sheet open={ centerOpen } title="Heads up" position="center" @close={ closeCenter }>
+  <p>A centered dialog hugs its content height.</p>
+  <p>Two short lines stay two short lines.</p>
+</Sheet>
+
+// Sides take a single fixed width; center takes its intrinsic height.
+// All three ignore snapPoints \u2014 snaps belong to bottom sheets only.`;
+var codeModes = `<Sheet open={ cardOpen } title="Card mode" mode="card" @close={ closeCard }>
+  <p>Floats inside a margin with rounded corners on every side.</p>
+</Sheet>
+
+<Sheet open={ edgeOpen } title="Edge mode" desktopMode="edge" @close={ closeEdge }>
+  <p>Flush against the screen edge at every width.</p>
+</Sheet>
+
+// mode is the mobile profile (default "edge"); desktopMode defaults to "card".`;
+var codeEffects = `<Sheet open={ popOpen } title="Saved" position="center" effect="pop" @close={ closePop }>
+  <p>pop arrives with a small visible bounce.</p>
+</Sheet>
+
+<Sheet
+  open={ detailsOpen }
+  title="Details"
+  desktopPosition="right"
+  desktopExitEffect="fade-scale"
+  @close={ closeDetails }>
+  <p>Slides in from the right, fades and shrinks away on close.</p>
+</Sheet>
+
+// Effects: slide | fade-scale | slide-fade | pop.
+// exitEffect / desktopExitEffect fall back to the entrance effects,
+// so saying nothing keeps leaving as the mirror of arriving.`;
+var codeDismiss = `<Sheet
+  open={ confirmOpen }
+  title="Delete project?"
+  position="center"
+  dismiss="none"
+  @close={ closeConfirm }>
+  <p>This cannot be undone.</p>
+  <Button slot="footer" class="w-full" @press={ confirmDelete }>Delete project</Button>
+</Sheet>
+
+// dismiss is a token list: "swipe backdrop escape" (default all) or "none".
+// A refused swipe settles back to its snap and @snapRelease reports
+// prevented: true, so you can shake the panel or flag the field.`;
+var codeSpring = `<Sheet open={ sheetOpen } title="Floaty" spring="0.08 0.4" @close={ close }>
+  <p>Looser attraction, lighter friction \u2014 a floatier arrival.</p>
+</Sheet>
+
+// spring="attraction friction", both dials exclusive of 0 and 1.
+// Overrides the entrance only; exits and snaps keep their presets.`;
+var codeHeader = `<Sheet open={ sheetOpen } labelledby="promo-sheet-title" desktopPosition="right" @close={ close }>
+  <div slot="header" class="flex items-center justify-between border-b border-border px-5 py-4">
+    <h2 id="promo-sheet-title" class="text-base font-semibold text-ink">Summer promo</h2>
+    <span class="rounded-full bg-brand px-2 py-0.5 text-xs text-surface">New</span>
+  </div>
+  <PromoDetails/>
+</Sheet>
+
+// A filled header slot replaces the grabber + title entirely, so it must
+// bring its own heading and point labelledby at that heading's id.
+// slot="header" must sit on a direct child of the Sheet tag.`;
 var SheetDoc = class extends PuzzleView {
   created() {
-    this.setData({ sheetOpen: false });
+    this.setData({
+      heroOpen: false,
+      snapsOpen: false,
+      leftOpen: false,
+      rightOpen: false,
+      centerOpen: false,
+      cardOpen: false,
+      edgeOpen: false,
+      popOpen: false,
+      asymOpen: false,
+      confirmOpen: false,
+      springOpen: false,
+      headerOpen: false,
+      snapIndex: 0
+    });
   }
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd67,
-      usageImport: usageImport67,
-      usageMarkup: usageMarkup67,
-      codeHero: codeHero67,
+      installCmd: installCmd68,
+      usageImport: usageImport68,
+      usageMarkup: usageMarkup68,
+      codeHero: codeHero68,
+      codeSnaps,
+      codePositions,
+      codeModes,
+      codeEffects,
+      codeDismiss,
+      codeSpring,
+      codeHeader,
       paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
+      propRows: [
+        { name: "open", desc: "Required, controlled. The parent owns it; flip it in @close." },
+        { name: "title", desc: "Heading text rendered by the default header." },
+        { name: "labelledby", desc: "Id of the labelling heading when the header slot is filled." },
+        { name: "position", desc: "Mobile profile: bottom, left, right, or center. Default bottom." },
+        { name: "mode", desc: "Mobile profile mode: edge or card. Default edge." },
+        { name: "breakpoint", desc: "Pixel width where the desktop profile takes over. Default 768." },
+        { name: "desktopPosition", desc: "Desktop position; falls back to position." },
+        { name: "desktopMode", desc: "Desktop mode. Default card." },
+        { name: "effect", desc: "Entrance: slide, fade-scale, slide-fade, or pop. Default slide." },
+        { name: "exitEffect", desc: "Exit effect; falls back to effect." },
+        { name: "desktopEffect", desc: "Desktop entrance; falls back to effect, except a centered desktop defaults to fade-scale." },
+        { name: "desktopExitEffect", desc: "Desktop exit; falls back to exitEffect, then desktopEffect." },
+        { name: "snapPoints", desc: 'CSS lengths, e.g. "85vh 55vh 25vh". Default "85vh". Bottom-mobile only; a desktop bottom keeps its largest snap and is dismiss-only, and sides/center ignore snaps.' },
+        { name: "snap", desc: "Snap index. Optional-controlled with @snapChange." },
+        { name: "initialSnap", desc: "Index to open at when snap is uncontrolled." },
+        { name: "dismiss", desc: 'Token list of swipe, backdrop, escape; or "all" (default) or "none".' },
+        { name: "spring", desc: '"attraction friction" entrance override, both dials in (0, 1).' },
+        { name: "showGrabber", desc: "Show the grabber in the default header. Default true." },
+        { name: "exitCushion", desc: "Extra pixels of exit runway to clear the shadow. Default 28." },
+        { name: "morphDuration", desc: "Profile morph duration in ms. Default 420." },
+        { name: "morphEasing", desc: "Profile morph easing." },
+        { name: "class", desc: "Merged onto the panel; a caller width utility replaces the default width." },
+        { name: "backdropClass", desc: "Merged onto the backdrop." }
+      ],
+      callbackRows: [
+        { name: "@close(reason)", desc: "reason is swipe, backdrop, or escape. The sheet never closes itself \u2014 the parent flips open here." },
+        { name: "@snapChange(index)", desc: "A release committed a snap; fires only on commit, never mid-drag." },
+        { name: "@snapRelease(detail)", desc: "Every claimed release: { velocity, flick, direction, size, target, prevented }. prevented is true when the dismiss policy refused a swipe." },
+        { name: "@shown()", desc: "The entrance settled." },
+        { name: "@hidden()", desc: "The exit finished and the dialog closed." }
+      ],
+      slotRows: [
+        { name: "header", desc: "Replaces the grabber and title heading; a filled header brings its own heading and labelledby. Always a drag surface." },
+        { name: "footer", desc: "Pinned below the content; hidden when empty." },
+        { name: "default", desc: "Untagged children become the scrollable content region." }
+      ],
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
-        { label: "Responsive behavior", href: "#responsive" }
+        { label: "Controlled snaps", href: "#snaps" },
+        { label: "Positions", href: "#positions" },
+        { label: "Card mode vs edge", href: "#modes" },
+        { label: "Effects", href: "#effects" },
+        { label: "Dismiss policy", href: "#dismiss" },
+        { label: "Spring override", href: "#spring" },
+        { label: "Custom header", href: "#header-slot" },
+        { label: "Reference", href: "#reference" }
       ]
     };
   }
   events = {
-    openSheet: () => this.setData("sheetOpen", true),
-    closeSheet: () => this.setData("sheetOpen", false)
+    openHero: () => this.setData("heroOpen", true),
+    closeHero: () => this.setData("heroOpen", false),
+    openSnaps: () => this.setData("snapsOpen", true),
+    closeSnaps: () => this.setData("snapsOpen", false),
+    setSnapIndex: (index) => this.setData("snapIndex", index),
+    openLeft: () => this.setData("leftOpen", true),
+    closeLeft: () => this.setData("leftOpen", false),
+    openRight: () => this.setData("rightOpen", true),
+    closeRight: () => this.setData("rightOpen", false),
+    openCenter: () => this.setData("centerOpen", true),
+    closeCenter: () => this.setData("centerOpen", false),
+    openCard: () => this.setData("cardOpen", true),
+    closeCard: () => this.setData("cardOpen", false),
+    openEdge: () => this.setData("edgeOpen", true),
+    closeEdge: () => this.setData("edgeOpen", false),
+    openPop: () => this.setData("popOpen", true),
+    closePop: () => this.setData("popOpen", false),
+    openAsym: () => this.setData("asymOpen", true),
+    closeAsym: () => this.setData("asymOpen", false),
+    openConfirm: () => this.setData("confirmOpen", true),
+    closeConfirm: () => this.setData("confirmOpen", false),
+    openSpring: () => this.setData("springOpen", true),
+    closeSpring: () => this.setData("springOpen", false),
+    openHeader: () => this.setData("headerOpen", true),
+    closeHeader: () => this.setData("headerOpen", false)
   };
 };
 SheetDoc.prototype.render = function() {
@@ -58378,30 +61664,43 @@ SheetDoc.prototype.render = function() {
             new ViewNode("text", { value: "Sheet" })
           ]),
           new ViewNode("p", { class: "mt-2 text-body" }, [
-            new ViewNode("text", { value: "A bottom sheet with drag-to-dismiss on the native dialog element. It pins to the bottom on narrow viewports and becomes a centered modal on wide ones. The parent owns the open flag; the piece only asks to close." })
+            new ViewNode("text", { value: "One component that is a snap-point bottom sheet on phones and morphs \u2014 live, in place, while open \u2014 into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, entrance and exit effects, a dismiss policy, and parent-controlled open state" })
           ])
         ]),
         new ViewNode(ExampleBox, { code: __d.codeHero }, [
           new ViewNode(Button, {
             variant: "outline",
-            press: (this.__h ??= {})[0] ??= (event) => this.events.openSheet(event)
+            press: (this.__h ??= {})[0] ??= (event) => this.events.openHero(event)
           }, [
             new ViewNode("text", { value: "Open sheet" })
           ]),
           new ViewNode(Sheet, {
-            open: __d.sheetOpen,
-            title: "Terms of service",
-            close: (this.__h ??= {})[1] ??= (event) => this.events.closeSheet(event)
+            open: __d.heroOpen,
+            title: "Your cart",
+            snapPoints: "85vh 55vh 25vh",
+            desktopPosition: "right",
+            close: (this.__h ??= {})[1] ??= (event) => this.events.closeHero(event)
           }, [
-            new ViewNode(
-              "div",
-              { class: "space-y-4 text-sm text-body" },
-              __d.paragraphs.map(
-                (n2) => new ViewNode("p", { key: ViewNode.keyOf(n2) }, [
-                  new ViewNode("text", { value: "Section " + displayValue(n2, true ? "n" : 0) + " \u2014 filler content to make the sheet scroll. On narrow viewports the sheet pins to the bottom with a drag handle; on wide viewports it becomes a centered modal. Drag it down or press Escape to dismiss." })
+            new ViewNode("div", { class: "space-y-4 py-4 text-sm text-body" }, [
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "On a phone this is a bottom sheet with three snap points \u2014 drag the header and flick between them. On a wide window it is a right-side drawer." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "Open it, then resize the window across 768px and watch it morph between the two profiles in place. It never closes, never re-opens \u2014 the panel animates from one resting geometry to the other while you watch." })
+              ]),
+              ...__d.paragraphs.map(
+                (n2) => new ViewNode("p", { key: n2 }, [
+                  new ViewNode("text", { value: "Cart line " + displayValue(n2, true ? "n" : 0) + " \u2014 filler content so the sheet scrolls. Scroll to the top before dragging down from the content surface." })
                 ])
               )
-            )
+            ]),
+            new ViewNode(Button, {
+              slot: "footer",
+              class: "w-full",
+              press: (this.__h ??= {})[2] ??= (event) => this.events.closeHero(event)
+            }, [
+              new ViewNode("text", { value: "Checkout" })
+            ])
           ])
         ]),
         new ViewNode("section", {
@@ -58416,7 +61715,7 @@ SheetDoc.prototype.render = function() {
           ]),
           new ViewNode(CodeBlock, { code: __d.installCmd }, []),
           new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
-            new ViewNode("text", { value: "Requires the pieces.css tokens merged into your app styles (see Introduction)." })
+            new ViewNode("text", { value: "The CLI prints the npm installs for @magic-spells/physics-engine and @magic-spells/frame-engine, and copies lib/sheet-engine.js, lib/sheet-policy.js, and lib/sheet-drag.js into app/lib/." })
           ])
         ]),
         new ViewNode("section", {
@@ -58433,19 +61732,375 @@ SheetDoc.prototype.render = function() {
           }, [])
         ]),
         new ViewNode("div", { class: "mt-12 space-y-12" }, [
+          new ViewNode(ExampleBox, {
+            id: "snaps",
+            title: "Controlled snaps",
+            code: __d.codeSnaps
+          }, [
+            new ViewNode("div", { class: "flex items-center gap-4" }, [
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[3] ??= (event) => this.events.openSnaps(event)
+              }, [
+                new ViewNode("text", { value: "Open snapping sheet" })
+              ]),
+              new ViewNode("span", { class: "text-sm text-muted" }, [
+                new ViewNode("text", { value: "snap index: " + displayValue(__d.snapIndex, true ? "snapIndex" : 0) })
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.snapsOpen,
+              title: "Filters",
+              snapPoints: "85vh 55vh 25vh",
+              snap: __d.snapIndex,
+              snapChange: (this.__h ??= {})[4] ??= (event) => this.events.setSnapIndex(event),
+              close: (this.__h ??= {})[5] ??= (event) => this.events.closeSnaps(event)
+            }, [
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "A slow release settles on the nearest snap; a flick steps exactly one snap in its direction, measured from wherever the panel actually is." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "snap is optional-controlled: pass it with @snapChange to own the committed index, or omit it and the sheet tracks its snap locally. The counter next to the trigger reflects each commit." })
+                ])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "positions",
+            title: "Positions",
+            code: __d.codePositions
+          }, [
+            new ViewNode("div", { class: "flex flex-wrap items-center justify-center gap-3" }, [
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[6] ??= (event) => this.events.openLeft(event)
+              }, [
+                new ViewNode("text", { value: "Left drawer" })
+              ]),
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[7] ??= (event) => this.events.openRight(event)
+              }, [
+                new ViewNode("text", { value: "Right drawer" })
+              ]),
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[8] ??= (event) => this.events.openCenter(event)
+              }, [
+                new ViewNode("text", { value: "Centered dialog" })
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.leftOpen,
+              title: "Navigation",
+              position: "left",
+              close: (this.__h ??= {})[9] ??= (event) => this.events.closeLeft(event)
+            }, [
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "A left drawer slides in from its edge and is fixed width \u2014 snap points do not apply to the sides." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Swipe it back toward its edge, tap the backdrop, or press Escape to dismiss." })
+                ])
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.rightOpen,
+              title: "Cart",
+              position: "right",
+              close: (this.__h ??= {})[10] ??= (event) => this.events.closeRight(event)
+            }, [
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Same drawer, opposite edge. position sets the mobile profile and desktopPosition falls back to it, so this is a right drawer at every width." })
+                ])
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.centerOpen,
+              title: "Heads up",
+              position: "center",
+              close: (this.__h ??= {})[11] ??= (event) => this.events.closeCenter(event)
+            }, [
+              new ViewNode("div", { class: "space-y-2 py-2 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "A centered dialog hugs its content height." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Two short lines stay two short lines." })
+                ])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "modes",
+            title: "Card mode vs edge",
+            code: __d.codeModes
+          }, [
+            new ViewNode("div", { class: "flex flex-wrap items-center justify-center gap-3" }, [
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[12] ??= (event) => this.events.openCard(event)
+              }, [
+                new ViewNode("text", { value: "Card mode" })
+              ]),
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[13] ??= (event) => this.events.openEdge(event)
+              }, [
+                new ViewNode("text", { value: "Edge mode" })
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.cardOpen,
+              title: "Card mode",
+              mode: "card",
+              close: (this.__h ??= {})[14] ??= (event) => this.events.closeCard(event)
+            }, [
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Card mode floats the panel inside a small margin with rounded corners on every side \u2014 it reads as a floating surface rather than a slab welded to the edge." })
+                ])
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.edgeOpen,
+              title: "Edge mode",
+              desktopMode: "edge",
+              close: (this.__h ??= {})[15] ??= (event) => this.events.closeEdge(event)
+            }, [
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: 'Edge mode sits flush against the screen edge. It is the mobile default; desktopMode defaults to card, so this sheet forces desktopMode="edge" to stay flush at every width.' })
+                ])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "effects",
+            title: "Entrance and exit effects",
+            code: __d.codeEffects
+          }, [
+            new ViewNode("div", { class: "flex flex-wrap items-center justify-center gap-3" }, [
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[16] ??= (event) => this.events.openPop(event)
+              }, [
+                new ViewNode("text", { value: "Pop dialog" })
+              ]),
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[17] ??= (event) => this.events.openAsym(event)
+              }, [
+                new ViewNode("text", { value: "Slide in, fade out" })
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.popOpen,
+              title: "Saved",
+              position: "center",
+              effect: "pop",
+              close: (this.__h ??= {})[18] ??= (event) => this.events.closePop(event)
+            }, [
+              new ViewNode("div", { class: "space-y-2 py-2 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "pop arrives with a small visible bounce." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "The bounce lives in the keyframes, not the spring." })
+                ])
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.asymOpen,
+              title: "Details",
+              desktopPosition: "right",
+              desktopExitEffect: "fade-scale",
+              close: (this.__h ??= {})[19] ??= (event) => this.events.closeAsym(event)
+            }, [
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Arriving and leaving are separate questions. On desktop this card slides in from the right, but closing it fades and shrinks it away instead of sliding it back across the screen." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Say nothing and leaving mirrors arriving \u2014 the exit props only exist for when the mirror reads wrong." })
+                ])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "dismiss",
+            title: "A sheet that may not be waved away",
+            code: __d.codeDismiss
+          }, [
+            new ViewNode(Button, {
+              variant: "outline",
+              press: (this.__h ??= {})[20] ??= (event) => this.events.openConfirm(event)
+            }, [
+              new ViewNode("text", { value: "Delete project" })
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.confirmOpen,
+              title: "Delete project?",
+              position: "center",
+              dismiss: "none",
+              close: (this.__h ??= {})[21] ??= (event) => this.events.closeConfirm(event)
+            }, [
+              new ViewNode("div", { class: "space-y-2 py-2 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "This cannot be undone." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Swipe, backdrop tap, and Escape are all refused \u2014 a refused swipe settles back and reports prevented: true on @snapRelease. The button below is the only way out." })
+                ])
+              ]),
+              new ViewNode(Button, {
+                slot: "footer",
+                variant: "secondary",
+                class: "w-full",
+                press: (this.__h ??= {})[22] ??= (event) => this.events.closeConfirm(event)
+              }, [
+                new ViewNode("text", { value: "Delete project" })
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "spring",
+            title: "Spring override",
+            code: __d.codeSpring
+          }, [
+            new ViewNode(Button, {
+              variant: "outline",
+              press: (this.__h ??= {})[23] ??= (event) => this.events.openSpring(event)
+            }, [
+              new ViewNode("text", { value: "Open floaty sheet" })
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.springOpen,
+              title: "Floaty",
+              spring: "0.08 0.4",
+              close: (this.__h ??= {})[24] ??= (event) => this.events.closeSpring(event)
+            }, [
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: 'spring="attraction friction" retunes how the sheet arrives \u2014 both dials exclusive of 0 and 1. This one is looser and floatier than the default entrance.' })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "The override governs the entrance only; exits and snap settles keep their tuned presets." })
+                ])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "header-slot",
+            title: "Custom header",
+            code: __d.codeHeader
+          }, [
+            new ViewNode(Button, {
+              variant: "outline",
+              press: (this.__h ??= {})[25] ??= (event) => this.events.openHeader(event)
+            }, [
+              new ViewNode("text", { value: "Open with custom header" })
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.headerOpen,
+              labelledby: "promo-sheet-title",
+              desktopPosition: "right",
+              close: (this.__h ??= {})[26] ??= (event) => this.events.closeHeader(event)
+            }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "flex items-center justify-between border-b border-border px-5 py-4"
+              }, [
+                new ViewNode("h2", {
+                  id: "promo-sheet-title",
+                  class: "text-base font-semibold text-ink"
+                }, [
+                  new ViewNode("text", { value: "Summer promo" })
+                ]),
+                new ViewNode("span", { class: "rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-surface" }, [
+                  new ViewNode("text", { value: "New" })
+                ])
+              ]),
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Filling the header slot replaces the stock grabber and title entirely, so a custom header brings its own heading and points labelledby at it." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "The header is still an unconditional drag surface." })
+                ])
+              ])
+            ])
+          ]),
           new ViewNode("section", {
-            id: "responsive",
+            id: "reference",
             class: "scroll-mt-20"
           }, [
             new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
-              new ViewNode("text", { value: "Responsive behavior" })
+              new ViewNode("text", { value: "Reference" })
             ]),
-            new ViewNode("p", { class: "mb-3 text-sm text-body" }, [
-              new ViewNode("text", { value: "Below 640px the Sheet renders as a bottom sheet \u2014 pinned to the bottom edge with a drag handle; drag it past the threshold to dismiss, or press Escape. At wider viewports the same piece becomes a centered modal with no handle and no drag, though Escape and backdrop clicks still dismiss it. Open the sheet above and resize the window across 640px to watch it switch." })
+            new ViewNode("h3", { class: "mb-2 mt-6 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Props" })
             ]),
-            new ViewNode("p", { class: "text-sm text-muted" }, [
-              new ViewNode("text", { value: "The breakpoint is the maxDisplayWidth prop (default 640). A matchMedia listener drives the switch reactively, so no reload is needed." })
-            ])
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.propRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Callbacks" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.callbackRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Slots" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.slotRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            )
           ])
         ])
       ]),
@@ -58459,9 +62114,9 @@ SheetDoc.prototype.render = function() {
 SheetDoc.__pzlModule = "app/views/components/SheetDoc.pzl";
 
 // app/views/components/SidebarDoc.pzl
-var installCmd68 = "puzzle add piece sidebar";
-var usageImport68 = `import Sidebar from '@/components/ui/Sidebar.pzl';`;
-var usageMarkup68 = `<Sidebar items={ items } activePath="/reports/overview" label="Main"></Sidebar>`;
+var installCmd69 = "puzzle add piece sidebar";
+var usageImport69 = `import Sidebar from '@/components/ui/Sidebar.pzl';`;
+var usageMarkup69 = `<Sidebar items={ items } activePath="/reports/overview" label="Main"></Sidebar>`;
 var icons = {
   home: "M3 12l9-7 9 7M5 10v10h14V10",
   chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
@@ -58494,7 +62149,7 @@ var shortItems = [
   { label: "Inbox", href: "/inbox", icon: icons.inbox, badge: "12" },
   { label: "Team", href: "/team", icon: icons.users }
 ];
-var codeHero68 = `const items = [
+var codeHero69 = `const items = [
   { group: 'Overview' },
   { label: 'Home', href: '/home', icon: 'M3 12l9-7 9 7M5 10v10h14V10' },
   {
@@ -58553,10 +62208,10 @@ var SidebarDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd68,
-      usageImport: usageImport68,
-      usageMarkup: usageMarkup68,
-      codeHero: codeHero68,
+      installCmd: installCmd69,
+      usageImport: usageImport69,
+      usageMarkup: usageMarkup69,
+      codeHero: codeHero69,
       codeCollapsed,
       codeSubmenus,
       codeSlots,
@@ -58888,10 +62543,10 @@ Skeleton.prototype.render = function() {
 Skeleton.__pzlModule = "app/components/ui/Skeleton.pzl";
 
 // app/views/components/SkeletonDoc.pzl
-var installCmd69 = "puzzle add piece skeleton";
-var usageImport69 = `import Skeleton from '@/components/ui/Skeleton.pzl';`;
-var usageMarkup69 = `<Skeleton variant="circle" class="size-10" />`;
-var codeHero69 = `<div class="space-y-4 rounded-xl border border-border bg-surface p-5">
+var installCmd70 = "puzzle add piece skeleton";
+var usageImport70 = `import Skeleton from '@/components/ui/Skeleton.pzl';`;
+var usageMarkup70 = `<Skeleton variant="circle" class="size-10" />`;
+var codeHero70 = `<div class="space-y-4 rounded-xl border border-border bg-surface p-5">
   <div class="flex items-center gap-3">
     <Skeleton variant="circle" class="size-10" />
     <div class="flex-1 space-y-2">
@@ -58911,10 +62566,10 @@ var codeShapes = `<Skeleton variant="text" class="w-2/3" />
 var SkeletonDoc = class extends PuzzleView {
   data(params, props) {
     return {
-      installCmd: installCmd69,
-      usageImport: usageImport69,
-      usageMarkup: usageMarkup69,
-      codeHero: codeHero69,
+      installCmd: installCmd70,
+      usageImport: usageImport70,
+      usageMarkup: usageMarkup70,
+      codeHero: codeHero70,
       codeShapes,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -59042,7 +62697,7 @@ SkeletonDoc.prototype.render = function() {
 SkeletonDoc.__pzlModule = "app/views/components/SkeletonDoc.pzl";
 
 // app/components/ui/Slider.pzl
-var DRAG_THRESHOLD3 = 3;
+var DRAG_THRESHOLD4 = 3;
 var EPS = 1e-9;
 var MAX_LABELS = 11;
 var ROOT_BASE6 = "relative flex w-full min-h-11 touch-pan-y select-none items-center";
@@ -59429,7 +63084,7 @@ var Slider = class extends PuzzleView {
         this._teardownGesture();
         return;
       }
-      if (deltaX <= DRAG_THRESHOLD3)
+      if (deltaX <= DRAG_THRESHOLD4)
         return;
       drag.thumb = this._nearestThumb(this._percentFromClientX(event.clientX), committed, cfg);
       drag.startValue = this._channel(committed, drag.thumb);
@@ -59446,7 +63101,7 @@ var Slider = class extends PuzzleView {
       if (el)
         el.focus({ preventScroll: true });
     }
-    if (Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD3)
+    if (Math.abs(event.clientX - drag.startX) > DRAG_THRESHOLD4)
       this._suppressClick = true;
     const raw2 = percentToValue(this._percentFromClientX(event.clientX), cfg);
     const nv = normalize2(raw2, drag.thumb, cfg, committed);
@@ -59735,14 +63390,14 @@ Slider.prototype.render = function() {
 Slider.__pzlModule = "app/components/ui/Slider.pzl";
 
 // app/views/components/SliderDoc.pzl
-var installCmd70 = "puzzle add piece slider";
-var usageImport70 = `import Slider from '@/components/ui/Slider.pzl';`;
-var usageMarkup70 = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />`;
+var installCmd71 = "puzzle add piece slider";
+var usageImport71 = `import Slider from '@/components/ui/Slider.pzl';`;
+var usageMarkup71 = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />`;
 var quarterTicks = [0, 25, 50, 75, 100];
 var redlineTicks = [0, 25, 50, 75, { value: 90, class: "bg-danger", labelClass: "text-danger" }, 100];
 var modeTicks = [{ value: 0, label: "Off" }, 25, 50, 75, { value: 100, label: "Max" }];
 var percent = (v) => v + "%";
-var codeHero70 = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />
+var codeHero71 = `<Slider value={ volume } min={ 0 } max={ 100 } @input={ setVolume } @change={ setVolume } />
 
 // parent \u2014 @input fires live during drag, @change on release
 events = {
@@ -59842,14 +63497,14 @@ var SliderDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd70,
-      usageImport: usageImport70,
-      usageMarkup: usageMarkup70,
+      installCmd: installCmd71,
+      usageImport: usageImport71,
+      usageMarkup: usageMarkup71,
       quarterTicks,
       redlineTicks,
       modeTicks,
       percent,
-      codeHero: codeHero70,
+      codeHero: codeHero71,
       codeRange,
       codeSteps: codeSteps2,
       codeTicks: codeTicks2,
@@ -60316,10 +63971,10 @@ SliderDoc.prototype.render = function() {
 SliderDoc.__pzlModule = "app/views/components/SliderDoc.pzl";
 
 // app/views/components/SparklineDoc.pzl
-var installCmd71 = "puzzle add piece sparkline";
-var usageImport71 = `import Sparkline from '@/components/ui/Sparkline.pzl';`;
-var usageMarkup71 = `<Sparkline data={ data } width={ 160 } height={ 40 } />`;
-var codeHero71 = `const data = [4, 6, 5, 8, 7, 10, 9, 12];
+var installCmd72 = "puzzle add piece sparkline";
+var usageImport72 = `import Sparkline from '@/components/ui/Sparkline.pzl';`;
+var usageMarkup72 = `<Sparkline data={ data } width={ 160 } height={ 40 } />`;
+var codeHero72 = `const data = [4, 6, 5, 8, 7, 10, 9, 12];
 
 <Sparkline data={ data } width={ 160 } height={ 40 } />`;
 var codeBasic2 = `// Defaults to 120\xD732 and text-chart-1. Nulls in the data become gaps.
@@ -60335,10 +63990,10 @@ var SparklineDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd71,
-      usageImport: usageImport71,
-      usageMarkup: usageMarkup71,
-      codeHero: codeHero71,
+      installCmd: installCmd72,
+      usageImport: usageImport72,
+      usageMarkup: usageMarkup72,
+      codeHero: codeHero72,
       codeBasic: codeBasic2,
       codeArea,
       codeColor,
@@ -60498,10 +64153,10 @@ Spinner.prototype.render = function() {
 Spinner.__pzlModule = "app/components/ui/Spinner.pzl";
 
 // app/views/components/SpinnerDoc.pzl
-var installCmd72 = "puzzle add piece spinner";
-var usageImport72 = `import Spinner from '@/components/ui/Spinner.pzl';`;
-var usageMarkup72 = `<Spinner size="sm" />`;
-var codeHero72 = `<Spinner size="sm" />
+var installCmd73 = "puzzle add piece spinner";
+var usageImport73 = `import Spinner from '@/components/ui/Spinner.pzl';`;
+var usageMarkup73 = `<Spinner size="sm" />`;
+var codeHero73 = `<Spinner size="sm" />
 <Spinner size="md" />
 <Spinner size="lg" />`;
 var codeInButton = `<Button variant="primary" loading={ saving }>Saving</Button>
@@ -60519,10 +64174,10 @@ var SpinnerDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd72,
-      usageImport: usageImport72,
-      usageMarkup: usageMarkup72,
-      codeHero: codeHero72,
+      installCmd: installCmd73,
+      usageImport: usageImport73,
+      usageMarkup: usageMarkup73,
+      codeHero: codeHero73,
       codeInButton,
       toc: [
         { label: "Installation", href: "#installation" },
@@ -60627,9 +64282,9 @@ SpinnerDoc.prototype.render = function() {
 SpinnerDoc.__pzlModule = "app/views/components/SpinnerDoc.pzl";
 
 // app/views/components/SplitButtonDoc.pzl
-var installCmd73 = "puzzle add piece split-button";
-var usageImport73 = `import SplitButton from '@/components/ui/SplitButton.pzl';`;
-var usageMarkup73 = `<SplitButton label="Save" actions={ saveActions } @press={ onPress } @select={ onSelect }/>`;
+var installCmd74 = "puzzle add piece split-button";
+var usageImport74 = `import SplitButton from '@/components/ui/SplitButton.pzl';`;
+var usageMarkup74 = `<SplitButton label="Save" actions={ saveActions } @press={ onPress } @select={ onSelect }/>`;
 var saveActions = [
   { label: "Save as\u2026", value: "save-as" },
   { label: "Save and close", value: "save-close" },
@@ -60641,7 +64296,7 @@ var exportActions = [
   { divider: true },
   { label: "Delete export", value: "delete", danger: true }
 ];
-var codeHero73 = `<SplitButton label="Save" actions={ saveActions } @press={ onPress } @select={ onSelect }/>
+var codeHero74 = `<SplitButton label="Save" actions={ saveActions } @press={ onPress } @select={ onSelect }/>
 
 // @press fires for the primary button; @select(value) for a menu item.
 data() {
@@ -60680,10 +64335,10 @@ var SplitButtonDoc = class extends PuzzleView {
     return {
       saveActions,
       exportActions,
-      installCmd: installCmd73,
-      usageImport: usageImport73,
-      usageMarkup: usageMarkup73,
-      codeHero: codeHero73,
+      installCmd: installCmd74,
+      usageImport: usageImport74,
+      usageMarkup: usageMarkup74,
+      codeHero: codeHero74,
       codeVariants: codeVariants5,
       codeSizes: codeSizes11,
       codeDanger: codeDanger3,
@@ -60929,7 +64584,7 @@ var DIVIDER_BASE = "group relative z-10 flex flex-none select-none touch-none it
 function roundShare(value) {
   return Math.round(value * 100) / 100;
 }
-function clamp7(value, min, max) {
+function clamp8(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 function normalizePair(raw2, fallback) {
@@ -61182,7 +64837,7 @@ var SplitPanel = class extends PuzzleView {
     const min = index === 0 ? measure.minPrevious : measure.pairPercent - measure.maxPrevious;
     const max = index === 0 ? measure.maxPrevious : measure.pairPercent - measure.minPrevious;
     const travel = max - min;
-    const visible = travel > 0 ? clamp7((share - min) / travel, 0, 1) : 1;
+    const visible = travel > 0 ? clamp8((share - min) / travel, 0, 1) : 1;
     return Math.round(visible * 1e3) / 1e3;
   }
   _fallbackMeasure(props) {
@@ -61197,7 +64852,7 @@ var SplitPanel = class extends PuzzleView {
   _constraintMeasure(sizes, props, flexSpace, firstExtra, secondExtra) {
     const constraints = this._constraints(props);
     const pairPercent = sizes[0] + sizes[1];
-    const clampToPair = (value) => clamp7(value, 0, pairPercent);
+    const clampToPair = (value) => clamp8(value, 0, pairPercent);
     const minPrevious = clampToPair(
       Math.max(
         parseConstraint(
@@ -61272,7 +64927,7 @@ var SplitPanel = class extends PuzzleView {
     return measure;
   }
   _sizesForFirst(first, measure) {
-    const clamped = clamp7(
+    const clamped = clamp8(
       first,
       measure.minPrevious,
       measure.maxPrevious
@@ -61526,13 +65181,13 @@ SplitPanel.prototype.render = function() {
 SplitPanel.__pzlModule = "app/components/ui/SplitPanel.pzl";
 
 // app/views/components/SplitPanelDoc.pzl
-var installCmd74 = "puzzle add piece split-panel";
-var usageImport74 = `import SplitPanel from '@/components/ui/SplitPanel.pzl';`;
-var usageMarkup74 = `<SplitPanel defaultSizes={ [35, 65] }>
+var installCmd75 = "puzzle add piece split-panel";
+var usageImport75 = `import SplitPanel from '@/components/ui/SplitPanel.pzl';`;
+var usageMarkup75 = `<SplitPanel defaultSizes={ [35, 65] }>
   <div slot="first">Navigation</div>
   <main slot="second">Content</main>
 </SplitPanel>`;
-var codeHero74 = `<SplitPanel class="h-56" defaultSizes={ [35, 65] }>
+var codeHero75 = `<SplitPanel class="h-56" defaultSizes={ [35, 65] }>
   <div slot="first">Navigation</div>
   <main slot="second">Content</main>
 </SplitPanel>`;
@@ -61606,10 +65261,10 @@ var SplitPanelDoc = class extends PuzzleView {
     return {
       snapFirst: Math.round(snapSizes[0]),
       snapSecond: Math.round(snapSizes[1]),
-      installCmd: installCmd74,
-      usageImport: usageImport74,
-      usageMarkup: usageMarkup74,
-      codeHero: codeHero74,
+      installCmd: installCmd75,
+      usageImport: usageImport75,
+      usageMarkup: usageMarkup75,
+      codeHero: codeHero75,
       codeVertical: codeVertical2,
       codeConstraints,
       codeFade,
@@ -61903,10 +65558,10 @@ SplitPanelDoc.prototype.render = function() {
 SplitPanelDoc.__pzlModule = "app/views/components/SplitPanelDoc.pzl";
 
 // app/views/components/StatCardDoc.pzl
-var installCmd75 = "puzzle add piece stat-card";
-var usageImport75 = `import StatCard from '@/components/ui/StatCard.pzl';`;
-var usageMarkup75 = `<StatCard label="Revenue" value="$48,120" delta={ 12.4 } deltaLabel="vs last month" />`;
-var codeHero75 = `<StatCard label="Revenue" value="$48,120" delta={ 12.4 } deltaLabel="vs last month" />
+var installCmd76 = "puzzle add piece stat-card";
+var usageImport76 = `import StatCard from '@/components/ui/StatCard.pzl';`;
+var usageMarkup76 = `<StatCard label="Revenue" value="$48,120" delta={ 12.4 } deltaLabel="vs last month" />`;
+var codeHero76 = `<StatCard label="Revenue" value="$48,120" delta={ 12.4 } deltaLabel="vs last month" />
 <StatCard label="Active users" value="8,540" delta={ 3.2 } deltaLabel="vs last week" />
 <StatCard label="Churn rate" value="2.1%" delta={ 0.4 } goodWhen="down" deltaLabel="vs last month" />
 <StatCard label="Avg order value" value="$86.40" delta={ -1.8 } deltaLabel="vs last month" />`;
@@ -61925,10 +65580,10 @@ var StatCardDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd75,
-      usageImport: usageImport75,
-      usageMarkup: usageMarkup75,
-      codeHero: codeHero75,
+      installCmd: installCmd76,
+      usageImport: usageImport76,
+      usageMarkup: usageMarkup76,
+      codeHero: codeHero76,
       codeGoodWhen,
       codeSparklines,
       codeNoDelta,
@@ -62304,10 +65959,10 @@ Stepper.prototype.render = function() {
 Stepper.__pzlModule = "app/components/ui/Stepper.pzl";
 
 // app/views/components/StepperDoc.pzl
-var installCmd76 = "puzzle add piece stepper";
-var usageImport76 = `import Stepper from '@/components/ui/Stepper.pzl';`;
-var usageMarkup76 = `<Stepper steps={ checkout } value={ 1 } />`;
-var codeHero76 = `const checkout = [
+var installCmd77 = "puzzle add piece stepper";
+var usageImport77 = `import Stepper from '@/components/ui/Stepper.pzl';`;
+var usageMarkup77 = `<Stepper steps={ checkout } value={ 1 } />`;
+var codeHero77 = `const checkout = [
   { label: 'Cart' },
   { label: 'Details' },
   { label: 'Payment' },
@@ -62342,10 +65997,10 @@ var StepperDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd76,
-      usageImport: usageImport76,
-      usageMarkup: usageMarkup76,
-      codeHero: codeHero76,
+      installCmd: installCmd77,
+      usageImport: usageImport77,
+      usageMarkup: usageMarkup77,
+      codeHero: codeHero77,
       codeVertical: codeVertical3,
       codeClickable,
       codeStates: codeStates3,
@@ -62546,10 +66201,10 @@ StepperDoc.prototype.render = function() {
 StepperDoc.__pzlModule = "app/views/components/StepperDoc.pzl";
 
 // app/views/components/SwitchDoc.pzl
-var installCmd77 = "puzzle add piece switch";
-var usageImport77 = `import Switch from '@/components/ui/Switch.pzl';`;
-var usageMarkup77 = `<Switch label="Wi-Fi" checked={ wifi } @change={ setWifi } />`;
-var codeHero77 = `<div class="divide-y divide-border">
+var installCmd78 = "puzzle add piece switch";
+var usageImport78 = `import Switch from '@/components/ui/Switch.pzl';`;
+var usageMarkup78 = `<Switch label="Wi-Fi" checked={ wifi } @change={ setWifi } />`;
+var codeHero78 = `<div class="divide-y divide-border">
   <div class="pb-3">
     <Switch label="Wi-Fi" checked={ wifi } @change={ setWifi } />
   </div>
@@ -62570,10 +66225,10 @@ var SwitchDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd77,
-      usageImport: usageImport77,
-      usageMarkup: usageMarkup77,
-      codeHero: codeHero77,
+      installCmd: installCmd78,
+      usageImport: usageImport78,
+      usageMarkup: usageMarkup78,
+      codeHero: codeHero78,
       codeHint: codeHint4,
       codeDisabled: codeDisabled11,
       toc: [
@@ -62821,10 +66476,10 @@ Table.prototype.render = function() {
 Table.__pzlModule = "app/components/ui/Table.pzl";
 
 // app/views/components/TableDoc.pzl
-var installCmd78 = "puzzle add piece table";
-var usageImport78 = `import Table from '@/components/ui/Table.pzl';`;
-var usageMarkup78 = `<Table columns={ columns } rows={ rows } caption="Invoices billed this quarter" />`;
-var codeHero78 = `const columns = [
+var installCmd79 = "puzzle add piece table";
+var usageImport79 = `import Table from '@/components/ui/Table.pzl';`;
+var usageMarkup79 = `<Table columns={ columns } rows={ rows } caption="Invoices billed this quarter" />`;
+var codeHero79 = `const columns = [
   { key: 'invoice', label: 'Invoice' },
   { key: 'client', label: 'Client' },
   { key: 'status', label: 'Status' },
@@ -62851,10 +66506,10 @@ var TableDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd78,
-      usageImport: usageImport78,
-      usageMarkup: usageMarkup78,
-      codeHero: codeHero78,
+      installCmd: installCmd79,
+      usageImport: usageImport79,
+      usageMarkup: usageMarkup79,
+      codeHero: codeHero79,
       codeAlignment: codeAlignment2,
       codeEmpty: codeEmpty2,
       invoiceColumns: [
@@ -62986,10 +66641,10 @@ TableDoc.prototype.render = function() {
 TableDoc.__pzlModule = "app/views/components/TableDoc.pzl";
 
 // app/views/components/TabsDoc.pzl
-var installCmd79 = "puzzle add piece tabs";
-var usageImport79 = `import Tabs from '@/components/ui/Tabs.pzl';`;
-var usageMarkup79 = `<Tabs id="acct" tabs={ tabs } value={ tab } @change={ setTab }/>`;
-var codeHero79 = `const tabs = [
+var installCmd80 = "puzzle add piece tabs";
+var usageImport80 = `import Tabs from '@/components/ui/Tabs.pzl';`;
+var usageMarkup80 = `<Tabs id="acct" tabs={ tabs } value={ tab } @change={ setTab }/>`;
+var codeHero80 = `const tabs = [
   { value: 'account', label: 'Account' },
   { value: 'password', label: 'Password' },
   { value: 'members', label: 'Members' },
@@ -63029,10 +66684,10 @@ var TabsDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd79,
-      usageImport: usageImport79,
-      usageMarkup: usageMarkup79,
-      codeHero: codeHero79,
+      installCmd: installCmd80,
+      usageImport: usageImport80,
+      usageMarkup: usageMarkup80,
+      codeHero: codeHero80,
       codePills,
       codeDisabled: codeDisabled12,
       acctTabs: [
@@ -63248,10 +66903,10 @@ TabsDoc.prototype.render = function() {
 TabsDoc.__pzlModule = "app/views/components/TabsDoc.pzl";
 
 // app/views/components/TagsInputDoc.pzl
-var installCmd80 = "puzzle add piece tags-input";
-var usageImport80 = `import TagsInput from '@/components/ui/TagsInput.pzl';`;
-var usageMarkup80 = `<TagsInput value={ tags } @change={ setTags } />`;
-var codeHero80 = `// value is a string ARRAY; @change fires with the NEXT array on add or remove.
+var installCmd81 = "puzzle add piece tags-input";
+var usageImport81 = `import TagsInput from '@/components/ui/TagsInput.pzl';`;
+var usageMarkup81 = `<TagsInput value={ tags } @change={ setTags } />`;
+var codeHero81 = `// value is a string ARRAY; @change fires with the NEXT array on add or remove.
 setTags(next) {
   this.setData('tags', next);
   this.refresh();
@@ -63296,10 +66951,10 @@ var TagsInputDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd80,
-      usageImport: usageImport80,
-      usageMarkup: usageMarkup80,
-      codeHero: codeHero80,
+      installCmd: installCmd81,
+      usageImport: usageImport81,
+      usageMarkup: usageMarkup81,
+      codeHero: codeHero81,
       codeBasic: codeBasic3,
       codeMax,
       codeDupes,
@@ -63563,10 +67218,10 @@ TagsInputDoc.prototype.render = function() {
 TagsInputDoc.__pzlModule = "app/views/components/TagsInputDoc.pzl";
 
 // app/views/components/TextareaDoc.pzl
-var installCmd81 = "puzzle add piece textarea";
-var usageImport81 = `import Textarea from '@/components/ui/Textarea.pzl';`;
-var usageMarkup81 = `<Textarea label="Bio" rows={ 4 } value={ bio } @change={ setBio } />`;
-var codeHero81 = `<Textarea label="Bio" rows={ 4 } value={ bio } @change={ setBio } />
+var installCmd82 = "puzzle add piece textarea";
+var usageImport82 = `import Textarea from '@/components/ui/Textarea.pzl';`;
+var usageMarkup82 = `<Textarea label="Bio" rows={ 4 } value={ bio } @change={ setBio } />`;
+var codeHero82 = `<Textarea label="Bio" rows={ 4 } value={ bio } @change={ setBio } />
 
 // parent
 events = {
@@ -63581,10 +67236,10 @@ var TextareaDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd81,
-      usageImport: usageImport81,
-      usageMarkup: usageMarkup81,
-      codeHero: codeHero81,
+      installCmd: installCmd82,
+      usageImport: usageImport82,
+      usageMarkup: usageMarkup82,
+      codeHero: codeHero82,
       codeHint: codeHint5,
       codeError: codeError12,
       toc: [
@@ -63699,7 +67354,7 @@ TextareaDoc.prototype.render = function() {
 TextareaDoc.__pzlModule = "app/views/components/TextareaDoc.pzl";
 
 // app/components/ui/TimePicker.pzl
-var uid35 = 0;
+var uid36 = 0;
 var PANEL_EST_HEIGHT5 = 280;
 var TRIGGER_BASE7 = "flex h-9 w-full items-center gap-2 rounded-lg border bg-surface px-3 text-sm text-ink select-none transition-colors cursor-pointer hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:pointer-events-none disabled:cursor-default";
 var TRIGGER_OK3 = "border-border outline-ring focus-visible:outline-ring";
@@ -63757,7 +67412,7 @@ function meridiemLabels(locale) {
 }
 var TimePicker = class extends PuzzleView {
   created() {
-    this._uid = ++uid35;
+    this._uid = ++uid36;
     this._wasOpen = false;
     this._pendingRestoreFocus = true;
     this.setData({ uncontrolledOpen: false, placement: "bottom", active: { h: 0, m: 0, s: 0 } });
@@ -64281,10 +67936,10 @@ TimePicker.prototype.render = function() {
 TimePicker.__pzlModule = "app/components/ui/TimePicker.pzl";
 
 // app/views/components/TimePickerDoc.pzl
-var installCmd82 = "puzzle add piece time-picker";
-var usageImport82 = `import TimePicker from '@/components/ui/TimePicker.pzl';`;
-var usageMarkup82 = `<TimePicker label="Meeting time" hint="24-hour clock." value={ meeting } @change={ setMeeting } />`;
-var codeHero82 = `<TimePicker
+var installCmd83 = "puzzle add piece time-picker";
+var usageImport83 = `import TimePicker from '@/components/ui/TimePicker.pzl';`;
+var usageMarkup83 = `<TimePicker label="Meeting time" hint="24-hour clock." value={ meeting } @change={ setMeeting } />`;
+var codeHero83 = `<TimePicker
   label="Meeting time"
   hint="24-hour clock."
   value={ meeting }
@@ -64338,10 +67993,10 @@ var TimePickerDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd82,
-      usageImport: usageImport82,
-      usageMarkup: usageMarkup82,
-      codeHero: codeHero82,
+      installCmd: installCmd83,
+      usageImport: usageImport83,
+      usageMarkup: usageMarkup83,
+      codeHero: codeHero83,
       codeTwelve,
       codeSeconds,
       codeStep,
@@ -64558,9 +68213,9 @@ TimePickerDoc.prototype.render = function() {
 TimePickerDoc.__pzlModule = "app/views/components/TimePickerDoc.pzl";
 
 // app/views/components/TimelineDoc.pzl
-var installCmd83 = "puzzle add piece timeline";
-var usageImport83 = `import Timeline from '@/components/ui/Timeline.pzl';`;
-var usageMarkup83 = `<Timeline items={ feed }/>`;
+var installCmd84 = "puzzle add piece timeline";
+var usageImport84 = `import Timeline from '@/components/ui/Timeline.pzl';`;
+var usageMarkup84 = `<Timeline items={ feed }/>`;
 var itemShape = "{ title, time?, description?, status?, icon?, number? }";
 var feed = [
   {
@@ -64664,7 +68319,7 @@ var compactFeed = [
   { title: "Tests passed", time: "12:04", status: "success" },
   { title: "Deployed", time: "12:05", status: "success" }
 ];
-var codeHero83 = `<Timeline items={ feed }/>
+var codeHero84 = `<Timeline items={ feed }/>
 
 // feed = [
 //   { title: 'Order placed', time: '9:41 AM',
@@ -64730,9 +68385,9 @@ var TimelineDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd83,
-      usageImport: usageImport83,
-      usageMarkup: usageMarkup83,
+      installCmd: installCmd84,
+      usageImport: usageImport84,
+      usageMarkup: usageMarkup84,
       itemShape,
       feed,
       statusFeed,
@@ -64740,7 +68395,7 @@ var TimelineDoc = class extends PuzzleView {
       stepFeed,
       mixedFeed,
       compactFeed,
-      codeHero: codeHero83,
+      codeHero: codeHero84,
       codeStatus,
       codeIcons,
       codeNumbered,
@@ -64884,10 +68539,10 @@ TimelineDoc.prototype.render = function() {
 TimelineDoc.__pzlModule = "app/views/components/TimelineDoc.pzl";
 
 // app/views/components/ToastDoc.pzl
-var installCmd84 = "puzzle add piece toast";
-var usageImport84 = `import { toast } from '@/components/ui/toast.js';`;
-var usageMarkup84 = `toast('Your draft was saved.');`;
-var codeHero84 = `import { toast } from '@/components/ui/toast.js';
+var installCmd85 = "puzzle add piece toast";
+var usageImport85 = `import { toast } from '@/components/ui/toast.js';`;
+var usageMarkup85 = `toast('Your draft was saved.');`;
+var codeHero85 = `import { toast } from '@/components/ui/toast.js';
 
 toast('Your draft was saved.');
 toast({ title: 'Published', message: 'The post is now live.', variant: 'success' });
@@ -64908,10 +68563,10 @@ toast('Saved!');`;
 var ToastDoc = class extends PuzzleView {
   data(params, props) {
     return {
-      installCmd: installCmd84,
-      usageImport: usageImport84,
-      usageMarkup: usageMarkup84,
-      codeHero: codeHero84,
+      installCmd: installCmd85,
+      usageImport: usageImport85,
+      usageMarkup: usageMarkup85,
+      codeHero: codeHero85,
       codeSticky,
       setupCode,
       toc: [
@@ -65109,10 +68764,10 @@ Toggle.prototype.render = function() {
 Toggle.__pzlModule = "app/components/ui/Toggle.pzl";
 
 // app/views/components/ToggleDoc.pzl
-var installCmd85 = "puzzle add piece toggle";
-var usageImport85 = `import Toggle from '@/components/ui/Toggle.pzl';`;
-var usageMarkup85 = `<Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>`;
-var codeHero85 = `<Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>
+var installCmd86 = "puzzle add piece toggle";
+var usageImport86 = `import Toggle from '@/components/ui/Toggle.pzl';`;
+var usageMarkup86 = `<Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>`;
+var codeHero86 = `<Toggle variant="outline" pressed={ bold } @change={ setBold }>B</Toggle>
 <Toggle variant="outline" pressed={ italic } @change={ setItalic }>I</Toggle>
 
 // parent \u2014 owns each pressed boolean, flips it from @change
@@ -65140,10 +68795,10 @@ var ToggleDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd85,
-      usageImport: usageImport85,
-      usageMarkup: usageMarkup85,
-      codeHero: codeHero85,
+      installCmd: installCmd86,
+      usageImport: usageImport86,
+      usageMarkup: usageMarkup86,
+      codeHero: codeHero86,
       codeVariants: codeVariants6,
       codeSizes: codeSizes12,
       toc: [
@@ -65376,10 +69031,10 @@ ToggleGroup.prototype.render = function() {
 ToggleGroup.__pzlModule = "app/components/ui/ToggleGroup.pzl";
 
 // app/views/components/ToggleGroupDoc.pzl
-var installCmd86 = "puzzle add piece toggle-group";
-var usageImport86 = `import ToggleGroup from '@/components/ui/ToggleGroup.pzl';`;
-var usageMarkup86 = `<ToggleGroup items={ aligns } value={ align } @change={ setAlign } label="Text alignment"/>`;
-var codeHero86 = `const aligns = [
+var installCmd87 = "puzzle add piece toggle-group";
+var usageImport87 = `import ToggleGroup from '@/components/ui/ToggleGroup.pzl';`;
+var usageMarkup87 = `<ToggleGroup items={ aligns } value={ align } @change={ setAlign } label="Text alignment"/>`;
+var codeHero87 = `const aligns = [
   { value: 'left', label: 'Left' },
   { value: 'center', label: 'Center' },
   { value: 'right', label: 'Right' },
@@ -65417,10 +69072,10 @@ var ToggleGroupDoc = class extends PuzzleView {
     const { marks } = this.getData();
     return {
       ...this.getData(),
-      installCmd: installCmd86,
-      usageImport: usageImport86,
-      usageMarkup: usageMarkup86,
-      codeHero: codeHero86,
+      installCmd: installCmd87,
+      usageImport: usageImport87,
+      usageMarkup: usageMarkup87,
+      codeHero: codeHero87,
       codeMultiple: codeMultiple3,
       codeIcon: codeIcon2,
       marksLabel: marks && marks.length ? marks.join(", ") : "none",
@@ -65555,9 +69210,9 @@ ToggleGroupDoc.prototype.render = function() {
 ToggleGroupDoc.__pzlModule = "app/views/components/ToggleGroupDoc.pzl";
 
 // app/views/components/ToolbarDoc.pzl
-var installCmd87 = "puzzle add piece toolbar";
-var usageImport87 = `import Toolbar from '@/components/ui/Toolbar.pzl';`;
-var usageMarkup87 = `<Toolbar label="Text formatting" @toggle={ setMark } @press={ act } items={[ { type: 'toggle', value: 'bold', label: 'Bold', icon: BOLD, iconOnly: true, pressed: marks.bold }, { type: 'toggle', value: 'italic', label: 'Italic', icon: ITALIC, iconOnly: true, pressed: marks.italic }, { type: 'toggle', value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true, pressed: marks.underline }, { type: 'separator' }, { type: 'button', value: 'left', label: 'Align left', icon: ALIGN_LEFT, iconOnly: true }, { type: 'button', value: 'center', label: 'Align center', icon: ALIGN_CENTER, iconOnly: true }, { type: 'button', value: 'right', label: 'Align right', icon: ALIGN_RIGHT, iconOnly: true }, ]}/>`;
+var installCmd88 = "puzzle add piece toolbar";
+var usageImport88 = `import Toolbar from '@/components/ui/Toolbar.pzl';`;
+var usageMarkup88 = `<Toolbar label="Text formatting" @toggle={ setMark } @press={ act } items={[ { type: 'toggle', value: 'bold', label: 'Bold', icon: BOLD, iconOnly: true, pressed: marks.bold }, { type: 'toggle', value: 'italic', label: 'Italic', icon: ITALIC, iconOnly: true, pressed: marks.italic }, { type: 'toggle', value: 'underline', label: 'Underline', icon: UNDERLINE, iconOnly: true, pressed: marks.underline }, { type: 'separator' }, { type: 'button', value: 'left', label: 'Align left', icon: ALIGN_LEFT, iconOnly: true }, { type: 'button', value: 'center', label: 'Align center', icon: ALIGN_CENTER, iconOnly: true }, { type: 'button', value: 'right', label: 'Align right', icon: ALIGN_RIGHT, iconOnly: true }, ]}/>`;
 var BOLD2 = "M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8";
 var ITALIC2 = "M19 4h-9 M14 20H5 M15 4 9 20";
 var UNDERLINE2 = "M6 4v6a6 6 0 0 0 12 0V4 M4 20h16";
@@ -65569,7 +69224,7 @@ var REDO = "M21 7v6h-6 M21 13a9 9 0 1 1-3-7.7L21 8";
 var ZOOM_IN = "M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16 M21 21l-4.35-4.35 M11 8v6 M8 11h6";
 var ZOOM_OUT = "M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16 M21 21l-4.35-4.35 M8 11h6";
 var GRID = "M3 3h7v7H3z M14 3h7v7h-7z M14 14h7v7h-7z M3 14h7v7H3z";
-var codeHero87 = `const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
+var codeHero88 = `const BOLD = 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8';
 // \u2026ITALIC, UNDERLINE, ALIGN_* path strings\u2026
 
 <Toolbar label="Text formatting" @toggle={ setMark } @press={ act } items={[
@@ -65612,10 +69267,10 @@ var ToolbarDoc = class extends PuzzleView {
     const { marks, wrap, grid } = this.getData();
     return {
       ...this.getData(),
-      installCmd: installCmd87,
-      usageImport: usageImport87,
-      usageMarkup: usageMarkup87,
-      codeHero: codeHero87,
+      installCmd: installCmd88,
+      usageImport: usageImport88,
+      usageMarkup: usageMarkup88,
+      codeHero: codeHero88,
       codeMixed: codeMixed2,
       codeVertical: codeVertical4,
       formatItems: [
@@ -65912,10 +69567,10 @@ ToolbarDoc.prototype.render = function() {
 ToolbarDoc.__pzlModule = "app/views/components/ToolbarDoc.pzl";
 
 // app/views/components/TooltipDoc.pzl
-var installCmd88 = "puzzle add piece tooltip";
-var usageImport88 = `import Tooltip from '@/components/ui/Tooltip.pzl';`;
-var usageMarkup88 = `<Tooltip text="Save your changes"><Button variant="outline">Save</Button></Tooltip>`;
-var codeHero88 = `<Tooltip text="Save your changes"><Button variant="outline">Save</Button></Tooltip>
+var installCmd89 = "puzzle add piece tooltip";
+var usageImport89 = `import Tooltip from '@/components/ui/Tooltip.pzl';`;
+var usageMarkup89 = `<Tooltip text="Save your changes"><Button variant="outline">Save</Button></Tooltip>`;
+var codeHero89 = `<Tooltip text="Save your changes"><Button variant="outline">Save</Button></Tooltip>
 <Tooltip text="Copy to clipboard"><Button variant="outline">Copy</Button></Tooltip>
 <Tooltip text="Delete permanently"><Button variant="destructive">Delete</Button></Tooltip>`;
 var codePlacement4 = `<Tooltip text="Appears above" side="top"><Button variant="outline">Top</Button></Tooltip>
@@ -65935,10 +69590,10 @@ var TooltipDoc = class extends PuzzleView {
   data(params, props) {
     return {
       ...this.getData(),
-      installCmd: installCmd88,
-      usageImport: usageImport88,
-      usageMarkup: usageMarkup88,
-      codeHero: codeHero88,
+      installCmd: installCmd89,
+      usageImport: usageImport89,
+      usageMarkup: usageMarkup89,
+      codeHero: codeHero89,
       codePlacement: codePlacement4,
       codeDelay,
       toc: [
@@ -66084,9 +69739,9 @@ TooltipDoc.prototype.render = function() {
 TooltipDoc.__pzlModule = "app/views/components/TooltipDoc.pzl";
 
 // app/views/components/TreeDoc.pzl
-var installCmd89 = "puzzle add piece tree";
-var usageImport89 = `import Tree from '@/components/ui/Tree.pzl';`;
-var usageMarkup89 = `<Tree nodes={ nodes } value={ selected } expanded={ expanded } label="Project files" @select={ onSelect } @toggle={ onToggle } />`;
+var installCmd90 = "puzzle add piece tree";
+var usageImport90 = `import Tree from '@/components/ui/Tree.pzl';`;
+var usageMarkup90 = `<Tree nodes={ nodes } value={ selected } expanded={ expanded } label="Project files" @select={ onSelect } @toggle={ onToggle } />`;
 var folder = "M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2z";
 var file = "M14 3v4a1 1 0 001 1h4M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z";
 var user = "M17 20v-2a4 4 0 00-4-4H7a4 4 0 00-4 4v2M10 10a3 3 0 100-6 3 3 0 000 6";
@@ -66134,7 +69789,7 @@ var disabledTree = [
   ] },
   { id: "sol", label: "Sol Byrne", icon: user }
 ];
-var codeHero89 = `const folder = 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2z';
+var codeHero90 = `const folder = 'M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2z';
 const file   = 'M14 3v4a1 1 0 001 1h4M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z';
 
 const nodes = [
@@ -66208,10 +69863,10 @@ var TreeDoc = class extends PuzzleView {
     const d = this.getData();
     return {
       ...d,
-      installCmd: installCmd89,
-      usageImport: usageImport89,
-      usageMarkup: usageMarkup89,
-      codeHero: codeHero89,
+      installCmd: installCmd90,
+      usageImport: usageImport90,
+      usageMarkup: usageMarkup90,
+      codeHero: codeHero90,
       codeControlled: codeControlled9,
       codeDisabled: codeDisabled13,
       fileTree,
@@ -66656,6 +70311,13 @@ var routes_default = [
     view: BarChartDoc,
     layout: DefaultLayout,
     meta: { title: "Bar Chart \u2014 Puzzle Pieces" }
+  },
+  {
+    path: "/components/bottom-sheet",
+    name: "bottom-sheet",
+    view: BottomSheetDoc,
+    layout: DefaultLayout,
+    meta: { title: "Bottom Sheet \u2014 Puzzle Pieces" }
   },
   {
     path: "/components/breadcrumb",

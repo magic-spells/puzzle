@@ -121,6 +121,20 @@
       "targetDir": "app/components/ui"
     },
     {
+      "name": "bottom-sheet",
+      "description": "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state",
+      "files": [
+        "BottomSheet.pzl"
+      ],
+      "registryDependencies": [
+        "lib/sheet-math.js"
+      ],
+      "dependencies": [
+        "@magic-spells/physics-engine"
+      ],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "breadcrumb",
       "description": "Config-first breadcrumb trail rendered from an items array, with a chevron separator and the final crumb as aria-current page text",
       "files": [
@@ -733,12 +747,19 @@
     },
     {
       "name": "sheet",
-      "description": "Bottom sheet with drag-to-dismiss physics; becomes a centered modal on wide viewports",
+      "description": "One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, entrance and exit effects, a dismiss policy, and parent-controlled open state",
       "files": [
         "Sheet.pzl"
       ],
-      "registryDependencies": [],
-      "dependencies": [],
+      "registryDependencies": [
+        "lib/sheet-engine.js",
+        "lib/sheet-policy.js",
+        "lib/sheet-drag.js"
+      ],
+      "dependencies": [
+        "@magic-spells/physics-engine",
+        "@magic-spells/frame-engine"
+      ],
       "targetDir": "app/components/ui"
     },
     {
