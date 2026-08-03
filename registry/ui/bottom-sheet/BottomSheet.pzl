@@ -63,6 +63,7 @@ import {
   SPRING_DEFAULTS,
   VelocityTracker,
   applyResistance,
+  dismissProgress,
   parseSnapPoints,
   resolveSnapTarget,
   seedVelocity,
@@ -89,6 +90,17 @@ import {
 // header must provide its own accessible heading and pass `labelledby`. The
 // footer wrapper disappears when empty. Default call-site content renders
 // through <Children/>.
+//
+// SCRIM. The backdrop tracks the DISMISSAL, never the drag. Rest is the SHORTEST
+// snap, not the one the gesture started at, so snap-to-snap travel and upward
+// rubber-band overscroll never touch it — a resize is not a dismissal. Only the
+// transform path below the shortest snap moves it, and a binary sheet's resting
+// height IS its shortest snap, so the same formula covers both with no branch.
+//
+// Opacity is written straight onto the backdrop element. The source component's
+// public --bs-backdrop-progress CSS token is deliberately dropped, the same way
+// Sheet.pzl drops --sheet-backdrop-progress: a piece has no stylesheet to read a
+// token from, and the element it would feed is the one being written anyway.
 //
 // TOUCH HANDOFF. Content claims a downward mouse/pen drag when scrollTop reaches
 // zero during the gesture. Touch scrolling cannot change pointer owner after the
@@ -178,6 +190,10 @@ export default class BottomSheet extends PuzzleView {
   #enter = null;
   #exit = null;
   #move = null;
+  #scrimReturn = null;
+  // Last opacity written to the backdrop, so a frame that computes the same
+  // number does not touch the DOM. null means no inline value is set.
+  #scrimOpacity = null;
   #snapAnimation = null;
   #settleTarget = null;
   #engine = null;
@@ -270,6 +286,10 @@ export default class BottomSheet extends PuzzleView {
       this.#move.cancel();
       this.#move = null;
     }
+    if (this.#scrimReturn) {
+      this.#scrimReturn.cancel();
+      this.#scrimReturn = null;
+    }
     if (this.#snapAnimation) {
       this.#snapAnimation.cancel();
       this.#snapAnimation = null;
@@ -278,9 +298,69 @@ export default class BottomSheet extends PuzzleView {
     this.#stopSpring();
   }
 
+  // ---- scrim ----------------------------------------------------------------
+
+  /**
+   * Publishes how much of the sheet is still on screen as the backdrop's
+   * opacity. Only a live drag calls this — a spring settle never needs to, since
+   * the engine only runs when there is HEIGHT left to travel and height travel
+   * only exists at or above the shortest snap, where progress is pinned at 1.
+   *
+   * Saturation CLEARS the inline value rather than writing '1'. The resting
+   * opacity already is 1, and an absent inline style is what lets the enter and
+   * exit animations own the property without fighting a stale write.
+   * @param {number|null} progress - 1 fully on screen, 0 gone; null to release
+   */
+  #syncScrim(progress) {
+    const backdrop = this.refs.backdrop;
+    if (!backdrop) return;
+
+    if (progress === null || !(progress < 1)) {
+      if (this.#scrimOpacity === null) return;
+      this.#scrimOpacity = null;
+      backdrop.style.opacity = '';
+      return;
+    }
+
+    const value = Math.max(0, progress).toFixed(3);
+    if (value === this.#scrimOpacity) return;
+    this.#scrimOpacity = value;
+    backdrop.style.opacity = value;
+  }
+
+  /**
+   * Rides the scrim back to full after a release that keeps the sheet. The
+   * source hands this to a re-armed CSS transition; there is no stylesheet here,
+   * so the return is its own animation on the settle's clock.
+   */
+  #returnScrim() {
+    const backdrop = this.refs.backdrop;
+    const from = this.#scrimOpacity;
+    if (!backdrop || from === null) return;
+
+    if (this.#reducedMotion()) {
+      this.#syncScrim(null);
+      return;
+    }
+
+    // Clear first: the animation interpolates from the value it was given, and
+    // leaving the inline style behind would pin the scrim once it finishes.
+    this.#syncScrim(null);
+    const anim = backdrop.animate([{ opacity: from }, { opacity: 1 }], {
+      duration: EXIT_DURATION,
+      easing: MOTION_EASING,
+    });
+    this.#scrimReturn = anim;
+    anim.onfinish = () => {
+      if (this.#scrimReturn !== anim) return;
+      this.#scrimReturn = null;
+    };
+  }
+
   #finishClose(dialog) {
     this.refs.panel.style.transform = '';
     this.refs.backdrop.style.opacity = '';
+    this.#scrimOpacity = null;
     dialog.close();
     this.#unlockBody();
     const { hidden } = this.props;
@@ -292,6 +372,10 @@ export default class BottomSheet extends PuzzleView {
     const backdrop = this.refs.backdrop;
     panel.style.transform = '';
     backdrop.style.opacity = '';
+    // A sheet reopened after a drag-dismiss fades in from nothing. Without this
+    // the memo still holds the dismissing drag's last value and the first frame
+    // of the next drag would compare against it and skip its own write.
+    this.#scrimOpacity = null;
 
     if (this.#reducedMotion()) {
       const { shown } = this.props;
@@ -330,6 +414,10 @@ export default class BottomSheet extends PuzzleView {
     const panel = this.refs.panel;
     const backdrop = this.refs.backdrop;
     const from = panel.style.transform || 'translate3d(0, 0, 0)';
+    // A drag-dismiss hands the scrim over mid-fade, so the exit starts from
+    // wherever the gesture left it rather than jumping back to full first.
+    const fromOpacity = this.#scrimOpacity ?? 1;
+    this.#scrimOpacity = null;
     const distance = this.#hiddenDistance();
     const panelAnim = panel.animate(
       [
@@ -339,7 +427,7 @@ export default class BottomSheet extends PuzzleView {
       { duration: EXIT_DURATION, easing: MOTION_EASING, fill: 'forwards' }
     );
     const backdropAnim = backdrop.animate(
-      [{ opacity: 1 }, { opacity: 0 }],
+      [{ opacity: fromOpacity }, { opacity: 0 }],
       { duration: EXIT_DURATION, easing: MOTION_EASING, fill: 'forwards' }
     );
     const exit = { panel: panelAnim, backdrop: backdropAnim };
@@ -378,9 +466,19 @@ export default class BottomSheet extends PuzzleView {
       return;
     }
 
+    // Escape reaches here with the finger still down: handleCancel asks the
+    // parent to close and the close comes back through this method while the
+    // gesture is live. Left active, its next move would write a transform over
+    // the exit and its release would ride the scrim back to full on a sheet that
+    // is already leaving. A close the gesture did not ask for abandons it.
+    this.#abandonDrag();
     if (this.#move) {
       this.#move.cancel();
       this.#move = null;
+    }
+    if (this.#scrimReturn) {
+      this.#scrimReturn.cancel();
+      this.#scrimReturn = null;
     }
     if (this.#snapAnimation) this.#haltSnapSettle(true);
     if (this.#springTarget !== null) this.#haltSpring(true);
@@ -390,6 +488,21 @@ export default class BottomSheet extends PuzzleView {
       this.#enter = null;
     }
     if (dialog.open && !this.#exit) this.#playExit(dialog);
+  }
+
+  /**
+   * Drops a live gesture in place without running any release rule.
+   *
+   * Deliberately NOT the same thing as a pointercancel: that one is a reported
+   * release and dragEnd is entitled to resolve it. This is for a close the user
+   * never asked the gesture for, where acting on a lift that never happened is
+   * the bug. The pointer's own pointerup then finds an inactive drag and returns.
+   */
+  #abandonDrag() {
+    const drag = this.#drag;
+    if (!drag.active) return;
+    this.#releasePointer(drag);
+    this.#drag = { active: false };
   }
 
   mounted() {
@@ -408,6 +521,7 @@ export default class BottomSheet extends PuzzleView {
   destroyed() {
     this.#cancelAnimations();
     this.#drag = { active: false };
+    this.#scrimOpacity = null;
     this.#engine?.removeAllListeners();
     this.#engine = null;
     if (this.element?.open) this.element.close();
@@ -452,8 +566,13 @@ export default class BottomSheet extends PuzzleView {
     const panel = this.refs.panel;
     if (travel < 0) {
       panel.style.transform = `translate3d(0, ${-applyResistance(-travel)}px, 0)`;
+      this.#syncScrim(1);
     } else {
       panel.style.transform = `translate3d(0, ${travel}px, 0)`;
+      // A binary sheet has no snaps, so its resting height IS the shortest one
+      // and the whole downward drag is the dismissal zone. Same formula as the
+      // snapping path below, no special case.
+      this.#syncScrim(dismissProgress(this.#drag.startHeight - travel, this.#drag.startHeight));
     }
   }
 
@@ -468,6 +587,7 @@ export default class BottomSheet extends PuzzleView {
       panel.style.height = `${maxPx + applyResistance(height - maxPx)}px`;
       panel.style.transform = '';
       this.#drag.belowLowest = 0;
+      this.#syncScrim(1);
       return;
     }
 
@@ -476,12 +596,17 @@ export default class BottomSheet extends PuzzleView {
       panel.style.height = `${minPx}px`;
       panel.style.transform = `translate3d(0, ${below}px, 0)`;
       this.#drag.belowLowest = below;
+      // The only branch that moves the scrim. Rest is the SHORTEST snap, not the
+      // one the drag started at, so travel between snaps above never reaches
+      // here and never touches the overlay.
+      this.#syncScrim(dismissProgress(minPx - below, minPx));
       return;
     }
 
     panel.style.height = `${height}px`;
     panel.style.transform = '';
     this.#drag.belowLowest = 0;
+    this.#syncScrim(1);
   }
 
   #settleTransform(fromTransform = null) {
@@ -507,6 +632,31 @@ export default class BottomSheet extends PuzzleView {
   #requestClose(reason) {
     const { close } = this.props;
     if (typeof close === 'function') close(reason);
+  }
+
+  /**
+   * Takes the panel and backdrop back from a still-running open.
+   *
+   * A live WAAPI animation OVERRIDES inline style, so until the 400ms enter
+   * finishes every transform and opacity the gesture writes is discarded and the
+   * sheet simply ignores the finger. Cancelling hands both properties back.
+   *
+   * Called on the CLAIM, not on pointerdown — same reason the source component
+   * adds its `dragging` class there: a stray press that never becomes a drag must
+   * not kill the open.
+   *
+   * `shown` is fired here because cancel() suppresses onfinish, and a parent
+   * waiting on that callback would otherwise wait forever. The sheet does step to
+   * the finger rather than easing across; taking over an in-flight open means the
+   * enter's remaining distance is given up, which is the point of the takeover.
+   */
+  #adoptFromEnter() {
+    if (!this.#enter) return;
+    this.#enter.panel.cancel();
+    this.#enter.backdrop.cancel();
+    this.#enter = null;
+    const { shown } = this.props;
+    if (typeof shown === 'function') shown();
   }
 
   // ---- snap points ----------------------------------------------------------
@@ -643,10 +793,14 @@ export default class BottomSheet extends PuzzleView {
     }
   }
 
+  /**
+   * @returns {boolean} true when the release asked the parent to close, which is
+   *   what tells dragEnd to hand the scrim to the exit rather than ride it home
+   */
   #releaseToSnap(drag, velocityY, cancelled) {
     if (cancelled) {
       this.#commitSnap(this.#currentSnap());
-      return;
+      return false;
     }
 
     if (drag.belowLowest > 0) {
@@ -654,9 +808,12 @@ export default class BottomSheet extends PuzzleView {
       const pastThreshold =
         drag.belowLowest > DRAG_THRESHOLD && velocityY > -0.05;
 
-      if (flick || pastThreshold) this.#requestClose('drag');
-      else this.#commitSnap(this.#snapPoints[0], velocityY);
-      return;
+      if (flick || pastThreshold) {
+        this.#requestClose('drag');
+        return true;
+      }
+      this.#commitSnap(this.#snapPoints[0], velocityY);
+      return false;
     }
 
     const snapsPx = this.#snapsPx();
@@ -669,10 +826,11 @@ export default class BottomSheet extends PuzzleView {
 
     if (targetPx === null) {
       this.#requestClose('drag');
-      return;
+      return true;
     }
 
     this.#commitSnap(this.#snapPoints[snapsPx.indexOf(targetPx)], velocityY);
+    return false;
   }
 
   #reconcileSnap() {
@@ -805,6 +963,14 @@ export default class BottomSheet extends PuzzleView {
         this.#move = null;
         this.refs.panel.style.transform = '';
       }
+      // A live WAAPI animation OVERRIDES inline style, so a scrim still riding
+      // home from the last release would swallow every write this gesture makes.
+      // Cancelling drops the backdrop to its resting opacity, which is exactly
+      // where an unmoved sheet's scrim belongs.
+      if (this.#scrimReturn) {
+        this.#scrimReturn.cancel();
+        this.#scrimReturn = null;
+      }
 
       const startHeight = this.refs.panel.getBoundingClientRect().height;
       if (this.#snapAnimation) this.#haltSnapSettle(true);
@@ -859,6 +1025,7 @@ export default class BottomSheet extends PuzzleView {
         if (!this.#shouldClaim(drag.surface, moveY)) return;
         drag.claimed = true;
         drag.claimOffset = deltaY;
+        this.#adoptFromEnter();
       }
 
       const travel = deltaY - drag.claimOffset;
@@ -889,8 +1056,11 @@ export default class BottomSheet extends PuzzleView {
 
       if (!drag.claimed) return;
 
+      // The two verdicts split the scrim. A sheet that stays rides back to full
+      // on the settle's clock; a dismissal deliberately LEAVES the painted value
+      // so #playExit can carry the fade the rest of the way down from it.
       if (this.#snapPoints.length) {
-        this.#releaseToSnap(drag, velocityY, cancelled);
+        if (!this.#releaseToSnap(drag, velocityY, cancelled)) this.#returnScrim();
         return;
       }
 
@@ -899,8 +1069,12 @@ export default class BottomSheet extends PuzzleView {
       const pastThreshold =
         !cancelled && travel > DRAG_THRESHOLD && velocityY > -0.05;
 
-      if (flick || pastThreshold) this.#requestClose('drag');
-      else this.#settleTransform();
+      if (flick || pastThreshold) {
+        this.#requestClose('drag');
+        return;
+      }
+      this.#settleTransform();
+      this.#returnScrim();
     },
     scrollVeto: (event) => {
       if (this.#drag.active && this.#drag.claimed && event.cancelable) {

@@ -78,6 +78,32 @@ export function resolveSnapTarget({ currentPx, velocityY, snapsPx, flickVelocity
 }
 
 /**
+ * Maps a visible extent onto dismissal progress, which is what the scrim tracks.
+ *
+ * One clamp covers every case. `restExtent` is the sheet's resting extent — the
+ * SHORTEST snap on a snapping sheet, the panel height on a binary one — so any
+ * position at or above rest saturates at exactly 1, and only travel below it
+ * maps [rest -> off screen] onto [1 -> 0]. That is what leaves snap-to-snap
+ * travel and upward rubber-band overscroll alone without a single branch: a
+ * resize is not a dismissal, and only the gesture past the shortest snap is.
+ *
+ * A degenerate rest extent returns 1, not 0. This DIVERGES from
+ * sheet-engine.js's dismissalZoneProgress on purpose, and the mismatch is not a
+ * bug to reconcile: the engine always holds a measured extent, while this can be
+ * asked mid-gesture on a dialog that has not laid out, and blanking the scrim
+ * over a plainly visible sheet is a far worse answer than leaving it alone.
+ * @param {number} visibleExtent - On-screen height along the dismiss axis, in pixels
+ * @param {number} restExtent - Resting height in pixels
+ * @returns {number} Progress in [0, 1]; 1 means fully on screen
+ */
+export function dismissProgress(visibleExtent, restExtent) {
+  if (!Number.isFinite(restExtent) || restExtent <= 0) return 1;
+  if (!Number.isFinite(visibleExtent)) return 1;
+
+  return Math.min(1, Math.max(0, visibleExtent / restExtent));
+}
+
+/**
  * Rolling release-velocity tracker. Velocity is px/ms, positive downward.
  *
  * REFRESH-RATE INDEPENDENT BY CONSTRUCTION, and it must stay that way. Δy and Δt

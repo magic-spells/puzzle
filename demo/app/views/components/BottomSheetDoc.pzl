@@ -5,8 +5,8 @@
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Bottom Sheet</h1>
         <p class="mt-2 text-body">
           Gesture-driven native-dialog bottom sheet with snap points, velocity-aware
-          spring settling, pinned header/footer slots, backdrop dragging, inset mode,
-          and controlled open state.
+          spring settling, a dismissal-tracking scrim, pinned header/footer slots,
+          backdrop dragging, inset mode, and controlled open state.
         </p>
       </header>
 
@@ -87,6 +87,12 @@
               snap is optional-controlled. Pass it with @snapChange to own the committed
               snap, or omit it and the sheet keeps the current snap locally. snapChange
               fires only when a release commits, never during pointer movement.
+            </p>
+            <p>
+              The scrim tracks the dismissal, not the drag. It holds full through
+              snap-to-snap travel and upward overscroll — a resize is not a dismissal —
+              and only fades once the sheet drops below the shortest snap. A sheet with
+              no snapPoints treats its whole downward drag as the dismissal.
             </p>
             <p class="text-muted">
               Mouse and pen can hand a content drag to the sheet when scrollTop reaches

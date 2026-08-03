@@ -122,7 +122,7 @@
     },
     {
       "name": "bottom-sheet",
-      "description": "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state",
+      "description": "Gesture-driven native-dialog bottom sheet with snap points, velocity-aware spring settling, a dismissal-tracking scrim, pinned header/footer slots, backdrop dragging, inset mode, and controlled open state",
       "files": [
         "BottomSheet.pzl"
       ],
