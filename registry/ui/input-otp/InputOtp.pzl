@@ -19,7 +19,7 @@
             @input={ onInput(item, event) }
             @keydown={ onKey(item, event) }
             @paste={ onPaste(item, event) }
-            @focus={ onFocus(event) } />
+            @focus={ onFocus(item, event) } />
         {:else}
           <span class="select-none text-lg text-muted" aria-hidden="true">-</span>
         {/if}
@@ -58,6 +58,13 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // previous cell; ArrowLeft/Right (and Home/End) move between cells; Delete
 // clears the current cell; pasting distributes left-to-right from the focused
 // cell and lands focus on the next empty cell. Invalid characters are rejected.
+//
+// Focus can never rest past the first open slot. `value` is a COMPACT prefix
+// string — cell N has no slot in it until N chars exist — so clicking, tabbing
+// or arrowing beyond the typed chars redirects to the first empty cell, and any
+// edit clamps to it (`_slot`). Without that, typing into a cell past the prefix
+// wrote the char at the end of the string (it appeared in a different cell) and
+// advanced focus from the clicked index, skipping cells.
 //
 // `groups={[3,3]}` renders aria-hidden separators between segments — the render
 // list `items` is a precomputed mix of `kind:'cell'` and `kind:'sep'` entries so
@@ -156,10 +163,24 @@ export default class InputOtp extends PuzzleView {
     const { length } = this.getData();
     if (i < 0 || i >= length) return;
     const el = this.element?.querySelector(`[data-otp-index="${i}"]`);
-    if (el) {
-      el.focus();
-      el.select?.();
-    }
+    if (!el) return;
+    // Focus we move ourselves is already aimed at the right cell, so flag it and
+    // let onFocus skip its redirect: el.focus() dispatches focus synchronously,
+    // and at that point the parent has not committed the new `value` back yet —
+    // getData() would still read the pre-edit value and bounce focus backwards.
+    this._selfFocus = true;
+    el.focus();
+    el.select?.();
+    this._selfFocus = false;
+  }
+
+  // The slot an interaction at cell `i` actually acts on. `value` is a compact
+  // prefix string, so cell N only exists in it once N chars are typed — clamping
+  // to `value.length` keeps the edit landing in the cell the user is looking at
+  // instead of silently appending at the end of the string.
+  _slot(i) {
+    const { value } = this.getData();
+    return Math.min(i, value.length);
   }
 
   // Emit the new full value and fire @complete once, the moment the value first
@@ -177,7 +198,7 @@ export default class InputOtp extends PuzzleView {
     onInput: (item, event) => {
       const { value, length, type, disabled } = this.getData();
       if (disabled) return;
-      const i = item.index;
+      const i = this._slot(item.index);
       const chars = sanitize(event.target.value, type);
       if (chars.length === 0) {
         // Rejected char (e.g. a letter in a numeric field): restore the cell.
@@ -200,7 +221,7 @@ export default class InputOtp extends PuzzleView {
     onKey: (item, event) => {
       const { value, length, disabled } = this.getData();
       if (disabled) return;
-      const i = item.index;
+      const i = this._slot(item.index);
       switch (event.key) {
         case 'Backspace':
           event.preventDefault();
@@ -223,7 +244,7 @@ export default class InputOtp extends PuzzleView {
           break;
         case 'ArrowRight':
           event.preventDefault();
-          this._focus(i + 1);
+          this._focus(this._slot(i + 1));
           break;
         case 'Home':
           event.preventDefault();
@@ -231,7 +252,7 @@ export default class InputOtp extends PuzzleView {
           break;
         case 'End':
           event.preventDefault();
-          this._focus(length - 1);
+          this._focus(this._slot(length - 1));
           break;
         default:
           break;
@@ -244,12 +265,21 @@ export default class InputOtp extends PuzzleView {
       event.preventDefault();
       const chars = sanitize(event.clipboardData?.getData('text') ?? '', type);
       if (!chars) return;
-      const next = (value.slice(0, item.index) + chars).slice(0, length);
+      const next = (value.slice(0, this._slot(item.index)) + chars).slice(0, length);
       this._emit(next, event);
       this._focus(Math.min(next.length, length - 1));
     },
 
-    onFocus: (event) => {
+    onFocus: (item, event) => {
+      // Clicking (or tabbing to) a cell past the filled prefix would put the
+      // caret somewhere the value can't reach — send focus to the first open
+      // slot instead. Cells inside the prefix, and every cell of a full code,
+      // keep the focus they were given.
+      const slot = this._slot(item.index);
+      if (!this._selfFocus && slot !== item.index) {
+        this._focus(slot);
+        return;
+      }
       // Select the char so typing into a filled cell replaces it.
       event.target.select?.();
     },

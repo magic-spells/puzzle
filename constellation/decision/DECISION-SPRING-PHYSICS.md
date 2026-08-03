@@ -6,6 +6,18 @@ connections:
   - DECISION-NATIVE-REBUILD
   - DECISION-COPY-IN-DISTRIBUTION
   - PLAN-PROJECT
+notes:
+  - kind: state
+    text: >-
+      The rebuilt `sheet` piece extends this boundary: `@magic-spells/frame-engine` joins
+      physics-engine as the registry's second engine npm dependency (both plain, DOM-free JS).
+      Sheet's motion core lives in registry/lib/sheet-engine.js — a verbatim port of the source web
+      component's spring-keyframe engine — plus sheet-policy.js and sheet-drag.js, all pinned by the
+      repo-root `npm test` suite (133 tests, including exact-number motion assertions and
+      registry↔demo parity coverage). Unlike
+      bottom-sheet's height-driven WAAPI/spring hybrid, sheet's engine drives full keyframe
+      choreography per profile/effect. bottom-sheet deliberately remains the lighter-weight piece;
+      sheet supersedes only the old drag-to-dismiss Sheet.pzl.
 ---
 
 # Spring physics is a registry dependency for snapping sheets

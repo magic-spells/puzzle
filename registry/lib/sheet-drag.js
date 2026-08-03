@@ -96,7 +96,8 @@ class DragGesture {
   /**
    * @param {HTMLElement} el - Pointer event surface.
    * @param {Object} [callbacks] - Gesture lifecycle callbacks.
-   * @param {Function} [callbacks.onStart] - Pointer start callback.
+   * @param {Function} [callbacks.onStart] - Pointer start callback. Returning
+   *   exactly `false` refuses the gesture: no capture, no further callbacks.
    * @param {Function} [callbacks.onMove] - Pointer move callback.
    * @param {Function} [callbacks.onEnd] - Pointer end/cancel callback.
    */
@@ -139,7 +140,17 @@ class DragGesture {
     // retargets pointerup to this element, so the browser composes the
     // click on it instead of the button the user pressed — which silently
     // breaks every interactive child of a drag surface.
-    _.#onStart?.({ event, x: event.clientX, y: event.clientY });
+    //
+    // A start callback may refuse the gesture by returning exactly `false`,
+    // and a refused gesture goes fully inert: it never tracks and never
+    // captures. The seam exists for surfaces that overlap — a pointerdown on
+    // a child surface bubbles to its ancestors' gestures too, and an ancestor
+    // that merely ignored the callbacks would still capture the pointer out
+    // from under the surface that owns it the moment movement passes slop.
+    if (_.#onStart?.({ event, x: event.clientX, y: event.clientY }) === false) {
+      _.#active = false;
+      _.#pointerId = null;
+    }
   }
 
   #handlePointerMove(event) {

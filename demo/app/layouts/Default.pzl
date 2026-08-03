@@ -66,7 +66,9 @@
   </div>
 
   <div class="flex w-full px-gutter">
-    <aside class="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 overflow-y-auto py-8 pr-4 lg:block">
+    <!-- -ml-3 cancels the px-3 the nav links carry for their active pill, so the
+         link text lines up with the header logo instead of the pill's edge. -->
+    <aside class="sticky top-14 -ml-3 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 overflow-y-auto py-8 pr-4 lg:block">
       <SideNav path={ path }/>
     </aside>
 

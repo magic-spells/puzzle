@@ -12,15 +12,24 @@
         <Button variant="outline" @press={ openHero }>Open sheet</Button>
         <Sheet
           open={ heroOpen }
-          title="Your cart"
-          snapPoints="85vh 55vh 25vh"
-          desktopPosition="right"
+          labelledby="sheet-hero-title"
+          position="center"
           @close={ closeHero }>
+          <div slot="header" class="pb-4">
+            <div class="relative flex h-8 items-center">
+              <h2 id="sheet-hero-title" class="pr-9 text-base font-semibold text-ink">Your cart</h2>
+              <button
+                type="button"
+                aria-label="Close"
+                class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                @click={ closeHero }>×</button>
+            </div>
+          </div>
           <div class="space-y-4 py-4 text-sm text-body">
-            <p>On a phone this is a bottom sheet with three snap points — drag the header and flick between them. On a wide window it is a right-side drawer.</p>
-            <p>Open it, then resize the window across 768px and watch it morph between the two profiles in place. It never closes, never re-opens — the panel animates from one resting geometry to the other while you watch.</p>
+            <p>A plain centered dialog — same position at every width, no snap points, no morph. This is the zero-drama baseline; the examples below add the responsive profiles.</p>
+            <p>The X in the corner is yours, not the piece's: filling the header slot replaces the stock header, so this one re-supplies the heading and adds a close button wired to the same @close handler.</p>
             {#for n in paragraphs}
-              <p key={ n }>Cart line { n } — filler content so the sheet scrolls. Scroll to the top before dragging down from the content surface.</p>
+              <p key={ n }>Cart line { n } — filler content so the sheet scrolls.</p>
             {/for}
           </div>
           <Button slot="footer" class="w-full" @press={ closeHero }>Checkout</Button>
@@ -44,11 +53,17 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-muted">
+          Saying nothing about position gets the responsive default: a snapping bottom
+          sheet on a phone, and past the breakpoint a centered dialog sized to its own
+          content. Pass desktopPosition="bottom" to keep it welded to the bottom edge on
+          desktop too.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="snaps" title="Controlled snaps" code={ codeSnaps }>
-          <div class="flex items-center gap-4">
+        <ExampleBox id="snaps" title="Controlled snaps — stock header" code={ codeSnaps }>
+          <div class="flex flex-col items-center gap-2">
             <Button variant="outline" @press={ openSnaps }>Open snapping sheet</Button>
             <span class="text-sm text-muted">snap index: { snapIndex }</span>
           </div>
@@ -60,50 +75,227 @@
             @snapChange={ setSnapIndex }
             @close={ closeSnaps }>
             <div class="space-y-3 py-4 text-sm text-body">
+              <p>This one deliberately keeps the zero-config chrome: pass title and the stock header renders a touch grabber above a centered heading, generates the heading id, and wires aria-labelledby for you. No slot, no close button, no ids to invent.</p>
               <p>A slow release settles on the nearest snap; a flick steps exactly one snap in its direction, measured from wherever the panel actually is.</p>
               <p>snap is optional-controlled: pass it with @snapChange to own the committed index, or omit it and the sheet tracks its snap locally. The counter next to the trigger reflects each commit.</p>
             </div>
           </Sheet>
         </ExampleBox>
 
-        <ExampleBox id="positions" title="Positions" code={ codePositions }>
-          <div class="flex flex-wrap items-center justify-center gap-3">
-            <Button variant="outline" @press={ openLeft }>Left drawer</Button>
-            <Button variant="outline" @press={ openRight }>Right drawer</Button>
-            <Button variant="outline" @press={ openCenter }>Centered dialog</Button>
+        <ExampleBox id="responsive" title="Different mobile and desktop positions" code={ codeResponsive }>
+          <div class="mx-auto flex w-full max-w-md flex-col gap-3">
+            <button
+              type="button"
+              class="flex w-full cursor-pointer items-center gap-4 rounded-xl border border-border bg-surface p-4 text-left transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2"
+              @click={ openMorphCenter }>
+              <span class="flex-1">
+                <span class="block text-[11px] font-medium uppercase tracking-wide text-muted">Mobile</span>
+                <span class="mt-0.5 block text-sm font-semibold text-ink">Bottom sheet</span>
+              </span>
+              <span class="text-lg leading-none text-faint" aria-hidden="true">→</span>
+              <span class="flex-1">
+                <span class="block text-[11px] font-medium uppercase tracking-wide text-muted">Desktop</span>
+                <span class="mt-0.5 block text-sm font-semibold text-ink">Centered dialog</span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              class="flex w-full cursor-pointer items-center gap-4 rounded-xl border border-border bg-surface p-4 text-left transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2"
+              @click={ openMorphDrawer }>
+              <span class="flex-1">
+                <span class="block text-[11px] font-medium uppercase tracking-wide text-muted">Mobile</span>
+                <span class="mt-0.5 block text-sm font-semibold text-ink">Bottom card</span>
+              </span>
+              <span class="text-lg leading-none text-faint" aria-hidden="true">→</span>
+              <span class="flex-1">
+                <span class="block text-[11px] font-medium uppercase tracking-wide text-muted">Desktop</span>
+                <span class="mt-0.5 block text-sm font-semibold text-ink">Left drawer</span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              class="flex w-full cursor-pointer items-center gap-4 rounded-xl border border-border bg-surface p-4 text-left transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2"
+              @click={ openMorphPop }>
+              <span class="flex-1">
+                <span class="block text-[11px] font-medium uppercase tracking-wide text-muted">Mobile</span>
+                <span class="mt-0.5 block text-sm font-semibold text-ink">Pop in, slide out</span>
+              </span>
+              <span class="text-lg leading-none text-faint" aria-hidden="true">→</span>
+              <span class="flex-1">
+                <span class="block text-[11px] font-medium uppercase tracking-wide text-muted">Desktop</span>
+                <span class="mt-0.5 block text-sm font-semibold text-ink">Slide in, fade out</span>
+              </span>
+            </button>
           </div>
-          <Sheet open={ leftOpen } title="Navigation" position="left" @close={ closeLeft }>
+
+          <Sheet
+            open={ morphCenterOpen }
+            labelledby="sheet-morph-center-title"
+            snapPoints="85vh 55vh 30vh"
+            desktopPosition="center"
+            @close={ closeMorphCenter }>
+            <div slot="header" class="pb-3">
+              <div class="relative flex h-8 items-center justify-center">
+                <h2 id="sheet-morph-center-title" class="px-9 text-center text-base font-semibold text-ink">Shipping address</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeMorphCenter }>×</button>
+              </div>
+            </div>
             <div class="space-y-3 py-4 text-sm text-body">
+              <p>Below 768px: a bottom sheet welded to the edge with three snap points, dragged and flicked with a thumb. At or above it: a centered dialog that hugs its own content height and is dismiss-only.</p>
+              <p>Snaps belong to bottom sheets only, so crossing the breakpoint does not merely reposition the panel — it changes what the gesture even means. Drag it to a mid snap, widen the window, and watch it morph into a centered box.</p>
+              <p>The mobile side is spelled out too: snapPoints and the default position="bottom" are the phone profile, desktopPosition="center" is the wide one.</p>
+            </div>
+          </Sheet>
+
+          <Sheet
+            open={ morphDrawerOpen }
+            labelledby="sheet-morph-drawer-title"
+            position="bottom"
+            mode="card"
+            desktopPosition="left"
+            desktopMode="edge"
+            @close={ closeMorphDrawer }>
+            <div slot="header" class="pb-3">
+              <div class="relative flex h-8 items-center justify-center">
+                <h2 id="sheet-morph-drawer-title" class="px-9 text-center text-base font-semibold text-ink">Browse</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeMorphDrawer }>×</button>
+              </div>
+            </div>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Below 768px: a floating bottom card, inset from all four edges with rounded corners, swiped down to dismiss. At or above it: a navigation drawer flush against the left edge, swiped left to dismiss.</p>
+              <p>Both halves are declared — position and mode name the phone profile, desktopPosition and desktopMode name the desktop one. The axis the swipe travels on changes with the position, so the same gesture code answers a different question on each side of the breakpoint.</p>
+            </div>
+          </Sheet>
+
+          <Sheet
+            open={ morphPopOpen }
+            labelledby="sheet-morph-pop-title"
+            desktopPosition="bottom"
+            effect="pop"
+            desktopEffect="slide"
+            desktopExitEffect="fade-scale"
+            desktopMode="card"
+            @close={ closeMorphPop }>
+            <div slot="header" class="pb-3">
+              <div class="relative flex h-8 items-center justify-center">
+                <h2 id="sheet-morph-pop-title" class="px-9 text-center text-base font-semibold text-ink">Order placed</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeMorphPop }>×</button>
+              </div>
+            </div>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>Below 768px: a bottom sheet flush to the edge that pops in with a small visible bounce, and slides back down the way it came. At or above it: a floating bottom card that slides in and then fades and shrinks away instead of travelling back across a screen it only partly covers.</p>
+              <p>Position stays bottom on both sides — only the mode and the motion change. Four separate questions, four separate props: effect, desktopEffect, exitEffect, desktopExitEffect.</p>
+            </div>
+          </Sheet>
+        </ExampleBox>
+
+        <ExampleBox id="positions" title="Positions — same at every width" code={ codePositions }>
+          <div class="flex items-center justify-center gap-3">
+            <Button variant="outline" @press={ openLeft }>Left</Button>
+            <Button variant="outline" @press={ openCenter }>Center</Button>
+            <Button variant="outline" @press={ openRight }>Right</Button>
+          </div>
+          <Sheet open={ leftOpen } labelledby="sheet-left-title" position="left" @close={ closeLeft }>
+            <div slot="header" class="pb-4">
+              <div class="relative flex h-8 items-center">
+                <h2 id="sheet-left-title" class="pr-9 text-base font-semibold text-ink">Navigation</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeLeft }>×</button>
+              </div>
+            </div>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>position sets the mobile profile and desktopPosition falls back to it, so a lone position="left" is a left drawer at every width — phone and desktop alike. Nothing here morphs; that is the point of this example.</p>
               <p>A left drawer slides in from its edge and is fixed width — snap points do not apply to the sides.</p>
-              <p>Swipe it back toward its edge, tap the backdrop, or press Escape to dismiss.</p>
+              <p>Swipe it back toward its edge, tap the backdrop, press Escape, or use the X.</p>
             </div>
           </Sheet>
-          <Sheet open={ rightOpen } title="Cart" position="right" @close={ closeRight }>
+          <Sheet open={ rightOpen } labelledby="sheet-right-title" position="right" @close={ closeRight }>
+            <div slot="header" class="pb-4">
+              <div class="relative flex h-8 items-center">
+                <h2 id="sheet-right-title" class="pr-9 text-base font-semibold text-ink">Cart</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeRight }>×</button>
+              </div>
+            </div>
             <div class="space-y-3 py-4 text-sm text-body">
-              <p>Same drawer, opposite edge. position sets the mobile profile and desktopPosition falls back to it, so this is a right drawer at every width.</p>
+              <p>Same drawer, opposite edge, and again the same on a phone as on a desktop. A right drawer on a narrow screen is a real choice — it is what you want for a cart that slides over the page rather than up from the floor.</p>
+              <p>Want the phone to differ? Give it its own position and let desktopPosition take the wide profile — see the morphing examples above.</p>
             </div>
           </Sheet>
-          <Sheet open={ centerOpen } title="Heads up" position="center" @close={ closeCenter }>
+          <Sheet open={ centerOpen } labelledby="sheet-center-title" position="center" @close={ closeCenter }>
+            <div slot="header" class="pb-2">
+              <div class="relative flex h-8 items-center justify-center">
+                <h2 id="sheet-center-title" class="px-9 text-center text-base font-semibold text-ink">Heads up</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeCenter }>×</button>
+              </div>
+            </div>
             <div class="space-y-2 py-2 text-sm text-body">
-              <p>A centered dialog hugs its content height.</p>
-              <p>Two short lines stay two short lines.</p>
+              <p>A centered dialog hugs its content height, on a phone and on a desktop.</p>
+              <p>Two short lines stay two short lines. No grabber here — a centered dialog has no edge to drag toward, so the stock header omits it too.</p>
             </div>
           </Sheet>
         </ExampleBox>
 
         <ExampleBox id="modes" title="Card mode vs edge" code={ codeModes }>
           <div class="flex flex-wrap items-center justify-center gap-3">
-            <Button variant="outline" @press={ openCard }>Card mode</Button>
-            <Button variant="outline" @press={ openEdge }>Edge mode</Button>
+            <Button variant="outline" @press={ openCard }>Card on mobile, card on desktop</Button>
+            <Button variant="outline" @press={ openEdge }>Edge on mobile, edge on desktop</Button>
           </div>
-          <Sheet open={ cardOpen } title="Card mode" mode="card" @close={ closeCard }>
+          <Sheet open={ cardOpen } labelledby="sheet-card-title" mode="card" desktopPosition="bottom" @close={ closeCard }>
+            <div slot="header" class="pb-3">
+              <div class="relative flex h-8 items-center justify-center">
+                <h2 id="sheet-card-title" class="px-9 text-center text-base font-semibold text-ink">Card mode</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeCard }>×</button>
+              </div>
+            </div>
             <div class="space-y-3 py-4 text-sm text-body">
               <p>Card mode floats the panel inside a small margin with rounded corners on every side — it reads as a floating surface rather than a slab welded to the edge.</p>
+              <p>mode="card" is the mobile profile and desktopMode already defaults to card, so this one is a floating card at every width. Both sheets here also pin desktopPosition="bottom": mode describes a panel with an edge to hug, and a bottom sheet otherwise centers on desktop where there is no edge to hug.</p>
             </div>
           </Sheet>
-          <Sheet open={ edgeOpen } title="Edge mode" desktopMode="edge" @close={ closeEdge }>
+          <Sheet open={ edgeOpen } labelledby="sheet-edge-title" desktopMode="edge" desktopPosition="bottom" @close={ closeEdge }>
+            <div slot="header" class="pb-3">
+              <div class="relative flex h-8 items-center justify-center">
+                <h2 id="sheet-edge-title" class="px-9 text-center text-base font-semibold text-ink">Edge mode</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeEdge }>×</button>
+              </div>
+            </div>
             <div class="space-y-3 py-4 text-sm text-body">
-              <p>Edge mode sits flush against the screen edge. It is the mobile default; desktopMode defaults to card, so this sheet forces desktopMode="edge" to stay flush at every width.</p>
+              <p>Edge mode sits flush against the screen edge. It is the mobile default, so saying nothing gets it on a phone; desktopMode defaults to card, so this sheet forces desktopMode="edge" to stay flush past the breakpoint too.</p>
+              <p>Leave desktopMode off and you get the third pairing for free: flush on mobile, floating card on desktop.</p>
+              <p>Both of these are also the place to see a desktop BOTTOM panel, since they pin desktopPosition="bottom". Past the breakpoint it sizes to its content rather than to a snap point — snapPoints never crosses the breakpoint — so it sits at the bottom edge only as tall as it needs to be, up to the viewport.</p>
             </div>
           </Sheet>
         </ExampleBox>
@@ -111,9 +303,19 @@
         <ExampleBox id="effects" title="Entrance and exit effects" code={ codeEffects }>
           <div class="flex flex-wrap items-center justify-center gap-3">
             <Button variant="outline" @press={ openPop }>Pop dialog</Button>
-            <Button variant="outline" @press={ openAsym }>Slide in, fade out</Button>
+            <Button variant="outline" @press={ openAsym }>Bottom slide in, desktop fade out</Button>
           </div>
-          <Sheet open={ popOpen } title="Saved" position="center" effect="pop" @close={ closePop }>
+          <Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="pop" @close={ closePop }>
+            <div slot="header" class="pb-2">
+              <div class="relative flex h-8 items-center justify-center">
+                <h2 id="sheet-pop-title" class="px-9 text-center text-base font-semibold text-ink">Saved</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closePop }>×</button>
+              </div>
+            </div>
             <div class="space-y-2 py-2 text-sm text-body">
               <p>pop arrives with a small visible bounce.</p>
               <p>The bounce lives in the keyframes, not the spring.</p>
@@ -121,12 +323,23 @@
           </Sheet>
           <Sheet
             open={ asymOpen }
-            title="Details"
+            labelledby="sheet-asym-title"
+            position="bottom"
             desktopPosition="right"
             desktopExitEffect="fade-scale"
             @close={ closeAsym }>
+            <div slot="header" class="pb-3">
+              <div class="relative flex h-8 items-center justify-center">
+                <h2 id="sheet-asym-title" class="px-9 text-center text-base font-semibold text-ink">Details</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeAsym }>×</button>
+              </div>
+            </div>
             <div class="space-y-3 py-4 text-sm text-body">
-              <p>Arriving and leaving are separate questions. On desktop this card slides in from the right, but closing it fades and shrinks it away instead of sliding it back across the screen.</p>
+              <p>Arriving and leaving are separate questions. On a phone this is a bottom sheet that slides up and slides back down. On a desktop it is a right-side card that slides in — but closing it fades and shrinks it away instead of sliding it back across the screen.</p>
               <p>Say nothing and leaving mirrors arriving — the exit props only exist for when the mirror reads wrong.</p>
             </div>
           </Sheet>
@@ -142,9 +355,12 @@
             @close={ closeConfirm }>
             <div class="space-y-2 py-2 text-sm text-body">
               <p>This cannot be undone.</p>
-              <p>Swipe, backdrop tap, and Escape are all refused — a refused swipe settles back and reports prevented: true on @snapRelease. The button below is the only way out.</p>
+              <p>Swipe, backdrop tap, and Escape are all refused — a refused swipe settles back and reports prevented: true on @snapRelease. The two buttons below are the only way out, which is why this one also keeps the stock header and offers no X in the corner: every exit is an explicit, labelled choice.</p>
             </div>
-            <Button slot="footer" variant="secondary" class="w-full" @press={ closeConfirm }>Delete project</Button>
+            <div slot="footer" class="flex gap-3">
+              <Button variant="outline" class="flex-1" @press={ closeConfirm }>Cancel</Button>
+              <Button variant="destructive" class="flex-1" @press={ closeConfirm }>Delete project</Button>
+            </div>
           </Sheet>
         </ExampleBox>
 
@@ -152,9 +368,19 @@
           <Button variant="outline" @press={ openSpring }>Open floaty sheet</Button>
           <Sheet
             open={ springOpen }
-            title="Floaty"
+            labelledby="sheet-spring-title"
             spring="0.08 0.4"
             @close={ closeSpring }>
+            <div slot="header" class="pb-3">
+              <div class="relative flex h-8 items-center justify-center">
+                <h2 id="sheet-spring-title" class="px-9 text-center text-base font-semibold text-ink">Floaty</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeSpring }>×</button>
+              </div>
+            </div>
             <div class="space-y-3 py-4 text-sm text-body">
               <p>spring="attraction friction" retunes how the sheet arrives — both dials exclusive of 0 and 1. This one is looser and floatier than the default entrance.</p>
               <p>The override governs the entrance only; exits and snap settles keep their tuned presets.</p>
@@ -162,20 +388,28 @@
           </Sheet>
         </ExampleBox>
 
-        <ExampleBox id="header-slot" title="Custom header" code={ codeHeader }>
+        <ExampleBox id="header-slot" title="Custom header and a close button" code={ codeHeader }>
           <Button variant="outline" @press={ openHeader }>Open with custom header</Button>
           <Sheet
             open={ headerOpen }
-            labelledby="promo-sheet-title"
+            labelledby="sheet-promo-title"
             desktopPosition="right"
             @close={ closeHeader }>
-            <div slot="header" class="flex items-center justify-between border-b border-border px-5 py-4">
-              <h2 id="promo-sheet-title" class="text-base font-semibold text-ink">Summer promo</h2>
-              <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-surface">New</span>
+            <div slot="header" class="pb-3">
+              <div class="relative flex h-8 items-center gap-2 pr-9">
+                <h2 id="sheet-promo-title" class="text-base font-semibold text-ink">Summer promo</h2>
+                <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink">New</span>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeHeader }>×</button>
+              </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
-              <p>Filling the header slot replaces the stock grabber and title entirely, so a custom header brings its own heading and points labelledby at it.</p>
-              <p>The header is still an unconditional drag surface.</p>
+              <p>Filling the header slot replaces the stock title entirely, so a custom header brings its own heading and points labelledby at it. There is no is-slot-filled probe — the piece cannot render the fallback alongside your markup.</p>
+              <p>The grabber is not part of that trade. Every pill is hosted on the panel and absolutely positioned, so it floats inside the header's padding rather than sitting in the flow: it survives any header content, and hiding it on a fine pointer or on desktop moves nothing. This header is just a heading, a badge, and a close button positioned against a relative row.</p>
+              <p>The header is still an unconditional drag surface. A tap on the X never becomes a drag: pointer capture is deferred until the finger has moved 5px.</p>
             </div>
           </Sheet>
         </ExampleBox>
@@ -235,19 +469,34 @@ const usageMarkup = `<Sheet open={ sheetOpen } title="Your cart" @close={ () => 
   <Button slot="footer" @press={ checkout }>Checkout</Button>
 </Sheet>`;
 
+// The close-button class string is spelled out in codeHero and codeHeader and
+// elided as class="…" in the rest, following the docs convention for long
+// utility strings. Every sample's MARKUP matches its live example exactly.
 const codeHero = `<Button variant="outline" @press={ openSheet }>Open sheet</Button>
 <Sheet
   open={ sheetOpen }
-  title="Your cart"
-  snapPoints="85vh 55vh 25vh"
-  desktopPosition="right"
+  labelledby="sheet-hero-title"
+  position="center"
   @close={ () => this.setData('sheetOpen', false) }>
+
+  <div slot="header" class="pb-4">
+    <div class="relative flex h-8 items-center">
+      <h2 id="sheet-hero-title" class="pr-9 text-base font-semibold text-ink">Your cart</h2>
+      <button
+        type="button"
+        aria-label="Close"
+        class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+        @click={ closeSheet }>×</button>
+    </div>
+  </div>
+
   <CartLines/>
   <Button slot="footer" class="w-full" @press={ checkout }>Checkout</Button>
 </Sheet>
 
-// Bottom sheet with three snaps below 768px; right drawer above it.
-// Resize across the breakpoint while it is open and it morphs in place.`;
+// A plain centered dialog at every width — no snap points, no morph.
+// The header slot replaces the stock header, so this one re-supplies the
+// heading and adds the X. labelledby points at its heading id.`;
 
 const codeSnaps = `<Button variant="outline" @press={ openSheet }>Open snapping sheet</Button>
 <span class="text-sm text-muted">snap index: { snapIndex }</span>
@@ -262,46 +511,124 @@ const codeSnaps = `<Button variant="outline" @press={ openSheet }>Open snapping 
   <FilterList/>
 </Sheet>
 
+// No header slot: title alone gets the centered heading,
+// the generated heading id, and aria-labelledby wired for you.
 // snap is optional-controlled: omit it and the sheet tracks its own snap.
-// snapChange fires only when a release commits a snap, never mid-drag.`;
+// snapChange fires only when a release commits a snap, never mid-drag.
+// snapPoints is mobile-only — past the breakpoint this sheet is a centered
+// dialog sized to its content and none of these lengths apply.`;
 
-const codePositions = `<Sheet open={ leftOpen } title="Navigation" position="left" @close={ closeLeft }>
+const codeResponsive = `// 1 — bottom sheet with snaps on mobile, centered dialog on desktop
+<Sheet
+  open={ addressOpen }
+  labelledby="sheet-address-title"
+  snapPoints="85vh 55vh 30vh"
+  desktopPosition="center"
+  @close={ closeAddress }>
+  <div slot="header" class="pb-3">
+    <div class="relative flex h-8 items-center justify-center">
+      <h2 id="sheet-address-title" class="px-9 text-center text-base font-semibold text-ink">Shipping address</h2>
+      <button type="button" aria-label="Close" class="…" @click={ closeAddress }>×</button>
+    </div>
+  </div>
+  <AddressForm/>
+</Sheet>
+
+// 2 — floating bottom card on mobile, flush left drawer on desktop
+<Sheet
+  open={ browseOpen }
+  labelledby="sheet-browse-title"
+  position="bottom"
+  mode="card"
+  desktopPosition="left"
+  desktopMode="edge"
+  @close={ closeBrowse }>
+  <div slot="header" class="pb-3">…heading + X…</div>
   <NavLinks/>
 </Sheet>
 
-<Sheet open={ rightOpen } title="Cart" position="right" @close={ closeRight }>
+// 3 — pops in and slides out on mobile; slides in and fades away on desktop
+<Sheet
+  open={ orderOpen }
+  labelledby="sheet-order-title"
+  effect="pop"
+  desktopEffect="slide"
+  desktopExitEffect="fade-scale"
+  desktopMode="card"
+  @close={ closeOrder }>
+  <div slot="header" class="pb-3">…heading + X…</div>
+  <OrderSummary/>
+</Sheet>
+
+// position / mode / effect / exitEffect describe the MOBILE profile.
+// desktopPosition / desktopMode / desktopEffect / desktopExitEffect take over
+// at breakpoint (default 768). desktopPosition falls back to position — EXCEPT
+// a bottom sheet, which fans out to center by default so it sizes to its
+// content instead of standing 85vh tall on a wide screen;
+// desktopMode defaults to card, and a centered desktopEffect defaults to
+// fade-scale. Only name the halves that actually differ.
+// Crossing the breakpoint while open morphs the panel in place: the dialog
+// never closes, no @close fires, and the box animates from one resting
+// geometry to the other.`;
+
+const codePositions = `<Sheet open={ leftOpen } labelledby="sheet-left-title" position="left" @close={ closeLeft }>
+  <div slot="header" class="pb-4">
+    <div class="relative flex h-8 items-center">
+      <h2 id="sheet-left-title" class="pr-9 text-base font-semibold text-ink">Navigation</h2>
+      <button type="button" aria-label="Close" class="…" @click={ closeLeft }>×</button>
+    </div>
+  </div>
+  <NavLinks/>
+</Sheet>
+
+<Sheet open={ centerOpen } labelledby="sheet-center-title" position="center" @close={ closeCenter }>
+  <div slot="header" class="pb-2">…heading + X…</div>
+  <p>A centered dialog hugs its content height.</p>
+</Sheet>
+
+<Sheet open={ rightOpen } labelledby="sheet-right-title" position="right" @close={ closeRight }>
+  <div slot="header" class="pb-4">…heading + X…</div>
   <CartLines/>
 </Sheet>
 
-<Sheet open={ centerOpen } title="Heads up" position="center" @close={ closeCenter }>
-  <p>A centered dialog hugs its content height.</p>
-  <p>Two short lines stay two short lines.</p>
-</Sheet>
-
+// A non-bottom desktopPosition falls back to position, so each of these is the
+// SAME profile on a phone and on a desktop — no morph. Only bottom fans out to
+// center by default. Set desktopPosition when you want the two to differ.
 // Sides take a single fixed width; center takes its intrinsic height.
-// All three ignore snapPoints — snaps belong to bottom sheets only.`;
+// All three ignore snapPoints — snaps belong to bottom sheets only.
+// A side sheet keeps its edge pill on touch and a centered dialog has none;
+// either way the pill floats on the panel, so these headers are just a
+// heading and a close button.`;
 
-const codeModes = `<Sheet open={ cardOpen } title="Card mode" mode="card" @close={ closeCard }>
+const codeModes = `<Sheet open={ cardOpen } labelledby="sheet-card-title" mode="card" desktopPosition="bottom" @close={ closeCard }>
+  <div slot="header" class="pb-3">…heading + X…</div>
   <p>Floats inside a margin with rounded corners on every side.</p>
 </Sheet>
 
-<Sheet open={ edgeOpen } title="Edge mode" desktopMode="edge" @close={ closeEdge }>
+<Sheet open={ edgeOpen } labelledby="sheet-edge-title" desktopMode="edge" desktopPosition="bottom" @close={ closeEdge }>
+  <div slot="header" class="pb-3">…heading + X…</div>
   <p>Flush against the screen edge at every width.</p>
 </Sheet>
 
-// mode is the mobile profile (default "edge"); desktopMode defaults to "card".`;
+// mode is the mobile profile (default "edge"); desktopMode defaults to "card".
+// Both of these pin desktopPosition="bottom": mode only means something to a
+// bottom or side panel, and a bottom sheet otherwise centers on desktop, where
+// there is no edge to be flush against.`;
 
-const codeEffects = `<Sheet open={ popOpen } title="Saved" position="center" effect="pop" @close={ closePop }>
+const codeEffects = `<Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="pop" @close={ closePop }>
+  <div slot="header" class="pb-2">…heading + X…</div>
   <p>pop arrives with a small visible bounce.</p>
 </Sheet>
 
 <Sheet
   open={ detailsOpen }
-  title="Details"
+  labelledby="sheet-details-title"
+  position="bottom"
   desktopPosition="right"
   desktopExitEffect="fade-scale"
   @close={ closeDetails }>
-  <p>Slides in from the right, fades and shrinks away on close.</p>
+  <div slot="header" class="pb-3">…heading + X…</div>
+  <p>Bottom sheet on mobile; a right card on desktop that fades away.</p>
 </Sheet>
 
 // Effects: slide | fade-scale | slide-fade | pop.
@@ -315,37 +642,60 @@ const codeDismiss = `<Sheet
   dismiss="none"
   @close={ closeConfirm }>
   <p>This cannot be undone.</p>
-  <Button slot="footer" class="w-full" @press={ confirmDelete }>Delete project</Button>
+
+  <div slot="footer" class="flex gap-3">
+    <Button variant="outline" class="flex-1" @press={ closeConfirm }>Cancel</Button>
+    <Button variant="destructive" class="flex-1" @press={ confirmDelete }>Delete project</Button>
+  </div>
 </Sheet>
 
 // dismiss is a token list: "swipe backdrop escape" (default all) or "none".
 // A refused swipe settles back to its snap and @snapRelease reports
-// prevented: true, so you can shake the panel or flag the field.`;
+// prevented: true, so you can shake the panel or flag the field.
+// The two footer buttons are the only exits, so this one keeps the stock
+// header and adds no X — every way out is explicit and labelled.
+// The footer slot takes a single direct child, so two buttons share a
+// wrapper div that carries slot="footer".`;
 
-const codeSpring = `<Sheet open={ sheetOpen } title="Floaty" spring="0.08 0.4" @close={ close }>
+const codeSpring = `<Sheet open={ sheetOpen } labelledby="sheet-spring-title" spring="0.08 0.4" @close={ close }>
+  <div slot="header" class="pb-3">…heading + X…</div>
   <p>Looser attraction, lighter friction — a floatier arrival.</p>
 </Sheet>
 
 // spring="attraction friction", both dials exclusive of 0 and 1.
 // Overrides the entrance only; exits and snaps keep their presets.`;
 
-const codeHeader = `<Sheet open={ sheetOpen } labelledby="promo-sheet-title" desktopPosition="right" @close={ close }>
-  <div slot="header" class="flex items-center justify-between border-b border-border px-5 py-4">
-    <h2 id="promo-sheet-title" class="text-base font-semibold text-ink">Summer promo</h2>
-    <span class="rounded-full bg-brand px-2 py-0.5 text-xs text-surface">New</span>
+const codeHeader = `<Sheet open={ sheetOpen } labelledby="sheet-promo-title" desktopPosition="right" @close={ close }>
+  <div slot="header" class="pb-3">
+    <div class="relative flex h-8 items-center gap-2 pr-9">
+      <h2 id="sheet-promo-title" class="text-base font-semibold text-ink">Summer promo</h2>
+      <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink">New</span>
+      <button
+        type="button"
+        aria-label="Close"
+        class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+        @click={ close }>×</button>
+    </div>
   </div>
   <PromoDetails/>
 </Sheet>
 
-// A filled header slot replaces the grabber + title entirely, so it must
-// bring its own heading and point labelledby at that heading's id.
-// slot="header" must sit on a direct child of the Sheet tag.`;
+// A filled header slot replaces the stock title, so it must bring its own
+// heading and point labelledby at that heading's id. The grabber is hosted
+// on the panel and floats, so it survives any header content.
+// slot="header" must sit on a direct child of the Sheet tag.
+// The close button is absolute inside a relative row, so it pins to the
+// top-right corner without joining the flex flow. It calls the same close
+// handler as @close — the sheet never closes itself.`;
 
 export default class SheetDoc extends PuzzleView {
   created() {
     this.setData({
       heroOpen: false,
       snapsOpen: false,
+      morphCenterOpen: false,
+      morphDrawerOpen: false,
+      morphPopOpen: false,
       leftOpen: false,
       rightOpen: false,
       centerOpen: false,
@@ -368,6 +718,7 @@ export default class SheetDoc extends PuzzleView {
       usageMarkup,
       codeHero,
       codeSnaps,
+      codeResponsive,
       codePositions,
       codeModes,
       codeEffects,
@@ -377,45 +728,47 @@ export default class SheetDoc extends PuzzleView {
       paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
       propRows: [
         { name: 'open', desc: 'Required, controlled. The parent owns it; flip it in @close.' },
-        { name: 'title', desc: 'Heading text rendered by the default header.' },
+        { name: 'title', desc: 'Heading text rendered by the default header. Ignored once the header slot is filled.' },
         { name: 'labelledby', desc: 'Id of the labelling heading when the header slot is filled.' },
         { name: 'position', desc: 'Mobile profile: bottom, left, right, or center. Default bottom.' },
         { name: 'mode', desc: 'Mobile profile mode: edge or card. Default edge.' },
         { name: 'breakpoint', desc: 'Pixel width where the desktop profile takes over. Default 768.' },
-        { name: 'desktopPosition', desc: 'Desktop position; falls back to position.' },
+        { name: 'desktopPosition', desc: 'Desktop position. Falls back to position — except a bottom sheet, which defaults to center so a wide panel sizes to its content instead of standing 85vh tall. Pass "bottom" to keep it bottom.' },
         { name: 'desktopMode', desc: 'Desktop mode. Default card.' },
         { name: 'effect', desc: 'Entrance: slide, fade-scale, slide-fade, or pop. Default slide.' },
         { name: 'exitEffect', desc: 'Exit effect; falls back to effect.' },
         { name: 'desktopEffect', desc: 'Desktop entrance; falls back to effect, except a centered desktop defaults to fade-scale.' },
         { name: 'desktopExitEffect', desc: 'Desktop exit; falls back to exitEffect, then desktopEffect.' },
-        { name: 'snapPoints', desc: 'CSS lengths, e.g. "85vh 55vh 25vh". Default "85vh". Bottom-mobile only; a desktop bottom keeps its largest snap and is dismiss-only, and sides/center ignore snaps.' },
+        { name: 'snapPoints', desc: 'CSS lengths, e.g. "85vh 55vh calc(100dvh - 4rem)". Browser measurement supports viewport-unit variants, calc(), clamp(), and var(). Default "85vh". A MOBILE-profile prop only — nothing past the breakpoint reads it. Sides measure their width; center at any width and bottom on desktop measure their content height, so a desktop bottom panel can stand taller than the largest mobile snap.' },
         { name: 'snap', desc: 'Snap index. Optional-controlled with @snapChange.' },
-        { name: 'initialSnap', desc: 'Index to open at when snap is uncontrolled.' },
+        { name: 'initialSnap', desc: 'Index to open at on every uncontrolled open.' },
         { name: 'dismiss', desc: 'Token list of swipe, backdrop, escape; or "all" (default) or "none".' },
+        { name: 'maxDisplayWidth', desc: 'Opening-only pixel ceiling. Above it a closed sheet will not open; an already-open sheet stays open, even if the viewport crosses the ceiling.' },
         { name: 'spring', desc: '"attraction friction" entrance override, both dials in (0, 1).' },
-        { name: 'showGrabber', desc: 'Show the grabber in the default header. Default true.' },
+        { name: 'showGrabber', desc: 'Show the grabber. Default true. Every pill lives on the panel, absolutely positioned and pointer-events-none, so it survives a filled header slot and costs no layout — hiding it (fine pointer, desktop, or this prop) moves nothing. A centered dialog never has one.' },
         { name: 'exitCushion', desc: 'Extra pixels of exit runway to clear the shadow. Default 28.' },
-        { name: 'morphDuration', desc: 'Profile morph duration in ms. Default 420.' },
+        { name: 'morphDuration', desc: 'Profile morph duration in ms. Default 600.' },
         { name: 'morphEasing', desc: 'Profile morph easing.' },
         { name: 'class', desc: 'Merged onto the panel; a caller width utility replaces the default width.' },
         { name: 'backdropClass', desc: 'Merged onto the backdrop.' },
       ],
       callbackRows: [
-        { name: '@close(reason)', desc: 'reason is swipe, backdrop, or escape. The sheet never closes itself — the parent flips open here.' },
+        { name: '@close(reason)', desc: 'reason is swipe, backdrop, escape, or close. close reports a native close such as form method="dialog" or dialog.close(). The parent flips open here, and your own close button calls the same handler.' },
         { name: '@snapChange(index)', desc: 'A release committed a snap; fires only on commit, never mid-drag.' },
         { name: '@snapRelease(detail)', desc: 'Every claimed release: { velocity, flick, direction, size, target, prevented }. prevented is true when the dismiss policy refused a swipe.' },
         { name: '@shown()', desc: 'The entrance settled.' },
         { name: '@hidden()', desc: 'The exit finished and the dialog closed.' },
       ],
       slotRows: [
-        { name: 'header', desc: 'Replaces the grabber and title heading; a filled header brings its own heading and labelledby. Always a drag surface.' },
-        { name: 'footer', desc: 'Pinned below the content; hidden when empty.' },
+        { name: 'header', desc: 'Replaces the title heading entirely; a filled header brings its own heading and points labelledby at it. The grabber is not replaced — it floats on the panel. The wrapper supplies the top padding. Always a drag surface.' },
+        { name: 'footer', desc: 'Pinned below the content; hidden when empty. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute.' },
         { name: 'default', desc: 'Untagged children become the scrollable content region.' },
       ],
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Controlled snaps', href: '#snaps' },
+        { label: 'Mobile vs desktop', href: '#responsive' },
         { label: 'Positions', href: '#positions' },
         { label: 'Card mode vs edge', href: '#modes' },
         { label: 'Effects', href: '#effects' },
@@ -433,6 +786,12 @@ export default class SheetDoc extends PuzzleView {
     openSnaps: () => this.setData('snapsOpen', true),
     closeSnaps: () => this.setData('snapsOpen', false),
     setSnapIndex: (index) => this.setData('snapIndex', index),
+    openMorphCenter: () => this.setData('morphCenterOpen', true),
+    closeMorphCenter: () => this.setData('morphCenterOpen', false),
+    openMorphDrawer: () => this.setData('morphDrawerOpen', true),
+    closeMorphDrawer: () => this.setData('morphDrawerOpen', false),
+    openMorphPop: () => this.setData('morphPopOpen', true),
+    closeMorphPop: () => this.setData('morphPopOpen', false),
     openLeft: () => this.setData('leftOpen', true),
     closeLeft: () => this.setData('leftOpen', false),
     openRight: () => this.setData('rightOpen', true),

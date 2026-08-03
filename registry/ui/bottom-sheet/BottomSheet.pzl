@@ -184,7 +184,6 @@ export default class BottomSheet extends PuzzleView {
   #springTarget = null;
   #springSpec = null;
   #carriedVelocity = 0;
-  #bodyOverflow = null;
   #drag = { active: false };
   #snapPoints = [];
   #localSnap = null;
@@ -238,15 +237,15 @@ export default class BottomSheet extends PuzzleView {
   }
 
   #lockBody() {
-    if (this.#bodyOverflow !== null) return;
-    this.#bodyOverflow = document.body.style.overflow;
+    this.element?.setAttribute('data-scroll-lock', '');
     document.body.style.overflow = 'hidden';
   }
 
   #unlockBody() {
-    if (this.#bodyOverflow === null) return;
-    document.body.style.overflow = this.#bodyOverflow;
-    this.#bodyOverflow = null;
+    this.element?.removeAttribute('data-scroll-lock');
+    if (!document.querySelector('[data-scroll-lock]')) {
+      document.body.style.overflow = '';
+    }
   }
 
   #hiddenDistance() {

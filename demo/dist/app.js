@@ -1606,7 +1606,7 @@ var require_core = __commonJS({
   }
 });
 
-// node_modules/@magic-spells/puzzle/client-runtime/model.js
+// ../../puzzle/client-runtime/model.js
 var recordKey = (id) => typeof id === "number" ? String(id) : id;
 var FieldBuilder = class {
   constructor(type) {
@@ -1745,12 +1745,41 @@ var POLLUTION_SKIP = /* @__PURE__ */ new Set(["__proto__", "constructor", "proto
 var MERGE_SKIP = /* @__PURE__ */ new Set([...POLLUTION_SKIP, "_store", "_type", "_synced", "_deleted"]);
 var DELETED_SAVE_MESSAGE = "[puzzle] cannot save a deleted record";
 var MUTATION_REVISIONS = /* @__PURE__ */ new WeakMap();
+var COMPUTED_GETTER_WARNINGS;
+function resolvesToGetterOnly(target, key) {
+  let owner = target;
+  while (owner && owner !== Object.prototype) {
+    const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+    if (descriptor)
+      return "get" in descriptor && descriptor.set === void 0;
+    owner = Object.getPrototypeOf(owner);
+  }
+  return false;
+}
 function assignSkipping(target, src, skipSet, allow) {
   for (const key of Object.keys(src)) {
     if (skipSet.has(key))
       continue;
     if (allow && !allow(key))
       continue;
+    if (resolvesToGetterOnly(target, key)) {
+      if (true) {
+        COMPUTED_GETTER_WARNINGS ||= /* @__PURE__ */ new WeakMap();
+        const Model = target.constructor;
+        let warned = COMPUTED_GETTER_WARNINGS.get(Model);
+        if (!warned) {
+          warned = /* @__PURE__ */ new Set();
+          COMPUTED_GETTER_WARNINGS.set(Model, warned);
+        }
+        if (!warned.has(key)) {
+          warned.add(key);
+          console.warn(
+            `[puzzle] "${key}" collides with a computed getter on model "${Model.name || "PuzzleModel"}" \u2014 the incoming value was ignored`
+          );
+        }
+      }
+      continue;
+    }
     target[key] = src[key];
   }
   return target;
@@ -1969,7 +1998,7 @@ var PuzzleModel = class {
   }
 };
 
-// node_modules/@magic-spells/puzzle/client-runtime/devperf.js
+// ../../puzzle/client-runtime/devperf.js
 var DEV = false ? true : true;
 var PERF_SENTINEL = "__PUZZLE_PERF__";
 var RECURSION_LIMIT = 100;
@@ -2598,7 +2627,7 @@ function now() {
   return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/devstate.js
+// ../../puzzle/client-runtime/devstate.js
 var DEV2 = false ? true : true;
 var HMR_KEY = "__puzzleHMR";
 var MAX_AGE_MS = 1e4;
@@ -2773,7 +2802,7 @@ function restoreViewsImpl(blob) {
   }
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/devtools.js
+// ../../puzzle/client-runtime/devtools.js
 var DEV3 = false ? true : true;
 var PROTOCOL_VERSION = 1;
 var FRAMEWORK_VERSION = "0.4.0";
@@ -3013,7 +3042,19 @@ function snapshotSubscriptions() {
       if (!bucket.includes(key))
         bucket.push(key);
   }
-  return { byKey, byView };
+  const held = {};
+  for (const [sub, counts] of store._heldKeys ?? []) {
+    const id = subscriberId(sub);
+    let bucket = null;
+    for (const [key, { count }] of counts) {
+      if (count <= 0)
+        continue;
+      bucket ??= held[id] ??= [];
+      if (!bucket.includes(key))
+        bucket.push(key);
+    }
+  }
+  return { byKey, byView, held };
 }
 function editRecord(type, id, patch2) {
   const store = requireStore();
@@ -3382,7 +3423,7 @@ function requireStore() {
   return store;
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/datastore/store.js
+// ../../puzzle/client-runtime/datastore/store.js
 var REC_SEP = " ";
 var noop = () => {
 };
@@ -3431,6 +3472,7 @@ var Store = class {
     this._tracking = null;
     this._asyncTrackingChain = null;
     this._trackingAdded = null;
+    this._heldKeys = /* @__PURE__ */ new Map();
     this._pendingKeys = /* @__PURE__ */ new Set();
     this._flushScheduled = false;
     this._flushTimer = null;
@@ -4031,12 +4073,20 @@ var Store = class {
    * re-runnable — it re-runs on every store change.
    *
    * @param {boolean} [expectsAsync=false] caller's hint that fn is async.
+   * @param {?{reconcile?: function(boolean): void}} [pending=null] HELD-eval channel
+   *   (D146). When given, a SUCCESSFUL eval does not reconcile subscriptions here —
+   *   it parks the reconcile function on `pending.reconcile` and the caller decides
+   *   later whether the run is committed (`reconcile(true)` → drop the last-good keys
+   *   this eval no longer queries) or discarded (`reconcile(false)` → drop only this
+   *   eval's own additions, leaving the live set exactly as it was). Scope restore
+   *   (`_tracking`/`_trackingAdded`) is NEVER deferred — that is stack discipline.
+   *   A failing eval reconciles(false) immediately and leaves `pending` untouched.
    */
-  withTracking(subscriber, fn, expectsAsync = false) {
+  withTracking(subscriber, fn, expectsAsync = false, pending = null) {
     if (subscriber?.isDestroyed)
       return fn();
     if (this._asyncTrackingChain && expectsAsync) {
-      const retry = () => this.withTracking(subscriber, fn, true);
+      const retry = () => this.withTracking(subscriber, fn, true, pending);
       if (true) {
         return devperfTrackingDeferred(
           subscriber,
@@ -4053,16 +4103,54 @@ var Store = class {
     const added = /* @__PURE__ */ new Set();
     this._tracking = subscriber;
     this._trackingAdded = added;
-    const finalize = (ok) => {
+    const heldCount = (key) => this._heldKeys.get(subscriber)?.get(key)?.count ?? 0;
+    const reconcile = (ok, adopted = null) => {
       if (ok) {
-        for (const key of before)
-          if (!added.has(key))
-            this._dropSubscription(key, subscriber);
+        for (const key of before) {
+          if (added.has(key) || heldCount(key) > 0)
+            continue;
+          this._dropSubscription(key, subscriber);
+        }
       } else {
-        for (const key of added)
-          if (!before.has(key))
-            this._dropSubscription(key, subscriber);
+        for (const key of added) {
+          if (before.has(key) || heldCount(key) > 0 || adopted?.has(key))
+            continue;
+          this._dropSubscription(key, subscriber);
+        }
       }
+    };
+    const finalize = (ok) => {
+      if (ok && pending) {
+        let held = this._heldKeys.get(subscriber);
+        if (!held)
+          this._heldKeys.set(subscriber, held = /* @__PURE__ */ new Map());
+        for (const key of added) {
+          const entry = held.get(key);
+          if (entry)
+            entry.count++;
+          else
+            held.set(key, { count: 1, adopted: false });
+        }
+        pending.reconcile = (commit) => {
+          const adopted = /* @__PURE__ */ new Set();
+          for (const key of added) {
+            const entry = held.get(key);
+            if (!entry)
+              continue;
+            if (entry.adopted)
+              adopted.add(key);
+            if (commit)
+              entry.adopted = true;
+            if (--entry.count <= 0)
+              held.delete(key);
+          }
+          if (held.size === 0 && this._heldKeys.get(subscriber) === held) {
+            this._heldKeys.delete(subscriber);
+          }
+          reconcile(commit, adopted);
+        };
+      } else
+        reconcile(ok);
       this._tracking = prevTracking;
       this._trackingAdded = prevAdded;
     };
@@ -4077,7 +4165,7 @@ var Store = class {
       if (this._asyncTrackingChain) {
         result.then(noop, noop);
         finalize(false);
-        const retry = () => this.withTracking(subscriber, fn, true);
+        const retry = () => this.withTracking(subscriber, fn, true, pending);
         if (true) {
           return devperfTrackingDeferred(
             subscriber,
@@ -4118,6 +4206,7 @@ var Store = class {
       this._tracking = null;
       this._trackingAdded = null;
     }
+    this._heldKeys.delete(subscriber);
     const keys2 = this.keysBySubscriber.get(subscriber);
     if (!keys2)
       return;
@@ -4363,7 +4452,7 @@ var Store = class {
   }
 };
 
-// node_modules/@magic-spells/puzzle/client-runtime/formatters/builtins.js
+// ../../puzzle/client-runtime/formatters/builtins.js
 var str = (v) => v == null ? "" : String(v);
 function escape(v) {
   return str(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -4378,7 +4467,7 @@ function noescape(v) {
 // puzzle-formatters-manifest:@magic-spells/puzzle/formatters/manifest
 var manifest_default = { escape };
 
-// node_modules/@magic-spells/puzzle/client-runtime/formatters.js
+// ../../puzzle/client-runtime/formatters.js
 var requiredBuiltins = { escape, raw, noescape };
 function editDistance(a2, b2) {
   const m = a2.length;
@@ -4474,9 +4563,10 @@ function makeFormatterRegistry(customFormatters = {}, url) {
   return registry2;
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/views/ViewNode.js
+// ../../puzzle/client-runtime/views/ViewNode.js
 var SLOT_TAG = "slot";
 var PLACEHOLDER_TAG = "#";
+var PORTAL_TAG = "portal";
 var warnedNullKey = false;
 function warnNullKey(item) {
   if (warnedNullKey)
@@ -4511,6 +4601,10 @@ var ViewNode = class {
   get isSlot() {
     return this.tag === SLOT_TAG;
   }
+  /** A portal marker — children mount into the shared portal outlet. */
+  get isPortal() {
+    return this.tag === PORTAL_TAG;
+  }
   // Internal surface (like SLOT_TAG): the compiled render() calls this for an
   // item-form {#for}'s synthetic key; app code shouldn't. Resolves a row's
   // reconciliation key when the real object is in hand — a store record keys by
@@ -4533,7 +4627,7 @@ var ViewNode = class {
   }
 };
 
-// node_modules/@magic-spells/puzzle/client-runtime/head.js
+// ../../puzzle/client-runtime/head.js
 var HEAD_FIELDS = ["title", "description", "canonical", "socialImage"];
 function resolveHead(chain) {
   const out = {};
@@ -4558,7 +4652,7 @@ function syncTitle(resolved) {
     document.title = String(resolved.title);
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/router/routePath.js
+// ../../puzzle/client-runtime/router/routePath.js
 function isDynamicSegment(segment) {
   return segment.length > 1 && segment[0] === ":";
 }
@@ -4591,7 +4685,7 @@ function findShadowedPaths(entries) {
   return shadowed;
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/router/routeTree.js
+// ../../puzzle/client-runtime/router/routeTree.js
 function joinPath(parentPath, childPath) {
   if (childPath === "")
     return parentPath;
@@ -4611,7 +4705,7 @@ function walkRouteTree(node, out, makeLeaf, ancestors = [], fullPaths = []) {
   }
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/views/animate.js
+// ../../puzzle/client-runtime/views/animate.js
 var warnedSpecs = /* @__PURE__ */ new WeakSet();
 var warnedNonObject = false;
 var specExtraWarnings = /* @__PURE__ */ new WeakMap();
@@ -4719,7 +4813,7 @@ function warnOnceForSpec(spec, message) {
 function noop2() {
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/views/flip.js
+// ../../puzzle/client-runtime/views/flip.js
 var DEFAULT_DURATION = 250;
 var DEFAULT_EASING = "cubic-bezier(0.2, 0, 0, 1)";
 var MIN_DELTA = 0.5;
@@ -4832,7 +4926,7 @@ function resolveFlipOptions(spec) {
   return { duration, easing };
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/display.js
+// ../../puzzle/client-runtime/display.js
 var warnedUndefined;
 function warnUndefined(expression) {
   const key = expression || "";
@@ -4853,7 +4947,40 @@ function displayValue(value, expression = 0) {
   return value === null ? "" : String(value);
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/views/viewManager.js
+// ../../puzzle/client-runtime/errors.js
+var HANDLERS = /* @__PURE__ */ new WeakMap();
+function setErrorHandler(ctx, handler) {
+  if (typeof handler === "function")
+    HANDLERS.set(ctx, handler);
+  else
+    HANDLERS.delete(ctx);
+}
+function reportError(ctx, error, info, ...consoleArgs) {
+  const handler = ctx && HANDLERS.get(ctx);
+  if (!handler) {
+    if (consoleArgs.length)
+      console.error(...consoleArgs);
+    return;
+  }
+  const stableInfo = Object.freeze({
+    phase: info.phase,
+    view: info.view ?? null,
+    route: info.route ?? null
+  });
+  try {
+    const result = handler(error, stableInfo);
+    if (result != null && typeof result.then === "function") {
+      Promise.resolve(result).catch(logHandlerError);
+    }
+  } catch (handlerError) {
+    logHandlerError(handlerError);
+  }
+}
+function logHandlerError(error) {
+  console.error("[puzzle] onError hook failed:", error);
+}
+
+// ../../puzzle/client-runtime/views/viewManager.js
 var PROPS = /* @__PURE__ */ new Set(["value", "checked", "disabled", "selected", "muted"]);
 var SVG_NS = "http://www.w3.org/2000/svg";
 var LISTENERS = Symbol("puzzle-listeners");
@@ -4864,13 +4991,18 @@ var ViewManager = class {
    * @param {Element} container host element this manager renders into
    * @param {object} ctx owner's { store, router, formatters } — passed to
    *   any child components this tree instantiates (constellation/doc/DOC-APP-ANATOMY.md §4)
+   * @param {object|null} owner view whose render tree this manager patches
    */
-  constructor(container, ctx = {}) {
+  constructor(container, ctx = {}, owner = null) {
     this.container = container;
     this.ctx = ctx;
+    this.owner = owner;
     this.currentTree = null;
     this.slotChildren = [];
     this.anchor = null;
+    this.treeUnknown = false;
+    this.unknownRange = null;
+    this.unknownTrees = null;
   }
   /**
    * Reserve a DOM position synchronously, before async data() resolves. A
@@ -4887,9 +5019,11 @@ var ViewManager = class {
    * Slot markers are expanded against `slotChildren` before diffing.
    */
   render(rawTree) {
+    if (this.treeUnknown)
+      return this.renderFresh(rawTree);
     const newTree = expandSlots(rawTree, this.slotChildren);
     if (!this.currentTree) {
-      mount(newTree, this.container, this.anchor, this.ctx);
+      mount(newTree, this.container, this.anchor, this.ctx, this.owner);
       if (this.anchor) {
         this.anchor.remove();
         if (true)
@@ -4897,10 +5031,81 @@ var ViewManager = class {
         this.anchor = null;
       }
     } else {
-      patch(this.currentTree, newTree, this.container, this.ctx);
+      const el = this.currentTree.el ?? null;
+      const bracketed = el != null && el.parentNode === this.container;
+      const before = bracketed ? el.previousSibling : null;
+      const after = bracketed ? el.nextSibling : null;
+      try {
+        patch(this.currentTree, newTree, this.container, this.ctx, this.owner);
+      } catch (err) {
+        this.treeUnknown = true;
+        this.unknownRange = bracketed ? { before, after } : null;
+        this.unknownTrees = [this.currentTree, newTree];
+        throw err;
+      }
     }
     this.currentTree = newTree;
     return newTree;
+  }
+  /**
+   * Mount `rawTree` over a DOM range this manager can no longer describe (see
+   * `treeUnknown`). The vnode tree is untrustworthy, so the old content is
+   * cleared by DOM removal across the bracketed range rather than by an
+   * unmount() walk, then the new tree is mounted from scratch. The anchor
+   * comment, if this manager still holds one, survives the clear and is the
+   * insertion ref (mount()'s normal first-render contract).
+   *
+   * DOM position is the only thing those trees lie about, so the non-DOM release
+   * still runs over BOTH of them first (releaseAborted): nested component
+   * instances keep their store subscriptions, `outside` listeners live on
+   * document, and portaled content sits outside the range entirely — none of it
+   * is reachable again once currentTree becomes the error face.
+   */
+  renderFresh(rawTree) {
+    const newTree = expandSlots(rawTree, this.slotChildren);
+    releaseAborted(this.unknownTrees);
+    this.unknownTrees = null;
+    const range2 = this.unknownRange;
+    let removed = false;
+    if (range2) {
+      const { before, after: after2 } = range2;
+      const stop = after2 && after2.parentNode === this.container ? after2 : null;
+      let node = before && before.parentNode === this.container ? before.nextSibling : this.container.firstChild;
+      while (node && node !== stop) {
+        const next = node.nextSibling;
+        if (node !== this.anchor) {
+          node.remove();
+          removed = true;
+        }
+        node = next;
+      }
+    }
+    if (removed)
+      devperfMutation();
+    const after = range2?.after;
+    const ref = this.anchor && this.anchor.parentNode === this.container ? this.anchor : after && after.parentNode === this.container ? after : null;
+    this.currentTree = null;
+    this.treeUnknown = false;
+    this.unknownRange = null;
+    mount(newTree, this.container, ref, this.ctx, this.owner);
+    if (this.anchor) {
+      this.anchor.remove();
+      if (true)
+        devperfMutation();
+      this.anchor = null;
+    }
+    this.currentTree = newTree;
+    return newTree;
+  }
+  /**
+   * Mount a failed view's own boundary face beside the D115 placeholder. The
+   * failed instance is already destroyed, so nested fallback components belong
+   * to its surviving owner (the parent view), not to the dead view.
+   */
+  mountErrorFallback(rawTree, ref, owner) {
+    const tree = expandSlots(rawTree, []);
+    mount(tree, this.container, ref, this.ctx, owner);
+    return tree;
   }
   /** The DOM node currently occupying this subtree's position (or null). */
   get element() {
@@ -4908,6 +5113,10 @@ var ViewManager = class {
   }
   /** Remove everything this manager mounted. */
   clear() {
+    if (this.unknownTrees) {
+      releaseAborted(this.unknownTrees);
+      this.unknownTrees = null;
+    }
     if (this.currentTree)
       unmount(this.currentTree);
     if (this.anchor) {
@@ -4917,6 +5126,8 @@ var ViewManager = class {
       this.anchor = null;
     }
     this.currentTree = null;
+    this.treeUnknown = false;
+    this.unknownRange = null;
   }
 };
 function expandSlots(vnode, slotChildren) {
@@ -5008,9 +5219,129 @@ function expandChildList(kids, parts) {
   }
   return out;
 }
-function mount(vnode, parent, ref, ctx) {
+var portalHost = null;
+var portalOutlet = null;
+var portalRanges = /* @__PURE__ */ new Map();
+var portalCount = 0;
+function setPortalHost(el) {
+  if (true) {
+    if (portalRanges.size > 0 && el !== portalHost) {
+      console.warn(
+        "[puzzle] setPortalHost() called while another mounted app has live portals. Portal state is shared per page: multiple simultaneous PuzzleApp instances are not supported, and unmounting either app will tear down the other's portals."
+      );
+    }
+  }
+  portalHost = el || null;
+}
+function teardownPortals() {
+  portalOutlet?.remove();
+  portalOutlet = null;
+  portalRanges.clear();
+  portalCount = 0;
+  portalHost = null;
+}
+function ensurePortalOutlet() {
+  if (portalOutlet && portalOutlet.isConnected)
+    return portalOutlet;
+  portalOutlet = document.createElement("div");
+  portalOutlet.setAttribute("data-puzzle-portal", "");
+  const host = portalHost && portalHost.isConnected ? portalHost : document.body;
+  host.appendChild(portalOutlet);
+  if (true)
+    devperfMutation();
+  return portalOutlet;
+}
+function releasePortalOutlet() {
+  if (portalCount > 0 || !portalOutlet || portalOutlet.firstChild)
+    return;
+  portalOutlet.remove();
+  portalOutlet = null;
+  if (true)
+    devperfMutation();
+}
+function mountPortal(vnode, parent, ref, ctx, owner) {
+  const placeholder = document.createComment("puzzle-portal");
+  vnode.el = placeholder;
+  parent.insertBefore(placeholder, ref ?? null);
+  const outlet = ensurePortalOutlet();
+  const start = document.createComment("puzzle-portal-start");
+  const end = document.createComment("puzzle-portal-end");
+  outlet.appendChild(start);
+  outlet.appendChild(end);
+  const range2 = { start, end, placeholder };
+  vnode.portal = range2;
+  portalRanges.set(start, range2);
+  portalRanges.set(end, range2);
+  portalCount++;
+  for (const child of vnode.children)
+    mount(child, outlet, end, ctx, owner);
+  if (true)
+    devperfMutation();
+  return placeholder;
+}
+function patchPortal(oldVnode, newVnode, ctx, owner) {
+  const range2 = newVnode.portal = oldVnode.portal;
+  if (!range2)
+    return;
+  range2.placeholder = newVnode.el;
+  const outlet = range2.end.parentNode;
+  if (!outlet)
+    return;
+  patchChildren(outlet, oldVnode.children, newVnode.children, ctx, owner, range2.end);
+}
+function unmountPortal(vnode) {
+  for (const child of vnode.children)
+    unmount(child);
+  const range2 = vnode.portal;
+  if (range2) {
+    portalRanges.delete(range2.start);
+    portalRanges.delete(range2.end);
+    range2.start.remove();
+    range2.end.remove();
+    vnode.portal = null;
+    portalCount--;
+  }
+  if (true) {
+    if (vnode.el?.parentNode)
+      devperfMutation();
+  }
+  vnode.el?.remove();
+  releasePortalOutlet();
+}
+function owningPortalPlaceholder(target) {
+  if (!portalOutlet || portalRanges.size === 0 || !target)
+    return null;
+  if (!portalOutlet.contains(target))
+    return null;
+  let node = target;
+  while (node && node.parentNode !== portalOutlet)
+    node = node.parentNode;
+  if (!node)
+    return null;
+  for (let n2 = node; n2; n2 = n2.previousSibling) {
+    const range2 = portalRanges.get(n2);
+    if (range2)
+      return range2.start === n2 ? range2.placeholder : null;
+  }
+  return null;
+}
+function portalAwareContains(el, target) {
+  let t2 = target;
+  for (let hops = 0; hops < 32; hops++) {
+    if (el.contains(t2))
+      return true;
+    const placeholder = owningPortalPlaceholder(t2);
+    if (!placeholder)
+      return false;
+    t2 = placeholder;
+  }
+  return false;
+}
+function mount(vnode, parent, ref, ctx, owner = null) {
   if (vnode.isComponent)
-    return mountComponent(vnode, parent, ref, ctx);
+    return mountComponent(vnode, parent, ref, ctx, owner);
+  if (vnode.tag === PORTAL_TAG)
+    return mountPortal(vnode, parent, ref, ctx, owner);
   let el;
   if (vnode.tag === PLACEHOLDER_TAG) {
     el = document.createComment("");
@@ -5025,7 +5356,7 @@ function mount(vnode, parent, ref, ctx) {
   } else {
     el = inSvgNamespace(vnode.tag, parent) ? document.createElementNS(SVG_NS, vnode.tag) : document.createElement(vnode.tag);
     for (const [name, value] of Object.entries(vnode.attrs)) {
-      setAttr(el, name, value);
+      setAttr(el, name, value, owner);
     }
     if (typeof vnode.attrs.ref === "function")
       vnode.attrs.ref(el);
@@ -5035,7 +5366,7 @@ function mount(vnode, parent, ref, ctx) {
         devperfMutation();
     } else {
       for (const child of vnode.children) {
-        mount(child, el, null, ctx);
+        mount(child, el, null, ctx, owner);
       }
     }
     reassertSelectValue(el, vnode.attrs);
@@ -5055,7 +5386,7 @@ function plantFailedMountPlaceholder(child) {
   }
   return placeholder;
 }
-function mountComponent(vnode, parent, ref, ctx) {
+function mountComponent(vnode, parent, ref, ctx, owner) {
   if (vnode.takeoverFailed) {
     const placeholder = document.createComment("puzzle");
     vnode.el = placeholder;
@@ -5067,6 +5398,7 @@ function mountComponent(vnode, parent, ref, ctx) {
   const preloaded = vnode.instance != null;
   const takeoverPreloaded = vnode.takeoverPreloaded;
   const child = vnode.instance ?? new vnode.tag(ctx);
+  child.__setErrorParent?.(owner);
   vnode.component = child;
   child.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded }).then(
     // ENTER animation (constellation/doc/DOC-SPEC.md §12): once the first
@@ -5076,18 +5408,32 @@ function mountComponent(vnode, parent, ref, ctx) {
     () => {
       vnode.el = child.element;
       return Promise.resolve(child.playIn()).catch(
-        (err) => console.error("[puzzle] child enter animation failed:", err)
+        (err) => reportError(
+          ctx,
+          err,
+          { phase: "enter", view: child, route: child.route },
+          "[puzzle] child enter animation failed:",
+          err
+        )
       );
     },
     (err) => {
+      const boundary = child.__prepareErrorBoundary?.(err);
       if (preloaded && !takeoverPreloaded) {
-        console.error(
+        reportError(
+          ctx,
+          err,
+          { phase: "mount", view: child, route: child.route },
           "[puzzle] view mount failed after commit \u2014 the view stays mounted (router owns its lifetime):",
           err
         );
+        child.__showErrorBoundary?.(boundary);
         return;
       }
-      console.error(
+      reportError(
+        ctx,
+        err,
+        { phase: "mount", view: child, route: child.route },
         "[puzzle] component mount failed \u2014 the component was destroyed and will remount on the next patch:",
         err
       );
@@ -5097,6 +5443,7 @@ function mountComponent(vnode, parent, ref, ctx) {
         vnode.el = placeholder;
         child.__failedPlaceholder = placeholder;
       }
+      child.__showErrorBoundary?.(boundary, { failedMount: true, placeholder });
       vnode.component = null;
       vnode.instance = null;
       if (true)
@@ -5106,10 +5453,10 @@ function mountComponent(vnode, parent, ref, ctx) {
   vnode.el = child.element;
   return vnode.el;
 }
-function patch(oldVnode, newVnode, parent, ctx) {
+function patch(oldVnode, newVnode, parent, ctx, owner = null) {
   if (!sameNode(oldVnode, newVnode)) {
     const ref = oldVnode.isComponent && oldVnode.component?.element || oldVnode.el;
-    mount(newVnode, parent, ref, ctx);
+    mount(newVnode, parent, ref, ctx, owner);
     unmount(oldVnode);
     return;
   }
@@ -5117,7 +5464,16 @@ function patch(oldVnode, newVnode, parent, ctx) {
     const dead = oldVnode.component;
     if (dead == null || dead.isDestroyed) {
       const placeholder = dead?.__failedPlaceholder ?? oldVnode.el;
-      mount(newVnode, parent, placeholder?.parentNode === parent ? placeholder : null, ctx);
+      mount(
+        newVnode,
+        parent,
+        placeholder?.parentNode === parent ? placeholder : null,
+        ctx,
+        owner
+      );
+      const fallback = dead?.__failedFallback ?? placeholder?.__failedFallback;
+      if (fallback)
+        unmount(fallback);
       if (true) {
         if (placeholder?.parentNode)
           devperfMutation();
@@ -5131,6 +5487,10 @@ function patch(oldVnode, newVnode, parent, ctx) {
   const el = newVnode.el = oldVnode.el;
   if (newVnode.tag === PLACEHOLDER_TAG)
     return;
+  if (newVnode.tag === PORTAL_TAG) {
+    patchPortal(oldVnode, newVnode, ctx, owner);
+    return;
+  }
   if (newVnode.isText) {
     const text = displayValue(newVnode.attrs.value);
     if (el.nodeValue !== text) {
@@ -5140,7 +5500,7 @@ function patch(oldVnode, newVnode, parent, ctx) {
     }
     return;
   }
-  patchAttrs(el, oldVnode.attrs, newVnode.attrs);
+  patchAttrs(el, oldVnode.attrs, newVnode.attrs, owner);
   if ("island" in newVnode.attrs) {
     newVnode.children = oldVnode.children;
     return;
@@ -5153,7 +5513,7 @@ function patch(oldVnode, newVnode, parent, ctx) {
     }
     return;
   }
-  patchChildren(el, oldVnode.children, newVnode.children, ctx);
+  patchChildren(el, oldVnode.children, newVnode.children, ctx, owner);
   reassertSelectValue(el, newVnode.attrs);
 }
 function reassertSelectValue(el, attrs) {
@@ -5194,14 +5554,25 @@ function shallowEqual(a2, b2) {
 }
 var leavingEls = /* @__PURE__ */ new WeakSet();
 function unmount(vnode) {
+  if (vnode.tag === PORTAL_TAG)
+    return unmountPortal(vnode);
   if (vnode.isComponent) {
     const child = vnode.component;
     if (!child) {
+      const fallback = vnode.el?.__failedFallback;
+      if (fallback)
+        unmount(fallback);
       if (true) {
         if (vnode.el?.parentNode)
           devperfMutation();
       }
       vnode.el?.remove();
+      return;
+    }
+    if (child.isDestroyed && child.__failedFallback) {
+      unmount(child.__failedFallback);
+      child.__failedPlaceholder?.remove();
+      child.__failedFallback = null;
       return;
     }
     if (child?.animations?.out) {
@@ -5244,13 +5615,33 @@ function releaseSubtree(vnode) {
   if (typeof vnode.children === "string")
     return;
   for (const child of vnode.children) {
-    if (child.isComponent)
+    if (child.tag === PORTAL_TAG)
+      unmountPortal(child);
+    else if (child.isComponent)
       child.component?.destroy();
     else if (!child.isText)
       releaseSubtree(child);
   }
 }
-function patchAttrs(el, oldAttrs, newAttrs) {
+function releaseAborted(trees) {
+  if (!trees)
+    return;
+  for (const tree of trees) {
+    if (!tree)
+      continue;
+    try {
+      if (tree.tag === PORTAL_TAG)
+        unmountPortal(tree);
+      else if (tree.isComponent)
+        tree.component?.destroy();
+      else if (!tree.isText)
+        releaseSubtree(tree);
+    } catch (err) {
+      console.error("[puzzle] releasing an aborted render failed:", err);
+    }
+  }
+}
+function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
   for (const [name, value] of Object.entries(newAttrs)) {
     if (name === "ref") {
       const old = oldAttrs.ref;
@@ -5264,12 +5655,20 @@ function patchAttrs(el, oldAttrs, newAttrs) {
     }
     if (name === "value" && (el.nodeName === "INPUT" || el.nodeName === "TEXTAREA")) {
       if (el.value !== displayValue(value))
-        setAttr(el, name, value);
+        setAttr(el, name, value, owner);
     } else if (name === "checked" && el.nodeName === "INPUT") {
       if (el.checked !== Boolean(value))
-        setAttr(el, name, value);
+        setAttr(el, name, value, owner);
+      else if (el.hasAttribute("checked") !== Boolean(value)) {
+        if (value)
+          el.setAttribute("checked", "");
+        else
+          el.removeAttribute("checked");
+        if (true)
+          devperfMutation();
+      }
     } else if (oldAttrs[name] !== value) {
-      setAttr(el, name, value);
+      setAttr(el, name, value, owner);
     }
   }
   for (const name of Object.keys(oldAttrs)) {
@@ -5284,21 +5683,21 @@ function patchAttrs(el, oldAttrs, newAttrs) {
     }
   }
 }
-function patchChildren(el, oldChildren, newChildren, ctx) {
+function patchChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
   const keyed = oldChildren.some((c2) => c2.key != null) || newChildren.some((c2) => c2.key != null);
   if (keyed) {
-    patchKeyedChildren(el, oldChildren, newChildren, ctx);
+    patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
   } else {
-    patchIndexedChildren(el, oldChildren, newChildren, ctx);
+    patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail);
   }
 }
-function patchIndexedChildren(el, oldChildren, newChildren, ctx) {
+function patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
   const common = Math.min(oldChildren.length, newChildren.length);
   for (let i2 = 0; i2 < common; i2++) {
-    patch(oldChildren[i2], newChildren[i2], el, ctx);
+    patch(oldChildren[i2], newChildren[i2], el, ctx, owner);
   }
   for (let i2 = common; i2 < newChildren.length; i2++) {
-    mount(newChildren[i2], el, null, ctx);
+    mount(newChildren[i2], el, tail, ctx, owner);
   }
   for (let i2 = common; i2 < oldChildren.length; i2++) {
     if (oldChildren[i2].isComponent && oldChildren[i2].component?.animations?.out) {
@@ -5325,7 +5724,7 @@ function warnDuplicateKey(key) {
     `[puzzle] duplicate key ${JSON.stringify(key)} among keyed siblings \u2014 keys must be unique within a list; duplicates cause elements to be dropped or reordered unexpectedly.`
   );
 }
-function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
+function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
   const oldKeyed = /* @__PURE__ */ new Map();
   for (const child of oldChildren) {
     if (child.key != null) {
@@ -5372,11 +5771,11 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
     if (!matched.has(child))
       unmount(child);
   }
-  let ref = null;
+  let ref = tail;
   for (let i2 = pairs.length - 1; i2 >= 0; i2--) {
     const [oldChild, newChild] = pairs[i2];
     if (oldChild) {
-      patch(oldChild, newChild, el, ctx);
+      patch(oldChild, newChild, el, ctx, owner);
       if (nextPersistentSibling(newChild.el) !== ref) {
         el.insertBefore(newChild.el, ref);
         if (true) {
@@ -5384,7 +5783,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
         }
       }
     } else {
-      mount(newChild, el, ref, ctx);
+      mount(newChild, el, ref, ctx, owner);
     }
     ref = newChild.el;
   }
@@ -5397,7 +5796,7 @@ function nextPersistentSibling(node) {
     n2 = n2.nextSibling;
   return n2;
 }
-function setAttr(el, name, value) {
+function setAttr(el, name, value, owner = null) {
   if (name === "key" || name === "island" || name === "ref" || name === "flip")
     return;
   if (name.startsWith("@")) {
@@ -5409,7 +5808,8 @@ function setAttr(el, name, value) {
     if (typeof value === "function") {
       if (mods.includes("once") && listeners[name + ONCE_SPENT])
         return;
-      const handler = mods.length ? withModifiers(name, event, mods, value, listeners, el) : value;
+      const bound = typeof owner?.__withCommittedScope === "function" ? (event2) => owner.__withCommittedScope(() => value(event2)) : value;
+      const handler = mods.length ? withModifiers(name, event, mods, bound, listeners, el) : bound;
       target.addEventListener(event, handler, opts);
       listeners[name] = handler;
     } else {
@@ -5493,7 +5893,7 @@ function withModifiers(fullName, eventName, mods, handler, listeners, el) {
   const spentKey = fullName + ONCE_SPENT;
   const outside = mods.includes("outside");
   return (event) => {
-    if (outside && el.contains(event.target))
+    if (outside && portalAwareContains(el, event.target))
       return;
     for (const m of mods) {
       const key = KEY_FILTERS[m];
@@ -5519,7 +5919,7 @@ function inSvgNamespace(tag, parent) {
   return parent.namespaceURI === SVG_NS && parent.nodeName.toLowerCase() !== "foreignobject";
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/ssg/preload.js
+// ../../puzzle/client-runtime/ssg/preload.js
 async function preloadTakeoverComponents(vnode, ctx) {
   const instances = [];
   await preloadNode(vnode, ctx, instances);
@@ -5569,7 +5969,7 @@ async function preloadNode(vnode, ctx, instances) {
   await preloadNode(expanded, ctx, instances);
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/router/router.js
+// ../../puzzle/client-runtime/router/router.js
 var SCROLL_STORE_KEY = "__puzzleScroll";
 var SCROLL_MAX_ENTRIES = 50;
 var Router = class {
@@ -6117,7 +6517,13 @@ var Router = class {
       } catch (err) {
         if (token !== this.#token)
           return null;
-        console.error("[puzzle] navigation guard failed:", err);
+        reportError(
+          this.#ctx,
+          err,
+          { phase: "navigation", route: to },
+          "[puzzle] navigation guard failed:",
+          err
+        );
         return false;
       }
       if (token !== this.#token)
@@ -6126,9 +6532,10 @@ var Router = class {
         return false;
       if (typeof verdict === "string") {
         if (this.#guardRedirectCount >= 10) {
-          console.error(
+          const err = new Error(
             "[puzzle] navigation guard redirect limit exceeded (10) \u2014 staying on the current route"
           );
+          reportError(this.#ctx, err, { phase: "navigation", route: to }, err.message);
           return false;
         }
         this.#guardRedirectCount++;
@@ -6149,7 +6556,7 @@ var Router = class {
     if (this.#pendingOut) {
       const stalled = this.#pendingOut;
       this.#pendingOut = null;
-      stalled._cancelOutAnimation();
+      stalled._restoreFromLeaving();
     }
     this.#pendingIndex = null;
     this.#pendingNavPath = null;
@@ -6251,7 +6658,7 @@ var Router = class {
       }
     }
     let keep = 0;
-    if (cur) {
+    if (cur && !cur.chainInvalid) {
       const a2 = cur.entry.chain;
       const b2 = entry.chain;
       const max = Math.min(a2.length, b2.length);
@@ -6274,139 +6681,181 @@ var Router = class {
     for (let i2 = keep; i2 < entry.chain.length; i2++) {
       freshViews.push(new entry.chain[i2].view(this.#ctx));
     }
-    const reuseLayout = !!(cur && cur.layout && !pendingLayoutOut && cur.layoutClass === entry.layout);
+    const reuseLayout = !!(cur && cur.layout && !pendingLayoutOut && !cur.layoutInvalid && cur.layoutClass === entry.layout);
     const layout = reuseLayout ? cur.layout : entry.layout ? new entry.layout(this.#ctx) : null;
+    const prepared = [];
+    const discardPrepared = () => {
+      for (const p of prepared)
+        p.discard();
+      prepared.length = 0;
+    };
     const isSSGTakeover = !cur && this.#container != null && this.#container.hasAttribute("data-puzzle-ssg");
     try {
-      const loads = [];
-      const hasSkeleton = (v) => !isSSGTakeover && typeof v.renderSkeleton === "function";
-      const start = (v) => {
-        const p = v.preload({ params, props: {}, route: to });
-        if (hasSkeleton(v)) {
-          p.catch((err) => console.error("[puzzle] skeleton view data() failed:", err));
-        } else {
-          loads.push(p);
+      try {
+        const loads = [];
+        const hasSkeleton = (v) => !isSSGTakeover && typeof v.renderSkeleton === "function";
+        const start = (v) => {
+          const p = v.preload({ params, props: {}, route: to });
+          if (hasSkeleton(v)) {
+            p.catch((err) => {
+              reportError(
+                this.#ctx,
+                err,
+                { phase: "navigation", view: v, route: to },
+                "[puzzle] skeleton view data() failed:",
+                err
+              );
+              v.__renderErrorBoundary?.(err);
+            });
+          } else {
+            loads.push(p);
+          }
+        };
+        for (const v of freshViews)
+          if (!hasSkeleton(v))
+            start(v);
+        for (const v of reusedViews) {
+          const p = v.prepareRefresh({ params, route: to });
+          if (!p)
+            continue;
+          prepared.push(p);
+          loads.push(p.ready);
         }
-      };
-      for (const v of freshViews)
-        if (!hasSkeleton(v))
-          start(v);
-      for (const v of reusedViews)
-        loads.push(v.refresh({ params, route: to }));
-      if (layout && !reuseLayout && !hasSkeleton(layout))
-        start(layout);
-      for (const v of freshViews)
-        if (hasSkeleton(v))
-          start(v);
-      if (layout && !reuseLayout && hasSkeleton(layout))
-        start(layout);
-      await Promise.all(loads);
-    } catch (err) {
-      console.error("[puzzle] navigation data() failed:", err);
-      for (const v of freshViews)
-        v.destroy();
-      if (layout && !reuseLayout)
-        layout.destroy();
-      this.#recoverFailedNavigation(token);
-      return;
-    }
-    if (token !== this.#token) {
-      for (const v of freshViews)
-        v.destroy();
-      if (layout && !reuseLayout)
-        layout.destroy();
-      return;
-    }
-    const views = [...reusedViews, ...freshViews];
-    const anchor = loc.hash ? loc.hash.slice(1) : null;
-    const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
-    const focus = this.#resolveFocus({ to, from, push, pop, replace });
-    if (keep === entry.chain.length) {
-      this.#commitLocation({ rawPath, entry, push, replace, memoryIndex, departScroll });
-      this.#commitState({
+        if (layout && !reuseLayout && !hasSkeleton(layout))
+          start(layout);
+        for (const v of freshViews)
+          if (hasSkeleton(v))
+            start(v);
+        if (layout && !reuseLayout && hasSkeleton(layout))
+          start(layout);
+        await Promise.all(loads);
+      } catch (err) {
+        reportError(
+          this.#ctx,
+          err,
+          { phase: "navigation", route: to },
+          "[puzzle] navigation data() failed:",
+          err
+        );
+        for (const v of freshViews)
+          v.destroy();
+        if (layout && !reuseLayout)
+          layout.destroy();
+        discardPrepared();
+        this.#recoverFailedNavigation(token);
+        return;
+      }
+      if (token !== this.#token) {
+        for (const v of freshViews)
+          v.destroy();
+        if (layout && !reuseLayout)
+          layout.destroy();
+        discardPrepared();
+        return;
+      }
+      const views = [...reusedViews, ...freshViews];
+      const anchor = loc.hash ? loc.hash.slice(1) : null;
+      const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
+      const focus = this.#resolveFocus({ to, from, push, pop, replace });
+      if (keep === entry.chain.length) {
+        this.#commitLocation({ rawPath, entry, push, replace, memoryIndex, departScroll });
+        this.#commitState({
+          rawPath,
+          pathname: loc.pathname,
+          query: loc.query,
+          hash: loc.hash,
+          entry,
+          params,
+          views,
+          keys: cur.keys,
+          layout,
+          scroll,
+          // D146: the whole chain was prepared above; #commitState commits every
+          // prepared ancestor immediately after #state, still adjacent to
+          // #commitLocation — the atomic block D61 opened, now covering ancestor
+          // params/route/data/subscriptions too.
+          prepared,
+          // A leaf-identical replace is URL-backed transient-state churn, not
+          // a route change: leave the user's current focus in place and make no
+          // live-region announcement. Params-only pushes still take the normal
+          // focus path, and full replaces never reach this branch.
+          focus: replace ? null : focus
+        });
+        if (layout)
+          this.#refreshLogged(layout, params, to);
+        return;
+      }
+      const keys2 = entry.chain.map(
+        (_, i2) => i2 < keep ? cur.keys[i2] : entry.fullPaths[i2] + "\0" + token
+      );
+      let childVnode = null;
+      for (let i2 = entry.chain.length - 1; i2 >= 0; i2--) {
+        const vnode = new ViewNode(
+          entry.chain[i2].view,
+          { key: keys2[i2] },
+          childVnode ? [childVnode] : []
+        );
+        if (i2 >= keep)
+          vnode.instance = views[i2];
+        childVnode = vnode;
+      }
+      const rootVnode = childVnode;
+      if (this.#container?.hasAttribute("data-puzzle-ssg")) {
+        let takeoverVnode = rootVnode;
+        if (layout) {
+          takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
+          takeoverVnode.instance = layout;
+        }
+        const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
+        if (token !== this.#token) {
+          for (const instance of nestedInstances)
+            instance.destroy();
+          for (const v of freshViews)
+            v.destroy();
+          if (layout && !reuseLayout)
+            layout.destroy();
+          discardPrepared();
+          return;
+        }
+        for (const instance of nestedInstances)
+          instance.skipEnter();
+      }
+      await this.#swap(token, cur, {
         rawPath,
+        // The parsed URL parts (v1.49, D83) — #commitState records them on
+        // #state so the `current` getter never reparses.
         pathname: loc.pathname,
         query: loc.query,
         hash: loc.hash,
         entry,
         params,
         views,
-        keys: cur.keys,
+        keys: keys2,
         layout,
+        reuseLayout,
+        keep,
+        rootVnode,
         scroll,
-        // A leaf-identical replace is URL-backed transient-state churn, not
-        // a route change: leave the user's current focus in place and make no
-        // live-region announcement. Params-only pushes still take the normal
-        // focus path, and full replaces never reach this branch.
-        focus: replace ? null : focus
+        focus,
+        to,
+        // D146: prepared reused-ancestor refreshes, committed by #commitState inside
+        // #swap's synchronous #committing window — the same window as #commitLocation
+        // and the mount, so URL, DOM, and ancestor state move together or not at all.
+        prepared,
+        // D61: #commitLocation (run as the first statement inside #swap's commit
+        // window) reads these to move the URL/memory stack; null memoryIndex on a
+        // push/initial nav, set only for a memory-mode go/back/forward pop;
+        // replace (D83) selects the entry-swapping commit instead of a push.
+        // departScroll: the departure position captured at nav start, before the
+        // outgoing view's teardown collapsed the page (see #navigate).
+        push,
+        replace,
+        memoryIndex,
+        departScroll
       });
-      if (layout)
-        this.#refreshLogged(layout, params, to);
-      return;
+    } finally {
+      discardPrepared();
     }
-    const keys2 = entry.chain.map(
-      (_, i2) => i2 < keep ? cur.keys[i2] : entry.fullPaths[i2] + "\0" + token
-    );
-    let childVnode = null;
-    for (let i2 = entry.chain.length - 1; i2 >= 0; i2--) {
-      const vnode = new ViewNode(
-        entry.chain[i2].view,
-        { key: keys2[i2] },
-        childVnode ? [childVnode] : []
-      );
-      if (i2 >= keep)
-        vnode.instance = views[i2];
-      childVnode = vnode;
-    }
-    const rootVnode = childVnode;
-    if (this.#container?.hasAttribute("data-puzzle-ssg")) {
-      let takeoverVnode = rootVnode;
-      if (layout) {
-        takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
-        takeoverVnode.instance = layout;
-      }
-      const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
-      if (token !== this.#token) {
-        for (const instance of nestedInstances)
-          instance.destroy();
-        for (const v of freshViews)
-          v.destroy();
-        if (layout && !reuseLayout)
-          layout.destroy();
-        return;
-      }
-      for (const instance of nestedInstances)
-        instance.skipEnter();
-    }
-    await this.#swap(token, cur, {
-      rawPath,
-      // The parsed URL parts (v1.49, D83) — #commitState records them on
-      // #state so the `current` getter never reparses.
-      pathname: loc.pathname,
-      query: loc.query,
-      hash: loc.hash,
-      entry,
-      params,
-      views,
-      keys: keys2,
-      layout,
-      reuseLayout,
-      keep,
-      rootVnode,
-      scroll,
-      focus,
-      to,
-      // D61: #commitLocation (run as the first statement inside #swap's commit
-      // window) reads these to move the URL/memory stack; null memoryIndex on a
-      // push/initial nav, set only for a memory-mode go/back/forward pop;
-      // replace (D83) selects the entry-swapping commit instead of a push.
-      // departScroll: the departure position captured at nav start, before the
-      // outgoing view's teardown collapsed the page (see #navigate).
-      push,
-      replace,
-      memoryIndex,
-      departScroll
-    });
   }
   /**
    * Commit this navigation's LOCATION side effects — URL + memory stack + title/head (D84) —
@@ -6501,24 +6950,42 @@ var Router = class {
     }
     if (!skipOut && cur && oldAnimator) {
       if (overlap) {
-        this.#startOverlapLeave(oldAnimator);
+        this.#startOverlapLeave(oldAnimator, next.to);
       } else {
         this.#pendingOut = oldAnimator;
         let morphOut = null;
         if (this.#morphHandler) {
           try {
             const p = this.#morphHandler.leave(oldAnimator.element);
-            if (p)
-              morphOut = Promise.resolve(p).catch(() => {
-              });
+            if (p) {
+              morphOut = Promise.resolve(p).catch(
+                (err) => reportError(this.#ctx, err, {
+                  phase: "transition",
+                  view: oldAnimator,
+                  route: next.to
+                })
+              );
+            }
           } catch (err) {
-            console.error("[puzzle] morph leave handler threw", err);
+            reportError(
+              this.#ctx,
+              err,
+              { phase: "transition", view: oldAnimator, route: next.to },
+              "[puzzle] morph leave handler threw",
+              err
+            );
           }
         }
         try {
           await oldAnimator.playOut();
         } catch (err) {
-          console.error("[puzzle] leave hook failed during navigation:", err);
+          reportError(
+            this.#ctx,
+            err,
+            { phase: "leave", view: oldAnimator, route: next.to },
+            "[puzzle] leave hook failed during navigation:",
+            err
+          );
         }
         if (token !== this.#token)
           return this.#abandon(next);
@@ -6542,6 +7009,8 @@ var Router = class {
             const restoreTakeover = this.#takeoverSSG(topView);
             this.#observeMount(
               topView.mount(this.#container, { children: rootVnode.children, preloaded: true }),
+              topView,
+              next.to,
               restoreTakeover
             );
             this.#commitState(next);
@@ -6560,6 +7029,8 @@ var Router = class {
             const restoreTakeover = this.#takeoverSSG(topView);
             this.#observeMount(
               layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+              layout,
+              next.to,
               restoreTakeover
             );
             this.#commitState(next);
@@ -6568,6 +7039,8 @@ var Router = class {
             const restoreTakeover = this.#takeoverSSG(topView);
             this.#observeMount(
               layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+              layout,
+              next.to,
               restoreTakeover
             );
             this.#commitState(next);
@@ -6580,7 +7053,13 @@ var Router = class {
         try {
           this.#morphHandler.enter(newAnimator?.element ?? null, { initial: !cur });
         } catch (err) {
-          console.error("[puzzle] morph enter handler threw", err);
+          reportError(
+            this.#ctx,
+            err,
+            { phase: "transition", view: newAnimator, route: next.to },
+            "[puzzle] morph enter handler threw",
+            err
+          );
         }
       }
     } finally {
@@ -6588,25 +7067,75 @@ var Router = class {
     }
   }
   /**
+   * INTERNAL (D145) — an error boundary is about to render over content the
+   * router owns. `boundaryView` is the boundary itself; everything the router
+   * committed BELOW it is destroyed by that render, so the committed chain can
+   * no longer be reused: drop the instance bookkeeping and force the next
+   * navigation to rebuild every level (`keep` degrades to 0 via `chainInvalid`,
+   * which is checked before the prefix walk so an emptied `views` array is never
+   * indexed).
+   *
+   * Instances are dropped from `views`/`keys` only where they are actually
+   * destroyed — the surviving prefix stays, because #swap resolves the OUTGOING
+   * unit it tears down from `cur.layout`/`cur.views[keep]`. Dropping a live
+   * instance there would strand its DOM (error face included) in the container
+   * and the next navigation would mount alongside it. Same reason the layout
+   * reference is kept when the layout is the boundary: it is flagged unreusable
+   * (`layoutInvalid`) so a fresh one is built, while the old one still resolves
+   * as the animator and is destroyed.
+   *
+   * Underscore-prefixed: internal runtime plumbing, not public router API.
+   */
+  __invalidateChain(boundaryView) {
+    const st = this.#state;
+    if (!st)
+      return;
+    st.chainInvalid = true;
+    const i2 = boundaryView ? st.views.indexOf(boundaryView) : -1;
+    if (i2 !== -1) {
+      st.views = st.views.slice(0, i2 + 1);
+      st.keys = st.keys.slice(0, i2 + 1);
+      return;
+    }
+    if (st.layout) {
+      st.views = [];
+      st.keys = [];
+      st.layoutInvalid = true;
+      return;
+    }
+    st.views = st.views.slice(0, 1);
+    st.keys = st.keys.slice(0, 1);
+  }
+  /**
    * Observe a router-owned mount() promise. mount() is async, so a SYNCHRONOUS
    * render()/mounted() throw inside it surfaces as a REJECTED promise (not a sync
    * throw — the commit block keeps running, no rollback: D19/D61). Left
    * unobserved that becomes an unhandled rejection; log it once here instead. The
    * failed view is still committed to #state, so a later navigation replaces and
-   * destroys it normally. On navigation-zero SSG takeover, restoreTakeover puts
-   * the exact prerendered nodes + marker back before logging — the committed
-   * failed instance remains router-owned, but the user never gets a blank page.
+   * destroys it normally. On navigation-zero SSG takeover the error boundary gets
+   * the first refusal: restoreTakeover puts the exact prerendered nodes + marker
+   * back ONLY when no boundary rendered (including when the boundary's own render
+   * threw), because the restore's replaceChildren() detaches the failed view's
+   * ViewManager anchor — restoring first guaranteed the one path meant to surface
+   * the failure could not draw. When a boundary does render, the prerendered
+   * content stays cleared and the user sees the error face. The committed failed
+   * instance remains router-owned either way.
    * (Child views mounted through the ViewManager's keyed patch are already observed
    * there; this covers the three mounts the router drives directly: bare root view,
    * layout swap, initial-nav layout.)
    */
-  #observeMount(p, restoreTakeover = null) {
+  #observeMount(p, view, route, restoreTakeover = null) {
     Promise.resolve(p).catch((err) => {
-      restoreTakeover?.();
-      console.error(
+      reportError(
+        this.#ctx,
+        err,
+        { phase: "mount", view, route },
         "[puzzle] view mount failed after commit \u2014 the view stays mounted (router owns its lifetime):",
         err
       );
+      const shown = view.__renderErrorBoundary?.(err);
+      if (!shown)
+        restoreTakeover?.();
     });
   }
   /**
@@ -6621,7 +7150,9 @@ var Router = class {
    * page), drop the marker (a later re-mount is a normal SPA mount), and suppress
    * the incoming top view's ENTER animation so content the user is already
    * reading doesn't re-animate. The returned callback restores the exact nodes
-   * and marker if the async mount promise rejects on render()/mounted().
+   * and marker if the async mount promise rejects on render()/mounted() AND no
+   * error boundary drew a face in the cleared container (#observeMount decides —
+   * the restore would detach the anchor the boundary needs).
    * `topView` is views[keep] — the view the ViewManager auto-plays in (behind a
    * layout) or the router plays in directly (no layout). A non-SSG app has no
    * marker, so this is a no-op and behavior is byte-identical.
@@ -6670,21 +7201,41 @@ var Router = class {
    * promise is awaited alongside playOut before the leaver is removed; a throwing
    * handler is logged and never wedges navigation.
    */
-  #startOverlapLeave(oldAnimator) {
+  #startOverlapLeave(oldAnimator, route) {
     this.#pendingOut = oldAnimator;
     this.#pinLeaver(oldAnimator.element);
     let morphOut = null;
     if (this.#morphHandler) {
       try {
         const p = this.#morphHandler.leave(oldAnimator.element);
-        if (p)
-          morphOut = Promise.resolve(p).catch(() => {
-          });
+        if (p) {
+          morphOut = Promise.resolve(p).catch(
+            (err) => reportError(this.#ctx, err, {
+              phase: "transition",
+              view: oldAnimator,
+              route
+            })
+          );
+        }
       } catch (err) {
-        console.error("[puzzle] morph leave handler threw", err);
+        reportError(
+          this.#ctx,
+          err,
+          { phase: "transition", view: oldAnimator, route },
+          "[puzzle] morph leave handler threw",
+          err
+        );
       }
     }
-    Promise.all([oldAnimator.playOut(), morphOut]).catch((err) => console.error("[puzzle] leave hook failed mid-overlap:", err)).then(() => {
+    Promise.all([oldAnimator.playOut(), morphOut]).catch(
+      (err) => reportError(
+        this.#ctx,
+        err,
+        { phase: "leave", view: oldAnimator, route },
+        "[puzzle] leave hook failed mid-overlap:",
+        err
+      )
+    ).then(() => {
       if (this.#pendingOut === oldAnimator)
         this.#pendingOut = null;
       oldAnimator.destroy();
@@ -6725,7 +7276,13 @@ var Router = class {
    */
   #playInLogged(instance) {
     Promise.resolve(instance.playIn()).catch(
-      (err) => console.error("[puzzle] view enter animation failed:", err)
+      (err) => reportError(
+        this.#ctx,
+        err,
+        { phase: "enter", view: instance, route: instance.route },
+        "[puzzle] view enter animation failed:",
+        err
+      )
     );
   }
   /** Record the freshly-mounted navigation as the current committed state. */
@@ -6747,6 +7304,9 @@ var Router = class {
     this.#guardRedirectCount = 0;
     this.#pendingNavPath = null;
     this.#pendingNavPromise = null;
+    if (next.prepared)
+      for (const p of next.prepared)
+        p.commit();
     if (true) {
       warnMissingSlots(next.views);
       devtoolsRouteCommit(next);
@@ -6806,7 +7366,13 @@ var Router = class {
         const pos = this.#scrollBehavior(to, from, pop ? savedPosition : null);
         return pos ? { x: pos.x ?? 0, y: pos.y ?? 0 } : null;
       } catch (err) {
-        console.error("[puzzle] scrollBehavior failed:", err);
+        reportError(
+          this.#ctx,
+          err,
+          { phase: "navigation", route: to },
+          "[puzzle] scrollBehavior failed:",
+          err
+        );
         return null;
       }
     }
@@ -6954,7 +7520,13 @@ var Router = class {
       try {
         el = this.#focusBehavior(spec.to, spec.from);
       } catch (err) {
-        console.error("[puzzle] focusBehavior failed:", err);
+        reportError(
+          this.#ctx,
+          err,
+          { phase: "navigation", route: spec.to },
+          "[puzzle] focusBehavior failed:",
+          err
+        );
         return null;
       }
       return el && typeof el.focus === "function" ? el : null;
@@ -7083,6 +7655,9 @@ var Router = class {
       next.views[i2]?.destroy();
     if (next.layout && !next.reuseLayout)
       next.layout.destroy();
+    if (next.prepared)
+      for (const p of next.prepared)
+        p.discard();
   }
   #match(pathname) {
     pathname = stripTrailingSlash(pathname);
@@ -7117,10 +7692,26 @@ var Router = class {
     try {
       const p = view.refresh({ params, route });
       if (p && typeof p.catch === "function") {
-        p.catch((err) => console.error("[puzzle] layout refresh failed:", err));
+        p.catch((err) => {
+          reportError(
+            this.#ctx,
+            err,
+            { phase: "refresh", view, route },
+            "[puzzle] layout refresh failed:",
+            err
+          );
+          view.__renderErrorBoundary?.(err);
+        });
       }
     } catch (err) {
-      console.error("[puzzle] layout refresh failed:", err);
+      reportError(
+        this.#ctx,
+        err,
+        { phase: "refresh", view, route },
+        "[puzzle] layout refresh failed:",
+        err
+      );
+      view.__renderErrorBoundary?.(err);
     }
   }
   /**
@@ -7442,7 +8033,7 @@ function sameNavKey(rawPath) {
   return stripTrailingSlash(rawPath.slice(0, cut)) + rawPath.slice(cut);
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/app.js
+// ../../puzzle/client-runtime/app.js
 var PuzzleApp = class {
   // Backing field for the `store` accessor. Null until mount() creates the Store
   // (and again after unmount()); the getter throws while unset so glue code that
@@ -7536,6 +8127,9 @@ var PuzzleApp = class {
    *   (services still live). Synchronous — a returned promise is not awaited; a
    *   throw is logged and teardown proceeds. Does not fire on the beforeMount
    *   abort path (SPEC §34)
+   * @param {Function} [config.onError] app error hook:
+   *   `onError(error, { phase, view, route })`, called for framework-contained
+   *   application errors. A throwing/rejecting hook is logged and swallowed
    */
   constructor(config = {}) {
     this.config = config;
@@ -7585,7 +8179,7 @@ var PuzzleApp = class {
     if (typeof document === "undefined")
       return this;
     const epoch = ++this.#mountEpoch;
-    for (const name of ["beforeMount", "mounted", "beforeUnmount"]) {
+    for (const name of ["beforeMount", "mounted", "beforeUnmount", "onError"]) {
       const hook2 = this.config[name];
       if (hook2 != null && typeof hook2 !== "function") {
         throw new Error(`[puzzle] config.${name} must be a function when set`);
@@ -7606,10 +8200,12 @@ var PuzzleApp = class {
       routerBase,
       transitionMode,
       beforeMount,
-      mounted
+      mounted,
+      onError
     } = this.config;
     const el = this.#resolveTarget(target);
     this._container = el;
+    setPortalHost(el.parentNode ?? (typeof document !== "undefined" ? document.body : null));
     const storeOptions = { apiURL };
     if (storage !== void 0)
       storeOptions.storage = storage;
@@ -7637,6 +8233,7 @@ var PuzzleApp = class {
       this.router.setMorphHandler(this.#morphHandler);
     }
     this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
+    setErrorHandler(this.ctx, onError);
     this._mounted = true;
     if (typeof window !== "undefined") {
       this.#pageHideFlush = () => this.#store?.flush();
@@ -7672,13 +8269,29 @@ var PuzzleApp = class {
     if (true)
       restoreViewsFromStorage(hmrBlob);
     if (mounted != null) {
+      const errorCtx = this.ctx;
+      const route = this.router?.current;
       try {
         const ret = mounted.call(this, this);
         if (ret != null && typeof ret.then === "function") {
-          ret.catch((err) => console.error("[puzzle] mounted hook error:", err));
+          ret.catch(
+            (err) => reportError(
+              errorCtx,
+              err,
+              { phase: "app-mount", route },
+              "[puzzle] mounted hook error:",
+              err
+            )
+          );
         }
       } catch (err) {
-        console.error("[puzzle] mounted hook error:", err);
+        reportError(
+          errorCtx,
+          err,
+          { phase: "app-mount", route },
+          "[puzzle] mounted hook error:",
+          err
+        );
       }
     }
     return this;
@@ -7704,13 +8317,29 @@ var PuzzleApp = class {
       return this;
     const { beforeUnmount } = this.config;
     if (beforeUnmount != null) {
+      const errorCtx = this.ctx;
+      const route = this.router?.current;
       try {
         const ret = beforeUnmount.call(this, this);
         if (ret != null && typeof ret.then === "function") {
-          ret.catch((err) => console.error("[puzzle] beforeUnmount hook error:", err));
+          ret.catch(
+            (err) => reportError(
+              errorCtx,
+              err,
+              { phase: "app-unmount", route },
+              "[puzzle] beforeUnmount hook error:",
+              err
+            )
+          );
         }
       } catch (err) {
-        console.error("[puzzle] beforeUnmount hook error:", err);
+        reportError(
+          errorCtx,
+          err,
+          { phase: "app-unmount", route },
+          "[puzzle] beforeUnmount hook error:",
+          err
+        );
       }
     }
     this.#teardown();
@@ -7736,6 +8365,7 @@ var PuzzleApp = class {
       window.removeEventListener("pagehide", this.#pageHideFlush);
       this.#pageHideFlush = null;
     }
+    teardownPortals();
     if (this._container)
       this._container.replaceChildren();
     this.ctx = null;
@@ -7763,7 +8393,7 @@ var PuzzleApp = class {
   }
 };
 
-// node_modules/@magic-spells/puzzle/client-runtime/views/visibility.js
+// ../../puzzle/client-runtime/views/visibility.js
 var registry = /* @__PURE__ */ new Map();
 function observeVisible(el, rootMargin, callback) {
   if (typeof IntersectionObserver !== "function")
@@ -7856,7 +8486,9 @@ function disarm(rootMargin, el, callback) {
   }
 }
 
-// node_modules/@magic-spells/puzzle/client-runtime/views/PuzzleView.js
+// ../../puzzle/client-runtime/views/PuzzleView.js
+var INERT_BIND = () => {
+};
 var PuzzleView = class {
   // Two-layer component state (Change C, SPEC §4). #local holds values written
   // via setData() (and created()-seeded state, which uses setData); #model holds
@@ -7886,7 +8518,41 @@ var PuzzleView = class {
   // SAME attrs.ref value across renders (a fresh closure would churn every patch),
   // so the setter identity is memoised per name for this instance's lifetime.
   #refSetters = null;
+  // Per-instance write-back handler caches for implicit two-way binding (D147),
+  // on the same memo principle as #refSetters: the differ must see the SAME
+  // '@input:bind' value across renders or patchAttrs detaches and re-attaches the
+  // listener on every patch. #bindLocalMemo keys the null-target (local state)
+  // handlers by "field spec"; #bindMemberMemo keys member handlers by the target
+  // OBJECT first — weakly, so a discarded record's handlers go with it — then by
+  // the same string. Both lazily created on first use.
+  #bindLocalMemo = null;
+  #bindMemberMemo = null;
+  // Dev-only: the last object seen for each member "field spec" path plus a
+  // write awaiting its next render. A plain-object write can otherwise disappear
+  // when data() returns a fresh literal: the new object misses #bindMemberMemo and
+  // its old field value replaces the edit. The pending entry records the object
+  // ACTUALLY written, so a stable target, a rebuilt target that preserved the
+  // value, and record replacement all stay silent. Lazily allocated behind inline
+  // __PUZZLE_DEV__ gates only.
+  #bindMemberLast = null;
+  #bindMemberPending = null;
+  #bindMemberWarned = null;
+  // Dev-only: the value each local bind write last wrote, keyed by field. The
+  // layer-clobber diagnostic reads it at the next recompose to notice a data()
+  // commit reverting a bound key, and #bindWarned holds the keys it has already
+  // reported so the warning is once per key per view rather than once per commit.
+  // Neither is ever allocated in production — every touchpoint is gated INLINE on
+  // __PUZZLE_DEV__.
+  #bindPending = null;
+  #bindWarned = null;
   #vm = null;
+  // Nearest owning PuzzleView for error-boundary lookup. Set by the parent's
+  // ViewManager when it instantiates/adopts this component; null for app roots.
+  #errorParent = null;
+  // An error whose boundary resolved to THIS instance before it had a
+  // ViewManager (a pre-mount preload/data() rejection). mount() flushes it once
+  // the manager exists and the first render has been attempted.
+  #pendingBoundaryError = null;
   #mounted = false;
   // Anchor-race gate (Change A): set true when the non-skeleton async mount()
   // branch resumes to find its first render superseded (no commit landed) —
@@ -7900,6 +8566,11 @@ var PuzzleView = class {
   #destroyed = false;
   #updateScheduled = false;
   #runToken = 0;
+  // D146: the { params, props, route } a PREPARED (not yet committed) data() run
+  // evaluates against. Non-null only while such an evaluation is in flight; the
+  // params/route getters read it, and every entry point save/restores it (exact
+  // stack discipline for nested synchronous evals, mirroring Store._tracking).
+  #evalScope = null;
   // False until the FIRST data() result actually SWAPS in (v1.8, D39; v1.20
   // D52 moves the flip from data-commit to swap time). While false and a
   // renderSkeleton() is declared (compiled from <puzzle-skeleton>), renders
@@ -7921,8 +8592,11 @@ var PuzzleView = class {
   // finished under fill:'both'. Keep that Puzzle-owned handle past natural
   // completion so recovery can cancel only it, never app-owned root animations.
   #outHandle = null;
+  // playOut is one-shot even when the router restores a stalled outgoing view:
+  // #outTask keeps the spent memo for a later instant swap, while #leaving names
+  // only the CURRENT inert interval and can therefore be cleared by recovery.
+  #outTask = null;
   #leaving = null;
-  // memoised playOut() promise — idempotent teardown
   // Scroll-triggered enter (v1.40, D73). While a `trigger: 'visible'` enter is
   // held waiting for the element to scroll into view: #disarmVisible stops the
   // shared IntersectionObserver observation and #enterResolve resolves the
@@ -8080,6 +8754,249 @@ var PuzzleView = class {
     return setter;
   }
   /**
+   * INTERNAL — the write-back handler for one implicitly-bound form control
+   * (D147, SPEC §6). The compiler emits this inline in a vnode's attrs on a
+   * qualifying `<input>`/`<textarea>`/`<select>`:
+   * `'@input:bind': this.__bind(null, 'draft', 'v')`.
+   *
+   * - `target` is null for a bare identifier bind (local component state) or the
+   *   resolved ROOT object of a one-member path (`todo.completed` → the loop
+   *   variable, `profile.hue` → the data() value). The write arm is chosen from
+   *   the target at write time, not here — a data() commit can swap a plain
+   *   object for a record between renders.
+   * - `key` is the field to write.
+   * - `spec` is the compile-time coercion: 'v' string, 'vn' numeric, 'c' boolean.
+   *
+   * Memoized on (target, key, spec) so the identity is stable across renders;
+   * see the #bindLocalMemo/#bindMemberMemo field notes. It consumes no `__h`
+   * handler-site index.
+   *
+   * INTERNAL — underscore-prefixed like the rest of the compiler-facing surface;
+   * never spelled in a template. Not part of the public typed API.
+   */
+  __bind(target, key, spec) {
+    if (target != null && typeof target !== "object" && typeof target !== "function") {
+      return INERT_BIND;
+    }
+    let store;
+    if (target == null) {
+      store = this.#bindLocalMemo ??= /* @__PURE__ */ new Map();
+    } else {
+      const byTarget = this.#bindMemberMemo ??= /* @__PURE__ */ new WeakMap();
+      store = byTarget.get(target);
+      if (!store)
+        byTarget.set(target, store = /* @__PURE__ */ new Map());
+    }
+    const memoKey = key + " " + spec;
+    let fn = store.get(memoKey);
+    if (!fn) {
+      fn = (event) => {
+        if (event.isComposing)
+          return;
+        const el = event.target;
+        let value;
+        if (spec === "c")
+          value = !!el.checked;
+        else if (spec === "vn") {
+          if (el.value === "")
+            value = null;
+          else {
+            value = Number(el.value);
+            if (Number.isNaN(value))
+              return;
+          }
+        } else
+          value = el.value;
+        this.#bindWrite(target, key, value, spec);
+      };
+      store.set(memoKey, fn);
+    }
+    if (true) {
+      if (target != null) {
+        const last = this.#bindMemberLast ??= /* @__PURE__ */ new Map();
+        const previous = last.get(memoKey);
+        const pending = this.#bindMemberPending?.get(memoKey);
+        if (pending) {
+          if (target === pending.target) {
+            pending.sawTarget = true;
+          } else if (previous !== void 0 && previous !== target && target[key] !== pending.value) {
+            if (pending.replacement == null)
+              pending.replacement = target;
+            else if (pending.replacement !== target)
+              pending.ambiguous = true;
+          }
+        }
+        last.set(memoKey, target);
+      }
+    }
+    return fn;
+  }
+  /**
+   * Apply one bind write. Three arms, decided by the target:
+   *
+   * 1. null → local component state. refresh(), not a bare setData: a bound
+   *    filter field feeding a data()-derived list must narrow it as you type, and
+   *    setData never re-runs data(). #renderNow disarms the frame setData armed,
+   *    so this still costs exactly one render.
+   * 2. a PuzzleModel record → its validated update(). Duck-typed on `update` and
+   *    a string `_type` TOGETHER (this file must not import model.js); a plain
+   *    object that merely owns an update() method is not a record. update()
+   *    validates and throws BEFORE mutating, so a rejected write leaves the
+   *    record — and the typed text on screen — untouched.
+   * 3. anything else → direct mutation plus a repaint of the owning view.
+   */
+  #bindWrite(target, key, value, spec) {
+    if (target == null) {
+      this.setData(key, value);
+      if (true) {
+        (this.#bindPending ??= /* @__PURE__ */ new Map()).set(key, value);
+      }
+      try {
+        this.refresh()?.catch(
+          (err) => this.#handleViewFailure(
+            "[puzzle] data() failed after a bound write:",
+            err,
+            "bind"
+          )
+        );
+      } catch (err) {
+        this.#handleViewFailure(
+          "[puzzle] data() failed after a bound write:",
+          err,
+          "bind"
+        );
+      }
+    } else if (typeof target.update === "function" && typeof target._type === "string") {
+      try {
+        target.update({ [key]: value });
+      } catch (err) {
+        reportError(
+          this.ctx,
+          err,
+          { phase: "bind", view: this, route: this.route },
+          "[puzzle] bound write rejected:",
+          err
+        );
+      }
+    } else {
+      target[key] = value;
+      if (true) {
+        (this.#bindMemberPending ??= /* @__PURE__ */ new Map()).set(key + " " + spec, {
+          key,
+          target,
+          value,
+          sawTarget: false,
+          replacement: null,
+          ambiguous: false
+        });
+      }
+      try {
+        this.refresh()?.catch(
+          (err) => this.#handleViewFailure(
+            "[puzzle] data() failed after a bound write:",
+            err,
+            "bind"
+          )
+        );
+      } catch (err) {
+        this.#handleViewFailure(
+          "[puzzle] data() failed after a bound write:",
+          err,
+          "bind"
+        );
+      }
+    }
+  }
+  /**
+   * INTERNAL — record the owning view for nearest-boundary lookup. ViewManager
+   * calls this when it creates or adopts a child component.
+   */
+  __setErrorParent(parent) {
+    this.#errorParent = parent ?? null;
+  }
+  /**
+   * Resolve and render the nearest optional `errorContent(error)` boundary.
+   *
+   * `errorContent` is a script-side member returning one ViewNode tree; it needs
+   * no compiler syntax. A boundary handles its own failures and descendants,
+   * with the nearest implementation winning. Returning null declines the error
+   * and lets lookup continue outward.
+   *
+   * The two-step prepare/show split preserves D115/D136 ownership: component
+   * mount recovery captures the fallback before destroying the failed instance,
+   * then mounts that face beside the existing recovery placeholder. The owning
+   * parent retries by calling refresh(), whose next patch mounts a fresh instance
+   * through that same placeholder and removes the fallback.
+   */
+  __prepareErrorBoundary(error) {
+    let boundary = this;
+    let boundaryError = error;
+    while (boundary) {
+      if (typeof boundary.errorContent === "function") {
+        try {
+          const tree = boundary.errorContent(boundaryError);
+          if (tree)
+            return { boundary, tree, error: boundaryError };
+        } catch (err) {
+          reportError(
+            boundary.ctx,
+            err,
+            { phase: "boundary", view: boundary, route: boundary.route },
+            "[puzzle] errorContent() failed:",
+            err
+          );
+          boundaryError = err;
+        }
+      }
+      boundary = boundary.#errorParent;
+    }
+    return null;
+  }
+  /** INTERNAL — display a boundary result prepared by __prepareErrorBoundary. */
+  __showErrorBoundary(captured, { failedMount = false, placeholder = null } = {}) {
+    if (!captured)
+      return false;
+    const { boundary, tree } = captured;
+    try {
+      if (failedMount && boundary === this) {
+        const mountedTree = this.#vm?.mountErrorFallback(tree, placeholder, this.#errorParent);
+        if (!mountedTree)
+          return false;
+        this.__failedFallback = mountedTree;
+        if (placeholder)
+          placeholder.__failedFallback = mountedTree;
+      } else {
+        if (!boundary.#vm || boundary.#destroyed) {
+          if (boundary === this && !this.#vm && !this.#destroyed) {
+            this.#pendingBoundaryError = captured.error ?? null;
+          }
+          return false;
+        }
+        if (boundary !== this) {
+          this.ctx?.router?.__invalidateChain?.(boundary);
+        }
+        if (boundary.#vm.treeUnknown)
+          boundary.#vm.renderFresh(tree);
+        else
+          boundary.#vm.render(tree);
+      }
+      return true;
+    } catch (err) {
+      reportError(
+        boundary.ctx,
+        err,
+        { phase: "boundary", view: boundary, route: boundary.route },
+        "[puzzle] errorContent() render failed:",
+        err
+      );
+      return false;
+    }
+  }
+  /** INTERNAL convenience for live failures that need no D115 teardown first. */
+  __renderErrorBoundary(error) {
+    return this.__showErrorBoundary(this.__prepareErrorBoundary(error));
+  }
+  /**
    * The DOM node occupying this component's position (null before mount).
    * While an async data() is in flight this is the anchor placeholder, so
    * a parent's sibling insertion refs stay valid (constellation/doc/DOC-APP-ANATOMY.md §4).
@@ -8108,7 +9025,7 @@ var PuzzleView = class {
     return this.#destroyed;
   }
   get params() {
-    return this.#params;
+    return this.#evalScope ? this.#evalScope.params : this.#params;
   }
   get props() {
     return this.#props;
@@ -8123,7 +9040,7 @@ var PuzzleView = class {
    * across store-change refreshes; overwritten by the next navigation.
    */
   get route() {
-    return this.#route;
+    return this.#evalScope ? this.#evalScope.route : this.#route;
   }
   // ---- lifecycle -------------------------------------------------------------
   /**
@@ -8143,7 +9060,7 @@ var PuzzleView = class {
    * timers, or grab focus from a mounted() hook (constellation/doc/DOC-VIEW-LIFECYCLE.md §3).
    */
   async mount(container, { params = {}, props = {}, children = [], ref = null, preloaded = false } = {}) {
-    this.#vm = new ViewManager(container, this.ctx);
+    this.#vm = new ViewManager(container, this.ctx, this);
     this.#vm.slotChildren = children;
     if (!preloaded) {
       this.#params = params;
@@ -8163,7 +9080,9 @@ var PuzzleView = class {
       this.created();
       const pending = this.refresh();
       if (pending && typeof this.renderSkeleton === "function") {
-        pending.catch((err) => console.error("[puzzle] data() failed behind a skeleton:", err));
+        pending.catch(
+          (err) => this.#handleViewFailure("[puzzle] data() failed behind a skeleton:", err, "mount")
+        );
         this.#renderNow();
       } else {
         await pending;
@@ -8171,12 +9090,26 @@ var PuzzleView = class {
           return this;
         if (!this.#loaded) {
           this.#pendingMountHook = true;
+          this.#flushPendingBoundaryError();
           return this;
         }
       }
     }
     this.#completeMount();
+    this.#flushPendingBoundaryError();
     return this;
+  }
+  /**
+   * Surface an error buffered before this instance had a ViewManager (see
+   * #pendingBoundaryError). Runs once — the field is cleared BEFORE the render,
+   * so a boundary that throws while drawing cannot re-enter this flush.
+   */
+  #flushPendingBoundaryError() {
+    const err = this.#pendingBoundaryError;
+    if (err === null || this.#destroyed)
+      return;
+    this.#pendingBoundaryError = null;
+    this.__renderErrorBoundary(err);
   }
   /**
    * Finish the mount: flip #mounted, join the dev live-view registry, fire
@@ -8192,7 +9125,7 @@ var PuzzleView = class {
     this.#mounted = true;
     if (true)
       registerView(this);
-    this.mounted();
+    this.#withCommittedScope(() => this.mounted());
   }
   /**
    * Run created() + data() (awaited, subscriptions tracked) WITHOUT touching the
@@ -8256,6 +9189,9 @@ var PuzzleView = class {
    * supersedes an in-flight async one (stale results are discarded).
    */
   refresh({ params, props, route } = {}) {
+    return this.#withCommittedScope(() => this.#refreshInner({ params, props, route }));
+  }
+  #refreshInner({ params, props, route } = {}) {
     if (this.#destroyed || this.#leaving)
       return;
     if (params)
@@ -8284,8 +9220,129 @@ var PuzzleView = class {
     }
     this.#commit(token, result);
   }
+  /**
+   * TRANSACTIONAL refresh (D146) — the two-phase form the router uses for a REUSED
+   * ancestor inside a gated navigation. PREPARE runs data() against the destination
+   * params/route (visible to the run through the params/route getters) and captures
+   * both the model result and the store subscriptions the run tracked; it renders
+   * nothing and mutates no committed field. The returned handle then either
+   *
+   *   commit()  — swap params/route/model/subscriptions and re-render, or
+   *   discard() — drop only the subscriptions this run added, leaving the view's
+   *               committed params, route snapshot, data, DOM, and live
+   *               subscription set exactly as they were.
+   *
+   * so a navigation that rejects or is superseded leaves the ancestor entirely on
+   * the old route (closing the D19/D30 soft-violation).
+   *
+   * Returns null when there is nothing to prepare (destroyed/leaving view, or a
+   * profiler-blocked data() run) — the same no-op refresh() performs in those
+   * states; the caller simply has nothing to commit.
+   *
+   * A SYNCHRONOUS data() throw propagates out of this call exactly as it does out
+   * of refresh() (withTracking rethrows), already reconciled as a failure.
+   *
+   * @returns {?{ready: Promise<void>, commit: function(): void, discard: function(): void}}
+   */
+  prepareRefresh({ params, props, route } = {}) {
+    if (this.#destroyed || this.#leaving)
+      return null;
+    if (true) {
+      if (!devperfPrepareData(
+        this,
+        params || route !== void 0 ? "route" : props !== void 0 ? "props" : void 0
+      ))
+        return null;
+    }
+    const scope = {
+      params: params ?? this.#params,
+      props: props ?? this.#props,
+      route: route !== void 0 ? route : this.#route
+    };
+    const pending = {};
+    const run = () => {
+      const prev = this.#evalScope;
+      this.#evalScope = scope;
+      let out;
+      try {
+        out = true ? devperfRunData(this, scope.params, scope.props) : this.data(scope.params, scope.props);
+      } catch (err) {
+        this.#evalScope = prev;
+        throw err;
+      }
+      if (out && typeof out.then === "function") {
+        return out.then(
+          (model2) => {
+            this.#evalScope = prev;
+            return model2;
+          },
+          (err) => {
+            this.#evalScope = prev;
+            throw err;
+          }
+        );
+      }
+      this.#evalScope = prev;
+      return out;
+    };
+    const result = this.ctx.store ? this.ctx.store.withTracking(
+      this,
+      run,
+      this.data.constructor.name === "AsyncFunction",
+      pending
+    ) : run();
+    let model;
+    const ready = Promise.resolve(result).then((m) => {
+      model = m;
+    });
+    const preparedAt = this.#runToken;
+    let settled = false;
+    return {
+      ready,
+      commit: () => {
+        if (settled)
+          return;
+        settled = true;
+        if (this.#destroyed || this.#leaving) {
+          pending.reconcile?.(false);
+          return;
+        }
+        pending.reconcile?.(true);
+        this.#params = scope.params;
+        this.#props = scope.props;
+        this.#route = scope.route;
+        if (this.#runToken !== preparedAt) {
+          this.#runToken++;
+          try {
+            this.refresh()?.catch(
+              (err) => this.#handleBackgroundRefreshFailure(
+                "[puzzle] data() failed during a prepared-commit re-derive:",
+                err
+              )
+            );
+          } catch (err) {
+            this.#handleBackgroundRefreshFailure(
+              "[puzzle] data() failed during a prepared-commit re-derive:",
+              err
+            );
+          }
+        } else {
+          this.#commit(++this.#runToken, model);
+        }
+      },
+      discard: () => {
+        if (settled)
+          return;
+        settled = true;
+        pending.reconcile?.(false);
+      }
+    };
+  }
   /** Store subscription callback (Store.flush → subscribed components). */
   onStoreChange() {
+    return this.#withCommittedScope(() => this.#onStoreChangeInner());
+  }
+  #onStoreChangeInner() {
     if (this.#destroyed || this.#leaving)
       return;
     try {
@@ -8315,15 +9372,28 @@ var PuzzleView = class {
    * their synchronous mount, so Router ownership remains untouched.
    */
   #handleBackgroundRefreshFailure(message, err) {
-    console.error(message, err);
-    if (!this.#pendingMountHook || this.#destroyed)
+    this.#handleViewFailure(message, err, "refresh");
+  }
+  #handleViewFailure(message, err, phase) {
+    reportError(
+      this.ctx,
+      err,
+      { phase, view: this, route: this.route },
+      message,
+      err
+    );
+    const boundary = this.__prepareErrorBoundary(err);
+    if (!this.#pendingMountHook || this.#destroyed) {
+      this.__showErrorBoundary(boundary);
       return;
+    }
     this.#pendingMountHook = false;
     this.#enterPending = false;
     const placeholder = plantFailedMountPlaceholder(this);
     this.destroy();
     if (placeholder)
       this.__failedPlaceholder = placeholder;
+    this.__showErrorBoundary(boundary, { failedMount: true, placeholder });
   }
   /**
    * Tear down: unsubscribe, clear DOM, fire destroyed(). Idempotent, and it
@@ -8353,9 +9423,15 @@ var PuzzleView = class {
     for (const key of Object.keys(this.refs))
       this.refs[key] = null;
     try {
-      this.destroyed();
+      this.#withCommittedScope(() => this.destroyed());
     } catch (err) {
-      console.error("[puzzle] destroyed hook error:", err);
+      reportError(
+        this.ctx,
+        err,
+        { phase: "unmount", view: this, route: this.route },
+        "[puzzle] destroyed hook error:",
+        err
+      );
     }
   }
   // ---- hooks & overridables (SPEC §4 class contract) ---------------------------
@@ -8582,7 +9658,13 @@ var PuzzleView = class {
         try {
           this.viewWillShow();
         } catch (err) {
-          console.error("[puzzle] enter hook failed during a visible-trigger reveal:", err);
+          reportError(
+            this.ctx,
+            err,
+            { phase: "enter", view: this, route: this.route },
+            "[puzzle] enter hook failed during a visible-trigger reveal:",
+            err
+          );
         }
         handle.play();
         handle.finished.then(() => {
@@ -8592,7 +9674,13 @@ var PuzzleView = class {
             try {
               this.viewDidShow();
             } catch (err) {
-              console.error("[puzzle] enter hook failed during a visible-trigger reveal:", err);
+              reportError(
+                this.ctx,
+                err,
+                { phase: "enter", view: this, route: this.route },
+                "[puzzle] enter hook failed during a visible-trigger reveal:",
+                err
+              );
             }
           }
           this.#settleEnter();
@@ -8659,12 +9747,18 @@ var PuzzleView = class {
   playOut() {
     if (this.#leaving)
       return this.#leaving;
+    if (this.#outTask) {
+      this.#leaving = this.#outTask;
+      this.ctx.store?.unsubscribe(this);
+      return this.#outTask;
+    }
     let resolveLeaving;
     let rejectLeaving;
     this.#leaving = new Promise((resolve, reject) => {
       resolveLeaving = resolve;
       rejectLeaving = reject;
     });
+    this.#outTask = this.#leaving;
     this.ctx.store?.unsubscribe(this);
     this._cancelOutAnimation();
     const leavingTask = (async () => {
@@ -8702,6 +9796,37 @@ var PuzzleView = class {
     handle.cancel();
   }
   /**
+   * Router-only failed-navigation recovery: make a committed outgoing view live
+   * again after playOut() made it inert. The out sequence remains spent through
+   * #outTask, so a later successful navigation still swaps this restored unit out
+   * instantly; only the active #leaving guard is cleared. Refresh after clearing
+   * it because playOut() unsubscribed the view — Store.withTracking inside refresh
+   * re-establishes exactly the queries data() still makes.
+   *
+   * Recovery runs inside the router's synchronous failure window. Contain both a
+   * synchronous data() throw and an async rejection here so restoring the old view
+   * can never turn a handled navigation failure into a rejecting router promise.
+   */
+  _restoreFromLeaving() {
+    if (this.#destroyed || !this.#leaving)
+      return;
+    this.#leaving = null;
+    this._cancelOutAnimation();
+    try {
+      this.refresh()?.catch(
+        (err) => this.#handleBackgroundRefreshFailure(
+          "[puzzle] data() failed while restoring a stalled outgoing view:",
+          err
+        )
+      );
+    } catch (err) {
+      this.#handleBackgroundRefreshFailure(
+        "[puzzle] data() failed while restoring a stalled outgoing view:",
+        err
+      );
+    }
+  }
+  /**
    * Animated teardown: play the leave sequence, THEN destroy() (which removes
    * the DOM and fires destroyed()). If already destroyed or there is no live
    * element, it degrades to a plain synchronous destroy(). This is the only
@@ -8716,7 +9841,13 @@ var PuzzleView = class {
     try {
       await this.playOut();
     } catch (err) {
-      console.error("[puzzle] leave hook failed during teardown:", err);
+      reportError(
+        this.ctx,
+        err,
+        { phase: "leave", view: this, route: this.route },
+        "[puzzle] leave hook failed during teardown:",
+        err
+      );
     }
     this.destroy();
   }
@@ -8775,7 +9906,13 @@ var PuzzleView = class {
       if (this.#enterPending) {
         this.#enterPending = false;
         Promise.resolve(this.playIn()).catch(
-          (err) => console.error("[puzzle] child enter animation failed:", err)
+          (err) => reportError(
+            this.ctx,
+            err,
+            { phase: "enter", view: this, route: this.route },
+            "[puzzle] child enter animation failed:",
+            err
+          )
         );
       }
     }
@@ -8792,6 +9929,19 @@ var PuzzleView = class {
         delete this.#data[key];
     }
     Object.assign(this.#data, composed);
+    if (true) {
+      if (this.#bindPending) {
+        for (const [key, written] of this.#bindPending) {
+          if (this.#data[key] === written || this.#bindWarned?.has(key))
+            continue;
+          (this.#bindWarned ??= /* @__PURE__ */ new Set()).add(key);
+          console.warn(
+            `[puzzle] a data() commit reverted the bound key '${key}' \u2014 bind the source path instead (value={ record.${key} }), or stop deriving '${key}' in data().`
+          );
+        }
+        this.#bindPending.clear();
+      }
+    }
   }
   /**
    * Whether the first loaded swap must be held (v1.20, D52): a skeleton was
@@ -8806,7 +9956,47 @@ var PuzzleView = class {
   #holdRemaining() {
     return (this.skeletonMinDuration ?? 0) - (Date.now() - this.#skeletonShownAt);
   }
+  /**
+   * Run fn with the DESTINATION eval scope (D146) fenced off, so `this.params` /
+   * `this.route` inside it report the COMMITTED route.
+   *
+   * #evalScope exists so a PREPARED data() run sees the navigation it is gating
+   * (D47). For a synchronous data() that window is one call frame. For an ASYNC
+   * one it spans the whole suspension — the entire navigation gate — during which
+   * the ancestor is still mounted, still on the old route, and fully interactive.
+   * Every path where the runtime re-enters app code from the event loop in that
+   * window must therefore read committed state, or a click handler doing
+   * `store.upsert('item', { listId: this.params.listId })` writes against a route
+   * the user has not navigated to (and which may never commit).
+   *
+   * Fenced here: renders, DOM event dispatch, flushUpdates (the setData path),
+   * onStoreChange, refresh, and the mounted()/destroyed() lifecycle hooks
+   * (beforeUpdate/afterUpdate run inside #renderNow, already fenced). NOT fenced,
+   * and a known residue: app code that captures `this` into a setTimeout or a
+   * fetch().then() DURING the gate and dereferences params/route after the fence
+   * returns. There is no async-local scope primitive in the browser to close that.
+   */
+  #withCommittedScope(fn) {
+    const prevScope = this.#evalScope;
+    this.#evalScope = null;
+    try {
+      return fn();
+    } finally {
+      this.#evalScope = prevScope;
+    }
+  }
+  /**
+   * INTERNAL bridge to #withCommittedScope for the ViewManager, which wraps every
+   * patch-managed DOM listener so the owner's handler runs against committed
+   * params/route. Underscore-prefixed by the codebase's internal convention.
+   */
+  __withCommittedScope(fn) {
+    return this.#withCommittedScope(fn);
+  }
   #renderNow(preparedTree = void 0) {
+    this.#withCommittedScope(() => this.#renderNowInner(preparedTree));
+  }
+  #renderNowInner(preparedTree = void 0) {
     if (!this.#vm || this.#destroyed)
       return;
     if (!devperfCanRender(this)) {
@@ -8855,6 +10045,19 @@ var PuzzleView = class {
       this.#vm.anchorAt(ref);
     }
     if (true) {
+      if (this.#bindMemberPending) {
+        for (const [memoKey, pending] of this.#bindMemberPending) {
+          if (!pending.sawTarget && pending.replacement != null && !pending.ambiguous && !this.#bindMemberWarned?.has(pending.key)) {
+            (this.#bindMemberWarned ??= /* @__PURE__ */ new Set()).add(pending.key);
+            console.warn(
+              `[puzzle] the object behind a bound path is rebuilt on every data() run, so the write is lost \u2014 return a stable object (this.memo(...)), or bind a record or a bare local key instead (key: '${pending.key}')`
+            );
+          }
+          this.#bindMemberPending.delete(memoKey);
+        }
+      }
+    }
+    if (true) {
       devperfRenderEnd(this);
     }
   }
@@ -8873,14 +10076,23 @@ var PuzzleView = class {
    * wedges the scheduler (the flag clears first; the error is reported).
    */
   flushUpdates() {
-    if (!this.#updateScheduled)
-      return;
-    this.#updateScheduled = false;
-    try {
-      this.#renderNow();
-    } catch (err) {
-      console.error("[puzzle] render update failed:", err);
-    }
+    this.#withCommittedScope(() => {
+      if (!this.#updateScheduled)
+        return;
+      this.#updateScheduled = false;
+      try {
+        this.#renderNow();
+      } catch (err) {
+        reportError(
+          this.ctx,
+          err,
+          { phase: "render", view: this, route: this.route },
+          "[puzzle] render update failed:",
+          err
+        );
+        this.__renderErrorBoundary(err);
+      }
+    });
   }
 };
 
@@ -13519,7 +14731,7 @@ DefaultLayout.prototype.render = function() {
     ]),
     new ViewNode("div", { class: "flex w-full px-gutter" }, [
       new ViewNode("aside", {
-        class: "sticky top-14 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 overflow-y-auto py-8 pr-4 lg:block"
+        class: "sticky top-14 -ml-3 hidden h-[calc(100vh-3.5rem)] w-60 shrink-0 overflow-y-auto py-8 pr-4 lg:block"
       }, [
         new ViewNode(SideNav, { path: __d.path }, [])
       ]),
@@ -33891,7 +35103,6 @@ var BottomSheet = class extends PuzzleView {
   #springTarget = null;
   #springSpec = null;
   #carriedVelocity = 0;
-  #bodyOverflow = null;
   #drag = { active: false };
   #snapPoints = [];
   #localSnap = null;
@@ -33934,16 +35145,14 @@ var BottomSheet = class extends PuzzleView {
     return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   }
   #lockBody() {
-    if (this.#bodyOverflow !== null)
-      return;
-    this.#bodyOverflow = document.body.style.overflow;
+    this.element?.setAttribute("data-scroll-lock", "");
     document.body.style.overflow = "hidden";
   }
   #unlockBody() {
-    if (this.#bodyOverflow === null)
-      return;
-    document.body.style.overflow = this.#bodyOverflow;
-    this.#bodyOverflow = null;
+    this.element?.removeAttribute("data-scroll-lock");
+    if (!document.querySelector("[data-scroll-lock]")) {
+      document.body.style.overflow = "";
+    }
   }
   #hiddenDistance() {
     const panel = this.refs.panel;
@@ -49735,10 +50944,20 @@ var InputOtp = class extends PuzzleView {
     if (i2 < 0 || i2 >= length)
       return;
     const el = this.element?.querySelector(`[data-otp-index="${i2}"]`);
-    if (el) {
-      el.focus();
-      el.select?.();
-    }
+    if (!el)
+      return;
+    this._selfFocus = true;
+    el.focus();
+    el.select?.();
+    this._selfFocus = false;
+  }
+  // The slot an interaction at cell `i` actually acts on. `value` is a compact
+  // prefix string, so cell N only exists in it once N chars are typed — clamping
+  // to `value.length` keeps the edit landing in the cell the user is looking at
+  // instead of silently appending at the end of the string.
+  _slot(i2) {
+    const { value } = this.getData();
+    return Math.min(i2, value.length);
   }
   // Emit the new full value and fire @complete once, the moment the value first
   // transitions to full length (never again while it stays full).
@@ -49756,7 +50975,7 @@ var InputOtp = class extends PuzzleView {
       const { value, length, type, disabled } = this.getData();
       if (disabled)
         return;
-      const i2 = item.index;
+      const i2 = this._slot(item.index);
       const chars = sanitize(event.target.value, type);
       if (chars.length === 0) {
         event.target.value = value[i2] || "";
@@ -49776,7 +50995,7 @@ var InputOtp = class extends PuzzleView {
       const { value, length, disabled } = this.getData();
       if (disabled)
         return;
-      const i2 = item.index;
+      const i2 = this._slot(item.index);
       switch (event.key) {
         case "Backspace":
           event.preventDefault();
@@ -49798,7 +51017,7 @@ var InputOtp = class extends PuzzleView {
           break;
         case "ArrowRight":
           event.preventDefault();
-          this._focus(i2 + 1);
+          this._focus(this._slot(i2 + 1));
           break;
         case "Home":
           event.preventDefault();
@@ -49806,7 +51025,7 @@ var InputOtp = class extends PuzzleView {
           break;
         case "End":
           event.preventDefault();
-          this._focus(length - 1);
+          this._focus(this._slot(length - 1));
           break;
         default:
           break;
@@ -49820,11 +51039,16 @@ var InputOtp = class extends PuzzleView {
       const chars = sanitize(event.clipboardData?.getData("text") ?? "", type);
       if (!chars)
         return;
-      const next = (value.slice(0, item.index) + chars).slice(0, length);
+      const next = (value.slice(0, this._slot(item.index)) + chars).slice(0, length);
       this._emit(next, event);
       this._focus(Math.min(next.length, length - 1));
     },
-    onFocus: (event) => {
+    onFocus: (item, event) => {
+      const slot = this._slot(item.index);
+      if (!this._selfFocus && slot !== item.index) {
+        this._focus(slot);
+        return;
+      }
       event.target.select?.();
     }
   };
@@ -49858,7 +51082,7 @@ InputOtp.prototype.render = function() {
             "@input": (event) => this.events.onInput(item, event),
             "@keydown": (event) => this.events.onKey(item, event),
             "@paste": (event) => this.events.onPaste(item, event),
-            "@focus": (this.__h ??= {})[0] ??= (event) => this.events.onFocus(event)
+            "@focus": (event) => this.events.onFocus(item, event)
           }, [])
         ] : [
           new ViewNode("span", {
@@ -59186,6 +60410,14 @@ function paintedProgress(position, p) {
 function dismissAxis(position) {
   return position === "bottom" || position === "center" ? "y" : "x";
 }
+function contentSized(profile2) {
+  if (profile2.position === "center")
+    return true;
+  return profile2.position === "bottom" && !!profile2.desktop;
+}
+function resizesWithSnaps(profile2) {
+  return profile2.position === "bottom" && !contentSized(profile2);
+}
 function awayOffset(position, deltaX, deltaY) {
   if (dismissAxis(position) === "y")
     return deltaY;
@@ -59199,10 +60431,10 @@ function awayVector(position, distance) {
   return { x: (position === "left" ? -1 : 1) * distance, y: 0 };
 }
 function paintedExtent(profile2, size, restSize, lowestSize = 0) {
-  return profile2.position === "bottom" ? Math.max(size, lowestSize) : restSize;
+  return resizesWithSnaps(profile2) ? Math.max(size, lowestSize) : restSize;
 }
 function awayTranslation(profile2, size, restSize, lowestSize = 0) {
-  if (profile2.position === "bottom")
+  if (resizesWithSnaps(profile2))
     return Math.max(0, lowestSize - size);
   return restSize - size;
 }
@@ -59217,7 +60449,7 @@ function transformOrigin(profile2) {
 }
 function restStyles(profile2, size, restSize, lowestSize = 0) {
   const base = { opacity: "1", transformOrigin: transformOrigin(profile2) };
-  if (profile2.position === "bottom") {
+  if (resizesWithSnaps(profile2)) {
     const paintedSize = Math.max(size, lowestSize);
     const shift2 = Math.max(0, lowestSize - size);
     return {
@@ -59227,7 +60459,7 @@ function restStyles(profile2, size, restSize, lowestSize = 0) {
     };
   }
   const shift = restSize - size;
-  if (profile2.position === "center") {
+  if (dismissAxis(profile2.position) === "y") {
     return { ...base, transform: `translate3d(0px, ${shift}px, 0px) scale(1)` };
   }
   return {
@@ -59492,10 +60724,11 @@ var SheetEngine = class extends EventEmitter2 {
   setProfile(profile2) {
     const _ = this;
     _.#landPendingSettle();
-    const previousPosition = _.#profile.position;
+    const previous = _.#profile;
     _.#profile = { ..._.#profile, ...profile2 };
-    if (_.#profile.position !== previousPosition)
+    if (_.#profile.position !== previous.position || resizesWithSnaps(_.#profile) !== resizesWithSnaps(previous)) {
       _.#clearManagedSize();
+    }
     _.#rebuildOpenTrack();
   }
   /**
@@ -59635,16 +60868,23 @@ var SheetEngine = class extends EventEmitter2 {
     _.#saveInline();
     _.#prepareDialog();
     if (_.#state === "hiding") {
-      const start = _.#openProgressFromExit(_.#snaps[_.#activeSnap]);
+      const flight = clamp7(_.#p, 0, 1);
+      const clear = _.#settleAction?.backdropClearProgress;
+      const visibleFlight = clear > 0 && clear < 1 ? clamp7((flight - clear) / (1 - clear), 0, 1) : flight;
+      const backdropFloorExtent = _.#currentSize * visibleFlight;
+      const painted = _.#frames?.getFrame(
+        paintedProgress(_.#profile.position, _.#p)
+      );
       _.#state = "showing";
       _.#phase = "showing";
       _.#currentSize = _.#snaps[_.#activeSnap];
-      _.#frames = _.#makeOpenFrames(_.#currentSize);
-      _.#p = start;
-      _.#settleAction = { type: "shown" };
-      _.#applyFrame(start);
+      const open = _.#makeOpenFrames(_.#currentSize);
+      _.#frames = painted ? new c({ 0: painted, 100: open.getFrame(1) }) : open;
+      _.#p = 0;
+      _.#settleAction = { type: "shown", backdropFloorExtent };
+      _.#applyFrame(0);
       _.#tuneSpring("entrance");
-      return _.#animate(start * TRAVEL2, TRAVEL2, 0);
+      return _.#animate(0, TRAVEL2, 0);
     }
     if (_.#state === "showing")
       return Promise.resolve(false);
@@ -59930,23 +61170,6 @@ var SheetEngine = class extends EventEmitter2 {
     const _ = this;
     return new c(buildOpenKeyframes(_.#profile, size, _.#restSize(), _.#snaps[0]));
   }
-  #openProgressFromExit(size) {
-    const _ = this;
-    const progress = clamp7(paintedProgress(_.#profile.position, _.#p), 0, 1);
-    const { away, hiddenAway } = exitValues(
-      _.#profile,
-      _.#currentSize,
-      _.#restSize(),
-      _.#snaps[0],
-      _.#profile.exitEffect || _.#profile.effect
-    );
-    const paintedAway = hiddenAway * (1 - progress) + away * progress;
-    const hidden = effectValues(_.#profile, { size, hidden: true });
-    const openAway = awayOffset(_.#profile.position, hidden.x, hidden.y);
-    if (openAway <= 0)
-      return progress;
-    return clamp7(1 - paintedAway / openAway, 0, 1);
-  }
   #makeDragFrames(activeSize) {
     const _ = this;
     const maximum = Math.max(activeSize, ..._.#snaps);
@@ -60077,7 +61300,9 @@ var SheetEngine = class extends EventEmitter2 {
       _.#backdropProgress = dismissalZoneProgress(_.#currentSize * visibleFlight, _.#snaps[0]);
       return;
     }
-    _.#backdropProgress = dismissalZoneProgress(_.#currentSize * flight, _.#snaps[0]);
+    const floor = _.#settleAction?.backdropFloorExtent;
+    const extent2 = Number.isFinite(floor) ? floor + (_.#currentSize - floor) * flight : _.#currentSize * flight;
+    _.#backdropProgress = dismissalZoneProgress(extent2, _.#snaps[0]);
   }
   #emitChange() {
     const _ = this;
@@ -60115,7 +61340,7 @@ var SheetEngine = class extends EventEmitter2 {
     if (!_.#dialog)
       return;
     _.#dialog.style.display = _.#display;
-    _.#dialog.style.willChange = _.#profile.position === "bottom" ? "transform, opacity, height" : "transform, opacity";
+    _.#dialog.style.willChange = resizesWithSnaps(_.#profile) ? "transform, opacity, height" : "transform, opacity";
   }
   #restoreInline() {
     const _ = this;
@@ -60168,6 +61393,27 @@ function contentClaimDirection(chain, axis, position, awayOffset2, slop = CLAIM_
   return scrollChainConsumes(chain, axis, fingerDelta) ? 0 : direction;
 }
 var SIMPLE_LENGTH = /^(-?\d*\.?\d+)(px|vh|dvh|svh|lvh|vw|rem|%)?$/i;
+function splitSnapPoints(value) {
+  const input = String(value || "").trim();
+  const tokens = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (char === "(")
+      depth += 1;
+    else if (char === ")")
+      depth = Math.max(0, depth - 1);
+    else if (/\s/.test(char) && depth === 0) {
+      if (start < index)
+        tokens.push(input.slice(start, index));
+      start = index + 1;
+    }
+  }
+  if (start < input.length)
+    tokens.push(input.slice(start));
+  return tokens;
+}
 var SNAP_EPSILON2 = 1;
 function resolveSnapPoints(value, {
   viewportHeight,
@@ -60176,7 +61422,7 @@ function resolveSnapPoints(value, {
   percentageBase = viewportHeight,
   measure
 }) {
-  const tokens = String(value || "").trim().split(/\s+/).filter(Boolean);
+  const tokens = splitSnapPoints(value);
   const pixels = tokens.map((token) => {
     if (measure)
       return measure(token);
@@ -60310,7 +61556,8 @@ var DragGesture = class {
   /**
    * @param {HTMLElement} el - Pointer event surface.
    * @param {Object} [callbacks] - Gesture lifecycle callbacks.
-   * @param {Function} [callbacks.onStart] - Pointer start callback.
+   * @param {Function} [callbacks.onStart] - Pointer start callback. Returning
+   *   exactly `false` refuses the gesture: no capture, no further callbacks.
    * @param {Function} [callbacks.onMove] - Pointer move callback.
    * @param {Function} [callbacks.onEnd] - Pointer end/cancel callback.
    */
@@ -60344,7 +61591,10 @@ var DragGesture = class {
     _.#trackerY.reset();
     _.#trackerX.add(event.clientX, event.timeStamp);
     _.#trackerY.add(event.clientY, event.timeStamp);
-    _.#onStart?.({ event, x: event.clientX, y: event.clientY });
+    if (_.#onStart?.({ event, x: event.clientX, y: event.clientY }) === false) {
+      _.#active = false;
+      _.#pointerId = null;
+    }
   }
   #handlePointerMove(event) {
     const _ = this;
@@ -60413,7 +61663,7 @@ var RESIZE_THROTTLE_MS = 100;
 var FLICK_VELOCITY2 = 0.5;
 var OVERSCROLL_RESISTANCE = 0.2;
 var MORPH_TIMEOUT_PADDING_MS = 120;
-var DEFAULT_MORPH_DURATION = 420;
+var DEFAULT_MORPH_DURATION = 600;
 var DEFAULT_MORPH_EASING = "cubic-bezier(0.34, 1.32, 0.52, 1)";
 var DIALOG2 = "fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-transparent p-0 open:flex overflow-hidden text-body [&::backdrop]:bg-transparent";
 var DIALOG_PROFILE = {
@@ -60424,13 +61674,16 @@ var DIALOG_PROFILE = {
 };
 var BACKDROP2 = "absolute inset-0 bg-black/50 backdrop-blur-sm touch-none";
 var PANEL_BASE12 = "relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface will-change-transform";
-var PANEL_BOTTOM_EDGE = "h-[85dvh] max-h-[100dvh] w-full rounded-t-2xl border-t border-border pb-[env(safe-area-inset-bottom,0px)] shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
-var PANEL_BOTTOM_CARD = "mx-auto mb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] h-[85dvh] max-h-[calc(100dvh-1.5rem)] w-[calc(100%-1.5rem)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
-var PANEL_LEFT_EDGE = "h-full w-[min(26rem,90vw)] rounded-r-2xl border-r border-border pl-[env(safe-area-inset-left,0px)] shadow-[-120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
-var PANEL_RIGHT_EDGE = "h-full w-[min(26rem,90vw)] rounded-l-2xl border-l border-border pr-[env(safe-area-inset-right,0px)] shadow-[120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
-var PANEL_LEFT_CARD = "my-[0.75rem] ml-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] w-[min(26rem,90vw)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
-var PANEL_RIGHT_CARD = "my-[0.75rem] mr-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] w-[min(26rem,90vw)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
-var PANEL_CENTER = "m-auto h-fit w-[min(28rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-1.5rem)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_BOTTOM_EDGE = "max-h-[100dvh] rounded-t-2xl border-t border-border pb-[env(safe-area-inset-bottom,0px)] shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_BOTTOM_CARD = "mx-auto mb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-1.5rem)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var BOTTOM_HEIGHT_MOBILE = "h-[85dvh]";
+var BOTTOM_HEIGHT_DESKTOP = "h-fit";
+var CONTENT_SIZED = (profile2) => profile2.position === "center" || profile2.position === "bottom" && profile2.desktop;
+var PANEL_LEFT_EDGE = "h-full rounded-r-2xl border-r border-border pl-[env(safe-area-inset-left,0px)] shadow-[-120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_RIGHT_EDGE = "h-full rounded-l-2xl border-l border-border pr-[env(safe-area-inset-right,0px)] shadow-[120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_LEFT_CARD = "my-[0.75rem] ml-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_RIGHT_CARD = "my-[0.75rem] mr-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
+var PANEL_CENTER = "m-auto h-fit max-h-[calc(100dvh-1.5rem)] rounded-2xl border border-border shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]";
 var PANEL_PROFILE = {
   "bottom:edge": PANEL_BOTTOM_EDGE,
   "bottom:card": PANEL_BOTTOM_CARD,
@@ -60439,17 +61692,32 @@ var PANEL_PROFILE = {
   "right:edge": PANEL_RIGHT_EDGE,
   "right:card": PANEL_RIGHT_CARD
 };
+var PANEL_WIDTH = {
+  "bottom:edge": "w-full",
+  "bottom:card": "w-[calc(100%-1.5rem)]",
+  "left:edge": "w-[min(26rem,90vw)]",
+  "left:card": "w-[min(26rem,90vw)]",
+  "right:edge": "w-[min(26rem,90vw)]",
+  "right:card": "w-[min(26rem,90vw)]",
+  center: "w-[min(28rem,calc(100vw-1.5rem))]"
+};
 var PANEL_WIDTH_CAP2 = "max-w-[26rem]";
 var CALLER_MAX_WIDTH2 = /(?:^|\s)\S*max-w-/;
-var HEADER2 = "shrink-0 touch-none select-none px-4";
+var CALLER_WIDTH = /(?:^|\s)(?:[\w-]+:)*w-/;
+var HEADER2 = "shrink-0 touch-none select-none px-4 pt-4 empty:hidden";
+var HEADER_HANDLE = "shrink-0 touch-none select-none px-4 pt-4";
 var CONTENT2 = "min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain touch-pan-x touch-pan-y px-4 py-4";
 var FOOTER2 = "shrink-0 touch-none bg-surface p-4 empty:hidden";
-var GRABBER_BOTTOM = "pointer-fine:hidden mx-auto my-3 h-1 w-10 rounded-full bg-faint";
-var GRABBER_LEFT = "pointer-fine:hidden absolute right-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint";
-var GRABBER_RIGHT = "pointer-fine:hidden absolute left-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint";
+var GRABBER_BOTTOM = "pointer-fine:hidden pointer-events-none absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-faint";
+var GRABBER_LEFT = "pointer-fine:hidden pointer-events-none absolute right-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint";
+var GRABBER_RIGHT = "pointer-fine:hidden pointer-events-none absolute left-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint";
+var PANEL_SIDE_STRIP = {
+  left: "pr-3 pointer-fine:pr-0",
+  right: "pl-3 pointer-fine:pl-0"
+};
 var TITLE_BOTTOM = "pb-3 text-center text-base font-semibold text-ink";
-var TITLE_SIDE = "py-4 text-left text-base font-semibold text-ink";
-var TITLE_CENTER = "pt-4 text-center text-base font-semibold text-ink";
+var TITLE_SIDE = "pb-4 text-left text-base font-semibold text-ink";
+var TITLE_CENTER = "text-center text-base font-semibold text-ink";
 var MORPH_PROPERTIES = [
   "position",
   "top",
@@ -60504,13 +61772,13 @@ var Sheet = class extends PuzzleView {
   #settleTarget = null;
   #programmaticSnap = null;
   #snapRun = 0;
-  #bodyOverflow = null;
   #returnFocus = null;
   #resizeHandler = null;
   #resizeTimer = null;
   #centerObserver = null;
   #centerTimer = null;
   #pendingMorph = null;
+  #pendingMeasure = null;
   #morph = null;
   #measureSignature = null;
   #needsRemeasure = false;
@@ -60537,6 +61805,7 @@ var Sheet = class extends PuzzleView {
     if (this.refs.backdrop)
       this.refs.backdrop.style.opacity = "0";
     this.#drag = { active: false };
+    this.#localSnap = null;
     this.#settleTarget = null;
     this.#programmaticSnap = null;
     this.#syncCenterObserver();
@@ -60593,6 +61862,7 @@ var Sheet = class extends PuzzleView {
     const callerClass = props.class || "";
     const position = profile2.position;
     const cardKey = `${position}:${profile2.mode}`;
+    const side = position === "left" || position === "right";
     const showGrabber = props.showGrabber !== false && !profile2.desktop && position !== "center";
     const desktopBottomCap = profile2.desktop && position === "bottom" && profile2.mode === "card";
     let grabberClass = GRABBER_BOTTOM;
@@ -60606,16 +61876,26 @@ var Sheet = class extends PuzzleView {
     if (position === "center")
       titleClass = TITLE_CENTER;
     return {
+      // Every pill belongs to the panel, not the header fallback, so it survives
+      // any header content — see the fifth-surface note above.
       showGrabber,
       dialogClass: [DIALOG2, DIALOG_PROFILE[position]].filter(Boolean).join(" "),
       backdropClass: [BACKDROP2, props.backdropClass || ""].filter(Boolean).join(" "),
       panelClass: [
         PANEL_BASE12,
         position === "center" ? PANEL_CENTER : PANEL_PROFILE[cardKey],
+        CALLER_WIDTH.test(callerClass) ? "" : PANEL_WIDTH[position === "center" ? "center" : cardKey],
+        // The bottom recipes carry no height of their own — see the note above.
+        position === "bottom" ? profile2.desktop ? BOTTOM_HEIGHT_DESKTOP : BOTTOM_HEIGHT_MOBILE : "",
+        // A side panel is itself a rigid drag surface, so no native pan may begin
+        // on it. Scroll containers inside the content declare their own pans
+        // below this element, so nested scrolling is unaffected.
+        side ? "touch-none" : "",
+        side && !profile2.desktop ? PANEL_SIDE_STRIP[position] : "",
         desktopBottomCap && !CALLER_MAX_WIDTH2.test(callerClass) ? PANEL_WIDTH_CAP2 : "",
         callerClass
       ].filter(Boolean).join(" "),
-      headerClass: HEADER2,
+      headerClass: position === "bottom" && showGrabber ? HEADER_HANDLE : HEADER2,
       contentClass: CONTENT2,
       footerClass: FOOTER2,
       grabberClass,
@@ -60629,7 +61909,7 @@ var Sheet = class extends PuzzleView {
     const breakpointValue = Number(props.breakpoint);
     const breakpoint = Number.isFinite(breakpointValue) ? breakpointValue : 768;
     const desktop = typeof window !== "undefined" && window.innerWidth >= breakpoint;
-    const desktopPosition = POSITIONS.has(props.desktopPosition) ? props.desktopPosition : position;
+    const desktopPosition = POSITIONS.has(props.desktopPosition) ? props.desktopPosition : position === "bottom" ? "center" : position;
     const desktopMode = MODES2.has(props.desktopMode) ? props.desktopMode : "card";
     const explicitDesktopEffect = EFFECTS.has(props.desktopEffect) ? props.desktopEffect : null;
     const desktopEffect = explicitDesktopEffect || (desktopPosition === "center" ? "fade-scale" : effect);
@@ -60707,16 +61987,14 @@ var Sheet = class extends PuzzleView {
     return this.props.morphEasing || DEFAULT_MORPH_EASING;
   }
   #lockBody() {
-    if (this.#bodyOverflow !== null)
-      return;
-    this.#bodyOverflow = document.body.style.overflow;
+    this.element?.setAttribute("data-scroll-lock", "");
     document.body.style.overflow = "hidden";
   }
   #unlockBody() {
-    if (this.#bodyOverflow === null)
-      return;
-    document.body.style.overflow = this.#bodyOverflow;
-    this.#bodyOverflow = null;
+    this.element?.removeAttribute("data-scroll-lock");
+    if (!document.querySelector("[data-scroll-lock]")) {
+      document.body.style.overflow = "";
+    }
   }
   #restoreFocus() {
     const target = this.#returnFocus;
@@ -60757,19 +62035,40 @@ var Sheet = class extends PuzzleView {
     const viewportHeight = window.innerHeight;
     const viewportWidth = window.innerWidth;
     const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    let snaps = resolveSnapPoints(this.#snapPointValue(), {
-      viewportHeight,
-      viewportWidth,
-      rootFontSize,
-      percentageBase: viewportHeight
+    const probe = document.createElement("div");
+    Object.assign(probe.style, {
+      position: "fixed",
+      visibility: "hidden",
+      pointerEvents: "none",
+      boxSizing: "border-box"
     });
-    if (!snaps.length) {
-      snaps = resolveSnapPoints("85vh", {
+    document.body.append(probe);
+    const measure = (token) => {
+      probe.style.height = "";
+      probe.style.height = token;
+      const height = probe.getBoundingClientRect().height;
+      return Number.isFinite(height) && height > 0 ? height : 0;
+    };
+    let snaps;
+    try {
+      snaps = resolveSnapPoints(this.#snapPointValue(), {
         viewportHeight,
         viewportWidth,
         rootFontSize,
-        percentageBase: viewportHeight
+        percentageBase: viewportHeight,
+        measure
       });
+      if (!snaps.length) {
+        snaps = resolveSnapPoints("85vh", {
+          viewportHeight,
+          viewportWidth,
+          rootFontSize,
+          percentageBase: viewportHeight,
+          measure
+        });
+      }
+    } finally {
+      probe.remove();
     }
     return snaps;
   }
@@ -60849,11 +62148,9 @@ var Sheet = class extends PuzzleView {
     this.#profile = profile2;
     this.#engine.setProfile(profile2);
     let snaps;
-    if (profile2.position === "bottom") {
+    if (profile2.position === "bottom" && !profile2.desktop) {
       snaps = this.#resolveBottomSnaps();
-      if (profile2.desktop)
-        snaps = [snaps[snaps.length - 1]];
-    } else if (profile2.position === "center") {
+    } else if (CONTENT_SIZED(profile2)) {
       snaps = [
         box.height > 0 ? box.height : Math.max(1, profile2.viewportHeight * 0.5)
       ];
@@ -60914,7 +62211,7 @@ var Sheet = class extends PuzzleView {
     if (shouldOpen) {
       if (dialog.open) {
         if (this.#engine.state === "hiding" || this.#engine.state === "hidden") {
-          this.#engine.show({ to: this.refs.panel, display: "flex" });
+          this.#engine.show({ to: this.refs.panel, display: "flex" }).then(() => this.#reconcileSnap());
           this.refs.backdrop.style.opacity = String(
             this.#engine.backdropProgress
           );
@@ -60928,7 +62225,7 @@ var Sheet = class extends PuzzleView {
       this.#lockBody();
       this.refs.backdrop.style.opacity = "0";
       dialog.showModal();
-      this.#engine.show({ to: this.refs.panel, display: "flex" });
+      this.#engine.show({ to: this.refs.panel, display: "flex" }).then(() => this.#reconcileSnap());
       this.refs.backdrop.style.opacity = String(
         this.#engine.backdropProgress
       );
@@ -60953,7 +62250,14 @@ var Sheet = class extends PuzzleView {
       ["backdrop", this.refs.backdrop],
       ["header", this.refs.header],
       ["content", this.refs.content],
-      ["footer", this.refs.footer]
+      ["footer", this.refs.footer],
+      // The panel itself hosts a side sheet's handle: the pill is
+      // pointer-events-none and floats over the strip the panel reserves in its
+      // own padding, which no child surface covers. Without this binding the one
+      // element that advertises the swipe is the one place a swipe is dead.
+      // #dragStart refuses any hit that is not the panel directly, so gestures
+      // bubbling up from the surfaces above stay owned by them.
+      ["panel", this.refs.panel]
     ]) {
       this.#gestures.push(
         new DragGesture(element, this.#surfaceCallbacks(surface))
@@ -60976,12 +62280,18 @@ var Sheet = class extends PuzzleView {
     this.#syncSpring();
     if (!this.#shouldDisplayOpen()) {
       this.#queuedProfile = null;
+      this.#pendingMeasure = null;
       this.syncOpen();
       return;
     }
     if (this.#pendingMorph) {
       this.#continueMorph();
       return;
+    }
+    if (this.#pendingMeasure) {
+      const profile2 = this.#pendingMeasure;
+      this.#pendingMeasure = null;
+      this.#prepareOpen(profile2);
     }
     if (this.#queuedProfile && this.element?.open) {
       const next2 = this.#queuedProfile;
@@ -61042,9 +62352,11 @@ var Sheet = class extends PuzzleView {
     };
   }
   #dragStart(surface, event) {
+    if (surface === "panel" && event?.target !== this.refs.panel)
+      return false;
     if (this.#engine?.state !== "shown" || this.#engine.morphing) {
       this.#drag = { active: false };
-      return;
+      return false;
     }
     this.#settleTarget = null;
     this.#programmaticSnap = null;
@@ -61123,6 +62435,13 @@ var Sheet = class extends PuzzleView {
     }
     this.#engine.dragBy(activeSize - size);
   }
+  #settleBack() {
+    if (this.#profile.position === "bottom") {
+      this.#engine.settleTo(this.#engine.activeSnap, 0);
+    } else {
+      this.#engine.returnToRest(0);
+    }
+  }
   #dragEnd(surface, info) {
     const drag = this.#drag;
     if (!drag.active)
@@ -61131,17 +62450,15 @@ var Sheet = class extends PuzzleView {
     if (!info.cancelled && surface === "backdrop" && Math.hypot(info.deltaX, info.deltaY) < 10 && info.duration < 300) {
       if (this.#dismissPolicy().backdrop) {
         this.#requestClose("backdrop");
+      } else if (drag.claimed) {
+        this.#settleBack();
       }
       return;
     }
     if (!drag.claimed)
       return;
     if (info.cancelled) {
-      if (this.#profile.position === "bottom") {
-        this.#engine.settleTo(this.#engine.activeSnap, 0);
-      } else {
-        this.#engine.returnToRest(0);
-      }
+      this.#settleBack();
       return;
     }
     const velocityAway = awayOffset(
@@ -61183,8 +62500,10 @@ var Sheet = class extends PuzzleView {
       settle = this.#engine.returnToRest(-velocityAway);
     }
     settle.then(() => {
-      if (run === this.#snapRun)
+      if (run === this.#snapRun) {
         this.#settleTarget = null;
+        this.#reconcileSnap();
+      }
     });
   }
   #handleResize() {
@@ -61198,7 +62517,6 @@ var Sheet = class extends PuzzleView {
     if (!this.element?.open) {
       this.#renderProfile = next;
       this.setData(this.#classData(next));
-      this.syncOpen();
       return;
     }
     if (this.#profile && this.#profileKey(next) !== this.#profileKey(this.#profile)) {
@@ -61207,15 +62525,38 @@ var Sheet = class extends PuzzleView {
     }
     if (this.#drag.active)
       return;
+    if (this.#engine?.morphing) {
+      this.#retargetMorph(next);
+      return;
+    }
     this.#renderProfile = next;
     this.#prepareOpen(next);
+  }
+  // Mid-morph, the instant remeasure above would read pinned, interpolating
+  // geometry — a centre profile would publish the animating height as its
+  // intrinsic one. But simply waiting leaves the morph flying toward a
+  // destination measured at the crossing tick, and when the pins strip the panel
+  // snaps to wherever the still-moving window ended up. So retarget instead.
+  //
+  // Unlike #startProfileMorph this must NOT route through setData: the profile
+  // key has not changed, so the class data is identical and the patcher may not
+  // schedule an update at all — which would strand #pendingMorph and leave the
+  // engine parked forever. The FLIP is therefore re-entered synchronously.
+  #retargetMorph(profile2) {
+    const panel = this.refs.panel;
+    if (!panel || !this.#engine?.morphing)
+      return;
+    const from = this.#readBox(panel);
+    this.#clearMorphTimers();
+    this.#stripMorphPins(panel);
+    this.#renderProfile = profile2;
+    this.#pendingMorph = { from, profile: profile2 };
+    this.#continueMorph();
   }
   #startProfileMorph(next) {
     const panel = this.refs.panel;
     if (!panel || !this.#engine || !this.element?.open) {
-      this.#renderProfile = next;
-      this.setData(this.#classData(next));
-      this.#prepareOpen(next);
+      this.#deferMeasure(next);
       return;
     }
     this.#drag = { active: false };
@@ -61226,9 +62567,7 @@ var Sheet = class extends PuzzleView {
       this.#pendingMorph = null;
     } else {
       if (!this.#engine.beginMorph()) {
-        this.#renderProfile = next;
-        this.setData(this.#classData(next));
-        this.#prepareOpen(next);
+        this.#deferMeasure(next);
         return;
       }
       from = this.#readBox(panel);
@@ -61239,6 +62578,11 @@ var Sheet = class extends PuzzleView {
     this.#renderProfile = next;
     this.setData(this.#classData(next));
   }
+  #deferMeasure(profile2) {
+    this.#renderProfile = profile2;
+    this.#pendingMeasure = profile2;
+    this.setData(this.#classData(profile2));
+  }
   #continueMorph() {
     const pending = this.#pendingMorph;
     if (!pending)
@@ -61248,8 +62592,12 @@ var Sheet = class extends PuzzleView {
     this.#prepareOpen(pending.profile);
     const to = this.#readBox(panel);
     const duration = this.#morphDuration();
-    if (duration <= 0) {
+    const finish = () => {
       this.#finishMorph();
+      this.#reconcileSnap();
+    };
+    if (duration <= 0) {
+      finish();
       return;
     }
     this.#pinBox(panel, pending.from);
@@ -61259,7 +62607,6 @@ var Sheet = class extends PuzzleView {
       (property) => `${property} ${duration}ms ${easing}`
     ).join(", ");
     this.#pinBox(panel, to);
-    const finish = () => this.#finishMorph();
     const onEnd = (event) => {
       if (event.target === panel && MORPH_TRANSITION_PROPERTIES.includes(event.propertyName)) {
         finish();
@@ -61329,7 +62676,7 @@ var Sheet = class extends PuzzleView {
     }
   }
   #syncCenterObserver() {
-    const want = this.#profile?.position === "center" && !!this.element?.open && typeof ResizeObserver === "function";
+    const want = !!this.#profile && CONTENT_SIZED(this.#profile) && !!this.element?.open && typeof ResizeObserver === "function";
     if (want && !this.#centerObserver) {
       this.#centerObserver = new ResizeObserver(() => {
         this.#scheduleCenterRemeasure();
@@ -61348,7 +62695,7 @@ var Sheet = class extends PuzzleView {
       clearTimeout(this.#centerTimer);
     this.#centerTimer = setTimeout(() => {
       this.#centerTimer = null;
-      if (this.#profile?.position !== "center" || !this.element?.open) {
+      if (!this.#profile || !CONTENT_SIZED(this.#profile) || !this.element?.open) {
         return;
       }
       if (this.#drag.active || this.#engine?.morphing || this.#engine?.state !== "shown" || this.#settleTarget !== null) {
@@ -61368,6 +62715,16 @@ var Sheet = class extends PuzzleView {
         return;
       this.#requestClose("escape");
     },
+    handleClose: () => {
+      const state = this.#engine?.state;
+      if (!state || state === "hidden" || state === "hiding" || state === "showing") {
+        return;
+      }
+      this.#finishMorph();
+      this.#drag = { active: false };
+      this.#engine.hide();
+      this.#requestClose("close");
+    },
     scrollVeto: (event) => {
       if (this.#drag.active && this.#drag.claimed && event.cancelable) {
         event.preventDefault();
@@ -61380,7 +62737,8 @@ Sheet.prototype.render = function() {
   return new ViewNode("dialog", {
     class: __d.dialogClass,
     "aria-labelledby": __d.labelledby,
-    "@cancel": (this.__h ??= {})[0] ??= (event) => this.events.handleCancel(event)
+    "@cancel": (this.__h ??= {})[0] ??= (event) => this.events.handleCancel(event),
+    "@close": (this.__h ??= {})[1] ??= (event) => this.events.handleClose(event)
   }, [
     new ViewNode("div", {
       ref: this.__ref("backdrop"),
@@ -61389,22 +62747,23 @@ Sheet.prototype.render = function() {
     }, []),
     new ViewNode("div", {
       ref: this.__ref("panel"),
+      "data-sheet-surface": "panel",
       class: __d.panelClass
     }, [
+      ...__d.showGrabber ? [
+        new ViewNode("div", {
+          class: __d.grabberClass,
+          "aria-hidden": "true"
+        }, [])
+      ] : [
+        new ViewNode("#")
+      ],
       new ViewNode("div", {
         ref: this.__ref("header"),
         "data-sheet-surface": "header",
         class: __d.headerClass
       }, [
         new ViewNode(SLOT_TAG, { name: "header" }, [
-          ...__d.showGrabber ? [
-            new ViewNode("div", {
-              class: __d.grabberClass,
-              "aria-hidden": "true"
-            }, [])
-          ] : [
-            new ViewNode("#")
-          ],
           ...__d.title ? [
             new ViewNode("h2", {
               id: __d.titleId,
@@ -61421,7 +62780,7 @@ Sheet.prototype.render = function() {
         ref: this.__ref("content"),
         "data-sheet-surface": "content",
         class: __d.contentClass,
-        "@touchmove": (this.__h ??= {})[1] ??= (event) => this.events.scrollVeto(event)
+        "@touchmove": (this.__h ??= {})[2] ??= (event) => this.events.scrollVeto(event)
       }, [
         new ViewNode(SLOT_TAG)
       ]),
@@ -61447,16 +62806,28 @@ var usageMarkup68 = `<Sheet open={ sheetOpen } title="Your cart" @close={ () => 
 var codeHero68 = `<Button variant="outline" @press={ openSheet }>Open sheet</Button>
 <Sheet
   open={ sheetOpen }
-  title="Your cart"
-  snapPoints="85vh 55vh 25vh"
-  desktopPosition="right"
+  labelledby="sheet-hero-title"
+  position="center"
   @close={ () => this.setData('sheetOpen', false) }>
+
+  <div slot="header" class="pb-4">
+    <div class="relative flex h-8 items-center">
+      <h2 id="sheet-hero-title" class="pr-9 text-base font-semibold text-ink">Your cart</h2>
+      <button
+        type="button"
+        aria-label="Close"
+        class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+        @click={ closeSheet }>\xD7</button>
+    </div>
+  </div>
+
   <CartLines/>
   <Button slot="footer" class="w-full" @press={ checkout }>Checkout</Button>
 </Sheet>
 
-// Bottom sheet with three snaps below 768px; right drawer above it.
-// Resize across the breakpoint while it is open and it morphs in place.`;
+// A plain centered dialog at every width \u2014 no snap points, no morph.
+// The header slot replaces the stock header, so this one re-supplies the
+// heading and adds the X. labelledby points at its heading id.`;
 var codeSnaps = `<Button variant="outline" @press={ openSheet }>Open snapping sheet</Button>
 <span class="text-sm text-muted">snap index: { snapIndex }</span>
 
@@ -61470,43 +62841,120 @@ var codeSnaps = `<Button variant="outline" @press={ openSheet }>Open snapping sh
   <FilterList/>
 </Sheet>
 
+// No header slot: title alone gets the centered heading,
+// the generated heading id, and aria-labelledby wired for you.
 // snap is optional-controlled: omit it and the sheet tracks its own snap.
-// snapChange fires only when a release commits a snap, never mid-drag.`;
-var codePositions = `<Sheet open={ leftOpen } title="Navigation" position="left" @close={ closeLeft }>
+// snapChange fires only when a release commits a snap, never mid-drag.
+// snapPoints is mobile-only \u2014 past the breakpoint this sheet is a centered
+// dialog sized to its content and none of these lengths apply.`;
+var codeResponsive2 = `// 1 \u2014 bottom sheet with snaps on mobile, centered dialog on desktop
+<Sheet
+  open={ addressOpen }
+  labelledby="sheet-address-title"
+  snapPoints="85vh 55vh 30vh"
+  desktopPosition="center"
+  @close={ closeAddress }>
+  <div slot="header" class="pb-3">
+    <div class="relative flex h-8 items-center justify-center">
+      <h2 id="sheet-address-title" class="px-9 text-center text-base font-semibold text-ink">Shipping address</h2>
+      <button type="button" aria-label="Close" class="\u2026" @click={ closeAddress }>\xD7</button>
+    </div>
+  </div>
+  <AddressForm/>
+</Sheet>
+
+// 2 \u2014 floating bottom card on mobile, flush left drawer on desktop
+<Sheet
+  open={ browseOpen }
+  labelledby="sheet-browse-title"
+  position="bottom"
+  mode="card"
+  desktopPosition="left"
+  desktopMode="edge"
+  @close={ closeBrowse }>
+  <div slot="header" class="pb-3">\u2026heading + X\u2026</div>
   <NavLinks/>
 </Sheet>
 
-<Sheet open={ rightOpen } title="Cart" position="right" @close={ closeRight }>
+// 3 \u2014 pops in and slides out on mobile; slides in and fades away on desktop
+<Sheet
+  open={ orderOpen }
+  labelledby="sheet-order-title"
+  effect="pop"
+  desktopEffect="slide"
+  desktopExitEffect="fade-scale"
+  desktopMode="card"
+  @close={ closeOrder }>
+  <div slot="header" class="pb-3">\u2026heading + X\u2026</div>
+  <OrderSummary/>
+</Sheet>
+
+// position / mode / effect / exitEffect describe the MOBILE profile.
+// desktopPosition / desktopMode / desktopEffect / desktopExitEffect take over
+// at breakpoint (default 768). desktopPosition falls back to position \u2014 EXCEPT
+// a bottom sheet, which fans out to center by default so it sizes to its
+// content instead of standing 85vh tall on a wide screen;
+// desktopMode defaults to card, and a centered desktopEffect defaults to
+// fade-scale. Only name the halves that actually differ.
+// Crossing the breakpoint while open morphs the panel in place: the dialog
+// never closes, no @close fires, and the box animates from one resting
+// geometry to the other.`;
+var codePositions = `<Sheet open={ leftOpen } labelledby="sheet-left-title" position="left" @close={ closeLeft }>
+  <div slot="header" class="pb-4">
+    <div class="relative flex h-8 items-center">
+      <h2 id="sheet-left-title" class="pr-9 text-base font-semibold text-ink">Navigation</h2>
+      <button type="button" aria-label="Close" class="\u2026" @click={ closeLeft }>\xD7</button>
+    </div>
+  </div>
+  <NavLinks/>
+</Sheet>
+
+<Sheet open={ centerOpen } labelledby="sheet-center-title" position="center" @close={ closeCenter }>
+  <div slot="header" class="pb-2">\u2026heading + X\u2026</div>
+  <p>A centered dialog hugs its content height.</p>
+</Sheet>
+
+<Sheet open={ rightOpen } labelledby="sheet-right-title" position="right" @close={ closeRight }>
+  <div slot="header" class="pb-4">\u2026heading + X\u2026</div>
   <CartLines/>
 </Sheet>
 
-<Sheet open={ centerOpen } title="Heads up" position="center" @close={ closeCenter }>
-  <p>A centered dialog hugs its content height.</p>
-  <p>Two short lines stay two short lines.</p>
-</Sheet>
-
+// A non-bottom desktopPosition falls back to position, so each of these is the
+// SAME profile on a phone and on a desktop \u2014 no morph. Only bottom fans out to
+// center by default. Set desktopPosition when you want the two to differ.
 // Sides take a single fixed width; center takes its intrinsic height.
-// All three ignore snapPoints \u2014 snaps belong to bottom sheets only.`;
-var codeModes = `<Sheet open={ cardOpen } title="Card mode" mode="card" @close={ closeCard }>
+// All three ignore snapPoints \u2014 snaps belong to bottom sheets only.
+// A side sheet keeps its edge pill on touch and a centered dialog has none;
+// either way the pill floats on the panel, so these headers are just a
+// heading and a close button.`;
+var codeModes = `<Sheet open={ cardOpen } labelledby="sheet-card-title" mode="card" desktopPosition="bottom" @close={ closeCard }>
+  <div slot="header" class="pb-3">\u2026heading + X\u2026</div>
   <p>Floats inside a margin with rounded corners on every side.</p>
 </Sheet>
 
-<Sheet open={ edgeOpen } title="Edge mode" desktopMode="edge" @close={ closeEdge }>
+<Sheet open={ edgeOpen } labelledby="sheet-edge-title" desktopMode="edge" desktopPosition="bottom" @close={ closeEdge }>
+  <div slot="header" class="pb-3">\u2026heading + X\u2026</div>
   <p>Flush against the screen edge at every width.</p>
 </Sheet>
 
-// mode is the mobile profile (default "edge"); desktopMode defaults to "card".`;
-var codeEffects = `<Sheet open={ popOpen } title="Saved" position="center" effect="pop" @close={ closePop }>
+// mode is the mobile profile (default "edge"); desktopMode defaults to "card".
+// Both of these pin desktopPosition="bottom": mode only means something to a
+// bottom or side panel, and a bottom sheet otherwise centers on desktop, where
+// there is no edge to be flush against.`;
+var codeEffects = `<Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="pop" @close={ closePop }>
+  <div slot="header" class="pb-2">\u2026heading + X\u2026</div>
   <p>pop arrives with a small visible bounce.</p>
 </Sheet>
 
 <Sheet
   open={ detailsOpen }
-  title="Details"
+  labelledby="sheet-details-title"
+  position="bottom"
   desktopPosition="right"
   desktopExitEffect="fade-scale"
   @close={ closeDetails }>
-  <p>Slides in from the right, fades and shrinks away on close.</p>
+  <div slot="header" class="pb-3">\u2026heading + X\u2026</div>
+  <p>Bottom sheet on mobile; a right card on desktop that fades away.</p>
 </Sheet>
 
 // Effects: slide | fade-scale | slide-fade | pop.
@@ -61519,34 +62967,57 @@ var codeDismiss = `<Sheet
   dismiss="none"
   @close={ closeConfirm }>
   <p>This cannot be undone.</p>
-  <Button slot="footer" class="w-full" @press={ confirmDelete }>Delete project</Button>
+
+  <div slot="footer" class="flex gap-3">
+    <Button variant="outline" class="flex-1" @press={ closeConfirm }>Cancel</Button>
+    <Button variant="destructive" class="flex-1" @press={ confirmDelete }>Delete project</Button>
+  </div>
 </Sheet>
 
 // dismiss is a token list: "swipe backdrop escape" (default all) or "none".
 // A refused swipe settles back to its snap and @snapRelease reports
-// prevented: true, so you can shake the panel or flag the field.`;
-var codeSpring = `<Sheet open={ sheetOpen } title="Floaty" spring="0.08 0.4" @close={ close }>
+// prevented: true, so you can shake the panel or flag the field.
+// The two footer buttons are the only exits, so this one keeps the stock
+// header and adds no X \u2014 every way out is explicit and labelled.
+// The footer slot takes a single direct child, so two buttons share a
+// wrapper div that carries slot="footer".`;
+var codeSpring = `<Sheet open={ sheetOpen } labelledby="sheet-spring-title" spring="0.08 0.4" @close={ close }>
+  <div slot="header" class="pb-3">\u2026heading + X\u2026</div>
   <p>Looser attraction, lighter friction \u2014 a floatier arrival.</p>
 </Sheet>
 
 // spring="attraction friction", both dials exclusive of 0 and 1.
 // Overrides the entrance only; exits and snaps keep their presets.`;
-var codeHeader = `<Sheet open={ sheetOpen } labelledby="promo-sheet-title" desktopPosition="right" @close={ close }>
-  <div slot="header" class="flex items-center justify-between border-b border-border px-5 py-4">
-    <h2 id="promo-sheet-title" class="text-base font-semibold text-ink">Summer promo</h2>
-    <span class="rounded-full bg-brand px-2 py-0.5 text-xs text-surface">New</span>
+var codeHeader = `<Sheet open={ sheetOpen } labelledby="sheet-promo-title" desktopPosition="right" @close={ close }>
+  <div slot="header" class="pb-3">
+    <div class="relative flex h-8 items-center gap-2 pr-9">
+      <h2 id="sheet-promo-title" class="text-base font-semibold text-ink">Summer promo</h2>
+      <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink">New</span>
+      <button
+        type="button"
+        aria-label="Close"
+        class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+        @click={ close }>\xD7</button>
+    </div>
   </div>
   <PromoDetails/>
 </Sheet>
 
-// A filled header slot replaces the grabber + title entirely, so it must
-// bring its own heading and point labelledby at that heading's id.
-// slot="header" must sit on a direct child of the Sheet tag.`;
+// A filled header slot replaces the stock title, so it must bring its own
+// heading and point labelledby at that heading's id. The grabber is hosted
+// on the panel and floats, so it survives any header content.
+// slot="header" must sit on a direct child of the Sheet tag.
+// The close button is absolute inside a relative row, so it pins to the
+// top-right corner without joining the flex flow. It calls the same close
+// handler as @close \u2014 the sheet never closes itself.`;
 var SheetDoc = class extends PuzzleView {
   created() {
     this.setData({
       heroOpen: false,
       snapsOpen: false,
+      morphCenterOpen: false,
+      morphDrawerOpen: false,
+      morphPopOpen: false,
       leftOpen: false,
       rightOpen: false,
       centerOpen: false,
@@ -61568,6 +63039,7 @@ var SheetDoc = class extends PuzzleView {
       usageMarkup: usageMarkup68,
       codeHero: codeHero68,
       codeSnaps,
+      codeResponsive: codeResponsive2,
       codePositions,
       codeModes,
       codeEffects,
@@ -61577,45 +63049,47 @@ var SheetDoc = class extends PuzzleView {
       paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
       propRows: [
         { name: "open", desc: "Required, controlled. The parent owns it; flip it in @close." },
-        { name: "title", desc: "Heading text rendered by the default header." },
+        { name: "title", desc: "Heading text rendered by the default header. Ignored once the header slot is filled." },
         { name: "labelledby", desc: "Id of the labelling heading when the header slot is filled." },
         { name: "position", desc: "Mobile profile: bottom, left, right, or center. Default bottom." },
         { name: "mode", desc: "Mobile profile mode: edge or card. Default edge." },
         { name: "breakpoint", desc: "Pixel width where the desktop profile takes over. Default 768." },
-        { name: "desktopPosition", desc: "Desktop position; falls back to position." },
+        { name: "desktopPosition", desc: 'Desktop position. Falls back to position \u2014 except a bottom sheet, which defaults to center so a wide panel sizes to its content instead of standing 85vh tall. Pass "bottom" to keep it bottom.' },
         { name: "desktopMode", desc: "Desktop mode. Default card." },
         { name: "effect", desc: "Entrance: slide, fade-scale, slide-fade, or pop. Default slide." },
         { name: "exitEffect", desc: "Exit effect; falls back to effect." },
         { name: "desktopEffect", desc: "Desktop entrance; falls back to effect, except a centered desktop defaults to fade-scale." },
         { name: "desktopExitEffect", desc: "Desktop exit; falls back to exitEffect, then desktopEffect." },
-        { name: "snapPoints", desc: 'CSS lengths, e.g. "85vh 55vh 25vh". Default "85vh". Bottom-mobile only; a desktop bottom keeps its largest snap and is dismiss-only, and sides/center ignore snaps.' },
+        { name: "snapPoints", desc: 'CSS lengths, e.g. "85vh 55vh calc(100dvh - 4rem)". Browser measurement supports viewport-unit variants, calc(), clamp(), and var(). Default "85vh". A MOBILE-profile prop only \u2014 nothing past the breakpoint reads it. Sides measure their width; center at any width and bottom on desktop measure their content height, so a desktop bottom panel can stand taller than the largest mobile snap.' },
         { name: "snap", desc: "Snap index. Optional-controlled with @snapChange." },
-        { name: "initialSnap", desc: "Index to open at when snap is uncontrolled." },
+        { name: "initialSnap", desc: "Index to open at on every uncontrolled open." },
         { name: "dismiss", desc: 'Token list of swipe, backdrop, escape; or "all" (default) or "none".' },
+        { name: "maxDisplayWidth", desc: "Opening-only pixel ceiling. Above it a closed sheet will not open; an already-open sheet stays open, even if the viewport crosses the ceiling." },
         { name: "spring", desc: '"attraction friction" entrance override, both dials in (0, 1).' },
-        { name: "showGrabber", desc: "Show the grabber in the default header. Default true." },
+        { name: "showGrabber", desc: "Show the grabber. Default true. Every pill lives on the panel, absolutely positioned and pointer-events-none, so it survives a filled header slot and costs no layout \u2014 hiding it (fine pointer, desktop, or this prop) moves nothing. A centered dialog never has one." },
         { name: "exitCushion", desc: "Extra pixels of exit runway to clear the shadow. Default 28." },
-        { name: "morphDuration", desc: "Profile morph duration in ms. Default 420." },
+        { name: "morphDuration", desc: "Profile morph duration in ms. Default 600." },
         { name: "morphEasing", desc: "Profile morph easing." },
         { name: "class", desc: "Merged onto the panel; a caller width utility replaces the default width." },
         { name: "backdropClass", desc: "Merged onto the backdrop." }
       ],
       callbackRows: [
-        { name: "@close(reason)", desc: "reason is swipe, backdrop, or escape. The sheet never closes itself \u2014 the parent flips open here." },
+        { name: "@close(reason)", desc: 'reason is swipe, backdrop, escape, or close. close reports a native close such as form method="dialog" or dialog.close(). The parent flips open here, and your own close button calls the same handler.' },
         { name: "@snapChange(index)", desc: "A release committed a snap; fires only on commit, never mid-drag." },
         { name: "@snapRelease(detail)", desc: "Every claimed release: { velocity, flick, direction, size, target, prevented }. prevented is true when the dismiss policy refused a swipe." },
         { name: "@shown()", desc: "The entrance settled." },
         { name: "@hidden()", desc: "The exit finished and the dialog closed." }
       ],
       slotRows: [
-        { name: "header", desc: "Replaces the grabber and title heading; a filled header brings its own heading and labelledby. Always a drag surface." },
-        { name: "footer", desc: "Pinned below the content; hidden when empty." },
+        { name: "header", desc: "Replaces the title heading entirely; a filled header brings its own heading and points labelledby at it. The grabber is not replaced \u2014 it floats on the panel. The wrapper supplies the top padding. Always a drag surface." },
+        { name: "footer", desc: "Pinned below the content; hidden when empty. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute." },
         { name: "default", desc: "Untagged children become the scrollable content region." }
       ],
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
         { label: "Controlled snaps", href: "#snaps" },
+        { label: "Mobile vs desktop", href: "#responsive" },
         { label: "Positions", href: "#positions" },
         { label: "Card mode vs edge", href: "#modes" },
         { label: "Effects", href: "#effects" },
@@ -61632,6 +63106,12 @@ var SheetDoc = class extends PuzzleView {
     openSnaps: () => this.setData("snapsOpen", true),
     closeSnaps: () => this.setData("snapsOpen", false),
     setSnapIndex: (index) => this.setData("snapIndex", index),
+    openMorphCenter: () => this.setData("morphCenterOpen", true),
+    closeMorphCenter: () => this.setData("morphCenterOpen", false),
+    openMorphDrawer: () => this.setData("morphDrawerOpen", true),
+    closeMorphDrawer: () => this.setData("morphDrawerOpen", false),
+    openMorphPop: () => this.setData("morphPopOpen", true),
+    closeMorphPop: () => this.setData("morphPopOpen", false),
     openLeft: () => this.setData("leftOpen", true),
     closeLeft: () => this.setData("leftOpen", false),
     openRight: () => this.setData("rightOpen", true),
@@ -61676,28 +63156,48 @@ SheetDoc.prototype.render = function() {
           ]),
           new ViewNode(Sheet, {
             open: __d.heroOpen,
-            title: "Your cart",
-            snapPoints: "85vh 55vh 25vh",
-            desktopPosition: "right",
+            labelledby: "sheet-hero-title",
+            position: "center",
             close: (this.__h ??= {})[1] ??= (event) => this.events.closeHero(event)
           }, [
+            new ViewNode("div", {
+              slot: "header",
+              class: "pb-4"
+            }, [
+              new ViewNode("div", { class: "relative flex h-8 items-center" }, [
+                new ViewNode("h2", {
+                  id: "sheet-hero-title",
+                  class: "pr-9 text-base font-semibold text-ink"
+                }, [
+                  new ViewNode("text", { value: "Your cart" })
+                ]),
+                new ViewNode("button", {
+                  type: "button",
+                  "aria-label": "Close",
+                  class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                  "@click": (this.__h ??= {})[2] ??= (event) => this.events.closeHero(event)
+                }, [
+                  new ViewNode("text", { value: "\xD7" })
+                ])
+              ])
+            ]),
             new ViewNode("div", { class: "space-y-4 py-4 text-sm text-body" }, [
               new ViewNode("p", {}, [
-                new ViewNode("text", { value: "On a phone this is a bottom sheet with three snap points \u2014 drag the header and flick between them. On a wide window it is a right-side drawer." })
+                new ViewNode("text", { value: "A plain centered dialog \u2014 same position at every width, no snap points, no morph. This is the zero-drama baseline; the examples below add the responsive profiles." })
               ]),
               new ViewNode("p", {}, [
-                new ViewNode("text", { value: "Open it, then resize the window across 768px and watch it morph between the two profiles in place. It never closes, never re-opens \u2014 the panel animates from one resting geometry to the other while you watch." })
+                new ViewNode("text", { value: "The X in the corner is yours, not the piece's: filling the header slot replaces the stock header, so this one re-supplies the heading and adds a close button wired to the same @close handler." })
               ]),
               ...__d.paragraphs.map(
                 (n2) => new ViewNode("p", { key: n2 }, [
-                  new ViewNode("text", { value: "Cart line " + displayValue(n2, true ? "n" : 0) + " \u2014 filler content so the sheet scrolls. Scroll to the top before dragging down from the content surface." })
+                  new ViewNode("text", { value: "Cart line " + displayValue(n2, true ? "n" : 0) + " \u2014 filler content so the sheet scrolls." })
                 ])
               )
             ]),
             new ViewNode(Button, {
               slot: "footer",
               class: "w-full",
-              press: (this.__h ??= {})[2] ??= (event) => this.events.closeHero(event)
+              press: (this.__h ??= {})[3] ??= (event) => this.events.closeHero(event)
             }, [
               new ViewNode("text", { value: "Checkout" })
             ])
@@ -61729,18 +63229,21 @@ SheetDoc.prototype.render = function() {
           new ViewNode(CodeBlock, {
             code: __d.usageMarkup,
             class: "mt-3"
-          }, [])
+          }, []),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: 'Saying nothing about position gets the responsive default: a snapping bottom sheet on a phone, and past the breakpoint a centered dialog sized to its own content. Pass desktopPosition="bottom" to keep it welded to the bottom edge on desktop too.' })
+          ])
         ]),
         new ViewNode("div", { class: "mt-12 space-y-12" }, [
           new ViewNode(ExampleBox, {
             id: "snaps",
-            title: "Controlled snaps",
+            title: "Controlled snaps \u2014 stock header",
             code: __d.codeSnaps
           }, [
-            new ViewNode("div", { class: "flex items-center gap-4" }, [
+            new ViewNode("div", { class: "flex flex-col items-center gap-2" }, [
               new ViewNode(Button, {
                 variant: "outline",
-                press: (this.__h ??= {})[3] ??= (event) => this.events.openSnaps(event)
+                press: (this.__h ??= {})[4] ??= (event) => this.events.openSnaps(event)
               }, [
                 new ViewNode("text", { value: "Open snapping sheet" })
               ]),
@@ -61753,10 +63256,13 @@ SheetDoc.prototype.render = function() {
               title: "Filters",
               snapPoints: "85vh 55vh 25vh",
               snap: __d.snapIndex,
-              snapChange: (this.__h ??= {})[4] ??= (event) => this.events.setSnapIndex(event),
-              close: (this.__h ??= {})[5] ??= (event) => this.events.closeSnaps(event)
+              snapChange: (this.__h ??= {})[5] ??= (event) => this.events.setSnapIndex(event),
+              close: (this.__h ??= {})[6] ??= (event) => this.events.closeSnaps(event)
             }, [
               new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "This one deliberately keeps the zero-config chrome: pass title and the stock header renders a touch grabber above a centered heading, generates the heading id, and wires aria-labelledby for you. No slot, no close button, no ids to invent." })
+                ]),
                 new ViewNode("p", {}, [
                   new ViewNode("text", { value: "A slow release settles on the nearest snap; a flick steps exactly one snap in its direction, measured from wherever the panel actually is." })
                 ]),
@@ -61767,69 +63273,349 @@ SheetDoc.prototype.render = function() {
             ])
           ]),
           new ViewNode(ExampleBox, {
+            id: "responsive",
+            title: "Different mobile and desktop positions",
+            code: __d.codeResponsive
+          }, [
+            new ViewNode("div", { class: "mx-auto flex w-full max-w-md flex-col gap-3" }, [
+              new ViewNode("button", {
+                type: "button",
+                class: "flex w-full cursor-pointer items-center gap-4 rounded-xl border border-border bg-surface p-4 text-left transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2",
+                "@click": (this.__h ??= {})[7] ??= (event) => this.events.openMorphCenter(event)
+              }, [
+                new ViewNode("span", { class: "flex-1" }, [
+                  new ViewNode("span", { class: "block text-[11px] font-medium uppercase tracking-wide text-muted" }, [
+                    new ViewNode("text", { value: "Mobile" })
+                  ]),
+                  new ViewNode("span", { class: "mt-0.5 block text-sm font-semibold text-ink" }, [
+                    new ViewNode("text", { value: "Bottom sheet" })
+                  ])
+                ]),
+                new ViewNode("span", {
+                  class: "text-lg leading-none text-faint",
+                  "aria-hidden": "true"
+                }, [
+                  new ViewNode("text", { value: "\u2192" })
+                ]),
+                new ViewNode("span", { class: "flex-1" }, [
+                  new ViewNode("span", { class: "block text-[11px] font-medium uppercase tracking-wide text-muted" }, [
+                    new ViewNode("text", { value: "Desktop" })
+                  ]),
+                  new ViewNode("span", { class: "mt-0.5 block text-sm font-semibold text-ink" }, [
+                    new ViewNode("text", { value: "Centered dialog" })
+                  ])
+                ])
+              ]),
+              new ViewNode("button", {
+                type: "button",
+                class: "flex w-full cursor-pointer items-center gap-4 rounded-xl border border-border bg-surface p-4 text-left transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2",
+                "@click": (this.__h ??= {})[8] ??= (event) => this.events.openMorphDrawer(event)
+              }, [
+                new ViewNode("span", { class: "flex-1" }, [
+                  new ViewNode("span", { class: "block text-[11px] font-medium uppercase tracking-wide text-muted" }, [
+                    new ViewNode("text", { value: "Mobile" })
+                  ]),
+                  new ViewNode("span", { class: "mt-0.5 block text-sm font-semibold text-ink" }, [
+                    new ViewNode("text", { value: "Bottom card" })
+                  ])
+                ]),
+                new ViewNode("span", {
+                  class: "text-lg leading-none text-faint",
+                  "aria-hidden": "true"
+                }, [
+                  new ViewNode("text", { value: "\u2192" })
+                ]),
+                new ViewNode("span", { class: "flex-1" }, [
+                  new ViewNode("span", { class: "block text-[11px] font-medium uppercase tracking-wide text-muted" }, [
+                    new ViewNode("text", { value: "Desktop" })
+                  ]),
+                  new ViewNode("span", { class: "mt-0.5 block text-sm font-semibold text-ink" }, [
+                    new ViewNode("text", { value: "Left drawer" })
+                  ])
+                ])
+              ]),
+              new ViewNode("button", {
+                type: "button",
+                class: "flex w-full cursor-pointer items-center gap-4 rounded-xl border border-border bg-surface p-4 text-left transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2",
+                "@click": (this.__h ??= {})[9] ??= (event) => this.events.openMorphPop(event)
+              }, [
+                new ViewNode("span", { class: "flex-1" }, [
+                  new ViewNode("span", { class: "block text-[11px] font-medium uppercase tracking-wide text-muted" }, [
+                    new ViewNode("text", { value: "Mobile" })
+                  ]),
+                  new ViewNode("span", { class: "mt-0.5 block text-sm font-semibold text-ink" }, [
+                    new ViewNode("text", { value: "Pop in, slide out" })
+                  ])
+                ]),
+                new ViewNode("span", {
+                  class: "text-lg leading-none text-faint",
+                  "aria-hidden": "true"
+                }, [
+                  new ViewNode("text", { value: "\u2192" })
+                ]),
+                new ViewNode("span", { class: "flex-1" }, [
+                  new ViewNode("span", { class: "block text-[11px] font-medium uppercase tracking-wide text-muted" }, [
+                    new ViewNode("text", { value: "Desktop" })
+                  ]),
+                  new ViewNode("span", { class: "mt-0.5 block text-sm font-semibold text-ink" }, [
+                    new ViewNode("text", { value: "Slide in, fade out" })
+                  ])
+                ])
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.morphCenterOpen,
+              labelledby: "sheet-morph-center-title",
+              snapPoints: "85vh 55vh 30vh",
+              desktopPosition: "center",
+              close: (this.__h ??= {})[10] ??= (event) => this.events.closeMorphCenter(event)
+            }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-3"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center justify-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-morph-center-title",
+                    class: "px-9 text-center text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Shipping address" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[11] ??= (event) => this.events.closeMorphCenter(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Below 768px: a bottom sheet welded to the edge with three snap points, dragged and flicked with a thumb. At or above it: a centered dialog that hugs its own content height and is dismiss-only." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Snaps belong to bottom sheets only, so crossing the breakpoint does not merely reposition the panel \u2014 it changes what the gesture even means. Drag it to a mid snap, widen the window, and watch it morph into a centered box." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: 'The mobile side is spelled out too: snapPoints and the default position="bottom" are the phone profile, desktopPosition="center" is the wide one.' })
+                ])
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.morphDrawerOpen,
+              labelledby: "sheet-morph-drawer-title",
+              position: "bottom",
+              mode: "card",
+              desktopPosition: "left",
+              desktopMode: "edge",
+              close: (this.__h ??= {})[12] ??= (event) => this.events.closeMorphDrawer(event)
+            }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-3"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center justify-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-morph-drawer-title",
+                    class: "px-9 text-center text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Browse" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[13] ??= (event) => this.events.closeMorphDrawer(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Below 768px: a floating bottom card, inset from all four edges with rounded corners, swiped down to dismiss. At or above it: a navigation drawer flush against the left edge, swiped left to dismiss." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Both halves are declared \u2014 position and mode name the phone profile, desktopPosition and desktopMode name the desktop one. The axis the swipe travels on changes with the position, so the same gesture code answers a different question on each side of the breakpoint." })
+                ])
+              ])
+            ]),
+            new ViewNode(Sheet, {
+              open: __d.morphPopOpen,
+              labelledby: "sheet-morph-pop-title",
+              desktopPosition: "bottom",
+              effect: "pop",
+              desktopEffect: "slide",
+              desktopExitEffect: "fade-scale",
+              desktopMode: "card",
+              close: (this.__h ??= {})[14] ??= (event) => this.events.closeMorphPop(event)
+            }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-3"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center justify-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-morph-pop-title",
+                    class: "px-9 text-center text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Order placed" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[15] ??= (event) => this.events.closeMorphPop(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
+              new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Below 768px: a bottom sheet flush to the edge that pops in with a small visible bounce, and slides back down the way it came. At or above it: a floating bottom card that slides in and then fades and shrinks away instead of travelling back across a screen it only partly covers." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Position stays bottom on both sides \u2014 only the mode and the motion change. Four separate questions, four separate props: effect, desktopEffect, exitEffect, desktopExitEffect." })
+                ])
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
             id: "positions",
-            title: "Positions",
+            title: "Positions \u2014 same at every width",
             code: __d.codePositions
           }, [
-            new ViewNode("div", { class: "flex flex-wrap items-center justify-center gap-3" }, [
+            new ViewNode("div", { class: "flex items-center justify-center gap-3" }, [
               new ViewNode(Button, {
                 variant: "outline",
-                press: (this.__h ??= {})[6] ??= (event) => this.events.openLeft(event)
+                press: (this.__h ??= {})[16] ??= (event) => this.events.openLeft(event)
               }, [
-                new ViewNode("text", { value: "Left drawer" })
+                new ViewNode("text", { value: "Left" })
               ]),
               new ViewNode(Button, {
                 variant: "outline",
-                press: (this.__h ??= {})[7] ??= (event) => this.events.openRight(event)
+                press: (this.__h ??= {})[17] ??= (event) => this.events.openCenter(event)
               }, [
-                new ViewNode("text", { value: "Right drawer" })
+                new ViewNode("text", { value: "Center" })
               ]),
               new ViewNode(Button, {
                 variant: "outline",
-                press: (this.__h ??= {})[8] ??= (event) => this.events.openCenter(event)
+                press: (this.__h ??= {})[18] ??= (event) => this.events.openRight(event)
               }, [
-                new ViewNode("text", { value: "Centered dialog" })
+                new ViewNode("text", { value: "Right" })
               ])
             ]),
             new ViewNode(Sheet, {
               open: __d.leftOpen,
-              title: "Navigation",
+              labelledby: "sheet-left-title",
               position: "left",
-              close: (this.__h ??= {})[9] ??= (event) => this.events.closeLeft(event)
+              close: (this.__h ??= {})[19] ??= (event) => this.events.closeLeft(event)
             }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-4"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-left-title",
+                    class: "pr-9 text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Navigation" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[20] ??= (event) => this.events.closeLeft(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
               new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: 'position sets the mobile profile and desktopPosition falls back to it, so a lone position="left" is a left drawer at every width \u2014 phone and desktop alike. Nothing here morphs; that is the point of this example.' })
+                ]),
                 new ViewNode("p", {}, [
                   new ViewNode("text", { value: "A left drawer slides in from its edge and is fixed width \u2014 snap points do not apply to the sides." })
                 ]),
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "Swipe it back toward its edge, tap the backdrop, or press Escape to dismiss." })
+                  new ViewNode("text", { value: "Swipe it back toward its edge, tap the backdrop, press Escape, or use the X." })
                 ])
               ])
             ]),
             new ViewNode(Sheet, {
               open: __d.rightOpen,
-              title: "Cart",
+              labelledby: "sheet-right-title",
               position: "right",
-              close: (this.__h ??= {})[10] ??= (event) => this.events.closeRight(event)
+              close: (this.__h ??= {})[21] ??= (event) => this.events.closeRight(event)
             }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-4"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-right-title",
+                    class: "pr-9 text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Cart" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[22] ??= (event) => this.events.closeRight(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
               new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "Same drawer, opposite edge. position sets the mobile profile and desktopPosition falls back to it, so this is a right drawer at every width." })
+                  new ViewNode("text", { value: "Same drawer, opposite edge, and again the same on a phone as on a desktop. A right drawer on a narrow screen is a real choice \u2014 it is what you want for a cart that slides over the page rather than up from the floor." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Want the phone to differ? Give it its own position and let desktopPosition take the wide profile \u2014 see the morphing examples above." })
                 ])
               ])
             ]),
             new ViewNode(Sheet, {
               open: __d.centerOpen,
-              title: "Heads up",
+              labelledby: "sheet-center-title",
               position: "center",
-              close: (this.__h ??= {})[11] ??= (event) => this.events.closeCenter(event)
+              close: (this.__h ??= {})[23] ??= (event) => this.events.closeCenter(event)
             }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-2"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center justify-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-center-title",
+                    class: "px-9 text-center text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Heads up" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[24] ??= (event) => this.events.closeCenter(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
               new ViewNode("div", { class: "space-y-2 py-2 text-sm text-body" }, [
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "A centered dialog hugs its content height." })
+                  new ViewNode("text", { value: "A centered dialog hugs its content height, on a phone and on a desktop." })
                 ]),
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "Two short lines stay two short lines." })
+                  new ViewNode("text", { value: "Two short lines stay two short lines. No grabber here \u2014 a centered dialog has no edge to drag toward, so the stock header omits it too." })
                 ])
               ])
             ])
@@ -61842,38 +63628,91 @@ SheetDoc.prototype.render = function() {
             new ViewNode("div", { class: "flex flex-wrap items-center justify-center gap-3" }, [
               new ViewNode(Button, {
                 variant: "outline",
-                press: (this.__h ??= {})[12] ??= (event) => this.events.openCard(event)
+                press: (this.__h ??= {})[25] ??= (event) => this.events.openCard(event)
               }, [
-                new ViewNode("text", { value: "Card mode" })
+                new ViewNode("text", { value: "Card on mobile, card on desktop" })
               ]),
               new ViewNode(Button, {
                 variant: "outline",
-                press: (this.__h ??= {})[13] ??= (event) => this.events.openEdge(event)
+                press: (this.__h ??= {})[26] ??= (event) => this.events.openEdge(event)
               }, [
-                new ViewNode("text", { value: "Edge mode" })
+                new ViewNode("text", { value: "Edge on mobile, edge on desktop" })
               ])
             ]),
             new ViewNode(Sheet, {
               open: __d.cardOpen,
-              title: "Card mode",
+              labelledby: "sheet-card-title",
               mode: "card",
-              close: (this.__h ??= {})[14] ??= (event) => this.events.closeCard(event)
+              desktopPosition: "bottom",
+              close: (this.__h ??= {})[27] ??= (event) => this.events.closeCard(event)
             }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-3"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center justify-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-card-title",
+                    class: "px-9 text-center text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Card mode" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[28] ??= (event) => this.events.closeCard(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
               new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
                 new ViewNode("p", {}, [
                   new ViewNode("text", { value: "Card mode floats the panel inside a small margin with rounded corners on every side \u2014 it reads as a floating surface rather than a slab welded to the edge." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: 'mode="card" is the mobile profile and desktopMode already defaults to card, so this one is a floating card at every width. Both sheets here also pin desktopPosition="bottom": mode describes a panel with an edge to hug, and a bottom sheet otherwise centers on desktop where there is no edge to hug.' })
                 ])
               ])
             ]),
             new ViewNode(Sheet, {
               open: __d.edgeOpen,
-              title: "Edge mode",
+              labelledby: "sheet-edge-title",
               desktopMode: "edge",
-              close: (this.__h ??= {})[15] ??= (event) => this.events.closeEdge(event)
+              desktopPosition: "bottom",
+              close: (this.__h ??= {})[29] ??= (event) => this.events.closeEdge(event)
             }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-3"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center justify-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-edge-title",
+                    class: "px-9 text-center text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Edge mode" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[30] ??= (event) => this.events.closeEdge(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
               new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: 'Edge mode sits flush against the screen edge. It is the mobile default; desktopMode defaults to card, so this sheet forces desktopMode="edge" to stay flush at every width.' })
+                  new ViewNode("text", { value: 'Edge mode sits flush against the screen edge. It is the mobile default, so saying nothing gets it on a phone; desktopMode defaults to card, so this sheet forces desktopMode="edge" to stay flush past the breakpoint too.' })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Leave desktopMode off and you get the third pairing for free: flush on mobile, floating card on desktop." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: 'Both of these are also the place to see a desktop BOTTOM panel, since they pin desktopPosition="bottom". Past the breakpoint it sizes to its content rather than to a snap point \u2014 snapPoints never crosses the breakpoint \u2014 so it sits at the bottom edge only as tall as it needs to be, up to the viewport.' })
                 ])
               ])
             ])
@@ -61886,24 +63725,45 @@ SheetDoc.prototype.render = function() {
             new ViewNode("div", { class: "flex flex-wrap items-center justify-center gap-3" }, [
               new ViewNode(Button, {
                 variant: "outline",
-                press: (this.__h ??= {})[16] ??= (event) => this.events.openPop(event)
+                press: (this.__h ??= {})[31] ??= (event) => this.events.openPop(event)
               }, [
                 new ViewNode("text", { value: "Pop dialog" })
               ]),
               new ViewNode(Button, {
                 variant: "outline",
-                press: (this.__h ??= {})[17] ??= (event) => this.events.openAsym(event)
+                press: (this.__h ??= {})[32] ??= (event) => this.events.openAsym(event)
               }, [
-                new ViewNode("text", { value: "Slide in, fade out" })
+                new ViewNode("text", { value: "Bottom slide in, desktop fade out" })
               ])
             ]),
             new ViewNode(Sheet, {
               open: __d.popOpen,
-              title: "Saved",
+              labelledby: "sheet-pop-title",
               position: "center",
               effect: "pop",
-              close: (this.__h ??= {})[18] ??= (event) => this.events.closePop(event)
+              close: (this.__h ??= {})[33] ??= (event) => this.events.closePop(event)
             }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-2"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center justify-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-pop-title",
+                    class: "px-9 text-center text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Saved" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[34] ??= (event) => this.events.closePop(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
               new ViewNode("div", { class: "space-y-2 py-2 text-sm text-body" }, [
                 new ViewNode("p", {}, [
                   new ViewNode("text", { value: "pop arrives with a small visible bounce." })
@@ -61915,14 +63775,36 @@ SheetDoc.prototype.render = function() {
             ]),
             new ViewNode(Sheet, {
               open: __d.asymOpen,
-              title: "Details",
+              labelledby: "sheet-asym-title",
+              position: "bottom",
               desktopPosition: "right",
               desktopExitEffect: "fade-scale",
-              close: (this.__h ??= {})[19] ??= (event) => this.events.closeAsym(event)
+              close: (this.__h ??= {})[35] ??= (event) => this.events.closeAsym(event)
             }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-3"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center justify-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-asym-title",
+                    class: "px-9 text-center text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Details" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[36] ??= (event) => this.events.closeAsym(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
               new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "Arriving and leaving are separate questions. On desktop this card slides in from the right, but closing it fades and shrinks it away instead of sliding it back across the screen." })
+                  new ViewNode("text", { value: "Arriving and leaving are separate questions. On a phone this is a bottom sheet that slides up and slides back down. On a desktop it is a right-side card that slides in \u2014 but closing it fades and shrinks it away instead of sliding it back across the screen." })
                 ]),
                 new ViewNode("p", {}, [
                   new ViewNode("text", { value: "Say nothing and leaving mirrors arriving \u2014 the exit props only exist for when the mirror reads wrong." })
@@ -61937,7 +63819,7 @@ SheetDoc.prototype.render = function() {
           }, [
             new ViewNode(Button, {
               variant: "outline",
-              press: (this.__h ??= {})[20] ??= (event) => this.events.openConfirm(event)
+              press: (this.__h ??= {})[37] ??= (event) => this.events.openConfirm(event)
             }, [
               new ViewNode("text", { value: "Delete project" })
             ]),
@@ -61946,23 +63828,34 @@ SheetDoc.prototype.render = function() {
               title: "Delete project?",
               position: "center",
               dismiss: "none",
-              close: (this.__h ??= {})[21] ??= (event) => this.events.closeConfirm(event)
+              close: (this.__h ??= {})[38] ??= (event) => this.events.closeConfirm(event)
             }, [
               new ViewNode("div", { class: "space-y-2 py-2 text-sm text-body" }, [
                 new ViewNode("p", {}, [
                   new ViewNode("text", { value: "This cannot be undone." })
                 ]),
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "Swipe, backdrop tap, and Escape are all refused \u2014 a refused swipe settles back and reports prevented: true on @snapRelease. The button below is the only way out." })
+                  new ViewNode("text", { value: "Swipe, backdrop tap, and Escape are all refused \u2014 a refused swipe settles back and reports prevented: true on @snapRelease. The two buttons below are the only way out, which is why this one also keeps the stock header and offers no X in the corner: every exit is an explicit, labelled choice." })
                 ])
               ]),
-              new ViewNode(Button, {
+              new ViewNode("div", {
                 slot: "footer",
-                variant: "secondary",
-                class: "w-full",
-                press: (this.__h ??= {})[22] ??= (event) => this.events.closeConfirm(event)
+                class: "flex gap-3"
               }, [
-                new ViewNode("text", { value: "Delete project" })
+                new ViewNode(Button, {
+                  variant: "outline",
+                  class: "flex-1",
+                  press: (this.__h ??= {})[39] ??= (event) => this.events.closeConfirm(event)
+                }, [
+                  new ViewNode("text", { value: "Cancel" })
+                ]),
+                new ViewNode(Button, {
+                  variant: "destructive",
+                  class: "flex-1",
+                  press: (this.__h ??= {})[40] ??= (event) => this.events.closeConfirm(event)
+                }, [
+                  new ViewNode("text", { value: "Delete project" })
+                ])
               ])
             ])
           ]),
@@ -61973,16 +63866,37 @@ SheetDoc.prototype.render = function() {
           }, [
             new ViewNode(Button, {
               variant: "outline",
-              press: (this.__h ??= {})[23] ??= (event) => this.events.openSpring(event)
+              press: (this.__h ??= {})[41] ??= (event) => this.events.openSpring(event)
             }, [
               new ViewNode("text", { value: "Open floaty sheet" })
             ]),
             new ViewNode(Sheet, {
               open: __d.springOpen,
-              title: "Floaty",
+              labelledby: "sheet-spring-title",
               spring: "0.08 0.4",
-              close: (this.__h ??= {})[24] ??= (event) => this.events.closeSpring(event)
+              close: (this.__h ??= {})[42] ??= (event) => this.events.closeSpring(event)
             }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "pb-3"
+              }, [
+                new ViewNode("div", { class: "relative flex h-8 items-center justify-center" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-spring-title",
+                    class: "px-9 text-center text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Floaty" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[43] ??= (event) => this.events.closeSpring(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
+                ])
+              ]),
               new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
                 new ViewNode("p", {}, [
                   new ViewNode("text", { value: 'spring="attraction friction" retunes how the sheet arrives \u2014 both dials exclusive of 0 and 1. This one is looser and floatier than the default entrance.' })
@@ -61995,41 +63909,56 @@ SheetDoc.prototype.render = function() {
           ]),
           new ViewNode(ExampleBox, {
             id: "header-slot",
-            title: "Custom header",
+            title: "Custom header and a close button",
             code: __d.codeHeader
           }, [
             new ViewNode(Button, {
               variant: "outline",
-              press: (this.__h ??= {})[25] ??= (event) => this.events.openHeader(event)
+              press: (this.__h ??= {})[44] ??= (event) => this.events.openHeader(event)
             }, [
               new ViewNode("text", { value: "Open with custom header" })
             ]),
             new ViewNode(Sheet, {
               open: __d.headerOpen,
-              labelledby: "promo-sheet-title",
+              labelledby: "sheet-promo-title",
               desktopPosition: "right",
-              close: (this.__h ??= {})[26] ??= (event) => this.events.closeHeader(event)
+              close: (this.__h ??= {})[45] ??= (event) => this.events.closeHeader(event)
             }, [
               new ViewNode("div", {
                 slot: "header",
-                class: "flex items-center justify-between border-b border-border px-5 py-4"
+                class: "pb-3"
               }, [
-                new ViewNode("h2", {
-                  id: "promo-sheet-title",
-                  class: "text-base font-semibold text-ink"
-                }, [
-                  new ViewNode("text", { value: "Summer promo" })
-                ]),
-                new ViewNode("span", { class: "rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-surface" }, [
-                  new ViewNode("text", { value: "New" })
+                new ViewNode("div", { class: "relative flex h-8 items-center gap-2 pr-9" }, [
+                  new ViewNode("h2", {
+                    id: "sheet-promo-title",
+                    class: "text-base font-semibold text-ink"
+                  }, [
+                    new ViewNode("text", { value: "Summer promo" })
+                  ]),
+                  new ViewNode("span", {
+                    class: "rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink"
+                  }, [
+                    new ViewNode("text", { value: "New" })
+                  ]),
+                  new ViewNode("button", {
+                    type: "button",
+                    "aria-label": "Close",
+                    class: "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2",
+                    "@click": (this.__h ??= {})[46] ??= (event) => this.events.closeHeader(event)
+                  }, [
+                    new ViewNode("text", { value: "\xD7" })
+                  ])
                 ])
               ]),
               new ViewNode("div", { class: "space-y-3 py-4 text-sm text-body" }, [
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "Filling the header slot replaces the stock grabber and title entirely, so a custom header brings its own heading and points labelledby at it." })
+                  new ViewNode("text", { value: "Filling the header slot replaces the stock title entirely, so a custom header brings its own heading and points labelledby at it. There is no is-slot-filled probe \u2014 the piece cannot render the fallback alongside your markup." })
                 ]),
                 new ViewNode("p", {}, [
-                  new ViewNode("text", { value: "The header is still an unconditional drag surface." })
+                  new ViewNode("text", { value: "The grabber is not part of that trade. Every pill is hosted on the panel and absolutely positioned, so it floats inside the header's padding rather than sitting in the flow: it survives any header content, and hiding it on a fine pointer or on desktop moves nothing. This header is just a heading, a badge, and a close button positioned against a relative row." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "The header is still an unconditional drag surface. A tap on the X never becomes a drag: pointer capture is deferred until the finger has moved 5px." })
                 ])
               ])
             ])

@@ -10,6 +10,7 @@ import {
 	buildExitKeyframes,
 	buildOpenKeyframes,
 	buildRestKeyframes,
+	contentSized,
 	dismissalZoneProgress,
 	EXIT_CUSHION,
 	exitClearProgress,
@@ -18,6 +19,7 @@ import {
 	paintedProgress,
 	parseDismiss,
 	parseSpring,
+	resizesWithSnaps,
 	POP_OVERSHOOT_PERCENT,
 	POP_OVERSHOOT_SCALE,
 	REVEAL_PERCENT,
@@ -196,6 +198,118 @@ test('show during a dismissal retargets onto the entrance rest frame', async (t)
 	engine.destroy();
 });
 
+test('show during a dismissal preserves backdrop progress through the reversal', async (t) => {
+	const frames = captureFrames(t);
+	const engine = new SheetEngine();
+	const dialog = makeDialog();
+	engine.setProfile(profileFor('left'));
+	engine.setSnaps([400], 0);
+
+	const opened = engine.show({ to: dialog });
+	drainFrames(frames);
+	await opened;
+
+	const hidden = engine.hide();
+	for (let index = 0; index < 5; index++) {
+		assert.ok(frames.length > 0, `dismissal frame ${index + 1} is queued`);
+		frames.shift()(index * 16.66);
+	}
+	const beforeReversal = engine.backdropProgress;
+
+	const reopened = engine.show({ to: dialog });
+	assert.equal(
+		engine.backdropProgress,
+		beforeReversal,
+		'the reversal starts with the exact backdrop progress already on screen'
+	);
+	drainFrames(frames);
+	await Promise.all([hidden, reopened]);
+	assert.equal(engine.backdropProgress, 1);
+	engine.destroy();
+});
+
+test('a pop reversal starts from the exact exit pose painted on screen', async (t) => {
+	const frames = captureFrames(t);
+	const engine = new SheetEngine();
+	const dialog = makeDialog();
+	engine.setProfile(profileFor('bottom', { effect: 'pop', exitEffect: 'pop' }));
+	engine.setSnaps([500], 0);
+
+	const opened = engine.show({ to: dialog });
+	drainFrames(frames);
+	await opened;
+
+	const hidden = engine.hide();
+	for (let index = 0; index < 5; index++) {
+		assert.ok(frames.length > 0, `exit frame ${index + 1} is queued`);
+		frames.shift()(index * 16.66);
+	}
+	const painted = {
+		transform: dialog.style.transform,
+		opacity: dialog.style.opacity,
+		height: dialog.style.height,
+	};
+
+	const reopened = engine.show({ to: dialog });
+	assert.deepEqual(
+		{
+			transform: dialog.style.transform,
+			opacity: dialog.style.opacity,
+			height: dialog.style.height,
+		},
+		painted
+	);
+	drainFrames(frames);
+	await Promise.all([hidden, reopened]);
+	engine.destroy();
+});
+
+test('mismatched exit and entrance effects reverse from the exact painted pose', async (t) => {
+	for (const [effect, exitEffect] of [
+		['slide', 'fade-scale'],
+		['fade-scale', 'slide'],
+		['slide-fade', 'pop'],
+	]) {
+		const frames = captureFrames(t);
+		const engine = new SheetEngine();
+		const dialog = makeDialog();
+		engine.setProfile(profileFor('right', { effect, exitEffect }));
+		engine.setSnaps([400], 0);
+
+		const opened = engine.show({ to: dialog });
+		drainFrames(frames);
+		await opened;
+
+		const hidden = engine.hide();
+		for (let index = 0; index < 5; index++) {
+			assert.ok(
+				frames.length > 0,
+				`${effect}/${exitEffect} exit frame ${index + 1} is queued`
+			);
+			frames.shift()(index * 16.66);
+		}
+		const painted = {
+			transform: dialog.style.transform,
+			opacity: dialog.style.opacity,
+			height: dialog.style.height,
+		};
+
+		const reopened = engine.show({ to: dialog });
+		assert.deepEqual(
+			{
+				transform: dialog.style.transform,
+				opacity: dialog.style.opacity,
+				height: dialog.style.height,
+			},
+			painted,
+			`${effect}/${exitEffect} preserves every painted value`
+		);
+		drainFrames(frames);
+		await Promise.all([hidden, reopened]);
+		engine.destroy();
+	}
+});
+
 test('a zero-travel hide defers hidden until after the caller returns', async (t) => {
 	const frames = captureFrames(t);
 	const engine = makeEngine();
@@ -360,6 +474,67 @@ test('non-resizing profiles never carry a size property', () => {
 		assertNoSizeProperties(buildDragKeyframes(profile, 400, 400, 400), `drag ${position}`);
 		assertNoSizeProperties(buildRestKeyframes(profile, 400, 250, 400), `rest ${position}`);
 	}
+});
+
+// `snapPoints` is a MOBILE-profile prop and is ignored past the breakpoint,
+// so a desktop bottom panel is sized by its own content exactly like `center` and
+// joins the non-resizing profiles above. Emitting a pixel height there is not
+// merely redundant: it pins the box, so the next measurement reads back the
+// number the previous frame wrote rather than the content's own height, and the
+// content ResizeObserver has nothing left to observe.
+test('a desktop bottom profile is content-sized and never carries a size property', () => {
+	const desktop = profileFor('bottom', { desktop: true });
+	const mobile = profileFor('bottom');
+
+	assert.equal(contentSized(desktop), true);
+	assert.equal(contentSized(profileFor('center')), true);
+	assert.equal(contentSized(mobile), false);
+	assert.equal(
+		contentSized(profileFor('left', { desktop: true })),
+		false,
+		'a side sheet is sized by its measured width, not by its content'
+	);
+	assert.equal(resizesWithSnaps(mobile), true, 'a mobile bottom sheet still paints its snaps');
+	assert.equal(resizesWithSnaps(desktop), false);
+
+	for (const effect of ['slide', 'fade-scale', 'slide-fade', 'pop']) {
+		const profile = profileFor('bottom', { desktop: true, effect });
+		assertNoSizeProperties(
+			buildOpenKeyframes(profile, 400, 400, 400),
+			`open desktop bottom/${effect}`
+		);
+		assertNoSizeProperties(
+			buildExitKeyframes(profile, 400, 400, 400, { effect }),
+			`exit desktop bottom/${effect}`
+		);
+	}
+	assertNoSizeProperties(buildDragKeyframes(desktop, 400, 400, 400, 400), 'drag desktop bottom');
+
+	// The mobile twin is unchanged and still paints the snap it rests on.
+	assert.equal(buildDragKeyframes(mobile, 400, 400, 400, 400)[100].height, '400px');
+});
+
+test('a desktop bottom drag translates its content-sized box instead of resizing it', () => {
+	const desktop = profileFor('bottom', { desktop: true });
+
+	// Same axis as ever — it is still a bottom sheet, pulled away downward — but
+	// the whole size change is expressed as translation, like a centred dialog.
+	const drag = buildDragKeyframes(desktop, 400, 400, 400, 400);
+	assert.equal(drag[0].transform, 'translate3d(0px, 400px, 0px) scale(1)');
+	assert.equal(drag[100].transform, 'translate3d(0px, 0px, 0px) scale(1)');
+
+	// Read back out as numbers: a content-sized panel paints its resting extent
+	// wherever the drag took it, and has already travelled the whole difference.
+	// That is what keeps the exit runway honest — a shrinking height would let it
+	// stop short.
+	assert.equal(paintedExtent(desktop, 120, 400, 400), 400);
+	assert.equal(awayTranslation(desktop, 120, 400, 400), 280);
+	assert.equal(
+		paintedExtent(profileFor('bottom'), 120, 400, 400),
+		400,
+		'a snapped bottom sheet below its floor paints the floor, so both agree here'
+	);
+	assert.equal(awayTranslation(profileFor('bottom'), 120, 400, 400), 280);
 });
 
 // The split that makes `center` possible: which axis a profile travels on is a
@@ -2012,4 +2187,48 @@ test('spring presets land in their timing budgets', () => {
 
 	// Leaving should always feel faster than arriving.
 	assert.ok(simulateSpring(SPRING_PRESETS.exit).ms < simulateSpring(SPRING_PRESETS.entrance).ms);
+});
+
+test('a profile change away from bottom drops the height its track wrote', async (t) => {
+	const frames = captureFrames(t);
+	const engine = makeEngine();
+	const dialog = makeDialog();
+	const shown = engine.show({ to: dialog, display: 'flex' });
+	drainFrames(frames);
+	await shown;
+	assert.equal(dialog.style.height, '500px', 'a bottom sheet paints a pixel height');
+
+	// Only a bottom profile emits a size property, and #applyFrame's Object.assign
+	// cannot clear one the new track never mentions — so a stale pixel height would
+	// pin a side drawer to the geometry it just left.
+	engine.setProfile(profileFor('right'));
+	engine.setSnaps([400], 0);
+	assert.equal(dialog.style.height, '', 'the bottom height is gone');
+	assert.equal(translateX(dialog), 0, 'the side drawer rests flush against its edge');
+});
+
+test('a profile change mid-entrance retargets the running spring', async (t) => {
+	const frames = captureFrames(t);
+	const engine = makeEngine();
+	const dialog = makeDialog();
+	const shown = engine.show({ to: dialog, display: 'flex' });
+	// Part-way into the entrance, while the spring is still running: beginMorph
+	// refuses any state but 'shown', so the host's only route is this rebuild.
+	for (let index = 0; index < 6; index++) {
+		assert.ok(frames.length > 0, `entrance frame ${index + 1} is queued`);
+		frames.shift()(index * 16.66);
+	}
+	assert.equal(engine.state, 'showing');
+	assert.ok(dialog.style.height, 'the bottom track is still painting a height');
+
+	engine.setProfile(profileFor('right'));
+	engine.setSnaps([400], 0);
+	// The run must finish in the NEW geometry rather than landing in the old one
+	// and snapping at settle.
+	assert.equal(dialog.style.height, '', 'the run stops repainting the old size');
+	drainFrames(frames);
+	await shown;
+	assert.equal(engine.state, 'shown');
+	assert.equal(dialog.style.height, '', 'and never reintroduces it');
+	assert.equal(translateX(dialog), 0, 'the entrance settles flush, with no jump');
 });

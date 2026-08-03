@@ -316,6 +316,9 @@
   .top-1\/2 {
     top: calc(1 / 2 * 100%);
   }
+  .top-2 {
+    top: calc(var(--spacing) * 2);
+  }
   .top-2\.5 {
     top: calc(var(--spacing) * 2.5);
   }
@@ -2159,6 +2162,9 @@
   .px-6 {
     padding-inline: calc(var(--spacing) * 6);
   }
+  .px-9 {
+    padding-inline: calc(var(--spacing) * 9);
+  }
   .px-gutter {
     padding-inline: var(--spacing-gutter);
   }
@@ -2477,9 +2483,6 @@
   }
   .text-success {
     color: var(--color-success);
-  }
-  .text-surface {
-    color: var(--color-surface);
   }
   .text-white {
     color: var(--color-white);
@@ -3241,6 +3244,12 @@
   @media (pointer: fine) {
     .pointer-fine\:hidden {
       display: none;
+    }
+    .pointer-fine\:pr-0 {
+      padding-right: 0px;
+    }
+    .pointer-fine\:pl-0 {
+      padding-left: 0px;
     }
   }
   @media (any-pointer: coarse) {

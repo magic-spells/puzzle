@@ -2,22 +2,24 @@
   <dialog
     class={ dialogClass }
     aria-labelledby={ labelledby }
-    @cancel={ handleCancel }>
+    @cancel={ handleCancel }
+    @close={ handleClose }>
 
     <div
       ref="backdrop"
       data-sheet-surface="backdrop"
       class={ backdropClass }></div>
 
-    <div ref="panel" class={ panelClass }>
+    <div ref="panel" data-sheet-surface="panel" class={ panelClass }>
+      {#if showGrabber}
+        <div class={ grabberClass } aria-hidden="true"></div>
+      {/if}
+
       <div
         ref="header"
         data-sheet-surface="header"
         class={ headerClass }>
         <Slot name="header">
-          {#if showGrabber}
-            <div class={ grabberClass } aria-hidden="true"></div>
-          {/if}
           {#if title}
             <h2 id={ titleId } class={ titleClass }>{ title }</h2>
           {/if}
@@ -67,8 +69,9 @@ import { DragGesture } from '../../lib/sheet-drag.js';
 // overlay a gesture surface while the native ::backdrop remains transparent.
 //
 // CONTROLLED CONTRACT. `open` is required and is never mutated here. Escape,
-// a backdrop tap, or an allowed swipe calls @close(reason), where reason is
-// 'escape', 'backdrop', or 'swipe'. The parent flips `open`; syncOpen() then
+// a backdrop tap, an allowed swipe, or a native close calls @close(reason),
+// where reason is 'escape', 'backdrop', 'swipe', or 'close'. The parent flips
+// `open`; syncOpen() then
 // asks SheetEngine to hide, and only the engine's `hidden` event closes the
 // native dialog. Native `cancel` is always preventDefault'd. maxDisplayWidth is
 // an opening ceiling: above it a closed open intent is suppressed without
@@ -76,31 +79,43 @@ import { DragGesture } from '../../lib/sheet-drag.js';
 // controlled sheet; shrinking below the ceiling opens while `open` remains true.
 //
 // SNAP CONTRACT. `snapPoints` accepts a space-separated CSS-length string or an
-// array of lengths (px, vh/dvh/svh/lvh, vw, rem, or %); default '85vh'. calc()
-// is intentionally unsupported because this port resolves through the pure
-// policy helper instead of a browser CSS probe. Mobile bottom profiles use the
-// full ascending list. Desktop bottom keeps only the largest snap and is
-// dismiss-only. Left/right/center ignore snapPoints: sides use their measured
-// fixed width and center uses its measured intrinsic height. `snap` is
-// optional-controlled: when present, the parent owns the index through
-// @snapChange(index); when absent, the piece commits releases locally.
-// `initialSnap` selects the first uncontrolled index and defaults to largest.
+// array of CSS lengths; default '85vh'. A hidden browser probe resolves every
+// top-level token independently while preserving whitespace inside functions,
+// so viewport-unit variants and expressions such as calc(100dvh - 4rem),
+// min(), clamp(), and var() keep their native CSS semantics. Invalid or
+// zero-height tokens are discarded. `snapPoints` is a MOBILE-PROFILE prop and
+// nothing else: only a bottom sheet below the breakpoint reads it, and it uses
+// the full ascending list. Every other profile sizes itself by measurement —
+// sides take their measured fixed width, and center at any width AND bottom
+// past the breakpoint take their measured intrinsic content height (both are
+// dismiss-only, so there is nothing to snap to). Mobile and desktop are
+// therefore independent resting geometries that the breakpoint FLIPs between,
+// and a content-sized desktop bottom panel may stand TALLER than the largest
+// mobile snap — the recipe's max-h is its only ceiling. `snap` is
+// optional-controlled: when
+// present, the parent owns the index through @snapChange(index); when absent, the
+// piece commits releases locally. `initialSnap` selects the first uncontrolled
+// index on every open and defaults to largest.
 //
-// SLOTS. The named header slot replaces the ENTIRE stock header fallback —
-// grabber and title together. Because Puzzle has no slot-filled probe, a custom
-// header must bring its own accessible heading and pass `labelledby`; otherwise
-// the title fallback supplies the generated heading id. The footer wrapper is
-// `empty:hidden`. Untagged call-site content renders through <Children/>.
+// SLOTS. The named header slot replaces the stock header fallback — the title.
+// Because Puzzle has no slot-filled probe, a custom header must bring its own
+// accessible heading and pass `labelledby`; otherwise the title fallback
+// supplies the generated heading id. The grabber pill is deliberately NOT in
+// that fallback for any position (see the fifth surface below): it is hosted on
+// the panel and floats, so it survives any header content and a custom header
+// never re-adds it. The header wrapper owns the top padding and is
+// `empty:hidden`; the footer wrapper is `empty:hidden`. Untagged call-site
+// content renders through <Children/>.
 //
-// MEASUREMENT. CSS-token probing from the source is gone. prepareOpen() lays out
-// the real panel (temporarily display:flex + visibility:hidden while the dialog
-// is closed), then reads getBoundingClientRect(). Side width, center height, and
-// every card-mode edge inset therefore match the caller's actual Tailwind
-// overrides exactly. Bottom snaps use live viewport/root-font metrics. Numeric
-// props replace the remaining probes: exitCushion defaults to 28px;
-// morphDuration defaults to 420ms and collapses to 0 under reduced motion.
+// MEASUREMENT. prepareOpen() lays out the real panel (temporarily display:flex +
+// visibility:hidden while the dialog is closed), then reads
+// getBoundingClientRect(). Side width, center height, and every card-mode edge
+// inset therefore match the caller's actual Tailwind overrides exactly. Bottom
+// snaps use a hidden CSS measurement probe. Numeric props replace the remaining
+// probes: exitCushion defaults to 28px;
+// morphDuration defaults to 600ms and collapses to 0 under reduced motion.
 //
-// GESTURES AND DISMISS POLICY. Four DragGesture instances preserve the source's
+// GESTURES AND DISMISS POLICY. Five DragGesture instances preserve the source's
 // continuous tracking, independent axes, rolling velocity, and deferred pointer
 // capture. Header/footer/backdrop always claim; content snapshots its complete
 // scroll chain at pointerdown and delegates the finger-space decision to
@@ -110,13 +125,45 @@ import { DragGesture } from '../../lib/sheet-drag.js';
 // and reports snapRelease({ prevented: true }); an allowed swipe queues release
 // velocity on SheetEngine before asking the parent to close.
 //
+// THE FIFTH SURFACE. The panel itself is the fifth gesture, and it exists for one
+// region: a side sheet's handle strip. Side profiles reserve the pill's own 12px
+// footprint as panel padding no child surface covers, the pill floats over it as
+// a pointer-events-none panel child, and the panel takes touch-action: none so no
+// native pan can begin on the strip (the content's own touch-pan-x/y keeps nested
+// scrolling working below it). It claims rigidly, like the header.
+//
+// An earlier port put the side pill inside the header slot fallback instead. That
+// made the pill itself live — it is a header descendant, and the header always
+// claims — but it did not satisfy the invariant: the claim surface was a 4px x
+// 40px sliver rather than a full-height edge strip, the region beside the pill
+// belonged to the content and so deferred to its scroll chain, and a caller
+// filling the header slot deleted the side sheet's advertised swipe outright.
+// Hosting the pill on the panel, as the source deliberately does, fixes all
+// three.
+//
+// The trap is bubbling: every child surface's pointerdown reaches the panel's
+// DragGesture too, and one that merely ignored the callbacks would still capture
+// the pointer at slop and starve the surface that owns it. #dragStart therefore
+// REFUSES any hit whose target is not the panel directly, via DragGesture's
+// return-false seam, which leaves the refused gesture fully inert — no capture,
+// no further callbacks. Desktop and fine-pointer profiles drop the strip and the
+// pill, so there the panel is fully covered and every hit is refused.
+//
+// DESKTOP FALLBACK. Past `breakpoint` (default 768) the desktop* props take
+// over, and each falls back to its mobile twin — except `desktopPosition` when
+// `position` is bottom, which defaults to 'center' so a wide sheet sizes to its
+// content instead of standing as a full-width 85vh slab. Pass
+// desktopPosition="bottom" to opt back in. See #resolveProfile.
+//
 // PROFILE MORPH. A breakpoint/profile-key crossing while open is a synchronous
 // FLIP split across Puzzle's patcher: beginMorph() parks the spring and pins the
 // backdrop; the live FROM box is read; new literal class maps are patched; then
 // afterUpdate() measures the unpinned TO box and transitions explicit
 // top/left/width/height/border-radius pixels. transitionend and a duration+120ms
 // timeout share one teardown. Re-entrant crossings always retarget from the
-// currently painted box. Same-profile resizes remeasure without morphing.
+// currently painted box. Same-profile resizes remeasure without morphing —
+// unless one arrives mid-morph, which retargets the flight synchronously
+// (#retargetMorph) rather than waiting for it to land somewhere stale.
 //
 // IMPERATIVE INLINE STYLES. The panel and backdrop deliberately have NO
 // `style={}` bindings and there is no <style> block. SheetEngine/DragGesture/
@@ -135,7 +182,7 @@ const RESIZE_THROTTLE_MS = 100;
 const FLICK_VELOCITY = 0.5;
 const OVERSCROLL_RESISTANCE = 0.2;
 const MORPH_TIMEOUT_PADDING_MS = 120;
-const DEFAULT_MORPH_DURATION = 420;
+const DEFAULT_MORPH_DURATION = 600;
 const DEFAULT_MORPH_EASING = 'cubic-bezier(0.34, 1.32, 0.52, 1)';
 
 const DIALOG =
@@ -161,37 +208,57 @@ const PANEL_BASE =
 // Tailwind's scanner. The edge recipes add a surface-colour bleed skirt so
 // rubber-band travel cannot expose the backdrop past a flush screen edge.
 const PANEL_BOTTOM_EDGE =
-  'h-[85dvh] max-h-[100dvh] w-full rounded-t-2xl border-t border-border ' +
+  'max-h-[100dvh] rounded-t-2xl border-t border-border ' +
   'pb-[env(safe-area-inset-bottom,0px)] ' +
   'shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
 const PANEL_BOTTOM_CARD =
-  'mx-auto mb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] h-[85dvh] max-h-[calc(100dvh-1.5rem)] ' +
-  'w-[calc(100%-1.5rem)] rounded-2xl border border-border ' +
+  'mx-auto mb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-1.5rem)] ' +
+  'rounded-2xl border border-border ' +
   'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
+// The bottom recipes deliberately carry NO height: mobile and desktop are two
+// independent resting geometries and the height is the thing that differs.
+// Mobile takes a snap point, so the class is the 85dvh fallback the snap
+// resolution then overwrites; desktop ignores snapPoints entirely and measures
+// its own content, exactly like center. These are appended rather than layered
+// over a base height because registry class strings have no conflict resolver —
+// stacking h-[85dvh] and h-fit would let Tailwind's stylesheet order decide,
+// not the attribute order. The max-h caps stay on the recipes: they bound both
+// profiles, and on desktop the cap is the ONLY ceiling, so a content-sized
+// panel can legitimately stand taller than the largest mobile snap.
+const BOTTOM_HEIGHT_MOBILE = 'h-[85dvh]';
+const BOTTOM_HEIGHT_DESKTOP = 'h-fit';
+
+// The two profiles whose height IS their content: center at any width, and
+// bottom past the breakpoint. Both resolve their single snap by measurement and
+// both need the content-resize observer.
+const CONTENT_SIZED = (profile) =>
+  profile.position === 'center' ||
+  (profile.position === 'bottom' && profile.desktop);
+
 const PANEL_LEFT_EDGE =
-  'h-full w-[min(26rem,90vw)] rounded-r-2xl border-r border-border ' +
+  'h-full rounded-r-2xl border-r border-border ' +
   'pl-[env(safe-area-inset-left,0px)] ' +
   'shadow-[-120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
 const PANEL_RIGHT_EDGE =
-  'h-full w-[min(26rem,90vw)] rounded-l-2xl border-l border-border ' +
+  'h-full rounded-l-2xl border-l border-border ' +
   'pr-[env(safe-area-inset-right,0px)] ' +
   'shadow-[120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
 const PANEL_LEFT_CARD =
   'my-[0.75rem] ml-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] ' +
-  'w-[min(26rem,90vw)] rounded-2xl border border-border ' +
+  'rounded-2xl border border-border ' +
   'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
 const PANEL_RIGHT_CARD =
   'my-[0.75rem] mr-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] ' +
-  'w-[min(26rem,90vw)] rounded-2xl border border-border ' +
+  'rounded-2xl border border-border ' +
   'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
 const PANEL_CENTER =
-  'm-auto h-fit w-[min(28rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-1.5rem)] ' +
+  'm-auto h-fit max-h-[calc(100dvh-1.5rem)] ' +
   'rounded-2xl border border-border ' +
   'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
@@ -204,28 +271,65 @@ const PANEL_PROFILE = {
   'right:card': PANEL_RIGHT_CARD,
 };
 
+const PANEL_WIDTH = {
+  'bottom:edge': 'w-full',
+  'bottom:card': 'w-[calc(100%-1.5rem)]',
+  'left:edge': 'w-[min(26rem,90vw)]',
+  'left:card': 'w-[min(26rem,90vw)]',
+  'right:edge': 'w-[min(26rem,90vw)]',
+  'right:card': 'w-[min(26rem,90vw)]',
+  center: 'w-[min(28rem,calc(100vw-1.5rem))]',
+};
+
 // Desktop bottom cards yield this default cap outright when the caller supplies
 // any max-width utility. Registry class strings have no conflict resolver, and
 // Tailwind's generated selector order otherwise makes a plain override win for
 // some utility spellings and lose for others.
 const PANEL_WIDTH_CAP = 'max-w-[26rem]';
 const CALLER_MAX_WIDTH = /(?:^|\s)\S*max-w-/;
+const CALLER_WIDTH = /(?:^|\s)(?:[\w-]+:)*w-/;
 
-const HEADER = 'shrink-0 touch-none select-none px-4';
+// pt-4 is unconditional so the header sits the same distance from the top edge
+// on touch and on desktop. The pills float inside that padding instead of
+// occupying flow, so hiding them (fine pointer, or desktop) cannot reflow the
+// header. empty:hidden keeps a title-less, slot-less sheet from reserving it.
+const HEADER = 'shrink-0 touch-none select-none px-4 pt-4 empty:hidden';
+const HEADER_HANDLE = 'shrink-0 touch-none select-none px-4 pt-4';
 const CONTENT =
   'min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain touch-pan-x touch-pan-y px-4 py-4';
 const FOOTER = 'shrink-0 touch-none bg-surface p-4 empty:hidden';
 
+// Every pill is hosted on the PANEL and is `pointer-events-none` exactly like
+// the source's `sheet-panel::before`: it floats over the space its neighbours
+// already reserve, so a pointerdown there hits the panel itself — the fifth drag
+// surface — rather than a 4px sliver of pill. Nothing here is in flow and
+// nothing carries a margin: a pill appears and disappears (fine pointer, or
+// desktop) without moving a single header pixel. The bottom pill rides inside
+// the header's own pt-4, so it needs no reserved strip; the sides still get one
+// because their pill sits beside the content rather than above it.
 const GRABBER_BOTTOM =
-  'pointer-fine:hidden mx-auto my-3 h-1 w-10 rounded-full bg-faint';
+  'pointer-fine:hidden pointer-events-none absolute left-1/2 top-2 h-1 w-10 -translate-x-1/2 rounded-full bg-faint';
 const GRABBER_LEFT =
-  'pointer-fine:hidden absolute right-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint';
+  'pointer-fine:hidden pointer-events-none absolute right-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint';
 const GRABBER_RIGHT =
-  'pointer-fine:hidden absolute left-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint';
+  'pointer-fine:hidden pointer-events-none absolute left-2 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-faint';
 
+// The strip reserves only the pill's own footprint — 8px offset + 4px thickness
+// = 12px — and nothing more: breathing room on top of it shifts every child over
+// and reads as lopsided padding on a narrow panel, and the children's own px-4
+// gutter already provides the clearance. Desktop drops the strip in JS (no touch
+// swipes above the breakpoint, and a desktop sheet is dismiss-only); a fine
+// pointer drops it in CSS, matching the two places the source hides the handle.
+const PANEL_SIDE_STRIP = {
+  left: 'pr-3 pointer-fine:pr-0',
+  right: 'pl-3 pointer-fine:pl-0',
+};
+
+// HEADER owns the top padding for all three, so a title only spells out the gap
+// below itself.
 const TITLE_BOTTOM = 'pb-3 text-center text-base font-semibold text-ink';
-const TITLE_SIDE = 'py-4 text-left text-base font-semibold text-ink';
-const TITLE_CENTER = 'pt-4 text-center text-base font-semibold text-ink';
+const TITLE_SIDE = 'pb-4 text-left text-base font-semibold text-ink';
+const TITLE_CENTER = 'text-center text-base font-semibold text-ink';
 
 const MORPH_PROPERTIES = [
   'position',
@@ -285,13 +389,13 @@ export default class Sheet extends PuzzleView {
   #settleTarget = null;
   #programmaticSnap = null;
   #snapRun = 0;
-  #bodyOverflow = null;
   #returnFocus = null;
   #resizeHandler = null;
   #resizeTimer = null;
   #centerObserver = null;
   #centerTimer = null;
   #pendingMorph = null;
+  #pendingMeasure = null;
   #morph = null;
   #measureSignature = null;
   #needsRemeasure = false;
@@ -317,6 +421,7 @@ export default class Sheet extends PuzzleView {
     if (dialog?.open) dialog.close();
     if (this.refs.backdrop) this.refs.backdrop.style.opacity = '0';
     this.#drag = { active: false };
+    this.#localSnap = null;
     this.#settleTarget = null;
     this.#programmaticSnap = null;
     this.#syncCenterObserver();
@@ -384,6 +489,7 @@ export default class Sheet extends PuzzleView {
     const callerClass = props.class || '';
     const position = profile.position;
     const cardKey = `${position}:${profile.mode}`;
+    const side = position === 'left' || position === 'right';
     const showGrabber =
       props.showGrabber !== false && !profile.desktop && position !== 'center';
     const desktopBottomCap =
@@ -398,12 +504,28 @@ export default class Sheet extends PuzzleView {
     if (position === 'center') titleClass = TITLE_CENTER;
 
     return {
+      // Every pill belongs to the panel, not the header fallback, so it survives
+      // any header content — see the fifth-surface note above.
       showGrabber,
       dialogClass: [DIALOG, DIALOG_PROFILE[position]].filter(Boolean).join(' '),
       backdropClass: [BACKDROP, props.backdropClass || ''].filter(Boolean).join(' '),
       panelClass: [
         PANEL_BASE,
         position === 'center' ? PANEL_CENTER : PANEL_PROFILE[cardKey],
+        CALLER_WIDTH.test(callerClass)
+          ? ''
+          : PANEL_WIDTH[position === 'center' ? 'center' : cardKey],
+        // The bottom recipes carry no height of their own — see the note above.
+        position === 'bottom'
+          ? profile.desktop
+            ? BOTTOM_HEIGHT_DESKTOP
+            : BOTTOM_HEIGHT_MOBILE
+          : '',
+        // A side panel is itself a rigid drag surface, so no native pan may begin
+        // on it. Scroll containers inside the content declare their own pans
+        // below this element, so nested scrolling is unaffected.
+        side ? 'touch-none' : '',
+        side && !profile.desktop ? PANEL_SIDE_STRIP[position] : '',
         desktopBottomCap && !CALLER_MAX_WIDTH.test(callerClass)
           ? PANEL_WIDTH_CAP
           : '',
@@ -411,7 +533,7 @@ export default class Sheet extends PuzzleView {
       ]
         .filter(Boolean)
         .join(' '),
-      headerClass: HEADER,
+      headerClass: position === 'bottom' && showGrabber ? HEADER_HANDLE : HEADER,
       contentClass: CONTENT,
       footerClass: FOOTER,
       grabberClass,
@@ -427,9 +549,18 @@ export default class Sheet extends PuzzleView {
     const breakpoint = Number.isFinite(breakpointValue) ? breakpointValue : 768;
     const desktop =
       typeof window !== 'undefined' && window.innerWidth >= breakpoint;
+    // Bottom is the one position whose desktop fallback is NOT itself. A bottom
+    // panel takes its height from a snap point, so on a large display a sheet
+    // holding one paragraph is still a full-width 85vh slab of mostly empty
+    // surface. Center is the conventional wide answer and the only profile that
+    // sizes to its content, so bottom fans out to it by default. Every other
+    // position already reads the same at both widths and falls back to itself.
+    // Pass desktopPosition="bottom" to keep a bottom sheet bottom on desktop.
     const desktopPosition = POSITIONS.has(props.desktopPosition)
       ? props.desktopPosition
-      : position;
+      : position === 'bottom'
+        ? 'center'
+        : position;
     const desktopMode = MODES.has(props.desktopMode)
       ? props.desktopMode
       : 'card';
@@ -537,15 +668,15 @@ export default class Sheet extends PuzzleView {
   }
 
   #lockBody() {
-    if (this.#bodyOverflow !== null) return;
-    this.#bodyOverflow = document.body.style.overflow;
+    this.element?.setAttribute('data-scroll-lock', '');
     document.body.style.overflow = 'hidden';
   }
 
   #unlockBody() {
-    if (this.#bodyOverflow === null) return;
-    document.body.style.overflow = this.#bodyOverflow;
-    this.#bodyOverflow = null;
+    this.element?.removeAttribute('data-scroll-lock');
+    if (!document.querySelector('[data-scroll-lock]')) {
+      document.body.style.overflow = '';
+    }
   }
 
   #restoreFocus() {
@@ -593,19 +724,41 @@ export default class Sheet extends PuzzleView {
     const viewportWidth = window.innerWidth;
     const rootFontSize =
       Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    let snaps = resolveSnapPoints(this.#snapPointValue(), {
-      viewportHeight,
-      viewportWidth,
-      rootFontSize,
-      percentageBase: viewportHeight,
+    const probe = document.createElement('div');
+    Object.assign(probe.style, {
+      position: 'fixed',
+      visibility: 'hidden',
+      pointerEvents: 'none',
+      boxSizing: 'border-box',
     });
-    if (!snaps.length) {
-      snaps = resolveSnapPoints('85vh', {
+    document.body.append(probe);
+    const measure = (token) => {
+      probe.style.height = '';
+      probe.style.height = token;
+      const height = probe.getBoundingClientRect().height;
+      return Number.isFinite(height) && height > 0 ? height : 0;
+    };
+
+    let snaps;
+    try {
+      snaps = resolveSnapPoints(this.#snapPointValue(), {
         viewportHeight,
         viewportWidth,
         rootFontSize,
         percentageBase: viewportHeight,
+        measure,
       });
+      if (!snaps.length) {
+        snaps = resolveSnapPoints('85vh', {
+          viewportHeight,
+          viewportWidth,
+          rootFontSize,
+          percentageBase: viewportHeight,
+          measure,
+        });
+      }
+    } finally {
+      probe.remove();
     }
     return snaps;
   }
@@ -692,10 +845,15 @@ export default class Sheet extends PuzzleView {
     this.#engine.setProfile(profile);
 
     let snaps;
-    if (profile.position === 'bottom') {
+    if (profile.position === 'bottom' && !profile.desktop) {
       snaps = this.#resolveBottomSnaps();
-      if (profile.desktop) snaps = [snaps[snaps.length - 1]];
-    } else if (profile.position === 'center') {
+    } else if (CONTENT_SIZED(profile)) {
+      // Desktop bottom and center share one rule: the panel is whatever height
+      // its content is, so the single "snap" is the measured box. snapPoints is
+      // a MOBILE-profile prop and has no say here — the two profiles are
+      // independent resting geometries, and a desktop bottom panel may well
+      // stand taller than the largest mobile snap. Only the recipe's max-h caps
+      // it. The fallback matters when the panel measures 0 (never laid out).
       snaps = [
         box.height > 0
           ? box.height
@@ -721,9 +879,12 @@ export default class Sheet extends PuzzleView {
     this.#snaps = snaps;
     this.#engine.setSnaps(snaps, active);
     // While beginMorph() has the engine parked, setSnaps() deliberately writes
-    // no frame. A bottom destination still needs its resolved snap height under
-    // the TO measurement; otherwise the class fallback (85dvh) is measured and
-    // endMorph() snaps to the real active snap after the FLIP has finished.
+    // no frame. A bottom destination still needs its resolved height pinned
+    // under the TO measurement — the mobile 85dvh class fallback on one side,
+    // the measured content height on the other — otherwise the FLIP measures
+    // the wrong box and endMorph() snaps to the real value after it lands.
+    // #stripMorphPins clears this height again at teardown, which is what lets
+    // a desktop bottom panel go back to being sized by h-fit.
     if (this.#engine.morphing && profile.position === 'bottom') {
       this.refs.panel.style.height = `${snaps[active]}px`;
     }
@@ -786,7 +947,9 @@ export default class Sheet extends PuzzleView {
           this.#engine.state === 'hiding' ||
           this.#engine.state === 'hidden'
         ) {
-          this.#engine.show({ to: this.refs.panel, display: 'flex' });
+          this.#engine
+            .show({ to: this.refs.panel, display: 'flex' })
+            .then(() => this.#reconcileSnap());
           this.refs.backdrop.style.opacity = String(
             this.#engine.backdropProgress
           );
@@ -807,7 +970,9 @@ export default class Sheet extends PuzzleView {
       // showModal() and the synchronous frame-0 write inside engine.show() stay
       // in this task, so the browser never paints the resting panel first.
       dialog.showModal();
-      this.#engine.show({ to: this.refs.panel, display: 'flex' });
+      this.#engine
+        .show({ to: this.refs.panel, display: 'flex' })
+        .then(() => this.#reconcileSnap());
       this.refs.backdrop.style.opacity = String(
         this.#engine.backdropProgress
       );
@@ -835,6 +1000,13 @@ export default class Sheet extends PuzzleView {
       ['header', this.refs.header],
       ['content', this.refs.content],
       ['footer', this.refs.footer],
+      // The panel itself hosts a side sheet's handle: the pill is
+      // pointer-events-none and floats over the strip the panel reserves in its
+      // own padding, which no child surface covers. Without this binding the one
+      // element that advertises the swipe is the one place a swipe is dead.
+      // #dragStart refuses any hit that is not the panel directly, so gestures
+      // bubbling up from the surfaces above stay owned by them.
+      ['panel', this.refs.panel],
     ]) {
       this.#gestures.push(
         new DragGesture(element, this.#surfaceCallbacks(surface))
@@ -858,6 +1030,7 @@ export default class Sheet extends PuzzleView {
 
     if (!this.#shouldDisplayOpen()) {
       this.#queuedProfile = null;
+      this.#pendingMeasure = null;
       this.syncOpen();
       return;
     }
@@ -865,6 +1038,12 @@ export default class Sheet extends PuzzleView {
     if (this.#pendingMorph) {
       this.#continueMorph();
       return;
+    }
+
+    if (this.#pendingMeasure) {
+      const profile = this.#pendingMeasure;
+      this.#pendingMeasure = null;
+      this.#prepareOpen(profile);
     }
 
     if (this.#queuedProfile && this.element?.open) {
@@ -940,9 +1119,16 @@ export default class Sheet extends PuzzleView {
   }
 
   #dragStart(surface, event) {
+    // The panel surface exists for the side handle strip — the only region where
+    // the panel itself is the hit target. Every child surface's pointerdown
+    // bubbles through the panel's gesture too, and it must be refused outright
+    // (not merely ignored): DragGesture would otherwise capture the pointer at
+    // slop and starve the surface that owns it. Returning false is that refusal,
+    // and it leaves the refused gesture fully inert.
+    if (surface === 'panel' && event?.target !== this.refs.panel) return false;
     if (this.#engine?.state !== 'shown' || this.#engine.morphing) {
       this.#drag = { active: false };
-      return;
+      return false;
     }
     this.#settleTarget = null;
     this.#programmaticSnap = null;
@@ -1023,6 +1209,14 @@ export default class Sheet extends PuzzleView {
     this.#engine.dragBy(activeSize - size);
   }
 
+  #settleBack() {
+    if (this.#profile.position === 'bottom') {
+      this.#engine.settleTo(this.#engine.activeSnap, 0);
+    } else {
+      this.#engine.returnToRest(0);
+    }
+  }
+
   #dragEnd(surface, info) {
     const drag = this.#drag;
     if (!drag.active) return;
@@ -1036,17 +1230,15 @@ export default class Sheet extends PuzzleView {
     ) {
       if (this.#dismissPolicy().backdrop) {
         this.#requestClose('backdrop');
+      } else if (drag.claimed) {
+        this.#settleBack();
       }
       return;
     }
     if (!drag.claimed) return;
 
     if (info.cancelled) {
-      if (this.#profile.position === 'bottom') {
-        this.#engine.settleTo(this.#engine.activeSnap, 0);
-      } else {
-        this.#engine.returnToRest(0);
-      }
+      this.#settleBack();
       return;
     }
 
@@ -1096,7 +1288,10 @@ export default class Sheet extends PuzzleView {
       settle = this.#engine.returnToRest(-velocityAway);
     }
     settle.then(() => {
-      if (run === this.#snapRun) this.#settleTarget = null;
+      if (run === this.#snapRun) {
+        this.#settleTarget = null;
+        this.#reconcileSnap();
+      }
     });
   }
 
@@ -1111,7 +1306,6 @@ export default class Sheet extends PuzzleView {
     if (!this.element?.open) {
       this.#renderProfile = next;
       this.setData(this.#classData(next));
-      this.syncOpen();
       return;
     }
 
@@ -1124,16 +1318,41 @@ export default class Sheet extends PuzzleView {
     }
     if (this.#drag.active) return;
 
+    if (this.#engine?.morphing) {
+      this.#retargetMorph(next);
+      return;
+    }
+
     this.#renderProfile = next;
     this.#prepareOpen(next);
+  }
+
+  // Mid-morph, the instant remeasure above would read pinned, interpolating
+  // geometry — a centre profile would publish the animating height as its
+  // intrinsic one. But simply waiting leaves the morph flying toward a
+  // destination measured at the crossing tick, and when the pins strip the panel
+  // snaps to wherever the still-moving window ended up. So retarget instead.
+  //
+  // Unlike #startProfileMorph this must NOT route through setData: the profile
+  // key has not changed, so the class data is identical and the patcher may not
+  // schedule an update at all — which would strand #pendingMorph and leave the
+  // engine parked forever. The FLIP is therefore re-entered synchronously.
+  #retargetMorph(profile) {
+    const panel = this.refs.panel;
+    if (!panel || !this.#engine?.morphing) return;
+    // Read before the pins go: the animated rect is the exact starting point.
+    const from = this.#readBox(panel);
+    this.#clearMorphTimers();
+    this.#stripMorphPins(panel);
+    this.#renderProfile = profile;
+    this.#pendingMorph = { from, profile };
+    this.#continueMorph();
   }
 
   #startProfileMorph(next) {
     const panel = this.refs.panel;
     if (!panel || !this.#engine || !this.element?.open) {
-      this.#renderProfile = next;
-      this.setData(this.#classData(next));
-      this.#prepareOpen(next);
+      this.#deferMeasure(next);
       return;
     }
 
@@ -1147,9 +1366,7 @@ export default class Sheet extends PuzzleView {
       this.#pendingMorph = null;
     } else {
       if (!this.#engine.beginMorph()) {
-        this.#renderProfile = next;
-        this.setData(this.#classData(next));
-        this.#prepareOpen(next);
+        this.#deferMeasure(next);
         return;
       }
       from = this.#readBox(panel);
@@ -1162,6 +1379,12 @@ export default class Sheet extends PuzzleView {
     this.setData(this.#classData(next));
   }
 
+  #deferMeasure(profile) {
+    this.#renderProfile = profile;
+    this.#pendingMeasure = profile;
+    this.setData(this.#classData(profile));
+  }
+
   #continueMorph() {
     const pending = this.#pendingMorph;
     if (!pending) return;
@@ -1171,8 +1394,12 @@ export default class Sheet extends PuzzleView {
     this.#prepareOpen(pending.profile);
     const to = this.#readBox(panel);
     const duration = this.#morphDuration();
-    if (duration <= 0) {
+    const finish = () => {
       this.#finishMorph();
+      this.#reconcileSnap();
+    };
+    if (duration <= 0) {
+      finish();
       return;
     }
 
@@ -1185,7 +1412,6 @@ export default class Sheet extends PuzzleView {
     ).join(', ');
     this.#pinBox(panel, to);
 
-    const finish = () => this.#finishMorph();
     const onEnd = (event) => {
       if (
         event.target === panel &&
@@ -1265,7 +1491,8 @@ export default class Sheet extends PuzzleView {
 
   #syncCenterObserver() {
     const want =
-      this.#profile?.position === 'center' &&
+      !!this.#profile &&
+      CONTENT_SIZED(this.#profile) &&
       !!this.element?.open &&
       typeof ResizeObserver === 'function';
     if (want && !this.#centerObserver) {
@@ -1286,7 +1513,8 @@ export default class Sheet extends PuzzleView {
     this.#centerTimer = setTimeout(() => {
       this.#centerTimer = null;
       if (
-        this.#profile?.position !== 'center' ||
+        !this.#profile ||
+        !CONTENT_SIZED(this.#profile) ||
         !this.element?.open
       ) {
         return;
@@ -1311,6 +1539,21 @@ export default class Sheet extends PuzzleView {
       event.preventDefault();
       if (!this.#dismissPolicy().escape) return;
       this.#requestClose('escape');
+    },
+    handleClose: () => {
+      const state = this.#engine?.state;
+      if (
+        !state ||
+        state === 'hidden' ||
+        state === 'hiding' ||
+        state === 'showing'
+      ) {
+        return;
+      }
+      this.#finishMorph();
+      this.#drag = { active: false };
+      this.#engine.hide();
+      this.#requestClose('close');
     },
     scrollVeto: (event) => {
       if (this.#drag.active && this.#drag.claimed && event.cancelable) {

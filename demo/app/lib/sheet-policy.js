@@ -144,6 +144,24 @@ export {
 
 const SIMPLE_LENGTH = /^(-?\d*\.?\d+)(px|vh|dvh|svh|lvh|vw|rem|%)?$/i;
 
+function splitSnapPoints(value) {
+  const input = String(value || '').trim();
+  const tokens = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index];
+    if (char === '(') depth += 1;
+    else if (char === ')') depth = Math.max(0, depth - 1);
+    else if (/\s/.test(char) && depth === 0) {
+      if (start < index) tokens.push(input.slice(start, index));
+      start = index + 1;
+    }
+  }
+  if (start < input.length) tokens.push(input.slice(start));
+  return tokens;
+}
+
 // Sitting exactly on a snap leaves sub-pixel noise in the measured size, so
 // "strictly past" needs a little room or a flick from a snap resolves to itself.
 const SNAP_EPSILON = 1;
@@ -172,10 +190,7 @@ function resolveSnapPoints(
     measure,
   }
 ) {
-  const tokens = String(value || '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  const tokens = splitSnapPoints(value);
   const pixels = tokens
     .map((token) => {
       if (measure) return measure(token);

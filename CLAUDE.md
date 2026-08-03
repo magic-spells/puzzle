@@ -77,6 +77,13 @@ Rules that follow from this:
 - **Dev server:** `cd demo && npm run dev` on **port 3070** (3000 and several other ports
   are taken by sibling projects). Browser-smoke interactive pieces in a FOREGROUNDED tab —
   Puzzle's rAF-based view scheduler stalls re-renders in a hidden/backgrounded tab.
+- **Node tests:** `npm test` at the repo root runs the DOM-free suites in `test/` against
+  `registry/lib/` (currently the sheet motion libs: engine, policy, drag). These are
+  repo-internal — nothing under `test/` or the root `package.json` is ever copied to a
+  consumer. The assertions are ported byte-identical from the source `@magic-spells/sheet`
+  repo and pin exact numbers, not bounds; any edit to `registry/lib/sheet-*.js` requires
+  the suite green, and porting upstream changes means copying their new tests with only
+  the import paths adjusted — never loosening an assertion to make a port fit.
 
 ## Piece conventions
 

@@ -378,7 +378,7 @@ function paintedProgress(position, p) {
  * deliberately kept apart:
  *
  *   - which axis does this profile move on?  -> dismissAxis()
- *   - does it resize, or only translate?     -> `position === 'bottom'`
+ *   - does it resize, or only translate?     -> resizesWithSnaps()
  *
  * For bottom/left/right the two line up, which is why they were once tangled
  * together. `center` is the case that separates them: it travels on y like a
@@ -389,6 +389,48 @@ function paintedProgress(position, p) {
  */
 function dismissAxis(position) {
   return position === 'bottom' || position === 'center' ? 'y' : 'x';
+}
+
+/**
+ * Where a profile's single resting size comes from: its own laid-out content.
+ *
+ * Two profiles answer yes, and they answer it for the same reason — neither has
+ * a length to read. A centred dialog rests against no edge at all, and a bottom
+ * panel PAST THE BREAKPOINT is a desktop dialog that happens to sit on the
+ * bottom edge: `snapPoints` is a mobile-profile prop and has no say up there,
+ * so the only honest height is the one the content produces. The host measures
+ * the laid-out box for both, and both need the content-resize observer, because
+ * content is the one thing that changes a size nothing else re-measures.
+ *
+ * A side sheet is neither: it is intrinsically sized too, but by its measured
+ * width rather than by its content height, so it is measured once per profile.
+ * @param {Object} profile - Resolved visual profile.
+ * @returns {boolean} True when the resting size is the content's own.
+ */
+function contentSized(profile) {
+  if (profile.position === 'center') return true;
+  return profile.position === 'bottom' && !!profile.desktop;
+}
+
+/**
+ * Does this profile RESIZE as it travels, or only translate?
+ *
+ * The second of the two orthogonal questions above, and the reason it is a
+ * predicate rather than `position === 'bottom'`: only a *mobile* bottom profile
+ * resizes. It is the one profile with a snap list, and painting a height is how
+ * snap-to-snap travel is expressed.
+ *
+ * A desktop bottom profile is sized by its content, exactly like `center`, so it
+ * must not emit a height at all. Emitting one is not merely redundant — it pins
+ * the box in pixels, which makes the next measurement read back the number the
+ * last frame wrote instead of the content's own height, and freezes the
+ * ResizeObserver that watches for content changes. And an overshoot or an
+ * upward rubber-band would stretch a content-sized panel past its content.
+ * @param {Object} profile - Resolved visual profile.
+ * @returns {boolean} True when travel is painted as a size change.
+ */
+function resizesWithSnaps(profile) {
+  return profile.position === 'bottom' && !contentSized(profile);
 }
 
 /**
@@ -438,7 +480,7 @@ function awayVector(position, distance) {
  * @returns {number} Painted extent in pixels.
  */
 function paintedExtent(profile, size, restSize, lowestSize = 0) {
-  return profile.position === 'bottom' ? Math.max(size, lowestSize) : restSize;
+  return resizesWithSnaps(profile) ? Math.max(size, lowestSize) : restSize;
 }
 
 /**
@@ -455,7 +497,7 @@ function paintedExtent(profile, size, restSize, lowestSize = 0) {
  * @returns {number} Translate magnitude toward the dismiss edge, in pixels.
  */
 function awayTranslation(profile, size, restSize, lowestSize = 0) {
-  if (profile.position === 'bottom') return Math.max(0, lowestSize - size);
+  if (resizesWithSnaps(profile)) return Math.max(0, lowestSize - size);
   return restSize - size;
 }
 
@@ -492,7 +534,7 @@ function transformOrigin(profile) {
  */
 function restStyles(profile, size, restSize, lowestSize = 0) {
   const base = { opacity: '1', transformOrigin: transformOrigin(profile) };
-  if (profile.position === 'bottom') {
+  if (resizesWithSnaps(profile)) {
     const paintedSize = Math.max(size, lowestSize);
     const shift = Math.max(0, lowestSize - size);
     return {
@@ -502,7 +544,10 @@ function restStyles(profile, size, restSize, lowestSize = 0) {
     };
   }
   const shift = restSize - size;
-  if (profile.position === 'center') {
+  // Desktop bottom now reaches this branch too, so the y-axis test has to be
+  // the AXIS question, not `position === 'center'` — otherwise a content-sized
+  // bottom panel would translate sideways like a side sheet.
+  if (dismissAxis(profile.position) === 'y') {
     return { ...base, transform: `translate3d(0px, ${shift}px, 0px) scale(1)` };
   }
   return {
@@ -1007,9 +1052,17 @@ class SheetEngine extends EventEmitter {
   setProfile(profile) {
     const _ = this;
     _.#landPendingSettle();
-    const previousPosition = _.#profile.position;
+    const previous = _.#profile;
     _.#profile = { ..._.#profile, ...profile };
-    if (_.#profile.position !== previousPosition) _.#clearManagedSize();
+    // Two ways to stop emitting a height: change position, or cross the
+    // breakpoint on `bottom`, where the same position switches from
+    // snap-resized to content-sized.
+    if (
+      _.#profile.position !== previous.position ||
+      resizesWithSnaps(_.#profile) !== resizesWithSnaps(previous)
+    ) {
+      _.#clearManagedSize();
+    }
     _.#rebuildOpenTrack();
   }
 
@@ -1160,16 +1213,31 @@ class SheetEngine extends EventEmitter {
     _.#prepareDialog();
 
     if (_.#state === 'hiding') {
-      const start = _.#openProgressFromExit(_.#snaps[_.#activeSnap]);
+      // A reversal interpolates from the pose actually on screen to the resting
+      // pose. It cannot borrow the entrance's parameterisation: pop exits drop
+      // the bounce, and an exit effect need not translate at all.
+      const flight = clamp(_.#p, 0, 1);
+      const clear = _.#settleAction?.backdropClearProgress;
+      const visibleFlight =
+        clear > 0 && clear < 1
+          ? clamp((flight - clear) / (1 - clear), 0, 1)
+          : flight;
+      const backdropFloorExtent = _.#currentSize * visibleFlight;
+      const painted = _.#frames?.getFrame(
+        paintedProgress(_.#profile.position, _.#p)
+      );
       _.#state = 'showing';
       _.#phase = 'showing';
       _.#currentSize = _.#snaps[_.#activeSnap];
-      _.#frames = _.#makeOpenFrames(_.#currentSize);
-      _.#p = start;
-      _.#settleAction = { type: 'shown' };
-      _.#applyFrame(start);
+      const open = _.#makeOpenFrames(_.#currentSize);
+      _.#frames = painted
+        ? new FrameEngine({ 0: painted, 100: open.getFrame(1) })
+        : open;
+      _.#p = 0;
+      _.#settleAction = { type: 'shown', backdropFloorExtent };
+      _.#applyFrame(0);
       _.#tuneSpring('entrance');
-      return _.#animate(start * TRAVEL, TRAVEL, 0);
+      return _.#animate(0, TRAVEL, 0);
     }
     if (_.#state === 'showing') return Promise.resolve(false);
 
@@ -1492,23 +1560,6 @@ class SheetEngine extends EventEmitter {
     return new FrameEngine(buildOpenKeyframes(_.#profile, size, _.#restSize(), _.#snaps[0]));
   }
 
-  #openProgressFromExit(size) {
-    const _ = this;
-    const progress = clamp(paintedProgress(_.#profile.position, _.#p), 0, 1);
-    const { away, hiddenAway } = exitValues(
-      _.#profile,
-      _.#currentSize,
-      _.#restSize(),
-      _.#snaps[0],
-      _.#profile.exitEffect || _.#profile.effect
-    );
-    const paintedAway = hiddenAway * (1 - progress) + away * progress;
-    const hidden = effectValues(_.#profile, { size, hidden: true });
-    const openAway = awayOffset(_.#profile.position, hidden.x, hidden.y);
-    if (openAway <= 0) return progress;
-    return clamp(1 - paintedAway / openAway, 0, 1);
-  }
-
   #makeDragFrames(activeSize) {
     const _ = this;
     const maximum = Math.max(activeSize, ..._.#snaps);
@@ -1645,7 +1696,11 @@ class SheetEngine extends EventEmitter {
       _.#backdropProgress = dismissalZoneProgress(_.#currentSize * visibleFlight, _.#snaps[0]);
       return;
     }
-    _.#backdropProgress = dismissalZoneProgress(_.#currentSize * flight, _.#snaps[0]);
+    const floor = _.#settleAction?.backdropFloorExtent;
+    const extent = Number.isFinite(floor)
+      ? floor + (_.#currentSize - floor) * flight
+      : _.#currentSize * flight;
+    _.#backdropProgress = dismissalZoneProgress(extent, _.#snaps[0]);
   }
 
   #emitChange() {
@@ -1689,8 +1744,9 @@ class SheetEngine extends EventEmitter {
     const _ = this;
     if (!_.#dialog) return;
     _.#dialog.style.display = _.#display;
-    _.#dialog.style.willChange =
-      _.#profile.position === 'bottom' ? 'transform, opacity, height' : 'transform, opacity';
+    _.#dialog.style.willChange = resizesWithSnaps(_.#profile)
+      ? 'transform, opacity, height'
+      : 'transform, opacity';
   }
 
   #restoreInline() {
@@ -1712,6 +1768,7 @@ export {
   buildOpenKeyframes,
   buildRestKeyframes,
   CLAMP_POSITIVE,
+  contentSized,
   dismissalZoneProgress,
   dismissAxis,
   DISMISS_ROUTES,
@@ -1726,6 +1783,7 @@ export {
   parseSpring,
   effectValues,
   FRAME_MS,
+  resizesWithSnaps,
   restStyles,
   POP_OVERSHOOT_PERCENT,
   POP_OVERSHOOT_SCALE,

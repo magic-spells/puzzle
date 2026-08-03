@@ -155,6 +155,30 @@ test('DragGesture captures on upward drags', () => {
 	gesture.destroy();
 });
 
+test('DragGesture abandons a gesture its onStart refuses', () => {
+	const el = new StubElement();
+	const calls = [];
+	const gesture = new DragGesture(el, {
+		// The panel surface refuses bubbled pointerdowns whose hit target is a
+		// child surface; a refused gesture must go fully inert, or it captures
+		// the pointer out from under the surface that owns it at slop.
+		onStart: () => {
+			calls.push('start');
+			return false;
+		},
+		onMove: () => calls.push('move'),
+		onEnd: () => calls.push('end'),
+	});
+
+	el.fire('pointerdown', ev({ timeStamp: 0 }));
+	el.fire('pointermove', ev({ clientY: 100, timeStamp: 40 }));
+	el.fire('pointerup', ev({ clientY: 120, timeStamp: 80 }));
+
+	assert.deepEqual(calls, ['start']);
+	assert.equal(el.capturedPointerId, null, 'a refused gesture must not capture the pointer');
+	gesture.destroy();
+});
+
 test('DragGesture ignores non-primary and foreign pointers', () => {
 	const el = new StubElement();
 	const calls = [];

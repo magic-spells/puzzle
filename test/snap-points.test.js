@@ -42,6 +42,36 @@ test('resolveSnapPoints handles px, rem, vw, percentages, and duplicates', () =>
 	);
 });
 
+test('resolveSnapPoints preserves calc whitespace and keeps the following snap separate', () => {
+	const measured = [];
+	assert.deepEqual(
+		resolveSnapPoints('calc(100dvh - 4rem) 50vh', {
+			viewportHeight: 1000,
+			measure(token) {
+				measured.push(token);
+				return token === 'calc(100dvh - 4rem)' ? 936 : 500;
+			},
+		}),
+		[500, 936]
+	);
+	assert.deepEqual(measured, ['calc(100dvh - 4rem)', '50vh']);
+});
+
+test('resolveSnapPoints keeps min and clamp expressions intact', () => {
+	const measured = [];
+	resolveSnapPoints('min(400px, 50vh) clamp(20rem, 50vh, 30rem)', {
+		viewportHeight: 1000,
+		measure(token) {
+			measured.push(token);
+			return measured.length * 100;
+		},
+	});
+	assert.deepEqual(measured, [
+		'min(400px, 50vh)',
+		'clamp(20rem, 50vh, 30rem)',
+	]);
+});
+
 test('resolveInitialSnap defaults to the largest snap and clamps explicit indices', () => {
 	const snaps = [200, 550, 900];
 	assert.equal(resolveInitialSnap(null, snaps), 2);
