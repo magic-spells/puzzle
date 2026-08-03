@@ -936,3 +936,176 @@ describe('PuzzleView — events integration (mini hand-compiled component)', () 
 		expect(v.getData().count).toBe(1);
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Controlled `checked` reflects to the CONTENT attribute even when the property
+// already agrees. The live-DOM guard in patchAttrs short-circuits exactly when
+// the USER moved checkedness, which is the only path that leaves the attribute
+// stale — `el.checked = x` writes the property, never the attribute. Skipping
+// the write there breaks viewManager's own "keep boolean ATTRIBUTES coherent
+// for CSS selectors" rule for `checked` alone.
+// ---------------------------------------------------------------------------
+describe('controlled `checked` keeps its content attribute coherent', () => {
+	class Box extends PuzzleView {
+		data() {
+			return { on: this.getData().on ?? true };
+		}
+	}
+	Box.prototype.render = function () {
+		return h('div', {}, [h('input', { type: 'checkbox', checked: this.getData().on }, [])]);
+	};
+
+	it('drops the attribute after a user click flips state to false', async () => {
+		const el = container();
+		const v = await new Box().mount(el);
+		const box = el.querySelector('input');
+		expect(box.checked).toBe(true);
+		expect(box.hasAttribute('checked')).toBe(true);
+
+		// The browser moves the property on click; the app mirrors it into state.
+		box.checked = false;
+		v.setData('on', false);
+		v.flushUpdates();
+
+		expect(box.checked).toBe(false);
+		expect(box.hasAttribute('checked')).toBe(false);
+		// The stale attribute used to survive here, so `input[checked]` matched an
+		// unchecked box and form.reset() re-checked it with no change event.
+		expect(el.querySelectorAll('input[checked]').length).toBe(0);
+	});
+
+	it('adds the attribute after a user click flips state to true', async () => {
+		const el = container();
+		const v = await new Box().mount(el);
+		v.setData('on', false);
+		v.flushUpdates();
+		const box = el.querySelector('input');
+		expect(box.hasAttribute('checked')).toBe(false);
+
+		box.checked = true;
+		v.setData('on', true);
+		v.flushUpdates();
+
+		expect(box.checked).toBe(true);
+		expect(box.hasAttribute('checked')).toBe(true);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// D145 states "never patched over an unknown tree" as an invariant of the
+// MANAGER. A view with no errorContent above it leaves the boundary path unused,
+// so nothing clears treeUnknown; the next ordinary render must still not diff
+// against a currentTree whose vnodes point at detached nodes.
+// ---------------------------------------------------------------------------
+describe('ViewManager — an unknown tree is never patched over', () => {
+	it('routes the next ordinary render through a fresh mount, with no orphaned DOM', async () => {
+		const el = container();
+		let poisoned = false;
+		let n = 1;
+
+		class Fragile extends PuzzleView {
+			data() {
+				return { n, poisoned };
+			}
+		}
+		Fragile.prototype.render = function () {
+			const d = this.getData();
+			// Row 1 CHANGES TAG when poisoned, so the patch replaces real DOM before
+			// row 3's throwing ref aborts it — that half-updated state is the whole
+			// point. A throw on the first child would leave the DOM still matching the
+			// old tree and prove nothing.
+			return h('section', { class: 'shell' }, [
+				d.poisoned
+					? h('span', { class: 'row row-1' }, [text(`S${d.n}`)])
+					: h('div', { class: 'row row-1' }, [text(`D${d.n}`)]),
+				h('div', { class: 'row row-2' }, [text(`two${d.n}`)]),
+				d.poisoned
+					? h('div', { class: 'row row-3', ref: () => { throw new Error('ref boom'); } }, [text('x')])
+					: h('div', { class: 'row row-3' }, [text(`three${d.n}`)]),
+			]);
+		};
+
+		const v = await new Fragile().mount(el);
+		expect(el.querySelector('.row-1').textContent).toBe('D1');
+
+		// Abort a patch partway. No errorContent anywhere → the boundary path is
+		// never taken and treeUnknown stays set.
+		poisoned = true;
+		n = 2;
+		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+		// refresh(), not setData: setData never re-runs data(), so the poisoned
+		// tree would never be built and the patch would never throw.
+		let aborted = false;
+		try {
+			await v.refresh();
+			v.flushUpdates();
+		} catch {
+			aborted = true;
+		}
+		expect(aborted).toBe(true); // the patch really did abort partway
+
+		// The next ordinary render must show CURRENT state, not a frozen orphan.
+		poisoned = false;
+		n = 3;
+		await v.refresh();
+		v.flushUpdates();
+		logged.mockRestore();
+
+		expect(el.querySelector('.row-1')?.textContent).toBe('D3');
+		expect(el.querySelector('.row-2')?.textContent).toBe('two3');
+		expect(el.querySelector('.row-3')?.textContent).toBe('three3');
+		// Exactly one of each — a fresh mount over a cleared range, not a duplicate,
+		// and no leftover <span> orphaned by the aborted patch.
+		expect(el.querySelectorAll('.row-1').length).toBe(1);
+		expect(el.querySelectorAll('span.row-1').length).toBe(0);
+		expect(el.querySelectorAll('.row').length).toBe(3);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// A view the router restored after a stalled out-animation is live again, so the
+// leave that eventually succeeds must make it inert a second time. playOut()'s
+// out sequence is spent (no second animation, per the router's recovery
+// contract) but D136's leave-inertness rule is about the LEAVE, not the
+// animation — the restored view must still unsubscribe on its way out.
+// ---------------------------------------------------------------------------
+describe('PuzzleView — a restored view goes inert again when it really leaves', () => {
+	class Leaver extends PuzzleView {
+		data() {
+			return { n: 1 };
+		}
+	}
+	Leaver.prototype.render = function () {
+		return h('div', {}, [text('leaver')]);
+	};
+
+	it('re-arms the leaving guard and drops the subscription on the second playOut', async () => {
+		installFakeAnimate();
+		{
+			const store = new Store({ todo: Todo });
+			const v = new Leaver(ctxWith(store));
+			await v.mount(container());
+
+			const unsubscribe = vi.spyOn(store, 'unsubscribe');
+
+			v.playOut();
+			expect(unsubscribe).toHaveBeenCalledTimes(1);
+			expect(v.setData('x', 1)).toBe(undefined);
+			// Inert while leaving: setData is a no-op.
+			expect(v.getData().x).toBe(undefined);
+
+			// The router's failed-navigation recovery puts it back.
+			v._restoreFromLeaving();
+			await afterFrame();
+			v.setData('x', 2);
+			expect(v.getData().x).toBe(2); // reactive again
+
+			// Now it leaves for real.
+			unsubscribe.mockClear();
+			v.playOut();
+			expect(unsubscribe).toHaveBeenCalledTimes(1); // inert again
+			v.setData('x', 3);
+			expect(v.getData().x).toBe(2); // still 2 — the write was refused
+		}
+	});
+});

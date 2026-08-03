@@ -57,6 +57,12 @@ handler the author writes by hand today. Product line v1.68, targeting 0.5.0.
   NaN-skip), stable handler identity across renders, IME guard, validation
   throw → `onError` with `phase: 'bind'` and preserved DOM text, and the
   zero-write echo render.
+- Both bind arms that call `refresh()` route a synchronous throw AND an async
+  rejection into the D145 funnel with `phase: 'bind'` — tested both ways, since a
+  bare call escapes the DOM event path with no report and no boundary.
+- The rebuilt-member-root diagnostic warns once per key when `data()` returns a
+  fresh object that discards the write, stays silent for a stable target and for
+  record replacement, and allocates nothing when `__PUZZLE_DEV__` is false.
 - `npx vitest run`, `cd compiler && go test ./...`, `npm run test:types`,
   `npm run verify:pack` all green; real-browser pass covers caret, IME
   composition, number-on-change, select, checkbox, and range.

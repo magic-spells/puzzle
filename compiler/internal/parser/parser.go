@@ -448,6 +448,9 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 		case TokAttrName:
 			name := t.Value
 			npos := tokPos(t)
+			if e := checkAttrNamespace(name, npos, p.file); e != nil {
+				return nil, false, e
+			}
 			if err := p.advance(); err != nil {
 				return nil, false, toPE(err)
 			}
@@ -477,6 +480,36 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 	}
 }
 
+// checkAttrNamespace rejects a reserved `prefix:name` attribute (D147 reserves the
+// directive-namespace space the grammar deliberately never opened). Event attrs own
+// the colon for their modifier channel (`@click:prevent`), so they are exempt and
+// validated by parseEventModifiers instead.
+//
+// Callers run this at the attribute NAME, before branching on `=`, because the two
+// forms must agree: validating inside buildAttr — which only runs once a value
+// follows — let the VALUELESS spelling `<input bind:value>` through as an ordinary
+// boolean attribute, so the one syntax the reservation exists to reject compiled
+// silently to `{ 'bind:value': true }`.
+func checkAttrNamespace(name string, npos Position, file string) *ParseError {
+	if strings.HasPrefix(name, "@") {
+		return nil
+	}
+	i := strings.IndexByte(name, ':')
+	if i < 0 {
+		return nil
+	}
+	switch name[:i] {
+	case "xml", "xlink", "xmlns":
+		return nil
+	}
+	// The message names the offending prefix and the SVG escape: pasted markup from
+	// an SVG editor is the main way a template acquires a namespaced attribute, and
+	// pointing that author at form-control binding told them nothing.
+	return errAt(file, npos,
+		"attribute namespace %q is reserved — only xml:, xlink:, and xmlns: are allowed. SVG exported from an editor (inkscape:, sodipodi:, serif:) needs those attributes stripped, or load the file as an asset with {#svg}",
+		name[:i]+":")
+}
+
 // buildAttr classifies an attribute given its name and value token.
 func buildAttr(name string, npos Position, v Token, file string) (Attr, *ParseError) {
 	vpos := tokPos(v)
@@ -498,13 +531,6 @@ func buildAttr(name string, npos Position, v Token, file string) (Attr, *ParseEr
 			return nil, perr
 		}
 		return &EventAttr{Name: event, Modifiers: mods, Expr: expr, Pos: npos}, nil
-	}
-	if i := strings.IndexByte(name, ':'); i >= 0 {
-		switch name[:i] {
-		case "xml", "xlink", "xmlns":
-		default:
-			return nil, errAt(file, npos, "attribute namespaces are reserved; two-way binding is automatic on form controls — see template SPEC §6")
-		}
 	}
 	switch v.Type {
 	case TokAttrBrace:

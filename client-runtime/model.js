@@ -297,11 +297,56 @@ export const DELETED_SAVE_MESSAGE = '[puzzle] cannot save a deleted record';
 // an entry here at all.
 const MUTATION_REVISIONS = new WeakMap();
 
+// Warn-once state is allocated lazily inside the development gate below. A
+// production build still must walk descriptors to avoid the strict-mode throw,
+// but it should not allocate diagnostic bookkeeping it can never read.
+let COMPUTED_GETTER_WARNINGS;
+
+/**
+ * Follow the same resolved-property path [[Set]] would follow, stopping before
+ * Object.prototype (its dangerous names are already covered by POLLUTION_SKIP).
+ * A model getter may live on any superclass, not only the concrete model's
+ * immediate prototype. Finding the FIRST descriptor matters too: an own data
+ * property legitimately shadows an older getter and remains assignable.
+ */
+function resolvesToGetterOnly(target, key) {
+	let owner = target;
+	while (owner && owner !== Object.prototype) {
+		const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+		if (descriptor) return 'get' in descriptor && descriptor.set === undefined;
+		owner = Object.getPrototypeOf(owner);
+	}
+	return false;
+}
+
 /** Shared body of safeAssign/safeMerge: assign every allowed own key. */
 function assignSkipping(target, src, skipSet, allow) {
 	for (const key of Object.keys(src)) {
 		if (skipSet.has(key)) continue;
 		if (allow && !allow(key)) continue;
+		// Computed properties are plain prototype getters (SPEC §7). ESM is
+		// strict mode, so assigning a payload key that resolves to one throws in
+		// the MIDDLE of this loop: earlier fields land, later fields do not, and a
+		// save response never reaches its post-merge _synced flip. Match D49's
+		// reserved-relationship posture: drop the colliding value and warn once.
+		if (resolvesToGetterOnly(target, key)) {
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				COMPUTED_GETTER_WARNINGS ||= new WeakMap();
+				const Model = target.constructor;
+				let warned = COMPUTED_GETTER_WARNINGS.get(Model);
+				if (!warned) {
+					warned = new Set();
+					COMPUTED_GETTER_WARNINGS.set(Model, warned);
+				}
+				if (!warned.has(key)) {
+					warned.add(key);
+					console.warn(
+						`[puzzle] "${key}" collides with a computed getter on model "${Model.name || 'PuzzleModel'}" — the incoming value was ignored`
+					);
+				}
+			}
+			continue;
+		}
 		target[key] = src[key];
 	}
 	return target;
@@ -331,11 +376,13 @@ function recordMutation(target, fields) {
  * (`__proto__`/`constructor`/`prototype`) neutralizes both re-prototyping AND the
  * class-shadowing an own `constructor`/`prototype` key would cause (matching
  * safeMerge — a payload that reaches a fresh `new Model(data)` is just as hostile
- * as one that reaches an update merge). All other keys keep exact assignment
- * semantics and Object.keys preserves enumeration order (identical to
- * Object.assign for normal data). A legitimate data field literally named
- * `constructor` therefore cannot be set at construction — intended, and symmetric
- * with safeMerge.
+ * as one that reaches an update merge). A key resolving to a getter-only computed
+ * property is also dropped: strict-mode assignment would throw and leave the
+ * ordered copy half-applied. Every remaining key keeps exact assignment semantics,
+ * including accessors WITH setters, and Object.keys preserves enumeration order
+ * (identical to Object.assign for normal data). A legitimate data field literally
+ * named `constructor` therefore cannot be set at construction — intended, and
+ * symmetric with safeMerge.
  */
 function safeAssign(target, src) {
 	return assignSkipping(target, src, POLLUTION_SKIP);
@@ -384,10 +431,13 @@ export function recordMutationRevision(record) {
  * would shadow the class), and ADDITIONALLY skips the reserved
  * `_store`/`_type`/`_synced`/`_deleted` fields so a hostile or accidental payload
  * can't detach a record from its store, retype it, forge its sync provenance, or
- * impersonate a locally removed instance. Callers that
- * legitimately set `_synced` do so explicitly right after this merge. All other keys
- * keep exact `record[key] = src[key]` assignment semantics; Object.keys preserves
- * enumeration order (identical to Object.assign for ordinary data).
+ * impersonate a locally removed instance. Getter-only computed-property collisions
+ * are dropped too, before their strict-mode throw can strand a half-merged record;
+ * accessors with setters (including D49 relationships) retain their setter behavior.
+ * Callers that legitimately set `_synced` do so explicitly right after this merge.
+ * Every remaining key keeps exact `record[key] = src[key]` assignment semantics;
+ * Object.keys preserves enumeration order (identical to Object.assign for ordinary
+ * data).
  *
  * When `throughRevision` is provided by save reconciliation, a field changed by
  * update() after that request's dispatch revision is skipped. Other merge sites

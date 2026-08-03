@@ -71,6 +71,14 @@ decision cards explain why the contract has its current shape.
   refresh, D147 implicit two-way form binding
   ([[FEATURE-IMPLICIT-BINDING]], v1.68), and D148 `puzzle preview` + real
   static serving in dev ([[DECISION-D148-PREVIEW-AND-STATIC-DEV]], v1.69).
+  A pre-merge review round on the binding branch also landed
+  [[DECISION-D149-COMPUTED-GETTER-COLLISIONS]] (a payload key colliding with a
+  computed getter is dropped and warned, not thrown on) plus correctness
+  amendments with no product-line entry of their own: the bind write-back's
+  `refresh()` now enters the D145 funnel, `ViewManager.render()` honours
+  `treeUnknown`, a controlled `checked` keeps its content attribute coherent,
+  and a view the router restores after a stalled out-animation is reactive
+  again (and inert again when it truly leaves).
   `examples/overlays` is the Portal showcase (toasts, clipped-ancestor menu
   with `@event:outside` logical containment, Portal slide-over vs native
   `<dialog>` modal); its dogfooding pass produced the Portal

@@ -62,6 +62,18 @@ BEFORE `viewWillHide` fires so the guards cover the hook window and a
 re-entrant `playOut()` memoizes. DOM listeners stay attached — pointer-events
 on a fading element are an app-level concern.
 
+Inertness lasts for the leave, not for the instance. A navigation can FAIL
+mid-leave (a guard blocks it, its `data()` rejects) while this view is still the
+committed one, and the router then restores it — so the state `playOut()` set has
+to be undoable. Two fields carry the two different lifetimes: `#outTask` holds the
+spent out sequence forever, so a later navigation away swaps the restored unit out
+instantly with no second animation, while `#leaving` names only the CURRENT inert
+interval. `_restoreFromLeaving()` clears `#leaving`, cancels the animation fill,
+and refreshes once to re-track the store subscriptions `playOut()` dropped; a
+later real leave re-arms `#leaving` from the spent `#outTask` and unsubscribes
+again. Without that second arming a restored view would leave while still
+reactive — inertness is a property of leaving, not of having left once.
+
 ## 4. `router.start()` abort parity
 
 `PuzzleApp.mount()` claims `_mounted` before the awaited `router.start()`; a

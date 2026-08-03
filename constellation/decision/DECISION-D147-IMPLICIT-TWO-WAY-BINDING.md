@@ -128,10 +128,15 @@ drift indices and churn every golden).
 
 `PuzzleView.__bind(target, key, spec)` memoizes per (target, key, spec) — a Map
 for locals, WeakMap-of-Maps for member targets — so `patchAttrs` sees a stable
-function identity across renders and never re-attaches listeners
+function identity across renders and does not re-attach listeners
 ([[DECISION-D18-PER-NODE-LISTENERS]] economics preserved; a fresh arrow per
 render would detach + re-add every `{#for}` row's listener on every store
-flush). The handler guards `event.isComposing` (a mid-composition write aborts
+flush). Stability is inherited from the TARGET: locals key on a string, and a
+store record keeps one object identity across `update()`, flush, and repeated
+`findOne` (D50), so both are stable by construction. A plain object that `data()`
+rebuilds on every run is a WeakMap miss every render — the listener churns and,
+more seriously, the write lands on the object the next commit discards. That is
+the rebuilt-root hazard below, not a memo defect. The handler guards `event.isComposing` (a mid-composition write aborts
 the IME session; the final post-`compositionend` input carries
 `isComposing: false` so the value still lands), applies the matrix coercion,
 then dispatches through a three-arm write:
@@ -161,7 +166,14 @@ form-UX answer. No hidden dirty-state layer.
    `value`/`checked` compare against the live DOM property, so the
    per-keystroke echo writes nothing. Coercion breaks the round-trip → number
    commits on `change`.
-2. **IME composition** — the `isComposing` guard above.
+2. **IME composition** — the `isComposing` guard above covers the WRITE side: no
+   state write lands mid-composition, and the composed text arrives with the
+   input that follows `compositionend`. The guard necessarily makes state lag the
+   DOM for the duration of the composition, so a re-render driven by something
+   else (a store flush, a sibling's `setData`) re-asserts the stale value into the
+   composing element through the view manager's controlled-prop rule. Guarding the
+   patch side too — skipping the live-DOM re-assert for an element that is
+   mid-composition — is the remaining half.
 3. **Validation throws** — strict update + `phase: 'bind'` report, state
    unchanged.
 4. **Layer clobber** — `#recompose` composes model over local, so a `setData`
@@ -175,6 +187,25 @@ form-UX answer. No hidden dirty-state layer.
 5. **Islands** — a bind inside an [[DECISION-D44-DOM-ISLANDS]] subtree attaches
    at mount and survives the freeze; data flows out of the island, never into
    it. Documented, not special-cased.
+6. **Rebuilt member root** — the plain-object arm writes to the object the
+   template resolved, so that object has to survive the `data()` re-run the write
+   triggers. `data() { return { form: { name: '' } } }` returns a NEW object every
+   run: the write lands on the outgoing one, `#commit` replaces the model
+   wholesale, and the controlled-prop compare rewrites the field — every keystroke
+   erased, silently. Records and bare locals are stable by construction, so this
+   is only reachable for plain objects. A dev-only diagnostic warns once per key,
+   armed on the write and read at the END of the following render: it fires only
+   when the written object never reappeared, exactly one replacement did, and that
+   replacement did not carry the value. The completed-render fence is what keeps a
+   `{#for}` from false-positiving when a sibling row is visited first, and record
+   writes never arm it, so replacing a record stays silent. The fix in app code is
+   a stable object (`this.memo(...)`), a record, or a bare local key.
+7. **A failed `data()` after a bound write** — the write-back's own `refresh()` is
+   a fire-and-forget call from a DOM listener, so both arms route a synchronous
+   throw and an async rejection into the [[DECISION-D145-ERROR-BOUNDARIES]] funnel
+   with `phase: 'bind'`. Left bare it escaped the event path entirely: no
+   `onError`, no boundary, nothing logged — the one refresh site in the class that
+   did not contain its own failure.
 
 ## Out of scope
 
@@ -190,7 +221,13 @@ layer); explicit `bind:`/opt-out syntax (the three no-syntax escapes cover it).
 - **`bind:value` / directive namespace** — re-litigates D85's namespace
   rejection and drags three editor grammars, the eslint/prettier ports, and the
   lexer with it. The namespace is now a positioned compile error reserving the
-  space (non-XML `:` prefixes; `xml`/`xlink`/`xmlns` allowlisted for SVG).
+  space (non-XML `:` prefixes; `xml`/`xlink`/`xmlns` allowlisted for SVG). The
+  check runs at the attribute NAME, before the `=` branch, so the valueless
+  spelling `<input bind:value>` is rejected on the same footing as the valued
+  one. Event attrs are exempt — they own the colon for their modifier channel.
+  The error names the offending prefix and points at `{#svg}`, because pasted
+  editor output (`inkscape:`, `sodipodi:`, `serif:`) is the main way a template
+  acquires a namespaced attribute and that author is not writing a binding.
 - **A bare `bind`/`sync` marker word** — new grammar for something the
   classifier can infer; every escape it enables already exists without it.
 - **Options-object `bind={{ … }}`** — object literals in template expressions
@@ -214,8 +251,15 @@ layer); explicit `bind:`/opt-out syntax (the three no-syntax escapes cover it).
 
 ## Consequences
 
-- Every existing handler-paired template compiles byte-identically; adopting
-  the feature is *deleting* the mirror handler.
+- A control carrying an author `@input`/`@change` compiles byte-identically;
+  adopting the feature is *deleting* that mirror handler. The upgrade risk is the
+  complement: a handler-less, path-shaped `value=`/`checked=` that was
+  display-only — or one paired with a handler on some OTHER event — starts
+  writing back. `@keydown:enter`/`@blur` edit buffers are the shape to look for;
+  `examples/music` binds through `String(...)` for exactly that reason, since a
+  live write would let Escape-to-cancel commit the text it exists to discard.
+  Compile-and-grep for `__bind(` is the audit, not eyeballing templates; the
+  consumer-side procedure is `notes/Puzzle-Upgrade-Binding.md`.
 - The `:bind` suffix is greppable and visible in DevTools listener listings.
 - SSG/static serialization strips `@`-prefixed attrs already, so prerendered
   markup carries the controlled initial value and no bind artifacts; hybrid

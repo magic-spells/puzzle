@@ -488,6 +488,9 @@ func parseAttrString(attrsRaw string, base Position, file, section string) ([]At
 		}
 		name := t.Value
 		npos := tokPos(t)
+		if e := checkAttrNamespace(name, npos, file); e != nil {
+			return nil, e
+		}
 		if err := p.advance(); err != nil {
 			return nil, toPE(err)
 		}

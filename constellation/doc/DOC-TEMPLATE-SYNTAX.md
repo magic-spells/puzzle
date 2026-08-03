@@ -274,6 +274,22 @@ On a plain form control, `value={ … }` and `checked={ … }` are **two-way**: 
 
 A **bare identifier** writes local state (`setData` plus `refresh`, so values `data()` derives stay live — the `disabled={ !newTodoText.trim() }` button next to that input stays honest keystroke by keystroke). A **member path** writes the resolved root: a store record goes through validated `update()`, so every subscribed view re-renders; a plain object is mutated and its owner repaints. Bind the path you want written.
 
+> **A bound plain object must keep its identity across `data()` runs.** The write mutates the object the template resolved, and it triggers a `refresh()` — so if `data()` builds that object fresh every run, the edit lands on the copy the next commit throws away and the field is uneditable. This is uneditable-silently, so development warns once per key.
+>
+> ```js
+> // ✗ every keystroke is erased — a new object each run
+> data() { return { form: { name: '' } }; }
+>
+> // ✓ stable identity
+> created() { this.form = { name: '' }; }
+> data() { return { form: this.form }; }
+>
+> // ✓ or let memo() hold it
+> data() { return { form: this.memo('form', [], () => ({ name: '' })) }; }
+> ```
+>
+> Store records and bare local keys are stable by construction, so this only applies to plain objects.
+
 ### When an attribute binds
 
 Every condition must hold. Anything else compiles as a plain one-way display binding, silently — computed values are a legitimate thing to display:

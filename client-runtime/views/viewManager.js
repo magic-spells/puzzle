@@ -96,6 +96,14 @@ export class ViewManager {
 	 * Slot markers are expanded against `slotChildren` before diffing.
 	 */
 	render(rawTree) {
+		// D145's "never patched over an unknown tree" is an invariant of the MANAGER,
+		// not of the boundary path that usually restores it. A view with no
+		// errorContent anywhere above it (the default) leaves __showErrorBoundary
+		// returning false, so nothing clears treeUnknown and the next ordinary render
+		// would diff against a currentTree whose vnodes point at detached nodes —
+		// updates land on orphans and the visible DOM freezes. Route it through the
+		// same fresh mount the boundary uses.
+		if (this.treeUnknown) return this.renderFresh(rawTree);
 		const newTree = expandSlots(rawTree, this.slotChildren);
 		if (!this.currentTree) {
 			mount(newTree, this.container, this.anchor, this.ctx, this.owner);
@@ -1098,8 +1106,10 @@ function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
 		}
 		// Controlled property-backed attrs (`value` on an input/textarea, `checked`
 		// on a checkbox/radio) can drift from the live DOM through user interaction
-		// the app never mirrored back into state — typing into an @change-bound input,
-		// clicking an @change-bound checkbox. A later re-render whose BOUND value is
+		// the app never mirrored back into state — typing into an input whose write
+		// commits on `change` (an author handler, or D147's synthesized
+		// '@change:bind'), clicking such a checkbox, or an in-flight IME composition
+		// whose write the bind guard is deliberately holding back. A later re-render whose BOUND value is
 		// unchanged would skip the write on a vnode-to-vnode compare (`'' === ''`),
 		// leaving the stale user text/state on screen while component state says
 		// otherwise. Compare against the LIVE DOM property instead so the controlled
@@ -1115,6 +1125,22 @@ function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
 			if (el.value !== stringify(value)) setAttr(el, name, value, owner);
 		} else if (name === 'checked' && el.nodeName === 'INPUT') {
 			if (el.checked !== Boolean(value)) setAttr(el, name, value, owner);
+			// The property guard above short-circuits precisely when the USER moved
+			// checkedness, which is also the only path that leaves the content
+			// attribute stale — `el.checked = x` writes the property, never the
+			// attribute (that is defaultChecked). Skipping setAttr therefore breaks
+			// this file's own "keep boolean ATTRIBUTES coherent for CSS selectors"
+			// rule for `checked` alone: `input[checked]` keeps matching an unchecked
+			// box, and form.reset() restores the stale attribute with no change event,
+			// so state and UI diverge with nothing to resync them. Reflect the
+			// attribute on its own rather than falling through to setAttr, which would
+			// re-assign the property and bill two devperfMutation() calls per patch —
+			// moving the D121/D122 counts and the stress form-state baseline.
+			else if (el.hasAttribute('checked') !== Boolean(value)) {
+				if (value) el.setAttribute('checked', '');
+				else el.removeAttribute('checked');
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+			}
 		} else if (oldAttrs[name] !== value) {
 			setAttr(el, name, value, owner);
 		}

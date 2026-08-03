@@ -57,7 +57,11 @@ two here, two in [[COMPONENT-CODEGEN]] — and they must be fixed together.
 Attributes are static, dynamic, mixed, event, or valueless-static values.
 Non-event names containing `:` are reserved unless their prefix is `xml`,
 `xlink`, or `xmlns`; invalid namespaces fail at the attribute name's source
-position. Parser helpers enforce event/modifier grammar (generic modifiers:
+position. `checkAttrNamespace` runs in both attribute loops (element tags and
+section tags) at the NAME, before the `=` branch — the valued and valueless
+spellings must reject identically, and validating inside `buildAttr` reaches only
+the valued one. Event names are exempt: the colon is their modifier channel, and
+`parseEventModifiers` owns it. Parser helpers enforce event/modifier grammar (generic modifiers:
 `prevent`, `stop`, `once`, and since D86 `outside` — valid on any event; key
 filters stay keyboard-only), static islands, literal inline SVG roots/paths,
 list identifiers/keys, and unique static refs.

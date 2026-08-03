@@ -17,6 +17,8 @@ import { mountView, measureRenders, settled, type } from '../client-runtime/test
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { setErrorHandler } from '../client-runtime/errors.js';
+import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
+import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import LocalForm from './fixtures/binding/LocalForm.compiled.js';
 import RecordForm from './fixtures/binding/RecordForm.compiled.js';
 import PlainForm from './fixtures/binding/PlainForm.compiled.js';
@@ -139,6 +141,28 @@ describe('implicit binding — local-state arm', () => {
 		fire(input, 'input', { isComposing: false });
 		await settled();
 		expect(view.instance.getData().draft).toBe('にほ');
+	});
+
+	it('funnels a sync data() failure after the write with phase "bind"', async () => {
+		const view = await mount(LocalForm);
+		const failure = new Error('local bind refresh failed');
+		const onError = vi.fn();
+		setErrorHandler(view.ctx, onError);
+		view.instance.data = () => {
+			throw failure;
+		};
+
+		const input = view.find('input.draft');
+		input.value = 'typed';
+		fire(input, 'input');
+		await settled();
+
+		expect(onError).toHaveBeenCalledOnce();
+		expect(onError).toHaveBeenCalledWith(
+			failure,
+			expect.objectContaining({ phase: 'bind', view: view.instance })
+		);
+		setErrorHandler(view.ctx, null);
 	});
 });
 
@@ -436,6 +460,99 @@ describe('implicit binding — plain-object arm', () => {
 
 		expect(update).toHaveBeenCalledWith({ label: 'quack again' });
 		expect(view.instance.ducky.label).toBe('moo'); // the stub update() writes nothing
+	});
+
+	it('funnels an async data() failure after the write with phase "bind"', async () => {
+		const view = await mount(PlainForm);
+		const failure = new Error('plain bind refresh failed');
+		const onError = vi.fn();
+		setErrorHandler(view.ctx, onError);
+		view.instance.data = async () => {
+			throw failure;
+		};
+
+		const input = view.find('input.hue');
+		input.value = 'blue';
+		fire(input, 'input');
+		await settled();
+
+		expect(onError).toHaveBeenCalledOnce();
+		expect(onError).toHaveBeenCalledWith(
+			failure,
+			expect.objectContaining({ phase: 'bind', view: view.instance })
+		);
+		setErrorHandler(view.ctx, null);
+	});
+});
+
+describe('implicit binding — rebuilt member-target diagnostic', () => {
+	class RebuiltForm extends PuzzleView {
+		data() {
+			return { form: { name: '' } };
+		}
+
+		render() {
+			const form = this.getData().form;
+			return new ViewNode('puzzle-view', { class: 'rebuilt-form' }, [
+				new ViewNode(
+					'input',
+					{
+						class: 'name',
+						value: form.name,
+						'@input:bind': this.__bind(form, 'name', 'v'),
+					},
+					[]
+				),
+			]);
+		}
+	}
+
+	const rebuiltWarnings = (spy) =>
+		spy.mock.calls.filter((call) => String(call[0]).includes('object behind a bound path'));
+
+	it('warns once, naming the key, when a fresh data() object loses the write', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const view = await mount(RebuiltForm);
+		const input = view.find('input.name');
+
+		input.value = 'Ada';
+		fire(input, 'input');
+		await settled();
+
+		// data() returned a new object with the old value, so the controlled render
+		// visibly erased the write; the diagnostic must describe that exact failure.
+		expect(input.value).toBe('');
+		const warnings = rebuiltWarnings(warn);
+		expect(warnings).toHaveLength(1);
+		expect(warnings[0][0]).toContain("'name'");
+		expect(warnings[0][0]).toContain('return a stable object (this.memo(...))');
+
+		input.value = 'Grace';
+		fire(input, 'input');
+		await settled();
+		expect(rebuiltWarnings(warn)).toHaveLength(1);
+	});
+
+	it('does not allocate a pending diagnostic or warn in production', async () => {
+		globalThis.__PUZZLE_DEV__ = false;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const view = await mount(RebuiltForm);
+			const input = view.find('input.name');
+			input.value = 'Ada';
+			fire(input, 'input');
+			await settled();
+			expect(rebuiltWarnings(warn)).toHaveLength(0);
+
+			// Turning the unbundled test probe back on cannot discover stale work: the
+			// production-gated write recorded nothing for a later render to inspect.
+			delete globalThis.__PUZZLE_DEV__;
+			view.instance.refresh();
+			await settled();
+			expect(rebuiltWarnings(warn)).toHaveLength(0);
+		} finally {
+			delete globalThis.__PUZZLE_DEV__;
+		}
 	});
 });
 

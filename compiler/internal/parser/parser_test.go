@@ -1522,12 +1522,48 @@ func TestParseReservedAttributeNamespaces(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *ParseError, got %T (%v)", err, err)
 		}
-		wantMessage := "attribute namespaces are reserved; two-way binding is automatic on form controls — see template SPEC §6"
+		wantMessage := `attribute namespace "bind:" is reserved — only xml:, xlink:, and xmlns: are allowed. SVG exported from an editor (inkscape:, sodipodi:, serif:) needs those attributes stripped, or load the file as an asset with {#svg}`
 		if pe.Message != wantMessage {
 			t.Errorf("message: got %q, want %q", pe.Message, wantMessage)
 		}
 		if pe.File != "Binding.pzl" || pe.Line != 2 || pe.Col != 10 {
 			t.Errorf("position: got %s:%d:%d, want Binding.pzl:2:10", pe.File, pe.Line, pe.Col)
+		}
+	})
+
+	// The reservation is validated at the attribute NAME, not inside buildAttr, so
+	// the valueless spelling cannot slip through as a plain boolean attribute. It
+	// used to: `<input bind:value>` compiled to `{ 'bind:value': true }` with no
+	// error — the exact syntax the reservation exists to reject.
+	t.Run("valueless namespace is rejected too", func(t *testing.T) {
+		src := "<puzzle-view>\n  <input bind:value />\n</puzzle-view>\n<script></script>"
+		_, err := Parse([]byte(src), "Binding.pzl")
+		if err == nil {
+			t.Fatal("expected parse error, got nil")
+		}
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Fatalf("expected *ParseError, got %T (%v)", err, err)
+		}
+		if !strings.Contains(pe.Message, `attribute namespace "bind:" is reserved`) {
+			t.Errorf("message: got %q", pe.Message)
+		}
+		if pe.File != "Binding.pzl" || pe.Line != 2 || pe.Col != 10 {
+			t.Errorf("position: got %s:%d:%d, want Binding.pzl:2:10", pe.File, pe.Line, pe.Col)
+		}
+	})
+
+	// An event attr owns the colon for its modifier channel; parseEventModifiers
+	// validates those, so the namespace check must not intercept them.
+	t.Run("event modifiers are exempt", func(t *testing.T) {
+		root := parseContent(t, `<button @click:prevent:once={ go }></button>`)
+		btn := elementChildren(root.Children)[0].(*Element)
+		ev, ok := btn.Attrs[0].(*EventAttr)
+		if !ok {
+			t.Fatalf("expected *EventAttr, got %#v", btn.Attrs[0])
+		}
+		if ev.Name != "click" {
+			t.Errorf("event: got %q, want %q", ev.Name, "click")
 		}
 	})
 

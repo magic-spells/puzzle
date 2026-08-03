@@ -129,9 +129,16 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 		}
 	}
 
+	// EXACT match, not EqualFold: the runtime routes `value`/`checked` through the
+	// property path via a case-SENSITIVE lookup (viewManager's PROPS set), so a
+	// `VALUE={ x }` never becomes a property write — setAttribute lands it on the
+	// content attribute (an input's defaultValue) instead. Synthesizing a bind for a
+	// spelling the runtime will not treat as controlled desynced the DOM from state
+	// the moment the field went dirty; matching exactly leaves that spelling the
+	// plain one-way attribute it was before D147.
 	for _, a := range attrs {
 		at, ok := a.(*parser.DynamicAttr)
-		if !ok || !strings.EqualFold(at.Name, attrName) {
+		if !ok || at.Name != attrName {
 			continue
 		}
 		target, field, _, ok := classifyBindExpr(at.Expr, scope)

@@ -13,6 +13,8 @@
  * Update triggers (constellation/doc/DOC-VIEW-LIFECYCLE.md §5):
  * - store change matching a data() query → onStoreChange → data() re-runs
  * - refresh({params|props}) from router/parent → data() re-runs
+ * - a two-way bind write-back (D147) → setData + refresh, or the record's
+ *   update() and the store flush behind it → data() re-runs
  * - setData() → re-render only, data() does NOT re-run
  */
 
@@ -87,6 +89,16 @@ export class PuzzleView {
 	// the same string. Both lazily created on first use.
 	#bindLocalMemo = null;
 	#bindMemberMemo = null;
+	// Dev-only: the last object seen for each member "field spec" path plus a
+	// write awaiting its next render. A plain-object write can otherwise disappear
+	// when data() returns a fresh literal: the new object misses #bindMemberMemo and
+	// its old field value replaces the edit. The pending entry records the object
+	// ACTUALLY written, so a stable target, a rebuilt target that preserved the
+	// value, and record replacement all stay silent. Lazily allocated behind inline
+	// __PUZZLE_DEV__ gates only.
+	#bindMemberLast = null;
+	#bindMemberPending = null;
+	#bindMemberWarned = null;
 	// Dev-only: the value each local bind write last wrote, keyed by field. The
 	// layer-clobber diagnostic reads it at the next recompose to notice a data()
 	// commit reverting a bound key, and #bindWarned holds the keys it has already
@@ -141,7 +153,11 @@ export class PuzzleView {
 	// finished under fill:'both'. Keep that Puzzle-owned handle past natural
 	// completion so recovery can cancel only it, never app-owned root animations.
 	#outHandle = null;
-	#leaving = null; // memoised playOut() promise — idempotent teardown
+	// playOut is one-shot even when the router restores a stalled outgoing view:
+	// #outTask keeps the spent memo for a later instant swap, while #leaving names
+	// only the CURRENT inert interval and can therefore be cleared by recovery.
+	#outTask = null;
+	#leaving = null;
 	// Scroll-triggered enter (v1.40, D73). While a `trigger: 'visible'` enter is
 	// held waiting for the element to scroll into view: #disarmVisible stops the
 	// shared IntersectionObserver observation and #enterResolve resolves the
@@ -377,9 +393,36 @@ export class PuzzleView {
 						if (Number.isNaN(value)) return;
 					}
 				} else value = el.value;
-				this.#bindWrite(target, key, value);
+				this.#bindWrite(target, key, value, spec);
 			};
 			store.set(memoKey, fn);
+		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (target != null) {
+				const last = (this.#bindMemberLast ??= new Map());
+				const previous = last.get(memoKey);
+				const pending = this.#bindMemberPending?.get(memoKey);
+				if (pending) {
+					if (target === pending.target) {
+						// A stable target reappeared in this render. Whatever data() did to
+						// its field is not the rebuilt-literal hazard this diagnostic names.
+						pending.sawTarget = true;
+					} else if (
+						previous !== undefined &&
+						previous !== target &&
+						target[key] !== pending.value
+					) {
+						// Do not warn inline: a loop renders many member targets under the
+						// same (key, spec), and the object that was written may appear later
+						// in this same tree. Collect one replacement candidate and let the
+						// render tail prove the old target never returned; multiple candidates
+						// make the path ambiguous and deliberately suppress the diagnostic.
+						if (pending.replacement == null) pending.replacement = target;
+						else if (pending.replacement !== target) pending.ambiguous = true;
+					}
+				}
+				last.set(memoKey, target);
+			}
 		}
 		return fn;
 	}
@@ -398,7 +441,7 @@ export class PuzzleView {
 	 *    record — and the typed text on screen — untouched.
 	 * 3. anything else → direct mutation plus a repaint of the owning view.
 	 */
-	#bindWrite(target, key, value) {
+	#bindWrite(target, key, value, spec) {
 		if (target == null) {
 			this.setData(key, value);
 			// Arm the clobber diagnostic BEFORE the refresh: the commit this refresh
@@ -408,7 +451,25 @@ export class PuzzleView {
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				(this.#bindPending ??= new Map()).set(key, value);
 			}
-			this.refresh();
+			// Bind handlers are fire-and-forget DOM listeners, so both a synchronous
+			// data() throw and an async rejection must enter D145 here. Leaving either
+			// bare escapes the event path; the phase stays 'bind' because this refresh is
+			// the second half of the write, not an ambient refresh delivery.
+			try {
+				this.refresh()?.catch((err) =>
+					this.#handleViewFailure(
+						'[puzzle] data() failed after a bound write:',
+						err,
+						'bind'
+					)
+				);
+			} catch (err) {
+				this.#handleViewFailure(
+					'[puzzle] data() failed after a bound write:',
+					err,
+					'bind'
+				);
+			}
 		} else if (typeof target.update === 'function' && typeof target._type === 'string') {
 			try {
 				// The store's batched flush drives the re-render and the persistence write.
@@ -424,7 +485,35 @@ export class PuzzleView {
 			}
 		} else {
 			target[key] = value;
-			this.refresh();
+			// Arm only the plain-object arm: a record replacement is legitimate identity
+			// churn and its validated update/store flush owns reactivity. The next render
+			// consumes this entry after __bind has shown whether the exact object returned
+			// or one unambiguous replacement discarded the value.
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				(this.#bindMemberPending ??= new Map()).set(key + ' ' + spec, {
+					key,
+					target,
+					value,
+					sawTarget: false,
+					replacement: null,
+					ambiguous: false,
+				});
+			}
+			try {
+				this.refresh()?.catch((err) =>
+					this.#handleViewFailure(
+						'[puzzle] data() failed after a bound write:',
+						err,
+						'bind'
+					)
+				);
+			} catch (err) {
+				this.#handleViewFailure(
+					'[puzzle] data() failed after a bound write:',
+					err,
+					'bind'
+				);
+			}
 		}
 	}
 
@@ -1477,12 +1566,22 @@ export class PuzzleView {
 	 */
 	playOut() {
 		if (this.#leaving) return this.#leaving;
+		if (this.#outTask) {
+			// A restored view leaving for real. The out sequence is spent, so the
+			// animation must not replay — but D136's leave-inertness rule is about the
+			// LEAVE, not about the animation: re-arm #leaving and drop the subscription
+			// this view re-took during recovery, or it stays reactive on its way out.
+			this.#leaving = this.#outTask;
+			this.ctx.store?.unsubscribe(this);
+			return this.#outTask;
+		}
 		let resolveLeaving;
 		let rejectLeaving;
 		this.#leaving = new Promise((resolve, reject) => {
 			resolveLeaving = resolve;
 			rejectLeaving = reject;
 		});
+		this.#outTask = this.#leaving;
 		// Leaving views become inert immediately. Store.flush() snapshots its
 		// subscribers, so the method guards cover an already-snapshotted delivery;
 		// unsubscribing here prevents every later one. destroy() repeats this safely.
@@ -1537,6 +1636,37 @@ export class PuzzleView {
 		if (!handle) return;
 		if (this.#currentAnimation === handle) this.#currentAnimation = null;
 		handle.cancel();
+	}
+
+	/**
+	 * Router-only failed-navigation recovery: make a committed outgoing view live
+	 * again after playOut() made it inert. The out sequence remains spent through
+	 * #outTask, so a later successful navigation still swaps this restored unit out
+	 * instantly; only the active #leaving guard is cleared. Refresh after clearing
+	 * it because playOut() unsubscribed the view — Store.withTracking inside refresh
+	 * re-establishes exactly the queries data() still makes.
+	 *
+	 * Recovery runs inside the router's synchronous failure window. Contain both a
+	 * synchronous data() throw and an async rejection here so restoring the old view
+	 * can never turn a handled navigation failure into a rejecting router promise.
+	 */
+	_restoreFromLeaving() {
+		if (this.#destroyed || !this.#leaving) return;
+		this.#leaving = null;
+		this._cancelOutAnimation();
+		try {
+			this.refresh()?.catch((err) =>
+				this.#handleBackgroundRefreshFailure(
+					'[puzzle] data() failed while restoring a stalled outgoing view:',
+					err
+				)
+			);
+		} catch (err) {
+			this.#handleBackgroundRefreshFailure(
+				'[puzzle] data() failed while restoring a stalled outgoing view:',
+				err
+			);
+		}
 	}
 
 	/**
@@ -1848,6 +1978,35 @@ export class PuzzleView {
 			const ref = this.#vm.element?.nextSibling ?? null;
 			this.#vm.clear();
 			this.#vm.anchorAt(ref);
+		}
+		// Rebuilt member-target diagnostic (D147, dev only). __bind collected the
+		// member objects this completed render actually used. Warn only when the
+		// object that received the write never returned, exactly one replacement did,
+		// and that replacement did not preserve the value. The completed-render fence
+		// is load-bearing for loops: another row may be visited before the written row,
+		// and warning at the first WeakMap miss would false-positive on that ordinary
+		// traversal. Record writes never arm #bindMemberPending, so replacing a store
+		// record remains silent. Consume every entry here; a later intentional object
+		// replacement must not be blamed for an older write that already survived.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (this.#bindMemberPending) {
+				for (const [memoKey, pending] of this.#bindMemberPending) {
+					if (
+						!pending.sawTarget &&
+						pending.replacement != null &&
+						!pending.ambiguous &&
+						!this.#bindMemberWarned?.has(pending.key)
+					) {
+						(this.#bindMemberWarned ??= new Set()).add(pending.key);
+						console.warn(
+							`[puzzle] the object behind a bound path is rebuilt on every data() run, so the write is lost — ` +
+								`return a stable object (this.memo(...)), or bind a record or a bare local key instead ` +
+								`(key: '${pending.key}')`
+						);
+					}
+					this.#bindMemberPending.delete(memoKey);
+				}
+			}
 		}
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			devperfRenderEnd(this);
