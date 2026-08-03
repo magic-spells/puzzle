@@ -46,6 +46,7 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
+import { MorphEngine } from '@magic-spells/morph-engine';
 import {
   awayOffset,
   dismissAxis,
@@ -175,6 +176,59 @@ import { DragGesture } from '../../lib/sheet-drag.js';
 // unless one arrives mid-morph, which retargets the flight synchronously
 // (#retargetMorph) rather than waiting for it to land somewhere stale.
 //
+// TRIGGER MORPH. `morphTrigger` (a CSS selector or an Element) makes the sheet
+// grow out of the thing that opened it and shrink back into it: a MorphEngine
+// blob — a body child at `blobZIndex` (1002, above the dialog+scrim at 1000 and
+// the panel at 1001) — flies between the trigger's box and the panel's, while
+// the real dialog stays demoted and invisible. Named `morphTrigger` rather than
+// `morph` because this component already owns the `morph*` namespace for the
+// PROFILE FLIP above, which is an unrelated feature.
+//
+// The two features share one dial on purpose: `morphDuration` is both the
+// profile-morph duration AND the trigger morph's on/off switch. Zero disables
+// both, so `prefers-reduced-motion` (which zeroes it in #morphDuration) is the
+// entire reduced-motion policy for this component in one read, with the
+// ordinary spring entrance and exit left standing.
+//
+// The transport is classified EXACTLY ONCE per open, in syncOpen()'s fresh-open
+// branch, before anything paints — see #beginOpenTransport. Puzzle's
+// afterUpdate() runs repeatedly and re-reading engine.animatesPanel mid-flight
+// would promote a dialog whose blob is still flying, or demote one mid-exit.
+//
+//   open with a usable trigger  → proxy: NO showModal here; the dialog is only
+//                                 display-forced, and the engine's `reveal`
+//                                 (75% of the blob flight, panel still
+//                                 invisible) promotes it. That promotion is
+//                                 also the focus event, which is why deferring
+//                                 it gets focus timing right for free.
+//   open with no usable trigger → direct: showModal() immediately.
+//   deliberate close, trigger still usable → demote FIRST (close() before
+//                                 engine.hide(), in the same task), because a
+//                                 top-layer dialog paints over a body-child
+//                                 blob whatever the z-index. The force-paint
+//                                 before close() keeps the panel laid out so
+//                                 MorphEngine can measure it inside hide().
+//   swipe dismissal / trigger detached or scrolled away → direct spring exit;
+//                                 the engine hands the trigger back at the
+//                                 hidden settle and `triggerreturn` plays the
+//                                 pop (#playTriggerReturn) via WAAPI.
+//
+// TWO CONSTRAINTS WITH NO CODE FIX.
+//
+//   Ancestor transforms. `fixed inset-0` resolves against the viewport UNLESS
+//   an ancestor carries `transform`, `filter`, `backdrop-filter`, `perspective`,
+//   `contain: paint`, or `will-change` on any of those — that ancestor becomes
+//   the containing block. In the top layer the dialog ignores its ancestors;
+//   demoted (which is exactly what a proxy flight does) it does not. So a
+//   transformed page wrapper makes the panel JUMP at the reveal promotion and
+//   again at the hide demotion. Keep the sheet out of transformed wrappers.
+//
+//   Known gap, matching upstream: a reverse flight stays bound to the trigger
+//   it was armed with. Flipping `open` true again with a DIFFERENT morphTrigger
+//   while the morph-back is still flying reopens with the new content but
+//   morphs into the OLD box. Upstream deliberately deferred that fix (the
+//   classification point would have to move); do not attempt it here.
+//
 // IMPERATIVE INLINE STYLES. The panel and backdrop deliberately have NO
 // `style={}` bindings and there is no <style> block. SheetEngine/DragGesture/
 // morph code own panel inline styles between renders; the engine change listener
@@ -206,8 +260,30 @@ const MORPH_TIMEOUT_PADDING_MS = 120;
 const DEFAULT_MORPH_DURATION = 600;
 const DEFAULT_MORPH_EASING = 'cubic-bezier(0.34, 1.32, 0.52, 1)';
 
+// Scrim and dialog sit at 1000, the panel at 1001 (PANEL_BASE's z-10 inside the
+// dialog's own stacking context), and the blob at 1002 as a body child. Five- and
+// six-digit z-indexes are banned across the library — Dialog.pzl's 10000 is a
+// known bug there and must not be copied.
+const DEFAULT_BLOB_Z_INDEX = 1002;
+
+// The pop the trigger plays when it is handed back WITHOUT a reverse morph — a
+// swipe dismissal, or a close after the trigger detached. No <style> block here,
+// so upstream's `[sheet-return]` + @keyframes becomes a WAAPI animation, the
+// same precedent Dialog.pzl's playEnter/playExit set.
+const TRIGGER_RETURN_KEYFRAMES = [
+  { opacity: 0, transform: 'scale(0.86)' },
+  { opacity: 1, transform: 'scale(1.04)', offset: 0.6 },
+  { opacity: 1, transform: 'scale(1)' },
+];
+const DEFAULT_TRIGGER_RETURN_DURATION = 280;
+const DEFAULT_TRIGGER_RETURN_EASING = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
+
+// z-[1000] is a no-op while the dialog is in the top layer, which is most of the
+// time. It matters for the window a proxy trigger morph opens: there the dialog
+// is demoted into normal flow, and without this it would be `z-index: auto` and
+// its order against the blob (1002) an accident of document order.
 const DIALOG =
-  'fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-transparent p-0 ' +
+  'fixed inset-0 z-[1000] m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-transparent p-0 ' +
   'open:flex overflow-hidden text-body [&::backdrop]:bg-transparent';
 
 const DIALOG_PROFILE = {
@@ -509,6 +585,21 @@ function scrollsOnAxis(element, axis) {
   return SCROLLABLE_OVERFLOW.has(axis === 'x' ? style.overflowX : style.overflowY);
 }
 
+/**
+ * Whether the page — as opposed to a live morph — is hiding this trigger.
+ *
+ * Only meaningful while the engine is hidden; see the state gate in
+ * #usableTriggerBox for why.
+ * @param {Element} element - Candidate morph trigger.
+ * @returns {boolean} True when the element is not hidden by style.
+ */
+function triggerIsVisible(element) {
+  const style = getComputedStyle(element);
+  if (style.visibility === 'hidden' || style.display === 'none') return false;
+  const opacity = Number.parseFloat(style.opacity);
+  return !(Number.isFinite(opacity) && opacity === 0);
+}
+
 export default class Sheet extends PuzzleView {
   #mounted = false;
   #engine = null;
@@ -536,6 +627,18 @@ export default class Sheet extends PuzzleView {
   #needsRemeasure = false;
   #springSignature = null;
   #appliedProfileSignature = null;
+  // Set only by this run's `reveal`, so it means "the current proxy flight has
+  // already promoted the dialog" — the precondition for handleClose's
+  // force-close repair, and nothing weaker.
+  #proxyRevealed = false;
+  #triggerReturn = null;
+  #dialogPaintHeld = false;
+  // dialog.close() QUEUES its close event rather than firing it synchronously,
+  // so a boolean cleared right after the call is already gone by the time the
+  // handler runs. A counter survives the gap, and survives two of them
+  // overlapping.
+  #expectedCloses = 0;
+  #blobDeferredProfile = null;
 
   #engineChange = ({ backdropProgress }) => {
     if (this.refs.backdrop) {
@@ -546,27 +649,51 @@ export default class Sheet extends PuzzleView {
 
   #engineShown = () => {
     if (this.refs.backdrop) this.refs.backdrop.style.opacity = '1';
+    // Before the observer sync: the flush may rebuild or morph the profile, and
+    // #prepareOpen re-runs #syncCenterObserver against whatever it lands on.
+    this.#flushBlobProfile();
     this.#syncCenterObserver();
     const { shown } = this.props;
     if (typeof shown === 'function') shown();
   };
 
   #engineHidden = () => {
-    const dialog = this.element;
     // Backstop accept: any route that hid the sheet without passing one of the
     // named accept sites still resolves a banked dismissal truthfully.
     this.#acceptDismissal();
-    if (dialog?.open) dialog.close();
+    this.#closeDialog();
+    this.#releaseDialogPaint();
     if (this.refs.backdrop) this.refs.backdrop.style.opacity = '0';
     this.#drag = { active: false };
     this.#localSnap = null;
     this.#settleTarget = null;
     this.#programmaticSnap = null;
+    this.#proxyRevealed = false;
+    this.#blobDeferredProfile = null;
+    // The classification this run was given dies with the run; leaving it armed
+    // would make the NEXT deliberate close take the direct spring exit instead
+    // of morphing back into its trigger.
+    this.#engine?.cancelGestureExit();
     this.#syncCenterObserver();
     this.#unlockBody();
     this.#restoreFocus();
     const { hidden } = this.props;
     if (typeof hidden === 'function') hidden();
+  };
+
+  // Only a proxy run emits `reveal`, so this is exactly "the blob has
+  // established the geometry and the real dialog may now be promoted". The
+  // props.open guard matters because `reveal` is asynchronous: a flight resumed
+  // after the parent already flipped `open` false must not wedge a modal open.
+  // This showModal() is also where focus (and any `autofocus`) enters.
+  #engineReveal = () => {
+    this.#proxyRevealed = true;
+    const dialog = this.element;
+    if (dialog && !dialog.open && this.props.open) dialog.showModal();
+  };
+
+  #engineTriggerReturn = ({ trigger }) => {
+    this.#playTriggerReturn(trigger);
   };
 
   #engineSnapChange = (detail) => {
@@ -589,6 +716,13 @@ export default class Sheet extends PuzzleView {
 
     if (!this.#renderProfile) {
       this.#renderProfile = requestedProfile;
+    } else if (this.#engine?.blobFlight) {
+      // MorphEngine measured both endpoints at launch and owns every panel
+      // style until its terminal event. Swapping the class map underneath that
+      // snapshot creates two geometry owners, so keep the rendered profile and
+      // queue one latest-value flush for `shown`.
+      this.#blobDeferredProfile = requestedProfile;
+      renderedProfile = this.#renderProfile;
     } else if (
       this.#mounted &&
       this.element?.open &&
@@ -835,6 +969,258 @@ export default class Sheet extends PuzzleView {
 
   #morphEasing() {
     return this.props.morphEasing || DEFAULT_MORPH_EASING;
+  }
+
+  #triggerReturnDuration() {
+    if (this.#reducedMotion()) return 0;
+    const value = Number(this.props.triggerReturnDuration);
+    return Number.isFinite(value) && value >= 0
+      ? value
+      : DEFAULT_TRIGGER_RETURN_DURATION;
+  }
+
+  #triggerReturnEasing() {
+    return this.props.triggerReturnEasing || DEFAULT_TRIGGER_RETURN_EASING;
+  }
+
+  #blobZIndex() {
+    const value = Number(this.props.blobZIndex);
+    return Number.isFinite(value) ? value : DEFAULT_BLOB_Z_INDEX;
+  }
+
+  /** @returns {Element|null} The configured morph trigger, if it resolves. */
+  #morphTriggerElement() {
+    const value = this.props.morphTrigger;
+    if (!value) return null;
+    if (typeof value === 'string') {
+      return typeof document === 'undefined'
+        ? null
+        : document.querySelector(value);
+    }
+    return value instanceof Element ? value : null;
+  }
+
+  /**
+   * Whether this trigger is still a usable morph source AND reverse
+   * destination. Doubles as the engine's `triggerProbe`, which is what routes a
+   * trigger that vanished while the sheet was open to the direct spring exit.
+   *
+   * THE STATE GATE ON THE VISIBILITY CHECK IS LOAD-BEARING — do not "simplify"
+   * it away. MorphEngine hides the source element for the whole flight AND for
+   * as long as the panel is shown, so from the launch onward a hidden trigger is
+   * the MORPH's own doing and says nothing about what the page wants. Checking
+   * it unconditionally therefore refuses EVERY reverse morph: the feature looks
+   * like it works on open and silently never morphs back. `hidden` is the one
+   * moment the answer is honest, and it is the moment that decides whether the
+   * flight happens at all.
+   *
+   * The geometry gates below stay live in both states, because the blob moves
+   * nothing — a trigger that detaches or scrolls out of the viewport while the
+   * sheet is open really has stopped being a place to fly back to.
+   * @param {Element|null} trigger - Candidate trigger.
+   * @returns {Object|null} Its viewport box, or null when it is unusable.
+   */
+  #usableTriggerBox(trigger) {
+    if (!(trigger instanceof Element) || !trigger.isConnected) return null;
+    if (
+      (this.#engine?.state ?? 'hidden') === 'hidden' &&
+      !triggerIsVisible(trigger)
+    ) {
+      return null;
+    }
+    // getClientRects is the ancestor-aware half of the same question:
+    // getComputedStyle above reports the element's OWN display, so a trigger
+    // inside a `display: none` subtree still reads visible and would hand the
+    // blob a collapsed box to fly out of.
+    if (typeof trigger.getClientRects === 'function') {
+      if (trigger.getClientRects().length === 0) return null;
+    }
+    const box = trigger.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0) return null;
+    if (
+      box.left >= window.innerWidth ||
+      box.top >= window.innerHeight ||
+      box.left + box.width <= 0 ||
+      box.top + box.height <= 0
+    ) {
+      return null;
+    }
+    return box;
+  }
+
+  /**
+   * Arms a trigger morph for the run syncOpen() is about to start.
+   *
+   * Every gate resolves here, in one place, because the transport bit is read
+   * once immediately afterwards and never again for this run: the opt-in prop,
+   * a non-zero morphDuration (which is also the reduced-motion policy), and a
+   * usable trigger box.
+   * @returns {Element|null} The armed trigger, or null for the direct spring.
+   */
+  #armTriggerMorph() {
+    const trigger = this.#morphTriggerElement();
+    if (!trigger) return null;
+    // This trigger is being used to REOPEN the sheet, so its return pop is moot
+    // — and left running it is actively harmful: getComputedStyle reflects WAAPI
+    // values, so the opacity check in #usableTriggerBox would read the pop's own
+    // `from: 0` frame as a trigger the page had hidden and silently drop the
+    // morph on a rapid reopen. Same reasoning as the state gate there.
+    if (this.#triggerReturn?.trigger === trigger) this.#clearTriggerReturn();
+    if (this.#morphDuration() <= 0) return null;
+    if (!this.#usableTriggerBox(trigger)) return null;
+    if (!this.#engine.armMorph(trigger, { zIndex: this.#blobZIndex() })) {
+      return null;
+    }
+    return trigger;
+  }
+
+  /**
+   * Selects and starts the open transport. THE ONE CLASSIFICATION POINT.
+   *
+   * engine.animatesPanel is read exactly once, here, before anything paints.
+   * Puzzle's afterUpdate() runs repeatedly, and re-reading it mid-flight would
+   * promote a dialog whose blob is still flying or demote one mid-exit.
+   * @param {HTMLElement} dialog - The native dialog element.
+   */
+  #beginOpenTransport(dialog) {
+    const trigger = this.#armTriggerMorph();
+    const proxy = !!trigger && !this.#engine.animatesPanel;
+    // An arm the engine then declines to fly must not stay armed: engine.show()
+    // keys the blob branch off the trigger alone, so the two would disagree
+    // about which transport this run is using.
+    if (trigger && !proxy) this.#engine.disarmMorph();
+    if (proxy) {
+      // Focus return falls back to the trigger when nothing else had focus —
+      // a pointer-driven open leaves document.activeElement on <body>.
+      this.#returnFocus ??= trigger;
+      // NO showModal() here. The dialog stays demoted and merely display-forced
+      // so the panel has layout for MorphEngine to measure and fly to; the
+      // engine's `reveal` promotes it mid-flight, still invisible.
+      this.#forceDialogPaint();
+    } else {
+      dialog.showModal();
+    }
+    this.refs.backdrop.style.opacity = '0';
+    this.#engine
+      .show({ to: this.refs.panel, display: 'flex' })
+      .then(() => this.#reconcileSnap());
+    this.refs.backdrop.style.opacity = String(this.#engine.backdropProgress);
+  }
+
+  /**
+   * Leaves through whichever transport the engine now declares.
+   *
+   * A proxy reverse demotes the dialog FIRST and in the same synchronous task,
+   * because the blob is a body child at z 1002 and a top-layer dialog paints
+   * over it whatever the z-index. The force-paint has to precede the close so
+   * the panel keeps its layout — MorphEngine measures it inside engine.hide().
+   */
+  #hideThroughEngine() {
+    if (!this.#engine.animatesPanel) {
+      this.#forceDialogPaint();
+      this.#closeDialog();
+    }
+    this.#engine.hide();
+  }
+
+  /**
+   * Holds the dialog painting while it is out of the top layer. A closed dialog
+   * is display:none, which would leave the panel with no box for MorphEngine to
+   * measure or fly to. Idempotent, and released by #releaseDialogPaint.
+   */
+  #forceDialogPaint() {
+    const dialog = this.element;
+    if (!dialog || this.#dialogPaintHeld) return;
+    this.#dialogPaintHeld = true;
+    dialog.style.display = 'flex';
+  }
+
+  /**
+   * Drops the hold. A CLOSED dialog must go back to the UA's display:none, or
+   * it paints its panel at CSS rest over the page.
+   */
+  #releaseDialogPaint() {
+    if (!this.#dialogPaintHeld) return;
+    this.#dialogPaintHeld = false;
+    if (this.element) this.element.style.display = '';
+  }
+
+  /**
+   * Closes the native dialog and records that this component asked for it, so
+   * the queued `close` event is not mistaken for an app-level force close.
+   */
+  #closeDialog() {
+    const dialog = this.element;
+    if (!dialog?.open) return;
+    this.#expectedCloses += 1;
+    dialog.close();
+  }
+
+  /**
+   * Plays the hand-back pop on a trigger that was never morphed into.
+   *
+   * The ordering invariant upstream states in the engine survives structurally:
+   * the engine emits `triggerreturn` BEFORE it restores the source, and
+   * element.animate() enters the timeline immediately, so the `opacity: 0` frame
+   * is already winning (animation origin beats author inline) by the time
+   * MorphEngine clears its `visibility: hidden`. No frame exists in which the
+   * trigger is visible and undecorated.
+   * @param {Element} trigger - The trigger being handed back.
+   */
+  #playTriggerReturn(trigger) {
+    if (!trigger?.isConnected || typeof trigger.animate !== 'function') return;
+    const duration = this.#triggerReturnDuration();
+    // Zero creates NO animation rather than a zero-length one, which makes the
+    // opt-out and reduced motion the same code path — and matches how a zeroed
+    // profile morph swaps instantly instead of awaiting a transition that will
+    // never run.
+    if (duration <= 0) return;
+    this.#clearTriggerReturn();
+    const animation = trigger.animate(TRIGGER_RETURN_KEYFRAMES, {
+      duration,
+      easing: this.#triggerReturnEasing(),
+      fill: 'both',
+    });
+    this.#triggerReturn = { trigger, animation };
+    // cancel() rejects `finished`; swallow it. No safety timeout is needed —
+    // unlike the CSS version there is no animationend-never-fires hole.
+    animation.finished?.then(
+      () => {
+        if (this.#triggerReturn?.animation === animation) {
+          this.#clearTriggerReturn();
+        }
+      },
+      () => {}
+    );
+  }
+
+  /**
+   * The single teardown site for the pop — reached by its own completion, by a
+   * re-arm of the same trigger, and by destroyed().
+   */
+  #clearTriggerReturn() {
+    const state = this.#triggerReturn;
+    if (!state) return;
+    this.#triggerReturn = null;
+    state.animation?.cancel();
+  }
+
+  /**
+   * Applies the profile rebuild a blob flight deferred. Runs from `shown`,
+   * where MorphEngine has released the panel and the sheet owns it again.
+   */
+  #flushBlobProfile() {
+    const next = this.#blobDeferredProfile;
+    if (!next) return;
+    this.#blobDeferredProfile = null;
+    if (!this.element?.open || !this.#profile) return;
+    if (this.#profileKey(next) !== this.#profileKey(this.#profile)) {
+      this.#startProfileMorph(next);
+      return;
+    }
+    this.#renderProfile = next;
+    this.setData(this.#classData(next));
+    this.#prepareOpen(next);
   }
 
   #lockBody() {
@@ -1122,64 +1508,86 @@ export default class Sheet extends PuzzleView {
     });
   }
 
+  // BRANCHES ON engine.state, NOT dialog.open. A proxy reverse demotes the
+  // dialog at hide-start, so a reopen landing mid-morph-back sees
+  // dialog.open === false; keying off that would read as a fresh open and start
+  // a SECOND blob flight over a live one. The engine is the only thing that
+  // knows a transport is running.
   syncOpen() {
     const dialog = this.element;
     if (!dialog || !this.#engine) return;
     const shouldOpen = this.#shouldDisplayOpen();
+    const state = this.#engine.state;
 
     if (shouldOpen) {
-      if (dialog.open) {
-        if (
-          this.#engine.state === 'hiding' ||
-          this.#engine.state === 'hidden'
-        ) {
-          this.#engine
-            .show({ to: this.refs.panel, display: 'flex' })
-            .then(() => this.#reconcileSnap());
-          this.refs.backdrop.style.opacity = String(
-            this.#engine.backdropProgress
-          );
-        }
+      if (state === 'shown' || state === 'showing') return;
+      // 'hiding' is the reversal; `dialog.open` with a hidden engine is the
+      // force-close repair — the transport was stopped out from under a dialog
+      // the browser still has open, so re-show without a second showModal().
+      if (state === 'hiding' || dialog.open) {
+        this.#engine
+          .show({ to: this.refs.panel, display: 'flex' })
+          .then(() => this.#reconcileSnap());
+        this.refs.backdrop.style.opacity = String(
+          this.#engine.backdropProgress
+        );
         return;
       }
 
       const profile = this.#resolveProfile();
       this.#renderProfile = profile;
+      // Before #forceDialogPaint: this toggles display and visibility to
+      // measure, and would otherwise clobber the held value.
       this.#prepareOpen(profile);
       this.#returnFocus =
         document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null;
       this.#lockBody();
-      this.refs.backdrop.style.opacity = '0';
+      this.#proxyRevealed = false;
 
-      // showModal() and the synchronous frame-0 write inside engine.show() stay
-      // in this task, so the browser never paints the resting panel first.
-      dialog.showModal();
-      this.#engine
-        .show({ to: this.refs.panel, display: 'flex' })
-        .then(() => this.#reconcileSnap());
-      this.refs.backdrop.style.opacity = String(
-        this.#engine.backdropProgress
-      );
+      // Whichever transport is selected, its promotion (or its deliberate
+      // non-promotion) and the synchronous frame-0 write inside engine.show()
+      // stay in this task, so the browser never paints the resting panel first.
+      this.#beginOpenTransport(dialog);
       this.#syncCenterObserver();
       return;
     }
 
-    if (!dialog.open) return;
+    if (state === 'hidden') {
+      // Nothing is in flight, so no `hidden` event is coming to finalize. A
+      // force close (engine.stop(), or an app-level close) can leave the dialog
+      // open or the paint hold set, and a closed dialog still carrying inline
+      // display:flex paints its panel at CSS rest over the page. Every call
+      // here is idempotent, so the repair costs nothing on the common path.
+      this.#finishMorph();
+      this.#drag = { active: false };
+      this.#acceptDismissal();
+      this.#closeDialog();
+      this.#releaseDialogPaint();
+      return;
+    }
+
     this.#finishMorph();
     this.#drag = { active: false };
     this.#acceptDismissal();
-    this.#engine.hide();
+    this.#hideThroughEngine();
   }
 
   mounted() {
     this.#mounted = true;
-    this.#engine = new SheetEngine();
+    this.#engine = new SheetEngine({
+      // The engine stays DOM-free: the component supplies the geometry policy
+      // and the blob factory it deliberately does not import.
+      triggerProbe: (trigger) => !!this.#usableTriggerBox(trigger),
+      createMorphEngine: (options) => new MorphEngine(options),
+    });
     this.#engine.on('change', this.#engineChange);
     this.#engine.on('shown', this.#engineShown);
     this.#engine.on('hidden', this.#engineHidden);
     this.#engine.on('snapchange', this.#engineSnapChange);
+    this.#engine.on('reveal', this.#engineReveal);
+    this.#engine.on('triggerreturn', this.#engineTriggerReturn);
     this.#syncSpring();
 
     for (const [surface, element] of [
@@ -1218,7 +1626,16 @@ export default class Sheet extends PuzzleView {
     if (!this.#shouldDisplayOpen()) {
       this.#queuedProfile = null;
       this.#pendingMeasure = null;
+      this.#blobDeferredProfile = null;
       this.syncOpen();
+      return;
+    }
+
+    // MorphEngine owns every panel style until its terminal event. Queue one
+    // latest-value rebuild for `shown` rather than creating a second geometry
+    // owner mid-flight; data() defers the class map for the same reason.
+    if (this.#engine?.blobFlight) {
+      this.#blobDeferredProfile = this.#resolveProfile();
       return;
     }
 
@@ -1283,17 +1700,30 @@ export default class Sheet extends PuzzleView {
     this.#gestures = [];
     this.#drag = { active: false };
 
+    this.#blobDeferredProfile = null;
+
     if (this.#engine) {
       this.#engine.off('change', this.#engineChange);
       this.#engine.off('shown', this.#engineShown);
       this.#engine.off('hidden', this.#engineHidden);
       this.#engine.off('snapchange', this.#engineSnapChange);
+      this.#engine.off('reveal', this.#engineReveal);
+      this.#engine.off('triggerreturn', this.#engineTriggerReturn);
+      // THE WORST FAILURE MODE THIS FEATURE HAS. MorphEngine holds the trigger
+      // at `visibility: hidden` for the whole flight and the whole shown period,
+      // and Puzzle has terminal routes the upstream web component does not — a
+      // view teardown, a route change unmounting the sheet mid-flight. destroy()
+      // routes through the engine's stop(), which stops the blob and hands the
+      // trigger back unannounced; skipping it would leave a consumer's button
+      // permanently invisible, in markup this component does not own.
       this.#engine.destroy();
       this.#engine = null;
     }
+    this.#clearTriggerReturn();
 
     if (this.refs.backdrop) this.refs.backdrop.style.opacity = '';
-    if (this.element?.open) this.element.close();
+    this.#closeDialog();
+    this.#releaseDialogPaint();
     this.#unlockBody();
     this.#restoreFocus();
   }
@@ -1314,7 +1744,18 @@ export default class Sheet extends PuzzleView {
     // slop and starve the surface that owns it. Returning false is that refusal,
     // and it leaves the refused gesture fully inert.
     if (surface === 'panel' && event?.target !== this.refs.panel) return false;
-    if (this.#engine?.state !== 'shown' || this.#engine.morphing) {
+    // A fresh grab retires any exit classification a previous release armed.
+    // Left standing it would send the NEXT deliberate close out through the
+    // direct spring instead of morphing back into its trigger.
+    this.#engine?.cancelGestureExit();
+    // blobFlight is refused alongside morphing and for the same reason: while
+    // the blob is up, MorphEngine owns every panel style and a drag would be
+    // painting against a snapshot it cannot see.
+    if (
+      this.#engine?.state !== 'shown' ||
+      this.#engine.morphing ||
+      this.#engine.blobFlight
+    ) {
       this.#drag = { active: false };
       return false;
     }
@@ -1484,8 +1925,11 @@ export default class Sheet extends PuzzleView {
     }
     clearTimeout(pending.timer);
     this.#pendingDismissal = null;
-    // The queued velocity would otherwise leak into the next hide.
+    // The queued velocity would otherwise leak into the next hide, and so would
+    // the direct-exit classification the release armed — this refusal is the
+    // controlled analogue of upstream's vetoed `beforeHide`, which cancels both.
     this.#engine.setDismissVelocity(0);
+    this.#engine.cancelGestureExit();
     // `settle` is false only when a new gesture is taking the panel over, which
     // makes the settle-back both unnecessary and a fight with the live drag.
     if (settle) this.#settleBack();
@@ -1556,6 +2000,12 @@ export default class Sheet extends PuzzleView {
       // the deadline. See #bankDismissal.
       this.#engine.setDismissVelocity(Math.max(0, velocityAway));
       this.#bankDismissal(velocityAway, releasedSize);
+      // Classification has to precede the close request: the parent may flip
+      // `open` synchronously, and #hideThroughEngine reads animatesPanel at the
+      // top of the very next task. A swipe always leaves by the direct spring —
+      // a panel flying home to a button under the user's own finger reads as the
+      // gesture being undone.
+      this.#engine.armGestureExit();
       this.#requestClose('swipe');
       // A parent that answers synchronously is answered synchronously back.
       if (this.#engine.state !== 'shown') this.#acceptDismissal();
@@ -1588,6 +2038,13 @@ export default class Sheet extends PuzzleView {
     }
 
     const next = this.#resolveProfile();
+    // Ahead of the closed-dialog branch, not after it: during a forward blob
+    // flight the dialog is deliberately still closed, so that branch would
+    // happily patch a new class map onto the panel MorphEngine is flying.
+    if (this.#engine?.blobFlight) {
+      this.#blobDeferredProfile = next;
+      return;
+    }
     if (!this.element?.open) {
       this.#renderProfile = next;
       this.setData(this.#classData(next));
@@ -1901,7 +2358,36 @@ export default class Sheet extends PuzzleView {
       this.#requestClose('escape');
     },
     handleClose: () => {
-      const state = this.#engine?.state;
+      // A counter, not a flag: dialog.close() QUEUES its close event, so a
+      // boolean cleared right after the call would already be gone by the time
+      // this handler runs — and a proxy reverse closes the dialog one full task
+      // before the engine reports hidden.
+      if (this.#expectedCloses > 0) {
+        this.#expectedCloses -= 1;
+        return;
+      }
+      const engine = this.#engine;
+      const dialog = this.element;
+      // Force-close repair, scoped to the FORWARD proxy flight: something closed
+      // the dialog natively between the reveal promotion and the blob settle (a
+      // <form method="dialog"> submit, an app-level close). Left alone the blob
+      // would land and re-show a dialog the user explicitly closed.
+      // #proxyRevealed is the staleness token — only this run's reveal sets it —
+      // and `!dialog.open` distinguishes it from a reverse flight reversed back
+      // into a show, which re-promotes at its reveal re-emit.
+      if (
+        dialog &&
+        !dialog.open &&
+        this.#proxyRevealed &&
+        engine?.state === 'showing' &&
+        engine.blobFlight
+      ) {
+        engine.stop();
+        this.#releaseDialogPaint();
+        this.#requestClose('close');
+        return;
+      }
+      const state = engine?.state;
       if (
         !state ||
         state === 'hidden' ||
@@ -1913,7 +2399,7 @@ export default class Sheet extends PuzzleView {
       this.#finishMorph();
       this.#drag = { active: false };
       this.#acceptDismissal();
-      this.#engine.hide();
+      this.#hideThroughEngine();
       this.#requestClose('close');
     },
     scrollVeto: (event) => {
