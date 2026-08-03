@@ -1511,6 +1511,104 @@ func TestParseBooleanAndDynamicAttrs(t *testing.T) {
 	}
 }
 
+func TestParseReservedAttributeNamespaces(t *testing.T) {
+	t.Run("non-XML namespace is a positioned error", func(t *testing.T) {
+		src := "<puzzle-view>\n  <input bind:value={ x } />\n</puzzle-view>\n<script></script>"
+		_, err := Parse([]byte(src), "Binding.pzl")
+		if err == nil {
+			t.Fatal("expected parse error, got nil")
+		}
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Fatalf("expected *ParseError, got %T (%v)", err, err)
+		}
+		// A directive-shaped prefix gets the binding steer, not the SVG one: the
+		// author who types this arrived from Svelte/Vue and needs the keyword-free
+		// form, and telling them about Inkscape exports would be noise.
+		wantMessage := "attribute namespace \"bind:\" is reserved — two-way binding needs no prefix. Write `value={ expr }` (or `checked={ expr }`) on a plain <input>/<textarea>/<select> and the compiler synthesizes the write-back; see template SPEC §6"
+		if pe.Message != wantMessage {
+			t.Errorf("message: got %q, want %q", pe.Message, wantMessage)
+		}
+		if pe.File != "Binding.pzl" || pe.Line != 2 || pe.Col != 10 {
+			t.Errorf("position: got %s:%d:%d, want Binding.pzl:2:10", pe.File, pe.Line, pe.Col)
+		}
+	})
+
+	// The reservation is validated at the attribute NAME, not inside buildAttr, so
+	// the valueless spelling cannot slip through as a plain boolean attribute. It
+	// used to: `<input bind:value>` compiled to `{ 'bind:value': true }` with no
+	// error — the exact syntax the reservation exists to reject.
+	t.Run("valueless namespace is rejected too", func(t *testing.T) {
+		src := "<puzzle-view>\n  <input bind:value />\n</puzzle-view>\n<script></script>"
+		_, err := Parse([]byte(src), "Binding.pzl")
+		if err == nil {
+			t.Fatal("expected parse error, got nil")
+		}
+		pe, ok := err.(*ParseError)
+		if !ok {
+			t.Fatalf("expected *ParseError, got %T (%v)", err, err)
+		}
+		if !strings.Contains(pe.Message, `attribute namespace "bind:" is reserved`) {
+			t.Errorf("message: got %q", pe.Message)
+		}
+		if !strings.Contains(pe.Message, "two-way binding needs no prefix") {
+			t.Errorf("valueless form should carry the binding steer too: %q", pe.Message)
+		}
+		if pe.File != "Binding.pzl" || pe.Line != 2 || pe.Col != 10 {
+			t.Errorf("position: got %s:%d:%d, want Binding.pzl:2:10", pe.File, pe.Line, pe.Col)
+		}
+	})
+
+	// A non-directive prefix is almost always pasted SVG-editor output, so that
+	// author gets the file-asset escape instead of a lecture about form controls.
+	t.Run("an SVG-editor namespace gets the {#svg} steer", func(t *testing.T) {
+		src := "<puzzle-view>\n  <g inkscape:label=\"Layer 1\"></g>\n</puzzle-view>\n<script></script>"
+		_, err := Parse([]byte(src), "Icon.pzl")
+		if err == nil {
+			t.Fatal("expected parse error, got nil")
+		}
+		pe := err.(*ParseError)
+		if !strings.Contains(pe.Message, `attribute namespace "inkscape:" is reserved`) {
+			t.Errorf("message: got %q", pe.Message)
+		}
+		if !strings.Contains(pe.Message, "{#svg}") {
+			t.Errorf("expected the file-asset escape: %q", pe.Message)
+		}
+		if strings.Contains(pe.Message, "two-way binding") {
+			t.Errorf("SVG author should not get the binding steer: %q", pe.Message)
+		}
+	})
+
+	// An event attr owns the colon for its modifier channel; parseEventModifiers
+	// validates those, so the namespace check must not intercept them.
+	t.Run("event modifiers are exempt", func(t *testing.T) {
+		root := parseContent(t, `<button @click:prevent:once={ go }></button>`)
+		btn := elementChildren(root.Children)[0].(*Element)
+		ev, ok := btn.Attrs[0].(*EventAttr)
+		if !ok {
+			t.Fatalf("expected *EventAttr, got %#v", btn.Attrs[0])
+		}
+		if ev.Name != "click" {
+			t.Errorf("event: got %q, want %q", ev.Name, "click")
+		}
+	})
+
+	t.Run("XML namespaces remain valid", func(t *testing.T) {
+		root := parseContent(t, `<svg xlink:href="#icon" xml:lang="en" xmlns:icons="urn:icons"></svg>`)
+		svg := elementChildren(root.Children)[0].(*Element)
+		want := []string{"xlink:href", "xml:lang", "xmlns:icons"}
+		if len(svg.Attrs) != len(want) {
+			t.Fatalf("attrs: got %d, want %d", len(svg.Attrs), len(want))
+		}
+		for i, name := range want {
+			attr, ok := svg.Attrs[i].(*StaticAttr)
+			if !ok || attr.Name != name {
+				t.Errorf("attr %d: got %#v, want StaticAttr %q", i, svg.Attrs[i], name)
+			}
+		}
+	})
+}
+
 // TestParseErrors asserts message content + line/col for malformed input.
 func TestParseErrors(t *testing.T) {
 	tests := []struct {

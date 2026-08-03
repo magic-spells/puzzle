@@ -18,12 +18,21 @@
                input. `@keydown:enter` / `@keydown:escape` are key-filtered
                bindings — the handler only fires on that key, no manual
                `event.key` checks. Enter saves, Escape cancels; focus is grabbed
-               once in afterUpdate(). -->
+               once in afterUpdate().
+
+               `value` is wrapped in String(...) to keep this field OUT of
+               implicit binding (D147). Key handlers do not suppress synthesis —
+               only `@input`/`@change` do — so a bare `value={ playlist.name }`
+               here would write the record on every keystroke, and this input is
+               an edit buffer, not a live field: Escape could no longer cancel
+               (the record would already hold the typed text) and rename()'s
+               no-op-on-empty guard would be bypassed by the empty string on the
+               way to a retype. The commit stays where the modifiers put it. -->
           {#if renaming}
             <input
               type="text"
               class="font-display text-3xl sm:text-5xl font-bold text-fg leading-tight bg-transparent border-b-2 border-accent/60 focus:outline-none w-full max-w-xl"
-              value={ playlist.name }
+              value={ String(playlist.name) }
               @keydown:enter={ saveRename(event) }
               @keydown:escape={ cancelRename(event) }
               aria-label="Playlist name" />

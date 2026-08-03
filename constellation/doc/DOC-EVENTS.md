@@ -73,8 +73,8 @@ Templates bind handlers with `@event={ … }`. There are exactly two forms, one 
 
 ```html
 <form @submit={ addTodo(event) }>
-<input @input={ updateNewTodoText(event) } />
-<input type="checkbox" @change={ toggleTodo(todo) } />
+<input @blur={ commitDraft(event) } />
+<button @click={ deleteTodo(todo) }>Delete</button>
 <button @click={ setFilter('all') }>All</button>
 <button @click={ clearCompleted }>Clear</button>
 ```
@@ -82,8 +82,9 @@ Templates bind handlers with `@event={ … }`. There are exactly two forms, one 
 Notes on the call-expression form:
 
 - Write `event` explicitly if the handler needs it: `@submit={ addTodo(event) }`. If you write `@click={ setFilter('all') }`, the handler receives only `'all'` — no event object is appended.
-- Loop variables are in scope: inside `{#for todo in filteredTodos}`, `@change={ toggleTodo(todo) }` passes that iteration's record.
+- Loop variables are in scope: inside `{#for todo in filteredTodos}`, `@remove={ deleteTodo(todo) }` passes that iteration's record.
 - The expression is evaluated when the event fires, not at render time.
+- Reading a form control's value into state is not on this list, because it needs no handler at all: `value={ … }` and `checked={ … }` bind two ways on their own (see [Form binding](#form-binding-the-handler-you-dont-write-v168-d147) below).
 
 ## Worked examples from the todos app
 
@@ -114,17 +115,19 @@ events = {
 
 ```html
 {#for todo in filteredTodos}
-  <input type="checkbox" checked={ todo.completed } @change={ toggleTodo(todo) } />
+  <TodoItem todo={ todo } @remove={ deleteTodo(todo) } />
 {/for}
 ```
 
 ```js
 events = {
-  toggleTodo: (todo) => {
-    todo.toggle(); // model method: update({ completed: !this.completed, ... })
+  deleteTodo: (todo) => {
+    todo.destroy();
   },
 };
 ```
+
+The checkbox inside that row needs no handler in either component: `checked={ todo.completed }` writes the record field directly. Deletion still gets one, because destroying a record is the owning view's call, not the row's.
 
 **Passing a literal argument — call form with a string:**
 
@@ -138,6 +141,8 @@ events = {
 events = {
   setFilter: (filter) => {
     this.setData('currentFilter', filter);
+    // filteredTodos is derived in data(); setData() alone does not re-run it.
+    this.refresh();
   },
 };
 ```
@@ -170,15 +175,21 @@ Handlers have two levers, and they behave differently:
 
 ### Local state: `this.setData()`
 
-Use `setData` for local UI state — form inputs, toggles, the current filter. It accepts `(key, value)` or an object map:
+Use `setData` for local UI state — toggles, the current filter, a panel's open flag. It accepts `(key, value)` or an object map:
 
 ```js
 events = {
-  updateNewTodoText: (event) => {
-    this.setData('newTodoText', event.target.value);
+  toggleDetails: () => {
+    this.setData('detailsOpen', !this.getData().detailsOpen);
+  },
+
+  resetForm: () => {
+    this.setData({ commentText: '', authorName: '' });
   },
 };
 ```
+
+Form fields are the exception: a bound `value={ … }` performs exactly this `setData` for you, so a handler whose only job is to mirror a control into state is work the compiler already does — see [Form binding](#form-binding-the-handler-you-dont-write-v168-d147) below.
 
 **`setData()` does NOT re-trigger `data()`.** It updates the component state directly and re-renders. This is deliberate: it keeps keystroke-level updates cheap and avoids re-running store queries for purely local changes. If a value must be recomputed from other data, compute it in `data()` and change its inputs instead.
 
@@ -207,6 +218,52 @@ This is the normal flow for shared data: the handler mutates the store, the stor
 | Local UI state (input text, filter, toggle) | `this.setData(...)` | No — direct state update + re-render |
 | Shared records | `store.createRecord` / `record.update()` / `record.destroy()` | Yes — on all subscribed components |
 
+## Form binding: the handler you don't write (v1.68, D147)
+
+`value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>`, or `<select>` are **two-way**. The compiler synthesizes the write-back handler, so a form field carries the user's edit into state with no `events` entry at all:
+
+```html
+<input type="text" placeholder="What needs doing?" value={ newTodoText } />
+<input type="checkbox" checked={ todo.completed } />
+```
+
+A bare identifier writes local state (`setData` plus `refresh`, so values `data()` derives recompute as the user types); a one-member path writes the resolved root — a store record through validated `update()`, a plain object by assignment. The trigger conditions, the per-control event and coercion matrix, and the opt-outs are in [[DOC-TEMPLATE-SYNTAX]].
+
+**Your `@input` or `@change` wins.** Either one on the element — with any modifiers — means you own the write, and nothing is synthesized. There is no double write, no ordering question, and no way for the framework to stomp a handler that clamps, formats, or rejects what the user typed:
+
+```html
+<!-- No synthesized write; clampQuantity owns this field. -->
+<input type="number" value={ quantity } @input={ clampQuantity(event) } />
+```
+
+**Handlers on every other event coexist with the bind.** `@blur`, `@focus`, `@keydown:enter`, `@click` — none of them suppress anything. That is the shape for a field which binds continuously but *acts* on a key:
+
+```html
+<!-- draft binds on every keystroke; Enter acts on it -->
+<input value={ draft } @keydown:enter={ submitDraft(event) } />
+```
+
+```js
+events = {
+  submitDraft: (event) => {
+    const text = this.getData().draft.trim();
+    if (!text) return;
+    this.ctx.store.createRecord('todo', { text });
+    this.setData('draft', ''); // clearing the source clears the field
+  },
+};
+```
+
+**Edit buffers need an explicit opt-out.** A bare path binds *live*, so `value={ name }` with only a `@keydown:enter` commit handler is not an editable scratch buffer — every keystroke has already landed in `name`, and there is nothing left to revert on Escape. When abandon-and-restore is the point, keep the display one-way with a non-path expression and let your handler own the commit:
+
+```html
+<!-- String(…) does not classify, so this stays a one-way display binding -->
+<input
+  value={ String(committedName) }
+  @keydown:enter={ commitName(event) }
+  @keydown:escape={ cancelEdit } />
+```
+
 ## Common mistakes
 
 **1. Method shorthand in `events`.** Parses, but `this` is wrong at event time; the compiler rejects it with a build error.
@@ -233,15 +290,15 @@ events = {
 // Wrong — removed pattern; the handler would receive `todo` and return
 // an unused inner function
 events = {
-  toggleTodo: (todo) => () => {
-    todo.toggle();
+  togglePinned: (todo) => () => {
+    todo.update({ pinned: !todo.pinned });
   },
 };
 
 // Right
 events = {
-  toggleTodo: (todo) => {
-    todo.toggle();
+  togglePinned: (todo) => {
+    todo.update({ pinned: !todo.pinned });
   },
 };
 ```

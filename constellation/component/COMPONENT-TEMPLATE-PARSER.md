@@ -1,14 +1,14 @@
 ---
 name: Template parser
-status: built
+status: verified
 connections:
   - COMPONENT-CODEGEN
   - DOC-TEMPLATE-SYNTAX
   - FILE-PARSER
   - FILE-PARSER-SECTIONS
   - FILE-PARSER-SCANNER
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-29T05:19:20.084Z'
+verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
 notes:
   - kind: gotcha
     text: >-
@@ -55,10 +55,16 @@ instead of a positioned "unclosed `{`" error. Four scanners share the rule —
 two here, two in [[COMPONENT-CODEGEN]] — and they must be fixed together.
 
 Attributes are static, dynamic, mixed, event, or valueless-static values.
-Parser helpers enforce event/modifier grammar (generic modifiers: `prevent`,
-`stop`, `once`, and since D86 `outside` — valid on any event; key filters stay
-keyboard-only), static islands, literal inline SVG roots/paths, list
-identifiers/keys, and unique static refs.
+Non-event names containing `:` are reserved unless their prefix is `xml`,
+`xlink`, or `xmlns`; invalid namespaces fail at the attribute name's source
+position. `checkAttrNamespace` runs in both attribute loops (element tags and
+section tags) at the NAME, before the `=` branch — the valued and valueless
+spellings must reject identically, and validating inside `buildAttr` reaches only
+the valued one. Event names are exempt: the colon is their modifier channel, and
+`parseEventModifiers` owns it. Parser helpers enforce event/modifier grammar (generic modifiers:
+`prevent`, `stop`, `once`, and since D86 `outside` — valid on any event; key
+filters stay keyboard-only), static islands, literal inline SVG roots/paths,
+list identifiers/keys, and unique static refs.
 
 Composition grammar (D134/D141): `<Children>` is the default marker,
 `<Slot>` is the router outlet, and `<Slot name="x">` is a named marker.

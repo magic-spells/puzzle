@@ -83,12 +83,17 @@ run.
   in-progress worktree.
 - `0.5.0` (in progress on `release/0.5.0`, unpublished): D144 Portal scoped v1
   (`<Portal>` marker + framework outlet + portal-aware `@event:outside`), D145
-  error boundaries (`onError` funnel + script-side `errorContent()`), and D146
+  error boundaries (`onError` funnel + script-side `errorContent()`), D146
   transactional reused-ancestor refresh (prepare/commit closes the D19/D30
-  soft-violation). Cards truthed. Remaining candidates: the DevTools
-  subscriptions-graph round 2.
-- Product line: v1 through v1.67 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
-  D145 = v1.67; D146 is a correctness amendment with no product-line entry),
+  soft-violation), D147 implicit two-way form binding, and D148
+  `puzzle preview` + real static serving in `puzzle dev` for
+  `output: 'static'` projects (hybrid devs as the SPA). Also in: the Portal
+  showcase `examples/overlays` and the Portal component-root steering error
+  (wrap `<Portal>` in a root element; documented in D144). Cards truthed
+  through D148.
+- Product line: v1 through v1.69 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
+  D145 = v1.67, D147 = v1.68, D148 = v1.69; D146 is a correctness amendment
+  with no product-line entry),
   plus the July
   21 pre-release correctness/performance hardening pass and the July 24
   deep-review round. The `constellation/decision/` cards are the authoritative

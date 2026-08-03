@@ -48,10 +48,17 @@ removes the fallback.
 
 ## Where and how the boundary face renders
 
-- **Never patched over an unknown tree.** A throw partway through a `patch()`
+- **Never patched over an unknown tree.** This is an invariant of the MANAGER,
+  not only of the boundary path: `ViewManager.render()` itself routes to
+  `renderFresh()` whenever `treeUnknown` is set. That matters because a view with
+  no `errorContent` above it — the default — never takes the boundary path at
+  all, so nothing else would ever clear the flag, and the next ordinary render
+  would diff against vnodes pointing at detached nodes (updates landing on
+  orphans while the visible DOM freezes).
+  A throw partway through a `patch()`
   leaves the DOM matching neither the old nor the new tree, so the manager
   marks its tree UNKNOWN (bracketing the managed range with the live siblings
-  outside it, the only trustworthy handles) and the boundary renders through
+  outside it, the only trustworthy handles) and renders through
   `ViewManager.renderFresh()`: release BOTH aborted trees' non-DOM resources
   first (the trees lie about where nodes are, not about what exists — nested
   instances, refs, `@event:outside` document listeners, and portaled content
@@ -60,6 +67,14 @@ removes the fallback.
   the same release so a destroy with no boundary reaches both trees), then
   clear the bracketed range by DOM removal and mount the face fresh. Healthy
   boundary renders keep the cheap diff path.
+  **Known limit — the unbracketed case.** Bracketing needs the old tree's root
+  to be a direct child of the manager's container. When it is not (a component
+  or portal root whose node lives elsewhere, or a tree with no `el` yet),
+  `unknownRange` is null: `renderFresh` removes nothing and mounts with a null
+  insertion ref, so the fresh content can land beside the corrupt content rather
+  than replacing it. Recovering a range with no trustworthy handle needs a
+  decision this card does not yet make; what is settled is that a fresh mount
+  showing current state beats a frozen tree patched over orphans.
 - **A pre-mount failure is buffered, not lost.** A skeleton view's un-awaited
   preload can reject before `mount()` creates the view's ViewManager; when the
   boundary resolves to the failing view itself and no manager exists yet, the

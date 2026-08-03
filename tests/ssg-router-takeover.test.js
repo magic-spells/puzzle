@@ -15,11 +15,24 @@ import { PuzzleApp } from '../client-runtime/app.js';
 import { prerender } from '../client-runtime/ssg/index.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import LocalForm from './fixtures/binding/LocalForm.compiled.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const slot = () => new ViewNode(SLOT_TAG);
 const tick = () => new Promise((r) => setTimeout(r, 0));
+// A bind write is setData + refresh(): the re-render lands on an animation frame
+// after data() re-runs, so drain both queues a few times.
+const frame = () =>
+	new Promise((r) =>
+		typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 0)
+	);
+async function flush() {
+	for (let i = 0; i < 5; i++) {
+		await frame();
+		await tick();
+	}
+}
 
 let willShow = 0;
 let nestedWillShow = 0;
@@ -784,5 +797,48 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false); // gate 3: marker dropped
 		expect(willShow).toBe(0); // gate 3: enter suppressed
 		expect(leafRenders).toBeGreaterThan(0);
+	});
+
+	// Implicit two-way binding (D147) is a LISTENER, and a listener cannot be
+	// prerendered — the synthesized `@input:bind` attr is stripped from the HTML
+	// (ssg/serialize.js serializeAttrs) and only exists once something mounts. In
+	// hybrid output that "something" is the takeover: the router re-mounts the
+	// same tree over the prerendered markup, so the bind must come alive with it.
+	// The view is the Go compiler's ACTUAL output, so this also pins that a bound
+	// control survives the takeover with its controlled state intact.
+	it('hybrid takeover leaves the synthesized bind listener live (D147)', async () => {
+		const routes = [{ path: '/', name: 'form', view: LocalForm }];
+		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
+
+		// The build-time HTML carries the controlled values and no directive.
+		expect(pages[0].html).toContain('<input class="draft" value="">');
+		expect(pages[0].html).not.toContain('bind');
+
+		const el = ssgContainer(pages[0].html);
+		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+		await app.mount();
+
+		// The takeover re-mounts the tree, which moves controlled form state from
+		// HTML initial-state markup to live DOM PROPERTIES — the documented
+		// serializer ⟷ ViewManager difference (see ssg-equivalence.test.js), so
+		// parity for a form control is its property values, not innerHTML bytes.
+		// Attaching a listener adds no markup either way.
+		expect(el.innerHTML).not.toContain('bind');
+		expect(el.querySelectorAll('input.draft').length).toBe(1); // no duplication
+		expect(el.querySelector('input.draft').value).toBe('');
+		expect(el.querySelector('input.volume').value).toBe('0');
+		expect(el.querySelector('input.agree').checked).toBe(false);
+		expect(el.querySelector('select.sort').value).toBe('all');
+		expect(el.querySelector('p.matches').textContent).toBe('4');
+
+		const input = el.querySelector('input.draft');
+		input.value = 'al';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		await flush();
+
+		// The bind wrote local state AND refresh() re-ran data(): only 'alpha'
+		// matches. A dead listener would have left this at 4.
+		expect(el.querySelector('p.matches').textContent).toBe('1');
+		expect(el.querySelector('input.draft').value).toBe('al');
 	});
 });

@@ -29,8 +29,11 @@ model type or one primary-keyed record.
 It has props and call-site children but no `<puzzle-view>` DOM wrapper.
 
 **controlled property** — Form/boolean properties such as `value`, `checked`,
-`selected`, or `disabled` synchronized as DOM properties during patches.
-Puzzle does not infer a two-way state assignment; event handlers update state.
+`selected`, or `disabled` synchronized as DOM properties during patches and
+compared against the live DOM, so the per-keystroke echo writes nothing. On
+plain form controls a path-shaped `value=`/`checked=` is two-way (D147): the
+compiler synthesizes the write-back handler, and an author `@input`/`@change`
+suppresses the synthesis and owns the write.
 
 **data layer** — The model values returned by the latest successful `data()`.
 It is replaced on refresh and sits below persistent local state.

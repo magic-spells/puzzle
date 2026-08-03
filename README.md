@@ -46,6 +46,7 @@ npm install -D @magic-spells/puzzle
 
 - **Single-file components** (`.pzl`) with template + scripts + styles — optional TypeScript (`<script lang="ts">`), scoped styles (`<style scoped>`), skeletons, comments, slots, and refs
 - **Reactive data** with automatic view updates
+- **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and write sync
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
 - **Nested routing** with view slots — history, hash, and memory modes; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
@@ -197,15 +198,20 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 <!-- Event handlers -->
 <button @click={ handleClick }>Click me</button>
 <form @submit={ handleForm(event) }>
-  <!-- Controlled form property; the handler updates component/store state -->
-  <input value={ searchQuery } @input={ updateSearch(event) } />
+  <!-- Two-way: reads searchQuery AND writes the user's edit back. No handler. -->
+  <input value={ searchQuery } />
   <select value={ selectedOption }></select>
 </form>
+
+<!-- A one-member path writes the record itself, through validated update() -->
+<input type="checkbox" checked={ todo.completed } />
 
 <!-- Event modifiers: prevent / stop / once + key filters, and they stack -->
 <input @keydown:enter={ handleSubmit } @keydown:escape:prevent={ cancelEdit } />
 <button @click:once={ claimReward }>Claim</button>
 ```
+
+**Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a one-member path — the compiler synthesizes the write-back handler. A bare identifier writes local state; a path writes the record through validated `update()`. Opt out with your own `@input`/`@change`, a non-path expression (`value={ String(x) }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
 
 **Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §5.
 

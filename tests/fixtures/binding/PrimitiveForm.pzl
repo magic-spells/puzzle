@@ -1,0 +1,19 @@
+<puzzle-view class="primitive-form">
+  <input class="len" type="number" value={ title.length } />
+  <p class="title">{ title }</p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The primitive-root degradation of implicit binding (D147). `title` is a STRING,
+// so `title.length` is a one-way display binding — but it is a one-member path,
+// which is exactly the shape the compiler synthesizes a bind for, and no
+// compile-time type tells the two apart. The runtime resolves the root at render,
+// finds a primitive, and falls back to the shared inert handler.
+export default class PrimitiveForm extends PuzzleView {
+	data() {
+		return { title: 'wash' };
+	}
+}
+</script>

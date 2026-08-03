@@ -31,7 +31,17 @@ Cobra command surface shipped by the platform binary:
   value — and prints raw/gzip output plus prerender summaries.
 - `puzzle dev [dir] --port` starts [[COMPONENT-DEV-SERVER]]. A busy port is not
   fatal: the server scans upward for the first free one and warns when it moved;
-  `--strict-port` restores bind-or-fail ([[DECISION-D90-DEV-PORT-SCAN]]).
+  `--strict-port` restores bind-or-fail ([[DECISION-D90-DEV-PORT-SCAN]]). An
+  `output: 'static'` project gets the real prerender pipeline per rebuild
+  instead of the SPA loop ([[DECISION-D148-PREVIEW-AND-STATIC-DEV]]).
+- `puzzle preview [dir] [--port N] [--strict-port]` (D148) serves an existing
+  `dist/` with production-host semantics per resolved output mode (SPA history
+  fallback / hybrid prerendered-page-first / static clean URLs + real 404s) via
+  `internal/preview` over the shared `internal/serve` resolver. No watcher, no
+  SSE. Default port 4000 so it runs beside dev; missing or empty `dist/` is a
+  hard error naming `puzzle build`; a flag-only build's mode is read back from
+  the artifact's `data-puzzle-static`/`data-puzzle-ssg` marker when the config
+  is silent, and config/artifact disagreements warn.
 - `--fixtures` on both `build` and `dev` (D98) wires `app/fixtures.js` through
   a generated two-module wrapper entry under `.puzzle/` so the `/fixtures`
   module installs before the app entry runs; requires the file, is rejected

@@ -2,20 +2,22 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class TodoItem extends PuzzleView {
-  // `todo` is a prop from the parent; toggle/remove are callback props (SPEC §6)
-  // that route this row's DOM events up to the owning view (Home).
+  // `todo` is a prop from the parent; `remove` is a callback prop (SPEC §6)
+  // that routes this row's delete click up to the owning view (Home).
+  //
+  // Returning the record itself is what makes the checkbox writable: the
+  // template's `checked={ todo.completed }` resolves to this record, so the
+  // synthesized handler has something to call update() on.
   data(params, props) {
     return { todo: props.todo };
   }
 
-  // Event handlers invoke the callback props passed by the parent. The parent's
-  // `@toggle={ toggleTodo(todo) }` compiled to `props.toggle = (event) =>
-  // this.events.toggleTodo(todo)`, so calling this.props.toggle(event) runs the
-  // parent handler with the row's todo already closed over.
+  // Only deletion needs a handler. Destroying a record is the parent's call —
+  // it owns the collection — so it stays a callback prop: the parent's
+  // `@remove={ deleteTodo(todo) }` compiled to `props.remove = (event) =>
+  // this.events.deleteTodo(todo)`, and calling this.props.remove(event) runs
+  // that handler with the row's todo already closed over.
   events = {
-    toggle: (event) => {
-      this.props.toggle(event);
-    },
     remove: (event) => {
       this.props.remove(event);
     }
@@ -47,7 +49,11 @@ TodoItem.prototype.render = function () {
           type: 'checkbox',
           class: 'sr-only',
           checked: __d.todo.completed,
-          '@change': (event) => this.events.toggle(event),
+          // The synthesized write-back for `checked={ todo.completed }`: a
+          // distinct listener slot on the modifier channel, and a memoized
+          // handler keyed by (target, field, spec) so the identity is stable
+          // across renders and the listener never re-attaches.
+          '@change:bind': this.__bind(__d.todo, 'completed', 'c'),
         }, []),
         new ViewNode('div', { class: 'relative' }, [
           new ViewNode('div', {

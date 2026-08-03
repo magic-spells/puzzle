@@ -119,6 +119,7 @@ export interface PuzzleErrorInfo {
 		| 'refresh'
 		| 'navigation'
 		| 'render'
+		| 'bind'
 		| 'boundary'
 		| 'enter'
 		| 'leave'

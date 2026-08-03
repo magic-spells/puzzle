@@ -324,7 +324,7 @@ roadmap item — bind is the substrate, forms are a later product layer); explic
 - Modify: `constellation/plan.md` (roadmap line ~:202; 0.5.0 section; card index)
 
 **Steps:**
-- [ ] Write D147 from "The contract" above, plus Alternatives rejected: `bind:value`
+- [x] Write D147 from "The contract" above, plus Alternatives rejected: `bind:value`
       (re-litigates D85's namespace rejection + 3 editor grammars), bare `bind`/`sync`
       marker, options-object `bind={{…}}` (compile error, `codegen.go:1130`), Ember-Octane
       `<Input>` component (no spread-props; D134 case trap), runtime-only helper,
@@ -334,11 +334,11 @@ roadmap item — bind is the substrate, forms are a later product layer); explic
       Scope line verbatim from "Out of scope". Connect: D04/D16/D18/D23/D38/D44/D48/D62/
       D85/D125/D133/D134/D145/D146, COMPONENT-CODEGEN, COMPONENT-PUZZLE-VIEW,
       FLOW-REACTIVITY, DOC-SPEC-TEMPLATE.
-- [ ] Feature card `planned`, connected to the decision + the files this plan touches.
-- [ ] `plan.md`: move "two-way `bind` sugar" out of identified-not-scheduled (note the
+- [x] Feature card `planned`, connected to the decision + the files this plan touches.
+- [x] `plan.md`: move "two-way `bind` sugar" out of identified-not-scheduled (note the
       shipped shape is no-sugar inference); keep "schema-derived forms helper" as its own
       unscheduled line; add D147 to the 0.5.0 section and card index.
-- [ ] Commit: `docs: D147 implicit two-way binding — decision + planned feature card`
+- [x] Commit: `docs: D147 implicit two-way binding — decision + planned feature card`
 
 ### Task 2: Reserved attr-namespace compile error (standalone; ship regardless)
 
@@ -353,18 +353,18 @@ attribute.
 - Test: `compiler/internal/parser/parser_test.go`
 
 **Steps:**
-- [ ] **Failing test first:** `bind:value={ x }` on an element produces a positioned
+- [x] **Failing test first:** `bind:value={ x }` on an element produces a positioned
       `ParseError` naming the reserved namespace; `xlink:href="…"`, `xml:lang="…"`, and
       `xmlns:*` still parse (SVG passes through `attrsMultiline`/`emitAttrs` via
       `inlinesvg.go:185/189` — grep the examples for colon-named SVG attrs and cover
       every prefix found).
-- [ ] Implement in `buildAttr`: non-`@` attr name containing `:` errors unless the prefix
+- [x] Implement in `buildAttr`: non-`@` attr name containing `:` errors unless the prefix
       is in the XML allowlist (`xml`, `xlink`, `xmlns`). Error text steers: "attribute
       namespaces are reserved; two-way binding is automatic on form controls — see
       template SPEC §6".
-- [ ] `go test ./compiler/internal/parser/...` green; full `go test ./...` green (proves
+- [x] `go test ./compiler/internal/parser/...` green; full `go test ./...` green (proves
       no existing example/golden uses a non-allowlisted colon attr).
-- [ ] Commit: `compiler: reserve non-XML attr namespaces with a positioned error`
+- [x] Commit: `compiler: reserve non-XML attr namespaces with a positioned error`
 
 ### Task 3: Bind classifier (Go, pure function + table test)
 
@@ -383,16 +383,16 @@ func classifyBindExpr(raw string, scope map[string]bool) (target, field string, 
 ```
 
 **Steps:**
-- [ ] **Failing table test** (reuse `isIdentStart`/`isIdentChar` from `expr.go:57-63`):
+- [x] **Failing table test** (reuse `isIdentStart`/`isIdentChar` from `expr.go:57-63`):
       accept `draft`, ` draft `, `todo.completed`, `profile.displayName`, `_x.y`;
       reject `a.b.c`, `fmt(x)`, `x.trim()`, `a + b`, `a ?? ''`, `a ? b : c`,
       `todo[k]`, `a?.b`, `x | money`, `this.x`, `true`, `window`, `event.target`,
       `''`, `{ a: 1 }`, and bare `todo` when `scope = {"todo": true}` — but accept
       `todo.completed` under the same scope with `target == "todo"`.
-- [ ] Implement: trim; split on `.`; 1–2 segments; each segment a full identifier; root
+- [x] Implement: trim; split on `.`; 1–2 segments; each segment a full identifier; root
       not in `jsKeywords`/`jsGlobals` (`expr.go:19-46`); bare root not in `scope`.
-- [ ] `go test ./compiler/internal/codegen -run TestClassifyBindExpr` green.
-- [ ] Commit: `compiler: bind-target classifier for implicit two-way binding`
+- [x] `go test ./compiler/internal/codegen -run TestClassifyBindExpr` green.
+- [x] Commit: `compiler: bind-target classifier for implicit two-way binding`
 
 ### Task 4: Synthesis in codegen + goldens
 
@@ -418,31 +418,31 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 ```
 
 **Steps:**
-- [ ] **Failing golden:** write `binding.pzl` covering every matrix row + the negative
+- [x] **Failing golden:** write `binding.pzl` covering every matrix row + the negative
       space — text input bare, number (change/vn), range (input/vn), checkbox `checked`
       on loop var, select single, textarea, member path on a data root; suppression by
       author `@input`, suppression by author `@change:prevent`, non-suppression by
       `@keydown:enter`; `readonly` opt-out; dynamic `type={t}` skip; radio/file skip;
       `<select multiple>` skip; component `<Foo value={x}/>` skip; `value={ x.trim() }`
       one-way. Hand-write `binding.golden.js` to the emitted shapes in the contract.
-- [ ] Implement `detectAutoBind` per the trigger conditions (static-type lookup mirrors
+- [x] Implement `detectAutoBind` per the trigger conditions (static-type lookup mirrors
       the a11y pass, `a11y.go:36` — never guess runtime values). Event-attr matching
       strips modifiers: base name before the first `:` decides `@input`/`@change`.
-- [ ] Wire into `attrsMultiline` AND `emitAttrs`: after the authored attrs, emit the KV
+- [x] Wire into `attrsMultiline` AND `emitAttrs`: after the authored attrs, emit the KV
       `'@<event>:bind': this.__bind(<target>, '<field>', '<spec>')`, where `<target>` is
       `null` (bare), the bare scope var, or `__d.<root>`. The width trial must count the
       synthesized attr so single/multi-line layout stays deterministic. No `__h` index.
-- [ ] Add a width-trial canary test: a template mixing one auto-bind with several cached
+- [x] Add a width-trial canary test: a template mixing one auto-bind with several cached
       `@click` handlers asserts `__h` indices run `0..n` with no gap.
-- [ ] `go test ./compiler/internal/codegen -run TestGoldens -update`; **expected churn:
+- [x] `go test ./compiler/internal/codegen -run TestGoldens -update`; **expected churn:
       the new pair + `boolean_attr.golden.js` gains exactly
       `'@input:bind': this.__bind(null, 'name', 'v')` (its `value={ name }` is
       handler-less — verified) — audit any OTHER modified golden line-by-line; each diff
       must be exactly a synthesized bind attr or its multiline reflow.** `TestNodeCheck`,
       `TestGoldenHome`, `TestGoldenDefault` still green (todos is handler-paired ⇒
       suppressed ⇒ untouched at this task).
-- [ ] `cd compiler && go test ./...` green.
-- [ ] Commit: `compiler: synthesize implicit two-way bind handlers on form controls`
+- [x] `cd compiler && go test ./...` green.
+- [x] Commit: `compiler: synthesize implicit two-way bind handlers on form controls`
 
 ### Task 5: Runtime `__bind` + `#bindWrite` + error phase
 
@@ -454,7 +454,7 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 - Test: `tests/binding.test.js` (new)
 
 **Steps:**
-- [ ] **Failing tests** (compile small fixtures via the existing pretest pipeline, mount
+- [x] **Failing tests** (compile small fixtures via the existing pretest pipeline, mount
       with `client-runtime/testing`):
   - local arm: dispatch `input` on a bound text input → `getData().draft` updates →
     a derived value computed in `data()` from `draft` also updates (refresh proof) →
@@ -473,10 +473,10 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
   - `event.isComposing` true → no write.
   - caret regression: value-setter spy asserts `writes === 0` on the echo render
     (mirror `tests/vdom.test.js:147-179`).
-- [ ] Implement `__bind` and `#bindWrite` exactly as in the contract (memo maps, IME
+- [x] Implement `__bind` and `#bindWrite` exactly as in the contract (memo maps, IME
       guard, three arms, `reportError` with `phase: 'bind'`).
-- [ ] `npx vitest run` + `npm run test:types` green.
-- [ ] Commit: `runtime: memoized __bind write-back dispatch for implicit binding`
+- [x] `npx vitest run` + `npm run test:types` green.
+- [x] Commit: `runtime: memoized __bind write-back dispatch for implicit binding`
 
 ### Task 6: `type()` testing helper
 
@@ -485,13 +485,13 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 - Test: extend `tests/binding.test.js`
 
 **Steps:**
-- [ ] **Failing test:** `await type(handle, 'hello')` on a bound input leaves
+- [x] **Failing test:** `await type(handle, 'hello')` on a bound input leaves
       `getData().draft === 'hello'` after `settled()`.
-- [ ] Implement `type(target, text)`: set `.value`, dispatch bubbling `input` (and
+- [x] Implement `type(target, text)`: set `.value`, dispatch bubbling `input` (and
       `change` for completeness on blur-style controls), `await settled()`.
-- [ ] Export + `npm run test:types` green (public `/testing` surface — add the d.ts
+- [x] Export + `npm run test:types` green (public `/testing` surface — add the d.ts
       signature).
-- [ ] Commit: `testing: type() helper for two-way-bound inputs`
+- [x] Commit: `testing: type() helper for two-way-bound inputs`
 
 ### Task 7: Dev-only clobber diagnostic
 
@@ -500,17 +500,17 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 - Test: extend `tests/binding.test.js`
 
 **Steps:**
-- [ ] **Failing tests:** (a) bind a key that `data()` derives from a record → trigger a
+- [x] **Failing tests:** (a) bind a key that `data()` derives from a record → trigger a
       store flush → exactly one console warning naming the key; second flush warns
       nothing. (b) the legitimate echo idiom (`data()` re-reads `getData().text`,
       Playground-style) never warns. (c) production build path (`__PUZZLE_DEV__` false)
       emits nothing.
-- [ ] Implement: `#bindPending` map written in the local arm (already stubbed in Task 5);
+- [x] Implement: `#bindPending` map written in the local arm (already stubbed in Task 5);
       at recompose, for each pending key, if `#data[key] !== written` warn once per key
       (`#bindWarned` set) with the taught fix ("bind the source path, or stop deriving
       '<key>' in data()"); clear pending. Inline `__PUZZLE_DEV__` gates.
-- [ ] `npx vitest run` green.
-- [ ] Commit: `runtime: dev warning when a data() commit reverts a bound local key`
+- [x] `npx vitest run` green.
+- [x] Commit: `runtime: dev warning when a data() commit reverts a bound local key`
 
 ### Task 8: SSG / static / hybrid coverage
 
@@ -519,14 +519,14 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
   static-output integration case
 
 **Steps:**
-- [ ] **Failing tests:** serialized HTML for a bound input contains the controlled
+- [x] **Failing tests:** serialized HTML for a bound input contains the controlled
       initial value but **no** `@input:bind`/`@change:bind` (the `@` prefix strip rule
       covers it — pin it); textarea text content, selected option, and `checked`
       serialize as today; hybrid takeover and `mountStatic` both attach the bind listener
       (type after mount → state updates).
-- [ ] Fix anything the pins surface (expected: nothing).
-- [ ] `npx vitest run` green.
-- [ ] Commit: `ssg: pin bind-listener stripping and post-takeover binding`
+- [x] Fix anything the pins surface (expected: nothing).
+- [x] `npx vitest run` green.
+- [x] Commit: `ssg: pin bind-listener stripping and post-takeover binding`
 
 ### Task 9: Examples, scaffold, and fixture migration
 
@@ -541,32 +541,39 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
 - Test: `tests/helpers/todos-suite.js` lanes, `npm run lint:examples`
 
 **Steps:**
-- [ ] **FormState first (benchmark preservation):** its handler-less `value={ row.text }`
+- [x] **FormState first (benchmark preservation):** its handler-less `value={ row.text }`
       / `value={ row.choice }` would now auto-bind and change what the benchmark
       measures. Make both intentionally non-classifying — `value={ String(row.text) }`
       and `value={ String(row.choice) }` — with a one-line comment (`readonly` is not
       valid on `<select>`, and it would change the demo's interactivity). Note the
       escape in the stress README.
-- [ ] **binding example:** rewrite as the record-path showcase — `data()` returns the
+- [x] **binding example:** rewrite as the record-path showcase — `data()` returns the
       `profile` record; bind `value={ profile.displayName }`, `value={ profile.hue }`
       (a `Puzzle.number()` field — exercises `vn` coercion end-to-end), textarea, color,
       range; delete the entire mirror-handler `events` block. This is the
       `#bindWrite` record-arm regression app.
-- [ ] **todos + scaffold (the flagship must demo the flagship feature):** drop
+- [x] **todos + scaffold (the flagship must demo the flagship feature):** drop
       `@input={ updateNewTodoText(event) }` + the handler from both Home.pzl copies
       (keep `created()` seeding); in both TodoItem.pzl copies, `checked={ todo.completed }`
       bare, drop the `@change` toggle plumbing. Hand-edit
       `tests/fixtures/todos/Home.compiled.js` to the new compiled output (compile with
       `pzlc`, then apply the documented normalizations); `TestGoldenHome` +
       `parser/integration_test.go` + `build_test.go` green.
-- [ ] Audit the remaining corpus: `rg -n 'value=\{|checked=\{' examples -g '*.pzl'`,
+- [x] Audit the remaining corpus: `rg -n 'value=\{|checked=\{' examples -g '*.pzl'`,
       inspect every handler-less hit for unintended new binding; fix or bless each.
-- [ ] Build todos + binding with the repo-root `./puzzle` binary; click through in a real
+      (One real catch: `music/Playlist.pzl`'s inline rename. Its `@keydown:enter`
+      / `@keydown:escape` do NOT suppress, so it newly bound live and Escape
+      could no longer cancel — escaped with `String(playlist.name)`.)
+- [x] Build todos + binding with the repo-root `./puzzle` binary; click through in a real
       browser: typing (caret never jumps mid-word), checkbox, select, number commit on
       change, range slider live. **IME check:** compose Japanese into a bound input — no
       dropped characters. (jsdom can't do composition or number-input sanitization.)
-- [ ] `npx vitest run` && `cd compiler && go test ./...` && `npm run lint:examples` green.
-- [ ] Commit: `examples: adopt implicit binding (todos, scaffold, binding); preserve stress benchmark`
+- [x] `npx vitest run` && `cd compiler && go test ./...` && `npm run lint:examples` green.
+      (`lint:examples` is not a script in this repo — no `lint*` script exists.
+      Stood in for it: `npm run pretest`, which recompiles every example through
+      the compiler, plus full `./puzzle build` runs of todos and binding in both
+      development and production, and `npm run test:types`.)
+- [x] Commit: `examples: adopt implicit binding (todos, scaffold, binding); preserve stress benchmark`
 
 ### Task 10: Docs truthing + skill + card stamps
 
@@ -585,30 +592,32 @@ func detectAutoBind(tag string, attrs []parser.Attr, scope map[string]bool) *aut
   true; touch only if its prose reads as fiction-era
 
 **Steps:**
-- [ ] Rewrite each doc to state the current design as if it were always the design (no
+- [x] Rewrite each doc to state the current design as if it were always the design (no
       "previously"/"we changed" narration). Teach: the trigger conditions, the matrix,
       the three escapes, bind-the-source-path rule, local-draft idiom for constrained
       fields, `type()` helper.
-- [ ] Skill: add the input-binding section (when it binds, when it doesn't, the
+- [x] Skill: add the input-binding section (when it binds, when it doesn't, the
       record-vs-draft choice, the suppression rule).
-- [ ] `mcp` card updates + connections; product line v1.68 entry; stamp cards by release
+- [x] `mcp` card updates + connections; product line v1.68 entry; stamp cards by release
       (`0.5.0` + `verified_sha` convention) **after** Task 11 verification, not before.
-- [ ] Commit: `docs: implicit two-way binding — SPEC §6, glossary, guides, skill, cards`
+- [x] Commit: `docs: implicit two-way binding — SPEC §6, glossary, guides, skill, cards`
 
 ### Task 11: Full verification sweep
 
 **Steps:**
-- [ ] `npx vitest run` — green, zero skips introduced.
-- [ ] `cd compiler && go test ./...` — green.
-- [ ] `npm run test:types` && `npm run verify:pack` — green.
-- [ ] Rebuild the repo-root `./puzzle` binary; `puzzle init` a scratch app in the
+- [x] `npx vitest run` — green, zero skips introduced.
+- [x] `cd compiler && go test ./...` — green.
+- [x] `npm run test:types` && `npm run verify:pack` — green.
+- [x] Rebuild the repo-root `./puzzle` binary; `puzzle init` a scratch app in the
       scratchpad; confirm the scaffolded todos demos handler-less binding out of the box.
-- [ ] Real-browser pass (todos + binding, per Task 9): caret, IME, number commit, select,
+- [x] Real-browser pass (todos + binding, per Task 9): caret, IME, number commit, select,
       checkbox, range; DevTools extension still shows the views/store panels sane with
-      `:bind` listeners present.
-- [ ] Constellation `check_integrity` + `check_sync`; stamp D147/feature/component cards
+      `:bind` listeners present. *(Panel check NOT run — needs a human-opened
+      DevTools window; the bridge is suite-covered and `:bind` rides the
+      standard listener channel the Views panel reads.)*
+- [x] Constellation `check_integrity` + `check_sync`; stamp D147/feature/component cards
       `verified`.
-- [ ] Report anything not run.
+- [x] Report anything not run.
 
 ---
 

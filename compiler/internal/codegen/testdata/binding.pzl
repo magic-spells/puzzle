@@ -1,0 +1,65 @@
+<puzzle-view class="binding">
+  <input value={ draft } />
+  <input type="number" value={ age } />
+  <input type="range" value={ volume } />
+  <ul>
+    {#for todo in todos}
+      <input type="checkbox" checked={ todo.completed } />
+    {/for}
+  </ul>
+  <select value={ sort }>
+    <option value="all">All</option>
+  </select>
+  <textarea value={ notes }></textarea>
+  <input type="date" value={ profile.birthday } />
+
+  <input value={ inputOwned } @input={ syncInput } />
+  <input type="number" value={ changeOwned } @change:prevent={ syncChange } />
+  <input value={ keyboard } @keydown:enter={ submit } />
+  <input value={ readOnlyValue } readonly />
+  <input value={ disabledValue } disabled />
+  <input type={ inputType } value={ dynamicValue } />
+  <input type="radio" value={ radioValue } />
+  <input type="file" value={ fileValue } />
+  <input type="checkbox" value={ checkboxValue } />
+  <select value={ multiValue } multiple></select>
+  <Foo value={ x } />
+  <input value={ x.trim() } />
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Foo from './Foo.pzl';
+
+export default class Binding extends PuzzleView {
+  data() {
+    return {
+      draft: '',
+      age: null,
+      volume: 0,
+      todos: [],
+      sort: 'all',
+      notes: '',
+      profile: { birthday: '' },
+      inputOwned: '',
+      changeOwned: null,
+      keyboard: '',
+      readOnlyValue: '',
+      disabledValue: '',
+      inputType: 'text',
+      dynamicValue: '',
+      radioValue: '',
+      fileValue: '',
+      checkboxValue: '',
+      multiValue: [],
+      x: '',
+    };
+  }
+
+  events = {
+    syncInput: (event) => {},
+    syncChange: (event) => {},
+    submit: (event) => {},
+  };
+}
+</script>

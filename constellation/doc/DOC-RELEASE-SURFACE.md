@@ -39,9 +39,9 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Subpaths: `@magic-spells/puzzle/morph`, `/ssg`, `/static`, `/testing`,
   `/fixtures`, and `/puzzle-env`. (`/static` exports `mountStatic`, the
   per-page kernel for `output: 'static'`; `/testing` exports the app-author
-  test utilities — `mountView`, `createTestApp`, `settled`,
-  `installFakeAnimate`, `installFakeObserver`, D94 — and re-exports
-  `installFixtures`; `/fixtures` is the self-contained fixtures + mock-adapter
+  test utilities — `mountView`, `createTestApp`, `settled`, `type` (drives a
+  two-way-bound control, D147), `installFakeAnimate`, `installFakeObserver`,
+  D94 — and re-exports `installFixtures`; `/fixtures` is the self-contained fixtures + mock-adapter
   module, D98, bundled into an app only by the `--fixtures` flag.)
 - `puzzle` binary shim selects an optional platform binary for macOS/Linux on
   arm64/x64. Unsupported systems get a Go-install fallback message.
@@ -65,6 +65,16 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `<style scoped>` uses native `@scope`; unscoped styles are global.
 - Interpolation and formatter chains; dynamic/mixed/boolean attributes;
   controlled `value`, `checked`, `disabled`, and `selected` properties.
+- Implicit two-way binding (D147): a path-shaped `value=`/`checked=`
+  (`ident` or `ident.ident`) on a plain form control synthesizes its own
+  write-back handler (`@input:bind`/`@change:bind`) — suppressed by an author
+  `@input`/`@change`, static `readonly`/`disabled`, a non-path expression, a
+  dynamic or excluded `type`, or a component tag. Number, checkbox, date
+  kinds, and select commit on `change`; numeric `''` writes `null`, NaN is
+  skipped; IME composition never mid-writes. Records write through validated
+  `update()` (rejections report to `onError` as `phase: 'bind'`); bare locals
+  write `setData` + refresh. Attr namespaces (`bind:value`) are a positioned
+  compile error reserving the space (`xml`/`xlink`/`xmlns` allowlisted).
 - `{#if}` with `{:else if}`/`{:else}`, `{#unless}`, `{#case}` with `{:when}`,
   item/range `{#for}` with optional counters, template comments, and inline SVG.
 - DOM events support bare/call handlers, `prevent`, `stop`, `once`, `outside`
@@ -195,6 +205,9 @@ second specification. Decision cards hold rationale and git holds chronology.
   stage and atomically swap `dist`, preserving the last good build on failure.
 - `puzzle dev` uses incremental esbuild, recursive watch, warm Tailwind watch,
   a localhost static server, SPA fallback, SSE reload, and graceful shutdown.
+  An `output: 'static'` project instead gets the real pipeline per rebuild —
+  full build + prerender, clean URLs, real 404s, serve-time reload injection
+  into every HTML page (D148); hybrid devs as the SPA.
 - Build failures reach the browser, not just the terminal (D92): the SSE channel
   carries typed `reload`/`builderror`/`clear` frames with JSON payloads and
   last-write-wins client buffers, the server retains the current error and
@@ -225,6 +238,10 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - `puzzle init` (`default`/`todos`, optional TypeScript project config).
 - `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
+- `puzzle preview [--port] [--strict-port]` (D148): serves an existing `dist/`
+  with production-host semantics per output mode — SPA history fallback,
+  hybrid prerendered-page-first, static clean URLs + real 404s. Port 4000
+  default; flag-only builds self-identify via the artifact's prerender marker.
 - `puzzle dev --fixtures` / `puzzle build --fixtures` (D98): wire
   `app/fixtures.js` through a generated wrapper entry so the `/fixtures`
   module installs before the app entry runs; rejected alongside

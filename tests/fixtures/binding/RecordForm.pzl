@@ -1,0 +1,22 @@
+<puzzle-view class="record-form">
+  {#for todo in todos}
+    <div class="row">
+      <input class="text" value={ todo.text } />
+      <input class="done" type="checkbox" checked={ todo.completed } />
+      <input class="rank" type="number" value={ todo.rank } />
+    </div>
+  {/for}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The record arm of implicit binding (D147): a loop variable as the ROOT of a
+// member path binds through PuzzleModel.update(), so validation, store
+// notification, and persistence all run exactly as a hand-written handler's would.
+export default class RecordForm extends PuzzleView {
+	data() {
+		return { todos: this.ctx.store.findMany('todo') };
+	}
+}
+</script>

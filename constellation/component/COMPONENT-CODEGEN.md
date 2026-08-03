@@ -1,14 +1,14 @@
 ---
 name: Render-function codegen
-status: built
+status: verified
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-07-29T05:19:19.240Z'
+verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
 notes:
   - kind: gotcha
     text: >-
@@ -78,6 +78,18 @@ Data-independent event sites cache one closure per instance in `this.__h`,
 stabilizing DOM listeners and callback props. Sites that capture model or loop
 values emit fresh closures so their captured values stay correct. Modifiers
 remain encoded in vnode attribute names for ViewManager to apply.
+
+Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) lives in
+`binding.go`: `classifyBindExpr` accepts exactly `ident`/`ident.ident` (keyword,
+global, and reserved-`event` roots never classify; a bare loop variable never
+classifies, a loop-var-rooted member path does) and `detectAutoBind` applies the
+element-level conditions (form-control tag, no author `@input`/`@change`, no
+static `readonly`/`disabled`, static classifiable `type`). Both `attrsMultiline`
+and `emitAttrs` consume it — inline SVG calls that pair directly — appending
+`'@<event>:bind': this.__bind(target, field, spec)` after the authored attrs.
+The synthesized attr counts toward the width trial (layout stays deterministic)
+and consumes no `__h` site index; `attrKV` runs twice per attr, so a counter
+there would drift every golden. Non-classifying templates emit byte-identically.
 
 Conditional branches are arity-stabilized when occupancy is provably fixed.
 `if`/`unless`/`case` compute their maximum static child count recursively and

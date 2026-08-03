@@ -1052,7 +1052,10 @@ export class Router {
 		if (this.#pendingOut) {
 			const stalled = this.#pendingOut;
 			this.#pendingOut = null;
-			stalled._cancelOutAnimation();
+			// playOut() did more than start WAAPI: it made the still-committed view
+			// inert and unsubscribed it. Recovery must undo that whole state transition,
+			// not merely clear the animation fill that hid the root.
+			stalled._restoreFromLeaving();
 		}
 		this.#pendingIndex = null;
 		// This navigation terminated without committing (guard block/failure, data
@@ -1428,11 +1431,11 @@ export class Router {
 				// #state that still claims it as the current view. Restore it: cancel the
 				// out animation (WAAPI cancel clears the effect, finished-and-filling
 				// included — and resolves a still-parked playOut await, so the doomed
-				// navigation abandons promptly) and clear #pendingOut. Only when WE are
+				// navigation abandons promptly), clear its leaving/inert guard, and refresh
+				// once to re-track the store subscription playOut dropped. Only when WE are
 				// still the latest navigation — a newer one owns the cleanup via its own
-				// clamp + #swap skipOut path. The restored unit's playOut memo stays
-				// spent: a later navigation away swaps it out instantly, no second out
-				// animation.
+				// clamp + #swap skipOut path. The restored unit's playOut memo stays spent:
+				// a later navigation away swaps it out instantly, no second out animation.
 				this.#recoverFailedNavigation(token);
 				return; // stay put, no history entry (reused ancestors kept — soft-violation)
 			}

@@ -83,7 +83,7 @@ Templates reference handlers in two forms:
 
 ```html
 <form @submit={ addTodo(event) }>
-<input type="checkbox" @change={ toggleTodo(todo) } />
+<button @click={ deleteTodo(todo) }>×</button>
 <button @click={ setFilter('all') }>All</button>
 <button @click={ clearCompleted }>Clear</button>
 ```
@@ -94,8 +94,8 @@ events = {
     event.preventDefault();
     // ...
   },
-  toggleTodo: (todo) => {
-    todo.toggle();
+  deleteTodo: (todo) => {
+    todo.destroy();
   },
   setFilter: (filter) => {
     this.setData('currentFilter', filter);
@@ -105,6 +105,10 @@ events = {
   },
 };
 ```
+
+Form controls usually need no handler at all: a path-shaped `value=`/`checked=`
+two-way binds the field itself (D147, SPEC §6), and an author
+`@input`/`@change` on the control suppresses that synthesis and owns the write.
 
 Event modifiers — `@event:modifier[:modifier…]={ handler }` (`prevent`/`stop`/`once` + key filters like `@keydown:enter`) — **shipped in v1.7 (D38)**. See [[DOC-SPEC]] §5 and [[DOC-EVENTS]].
 
