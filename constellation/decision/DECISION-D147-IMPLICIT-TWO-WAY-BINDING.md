@@ -225,9 +225,13 @@ layer); explicit `bind:`/opt-out syntax (the three no-syntax escapes cover it).
   check runs at the attribute NAME, before the `=` branch, so the valueless
   spelling `<input bind:value>` is rejected on the same footing as the valued
   one. Event attrs are exempt — they own the colon for their modifier channel.
-  The error names the offending prefix and points at `{#svg}`, because pasted
-  editor output (`inkscape:`, `sodipodi:`, `serif:`) is the main way a template
-  acquires a namespaced attribute and that author is not writing a binding.
+  The error names the offending prefix and then splits on the name, because two
+  unrelated authors land on it: a directive-shaped half (`bind`, `model`,
+  `v-model`, `sync`, `value`, `checked`) means someone arrived from another
+  framework and is taught the keyword-free form, while anything else is almost
+  always pasted editor output (`inkscape:`, `sodipodi:`, `serif:`) and is pointed
+  at `{#svg}`. One generic message necessarily misdirects whichever author it was
+  not written for.
 - **A bare `bind`/`sync` marker word** — new grammar for something the
   classifier can infer; every escape it enables already exists without it.
 - **Options-object `bind={{ … }}`** — object literals in template expressions

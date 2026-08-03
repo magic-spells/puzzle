@@ -1522,7 +1522,10 @@ func TestParseReservedAttributeNamespaces(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *ParseError, got %T (%v)", err, err)
 		}
-		wantMessage := `attribute namespace "bind:" is reserved — only xml:, xlink:, and xmlns: are allowed. SVG exported from an editor (inkscape:, sodipodi:, serif:) needs those attributes stripped, or load the file as an asset with {#svg}`
+		// A directive-shaped prefix gets the binding steer, not the SVG one: the
+		// author who types this arrived from Svelte/Vue and needs the keyword-free
+		// form, and telling them about Inkscape exports would be noise.
+		wantMessage := "attribute namespace \"bind:\" is reserved — two-way binding needs no prefix. Write `value={ expr }` (or `checked={ expr }`) on a plain <input>/<textarea>/<select> and the compiler synthesizes the write-back; see template SPEC §6"
 		if pe.Message != wantMessage {
 			t.Errorf("message: got %q, want %q", pe.Message, wantMessage)
 		}
@@ -1548,8 +1551,31 @@ func TestParseReservedAttributeNamespaces(t *testing.T) {
 		if !strings.Contains(pe.Message, `attribute namespace "bind:" is reserved`) {
 			t.Errorf("message: got %q", pe.Message)
 		}
+		if !strings.Contains(pe.Message, "two-way binding needs no prefix") {
+			t.Errorf("valueless form should carry the binding steer too: %q", pe.Message)
+		}
 		if pe.File != "Binding.pzl" || pe.Line != 2 || pe.Col != 10 {
 			t.Errorf("position: got %s:%d:%d, want Binding.pzl:2:10", pe.File, pe.Line, pe.Col)
+		}
+	})
+
+	// A non-directive prefix is almost always pasted SVG-editor output, so that
+	// author gets the file-asset escape instead of a lecture about form controls.
+	t.Run("an SVG-editor namespace gets the {#svg} steer", func(t *testing.T) {
+		src := "<puzzle-view>\n  <g inkscape:label=\"Layer 1\"></g>\n</puzzle-view>\n<script></script>"
+		_, err := Parse([]byte(src), "Icon.pzl")
+		if err == nil {
+			t.Fatal("expected parse error, got nil")
+		}
+		pe := err.(*ParseError)
+		if !strings.Contains(pe.Message, `attribute namespace "inkscape:" is reserved`) {
+			t.Errorf("message: got %q", pe.Message)
+		}
+		if !strings.Contains(pe.Message, "{#svg}") {
+			t.Errorf("expected the file-asset escape: %q", pe.Message)
+		}
+		if strings.Contains(pe.Message, "two-way binding") {
+			t.Errorf("SVG author should not get the binding steer: %q", pe.Message)
 		}
 	})
 

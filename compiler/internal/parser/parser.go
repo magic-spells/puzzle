@@ -502,12 +502,31 @@ func checkAttrNamespace(name string, npos Position, file string) *ParseError {
 	case "xml", "xlink", "xmlns":
 		return nil
 	}
-	// The message names the offending prefix and the SVG escape: pasted markup from
-	// an SVG editor is the main way a template acquires a namespaced attribute, and
-	// pointing that author at form-control binding told them nothing.
+	// Two very different authors land here, so the steer is chosen from the name.
+	// Someone typing `bind:value`/`value:bind`/`v-model:` arrived from another
+	// framework and needs to know binding is automatic; someone with `inkscape:label`
+	// pasted an SVG export and needs the file-asset escape. One generic message
+	// misdirects whichever one it is not written for.
+	prefix, local := name[:i], name[i+1:]
+	if isDirectiveWord(prefix) || isDirectiveWord(local) {
+		return errAt(file, npos,
+			"attribute namespace %q is reserved — two-way binding needs no prefix. Write `value={ expr }` (or `checked={ expr }`) on a plain <input>/<textarea>/<select> and the compiler synthesizes the write-back; see template SPEC §6",
+			prefix+":")
+	}
 	return errAt(file, npos,
 		"attribute namespace %q is reserved — only xml:, xlink:, and xmlns: are allowed. SVG exported from an editor (inkscape:, sodipodi:, serif:) needs those attributes stripped, or load the file as an asset with {#svg}",
-		name[:i]+":")
+		prefix+":")
+}
+
+// isDirectiveWord reports whether a `prefix:name` half looks like another
+// framework's two-way-binding directive, in which case the reservation error
+// should teach Puzzle's keyword-free form rather than the SVG escape.
+func isDirectiveWord(s string) bool {
+	switch strings.ToLower(s) {
+	case "bind", "model", "v-model", "vmodel", "sync", "value", "checked":
+		return true
+	}
+	return false
 }
 
 // buildAttr classifies an attribute given its name and value token.
