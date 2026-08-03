@@ -5,6 +5,7 @@ import FrameEngine from '@magic-spells/frame-engine';
 import {
 	awayOffset,
 	awayTranslation,
+	BLOB_REVEAL_AT,
 	dismissAxis,
 	buildDragKeyframes,
 	buildExitKeyframes,
@@ -89,6 +90,226 @@ function makeDialog() {
 	return { style: {} };
 }
 
+class StubStyle {
+	setProperty(name, value) {
+		this[name] = String(value);
+	}
+
+	removeProperty(name) {
+		delete this[name];
+	}
+
+	getPropertyValue(name) {
+		return this[name] || '';
+	}
+}
+
+class StubElement {
+	constructor(tagName = '') {
+		this.tagName = tagName.toUpperCase();
+		this.style = new StubStyle();
+	}
+}
+
+class MorphEngineStub {
+	static instances = [];
+
+	runs = [];
+	reversals = [];
+	stopCalls = [];
+	restoreSourceCalls = 0;
+	destroyCalls = 0;
+	callLog = [];
+	targetTransformAfterStop = null;
+
+	#events = new Map();
+	#state = 'idle';
+	#source = null;
+	#target = null;
+	#from = null;
+	#to = null;
+	#saved = new Map();
+	#p = 0;
+	#revealed = false;
+	#heldSource = null;
+
+	constructor(options = {}) {
+		this.options = { ...options };
+		this.zIndex = options.zIndex ?? 9999;
+		this.lockScroll = options.lockScroll ?? true;
+		this.cloneContents = options.cloneContents ?? true;
+		this.attraction = options.attraction ?? 0.1;
+		this.friction = options.friction ?? 0.32;
+		this.revealAt = options.revealAt ?? 0.75;
+		MorphEngineStub.instances.push(this);
+	}
+
+	get state() {
+		return this.#state;
+	}
+
+	get progress() {
+		return this.#p;
+	}
+
+	on(name, listener) {
+		const listeners = this.#events.get(name) || [];
+		listeners.push(listener);
+		this.#events.set(name, listeners);
+		return this;
+	}
+
+	off(name, listener) {
+		const listeners = (this.#events.get(name) || []).filter((entry) => entry !== listener);
+		if (listeners.length) this.#events.set(name, listeners);
+		else this.#events.delete(name);
+		return this;
+	}
+
+	setAttraction(value) {
+		this.attraction = value;
+	}
+
+	setFriction(value) {
+		this.friction = value;
+	}
+
+	show({ from, to } = {}) {
+		if (this.#state === 'showing' || this.#state === 'shown') return Promise.resolve(false);
+		if (this.#state === 'hiding') {
+			this.reversals.push({ from: 'hiding', to: 'showing', progress: this.#p });
+			this.#state = 'showing';
+			return Promise.resolve(true);
+		}
+		this.restoreSource();
+		this.#source = from;
+		this.#target = to;
+		this.#save(from);
+		this.#save(to);
+		this.runs.push({ phase: 'showing', from, to, cloneContents: this.cloneContents });
+		this.#start(from, to, 'showing');
+		return Promise.resolve(true);
+	}
+
+	hide() {
+		if (this.#state === 'idle' || this.#state === 'hiding') return Promise.resolve(false);
+		if (this.#state === 'showing') {
+			this.reversals.push({ from: 'showing', to: 'hiding', progress: this.#p });
+			this.#state = 'hiding';
+			return Promise.resolve(true);
+		}
+		this.runs.push({
+			phase: 'hiding',
+			from: this.#target,
+			to: this.#source,
+			cloneContents: this.cloneContents,
+		});
+		this.#start(this.#target, this.#source, 'hiding');
+		return Promise.resolve(true);
+	}
+
+	step(p) {
+		if (this.#state !== 'showing' && this.#state !== 'hiding') return;
+		this.#p = p;
+		this.emit('change', { progress: p, phase: this.#state });
+		if (!this.#revealed && p >= this.revealAt) {
+			this.#revealed = true;
+			this.emit('reveal', { from: this.#from, to: this.#to });
+		}
+
+		const target =
+			this.#state === 'showing'
+				? this.#to === this.#target
+					? 1
+					: 0
+				: this.#to === this.#source
+					? 1
+					: 0;
+		if (p !== target) return;
+		if (this.#state === 'showing') this.#finishShown();
+		else this.#finishHidden();
+	}
+
+	stop(options) {
+		if (this.#state === 'idle') return;
+		this.stopCalls.push(options);
+		this.callLog.push('stop');
+		const { restoreSource = true } = options || {};
+		const progress = this.#p;
+		if (restoreSource) this.#restore(this.#source);
+		else this.#heldSource = this.#source;
+		this.#restore(this.#target);
+		this.targetTransformAfterStop = this.#target?.style.transform || '';
+		this.#state = 'idle';
+		this.#p = 0;
+		this.emit('stop', { progress });
+	}
+
+	restoreSource() {
+		const source = this.#heldSource;
+		if (!source) return false;
+		this.callLog.push('restoreSource');
+		this.restoreSourceCalls += 1;
+		this.#heldSource = null;
+		this.#restore(source);
+		return true;
+	}
+
+	destroy() {
+		this.destroyCalls += 1;
+		this.stop();
+		this.restoreSource();
+		this.#events.clear();
+	}
+
+	emit(name, detail) {
+		for (const listener of (this.#events.get(name) || []).slice()) listener(detail);
+	}
+
+	#start(from, to, state) {
+		this.#from = from;
+		this.#to = to;
+		this.#state = state;
+		this.#p = 0;
+		this.#revealed = false;
+		from.style.visibility = 'hidden';
+	}
+
+	#finishShown() {
+		this.#source.style.visibility = 'hidden';
+		const saved = this.#saved.get(this.#target);
+		this.#target.style.visibility = saved?.visibility || '';
+		this.#state = 'shown';
+		this.emit('shown', { from: this.#source, to: this.#target });
+	}
+
+	#finishHidden() {
+		this.#restore(this.#source);
+		this.#restore(this.#target);
+		this.#state = 'idle';
+		this.#p = 0;
+		this.emit('hidden', { from: this.#source, to: this.#target });
+	}
+
+	#save(element) {
+		if (!element || this.#saved.has(element)) return;
+		this.#saved.set(element, { ...element.style });
+	}
+
+	#restore(element) {
+		if (!element) return;
+		const saved = this.#saved.get(element);
+		if (!saved) return;
+		for (const property of Object.keys(element.style)) delete element.style[property];
+		Object.assign(element.style, saved);
+		this.#saved.delete(element);
+	}
+}
+
+function createMorphEngine(options) {
+	return new MorphEngineStub(options);
+}
+
 function translateYOf(styles) {
 	return Number.parseFloat(styles.transform.match(/translate3d\([^,]+,\s*(-?[\d.]+)px/)[1]);
 }
@@ -101,8 +322,8 @@ function translateX(dialog) {
 	return Number.parseFloat(dialog.style.transform.match(/translate3d\((-?[\d.]+)px/)[1]);
 }
 
-function makeEngine() {
-	const engine = new SheetEngine();
+function makeEngine(options) {
+	const engine = new SheetEngine(options);
 	engine.setProfile({
 		position: 'bottom',
 		mode: 'edge',
@@ -460,6 +681,12 @@ test('SheetEngine dismiss emits hidden', async (t) => {
 	await dismiss;
 	assert.equal(engine.state, 'hidden');
 	assert.deepEqual(events, ['hidden']);
+	engine.destroy();
+});
+
+test('SheetEngine declares itself a direct engine', () => {
+	const engine = new SheetEngine();
+	assert.equal(engine.animatesPanel, true);
 	engine.destroy();
 });
 
@@ -2859,6 +3086,540 @@ test('beginMorph declines while the panel is hidden', () => {
 	engine.endMorph();
 	assert.equal(engine.morphing, false);
 	engine.destroy();
+});
+
+test('animatesPanel selects direct and blob transports from live policy', () => {
+	MorphEngineStub.instances.length = 0;
+	let usable = true;
+	const engine = new SheetEngine({
+		triggerProbe: () => usable,
+		createMorphEngine,
+	});
+	const trigger = new StubElement('button');
+
+	assert.equal(engine.animatesPanel, true, 'no trigger means direct');
+	assert.equal(engine.armMorph(trigger), true);
+	assert.equal(engine.animatesPanel, false, 'a usable armed trigger selects the blob');
+
+	usable = false;
+	assert.equal(engine.animatesPanel, true, 'a failed live probe falls back to direct');
+	usable = true;
+	engine.armGestureExit();
+	assert.equal(engine.animatesPanel, true, 'a gesture exit is always direct');
+	engine.cancelGestureExit();
+	assert.equal(engine.animatesPanel, false, 'a cancelled gesture restores blob classification');
+	engine.destroy();
+});
+
+test('armMorph refuses outside hidden and without an injected factory', () => {
+	const direct = new SheetEngine();
+	assert.equal(direct.armMorph(new StubElement('button')), false);
+	assert.equal(direct.animatesPanel, true, 'a missing factory cannot leave a proxy arm behind');
+	direct.destroy();
+
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	assert.equal(engine.armMorph(trigger), true);
+	void engine.show({ to: dialog });
+	assert.equal(engine.state, 'showing');
+	assert.equal(engine.armMorph(new StubElement('button')), false);
+	MorphEngineStub.instances.at(-1).step(1);
+	engine.destroy();
+});
+
+test('disarmMorph refuses outside hidden', () => {
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+
+	engine.armMorph(trigger);
+	assert.equal(engine.animatesPanel, false);
+	engine.disarmMorph();
+	assert.equal(engine.animatesPanel, true, 'a hidden unused arm can be cleared');
+
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	engine.disarmMorph();
+	assert.equal(engine.animatesPanel, false, 'a live flight keeps its trigger');
+	MorphEngineStub.instances.at(-1).step(1);
+	engine.destroy();
+});
+
+test('a swipe release stops the blob without restoring its source and repaints synchronously', async (t) => {
+	const frames = captureFrames(t);
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	dialog.style.transform = 'target-snapshot';
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	const blob = MorphEngineStub.instances.at(-1);
+	blob.step(1);
+	engine.dragBy(120);
+	const painted = dialog.style.transform;
+
+	engine.armGestureExit();
+	const hiding = engine.hide();
+
+	assert.deepEqual(blob.stopCalls, [{ restoreSource: false }]);
+	assert.equal(blob.targetTransformAfterStop, 'target-snapshot', 'the fake restored its snapshot');
+	assert.equal(
+		dialog.style.transform,
+		painted,
+		'the live pose is back before hide returns, with no microtask or frame gap'
+	);
+	engine.stop();
+	await hiding;
+	assert.equal(frames.length, 1, 'the cancelled spring frame may remain queued but cannot paint');
+	engine.destroy();
+});
+
+test('the blob transport stop event is swallowed during a swipe release', async (t) => {
+	captureFrames(t);
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	const blob = MorphEngineStub.instances.at(-1);
+	blob.step(1);
+
+	let stops = 0;
+	engine.on('stop', () => stops++);
+	engine.armGestureExit();
+	const hiding = engine.hide();
+	assert.equal(blob.stopCalls.length, 1, 'the fake emitted its own stop');
+	assert.equal(stops, 0, 'the host engine did not forward it');
+	engine.stop();
+	await hiding;
+	assert.equal(stops, 1, 'only the host force-stop is public');
+	engine.destroy();
+});
+
+test('triggerreturn is emitted before the held source is restored', async (t) => {
+	const frames = captureFrames(t);
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	const blob = MorphEngineStub.instances.at(-1);
+	blob.step(1);
+	engine.on('triggerreturn', () => blob.callLog.push('triggerreturn'));
+
+	engine.armGestureExit();
+	const hiding = engine.hide();
+	drainFrames(frames);
+	await hiding;
+
+	assert.deepEqual(blob.callLog, ['stop', 'triggerreturn', 'restoreSource']);
+	engine.destroy();
+});
+
+test('a trigger blob paints no panel style before its inner shown event', () => {
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	dialog.style.sentinel = 'untouched';
+	const before = { ...dialog.style };
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	const blob = MorphEngineStub.instances.at(-1);
+
+	assert.deepEqual({ ...dialog.style }, before, 'show itself writes nothing');
+	blob.step(0.5);
+	assert.deepEqual({ ...dialog.style }, before, 'an in-flight change still writes nothing');
+	blob.step(1);
+	assert.equal(dialog.style.height, '500px', 'the sheet takes ownership at inner shown');
+	engine.destroy();
+});
+
+test('the injected blob pins revealAt and ramps the child backdrop across reveal', () => {
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	const changes = [];
+	engine.on('change', (detail) => changes.push(detail));
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	const blob = MorphEngineStub.instances.at(-1);
+
+	assert.equal(blob.options.revealAt, BLOB_REVEAL_AT);
+	blob.step(BLOB_REVEAL_AT);
+	assert.equal(changes.at(-1).backdropProgress, 0, 'forward reveal begins with a clear backdrop');
+	blob.step(1);
+	assert.equal(changes.at(-1).backdropProgress, 1, 'forward openness 1 is fully dimmed');
+
+	void engine.hide();
+	blob.step(1 - BLOB_REVEAL_AT);
+	assert.equal(changes.at(-1).backdropProgress, 0, 'reverse reveal ends at a clear backdrop');
+	blob.step(0);
+	assert.equal(changes.at(-1).backdropProgress, 1, 'reverse openness 1 starts fully dimmed');
+	blob.step(1);
+	engine.destroy();
+});
+
+test('stop and destroy both release a trigger held by a direct exit', async (t) => {
+	for (const terminal of ['stop', 'destroy']) {
+		const frames = captureFrames(t);
+		MorphEngineStub.instances.length = 0;
+		const engine = makeEngine({ createMorphEngine });
+		const trigger = new StubElement('button');
+		const dialog = new StubElement('dialog');
+		engine.armMorph(trigger);
+		void engine.show({ to: dialog });
+		const blob = MorphEngineStub.instances.at(-1);
+		blob.step(1);
+		engine.armGestureExit();
+		const hiding = engine.hide();
+		assert.equal(blob.restoreSourceCalls, 0, `${terminal} begins with the trigger held`);
+
+		engine[terminal]();
+		await hiding;
+		assert.equal(blob.restoreSourceCalls, 1, `${terminal} hands the trigger back`);
+		assert.equal(
+			trigger.style.getPropertyValue('visibility'),
+			'',
+			`${terminal} does not strand the trigger`
+		);
+		assert.equal(frames.length, 1, `${terminal} leaves only a cancelled frame callback`);
+		if (terminal === 'stop') engine.destroy();
+	}
+});
+
+test('blobFlight spans only active inner flights', () => {
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	const blob = MorphEngineStub.instances.at(-1);
+	assert.equal(engine.blobFlight, true, 'forward flight');
+	blob.step(1);
+	assert.equal(engine.blobFlight, false, 'shown terminal');
+	void engine.hide();
+	assert.equal(engine.blobFlight, true, 'reverse flight');
+	blob.step(1);
+	assert.equal(engine.blobFlight, false, 'hidden terminal');
+	engine.destroy();
+});
+
+test('beginMorph refuses and endMorph stays inert during a blob flight', () => {
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	trigger.rect = { top: 20, left: 20, right: 68, bottom: 68, width: 48, height: 48 };
+	dialog.rect = { top: 100, left: 0, right: 400, bottom: 600, width: 400, height: 500 };
+	engine.armMorph(trigger);
+	void engine.show({ from: trigger, to: dialog });
+	const blob = MorphEngineStub.instances.at(-1);
+
+	assert.equal(engine.blobFlight, true);
+	assert.equal(engine.beginMorph(), false);
+	engine.endMorph();
+	assert.equal(engine.blobFlight, true);
+	assert.equal(engine.morphing, false);
+	assert.equal(dialog.style.getPropertyValue('transform'), '');
+	assert.equal(dialog.style.getPropertyValue('height'), '');
+
+	blob.step(1);
+	engine.destroy();
+});
+
+test('endMorph during a reverse blob flight releases only the profile park', () => {
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	const blob = MorphEngineStub.instances.at(-1);
+	blob.step(1);
+	assert.equal(engine.beginMorph(), true);
+	dialog.style.transform = 'host-profile-pin';
+
+	void engine.hide();
+	assert.equal(engine.blobFlight, true);
+	engine.endMorph();
+
+	assert.equal(engine.morphing, false);
+	assert.equal(engine.blobFlight, true);
+	assert.equal(dialog.style.transform, 'host-profile-pin');
+	blob.step(1);
+	assert.equal(engine.state, 'hidden');
+	engine.destroy();
+});
+
+test('closing during a profile morph resets both transports before an immediate reopen', async (t) => {
+	for (const transport of ['direct', 'trigger']) {
+		const frames = captureFrames(t);
+		MorphEngineStub.instances.length = 0;
+		const engine = makeEngine({ createMorphEngine });
+		const dialog = new StubElement('dialog');
+		let blob;
+
+		if (transport === 'trigger') {
+			const trigger = new StubElement('button');
+			engine.armMorph(trigger);
+			void engine.show({ to: dialog });
+			blob = MorphEngineStub.instances.at(-1);
+			blob.step(1);
+		} else {
+			const shown = engine.show({ to: dialog });
+			drainFrames(frames);
+			await shown;
+		}
+
+		assert.equal(engine.beginMorph(), true, `${transport} profile morph starts`);
+		let hidden;
+		if (transport === 'trigger') {
+			hidden = engine.hide();
+			engine.endMorph();
+			blob.step(1);
+		} else {
+			engine.endMorph();
+			hidden = engine.hide();
+			drainFrames(frames);
+		}
+		await hidden;
+
+		assert.equal(engine.state, 'hidden', `${transport} close lands hidden`);
+		assert.equal(engine.morphing, false, `${transport} close releases the profile park`);
+		const reopened = engine.show({ to: dialog });
+		assert.equal(
+			dialog.style.transform,
+			'translate3d(0px, 528px, 0px) scale(1)',
+			`${transport} reopen paints its p = 0 frame`
+		);
+		drainFrames(frames);
+		await reopened;
+		engine.destroy();
+	}
+});
+
+test('stop clears a stranded morph after the blob already hid', () => {
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	const blob = MorphEngineStub.instances.at(-1);
+	blob.step(1);
+	assert.equal(engine.beginMorph(), true);
+	void engine.hide();
+	blob.step(1);
+
+	assert.equal(engine.state, 'hidden');
+	assert.equal(engine.morphing, true);
+	engine.stop();
+	assert.equal(engine.morphing, false);
+	engine.destroy();
+});
+
+test('reverse blob close supersedes settle and return springs', async (t) => {
+	for (const kind of ['settleTo', 'returnToRest']) {
+		const frames = captureFrames(t);
+		MorphEngineStub.instances.length = 0;
+		const engine = new SheetEngine({ createMorphEngine });
+		const dialog = new StubElement('dialog');
+		const writesAfterHidden = [];
+		let trackWrites = false;
+		dialog.style = new Proxy(dialog.style, {
+			set(target, property, value) {
+				if (trackWrites) writesAfterHidden.push([property, value]);
+				target[property] = value;
+				return true;
+			},
+		});
+		if (kind === 'settleTo') {
+			engine.setProfile(profileFor('bottom'));
+			engine.setSnaps([200, 500], 1);
+		} else {
+			engine.setProfile(profileFor('right'));
+			engine.setSnaps([500], 0);
+		}
+		const trigger = new StubElement('button');
+		engine.armMorph(trigger);
+		void engine.show({ to: dialog });
+		const blob = MorphEngineStub.instances.at(-1);
+		blob.step(1);
+		engine.dragBy(120);
+
+		const phases = [];
+		const snapchanges = [];
+		engine.on('change', ({ phase }) => phases.push(phase));
+		engine.on('snapchange', (detail) => snapchanges.push(detail));
+		engine.on('hidden', () => {
+			trackWrites = true;
+		});
+		const settling = kind === 'settleTo' ? engine.settleTo(0, -1.5) : engine.returnToRest(1.5);
+		for (let index = 0; index < 3; index++) frames.shift()(index * 16.66);
+
+		void engine.hide();
+		blob.step(1);
+		drainFrames(frames);
+		await settling;
+
+		assert.equal(engine.state, 'hidden', kind);
+		assert.equal(phases.at(-1), 'hidden', kind);
+		assert.deepEqual(snapchanges, [], kind);
+		assert.deepEqual(writesAfterHidden, [], kind);
+		assert.deepEqual(
+			{
+				display: dialog.style.getPropertyValue('display'),
+				height: dialog.style.getPropertyValue('height'),
+				transform: dialog.style.getPropertyValue('transform'),
+			},
+			{ display: '', height: '', transform: '' },
+			kind
+		);
+		trackWrites = false;
+		engine.destroy();
+	}
+});
+
+test('reversing a blob close drops the cancelled snap and lands at rest', async (t) => {
+	const frames = captureFrames(t);
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	const blob = MorphEngineStub.instances.at(-1);
+	blob.step(1);
+	engine.dragBy(120);
+	const settling = engine.settleTo(0, -1.5);
+	for (let index = 0; index < 3; index++) frames.shift()(index * 16.66);
+
+	void engine.hide();
+	blob.step(0.4);
+	void engine.show({ to: dialog });
+	blob.step(0);
+	drainFrames(frames);
+	await settling;
+
+	assert.deepEqual(
+		{
+			activeSnap: engine.activeSnap,
+			currentSize: engine.currentSize,
+			height: dialog.style.height,
+			state: engine.state,
+			transform: dialog.style.transform,
+		},
+		{
+			activeSnap: 1,
+			currentSize: 500,
+			height: '500px',
+			state: 'shown',
+			transform: 'translate3d(0px, 0px, 0px) scale(1)',
+		}
+	);
+	engine.destroy();
+});
+
+// The direct exit is the one close that never morphs back, so MorphEngine's own
+// source crossfade never runs and a plain stop() restored the button on frame 0
+// of an exit that had not started — it then sat at full opacity under a scrim
+// still up, which read as popping into existence at the end.
+test('a swipe exit holds the trigger back and hands it over at the hidden settle', async (t) => {
+	const frames = captureFrames(t);
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	MorphEngineStub.instances.at(-1).step(1);
+
+	const returned = [];
+	engine.on('triggerreturn', ({ trigger: element }) => {
+		returned.push({ element, visibility: element.style.getPropertyValue('visibility') });
+	});
+
+	engine.armGestureExit();
+	const hiding = engine.hide();
+
+	assert.equal(
+		trigger.style.getPropertyValue('visibility'),
+		'hidden',
+		'the trigger stays held for the whole exit'
+	);
+	assert.equal(returned.length, 0, 'and nothing is announced before the settle');
+
+	drainFrames(frames);
+	await hiding;
+
+	assert.equal(returned.length, 1, 'announced exactly once');
+	assert.equal(returned[0].element, trigger);
+	// The emit precedes the restore so a listener can decorate a button that
+	// cannot yet paint. Asserting the visibility SEEN BY THE LISTENER is what
+	// pins that ordering — checking it after the fact would pass either way.
+	assert.equal(
+		returned[0].visibility,
+		'hidden',
+		'the emit lands before the restore, so no frame shows an undecorated button'
+	);
+	assert.equal(
+		trigger.style.getPropertyValue('visibility'),
+		'',
+		'and the page owns its trigger again once the listener has run'
+	);
+	engine.destroy();
+});
+
+test('a force close hands the held trigger back with no entrance to announce', () => {
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	MorphEngineStub.instances.at(-1).step(1);
+
+	let announced = 0;
+	engine.on('triggerreturn', () => announced++);
+
+	engine.armGestureExit();
+	void engine.hide();
+	assert.equal(trigger.style.getPropertyValue('visibility'), 'hidden', 'held mid-exit');
+
+	engine.stop();
+
+	assert.equal(announced, 0, 'a force close paints no frame and has no beat to add');
+	assert.equal(
+		trigger.style.getPropertyValue('visibility'),
+		'',
+		'but it must never strand a consumer button invisible'
+	);
+	engine.destroy();
+});
+
+test('destroy hands back a trigger held by an exit that never finished', () => {
+	MorphEngineStub.instances.length = 0;
+	const engine = makeEngine({ createMorphEngine });
+	const trigger = new StubElement('button');
+	const dialog = new StubElement('dialog');
+	engine.armMorph(trigger);
+	void engine.show({ to: dialog });
+	MorphEngineStub.instances.at(-1).step(1);
+	engine.armGestureExit();
+	void engine.hide();
+
+	engine.destroy();
+
+	assert.equal(trigger.style.getPropertyValue('visibility'), '');
 });
 
 test('crossing the breakpoint on bottom drops the height its mobile track wrote', async (t) => {

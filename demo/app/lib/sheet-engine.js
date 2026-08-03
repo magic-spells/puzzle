@@ -90,6 +90,7 @@ const FRAME_MS = 16.66;
 const VELOCITY_BOOST = 1.1;
 
 const TRAVEL = 100;
+const BLOB_REVEAL_AT = 0.75;
 // Settle epsilons are absolute spring units, so their felt effect scales with
 // TRAVEL. At 100 travel these sit at 0.3% / 0.15% of travel — a crisper
 // end-of-motion trim than the 0.1% / 0.05% the old 1000 travel gave, while the
@@ -157,6 +158,37 @@ const EFFECT_BLUR = { 'fade-scale': 8, 'slide-fade': 4 };
  *   snap        566ms   200ms   1.024  — the only phase allowed to breathe
  *   rest        333ms   167ms   1.000
  *
+ * `morph` and `morphBack` tune the trigger BLOB rather than this engine's own
+ * spring — a `morph-trigger` panel is flown by MorphEngine, so neither is ever
+ * handed to `#spring`:
+ *
+ *              settle   t90    max progress
+ *   morph       583ms   133ms   1.118  — growing out of the trigger, deliberately loose
+ *   morphBack   317ms   150ms   1.000  — returning to it, no bounce at all
+ *
+ * Both used to be one inherited number. Saying nothing in MorphEngine's
+ * constructor took its default of 0.1 / 0.32, which put an 5.9% overshoot on BOTH
+ * directions — more breath than any preset above, applied by accident rather than
+ * chosen, and applied just as much to the return as to the arrival.
+ *
+ * They are split because the two directions want opposite things. Growing out of
+ * a trigger is the one motion in this package with somewhere to put a bounce: the
+ * panel is arriving, nothing is waiting on it, and the overshoot reads as the
+ * thing springing open. Going back is a dismissal — the user is done, and a
+ * wobble on the way out reads as the UI dawdling. So `morph` roughly doubles the
+ * breath it had (5.9% -> 11.8%, and a second crossing, so it reads as a bounce
+ * rather than a single settle) while `morphBack` removes it entirely and lands
+ * brisker than it arrives, which is the same rule `exit` follows against
+ * `entrance` above.
+ *
+ * The t90s are near-identical (133 / 150ms), so this is a change of character,
+ * not of pace: the return is not sluggish, it just does not overshoot.
+ *
+ * Settle figures come from the suite's integrator simulation, which models THIS
+ * engine's early-settle detector; MorphEngine's own settle test may differ by a
+ * frame or two. Overshoot and t90 are properties of the shared integrator and
+ * transfer exactly.
+ *
  * `snap` is deliberately the loose one, matching bottom-sheet. A flick has to
  * have somewhere to GO: with a tightly damped snap the release velocity is
  * absorbed within a frame and every settle looks the same however hard it was
@@ -174,6 +206,8 @@ const SPRING_PRESETS = {
   exit: { attraction: 0.3, friction: 0.56 },
   snap: { attraction: 0.065, friction: 0.3 },
   rest: { attraction: 0.15, friction: 0.455 },
+  morph: { attraction: 0.07, friction: 0.28 },
+  morphBack: { attraction: 0.08, friction: 0.34 },
 };
 
 /**
@@ -1107,22 +1141,56 @@ class SheetEngine extends EventEmitter {
   #flightBackdrop = 0;
   #springOverride = null;
   #morphing = false;
+  #blobEngine = null;
+  #morphTrigger = null;
+  #blobTo = null;
+  #gestureExit = false;
+  #heldTrigger = null;
+  #triggerProbe;
+  #createMorphEngine;
 
   /**
    * @param {Object} [options] - Spring tuning. Each run retunes the spring
    *   from SPRING_PRESETS, so these only seed the initial values.
    * @param {number} [options.attraction=0.07] - Spring attraction.
    * @param {number} [options.friction=0.52] - Spring friction.
+   * @param {Function} [options.triggerProbe] - Returns whether an armed trigger
+   *   is still a usable reverse destination. The component supplies the DOM
+   *   geometry policy; the engine remains usable in DOM-free tests.
+   * @param {Function|null} [options.createMorphEngine=null] - Factory for the
+   *   optional trigger-blob transport.
    */
   constructor({
     attraction = SPRING_PRESETS.entrance.attraction,
     friction = SPRING_PRESETS.entrance.friction,
+    triggerProbe = (trigger) => !!trigger,
+    createMorphEngine = null,
   } = {}) {
     super();
     const _ = this;
+    _.#triggerProbe = triggerProbe;
+    _.#createMorphEngine = createMorphEngine;
     _.#spring = new PhysicsEngine({ attraction, friction });
     _.#spring.on('change', ({ position }) => _.#handleSpringChange(position));
     _.#spring.on('complete', () => _.#settle());
+  }
+
+  /**
+   * Declares which transport owns the next run.
+   *
+   * Upstream calls this `animatesDialog`; this port animates the inner panel.
+   * An armed, still-usable trigger selects the proxy blob, while a swipe or a
+   * vanished trigger selects the direct spring. Reading this getter never
+   * mutates the run.
+   * @returns {boolean} True when the sheet spring animates the real panel.
+   */
+  get animatesPanel() {
+    const _ = this;
+    if (_.#gestureExit) return true;
+    // PORT DIVERGENCE from upstream: its imported MorphEngine always exists;
+    // this port's injected factory is optional, so no engine means direct.
+    if (!_.#morphTrigger || !_.#blobEngine) return true;
+    return !_.#triggerProbe(_.#morphTrigger);
   }
 
   /** @returns {'hidden'|'showing'|'shown'|'hiding'} Current transport state. */
@@ -1196,7 +1264,7 @@ class SheetEngine extends EventEmitter {
    */
   #clearManagedSize() {
     const _ = this;
-    if (!_.#dialog || _.#morphing) return;
+    if (!_.#dialog || _.#parked()) return;
     _.#dialog.style.width = '';
     _.#dialog.style.height = '';
   }
@@ -1213,7 +1281,7 @@ class SheetEngine extends EventEmitter {
    */
   #rebuildOpenTrack() {
     const _ = this;
-    if (!_.#dialog || _.#morphing) return;
+    if (!_.#dialog || _.#parked()) return;
     if (_.#state !== 'shown' && _.#state !== 'showing') return;
     if (_.#state === 'shown') _.#p = 1;
     const open = _.#makeOpenFrames(_.#currentSize);
@@ -1248,6 +1316,58 @@ class SheetEngine extends EventEmitter {
     return this.#morphing;
   }
 
+  /** @returns {boolean} True while the inner blob is actively flying. */
+  get blobFlight() {
+    const state = this.#blobEngine?.state;
+    return state === 'showing' || state === 'hiding';
+  }
+
+  /**
+   * Arms a trigger morph for the next hidden-to-showing run.
+   *
+   * The hidden-state guard is the classification boundary: a show that rescues
+   * a live spring exit cannot accidentally acquire a trigger halfway through
+   * and later reverse into a source it never came from. Clearing the gesture
+   * flag even on refusal is what lets that rescued spring show classify itself
+   * as direct when the host reads animatesPanel immediately afterwards.
+   * @param {HTMLElement} trigger - Trigger to morph from and back into.
+   * @param {Object} [options] - Blob presentation options.
+   * @param {number} [options.zIndex=1002] - Blob stacking level.
+   * @returns {boolean} True when the morph was armed.
+   */
+  armMorph(trigger, { zIndex = 1002 } = {}) {
+    const _ = this;
+    _.#gestureExit = false;
+    if (_.#state !== 'hidden') return false;
+    // PORT DIVERGENCE from upstream: the factory is injected, so a build without
+    // one has no blob transport. Confirming the engine exists BEFORE setting
+    // #morphTrigger stops animatesPanel classifying a proxy run that cannot fly.
+    if (!_.#ensureBlobEngine(zIndex)) return false;
+    _.#morphTrigger = trigger;
+    return true;
+  }
+
+  /**
+   * Clears an armed trigger morph that was never consumed — a vetoed
+   * beforeShow leaves the arm set with the engine still hidden, which would
+   * misclassify every later run as proxy. Refuses outside 'hidden' so a live
+   * reversal's trigger is never stripped mid-flight.
+   */
+  disarmMorph() {
+    if (this.#state !== 'hidden') return;
+    this.#morphTrigger = null;
+  }
+
+  /** Selects the direct spring exit for the next gesture-driven hide. */
+  armGestureExit() {
+    this.#gestureExit = true;
+  }
+
+  /** Cancels a gesture exit classification after beforeHide is vetoed. */
+  cancelGestureExit() {
+    this.#gestureExit = false;
+  }
+
   /**
    * Parks the engine so the host can morph the dialog between two profile
    * geometries.
@@ -1269,7 +1389,7 @@ class SheetEngine extends EventEmitter {
    */
   beginMorph() {
     const _ = this;
-    if (_.#state !== 'shown' || _.#morphing || !_.#dialog) return false;
+    if (_.#state !== 'shown' || _.#parked() || !_.#dialog) return false;
     // Land a snap that is still in flight FIRST, exactly as setSnaps and
     // setProfile do. settleTo never leaves 'shown', so this guard admits a
     // running snap settle, and #restSize() below reads #snaps[#activeSnap] —
@@ -1317,7 +1437,9 @@ class SheetEngine extends EventEmitter {
     _.#phase = _.#state === 'shown' ? 'shown' : _.#phase;
     _.#currentSize = _.#restSize();
     _.#p = 1;
-    if (_.#dialog && _.#state === 'shown') {
+    // A blob owns every panel style until its terminal event, so the profile
+    // morph releases its own park without painting over the flight.
+    if (_.#dialog && _.#state === 'shown' && !_.blobFlight) {
       _.#frames = _.#makeOpenFrames(_.#currentSize);
       _.#applyFrame(1);
     }
@@ -1367,6 +1489,44 @@ class SheetEngine extends EventEmitter {
     _.#dialog = to;
     _.#display = display || 'flex';
     _.#saveInline();
+
+    if (_.#morphTrigger && _.#blobEngine) {
+      if (_.#state === 'hiding') {
+        // A hide maps the dialog as the blob run's source, and MorphEngine has
+        // no source-reveal event when that spring reverses. dialog-panel already
+        // closed the dialog at proxy hide-start, so promote it synchronously while
+        // it is still visibility:hidden, before asking the blob to turn around.
+        _.emit('reveal', { from: _.#morphTrigger, to: _.#dialog });
+        _.#state = 'showing';
+        _.#phase = 'showing';
+        // A show landing mid-morph-back takes the INBOUND tuning, mirroring
+        // the direct transport's rule that a reversal runs on the track it is
+        // heading for rather than the one it interrupted.
+        _.#tuneBlob('morph');
+        return _.#blobEngine.show({
+          from: _.#morphTrigger,
+          to,
+          display: _.#display,
+        });
+      }
+      if (_.#state === 'hidden') {
+        _.#state = 'showing';
+        _.#phase = 'showing';
+        _.#p = 0;
+        _.#backdropProgress = 0;
+        _.#blobTo = 'dialog';
+        _.#tuneBlob('morph');
+        // The trigger's content is small and its dissolve is the effect, so the
+        // forward blob keeps the source snapshot MorphEngine normally builds.
+        _.#blobEngine.cloneContents = true;
+        return _.#blobEngine.show({
+          from: _.#morphTrigger,
+          to: _.#dialog,
+          display: _.#display,
+        });
+      }
+    }
+
     _.#prepareDialog();
 
     if (_.#state === 'hiding') {
@@ -1429,6 +1589,28 @@ class SheetEngine extends EventEmitter {
     const velocity = _.#pendingDismissVelocity;
     _.#pendingDismissVelocity = 0;
 
+    if (_.#morphTrigger && _.#blobEngine && !_.#gestureExit && _.#triggerProbe(_.#morphTrigger)) {
+      if (_.#state === 'shown') {
+        _.#blobTo = 'trigger';
+        // The dialog is live application state: cloning its subtree under body
+        // would re-run custom element lifecycles and duplicate element IDs.
+        _.#blobEngine.cloneContents = false;
+      }
+      _.#state = 'hiding';
+      _.#phase = 'hiding';
+      // A snap or return settle still in flight would outlive this hide: the blob
+      // parks #applyFrame, but the spring keeps running and repaints the closed
+      // dialog the moment the flight ends. Supersede it — the painted pose is
+      // already live in #currentSize, and PhysicsEngine resolves the old promise.
+      _.#settleAction = null;
+      if (_.#spring.isAnimating) _.#spring.stop();
+      _.#tuneBlob('morphBack');
+      return _.#blobEngine.hide();
+    }
+
+    if (_.#blobTo !== null || _.#morphTrigger) _.#releaseBlob();
+    _.#gestureExit = false;
+
     if (_.#state === 'showing') {
       const paintedP = paintedProgress(_.#profile.position, _.#p, _.#phase);
       const painted = _.#frames?.getFrame(paintedP);
@@ -1479,7 +1661,7 @@ class SheetEngine extends EventEmitter {
    */
   dragBy(offsetPx) {
     const _ = this;
-    if (!_.#dialog || _.#state !== 'shown' || _.#morphing) return;
+    if (!_.#dialog || _.#state !== 'shown' || _.#parked()) return;
     if (_.#spring.isAnimating) _.#spring.stop();
 
     const activeSize = _.#snaps[_.#activeSnap];
@@ -1506,7 +1688,7 @@ class SheetEngine extends EventEmitter {
     if (_.#profile.position !== 'bottom' || !_.#dialog || _.#state !== 'shown') {
       return Promise.resolve(false);
     }
-    if (_.#morphing) return Promise.resolve(false);
+    if (_.#parked()) return Promise.resolve(false);
     const to = clamp(Math.trunc(snapIndex), 0, _.#snaps.length - 1);
     const from = _.#activeSnap;
     const targetSize = _.#snaps[to];
@@ -1544,7 +1726,7 @@ class SheetEngine extends EventEmitter {
     if (_.#profile.position === 'bottom' || !_.#dialog || _.#state !== 'shown') {
       return Promise.resolve(false);
     }
-    if (_.#morphing) return Promise.resolve(false);
+    if (_.#parked()) return Promise.resolve(false);
 
     const targetSize = _.#restSize();
     // Capped, never floored, and the asymmetry is the whole point: this run has
@@ -1629,6 +1811,13 @@ class SheetEngine extends EventEmitter {
    */
   stop() {
     const _ = this;
+    if (_.#blobEngine && _.#blobEngine.state !== 'idle') _.#blobEngine.stop();
+    // A force close paints no frame, so there is no exit for the button to wait
+    // out and no entrance to introduce — hand it straight back.
+    _.#returnTrigger(false);
+    _.#blobTo = null;
+    _.#morphTrigger = null;
+    _.#gestureExit = false;
     // Force-close can land mid-flight, never paints a frame, and emits no close
     // request, so anything only #applyFrame would have cleared is stranded
     // unless cleared here by hand.
@@ -1666,6 +1855,8 @@ class SheetEngine extends EventEmitter {
   destroy() {
     const _ = this;
     _.stop();
+    _.#blobEngine?.destroy();
+    _.#blobEngine = null;
     _.#spring.removeAllListeners();
     _.removeAllListeners();
   }
@@ -1796,6 +1987,14 @@ class SheetEngine extends EventEmitter {
     _.#state = 'hidden';
     _.#phase = 'hidden';
     _.#p = 0;
+    // Ahead of the hidden emit for the same reason #restoreInline is: the host
+    // finalizes synchronously from it and a listener there may re-enter show(),
+    // which would arm a fresh flight over a trigger this run is still holding.
+    _.#returnTrigger(true);
+    // Restore BEFORE emitting, matching stop(): the hidden emit may run the
+    // host's finalize synchronously, and a listener there may call show() again
+    // — restoring afterwards would wipe that new run's freshly painted p=0
+    // frame (and null the inline snapshot it just saved).
     _.#restoreInline();
     _.emit('hidden');
   }
@@ -1905,8 +2104,15 @@ class SheetEngine extends EventEmitter {
   /**
    * Resolves the tuning for a phase, honouring any instance override.
    *
-   * The override governs how the sheet ARRIVES. Exits and snaps keep their
-   * presets.
+   * The override governs how the sheet ARRIVES — by whichever engine is flying
+   * that arrival. `entrance` is this engine's own spring; `morph` is the trigger
+   * blob that REPLACES it when `morph-trigger` is set. Answering only for
+   * `entrance` was the gap: a `morph-trigger` panel is never flown by `#spring`
+   * at all, so `spring=` resolved correctly and then tuned a spring that painted
+   * no frame of the entrance the user could see.
+   *
+   * Exits and snaps keep their presets, and `morphBack` is an exit — it returns
+   * the panel to the trigger, so it is pinned for the same reason `exit` is.
    *
    * Scaling those phases proportionally was tried and abandoned: the exit
    * preset's attraction is ~5.5x the entrance's, so any brisk override pushed
@@ -1914,7 +2120,7 @@ class SheetEngine extends EventEmitter {
    * spring — `spring="0.3 0.55"` measured a 2933ms exit. The dials are bounded,
    * so no proportional rule can survive a fast entrance. Pinning exits to
    * their presets keeps leaving brisk for every override instead.
-   * @param {'entrance'|'exit'|'snap'|'rest'} kind - Motion phase.
+   * @param {'entrance'|'exit'|'snap'|'rest'|'morph'|'morphBack'} kind - Motion phase.
    * @returns {{attraction: number, friction: number}} Spring tuning.
    */
   #springFor(kind) {
@@ -1922,7 +2128,7 @@ class SheetEngine extends EventEmitter {
     const preset = SPRING_PRESETS[kind] || SPRING_PRESETS.entrance;
     const override = _.#springOverride;
     if (!override) return preset;
-    if (kind !== 'entrance') return preset;
+    if (kind !== 'entrance' && kind !== 'morph') return preset;
     return {
       attraction: clamp(override.attraction, MIN_SPRING, MAX_SPRING),
       friction: clamp(override.friction, MIN_SPRING, MAX_SPRING),
@@ -1931,13 +2137,31 @@ class SheetEngine extends EventEmitter {
 
   /**
    * Retunes the spring for the next run.
-   * @param {'entrance'|'exit'|'snap'} kind - Motion phase.
+   * @param {'entrance'|'exit'|'snap'|'rest'} kind - Motion phase.
    */
   #tuneSpring(kind) {
     const _ = this;
     const preset = _.#springFor(kind);
     _.#spring.setAttraction(preset.attraction);
     _.#spring.setFriction(preset.friction);
+  }
+
+  /**
+   * Retunes the trigger blob for its next run.
+   *
+   * The blob outlives a single flight — one MorphEngine is reused for every
+   * open and close of this panel — so its tuning has to be written at each run
+   * boundary rather than only at construction. That is also what lets the
+   * outbound run differ from the inbound one at all: MorphEngine takes both
+   * dials live, so the two directions are one retune apart.
+   * @param {'morph'|'morphBack'} kind - Blob run direction.
+   */
+  #tuneBlob(kind) {
+    const _ = this;
+    if (!_.#blobEngine) return;
+    const preset = _.#springFor(kind);
+    _.#blobEngine.setAttraction(preset.attraction);
+    _.#blobEngine.setFriction(preset.friction);
   }
 
   /**
@@ -2041,7 +2265,7 @@ class SheetEngine extends EventEmitter {
     // the transition it is driving. The backdrop is pinned by beginMorph, so
     // skipping #syncBackdropProgress here is deliberate rather than an
     // oversight.
-    if (_.#morphing) return;
+    if (_.#parked()) return;
     _.#syncBackdropProgress(p);
     if (!_.#frames || !_.#dialog) return;
     // paintedProgress is the whole rule — phase-aware floor and profile cap.
@@ -2066,9 +2290,140 @@ class SheetEngine extends EventEmitter {
     const _ = this;
     if (!_.#dialog) return;
     _.#dialog.style.display = _.#display;
+    _.#prepareDialogMotion();
+  }
+
+  #prepareDialogMotion() {
+    const _ = this;
+    if (!_.#dialog) return;
     _.#dialog.style.willChange = resizesWithSnaps(_.#profile)
       ? 'transform, opacity, height'
       : 'transform, opacity';
+  }
+
+  #parked() {
+    return this.#morphing || this.#blobTo !== null;
+  }
+
+  #ensureBlobEngine(zIndex) {
+    const _ = this;
+    if (_.#blobEngine) {
+      _.#blobEngine.zIndex = zIndex;
+      return true;
+    }
+    if (!_.#createMorphEngine) return false;
+    // Seeded with the inbound tuning because an arm is always followed by a
+    // show. Every run retunes at its own boundary regardless, so this only has
+    // to be right for the first frame of the first flight.
+    _.#blobEngine = _.#createMorphEngine({
+      ..._.#springFor('morph'),
+      zIndex,
+      lockScroll: false,
+      revealAt: BLOB_REVEAL_AT,
+    });
+    _.#blobEngine.on('change', ({ progress }) => {
+      const openness = _.#blobTo === 'dialog' ? progress : 1 - progress;
+      _.#p = openness;
+      // PORT DIVERGENCE from upstream: its scrim is a sibling of the dialog,
+      // so the promoted dialog cannot lift the scrim over the still-flying blob.
+      // Here the scrim is a child and enters the top layer with its dialog at
+      // reveal. Holding it clear until that boundary, then ramping across the
+      // remaining reveal span in both directions, prevents a ~0.75-opacity
+      // wash from covering the visible blob while the panel fades in.
+      _.#backdropProgress = clamp(
+        (openness - BLOB_REVEAL_AT) / (1 - BLOB_REVEAL_AT),
+        0,
+        1
+      );
+      _.emit('change', {
+        progress: openness,
+        backdropProgress: _.#backdropProgress,
+        phase: _.#phase,
+      });
+    });
+    _.#blobEngine.on('reveal', (detail) => _.emit('reveal', detail));
+    _.#blobEngine.on('shown', () => _.#finishBlobShown());
+    _.#blobEngine.on('hidden', () => _.#finishBlobHidden());
+    // Deliberately no inner `stop` forwarding. #releaseBlob uses stop() to
+    // switch from the blob to a live swipe pose; forwarding it would make the
+    // host finalize the whole dialog in the middle of that handoff.
+    return true;
+  }
+
+  #releaseBlob() {
+    const _ = this;
+    // #morphTrigger is about to be cleared, but the button it names is still
+    // hidden by MorphEngine and has to be handed back when the exit lands.
+    if (_.#morphTrigger) _.#heldTrigger = _.#morphTrigger;
+    if (_.#blobEngine && _.#blobEngine.state !== 'idle') {
+      // A transport handoff, not an abort. A plain stop() restores the source,
+      // which puts the trigger back at full opacity on frame 0 of an exit that
+      // has not started, under a scrim that is still up — the whole defect.
+      _.#blobEngine.stop({ restoreSource: false });
+    }
+    _.#blobTo = null;
+    _.#morphTrigger = null;
+    // MorphEngine.stop() restores the dialog snapshot, which erases the live
+    // drag pose. Repaint in this same task so a swipe release never flashes at
+    // rest between the disappearing blob and the first exit spring frame.
+    _.#applyFrame(_.#p);
+  }
+
+  /**
+   * Hands a held trigger back to the page at the end of a direct exit.
+   *
+   * The emit precedes the restore deliberately: a listener decorates the button
+   * while it still cannot paint, so no frame exists in which it is visible and
+   * undecorated. Stating that order here makes it structural, rather than a
+   * consequence of which listener happened to be registered first.
+   * @param {boolean} announce - Emit `triggerreturn` first. False on a force
+   *   close, which paints no frame and so has no entrance to introduce.
+   */
+  #returnTrigger(announce) {
+    const _ = this;
+    const trigger = _.#heldTrigger;
+    if (!trigger) return;
+    _.#heldTrigger = null;
+    if (announce) _.emit('triggerreturn', { trigger });
+    _.#blobEngine?.restoreSource();
+  }
+
+  #finishBlobShown() {
+    const _ = this;
+    if (_.#state !== 'showing') return;
+    _.#state = 'shown';
+    _.#phase = 'shown';
+    _.#p = 1;
+    _.#backdropProgress = 1;
+    _.#currentSize = _.#restSize();
+    _.#frames = _.#makeOpenFrames(_.#currentSize);
+    // The inner engine has finished restoring its target properties. Only now
+    // may the sheet become the dialog's geometry owner: painting even the p=0
+    // frame earlier would enter MorphEngine's snapshot and be restored over the
+    // settled panel on the next handoff.
+    _.#blobTo = null;
+    _.#prepareDialogMotion();
+    _.#applyFrame(1);
+    _.#emitChange();
+    _.emit('shown');
+    _.#dialog.style.display = _.#savedInline?.display || '';
+  }
+
+  #finishBlobHidden() {
+    const _ = this;
+    _.#state = 'hidden';
+    _.#phase = 'hidden';
+    _.#p = 0;
+    _.#backdropProgress = 0;
+    _.#flightPhase = null;
+    _.#blobTo = null;
+    _.#morphTrigger = null;
+    _.#gestureExit = false;
+    _.#emitChange();
+    // Restore before emitting, matching the spring settle: the host finalizes
+    // synchronously from hidden, and a listener may immediately reopen.
+    _.#restoreInline();
+    _.emit('hidden');
   }
 
   #restoreInline() {
@@ -2089,6 +2444,7 @@ export {
   buildExitKeyframes,
   buildOpenKeyframes,
   buildRestKeyframes,
+  BLOB_REVEAL_AT,
   CLAMP_POSITIVE,
   contentSized,
   dismissalZoneProgress,
