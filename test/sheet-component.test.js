@@ -293,6 +293,112 @@ test('a refused claimed backdrop micro-drag settles back to its active snap', as
 	assert.equal(refs.panel.style.height, '500px');
 });
 
+// The source reads a synchronous `beforeHide` veto; a controlled piece cannot,
+// so a resolved dismissal is banked until the parent answers. Both outcomes
+// report through the same event, and neither may report before the answer.
+function swipeAway(refs) {
+	refs.backdrop.fire('pointerdown');
+	refs.backdrop.fire('pointermove', { clientY: 400, timeStamp: 50 });
+	refs.backdrop.fire('pointerup', { clientY: 400, timeStamp: 100 });
+}
+
+test('a swipe dismissal reports nothing until the parent accepts the close', async (t) => {
+	const reasons = [];
+	const releases = [];
+	const { sheet, refs, frames } = await mountSheet(t, {
+		open: true,
+		dismiss: 'swipe',
+		close: (reason) => reasons.push(reason),
+	});
+	sheet.props.snapRelease = (detail) => releases.push(detail);
+
+	swipeAway(refs);
+	assert.deepEqual(reasons, ['swipe']);
+	assert.deepEqual(releases, [], 'nothing is reported before the parent answers');
+
+	sheet.props.open = false;
+	sheet.syncOpen();
+
+	assert.equal(releases.length, 1);
+	assert.equal(releases[0].target, null);
+	assert.equal(releases[0].prevented, false);
+	drainFrames(frames);
+	await Promise.resolve();
+});
+
+test('a dismissal the parent never accepts settles back and reports prevented', async (t) => {
+	const releases = [];
+	const { sheet, refs, frames } = await mountSheet(t, {
+		open: true,
+		dismiss: 'swipe',
+		close: () => {},
+	});
+	sheet.props.snapRelease = (detail) => releases.push(detail);
+
+	swipeAway(refs);
+	assert.deepEqual(releases, []);
+
+	// Past DISMISS_ACK_MS with `open` still true: nothing took the close.
+	await new Promise((resolve) => setTimeout(resolve, 320));
+
+	assert.equal(releases.length, 1);
+	assert.equal(releases[0].target, 0, 'reports the snap the panel landed on');
+	assert.equal(releases[0].prevented, true);
+	assert.equal(sheet.__testEngine().state, 'shown');
+
+	drainFrames(frames);
+	await Promise.resolve();
+	assert.equal(refs.panel.style.height, '500px', 'settled back rather than frozen');
+});
+
+test('a fresh grab supersedes a swipe still waiting on its answer', async (t) => {
+	const releases = [];
+	const { sheet, refs } = await mountSheet(t, {
+		open: true,
+		dismiss: 'swipe',
+		close: () => {},
+	});
+	sheet.props.snapRelease = (detail) => releases.push(detail);
+
+	swipeAway(refs);
+	assert.deepEqual(releases, [], 'the dismissal is banked, not yet reported');
+
+	// The user grabs the sheet again inside DISMISS_ACK_MS. Left banked, the
+	// deadline would later fire under this finger: settling the panel back
+	// mid-drag and reporting a dismissal the user has already moved past.
+	assert.notEqual(
+		sheet.__testDragStart('header', { target: refs.header }),
+		false,
+		'the new gesture is accepted'
+	);
+	assert.equal(releases.length, 1, 'the owed report is refused, not dropped');
+	assert.equal(releases[0].prevented, true);
+	assert.equal(releases[0].target, 0, 'reports the snap the panel is still on');
+
+	// And the bank is consumed, so the deadline cannot fire a second time.
+	await new Promise((resolve) => setTimeout(resolve, 320));
+	assert.equal(releases.length, 1, 'no deadline report lands under the finger');
+	assert.equal(sheet.__testEngine().state, 'shown');
+});
+
+test('an effect change applies without running a profile morph', async (t) => {
+	const { sheet } = await mountSheet(t, { open: true });
+	const engine = sheet.__testEngine();
+	const setProfile = engine.setProfile.bind(engine);
+	const effects = [];
+	engine.setProfile = (profile) => {
+		effects.push(profile.effect);
+		return setProfile(profile);
+	};
+
+	sheet.props.effect = 'fade-scale';
+	sheet.data(null, sheet.props);
+	sheet.afterUpdate();
+
+	assert.equal(engine.morphing, false, 'no FLIP for an identical from/to box');
+	assert.deepEqual(effects, ['fade-scale'], 'the new choreography reached the engine');
+});
+
 test('a queued native close cannot interrupt a reopened sheet entrance', async (t) => {
 	const reasons = [];
 	const { sheet, frames } = await mountSheet(t, {

@@ -52,6 +52,7 @@ import {
   EXIT_CUSHION,
   parseDismiss,
   parseSpring,
+  resizesWithSnaps,
   SheetEngine,
 } from '../../lib/sheet-engine.js';
 import {
@@ -107,6 +108,14 @@ import { DragGesture } from '../../lib/sheet-drag.js';
 // `empty:hidden`; the footer wrapper is `empty:hidden`. Untagged call-site
 // content renders through <Children/>.
 //
+// The footer wrapper's emptiness is load-bearing beyond hiding it: the panel's
+// safe-area rules key off `:not(:empty)` on it, which is this port's stand-in
+// for the source's `:has(sheet-footer)` — Puzzle has no is-slot-filled probe.
+// That works only because the compiler emits no whitespace text nodes inside an
+// element, so an unfilled Slot leaves the div genuinely childless. Wrapping the
+// Slot in anything, or introducing a placeholder child, silently hands the
+// inset to two owners at once.
+//
 // MEASUREMENT. prepareOpen() lays out the real panel (temporarily display:flex +
 // visibility:hidden while the dialog is closed), then reads
 // getBoundingClientRect(). Side width, center height, and every card-mode edge
@@ -128,9 +137,10 @@ import { DragGesture } from '../../lib/sheet-drag.js';
 // THE FIFTH SURFACE. The panel itself is the fifth gesture, and it exists for one
 // region: a side sheet's handle strip. Side profiles reserve the pill's own 12px
 // footprint as panel padding no child surface covers, the pill floats over it as
-// a pointer-events-none panel child, and the panel takes touch-action: none so no
-// native pan can begin on the strip (the content's own touch-pan-x/y keeps nested
-// scrolling working below it). It claims rigidly, like the header.
+// a pointer-events-none panel child, and the panel takes touch-action:
+// pinch-zoom so no native PAN can begin on the strip while a two-finger zoom
+// still can (the content's own `manipulation` keeps nested scrolling working
+// below it). It claims rigidly, like the header.
 //
 // An earlier port put the side pill inside the header slot fallback instead. That
 // made the pill itself live — it is a header descendant, and the header always
@@ -175,12 +185,23 @@ let uid = 0;
 
 const POSITIONS = new Set(['bottom', 'left', 'right', 'center']);
 const MODES = new Set(['edge', 'card']);
-const EFFECTS = new Set(['slide', 'fade-scale', 'slide-fade', 'pop']);
+const EFFECTS = new Set(['slide', 'fade-scale', 'slide-fade']);
 const SCROLLABLE_OVERFLOW = new Set(['auto', 'scroll']);
 
 const RESIZE_THROTTLE_MS = 100;
 const FLICK_VELOCITY = 0.5;
 const OVERSCROLL_RESISTANCE = 0.2;
+// How long a swipe dismissal waits for the parent to answer before concluding it
+// was refused. The source reads a synchronous `beforeHide` veto; a controlled
+// Puzzle piece cannot, because the answer is a prop flip that arrives through
+// the framework's own scheduler — PuzzleView.#scheduleRender and the data
+// store's flush are both requestAnimationFrame, and the store additionally arms
+// a 220ms fallback for the visibility boundary. A microtask therefore ALWAYS
+// observes the sheet still shown and would report every dismissal as refused.
+// This deadline clears the slowest of those paths (220ms + a frame) with margin;
+// a parent that accepts resolves the release on the frame it re-renders, so the
+// timer only ever fires on the rare genuine refusal.
+const DISMISS_ACK_MS = 250;
 const MORPH_TIMEOUT_PADDING_MS = 120;
 const DEFAULT_MORPH_DURATION = 600;
 const DEFAULT_MORPH_EASING = 'cubic-bezier(0.34, 1.32, 0.52, 1)';
@@ -196,8 +217,69 @@ const DIALOG_PROFILE = {
   center: 'items-center justify-center',
 };
 
+// `touch-pinch-zoom` rather than `touch-none`, here and on every other rigid
+// drag surface below. The two are not the same refusal: `none` also refuses a
+// two-finger pinch, and the UA refuses it before the drag-claim logic is ever
+// consulted, so a low-vision user could not enlarge a form in any sheet
+// (WCAG 1.4.4). A pinch is two-finger and cannot collide with the single-finger
+// drag these surfaces are protecting.
 const BACKDROP =
-  'absolute inset-0 bg-black/50 backdrop-blur-sm touch-none';
+  'absolute inset-0 bg-black/50 backdrop-blur-sm touch-pinch-zoom';
+
+// SAFE AREA. env(safe-area-inset-*) measures from the SCREEN edge, so how much
+// of it a surface must reserve depends on how far the panel's own box already
+// floats from that edge. The source states that distance once as a
+// --_sheet-safe-float custom property; this port has no custom properties and no
+// <style> block, so it is baked into two literal spellings of every rule and
+// selected by mode:
+//
+//   edge   — the panel is welded to the edge and floats by nothing.
+//   float  — card mode AND center. A card floats by the 0.75rem card margin on
+//            every side it touches. A centred dialog floats by its own centring
+//            rather than by a margin, but its max-height cap is
+//            100dvh - 2 * 0.75rem, so its gap to the bottom edge is that margin
+//            at the cap and strictly more below it — the same number is the
+//            tightest value that can never under-reserve.
+//
+// Discounting the float is what stops a card measuring from the wrong edge: a
+// card 12px above the screen needs 22px of a 34px inset, not all 34.
+//
+// The panel owns its edge inset only while there is no footer to own it, which
+// is the source's `:has(sheet-footer)` reset stated as a Tailwind variant. It
+// keys off the footer wrapper's existing empty:hidden convention — an unfilled
+// Slot renders no children at all, so `:not(:empty)` is exactly "a footer
+// exists". The variant's :has() argument carries its own specificity, so the
+// reset outranks the base padding whatever the stylesheet's source order.
+const PANEL_SAFE_BOTTOM =
+  'pb-[env(safe-area-inset-bottom,0px)] ' +
+  'has-[[data-sheet-surface=footer]:not(:empty)]:pb-0';
+const PANEL_SAFE_LEFT =
+  'pl-[env(safe-area-inset-left,0px)] ' +
+  'has-[[data-sheet-surface=footer]:not(:empty)]:pl-0';
+const PANEL_SAFE_RIGHT =
+  'pr-[env(safe-area-inset-right,0px)] ' +
+  'has-[[data-sheet-surface=footer]:not(:empty)]:pr-0';
+
+// A side sheet's axis inset runs the panel's WHOLE height, unlike a bottom
+// sheet's, whose only edge is the one the footer already covers. So handing that
+// edge to the footer leaves the header and content at their bare 1rem gutter,
+// under a landscape notch. They take the same reservation, gated on the same
+// footer, because without one the panel above still holds the padding for the
+// whole thing and these would double-count it.
+//
+// Every entry below is ONE class and must stay one unbroken string literal:
+// Tailwind's scanner reads the raw source text, so a candidate split across a
+// `+` concatenation is never generated. Same rule as the shadow recipes above.
+const PANEL_SIDE_SAFE = {
+  'left:edge':
+    'has-[[data-sheet-surface=footer]:not(:empty)]:[&>[data-sheet-surface=header],&>[data-sheet-surface=content]]:pl-[calc(1rem+env(safe-area-inset-left,0px))]',
+  'left:float':
+    'has-[[data-sheet-surface=footer]:not(:empty)]:[&>[data-sheet-surface=header],&>[data-sheet-surface=content]]:pl-[calc(1rem+max(0px,env(safe-area-inset-left,0px)-0.75rem))]',
+  'right:edge':
+    'has-[[data-sheet-surface=footer]:not(:empty)]:[&>[data-sheet-surface=header],&>[data-sheet-surface=content]]:pr-[calc(1rem+env(safe-area-inset-right,0px))]',
+  'right:float':
+    'has-[[data-sheet-surface=footer]:not(:empty)]:[&>[data-sheet-surface=header],&>[data-sheet-surface=content]]:pr-[calc(1rem+max(0px,env(safe-area-inset-right,0px)-0.75rem))]',
+};
 
 const PANEL_BASE =
   'relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface will-change-transform';
@@ -209,11 +291,19 @@ const PANEL_BASE =
 // rubber-band travel cannot expose the backdrop past a flush screen edge.
 const PANEL_BOTTOM_EDGE =
   'max-h-[100dvh] rounded-t-2xl border-t border-border ' +
-  'pb-[env(safe-area-inset-bottom,0px)] ' +
-  'shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
+  PANEL_SAFE_BOTTOM +
+  ' shadow-[0_60px_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
+// The card floats by the bare card margin and reserves NOTHING for the home
+// indicator itself, exactly like the source's `inset: auto 12px 12px` plus
+// `padding-bottom: 0`. Its footer then reserves the remainder — 22px of a 34px
+// inset — which is the arithmetic the float discount exists for. Folding the
+// inset into this margin instead (the port's first cut) floated the card clear
+// of the safe area on its own, which double-counted the moment the footer
+// discount below was added AND left max-h under-stated by the same amount, so a
+// notched device could size the card past the viewport.
 const PANEL_BOTTOM_CARD =
-  'mx-auto mb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] max-h-[calc(100dvh-1.5rem)] ' +
+  'mx-auto mb-[0.75rem] max-h-[calc(100dvh-1.5rem)] ' +
   'rounded-2xl border border-border ' +
   'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
@@ -227,6 +317,14 @@ const PANEL_BOTTOM_CARD =
 // not the attribute order. The max-h caps stay on the recipes: they bound both
 // profiles, and on desktop the cap is the ONLY ceiling, so a content-sized
 // panel can legitimately stand taller than the largest mobile snap.
+//
+// The ceiling IS card geometry, so unlike the height it has to be said per
+// mode — and the two spellings live on PANEL_BOTTOM_EDGE (100dvh) and
+// PANEL_BOTTOM_CARD (100dvh minus two card margins), which PANEL_PROFILE
+// selects between and can never both apply. Declared once on a mode-agnostic
+// recipe and overridden, it would subtract two margins from a panel welded to
+// the bottom edge and leave a 24px strip of scrim above it, with source order
+// deciding which of the two won.
 const BOTTOM_HEIGHT_MOBILE = 'h-[85dvh]';
 const BOTTOM_HEIGHT_DESKTOP = 'h-fit';
 
@@ -239,13 +337,13 @@ const CONTENT_SIZED = (profile) =>
 
 const PANEL_LEFT_EDGE =
   'h-full rounded-r-2xl border-r border-border ' +
-  'pl-[env(safe-area-inset-left,0px)] ' +
-  'shadow-[-120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
+  PANEL_SAFE_LEFT +
+  ' shadow-[-120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
 const PANEL_RIGHT_EDGE =
   'h-full rounded-l-2xl border-l border-border ' +
-  'pr-[env(safe-area-inset-right,0px)] ' +
-  'shadow-[120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
+  PANEL_SAFE_RIGHT +
+  ' shadow-[120px_0_0_0_var(--color-surface),0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
 const PANEL_LEFT_CARD =
   'my-[0.75rem] ml-[0.75rem] h-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] ' +
@@ -293,11 +391,46 @@ const CALLER_WIDTH = /(?:^|\s)(?:[\w-]+:)*w-/;
 // on touch and on desktop. The pills float inside that padding instead of
 // occupying flow, so hiding them (fine pointer, or desktop) cannot reflow the
 // header. empty:hidden keeps a title-less, slot-less sheet from reserving it.
-const HEADER = 'shrink-0 touch-none select-none px-4 pt-4 empty:hidden';
-const HEADER_HANDLE = 'shrink-0 touch-none select-none px-4 pt-4';
+//
+// The side gutters are spelled as the physical `pl-4 pr-4` rather than `px-4`
+// so PANEL_SIDE_SAFE's override competes longhand-against-longhand on plain
+// specificity. `px-4` compiles to the logical `padding-inline` shorthand, and
+// leaving a physical longhand to out-cascade a logical shorthand is a rule
+// nothing here needs to depend on.
+const HEADER = 'shrink-0 touch-pinch-zoom select-none pl-4 pr-4 pt-4 empty:hidden';
+const HEADER_HANDLE = 'shrink-0 touch-pinch-zoom select-none pl-4 pr-4 pt-4';
+// `manipulation` is exactly `pan-x pan-y pinch-zoom`, and the third keyword is
+// the point: it is NOT implied by the first two, so the pair the claim logic
+// wanted also refused every two-finger zoom inside the sheet, before the claim
+// logic saw the gesture at all. Arbitration belongs to the claim policy and the
+// non-passive touchmove veto, not to touch-action.
 const CONTENT =
-  'min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain touch-pan-x touch-pan-y px-4 py-4';
-const FOOTER = 'shrink-0 touch-none bg-surface p-4 empty:hidden';
+  'min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain touch-manipulation pl-4 pr-4 py-4';
+
+// EVERY profile's footer is the bottom-most surface of a column-flex panel, so
+// it — not the panel — is what stands between a button and the home indicator,
+// whichever edge the sheet is dragged from. Keying this to the dismiss axis
+// instead left a full-height side sheet reserving nothing at all in portrait,
+// where safe-area-inset-left is 0, and dropped its footer buttons into the 34px
+// band whose lower half the system swipe-up eats.
+//
+// The four sides are spelled as longhands and exactly one of each is ever
+// emitted, so no two utilities here ever set the same property: `p-4` plus a
+// `pb-[...]` longhand would be equal-specificity and leave Tailwind's own
+// utility order to decide the winner.
+const FOOTER = 'shrink-0 touch-pinch-zoom bg-surface pt-4 empty:hidden';
+const FOOTER_SAFE_BOTTOM = {
+  edge: 'pb-[calc(1rem+env(safe-area-inset-bottom,0px))]',
+  float: 'pb-[calc(1rem+max(0px,env(safe-area-inset-bottom,0px)-0.75rem))]',
+};
+const FOOTER_SAFE_LEFT = {
+  edge: 'pl-[calc(1rem+env(safe-area-inset-left,0px))]',
+  float: 'pl-[calc(1rem+max(0px,env(safe-area-inset-left,0px)-0.75rem))]',
+};
+const FOOTER_SAFE_RIGHT = {
+  edge: 'pr-[calc(1rem+env(safe-area-inset-right,0px))]',
+  float: 'pr-[calc(1rem+max(0px,env(safe-area-inset-right,0px)-0.75rem))]',
+};
 
 // Every pill is hosted on the PANEL and is `pointer-events-none` exactly like
 // the source's `sheet-panel::before`: it floats over the space its neighbours
@@ -385,6 +518,8 @@ export default class Sheet extends PuzzleView {
   #queuedProfile = null;
   #snaps = [];
   #drag = { active: false };
+  #pendingDismissal = null;
+  #morphInline = null;
   #localSnap = null;
   #settleTarget = null;
   #programmaticSnap = null;
@@ -418,6 +553,9 @@ export default class Sheet extends PuzzleView {
 
   #engineHidden = () => {
     const dialog = this.element;
+    // Backstop accept: any route that hid the sheet without passing one of the
+    // named accept sites still resolves a banked dismissal truthfully.
+    this.#acceptDismissal();
     if (dialog?.open) dialog.close();
     if (this.refs.backdrop) this.refs.backdrop.style.opacity = '0';
     this.#drag = { active: false };
@@ -494,6 +632,11 @@ export default class Sheet extends PuzzleView {
       props.showGrabber !== false && !profile.desktop && position !== 'center';
     const desktopBottomCap =
       profile.desktop && position === 'bottom' && profile.mode === 'card';
+    // How far this profile's own box already floats from the screen edges an
+    // env(safe-area-inset-*) is measured from — see the SAFE AREA note above.
+    // Center is `float` at any mode: it rests against no edge at all.
+    const floatKey =
+      profile.mode === 'card' || position === 'center' ? 'float' : 'edge';
 
     let grabberClass = GRABBER_BOTTOM;
     if (position === 'left') grabberClass = GRABBER_LEFT;
@@ -523,9 +666,17 @@ export default class Sheet extends PuzzleView {
           : '',
         // A side panel is itself a rigid drag surface, so no native pan may begin
         // on it. Scroll containers inside the content declare their own pans
-        // below this element, so nested scrolling is unaffected.
-        side ? 'touch-none' : '',
+        // below this element, so nested scrolling is unaffected. `pinch-zoom`
+        // rather than `none` for the WCAG 1.4.4 reason recorded on BACKDROP: this
+        // element backs a side sheet whose content may be too short to scroll, so
+        // `none` here made the whole panel a region the page could not be
+        // enlarged in at all.
+        side ? 'touch-pinch-zoom' : '',
         side && !profile.desktop ? PANEL_SIDE_STRIP[position] : '',
+        // A side sheet's axis inset runs the panel's whole height, so its header
+        // and content take the same reservation the footer does — but only while
+        // there IS a footer, or they double-count the panel's own padding above.
+        side ? PANEL_SIDE_SAFE[`${position}:${floatKey}`] : '',
         desktopBottomCap && !CALLER_MAX_WIDTH.test(callerClass)
           ? PANEL_WIDTH_CAP
           : '',
@@ -535,7 +686,12 @@ export default class Sheet extends PuzzleView {
         .join(' '),
       headerClass: position === 'bottom' && showGrabber ? HEADER_HANDLE : HEADER,
       contentClass: CONTENT,
-      footerClass: FOOTER,
+      footerClass: [
+        FOOTER,
+        FOOTER_SAFE_BOTTOM[floatKey],
+        position === 'left' ? FOOTER_SAFE_LEFT[floatKey] : 'pl-4',
+        position === 'right' ? FOOTER_SAFE_RIGHT[floatKey] : 'pr-4',
+      ].join(' '),
       grabberClass,
       titleClass,
     };
@@ -599,13 +755,27 @@ export default class Sheet extends PuzzleView {
     };
   }
 
+  // What a PROFILE MORPH is keyed off: the three things that change the panel's
+  // resting geometry. `effect` is deliberately absent. An entrance or exit
+  // effect changes no resting box, so morphing on one runs a FLIP whose `from`
+  // and `to` are identical — a measure that answers nothing, never fires
+  // transitionend for an unchanged property, and parks the engine until the
+  // safety timeout. A resize cannot change an effect on its own either: crossing
+  // the breakpoint is the only way it resolves a different one, and that already
+  // moves `desktop`, while position-derived defaults already move `position`.
+  //
+  // An effect prop change therefore falls through to #syncProfileWithoutMeasure,
+  // which is why #profileSignature below carries `effect` explicitly: that is
+  // what makes the new choreography reach the engine immediately instead of
+  // being dropped along with the morph.
   #profileKey(profile) {
-    return `${profile.desktop}:${profile.position}:${profile.mode}:${profile.effect}`;
+    return `${profile.desktop}:${profile.position}:${profile.mode}`;
   }
 
   #profileSignature(profile) {
     return [
       this.#profileKey(profile),
+      profile.effect,
       profile.exitEffect,
       profile.edgeInset,
       profile.exitCushion,
@@ -797,14 +967,22 @@ export default class Sheet extends PuzzleView {
     const closed = !dialog.open;
     const savedDisplay = dialog.style.display;
     const savedVisibility = dialog.style.visibility;
+    const savedTransform = panel.style.transform;
     if (closed) {
       dialog.style.display = 'flex';
       dialog.style.visibility = 'hidden';
     }
+    // getBoundingClientRect reports the TRANSFORMED box, and the engine owns an
+    // inline transform on this element for the whole entrance. A resize landing
+    // during a fade-scale entrance would otherwise read the 0.95-scaled height
+    // and publish it as the profile's intrinsic resting size. Neutralised for
+    // the read and restored immediately, so no frame ever sees it.
+    panel.style.transform = 'none';
 
     const rect = panel.getBoundingClientRect();
     const borderRadius = getComputedStyle(panel).borderRadius;
 
+    panel.style.transform = savedTransform;
     if (closed) {
       dialog.style.display = savedDisplay;
       dialog.style.visibility = savedVisibility;
@@ -836,6 +1014,7 @@ export default class Sheet extends PuzzleView {
   #prepareOpen(requestedProfile = this.#resolveProfile()) {
     if (!this.#engine) return;
 
+    const previous = this.#profile;
     const box = this.#measurePanelBox();
     const profile = {
       ...requestedProfile,
@@ -871,7 +1050,14 @@ export default class Sheet extends PuzzleView {
       this.element?.open && this.#engine.state !== 'hidden';
     let active = 0;
     if (profile.position === 'bottom' && !profile.desktop) {
-      active = alreadyOpen
+      // The engine's live index is only meaningful while it names a spot in a
+      // snap list of the same SHAPE. A same-profile resize re-measures the
+      // heights and must keep the snap the user chose; every other profile
+      // carries exactly one snap, so its index is always 0, and inheriting that
+      // across a breakpoint or position morph lands the panel on the LOWEST
+      // mobile snap while a fresh open resolves initialSnap to the highest.
+      const carrySnap = alreadyOpen && !!previous && resizesWithSnaps(previous);
+      active = carrySnap
         ? Math.min(this.#engine.activeSnap, snaps.length - 1)
         : this.#desiredSnap(snaps);
     }
@@ -983,6 +1169,7 @@ export default class Sheet extends PuzzleView {
     if (!dialog.open) return;
     this.#finishMorph();
     this.#drag = { active: false };
+    this.#acceptDismissal();
     this.#engine.hide();
   }
 
@@ -1091,6 +1278,7 @@ export default class Sheet extends PuzzleView {
     this.#centerObserver = null;
 
     this.#finishMorph();
+    this.#clearDismissal();
     for (const gesture of this.#gestures) gesture.destroy();
     this.#gestures = [];
     this.#drag = { active: false };
@@ -1130,6 +1318,12 @@ export default class Sheet extends PuzzleView {
       this.#drag = { active: false };
       return false;
     }
+    // A fresh grab supersedes a swipe still waiting on its answer. Left banked,
+    // the deadline would fire under this finger — settling the panel back
+    // mid-drag and reporting a dismissal the user has already moved past. The
+    // report is still owed, so this refuses rather than drops it, but the new
+    // gesture owns the pose from here and there is nothing to settle.
+    this.#refuseDismissal(false);
     this.#settleTarget = null;
     this.#programmaticSnap = null;
     this.#drag = {
@@ -1196,8 +1390,17 @@ export default class Sheet extends PuzzleView {
   #applyLiveOffset(offset) {
     const activeSize = this.#snaps[this.#engine.activeSnap];
     if (!Number.isFinite(activeSize)) return;
+    // The gesture's base pose is the size actually painted when the drag
+    // claimed, not the active snap's rest. #activeSnap still names the snap an
+    // interrupted settle STARTED from — it only advances when a settle
+    // completes — so basing the pose on its rest teleported a mid-settle claim
+    // back to the previous position and re-transitioned from there: every quick
+    // second flick jumped before it moved. At rest the painted size IS the
+    // active snap size, so an ordinary drag is unchanged.
+    const drag = this.#drag;
+    if (drag.base === undefined) drag.base = this.#engine.currentSize;
     const maximum = this.#snaps[this.#snaps.length - 1];
-    let size = activeSize - offset;
+    let size = drag.base - offset;
     if (size > maximum) {
       size =
         maximum +
@@ -1215,6 +1418,89 @@ export default class Sheet extends PuzzleView {
     } else {
       this.#engine.returnToRest(0);
     }
+  }
+
+  /**
+   * Announces a touch release decision. `target` reports the snap actually
+   * taken, never merely the one resolved, so a dismissal that did not happen
+   * reads as the snap the panel landed on with `prevented: true`.
+   */
+  #emitSnapRelease(velocity, size, target, prevented) {
+    const { snapRelease } = this.props;
+    if (typeof snapRelease !== 'function') return;
+    snapRelease({
+      velocity,
+      flick: Math.abs(velocity) > FLICK_VELOCITY,
+      direction: velocity > 0 ? 'away' : velocity < 0 ? 'toward' : 'none',
+      size,
+      target,
+      prevented,
+    });
+  }
+
+  // A DISMISSAL IS NOT REPORTED UNTIL IT IS ANSWERED.
+  //
+  // The source reads the answer straight out of `panel.hide()` — a consumer's
+  // cancelable `beforeHide` returns false and #dismiss() reports the snap the
+  // panel landed on instead. A controlled Puzzle piece has no such return
+  // value: `open` belongs to the parent, and its answer arrives as a prop flip
+  // through the framework's own scheduler, which is requestAnimationFrame in
+  // both PuzzleView.#scheduleRender and the data store's flush. A microtask
+  // check therefore always observes the sheet still shown and would brand every
+  // dismissal `prevented`. So the release is banked, and settled by whichever
+  // arrives first:
+  //
+  //   accept  — syncOpen()/handleClose reaching engine.hide(), or the hidden
+  //             event: the sheet is genuinely leaving, so `target: null`.
+  //   refuse  — DISMISS_ACK_MS with the engine still shown: nothing took the
+  //             close, so the panel settles back (otherwise it freezes at its
+  //             dragged, half-faded pose) and reports the active snap with
+  //             `prevented: true`, exactly as a policy-refused swipe does.
+  #bankDismissal(velocity, size) {
+    this.#clearDismissal();
+    this.#pendingDismissal = {
+      velocity,
+      size,
+      timer: setTimeout(() => this.#refuseDismissal(), DISMISS_ACK_MS),
+    };
+  }
+
+  #acceptDismissal() {
+    const pending = this.#pendingDismissal;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.#pendingDismissal = null;
+    this.#emitSnapRelease(pending.velocity, pending.size, null, false);
+  }
+
+  #refuseDismissal(settle = true) {
+    const pending = this.#pendingDismissal;
+    if (!pending) return;
+    // The deadline is a backstop, not an oracle: if the sheet did leave without
+    // passing an accept site, the honest report is still the dismissal.
+    if (!this.#engine || this.#engine.state !== 'shown') {
+      this.#acceptDismissal();
+      return;
+    }
+    clearTimeout(pending.timer);
+    this.#pendingDismissal = null;
+    // The queued velocity would otherwise leak into the next hide.
+    this.#engine.setDismissVelocity(0);
+    // `settle` is false only when a new gesture is taking the panel over, which
+    // makes the settle-back both unnecessary and a fight with the live drag.
+    if (settle) this.#settleBack();
+    this.#emitSnapRelease(
+      pending.velocity,
+      pending.size,
+      this.#engine.activeSnap,
+      true
+    );
+  }
+
+  #clearDismissal() {
+    if (!this.#pendingDismissal) return;
+    clearTimeout(this.#pendingDismissal.timer);
+    this.#pendingDismissal = null;
   }
 
   #dragEnd(surface, info) {
@@ -1254,30 +1540,29 @@ export default class Sheet extends PuzzleView {
       snaps: this.#snaps,
       flickVelocity: FLICK_VELOCITY,
     });
+    // A locked sheet refuses the dismissal but still has to land somewhere, so
+    // the refusal is redirected to the active snap rather than vetoed later.
+    // This one is answerable synchronously, so it emits with the rest.
     const prevented = resolved === null && !this.#dismissPolicy().swipe;
     const target = prevented ? this.#engine.activeSnap : resolved;
 
-    const detail = {
-      velocity: velocityAway,
-      flick: Math.abs(velocityAway) > FLICK_VELOCITY,
-      direction:
-        velocityAway > 0
-          ? 'away'
-          : velocityAway < 0
-            ? 'toward'
-            : 'none',
-      size: releasedSize,
-      target,
-      prevented,
-    };
-    const { snapRelease } = this.props;
-    if (typeof snapRelease === 'function') snapRelease(detail);
-
     if (target === null) {
+      // The OTHER way a resolved dismissal fails to happen: the parent owns
+      // `open` and may simply not flip it. Emitting `target: null` here — before
+      // anyone has answered — was the bug: a consumer listening for it to tear
+      // down (clearing a draft, releasing a camera stream, logging a dismissal)
+      // did all of it while the sheet stayed open and interactive. So the
+      // release is banked and reported by whichever comes first, the accept or
+      // the deadline. See #bankDismissal.
       this.#engine.setDismissVelocity(Math.max(0, velocityAway));
+      this.#bankDismissal(velocityAway, releasedSize);
       this.#requestClose('swipe');
+      // A parent that answers synchronously is answered synchronously back.
+      if (this.#engine.state !== 'shown') this.#acceptDismissal();
       return;
     }
+
+    this.#emitSnapRelease(velocityAway, releasedSize, target, prevented);
 
     this.#settleTarget = target;
     const run = ++this.#snapRun;
@@ -1308,6 +1593,14 @@ export default class Sheet extends PuzzleView {
       this.setData(this.#classData(next));
       return;
     }
+
+    // The dialog stays open for the whole exit flight — it is closed from the
+    // engine's `hidden` event, not at hide-start. A resize landing in that
+    // window must not rebuild the profile underneath it: setSnaps/setProfile
+    // would re-measure and repaint geometry the exit is already animating away
+    // from, and a profile crossing would start a FLIP on a panel mid-flight.
+    // The next open re-measures anyway.
+    if (this.#engine.state === 'hiding') return;
 
     if (
       this.#profile &&
@@ -1340,6 +1633,7 @@ export default class Sheet extends PuzzleView {
   #retargetMorph(profile) {
     const panel = this.refs.panel;
     if (!panel || !this.#engine?.morphing) return;
+    this.#snapshotMorphInline(panel);
     // Read before the pins go: the animated rect is the exact starting point.
     const from = this.#readBox(panel);
     this.#clearMorphTimers();
@@ -1373,6 +1667,11 @@ export default class Sheet extends PuzzleView {
     }
 
     this.refs.backdrop.style.opacity = '1';
+    // Taken here rather than at the top: the beginMorph() branch above can bail
+    // to #deferMeasure without ever pinning, and a snapshot with no FLIP behind
+    // it is a restore waiting to happen. Nothing before this line writes a
+    // MORPH_PROPERTY, so this is still ahead of every pin.
+    this.#snapshotMorphInline(panel);
     this.#stripMorphPins(panel);
     this.#pendingMorph = { from, profile: next };
     this.#renderProfile = next;
@@ -1458,8 +1757,69 @@ export default class Sheet extends PuzzleView {
     });
   }
 
+  /**
+   * Snapshots the consumer's own inline geometry once per FLIP, before any pin
+   * is written.
+   *
+   * Stripping used to blank MORPH_PROPERTIES outright, which erased styles the
+   * component never owned — a consumer's inline `height` or `margin` is
+   * indistinguishable from a pin once both are inline.
+   *
+   * The null guard is the re-entrant case and is load-bearing: a window edge
+   * dragged back and forth re-enters the FLIP with the previous run's pins still
+   * on the element, and re-snapshotting would promote that scaffolding to "what
+   * the consumer had", permanently. The snapshot therefore survives every
+   * retarget and is released only by #releaseMorphPins.
+   */
+  #snapshotMorphInline(panel) {
+    if (this.#morphInline !== null) return;
+    // `height` is the one property on the list the ENGINE also writes inline,
+    // and only for a snap-resized bottom sheet. That painted value is not the
+    // consumer's, and restoring it would pin the incoming profile — which paints
+    // no height at all — to the outgoing one's snap, exactly the stale survivor
+    // the blanking teardown existed to prevent. A consumer's own inline height
+    // on such a profile is already overwritten every frame, so nothing is lost.
+    const engineOwnsHeight = this.#profile
+      ? resizesWithSnaps(this.#profile)
+      : false;
+    this.#morphInline = {};
+    for (const property of MORPH_PROPERTIES) {
+      const owned = engineOwnsHeight && property === 'height';
+      this.#morphInline[property] = owned ? '' : (panel.style[property] ?? '');
+    }
+  }
+
+  /**
+   * Unpins the panel back to whatever inline geometry the consumer had.
+   *
+   * Restores rather than blanks — see #snapshotMorphInline. With no snapshot
+   * taken (teardown before any morph ran) blanking is still the right answer,
+   * since only a pin could have put a value there.
+   *
+   * Deliberately does NOT clear the snapshot: the FLIP strips mid-run so the
+   * destination is measured against the consumer's real geometry rather than a
+   * blanked box, and the same snapshot has to survive to the strip that ends it.
+   */
   #stripMorphPins(panel) {
-    for (const property of MORPH_PROPERTIES) panel.style[property] = '';
+    const saved = this.#morphInline;
+    for (const property of MORPH_PROPERTIES) {
+      panel.style[property] = saved?.[property] ?? '';
+    }
+  }
+
+  /**
+   * Unpins and releases the snapshot — the single site every path that ends a
+   * FLIP passes through.
+   *
+   * A null snapshot means no FLIP ever pinned, and the write would only blank
+   * inline styles the consumer owns. #finishMorph runs from syncOpen(),
+   * handleClose and destroyed() whether a morph ran or not, which is exactly how
+   * often that blank used to land.
+   */
+  #releaseMorphPins() {
+    if (this.#morphInline === null) return;
+    if (this.refs.panel) this.#stripMorphPins(this.refs.panel);
+    this.#morphInline = null;
   }
 
   #clearMorphTimers() {
@@ -1473,16 +1833,16 @@ export default class Sheet extends PuzzleView {
   }
 
   #finishMorph() {
-    if (
-      !this.#pendingMorph &&
-      !this.#morph &&
-      !this.#engine?.morphing
-    ) {
-      return;
-    }
+    const ran =
+      !!this.#pendingMorph || !!this.#morph || !!this.#engine?.morphing;
     this.#pendingMorph = null;
     this.#clearMorphTimers();
-    if (this.refs.panel) this.#stripMorphPins(this.refs.panel);
+    // Unconditional, and the only release site. Normal completion, the safety
+    // timeout, a zero morph duration, the close interruption and destroyed() all
+    // arrive here; a null snapshot makes it a no-op, so calling it on a run that
+    // never morphed costs nothing and forgetting it strands a pin forever.
+    this.#releaseMorphPins();
+    if (!ran) return;
     if (this.#engine?.morphing) this.#engine.endMorph();
     if (this.refs.backdrop && this.element?.open) {
       this.refs.backdrop.style.opacity = '1';
@@ -1552,6 +1912,7 @@ export default class Sheet extends PuzzleView {
       }
       this.#finishMorph();
       this.#drag = { active: false };
+      this.#acceptDismissal();
       this.#engine.hide();
       this.#requestClose('close');
     },
