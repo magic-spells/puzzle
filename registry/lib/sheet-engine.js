@@ -116,7 +116,28 @@ const MANAGED_PROPERTIES = [
   'willChange',
   'width',
   'height',
+  // `filter` is written by the fading effects and MUST be restorable. It is the
+  // one managed property whose stale value would outlive the run visibly: an
+  // un-restored `blur(8px)` leaves the panel soft forever and destroys whatever
+  // filter the consumer had on the dialog.
+  'filter',
 ];
+
+/**
+ * Peak blur, in pixels, an effect's hidden frame carries.
+ *
+ * Only the fading effects take one — a `slide` arrives at full clarity from off
+ * screen, and blurring it would read as motion blur it never earned. The values
+ * differ because the two effects have different amounts of other motion to hide
+ * behind: `fade-scale` changes almost nothing geometrically (a 5% scale), so it
+ * needs the blur to carry the arrival, while `slide-fade` already translates and
+ * a matching blur would read as a smear.
+ *
+ * Blur resolves to 0 on the same reveal frame opacity does, which is what keeps
+ * it out of the overshoot extrapolation — see DEFAULT_REVEAL_PERCENT. Zero
+ * disables it.
+ */
+const EFFECT_BLUR = { 'fade-scale': 8, 'slide-fade': 4 };
 
 /**
  * Spring tuning per motion phase.
@@ -132,7 +153,6 @@ const MANAGED_PROPERTIES = [
  *
  *              settle   t90    max progress
  *   entrance    483ms   267ms   1.000
- *   pop         516ms   283ms   1.000  — bounce lives in its keyframes
  *   exit        267ms   133ms   1.000  — leaving is brisker than arriving
  *   snap        566ms   200ms   1.024  — the only phase allowed to breathe
  *   rest        333ms   167ms   1.000
@@ -151,11 +171,53 @@ const MANAGED_PROPERTIES = [
  */
 const SPRING_PRESETS = {
   entrance: { attraction: 0.055, friction: 0.32 },
-  pop: { attraction: 0.055, friction: 0.325 },
   exit: { attraction: 0.3, friction: 0.56 },
   snap: { attraction: 0.065, friction: 0.3 },
   rest: { attraction: 0.15, friction: 0.455 },
 };
+
+/**
+ * The fastest seed a release may hand a spring: the velocity that spring could
+ * build for itself under a constant attraction over `distance`, held until
+ * friction balanced it. In the seed's pre-damping units that terminal velocity
+ * is the attraction impulse divided by the friction removing it.
+ *
+ * Stated once because both cappers below need exactly this quantity and got it
+ * from the same argument. Writing it out twice already went wrong once — the
+ * return cap was authored as the bare attraction impulse, dropping the `/
+ * friction` term, which made it 0.455x too small: it swallowed every flick whole
+ * so a gentle throw and a hard one returned in the same 200ms, which is the
+ * "every settle looks identical however hard it was thrown" failure the snap
+ * preset's own tuning notes exist to prevent.
+ * @param {{attraction: number, friction: number}} preset - Spring tuning.
+ * @param {number} distance - Spring-space distance the run has left to cover.
+ * @returns {number} Largest seed that stays within the spring's own means.
+ */
+function terminalSeed(preset, distance) {
+  return (distance * preset.attraction) / preset.friction;
+}
+
+// A release may not enter a snap spring faster than that spring could build
+// velocity for itself over the full travel. Tying the cap to the preset
+// preserves an ordinary 240px / 1.5px-ms flick unchanged while a 1px hop can no
+// longer turn the same gesture into an 85px launch.
+const SNAP_VELOCITY_LIMIT = terminalSeed(SPRING_PRESETS.snap, TRAVEL);
+
+// The same rule for the third run that takes a release velocity. A dismissal
+// normalises over the runway it has LEFT, so the seed scales as 1/span and a
+// deep drag makes the span small — exactly the short-run explosion the snap cap
+// exists for, reached from the other direction. A 373px centred dialog dragged
+// to a logical 10px has 28px of fade-scale runway left; a 2px/ms flick across it
+// seeds ~131 units into a spring whose own terminal velocity is ~54.
+//
+// Capping is the fix rather than widening exitTravel's floor. The floor is
+// genuinely the extent still showing, and raising it to the resting size would
+// re-introduce the shipped bug its docstring records — a flick understated ~2.8x
+// on a deep drag, every flick-to-close settling at the same speed. Measured, the
+// uncapped seed drove the spring to p = -0.242 and left 17 frames (~283ms) in
+// which the panel was already gone but `hidden` — and with it dialog.close(),
+// focus return and scroll unlock — had not fired.
+const EXIT_VELOCITY_LIMIT = terminalSeed(SPRING_PRESETS.exit, TRAVEL);
 
 /** Bounds PhysicsEngine accepts for both dials, exclusive. */
 const MIN_SPRING = 0.001;
@@ -255,15 +317,26 @@ function exitCushion(profile) {
 }
 
 /**
- * Percent of the geometry timeline at which a fading effect reaches full
- * opacity, per effect. Finishing the fade early keeps spring overshoot past
- * p=1 from flickering a settled panel back toward transparent, and — because
- * opacity is flat from the reveal frame to the end — keeps opacity out of the
- * overshoot extrapolation entirely. Walking these frames backwards puts the
- * fade-out in the closing tail, which is where an exit wants it.
+ * Percent of the geometry timeline at which fading effects reach full opacity.
+ * Finishing the fade before the end keeps spring overshoot
+ * past p=1 from flickering a settled panel back toward transparent, and —
+ * because opacity is flat from the reveal frame to the end — keeps opacity out
+ * of the overshoot extrapolation entirely. Walking these frames backwards puts
+ * the fade-out in the closing tail, which is where an exit wants it.
+ *
+ * The number is a percent of TRAVEL, not of time, and springs front-load: at
+ * the entrance preset, p=0.55 arrives 133ms into a 483ms run. So the old 55
+ * finished the fade at 28% of the wall clock and left 350ms in which the only
+ * remaining motion was a 0.95 -> 1 scale — about 9px on a 420px dialog. Opacity
+ * is the channel the eye actually tracks on a fade effect, and its rate went
+ * from steep to exactly zero in a single keyframe, so the entrance read as
+ * arriving and then stopping dead well short of rest.
+ *
+ * 80 keeps the whole point of the frame — the entrance preset peaks at p=0.9996
+ * and even a loose `spring=` override stays flat through an overshoot to 1.25 —
+ * while giving the fade the back half of the run it was visually missing.
  */
-const REVEAL_PERCENT = { pop: 30 };
-const DEFAULT_REVEAL_PERCENT = 55;
+const DEFAULT_REVEAL_PERCENT = 80;
 
 /**
  * How far past the destination a snap track carries explicit frames, so spring
@@ -311,17 +384,6 @@ function velocityToSpring(velocityPxMs, spanPx) {
   return (velocityPxMs * FRAME_MS * VELOCITY_BOOST * TRAVEL) / spanPx;
 }
 
-/**
- * pop's bounce is baked into its keyframes instead of borrowed from spring
- * overshoot: the scale track rises past rest once, then settles. A spring can
- * only overshoot by oscillating, which reads as jelly; a keyframed rise gives
- * exactly one confident bounce and a clean exit when walked in reverse.
- */
-const POP_OVERSHOOT_PERCENT = 70;
-const POP_OVERSHOOT_SCALE = 1.05;
-const POP_ENTER_SCALE = 0.85;
-const POP_EXIT_SCALE = 0.9;
-
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -353,22 +415,31 @@ function dismissalZoneProgress(visibleExtent, restExtent) {
  * panel by `#applyFrame`, published as `--sheet-progress` by the component. Both
  * writers go through here so they can never disagree about a frame.
  *
- * Springs undershoot past the target on a fast dismissal, so the lower end
- * always floors: extrapolating below the hidden frame is meaningless and flips
- * scale negative. The upper end is profile-specific. A bottom sheet's overshoot
- * is the intended settling breath — a height stretch, or a translate below the
- * floor, both of which the snap track carries explicit frames for — so it flows
+ * Springs undershoot past the target on a fast entrance or dismissal, so the
+ * lower end floors during those FLIGHT phases: extrapolating an effect's hidden
+ * frame is meaningless and can drive scale negative. Landed tracks are a
+ * different shape. Drag, snap, and return frames are linear in size with scale
+ * pinned at 1, so allowing their progress below 0 is the 1:1 continuation a
+ * finger needs to carry an inset or centred panel all the way off screen.
+ *
+ * The upper end remains profile-specific. A bottom sheet's overshoot is the
+ * intended settling breath — a height stretch, or a translate below the floor,
+ * both of which the snap track carries explicit frames for — so it flows
  * through. A side sheet has no equivalent: it is fixed width and sits against
  * its edge, so every position past flush translates it inward and opens a
  * sliver of backdrop down the side. There is nothing to tune away there — a
  * synthetic frame past 100 would be collinear with the track and change nothing
  * — so the only fix is to refuse it.
- * @param {'bottom'|'left'|'right'} position - Sheet edge.
+ * @param {'bottom'|'left'|'right'|'center'} position - Sheet edge.
  * @param {number} p - Raw frame progress.
+ * @param {string} [phase] - Motion phase; landed phases may extrapolate below 0.
  * @returns {number} Progress that may be painted and published.
  */
-function paintedProgress(position, p) {
-  return Math.max(0, position === 'bottom' ? p : Math.min(1, p));
+function paintedProgress(position, p, phase) {
+  const landed =
+    phase === 'dragging' || phase === 'snapping' || phase === 'returning' || phase === 'shown';
+  const lower = landed ? p : Math.max(0, p);
+  return position === 'bottom' ? lower : Math.min(1, lower);
 }
 
 /**
@@ -467,6 +538,24 @@ function awayVector(position, distance) {
 }
 
 /**
+ * Reads the away-signed translation from one of this engine's own style frames.
+ * Cancelled entrances rebase from the exact FrameEngine pose already painted;
+ * recomputing it from raw spring progress would lose the active effect's
+ * geometry and put the backdrop's edge crossing on a different frame than the
+ * panel's.
+ * @param {'bottom'|'left'|'right'|'center'} position - Sheet edge.
+ * @param {Object} styles - A style frame built by {@link styleFromValues}.
+ * @returns {number} Translate magnitude toward the dismiss edge, in pixels.
+ */
+function frameAwayTranslation(position, styles) {
+  const match = styles?.transform?.match(
+    /translate3d\((-?[\d.]+)px,\s*(-?[\d.]+)px,\s*-?[\d.]+px\)/
+  );
+  if (!match) return 0;
+  return awayOffset(position, Number(match[1]), Number(match[2]));
+}
+
+/**
  * The extent the panel actually paints along the dismiss axis at a live size.
  *
  * Only a bottom sheet's changes with the gesture, and only above its floor:
@@ -533,7 +622,15 @@ function transformOrigin(profile) {
  * @returns {Object} Keyframe styles.
  */
 function restStyles(profile, size, restSize, lowestSize = 0) {
-  const base = { opacity: '1', transformOrigin: transformOrigin(profile) };
+  // `filter` for the same reason the transform is always complete: the drag and
+  // snap tracks are built from restStyles directly rather than through
+  // styleFromValues, and a track whose frames omit it would back-fill against
+  // one that does not — the entrance and exit tracks both carry it.
+  const base = {
+    opacity: '1',
+    transformOrigin: transformOrigin(profile),
+    filter: 'blur(0px)',
+  };
   if (resizesWithSnaps(profile)) {
     const paintedSize = Math.max(size, lowestSize);
     const shift = Math.max(0, lowestSize - size);
@@ -564,8 +661,9 @@ function restStyles(profile, size, restSize, lowestSize = 0) {
  * @param {Object} options - Frame options.
  * @param {number} options.size - Live size in pixels along the dismiss axis.
  * @param {boolean} options.hidden - True for the off-screen end of the run.
- * @param {boolean} [options.exiting] - True when building a closing run.
- * @returns {{x: number, y: number, scale: number, opacity: number}} Motion values.
+ * @param {number} [options.floorDistance] - Minimum away-distance the hidden end
+ *   must reach. Only buildExitKeyframes supplies it; see the floor rule there.
+ * @returns {{x: number, y: number, scale: number, opacity: number, blur: number}} Motion values.
  */
 /**
  * The gap a slide has to clear before the panel's own extent even starts.
@@ -593,7 +691,7 @@ function slideInset(profile, size) {
   return profile.edgeInset ?? 0;
 }
 
-function effectValues(profile, { size, hidden, exiting = false, floorDistance = 0 }) {
+function effectValues(profile, { size, hidden, floorDistance = 0 }) {
   const { effect, position } = profile;
   let distance = 0;
   let scale = 1;
@@ -619,20 +717,20 @@ function effectValues(profile, { size, hidden, exiting = false, floorDistance = 
     scale = 0.95;
     opacity = 0;
   }
-  if (hidden && effect === 'pop') {
-    scale = exiting ? POP_EXIT_SCALE : POP_ENTER_SCALE;
-    opacity = 0;
-  }
   // The floor an exit continuing a live drag imposes — see buildExitKeyframes.
   // It is 0 for every other caller, so it cannot reach a track that has not
   // asked for it.
   if (hidden) distance = Math.max(distance, floorDistance);
 
+  // Keyed off the effect rather than off `opacity === 0` so that a fading
+  // effect can deliberately omit blur without changing this contract.
+  const blur = hidden ? (EFFECT_BLUR[effect] ?? 0) : 0;
+
   // The axis question, asked once, through the shared vector. A centered dialog
   // travels vertically like a bottom sheet — `slide` drops it away downward —
   // while left/right travel horizontally. How FAR it travels is a separate
   // question again: see slideInset.
-  return { ...awayVector(position, distance), scale, opacity };
+  return { ...awayVector(position, distance), scale, opacity, blur };
 }
 
 /**
@@ -646,23 +744,20 @@ function styleFromValues(profile, values) {
     opacity: String(values.opacity),
     transform: `translate3d(${values.x}px, ${values.y}px, 0px) scale(${values.scale})`,
     transformOrigin: transformOrigin(profile),
+    // UNCONDITIONAL, exactly like transform. FrameEngine treats `filter` as a
+    // composite property and back-fills it onto any keyframe that omits it,
+    // using a zeroed default — so a single frame without it becomes a hard
+    // `blur(0px)` and bends the track through it. The same trap the transform
+    // rule warns about, one property over. A zero blur costs nothing: the
+    // browser drops `filter: blur(0px)` to no-op compositing.
+    filter: `blur(${values.blur ?? 0}px)`,
   };
 }
 
 /**
- * Motion styles for the hidden or shown end of an open/close run.
- * @param {Object} profile - Resolved visual profile.
- * @param {Object} options - Frame options, as accepted by effectValues.
- * @returns {Object} Keyframe styles.
- */
-function effectStyles(profile, options) {
-  return styleFromValues(profile, effectValues(profile, options));
-}
-
-/**
- * Assembles a track from two sets of motion values, plus whatever intermediate
- * frames the effect asks for. Shared by the entrance and the exit so the two
- * cannot drift apart on the details below.
+ * Assembles a track from two sets of motion values, plus the reveal frame a
+ * fading track needs. Shared by the entrance and the exit so the two cannot
+ * drift apart on the details below.
  *
  * Fading effects get a third keyframe where opacity has already reached its
  * shown value while the geometry is only partway. FrameEngine back-fills
@@ -674,13 +769,9 @@ function effectStyles(profile, options) {
  *   size property, if the profile has one, and the shared transform-origin.
  * @param {Object} from - Motion values for the 0% frame.
  * @param {Object} to - Motion values for the 100% frame.
- * @param {Object} options - Assembly options.
- * @param {string} options.effect - Effect governing the intermediate frames.
- * @param {boolean} [options.exiting] - True when building a closing run, which
- *   drops pop's bounce frame so the track stays monotonic.
  * @returns {Object} Percent-keyed keyframes.
  */
-function assembleKeyframes(profile, restFrame, from, to, { effect, exiting = false }) {
+function assembleKeyframes(profile, restFrame, from, to) {
   const frame = (values) => ({ ...restFrame, ...styleFromValues(profile, values) });
   const at = (percent, overrides) => {
     const factor = percent / 100;
@@ -690,23 +781,27 @@ function assembleKeyframes(profile, restFrame, from, to, { effect, exiting = fal
       y: lerp(from.y, to.y),
       scale: lerp(from.scale, to.scale),
       opacity: lerp(from.opacity, to.opacity),
+      // Interpolated like every other channel, or the intermediate frames
+      // would back-fill to a hard blur(0) and put a corner in the track at
+      // exactly the point the reveal frame exists to smooth.
+      blur: lerp(from.blur ?? 0, to.blur ?? 0),
       ...overrides,
     });
   };
 
   const keyframes = { 0: frame(from), 100: frame(to) };
 
-  // Only the entrance carries the bounce; the exit walks a monotonic track.
-  if (effect === 'pop' && !exiting) {
-    keyframes[POP_OVERSHOOT_PERCENT] = at(POP_OVERSHOOT_PERCENT, {
-      scale: POP_OVERSHOOT_SCALE,
-      opacity: to.opacity,
-    });
-  }
-
-  if (from.opacity !== to.opacity) {
-    const reveal = REVEAL_PERCENT[effect] ?? DEFAULT_REVEAL_PERCENT;
-    keyframes[reveal] = at(reveal, { opacity: to.opacity });
+  // Blur joins opacity in the reveal frame's contract: both are channels that
+  // must be FLAT by the end of the track, so that overshoot past p=1 cannot
+  // extrapolate them — a negative blur is clamped by FrameEngine, but a panel
+  // that softens again as it settles is the same flicker the opacity rule
+  // exists to prevent. Testing blur as well as opacity keeps that structural
+  // rather than a coincidence of every blurring effect also fading.
+  const fades = from.opacity !== to.opacity;
+  const softens = (from.blur ?? 0) !== (to.blur ?? 0);
+  if (fades || softens) {
+    const reveal = DEFAULT_REVEAL_PERCENT;
+    keyframes[reveal] = at(reveal, { opacity: to.opacity, blur: to.blur ?? 0 });
   }
   return keyframes;
 }
@@ -729,9 +824,7 @@ function buildOpenKeyframes(profile, size, restSize, lowestSize = 0) {
     scale: 1,
     opacity: 1,
   };
-  return assembleKeyframes(profile, restStyles(profile, size, restSize, lowestSize), from, to, {
-    effect: profile.effect,
-  });
+  return assembleKeyframes(profile, restStyles(profile, size, restSize, lowestSize), from, to);
 }
 
 /**
@@ -748,20 +841,33 @@ function buildOpenKeyframes(profile, size, restSize, lowestSize = 0) {
  * @returns {Object} `{live, hidden, away, hiddenAway}`.
  */
 function exitValues(profile, size, restSize, lowestSize = 0, effect = profile.effect) {
-  const away = awayTranslation(profile, size, restSize, lowestSize);
+  // Read the displacement from the pose #applyFrame actually allowed onto the
+  // screen. Using the raw logical size made a right sheet at restSize=400 and
+  // size=420 produce away=-20 even though its drag frame was capped at p=1 and
+  // painted x=0; dismiss() then repainted that -20px pose synchronously before
+  // leaving. This is returnToRest's cap-not-floor rule mirrored onto the exit.
+  //
+  // Routing through paintedProgress keeps the exception where it already lives:
+  // bottom profiles remain uncapped, while awayTranslation still owns the
+  // resize-versus-translate split through resizesWithSnaps.
+  const logicalProgress = size / restSize;
+  const painted = paintedProgress(profile.position, logicalProgress, 'dragging');
+  // Keep the raw value when no cap was applied. Besides making the rule plain,
+  // this avoids shifting ordinary geometry through a divide/multiply round-trip.
+  const paintedSize = painted === logicalProgress ? size : painted * restSize;
+  const away = awayTranslation(profile, paintedSize, restSize, lowestSize);
   const hidden = effectValues(
     { ...profile, effect },
     {
       size: paintedExtent(profile, size, restSize, lowestSize),
       hidden: true,
-      exiting: true,
       // An exit must never end closer to rest than the pose it started from:
       // when it starts displaced it ends at least one cushion further out.
       //
       // The `away > 0` guard is load-bearing. From rest there is no
-      // displacement and so no floor — without the guard every fade-scale and
-      // pop exit would acquire a cushion of stray drift, and those effects
-      // scale down IN PLACE. It also subsumes the old negative-size guard:
+      // displacement and so no floor — without the guard every fade-scale exit
+      // would acquire a cushion of stray drift instead of scaling down IN PLACE.
+      // It also subsumes the old negative-size guard:
       // #applyLiveOffset rubber-bands an overpull to about -68px, and `away`
       // then exceeds the slide runway on its own, so this is what keeps the
       // runway pointing away from rest rather than back toward it.
@@ -805,17 +911,14 @@ function buildExitKeyframes(profile, size, restSize, lowestSize = 0, { effect } 
   // The rest frame pins the painted height for the whole run — a bottom sheet
   // dragged below its floor exits at that floor's height, exactly as the drag
   // track paints it — and supplies the transform-origin every frame shares.
-  return assembleKeyframes(profile, restStyles(profile, size, restSize, lowestSize), hidden, live, {
-    effect: resolved,
-    exiting: true,
-  });
+  return assembleKeyframes(profile, restStyles(profile, size, restSize, lowestSize), hidden, live);
 }
 
 /**
  * Pixel distance an exit run covers, for velocity normalisation.
  *
  * A translating exit covers the runway it has left. One that does not translate —
- * `fade-scale`, `pop` — still crosses the panel's own visible extent by making it
+ * `fade-scale` — still crosses the panel's own visible extent by making it
  * vanish, and that extent is also the floor for a translating exit whose runway
  * the drag has already eaten: normalising a hard flick over the cushion alone
  * would hand the spring ~100 units of seed on a 100-unit run and cross it in a
@@ -849,13 +952,22 @@ function exitTravel(profile, size, restSize, lowestSize = 0, effect = profile.ef
  * @param {number} restSize - CSS resting size in pixels.
  * @param {number} [lowestSize=0] - Lowest bottom snap in pixels.
  * @param {string} [effect] - Exit effect; defaults to the profile's.
+ * @param {number} [liveAway] - Painted start translation. Supplying it rebases
+ *   the edge crossing for a cancelled entrance whose start is not at rest.
  * @returns {number} Exit progress in [0, 1], or 0 for a non-sliding effect.
  */
-function exitClearProgress(profile, size, restSize, lowestSize = 0, effect = profile.effect) {
+function exitClearProgress(
+  profile,
+  size,
+  restSize,
+  lowestSize = 0,
+  effect = profile.effect,
+  liveAway
+) {
   if (effect !== 'slide') return 0;
   const extent = paintedExtent(profile, size, restSize, lowestSize);
   const { away, hiddenAway } = exitValues(profile, size, restSize, lowestSize, effect);
-  const travel = hiddenAway - away;
+  const travel = hiddenAway - (liveAway ?? away);
   if (travel <= 0) return 0;
   const clearAway = extent + slideInset(profile, extent);
   return clamp((hiddenAway - clearAway) / travel, 0, 1);
@@ -988,6 +1100,11 @@ class SheetEngine extends EventEmitter {
   #pendingDismissVelocity = 0;
   #savedInline = null;
   #backdropProgress = 0;
+  #flightPhase = null;
+  // True only while #frames holds the two-frame hide→show reversal track, whose
+  // 0% is a pose on screen rather than an effect's hidden frame.
+  #reversalTrack = false;
+  #flightBackdrop = 0;
   #springOverride = null;
   #morphing = false;
 
@@ -1099,7 +1216,30 @@ class SheetEngine extends EventEmitter {
     if (!_.#dialog || _.#morphing) return;
     if (_.#state !== 'shown' && _.#state !== 'showing') return;
     if (_.#state === 'shown') _.#p = 1;
-    _.#frames = _.#makeOpenFrames(_.#currentSize);
+    const open = _.#makeOpenFrames(_.#currentSize);
+
+    // A hide→show reversal is running on a two-frame track whose 0% is the
+    // half-dismissed pose ON SCREEN, not an entrance's off-screen hidden frame.
+    // Swapping the full entrance track in underneath it and repainting at the
+    // same #p reinterprets that number against completely different geometry:
+    // a bottom sheet caught at #p ≈ 0.15 jumped from mid-screen back to nearly
+    // off-screen and re-entered, while the scrim stayed dark because the
+    // settle action's floors still described the pre-jump run.
+    //
+    // Only the DESTINATION is rebased, never the 0% frame or #p. The spring is
+    // mid-run and #p is derived from its position, so re-parameterising here
+    // would be overwritten by the next frame anyway; keeping 0% as the pose the
+    // run actually started from leaves #p meaning exactly what it did and lets
+    // the same spring finish into the new profile's rest frame. This is the
+    // retarget every other track-replacing site already performs — show() and
+    // hide() both read the painted frame before replacing — and #rebuildOpenTrack
+    // was the one writer that assumed the entrance parameterisation.
+    if (_.#reversalTrack && _.#frames) {
+      _.#frames = new FrameEngine({ 0: _.#frames.getFrame(0), 100: open.getFrame(1) });
+      _.#applyFrame(_.#p);
+      return;
+    }
+    _.#frames = open;
     _.#applyFrame(_.#p);
   }
 
@@ -1130,6 +1270,15 @@ class SheetEngine extends EventEmitter {
   beginMorph() {
     const _ = this;
     if (_.#state !== 'shown' || _.#morphing || !_.#dialog) return false;
+    // Land a snap that is still in flight FIRST, exactly as setSnaps and
+    // setProfile do. settleTo never leaves 'shown', so this guard admits a
+    // running snap settle, and #restSize() below reads #snaps[#activeSnap] —
+    // which #settle only advances to the destination snap. Parking without
+    // landing therefore measured the snap the settle STARTED from, so the
+    // panel jerked backward before the morph and the host's FLIP read that
+    // wrong box as its `from`. Must precede the stop: #landPendingSettle
+    // early-returns unless the spring is still animating.
+    _.#landPendingSettle();
     if (_.#spring.isAnimating) _.#spring.stop();
 
     _.#currentSize = _.#restSize();
@@ -1144,6 +1293,14 @@ class SheetEngine extends EventEmitter {
     // across, so recomputing the dismissal zone against a changing rest size
     // would blink the overlay mid-morph.
     _.#backdropProgress = 1;
+    // And PUBLISHED, not merely held. #applyFrame is inert from here until
+    // endMorph, so this is the last chance to write the token before the host
+    // takes the box; without it the component's change handler never hears
+    // about the pin and the CSS scrim keeps whatever the last frame left —
+    // a drag into the dismissal zone that crosses the breakpoint held the
+    // overlay at its faded value for the whole morph, with the panel fully on
+    // screen, then popped to 1 when #finishMorph wrote (1, 1).
+    _.#emitChange();
     return true;
   }
 
@@ -1213,28 +1370,38 @@ class SheetEngine extends EventEmitter {
     _.#prepareDialog();
 
     if (_.#state === 'hiding') {
-      // A reversal interpolates from the pose actually on screen to the resting
-      // pose. It cannot borrow the entrance's parameterisation: pop exits drop
-      // the bounce, and an exit effect need not translate at all.
-      const flight = clamp(_.#p, 0, 1);
-      const clear = _.#settleAction?.backdropClearProgress;
-      const visibleFlight =
-        clear > 0 && clear < 1
-          ? clamp((flight - clear) / (1 - clear), 0, 1)
-          : flight;
-      const backdropFloorExtent = _.#currentSize * visibleFlight;
-      const painted = _.#frames?.getFrame(
-        paintedProgress(_.#profile.position, _.#p)
-      );
+      const floorP = paintedProgress(_.#profile.position, _.#p, _.#phase);
+      // Seed from what the exit actually PAINTED, not from raw p x size. A
+      // slide exit remaps its backdrop through backdropClearProgress so the
+      // scrim reaches 0 as the box crosses the edge rather than trailing the
+      // shadow cushion — so raw p x size overstates it, and the reversal
+      // jumped the overlay back up on its first frame. The jump is bounded by
+      // cushion / (extent + inset + cushion): invisible at the 28px default,
+      // but 0.18 on a narrow side panel under the 72px cushion a soft shadow
+      // needs. dismissalZoneProgress divides by #backdropRestExtent(), so this
+      // inverts it exactly and seeds #flightEnvelope from the right number.
+      const floorExtent = _.#backdropProgress * _.#backdropRestExtent();
+      const painted = _.#frames?.getFrame(floorP);
       _.#state = 'showing';
       _.#phase = 'showing';
       _.#currentSize = _.#snaps[_.#activeSnap];
       const open = _.#makeOpenFrames(_.#currentSize);
+      // A reversal interpolates from the pose on screen to rest; it cannot borrow
+      // the entrance parameterisation because an exit effect need not translate
+      // at all.
       _.#frames = painted
         ? new FrameEngine({ 0: painted, 100: open.getFrame(1) })
         : open;
+      // #rebuildOpenTrack has to know this track is not the entrance
+      // parameterisation, or a resize landing inside the reversal repaints it
+      // as one. See there.
+      _.#reversalTrack = !!painted;
       _.#p = 0;
-      _.#settleAction = { type: 'shown', backdropFloorExtent };
+      _.#settleAction = {
+        type: 'shown',
+        backdropFloorExtent: floorExtent,
+        progressFloor: floorP,
+      };
       _.#applyFrame(0);
       _.#tuneSpring('entrance');
       return _.#animate(0, TRAVEL, 0);
@@ -1263,11 +1430,37 @@ class SheetEngine extends EventEmitter {
     _.#pendingDismissVelocity = 0;
 
     if (_.#state === 'showing') {
+      const paintedP = paintedProgress(_.#profile.position, _.#p, _.#phase);
+      const painted = _.#frames?.getFrame(paintedP);
+      const paintedBackdrop = _.#backdropProgress;
+      const exit = _.#makeExitFrames(_.#currentSize);
       _.#state = 'hiding';
       _.#phase = 'hiding';
-      _.#settleAction = { type: 'hidden' };
+      // An entrance and an exit are separate tracks: reusing the opening one
+      // ignored exitEffect, walked entrance-only choreography backwards, and
+      // omitted the slide edge-clear remap. Rebase from the exact pose on screen
+      // onto the real exit's hidden frame, mirroring hide-to-show reversal.
+      _.#frames = painted ? new FrameEngine({ 0: exit.getFrame(0), 100: painted }) : exit;
+      // At the entrance's untouched hidden endpoint both effects are already
+      // invisible, so switch hidden poses and keep the transport's zero-travel
+      // completion asynchronous without scheduling a pointless spring.
+      const start = paintedP === 0 ? 0 : TRAVEL;
+      _.#p = start / TRAVEL;
+      _.#settleAction = {
+        type: 'hidden',
+        backdropCeilingExtent: paintedBackdrop * _.#backdropRestExtent(),
+        backdropClearProgress: _.#exitClearProgress(
+          _.#currentSize,
+          frameAwayTranslation(_.#profile.position, painted)
+        ),
+      };
+      _.#applyFrame(_.#p);
       _.#tuneSpring('exit');
-      return _.#animate(_.#p * TRAVEL, 0, velocityToSpring(-Math.abs(velocity), _.#restSize()));
+      return _.#animate(
+        start,
+        0,
+        velocityToSpring(-Math.abs(velocity), _.#exitTravel(_.#currentSize))
+      );
     }
     return _.dismiss(velocity);
   }
@@ -1326,7 +1519,15 @@ class SheetEngine extends EventEmitter {
     _.#tuneSpring('snap');
     // The segment, not the resting size: this run's keyframes span exactly
     // startSize -> targetSize, and that span is negative on a downward snap.
-    return _.#animate(0, TRAVEL, velocityToSpring(velocityPxMs, targetSize - startSize));
+    // Capping the resulting spring-space seed, rather than declaring short
+    // hops velocity-free, preserves a flick on the common 1-20px release band
+    // without letting its 1/span normalisation launch across several snaps.
+    const velocity = clamp(
+      velocityToSpring(velocityPxMs, targetSize - startSize),
+      -SNAP_VELOCITY_LIMIT,
+      SNAP_VELOCITY_LIMIT
+    );
+    return _.#animate(0, TRAVEL, velocity);
   }
 
   /**
@@ -1346,12 +1547,23 @@ class SheetEngine extends EventEmitter {
     if (_.#morphing) return Promise.resolve(false);
 
     const targetSize = _.#restSize();
-    // The upper clamp discards logical inward overscroll, which is correct
-    // ONLY because #applyFrame refuses to paint these profiles past flush: the
-    // panel is already sitting at p=1, so starting there matches what is on
-    // screen. Without that clamp this would start the spring somewhere the
-    // panel is not, and the first frame would teleport it.
-    const start = clamp(_.#currentSize / targetSize, 0, 1) * TRAVEL;
+    // Capped, never floored, and the asymmetry is the whole point: this run has
+    // to start where the panel actually IS.
+    //
+    // The cap discards logical inward overscroll, which is correct ONLY because
+    // #applyFrame refuses to paint these profiles past flush — the panel is
+    // already sitting at p=1, so starting there matches what is on screen.
+    //
+    // Below zero there is no such refusal. paintedProgress lets the landed
+    // phases extrapolate under 0 precisely so an inset or centred panel can be
+    // carried off screen 1:1, and #applyLiveOffset rubber-bands a pull past the
+    // closed edge to about -2·√(overpull). A floor here therefore started the
+    // spring somewhere the panel was not: a right sheet resting at 400px and
+    // overpulled to -20px paints translate3d(420px, …), and a floored start
+    // painted 400px on its very first frame — the whole overpull, teleported
+    // away before the spring had moved. settleTo has never clamped its start
+    // and has never had the defect.
+    const start = Math.min(_.#currentSize / targetSize, 1) * TRAVEL;
     _.#frames = _.#makeDragFrames(targetSize);
     _.#p = start / TRAVEL;
     _.#phase = 'returning';
@@ -1360,7 +1572,23 @@ class SheetEngine extends EventEmitter {
     // spring would translate the panel past flush — opening a gap down the
     // side of a side sheet, and drifting a centered dialog off its middle.
     _.#tuneSpring('rest');
-    return _.#animate(start, TRAVEL, velocityToSpring(velocityPxMs, targetSize));
+    const velocity = velocityToSpring(velocityPxMs, targetSize);
+    // Capped at what this run's own spring could reach over the distance it has
+    // left, by the same terminal-velocity argument SNAP_VELOCITY_LIMIT uses.
+    // Anything beyond that becomes overshoot past TRAVEL, and the non-bottom
+    // paint clamp is obliged to eat it — which is the bug: a 20px pull flicked
+    // at 3px/ms painted ONE pose and then sat motionless for 317ms while the
+    // spring finished running.
+    //
+    // The cap is deliberately not tighter than the argument allows. Tuned down
+    // to the bare attraction impulse it left zero overshoot but also zero
+    // expression: v=1 and v=3 both returned in exactly 200ms. At the terminal
+    // velocity a 120px pull spreads 300 / 267 / 233ms across v = 0 / 1 / 3 and
+    // still paints every frame — the deepest pull with the hardest flick peaks
+    // at p = 1.001, one frame, which is below the 1.0001 the preset overshoots
+    // by unaided.
+    const velocityCeiling = terminalSeed(SPRING_PRESETS.rest, TRAVEL - start);
+    return _.#animate(start, TRAVEL, Math.min(velocity, velocityCeiling));
   }
 
   /**
@@ -1387,12 +1615,13 @@ class SheetEngine extends EventEmitter {
     _.#applyFrame(1);
     _.#tuneSpring('exit');
     // The span is what this run actually covers — never the resting size, which
-    // is the distance only a from-rest exit happens to travel.
-    return _.#animate(
-      TRAVEL,
-      0,
-      velocityToSpring(-Math.abs(velocityPxMs), _.#exitTravel(_.#currentSize))
-    );
+    // is the distance only a from-rest exit happens to travel. Capped at what
+    // this spring could have built for itself over the full travel, by the same
+    // terminal-velocity argument SNAP_VELOCITY_LIMIT uses: the span is small on
+    // a deep drag, and the seed scales as 1/span. The run is negative-going, so
+    // the cap is a lower bound.
+    const seed = velocityToSpring(-Math.abs(velocityPxMs), _.#exitTravel(_.#currentSize));
+    return _.#animate(TRAVEL, 0, Math.max(seed, -EXIT_VELOCITY_LIMIT));
   }
 
   /**
@@ -1400,6 +1629,27 @@ class SheetEngine extends EventEmitter {
    */
   stop() {
     const _ = this;
+    // Force-close can land mid-flight, never paints a frame, and emits no close
+    // request, so anything only #applyFrame would have cleared is stranded
+    // unless cleared here by hand.
+    //
+    // A stale #morphing leaves #applyFrame inert forever: the next show() paints
+    // no p=0 frame and the panel is promoted sitting at CSS rest, which is the
+    // full-size flash the whole transport design exists to prevent. A stale
+    // #flightPhase of 'showing' makes #flightEnvelope mistake the NEXT entrance
+    // for the same flight and hold the old opacity through Math.max, so a
+    // reopened sheet pops to the scrim it was stopped under. A stale
+    // #pendingDismissVelocity survives because hide() — its normal consumer —
+    // never ran: queuing 3px/ms before the stop changed the next plain close's
+    // first progress from 0.868000 to 0.811481.
+    _.#morphing = false;
+    _.#flightPhase = null;
+    _.#pendingDismissVelocity = 0;
+    // The same force-close argument applies to a hide→show reversal: landing
+    // inside one leaves #reversalTrack set with the track itself discarded, and
+    // the next #rebuildOpenTrack would then rebase a frame from whatever #frames
+    // had become.
+    _.#reversalTrack = false;
     if (_.#state === 'hidden') return;
     if (_.#spring.isAnimating) _.#spring.stop();
     _.#state = 'hidden';
@@ -1441,8 +1691,12 @@ class SheetEngine extends EventEmitter {
       _.#currentSize = action.targetSize * clamp(p, 0, 1);
     }
     _.#applyFrame(p);
+    const progress =
+      action.progressFloor === undefined
+        ? p
+        : action.progressFloor + (1 - action.progressFloor) * clamp(p, 0, 1);
     _.emit('change', {
-      progress: p,
+      progress,
       backdropProgress: _.#backdropProgress,
       phase: _.#phase,
     });
@@ -1497,6 +1751,10 @@ class SheetEngine extends EventEmitter {
     const action = _.#settleAction;
     if (!action) return;
     _.#settleAction = null;
+    // The reversal track is consumed by the run that installed it; every settle
+    // re-establishes an ordinary one, so a stale flag could only mislead a later
+    // #rebuildOpenTrack.
+    _.#reversalTrack = false;
 
     if (action.type === 'shown') {
       _.#state = 'shown';
@@ -1505,6 +1763,7 @@ class SheetEngine extends EventEmitter {
       _.#currentSize = _.#snaps[_.#activeSnap];
       _.#frames = _.#makeOpenFrames(_.#currentSize);
       _.#applyFrame(1);
+      _.#emitChange();
       _.emit('shown');
       _.#dialog.style.display = _.#savedInline?.display || '';
       return;
@@ -1537,8 +1796,8 @@ class SheetEngine extends EventEmitter {
     _.#state = 'hidden';
     _.#phase = 'hidden';
     _.#p = 0;
-    _.emit('hidden');
     _.#restoreInline();
+    _.emit('hidden');
   }
 
   /**
@@ -1588,15 +1847,28 @@ class SheetEngine extends EventEmitter {
     );
   }
 
-  #exitClearProgress(size) {
+  #exitClearProgress(size, liveAway) {
     const _ = this;
     return exitClearProgress(
       _.#profile,
       size,
       _.#restSize(),
       _.#snaps[0],
-      _.#profile.exitEffect || _.#profile.effect
+      _.#profile.exitEffect || _.#profile.effect,
+      liveAway
     );
+  }
+
+  /**
+   * Distance from the resting pose to fully outside the viewport, excluding
+   * the shadow cushion. Adding the inset to both the live and resting extents
+   * preserves a snapped bottom sheet's saturation at its lowest snap while a
+   * card or centred panel keeps fading until its trailing edge really clears.
+   * @returns {number} Dismissal-zone extent at the lowest resting snap.
+   */
+  #backdropRestExtent() {
+    const _ = this;
+    return _.#snaps[0] + slideInset(_.#profile, _.#restSize());
   }
 
   #makeRestFrames(fromSize, toSize) {
@@ -1633,8 +1905,8 @@ class SheetEngine extends EventEmitter {
   /**
    * Resolves the tuning for a phase, honouring any instance override.
    *
-   * The override governs how the sheet ARRIVES — the entrance, including
-   * pop's. Exits and snaps keep their presets.
+   * The override governs how the sheet ARRIVES. Exits and snaps keep their
+   * presets.
    *
    * Scaling those phases proportionally was tried and abandoned: the exit
    * preset's attraction is ~5.5x the entrance's, so any brisk override pushed
@@ -1642,7 +1914,7 @@ class SheetEngine extends EventEmitter {
    * spring — `spring="0.3 0.55"` measured a 2933ms exit. The dials are bounded,
    * so no proportional rule can survive a fast entrance. Pinning exits to
    * their presets keeps leaving brisk for every override instead.
-   * @param {'entrance'|'exit'|'snap'|'pop'} kind - Motion phase.
+   * @param {'entrance'|'exit'|'snap'|'rest'} kind - Motion phase.
    * @returns {{attraction: number, friction: number}} Spring tuning.
    */
   #springFor(kind) {
@@ -1650,7 +1922,7 @@ class SheetEngine extends EventEmitter {
     const preset = SPRING_PRESETS[kind] || SPRING_PRESETS.entrance;
     const override = _.#springOverride;
     if (!override) return preset;
-    if (kind !== 'entrance' && kind !== 'pop') return preset;
+    if (kind !== 'entrance') return preset;
     return {
       attraction: clamp(override.attraction, MIN_SPRING, MAX_SPRING),
       friction: clamp(override.friction, MIN_SPRING, MAX_SPRING),
@@ -1663,7 +1935,7 @@ class SheetEngine extends EventEmitter {
    */
   #tuneSpring(kind) {
     const _ = this;
-    const preset = _.#springFor(kind === 'entrance' && _.#profile.effect === 'pop' ? 'pop' : kind);
+    const preset = _.#springFor(kind);
     _.#spring.setAttraction(preset.attraction);
     _.#spring.setFriction(preset.friction);
   }
@@ -1689,18 +1961,68 @@ class SheetEngine extends EventEmitter {
    */
   #syncBackdropProgress(p) {
     const _ = this;
-    const flight = _.#phase === 'showing' || _.#phase === 'hiding' ? clamp(p, 0, 1) : 1;
+    const flying = _.#phase === 'showing' || _.#phase === 'hiding';
+    const flight = flying ? clamp(p, 0, 1) : 1;
+    const inset = slideInset(_.#profile, _.#restSize());
+    const restExtent = _.#backdropRestExtent();
+    const liveExtent = _.#currentSize + inset;
+    const ceiling = _.#settleAction?.backdropCeilingExtent;
+    const flightExtent = ceiling === undefined ? liveExtent : ceiling;
     const clear = _.#settleAction?.backdropClearProgress;
     if (clear > 0 && clear < 1) {
       const visibleFlight = clamp((flight - clear) / (1 - clear), 0, 1);
-      _.#backdropProgress = dismissalZoneProgress(_.#currentSize * visibleFlight, _.#snaps[0]);
+      _.#backdropProgress = _.#flightEnvelope(
+        flying,
+        dismissalZoneProgress(flightExtent * visibleFlight, restExtent)
+      );
       return;
     }
     const floor = _.#settleAction?.backdropFloorExtent;
     const extent = Number.isFinite(floor)
-      ? floor + (_.#currentSize - floor) * flight
-      : _.#currentSize * flight;
-    _.#backdropProgress = dismissalZoneProgress(extent, _.#snaps[0]);
+      ? floor + (liveExtent - floor) * flight
+      : flightExtent * flight;
+    _.#backdropProgress = _.#flightEnvelope(flying, dismissalZoneProgress(extent, restExtent));
+  }
+
+  /**
+   * Holds a flight's overlay monotonic: an entrance may only darken it, an exit
+   * may only lighten it.
+   *
+   * dismissalZoneProgress saturates the top, which is what stops overshoot and
+   * rubber-band overscroll from lightening the overlay. That covers every
+   * preset, because none of them oscillate. A public `spring` override can be
+   * set loose enough to oscillate, and a return swing comes back DOWN through
+   * rest, into the band below saturation where the clamp has nothing to say —
+   * so the scrim pulsed 1 -> 0.85 -> 1 -> 0.95 in time with the panel, decaying
+   * with it. The panel is meant to bounce. The scrim is a fade.
+   *
+   * The mark is seeded, not reset, on every phase change, so a reversal starts
+   * from the opacity already painted rather than snapping. Every entry into a
+   * flight crosses a phase boundary — `show()` refuses a second showing run and
+   * `dismiss()` arrives from `shown`/`dragging` — so no explicit reset is
+   * needed at the four call sites that begin one. Landed phases (`dragging`,
+   * `snapping`, `returning`, `shown`) are deliberately outside the envelope:
+   * there the overlay follows the finger, in both directions.
+   * @param {boolean} flying - True during a `showing` or `hiding` run.
+   * @param {number} value - The dismissal-zone opacity this frame computed.
+   * @returns {number} The value, held to the flight's direction.
+   */
+  #flightEnvelope(flying, value) {
+    const _ = this;
+    if (!flying) {
+      _.#flightPhase = null;
+      return value;
+    }
+    if (_.#flightPhase !== _.#phase) {
+      _.#flightPhase = _.#phase;
+      _.#flightBackdrop = value;
+      return value;
+    }
+    _.#flightBackdrop =
+      _.#phase === 'showing'
+        ? Math.max(_.#flightBackdrop, value)
+        : Math.min(_.#flightBackdrop, value);
+    return _.#flightBackdrop;
   }
 
   #emitChange() {
@@ -1722,9 +2044,9 @@ class SheetEngine extends EventEmitter {
     if (_.#morphing) return;
     _.#syncBackdropProgress(p);
     if (!_.#frames || !_.#dialog) return;
-    // paintedProgress is the whole rule — floor, and a profile-specific cap.
+    // paintedProgress is the whole rule — phase-aware floor and profile cap.
     // The component publishes --sheet-progress through the same function.
-    const styles = _.#frames.getFrame(paintedProgress(_.#profile.position, p));
+    const styles = _.#frames.getFrame(paintedProgress(_.#profile.position, p, _.#phase));
     for (const property of CLAMP_POSITIVE) {
       if (property in styles && parseFloat(styles[property]) < 0) styles[property] = '0px';
     }
@@ -1772,7 +2094,7 @@ export {
   dismissalZoneProgress,
   dismissAxis,
   DISMISS_ROUTES,
-  effectStyles,
+  EFFECT_BLUR,
   EXIT_CUSHION,
   exitCushion,
   exitClearProgress,
@@ -1785,9 +2107,6 @@ export {
   FRAME_MS,
   resizesWithSnaps,
   restStyles,
-  POP_OVERSHOOT_PERCENT,
-  POP_OVERSHOOT_SCALE,
-  REVEAL_PERCENT,
   SheetEngine,
   SPRING_PRESETS,
   transformOrigin,
