@@ -4,7 +4,7 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Sheet</h1>
         <p class="mt-2 text-body">
-          One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, entrance and exit effects, a dismiss policy, and parent-controlled open state
+          One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, an optional container-transform flight out of the trigger that opened it, entrance and exit effects, a dismiss policy, and parent-controlled open state
         </p>
       </header>
 
@@ -43,9 +43,9 @@
         </p>
         <CodeBlock code={ installCmd }/>
         <p class="mt-3 text-sm text-muted">
-          The CLI prints the npm installs for @magic-spells/physics-engine and
-          @magic-spells/frame-engine, and copies lib/sheet-engine.js, lib/sheet-policy.js,
-          and lib/sheet-drag.js into app/lib/.
+          The CLI prints the npm installs for @magic-spells/physics-engine,
+          @magic-spells/frame-engine and @magic-spells/morph-engine, and copies
+          lib/sheet-engine.js, lib/sheet-policy.js, and lib/sheet-drag.js into app/lib/.
         </p>
       </section>
 
@@ -120,7 +120,7 @@
               @click={ openMorphPop }>
               <span class="flex-1">
                 <span class="block text-[11px] font-medium uppercase tracking-wide text-muted">Mobile</span>
-                <span class="mt-0.5 block text-sm font-semibold text-ink">Pop in, slide out</span>
+                <span class="mt-0.5 block text-sm font-semibold text-ink">Fade in, slide out</span>
               </span>
               <span class="text-lg leading-none text-faint" aria-hidden="true">→</span>
               <span class="flex-1">
@@ -181,7 +181,8 @@
             open={ morphPopOpen }
             labelledby="sheet-morph-pop-title"
             desktopPosition="bottom"
-            effect="pop"
+            effect="slide-fade"
+            exitEffect="slide"
             desktopEffect="slide"
             desktopExitEffect="fade-scale"
             desktopMode="card"
@@ -197,7 +198,7 @@
               </div>
             </div>
             <div class="space-y-3 py-4 text-sm text-body">
-              <p>Below 768px: a bottom sheet flush to the edge that pops in with a small visible bounce, and slides back down the way it came. At or above it: a floating bottom card that slides in and then fades and shrinks away instead of travelling back across a screen it only partly covers.</p>
+              <p>Below 768px: a bottom sheet flush to the edge that rises in behind a short blur, and slides straight back down the way it came. At or above it: a floating bottom card that slides in and then fades and shrinks away instead of travelling back across a screen it only partly covers.</p>
               <p>Position stays bottom on both sides — only the mode and the motion change. Four separate questions, four separate props: effect, desktopEffect, exitEffect, desktopExitEffect.</p>
             </div>
           </Sheet>
@@ -302,10 +303,10 @@
 
         <ExampleBox id="effects" title="Entrance and exit effects" code={ codeEffects }>
           <div class="flex flex-wrap items-center justify-center gap-3">
-            <Button variant="outline" @press={ openPop }>Pop dialog</Button>
+            <Button variant="outline" @press={ openPop }>Fade-scale dialog</Button>
             <Button variant="outline" @press={ openAsym }>Bottom slide in, desktop fade out</Button>
           </div>
-          <Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="pop" @close={ closePop }>
+          <Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="fade-scale" @close={ closePop }>
             <div slot="header" class="pb-2">
               <div class="relative flex h-8 items-center justify-center">
                 <h2 id="sheet-pop-title" class="px-9 text-center text-base font-semibold text-ink">Saved</h2>
@@ -317,8 +318,8 @@
               </div>
             </div>
             <div class="space-y-2 py-2 text-sm text-body">
-              <p>pop arrives with a small visible bounce.</p>
-              <p>The bounce lives in the keyframes, not the spring.</p>
+              <p>fade-scale grows in from 95% behind a short blur, with no travel at all.</p>
+              <p>The blur is spent well before the panel settles, so the tail of the run is pure geometry.</p>
             </div>
           </Sheet>
           <Sheet
@@ -341,6 +342,43 @@
             <div class="space-y-3 py-4 text-sm text-body">
               <p>Arriving and leaving are separate questions. On a phone this is a bottom sheet that slides up and slides back down. On a desktop it is a right-side card that slides in — but closing it fades and shrinks it away instead of sliding it back across the screen.</p>
               <p>Say nothing and leaving mirrors arriving — the exit props only exist for when the mirror reads wrong.</p>
+            </div>
+          </Sheet>
+        </ExampleBox>
+
+        <ExampleBox id="morph-trigger" title="Growing out of the thing you tapped" code={ codeMorphTrigger }>
+          <button
+            id="sheet-morph-source"
+            type="button"
+            class="mx-auto flex w-full max-w-xs cursor-pointer items-center gap-3 rounded-xl border border-border bg-surface p-4 text-left transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2"
+            @click={ openTriggerMorph }>
+            <span class="size-10 shrink-0 rounded-lg bg-brand"></span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-semibold text-ink">Aurora Pack</span>
+              <span class="block truncate text-xs text-muted">3 items · $48.00</span>
+            </span>
+          </button>
+          <Sheet
+            open={ triggerMorphOpen }
+            labelledby="sheet-trigger-morph-title"
+            position="bottom"
+            desktopPosition="center"
+            morphTrigger="#sheet-morph-source"
+            @close={ closeTriggerMorph }>
+            <div slot="header" class="pb-3">
+              <div class="relative flex h-8 items-center justify-center">
+                <h2 id="sheet-trigger-morph-title" class="px-9 text-center text-base font-semibold text-ink">Aurora Pack</h2>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  class="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2"
+                  @click={ closeTriggerMorph }>×</button>
+              </div>
+            </div>
+            <div class="space-y-3 py-4 text-sm text-body">
+              <p>morphTrigger names the element the sheet grows out of. A stand-in flies from that card to the panel while the real dialog stays out of the top layer, and the dialog is promoted mid-flight — so there is no frame where a full-size panel repaints into view.</p>
+              <p>Closing it deliberately runs the flight in reverse, back into the card. Swiping it away does not: the trigger is handed back with a small pop at the end instead, because a dismissal is not a return trip.</p>
+              <p>It degrades rather than breaks. Scroll the card out of view and close the sheet, and it leaves by the ordinary spring — a morph into somewhere off screen is worse than no morph. Reduced motion drops it for the same reason.</p>
             </div>
           </Sheet>
         </ExampleBox>
@@ -547,11 +585,12 @@ const codeResponsive = `// 1 — bottom sheet with snaps on mobile, centered dia
   <NavLinks/>
 </Sheet>
 
-// 3 — pops in and slides out on mobile; slides in and fades away on desktop
+// 3 — fades in and slides out on mobile; slides in and fades away on desktop
 <Sheet
   open={ orderOpen }
   labelledby="sheet-order-title"
-  effect="pop"
+  effect="slide-fade"
+  exitEffect="slide"
   desktopEffect="slide"
   desktopExitEffect="fade-scale"
   desktopMode="card"
@@ -615,9 +654,27 @@ const codeModes = `<Sheet open={ cardOpen } labelledby="sheet-card-title" mode="
 // bottom or side panel, and a bottom sheet otherwise centers on desktop, where
 // there is no edge to be flush against.`;
 
-const codeEffects = `<Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="pop" @close={ closePop }>
+const codeMorphTrigger = `<button id="sheet-morph-source" @click={ openTriggerMorph }>…card…</button>
+
+<Sheet
+  open={ triggerMorphOpen }
+  labelledby="sheet-trigger-morph-title"
+  position="bottom"
+  desktopPosition="center"
+  morphTrigger="#sheet-morph-source"
+  @close={ closeTriggerMorph }>
+  <div slot="header" class="pb-3">…heading + X…</div>
+  <p>Grows out of the card, and back into it on a deliberate close.</p>
+</Sheet>
+
+// morphTrigger takes a selector or an element. A deliberate close reverses the
+// flight; a swipe dismissal hands the trigger back with a pop instead. Set
+// morphDuration to 0 — or turn on reduced motion — to switch it off entirely.
+// Requires @magic-spells/morph-engine.`;
+
+const codeEffects = `<Sheet open={ popOpen } labelledby="sheet-pop-title" position="center" effect="fade-scale" @close={ closePop }>
   <div slot="header" class="pb-2">…heading + X…</div>
-  <p>pop arrives with a small visible bounce.</p>
+  <p>fade-scale grows in from 95% behind a short blur, with no travel at all.</p>
 </Sheet>
 
 <Sheet
@@ -631,7 +688,7 @@ const codeEffects = `<Sheet open={ popOpen } labelledby="sheet-pop-title" positi
   <p>Bottom sheet on mobile; a right card on desktop that fades away.</p>
 </Sheet>
 
-// Effects: slide | fade-scale | slide-fade | pop.
+// Effects: slide | fade-scale | slide-fade.
 // exitEffect / desktopExitEffect fall back to the entrance effects,
 // so saying nothing keeps leaving as the mirror of arriving.`;
 
@@ -702,6 +759,7 @@ export default class SheetDoc extends PuzzleView {
       cardOpen: false,
       edgeOpen: false,
       popOpen: false,
+      triggerMorphOpen: false,
       asymOpen: false,
       confirmOpen: false,
       springOpen: false,
@@ -735,7 +793,7 @@ export default class SheetDoc extends PuzzleView {
         { name: 'breakpoint', desc: 'Pixel width where the desktop profile takes over. Default 768.' },
         { name: 'desktopPosition', desc: 'Desktop position. Falls back to position — except a bottom sheet, which defaults to center so a wide panel sizes to its content instead of standing 85vh tall. Pass "bottom" to keep it bottom.' },
         { name: 'desktopMode', desc: 'Desktop mode. Default card.' },
-        { name: 'effect', desc: 'Entrance: slide, fade-scale, slide-fade, or pop. Default slide.' },
+        { name: 'effect', desc: 'Entrance: slide, fade-scale, or slide-fade. Default slide.' },
         { name: 'exitEffect', desc: 'Exit effect; falls back to effect.' },
         { name: 'desktopEffect', desc: 'Desktop entrance; falls back to effect, except a centered desktop defaults to fade-scale.' },
         { name: 'desktopExitEffect', desc: 'Desktop exit; falls back to exitEffect, then desktopEffect.' },
@@ -806,6 +864,8 @@ export default class SheetDoc extends PuzzleView {
     closeCard: () => this.setData('cardOpen', false),
     openEdge: () => this.setData('edgeOpen', true),
     closeEdge: () => this.setData('edgeOpen', false),
+    openTriggerMorph: () => this.setData('triggerMorphOpen', true),
+    closeTriggerMorph: () => this.setData('triggerMorphOpen', false),
     openPop: () => this.setData('popOpen', true),
     closePop: () => this.setData('popOpen', false),
     openAsym: () => this.setData('asymOpen', true),

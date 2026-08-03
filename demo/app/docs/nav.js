@@ -98,7 +98,7 @@ export const SECTIONS = [
 		{ name: "popover", title: "Popover", path: "/components/popover",
 			description: "Click-toggled floating panel with slot trigger, auto-flip, and outside-click dismiss" },
 		{ name: "sheet", title: "Sheet", path: "/components/sheet",
-			description: "One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, entrance and exit effects, a dismiss policy, and parent-controlled open state" },
+			description: "One component that is a snap-point bottom sheet on phones and morphs — live, in place, while open — into a side drawer or centered dialog past the breakpoint, with spring-physics snaps, an optional container-transform flight out of the trigger that opened it, entrance and exit effects, a dismiss policy, and parent-controlled open state" },
 		{ name: "tooltip", title: "Tooltip", path: "/components/tooltip",
 			description: "Hover/focus text hint with delay and four placements" },
 		],
