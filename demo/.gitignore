@@ -20,3 +20,6 @@ npm-debug.log*
 
 # Puzzle cached files
 .puzzle/
+
+# Source maps — dev builds drop these into the tracked dist/ output
+dist/*.map
