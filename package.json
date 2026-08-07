@@ -45,7 +45,8 @@
 		"!client-runtime/**/*.go",
 		"types",
 		"puzzle-env.d.ts",
-		"bin/puzzle.js"
+		"bin/puzzle.js",
+		"CHANGELOG.md"
 	],
 	"keywords": [
 		"puzzle",
