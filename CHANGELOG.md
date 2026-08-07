@@ -49,9 +49,7 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
-## Unreleased — 0.5.0
-
-Not published. Tracking on `release/0.5.0`.
+## 0.5.0 — 2026-08-07
 
 ### Added
 

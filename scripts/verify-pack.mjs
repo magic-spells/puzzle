@@ -17,6 +17,9 @@
 //   - package.json          (npm always includes it)
 //   - README.md             (npm always includes the README)
 //   - LICENSE / LICENSE.*   (npm always includes license files; correct to ship)
+//   - CHANGELOG.md          (declared in "files" — npm does NOT force-include it;
+//                            it ships so an installed copy carries the upgrade
+//                            table for the breaking 0.x minors, offline)
 //   - client-runtime/**     (the actual runtime — the point of the package)
 //   - types/**              (the public .d.ts surface, D54)
 //   - puzzle-env.d.ts       (the *.pzl ambient-module shim, D54)
@@ -69,6 +72,8 @@ function isAllowed(p) {
 	if (p === 'README.md') return true;
 	// npm force-includes license files regardless of the "files" field.
 	if (/^licen[sc]e(\.[^/]+)?$/i.test(p)) return true;
+	// Declared in "files" — see the header note. Not force-included by npm.
+	if (p === 'CHANGELOG.md') return true;
 	// Go sources live beside the runtime (formatter builtins are embedded into
 	// the compiler via go:embed) but must never ship to npm.
 	if (p.endsWith('.go')) return false;
@@ -246,8 +251,8 @@ if (offenders.length > 0) {
 	fail(
 		'the tarball contains unexpected files:',
 		offenders,
-		'Only package.json, README.md, LICENSE*, client-runtime/**, types/**, ' +
-			'puzzle-env.d.ts,\nand bin/puzzle.js may ship.'
+		'Only package.json, README.md, LICENSE*, CHANGELOG.md, client-runtime/**, ' +
+			'types/**,\npuzzle-env.d.ts, and bin/puzzle.js may ship.'
 	);
 }
 

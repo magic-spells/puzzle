@@ -1,13 +1,26 @@
 ---
 name: D149 — payload keys colliding with a computed getter
-status: built
+status: verified
 connections:
   - DECISION-D06-COMPUTED-GETTERS
   - DECISION-D48-SCHEMA-VALIDATION
   - DECISION-D49-MODEL-RELATIONSHIPS
   - DECISION-D125-SAVE-RECONCILE-REVISION
-  - COMPONENT-DATASTORE
+  - COMPONENT-PUZZLE-MODEL
+  - COMPONENT-STORE
   - DOC-MODELS
+verified_at: '2026-08-07T22:43:47.810Z'
+verified_sha: f2aef082b4b17fb4ded5da94da53a547e2fe66b1
+notes:
+  - kind: verified
+    text: >-
+      Verified against client-runtime/model.js at the 0.5.0 release prep: resolvesToGetterOnly walks
+      the chain and halts before Object.prototype, returns on the FIRST descriptor found (own data
+      property still shadows an inherited getter), and treats only `set === undefined` accessors as
+      getter-only. assignSkipping drops the key and `continue`s outside the dev gate, so the skip
+      holds in production while only the warn-once WeakMap<Model, Set<key>> bookkeeping is
+      DEV-gated. Covered by tests/model-computed-getter.test.js.
+    sha: f2aef082b4b17fb4ded5da94da53a547e2fe66b1
 ---
 
 # D149 — payload keys colliding with a computed getter

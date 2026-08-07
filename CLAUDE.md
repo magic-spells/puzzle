@@ -81,16 +81,23 @@ run.
   (`chore/d134-capitalized-markers`, pushed) is not yet merged into its
   `main`/`release/0.2.0`, and the site's merge is pending an unrelated
   in-progress worktree.
-- `0.5.0` (in progress on `release/0.5.0`, unpublished): D144 Portal scoped v1
+- `0.5.0` (on `release/0.5.0`, **version-stamped and release-prepped, NOT yet
+  published** — every manifest, `version.go`, and `FRAMEWORK_VERSION` reads
+  `0.5.0`, `release:prep` is green, and `magic-spells-puzzle-0.5.0.tgz` is
+  built; the five `npm publish` calls and `verify:published` have not been run.
+  Check `npm view @magic-spells/puzzle versions` before trusting this): D144
+  Portal scoped v1
   (`<Portal>` marker + framework outlet + portal-aware `@event:outside`), D145
   error boundaries (`onError` funnel + script-side `errorContent()`), D146
   transactional reused-ancestor refresh (prepare/commit closes the D19/D30
-  soft-violation), D147 implicit two-way form binding, and D148
+  soft-violation), D147 implicit two-way form binding, D148
   `puzzle preview` + real static serving in `puzzle dev` for
-  `output: 'static'` projects (hybrid devs as the SPA). Also in: the Portal
-  showcase `examples/overlays` and the Portal component-root steering error
-  (wrap `<Portal>` in a root element; documented in D144). Cards truthed
-  through D148.
+  `output: 'static'` projects (hybrid devs as the SPA), and D149 payload keys
+  colliding with a computed getter. Also in: the Portal
+  showcase `examples/overlays`, the Portal component-root steering error
+  (wrap `<Portal>` in a root element; documented in D144), and the D76 change
+  that points `puzzle upgrade` at the running CLI rather than the cwd. Cards
+  truthed through D149.
 - Product line: v1 through v1.69 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69; D146 is a correctness amendment
   with no product-line entry),

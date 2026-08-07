@@ -1,6 +1,6 @@
 ---
 name: D148 — `puzzle preview` + real static serving in dev
-status: built
+status: verified
 connections:
   - DECISION-D81-STATIC-PAGES-MODE
   - DECISION-D90-DEV-PORT-SCAN
@@ -9,6 +9,17 @@ connections:
   - COMPONENT-DEV-SERVER
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC-BUILD
+verified_at: '2026-08-07T22:43:50.731Z'
+verified_sha: f2aef082b4b17fb4ded5da94da53a547e2fe66b1
+notes:
+  - kind: verified
+    text: >-
+      Verified at the 0.5.0 release prep: compiler/internal/serve owns both Resolve (serve.go:61)
+      and the port scan (port_test.go covers scan/strict/exhausted/zero/range), so dev and preview
+      share one resolver. preview defaults to port 4000 (cmd/puzzle/main.go:172), sets
+      Cache-Control: no-cache on HTML (preview.go:162), and --fixtures + output:'static' is refused
+      at dev startup (dev/dev.go:204). compiler/internal/{preview,serve} tests pass.
+    sha: f2aef082b4b17fb4ded5da94da53a547e2fe66b1
 ---
 
 # D148 — `puzzle preview` + real static serving in dev

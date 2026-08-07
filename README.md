@@ -438,6 +438,10 @@ puzzle build --static
 # Prerendered pages plus the SPA bundle the router takes over
 puzzle build --hybrid
 
+# Serve an existing build the way a production host will
+puzzle preview
+puzzle preview ./my-app --port 4000
+
 # Upgrade the installed CLI, or only check what is available
 puzzle upgrade
 puzzle upgrade --check
@@ -453,7 +457,18 @@ On an interactive terminal, `build` and `dev` also use a cached, non-blocking
 daily check to mention newer Puzzle releases. Set `PUZZLE_NO_UPDATE_CHECK=1` to
 disable it; the check is skipped automatically when `CI` is set.
 
-`puzzle upgrade` updates a project or global package-manager install;
+`puzzle preview` serves a build you already produced, with no watcher, no live
+reload, and no `dev.proxy` — the artifact is checked exactly as it sits on disk.
+Its optional argument is the **project** directory (its `dist/` is found for
+you), not the output directory.
+It serves per the resolved output mode: an SPA gets history-API fallback, hybrid
+serves the prerendered page first and the shell otherwise, and static gets clean
+URLs and a real `404.html` rather than the shell. It defaults to port 4000 so it
+runs alongside `puzzle dev`.
+
+`puzzle upgrade` updates the CLI you are running, resolved from the executable's
+own install context rather than the current directory — bumping a project's
+`@magic-spells/puzzle` dependency is npm's job, not the CLI's.
 `puzzle upgrade --check` only reports the current and latest versions.
 
 ### Agent skill
