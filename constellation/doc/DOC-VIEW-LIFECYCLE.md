@@ -9,7 +9,6 @@ connections:
   - FLOW-REACTIVITY
   - DOC-SPEC
   - DOC-SPEC-VIEW
-  - DOC-DECISIONS
   - DOC-ROUTER
 verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
 ---
@@ -18,7 +17,7 @@ verified_sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
 
 # View Lifecycle & Frontend Runtime Map
 
-Internal design doc — see [[DOC-SPEC]] for the product contract. This document consolidates **how the frontend actually works end to end**: the rendering model, the event-listener strategy, component states, the navigation state machine, and exactly what triggers a re-render. Decisions here are logged as [[DOC-DECISIONS]] D17–D19.
+Internal design doc — see [[DOC-SPEC]] for the product contract. This document consolidates **how the frontend actually works end to end**: the rendering model, the event-listener strategy, component states, the navigation state machine, and exactly what triggers a re-render. Decisions here are logged in the D17–D19 decision cards.
 
 ---
 
@@ -97,7 +96,8 @@ IDLE ──▶ MATCH route (fail → catch-all `*` route, else warn + stay, URL 
                  ▼
          LOAD: diff old vs new route chain → keep = shared-prefix length;
                instantiate fresh views [keep..N] (+ layout if changed);
-               await every fresh + reused-ancestor data(params)
+               await every fresh + reused-ancestor data(params) — the
+               ancestor runs are PREPARED here, committed below (D146)
                  │  (a newer navigation cancels this one — nav token check)
                  ▼
          TRANSITION out (sequential default, v1.1 — D28):
@@ -106,8 +106,9 @@ IDLE ──▶ MATCH route (fail → catch-all `*` route, else warn + stay, URL 
                  │  overlap mode (v1.24 — D56) starts the out and falls through
                  │  without awaiting it
                  ▼
-         COMMIT (atomic, D19 + D61): pushState → document.title → mount — one
-                 synchronous block; URL, title, DOM and router state land together
+         COMMIT (atomic, D19 + D61 + D146): pushState → document.title → mount
+                 → prepared reused-ancestor commits — one synchronous block; URL,
+                 title, DOM, router state, and ancestor state land together
                  │
                  ▼
            new view rendered + mounted() → viewWillShow() → in animation → viewDidShow()
@@ -125,8 +126,8 @@ The ordering decisions, each fixing an audited prototype bug:
 4. **404 via catch-all route.** A route with `path: '*'` (checked last, regardless of definition order) receives unmatched URLs. Without one, the router warns and stays. This replaces the previously open question in [[DOC-ROUTER]].
 5. **Layout reuse.** If the next route uses the *same layout class*, the layout instance is kept — its `data(params)` re-runs and it re-renders (patch, not remount), and only the `<Slot/>` content swaps. A different layout class remounts the whole tree. This is what makes persistent headers/sidebars not flash on navigation.
 6. **Sequential transition animations (v1.1 — D28).** The transition plays in order: the old view's `out` animation → destroy → COMMIT (URL + title, atomic with the mount — point 1, D61) → mount the (already-preloaded) new view → the new view's `in` animation. Four no-op lifecycle hooks bracket the phases — `viewWillHide()`/`viewDidHide()` around `out`, `viewWillShow()`/`viewDidShow()` around `in` — and fire **in order even when a view declares no `animations`** (zero-duration semantics). The `in` animation is fire-and-forget, so navigation does not block on it. One animator per transition: a view swapped inside a **reused** layout animates alone; a **layout swap** animates the layout as the unit (its view rides along). Cross-fade/overlapping transitions shipped in v1.24 (D56): `transitionMode: 'overlap'` pins the leaver in place (inline `position: fixed` at its measured rect — the positioning strategy) and runs old-`out` and new-`in` concurrently, with the leaver torn down on its own out-settle; sequential stays the default. Full contract: [[DOC-SPEC]] §12 and §26.
-7. **The route snapshot rides the LOAD phase (v1.15 — D47).** Every gated `preload()`/`refresh()` in the LOAD box carries this navigation's frozen route snapshot (`refresh({ params, route })`), stored on the instance and read as `this.route` in `data()` — the only route source that describes the navigation being gated (in the LOAD phase, `location` and `router.current` still hold the OLD route; that's the point of the gate). One ordering nuance shipped with it: a **reused layout's** post-commit chrome refresh now runs *after* the internal state commit, so `router.current` read from a layout `data()` is never stale either. Full contract: [[DOC-SPEC]] §19, [[DOC-DECISIONS]] D47.
-8. **Chain-prefix reuse for nested routes (v1.3 — D30).** With `children` routes (SPEC §9), a route resolves to a **chain** of view instances (root → leaf) hosted through each level's `<Slot/>`, under one top-level layout. Navigation diffs the old and new chains by route-node identity and keeps the shared prefix: `keep` = shared-prefix length. Fresh views `[keep..N]` preload; **reused** ancestor views `[0..keep-1]` re-run `data(params)` with the **full merged params** and — being routed content, not chrome — are **awaited before the URL commits** (point 1, generalized). The old flat params-only case is just `keep === chain length` (whole chain refreshes, zero new instances). Layout reuse (point 5) is the special case at depth 0 — a layout can only swap when `keep === 0`; any deeper divergence necessarily reuses the layout. The one-animator rule (point 6) generalizes: the **animator is the topmost swapped instance** (`views[keep]`), and every fresh instance below it is `skipEnter()`'d so the subtree doesn't animate all at once. A rejection or superseded token anywhere destroys the fresh instances only and leaves reused ancestors (and the URL) untouched. Full contract: [[DOC-DECISIONS]] D30, [[DOC-ROUTER]].
+7. **The route snapshot rides the LOAD phase (v1.15 — D47).** Every gated `preload()`/`refresh()` in the LOAD box carries this navigation's frozen route snapshot (`refresh({ params, route })`), stored on the instance and read as `this.route` in `data()` — the only route source that describes the navigation being gated (in the LOAD phase, `location` and `router.current` still hold the OLD route; that's the point of the gate). One ordering nuance shipped with it: a **reused layout's** post-commit chrome refresh now runs *after* the internal state commit, so `router.current` read from a layout `data()` is never stale either. Full contract: [[DOC-SPEC]] §19, [[DECISION-D47-ROUTE-SNAPSHOT]].
+8. **Chain-prefix reuse for nested routes (v1.3 — D30).** With `children` routes (SPEC §9), a route resolves to a **chain** of view instances (root → leaf) hosted through each level's `<Slot/>`, under one top-level layout. Navigation diffs the old and new chains by route-node identity and keeps the shared prefix: `keep` = shared-prefix length. Fresh views `[keep..N]` preload; **reused** ancestor views `[0..keep-1]` re-run `data(params)` with the **full merged params** and — being routed content, not chrome — are **awaited before the URL commits** (point 1, generalized). The old flat params-only case is just `keep === chain length` (whole chain refreshes, zero new instances). Layout reuse (point 5) is the special case at depth 0 — a layout can only swap when `keep === 0`; any deeper divergence necessarily reuses the layout. The one-animator rule (point 6) generalizes: the **animator is the topmost swapped instance** (`views[keep]`), and every fresh instance below it is `skipEnter()`'d so the subtree doesn't animate all at once. A rejection or superseded token anywhere destroys the fresh instances only and leaves reused ancestors (and the URL) untouched — the ancestor runs are prepared during the gate and committed only with the navigation ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]). Full contract: [[DECISION-D30-NESTED-ROUTES]], [[DOC-ROUTER]].
 
 ## 5. What triggers a re-render — the complete table
 

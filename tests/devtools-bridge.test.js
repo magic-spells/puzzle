@@ -7,6 +7,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Puzzle, PuzzleModel, PuzzleView, ViewNode } from '../client-runtime/index.js';
 import { createTestApp, settled } from '../client-runtime/testing/index.js';
+import { liveViewList } from '../client-runtime/devstate.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -86,6 +87,20 @@ class Detail extends PuzzleView {
 }
 Detail.__pzlModule = 'views/Detail.pzl';
 
+class Item extends PuzzleView {
+	data(params) {
+		// findOne subscribes to a PER-RECORD key, so a run prepared against another
+		// id adds a key this view is not already subscribed to — the only shape in
+		// which D146 holds anything.
+		return { todo: this.ctx.store.findOne('todo', params.id) };
+	}
+
+	render() {
+		return h('puzzle-view', { class: 'item' }, [text(String(this.getData().todo?.id ?? 'none'))]);
+	}
+}
+Item.__pzlModule = 'views/Item.pzl';
+
 /**
  * Renders the same output no matter what local state says, which is exactly what
  * devperf's runaway detector looks for: a burst of renders that mutate nothing.
@@ -108,6 +123,7 @@ const routes = [
 	{ path: '/', name: 'home', view: Home },
 	{ path: '/detail/:id', name: 'detail', view: Detail },
 	{ path: '/runaway', name: 'runaway', view: Runaway },
+	{ path: '/item/:id', name: 'item', view: Item },
 ];
 
 const handles = [];
@@ -299,10 +315,36 @@ describe('devtools bridge — requests', () => {
 		// as the literal 'fn'.
 		app.store.withTracking(() => {}, () => app.store.findMany('todo'));
 
-		const { byKey, byView } = hook.request('snapshot:subscriptions');
+		const { byKey, byView, held } = hook.request('snapshot:subscriptions');
 		expect(byKey.todo).toContain(homeId);
 		expect(byKey.todo).toContain('fn');
 		expect(byView[homeId]).toContain('todo');
+		// Nothing is mid-navigation, so no key is held (D146).
+		expect(held).toEqual({});
+	});
+
+	it('snapshot:subscriptions separates the keys a prepared, uncommitted run holds', async () => {
+		const hook = installHook();
+		const app = await bootApp();
+		await app.visit('/item/t1');
+		const itemId = hook.of('view-mounted').find((e) => e.payload.name === 'Item').payload.id;
+		const item = liveViewList().find((v) => v.constructor.name === 'Item');
+		const before = hook.request('snapshot:subscriptions').byView[itemId] ?? [];
+
+		// A PREPARED run (D146): data() has resolved and its keys are live, but the
+		// navigation has not committed, so they must not read as settled state.
+		const prepared = item.prepareRefresh({ params: { id: 't2' }, route: item.route });
+		await prepared.ready;
+
+		const { byView, held } = hook.request('snapshot:subscriptions');
+		expect(held[itemId]).toHaveLength(1);
+		const [heldKey] = held[itemId];
+		expect(before).not.toContain(heldKey); // the prepared run added it
+		expect(byView[itemId]).toContain(heldKey); // and it IS genuinely subscribed
+
+		// Discarding releases the hold (a commit would too, by adopting the keys).
+		prepared.discard();
+		expect(hook.request('snapshot:subscriptions').held).toEqual({});
 	});
 
 	it('snapshot:route returns a JSON-safe current plus the chain view names', async () => {

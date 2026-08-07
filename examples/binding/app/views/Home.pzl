@@ -1,5 +1,16 @@
 <puzzle-view class="stack">
 
+  <!-- Every control on this page is bound STRAIGHT to a field of the
+       `profile#me` record. There is not one write-back handler in the script
+       below: a `value={ profile.displayName }` on a plain form control with no
+       author `@input`/`@change` is the whole binding, and the compiler
+       synthesizes the listener that calls `profile.update({ displayName })`.
+
+       The rule the page demonstrates: BIND THE PATH YOU WANT WRITTEN. These
+       bind `profile.<field>`, so the keystroke lands in the datastore and the
+       store — not the input — is the single source of truth. A bare
+       `value={ draft }` would bind local view state instead. -->
+
   <!-- ── CARD 1 · text inputs ─────────────────────────────── -->
   <div class="card">
     <p class="eyebrow">datastore ⇄ text</p>
@@ -17,7 +28,6 @@
       <input
         type="text"
         value={ profile.displayName }
-        @input={ updateText('displayName', event) }
         placeholder="Type a name…" />
     </label>
 
@@ -26,7 +36,6 @@
       <input
         type="text"
         value={ profile.tagline }
-        @input={ updateText('tagline', event) }
         placeholder="Type a tagline…" />
     </label>
   </div>
@@ -47,34 +56,39 @@
       <div class="swatch" style={ colorSwatchStyle }></div>
     </div>
 
+    <!-- `hue` is a Puzzle.number() field, so the bind coerces before it writes:
+         the record keeps a real number, never the input's string. The two
+         controls also commit on different events, which is not a choice made
+         here but a consequence of the type — a range has no caret, so it writes
+         live on `input`; a number field commits on `change` so that coercing
+         "1.20" to 1.2 can never rewrite the box while you are still typing. -->
     <label class="field">
       <span class="field-label">Accent hue · <b>{ profile.hue }</b></span>
       <div class="range-row">
         <input
           type="range" min="0" max="360"
-          value={ profile.hue }
-          @input={ updateNumber('hue', event) } />
+          value={ profile.hue } />
         <input
           type="number" min="0" max="360"
           class="num"
-          value={ profile.hue }
-          @input={ updateNumber('hue', event) } />
+          value={ profile.hue } />
       </div>
     </label>
 
+    <!-- Two controls, one field: the picker and the hex box are both bound to
+         `profile.color`, so each one shows what the other wrote. Neither knows
+         the other exists — they are only ever reading the record back. -->
     <label class="field">
       <span class="field-label">Color · <b>{ profile.color }</b></span>
       <div class="range-row">
         <input
           type="color"
           class="color"
-          value={ profile.color }
-          @input={ updateText('color', event) } />
+          value={ profile.color } />
         <input
           type="text"
           class="num hex"
-          value={ profile.color }
-          @input={ updateText('color', event) } />
+          value={ profile.color } />
       </div>
     </label>
   </div>
@@ -85,8 +99,7 @@
     <div class="md-grid">
       <textarea
         class="md-input"
-        value={ profile.notes }
-        @input={ updateText('notes', event) }></textarea>
+        value={ profile.notes }></textarea>
       <div class="md-preview"><!-- filled from afterUpdate() --></div>
     </div>
   </div>
@@ -108,6 +121,12 @@ export default class Home extends PuzzleView {
   // Reading the record here auto-subscribes the view: any update() to it
   // re-runs data() and re-renders — so every input, swatch, and the JSON
   // panel stay in lockstep with the datastore.
+  //
+  // It is also what makes the template's binds writable. `profile` is returned
+  // from here, so `value={ profile.hue }` resolves to a record the framework
+  // can call update() on; a value computed on the way out (`profile.hue + 1`,
+  // `hue || 0`) would render fine and bind nothing, because there would be
+  // nowhere to write it back to.
   data() {
     const profile = this.ctx.store.findOne('profile', 'me');
 
@@ -129,19 +148,10 @@ export default class Home extends PuzzleView {
     };
   }
 
+  // The only handler on the page. It is not a mirror — nothing above writes
+  // state back by hand — it is a button that replaces the whole record, which
+  // is exactly the kind of write that stays the author's job.
   events = {
-    // Write the keystroke back to the store record. The store is the single
-    // source of truth; the input mirrors it on the next render.
-    updateText: (field, event) => {
-      this.record().update({ [field]: event.target.value });
-    },
-
-    // Range / number inputs hand back strings — coerce so the field stays a
-    // real number in the datastore.
-    updateNumber: (field, event) => {
-      this.record().update({ [field]: Number(event.target.value) });
-    },
-
     reset: () => {
       this.record().update({
         displayName: 'Ada Lovelace',

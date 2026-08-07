@@ -150,7 +150,7 @@ export default class TodoHome extends PuzzleView {
 
 - **Override points** (the contract — implement these): `data`, `render` (compiler-attached), `events`, `animations`, `transitionMode` (§33), `renderSkeleton`/`skeletonMinDuration` (§16, compiler-attached), and the hooks `created`, `mounted`, `beforeUpdate`, `afterUpdate`, `destroyed`, `viewWillShow`/`viewDidShow`/`viewWillHide`/`viewDidHide` (§12).
 - **Read-only API** (call, never redefine): `getData`, `setData`, `memo` (§32), `ctx`, and the getters `element`, `loaded`, `isDestroyed`, `params`, `props`, `route` (§19).
-- **Framework-called internals** (never touch): `mount`, `preload`, `refresh`, `applyParentUpdate`, `onStoreChange`, `flushUpdates`, `destroy`, `playIn`, `playOut`, `skipEnter`, `destroyAnimated`, `_localState`, and the compiler-reserved `__h` (§31) and `__ref` (§38). `refs` is the framework-owned element-ref map (§38) — read it, never assign it.
+- **Framework-called internals** (never touch): `mount`, `preload`, `refresh`, `applyParentUpdate`, `onStoreChange`, `flushUpdates`, `destroy`, `playIn`, `playOut`, `skipEnter`, `destroyAnimated`, `_localState`, and the compiler-reserved `__h` (§31), `__ref` (§38), and `__bind` (§6). `refs` is the framework-owned element-ref map (§38) — read it, never assign it.
 
 ### Runtime/compiler implementation rules
 

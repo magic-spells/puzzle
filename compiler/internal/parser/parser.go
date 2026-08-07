@@ -377,6 +377,17 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		}
 		return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)")
 	}
+	if name == "portal" {
+		return nil, errAt(p.file, pos, "the portal marker is spelled <Portal>…</Portal> (D134/D144)")
+	}
+	if name == "Portal" {
+		if perr := portalMarkerAttrs(attrs, pos, p.file); perr != nil {
+			return nil, perr
+		}
+		if selfClose {
+			return nil, errAt(p.file, pos, "<Portal/> is paired-only — a portal carries the children it teleports: write <Portal>…</Portal>")
+		}
+	}
 	if name == "Children" || name == "Slot" {
 		if name == "Children" {
 			if perr := childrenMarkerAttrs(attrs, p.file); perr != nil {
@@ -409,6 +420,9 @@ func (p *parser) parseElement() (Node, *ParseError) {
 	if name == "Slot" {
 		return &Slot{Name: slotName, Children: children, Pos: pos}, nil
 	}
+	if name == "Portal" {
+		return &Portal{Children: children, Pos: pos}, nil
+	}
 	if isCapitalized(name) {
 		return &Component{Name: name, Props: attrs, Children: children, Pos: pos}, nil
 	}
@@ -434,6 +448,9 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 		case TokAttrName:
 			name := t.Value
 			npos := tokPos(t)
+			if e := checkAttrNamespace(name, npos, p.file); e != nil {
+				return nil, false, e
+			}
 			if err := p.advance(); err != nil {
 				return nil, false, toPE(err)
 			}
@@ -461,6 +478,55 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 			return nil, false, errAt(p.file, tokPos(t), "unexpected token %s in tag", t.Type)
 		}
 	}
+}
+
+// checkAttrNamespace rejects a reserved `prefix:name` attribute (D147 reserves the
+// directive-namespace space the grammar deliberately never opened). Event attrs own
+// the colon for their modifier channel (`@click:prevent`), so they are exempt and
+// validated by parseEventModifiers instead.
+//
+// Callers run this at the attribute NAME, before branching on `=`, because the two
+// forms must agree: validating inside buildAttr — which only runs once a value
+// follows — let the VALUELESS spelling `<input bind:value>` through as an ordinary
+// boolean attribute, so the one syntax the reservation exists to reject compiled
+// silently to `{ 'bind:value': true }`.
+func checkAttrNamespace(name string, npos Position, file string) *ParseError {
+	if strings.HasPrefix(name, "@") {
+		return nil
+	}
+	i := strings.IndexByte(name, ':')
+	if i < 0 {
+		return nil
+	}
+	switch name[:i] {
+	case "xml", "xlink", "xmlns":
+		return nil
+	}
+	// Two very different authors land here, so the steer is chosen from the name.
+	// Someone typing `bind:value`/`value:bind`/`v-model:` arrived from another
+	// framework and needs to know binding is automatic; someone with `inkscape:label`
+	// pasted an SVG export and needs the file-asset escape. One generic message
+	// misdirects whichever one it is not written for.
+	prefix, local := name[:i], name[i+1:]
+	if isDirectiveWord(prefix) || isDirectiveWord(local) {
+		return errAt(file, npos,
+			"attribute namespace %q is reserved — two-way binding needs no prefix. Write `value={ expr }` (or `checked={ expr }`) on a plain <input>/<textarea>/<select> and the compiler synthesizes the write-back; see template SPEC §6",
+			prefix+":")
+	}
+	return errAt(file, npos,
+		"attribute namespace %q is reserved — only xml:, xlink:, and xmlns: are allowed. SVG exported from an editor (inkscape:, sodipodi:, serif:) needs those attributes stripped, or load the file as an asset with {#svg}",
+		prefix+":")
+}
+
+// isDirectiveWord reports whether a `prefix:name` half looks like another
+// framework's two-way-binding directive, in which case the reservation error
+// should teach Puzzle's keyword-free form rather than the SVG escape.
+func isDirectiveWord(s string) bool {
+	switch strings.ToLower(s) {
+	case "bind", "model", "v-model", "vmodel", "sync", "value", "checked":
+		return true
+	}
+	return false
 }
 
 // buildAttr classifies an attribute given its name and value token.
@@ -847,6 +913,8 @@ func nodePos(n Node) Position {
 		return t.Pos
 	case *Slot:
 		return t.Pos
+	case *Portal:
+		return t.Pos
 	case *Text:
 		return t.Pos
 	case *Interpolation:
@@ -953,8 +1021,8 @@ func isBareIdent(s string) bool {
 // shadow the outlet marker inside the loop body (the row object silently becomes
 // the tag).
 func loopBindingIdentError(name string, pos Position, file string) *ParseError {
-	if name == "ViewNode" || name == "SLOT_TAG" || strings.HasPrefix(name, "__") {
-		return errAt(file, pos, "loop variable %q uses a reserved name (identifiers starting with %q and the names %q and %q are reserved by the compiler)", name, "__", "ViewNode", "SLOT_TAG")
+	if name == "ViewNode" || name == "SLOT_TAG" || name == "PORTAL_TAG" || strings.HasPrefix(name, "__") {
+		return errAt(file, pos, "loop variable %q uses a reserved name (identifiers starting with %q and the names %q, %q and %q are reserved by the compiler)", name, "__", "ViewNode", "SLOT_TAG", "PORTAL_TAG")
 	}
 	if jsident.IsReservedBindingIdentifier(name) {
 		return errAt(file, pos, "loop variable %q is not a legal binding identifier in strict-mode JavaScript", name)

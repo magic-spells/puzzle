@@ -112,6 +112,30 @@ export type FocusBehavior = (
 	from: RouteSnapshot | null
 ) => Element | null | undefined | false;
 
+/** Stable metadata passed to PuzzleAppConfig.onError. */
+export interface PuzzleErrorInfo {
+	readonly phase:
+		| 'mount'
+		| 'refresh'
+		| 'navigation'
+		| 'render'
+		| 'bind'
+		| 'boundary'
+		| 'enter'
+		| 'leave'
+		| 'transition'
+		| 'app-mount'
+		| 'app-unmount';
+	readonly view: PuzzleView | null;
+	readonly route: RouteSnapshot | null;
+}
+
+/** App-level reporter for errors the framework contains instead of rethrowing. */
+export type PuzzleErrorHandler = (
+	error: unknown,
+	info: PuzzleErrorInfo
+) => void | Promise<void>;
+
 /** A single enter/leave animation spec (constellation/doc/DOC-SPEC.md §12). */
 export interface AnimationSpec {
 	from: object;
@@ -386,6 +410,14 @@ export declare class PuzzleView {
 	refresh(): void | Promise<void>;
 
 	/**
+	 * Optional per-view error boundary. Return one ViewNode tree to replace this
+	 * view (or the failed child position) when this view or a descendant fails.
+	 * The nearest implementation wins. The surviving owner retries with
+	 * `refresh()`, which restores the normal render and remounts failed children.
+	 */
+	errorContent?(error: unknown): ViewNode | null | undefined;
+
+	/**
 	 * Event handlers referenced from the template (`@click={ handler }`).
 	 * A class field of arrow functions.
 	 */
@@ -640,6 +672,12 @@ export interface PuzzleAppConfig {
 	 * Errors are logged; teardown always proceeds.
 	 */
 	beforeUnmount?: (this: PuzzleApp, app: PuzzleApp) => void | Promise<void>;
+	/**
+	 * Called for every framework-contained application error. `info` always has
+	 * the stable `{ phase, view, route }` shape. A throwing or rejecting reporter
+	 * is logged and swallowed without recursion.
+	 */
+	onError?: PuzzleErrorHandler;
 }
 
 /**
@@ -693,8 +731,12 @@ export declare class ViewNode {
 	readonly isText: boolean;
 	readonly isComponent: boolean;
 	readonly isSlot: boolean;
+	readonly isPortal: boolean;
 	readonly props: Record<string, any>;
 }
 
 /** Reserved tag marking a composition-marker (`<children/>`/`<Slot/>`/`<slot name>`) substitution point. */
 export declare const SLOT_TAG: string;
+
+/** Reserved tag marking a `<Portal>…</Portal>` teleport (D144). */
+export declare const PORTAL_TAG: string;

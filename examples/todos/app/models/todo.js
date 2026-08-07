@@ -7,6 +7,8 @@ export default class Todo extends PuzzleModel {
     text:      Puzzle.string().required().min(1, 'Todo text cannot be empty'),
     completed: Puzzle.boolean().default(false),
     createdAt: Puzzle.date().default(() => new Date()),
+    // The checkbox's implicit bind writes `completed` on its own; the explicit
+    // handlers below stamp updatedAt as part of their richer write.
     updatedAt: Puzzle.date().default(() => new Date())
   };
 
@@ -25,13 +27,6 @@ export default class Todo extends PuzzleModel {
   }
 
   // Model-specific methods
-  toggle() {
-    return this.update({
-      completed: !this.completed,
-      updatedAt: new Date()
-    });
-  }
-
   markComplete() {
     if (!this.completed) {
       return this.update({

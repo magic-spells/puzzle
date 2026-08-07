@@ -19,8 +19,8 @@ Puzzle is a SPA-first JavaScript framework with `.pzl` single-file components,
 a reactive browser runtime, and a Go + esbuild compiler/CLI. Optional static
 generation prerenders routes without adding an SSR server or hydration layer.
 
-[[DOC-SPEC]] is the enforceable contract and wins all conflicts. The decision
-log in [[DOC-DECISIONS]] explains why the contract has its current shape.
+[[DOC-SPEC]] is the enforceable contract and wins all conflicts. The
+decision cards explain why the contract has its current shape.
 [[DOC-RELEASE-SURFACE]] is the concise inventory of everything that ships.
 
 ## Current state
@@ -62,6 +62,27 @@ log in [[DOC-DECISIONS]] explains why the contract has its current shape.
   surrogate pairs. The pre-publish review round added D115–D119 (mount-failure
   recovery, pack-time pin verification, static history-hrefs, lifecycle hook
   containment + mount epoch, router settlement/announcement).
+- **`0.4.0` is PUBLISHED** (2026-07-28, the current `latest`): the performance
+  round (D121/D122 profiler + DevTools protocol), the Grok review rounds
+  (D132/D133), D134 capitalized composition markers with marker fallback
+  bodies (D141), and the D135–D143 hardening set.
+- **`0.5.0` is in progress on `release/0.5.0`**: D144 `<Portal>` scoped v1
+  (v1.66), D145 error boundaries (v1.67), D146 transactional reused-ancestor
+  refresh, D147 implicit two-way form binding
+  ([[FEATURE-IMPLICIT-BINDING]], v1.68), and D148 `puzzle preview` + real
+  static serving in dev ([[DECISION-D148-PREVIEW-AND-STATIC-DEV]], v1.69).
+  A pre-merge review round on the binding branch also landed
+  [[DECISION-D149-COMPUTED-GETTER-COLLISIONS]] (a payload key colliding with a
+  computed getter is dropped and warned, not thrown on) plus correctness
+  amendments with no product-line entry of their own: the bind write-back's
+  `refresh()` now enters the D145 funnel, `ViewManager.render()` honours
+  `treeUnknown`, a controlled `checked` keeps its content attribute coherent,
+  and a view the router restores after a stalled out-animation is reactive
+  again (and inert again when it truly leaves).
+  `examples/overlays` is the Portal showcase (toasts, clipped-ancestor menu
+  with `@event:outside` logical containment, Portal slide-over vs native
+  `<dialog>` modal); its dogfooding pass produced the Portal
+  component-root steering error (wrapper idiom documented in D144).
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
@@ -89,8 +110,9 @@ log in [[DOC-DECISIONS]] explains why the contract has its current shape.
     genuinely fail-soft, island validation descends into slot fallback, the
     lexer no longer panics on a trailing backslash, and generated static-page
     entries observe their own mount rejection.
-- Element actions, `<Portal>`, and lazy routes were reviewed and deferred (the
-  SPEC deferred list carries the rationale). Pieces migration to
+- Element actions and lazy routes were reviewed and deferred (the SPEC deferred
+  list carries the rationale). `<Portal>` shipped its scoped v1 in 0.5.0
+  ([[DECISION-D144-PORTAL]], v1.66) — named outlets remain the deferred half. Pieces migration to
   `@event:outside` is queued for AFTER 0.2.0 ships — older compilers reject
   unknown modifiers.
 - `examples/kanban` drives its drag-shift animation from the `flip` attribute
@@ -171,12 +193,16 @@ half is merged and suite-verified: `client-runtime/devtools.js` speaks SPEC
 §55's wire protocol, registers only when an extension injects
 `window.__PUZZLE_DEVTOOLS_HOOK__`, and DCEs out of production entirely. The
 extension lives in its own public repo `magic-spells/puzzle-devtools` (MV3,
-panel UI dogfooded as a Puzzle app), and its v1 — Views + Store panels — is
-built, unit-tested, and smoke-verified against a live `puzzle dev` app in real
-Chrome. The store's `subscribersByKey`/`keysBySubscriber` pair is the asset —
-it answers "which views re-render when this record changes" exactly, which
-React and Svelte users answer by guessing; the subscriptions-graph panel that
-exploits it is the named round 2.
+panel UI dogfooded as a Puzzle app), unit-tested and smoke-verified against a
+live `puzzle dev` app in real Chrome. Its panels are Views, Store,
+Subscriptions, Router, Performance, and Connection. The store's
+`subscribersByKey`/`keysBySubscriber` pair is the asset — it answers "which
+views re-render when this record changes" exactly, which React and Svelte users
+answer by guessing; the Subscriptions panel reads it through
+`snapshot:subscriptions` and re-requests on each `flush`. That snapshot
+separates `held` keys — those a prepared, uncommitted `data()` run added
+([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]) — so an open navigation does
+not read as a leak.
 
 A **deep-review round** followed (2026-07-24), reading the merged tree rather
 than adding features. It produced two decision cards — D110 (`dev.proxy` rejects
@@ -191,14 +217,21 @@ of step with `MANAGED_TAGS`), and two were **fail-soft paths that were not**
 (Store hydration escaping the constructor, an enter-hook throw reaching the
 mount-failure recovery).
 
-Identified and **not** scheduled, roughly by value: error boundaries + an app
-`onError` hook; dynamic
+Identified and **not** scheduled, roughly by value (error boundaries + the app
+`onError` hook shipped in 0.5.0 — [[DECISION-D145-ERROR-BOUNDARIES]]): dynamic
 components (`<component is={}>`); `<KeepAlive>`-style view-state retention on
-back-navigation; two-way `bind` sugar plus a schema-derived forms helper;
-`<svelte:window>`-style global event bindings; per-subtree provide/inject;
+back-navigation; a schema-derived forms helper (its substrate — implicit
+two-way form binding, inferred with no sugar syntax — is in 0.5.0 as
+[[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]/v1.68; the forms helper itself
+stays unscheduled); `<svelte:window>`-style global event bindings;
+per-subtree provide/inject;
 `puzzle check` / an LSP over the compiler's existing positioned diagnostics;
-i18n; `build --analyze`; `puzzle preview`; deploy presets; Astro-style content
-collections; and a WASM playground.
+i18n; `build --analyze`; deploy presets; Astro-style content
+collections; and a WASM playground. (`puzzle preview` left this list in 0.5.0
+— [[DECISION-D148-PREVIEW-AND-STATIC-DEV]]/v1.69. Dynamic components were
+re-reviewed 2026-07-28 and stay cut: `{#if}`/`{#case}` over imported
+components covers the enumerable case, and compile-time import resolution
+makes an open-ended `is={}` real design work, not sugar.)
 
 ## Release checklist
 
@@ -239,7 +272,6 @@ collections; and a WASM playground.
     modes, base path, transitions, atomic commit, head, guards, focus.
   - [[DOC-SPEC-BUILD]] — CLI, HMR, static/hybrid output, upgrade, dev build
     errors, `/testing`, `--fixtures`, the DevTools bridge.
-- [[DOC-DECISIONS]] — numeric decision index and links to ADR cards.
 - [[DOC-RELEASE-SURFACE]] — complete, compact shipped-surface inventory.
 - [[DOC-BUILD-PLAN]] — v1 implementation plan and release-phase status.
 

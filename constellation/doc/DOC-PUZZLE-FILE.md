@@ -7,7 +7,6 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
   - DOC-SPEC-VIEW
-  - DOC-DECISIONS
   - DOC-USER-GUIDE
   - DOC-DATASTORE
   - DOC-COMPILATION-FLOW
@@ -51,7 +50,7 @@ export default class ComponentName extends PuzzleView {
 
 Only the `<puzzle-view>` block is required.
 
-**Emission modes (D20):** files under `app/views/**` and `app/layouts/**` compile to a real `<puzzle-view>` DOM element carrying the tag's attributes; **reusable components render inline** — no wrapper element, template contents only — so nested components never stack wrappers. For components, `<puzzle-view>` is just the template delimiter: it must carry no attributes (compile error) and the template needs a single root element in v1. See [[DOC-SPEC-ANATOMY]] §3 and [[DOC-DECISIONS]] D20.
+**Emission modes (D20):** files under `app/views/**` and `app/layouts/**` compile to a real `<puzzle-view>` DOM element carrying the tag's attributes; **reusable components render inline** — no wrapper element, template contents only — so nested components never stack wrappers. For components, `<puzzle-view>` is just the template delimiter: it must carry no attributes (compile error) and the template needs a single root element in v1. See [[DOC-SPEC-ANATOMY]] §3 and [[DECISION-D20-PUZZLE-VIEW-ELEMENT]].
 
 ---
 
@@ -84,7 +83,7 @@ Templates reference handlers in two forms:
 
 ```html
 <form @submit={ addTodo(event) }>
-<input type="checkbox" @change={ toggleTodo(todo) } />
+<button @click={ deleteTodo(todo) }>×</button>
 <button @click={ setFilter('all') }>All</button>
 <button @click={ clearCompleted }>Clear</button>
 ```
@@ -95,8 +94,8 @@ events = {
     event.preventDefault();
     // ...
   },
-  toggleTodo: (todo) => {
-    todo.toggle();
+  deleteTodo: (todo) => {
+    todo.destroy();
   },
   setFilter: (filter) => {
     this.setData('currentFilter', filter);
@@ -106,6 +105,10 @@ events = {
   },
 };
 ```
+
+Form controls usually need no handler at all: a path-shaped `value=`/`checked=`
+two-way binds the field itself (D147, SPEC §6), and an author
+`@input`/`@change` on the control suppresses that synthesis and owns the write.
 
 Event modifiers — `@event:modifier[:modifier…]={ handler }` (`prevent`/`stop`/`once` + key filters like `@keydown:enter`) — **shipped in v1.7 (D38)**. See [[DOC-SPEC]] §5 and [[DOC-EVENTS]].
 

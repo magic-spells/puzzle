@@ -1070,3 +1070,89 @@ describe('Store — server read path (D21)', () => {
 		vi.unstubAllGlobals();
 	});
 });
+
+describe('Store — held-eval refcounting (D146)', () => {
+	// The key set a subscriber is currently subscribed to.
+	const keysOf = (store, sub) => [...(store.keysBySubscriber.get(sub) ?? [])];
+
+	it('two overlapping prepares hold the same key; discarding the first does not drop it', () => {
+		const store = makeStore();
+		store.upsert('todo', { id: 't1', text: 'a' });
+		store.upsert('todo', { id: 't2', text: 'b' });
+		const sub = { onStoreChange() {} };
+
+		// Committed baseline: subscribed to t1.
+		store.withTracking(sub, () => store.findOne('todo', 't1'));
+		const baseline = keysOf(store, sub);
+		expect(baseline).toHaveLength(1);
+
+		// Prepare #1 queries t2. Its `before` is {t1}, so t2 is net-new.
+		const p1 = {};
+		store.withTracking(sub, () => store.findOne('todo', 't2'), false, p1);
+		// Prepare #2 queries t2 as well. Its `before` is {t1, t2} — under the old
+		// "hold only added \ before" rule it would hold NOTHING.
+		const p2 = {};
+		store.withTracking(sub, () => store.findOne('todo', 't2'), false, p2);
+
+		p1.reconcile(false); // superseded prepare unwinds
+		p2.reconcile(true); // winning prepare commits
+
+		// t2 survives p1's discard (p2 still held it) and t1 is garbage-collected by
+		// p2's commit reconcile — the winner's key set, exactly.
+		const after = keysOf(store, sub);
+		expect(after.some((k) => k.includes('t2'))).toBe(true);
+		expect(after.some((k) => k.includes('t1'))).toBe(false);
+		expect(store._heldKeys.get(sub)).toBeUndefined();
+	});
+
+	it('a prepare holds EVERY key it queried, refcounted, and releases exactly its own holds', () => {
+		const store = makeStore();
+		store.upsert('todo', { id: 't1', text: 'a' });
+		const sub = { onStoreChange() {} };
+
+		store.withTracking(sub, () => store.findOne('todo', 't1'));
+		const [key] = keysOf(store, sub);
+
+		const p1 = {};
+		store.withTracking(sub, () => store.findOne('todo', 't1'), false, p1);
+		// Already in `before`, but held all the same — that is what makes overlapping
+		// prepares compose.
+		expect(store._heldKeys.get(sub).get(key).count).toBe(1);
+
+		const p2 = {};
+		store.withTracking(sub, () => store.findOne('todo', 't1'), false, p2);
+		expect(store._heldKeys.get(sub).get(key).count).toBe(2);
+
+		p1.reconcile(true);
+		expect(store._heldKeys.get(sub).get(key).count).toBe(1); // p2's hold remains
+		p2.reconcile(true);
+		expect(store._heldKeys.get(sub)).toBeUndefined(); // entry dropped when empty
+
+		expect(keysOf(store, sub)).toEqual([key]);
+	});
+
+	it('a discard cannot drop a key another live prepare is holding', () => {
+		const store = makeStore();
+		store.upsert('todo', { id: 't2', text: 'b' });
+		const sub = { onStoreChange() {} };
+		// No baseline at all: both prepares ADD t2 from nothing.
+		const p1 = {};
+		store.withTracking(sub, () => store.findOne('todo', 't2'), false, p1);
+		const p2 = {};
+		store.withTracking(sub, () => store.findOne('todo', 't2'), false, p2);
+
+		p1.reconcile(false);
+		expect(keysOf(store, sub)).toHaveLength(1); // p2 still holds it
+
+		// Both discarded: the key is left LIVE. p2 observed it in its own pre-eval
+		// set, so unwinding p2 unwinds only what p2 added on top of that. This is
+		// D146's deliberate posture — transiently OVER-subscribed, never weakened —
+		// and it self-heals on the next committed eval that no longer queries it.
+		p2.reconcile(false);
+		expect(keysOf(store, sub)).toHaveLength(1);
+		expect(store._heldKeys.get(sub)).toBeUndefined(); // no hold survives
+
+		store.withTracking(sub, () => store.findMany('other'));
+		expect(keysOf(store, sub).some((k) => k.includes('t2'))).toBe(false);
+	});
+});

@@ -5,7 +5,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
-import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { ViewNode, SLOT_TAG, PORTAL_TAG } from '../client-runtime/views/ViewNode.js';
+import { Store } from '../client-runtime/datastore/store.js';
+import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
+import LocalForm from './fixtures/binding/LocalForm.compiled.js';
+import RecordForm from './fixtures/binding/RecordForm.compiled.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -170,6 +174,18 @@ describe('SSG serializer (M1)', () => {
 			}
 			expect(await serialize(comp(FallbackCard))).toBe('<section>fallback</section>');
 		});
+
+		it('emits nothing for a <Portal> (D144)', async () => {
+			class WithPortal extends PuzzleView {
+				render() {
+					return h('section', {}, [
+						text('page'),
+						new ViewNode(PORTAL_TAG, {}, [h('div', { class: 'overlay' }, [text('modal')])]),
+					]);
+				}
+			}
+			expect(await serialize(comp(WithPortal))).toBe('<section>page</section>');
+		});
 	});
 
 	describe('nested components with preloaded data', () => {
@@ -200,6 +216,99 @@ describe('SSG serializer (M1)', () => {
 				}
 			}
 			expect(await serialize(comp(Empty))).toBe('');
+		});
+	});
+
+	// The compiler synthesizes `'@input:bind'` / `'@change:bind'` attrs on
+	// qualifying form controls (D147). They are framework directives carrying a
+	// FUNCTION, so they must never reach the markup — serializeAttrs' `@` prefix
+	// rule is what covers them, and these pin that the `:bind` suffix rides it
+	// rather than needing (or growing) a rule of its own. The controlled value the
+	// bind is paired with still serializes exactly as an unbound one does.
+	describe('implicit two-way binding directives (D147)', () => {
+		const bind = () => () => {};
+
+		it('drops @input:bind and @change:bind while keeping the controlled value', async () => {
+			expect(await serialize(h('input', { class: 'draft', value: 'hello', '@input:bind': bind() }))).toBe(
+				'<input class="draft" value="hello">'
+			);
+			expect(await serialize(h('input', { type: 'number', value: 7, '@change:bind': bind() }))).toBe(
+				'<input type="number" value="7">'
+			);
+			expect(await serialize(h('input', { type: 'range', value: 0, '@input:bind': bind() }))).toBe(
+				'<input type="range" value="0">'
+			);
+		});
+
+		it('serializes a bound checkbox as a bare checked attr, or omits it', async () => {
+			expect(
+				await serialize(h('input', { type: 'checkbox', checked: true, '@change:bind': bind() }))
+			).toBe('<input type="checkbox" checked>');
+			expect(
+				await serialize(h('input', { type: 'checkbox', checked: false, '@change:bind': bind() }))
+			).toBe('<input type="checkbox">');
+		});
+
+		it('serializes a bound textarea value as escaped text content', async () => {
+			const tree = h('textarea', { class: 'notes', value: 'a < b & c', '@input:bind': bind() });
+			expect(await serialize(tree)).toBe('<textarea class="notes">a &lt; b &amp; c</textarea>');
+		});
+
+		it('serializes a bound select as a selected option, not a value attr', async () => {
+			const tree = h('select', { class: 'sort', value: 'done', '@change:bind': bind() }, [
+				h('option', { value: 'all' }, [text('All')]),
+				h('option', { value: 'done' }, [text('Done')]),
+			]);
+			expect(await serialize(tree)).toBe(
+				'<select class="sort"><option value="all">All</option>' +
+					'<option value="done" selected>Done</option></select>'
+			);
+		});
+
+		it('emits no directive for real compiler output (local-state binds)', async () => {
+			const html = await serialize(comp(LocalForm));
+			expect(html).toBe(
+				'<puzzle-view class="local-form">' +
+					'<input class="draft" value="">' +
+					'<input class="age" type="number" value="">' +
+					'<input class="volume" type="range" value="0">' +
+					'<input class="agree" type="checkbox">' +
+					'<textarea class="notes"></textarea>' +
+					'<select class="sort"><option value="all" selected>All</option>' +
+					'<option value="done">Done</option></select>' +
+					'<p class="matches">4</p>' +
+					'</puzzle-view>'
+			);
+			expect(html).not.toContain('bind');
+			expect(html).not.toContain('@');
+		});
+
+		it('emits no directive for real compiler output (record-path binds)', async () => {
+			class Todo extends PuzzleModel {
+				static schema = {
+					id: Puzzle.string().primary(),
+					text: Puzzle.string().required(),
+					completed: Puzzle.boolean().default(false),
+					rank: Puzzle.number().default(0),
+				};
+			}
+			const store = new Store({ todo: Todo });
+			store.createRecord('todo', { id: '1', text: 'wash', rank: 1, completed: true });
+			store.createRecord('todo', { id: '2', text: 'fo<ld', rank: 2 });
+
+			const html = await serialize(comp(RecordForm), { ctx: { store } });
+			expect(html).toBe(
+				'<puzzle-view class="record-form">' +
+					'<div class="row"><input class="text" value="wash">' +
+					'<input class="done" type="checkbox" checked>' +
+					'<input class="rank" type="number" value="1"></div>' +
+					'<div class="row"><input class="text" value="fo&lt;ld">' +
+					'<input class="done" type="checkbox">' +
+					'<input class="rank" type="number" value="2"></div>' +
+					'</puzzle-view>'
+			);
+			expect(html).not.toContain('bind');
+			expect(html).not.toContain('@');
 		});
 	});
 });

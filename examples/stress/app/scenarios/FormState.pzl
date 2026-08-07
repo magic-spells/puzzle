@@ -53,7 +53,17 @@
          `listener-churn` already owns that question. Keys would buy nothing: the
          row set never changes, so index alignment reuses every element for the
          whole op — which is also what makes a WeakSet of live elements built
-         ONCE per op valid until the op ends. -->
+         ONCE per op valid until the op ends.
+
+         Both bound values are wrapped in String(...) ON PURPOSE. A bare
+         `value={ row.text }` on a handler-less <input>/<select> is exactly the
+         shape the compiler auto-binds (D147), which would attach a write-back
+         listener to all 400 controls and make this a measurement of binding
+         rather than of controlled-value patching. A call expression does not
+         classify, so the wrapper is the documented opt-out. `readonly` is not
+         the escape here: it is not valid on <select>, and it would take the
+         interactivity the typing arms and opValidate() depend on. -->
+
     <div class="fs-grid max-h-[380px] overflow-auto px-4 py-2">
       {#for row in rows}
         <div class="fs-row flex items-center gap-3 h-9">
@@ -61,10 +71,10 @@
           <input
             class="fs-input flex-1 min-w-0 h-7 px-2 rounded bg-ink border border-hairline font-mono text-[11px] text-fg focus:outline-none"
             type="text"
-            value={ row.text } />
+            value={ String(row.text) } />
           <select
             class="fs-select w-44 shrink-0 h-7 px-2 rounded bg-ink border border-hairline font-mono text-[11px] text-muted focus:outline-none"
-            value={ row.choice }>
+            value={ String(row.choice) }>
             {#for opt in options}
               <option value={ opt.value }>{ opt.label }</option>
             {/for}

@@ -54,6 +54,14 @@ type Slot struct {
 	Pos      Position
 }
 
+// Portal is a <Portal>…</Portal> teleport marker (D144). It takes no
+// attributes and is paired-only; Children is the subtree the runtime mounts
+// into the framework-created portal outlet instead of at this position.
+type Portal struct {
+	Children []Node
+	Pos      Position
+}
+
 // Text is literal text between tags/directives. Brace escapes (\{ \}) are
 // already resolved to literal braces.
 type Text struct {
@@ -132,6 +140,7 @@ type InlineSVG struct {
 func (*Element) isNode()       {}
 func (*Component) isNode()     {}
 func (*Slot) isNode()          {}
+func (*Portal) isNode()        {}
 func (*Text) isNode()          {}
 func (*Interpolation) isNode() {}
 func (*If) isNode()            {}
@@ -164,9 +173,9 @@ type StaticAttr struct {
 	Pos       Position
 }
 
-// DynamicAttr is `name={ expr }` — a single unquoted brace expression. This
-// covers dynamic attributes and two-way bindings alike (value={var}); the
-// property-vs-attribute distinction is a runtime concern.
+// DynamicAttr is `name={ expr }` — a single unquoted brace expression. Binding
+// classification and the property-vs-attribute distinction are downstream
+// compiler/runtime concerns.
 type DynamicAttr struct {
 	Name string
 	Expr string

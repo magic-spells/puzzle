@@ -38,6 +38,7 @@ import type {
 	AdapterMockResult,
 	ModelAdapter,
 	FocusBehavior,
+	PuzzleErrorInfo,
 } from '@magic-spells/puzzle';
 import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
@@ -57,7 +58,7 @@ import type {
 } from '@magic-spells/puzzle/ssg';
 import { mountStatic } from '@magic-spells/puzzle/static';
 import type { MountStaticOptions, StaticRoute } from '@magic-spells/puzzle/static';
-import { createTestApp, measureRenders, mountView } from '@magic-spells/puzzle/testing';
+import { createTestApp, measureRenders, mountView, type } from '@magic-spells/puzzle/testing';
 import type { RenderProfile } from '@magic-spells/puzzle/testing';
 
 const renderedNull: string = displayValue(null);
@@ -129,6 +130,11 @@ class TodoListView extends PuzzleView {
 		},
 		selectAll: () => this.setData({ filter: 'all', selectedId: null }),
 	};
+
+	errorContent(error: unknown) {
+		void error;
+		return undefined;
+	}
 
 	async data(params?: Record<string, string>, props?: any): Promise<object> {
 		const id = params?.id ?? props?.id;
@@ -277,6 +283,10 @@ const config: PuzzleAppConfig = {
 	},
 	beforeUnmount(app) {
 		void app.store.findMany('todo');
+	},
+	onError(error, info) {
+		const typedInfo: PuzzleErrorInfo = info;
+		void [error, typedInfo.phase, typedInfo.view, typedInfo.route];
 	},
 };
 
@@ -461,8 +471,22 @@ mountStatic(staticOptions).then(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Testing helpers (D94/D121) — both measureRenders call shapes
+// Testing helpers (D94/D121) — both measureRenders call shapes, plus type()
 // ---------------------------------------------------------------------------
+
+async function typeIntoBoundInput(): Promise<void> {
+	const view = await mountView(TodoListView);
+	// Handle form: selector or element, chainable like click().
+	await view.type('input.draft', 'hello');
+	await (await createTestApp({ routes: [{ path: '/', view: TodoListView }] })).type(
+		'input.draft',
+		'hello'
+	);
+	// Free form (D147): the element itself, resolved by the caller.
+	const input = view.find('input.draft');
+	if (input) await type(input, 'hello');
+}
+void typeIntoBoundInput;
 
 async function profileRenders(): Promise<void> {
 	const view = await mountView(TodoListView);

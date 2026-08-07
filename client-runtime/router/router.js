@@ -296,6 +296,7 @@ import {
 import { walkRouteTree } from './routeTree.js';
 import { devtoolsRouteCommit } from '../devtools.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
+import { reportError } from '../errors.js';
 
 // sessionStorage mirror of the scroll-position map (v1.10, D41). One JSON blob of
 // { entryKey: {x,y} } under a single key; capped so a long session can't grow it
@@ -1008,7 +1009,13 @@ export class Router {
 				// Rejection is still the completion of an await: a newer
 				// navigation makes it stale and therefore silent.
 				if (token !== this.#token) return null;
-				console.error('[puzzle] navigation guard failed:', err);
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'navigation', route: to },
+					'[puzzle] navigation guard failed:',
+					err
+				);
 				return false;
 			}
 
@@ -1021,9 +1028,10 @@ export class Router {
 				// boundary. Same-path replace remains its normal no-op, but still
 				// counts because the guard initiated it and no commit reset occurred.
 				if (this.#guardRedirectCount >= 10) {
-					console.error(
+					const err = new Error(
 						'[puzzle] navigation guard redirect limit exceeded (10) — staying on the current route'
 					);
+					reportError(this.#ctx, err, { phase: 'navigation', route: to }, err.message);
 					return false;
 				}
 				this.#guardRedirectCount++;
@@ -1044,7 +1052,10 @@ export class Router {
 		if (this.#pendingOut) {
 			const stalled = this.#pendingOut;
 			this.#pendingOut = null;
-			stalled._cancelOutAnimation();
+			// playOut() did more than start WAAPI: it made the still-committed view
+			// inert and unsubscribed it. Recovery must undo that whole state transition,
+			// not merely clear the animation fill that hid the root.
+			stalled._restoreFromLeaving();
 		}
 		this.#pendingIndex = null;
 		// This navigation terminated without committing (guard block/failure, data
@@ -1239,8 +1250,11 @@ export class Router {
 
 		// keep = shared chain PREFIX length by node object identity. Reused
 		// ancestors keep their instances; everything from `keep` down is fresh.
+		// An INVALIDATED chain (an error boundary rendered over router-owned
+		// content and destroyed it — __invalidateChain) can reuse nothing: keep
+		// stays 0 so every level is rebuilt.
 		let keep = 0;
-		if (cur) {
+		if (cur && !cur.chainInvalid) {
 			const a = cur.entry.chain;
 			const b = entry.chain;
 			const max = Math.min(a.length, b.length);
@@ -1276,6 +1290,7 @@ export class Router {
 			cur &&
 			cur.layout &&
 			!pendingLayoutOut &&
+			!cur.layoutInvalid &&
 			cur.layoutClass === entry.layout
 		);
 		const layout = reuseLayout
@@ -1321,213 +1336,280 @@ export class Router {
 		// whole probe to `false` at compile time. Probed INLINE (never hoisted into
 		// a module const, which does not constant-propagate into method scopes);
 		// absent define ⇒ ON, so vitest and third-party bundlers keep the path.
+		// Prepared (run but NOT committed) reused-ancestor refreshes — D146. Filled by
+		// the load phase below, committed inside #commitState (the synchronous
+		// #committing window, atomically with #commitLocation + mount), and discarded
+		// on every path that does not reach a commit.
+		const prepared = [];
+		const discardPrepared = () => {
+			for (const p of prepared) p.discard();
+			prepared.length = 0;
+		};
+
 		const isSSGTakeover =
 			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
 			!cur &&
 			this.#container != null &&
 			this.#container.hasAttribute('data-puzzle-ssg');
+		// EXCEPTION-SAFE handle sweep (D146). Every prepared handle is idempotent via
+		// its own `settled` flag, so discarding unconditionally on the way out is free
+		// on the success path (#commitState already committed them) and is the only
+		// thing that covers a THROW out of the synchronous commit block inside #swap —
+		// a user render()/afterUpdate() blowing up there reaches neither commit nor any
+		// of the explicit bail paths, and an unreleased hold fences the ancestor's keys
+		// in Store._heldKeys for the rest of the session.
 		try {
-			const loads = [];
-			const hasSkeleton = (v) =>
-				!isSSGTakeover && typeof v.renderSkeleton === 'function';
-			const start = (v) => {
-				const p = v.preload({ params, props: {}, route: to });
-				if (hasSkeleton(v)) {
-					p.catch((err) => console.error('[puzzle] skeleton view data() failed:', err));
-				} else {
-					loads.push(p);
+			try {
+				const loads = [];
+				const hasSkeleton = (v) =>
+					!isSSGTakeover && typeof v.renderSkeleton === 'function';
+				const start = (v) => {
+					const p = v.preload({ params, props: {}, route: to });
+					if (hasSkeleton(v)) {
+						p.catch((err) => {
+							reportError(
+								this.#ctx,
+								err,
+								{ phase: 'navigation', view: v, route: to },
+								'[puzzle] skeleton view data() failed:',
+								err
+							);
+							// Straight through: preload() runs off-DOM, so this rejection can
+							// land before mount() ever creates the view's ViewManager. The
+							// view buffers the error in that window and flushes it at the end
+							// of mount() (PuzzleView #pendingBoundaryError) — deferring by a
+							// microtask never reached the mount and left the user on the
+							// skeleton forever.
+							v.__renderErrorBoundary?.(err);
+						});
+					} else {
+						loads.push(p);
+					}
+				};
+				// GATED loads start first, skeleton-exempt preloads LAST. An async
+				// data() holds the store's tracking scope open for its whole await
+				// (Store.withTracking serializes evaluations), so a skeleton view's
+				// un-awaited preload must open its scope only after every gated load
+				// has started — otherwise the gate queues behind the skeleton's own
+				// fetch and the commit (and the skeleton paint) waits on the very
+				// load the exemption exists to skip.
+				for (const v of freshViews) if (!hasSkeleton(v)) start(v);
+				// Reused ancestors PREPARE rather than refresh (D146): data() runs here with
+				// the destination params/route (so it still gates the URL exactly as before,
+				// and this.route still names the target — D47), but nothing about the
+				// ancestor changes until the commit window. Ordering inside the loads array
+				// is unchanged, so the store's tracking serialization behaves identically.
+				for (const v of reusedViews) {
+					const p = v.prepareRefresh({ params, route: to });
+					if (!p) continue; // destroyed/leaving/profiler-blocked — refresh() no-ops too
+					prepared.push(p);
+					loads.push(p.ready);
 				}
-			};
-			// GATED loads start first, skeleton-exempt preloads LAST. An async
-			// data() holds the store's tracking scope open for its whole await
-			// (Store.withTracking serializes evaluations), so a skeleton view's
-			// un-awaited preload must open its scope only after every gated load
-			// has started — otherwise the gate queues behind the skeleton's own
-			// fetch and the commit (and the skeleton paint) waits on the very
-			// load the exemption exists to skip.
-			for (const v of freshViews) if (!hasSkeleton(v)) start(v);
-			for (const v of reusedViews) loads.push(v.refresh({ params, route: to }));
-			if (layout && !reuseLayout && !hasSkeleton(layout)) start(layout);
-			for (const v of freshViews) if (hasSkeleton(v)) start(v);
-			if (layout && !reuseLayout && hasSkeleton(layout)) start(layout);
-			await Promise.all(loads);
-		} catch (err) {
-			console.error('[puzzle] navigation data() failed:', err);
-			for (const v of freshViews) v.destroy();
-			if (layout && !reuseLayout) layout.destroy();
-			// Strand recovery: our token bump doomed any transition still animating
-			// out (its post-playOut check will #abandon against our newer token), but
-			// by failing here we never reach #swap — the only place that destroys a
-			// stalled #pendingOut. Left alone, that outgoing unit sits fully played
-			// out (held invisible by the out animation's `fill`) over an UNCHANGED
-			// #state that still claims it as the current view. Restore it: cancel the
-			// out animation (WAAPI cancel clears the effect, finished-and-filling
-			// included — and resolves a still-parked playOut await, so the doomed
-			// navigation abandons promptly) and clear #pendingOut. Only when WE are
-			// still the latest navigation — a newer one owns the cleanup via its own
-			// clamp + #swap skipOut path. The restored unit's playOut memo stays
-			// spent: a later navigation away swaps it out instantly, no second out
-			// animation.
-			this.#recoverFailedNavigation(token);
-			return; // stay put, no history entry (reused ancestors kept — soft-violation)
-		}
+				if (layout && !reuseLayout && !hasSkeleton(layout)) start(layout);
+				for (const v of freshViews) if (hasSkeleton(v)) start(v);
+				if (layout && !reuseLayout && hasSkeleton(layout)) start(layout);
+				await Promise.all(loads);
+			} catch (err) {
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'navigation', route: to },
+					'[puzzle] navigation data() failed:',
+					err
+				);
+				for (const v of freshViews) v.destroy();
+				if (layout && !reuseLayout) layout.destroy();
+				// D146: unwind every prepared ancestor. Subscription-only — the ancestors
+				// were never touched, so nothing renders, no hook fires, and the D145 error
+				// funnel above stays the single report for this failure.
+				discardPrepared();
+				// Strand recovery: our token bump doomed any transition still animating
+				// out (its post-playOut check will #abandon against our newer token), but
+				// by failing here we never reach #swap — the only place that destroys a
+				// stalled #pendingOut. Left alone, that outgoing unit sits fully played
+				// out (held invisible by the out animation's `fill`) over an UNCHANGED
+				// #state that still claims it as the current view. Restore it: cancel the
+				// out animation (WAAPI cancel clears the effect, finished-and-filling
+				// included — and resolves a still-parked playOut await, so the doomed
+				// navigation abandons promptly), clear its leaving/inert guard, and refresh
+				// once to re-track the store subscription playOut dropped. Only when WE are
+				// still the latest navigation — a newer one owns the cleanup via its own
+				// clamp + #swap skipOut path. The restored unit's playOut memo stays spent:
+				// a later navigation away swaps it out instantly, no second out animation.
+				this.#recoverFailedNavigation(token);
+				return; // stay put, no history entry (reused ancestors kept — soft-violation)
+			}
 
-		// A newer navigation started while we awaited — discard this one.
-		if (token !== this.#token) {
-			for (const v of freshViews) v.destroy();
-			if (layout && !reuseLayout) layout.destroy();
-			return;
-		}
+			// A newer navigation started while we awaited — discard this one.
+			if (token !== this.#token) {
+				for (const v of freshViews) v.destroy();
+				if (layout && !reuseLayout) layout.destroy();
+				discardPrepared(); // D146
+				return;
+			}
 
-		// LOCATION is NOT committed here anymore (D61): URL + memory stack + title/head (D84) all
-		// move into #commitLocation, called inside the synchronous #committing window
-		// — the params-only branch below and #swap's commit block — so they land
-		// ATOMICALLY with the mount/#state, one out-animation LATER in sequential mode.
-		// #resolveScroll STAYS here (it is pure over its arguments — reads only
-		// #scrollEnabled()/#scrollBehavior, never #scrollKey/#positions/history): the
-		// resolved { anchor } sentinel / {x,y} is threaded down to #commitState, which
-		// applies it after the new content is on screen.
+			// LOCATION is NOT committed here anymore (D61): URL + memory stack + title/head (D84) all
+			// move into #commitLocation, called inside the synchronous #committing window
+			// — the params-only branch below and #swap's commit block — so they land
+			// ATOMICALLY with the mount/#state, one out-animation LATER in sequential mode.
+			// #resolveScroll STAYS here (it is pure over its arguments — reads only
+			// #scrollEnabled()/#scrollBehavior, never #scrollKey/#positions/history): the
+			// resolved { anchor } sentinel / {x,y} is threaded down to #commitState, which
+			// applies it after the new content is on screen.
 
-		const views = [...reusedViews, ...freshViews];
+			const views = [...reusedViews, ...freshViews];
 
-		// Where the window should land once the new view is on screen (null =
-		// leave it alone). Resolved here, applied in #commitState. A `#anchor` suffix
-		// on the pushed path refines the default landing (D41): read off the fragment
-		// parseLocation already split (D83 — stripPath dropped it for matching).
-		const anchor = loc.hash ? loc.hash.slice(1) : null;
-		const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
+			// Where the window should land once the new view is on screen (null =
+			// leave it alone). Resolved here, applied in #commitState. A `#anchor` suffix
+			// on the pushed path refines the default landing (D41): read off the fragment
+			// parseLocation already split (D83 — stripPath dropped it for matching).
+			const anchor = loc.hash ? loc.hash.slice(1) : null;
+			const scroll = this.#resolveScroll({ to, from, push, pop, replace, savedPosition, anchor });
 
-		// Whether this navigation moves focus + announces (v1.56, D93). Only the
-		// GATE is decided here — memory mode, `focusBehavior: false`, and nav #0 all
-		// resolve to null, exactly the shape #resolveScroll uses. The TARGET cannot
-		// be resolved off-DOM (the leaf's root element does not exist yet, and a
-		// custom focusBehavior wants to query the committed DOM), so the sentinel
-		// just carries the snapshots #commitState hands back to that function —
-		// the same pre-commit-sentinel/post-mount-resolution split D41's { anchor }
-		// scroll landing uses.
-		const focus = this.#resolveFocus({ to, from, push, pop, replace });
+			// Whether this navigation moves focus + announces (v1.56, D93). Only the
+			// GATE is decided here — memory mode, `focusBehavior: false`, and nav #0 all
+			// resolve to null, exactly the shape #resolveScroll uses. The TARGET cannot
+			// be resolved off-DOM (the leaf's root element does not exist yet, and a
+			// custom focusBehavior wants to query the committed DOM), so the sentinel
+			// just carries the snapshots #commitState hands back to that function —
+			// the same pre-commit-sentinel/post-mount-resolution split D41's { anchor }
+			// scroll landing uses.
+			const focus = this.#resolveFocus({ to, from, push, pop, replace });
 
-		// Params-only degenerate case: keep === chain length ⇒ no fresh views, the
-		// whole chain was refreshed pre-commit. Just record state + refresh the
-		// reused layout (chrome). (Replaces the old dedicated params-only branch.)
-		if (keep === entry.chain.length) {
-			// No animation is involved on a params-only refresh, so the atomic commit
-			// (D61) is just these two adjacent synchronous calls: location (URL/title/
-			// memory stack) immediately before #state. Timing is unchanged from the
-			// old inline commit block.
-			this.#commitLocation({ rawPath, entry, push, replace, memoryIndex, departScroll });
-			this.#commitState({
+			// Params-only degenerate case: keep === chain length ⇒ no fresh views, the
+			// whole chain was refreshed pre-commit. Just record state + refresh the
+			// reused layout (chrome). (Replaces the old dedicated params-only branch.)
+			if (keep === entry.chain.length) {
+				// No animation is involved on a params-only refresh, so the atomic commit
+				// (D61) is just these two adjacent synchronous calls: location (URL/title/
+				// memory stack) immediately before #state. Timing is unchanged from the
+				// old inline commit block.
+				this.#commitLocation({ rawPath, entry, push, replace, memoryIndex, departScroll });
+				this.#commitState({
+					rawPath,
+					pathname: loc.pathname,
+					query: loc.query,
+					hash: loc.hash,
+					entry,
+					params,
+					views,
+					keys: cur.keys,
+					layout,
+					scroll,
+					// D146: the whole chain was prepared above; #commitState commits every
+					// prepared ancestor immediately after #state, still adjacent to
+					// #commitLocation — the atomic block D61 opened, now covering ancestor
+					// params/route/data/subscriptions too.
+					prepared,
+					// A leaf-identical replace is URL-backed transient-state churn, not
+					// a route change: leave the user's current focus in place and make no
+					// live-region announcement. Params-only pushes still take the normal
+					// focus path, and full replaces never reach this branch.
+					focus: replace ? null : focus,
+				});
+				if (layout) this.#refreshLogged(layout, params, to);
+				return;
+			}
+
+			// Assemble the FULL chain LEAF-UP into nested keyed component vnodes — all
+			// levels, not just the fresh ones, so every host along the path (layout and
+			// reused ancestors alike) receives slot content whose descendants describe
+			// the NEW chain. Swapping only at the divergence level and leaving ancestors
+			// holding their old vnodes would let any later ancestor re-render (store
+			// change, setData) push the stale sub-chain back down and revert the swap.
+			//
+			// Keys: a REUSED level keeps its committed key, so the keyed patch reuses
+			// the instance (children pushed through, no data() re-run — props are just
+			// the key). A FRESH level gets its fullPaths pattern stamped with this nav's
+			// token: patchComponent adopts by tag+key and ignores a preattached
+			// .instance, so a fresh level must NEVER collide with an old key — not even
+			// re-entering the same path pattern whose previous instance was destroyed by
+			// an interrupted transition (the clamp above).
+			const keys = entry.chain.map((_, i) =>
+				i < keep ? cur.keys[i] : entry.fullPaths[i] + '\x00' + token
+			);
+			let childVnode = null;
+			for (let i = entry.chain.length - 1; i >= 0; i--) {
+				const vnode = new ViewNode(
+					entry.chain[i].view,
+					{ key: keys[i] },
+					childVnode ? [childVnode] : []
+				);
+				if (i >= keep) vnode.instance = views[i]; // adopt, don't construct
+				childVnode = vnode;
+			}
+			const rootVnode = childVnode; // vnode for chain level 0
+
+			// The routed chain/layout are already preloaded above, but their render
+			// trees can contain non-routed async components. Only an SSG navigation-zero
+			// marker opts into waiting for those descendants: ordinary SPA navigation
+			// keeps ViewManager's fire-and-forget component mounting unchanged.
+			//
+			// This is the branch that pays for itself: with __PUZZLE_TAKEOVER__ false the
+			// block folds away, `preloadTakeoverComponents` loses its only importer here,
+			// and ssg/preload.js tree-shakes out of the bundle ("sideEffects": false).
+			if (
+				(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
+				this.#container?.hasAttribute('data-puzzle-ssg')
+			) {
+				let takeoverVnode = rootVnode;
+				if (layout) {
+					takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
+					takeoverVnode.instance = layout;
+				}
+				const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
+				// A newer navigation may supersede us while a nested component loads.
+				// None of these instances mounted, so release each one's tracked state
+				// explicitly before discarding the routed chain.
+				if (token !== this.#token) {
+					for (const instance of nestedInstances) instance.destroy();
+					for (const v of freshViews) v.destroy();
+					if (layout && !reuseLayout) layout.destroy();
+					discardPrepared(); // D146
+					return;
+				}
+				// Same suppression the routed chain gets below: mountComponent auto-chains
+				// playIn() onto every component it mounts, and these are about to mount over
+				// prerendered markup that already shows them.
+				for (const instance of nestedInstances) instance.skipEnter();
+			}
+
+			await this.#swap(token, cur, {
 				rawPath,
+				// The parsed URL parts (v1.49, D83) — #commitState records them on
+				// #state so the `current` getter never reparses.
 				pathname: loc.pathname,
 				query: loc.query,
 				hash: loc.hash,
 				entry,
 				params,
 				views,
-				keys: cur.keys,
+				keys,
 				layout,
+				reuseLayout,
+				keep,
+				rootVnode,
 				scroll,
-				// A leaf-identical replace is URL-backed transient-state churn, not
-				// a route change: leave the user's current focus in place and make no
-				// live-region announcement. Params-only pushes still take the normal
-				// focus path, and full replaces never reach this branch.
-				focus: replace ? null : focus,
+				focus,
+				to,
+				// D146: prepared reused-ancestor refreshes, committed by #commitState inside
+				// #swap's synchronous #committing window — the same window as #commitLocation
+				// and the mount, so URL, DOM, and ancestor state move together or not at all.
+				prepared,
+				// D61: #commitLocation (run as the first statement inside #swap's commit
+				// window) reads these to move the URL/memory stack; null memoryIndex on a
+				// push/initial nav, set only for a memory-mode go/back/forward pop;
+				// replace (D83) selects the entry-swapping commit instead of a push.
+				// departScroll: the departure position captured at nav start, before the
+				// outgoing view's teardown collapsed the page (see #navigate).
+				push,
+				replace,
+				memoryIndex,
+				departScroll,
 			});
-			if (layout) this.#refreshLogged(layout, params, to);
-			return;
+		} finally {
+			discardPrepared();
 		}
-
-		// Assemble the FULL chain LEAF-UP into nested keyed component vnodes — all
-		// levels, not just the fresh ones, so every host along the path (layout and
-		// reused ancestors alike) receives slot content whose descendants describe
-		// the NEW chain. Swapping only at the divergence level and leaving ancestors
-		// holding their old vnodes would let any later ancestor re-render (store
-		// change, setData) push the stale sub-chain back down and revert the swap.
-		//
-		// Keys: a REUSED level keeps its committed key, so the keyed patch reuses
-		// the instance (children pushed through, no data() re-run — props are just
-		// the key). A FRESH level gets its fullPaths pattern stamped with this nav's
-		// token: patchComponent adopts by tag+key and ignores a preattached
-		// .instance, so a fresh level must NEVER collide with an old key — not even
-		// re-entering the same path pattern whose previous instance was destroyed by
-		// an interrupted transition (the clamp above).
-		const keys = entry.chain.map((_, i) =>
-			i < keep ? cur.keys[i] : entry.fullPaths[i] + '\x00' + token
-		);
-		let childVnode = null;
-		for (let i = entry.chain.length - 1; i >= 0; i--) {
-			const vnode = new ViewNode(
-				entry.chain[i].view,
-				{ key: keys[i] },
-				childVnode ? [childVnode] : []
-			);
-			if (i >= keep) vnode.instance = views[i]; // adopt, don't construct
-			childVnode = vnode;
-		}
-		const rootVnode = childVnode; // vnode for chain level 0
-
-		// The routed chain/layout are already preloaded above, but their render
-		// trees can contain non-routed async components. Only an SSG navigation-zero
-		// marker opts into waiting for those descendants: ordinary SPA navigation
-		// keeps ViewManager's fire-and-forget component mounting unchanged.
-		//
-		// This is the branch that pays for itself: with __PUZZLE_TAKEOVER__ false the
-		// block folds away, `preloadTakeoverComponents` loses its only importer here,
-		// and ssg/preload.js tree-shakes out of the bundle ("sideEffects": false).
-		if (
-			(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) &&
-			this.#container?.hasAttribute('data-puzzle-ssg')
-		) {
-			let takeoverVnode = rootVnode;
-			if (layout) {
-				takeoverVnode = new ViewNode(entry.layout, {}, [rootVnode]);
-				takeoverVnode.instance = layout;
-			}
-			const nestedInstances = await preloadTakeoverComponents(takeoverVnode, this.#ctx);
-			// A newer navigation may supersede us while a nested component loads.
-			// None of these instances mounted, so release each one's tracked state
-			// explicitly before discarding the routed chain.
-			if (token !== this.#token) {
-				for (const instance of nestedInstances) instance.destroy();
-				for (const v of freshViews) v.destroy();
-				if (layout && !reuseLayout) layout.destroy();
-				return;
-			}
-			// Same suppression the routed chain gets below: mountComponent auto-chains
-			// playIn() onto every component it mounts, and these are about to mount over
-			// prerendered markup that already shows them.
-			for (const instance of nestedInstances) instance.skipEnter();
-		}
-
-		await this.#swap(token, cur, {
-			rawPath,
-			// The parsed URL parts (v1.49, D83) — #commitState records them on
-			// #state so the `current` getter never reparses.
-			pathname: loc.pathname,
-			query: loc.query,
-			hash: loc.hash,
-			entry,
-			params,
-			views,
-			keys,
-			layout,
-			reuseLayout,
-			keep,
-			rootVnode,
-			scroll,
-			focus,
-			to,
-			// D61: #commitLocation (run as the first statement inside #swap's commit
-			// window) reads these to move the URL/memory stack; null memoryIndex on a
-			// push/initial nav, set only for a memory-mode go/back/forward pop;
-			// replace (D83) selects the entry-swapping commit instead of a push.
-			// departScroll: the departure position captured at nav start, before the
-			// outgoing view's teardown collapsed the page (see #navigate).
-			push,
-			replace,
-			memoryIndex,
-			departScroll,
-		});
 	}
 
 	/**
@@ -1673,7 +1755,7 @@ export class Router {
 		// byte-identical to v1.23.
 		if (!skipOut && cur && oldAnimator) {
 			if (overlap) {
-				this.#startOverlapLeave(oldAnimator);
+				this.#startOverlapLeave(oldAnimator, next.to);
 			} else {
 				this.#pendingOut = oldAnimator;
 				// Morph-leave (v1.23, D55): starts synchronously alongside the WAAPI out.
@@ -1686,9 +1768,23 @@ export class Router {
 				if (this.#morphHandler) {
 					try {
 						const p = this.#morphHandler.leave(oldAnimator.element);
-						if (p) morphOut = Promise.resolve(p).catch(() => {});
+						if (p) {
+							morphOut = Promise.resolve(p).catch((err) =>
+								reportError(this.#ctx, err, {
+									phase: 'transition',
+									view: oldAnimator,
+									route: next.to,
+								})
+							);
+						}
 					} catch (err) {
-						console.error('[puzzle] morph leave handler threw', err);
+						reportError(
+							this.#ctx,
+							err,
+							{ phase: 'transition', view: oldAnimator, route: next.to },
+							'[puzzle] morph leave handler threw',
+							err
+						);
 					}
 				}
 				// A user viewWillHide()/viewDidHide() hook can throw, rejecting playOut().
@@ -1706,7 +1802,13 @@ export class Router {
 				try {
 					await oldAnimator.playOut();
 				} catch (err) {
-					console.error('[puzzle] leave hook failed during navigation:', err);
+					reportError(
+						this.#ctx,
+						err,
+						{ phase: 'leave', view: oldAnimator, route: next.to },
+						'[puzzle] leave hook failed during navigation:',
+						err
+					);
 				}
 				// Superseded while the outgoing unit was still animating out: bail NOW,
 				// BEFORE awaiting the fly-back. The loser must not be held hostage by its
@@ -1760,6 +1862,8 @@ export class Router {
 						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
 							topView.mount(this.#container, { children: rootVnode.children, preloaded: true }),
+							topView,
+							next.to,
 							restoreTakeover
 						);
 						this.#commitState(next);
@@ -1785,7 +1889,11 @@ export class Router {
 					// Commit BEFORE the chrome refresh (v1.15, D47) — matching the
 					// params-only branch — so the layout's post-commit data() reads a
 					// fresh router.current. Safe: applyParentUpdate patched the DOM
-					// above, so #commitState's mount-first invariant holds.
+					// above, so #commitState's mount-first invariant holds. The D47
+					// ordering survives D146's deferred ancestor commit unchanged: the
+					// prepared ancestors commit INSIDE #commitState (after #state), so the
+					// chrome refresh below still runs last and now also sees ancestors
+					// whose params/route/data already name this route.
 					this.#commitState(next);
 					this.#refreshLogged(layout, params, next.to);
 				} else {
@@ -1801,6 +1909,8 @@ export class Router {
 						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
 							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+							layout,
+							next.to,
 							restoreTakeover
 						);
 						this.#commitState(next);
@@ -1811,6 +1921,8 @@ export class Router {
 						const restoreTakeover = this.#takeoverSSG(topView);
 						this.#observeMount(
 							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
+							layout,
+							next.to,
 							restoreTakeover
 						);
 						this.#commitState(next);
@@ -1829,7 +1941,13 @@ export class Router {
 				try {
 					this.#morphHandler.enter(newAnimator?.element ?? null, { initial: !cur });
 				} catch (err) {
-					console.error('[puzzle] morph enter handler threw', err);
+					reportError(
+						this.#ctx,
+						err,
+						{ phase: 'transition', view: newAnimator, route: next.to },
+						'[puzzle] morph enter handler threw',
+						err
+					);
 				}
 			}
 		} finally {
@@ -1848,25 +1966,81 @@ export class Router {
 	}
 
 	/**
+	 * INTERNAL (D145) — an error boundary is about to render over content the
+	 * router owns. `boundaryView` is the boundary itself; everything the router
+	 * committed BELOW it is destroyed by that render, so the committed chain can
+	 * no longer be reused: drop the instance bookkeeping and force the next
+	 * navigation to rebuild every level (`keep` degrades to 0 via `chainInvalid`,
+	 * which is checked before the prefix walk so an emptied `views` array is never
+	 * indexed).
+	 *
+	 * Instances are dropped from `views`/`keys` only where they are actually
+	 * destroyed — the surviving prefix stays, because #swap resolves the OUTGOING
+	 * unit it tears down from `cur.layout`/`cur.views[keep]`. Dropping a live
+	 * instance there would strand its DOM (error face included) in the container
+	 * and the next navigation would mount alongside it. Same reason the layout
+	 * reference is kept when the layout is the boundary: it is flagged unreusable
+	 * (`layoutInvalid`) so a fresh one is built, while the old one still resolves
+	 * as the animator and is destroyed.
+	 *
+	 * Underscore-prefixed: internal runtime plumbing, not public router API.
+	 */
+	__invalidateChain(boundaryView) {
+		const st = this.#state;
+		if (!st) return;
+		st.chainInvalid = true;
+		const i = boundaryView ? st.views.indexOf(boundaryView) : -1;
+		if (i !== -1) {
+			// A routed ancestor is the boundary: it survives (it draws the face);
+			// every level below it is destroyed by that render.
+			st.views = st.views.slice(0, i + 1);
+			st.keys = st.keys.slice(0, i + 1);
+			return;
+		}
+		if (st.layout) {
+			// The layout — or a plain component between it and the chain — is the
+			// boundary, so no routed view survives. The layout instance itself is
+			// still on screen; keep the reference, refuse the reuse.
+			st.views = [];
+			st.keys = [];
+			st.layoutInvalid = true;
+			return;
+		}
+		// No layout: chain level 0 is router-mounted into the container, so a
+		// boundary nested inside it survives with it. Keep exactly that level.
+		st.views = st.views.slice(0, 1);
+		st.keys = st.keys.slice(0, 1);
+	}
+
+	/**
 	 * Observe a router-owned mount() promise. mount() is async, so a SYNCHRONOUS
 	 * render()/mounted() throw inside it surfaces as a REJECTED promise (not a sync
 	 * throw — the commit block keeps running, no rollback: D19/D61). Left
 	 * unobserved that becomes an unhandled rejection; log it once here instead. The
 	 * failed view is still committed to #state, so a later navigation replaces and
-	 * destroys it normally. On navigation-zero SSG takeover, restoreTakeover puts
-	 * the exact prerendered nodes + marker back before logging — the committed
-	 * failed instance remains router-owned, but the user never gets a blank page.
+	 * destroys it normally. On navigation-zero SSG takeover the error boundary gets
+	 * the first refusal: restoreTakeover puts the exact prerendered nodes + marker
+	 * back ONLY when no boundary rendered (including when the boundary's own render
+	 * threw), because the restore's replaceChildren() detaches the failed view's
+	 * ViewManager anchor — restoring first guaranteed the one path meant to surface
+	 * the failure could not draw. When a boundary does render, the prerendered
+	 * content stays cleared and the user sees the error face. The committed failed
+	 * instance remains router-owned either way.
 	 * (Child views mounted through the ViewManager's keyed patch are already observed
 	 * there; this covers the three mounts the router drives directly: bare root view,
 	 * layout swap, initial-nav layout.)
 	 */
-	#observeMount(p, restoreTakeover = null) {
+	#observeMount(p, view, route, restoreTakeover = null) {
 		Promise.resolve(p).catch((err) => {
-			restoreTakeover?.();
-			console.error(
+			reportError(
+				this.#ctx,
+				err,
+				{ phase: 'mount', view, route },
 				'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
 				err
 			);
+			const shown = view.__renderErrorBoundary?.(err);
+			if (!shown) restoreTakeover?.();
 		});
 	}
 
@@ -1882,7 +2056,9 @@ export class Router {
 	 * page), drop the marker (a later re-mount is a normal SPA mount), and suppress
 	 * the incoming top view's ENTER animation so content the user is already
 	 * reading doesn't re-animate. The returned callback restores the exact nodes
-	 * and marker if the async mount promise rejects on render()/mounted().
+	 * and marker if the async mount promise rejects on render()/mounted() AND no
+	 * error boundary drew a face in the cleared container (#observeMount decides —
+	 * the restore would detach the anchor the boundary needs).
 	 * `topView` is views[keep] — the view the ViewManager auto-plays in (behind a
 	 * layout) or the router plays in directly (no layout). A non-SSG app has no
 	 * marker, so this is a no-op and behavior is byte-identical.
@@ -1931,7 +2107,7 @@ export class Router {
 	 * promise is awaited alongside playOut before the leaver is removed; a throwing
 	 * handler is logged and never wedges navigation.
 	 */
-	#startOverlapLeave(oldAnimator) {
+	#startOverlapLeave(oldAnimator, route) {
 		this.#pendingOut = oldAnimator;
 		this.#pinLeaver(oldAnimator.element);
 		// Morph-leave (v1.23, D55): same posture as the sequential path — start it
@@ -1940,9 +2116,23 @@ export class Router {
 		if (this.#morphHandler) {
 			try {
 				const p = this.#morphHandler.leave(oldAnimator.element);
-				if (p) morphOut = Promise.resolve(p).catch(() => {});
+				if (p) {
+					morphOut = Promise.resolve(p).catch((err) =>
+						reportError(this.#ctx, err, {
+							phase: 'transition',
+							view: oldAnimator,
+							route,
+						})
+					);
+				}
 			} catch (err) {
-				console.error('[puzzle] morph leave handler threw', err);
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'transition', view: oldAnimator, route },
+					'[puzzle] morph leave handler threw',
+					err
+				);
 			}
 		}
 		// Fire-and-forget: the out runs concurrently with the incoming in. On settle
@@ -1954,7 +2144,15 @@ export class Router {
 		// leaver must never be stranded on screen (#playInLogged's never-throw
 		// posture, applied to the leave side).
 		Promise.all([oldAnimator.playOut(), morphOut])
-			.catch((err) => console.error('[puzzle] leave hook failed mid-overlap:', err))
+			.catch((err) =>
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'leave', view: oldAnimator, route },
+					'[puzzle] leave hook failed mid-overlap:',
+					err
+				)
+			)
 			.then(() => {
 				if (this.#pendingOut === oldAnimator) this.#pendingOut = null;
 				oldAnimator.destroy(); // cascades to inner/deeper old instances
@@ -1996,7 +2194,13 @@ export class Router {
 	 */
 	#playInLogged(instance) {
 		Promise.resolve(instance.playIn()).catch((err) =>
-			console.error('[puzzle] view enter animation failed:', err)
+			reportError(
+				this.#ctx,
+				err,
+				{ phase: 'enter', view: instance, route: instance.route },
+				'[puzzle] view enter animation failed:',
+				err
+			)
 		);
 	}
 
@@ -2023,6 +2227,17 @@ export class Router {
 		// #commitState): clear its pending target — #state now names it.
 		this.#pendingNavPath = null;
 		this.#pendingNavPromise = null;
+		// D146 — COMMIT the prepared reused ancestors: swap params/route/model/store
+		// subscriptions and re-render, synchronously here so ancestor state lands in the
+		// same window as #commitLocation, the mount, and #state. Deliberately AFTER
+		// #state is assigned (D47's reuseLayout ordering, generalized): a committing
+		// ancestor's render must read a router.current that already names this route.
+		// Their data() is NOT re-run — it ran during the gate. In #swap the DOM
+		// patch/mount already happened above, so each ancestor re-renders over the new
+		// chain, not the old one; on the D39 skeleton-leaf path the commit still lands
+		// here, in the immediate (un-awaited-leaf) commit, exactly like the old inline
+		// ancestor refresh did.
+		if (next.prepared) for (const p of next.prepared) p.commit();
 		// Dev-only missing-<Slot/> diagnostic — the module helper (and this whole
 		// per-commit walk) DCEs away in production (§27 define pattern).
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -2108,7 +2323,13 @@ export class Router {
 				const pos = this.#scrollBehavior(to, from, pop ? savedPosition : null);
 				return pos ? { x: pos.x ?? 0, y: pos.y ?? 0 } : null;
 			} catch (err) {
-				console.error('[puzzle] scrollBehavior failed:', err);
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'navigation', route: to },
+					'[puzzle] scrollBehavior failed:',
+					err
+				);
 				return null;
 			}
 		}
@@ -2265,7 +2486,13 @@ export class Router {
 			try {
 				el = this.#focusBehavior(spec.to, spec.from);
 			} catch (err) {
-				console.error('[puzzle] focusBehavior failed:', err);
+				reportError(
+					this.#ctx,
+					err,
+					{ phase: 'navigation', route: spec.to },
+					'[puzzle] focusBehavior failed:',
+					err
+				);
 				return null;
 			}
 			return el && typeof el.focus === 'function' ? el : null;
@@ -2402,6 +2629,10 @@ export class Router {
 	#abandon(next) {
 		for (let i = next.keep; i < next.views.length; i++) next.views[i]?.destroy();
 		if (next.layout && !next.reuseLayout) next.layout.destroy();
+		// D146: a navigation superseded during its out phase never reaches
+		// #commitState, so its prepared ancestor runs are unwound here — otherwise
+		// their tracked subscriptions would be stranded on a live ancestor.
+		if (next.prepared) for (const p of next.prepared) p.discard();
 	}
 
 	#match(pathname) {
@@ -2442,10 +2673,26 @@ export class Router {
 		try {
 			const p = view.refresh({ params, route });
 			if (p && typeof p.catch === 'function') {
-				p.catch((err) => console.error('[puzzle] layout refresh failed:', err));
+				p.catch((err) => {
+					reportError(
+						this.#ctx,
+						err,
+						{ phase: 'refresh', view, route },
+						'[puzzle] layout refresh failed:',
+						err
+					);
+					view.__renderErrorBoundary?.(err);
+				});
 			}
 		} catch (err) {
-			console.error('[puzzle] layout refresh failed:', err);
+			reportError(
+				this.#ctx,
+				err,
+				{ phase: 'refresh', view, route },
+				'[puzzle] layout refresh failed:',
+				err
+			);
+			view.__renderErrorBoundary?.(err);
 		}
 	}
 

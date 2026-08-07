@@ -251,13 +251,18 @@ Calling from a component's event handler is a one-liner:
 
 ```js
 events = {
-  toggleTodo: (todo) => { todo.toggle(); },
+  archiveTodo: (todo) => { todo.update({ archived: true, archivedAt: new Date() }); },
 };
 ```
 
 ```html
-<input type="checkbox" checked={ todo.completed } @change={ toggleTodo(todo) } />
+<button @click={ archiveTodo(todo) }>Archive</button>
 ```
+
+A single-field form write needs no handler at all: `checked={ todo.completed }`
+on a checkbox binds the record field through the same validated `update()`
+(D147, SPEC §6). Reach for an explicit handler when the write is richer than
+the bound field — several fields, a timestamp stamp, a side effect.
 
 ---
 

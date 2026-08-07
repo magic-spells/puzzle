@@ -22,10 +22,11 @@
  * substituted with the slot content captured at the call site before diffing.
  */
 
-import { ViewNode, PLACEHOLDER_TAG } from './ViewNode.js';
+import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import { devperfComponentPatch, devperfMutation } from '../devperf.js';
 import { displayValue as stringify } from '../display.js';
+import { reportError } from '../errors.js';
 
 // these must be assigned as element properties, not attributes
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'muted']);
@@ -49,10 +50,12 @@ export class ViewManager {
 	 * @param {Element} container host element this manager renders into
 	 * @param {object} ctx owner's { store, router, formatters } — passed to
 	 *   any child components this tree instantiates (constellation/doc/DOC-APP-ANATOMY.md §4)
+	 * @param {object|null} owner view whose render tree this manager patches
 	 */
-	constructor(container, ctx = {}) {
+	constructor(container, ctx = {}, owner = null) {
 		this.container = container;
 		this.ctx = ctx;
+		this.owner = owner;
 		this.currentTree = null;
 		// slot content injected at this component's composition markers (set by the
 		// owning PuzzleView before each render; empty for views/layouts roots).
@@ -61,6 +64,20 @@ export class ViewManager {
 		// lands — needed because a child's mount() awaits async data() while the
 		// synchronous parent patch must already have a stable insertion ref.
 		this.anchor = null;
+		// A patch() threw partway: the DOM matches NEITHER currentTree nor the tree
+		// that was being applied, so nothing may be diffed against it again. The
+		// error boundary renders through renderFresh() while this is set (D145).
+		this.treeUnknown = false;
+		// The two live siblings bracketing this manager's DOM range, captured
+		// immediately before the patch that threw. Both sit OUTSIDE the range, so an
+		// aborted patch cannot have moved or removed them — they are the only
+		// trustworthy handles on the corrupt range.
+		this.unknownRange = null;
+		// Both vnode trees involved in that aborted patch. Their DOM positions are
+		// lies, but their INSTANCE bookkeeping is not: nested component instances,
+		// element refs and document-level `outside` listeners are reachable only
+		// through them, and clearing the range by DOM removal releases none of it.
+		this.unknownTrees = null;
 	}
 
 	/**
@@ -79,9 +96,17 @@ export class ViewManager {
 	 * Slot markers are expanded against `slotChildren` before diffing.
 	 */
 	render(rawTree) {
+		// D145's "never patched over an unknown tree" is an invariant of the MANAGER,
+		// not of the boundary path that usually restores it. A view with no
+		// errorContent anywhere above it (the default) leaves __showErrorBoundary
+		// returning false, so nothing clears treeUnknown and the next ordinary render
+		// would diff against a currentTree whose vnodes point at detached nodes —
+		// updates land on orphans and the visible DOM freezes. Route it through the
+		// same fresh mount the boundary uses.
+		if (this.treeUnknown) return this.renderFresh(rawTree);
 		const newTree = expandSlots(rawTree, this.slotChildren);
 		if (!this.currentTree) {
-			mount(newTree, this.container, this.anchor, this.ctx);
+			mount(newTree, this.container, this.anchor, this.ctx, this.owner);
 			if (this.anchor) {
 				this.anchor.remove();
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
@@ -89,10 +114,101 @@ export class ViewManager {
 				this.anchor = null;
 			}
 		} else {
-			patch(this.currentTree, newTree, this.container, this.ctx);
+			// Bracket the managed range BEFORE patching. A throw partway through the
+			// patch leaves the DOM half-updated, and `currentTree` (assigned only
+			// below) would then describe a tree that no longer exists — diffing the
+			// error face against it resolves insertion refs to moved or removed
+			// nodes. Record the corrupt range instead and leave `currentTree` alone:
+			// neither tree is true, so the manager reports the tree as UNKNOWN and
+			// the next boundary render goes through renderFresh().
+			const el = this.currentTree.el ?? null;
+			const bracketed = el != null && el.parentNode === this.container;
+			const before = bracketed ? el.previousSibling : null;
+			const after = bracketed ? el.nextSibling : null;
+			try {
+				patch(this.currentTree, newTree, this.container, this.ctx, this.owner);
+			} catch (err) {
+				this.treeUnknown = true;
+				this.unknownRange = bracketed ? { before, after } : null;
+				// BOTH trees: the aborted patch may have mounted components from the
+				// new one and left components from the old one live.
+				this.unknownTrees = [this.currentTree, newTree];
+				throw err;
+			}
 		}
 		this.currentTree = newTree;
 		return newTree;
+	}
+
+	/**
+	 * Mount `rawTree` over a DOM range this manager can no longer describe (see
+	 * `treeUnknown`). The vnode tree is untrustworthy, so the old content is
+	 * cleared by DOM removal across the bracketed range rather than by an
+	 * unmount() walk, then the new tree is mounted from scratch. The anchor
+	 * comment, if this manager still holds one, survives the clear and is the
+	 * insertion ref (mount()'s normal first-render contract).
+	 *
+	 * DOM position is the only thing those trees lie about, so the non-DOM release
+	 * still runs over BOTH of them first (releaseAborted): nested component
+	 * instances keep their store subscriptions, `outside` listeners live on
+	 * document, and portaled content sits outside the range entirely — none of it
+	 * is reachable again once currentTree becomes the error face.
+	 */
+	renderFresh(rawTree) {
+		const newTree = expandSlots(rawTree, this.slotChildren);
+		releaseAborted(this.unknownTrees);
+		this.unknownTrees = null;
+		const range = this.unknownRange;
+		let removed = false;
+		if (range) {
+			const { before, after } = range;
+			const stop = after && after.parentNode === this.container ? after : null;
+			let node =
+				before && before.parentNode === this.container
+					? before.nextSibling
+					: this.container.firstChild;
+			while (node && node !== stop) {
+				const next = node.nextSibling;
+				// The anchor is this manager's position marker, not content.
+				if (node !== this.anchor) {
+					node.remove();
+					removed = true;
+				}
+				node = next;
+			}
+		}
+		if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && removed) devperfMutation();
+
+		const after = range?.after;
+		const ref =
+			this.anchor && this.anchor.parentNode === this.container
+				? this.anchor
+				: after && after.parentNode === this.container
+					? after
+					: null;
+
+		this.currentTree = null;
+		this.treeUnknown = false;
+		this.unknownRange = null;
+		mount(newTree, this.container, ref, this.ctx, this.owner);
+		if (this.anchor) {
+			this.anchor.remove();
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+			this.anchor = null;
+		}
+		this.currentTree = newTree;
+		return newTree;
+	}
+
+	/**
+	 * Mount a failed view's own boundary face beside the D115 placeholder. The
+	 * failed instance is already destroyed, so nested fallback components belong
+	 * to its surviving owner (the parent view), not to the dead view.
+	 */
+	mountErrorFallback(rawTree, ref, owner) {
+		const tree = expandSlots(rawTree, []);
+		mount(tree, this.container, ref, this.ctx, owner);
+		return tree;
 	}
 
 	/** The DOM node currently occupying this subtree's position (or null). */
@@ -102,6 +218,13 @@ export class ViewManager {
 
 	/** Remove everything this manager mounted. */
 	clear() {
+		// A destroy that arrives BEFORE any boundary render still has to release the
+		// aborted patch's two trees — unmount(currentTree) below reaches only the old
+		// one, and only through positions that may no longer be true.
+		if (this.unknownTrees) {
+			releaseAborted(this.unknownTrees);
+			this.unknownTrees = null;
+		}
 		if (this.currentTree) unmount(this.currentTree);
 		if (this.anchor) {
 			this.anchor.remove();
@@ -110,6 +233,8 @@ export class ViewManager {
 			this.anchor = null;
 		}
 		this.currentTree = null;
+		this.treeUnknown = false;
+		this.unknownRange = null;
 	}
 }
 
@@ -252,11 +377,185 @@ function expandChildList(kids, parts) {
 	return out;
 }
 
+// ---- portals (D144) ---------------------------------------------------------
+
+/**
+ * Portal (`<Portal>…</Portal>`) teleports its children to ONE framework-created
+ * outlet element (`<div data-puzzle-portal>`) appended as a sibling of the app
+ * mount container. There are no user-placed outlets in v1, so there is no outlet
+ * registry and no teardown-ordering race: the outlet is created lazily on the
+ * first portal mount and removed once the last portal unmounts (and on app
+ * unmount, via teardownPortals()).
+ *
+ * Each portal owns a comment-bracketed RANGE inside the shared outlet, so
+ * several live portals never fight over one childNodes list, and the portal
+ * vnode itself keeps a comment placeholder at its LOCAL position so sibling
+ * insertion refs and `{#if}` arity padding are unaffected.
+ */
+let portalHost = null;
+let portalOutlet = null;
+// Both bracket comments of every live range map to their record, so the
+// `outside`-modifier containment walk can resolve a target to its owner in one
+// backwards sibling scan.
+const portalRanges = new Map();
+let portalCount = 0;
+
+/**
+ * Point new portal outlets at the app's host (the mount container's parent).
+ * Called by PuzzleApp.mount() and mountStatic(); unset falls back to <body>.
+ *
+ * Portal state is MODULE-scoped, so two PuzzleApp instances on one page share
+ * one host/outlet/range table — a later mount retargets the outlet for both,
+ * and either unmount's teardownPortals() removes the other app's live portals.
+ * Multiple apps on a page are not a supported shape (D144); the dev build
+ * warns when a mount would stomp live portal state.
+ */
+export function setPortalHost(el) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (portalRanges.size > 0 && el !== portalHost) {
+			console.warn(
+				'[puzzle] setPortalHost() called while another mounted app has live portals. ' +
+					'Portal state is shared per page: multiple simultaneous PuzzleApp instances ' +
+					'are not supported, and unmounting either app will tear down the other\'s portals.'
+			);
+		}
+	}
+	portalHost = el || null;
+}
+
+/** Drop the outlet and all range bookkeeping (app unmount). */
+export function teardownPortals() {
+	portalOutlet?.remove();
+	portalOutlet = null;
+	portalRanges.clear();
+	portalCount = 0;
+	portalHost = null;
+}
+
+function ensurePortalOutlet() {
+	if (portalOutlet && portalOutlet.isConnected) return portalOutlet;
+	portalOutlet = document.createElement('div');
+	portalOutlet.setAttribute('data-puzzle-portal', '');
+	const host = portalHost && portalHost.isConnected ? portalHost : document.body;
+	host.appendChild(portalOutlet);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+	return portalOutlet;
+}
+
+/**
+ * Remove the outlet once nothing is portaled into it. An element lingering
+ * mid-leave-animation keeps it alive (its range markers are already gone, but
+ * the element is still painting) — the next release, or teardownPortals(),
+ * clears it.
+ */
+function releasePortalOutlet() {
+	if (portalCount > 0 || !portalOutlet || portalOutlet.firstChild) return;
+	portalOutlet.remove();
+	portalOutlet = null;
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+}
+
+function mountPortal(vnode, parent, ref, ctx, owner) {
+	const placeholder = document.createComment('puzzle-portal');
+	vnode.el = placeholder;
+	parent.insertBefore(placeholder, ref ?? null);
+	const outlet = ensurePortalOutlet();
+	const start = document.createComment('puzzle-portal-start');
+	const end = document.createComment('puzzle-portal-end');
+	outlet.appendChild(start);
+	outlet.appendChild(end);
+	const range = { start, end, placeholder };
+	vnode.portal = range;
+	portalRanges.set(start, range);
+	portalRanges.set(end, range);
+	portalCount++;
+	for (const child of vnode.children) mount(child, outlet, end, ctx, owner);
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+	return placeholder;
+}
+
+function patchPortal(oldVnode, newVnode, ctx, owner) {
+	const range = (newVnode.portal = oldVnode.portal);
+	if (!range) return;
+	// The local placeholder moved onto the new vnode; the range must point at the
+	// live one so the `outside` containment walk keeps resolving.
+	range.placeholder = newVnode.el;
+	const outlet = range.end.parentNode;
+	if (!outlet) return;
+	patchChildren(outlet, oldVnode.children, newVnode.children, ctx, owner, range.end);
+}
+
+/**
+ * Portal teardown. The teleported children are NOT under `vnode.el` (that is the
+ * local placeholder comment), so removing the placeholder cascades to nothing —
+ * every removal shape has to unmount the remote children EXPLICITLY or their
+ * component instances, store subscriptions and document-level `outside`
+ * listeners leak. Reached from unmount() (patch-replace, keyed removal,
+ * `#vm.clear()`, router teardown) and from releaseSubtree()'s descent.
+ */
+function unmountPortal(vnode) {
+	for (const child of vnode.children) unmount(child);
+	const range = vnode.portal;
+	if (range) {
+		portalRanges.delete(range.start);
+		portalRanges.delete(range.end);
+		range.start.remove();
+		range.end.remove();
+		vnode.portal = null;
+		portalCount--;
+	}
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		if (vnode.el?.parentNode) devperfMutation();
+	}
+	vnode.el?.remove();
+	releasePortalOutlet();
+}
+
+/**
+ * The local placeholder of the portal that owns `target`, or null when the
+ * target is not inside any live portal range. Walks the target up to the
+ * outlet's direct child, then scans backwards to the nearest bracket comment:
+ * that comment is the owning range's `start` (an `end` first means the target
+ * sits between ranges, which is not portaled content).
+ */
+function owningPortalPlaceholder(target) {
+	if (!portalOutlet || portalRanges.size === 0 || !target) return null;
+	if (!portalOutlet.contains(target)) return null;
+	let node = target;
+	while (node && node.parentNode !== portalOutlet) node = node.parentNode;
+	if (!node) return null;
+	for (let n = node; n; n = n.previousSibling) {
+		const range = portalRanges.get(n);
+		if (range) return range.start === n ? range.placeholder : null;
+	}
+	return null;
+}
+
+/**
+ * LOGICAL containment for the `outside` modifier (D86): portaled content is
+ * physically in the outlet but logically still sits where its `<Portal>` marker
+ * is, so a click inside content portaled by a descendant of `el` counts as
+ * INSIDE. Re-tests containment against the owning local placeholder, iterating
+ * for portals nested inside portaled content. Zero cost with no live portals.
+ */
+export function portalAwareContains(el, target) {
+	let t = target;
+	for (let hops = 0; hops < 32; hops++) {
+		if (el.contains(t)) return true;
+		const placeholder = owningPortalPlaceholder(t);
+		if (!placeholder) return false;
+		t = placeholder;
+	}
+	return false;
+}
+
 // ---- mount ------------------------------------------------------------------
 
 /** Create the DOM for vnode and insert it into parent (before ref, or append). */
-export function mount(vnode, parent, ref, ctx) {
-	if (vnode.isComponent) return mountComponent(vnode, parent, ref, ctx);
+export function mount(vnode, parent, ref, ctx, owner = null) {
+	if (vnode.isComponent) return mountComponent(vnode, parent, ref, ctx, owner);
+
+	if (vnode.tag === PORTAL_TAG) return mountPortal(vnode, parent, ref, ctx, owner);
 
 	let el;
 	if (vnode.tag === PLACEHOLDER_TAG) {
@@ -278,7 +577,7 @@ export function mount(vnode, parent, ref, ctx) {
 			? document.createElementNS(SVG_NS, vnode.tag)
 			: document.createElement(vnode.tag);
 		for (const [name, value] of Object.entries(vnode.attrs)) {
-			setAttr(el, name, value);
+			setAttr(el, name, value, owner);
 		}
 		// Element ref (v1.39, D72): populate this.refs[name] with the live element the
 		// moment it is created, BEFORE children mount and BEFORE the owning view's
@@ -297,10 +596,10 @@ export function mount(vnode, parent, ref, ctx) {
 			el.innerHTML = vnode.children;
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__)
 				devperfMutation();
-		} else {
-			for (const child of vnode.children) {
-				mount(child, el, null, ctx);
-			}
+			} else {
+				for (const child of vnode.children) {
+					mount(child, el, null, ctx, owner);
+				}
 		}
 		// A <select>'s controlled `value` is applied by setAttr above, BEFORE its
 		// <option> children exist, so the browser silently falls back to the first
@@ -338,7 +637,7 @@ export function plantFailedMountPlaceholder(child) {
 	return placeholder;
 }
 
-function mountComponent(vnode, parent, ref, ctx) {
+function mountComponent(vnode, parent, ref, ctx, owner) {
 	if ((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverFailed) {
 		const placeholder = document.createComment('puzzle');
 		vnode.el = placeholder;
@@ -354,6 +653,7 @@ function mountComponent(vnode, parent, ref, ctx) {
 	const takeoverPreloaded =
 		(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
 	const child = vnode.instance ?? new vnode.tag(ctx);
+	child.__setErrorParent?.(owner);
 	vnode.component = child;
 	child
 		.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded })
@@ -380,10 +680,17 @@ function mountComponent(vnode, parent, ref, ctx) {
 				// PuzzleView.destroyAnimated()'s leave-hook guard, and what router.js
 				// #playInLogged already does for router-mounted animators).
 				return Promise.resolve(child.playIn()).catch((err) =>
-					console.error('[puzzle] child enter animation failed:', err)
+					reportError(
+						ctx,
+						err,
+						{ phase: 'enter', view: child, route: child.route },
+						'[puzzle] child enter animation failed:',
+						err
+					)
 				);
 			},
 			(err) => {
+				const boundary = child.__prepareErrorBoundary?.(err);
 				// A ROUTER-PRELOADED instance (`vnode.instance`, pinned by router.js) is not
 				// ours to tear down: the Router owns that lifetime, committed the view
 				// SYNCHRONOUSLY, and its own #observeMount logs a post-commit mount failure
@@ -393,13 +700,20 @@ function mountComponent(vnode, parent, ref, ctx) {
 				// would swap the committed markup for a comment behind its back. Log only;
 				// the instance and the vnode's links are left exactly as they are.
 				if (preloaded && !takeoverPreloaded) {
-					console.error(
+					reportError(
+						ctx,
+						err,
+						{ phase: 'mount', view: child, route: child.route },
 						'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
 						err
 					);
+					child.__showErrorBoundary?.(boundary);
 					return;
 				}
-				console.error(
+				reportError(
+					ctx,
+					err,
+					{ phase: 'mount', view: child, route: child.route },
 					'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
 					err
 				);
@@ -428,6 +742,7 @@ function mountComponent(vnode, parent, ref, ctx) {
 					vnode.el = placeholder;
 					child.__failedPlaceholder = placeholder;
 				}
+				child.__showErrorBoundary?.(boundary, { failedMount: true, placeholder });
 				vnode.component = null;
 				vnode.instance = null;
 				// Gated: ungated this would ADD the property outside the constructor in a
@@ -447,7 +762,7 @@ function mountComponent(vnode, parent, ref, ctx) {
  * Patch oldVnode's DOM to match newVnode. Transfers `el` onto newVnode.
  * Falls back to replace when tag or key differ.
  */
-export function patch(oldVnode, newVnode, parent, ctx) {
+export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 	if (!sameNode(oldVnode, newVnode)) {
 		// Resolve the insertion reference from the LIVE DOM node, not the cached
 		// vnode.el. For a component with async data(), mountComponent cached
@@ -458,7 +773,7 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 		// child's element getter always tracks its current root, so prefer it; fall
 		// back to vnode.el for non-component (or not-yet-mounted) vnodes.
 		const ref = (oldVnode.isComponent && oldVnode.component?.element) || oldVnode.el;
-		mount(newVnode, parent, ref, ctx);
+		mount(newVnode, parent, ref, ctx, owner);
 		unmount(oldVnode);
 		return;
 	}
@@ -484,7 +799,15 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 			const placeholder = dead?.__failedPlaceholder ?? oldVnode.el;
 			// Only an ATTACHED node is a usable insertion ref — insertBefore against a
 			// detached one throws NotFoundError and empties the container.
-			mount(newVnode, parent, placeholder?.parentNode === parent ? placeholder : null, ctx);
+			mount(
+				newVnode,
+				parent,
+				placeholder?.parentNode === parent ? placeholder : null,
+				ctx,
+				owner
+			);
+			const fallback = dead?.__failedFallback ?? placeholder?.__failedFallback;
+			if (fallback) unmount(fallback);
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				if (placeholder?.parentNode) devperfMutation();
 			}
@@ -503,6 +826,13 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 	// comment — releaseSubtree/remove handle a comment-el vnode with no children).
 	if (newVnode.tag === PLACEHOLDER_TAG) return;
 
+	// Portal → portal: the local placeholder transferred above; the teleported
+	// children patch against this portal's bracketed range inside the outlet.
+	if (newVnode.tag === PORTAL_TAG) {
+		patchPortal(oldVnode, newVnode, ctx, owner);
+		return;
+	}
+
 	if (newVnode.isText) {
 		const text = stringify(newVnode.attrs.value);
 		if (el.nodeValue !== text) {
@@ -513,7 +843,7 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 		return;
 	}
 
-	patchAttrs(el, oldVnode.attrs, newVnode.attrs);
+	patchAttrs(el, oldVnode.attrs, newVnode.attrs, owner);
 
 	// DOM island (constellation/doc/DOC-SPEC.md §17, D44): a static `island` attr
 	// makes this element's children browser-/component-owned after mount. The
@@ -541,7 +871,7 @@ export function patch(oldVnode, newVnode, parent, ctx) {
 		return;
 	}
 
-	patchChildren(el, oldVnode.children, newVnode.children, ctx);
+	patchChildren(el, oldVnode.children, newVnode.children, ctx, owner);
 
 	// The option list may have changed under a <select> whose controlled `value`
 	// was unchanged (patchAttrs skips it) or churned entirely — either way the
@@ -622,16 +952,28 @@ const leavingEls = new WeakSet();
  * destroy them all, not just a top-level component vnode.
  */
 function unmount(vnode) {
+	if (vnode.tag === PORTAL_TAG) return unmountPortal(vnode);
 	if (vnode.isComponent) {
 		const child = vnode.component;
 		// A first-mount-failed component was already torn down, leaving only a comment
 		// placeholder (mountComponent's catch nulled `component`). No instance to
 		// destroy — just drop the placeholder node so it doesn't linger in the DOM.
 		if (!child) {
+			const fallback = vnode.el?.__failedFallback;
+			if (fallback) unmount(fallback);
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				if (vnode.el?.parentNode) devperfMutation();
 			}
 			vnode.el?.remove();
+			return;
+		}
+		// A boundary face mounted beside a destroyed instance's recovery comment is
+		// outside the child's cleared ViewManager tree. If the owner removes this
+		// position instead of retrying it, tear that face down explicitly.
+		if (child.isDestroyed && child.__failedFallback) {
+			unmount(child.__failedFallback);
+			child.__failedPlaceholder?.remove();
+			child.__failedFallback = null;
 			return;
 		}
 		// LEAVE animation (constellation/doc/DOC-SPEC.md §12): when the leaving
@@ -706,12 +1048,48 @@ function releaseSubtree(vnode) {
 	// — no refs or component instances hide inside them.
 	if (typeof vnode.children === 'string') return;
 	for (const child of vnode.children) {
-		if (child.isComponent) child.component?.destroy();
+		// A portal inside a removed subtree: its teleported children live in the
+		// outlet, so the ancestor's el.remove() reaches neither their DOM nor their
+		// instances — tear the whole portal down explicitly.
+		if (child.tag === PORTAL_TAG) unmountPortal(child);
+		else if (child.isComponent) child.component?.destroy();
 		else if (!child.isText) releaseSubtree(child);
 	}
 }
 
-function patchAttrs(el, oldAttrs, newAttrs) {
+/**
+ * Release the non-DOM resources held by the two vnode trees of a patch that threw
+ * partway (ViewManager.treeUnknown). The DOM is cleared separately, by range
+ * removal, because these trees no longer describe where anything IS — but they are
+ * still the only record of WHAT exists: nested component instances (and their store
+ * subscriptions), element refs (D72), `outside` listeners parked on document (D86),
+ * and portaled content living in the outlet. Raw node removal releases none of it,
+ * and once the manager adopts the boundary face nothing can reach these trees again.
+ *
+ * Both trees are walked because the aborted patch may have mounted components from
+ * the incoming tree while leaving the outgoing tree's components live. An instance
+ * carried across by patchComponent is reached twice; destroy() is idempotent
+ * (#destroyed guard), the ref setters are removal-guarded, and the listener sweep
+ * deletes the keys it detaches, so the second visit is a no-op.
+ *
+ * This runs on an already-failing path, so every subtree is guarded: a throwing
+ * user beforeDestroy()/ref must not stop the boundary face from mounting.
+ */
+function releaseAborted(trees) {
+	if (!trees) return;
+	for (const tree of trees) {
+		if (!tree) continue;
+		try {
+			if (tree.tag === PORTAL_TAG) unmountPortal(tree);
+			else if (tree.isComponent) tree.component?.destroy();
+			else if (!tree.isText) releaseSubtree(tree);
+		} catch (err) {
+			console.error('[puzzle] releasing an aborted render failed:', err);
+		}
+	}
+}
+
+function patchAttrs(el, oldAttrs, newAttrs, owner = null) {
 	for (const [name, value] of Object.entries(newAttrs)) {
 		// Element ref (v1.39, D72): the element PERSISTS through this patch. The
 		// normal case is a cached setter identical on both sides (===) → nothing to
@@ -728,8 +1106,10 @@ function patchAttrs(el, oldAttrs, newAttrs) {
 		}
 		// Controlled property-backed attrs (`value` on an input/textarea, `checked`
 		// on a checkbox/radio) can drift from the live DOM through user interaction
-		// the app never mirrored back into state — typing into an @change-bound input,
-		// clicking an @change-bound checkbox. A later re-render whose BOUND value is
+		// the app never mirrored back into state — typing into an input whose write
+		// commits on `change` (an author handler, or D147's synthesized
+		// '@change:bind'), clicking such a checkbox, or an in-flight IME composition
+		// whose write the bind guard is deliberately holding back. A later re-render whose BOUND value is
 		// unchanged would skip the write on a vnode-to-vnode compare (`'' === ''`),
 		// leaving the stale user text/state on screen while component state says
 		// otherwise. Compare against the LIVE DOM property instead so the controlled
@@ -742,11 +1122,27 @@ function patchAttrs(el, oldAttrs, newAttrs) {
 		// a plain `value` (<li>, <progress>, <button>) keep the byte-identical vnode
 		// compare — they never drift out of band.
 		if (name === 'value' && (el.nodeName === 'INPUT' || el.nodeName === 'TEXTAREA')) {
-			if (el.value !== stringify(value)) setAttr(el, name, value);
+			if (el.value !== stringify(value)) setAttr(el, name, value, owner);
 		} else if (name === 'checked' && el.nodeName === 'INPUT') {
-			if (el.checked !== Boolean(value)) setAttr(el, name, value);
+			if (el.checked !== Boolean(value)) setAttr(el, name, value, owner);
+			// The property guard above short-circuits precisely when the USER moved
+			// checkedness, which is also the only path that leaves the content
+			// attribute stale — `el.checked = x` writes the property, never the
+			// attribute (that is defaultChecked). Skipping setAttr therefore breaks
+			// this file's own "keep boolean ATTRIBUTES coherent for CSS selectors"
+			// rule for `checked` alone: `input[checked]` keeps matching an unchecked
+			// box, and form.reset() restores the stale attribute with no change event,
+			// so state and UI diverge with nothing to resync them. Reflect the
+			// attribute on its own rather than falling through to setAttr, which would
+			// re-assign the property and bill two devperfMutation() calls per patch —
+			// moving the D121/D122 counts and the stress form-state baseline.
+			else if (el.hasAttribute('checked') !== Boolean(value)) {
+				if (value) el.setAttribute('checked', '');
+				else el.removeAttribute('checked');
+				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+			}
 		} else if (oldAttrs[name] !== value) {
-			setAttr(el, name, value);
+			setAttr(el, name, value, owner);
 		}
 	}
 	for (const name of Object.keys(oldAttrs)) {
@@ -767,22 +1163,26 @@ function patchAttrs(el, oldAttrs, newAttrs) {
  * nodes are matched by (tag, key) and their DOM moved into position;
  * everything else falls back to index alignment.
  */
-function patchChildren(el, oldChildren, newChildren, ctx) {
+function patchChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
 	const keyed = oldChildren.some((c) => c.key != null) || newChildren.some((c) => c.key != null);
 	if (keyed) {
-		patchKeyedChildren(el, oldChildren, newChildren, ctx);
+		patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail);
 	} else {
-		patchIndexedChildren(el, oldChildren, newChildren, ctx);
+		patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail);
 	}
 }
 
-function patchIndexedChildren(el, oldChildren, newChildren, ctx) {
+// `tail` is the insertion reference for children appended at the END of the
+// list. Null (every ordinary element parent) appends to the parent; a portal
+// passes its range's closing comment so teleported children stay inside their
+// own bracketed span of the shared outlet.
+function patchIndexedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
 	const common = Math.min(oldChildren.length, newChildren.length);
 	for (let i = 0; i < common; i++) {
-		patch(oldChildren[i], newChildren[i], el, ctx);
+		patch(oldChildren[i], newChildren[i], el, ctx, owner);
 	}
 	for (let i = common; i < newChildren.length; i++) {
-		mount(newChildren[i], el, null, ctx);
+		mount(newChildren[i], el, tail, ctx, owner);
 	}
 	for (let i = common; i < oldChildren.length; i++) {
 		if (
@@ -838,7 +1238,7 @@ function warnFlipCompiledOut() {
 	);
 }
 
-function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
+function patchKeyedChildren(el, oldChildren, newChildren, ctx, owner, tail = null) {
 	// Keyed identity is the pair (tag, key), with BOTH sides compared by native
 	// SameValueZero — never string concatenation. Partition by raw `tag` (a
 	// component's class object by identity, an element's tag string) into a nested
@@ -938,11 +1338,11 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 	// move-guard compares against the next PERSISTENT sibling — elements
 	// lingering mid-leave-animation don't count, so a pure removal leaves every
 	// survivor (and the fading element) exactly where it was.
-	let ref = null;
+	let ref = tail;
 	for (let i = pairs.length - 1; i >= 0; i--) {
 		const [oldChild, newChild] = pairs[i];
 		if (oldChild) {
-			patch(oldChild, newChild, el, ctx);
+			patch(oldChild, newChild, el, ctx, owner);
 			if (nextPersistentSibling(newChild.el) !== ref) {
 				el.insertBefore(newChild.el, ref);
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
@@ -950,7 +1350,7 @@ function patchKeyedChildren(el, oldChildren, newChildren, ctx) {
 				}
 			}
 		} else {
-			mount(newChild, el, ref, ctx);
+			mount(newChild, el, ref, ctx, owner);
 		}
 		ref = newChild.el;
 	}
@@ -969,7 +1369,7 @@ function nextPersistentSibling(node) {
 
 // ---- attributes / properties / listeners --------------------------------------
 
-function setAttr(el, name, value) {
+function setAttr(el, name, value, owner = null) {
 	// `key`, `island` (D44), `ref` (D72), and `flip` (D85) are framework
 	// directives, never DOM markup — the ref setter is invoked by
 	// mount()/patchAttrs, and flip by patchKeyedChildren, not written here.
@@ -996,9 +1396,20 @@ function setAttr(el, name, value) {
 			// An outside binding always wraps (mods is non-empty by construction —
 			// 'outside' itself is a modifier), so the gate below never needs a
 			// separate no-other-mods path.
+			// D146: an event handler re-enters the owning view from the event loop,
+			// which may be INSIDE a suspended prepared data()'s window. Run it with
+			// the destination eval scope fenced off so `this.params`/`this.route`
+			// report the committed route — a handler writing `{ orgId: this.params.id }`
+			// must not write against a navigation that has not landed (and may never).
+			// The fence wraps the modifier chain too; those are framework steps and
+			// read no route state, so the ordering in withModifiers is unaffected.
+			const bound =
+				typeof owner?.__withCommittedScope === 'function'
+					? (event) => owner.__withCommittedScope(() => value(event))
+					: value;
 			const handler = mods.length
-				? withModifiers(name, event, mods, value, listeners, el)
-				: value;
+				? withModifiers(name, event, mods, bound, listeners, el)
+				: bound;
 			target.addEventListener(event, handler, opts);
 			listeners[name] = handler;
 		} else {
@@ -1129,7 +1540,7 @@ function withModifiers(fullName, eventName, mods, handler, listeners, el) {
 	const spentKey = fullName + ONCE_SPENT;
 	const outside = mods.includes('outside');
 	return (event) => {
-		if (outside && el.contains(event.target)) return;
+		if (outside && portalAwareContains(el, event.target)) return;
 		for (const m of mods) {
 			const key = KEY_FILTERS[m];
 			if (key !== undefined && event.key !== key) return;

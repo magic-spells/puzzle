@@ -260,6 +260,9 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	if hasSlot(root.Children) || (skel != nil && hasSlot(skel.Children)) {
 		imports = append(imports, "SLOT_TAG")
 	}
+	if hasPortal(root.Children) || (skel != nil && hasPortal(skel.Children)) {
+		imports = append(imports, "PORTAL_TAG")
+	}
 	if c.usesDisplayValue {
 		imports = append(imports, "displayValue as __s")
 	}
@@ -450,6 +453,11 @@ func (c *compiler) emitComponentRoot(root *parser.Element, startCol int, scope m
 			n.Props = append(n.Props, scopeStamp)
 		}
 		return c.emitElement(n.Name, n.Props, n.Children, 2, startCol, true, scope)
+	case *parser.Portal:
+		// The root is where call-site attributes merge and where the D59 scope
+		// stamp lands; a portal teleports its children away and keeps only a
+		// comment placeholder locally, so there is no element to do either job.
+		return "", c.cgErr(root.Pos, `a component template's root cannot be <Portal> — wrap it in a root element (e.g. <div style="display: contents">), which stays local while the portal's children teleport`)
 	default:
 		return "", c.cgErr(root.Pos, "a component template's root must be an element or component")
 	}
@@ -509,11 +517,15 @@ func (c *compiler) emitElement(tagStr string, attrs []parser.Attr, children []pa
 	if err != nil {
 		return "", err
 	}
-	multiline, err := c.attrsMultiline(attrs, tagStr, startCol, len(processed) == 0, scope, isComponent)
+	tag := ""
+	if !isComponent && len(tagStr) >= 2 && tagStr[0] == '\'' && tagStr[len(tagStr)-1] == '\'' {
+		tag = tagStr[1 : len(tagStr)-1]
+	}
+	multiline, err := c.attrsMultiline(tag, attrs, tagStr, startCol, len(processed) == 0, scope, isComponent)
 	if err != nil {
 		return "", err
 	}
-	attrsSeg, err := c.emitAttrs(attrs, ind, multiline, scope, isComponent)
+	attrsSeg, err := c.emitAttrs(tag, attrs, ind, multiline, scope, isComponent)
 	if err != nil {
 		return "", err
 	}
@@ -594,6 +606,11 @@ func (c *compiler) emitItem(it item, ind int, scope map[string]bool) (string, er
 		}
 		nameAttr := []parser.Attr{&parser.StaticAttr{Name: "name", Value: n.Name}}
 		return c.emitElement("SLOT_TAG", nameAttr, n.Children, ind, ind, false, scope)
+	case *parser.Portal:
+		// <Portal>…</Portal> (D144): one vnode carrying the teleported children;
+		// the runtime mounts them into the shared portal outlet and leaves a comment
+		// placeholder at this position. Attribute-free by grammar.
+		return c.emitElement("PORTAL_TAG", nil, n.Children, ind, ind, false, scope)
 	case *parser.If:
 		return c.emitIf(n, ind, scope)
 	case *parser.Case:
@@ -1047,11 +1064,16 @@ const printWidth = 120
 // lines: always when there are ≥2 attributes or any mixed (template-literal)
 // value; for a single simple attribute, only when the inline first line would
 // exceed printWidth.
-func (c *compiler) attrsMultiline(attrs []parser.Attr, tagStr string, startCol int, emptyChildren bool, scope map[string]bool, isComponent bool) (bool, error) {
-	if len(attrs) == 0 {
+func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string, startCol int, emptyChildren bool, scope map[string]bool, isComponent bool) (bool, error) {
+	bind := detectAutoBind(tag, attrs, scope)
+	attrCount := len(attrs)
+	if bind != nil {
+		attrCount++
+	}
+	if attrCount == 0 {
 		return false, nil
 	}
-	if len(attrs) >= 2 || anyMixed(attrs) {
+	if attrCount >= 2 || anyMixed(attrs) {
 		return true, nil
 	}
 	kv, err := c.attrKV(attrs[0], scope, isComponent, false)
@@ -1068,16 +1090,28 @@ func (c *compiler) attrsMultiline(attrs []parser.Attr, tagStr string, startCol i
 
 // emitAttrs emits the attribute object either inline `{ k: v }` or multi-line
 // (one attribute per line, trailing comma), per the precomputed decision.
-func (c *compiler) emitAttrs(attrs []parser.Attr, ind int, multiline bool, scope map[string]bool, isComponent bool) (string, error) {
-	if len(attrs) == 0 {
+func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline bool, scope map[string]bool, isComponent bool) (string, error) {
+	bind := detectAutoBind(tag, attrs, scope)
+	attrCount := len(attrs)
+	if bind != nil {
+		attrCount++
+	}
+	if attrCount == 0 {
 		return "{}", nil
 	}
 	if !multiline {
-		kv, err := c.attrKV(attrs[0], scope, isComponent, true)
-		if err != nil {
-			return "", err
+		kvs := make([]string, 0, attrCount)
+		for _, a := range attrs {
+			kv, err := c.attrKV(a, scope, isComponent, true)
+			if err != nil {
+				return "", err
+			}
+			kvs = append(kvs, kv)
 		}
-		return "{ " + kv + " }", nil
+		if bind != nil {
+			kvs = append(kvs, autoBindKV(bind, scope))
+		}
+		return "{ " + strings.Join(kvs, ", ") + " }", nil
 	}
 	var b strings.Builder
 	b.WriteString("{\n")
@@ -1088,6 +1122,11 @@ func (c *compiler) emitAttrs(attrs []parser.Attr, ind int, multiline bool, scope
 		}
 		b.WriteString(sp(ind + 2))
 		b.WriteString(kv)
+		b.WriteString(",\n")
+	}
+	if bind != nil {
+		b.WriteString(sp(ind + 2))
+		b.WriteString(autoBindKV(bind, scope))
 		b.WriteString(",\n")
 	}
 	b.WriteString(sp(ind))
@@ -1401,6 +1440,47 @@ func trailingWSHasNewline(s string) bool {
 	return false
 }
 
+// hasPortal reports whether any <Portal> appears in the tree (→ PORTAL_TAG
+// import). Mirrors hasSlot's shape.
+func hasPortal(nodes []parser.Node) bool {
+	for _, n := range nodes {
+		switch t := n.(type) {
+		case *parser.Portal:
+			return true
+		case *parser.Slot:
+			if hasPortal(t.Children) {
+				return true
+			}
+		case *parser.Element:
+			if hasPortal(t.Children) {
+				return true
+			}
+		case *parser.Component:
+			if hasPortal(t.Children) {
+				return true
+			}
+		case *parser.If:
+			if hasPortal(t.Then) || hasPortal(t.Else) {
+				return true
+			}
+		case *parser.For:
+			if hasPortal(t.Body) {
+				return true
+			}
+		case *parser.Case:
+			for _, cl := range t.Clauses {
+				if hasPortal(cl.Body) {
+					return true
+				}
+			}
+			if hasPortal(t.Else) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // hasSlot reports whether any composition marker (<Children/> or <Slot/>) appears
 // in the tree (→ SLOT_TAG import). Both reserved tags parse as *parser.Slot.
 func hasSlot(nodes []parser.Node) bool {
@@ -1408,6 +1488,10 @@ func hasSlot(nodes []parser.Node) bool {
 		switch t := n.(type) {
 		case *parser.Slot:
 			return true
+		case *parser.Portal:
+			if hasSlot(t.Children) {
+				return true
+			}
 		case *parser.Element:
 			if hasSlot(t.Children) {
 				return true

@@ -52,10 +52,6 @@ events = {
       this.ctx.store.createRecord('todo', { text });
       this.setData('newTodoText', '');
     }
-  },
-
-  toggleTodo: (todo) => {
-    todo.toggle();
   }
 };
 ```
@@ -65,9 +61,7 @@ events = {
 {#if todos.length > 0}
   {#for todo in filteredTodos}
     <div class="todo-item {#if todo.completed}completed{/if}">
-      <input type="checkbox" 
-      checked={ todo.completed } 
-      @change={ toggleTodo(todo) } />
+      <input type="checkbox" checked={ todo.completed } />
       <span>{ todo.text }</span>
       <span>{ todo.createdAt | todoDate }</span>
     </div>
@@ -76,6 +70,11 @@ events = {
   <div class="empty-state">No todos yet!</div>
 {/if}
 ```
+
+The checkbox needs no handler: `checked={ todo.completed }` is a two-way bind, so
+a click writes through `todo.update()` and every view reading that record
+re-renders. Writing your own `@input`/`@change` on the control suppresses the
+bind — the handler owns the write instead.
 
 ### 4. Custom Formatters
 ```javascript
@@ -89,16 +88,16 @@ formatters: {
 ### 5. Model Methods
 ```javascript
 // In todo.js model
-toggle() {
-  return this.update({
-    completed: !this.completed,
-    updatedAt: new Date()
-  });
-}
-
 markComplete() {
   if (!this.completed) {
     return this.update({ completed: true, updatedAt: new Date() });
+  }
+  return this;
+}
+
+markIncomplete() {
+  if (this.completed) {
+    return this.update({ completed: false, updatedAt: new Date() });
   }
   return this;
 }

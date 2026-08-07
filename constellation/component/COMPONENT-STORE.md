@@ -51,9 +51,15 @@ always had. Record fields keep their original type; only numbers normalize
 comparison uses the same rule so a numeric echo of a string-keyed id merges
 instead of warning.
 
-`withTracking(subscriber, fn, expectsAsync)` records collection and record-key
-queries performed by `data()`. Retracking replaces subscriptions; destroying a
-view unsubscribes it. `flush()` snapshots affected subscribers, notifies each
+`withTracking(subscriber, fn, expectsAsync, pending)` records collection and
+record-key queries performed by `data()`. Retracking replaces subscriptions;
+destroying a view unsubscribes it. The optional `pending` channel is the D146
+held eval: a successful run parks its reconcile there instead of applying it,
+so the router's prepare/commit decides whether the run's keys replace the
+last-good set or are unwound, while `_heldKeys` fences those keys from any
+other eval's garbage collection until that decision lands
+([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]). Scope restore is never
+deferred, and a failing run reconciles immediately. `flush()` snapshots affected subscribers, notifies each
 once in isolation, observes thenable failures, and continues after a throwing
 subscriber. Scheduling uses rAF when visible plus a 220ms fallback, and timers
 directly in hidden/non-DOM contexts. In dev builds `flush()` closes by reporting

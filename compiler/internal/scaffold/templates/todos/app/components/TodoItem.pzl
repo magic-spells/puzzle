@@ -2,11 +2,14 @@
   <div class="overflow-hidden">
     <div class="group h-[65px] flex items-center px-5 border-b border-line hover:bg-surface-2 transition-colors">
       <label class="flex items-center cursor-pointer mr-4">
+        <!-- `checked={ todo.completed }` binds the record field itself: the
+             click writes through todo.update(), the store notifies, and every
+             view reading this todo re-renders. No handler, and no callback prop
+             up to Home — the row owns the field it displays. -->
         <input
           type="checkbox"
           class="sr-only"
-          checked={ todo.completed }
-          @change={ toggle(event) } />
+          checked={ todo.completed } />
         <div class="relative">
           <div class="w-5 h-5 rounded-md border transition-colors {#if todo.completed}bg-accent border-accent{/if}{#if !todo.completed}border-white/25 group-hover:border-white/40{/if}"></div>
           {#if todo.completed}
@@ -40,20 +43,22 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class TodoItem extends PuzzleView {
-  // `todo` is a prop from the parent; toggle/remove are callback props (SPEC §6)
-  // that route this row's DOM events up to the owning view (Home).
+  // `todo` is a prop from the parent; `remove` is a callback prop (SPEC §6)
+  // that routes this row's delete click up to the owning view (Home).
+  //
+  // Returning the record itself is what makes the checkbox writable: the
+  // template's `checked={ todo.completed }` resolves to this record, so the
+  // synthesized handler has something to call update() on.
   data(params, props) {
     return { todo: props.todo };
   }
 
-  // Event handlers invoke the callback props passed by the parent. The parent's
-  // `@toggle={ toggleTodo(todo) }` compiled to `props.toggle = (event) =>
-  // this.events.toggleTodo(todo)`, so calling this.props.toggle(event) runs the
-  // parent handler with the row's todo already closed over.
+  // Only deletion needs a handler. Destroying a record is the parent's call —
+  // it owns the collection — so it stays a callback prop: the parent's
+  // `@remove={ deleteTodo(todo) }` compiled to `props.remove = (event) =>
+  // this.events.deleteTodo(todo)`, and calling this.props.remove(event) runs
+  // that handler with the row's todo already closed over.
   events = {
-    toggle: (event) => {
-      this.props.toggle(event);
-    },
     remove: (event) => {
       this.props.remove(event);
     }

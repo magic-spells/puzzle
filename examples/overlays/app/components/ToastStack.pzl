@@ -1,0 +1,57 @@
+<puzzle-view>
+  <!--
+    The stack is written HERE, in the layout's subtree, but mounts into the
+    framework's portal outlet beside #app (D144). That matters: `.shell` is a
+    centered, max-width column, so a `position: fixed` toast column declared
+    inside it would still work today — and would silently break the day anyone
+    puts a `transform`/`filter`/`contain` on an ancestor. Portaling makes the
+    stack's containing block the viewport by construction.
+
+    The wrapper div is not decoration: a component template's root must be an
+    element or a component, and <Portal> is neither — so a component whose
+    entire output is teleported still needs one local element to be rooted at.
+    `display: contents` keeps it out of the layout.
+  -->
+  <div class="toast-mount">
+    <Portal>
+      <div class="toast-stack" role="status" aria-live="polite">
+        {#for toast in toasts}
+          <ToastItem key={ toast.id } toast={ toast } />
+        {/for}
+      </div>
+    </Portal>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ToastItem from './ToastItem.pzl';
+
+export default class ToastStack extends PuzzleView {
+  // Querying the store inside data() auto-subscribes this view, so any code
+  // anywhere in the app that calls store.createRecord('toast', …) shows up
+  // here. Nothing wires a trigger to this component.
+  data() {
+    return { toasts: this.ctx.store.findMany('toast') };
+  }
+}
+</script>
+
+<style>
+/* The component's local root renders nothing visible — all of its content is
+   teleported. */
+.toast-mount { display: contents; }
+
+.toast-stack {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(340px, calc(100vw - 36px));
+  /* The empty column must never eat clicks; each toast opts back in. */
+  pointer-events: none;
+}
+</style>

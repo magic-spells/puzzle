@@ -11,10 +11,9 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      A reused ancestor refresh mutates that instance before the final navigation commit. If a later
-      fresh descendant load fails, URL/current stay put but the reused ancestor has seen the
-      attempted params. This documented D19/D30 soft edge is tracked by
-      FEATURE-TRANSACTIONAL-ANCESTOR-REFRESH.
+      A reused ancestor's gated data() runs against the DESTINATION params/snapshot but commits
+      only inside #commitState (D146). Anything the router adds on a non-committing exit path
+      must discard the prepared runs, or their tracked subscriptions strand on a live ancestor.
   - kind: verified
     text: >-
       Re-verified after the 2026-07-24 deep-review round. Corrected two stale claims: the commit no
@@ -82,7 +81,8 @@ a string verdict redirects through public `replace()` (denied URL never enters
 history; ten guard redirects without a commit trip the cycle cap, reset in
 `#commitState`). An empty guard chain adds no await — unguarded navigation
 keeps its synchronous path to construction. The router then computes the
-shared route-node prefix, preloads fresh views, refreshes reused ancestors
+shared route-node prefix, preloads fresh views, prepares reused ancestors
+(D146 — run in the gate, committed with the navigation)
 with one frozen
 `{ path, pathname, query, hash, route, params, chain }` snapshot (parsed once
 per navigation by `parseLocation` — frozen null-proto query, repeated keys →

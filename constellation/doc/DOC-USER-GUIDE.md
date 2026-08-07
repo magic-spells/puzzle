@@ -5,7 +5,6 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - DOC-BLOG-EXAMPLE
   - DOC-SPEC
-  - DOC-DECISIONS
   - DOC-PUZZLE-FILE
   - DOC-DATASTORE
   - DOC-COMPILATION-FLOW
@@ -342,7 +341,7 @@ export const models = {
 export default models;
 ```
 
-**The `adapter` drives both the read and write paths.** A model's `static adapter = { endpoint }` is consumed on the read path by `store.loadAll(type)` / `store.loadOne(type, id)`, which GET `apiURL + endpoint` and upsert the results (D21). A model with no `adapter` (like `comment` above) simply opts out of that path. Write sync shipped in v1.18 (D50): `record.save()` POSTs a never-synced record and PUTs a synced one (local-first — a failed save keeps the dirty state and rejects), `record.delete()` DELETEs then removes locally, and `store.request()` reaches custom endpoints; `record.destroy()` stays local-only. Validation enforces too — since v1.16 (D48) `createRecord`/`update` throw `PuzzleValidationError` on invalid data, while `Model.validate(data)` / `record.validate()` return `{ valid, errors }` without throwing for form UX (server upserts and storage hydration stay exempt). See [[DOC-SPEC]] §20/§22 and [[DOC-DECISIONS]] D21/D48/D50.
+**The `adapter` drives both the read and write paths.** A model's `static adapter = { endpoint }` is consumed on the read path by `store.loadAll(type)` / `store.loadOne(type, id)`, which GET `apiURL + endpoint` and upsert the results (D21). A model with no `adapter` (like `comment` above) simply opts out of that path. Write sync shipped in v1.18 (D50): `record.save()` POSTs a never-synced record and PUTs a synced one (local-first — a failed save keeps the dirty state and rejects), `record.delete()` DELETEs then removes locally, and `store.request()` reaches custom endpoints; `record.destroy()` stays local-only. Validation enforces too — since v1.16 (D48) `createRecord`/`update` throw `PuzzleValidationError` on invalid data, while `Model.validate(data)` / `record.validate()` return `{ valid, errors }` without throwing for form UX (server upserts and storage hydration stay exempt). See [[DOC-SPEC]] §20/§22 and the D21/D48/D50 decision cards.
 
 ---
 
@@ -497,17 +496,17 @@ params and props** in `data(params, props)` — the router does not inject a
       {/if}
 
       <form class="comment-form" @submit={ addComment(event) }>
+        <!-- value={ … } on a bare local key is the whole binding (D147): each
+             keystroke lands in local state, so disabled= below stays honest. -->
         <input
           class="comment-form__name"
           type="text"
           placeholder="Your name"
-          value={ authorName }
-          @input={ updateAuthorName(event) } />
+          value={ authorName } />
         <textarea
           class="comment-form__text"
           placeholder="Write a comment…"
-          value={ commentText }
-          @input={ updateCommentText(event) }></textarea>
+          value={ commentText }></textarea>
         <button class="btn btn--primary" type="submit" disabled={ !commentText.trim() }>
           Add comment
         </button>
@@ -564,14 +563,9 @@ export default class PostDetailView extends PuzzleView {
   }
 
   events = {
-    updateAuthorName: (event) => {
-      this.setData('authorName', event.target.value);
-    },
-
-    updateCommentText: (event) => {
-      this.setData('commentText', event.target.value);
-    },
-
+    // No handlers for the two fields — their value={ … } bindings write them.
+    // What is left is the work binding cannot do: creating the record, and
+    // clearing the draft afterwards.
     addComment: (event) => {
       event.preventDefault();
       const { commentText, authorName } = this.getData();
@@ -657,10 +651,110 @@ export default class PostDetailView extends PuzzleView {
 
 Notes on this view:
 - **`params.id`** comes from the `/posts/:id` route; `data()` re-runs when it changes.
-- The comment form uses one-way `value={ … }` bindings plus manual `@input` handlers that `setData` local state, then `createRecord('comment', …)` on submit.
+- The comment form carries **no field handlers at all**: `value={ authorName }` and `value={ commentText }` are two-way bindings on bare local keys (D147), so `events` only has to `createRecord('comment', …)` on submit and clear the draft.
 - `<CommentItem @remove={ removeComment(comment) }>` is a **callback prop** carrying the loop variable; the child reports intent and the **parent owns the mutation** (`comment.destroy()`).
 - The nested conditional shown (`{#if post}…{:else}{#if loaded}…{/if}{/if}`) predates v1.9 — since `{:else if}` chaining shipped (D40) you can flatten it to `{#if post}…{:else if loaded}…{:else}…{/if}`.
-- The `<style>` block above is abridged and is a standalone walkthrough of the `<style>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see [[DOC-DECISIONS]] D27), so this section no longer mirrors that file verbatim.
+- The `<style>` block above is abridged and is a standalone walkthrough of the `<style>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see the D27 decision card), so this section no longer mirrors that file verbatim.
+
+### Form idioms (v1.68, D147)
+
+`value={ … }` and `checked={ … }` on a plain `<input>`, `<textarea>`, or
+`<select>` bind **two ways** — the compiler writes the write-back handler, so
+most form fields need nothing in `events`. One rule decides the rest: **bind the
+path you want written.**
+
+**A local draft — bind a bare key.** Text the view owns until submit: search
+boxes, filters, the comment form above.
+
+```html
+<input type="text" placeholder="Your name" value={ authorName } />
+```
+
+The write is `setData` plus `refresh`, so anything `data()` derives from that key
+recomputes while the user types — a bound filter field narrows its own list
+keystroke by keystroke. Seed the key in `created()` and read it back in `data()`
+(as `PostDetail` does with `this.getData()`) so it survives store-driven re-runs.
+
+**A record field — bind a one-member path.** An edit form over a record already
+in the store writes straight through:
+
+```html
+<input type="text" value={ profile.name } />
+<input type="checkbox" checked={ profile.subscribed } />
+```
+
+Each edit goes through `record.update()`, so schema validation runs, the store
+notifies, and every view subscribed to that record re-renders. Bind the record
+path rather than copying the field into a local key first: a local key that
+`data()` also derives from the record is overwritten on the next commit, and
+Puzzle warns once per key in development when it catches that happening.
+
+**A constrained field — bind a draft, commit on submit.** A bound record path
+validates on *every* commit, which is wrong for a field with a rule the user must
+type *through*. `Comment.text` is `required()`, so a directly-bound
+`value={ comment.text }` could never be emptied — the clearing write is rejected
+and the record keeps its old value. A `min(3)` rule has the same problem in the
+middle of a word. Bind a local draft and commit once:
+
+```html
+<form @submit={ save(event) }>
+  <textarea value={ textDraft }></textarea>
+  {#if textError}<p class="field-error">{ textError }</p>{/if}
+  <button type="submit">Save</button>
+</form>
+```
+
+```javascript
+import Comment from '../models/comment.js'; // at the top of the <script> block
+
+events = {
+  save: (event) => {
+    event.preventDefault();
+    const { textDraft } = this.getData();
+
+    // validate() reports without throwing — the form-UX half of the pair.
+    const { valid, errors } = Comment.validate({ text: textDraft }, { fields: ['text'] });
+    if (!valid) {
+      this.setData('textError', errors[0].message);
+      return;
+    }
+
+    this.props.comment.update({ text: textDraft });
+    this.setData('textError', null);
+  }
+};
+```
+
+`update()` throws on a rejected write and changes nothing — no render, no
+re-assert, and the text the user typed stays on screen. When a *bind* triggers
+that rejection, the error reaches your `onError` hook with `phase: 'bind'`.
+
+**Opting a field out.** Three escapes, all ordinary syntax: write your own
+`@input` or `@change` (either one suppresses the synthesized write entirely),
+use a non-path expression (`value={ String(name) }`, `value={ draft || '' }`), or
+add a static `readonly`. Handlers on other events — `@blur`, `@keydown:enter` —
+coexist with the bind rather than replacing it, so a field wired as
+`value={ name }` with only a `@keydown:enter` commit handler is **not** an
+abandonable edit buffer: every keystroke has already landed in `name`. Use the
+non-path form when Escape needs something to revert to.
+
+**Testing a bound field.** `@magic-spells/puzzle/testing` ships `type()`, which
+replaces a control's value, fires the events a real edit-then-leave produces, and
+waits for the view to settle. The mounted handles expose it as a method:
+
+```javascript
+import { mountView } from '@magic-spells/puzzle/testing';
+import PostDetailView from '../app/views/PostDetail.pzl';
+
+const view = await mountView(PostDetailView, { params: { id: 'p1' } });
+await view.type('.comment-form__name', 'Ada');
+
+expect(view.instance.getData().authorName).toBe('Ada');
+```
+
+The standalone `type(element, text)` export does the same for an element you
+already hold. See [[DOC-TEMPLATE-SYNTAX]] for the exact trigger conditions and
+the per-control event matrix.
 
 ---
 
@@ -799,7 +893,7 @@ export default class PostCard extends PuzzleView {
 `<a href="/posts/{ post.id }">`; the router intercepts the click for SPA
 navigation. The `<style>` block is abridged here to illustrate the feature;
 the shipped `examples/blog/app/components/PostCard.pzl` now uses Tailwind
-utilities instead (see [[DOC-DECISIONS]] D27).
+utilities instead (see the D27 decision card).
 
 ### components/CommentItem.pzl
 ```html

@@ -4,7 +4,6 @@ status: verified
 verified_at: '2026-07-22T00:04:04.846Z'
 connections:
   - DOC-SPEC
-  - DOC-DECISIONS
   - DOC-RELEASE-SURFACE
   - DOC-TESTING
   - DOC-DEVELOPMENT
@@ -15,7 +14,7 @@ connections:
 
 # Puzzle release plan
 
-[[DOC-SPEC]] is the frozen product contract. [[DOC-DECISIONS]] records why it
+[[DOC-SPEC]] is the frozen product contract. The decision cards record why it
 changed, [[DOC-RELEASE-SURFACE]] inventories what ships, and git holds the
 detailed implementation history.
 

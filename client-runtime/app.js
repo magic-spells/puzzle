@@ -8,7 +8,8 @@
  * D42), v1.19 with { routerBase } (sub-path deploys, D51), v1.24 with
  * { transitionMode } (overlapping route transitions, D56), v1.31 with
  * { beforeMount, mounted, beforeUnmount } (app lifecycle hooks, D66), and v1.56
- * with { focusBehavior } (router focus + route announcement, D93).
+ * with { focusBehavior } (router focus + route announcement, D93), plus
+ * { onError } for framework-contained application errors.
  * Everything else (app-level settings/computed/events/methods) stays deferred
  * post-v1 (re-rejected at the D66 triage — SPEC §34).
  *
@@ -28,6 +29,8 @@ import { makeFormatterRegistry } from './formatters.js';
 import { Router } from './router/router.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
+import { reportError, setErrorHandler } from './errors.js';
+import { setPortalHost, teardownPortals } from './views/viewManager.js';
 
 // Dev HMR guard (constellation/doc/DOC-SPEC.md §27, D57): gates the state-preserving reload
 // hooks on the __PUZZLE_DEV__ build define — "false" in production, where
@@ -137,6 +140,9 @@ export class PuzzleApp {
 	 *   (services still live). Synchronous — a returned promise is not awaited; a
 	 *   throw is logged and teardown proceeds. Does not fire on the beforeMount
 	 *   abort path (SPEC §34)
+	 * @param {Function} [config.onError] app error hook:
+	 *   `onError(error, { phase, view, route })`, called for framework-contained
+	 *   application errors. A throwing/rejecting hook is logged and swallowed
 	 */
 	constructor(config = {}) {
 		this.config = config;
@@ -202,12 +208,12 @@ export class PuzzleApp {
 		// correct: it can only invalidate continuations of cycles already torn down.
 		const epoch = ++this.#mountEpoch;
 
-		// App lifecycle hooks (v1.31, SPEC §34, D66): validate the three optional
-		// config hooks up front, before any wiring. Nullish → treated as absent;
+		// Validate the three lifecycle hooks plus the app error reporter up front,
+		// before any wiring. Nullish → treated as absent;
 		// any other non-function value is a mount()-time throw (the constructor
 		// stays a side-effect-free config store, SPEC §2, so the check lives here,
 		// not in the constructor).
-		for (const name of ['beforeMount', 'mounted', 'beforeUnmount']) {
+		for (const name of ['beforeMount', 'mounted', 'beforeUnmount', 'onError']) {
 			const hook = this.config[name];
 			if (hook != null && typeof hook !== 'function') {
 				throw new Error(`[puzzle] config.${name} must be a function when set`);
@@ -230,11 +236,16 @@ export class PuzzleApp {
 			transitionMode,
 			beforeMount,
 			mounted,
+			onError,
 		} = this.config;
 
 		// 1. Resolve the mount element — a selector string or an Element.
 		const el = this.#resolveTarget(target);
 		this._container = el;
+		// Portal outlet host (D144): portals teleport into a framework-created
+		// element appended NEXT TO the mount container, so it survives the
+		// container.replaceChildren() in unmount() and is torn down explicitly there.
+		setPortalHost(el.parentNode ?? (typeof document !== 'undefined' ? document.body : null));
 
 		// 2. Store: models registry in; pass storage through only when provided so
 		//    the Store's own default (no persistence) stands otherwise. The adapter
@@ -284,6 +295,7 @@ export class PuzzleApp {
 		}
 
 		this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
+		setErrorHandler(this.ctx, onError);
 
 		// Claim mounted BEFORE the async start(): the initial navigation may await a
 		// slow data(), and an unmount() during that window must actually tear down.
@@ -387,13 +399,29 @@ export class PuzzleApp {
 		// rejection (same "logged, never wedges" posture as morph-handler errors,
 		// D55). Both a sync throw and an async rejection are caught and logged.
 		if (mounted != null) {
+			const errorCtx = this.ctx;
+			const route = this.router?.current;
 			try {
 				const ret = mounted.call(this, this);
 				if (ret != null && typeof ret.then === 'function') {
-					ret.catch((err) => console.error('[puzzle] mounted hook error:', err));
+					ret.catch((err) =>
+						reportError(
+							errorCtx,
+							err,
+							{ phase: 'app-mount', route },
+							'[puzzle] mounted hook error:',
+							err
+						)
+					);
 				}
 			} catch (err) {
-				console.error('[puzzle] mounted hook error:', err);
+				reportError(
+					errorCtx,
+					err,
+					{ phase: 'app-mount', route },
+					'[puzzle] mounted hook error:',
+					err
+				);
 			}
 		}
 		return this;
@@ -430,6 +458,8 @@ export class PuzzleApp {
 		// abort path — that calls #teardown() directly.
 		const { beforeUnmount } = this.config;
 		if (beforeUnmount != null) {
+			const errorCtx = this.ctx;
+			const route = this.router?.current;
 			try {
 				// Synchronous: teardown does NOT await a returned promise. But a
 				// returned thenable that REJECTS would otherwise be an unobserved
@@ -437,10 +467,24 @@ export class PuzzleApp {
 				// posture as the mounted hook. The sync throw is caught below.
 				const ret = beforeUnmount.call(this, this);
 				if (ret != null && typeof ret.then === 'function') {
-					ret.catch((err) => console.error('[puzzle] beforeUnmount hook error:', err));
+					ret.catch((err) =>
+						reportError(
+							errorCtx,
+							err,
+							{ phase: 'app-unmount', route },
+							'[puzzle] beforeUnmount hook error:',
+							err
+						)
+					);
 				}
 			} catch (err) {
-				console.error('[puzzle] beforeUnmount hook error:', err);
+				reportError(
+					errorCtx,
+					err,
+					{ phase: 'app-unmount', route },
+					'[puzzle] beforeUnmount hook error:',
+					err
+				);
 			}
 		}
 
@@ -491,6 +535,7 @@ export class PuzzleApp {
 			window.removeEventListener('pagehide', this.#pageHideFlush);
 			this.#pageHideFlush = null;
 		}
+		teardownPortals();
 		if (this._container) this._container.replaceChildren();
 
 		this.ctx = null;

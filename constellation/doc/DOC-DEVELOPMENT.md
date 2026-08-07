@@ -4,7 +4,6 @@ status: verified
 verified_at: '2026-07-22T00:04:05.541Z'
 connections:
   - DOC-SPEC
-  - DOC-DECISIONS
   - DOC-RELEASE-SURFACE
   - DOC-TESTING
   - DOC-BUILD-PLAN
@@ -16,7 +15,7 @@ connections:
 # Development guide
 
 Contributor guidance for the current repository. [[DOC-SPEC]] is the frozen
-contract; [[DOC-DECISIONS]] is the rationale index; [[DOC-RELEASE-SURFACE]] is
+contract; the decision cards are the rationale record; [[DOC-RELEASE-SURFACE]] is
 the compact shipped-surface map.
 
 ## Repository map

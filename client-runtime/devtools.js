@@ -53,7 +53,7 @@ const PROTOCOL_VERSION = 1;
 // literal — BUMP IT WITH package.json AT EVERY RELEASE (D100). `release:prep`
 // asserts this matches package.json, because the instruction above was not
 // enough on its own: it silently stayed at 0.3.0 through the 0.3.1 bump.
-const FRAMEWORK_VERSION = '0.4.0';
+const FRAMEWORK_VERSION = '0.5.0';
 
 // The global the extension installs its hook on. Referenced ONLY from DEV-gated
 // code, so production DCE drops the usages and then this const — which is what
@@ -403,6 +403,14 @@ function snapshotRecords(type) {
  * The subscription graph, both ways. Function subscribers have no stable
  * identity to hand across the wire, so they all report as the literal 'fn' —
  * which means byView merges them into a single 'fn' bucket by design.
+ *
+ * `held` (additive, so a panel that predates it renders exactly as before)
+ * separates the keys a PREPARED but uncommitted data() run added (D146). Those
+ * are real live subscriptions — a prepared ancestor is deliberately
+ * over-subscribed so a discard can never weaken its coverage — but they belong
+ * to a navigation that has not committed and vanish if it fails. Without the
+ * split, a snapshot taken while a gated navigation is open shows an ancestor
+ * subscribed to both routes' keys and reads as a leak.
  */
 function snapshotSubscriptions() {
 	const store = requireStore();
@@ -416,7 +424,19 @@ function snapshotSubscriptions() {
 		const bucket = (byView[id] ??= []);
 		for (const key of keys) if (!bucket.includes(key)) bucket.push(key);
 	}
-	return { byKey, byView };
+	const held = {};
+	// _heldKeys is Map<subscriber, Map<key, {count, adopted}>> (D146 refcounting);
+	// the wire shape stays a flat array of key strings — the counts are internal.
+	for (const [sub, counts] of store._heldKeys ?? []) {
+		const id = subscriberId(sub);
+		let bucket = null;
+		for (const [key, { count }] of counts) {
+			if (count <= 0) continue;
+			bucket ??= held[id] ??= [];
+			if (!bucket.includes(key)) bucket.push(key);
+		}
+	}
+	return { byKey, byView, held };
 }
 
 function editRecord(type, id, patch) {

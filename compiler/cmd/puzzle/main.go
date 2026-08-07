@@ -8,6 +8,7 @@ import (
 
 	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/dev"
+	"github.com/magic-spells/puzzle/compiler/internal/preview"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/compiler/internal/update"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
@@ -87,6 +88,11 @@ var devCmd = &cobra.Command{
 rebuild + live-reload the browser on any change under app/. Builds are always
 development mode (no minification).
 
+When puzzle.config.js declares output: 'static', dev serves what that mode
+actually ships instead: every rebuild runs the real prerender pass and the pages
+are served with static semantics — clean URLs, plain full-page navigation, a real
+404, and the per-page mount modules. Default and 'hybrid' projects are unaffected.
+
 With --fixtures, wire app/fixtures.js (or .ts) through the fixtures/mock runtime
 module so the served app seeds and mocks itself.`,
 	Args: cobra.MaximumNArgs(1),
@@ -105,6 +111,33 @@ module so the served app seeds and mocks itself.`,
 			OnReady: func() {
 				printUpdateNotice(os.Stdout, ui.New(os.Stdout))
 			},
+		})
+	},
+}
+
+var previewCmd = &cobra.Command{
+	Use:   "preview [dir]",
+	Short: "Serve the existing dist/ the way a production host would",
+	Long: `Serve an already-built dist/ locally, with the URL semantics of the output
+mode declared in puzzle.config.js. There is no watcher, no rebuild, and no
+live-reload — run 'puzzle build' first, then preview the artifact.
+
+Default output: any path that is not a file falls back to index.html.
+output: 'hybrid': the route's prerendered page when one exists, index.html
+otherwise. output: 'static': clean URLs (/about → /about/index.html) and a real
+404 — dist/404.html when the app's catch-all route wrote one — because that is
+what a static host does.`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		dir := "."
+		if len(args) == 1 {
+			dir = args[0]
+		}
+		port, _ := cmd.Flags().GetInt("port")
+		strictPort, _ := cmd.Flags().GetBool("strict-port")
+		return preview.Serve(dir, preview.Options{
+			Port:       port,
+			StrictPort: strictPort,
 		})
 	},
 }
@@ -133,9 +166,15 @@ func init() {
 	devCmd.Flags().Int("port", 3000, "Port for the dev server (scans upward if busy)")
 	devCmd.Flags().Bool("strict-port", false, "Fail if --port is busy instead of scanning for a free one")
 	devCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module")
+	// Preview defaults to a different port than dev on purpose: previewing a
+	// build while a dev server runs is the common case, and the scan silently
+	// moving off 3000 would hide which server answered.
+	previewCmd.Flags().Int("port", 4000, "Port for the preview server (scans upward if busy)")
+	previewCmd.Flags().Bool("strict-port", false, "Fail if --port is busy instead of scanning for a free one")
 
 	rootCmd.AddCommand(buildCmd)
 	rootCmd.AddCommand(devCmd)
+	rootCmd.AddCommand(previewCmd)
 }
 
 func main() {

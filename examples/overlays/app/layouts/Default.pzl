@@ -1,0 +1,84 @@
+<puzzle-view class="shell">
+  <header class="shell-head">
+    <div class="eyebrow">Puzzle v1.66 · D144</div>
+    <h1 class="shell-title">Overlays</h1>
+    <p class="shell-sub">
+      Four overlays, one page. Three of them are teleported by
+      <code>{ '<Portal>' }</code> into the framework's outlet beside the app
+      root; the fourth is a native <code>{ '<dialog>' }</code>, because that is
+      what the framework recommends for focus-trapped modals.
+    </p>
+  </header>
+
+  <main class="shell-main">
+    <Slot/>
+  </main>
+
+  <footer class="shell-foot">
+    <p>
+      Open your inspector: everything portaled here lives in
+      <code>div[data-puzzle-portal]</code>, a sibling of
+      <code>#app</code> — while still being owned, patched and torn down by the
+      component that wrote it.
+    </p>
+  </footer>
+
+  <!-- Mounted once for the whole app. Its own DOM output is a single empty
+       div; the toast column itself is portaled out of here. -->
+  <ToastStack/>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ToastStack from '../components/ToastStack.pzl';
+
+export default class DefaultLayout extends PuzzleView {
+  data() {
+    return {};
+  }
+}
+</script>
+
+<style>
+.shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 72px 24px 120px;
+}
+
+.shell-head {
+  text-align: center;
+  margin-bottom: 80px;
+}
+
+.shell-title {
+  margin: 14px 0 14px;
+  font-size: clamp(34px, 6vw, 46px);
+  line-height: 1.05;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.shell-sub {
+  margin: 0 auto;
+  max-width: 58ch;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.shell-foot {
+  margin-top: 96px;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--faint);
+}
+
+.shell-foot p {
+  max-width: 72ch;
+  margin: 0 auto;
+}
+</style>

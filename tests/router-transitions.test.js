@@ -861,6 +861,93 @@ describe('Router transitions — incomplete navigations do not strand an in-flig
 		expect(el.querySelector('.one')).toBeNull();
 		expect(router.current.path).toBe('/two');
 	});
+
+	it('restores local updates and store tracking on the outgoing view after a failed navigation', async () => {
+		waapi = installFakeAnimate();
+		let one = null;
+		// This tiny tracking store exposes the exact subscription seam playOut()
+		// drops. A successful recovery refresh must call withTracking again before a
+		// later notification can reach the restored view.
+		const store = {
+			value: 0,
+			subscriber: null,
+			tracking: null,
+			withTracking(subscriber, run) {
+				this.tracking = subscriber;
+				try {
+					return run();
+				} finally {
+					this.tracking = null;
+				}
+			},
+			read() {
+				this.subscriber = this.tracking;
+				return this.value;
+			},
+			unsubscribe(subscriber) {
+				if (this.subscriber === subscriber) this.subscriber = null;
+			},
+		};
+		class One extends PuzzleView {
+			animations = { out: OUT };
+			created() {
+				one = this;
+				this.setData('draft', 'before');
+			}
+			data() {
+				return { count: store.read() };
+			}
+			render() {
+				const data = this.getData();
+				return h('puzzle-view', { class: 'one' }, [
+					text(`${data.draft}:${data.count}`),
+				]);
+			}
+		}
+		const Two = makeView('two', []);
+		class Bad extends PuzzleView {
+			async data() {
+				throw new Error('boom');
+			}
+			render() {
+				return h('puzzle-view', { class: 'bad' }, [text('BAD')]);
+			}
+		}
+		const routes = [
+			{ path: '/', name: 'one', view: One, layout: PlainLayout },
+			{ path: '/two', name: 'two', view: Two, layout: PlainLayout },
+			{ path: '/bad', name: 'bad', view: Bad, layout: PlainLayout },
+		];
+		const el = container();
+		const router = new Router(routes);
+		const context = { store, router, formatters: null };
+		routers.push(router);
+		await router.start(el, context);
+		expect(store.subscriber).toBe(one);
+
+		const doomed = router.push('/two');
+		await tick();
+		expect(store.subscriber).toBeNull(); // playOut made the view inert
+
+		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		await router.push('/bad');
+		await doomed;
+		await tick();
+
+		expect(errSpy).toHaveBeenCalledWith('[puzzle] navigation data() failed:', expect.any(Error));
+		expect(el.querySelector('.one').textContent).toBe('before:0');
+		expect(store.subscriber).toBe(one); // recovery refresh re-tracked the view
+
+		// Both inertness guards were undone: local writes repaint, and a later store
+		// delivery re-runs data() on the restored, still-committed instance.
+		one.setData('draft', 'after');
+		one.flushUpdates();
+		expect(el.querySelector('.one').textContent).toBe('after:0');
+		store.value = 1;
+		store.subscriber.onStoreChange();
+		expect(el.querySelector('.one').textContent).toBe('after:1');
+		expect(router.current.route.name).toBe('one');
+	});
 });
 
 // D61: location side effects (URL + title + history entry) now commit INSIDE the

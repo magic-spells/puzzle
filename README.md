@@ -46,6 +46,7 @@ npm install -D @magic-spells/puzzle
 
 - **Single-file components** (`.pzl`) with template + scripts + styles — optional TypeScript (`<script lang="ts">`), scoped styles (`<style scoped>`), skeletons, comments, slots, and refs
 - **Reactive data** with automatic view updates
+- **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and write sync
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
 - **Nested routing** with view slots — history, hash, and memory modes; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
@@ -197,15 +198,20 @@ See [constellation/doc/DOC-TEMPLATE-SYNTAX.md](constellation/doc/DOC-TEMPLATE-SY
 <!-- Event handlers -->
 <button @click={ handleClick }>Click me</button>
 <form @submit={ handleForm(event) }>
-  <!-- Controlled form property; the handler updates component/store state -->
-  <input value={ searchQuery } @input={ updateSearch(event) } />
+  <!-- Two-way: reads searchQuery AND writes the user's edit back. No handler. -->
+  <input value={ searchQuery } />
   <select value={ selectedOption }></select>
 </form>
+
+<!-- A one-member path writes the record itself, through validated update() -->
+<input type="checkbox" checked={ todo.completed } />
 
 <!-- Event modifiers: prevent / stop / once + key filters, and they stack -->
 <input @keydown:enter={ handleSubmit } @keydown:escape:prevent={ cancelEdit } />
 <button @click:once={ claimReward }>Claim</button>
 ```
+
+**Two-way binding** (D147): `value=` and `checked=` on a plain `<input>`, `<textarea>`, or `<select>` bind in both directions when the expression is a bare identifier or a one-member path — the compiler synthesizes the write-back handler. A bare identifier writes local state; a path writes the record through validated `update()`. Opt out with your own `@input`/`@change`, a non-path expression (`value={ String(x) }`), or a static `readonly`. Handlers on other events (`@blur`, `@keydown:enter`) coexist with the bind.
 
 **Event modifiers** (`prevent`, `stop`, `once`, and key filters like `:enter`/`:escape`) stack; the canonical order is key-gate → once-spend → preventDefault → stopPropagation → handler. See [constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) §5.
 
@@ -432,6 +438,10 @@ puzzle build --static
 # Prerendered pages plus the SPA bundle the router takes over
 puzzle build --hybrid
 
+# Serve an existing build the way a production host will
+puzzle preview
+puzzle preview ./my-app --port 4000
+
 # Upgrade the installed CLI, or only check what is available
 puzzle upgrade
 puzzle upgrade --check
@@ -447,7 +457,18 @@ On an interactive terminal, `build` and `dev` also use a cached, non-blocking
 daily check to mention newer Puzzle releases. Set `PUZZLE_NO_UPDATE_CHECK=1` to
 disable it; the check is skipped automatically when `CI` is set.
 
-`puzzle upgrade` updates a project or global package-manager install;
+`puzzle preview` serves a build you already produced, with no watcher, no live
+reload, and no `dev.proxy` — the artifact is checked exactly as it sits on disk.
+Its optional argument is the **project** directory (its `dist/` is found for
+you), not the output directory.
+It serves per the resolved output mode: an SPA gets history-API fallback, hybrid
+serves the prerendered page first and the shell otherwise, and static gets clean
+URLs and a real `404.html` rather than the shell. It defaults to port 4000 so it
+runs alongside `puzzle dev`.
+
+`puzzle upgrade` updates the CLI you are running, resolved from the executable's
+own install context rather than the current directory — bumping a project's
+`@magic-spells/puzzle` dependency is npm's job, not the CLI's.
 `puzzle upgrade --check` only reports the current and latest versions.
 
 ### Agent skill

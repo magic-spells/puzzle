@@ -1,0 +1,11 @@
+<puzzle-view>
+  <Portal>
+    <Slot name="x"/>
+  </Portal>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class PortalNamedSlot extends PuzzleView {}
+</script>

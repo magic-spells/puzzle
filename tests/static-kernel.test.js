@@ -14,6 +14,7 @@ import { mountStatic } from '../client-runtime/static/index.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import LocalForm from './fixtures/binding/LocalForm.compiled.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -31,6 +32,14 @@ const frame = () =>
 	new Promise((r) =>
 		typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => r()) : setTimeout(r, 0)
 	);
+// A bind write is setData + refresh(): the re-render lands on an animation frame
+// after data() re-runs, so drain both queues a few times.
+async function flush() {
+	for (let i = 0; i < 5; i++) {
+		await frame();
+		await tick();
+	}
+}
 
 function stamp(Class, module) {
 	Class.__pzlModule = module;
@@ -618,6 +627,46 @@ describe('static kernel — mountStatic (D81)', () => {
 				route: { path: '/', params: {}, chain: [{ path: '/', name: 'home' }] },
 			})
 		).resolves.toBeUndefined();
+	});
+
+	// Implicit two-way binding (D147) is a LISTENER, so it cannot be prerendered:
+	// the synthesized `@input:bind` attr is stripped from the serialized HTML
+	// (ssg/serialize.js serializeAttrs) and only exists once something mounts. A
+	// static page has no router, so mountStatic is that something — the whole
+	// interactivity budget of `output: 'static'`. The view is the Go compiler's
+	// ACTUAL output (tests/fixtures/binding/LocalForm.compiled.js).
+	it('attaches the synthesized bind listener over prerendered markup (D147)', async () => {
+		const cfg = { target: '#app', routes: [{ path: '/', name: 'form', view: LocalForm }] };
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		const page = pages[0];
+
+		// Build-time HTML: controlled values present, directive absent.
+		expect(page.html).toContain('<input class="draft" value="">');
+		expect(page.html).not.toContain('bind');
+
+		const el = seedDocument({ content: page.html, data: page.data });
+		await mountStatic({ target: '#app', views: [LocalForm], route: page.route });
+		await tick();
+
+		// Mounting moves controlled form state from HTML initial-state markup to
+		// live DOM PROPERTIES (the documented serializer ⟷ ViewManager difference,
+		// see ssg-equivalence.test.js), so parity for a form control is its
+		// property values, not innerHTML bytes. Either way, no directive markup.
+		expect(el.innerHTML).not.toContain('bind');
+		expect(el.querySelectorAll('input.draft').length).toBe(1); // no duplication
+		expect(el.querySelector('input.draft').value).toBe('');
+		expect(el.querySelector('select.sort').value).toBe('all');
+		expect(el.querySelector('p.matches').textContent).toBe('4');
+
+		const input = el.querySelector('input.draft');
+		input.value = 'al';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		await flush();
+
+		// The bind wrote local state AND refresh() re-ran data(): only 'alpha'
+		// matches. A dead listener would have left this at 4.
+		expect(el.querySelector('p.matches').textContent).toBe('1');
+		expect(el.querySelector('input.draft').value).toBe('al');
 	});
 
 	it('throws when the mount target is missing', async () => {

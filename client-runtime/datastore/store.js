@@ -107,6 +107,14 @@ export class Store {
 		this._tracking = null; // current subscriber during data() evaluation
 		this._asyncTrackingChain = null; // in-flight async tracked eval, or null
 		this._trackingAdded = null; // keys the in-flight eval has queried (transactional reset)
+		// D146: subscriber → Map<key, holdCount> for PREPARED (evaluated but not yet
+		// committed/discarded) evals. Held keys are live subscriptions that no OTHER
+		// eval may reclaim as garbage: a store-change refresh landing mid-gate runs
+		// with the old params and would otherwise see the prepared keys in its
+		// pre-eval set, not re-query them, and drop the prepare's work. REFCOUNTED so
+		// overlapping prepares compose — each holds every key it queried, and only the
+		// last hold to be released exposes the key to reconciliation again.
+		this._heldKeys = new Map();
 		this._pendingKeys = new Set();
 		this._flushScheduled = false;
 		this._flushTimer = null; // armed fallback timer (D63); cleared by flush()
@@ -855,8 +863,16 @@ export class Store {
 	 * re-runnable — it re-runs on every store change.
 	 *
 	 * @param {boolean} [expectsAsync=false] caller's hint that fn is async.
+	 * @param {?{reconcile?: function(boolean): void}} [pending=null] HELD-eval channel
+	 *   (D146). When given, a SUCCESSFUL eval does not reconcile subscriptions here —
+	 *   it parks the reconcile function on `pending.reconcile` and the caller decides
+	 *   later whether the run is committed (`reconcile(true)` → drop the last-good keys
+	 *   this eval no longer queries) or discarded (`reconcile(false)` → drop only this
+	 *   eval's own additions, leaving the live set exactly as it was). Scope restore
+	 *   (`_tracking`/`_trackingAdded`) is NEVER deferred — that is stack discipline.
+	 *   A failing eval reconciles(false) immediately and leaves `pending` untouched.
 	 */
-	withTracking(subscriber, fn, expectsAsync = false) {
+	withTracking(subscriber, fn, expectsAsync = false, pending = null) {
 		// Liveness probe: a subscriber destroyed since this eval was scheduled must
 		// never (re-)subscribe. Run fn UNTRACKED so any in-flight promise chain
 		// still settles for its caller, but no query inside can add a subscription.
@@ -869,7 +885,7 @@ export class Store {
 		// whole call (before we touch subscriptions or run fn) until it settles,
 		// then retry. Only async evals serialize — a sync eval is safe inline.
 		if (this._asyncTrackingChain && expectsAsync) {
-			const retry = () => this.withTracking(subscriber, fn, true);
+			const retry = () => this.withTracking(subscriber, fn, true, pending);
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				return devperfTrackingDeferred(
 					subscriber,
@@ -897,12 +913,73 @@ export class Store {
 		this._tracking = subscriber;
 		this._trackingAdded = added;
 
-		const finalize = (ok) => {
+		// How many UNCOMMITTED prepared evals currently hold this key for this
+		// subscriber (D146). Refcounted, so two overlapping prepares that query the
+		// same key both hold it and neither one's outcome can drop it out from under
+		// the other. Read fresh from `_heldKeys` every time: a destroy() in the
+		// meantime drops the whole entry and the count correctly reads 0.
+		const heldCount = (key) => this._heldKeys.get(subscriber)?.get(key)?.count ?? 0;
+		const reconcile = (ok, adopted = null) => {
 			if (ok) {
-				for (const key of before) if (!added.has(key)) this._dropSubscription(key, subscriber);
+				for (const key of before) {
+					// Never drop a key another eval is HOLDING for its pending commit.
+					if (added.has(key) || heldCount(key) > 0) continue;
+					this._dropSubscription(key, subscriber);
+				}
 			} else {
-				for (const key of added) if (!before.has(key)) this._dropSubscription(key, subscriber);
+				for (const key of added) {
+					// Symmetric to the success branch: an addition this eval is unwinding
+					// may be an addition a LIVE prepare is still holding, in which case it
+					// is not ours to drop — or one a prepare that has ALREADY COMMITTED
+					// adopted as committed state while we were still open. `before` is a
+					// snapshot from this eval's start and cannot see either.
+					if (before.has(key) || heldCount(key) > 0 || adopted?.has(key)) continue;
+					this._dropSubscription(key, subscriber);
+				}
 			}
+		};
+		const finalize = (ok) => {
+			// D146 held eval: park the SUCCESS reconcile for the caller's commit/discard
+			// decision. The subscriber is transiently over-subscribed (last-good keys AND
+			// this eval's additions) between here and that decision — benign: an extra
+			// notify at worst, and the live set is never weakened, so a discard cannot
+			// strand the still-mounted view. Failures reconcile now: there is nothing to
+			// commit, and the caller's `pending.reconcile` stays undefined (a no-op).
+			if (ok && pending) {
+				// HOLD every key this eval queried — not just its net-new ones — until the
+				// caller decides. Holding only `added \ before` is what let a second,
+				// overlapping prepare hold NOTHING (its `before` already contains the
+				// first prepare's live additions), so the first prepare's discard could
+				// unsubscribe a key the winning prepare was about to commit. Counts
+				// compose, so an outcome only releases the hold IT took.
+				let held = this._heldKeys.get(subscriber);
+				if (!held) this._heldKeys.set(subscriber, (held = new Map()));
+				for (const key of added) {
+					const entry = held.get(key);
+					if (entry) entry.count++;
+					// `adopted` records that some prepare COMMITTED this key while another
+					// hold was still open — the other hold's later discard must then treat
+					// it as committed state, not as its own reversible addition.
+					else held.set(key, { count: 1, adopted: false });
+				}
+				pending.reconcile = (commit) => {
+					const adopted = new Set();
+					for (const key of added) {
+						const entry = held.get(key);
+						if (!entry) continue;
+						if (entry.adopted) adopted.add(key);
+						if (commit) entry.adopted = true;
+						if (--entry.count <= 0) held.delete(key);
+					}
+					// Drop the subscriber's entry once no key carries a nonzero count.
+					// Identity-checked: a destroy() between prepare and decide already
+					// removed this entry, and a LATER prepare may own the current one.
+					if (held.size === 0 && this._heldKeys.get(subscriber) === held) {
+						this._heldKeys.delete(subscriber);
+					}
+					reconcile(commit, adopted);
+				};
+			} else reconcile(ok);
 			this._tracking = prevTracking;
 			this._trackingAdded = prevAdded;
 		};
@@ -931,7 +1008,7 @@ export class Store {
 			if (this._asyncTrackingChain) {
 				result.then(noop, noop); // observe the abandoned promise — no unhandled rejection
 				finalize(false);
-				const retry = () => this.withTracking(subscriber, fn, true);
+				const retry = () => this.withTracking(subscriber, fn, true, pending);
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 					return devperfTrackingDeferred(
 						subscriber,
@@ -978,6 +1055,9 @@ export class Store {
 			this._tracking = null;
 			this._trackingAdded = null;
 		}
+		// D146: a destroyed subscriber holds nothing. Any prepared eval still pointing
+		// at it resolves to a reconcile over an already-empty key set (a no-op).
+		this._heldKeys.delete(subscriber);
 		const keys = this.keysBySubscriber.get(subscriber);
 		if (!keys) return;
 		// Copy first: _dropSubscription mutates this set (and may delete it).

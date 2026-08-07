@@ -59,6 +59,10 @@ func (c *compiler) resolveInlineSVG(nodes []parser.Node, assetsDir string, inlin
 			if err := c.resolveInlineSVG(n.Children, assetsDir, inlined); err != nil {
 				return err
 			}
+		case *parser.Portal:
+			if err := c.resolveInlineSVG(n.Children, assetsDir, inlined); err != nil {
+				return err
+			}
 		case *parser.If:
 			if err := c.resolveInlineSVG(n.Then, assetsDir, inlined); err != nil {
 				return err
@@ -178,11 +182,11 @@ func (c *compiler) emitRawSVG(el *parser.Element, ind, startCol int, scope map[s
 		return c.emitSVGRef(el, scope)
 	}
 	tagStr := "'" + el.Tag + "'"
-	multiline, err := c.attrsMultiline(el.Attrs, tagStr, startCol, false, scope, false)
+	multiline, err := c.attrsMultiline(el.Tag, el.Attrs, tagStr, startCol, false, scope, false)
 	if err != nil {
 		return "", err
 	}
-	attrsSeg, err := c.emitAttrs(el.Attrs, ind, multiline, scope, false)
+	attrsSeg, err := c.emitAttrs(el.Tag, el.Attrs, ind, multiline, scope, false)
 	if err != nil {
 		return "", err
 	}

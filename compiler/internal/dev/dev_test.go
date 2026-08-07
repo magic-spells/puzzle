@@ -6,9 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/magic-spells/puzzle/compiler/internal/serve"
 )
 
 // writeDist lays down a minimal dist/ (index.html + app.js) in a temp dir and
@@ -37,7 +37,7 @@ func newTestServer(t *testing.T, dist string) *httptest.Server {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	srv := newServer(dist, ctx, nil)
+	srv := newServer(dist, serve.ModeSPA, ctx, nil)
 	ts := httptest.NewServer(srv.handler())
 	t.Cleanup(ts.Close)
 	// The SSE test builds its own server so it can reach the hub directly.
@@ -101,7 +101,7 @@ func TestServeTimeInjection(t *testing.T) {
 func TestMissingIndexWithRetainedErrorServesBuildErrorShell(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := newServer(t.TempDir(), ctx, nil)
+	srv := newServer(t.TempDir(), serve.ModeSPA, ctx, nil)
 	want := "app/views/Home.pzl:4:9: unexpected token\n  4 | {name\n    |      ^"
 	srv.rememberBuildError(want)
 
@@ -131,7 +131,7 @@ func TestMissingIndexWithRetainedErrorServesBuildErrorShell(t *testing.T) {
 func TestMissingIndexWithoutRetainedErrorKeepsExisting404(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := newServer(t.TempDir(), ctx, nil)
+	srv := newServer(t.TempDir(), serve.ModeSPA, ctx, nil)
 
 	response := httptest.NewRecorder()
 	srv.handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "http://puzzle.test/", nil))
@@ -152,7 +152,7 @@ func TestBuildErrorShellStopsAfterSuccessfulBuild(t *testing.T) {
 	dist := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := newServer(dist, ctx, nil)
+	srv := newServer(dist, serve.ModeSPA, ctx, nil)
 	handler := srv.handler()
 
 	srv.rememberBuildError("first build failed")
@@ -228,7 +228,7 @@ func TestDevProxy(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	backendURL := "http://backend.test"
-	srv := newServer(dist, ctx, map[string]string{"/api": backendURL})
+	srv := newServer(dist, serve.ModeSPA, ctx, map[string]string{"/api": backendURL})
 	var proxyLog bytes.Buffer
 	srv.proxyLog = &proxyLog
 	handler := srv.handler()
@@ -322,7 +322,7 @@ func TestProxyPrefixShapesDoNotPanic(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)
-			srv := newServer(dist, ctx, tt.proxies)
+			srv := newServer(dist, serve.ModeSPA, ctx, tt.proxies)
 			srv.proxyLog = io.Discard
 			handler := srv.handler() // must not panic
 
@@ -515,7 +515,7 @@ func TestSSEBroadcast(t *testing.T) {
 	dist := writeDist(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := newServer(dist, ctx, nil)
+	srv := newServer(dist, serve.ModeSPA, ctx, nil)
 	ts := httptest.NewServer(srv.handler())
 	defer ts.Close()
 
@@ -562,7 +562,7 @@ func TestSSEMultilinePayloadIsJSONEncodedOnOneDataLine(t *testing.T) {
 	dist := writeDist(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := newServer(dist, ctx, nil)
+	srv := newServer(dist, serve.ModeSPA, ctx, nil)
 	ts := httptest.NewServer(srv.handler())
 	defer ts.Close()
 
@@ -619,7 +619,7 @@ func TestSSEMultilinePayloadIsJSONEncodedOnOneDataLine(t *testing.T) {
 func TestSSEReplaysRetainedBuildErrorOnConnect(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := newServer("", ctx, nil)
+	srv := newServer("", serve.ModeSPA, ctx, nil)
 
 	want := "initial build failed\napp/views/Home.pzl:4:9: unexpected token"
 	srv.rememberBuildError(want)
@@ -650,7 +650,7 @@ func TestSSEReplaysRetainedBuildErrorOnConnect(t *testing.T) {
 func TestSSEDoesNotReplayClearedBuildError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	srv := newServer("", ctx, nil)
+	srv := newServer("", serve.ModeSPA, ctx, nil)
 
 	srv.rememberBuildError("stale failure")
 	srv.hub.broadcast(hubMessage{event: buildErrorEvent, payload: "stale failure"})
@@ -992,124 +992,158 @@ func containsPath(paths []string, want string) bool {
 	return false
 }
 
-// --- port scanning -----------------------------------------------------------
+// --- static output mode (D81) -------------------------------------------------
 
-// occupy binds a loopback port and returns it plus a closer, so a test can make
-// a specific port genuinely busy rather than mocking the bind.
-func occupy(t *testing.T) (int, net.Listener) {
+// writeStaticDist lays down a dist/ shaped like a `output: 'static'` build:
+// prerendered per-route pages, per-page modules, no app.js.
+func writeStaticDist(t *testing.T) string {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("occupying a port: %v", err)
+	dist := t.TempDir()
+	files := map[string]string{
+		"index.html":       `<!doctype html><html><body><div id="app" data-puzzle-static>HOME</div></body></html>`,
+		"about/index.html": `<!doctype html><html><body><div id="app" data-puzzle-static>ABOUT</div></body></html>`,
+		"404.html":         `<!doctype html><html><body>NOT_FOUND_PAGE</body></html>`,
+		"_puzzle/index.js": "export default 1;",
 	}
-	t.Cleanup(func() { ln.Close() })
-	return ln.Addr().(*net.TCPAddr).Port, ln
-}
-
-func TestListenDevUsesRequestedPortWhenFree(t *testing.T) {
-	// Take a port, release it: the number is known-good and almost certainly
-	// still free, without racing a hardcoded constant against the machine.
-	want, held := occupy(t)
-	held.Close()
-
-	ln, err := listenDev(want, false)
-	if err != nil {
-		t.Fatalf("listenDev: %v", err)
-	}
-	defer ln.Close()
-
-	if got := boundPort(ln, 0); got != want {
-		t.Errorf("bound port = %d, want the requested %d", got, want)
-	}
-}
-
-func TestListenDevScansPastBusyPort(t *testing.T) {
-	busy, _ := occupy(t)
-
-	ln, err := listenDev(busy, false)
-	if err != nil {
-		t.Fatalf("listenDev should have scanned past a busy port: %v", err)
-	}
-	defer ln.Close()
-
-	got := boundPort(ln, 0)
-	if got == busy {
-		t.Fatalf("bound the busy port %d", busy)
-	}
-	if got <= busy || got >= busy+portScanLimit {
-		t.Errorf("bound port = %d, want one in (%d, %d)", got, busy, busy+portScanLimit)
-	}
-}
-
-func TestListenDevStrictPortFailsOnBusyPort(t *testing.T) {
-	busy, _ := occupy(t)
-
-	ln, err := listenDev(busy, true)
-	if err == nil {
-		ln.Close()
-		t.Fatalf("strict mode bound port %d, want an error", boundPort(ln, 0))
-	}
-	if !strings.Contains(err.Error(), "address already in use") {
-		t.Errorf("error should name the bind failure, got: %v", err)
-	}
-}
-
-func TestListenDevExhaustedScanReportsRequestedPort(t *testing.T) {
-	// Fill the whole scan window so the range is genuinely exhausted, then check
-	// the surfaced error names the port the user asked for — not the last one
-	// tried, which the user never mentioned.
-	first, _ := occupy(t)
-	var held []net.Listener
-	for offset := 1; offset < portScanLimit; offset++ {
-		ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", first+offset))
-		if err != nil {
-			// Something else already owns it — equally "busy" for our purposes.
-			continue
+	for rel, body := range files {
+		full := filepath.Join(dist, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
 		}
-		held = append(held, ln)
-	}
-	defer func() {
-		for _, ln := range held {
-			ln.Close()
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
 		}
-	}()
-
-	ln, err := listenDev(first, false)
-	if err == nil {
-		ln.Close()
-		t.Fatalf("exhausted scan bound port %d, want an error", boundPort(ln, 0))
 	}
-	if !strings.Contains(err.Error(), fmt.Sprintf("%d", first)) {
-		t.Errorf("error should name the requested port %d, got: %v", first, err)
-	}
+	return dist
 }
 
-func TestListenDevPortZeroTakesAnyFreePort(t *testing.T) {
-	ln, err := listenDev(0, false)
+func newStaticTestServer(t *testing.T, dist string) *server {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	return newServer(dist, serve.ModeStatic, ctx, nil)
+}
+
+// TestStaticModeServesCleanURLsWithReloadClient proves dev serves the REAL
+// prerendered pages at their clean URLs and that every one of them carries the
+// live-reload client — the only path by which a static page reaches the SSE
+// channel that drives reload and the D92 error overlay.
+func TestStaticModeServesCleanURLsWithReloadClient(t *testing.T) {
+	srv := newStaticTestServer(t, writeStaticDist(t))
+	handler := srv.handler()
+
+	for path, marker := range map[string]string{
+		"/":                 "HOME",
+		"/index.html":       "HOME",
+		"/about":            "ABOUT",
+		"/about/":           "ABOUT",
+		"/about/index.html": "ABOUT",
+	} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://puzzle.test"+path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, want 200", path, rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, marker) {
+			t.Fatalf("GET %s served the wrong page: %q", path, body)
+		}
+		if strings.Count(body, "EventSource") != 1 {
+			t.Fatalf("GET %s: want exactly one injected reload client, got %q", path, body)
+		}
+	}
+
+	// dist/ on disk stays production-clean.
+	onDisk, err := os.ReadFile(filepath.Join(srv.dist, "about", "index.html"))
 	if err != nil {
-		t.Fatalf("listenDev(0): %v", err)
+		t.Fatal(err)
 	}
-	defer ln.Close()
-
-	if got := boundPort(ln, 0); got == 0 {
-		t.Error("port 0 should resolve to a kernel-assigned port")
+	if strings.Contains(string(onDisk), "EventSource") {
+		t.Fatal("a prerendered page on disk was mutated with the reload client")
 	}
 }
 
-func TestListenDevRejectsOutOfRangePorts(t *testing.T) {
-	for _, port := range []int{-1, 70000} {
-		t.Run(fmt.Sprintf("%d", port), func(t *testing.T) {
-			ln, err := listenDev(port, false)
-			if ln != nil {
-				ln.Close()
-				t.Errorf("listenDev(%d) returned a listener, want nil", port)
-			}
-			if err == nil {
-				t.Fatalf("listenDev(%d) returned nil error", port)
-			}
-			if !strings.Contains(err.Error(), fmt.Sprintf("%d", port)) {
-				t.Errorf("error should name invalid port %d, got: %v", port, err)
-			}
-		})
+// TestStaticModeMissIsARealNotFound proves the dev server does NOT fall back to
+// index.html in static mode: dev must show what ships, and what ships is a host
+// serving 404.html.
+func TestStaticModeMissIsARealNotFound(t *testing.T) {
+	srv := newStaticTestServer(t, writeStaticDist(t))
+
+	rec := httptest.NewRecorder()
+	srv.handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://puzzle.test/nope", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("static miss = %d, want 404", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "NOT_FOUND_PAGE") {
+		t.Fatalf("static miss did not serve the built 404.html: %q", body)
+	}
+	if strings.Contains(body, "HOME") {
+		t.Fatalf("static miss fell back to index.html: %q", body)
+	}
+	if !strings.Contains(body, "EventSource") {
+		t.Fatalf("static 404 lost the reload client (it must self-heal once the route exists): %q", body)
+	}
+}
+
+// TestStaticModeMissWithoutBuilt404 proves the dev-only 404 page still carries
+// the reload client when the app has no catch-all route.
+func TestStaticModeMissWithoutBuilt404(t *testing.T) {
+	dist := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dist, "index.html"), []byte("<html><body>HOME</body></html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := newStaticTestServer(t, dist)
+
+	rec := httptest.NewRecorder()
+	srv.handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://puzzle.test/nope", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("static miss = %d, want 404", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "EventSource") {
+		t.Fatalf("dev 404 page lost the reload client: %q", rec.Body.String())
+	}
+}
+
+// TestStaticModeFirstBuildFailureServesErrorShell proves D92's first-run shell
+// reaches static output too: with nothing built and an error retained, any URL
+// answers 503 with the diagnostic.
+func TestStaticModeFirstBuildFailureServesErrorShell(t *testing.T) {
+	srv := newStaticTestServer(t, t.TempDir())
+	want := "app/views/About.pzl:3:1: unexpected token"
+	srv.rememberBuildError(want)
+
+	for _, path := range []string{"/", "/about"} {
+		rec := httptest.NewRecorder()
+		srv.handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://puzzle.test"+path, nil))
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("GET %s with a retained error = %d, want 503", path, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("GET %s did not render the diagnostic: %q", path, rec.Body.String())
+		}
+	}
+}
+
+// TestStaticModeKeepsServingLastGoodPagesOnBuildFailure proves a broken rebuild
+// does not blank the site: the previous pages still serve (the build's atomic
+// swap left them alone) and the retained error reaches the open page through the
+// injected client's SSE replay.
+func TestStaticModeKeepsServingLastGoodPagesOnBuildFailure(t *testing.T) {
+	srv := newStaticTestServer(t, writeStaticDist(t))
+	srv.rememberBuildError("app/views/About.pzl:3:1: unexpected token")
+
+	rec := httptest.NewRecorder()
+	srv.handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://puzzle.test/about", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "ABOUT") {
+		t.Fatalf("broken build stopped serving the last good page: %d %q", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "EventSource") {
+		t.Fatalf("last good page lost the reload client, so the error could never reach it")
+	}
+	// The SSE replay is what draws the overlay on that page.
+	body := connectSSE(t, srv)
+	if !strings.Contains(body, "event: "+buildErrorEvent) {
+		t.Fatalf("SSE replay did not carry the build error: %q", body)
 	}
 }

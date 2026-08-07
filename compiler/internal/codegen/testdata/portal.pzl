@@ -1,0 +1,27 @@
+<puzzle-view class="portal-host">
+  <button @click={ open }>Open</button>
+  {#if showing}
+    <Portal>
+      <div class="pzl-overlay" @click:outside={ close }>
+        <h2>{ title }</h2>
+        <NowPlaying song={ song }/>
+      </div>
+    </Portal>
+  {/if}
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import NowPlaying from './NowPlaying.pzl';
+
+export default class PortalHost extends PuzzleView {
+  events = {
+    open: () => {},
+    close: () => {},
+  };
+
+  data() {
+    return { showing: true, title: 'Now Playing', song: null };
+  }
+}
+</script>

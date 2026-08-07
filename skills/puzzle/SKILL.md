@@ -105,6 +105,21 @@ Rules that bite:
   when nothing fills it (`<Slot name="trigger"><b>Open</b></Slot>`) — supplied
   content replaces the fallback entirely. Lowercase `<children>`/`<slot>` are
   compile errors.
+- **`<Portal>` teleports overlays.** `<Portal>…</Portal>` (paired-only,
+  attribute-free) mounts its children into a framework-created outlet beside
+  the app root while staying in the owner's component tree — for modals and
+  full-screen panels that must escape ancestor CSS. `@event:outside` treats
+  portaled content as inside its logical owner. Portals emit nothing in
+  prerendered HTML (content appears at takeover). For focus-trapped modals,
+  prefer native `<dialog>.showModal()` via a ref. A `<Portal>` cannot be a
+  COMPONENT's template root (the root receives call-site attrs and the scoped
+  style stamp) — wrap it: `<div style="display: contents"><Portal>…</Portal></div>`.
+  A portal-only view is fine.
+- **Error handling.** `new PuzzleApp({ onError(error, { phase, view, route }) })`
+  hears every framework-contained failure (mount, refresh, navigation);
+  a view's script-side `errorContent(error)` renders fallback UI where the view
+  failed to mount — nearest boundary wins, return null to decline outward, and
+  the owner's `refresh()` retries. Event handlers and formatters stay uncaught.
 - **`island` freezes children.** An element with the `island` attribute keeps
   its children untouched by patching after mount (for third-party DOM widgets);
   the element's own attrs/listeners still patch. Components, slots, and view
@@ -140,6 +155,43 @@ Rules that bite:
   it on an instance field (not `setData`) and guard every use with `?.`.
 - If a callback prop is wired into a long-lived external system, read it at fire
   time (`(e) => this.props.name?.(e)`), never capture it at wiring time.
+
+## Two-way form binding (puzzle ≥ 0.5.0)
+
+Form controls bind themselves — write NO input handler:
+
+```html
+<input value={ draft } />                             <!-- local state -->
+<input type="checkbox" checked={ todo.completed } />  <!-- record field -->
+<input type="number" value={ profile.hue } />         <!-- commits on change -->
+```
+
+- Binds when the expression is exactly `ident` or `ident.ident` on a plain
+  `<input>`/`<textarea>`/`<select>` with no author `@input`/`@change`, no
+  static `readonly`/`disabled`, and an absent or static classifiable `type`.
+  Never on components (their `value` is a plain prop). Excluded: radio, file,
+  `<select multiple>`, dynamic `type={ }`, `value` on a checkbox.
+- Text-ish inputs, textarea, and range update on `input`; number, checkbox,
+  date kinds, and select commit on `change`. Numeric edges: `''` writes
+  `null` (never `0`), NaN is skipped. Mid-IME-composition events never write.
+- **Bind the path you want written.** A member path (`profile.name`) writes
+  the record through validated `update()` — a rejected write reports to
+  `onError` with `phase: 'bind'` and leaves the typed text on screen. A bare
+  key (`draft`) writes local state AND re-runs `data()`, so derived values
+  (a filtered list, a disabled submit) stay live as you type. Do NOT bind a
+  local key that `data()` derives from a record — the next commit reverts it
+  (dev warns once per key).
+- Constrained fields (`required()`, `min(3)`): bind a local draft, commit
+  with `record.update()` on submit, pre-check with the non-throwing
+  `validate()` — a bind can never clear a `required()` field.
+- Opting out needs no syntax: write your own `@input`/`@change` (the author
+  handler owns the write — nothing is synthesized), use a non-path expression
+  (`value={ String(x) }`), or add static `readonly`. Migration gotcha: a
+  handler-less `value={ x }` that a `@keydown:enter` handler used to commit
+  is now live-bound — escape with `String(x)` when you need edit-buffer
+  semantics (Enter-commit / Escape-cancel).
+- In tests, `await handle.type('input.search', 'hello')` (from
+  `@magic-spells/puzzle/testing`) drives a bound control and settles.
 
 ## Routing
 
@@ -418,6 +470,12 @@ to `dist/404.html`; the route's `meta.title` is injected via a leaf→root walk.
   then the full SPA bundle takes over on load and re-renders (not true
   DOM-adoption hydration); all later navigation is client-side (transitions,
   morphs work). Pick this for apps that want SEO'd entry pages.
+
+`puzzle dev` on a static-mode project serves the REAL static output (clean
+URLs, full page loads, real 404s, prerender on every rebuild); hybrid projects
+dev as the SPA. `puzzle preview` serves an existing `dist/` with
+production-host semantics for any mode (SPA deep-link fallback, static real
+404s) — use `puzzle build && puzzle preview` to check the shipped artifact.
 
 1. **`data()` and `beforeMount` run under Node at build time** (both modes).
    Guard every browser global: `typeof document !== 'undefined'` before touching

@@ -1,0 +1,28 @@
+<puzzle-view class="plain-form">
+  <input class="hue" value={ profile.hue } />
+  <input class="size" type="number" value={ profile.size } />
+  <input class="ducky" value={ ducky.label } />
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// The plain-object arm of implicit binding (D147), plus the duck-type negative:
+// `ducky` owns an update() method but no string _type, so it is NOT a record and
+// must be mutated directly rather than routed through update().
+export default class PlainForm extends PuzzleView {
+	created() {
+		this.profile = { hue: 'red', size: 3 };
+		this.ducky = {
+			label: 'quack',
+			update() {
+				this.updateCalls = (this.updateCalls ?? 0) + 1;
+			},
+		};
+	}
+
+	data() {
+		return { profile: this.profile, ducky: this.ducky };
+	}
+}
+</script>

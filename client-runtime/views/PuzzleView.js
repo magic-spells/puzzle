@@ -13,6 +13,8 @@
  * Update triggers (constellation/doc/DOC-VIEW-LIFECYCLE.md §5):
  * - store change matching a data() query → onStoreChange → data() re-runs
  * - refresh({params|props}) from router/parent → data() re-runs
+ * - a two-way bind write-back (D147) → setData + refresh, or the record's
+ *   update() and the store flush behind it → data() re-runs
  * - setData() → re-render only, data() does NOT re-run
  */
 
@@ -20,6 +22,7 @@ import { ViewManager, plantFailedMountPlaceholder } from './viewManager.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
+import { reportError } from '../errors.js';
 import {
 	devperfCanRender,
 	devperfMarkCause,
@@ -42,6 +45,11 @@ import {
 // per-site constant folding across method scopes (see app.js) — so production
 // DCEs the calls and the registry import tree-shakes away. An undefined
 // define (unbundled vitest) reads as true.
+
+// The write-back for a bind whose resolved root is a primitive (D147; see
+// __bind). One shared function for the whole module: identity-stable by
+// definition, so the differ never churns the listener, and typing does nothing.
+const INERT_BIND = () => {};
 
 export class PuzzleView {
 	// Two-layer component state (Change C, SPEC §4). #local holds values written
@@ -72,7 +80,41 @@ export class PuzzleView {
 	// SAME attrs.ref value across renders (a fresh closure would churn every patch),
 	// so the setter identity is memoised per name for this instance's lifetime.
 	#refSetters = null;
+	// Per-instance write-back handler caches for implicit two-way binding (D147),
+	// on the same memo principle as #refSetters: the differ must see the SAME
+	// '@input:bind' value across renders or patchAttrs detaches and re-attaches the
+	// listener on every patch. #bindLocalMemo keys the null-target (local state)
+	// handlers by "field spec"; #bindMemberMemo keys member handlers by the target
+	// OBJECT first — weakly, so a discarded record's handlers go with it — then by
+	// the same string. Both lazily created on first use.
+	#bindLocalMemo = null;
+	#bindMemberMemo = null;
+	// Dev-only: the last object seen for each member "field spec" path plus a
+	// write awaiting its next render. A plain-object write can otherwise disappear
+	// when data() returns a fresh literal: the new object misses #bindMemberMemo and
+	// its old field value replaces the edit. The pending entry records the object
+	// ACTUALLY written, so a stable target, a rebuilt target that preserved the
+	// value, and record replacement all stay silent. Lazily allocated behind inline
+	// __PUZZLE_DEV__ gates only.
+	#bindMemberLast = null;
+	#bindMemberPending = null;
+	#bindMemberWarned = null;
+	// Dev-only: the value each local bind write last wrote, keyed by field. The
+	// layer-clobber diagnostic reads it at the next recompose to notice a data()
+	// commit reverting a bound key, and #bindWarned holds the keys it has already
+	// reported so the warning is once per key per view rather than once per commit.
+	// Neither is ever allocated in production — every touchpoint is gated INLINE on
+	// __PUZZLE_DEV__.
+	#bindPending = null;
+	#bindWarned = null;
 	#vm = null;
+	// Nearest owning PuzzleView for error-boundary lookup. Set by the parent's
+	// ViewManager when it instantiates/adopts this component; null for app roots.
+	#errorParent = null;
+	// An error whose boundary resolved to THIS instance before it had a
+	// ViewManager (a pre-mount preload/data() rejection). mount() flushes it once
+	// the manager exists and the first render has been attempted.
+	#pendingBoundaryError = null;
 	#mounted = false;
 	// Anchor-race gate (Change A): set true when the non-skeleton async mount()
 	// branch resumes to find its first render superseded (no commit landed) —
@@ -86,6 +128,12 @@ export class PuzzleView {
 	#destroyed = false;
 	#updateScheduled = false;
 	#runToken = 0;
+
+	// D146: the { params, props, route } a PREPARED (not yet committed) data() run
+	// evaluates against. Non-null only while such an evaluation is in flight; the
+	// params/route getters read it, and every entry point save/restores it (exact
+	// stack discipline for nested synchronous evals, mirroring Store._tracking).
+	#evalScope = null;
 	// False until the FIRST data() result actually SWAPS in (v1.8, D39; v1.20
 	// D52 moves the flip from data-commit to swap time). While false and a
 	// renderSkeleton() is declared (compiled from <puzzle-skeleton>), renders
@@ -105,7 +153,11 @@ export class PuzzleView {
 	// finished under fill:'both'. Keep that Puzzle-owned handle past natural
 	// completion so recovery can cancel only it, never app-owned root animations.
 	#outHandle = null;
-	#leaving = null; // memoised playOut() promise — idempotent teardown
+	// playOut is one-shot even when the router restores a stalled outgoing view:
+	// #outTask keeps the spent memo for a later instant swap, while #leaving names
+	// only the CURRENT inert interval and can therefore be cleared by recovery.
+	#outTask = null;
+	#leaving = null;
 	// Scroll-triggered enter (v1.40, D73). While a `trigger: 'visible'` enter is
 	// held waiting for the element to scroll into view: #disarmVisible stops the
 	// shared IntersectionObserver observation and #enterResolve resolves the
@@ -276,6 +328,297 @@ export class PuzzleView {
 	}
 
 	/**
+	 * INTERNAL — the write-back handler for one implicitly-bound form control
+	 * (D147, SPEC §6). The compiler emits this inline in a vnode's attrs on a
+	 * qualifying `<input>`/`<textarea>`/`<select>`:
+	 * `'@input:bind': this.__bind(null, 'draft', 'v')`.
+	 *
+	 * - `target` is null for a bare identifier bind (local component state) or the
+	 *   resolved ROOT object of a one-member path (`todo.completed` → the loop
+	 *   variable, `profile.hue` → the data() value). The write arm is chosen from
+	 *   the target at write time, not here — a data() commit can swap a plain
+	 *   object for a record between renders.
+	 * - `key` is the field to write.
+	 * - `spec` is the compile-time coercion: 'v' string, 'vn' numeric, 'c' boolean.
+	 *
+	 * Memoized on (target, key, spec) so the identity is stable across renders;
+	 * see the #bindLocalMemo/#bindMemberMemo field notes. It consumes no `__h`
+	 * handler-site index.
+	 *
+	 * INTERNAL — underscore-prefixed like the rest of the compiler-facing surface;
+	 * never spelled in a template. Not part of the public typed API.
+	 */
+	__bind(target, key, spec) {
+		// A member path whose ROOT resolves to a primitive is not a writable target
+		// — `value={ title.length }` over a string `title` is the classic case. The
+		// compiler cannot see runtime types, so it emits the bind for any qualifying
+		// one-member path; the primitive-rooted ones degrade here to the one-way
+		// display binding they always were, instead of throwing at render (a
+		// primitive is not a legal WeakMap key). No memo entry: INERT_BIND is a
+		// single shared function, so the identity is stable without one.
+		if (target != null && typeof target !== 'object' && typeof target !== 'function') {
+			return INERT_BIND;
+		}
+		let store;
+		if (target == null) {
+			store = (this.#bindLocalMemo ??= new Map());
+		} else {
+			const byTarget = (this.#bindMemberMemo ??= new WeakMap());
+			store = byTarget.get(target);
+			if (!store) byTarget.set(target, (store = new Map()));
+		}
+		// Neither a field name nor a spec code can contain a space, so this is an
+		// unambiguous composite key.
+		const memoKey = key + ' ' + spec;
+		let fn = store.get(memoKey);
+		if (!fn) {
+			fn = (event) => {
+				// IME guard: once the framework owns the listener it owns this. Writing
+				// state mid-composition re-asserts the input's value and aborts the IME
+				// session in Chrome/Safari. The final `input` after compositionend
+				// carries isComposing:false, so the composed text still lands.
+				if (event.isComposing) return;
+				const el = event.target;
+				let value;
+				if (spec === 'c') value = !!el.checked;
+				else if (spec === 'vn') {
+					// Number('') is 0 — writing it would rewrite a just-cleared field to
+					// "0" and jump the caret, so an emptied numeric field writes null
+					// (displayValue(null) is '', so the echo compare stays equal).
+					if (el.value === '') value = null;
+					else {
+						value = Number(el.value);
+						// Number('-') is NaN, which PASSES the model's bound checks and
+						// would render the literal "NaN". Skip the whole write instead.
+						if (Number.isNaN(value)) return;
+					}
+				} else value = el.value;
+				this.#bindWrite(target, key, value, spec);
+			};
+			store.set(memoKey, fn);
+		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (target != null) {
+				const last = (this.#bindMemberLast ??= new Map());
+				const previous = last.get(memoKey);
+				const pending = this.#bindMemberPending?.get(memoKey);
+				if (pending) {
+					if (target === pending.target) {
+						// A stable target reappeared in this render. Whatever data() did to
+						// its field is not the rebuilt-literal hazard this diagnostic names.
+						pending.sawTarget = true;
+					} else if (
+						previous !== undefined &&
+						previous !== target &&
+						target[key] !== pending.value
+					) {
+						// Do not warn inline: a loop renders many member targets under the
+						// same (key, spec), and the object that was written may appear later
+						// in this same tree. Collect one replacement candidate and let the
+						// render tail prove the old target never returned; multiple candidates
+						// make the path ambiguous and deliberately suppress the diagnostic.
+						if (pending.replacement == null) pending.replacement = target;
+						else if (pending.replacement !== target) pending.ambiguous = true;
+					}
+				}
+				last.set(memoKey, target);
+			}
+		}
+		return fn;
+	}
+
+	/**
+	 * Apply one bind write. Three arms, decided by the target:
+	 *
+	 * 1. null → local component state. refresh(), not a bare setData: a bound
+	 *    filter field feeding a data()-derived list must narrow it as you type, and
+	 *    setData never re-runs data(). #renderNow disarms the frame setData armed,
+	 *    so this still costs exactly one render.
+	 * 2. a PuzzleModel record → its validated update(). Duck-typed on `update` and
+	 *    a string `_type` TOGETHER (this file must not import model.js); a plain
+	 *    object that merely owns an update() method is not a record. update()
+	 *    validates and throws BEFORE mutating, so a rejected write leaves the
+	 *    record — and the typed text on screen — untouched.
+	 * 3. anything else → direct mutation plus a repaint of the owning view.
+	 */
+	#bindWrite(target, key, value, spec) {
+		if (target == null) {
+			this.setData(key, value);
+			// Arm the clobber diagnostic BEFORE the refresh: the commit this refresh
+			// drives is the one that can revert the write, so it is the commit that
+			// must see the pending value. A Map keyed by field keeps only the LATEST
+			// write per key, which is exactly the "no later bind superseded it" rule.
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				(this.#bindPending ??= new Map()).set(key, value);
+			}
+			// Bind handlers are fire-and-forget DOM listeners, so both a synchronous
+			// data() throw and an async rejection must enter D145 here. Leaving either
+			// bare escapes the event path; the phase stays 'bind' because this refresh is
+			// the second half of the write, not an ambient refresh delivery.
+			try {
+				this.refresh()?.catch((err) =>
+					this.#handleViewFailure(
+						'[puzzle] data() failed after a bound write:',
+						err,
+						'bind'
+					)
+				);
+			} catch (err) {
+				this.#handleViewFailure(
+					'[puzzle] data() failed after a bound write:',
+					err,
+					'bind'
+				);
+			}
+		} else if (typeof target.update === 'function' && typeof target._type === 'string') {
+			try {
+				// The store's batched flush drives the re-render and the persistence write.
+				target.update({ [key]: value });
+			} catch (err) {
+				reportError(
+					this.ctx,
+					err,
+					{ phase: 'bind', view: this, route: this.route },
+					'[puzzle] bound write rejected:',
+					err
+				);
+			}
+		} else {
+			target[key] = value;
+			// Arm only the plain-object arm: a record replacement is legitimate identity
+			// churn and its validated update/store flush owns reactivity. The next render
+			// consumes this entry after __bind has shown whether the exact object returned
+			// or one unambiguous replacement discarded the value.
+			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+				(this.#bindMemberPending ??= new Map()).set(key + ' ' + spec, {
+					key,
+					target,
+					value,
+					sawTarget: false,
+					replacement: null,
+					ambiguous: false,
+				});
+			}
+			try {
+				this.refresh()?.catch((err) =>
+					this.#handleViewFailure(
+						'[puzzle] data() failed after a bound write:',
+						err,
+						'bind'
+					)
+				);
+			} catch (err) {
+				this.#handleViewFailure(
+					'[puzzle] data() failed after a bound write:',
+					err,
+					'bind'
+				);
+			}
+		}
+	}
+
+	/**
+	 * INTERNAL — record the owning view for nearest-boundary lookup. ViewManager
+	 * calls this when it creates or adopts a child component.
+	 */
+	__setErrorParent(parent) {
+		this.#errorParent = parent ?? null;
+	}
+
+	/**
+	 * Resolve and render the nearest optional `errorContent(error)` boundary.
+	 *
+	 * `errorContent` is a script-side member returning one ViewNode tree; it needs
+	 * no compiler syntax. A boundary handles its own failures and descendants,
+	 * with the nearest implementation winning. Returning null declines the error
+	 * and lets lookup continue outward.
+	 *
+	 * The two-step prepare/show split preserves D115/D136 ownership: component
+	 * mount recovery captures the fallback before destroying the failed instance,
+	 * then mounts that face beside the existing recovery placeholder. The owning
+	 * parent retries by calling refresh(), whose next patch mounts a fresh instance
+	 * through that same placeholder and removes the fallback.
+	 */
+	__prepareErrorBoundary(error) {
+		let boundary = this;
+		let boundaryError = error;
+		while (boundary) {
+			if (typeof boundary.errorContent === 'function') {
+				try {
+					const tree = boundary.errorContent(boundaryError);
+					if (tree) return { boundary, tree, error: boundaryError };
+				} catch (err) {
+					reportError(
+						boundary.ctx,
+						err,
+						{ phase: 'boundary', view: boundary, route: boundary.route },
+						'[puzzle] errorContent() failed:',
+						err
+					);
+					boundaryError = err;
+				}
+			}
+			boundary = boundary.#errorParent;
+		}
+		return null;
+	}
+
+	/** INTERNAL — display a boundary result prepared by __prepareErrorBoundary. */
+	__showErrorBoundary(captured, { failedMount = false, placeholder = null } = {}) {
+		if (!captured) return false;
+		const { boundary, tree } = captured;
+		try {
+			if (failedMount && boundary === this) {
+				const mountedTree = this.#vm?.mountErrorFallback(tree, placeholder, this.#errorParent);
+				if (!mountedTree) return false;
+				this.__failedFallback = mountedTree;
+				if (placeholder) placeholder.__failedFallback = mountedTree;
+			} else {
+				if (!boundary.#vm || boundary.#destroyed) {
+					// PRE-MOUNT failure on this instance's own boundary: the router starts
+					// a skeleton view's preload() un-awaited, so a data() rejection can land
+					// before mount() ever creates the ViewManager. Buffer the error rather
+					// than dropping it — mount() flushes it once #vm exists, which is the
+					// difference between the declared errorContent() and an eternal
+					// skeleton. An ANCESTOR boundary is already mounted, so it renders
+					// immediately and never buffers (no double-fire).
+					if (boundary === this && !this.#vm && !this.#destroyed) {
+						this.#pendingBoundaryError = captured.error ?? null;
+					}
+					return false;
+				}
+				if (boundary !== this) {
+					// The ancestor's render unmounts — and DESTROYS — everything under it,
+					// including a routed chain the Router owns and still names in its
+					// committed state. Tell the router first so the next navigation
+					// rebuilds from scratch instead of reusing destroyed instances.
+					this.ctx?.router?.__invalidateChain?.(boundary);
+				}
+				// A patch threw partway through this manager's last render, so its tree
+				// no longer describes the DOM (D145/F7): mount the boundary face fresh
+				// over the corrupt range instead of diffing against a stale tree.
+				if (boundary.#vm.treeUnknown) boundary.#vm.renderFresh(tree);
+				else boundary.#vm.render(tree);
+			}
+			return true;
+		} catch (err) {
+			reportError(
+				boundary.ctx,
+				err,
+				{ phase: 'boundary', view: boundary, route: boundary.route },
+				'[puzzle] errorContent() render failed:',
+				err
+			);
+			return false;
+		}
+	}
+
+	/** INTERNAL convenience for live failures that need no D115 teardown first. */
+	__renderErrorBoundary(error) {
+		return this.__showErrorBoundary(this.__prepareErrorBoundary(error));
+	}
+
+	/**
 	 * The DOM node occupying this component's position (null before mount).
 	 * While an async data() is in flight this is the anchor placeholder, so
 	 * a parent's sibling insertion refs stay valid (constellation/doc/DOC-APP-ANATOMY.md §4).
@@ -307,7 +650,7 @@ export class PuzzleView {
 	}
 
 	get params() {
-		return this.#params;
+		return this.#evalScope ? this.#evalScope.params : this.#params;
 	}
 
 	get props() {
@@ -324,7 +667,13 @@ export class PuzzleView {
 	 * across store-change refreshes; overwritten by the next navigation.
 	 */
 	get route() {
-		return this.#route;
+		// D146: inside a PREPARED data() evaluation the view must see the DESTINATION
+		// snapshot (D47's invariant — data() describes the navigation it is gating)
+		// while its COMMITTED #route still names the live route, so a failed navigation
+		// has nothing to roll back. #evalScope is that window; #renderNow() clears it
+		// for the duration of a render so a paint that lands mid-gate (a store-change
+		// refresh while a prepared async data() is suspended) reads committed state.
+		return this.#evalScope ? this.#evalScope.route : this.#route;
 	}
 
 	// ---- lifecycle -------------------------------------------------------------
@@ -346,7 +695,7 @@ export class PuzzleView {
 	 * timers, or grab focus from a mounted() hook (constellation/doc/DOC-VIEW-LIFECYCLE.md §3).
 	 */
 	async mount(container, { params = {}, props = {}, children = [], ref = null, preloaded = false } = {}) {
-		this.#vm = new ViewManager(container, this.ctx);
+		this.#vm = new ViewManager(container, this.ctx, this);
 		this.#vm.slotChildren = children;
 		if (!preloaded) {
 			this.#params = params;
@@ -383,7 +732,9 @@ export class PuzzleView {
 				// patches over it when data() commits. The mount promise no longer
 				// waits on data, so a data() rejection surfaces here (logged), not to
 				// the caller; the skeleton stays up.
-				pending.catch((err) => console.error('[puzzle] data() failed behind a skeleton:', err));
+				pending.catch((err) =>
+					this.#handleViewFailure('[puzzle] data() failed behind a skeleton:', err, 'mount')
+				);
 				this.#renderNow();
 			} else {
 				await pending;
@@ -401,13 +752,27 @@ export class PuzzleView {
 				// refresh committed normally, #loaded is already true → complete inline.
 				if (!this.#loaded) {
 					this.#pendingMountHook = true;
+					this.#flushPendingBoundaryError();
 					return this;
 				}
 			}
 		}
 
 		this.#completeMount();
+		this.#flushPendingBoundaryError();
 		return this;
+	}
+
+	/**
+	 * Surface an error buffered before this instance had a ViewManager (see
+	 * #pendingBoundaryError). Runs once — the field is cleared BEFORE the render,
+	 * so a boundary that throws while drawing cannot re-enter this flush.
+	 */
+	#flushPendingBoundaryError() {
+		const err = this.#pendingBoundaryError;
+		if (err === null || this.#destroyed) return;
+		this.#pendingBoundaryError = null;
+		this.__renderErrorBoundary(err);
 	}
 
 	/**
@@ -425,7 +790,8 @@ export class PuzzleView {
 		// #mounted-true convergence point, so the snapshot can key and read this
 		// instance's state. Removed in destroy().
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) registerView(this);
-		this.mounted();
+		// D146: user code, fenced to committed params/route (see #withCommittedScope).
+		this.#withCommittedScope(() => this.mounted());
 	}
 
 	/**
@@ -507,6 +873,13 @@ export class PuzzleView {
 	 * supersedes an in-flight async one (stale results are discarded).
 	 */
 	refresh({ params, props, route } = {}) {
+		// D146: a refresh runs against this view's COMMITTED params/route, so a
+		// prepared async data() suspended on another route must not bleed its
+		// destination scope into this run's data() through the getters.
+		return this.#withCommittedScope(() => this.#refreshInner({ params, props, route }));
+	}
+
+	#refreshInner({ params, props, route } = {}) {
 		if (this.#destroyed || this.#leaving) return;
 		if (params) this.#params = params;
 		if (props) this.#props = props;
@@ -542,8 +915,181 @@ export class PuzzleView {
 		this.#commit(token, result);
 	}
 
+	/**
+	 * TRANSACTIONAL refresh (D146) — the two-phase form the router uses for a REUSED
+	 * ancestor inside a gated navigation. PREPARE runs data() against the destination
+	 * params/route (visible to the run through the params/route getters) and captures
+	 * both the model result and the store subscriptions the run tracked; it renders
+	 * nothing and mutates no committed field. The returned handle then either
+	 *
+	 *   commit()  — swap params/route/model/subscriptions and re-render, or
+	 *   discard() — drop only the subscriptions this run added, leaving the view's
+	 *               committed params, route snapshot, data, DOM, and live
+	 *               subscription set exactly as they were.
+	 *
+	 * so a navigation that rejects or is superseded leaves the ancestor entirely on
+	 * the old route (closing the D19/D30 soft-violation).
+	 *
+	 * Returns null when there is nothing to prepare (destroyed/leaving view, or a
+	 * profiler-blocked data() run) — the same no-op refresh() performs in those
+	 * states; the caller simply has nothing to commit.
+	 *
+	 * A SYNCHRONOUS data() throw propagates out of this call exactly as it does out
+	 * of refresh() (withTracking rethrows), already reconciled as a failure.
+	 *
+	 * @returns {?{ready: Promise<void>, commit: function(): void, discard: function(): void}}
+	 */
+	prepareRefresh({ params, props, route } = {}) {
+		if (this.#destroyed || this.#leaving) return null;
+
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (
+				!devperfPrepareData(
+					this,
+					params || route !== undefined
+						? 'route'
+						: props !== undefined
+							? 'props'
+							: undefined
+				)
+			)
+				return null;
+		}
+
+		const scope = {
+			params: params ?? this.#params,
+			props: props ?? this.#props,
+			route: route !== undefined ? route : this.#route,
+		};
+		// The held-eval channel: withTracking parks its success reconcile here instead
+		// of applying it, so the subscription swap lands with the commit (or is
+		// unwound by the discard) rather than at evaluation time.
+		const pending = {};
+
+		// Establish/restore #evalScope around EVERY invocation (withTracking may retry
+		// fn behind an in-flight async chain) and across the async tail.
+		const run = () => {
+			const prev = this.#evalScope;
+			this.#evalScope = scope;
+			let out;
+			try {
+				out =
+					typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__
+						? devperfRunData(this, scope.params, scope.props)
+						: this.data(scope.params, scope.props);
+			} catch (err) {
+				this.#evalScope = prev;
+				throw err;
+			}
+			if (out && typeof out.then === 'function') {
+				return out.then(
+					(model) => {
+						this.#evalScope = prev;
+						return model;
+					},
+					(err) => {
+						this.#evalScope = prev;
+						throw err;
+					}
+				);
+			}
+			this.#evalScope = prev;
+			return out;
+		};
+
+		const result = this.ctx.store
+			? this.ctx.store.withTracking(
+					this,
+					run,
+					this.data.constructor.name === 'AsyncFunction',
+					pending
+				)
+			: run();
+
+		let model;
+		const ready = Promise.resolve(result).then((m) => {
+			model = m;
+		});
+
+		// The token this prepare was evaluated against. Any COMMITTED refresh landing
+		// between here and commit() bumps it, which is exactly the "the prepared model
+		// is older than what is on screen" signal commit() converges on.
+		const preparedAt = this.#runToken;
+
+		let settled = false;
+		return {
+			ready,
+			commit: () => {
+				if (settled) return;
+				settled = true;
+				// Torn down between prepare and commit: unwind the prepared subscriptions
+				// and touch nothing else (destroy() already dropped this subscriber).
+				if (this.#destroyed || this.#leaving) {
+					pending.reconcile?.(false);
+					return;
+				}
+				pending.reconcile?.(true);
+				this.#params = scope.params;
+				this.#props = scope.props;
+				this.#route = scope.route;
+				// Bumping the token HERE (not at prepare) is what orders this commit
+				// against a mid-gate store-change refresh: while the gate is open the
+				// ancestor still shows the OLD route, so such a refresh runs and renders
+				// normally with the old params, and the bump below supersedes any of
+				// those still in flight — their params are stale by definition.
+				//
+				// But the prepared model is NOT automatically the newest state. A refresh
+				// that started (and possibly landed) after this prepare saw store data the
+				// prepared model predates — the D146 gate is exactly the window in which a
+				// user edit to a record the ancestor derives from can land. Committing the
+				// captured model then reverts the view to a pre-edit value and leaves it
+				// there until some unrelated later write. So: adopt the destination
+				// params/route/subscriptions either way, but when the token moved, RE-DERIVE
+				// instead of painting the stale capture. Costs one extra data() run and one
+				// tick of the older value on the rare interleaving; the alternative is
+				// indefinitely stale content.
+				if (this.#runToken !== preparedAt) {
+					this.#runToken++; // supersede anything still in flight
+					// Fire-and-forget, contained exactly like the store-change path: a
+					// data() failure here must not escape into the router's synchronous
+					// commit window (where it would strand the swap half-applied).
+					try {
+						this.refresh()?.catch((err) =>
+							this.#handleBackgroundRefreshFailure(
+								'[puzzle] data() failed during a prepared-commit re-derive:',
+								err
+							)
+						);
+					} catch (err) {
+						this.#handleBackgroundRefreshFailure(
+							'[puzzle] data() failed during a prepared-commit re-derive:',
+							err
+						);
+					}
+				} else {
+					this.#commit(++this.#runToken, model);
+				}
+			},
+			discard: () => {
+				if (settled) return;
+				settled = true;
+				// Subscription-only unwind: drops just this run's own additions. No
+				// render, no lifecycle hook, no error-boundary/onStoreChange side effect —
+				// a discarded prepare must be invisible to the app (D145).
+				pending.reconcile?.(false);
+			},
+		};
+	}
+
 	/** Store subscription callback (Store.flush → subscribed components). */
 	onStoreChange() {
+		// D146: a store flush landing mid-gate is committed-state work (see
+		// #withCommittedScope) — refresh() fences its own body, but the reportError
+		// context and the boundary funnel below read this.route too.
+		return this.#withCommittedScope(() => this.#onStoreChangeInner());
+	}
+
+	#onStoreChangeInner() {
 		if (this.#destroyed || this.#leaving) return;
 		// Fire-and-forget: a data() failure on the store-change path is logged
 		// rather than escaping into Store.flush() (where an uncaught throw would
@@ -582,13 +1128,28 @@ export class PuzzleView {
 	 * their synchronous mount, so Router ownership remains untouched.
 	 */
 	#handleBackgroundRefreshFailure(message, err) {
-		console.error(message, err);
-		if (!this.#pendingMountHook || this.#destroyed) return;
+		this.#handleViewFailure(message, err, 'refresh');
+	}
+
+	#handleViewFailure(message, err, phase) {
+		reportError(
+			this.ctx,
+			err,
+			{ phase, view: this, route: this.route },
+			message,
+			err
+		);
+		const boundary = this.__prepareErrorBoundary(err);
+		if (!this.#pendingMountHook || this.#destroyed) {
+			this.__showErrorBoundary(boundary);
+			return;
+		}
 		this.#pendingMountHook = false;
 		this.#enterPending = false;
 		const placeholder = plantFailedMountPlaceholder(this);
 		this.destroy();
 		if (placeholder) this.__failedPlaceholder = placeholder;
+		this.__showErrorBoundary(boundary, { failedMount: true, placeholder });
 	}
 
 	/**
@@ -633,9 +1194,16 @@ export class PuzzleView {
 		// logged/never-wedges posture as app.js's beforeUnmount guard. Stays
 		// synchronous: a returned promise is not awaited (destroy() is sync).
 		try {
-			this.destroyed();
+			// D146: user code, fenced to committed params/route.
+			this.#withCommittedScope(() => this.destroyed());
 		} catch (err) {
-			console.error('[puzzle] destroyed hook error:', err);
+			reportError(
+				this.ctx,
+				err,
+				{ phase: 'unmount', view: this, route: this.route },
+				'[puzzle] destroyed hook error:',
+				err
+			);
 		}
 	}
 
@@ -893,30 +1461,42 @@ export class PuzzleView {
 				// delivery, long after playIn() returned, so no caller can see the throw:
 				// an unguarded viewWillShow() would skip handle.play() and leave the enter
 				// held PAUSED at its `from` keyframe (typically opacity 0) — content
-				// stranded hidden forever, the §39 hard rule this function exists to keep
-				// — and both hooks would skip #settleEnter(), leaving playIn() pending.
-				// Log and continue instead; the sequence is never aborted by a user hook.
-				try {
-					this.viewWillShow();
-				} catch (err) {
-					console.error('[puzzle] enter hook failed during a visible-trigger reveal:', err);
-				}
-				handle.play();
+					// stranded hidden forever, the §39 hard rule this function exists to keep
+					// — and both hooks would skip #settleEnter(), leaving playIn() pending.
+					// Log and continue instead; the sequence is never aborted by a user hook.
+					try {
+						this.viewWillShow();
+					} catch (err) {
+						reportError(
+							this.ctx,
+							err,
+							{ phase: 'enter', view: this, route: this.route },
+							'[puzzle] enter hook failed during a visible-trigger reveal:',
+							err
+						);
+					}
+					handle.play();
 				// handle.finished NEVER rejects — playAnimation normalises WAAPI's
 				// cancel-time AbortError away (animate.js, "Cancellation resolves") — so
 				// the only throw reachable in here is the user hook, guarded so
 				// #settleEnter() below always runs. No .catch is needed on this chain.
 				handle.finished.then(() => {
-					if (this.#currentAnimation === handle) this.#currentAnimation = null;
-					// Same rule as the mount path: destroyed OR preempted by a leave means
-					// the reveal never completed, so its closing hook is skipped.
-					if (!this.#destroyed && !this.#leaving) {
-						try {
-							this.viewDidShow(); // skipped entirely if destroyed mid-enter
-						} catch (err) {
-							console.error('[puzzle] enter hook failed during a visible-trigger reveal:', err);
+						if (this.#currentAnimation === handle) this.#currentAnimation = null;
+						// Same rule as the mount path: destroyed OR preempted by a leave means
+						// the reveal never completed, so its closing hook is skipped.
+						if (!this.#destroyed && !this.#leaving) {
+							try {
+								this.viewDidShow(); // skipped entirely if destroyed mid-enter
+							} catch (err) {
+								reportError(
+									this.ctx,
+									err,
+									{ phase: 'enter', view: this, route: this.route },
+									'[puzzle] enter hook failed during a visible-trigger reveal:',
+									err
+								);
+							}
 						}
-					}
 					this.#settleEnter();
 				});
 			};
@@ -986,12 +1566,22 @@ export class PuzzleView {
 	 */
 	playOut() {
 		if (this.#leaving) return this.#leaving;
+		if (this.#outTask) {
+			// A restored view leaving for real. The out sequence is spent, so the
+			// animation must not replay — but D136's leave-inertness rule is about the
+			// LEAVE, not about the animation: re-arm #leaving and drop the subscription
+			// this view re-took during recovery, or it stays reactive on its way out.
+			this.#leaving = this.#outTask;
+			this.ctx.store?.unsubscribe(this);
+			return this.#outTask;
+		}
 		let resolveLeaving;
 		let rejectLeaving;
 		this.#leaving = new Promise((resolve, reject) => {
 			resolveLeaving = resolve;
 			rejectLeaving = reject;
 		});
+		this.#outTask = this.#leaving;
 		// Leaving views become inert immediately. Store.flush() snapshots its
 		// subscribers, so the method guards cover an already-snapshotted delivery;
 		// unsubscribing here prevents every later one. destroy() repeats this safely.
@@ -1049,6 +1639,37 @@ export class PuzzleView {
 	}
 
 	/**
+	 * Router-only failed-navigation recovery: make a committed outgoing view live
+	 * again after playOut() made it inert. The out sequence remains spent through
+	 * #outTask, so a later successful navigation still swaps this restored unit out
+	 * instantly; only the active #leaving guard is cleared. Refresh after clearing
+	 * it because playOut() unsubscribed the view — Store.withTracking inside refresh
+	 * re-establishes exactly the queries data() still makes.
+	 *
+	 * Recovery runs inside the router's synchronous failure window. Contain both a
+	 * synchronous data() throw and an async rejection here so restoring the old view
+	 * can never turn a handled navigation failure into a rejecting router promise.
+	 */
+	_restoreFromLeaving() {
+		if (this.#destroyed || !this.#leaving) return;
+		this.#leaving = null;
+		this._cancelOutAnimation();
+		try {
+			this.refresh()?.catch((err) =>
+				this.#handleBackgroundRefreshFailure(
+					'[puzzle] data() failed while restoring a stalled outgoing view:',
+					err
+				)
+			);
+		} catch (err) {
+			this.#handleBackgroundRefreshFailure(
+				'[puzzle] data() failed while restoring a stalled outgoing view:',
+				err
+			);
+		}
+	}
+
+	/**
 	 * Animated teardown: play the leave sequence, THEN destroy() (which removes
 	 * the DOM and fires destroyed()). If already destroyed or there is no live
 	 * element, it degrades to a plain synchronous destroy(). This is the only
@@ -1070,7 +1691,13 @@ export class PuzzleView {
 			// leave-hook guard, router.js #startOverlapLeave). The destroyed-mid-playOut
 			// interrupt path resolves (never rejects), so its early-return / did-hook-skip
 			// semantics are untouched — only the throw path lands here.
-			console.error('[puzzle] leave hook failed during teardown:', err);
+			reportError(
+				this.ctx,
+				err,
+				{ phase: 'leave', view: this, route: this.route },
+				'[puzzle] leave hook failed during teardown:',
+				err
+			);
 		}
 		this.destroy();
 	}
@@ -1151,7 +1778,13 @@ export class PuzzleView {
 			if (this.#enterPending) {
 				this.#enterPending = false;
 				Promise.resolve(this.playIn()).catch((err) =>
-					console.error('[puzzle] child enter animation failed:', err)
+					reportError(
+						this.ctx,
+						err,
+						{ phase: 'enter', view: this, route: this.route },
+						'[puzzle] child enter animation failed:',
+						err
+					)
 				);
 			}
 		}
@@ -1168,6 +1801,28 @@ export class PuzzleView {
 			if (!(key in composed)) delete this.#data[key];
 		}
 		Object.assign(this.#data, composed);
+		// Layer-clobber diagnostic (D147 hazard 4, dev only). A bare bind writes the
+		// LOCAL layer, but the composition above puts the MODEL last — so a key data()
+		// also derives from a record or prop is reverted the moment data() commits, and
+		// the user's typing snaps back with nothing to explain it. The compiler cannot
+		// see this (data() is opaque bytes, D03), so catch it here, against what the
+		// commit ACTUALLY composed: a bind write's own commit compares equal in the
+		// legitimate echo idiom (data() reads its own local back out through getData()
+		// and returns it unchanged) and only differs when something really overwrote it.
+		// Testing `key in #model` instead would flag every echo view in the corpus.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (this.#bindPending) {
+				for (const [key, written] of this.#bindPending) {
+					if (this.#data[key] === written || this.#bindWarned?.has(key)) continue;
+					(this.#bindWarned ??= new Set()).add(key);
+					console.warn(
+						`[puzzle] a data() commit reverted the bound key '${key}' — bind the source ` +
+							`path instead (value={ record.${key} }), or stop deriving '${key}' in data().`
+					);
+				}
+				this.#bindPending.clear();
+			}
+		}
 	}
 
 	/**
@@ -1185,7 +1840,56 @@ export class PuzzleView {
 		return (this.skeletonMinDuration ?? 0) - (Date.now() - this.#skeletonShownAt);
 	}
 
+	/**
+	 * Run fn with the DESTINATION eval scope (D146) fenced off, so `this.params` /
+	 * `this.route` inside it report the COMMITTED route.
+	 *
+	 * #evalScope exists so a PREPARED data() run sees the navigation it is gating
+	 * (D47). For a synchronous data() that window is one call frame. For an ASYNC
+	 * one it spans the whole suspension — the entire navigation gate — during which
+	 * the ancestor is still mounted, still on the old route, and fully interactive.
+	 * Every path where the runtime re-enters app code from the event loop in that
+	 * window must therefore read committed state, or a click handler doing
+	 * `store.upsert('item', { listId: this.params.listId })` writes against a route
+	 * the user has not navigated to (and which may never commit).
+	 *
+	 * Fenced here: renders, DOM event dispatch, flushUpdates (the setData path),
+	 * onStoreChange, refresh, and the mounted()/destroyed() lifecycle hooks
+	 * (beforeUpdate/afterUpdate run inside #renderNow, already fenced). NOT fenced,
+	 * and a known residue: app code that captures `this` into a setTimeout or a
+	 * fetch().then() DURING the gate and dereferences params/route after the fence
+	 * returns. There is no async-local scope primitive in the browser to close that.
+	 */
+	#withCommittedScope(fn) {
+		const prevScope = this.#evalScope;
+		this.#evalScope = null;
+		try {
+			return fn();
+		} finally {
+			this.#evalScope = prevScope;
+		}
+	}
+
+	/**
+	 * INTERNAL bridge to #withCommittedScope for the ViewManager, which wraps every
+	 * patch-managed DOM listener so the owner's handler runs against committed
+	 * params/route. Underscore-prefixed by the codebase's internal convention.
+	 */
+	__withCommittedScope(fn) {
+		return this.#withCommittedScope(fn);
+	}
+
 	#renderNow(preparedTree = undefined) {
+		// D146: a render always draws COMMITTED state. A prepared data() run whose
+		// promise is suspended leaves #evalScope set, so a render that lands inside
+		// that window (a store-change refresh on this same view while the gate is
+		// open) would otherwise read the destination params/route through the getters
+		// and paint the route the router has not committed. Renders are synchronous,
+		// so clearing and restoring around the whole render is exact.
+		this.#withCommittedScope(() => this.#renderNowInner(preparedTree));
+	}
+
+	#renderNowInner(preparedTree = undefined) {
 		if (!this.#vm || this.#destroyed) return;
 		if (
 			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
@@ -1275,6 +1979,35 @@ export class PuzzleView {
 			this.#vm.clear();
 			this.#vm.anchorAt(ref);
 		}
+		// Rebuilt member-target diagnostic (D147, dev only). __bind collected the
+		// member objects this completed render actually used. Warn only when the
+		// object that received the write never returned, exactly one replacement did,
+		// and that replacement did not preserve the value. The completed-render fence
+		// is load-bearing for loops: another row may be visited before the written row,
+		// and warning at the first WeakMap miss would false-positive on that ordinary
+		// traversal. Record writes never arm #bindMemberPending, so replacing a store
+		// record remains silent. Consume every entry here; a later intentional object
+		// replacement must not be blamed for an older write that already survived.
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			if (this.#bindMemberPending) {
+				for (const [memoKey, pending] of this.#bindMemberPending) {
+					if (
+						!pending.sawTarget &&
+						pending.replacement != null &&
+						!pending.ambiguous &&
+						!this.#bindMemberWarned?.has(pending.key)
+					) {
+						(this.#bindMemberWarned ??= new Set()).add(pending.key);
+						console.warn(
+							`[puzzle] the object behind a bound path is rebuilt on every data() run, so the write is lost — ` +
+								`return a stable object (this.memo(...)), or bind a record or a bare local key instead ` +
+								`(key: '${pending.key}')`
+						);
+					}
+					this.#bindMemberPending.delete(memoKey);
+				}
+			}
+		}
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			devperfRenderEnd(this);
 		}
@@ -1299,13 +2032,26 @@ export class PuzzleView {
 	 * wedges the scheduler (the flag clears first; the error is reported).
 	 */
 	flushUpdates() {
-		if (!this.#updateScheduled) return;
-		this.#updateScheduled = false;
-		try {
-			this.#renderNow();
-		} catch (err) {
-			console.error('[puzzle] render update failed:', err);
-		}
+		// D146: the setData re-render path re-enters from a rAF/timer callback, which
+		// can land inside a suspended prepared data()'s window. Fence the whole body
+		// (not just the render) so the error context and boundary funnel below read
+		// the committed route too.
+		this.#withCommittedScope(() => {
+			if (!this.#updateScheduled) return;
+			this.#updateScheduled = false;
+			try {
+				this.#renderNow();
+			} catch (err) {
+				reportError(
+					this.ctx,
+					err,
+					{ phase: 'render', view: this, route: this.route },
+					'[puzzle] render update failed:',
+					err
+				);
+				this.__renderErrorBoundary(err);
+			}
+		});
 	}
 }
 

@@ -9,8 +9,17 @@ map.
 1. `constellation/doc/DOC-SPEC.md` is the source of truth; keep it current.
    When code and SPEC disagree, decide on the merits — usually the SPEC is
    right, but sometimes the SPEC should change to match a code decision.
-   Either way, a SPEC change requires a new numbered decision card and a new
-   entry in `constellation/doc/DOC-DECISIONS.md`.
+   Either way, a SPEC change must be reflected in a decision card — but pick
+   the right card:
+   - **New decision** (a question nothing has answered yet) → new numbered
+     card.
+   - **Changed decision** (a question some card already owns, now answered
+     differently) → **rewrite that card in place**.
+     Do not add a second card superseding the first.
+     One decision, one card, forever; a chain of cards for a single question is
+     a defect, not a record. State the current design as if it were always the
+     design — the discarded approach belongs in that card's "Alternatives
+     rejected" as rationale, never as narration of what the card used to say.
 2. Read the relevant component, feature, decision, flow, and test cards before
    changing covered code. Update those cards as part of the same change.
 3. `constellation/doc/DOC-RELEASE-SURFACE.md` is the concise inventory of what
@@ -72,10 +81,32 @@ run.
   (`chore/d134-capitalized-markers`, pushed) is not yet merged into its
   `main`/`release/0.2.0`, and the site's merge is pending an unrelated
   in-progress worktree.
-- Product line: v1 through v1.65 (D134 = v1.64, D141 = v1.65), plus the July
+- `0.5.0` (on `release/0.5.0`, **version-stamped and release-prepped, NOT yet
+  published** — every manifest, `version.go`, and `FRAMEWORK_VERSION` reads
+  `0.5.0`, `release:prep` is green, and `magic-spells-puzzle-0.5.0.tgz` is
+  built; the five `npm publish` calls and `verify:published` have not been run.
+  Check `npm view @magic-spells/puzzle versions` before trusting this): D144
+  Portal scoped v1
+  (`<Portal>` marker + framework outlet + portal-aware `@event:outside`), D145
+  error boundaries (`onError` funnel + script-side `errorContent()`), D146
+  transactional reused-ancestor refresh (prepare/commit closes the D19/D30
+  soft-violation), D147 implicit two-way form binding, D148
+  `puzzle preview` + real static serving in `puzzle dev` for
+  `output: 'static'` projects (hybrid devs as the SPA), and D149 payload keys
+  colliding with a computed getter. Also in: the Portal
+  showcase `examples/overlays`, the Portal component-root steering error
+  (wrap `<Portal>` in a root element; documented in D144), and the D76 change
+  that points `puzzle upgrade` at the running CLI rather than the cwd. Cards
+  truthed through D149.
+- Product line: v1 through v1.69 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
+  D145 = v1.67, D147 = v1.68, D148 = v1.69; D146 is a correctness amendment
+  with no product-line entry),
+  plus the July
   21 pre-release correctness/performance hardening pass and the July 24
-  deep-review round. `constellation/doc/DOC-DECISIONS.md` is the authoritative
-  decision range — do not restate it here; it moves faster than this file.
+  deep-review round. The `constellation/decision/` cards are the authoritative
+  decision record — do not restate them here; they move faster than this file.
+  (There is deliberately no DOC-DECISIONS index card: each decision lives in
+  its numbered card only, never in two spots.)
 - Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`,
   `./static`, and `./puzzle-env` exports plus a `puzzle` binary shim and four
   optional platform binary packages (macOS/Linux, arm64/x64).
@@ -182,8 +213,9 @@ run.
 - Store queries inside `data()` auto-subscribe. Record props carry identity;
   children that need live record data should re-query by id.
 - Navigation loads before commit. URL/title/history, mounted tree, route
-  snapshot, and outgoing scroll save commit together. Failed or superseded
-  pushes do not partially commit.
+  snapshot, outgoing scroll save, and reused-ancestor state (params, snapshot,
+  data, subscriptions — D146) commit together. Failed or superseded pushes do
+  not partially commit.
 - `<Children>` is the component default marker, `<Slot name="x">` is named
   composition, and `<Slot>` is the router outlet. A marker is self-closing or
   paired — a paired body is fallback content, rendered only when nothing fills

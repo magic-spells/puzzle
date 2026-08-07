@@ -1,6 +1,6 @@
 ---
 name: Reactivity flow
-status: built
+status: verified
 triggers:
   - { kind: event }
   - { kind: manual }
@@ -12,7 +12,7 @@ connections:
   - FILE-STORE
   - FILE-PUZZLE-VIEW
   - FILE-VIEW-MANAGER
-verified_at: '2026-07-25T05:26:04.899Z'
+verified_at: '2026-07-29T05:19:20.181Z'
 notes:
   - kind: gotcha
     text: >-
@@ -25,7 +25,7 @@ notes:
       identity; the store carries live data. If a framework-level answer is ever wanted
       (always-refresh children, or record versioning), it needs a D-number — SPEC §4's
       shallow-differ rule is the documented contract.
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
 ---
 
 # Reactivity flow
@@ -38,6 +38,14 @@ Puzzle has two intentionally asymmetric update paths:
 2. `setData()` mutates the persistent local layer and renders immediately. It
    does not rerun `data()`; call `refresh()` when derived model data must be
    recomputed.
+
+Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) feeds
+both paths without adding a third: a bound form control's synthesized handler
+writes local state through `setData` + `refresh` (path 2 plus the rerun, so
+`data()`-derived values track typing) or writes a record through validated
+`update()`, which re-enters as an ordinary store notification (path 1). The
+controlled-property echo compares against the live DOM, so the keystroke that
+caused the write patches nothing back into the input.
 
 Queries made inside `data()` register the evaluating component with
 [[COMPONENT-STORE]]. Record and collection keys are batched into one flush,

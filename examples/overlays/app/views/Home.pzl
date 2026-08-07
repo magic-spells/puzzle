@@ -1,0 +1,240 @@
+<puzzle-view>
+  <!-- 1 ─────────────────────────────────────────── store-driven toasts -->
+  <section class="case">
+    <header class="case-head">
+      <!-- `{ portalTag }` rather than a literal `&lt;Portal&gt;`: template text is
+           not entity-decoded, and interpolations become text nodes — which is
+           exactly what you want when the text you are printing is markup. -->
+      <div class="eyebrow">case 1 · { portalTag }</div>
+      <h2 class="case-title">Toasts</h2>
+      <p class="case-sub">
+        Every button below just writes a <code>toast</code> record. The stack
+        in the top-right corner is mounted once in the layout, portaled to the
+        outlet, and subscribes by querying the store inside its own
+        <code>data()</code> — no event bus, no imperative <code>toast()</code>
+        helper.
+      </p>
+    </header>
+
+    <div class="case-actions">
+      <button class="btn btn-accent" @click={ toast('success') }>Success toast</button>
+      <button class="btn btn-danger" @click={ toast('error') }>Error toast</button>
+      <button class="btn" @click={ toast('info') }>Info toast</button>
+      <button class="btn" @click={ toast('sticky') }>Sticky (no auto-dismiss)</button>
+      <button class="btn" @click={ toast('burst') }>Burst of five</button>
+      <button class="btn" @click={ clearToasts } disabled={ !hasToasts }>
+        Clear ({ toastCount })
+      </button>
+    </div>
+  </section>
+
+  <!-- 2 ──────────────────────── dropdown escaping a clipping ancestor -->
+  <section class="case">
+    <header class="case-head">
+      <div class="eyebrow">case 2 · { portalTag }</div>
+      <h2 class="case-title">A menu that escapes its card</h2>
+      <p class="case-sub">
+        The <code>⋯</code> menu renders through { portalTag }, out of an
+        ancestor that would otherwise trap and clip it.
+      </p>
+    </header>
+
+    <ClippedCard title="Q3 rollout notes" />
+
+    <p class="case-note">
+      <strong>Try it:</strong> open the <code>⋯</code> menu, then click the menu
+      body itself. It stays open — <code>@click:outside</code> is bound on the
+      card, and the portaled menu resolves back to its placeholder inside that
+      card. Click anywhere else on the page and it dismisses.
+    </p>
+  </section>
+
+  <!-- 3 ─────────────────────────── non-modal panel vs. native modal -->
+  <section class="case">
+    <header class="case-head">
+      <div class="eyebrow">case 3 · { portalTag } vs { dialogTag }</div>
+      <h2 class="case-title">Panel or modal</h2>
+      <p class="case-sub">
+        <strong>{ portalTag } for non-modal overlays, { dialogTag } for
+        modals.</strong> The slide-over is portaled and leaves the page live —
+        scroll it, click it, fire a toast while it is open. The modal is a
+        native <code>dialog.showModal()</code>: the browser's top layer gives
+        it a focus trap, an inert background and Escape-to-close for free.
+      </p>
+    </header>
+
+    <div class="case-actions">
+      <button class="btn btn-accent" @click={ openPanel }>Open slide-over</button>
+      <button class="btn" @click={ openModal }>Open native modal</button>
+    </div>
+  </section>
+
+  <SlideOver open={ panelOpen } title="Deploy settings" @close={ closePanel }>
+    <p>
+      This copy lives in <code>Home.pzl</code>, inside a
+      <code>{ '<SlideOver>' }</code> tag — but its DOM node is a descendant of
+      <code>div[data-puzzle-portal]</code>, several thousand pixels of
+      document away from the button that opened it.
+    </p>
+    <p>
+      The page behind is not inert. Scroll it. Or fire a toast from here — the
+      toast stack is a different portal in the same outlet, and the two never
+      fight over sibling order because each portal owns a comment-bracketed
+      range of its own.
+    </p>
+    <p class="case-actions">
+      <button class="btn" @click={ toast('info') }>Toast from inside the panel</button>
+    </p>
+  </SlideOver>
+
+  <NativeModal
+    title="Ship to production?"
+    @ready={ modalReady }
+    @confirm={ confirmShip }>
+    <p>
+      Focus is trapped in here by the browser, not by the framework. Press
+      <code>Tab</code> — you cannot reach the page behind. Press
+      <code>Esc</code> — it closes, and the <code>close</code> event routes
+      back through a normal <code>@close</code> DOM binding.
+    </p>
+  </NativeModal>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import ClippedCard from '../components/ClippedCard.pzl';
+import SlideOver from '../components/SlideOver.pzl';
+import NativeModal from '../components/NativeModal.pzl';
+
+const MESSAGES = {
+  success: ['Deploy finished in 41s.', 'Settings saved.', 'Invite sent to dana@example.com.'],
+  error: ['Build failed on step 3.', 'Could not reach the registry.', 'Token expired — sign in again.'],
+  info: ['3 records synced.', 'A new version is available.', 'Draft autosaved.'],
+};
+
+let seq = 0;
+
+export default class Home extends PuzzleView {
+  // The modal's imperative handle, delivered up by @ready. An instance field,
+  // never setData — it is not render state.
+  modal = null;
+
+  created() {
+    this.setData({ panelOpen: false });
+  }
+
+  data() {
+    const toasts = this.ctx.store.findMany('toast');
+    return {
+      toastCount: toasts.length,
+      hasToasts: toasts.length > 0,
+      // Markup as DATA. Template text is never entity-decoded, so `&lt;Portal&gt;`
+      // would render literally; an interpolation becomes a text node instead.
+      portalTag: '<Portal>',
+      dialogTag: '<dialog>',
+    };
+  }
+
+  events = {
+    toast: (kind) => {
+      const store = this.ctx.store;
+
+      if (kind === 'sticky') {
+        store.createRecord('toast', {
+          kind: 'info',
+          message: 'Pinned until you dismiss it (ttl: 0).',
+          ttl: 0,
+        });
+        return;
+      }
+
+      if (kind === 'burst') {
+        for (let i = 0; i < 5; i++) {
+          store.createRecord('toast', {
+            kind: i % 2 === 0 ? 'success' : 'info',
+            message: `Batch item ${++seq} processed.`,
+            ttl: 3200 + i * 400,
+          });
+        }
+        return;
+      }
+
+      const pool = MESSAGES[kind];
+      store.createRecord('toast', {
+        kind,
+        message: pool[Math.floor(Math.random() * pool.length)],
+      });
+    },
+
+    clearToasts: () => {
+      this.ctx.store.findMany('toast').forEach((t) => t.destroy());
+    },
+
+    openPanel: () => this.setData('panelOpen', true),
+    closePanel: () => this.setData('panelOpen', false),
+
+    modalReady: (handle) => {
+      this.modal = handle;
+    },
+
+    openModal: () => {
+      this.modal?.open();
+    },
+
+    confirmShip: () => {
+      this.ctx.store.createRecord('toast', {
+        kind: 'success',
+        message: 'Shipped to production.',
+      });
+    },
+  };
+
+  animations = {
+    in: { from: { opacity: 0 }, to: { opacity: 1 }, duration: 200 },
+  };
+}
+</script>
+
+<style>
+/* No boxes around the cases — the only card on the page is the ClippedCard,
+   because there the card itself is the demo. Rhythm comes from spacing. */
+.case + .case { margin-top: 76px; }
+
+.case-head { margin-bottom: 24px; }
+
+.case-title {
+  margin: 10px 0 0;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.case-sub {
+  margin: 12px 0 0;
+  max-width: 62ch;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.case-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.case-actions .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.case-note {
+  margin: 16px 0 0;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--faint);
+}
+
+.case-note strong { color: var(--muted); }
+</style>

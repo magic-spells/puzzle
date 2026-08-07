@@ -1,0 +1,121 @@
+<puzzle-view>
+  <div class={ toastClass }>
+    <span class="toast-icon">{ icon }</span>
+    <p class="toast-msg">{ message }</p>
+    <button class="toast-x" @click={ dismiss } aria-label="Dismiss notification">×</button>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+export default class ToastItem extends PuzzleView {
+  #timer = null;
+
+  // A toast record is written once and then only ever destroyed, so a plain
+  // record prop is enough here — no id + re-query needed for liveness.
+  data(params, props) {
+    const toast = props.toast;
+    return {
+      toastClass: 'toast toast-' + toast.kind,
+      icon: toast.icon,
+      message: toast.message,
+    };
+  }
+
+  events = {
+    dismiss: () => {
+      this.props.toast.destroy();
+    },
+  };
+
+  // The teleported subtree keeps its normal lifecycle — mounted() fires and
+  // destroyed() is guaranteed to run on portal teardown, so the timer is
+  // safe to own here.
+  mounted() {
+    const ttl = this.props.toast.ttl;
+    if (ttl > 0) {
+      this.#timer = setTimeout(() => {
+        this.#timer = null;
+        this.props.toast.destroy();
+      }, ttl);
+    }
+  }
+
+  destroyed() {
+    if (this.#timer !== null) clearTimeout(this.#timer);
+    this.#timer = null;
+  }
+
+  animations = {
+    in: {
+      from: { opacity: 0, transform: 'translateX(24px) scale(0.96)' },
+      to: { opacity: 1, transform: 'translateX(0) scale(1)' },
+      duration: 220,
+      easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
+    },
+    out: {
+      from: { opacity: 1, transform: 'translateX(0) scale(1)' },
+      to: { opacity: 0, transform: 'translateX(24px) scale(0.96)' },
+      duration: 160,
+      easing: 'ease-in',
+    },
+  };
+}
+</script>
+
+<style>
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px 12px 12px 13px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.85);
+}
+
+.toast-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0d1a13;
+  background: var(--accent);
+}
+
+.toast-error .toast-icon { background: var(--danger); color: #2a0f0b; }
+.toast-info .toast-icon { background: rgba(255, 255, 255, 0.24); color: var(--fg); }
+
+.toast-success { border-color: rgba(125, 211, 167, 0.3); }
+.toast-error { border-color: rgba(224, 121, 107, 0.34); }
+
+.toast-msg {
+  flex: 1;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.toast-x {
+  flex: none;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 18px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.toast-x:hover { color: var(--fg); background: rgba(255, 255, 255, 0.08); }
+</style>

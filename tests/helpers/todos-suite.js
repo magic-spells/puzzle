@@ -94,10 +94,18 @@ async function typeAndSubmit(el, text) {
 	el.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 }
 
+// Toggle a row's checkbox the way the browser does: move the checkedness FIRST,
+// then fire `change`. The row's `checked={ todo.completed }` is two-way bound, so
+// the framework's handler reads `el.checked` off the event target — dispatching a
+// bare `change` without moving it would write the value already in the record and
+// the row would never complete. (jsdom's own click() toggles a DETACHED checkbox
+// but omits the activation events, which is why this is spelled out rather than
+// delegated to .click(); client-runtime/testing's dispatchClick patches the same
+// gap for the D94 lane.)
 function clickCheckbox(el, text) {
-	rowByText(el, text)
-		.querySelector('input[type="checkbox"]')
-		.dispatchEvent(new Event('change', { bubbles: true }));
+	const box = rowByText(el, text).querySelector('input[type="checkbox"]');
+	box.checked = !box.checked;
+	box.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
 function clickDelete(el, text) {
