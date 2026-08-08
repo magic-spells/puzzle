@@ -14,9 +14,6 @@
   "scripts": {
     "test": "node --test test/"
   },
-  "peerDependencies": {
-    "@magic-spells/puzzle": "^0.6.0"
-  },
   "devDependencies": {
     "@magic-spells/physics-engine": "^1.0.0",
     "@magic-spells/frame-engine": "^1.0.1"
