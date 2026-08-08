@@ -11,6 +11,10 @@
     "type": "git",
     "url": "git+https://github.com/magic-spells/puzzle-pieces.git"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "scripts": {
     "test": "node --test test/"
   },
