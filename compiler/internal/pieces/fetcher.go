@@ -2,8 +2,6 @@ package pieces
 
 import (
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,10 +17,11 @@ import (
 // pieces authored for the compiler running it.
 const defaultRegistry = npmScheme + defaultNpmPackage
 
-// httpTimeout bounds a single registry request, whether that's a file off an
-// http(s) mirror or a packument/tarball off the npm registry. A registry lives
-// behind the network, so a hung host must not wedge the CLI — 15s is generous
-// for the few KB of .pzl, JSON, and gzipped tarball involved.
+// httpTimeout bounds a single registry-file request off an http(s) mirror, and
+// the npm PACKUMENT fetch. A registry lives behind the network, so a hung host
+// must not wedge the CLI — 15s is generous for the few KB of .pzl, .js, and
+// JSON involved. The npm TARBALL is megabytes, not KB, so it runs under its own
+// longer budget (npmTarballTimeout).
 const httpTimeout = 15 * time.Second
 
 // Fetcher reads registry resources by their registry-relative slash path
@@ -35,7 +34,10 @@ type Fetcher interface {
 	// (path or URL) that failed — the user needs to know WHERE we looked.
 	Fetch(rel string) ([]byte, error)
 	// Source is the canonical source string recorded verbatim in pieces.lock so
-	// a later diff/update knows which registry a piece came from.
+	// a later diff/update knows which registry a piece came from. For the npm
+	// fetcher it is the CONFIGURED spec until the first successful Fetch resolves
+	// a release, and the fully pinned npm:<pkg>@<version> afterwards — so a caller
+	// recording it must read it AFTER fetching (Add does).
 	Source() string
 	// Ref renders rel as a human-readable location for advisories (the theme
 	// merge hint) — a full path for a dir source, a full URL for an http one.
@@ -149,40 +151,10 @@ const maxRedirects = 3
 // redirect chain, and a bounded response body.
 type httpFetcher struct{ base string }
 
+// Fetch is boundedGet over the mirror's URL prefix — the same timeout, redirect
+// budget, capped body, and URL-naming errors the npm endpoints get.
 func (h *httpFetcher) Fetch(rel string) ([]byte, error) {
-	url := h.base + "/" + rel
-	client := &http.Client{
-		Timeout: httpTimeout,
-		// via holds the requests ALREADY issued, so len(via) is the number of
-		// redirects followed to reach this one: allow it while that count is still
-		// within budget, refuse the hop that would exceed it.
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) > maxRedirects {
-				return fmt.Errorf("stopped after %d redirects", maxRedirects)
-			}
-			return nil
-		},
-	}
-	resp, err := client.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("fetching %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-	// A non-200 must name the URL — the usual cause is a mistyped piece name or a
-	// registry that moved, and the URL is the actionable detail.
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetching %s: HTTP %d", url, resp.StatusCode)
-	}
-	// Read ONE byte past the cap: a body that exactly fills it still succeeds, and
-	// anything larger is detected without buffering the remainder.
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("fetching %s: %w", url, err)
-	}
-	if len(data) > maxBodyBytes {
-		return nil, fmt.Errorf("fetching %s: response exceeds the %d MiB limit", url, maxBodyBytes>>20)
-	}
-	return data, nil
+	return boundedGet(h.base+"/"+rel, httpTimeout, maxBodyBytes)
 }
 
 func (h *httpFetcher) Source() string        { return h.base }

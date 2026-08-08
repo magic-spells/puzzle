@@ -121,7 +121,13 @@ func extractRegistryTarball(r io.Reader) (map[string][]byte, error) {
 	const prefix = "package/registry/"
 	files := make(map[string][]byte)
 	var total int64
-	tr := tar.NewReader(io.LimitReader(gz, maxUnpackedBytes+1))
+	// Hold the limiter itself, not just the io.Reader it satisfies: the budget can
+	// run out exactly on a 512-byte tar block boundary, in which case tar.Next
+	// reports a clean io.EOF and we would return a SILENTLY TRUNCATED map. EOF at
+	// the cap is otherwise indistinguishable from a genuine end of archive, so the
+	// only honest check is lr.N afterwards.
+	lr := &io.LimitedReader{R: gz, N: maxUnpackedBytes + 1}
+	tr := tar.NewReader(lr)
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -153,6 +159,11 @@ func extractRegistryTarball(r io.Reader) (map[string][]byte, error) {
 			return nil, fmt.Errorf("npm tarball unpacks past the %d MiB limit", maxUnpackedBytes>>20)
 		}
 		files[rel] = data
+	}
+	// The +1 byte of headroom is never legitimately consumed, so an exhausted
+	// limiter means the stream was cut short, not that the archive ended.
+	if lr.N <= 0 {
+		return nil, fmt.Errorf("npm tarball unpacks past the %d MiB limit", maxUnpackedBytes>>20)
 	}
 	return files, nil
 }
@@ -247,6 +258,13 @@ func (n *npmFetcher) load() error {
 // resolve fetches the abbreviated packument and picks the release: the
 // explicit pin when given, else the newest version lockstep with cliVersion.
 func (n *npmFetcher) resolve() (version, tarballURL string, err error) {
+	// A bare "npm:" source reaches here with an empty package name — PinNpmSource
+	// guards that, but only when --pieces-version is passed. Without this the URL
+	// is the bare registry root and the user gets an opaque 404 instead of the
+	// real mistake.
+	if n.pkg == "" {
+		return "", "", fmt.Errorf("registry source %q names no npm package", n.configured)
+	}
 	// A scoped name's / is escaped in the packument URL (@scope%2Fname).
 	url := n.base + "/" + strings.Replace(n.pkg, "/", "%2F", 1)
 	body, err := boundedGetWithAccept(url, httpTimeout, maxBodyBytes,
@@ -275,13 +293,13 @@ func (n *npmFetcher) resolve() (version, tarballURL string, err error) {
 		if pick == "" {
 			cliMajor, cliMinor, _, _, _ := parseVersion(n.cliVersion)
 			return "", "", fmt.Errorf("no %s release matches puzzle %s (need %d.%d.x; published: %s)",
-				n.pkg, n.cliVersion, cliMajor, cliMinor, strings.Join(published, ", "))
+				n.pkg, n.cliVersion, cliMajor, cliMinor, newestPublished(published, maxListedVersions))
 		}
 	}
 	entry, ok := pack.Versions[pick]
 	if !ok {
 		return "", "", fmt.Errorf("%s@%s is not published (published: %s)",
-			n.pkg, pick, strings.Join(published, ", "))
+			n.pkg, pick, newestPublished(published, maxListedVersions))
 	}
 	if entry.Dist.Tarball == "" {
 		return "", "", fmt.Errorf("npm metadata for %s@%s carries no tarball URL", n.pkg, pick)
@@ -289,8 +307,24 @@ func (n *npmFetcher) resolve() (version, tarballURL string, err error) {
 	return pick, entry.Dist.Tarball, nil
 }
 
-// boundedGet mirrors httpFetcher.Fetch's discipline — timeout, redirect
-// budget, capped body — for the npm endpoints.
+// maxListedVersions bounds how many published versions an error message names.
+// A long-lived package accumulates hundreds of releases; dumping all of them
+// buries the actual error, and the newest handful is what tells the user what
+// they can actually ask for.
+const maxListedVersions = 15
+
+// newestPublished renders the last n entries of a SORTED version slice, comma
+// separated, prefixed with "… " when entries were dropped.
+func newestPublished(published []string, n int) string {
+	if n <= 0 || len(published) <= n {
+		return strings.Join(published, ", ")
+	}
+	return "… " + strings.Join(published[len(published)-n:], ", ")
+}
+
+// boundedGet is the one HTTP path for every remote registry read — an http(s)
+// mirror's files and both npm endpoints — under a timeout, a redirect budget,
+// and a capped body.
 func boundedGet(url string, timeout time.Duration, limit int64) ([]byte, error) {
 	return boundedGetWithAccept(url, timeout, limit, "")
 }
@@ -298,6 +332,9 @@ func boundedGet(url string, timeout time.Duration, limit int64) ([]byte, error) 
 func boundedGetWithAccept(url string, timeout time.Duration, limit int64, accept string) ([]byte, error) {
 	client := &http.Client{
 		Timeout: timeout,
+		// via holds the requests ALREADY issued, so len(via) is the number of
+		// redirects followed to reach this one: allow it while that count is still
+		// within budget, refuse the hop that would exceed it.
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) > maxRedirects {
 				return fmt.Errorf("stopped after %d redirects", maxRedirects)
@@ -317,9 +354,13 @@ func boundedGetWithAccept(url string, timeout time.Duration, limit int64, accept
 		return nil, fmt.Errorf("fetching %s: %w", url, err)
 	}
 	defer resp.Body.Close()
+	// A non-200 must name the URL — the usual cause is a mistyped piece name or a
+	// registry that moved, and the URL is the actionable detail.
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetching %s: HTTP %d", url, resp.StatusCode)
 	}
+	// Read ONE byte past the cap: a body that exactly fills it still succeeds, and
+	// anything larger is detected without buffering the remainder.
 	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", url, err)

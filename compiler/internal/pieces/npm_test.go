@@ -144,6 +144,36 @@ func TestPinNpmSource(t *testing.T) {
 	}
 }
 
+// A bare "npm:" source builds a fetcher with an empty package name. PinNpmSource
+// only guards it when --pieces-version is passed, so the fetcher must refuse it
+// too — before any request, which is why this needs no server despite the real
+// npm registry being the base.
+func TestNpmFetcherEmptyPackageRefusedBeforeRequest(t *testing.T) {
+	_, err := NewFetcher("npm:").Fetch("registry.json")
+	if err == nil {
+		t.Fatal("Fetch on a bare npm: source = nil error, want an error")
+	}
+	if !strings.Contains(err.Error(), "names no npm package") {
+		t.Errorf("error %q does not mention the empty package", err.Error())
+	}
+}
+
+// An error message must not dump hundreds of releases. The newest n survive, and
+// the truncation is visible.
+func TestNewestPublished(t *testing.T) {
+	all := []string{"0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0"}
+
+	if got, want := newestPublished(all, 5), strings.Join(all, ", "); got != want {
+		t.Errorf("newestPublished(all, 5) = %q, want %q (nothing dropped at the boundary)", got, want)
+	}
+	if got, want := newestPublished(all, 2), "… 0.4.0, 0.5.0"; got != want {
+		t.Errorf("newestPublished(all, 2) = %q, want %q", got, want)
+	}
+	if got, want := newestPublished(all[:2], 5), "0.1.0, 0.2.0"; got != want {
+		t.Errorf("newestPublished on a short slice = %q, want %q", got, want)
+	}
+}
+
 // --- tarball extraction -------------------------------------------------------
 
 // registryTarball builds an npm-shaped gzipped tarball in memory. Keys are FULL
