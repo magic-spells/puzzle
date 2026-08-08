@@ -50,7 +50,7 @@ export default class T extends PuzzleView {}
 }
 
 // TestEmptyValueComponentProp asserts component props ride the same attrKV path:
-// <Child label="" /> passes '' — not true — to the child.
+// <Child label="" /> passes ” — not true — to the child.
 func TestEmptyValueComponentProp(t *testing.T) {
 	got := compileSrc(t, `<puzzle-view>
   <Child label="" />

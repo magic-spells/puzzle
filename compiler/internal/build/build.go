@@ -17,7 +17,6 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
-	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -82,6 +81,12 @@ func Build(root string, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("resolving app root: %w", err)
 	}
+
+	// Drop whatever a previous, interrupted build left behind before doing any
+	// work. Leftover output trees are not merely untidy: Tailwind v4 walks the
+	// project for sources, and a stale copy of dist/ under a name no gitignore
+	// rule matches turned a 112ms source scan into 14s on the reference site.
+	SweepWorkDirs(absRoot)
 
 	entry := filepath.Join(absRoot, "app", "app.js")
 	if _, err := os.Stat(entry); err != nil {
@@ -148,17 +153,24 @@ func Build(root string, opts Options) error {
 	// left the last good build as an EMPTY directory. Staging closes that hole: on
 	// any failure below, dist/ is left exactly as it was.
 	//
-	// The staging dir is a sibling of dist/ under the app root (via MkdirTemp in
-	// absRoot), so the final rename is same-filesystem (atomic, no cross-device
-	// copy). Building from scratch each time also prunes stale output for free — a
-	// since-removed public asset or a deleted view's chunk cannot linger, since the
-	// swapped-in tree only ever contains what this build produced.
+	// The staging dir lives in <root>/.puzzle/tmp — still under the app root, so
+	// the final rename into <root>/dist is same-filesystem (atomic, no
+	// cross-device copy), but inside the single self-ignoring scratch directory
+	// rather than as a sibling of dist/ that no gitignore rule matches (see
+	// workdir.go). Building from scratch each time also prunes stale output for
+	// free — a since-removed public asset or a deleted view's chunk cannot
+	// linger, since the swapped-in tree only ever contains what this build
+	// produced.
 	//
 	// One-shot path only: the incremental dev/watch path (watch.go) deliberately
 	// keeps dist warm and rebuilds in place — it is untouched here.
-	staging, err := os.MkdirTemp(absRoot, ".dist-staging-*")
+	workTmpDir, err := ensureWorkTmp(absRoot)
 	if err != nil {
-		return fmt.Errorf("creating build staging dir under %s: %w", absRoot, err)
+		return fmt.Errorf("creating the build scratch dir under %s: %w", absRoot, err)
+	}
+	staging, err := os.MkdirTemp(workTmpDir, stagingPrefix+"*")
+	if err != nil {
+		return fmt.Errorf("creating build staging dir under %s: %w", workTmpDir, err)
 	}
 	// MkdirTemp creates the dir 0700; dist/ is conventionally 0755 (it may be
 	// served directly), so match that after the swap-in.
@@ -172,13 +184,18 @@ func Build(root string, opts Options) error {
 		}
 	}()
 
-	pl := plugin.New(absRoot)
+	// One usage scan for the WHOLE build. The scan is a serial walk that parses
+	// every .pzl in the project, and a static build has three esbuild passes that
+	// each used to redo it over identical bytes. passContext computes it once and
+	// hands the same immutable result to every pass's plugin, so the profiler
+	// reports a single "usage scan" row and the three passes cannot disagree.
 	endScan := prof.phase("usage scan")
-	scanErr := scanUsage(absRoot, pl)
+	pc, scanErr := newPassContext(absRoot)
 	endScan()
 	if scanErr != nil {
 		return scanErr
 	}
+	pl := pc.plugin(absRoot)
 
 	// Takeover is a HYBRID-only capability for this bundle: only `output:
 	// 'hybrid'` emits a `data-puzzle-ssg` container for the router to adopt. A
@@ -265,7 +282,7 @@ func Build(root string, opts Options) error {
 	switch mode {
 	case "hybrid":
 		endHybrid := prof.phase("prerender (hybrid)")
-		hybridErr := prerenderHybrid(absRoot, staging, publicFiles)
+		hybridErr := prerenderHybrid(absRoot, staging, publicFiles, pc)
 		endHybrid()
 		if hybridErr != nil {
 			return hybridErr
@@ -273,7 +290,7 @@ func Build(root string, opts Options) error {
 	case "static":
 		// The per-page pass decides its own source-map mode from cfg + dev
 		// (staticPagesSourcemap), so there is no generate-then-delete pass here.
-		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development, prof); err != nil {
+		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development, prof, pc); err != nil {
 			return err
 		}
 	}
@@ -286,7 +303,7 @@ func Build(root string, opts Options) error {
 		return fmt.Errorf("refusing to replace unexpected dist path: %s", outdir)
 	}
 	endSwap := prof.phase("staging swap")
-	swapErr := swapOutput(staging, outdir)
+	swapErr := swapOutput(staging, outdir, workTmpDir)
 	endSwap()
 	if swapErr != nil {
 		return swapErr
@@ -316,10 +333,10 @@ func resolveOutputMode(flag string, cfg config.Config) (string, error) {
 }
 
 // swapOutput durably replaces outdir with staging. An existing output is moved
-// to a randomly named sibling first, keeping the last good build recoverable
-// until staging has landed. If that second rename fails, the old output is put
+// into workTmpDir under a random name first, keeping the last good build
+// recoverable until staging has landed. If that second rename fails, the old output is put
 // back; after success the old sibling is removed.
-func swapOutput(staging, outdir string) error {
+func swapOutput(staging, outdir, workTmpDir string) error {
 	switch _, err := os.Lstat(outdir); {
 	case os.IsNotExist(err):
 		if err := os.Rename(staging, outdir); err != nil {
@@ -330,10 +347,13 @@ func swapOutput(staging, outdir string) error {
 		return fmt.Errorf("checking dist %s: %w", outdir, err)
 	}
 
-	parent := filepath.Dir(outdir)
-	old, err := os.MkdirTemp(parent, filepath.Base(outdir)+".old-*")
+	// The holding dir goes in the same scratch tree as staging, not beside dist/:
+	// same filesystem (so renaming dist/ into it stays atomic), but a leftover
+	// from a failed cleanup lands somewhere gitignored instead of as an
+	// unignorable `dist.old-*` sibling.
+	old, err := os.MkdirTemp(workTmpDir, oldDistPrefix+"*")
 	if err != nil {
-		return fmt.Errorf("reserving previous dist path beside %s: %w", outdir, err)
+		return fmt.Errorf("reserving a path for the previous dist under %s: %w", workTmpDir, err)
 	}
 	if err := os.Remove(old); err != nil {
 		return fmt.Errorf("preparing previous dist path %s: %w", old, err)

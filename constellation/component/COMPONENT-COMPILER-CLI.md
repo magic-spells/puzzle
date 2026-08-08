@@ -53,7 +53,10 @@ Cobra command surface shipped by the platform binary:
   a generated two-module wrapper entry under `.puzzle/` so the `/fixtures`
   module installs before the app entry runs; requires the file, is rejected
   with `--static`/`--hybrid` (or a config `output`), and one-shot builds
-  remove `.puzzle/` afterward while dev keeps it for the process lifetime.
+  remove the generated `.puzzle/fixtures/` afterward while dev keeps it for the
+  process lifetime. `.puzzle/` itself now survives every build: it is the
+  compiler's scratch root, holding `tmp/` (staging + previous-dist holding dirs)
+  and a `.gitignore` of `*` that makes the whole directory self-ignoring.
 - `puzzle init <name>` embeds `default` and `todos` app trees, with optional
   TypeScript editor config. On a TTY it prompts for whatever was not given —
   missing name, then template, then TypeScript y/N (D77; explicit flags are

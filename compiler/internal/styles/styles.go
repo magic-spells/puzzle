@@ -9,6 +9,33 @@
 // The Tailwind invocation is behind the Runner interface so builds can be
 // exercised without the real toolchain (unit tests inject a fake), while the
 // production path shells out to the Tailwind CLI via npx.
+//
+// # What Tailwind v4 scans, and how the compiler stays out of its way
+//
+// Verified against @tailwindcss/cli 4.3.3. When the input CSS does not pin its
+// own sources — no `@import "tailwindcss" source(…)`, no `@source` directives —
+// the CLI registers ONE source root of `**/*` based at `--cwd`, which defaults
+// to process.cwd(). Both runners set the child's working directory to the app
+// root, so Tailwind walks the whole app root. The walk honors .gitignore, and
+// there is no CLI flag for excluding a path: negative sources exist only as
+// `@source not "…"` INSIDE the CSS, which is the user's file.
+//
+// So the only lever the compiler has over that scan is what is gitignored, and
+// the only tree it may take is its own. That is why every transient build
+// directory now lives under a self-ignoring `<root>/.puzzle/` (internal/build/
+// workdir.go): measured on 4.3.3, a `.dist-staging-*` or `dist.old-*` leftover
+// beside dist/ IS scanned even in a project whose .gitignore says `dist`, since
+// neither name matches that rule — ten of them took the reference site's source
+// scan from 112ms to 14s.
+//
+// dist/ ITSELF is deliberately left alone. In a project that gitignores dist
+// (the overwhelming default, and what every Puzzle template ships) it is
+// already excluded. In a project that does not, excluding it from Go would
+// change which sources Tailwind scans without the user asking — exactly the
+// user-visible behavior change this must not make — and the compiler cannot do
+// it without either rewriting the user's .gitignore, writing a .gitignore into
+// its own shipped output, or injecting `@source not` into the user's CSS. None
+// of those is worth it once the unignorable leftovers are gone.
 package styles
 
 import (

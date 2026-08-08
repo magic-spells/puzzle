@@ -106,10 +106,11 @@ func TestBuildFixturesInstallsModule(t *testing.T) {
 		}
 	}
 
-	// The wrapper is build scratch, not app source: a one-shot build that created
-	// .puzzle/ takes it away again, on success as well as on failure.
-	if _, err := os.Stat(filepath.Join(root, ".puzzle")); !os.IsNotExist(err) {
-		t.Errorf(".puzzle survived a one-shot --fixtures build (stat err = %v)", err)
+	// The wrapper is build scratch, not app source: a one-shot build takes it
+	// away again, on success as well as on failure. .puzzle itself stays — every
+	// build keeps its transient dirs in .puzzle/tmp (workdir.go).
+	if _, err := os.Stat(filepath.Join(root, ".puzzle", "fixtures")); !os.IsNotExist(err) {
+		t.Errorf("the generated wrapper survived a one-shot --fixtures build (stat err = %v)", err)
 	}
 }
 
@@ -131,8 +132,10 @@ func TestBuildWithoutFixturesOmitsModule(t *testing.T) {
 			t.Errorf("a bundle built WITHOUT --fixtures retained %q — app/fixtures.js must only be wired in by the flag", marker)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(root, ".puzzle")); !os.IsNotExist(err) {
-		t.Errorf("a build without --fixtures must not create .puzzle (stat err = %v)", err)
+	// No wrapper is generated without the flag; .puzzle exists only as the
+	// build's scratch root.
+	if _, err := os.Stat(filepath.Join(root, ".puzzle", "fixtures")); !os.IsNotExist(err) {
+		t.Errorf("a build without --fixtures must not generate a wrapper (stat err = %v)", err)
 	}
 }
 
@@ -272,6 +275,9 @@ func TestCleanupFixturesWorkDirNeverEatsUserContent(t *testing.T) {
 	cleanupFixturesWorkDir(root, false)
 	if _, err := os.Stat(filepath.Join(root, ".puzzle")); err != nil {
 		t.Errorf("a pre-existing .puzzle (created = false) must survive: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".puzzle", "fixtures")); !os.IsNotExist(err) {
+		t.Errorf("the generated wrapper is compiler scratch and must go regardless (stat err = %v)", err)
 	}
 
 	root = newWorkDir(t)

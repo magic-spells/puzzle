@@ -87,15 +87,31 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 }
 
 func scanUsage(absRoot string, pl *plugin.Plugin) error {
-	// Scan the whole project, not just app/, so a .pzl imported from a sibling
-	// directory still contributes its usage (the scan errs toward
-	// over-inclusion; see plugin.ScanUsage).
-	usage, err := plugin.ScanUsage(absRoot)
+	usage, err := scanUsageOnce(absRoot)
 	if err != nil {
-		return fmt.Errorf("scanning project usage: %w", err)
+		return err
 	}
 	pl.SetUsage(usage)
 	return nil
+}
+
+// scanUsageOnce performs the project-wide usage walk and returns its immutable
+// result. Scan the whole project, not just app/, so a .pzl imported from a
+// sibling directory still contributes its usage (the scan errs toward
+// over-inclusion; see plugin.ScanUsage).
+//
+// A full static build runs THREE esbuild passes over the same sources (browser
+// app.js, the node prerender bundle, the per-page browser bundles). The usage
+// facts are a property of the source tree, not of the pass, so a one-shot
+// build.Build scans once and hands the same Usage to all three (see
+// passContext). Only the long-lived dev/watch builder re-scans, and only when a
+// .pzl actually changed.
+func scanUsageOnce(absRoot string) (plugin.Usage, error) {
+	usage, err := plugin.ScanUsage(absRoot)
+	if err != nil {
+		return plugin.Usage{}, fmt.Errorf("scanning project usage: %w", err)
+	}
+	return usage, nil
 }
 
 func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Plugin) {

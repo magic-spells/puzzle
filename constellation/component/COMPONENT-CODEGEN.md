@@ -44,6 +44,14 @@ imports, and `ClassName.prototype.render = function () { … }`. The user class
 body is never rewritten. Class extraction is LexSkip-aware and requires a real
 named `export default class … extends …` declaration.
 
+The `<script>` body is tokenized ONCE per compile (`tokenizeJS`, scriptcollide.go)
+and the one stream feeds all three consumers that used to lex those same bytes
+independently: class-name extraction, the import-collision warning scan, and the
+reserved-binding check. Tokens carry a `comment` bit because the consumers
+disagree about opaque units — a comment is whitespace to the class-keyword
+adjacency rule (`export default /* x */ class Foo {}` is a declaration) while a
+string or regex breaks it, and the binding scans treat every opaque unit alike.
+
 Mode comes from the app-relative path. Views/layouts preserve the
 `<puzzle-view>` root; inline components require one render root and do not emit
 a wrapper. Scope-aware expression rewriting prefixes model identifiers while
@@ -109,7 +117,16 @@ and remount it. A generated-key range loop stays stable and counts as zero
 slots. Balanced branches emit unchanged.
 
 Inline SVG reads one app asset, validates a literal root, emits an island SVG
-vnode, and registers the file with esbuild watch inputs. Scoped styles share a
+vnode, and registers the file with esbuild watch inputs. The read + scan is
+memoized per absolute path in an optional build-scoped `SVGCache`
+(`Options.SVGCache`), which the esbuild plugin also shares with its shared-asset
+virtual module loader — so an icon used at N sites across M files and three
+passes is read and parsed once, not 3N+1 times. The scan is NOT skipped in dedup
+mode even though `emitRawSVG` discards the attrs there: "valid" is defined by the
+scan, and a `<div>` root must still fail the .pzl compile with a ParseError
+positioned inside the SVG. Memoized scans hand out a COPY of the attr slice —
+`forBody` prepends a synthetic loop `key`, which would otherwise write through
+into every other use site. Scoped styles share a
 stable app-relative path hash with the plugin's `@scope` wrapper.
 
 Golden tests byte-compare focused fixtures plus the canonical todos output and

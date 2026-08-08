@@ -23,6 +23,17 @@ verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 
 The `.pzl` onLoad plugin reads a file, splits/parses it, generates JavaScript,
 and returns positioned esbuild messages without writing intermediate modules.
+The transform itself is pass-INDEPENDENT — the generated module is a pure
+function of (app root, path, bytes), since platform, dev/prod, defines and
+minification are applied to it afterwards by esbuild — so a one-shot build
+memoizes it in a build-scoped `CompileCache` shared by all three plugin
+instances. A pass that hits the memo still does its own per-pass work:
+registering the file's `<style>` block in ITS collector (never on a failed
+compile) and returning fresh copies of the message/watch-file slices. Codegen's
+out-of-band warnings print from the memo's compute function, so they appear once
+per build rather than once per pass. The cache is never attached on the
+watch/dev path, which keeps esbuild's own incremental onLoad cache the only memo
+there.
 Scripts use JS or TS loader according to `<script lang>`; styles collect in a
 mutex-protected path map; inline SVG dependencies join esbuild's watch set.
 
@@ -32,6 +43,20 @@ minifies, and drops console calls unless `build.dropConsole: false`; development
 keeps readable output and console. Failed builds discard staging and preserve
 the last good dist. Success renames old output aside, installs staging, then
 removes the backup. Path-containment guards protect every swap target.
+
+Every transient directory a build needs lives under `<root>/.puzzle/tmp/` —
+the staging tree (`staging-*`) and swapOutput's holding dir for the previous
+output (`dist-old-*`), which used to be `.dist-staging-*` / `dist.old-*`
+siblings of `dist/`. Same filesystem, so the install is still an atomic rename;
+but `<root>/.puzzle` carries a `.gitignore` holding `*`, so a leftover from a
+killed build is invisible to every tool that respects gitignore. That matters
+beyond tidiness: Tailwind v4 walks the project for sources, and a stale copy of
+`dist/` under a name no `dist` ignore rule matches turned a 112ms source scan
+into 14s on the reference site. `Build` and `puzzle dev` both call
+`SweepWorkDirs` at startup, which removes entries under `.puzzle/tmp` — and
+legacy `.dist-staging-*` / `dist.old-*` siblings, so existing projects self-heal
+— matching the exact known prefixes, real directories only (never a symlink),
+untouched for over ten minutes so a concurrently running build survives.
 
 Public assets come from `app/public` with a root `public` fallback. Reserved
 generated names (`app.js`, its map, `styles.css`) are rejected case-insensitively
@@ -76,9 +101,12 @@ the virtual formatter manifest from observed built-ins, while element attrs or
 component props named `flip` drive the literal `__PUZZLE_HAS_FLIP__` esbuild
 define. Since [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]] that is the ONLY
 usage define: the managed-head gate and its raw `.js`/`.ts` token scan are gone,
-so the walk reads only `.pzl` files. Every one-shot, watch/dev, and per-page
-static bundle recomputes or receives the same usage so the runtime probes fold
-without risking a false-negative. Esbuild
+so the walk reads only `.pzl` files. The scan runs ONCE per `build.Build`
+and its immutable result is threaded to every pass through a `passContext` —
+the constructor build code uses instead of `plugin.New`, so a pass cannot start
+from an unscanned zero `Usage` and drop a used runtime module. A static build's
+three esbuild passes previously each redid the walk over identical bytes. Only
+the long-lived watch/dev builder still re-scans, and only when a `.pzl` changed. Esbuild
 re-runs the formatter virtual module's `OnLoad` on every rebuild; this is
 regression-guarded by `TestFormatterManifestFreshAcrossIncrementalRebuilds`.
 

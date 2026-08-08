@@ -34,6 +34,9 @@ type Plugin struct {
 	formatters map[string]bool
 	features   Features // DCE define bits from the most recent SetUsage
 	runtimeDir string
+	// cache is the build-scoped .pzl transform memo shared with this build's
+	// other esbuild passes, or nil for "transform every time" (WatchBuilder).
+	cache *CompileCache
 }
 
 // New creates a Plugin rooted at the app directory (the directory containing
@@ -96,45 +99,26 @@ func (p *Plugin) setup(build api.PluginBuild) {
 			return api.OnLoadResult{}, err
 		}
 
-		// App-relative filename: drives ModeForPath (app/views, app/layouts →
-		// view mode) and makes error locations readable. Fall back to the
-		// absolute path if it is somehow outside the root.
-		name := p.relName(args.Path)
+		p.mu.Lock()
+		cache := p.cache
+		p.mu.Unlock()
 
-		sec, serr := parser.SplitSections(string(src), name)
-		if serr != nil {
-			return api.OnLoadResult{Errors: toMessages(serr, name)}, nil
-		}
-
-		res, cerr := codegen.Compile(sec, codegen.Options{
-			Filename: name,
-			Mode:     codegen.ModeForPath(name),
-			// The app-relative name is also the module stamp (D81): view/layout
-			// classes carry Class.__pzlModule so the static-pages build can map a
-			// route back to its source .pzl for per-page entry generation.
-			ModulePath: name,
-			AssetsDir:  p.assetsDir,
-			// Bundled builds dedup {#svg} into shared virtual modules (D46
-			// amendment); the standalone pzlc path leaves this off and inlines.
-			SVGDedup: true,
+		// The transform itself is pass-independent, so it runs at most once per
+		// (root, file, bytes) across the whole build (see cache.go). Everything
+		// below the memo is per-PASS work: this pass's CSS collector and the
+		// esbuild result it hands back.
+		res := cache.load(p.appRoot, args.Path, src, func() pzlResult {
+			return p.transformPZL(args.Path, src)
 		})
-		if cerr != nil {
+
+		if len(res.errs) > 0 {
 			// Never emit partial output for a failed file (§e). WatchFiles still
 			// carries any {#svg} paths seen (incl. a missing one) so esbuild
 			// invalidates this cached failure once the file appears (D46).
 			return api.OnLoadResult{
-				Errors:     toMessages(cerr, name),
-				WatchFiles: res.InlinedFiles,
+				Errors:     append([]api.Message(nil), res.errs...),
+				WatchFiles: append([]string(nil), res.watchFiles...),
 			}, nil
-		}
-		out := res.JS
-
-		// Out-of-band codegen warnings (e.g. a template expression referencing a
-		// <script> import). The bundle build runs at LogLevelSilent, so print
-		// directly to stderr rather than routing through esbuild's suppressed
-		// warning channel; the generated JS is unaffected.
-		for _, w := range res.Warnings {
-			fmt.Fprintf(os.Stderr, "%s:%d:%d: warning: %s\n", w.File, w.Line, w.Col, w.Message)
 		}
 
 		// Set-or-delete keeps the collector correct across incremental rebuilds
@@ -142,43 +126,107 @@ func (p *Plugin) setup(build api.PluginBuild) {
 		// a file edited to REMOVE its <style> must drop its old entry, not keep
 		// the stale block. onLoad re-runs for every changed file, so this fires
 		// whenever a .pzl's styles appear or disappear. Deleted files (whose
-		// onLoad never re-runs) are pruned separately in CSS().
+		// onLoad never re-runs) are pruned separately in CSS(). It runs on a memo
+		// HIT too — the block belongs to THIS pass's map, not to the memo. A file
+		// that failed to compile returned above without touching the map, exactly
+		// as before: a broken edit must not drop the last good block.
 		p.mu.Lock()
-		if sec.HasStyles {
-			body := sec.Styles
-			if sec.StylesScoped {
-				// Scoped styles (v1.27, D59): wrap the verbatim block in a native
-				// @scope rule keyed by the SAME scope id codegen stamped on the root
-				// (codegen.ScopeID over the same app-relative `name`), so the rule and
-				// the data-<scopeId> attribute always agree. Aggregation/sorting/
-				// pruning and the Tailwind pipeline are untouched — @scope is plain CSS.
-				body = "@scope ([data-" + codegen.ScopeID(name) + "]) {\n" + body + "\n}"
-			}
-			p.css[args.Path] = body
+		if res.hasStyles {
+			p.css[args.Path] = res.cssBody
 		} else {
 			delete(p.css, args.Path)
 		}
 		p.mu.Unlock()
 
-		// TypeScript scripts (v1.22, D54): <script lang="ts"> marks the whole
-		// generated module TS so esbuild strips types (transpile-only, like Vite).
-		// The injected render tail + runtime import are plain JS, which is valid TS,
-		// so one loader covers the mixed module. Absent lang → LoaderJS, byte-for-byte
-		// as before.
-		loader := api.LoaderJS
-		if sec.ScriptsLang == "ts" {
-			loader = api.LoaderTS
-		}
+		out := res.js
 		return api.OnLoadResult{
 			Contents:   &out,
-			Loader:     loader,
+			Loader:     res.loader,
 			ResolveDir: filepath.Dir(args.Path),
 			// WatchFiles = {#svg}-inlined files: esbuild's incremental context caches
 			// OnLoad results, so an edit to an inlined svg would otherwise not rebuild
 			// this .pzl. Listing them invalidates the cache on the next Rebuild (D46).
-			WatchFiles: res.InlinedFiles,
+			WatchFiles: append([]string(nil), res.watchFiles...),
 		}, nil
 	})
+}
+
+// transformPZL is the pass-independent half of the .pzl onLoad: split, compile,
+// and package the results. It is the memo's compute function, so it runs at most
+// once per (app root, path, content) per build — which is also why the codegen
+// warnings are printed HERE. They land once per build instead of once per esbuild
+// pass; three identical copies of the same advisory said nothing extra and made
+// a static build's log look like three failures.
+func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
+	p.mu.Lock()
+	svgCache := p.cache.svgCache()
+	p.mu.Unlock()
+
+	// App-relative filename: drives ModeForPath (app/views, app/layouts →
+	// view mode) and makes error locations readable. Fall back to the
+	// absolute path if it is somehow outside the root.
+	name := p.relName(path)
+	out := pzlResult{name: name, loader: api.LoaderJS}
+
+	sec, serr := parser.SplitSections(string(src), name)
+	if serr != nil {
+		out.errs = toMessages(serr, name)
+		return out
+	}
+
+	if sec.HasStyles {
+		out.hasStyles = true
+		out.cssBody = sec.Styles
+		if sec.StylesScoped {
+			// Scoped styles (v1.27, D59): wrap the verbatim block in a native
+			// @scope rule keyed by the SAME scope id codegen stamped on the root
+			// (codegen.ScopeID over the same app-relative `name`), so the rule and
+			// the data-<scopeId> attribute always agree. Aggregation/sorting/
+			// pruning and the Tailwind pipeline are untouched — @scope is plain CSS.
+			out.cssBody = "@scope ([data-" + codegen.ScopeID(name) + "]) {\n" + sec.Styles + "\n}"
+		}
+	}
+
+	// TypeScript scripts (v1.22, D54): <script lang="ts"> marks the whole
+	// generated module TS so esbuild strips types (transpile-only, like Vite).
+	// The injected render tail + runtime import are plain JS, which is valid TS,
+	// so one loader covers the mixed module. Absent lang → LoaderJS, byte-for-byte
+	// as before.
+	if sec.ScriptsLang == "ts" {
+		out.loader = api.LoaderTS
+	}
+
+	res, cerr := codegen.Compile(sec, codegen.Options{
+		Filename: name,
+		Mode:     codegen.ModeForPath(name),
+		// The app-relative name is also the module stamp (D81): view/layout
+		// classes carry Class.__pzlModule so the static-pages build can map a
+		// route back to its source .pzl for per-page entry generation.
+		ModulePath: name,
+		AssetsDir:  p.assetsDir,
+		// Bundled builds dedup {#svg} into shared virtual modules (D46
+		// amendment); the standalone pzlc path leaves this off and inlines.
+		SVGDedup: true,
+		// One read + scan per {#svg} asset per build, shared with the virtual
+		// asset-module loader below (nil on the watch path — no memo).
+		SVGCache: svgCache,
+	})
+	out.watchFiles = res.InlinedFiles
+	out.warnings = res.Warnings
+	if cerr != nil {
+		out.errs = toMessages(cerr, name)
+		return out
+	}
+	out.js = res.JS
+
+	// Out-of-band codegen warnings (e.g. a template expression referencing a
+	// <script> import). The bundle build runs at LogLevelSilent, so print
+	// directly to stderr rather than routing through esbuild's suppressed
+	// warning channel; the generated JS is unaffected.
+	for _, w := range res.Warnings {
+		fmt.Fprintf(os.Stderr, "%s:%d:%d: warning: %s\n", w.File, w.Line, w.Col, w.Message)
+	}
+	return out
 }
 
 // CSS returns every collected <style> block, sorted by source file path and

@@ -18,7 +18,6 @@ package plugin
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -50,13 +49,9 @@ func (p *Plugin) setupSVGAssets(build api.PluginBuild) {
 	})
 
 	build.OnLoad(api.OnLoadOptions{Filter: ".*", Namespace: svgAssetNamespace}, func(args api.OnLoadArgs) (api.OnLoadResult, error) {
-		data, err := os.ReadFile(args.Path)
-		if err != nil {
-			return api.OnLoadResult{Errors: []api.Message{{Text: err.Error()}}}, nil
-		}
-
 		p.mu.Lock()
 		runtimeDir := p.runtimeDir
+		svgCache := p.cache.svgCache()
 		p.mu.Unlock()
 		viewNodeImport := "@magic-spells/puzzle"
 		if runtimeDir != "" {
@@ -64,9 +59,16 @@ func (p *Plugin) setupSVGAssets(build api.PluginBuild) {
 		}
 
 		// Position a malformed-file error inside the svg (matches the .pzl-compile
-		// error the codegen path already reports for the same file).
+		// error the codegen path already reports for the same file). The name is
+		// also codegen's memo key for this asset, so a build that already compiled
+		// a .pzl referencing this icon reuses that read + scan instead of a third.
 		name := p.relName(args.Path)
-		out, cerr := codegen.SVGAssetModule(data, name, viewNodeImport)
+		scanned := svgCache.Load(args.Path, name)
+		if scanned.ReadErr != nil {
+			return api.OnLoadResult{Errors: []api.Message{{Text: scanned.ReadErr.Error()}}}, nil
+		}
+
+		out, cerr := codegen.SVGAssetModuleFrom(scanned, name, viewNodeImport)
 		if cerr != nil {
 			return api.OnLoadResult{
 				Errors:     toMessages(cerr, name),

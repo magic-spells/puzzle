@@ -17,7 +17,6 @@ package codegen
 
 import (
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -114,20 +113,25 @@ func (c *compiler) resolveOneSVG(n *parser.InlineSVG, assetsDir string, inlined 
 	full := filepath.Join(assetsDir, filepath.FromSlash(src))
 	*inlined = append(*inlined, full)
 
-	data, err := os.ReadFile(full)
-	if err != nil {
-		return nil, c.cgErr(n.SrcPos, fmt.Sprintf("cannot inline %q — no such file at %s ({#svg} paths resolve from app/assets/)", src, full))
-	}
-
 	// App-root-relative-looking name so a malformed-file ParseError reads well in
 	// the build output (e.g. "app/assets/icons/heart.svg:1:1: …").
 	name := "app/assets/" + path.Clean(src)
-	attrs, inner, serr := parser.ScanSVGFile(data, name)
-	if serr != nil {
-		return nil, serr
+	// One read + scan per asset per build, however many use sites reference it
+	// (svgcache.go). With no cache configured this is the original inline
+	// read-and-scan, byte for byte.
+	scanned := c.svgCache.Load(full, name)
+	if scanned.ReadErr != nil {
+		return nil, c.cgErr(n.SrcPos, fmt.Sprintf("cannot inline %q — no such file at %s ({#svg} paths resolve from app/assets/)", src, full))
+	}
+	if scanned.ScanErr != nil {
+		return nil, scanned.ScanErr
 	}
 
-	seed := inner
+	seed := scanned.Inner
+	// The attrs slice is shared with every other use site through the memo, and
+	// forBody prepends a synthetic `key` to a loop body root's attrs — so hand
+	// out a copy rather than a view that an append could write through.
+	attrs := append([]parser.Attr(nil), scanned.Attrs...)
 	return &parser.Element{Tag: "svg", Attrs: attrs, RawInner: &seed, RawSrc: src, Pos: n.Pos}, nil
 }
 
@@ -271,6 +275,22 @@ func SVGAssetModule(data []byte, filename, viewNodeImport string) (string, error
 	if err != nil {
 		return "", err
 	}
+	return svgAssetModule(attrs, inner, filename, viewNodeImport)
+}
+
+// SVGAssetModuleFrom builds the same module from an ALREADY-scanned asset, so a
+// plugin that shares codegen's SVGCache does not re-read and re-parse a file the
+// .pzl compile already validated in this build. A scan error is returned
+// unchanged — it is the same positioned *parser.ParseError SVGAssetModule would
+// have produced.
+func SVGAssetModuleFrom(s *ScannedSVG, filename, viewNodeImport string) (string, error) {
+	if s.ScanErr != nil {
+		return "", s.ScanErr
+	}
+	return svgAssetModule(s.Attrs, s.Inner, filename, viewNodeImport)
+}
+
+func svgAssetModule(attrs []parser.Attr, inner, filename, viewNodeImport string) (string, error) {
 	c := &compiler{file: filename}
 	attrsLit, err := c.svgAttrsLiteral(attrs)
 	if err != nil {

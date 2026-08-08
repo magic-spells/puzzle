@@ -905,27 +905,43 @@ func TestBuildPrunesStaleDist(t *testing.T) {
 }
 
 func TestSwapOutput(t *testing.T) {
+	// The previous dist is held in <root>/.puzzle/tmp during the swap; nothing
+	// may survive there afterwards.
 	assertNoOldResidue := func(t *testing.T, root string) {
 		t.Helper()
-		entries, err := os.ReadDir(root)
+		entries, err := os.ReadDir(workTmp(root))
 		if err != nil {
+			if os.IsNotExist(err) {
+				return
+			}
 			t.Fatal(err)
 		}
 		for _, entry := range entries {
-			if strings.HasPrefix(entry.Name(), "dist.old-") {
+			if strings.HasPrefix(entry.Name(), oldDistPrefix) {
 				t.Errorf("leftover previous-dist directory: %s", entry.Name())
 			}
 		}
 	}
 
+	// newStaging creates a staging tree where a build would put it.
+	newStaging := func(t *testing.T, root string) (string, string) {
+		t.Helper()
+		tmp, err := ensureWorkTmp(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		staging := filepath.Join(tmp, stagingPrefix+"test")
+		if err := os.MkdirAll(staging, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return staging, tmp
+	}
+
 	t.Run("replaces existing dist and removes old sibling", func(t *testing.T) {
 		root := t.TempDir()
 		dist := filepath.Join(root, "dist")
-		staging := filepath.Join(root, ".dist-staging-test")
+		staging, tmp := newStaging(t, root)
 		if err := os.MkdirAll(dist, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.MkdirAll(staging, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(dist, "old.txt"), []byte("old"), 0o644); err != nil {
@@ -935,7 +951,7 @@ func TestSwapOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := swapOutput(staging, dist); err != nil {
+		if err := swapOutput(staging, dist, tmp); err != nil {
 			t.Fatalf("swapOutput: %v", err)
 		}
 		if got, err := os.ReadFile(filepath.Join(dist, "new.txt")); err != nil || string(got) != "new" {
@@ -950,15 +966,12 @@ func TestSwapOutput(t *testing.T) {
 	t.Run("first build installs without an old sibling", func(t *testing.T) {
 		root := t.TempDir()
 		dist := filepath.Join(root, "dist")
-		staging := filepath.Join(root, ".dist-staging-test")
-		if err := os.MkdirAll(staging, 0o755); err != nil {
-			t.Fatal(err)
-		}
+		staging, tmp := newStaging(t, root)
 		if err := os.WriteFile(filepath.Join(staging, "app.js"), []byte("first"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := swapOutput(staging, dist); err != nil {
+		if err := swapOutput(staging, dist, tmp); err != nil {
 			t.Fatalf("swapOutput: %v", err)
 		}
 		if got, err := os.ReadFile(filepath.Join(dist, "app.js")); err != nil || string(got) != "first" {
@@ -977,7 +990,11 @@ func TestSwapOutput(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		err := swapOutput(filepath.Join(root, "missing-staging"), dist)
+		tmp, tmpErr := ensureWorkTmp(root)
+		if tmpErr != nil {
+			t.Fatal(tmpErr)
+		}
+		err := swapOutput(filepath.Join(root, "missing-staging"), dist, tmp)
 		if err == nil {
 			t.Fatal("expected the missing staging rename to fail")
 		}
@@ -999,15 +1016,12 @@ func TestSwapOutput(t *testing.T) {
 		}
 		root := t.TempDir()
 		dist := filepath.Join(root, "dist")
-		staging := filepath.Join(root, ".dist-staging-test")
+		staging, tmp := newStaging(t, root)
 		locked := filepath.Join(dist, "locked")
 		if err := os.MkdirAll(locked, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(locked, "pinned.txt"), []byte("x"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.MkdirAll(staging, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(staging, "app.js"), []byte("new"), 0o644); err != nil {
@@ -1029,7 +1043,7 @@ func TestSwapOutput(t *testing.T) {
 		})
 
 		var swapErr error
-		stderr := captureStderr(t, func() { swapErr = swapOutput(staging, dist) })
+		stderr := captureStderr(t, func() { swapErr = swapOutput(staging, dist, tmp) })
 		if swapErr != nil {
 			t.Fatalf("swapOutput reported a failure for a build that succeeded: %v", swapErr)
 		}
@@ -1040,13 +1054,13 @@ func TestSwapOutput(t *testing.T) {
 			t.Errorf("expected a warning naming the leftover dist, got: %q", stderr)
 		}
 		// The undeletable tree is left behind on purpose — it is named in the warning.
-		entries, err := os.ReadDir(root)
+		entries, err := os.ReadDir(tmp)
 		if err != nil {
 			t.Fatal(err)
 		}
 		var leftovers int
 		for _, entry := range entries {
-			if strings.HasPrefix(entry.Name(), "dist.old-") {
+			if strings.HasPrefix(entry.Name(), oldDistPrefix) {
 				leftovers++
 			}
 		}
@@ -1135,13 +1149,13 @@ func TestBuildFailedCompileLeavesDistIntact(t *testing.T) {
 		t.Errorf("dist/app.js changed despite the build failing:\nbefore=%q\nafter=%q", before, after)
 	}
 
-	// The staging dir must be cleaned up on failure (no .dist-staging-* leftovers).
-	entries, err := os.ReadDir(root)
+	// The staging dir must be cleaned up on failure (nothing left in .puzzle/tmp).
+	entries, err := os.ReadDir(workTmp(root))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), ".dist-staging-") {
+		if strings.HasPrefix(e.Name(), stagingPrefix) {
 			t.Errorf("leftover staging dir after failed build: %s", e.Name())
 		}
 	}
