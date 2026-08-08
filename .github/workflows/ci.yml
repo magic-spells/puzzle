@@ -6,7 +6,11 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # The sheet motion suites pin EXACT floats minted on macOS/arm64 (ported
+    # byte-identical from @magic-spells/sheet — assertions are never loosened
+    # to fit a platform). ubuntu/x64 rounds one accumulated step differently
+    # in the last ULP, so the pins must run on the platform that minted them.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
