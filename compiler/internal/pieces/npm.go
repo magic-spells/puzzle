@@ -85,6 +85,9 @@ func PinNpmSource(source, version string) (string, error) {
 		return "", fmt.Errorf("--pieces-version only applies to an npm registry source, and the source is %q", source)
 	}
 	pkg, pin := splitNpmSpec(strings.TrimPrefix(source, npmScheme))
+	if pkg == "" {
+		return "", fmt.Errorf("registry source %q names no npm package", source)
+	}
 	if pin != "" {
 		return "", fmt.Errorf("registry source %q already pins @%s — drop --pieces-version or the pin", source, pin)
 	}

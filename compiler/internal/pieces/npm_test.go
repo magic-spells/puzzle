@@ -128,12 +128,19 @@ func TestPinNpmSource(t *testing.T) {
 		t.Errorf("PinNpmSource = %q, want %q", got, want)
 	}
 
-	if _, err := PinNpmSource("/some/dir", "0.6.2"); err == nil {
-		t.Error("PinNpmSource(\"/some/dir\") = nil error, want an error")
+	if _, err := PinNpmSource("/some/dir", "0.6.2"); err == nil ||
+		!strings.Contains(err.Error(), "only applies to an npm registry source") {
+		t.Errorf("PinNpmSource(\"/some/dir\") = %v, want a non-npm source error", err)
 	}
 
-	if _, err := PinNpmSource("npm:@magic-spells/puzzle-pieces@0.5.0", "0.6.2"); err == nil {
-		t.Error("PinNpmSource on an already-pinned source = nil error, want an error")
+	if _, err := PinNpmSource("npm:@magic-spells/puzzle-pieces@0.5.0", "0.6.2"); err == nil ||
+		!strings.Contains(err.Error(), "already pins") {
+		t.Errorf("PinNpmSource on an already-pinned source = %v, want an already-pinned error", err)
+	}
+
+	if _, err := PinNpmSource("npm:", "0.6.2"); err == nil ||
+		!strings.Contains(err.Error(), "names no npm package") {
+		t.Errorf("PinNpmSource(\"npm:\") = %v, want an empty-package error", err)
 	}
 }
 

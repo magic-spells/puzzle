@@ -437,7 +437,7 @@ func TestAddSkillsNoDetectedTargetsIsFriendlyNoOp(t *testing.T) {
 		homeDir:     func() (string, error) { return home, nil },
 		interactive: false,
 	}
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env); err != nil {
 		t.Fatalf("add skills with no targets: %v", err)
 	}
 	if out := buf.String(); !strings.Contains(out, "nothing to install") {
@@ -458,7 +458,7 @@ func TestAddSkillsNonInteractiveInstallsAllDetectedTargets(t *testing.T) {
 		homeDir:     func() (string, error) { return home, nil },
 		interactive: false,
 	}
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env); err != nil {
 		t.Fatalf("add skills: %v", err)
 	}
 
@@ -493,7 +493,7 @@ func TestAddSkillsOverwriteRefusalAndSuccess(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env); err != nil {
 		t.Fatalf("initial add skills: %v", err)
 	}
 	skillPath := filepath.Join(home, ".claude", "skills", "puzzle", "SKILL.md")
@@ -511,7 +511,7 @@ func TestAddSkillsOverwriteRefusalAndSuccess(t *testing.T) {
 	}
 
 	buf.Reset()
-	err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skill"}, "", false, env)
+	err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skill"}, "", "", false, env)
 	if err == nil {
 		t.Fatal("expected existing skill directory to be refused")
 	}
@@ -530,7 +530,7 @@ func TestAddSkillsOverwriteRefusalAndSuccess(t *testing.T) {
 	}
 
 	buf.Reset()
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skill"}, "", true, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skill"}, "", "", true, env); err != nil {
 		t.Fatalf("add skill --overwrite: %v", err)
 	}
 	want, err := fs.ReadFile(embeddedskills.FS, "puzzle/SKILL.md")
@@ -563,7 +563,7 @@ func TestAddSkillsExplicitRootsSkipDetectionAndPrompt(t *testing.T) {
 		interactive: true, // and must not prompt either
 		skillRoots:  []string{root},
 	}
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env); err != nil {
 		t.Fatalf("add skills --skill-root: %v", err)
 	}
 
@@ -590,7 +590,7 @@ func TestAddSkillsExplicitRootMustExist(t *testing.T) {
 		skillRoots: []string{missing},
 	}
 	var buf bytes.Buffer
-	err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env)
+	err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env)
 	if err == nil || !strings.Contains(err.Error(), "does not exist") {
 		t.Fatalf("expected a missing --skill-root to error, got %v", err)
 	}
@@ -653,7 +653,7 @@ func TestAddSkillsPromptConfirmedReplacesStaleInstall(t *testing.T) {
 		interactive: true,
 		skillRoots:  []string{filepath.Join(home, ".codex")},
 	}
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env); err != nil {
 		t.Fatalf("add skills: %v", err)
 	}
 	if *calls != 1 {
@@ -694,7 +694,7 @@ func TestAddSkillsPromptDeclinedKeepsExistingAndInstallsFresh(t *testing.T) {
 		interactive: true,
 		skillRoots:  []string{filepath.Join(home, ".codex"), filepath.Join(home, ".cursor")},
 	}
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env); err != nil {
 		t.Fatalf("add skills: %v", err)
 	}
 
@@ -730,7 +730,7 @@ func TestAddSkillsUpToDateInstallIsSkippedWithoutPrompting(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env); err != nil {
 		t.Fatalf("initial add skills: %v", err)
 	}
 	dest := filepath.Join(root, "skills", "puzzle")
@@ -741,7 +741,7 @@ func TestAddSkillsUpToDateInstallIsSkippedWithoutPrompting(t *testing.T) {
 
 	calls := stubSkillConfirm(t, true)
 	buf.Reset()
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env); err != nil {
 		t.Fatalf("second add skills: %v", err)
 	}
 	if *calls != 0 {
@@ -764,7 +764,7 @@ func TestAddSkillsUpToDateInstallIsSkippedWithoutPrompting(t *testing.T) {
 
 	// --overwrite is the documented escape, and must not need a version bump.
 	buf.Reset()
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", true, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", true, env); err != nil {
 		t.Fatalf("add skills --overwrite: %v", err)
 	}
 	restored, err := os.ReadFile(filepath.Join(dest, "SKILL.md"))
@@ -809,7 +809,7 @@ func TestAddSkillsSkipsSymlinkedDestination(t *testing.T) {
 		interactive: true,
 		skillRoots:  []string{root},
 	}
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", false, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", false, env); err != nil {
 		t.Fatalf("add skills: %v", err)
 	}
 	if *calls != 0 {
@@ -859,7 +859,7 @@ func TestAddSkillsOverwriteWritesThroughSymlink(t *testing.T) {
 		interactive: false,
 		skillRoots:  []string{root},
 	}
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", true, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", true, env); err != nil {
 		t.Fatalf("add skills --overwrite: %v", err)
 	}
 	got, err := os.ReadFile(filepath.Join(checkout, "SKILL.md"))
@@ -896,7 +896,7 @@ func TestAddSkillsOverwritePrunesFilesTheEmbeddedTreeDropped(t *testing.T) {
 		interactive: false,
 		skillRoots:  []string{root},
 	}
-	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", true, env); err != nil {
+	if err := runAddWithEnvironment(&buf, plainPrinter(), t.TempDir(), []string{"skills"}, "", "", true, env); err != nil {
 		t.Fatalf("add skills --overwrite: %v", err)
 	}
 	if fsFileExists(orphan) {
@@ -989,5 +989,21 @@ func writeFixtureFile(t *testing.T, root, rel, content string) {
 	}
 	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestAddPiecesVersionRequiresNpmSource pins the flag's failure mode: the pin is
+// applied after the app-root walk-up, so the app dir carries a package.json and
+// the only error left to surface is PinNpmSource refusing a directory source.
+func TestAddPiecesVersionRequiresNpmSource(t *testing.T) {
+	app := t.TempDir()
+	if err := os.WriteFile(filepath.Join(app, "package.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	err := runAddWithEnvironment(&buf, plainPrinter(), app, []string{"piece", "button"}, "/some/dir", "0.6.2", false, addEnvironment{})
+	if err == nil || !strings.Contains(err.Error(), "only applies to an npm registry source") {
+		t.Fatalf("want the PinNpmSource error, got %v", err)
 	}
 }
