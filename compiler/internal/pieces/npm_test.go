@@ -88,3 +88,41 @@ func TestSelectVersionUnparseableCLIVersionErrors(t *testing.T) {
 		t.Errorf("error %q does not mention --pieces-version", err.Error())
 	}
 }
+
+// --- npm source specs ---------------------------------------------------------
+
+func TestSplitNpmSpec(t *testing.T) {
+	cases := []struct {
+		in       string
+		pkg, pin string
+	}{
+		{"@magic-spells/puzzle-pieces", "@magic-spells/puzzle-pieces", ""},
+		{"@magic-spells/puzzle-pieces@0.6.2", "@magic-spells/puzzle-pieces", "0.6.2"},
+		{"some-pkg", "some-pkg", ""},
+		{"some-pkg@1.0.0", "some-pkg", "1.0.0"},
+	}
+	for _, c := range cases {
+		pkg, pin := splitNpmSpec(c.in)
+		if pkg != c.pkg || pin != c.pin {
+			t.Errorf("splitNpmSpec(%q) = (%q, %q), want (%q, %q)", c.in, pkg, pin, c.pkg, c.pin)
+		}
+	}
+}
+
+func TestPinNpmSource(t *testing.T) {
+	got, err := PinNpmSource("npm:@magic-spells/puzzle-pieces", "0.6.2")
+	if err != nil {
+		t.Fatalf("PinNpmSource returned error: %v", err)
+	}
+	if want := "npm:@magic-spells/puzzle-pieces@0.6.2"; got != want {
+		t.Errorf("PinNpmSource = %q, want %q", got, want)
+	}
+
+	if _, err := PinNpmSource("/some/dir", "0.6.2"); err == nil {
+		t.Error("PinNpmSource(\"/some/dir\") = nil error, want an error")
+	}
+
+	if _, err := PinNpmSource("npm:@magic-spells/puzzle-pieces@0.5.0", "0.6.2"); err == nil {
+		t.Error("PinNpmSource on an already-pinned source = nil error, want an error")
+	}
+}

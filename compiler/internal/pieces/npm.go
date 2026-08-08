@@ -53,3 +53,31 @@ func selectVersion(published []string, cliVersion string) (string, error) {
 	}
 	return best, nil
 }
+
+// npmScheme marks a registry source as an npm package spec:
+// "npm:<package>[@version]".
+const npmScheme = "npm:"
+
+// splitNpmSpec splits "<package>[@version]" into its parts. The leading @ of a
+// scoped name is not a pin separator — only an @ past index 0 splits, and the
+// LAST one wins so "@scope/name@1.2.3" parses correctly.
+func splitNpmSpec(spec string) (pkg, pin string) {
+	if i := strings.LastIndex(spec, "@"); i > 0 {
+		return spec[:i], spec[i+1:]
+	}
+	return spec, ""
+}
+
+// PinNpmSource applies an explicit --pieces-version to an npm: source. It
+// refuses a non-npm source (a dir or URL has no version to pin) and a source
+// that already carries a pin (two pins is a contradiction, not a merge).
+func PinNpmSource(source, version string) (string, error) {
+	if !strings.HasPrefix(source, npmScheme) {
+		return "", fmt.Errorf("--pieces-version only applies to an npm registry source, and the source is %q", source)
+	}
+	pkg, pin := splitNpmSpec(strings.TrimPrefix(source, npmScheme))
+	if pin != "" {
+		return "", fmt.Errorf("registry source %q already pins @%s — drop --pieces-version or the pin", source, pin)
+	}
+	return npmScheme + pkg + "@" + version, nil
+}
