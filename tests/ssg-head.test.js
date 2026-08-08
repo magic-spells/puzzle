@@ -321,6 +321,142 @@ describe('injectShell managed head surgery (D84)', () => {
 	});
 });
 
+describe('injectShell head surgery — the pinned contract (D84/D151)', () => {
+	// A shell whose <head> carries NO <title>: the only way to tell a head-scoped
+	// title replacement apart from a document-wide one.
+	const SHELL_NO_TITLE =
+		'<!doctype html><html><head><meta charset="utf-8"></head>' +
+		'<body><div id="app"></div></body></html>';
+
+	it('escapes the title text (&, <, > — escapeText, not attribute escaping)', () => {
+		const out = injectShell(SHELL, {
+			targetId: 'app',
+			content: 'x',
+			head: { ...EMPTY_HEAD, title: 'A & B <c> "d"' },
+		});
+		expect(out).toContain('<title>A &amp; B &lt;c&gt; "d"</title>');
+		// the derived og:/twitter: tags escape as ATTRIBUTE values (quotes too)
+		expect(out).toContain(
+			'<meta property="og:title" content="A &amp; B &lt;c&gt; &quot;d&quot;" data-puzzle-head="og:title">'
+		);
+	});
+
+	it('a non-string title is coerced before escaping', () => {
+		const out = injectShell(SHELL, {
+			targetId: 'app',
+			content: 'x',
+			head: { ...EMPTY_HEAD, title: 42 },
+		});
+		expect(out).toContain('<title>42</title>');
+	});
+
+	it('collapses DUPLICATE same-identity shell tags to one (first replaced, rest removed)', () => {
+		const seeded = SHELL.replace(
+			'</head>',
+			'<meta name="description" content="one" data-puzzle-head="description">' +
+				'<meta name="description" content="two" data-puzzle-head="description">' +
+				'<meta name="description" content="three" data-puzzle-head="description"></head>'
+		);
+		const out = injectShell(seeded, { targetId: 'app', content: 'x', head: FULL_HEAD });
+		expect(out.match(/data-puzzle-head="description"/g)).toHaveLength(1);
+		expect(out).toContain('<meta name="description" content="The home page" data-puzzle-head="description">');
+		expect(out).not.toContain('content="one"');
+		expect(out).not.toContain('content="two"');
+		expect(out).not.toContain('content="three"');
+	});
+
+	it('removes EVERY duplicate of a field that no longer resolves', () => {
+		const seeded = SHELL.replace(
+			'</head>',
+			'<meta property="og:image" content="a" data-puzzle-head="og:image">' +
+				'<meta property="og:image" content="b" data-puzzle-head="og:image"></head>'
+		);
+		const out = injectShell(seeded, {
+			targetId: 'app',
+			content: 'x',
+			head: { ...FULL_HEAD, socialImage: null },
+		});
+		expect(out).not.toContain('data-puzzle-head="og:image"');
+		expect(out).not.toContain('content="a"');
+		expect(out).not.toContain('content="b"');
+	});
+
+	it('replaces a shell marker IN PLACE — its position, not the end of <head>', () => {
+		const seeded = SHELL.replace(
+			'<meta charset="utf-8">',
+			'<meta name="description" content="stale" data-puzzle-head="description"><meta charset="utf-8">'
+		);
+		const out = injectShell(seeded, { targetId: 'app', content: 'x', head: FULL_HEAD });
+		// the replacement sits where the stale tag was: BEFORE <meta charset>
+		expect(out.indexOf('data-puzzle-head="description"')).toBeLessThan(
+			out.indexOf('<meta charset="utf-8">')
+		);
+	});
+
+	// ---- the narrowed contract: the SHELL HEAD, and nothing else ----------------
+	//
+	// The framework owns `data-puzzle-head` markers and the `<title>` element inside
+	// the shell's <head>. Rendered body markup is view output — never rewritten by
+	// head injection, however much it looks like a managed tag.
+
+	it('does NOT rewrite a <title> element in the rendered body', () => {
+		const out = injectShell(SHELL_NO_TITLE, {
+			targetId: 'app',
+			content: '<svg><title>Icon label</title></svg>',
+			head: { ...EMPTY_HEAD, title: 'Home' },
+		});
+		expect(out).toContain('<svg><title>Icon label</title></svg>');
+		expect(out).not.toContain('<title>Home</title>');
+	});
+
+	it('does NOT rewrite a <title> that lives after </head>', () => {
+		const bodyTitleShell =
+			'<!doctype html><html><head><meta charset="utf-8"></head>' +
+			'<body><title>Body title</title><div id="app"></div></body></html>';
+		const out = injectShell(bodyTitleShell, { targetId: 'app', content: 'x', head: FULL_HEAD });
+		expect(out).toContain('<title>Body title</title>');
+		// the managed tags still land in <head>
+		expect(out.indexOf('data-puzzle-head="og:title"')).toBeLessThan(out.indexOf('</head>'));
+	});
+
+	it('the title-only (pre-D84) path is head-scoped too', () => {
+		const out = injectShell(SHELL_NO_TITLE, {
+			targetId: 'app',
+			content: '<svg><title>Icon label</title></svg>',
+			title: 'Legacy',
+		});
+		expect(out).toContain('<svg><title>Icon label</title></svg>');
+		expect(out).not.toContain('Legacy');
+	});
+
+	it('does NOT touch a data-puzzle-head marker in rendered body markup', () => {
+		const out = injectShell(SHELL, {
+			targetId: 'app',
+			content: '<p data-puzzle-head="description">body copy</p>',
+			head: FULL_HEAD,
+		});
+		// the body element survives verbatim…
+		expect(out).toContain('<p data-puzzle-head="description">body copy</p>');
+		// …and it never counts as "already present": the head still gets its own tag
+		expect(out).toContain(
+			'<meta name="description" content="The home page" data-puzzle-head="description">'
+		);
+		expect(out.indexOf('data-puzzle-head="description">')).toBeLessThan(out.indexOf('</head>'));
+	});
+
+	it('does NOT remove a body marker whose field no longer resolves', () => {
+		const out = injectShell(SHELL, {
+			targetId: 'app',
+			content: '<link rel="canonical" href="/stale" data-puzzle-head="canonical">',
+			head: { ...FULL_HEAD, canonical: null },
+		});
+		expect(out).toContain('<link rel="canonical" href="/stale" data-puzzle-head="canonical">');
+		// nothing canonical was injected into the head
+		const headHtml = out.slice(0, out.indexOf('</head>'));
+		expect(headHtml).not.toContain('data-puzzle-head="canonical"');
+	});
+});
+
 describe('prerenderToDir output carries the head tags before any JS (D84)', () => {
 	const routes = () => [
 		{
@@ -387,6 +523,26 @@ describe('prerenderToDir output carries the head tags before any JS (D84)', () =
 		expect(index).toContain('data-puzzle-head="og:image"');
 		expect(index).not.toContain('src="/app.js"'); // still a true static page
 		expect(index).toContain('data-puzzle-static-data'); // island untouched by head surgery
+	});
+
+	it('static mode: a prerender:false page gets NO head work (content/head both null)', async () => {
+		const dir = tmp();
+		const outDir = path.join(dir, 'dist');
+		const staticShell =
+			'<!doctype html><html><head><title>Shell</title></head>' +
+			'<body><div id="app"></div><script type="module" src="/app.js"></script></body></html>';
+		const shellPath = writeShell(dir, staticShell);
+		await prerenderToDir(
+			{ target: '#app', routes: routes(), models: {}, formatters: {} },
+			{ outDir, shellPath, mode: 'static' }
+		);
+
+		const spa = fs.readFileSync(path.join(outDir, 'spa', 'index.html'), 'utf8');
+		expect(spa).not.toContain('data-puzzle-head');
+		expect(spa).toContain('<title>Shell</title>'); // the shell's own title survives
+		expect(spa).toContain('<div id="app"></div>'); // empty AND unmarked target
+		expect(spa).not.toContain('data-puzzle-static>');
+		expect(spa).toContain('data-puzzle-static-data'); // island + module still ship
 	});
 });
 
