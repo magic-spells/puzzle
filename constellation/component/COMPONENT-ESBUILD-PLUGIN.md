@@ -35,7 +35,14 @@ removes the backup. Path-containment guards protect every swap target.
 
 Public assets come from `app/public` with a root `public` fallback. Reserved
 generated names (`app.js`, its map, `styles.css`) are rejected case-insensitively
-before pruning or on every dev rebuild. Successful dev rebuilds mirror deleted
+before pruning or on every dev rebuild. The copier writes differently per
+destination: into the private staging dir a plain write (no reader exists yet,
+so an atomic temp+rename buys nothing), and into the live `dist/` an atomic
+write that also SKIPS any file already matching on size + mtime — normally the
+whole tree on an incremental rebuild. Live-dist copies stamp the source mtime so
+that comparison stays meaningful. Staging deliberately copies rather than
+hardlinks: the prerender passes edit staging's copy of `public/index.html` in
+place, and a shared inode would write through into the app's own source asset. Successful dev rebuilds mirror deleted
 public files and prune CSS for `.pzl` modules no longer in the esbuild metafile;
 failed rebuilds keep last-good assets/CSS.
 

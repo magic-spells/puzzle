@@ -251,7 +251,7 @@ func Build(root string, opts Options) error {
 	// copied into staging. Keep the copied set so prerender modes can distinguish
 	// public-owned files from generated output before writing the final dist tree.
 	endPublic := prof.phase("public copy")
-	publicFiles, err := copyPublic(absRoot, staging)
+	publicFiles, err := copyPublic(absRoot, staging, copyIntoStaging)
 	endPublic()
 	if err != nil {
 		return fmt.Errorf("copying public assets: %w", err)
@@ -448,15 +448,44 @@ func ValidatePublic(root string) error {
 	return nil
 }
 
-// copyPublic copies the app's static assets into dist and returns the set of
-// dist-relative paths (slash-separated, files only) it wrote this pass. The
-// examples/todos keeps them under app/public/; a flat public/ at the root is
-// also honored. The returned set lets the incremental dev path mirror deletions
-// across rebuilds (WatchBuilder.Rebuild) and lets prerender builds reject route
-// outputs that would overwrite a copied asset. Compiler outputs (app.js,
-// app.js.map, styles.css) are never produced here, so they never appear in the
-// set — a mirror built from it can never delete a build output.
-func copyPublic(root, outdir string) (map[string]bool, error) {
+// publicCopyMode selects how copyPublic writes each file. The two destinations
+// have genuinely different requirements, and paying the strictest one everywhere
+// made the dev loop re-read and re-write the entire public tree on every save.
+type publicCopyMode int
+
+const (
+	// copyIntoStaging writes into the private, freshly created staging dir that
+	// nothing can observe until the whole tree is atomically swapped into dist/.
+	// There is no concurrent reader and no pre-existing file, so a plain write is
+	// enough: the temp-file + chmod + rename of an atomic write buys nothing here.
+	//
+	// Hardlinking from public/ instead of copying is deliberately NOT done. The
+	// prerender passes edit staging's copy of the shell (public/index.html) in
+	// place, so a hardlinked staging file would write straight through into the
+	// app's own source asset. Halving the copy cost is not worth a build that can
+	// corrupt its inputs.
+	copyIntoStaging publicCopyMode = iota
+
+	// copyIntoLiveDist writes into the dist/ the dev server is serving RIGHT NOW,
+	// so every write must be atomic — a client must never receive a half-written
+	// file. It also skips any file whose destination already matches on size and
+	// mtime, which on an incremental rebuild is normally the entire tree: nothing
+	// under public/ changed, so nothing needs rewriting. Copies stamp the source
+	// mtime onto the destination so that comparison stays meaningful.
+	copyIntoLiveDist
+)
+
+// copyPublic copies the app's static assets into outdir and returns the set of
+// dist-relative paths (slash-separated, files only) that belong to the public
+// tree this pass — including files skipped as already-current, since the set
+// describes ownership, not work done. The examples/todos keeps them under
+// app/public/; a flat public/ at the root is also honored. The returned set lets
+// the incremental dev path mirror deletions across rebuilds
+// (WatchBuilder.Rebuild) and lets prerender builds reject route outputs that
+// would overwrite a copied asset. Compiler outputs (app.js, app.js.map,
+// styles.css) are never produced here, so they never appear in the set — a
+// mirror built from it can never delete a build output.
+func copyPublic(root, outdir string, mode publicCopyMode) (map[string]bool, error) {
 	copied := make(map[string]bool)
 	src := publicDir(root)
 	if src == "" {
@@ -474,6 +503,14 @@ func copyPublic(root, outdir string) (map[string]bool, error) {
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if mode == copyIntoLiveDist && publicFileCurrent(target, info) {
+			copied[filepath.ToSlash(rel)] = true
+			return nil
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -481,16 +518,35 @@ func copyPublic(root, outdir string) (map[string]bool, error) {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
-		// Atomic write: in the dev fallback path this rewrites dist/index.html
-		// while the server may be serving it, so avoid the truncate-then-write
-		// window that could hand a client a partial file.
-		if err := fsutil.WriteFileAtomic(target, data, 0o644); err != nil {
+		if mode == copyIntoLiveDist {
+			if err := fsutil.WriteFileAtomic(target, data, 0o644); err != nil {
+				return err
+			}
+			// Carry the source mtime across so the next rebuild's skip check has
+			// something to compare against. Best-effort: a filesystem that refuses
+			// only costs the next rebuild a redundant copy.
+			_ = os.Chtimes(target, info.ModTime(), info.ModTime())
+		} else if err := os.WriteFile(target, data, 0o644); err != nil {
 			return err
 		}
 		copied[filepath.ToSlash(rel)] = true
 		return nil
 	})
 	return copied, err
+}
+
+// publicFileCurrent reports whether target is already an up-to-date copy of a
+// source file described by info — same size, same mtime. It is deliberately a
+// cheap stat rather than a content hash: the copier stamps the source mtime onto
+// every file it writes, so a match means "this build already produced this
+// file", and any doubt (missing file, stat error, drifted timestamp) falls
+// through to a plain re-copy.
+func publicFileCurrent(target string, info fs.FileInfo) bool {
+	dst, err := os.Stat(target)
+	if err != nil || dst.IsDir() {
+		return false
+	}
+	return dst.Size() == info.Size() && dst.ModTime().Equal(info.ModTime())
 }
 
 // FindRuntime walks up from start looking for the in-repo runtime: a directory

@@ -150,7 +150,7 @@ func (b *WatchBuilder) Rebuild() error {
 			b.pl.PruneCSS(keep)
 		}
 	}
-	copied, err := copyPublic(b.root, b.outdir)
+	copied, err := copyPublic(b.root, b.outdir, copyIntoLiveDist)
 	if err != nil {
 		return fmt.Errorf("copying public assets: %w", err)
 	}
