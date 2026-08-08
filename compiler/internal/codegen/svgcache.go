@@ -86,6 +86,45 @@ func (c *SVGCache) Load(full, name string) *ScannedSVG {
 	return e.res
 }
 
+// Evict drops the memo for every key naming one of paths. It exists for the
+// long-lived dev caches (a `puzzle dev` session keeps ONE cache across
+// rebuilds), where the file this memo describes genuinely can change: unlike
+// the .pzl transform memo, whose key carries a content hash, this one is keyed
+// by path alone, so an edited icon would otherwise be served from the entry
+// made before the edit — and, worse, the .pzl that inlines it hashes the same,
+// so nothing else would notice. Callers evict on any change to a watched file
+// and pay at most one re-read.
+func (c *SVGCache) Evict(paths []string) {
+	if c == nil || len(paths) == 0 {
+		return
+	}
+	drop := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		drop[p] = true
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for key := range c.entries {
+		// Key is "<full>\x00<name>"; match on the path component.
+		full := key
+		if i := indexNUL(key); i >= 0 {
+			full = key[:i]
+		}
+		if drop[full] {
+			delete(c.entries, key)
+		}
+	}
+}
+
+func indexNUL(s string) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] == 0 {
+			return i
+		}
+	}
+	return -1
+}
+
 // scanSVGPath is the uncached read + scan.
 func scanSVGPath(full, name string) *ScannedSVG {
 	data, err := os.ReadFile(full)

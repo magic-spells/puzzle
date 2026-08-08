@@ -44,6 +44,10 @@ type WatchBuilder struct {
 	// the first Rebuild — nothing is ever pruned on the first pass.
 	prevPublic map[string]bool
 
+	// scanner memoizes the project usage walk per file so an unchanged .pzl is
+	// not re-parsed on every rebuild.
+	scanner *plugin.UsageScanner
+
 	// Esbuild contexts freeze Define values when they are created. Track the
 	// usage bits baked into ctx so ScanUsage can replace the context only when a
 	// source edit changes one of the feature defines.
@@ -90,7 +94,10 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	}
 
 	pl := plugin.New(absRoot)
-	if err := scanUsage(absRoot, pl); err != nil {
+	// One scanner for the session: the usage walk parses every .pzl in the
+	// project, and a dev rebuild changes one of them (plugin.UsageScanner).
+	scanner := plugin.NewUsageScanner()
+	if _, err := scanUsage(absRoot, pl, scanner); err != nil {
 		return nil, err
 	}
 
@@ -118,6 +125,7 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 		pl:          pl,
 		ctx:         ctx,
 		defined:     pl.Features(),
+		scanner:     scanner,
 		fixtures:    fixtures,
 		useFixtures: opts.Fixtures,
 	}, nil
@@ -201,7 +209,7 @@ func metafileInputs(metafileJSON string) (map[string]bool, error) {
 // into an esbuild context, so replace that context only when one of the booleans
 // changes; ordinary rebuilds keep the incremental graph warm.
 func (b *WatchBuilder) ScanUsage() error {
-	if err := scanUsage(b.root, b.pl); err != nil {
+	if _, err := scanUsage(b.root, b.pl, b.scanner); err != nil {
 		return err
 	}
 	features := b.pl.Features()

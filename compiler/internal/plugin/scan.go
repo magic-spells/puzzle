@@ -3,9 +3,6 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -82,65 +79,12 @@ func (u Usage) features() Features {
 // app actually imports is still reported — with position info — by the esbuild
 // .pzl OnLoad pass; the scan must not preempt that by failing the build over a
 // file nothing imports. See DOC-COMPILER-DESIGN §b.
+//
+// A long-lived dev builder calls UsageScanner.Scan (scanmemo.go) instead, which
+// is this same walk with a per-file memo in front of the parse; both share
+// scanFileUsage so they cannot answer differently.
 func ScanUsage(scanRoot string) (Usage, error) {
-	allow, err := builtinAllowlist()
-	if err != nil {
-		return Usage{}, err
-	}
-
-	usage := Usage{Formatters: map[string]bool{}}
-	root := filepath.Clean(scanRoot)
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			if path != root && skipScanDir(d.Name()) {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if filepath.Ext(path) != ".pzl" {
-			return nil
-		}
-
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return nil // unreadable file: skip, don't fail the scan
-		}
-		raw := string(src)
-		if strings.TrimSpace(raw) == "" {
-			return nil
-		}
-		name := filepath.ToSlash(path)
-		if rel, err := filepath.Rel(root, path); err == nil && !strings.HasPrefix(rel, "..") {
-			name = filepath.ToSlash(rel)
-		}
-
-		sec, err := parser.SplitSections(raw, name)
-		if err != nil {
-			return nil // unparseable: skip; esbuild OnLoad reports it if imported
-		}
-		tree, err := parser.ParseTemplate(sec, name)
-		if err != nil {
-			return nil
-		}
-		collectUsage(tree, &usage, allow)
-		// Codegen also emits formatter calls inside renderSkeleton() for the
-		// <puzzle-skeleton> section, so a builtin used ONLY in a skeleton must be
-		// seeded too — else the runtime logs `unknown formatter` and shows the raw
-		// value. Parse the skeleton with the same fail-soft handling as the template.
-		if sec.HasSkeleton {
-			if skel, serr := parser.ParseSkeleton(sec, name); serr == nil && skel != nil {
-				collectUsage(skel, &usage, allow)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return Usage{}, err
-	}
-	return usage, nil
+	return NewUsageScanner().Scan(scanRoot)
 }
 
 // ScanFormatters preserves the original formatter-only API for focused callers
