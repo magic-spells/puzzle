@@ -155,6 +155,18 @@ func NewStaticWatchBuilder(root string, opts StaticWatchOptions) (*StaticWatchBu
 	return b, nil
 }
 
+// SetTailwind installs the accessor for the Tailwind layer of the composed
+// stylesheet. It exists as a setter rather than a constructor field because the
+// dev loop only knows where that layer comes from — the warm `tailwindcss
+// --watch` child's private output file, or the one-shot fallback if that child
+// never started or has died — after it has decided whether to start a builder
+// at all. nil (the default) means the project declares no Tailwind pipeline.
+func (b *StaticWatchBuilder) SetTailwind(fn func() (string, error)) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.tailwind = fn
+}
+
 // buildContexts (re)creates the app and prerender contexts from the current
 // usage scan, disposing whatever was there. It is called at construction and
 // whenever a Define frozen into a context goes stale.
