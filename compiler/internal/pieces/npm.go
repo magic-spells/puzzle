@@ -182,6 +182,8 @@ type npmFetcher struct {
 	files    map[string][]byte // registry-relative path → bytes
 }
 
+var _ Fetcher = (*npmFetcher)(nil)
+
 // npmPackument is the slice of npm's abbreviated package metadata we read:
 // which versions exist and where each tarball lives.
 type npmPackument struct {

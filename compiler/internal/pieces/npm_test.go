@@ -242,6 +242,13 @@ func fakeNpm(t *testing.T, versions map[string]map[string]string) *httptest.Serv
 			_, _ = w.Write(registryTarball(t, files))
 			return
 		}
+		// The packument path must carry the SCOPED name escaped (@scope%2Fname).
+		// r.URL.Path is already decoded, so check the raw request URI — this is
+		// what makes resolve's strings.Replace load-bearing.
+		if !strings.Contains(r.RequestURI, "@magic-spells%2Fpuzzle-pieces") {
+			http.NotFound(w, r)
+			return
+		}
 		type dist struct {
 			Tarball string `json:"tarball"`
 		}
@@ -345,7 +352,9 @@ func TestNpmFetcherNoMatchNamesTheBoundary(t *testing.T) {
 	if err == nil {
 		t.Fatal("Fetch with no matching release = nil error, want an error")
 	}
-	for _, want := range []string{"0.3", "0.4.0", "0.5.2"} {
+	// "0.3.x" and not "0.3": the latter is already a substring of "puzzle 0.3.1"
+	// in the same message, so it would not cover the "need N.M.x" clause.
+	for _, want := range []string{"0.3.x", "0.4.0", "0.5.2"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q does not mention %q", err.Error(), want)
 		}
