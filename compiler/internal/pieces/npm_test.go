@@ -1,6 +1,9 @@
 package pieces
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"strings"
 	"testing"
 )
@@ -124,5 +127,95 @@ func TestPinNpmSource(t *testing.T) {
 
 	if _, err := PinNpmSource("npm:@magic-spells/puzzle-pieces@0.5.0", "0.6.2"); err == nil {
 		t.Error("PinNpmSource on an already-pinned source = nil error, want an error")
+	}
+}
+
+// --- tarball extraction -------------------------------------------------------
+
+// registryTarball builds an npm-shaped gzipped tarball in memory. Keys are FULL
+// tarball paths ("package/registry/registry.json") so tests can also craft
+// hostile entries.
+func registryTarball(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for name, body := range files {
+		hdr := &tar.Header{
+			Name:     name,
+			Mode:     0o644,
+			Size:     int64(len(body)),
+			Typeflag: tar.TypeReg,
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatalf("writing tar header for %s: %v", name, err)
+		}
+		if _, err := tw.Write([]byte(body)); err != nil {
+			t.Fatalf("writing tar body for %s: %v", name, err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("closing tar writer: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("closing gzip writer: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// Only package/registry/** comes out, keyed by registry-relative path — the same
+// rel strings Add passes to Fetch. package.json and README are package
+// packaging, not registry content.
+func TestExtractRegistryTarball(t *testing.T) {
+	tarball := registryTarball(t, map[string]string{
+		"package/package.json":                  `{"name":"@magic-spells/puzzle-pieces"}`,
+		"package/README.md":                     "# pieces",
+		"package/registry/registry.json":        `{"version":1,"pieces":[]}`,
+		"package/registry/ui/button/Button.pzl": "<button/>",
+		"package/registry/lib/date-math.js":     "export const x = 1;",
+	})
+
+	files, err := extractRegistryTarball(bytes.NewReader(tarball))
+	if err != nil {
+		t.Fatalf("extractRegistryTarball returned error: %v", err)
+	}
+	if len(files) != 3 {
+		t.Fatalf("extracted %d files, want 3: %v", len(files), files)
+	}
+	if got := string(files["ui/button/Button.pzl"]); got != "<button/>" {
+		t.Errorf("files[\"ui/button/Button.pzl\"] = %q, want %q", got, "<button/>")
+	}
+	if _, ok := files["registry.json"]; !ok {
+		t.Errorf("files is missing the \"registry.json\" key: %v", files)
+	}
+}
+
+// An entry that climbs out of the registry prefix loses the prefix when cleaned
+// and is simply skipped — it never lands under any key. An entry that escapes
+// the TARBALL ROOT is a hard error.
+func TestExtractRegistryTarballRejectsTraversal(t *testing.T) {
+	inner := registryTarball(t, map[string]string{
+		"package/registry/../../evil":    "pwned",
+		"package/registry/registry.json": "{}",
+	})
+	files, err := extractRegistryTarball(bytes.NewReader(inner))
+	if err != nil {
+		t.Fatalf("extractRegistryTarball returned error: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("extracted %d files, want 1: %v", len(files), files)
+	}
+
+	rooted := registryTarball(t, map[string]string{"../evil": "pwned"})
+	if _, err := extractRegistryTarball(bytes.NewReader(rooted)); err == nil {
+		t.Fatal("extractRegistryTarball on a root-escaping entry = nil error, want an error")
+	} else if !strings.Contains(err.Error(), "unsafe path") {
+		t.Errorf("error %q does not mention an unsafe path", err.Error())
+	}
+}
+
+func TestExtractRegistryTarballNotGzip(t *testing.T) {
+	if _, err := extractRegistryTarball(strings.NewReader("not a tarball")); err == nil {
+		t.Fatal("extractRegistryTarball on non-gzip input = nil error, want an error")
 	}
 }

@@ -1,7 +1,11 @@
 package pieces
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"fmt"
+	"io"
+	"path"
 	"strconv"
 	"strings"
 )
@@ -80,4 +84,64 @@ func PinNpmSource(source, version string) (string, error) {
 		return "", fmt.Errorf("registry source %q already pins @%s — drop --pieces-version or the pin", source, pin)
 	}
 	return npmScheme + pkg + "@" + version, nil
+}
+
+// maxTarballBytes caps the compressed npm tarball download. The whole registry
+// is ~2 MB of source text, so 50 MiB is far above anything real while refusing
+// to stream an unbounded body into memory.
+const maxTarballBytes = 50 << 20
+
+// maxUnpackedBytes caps the total extracted size — a tiny compressed body must
+// not decompress the CLI out of memory (the tarball is untrusted network input).
+const maxUnpackedBytes = 200 << 20
+
+// extractRegistryTarball reads an npm package tarball (gzipped tar) and returns
+// the files under package/registry/ keyed by registry-relative slash path — the
+// same rel strings Add passes to Fetch. Non-registry entries (package.json,
+// README) are skipped; per-file and total size caps bound decompression; a path
+// that escapes the tarball root is refused outright.
+func extractRegistryTarball(r io.Reader) (map[string][]byte, error) {
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("reading npm tarball: %w", err)
+	}
+	defer gz.Close()
+
+	const prefix = "package/registry/"
+	files := make(map[string][]byte)
+	var total int64
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading npm tarball: %w", err)
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			continue
+		}
+		name := path.Clean(hdr.Name)
+		if path.IsAbs(name) || name == ".." || strings.HasPrefix(name, "../") {
+			return nil, fmt.Errorf("npm tarball contains an unsafe path %q", hdr.Name)
+		}
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		rel := strings.TrimPrefix(name, prefix)
+		data, err := io.ReadAll(io.LimitReader(tr, maxBodyBytes+1))
+		if err != nil {
+			return nil, fmt.Errorf("reading %s from npm tarball: %w", rel, err)
+		}
+		if len(data) > maxBodyBytes {
+			return nil, fmt.Errorf("%s in the npm tarball exceeds the %d MiB limit", rel, maxBodyBytes>>20)
+		}
+		total += int64(len(data))
+		if total > maxUnpackedBytes {
+			return nil, fmt.Errorf("npm tarball unpacks past the %d MiB limit", maxUnpackedBytes>>20)
+		}
+		files[rel] = data
+	}
+	return files, nil
 }
