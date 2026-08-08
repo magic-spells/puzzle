@@ -899,6 +899,16 @@ func TestNewFetcherKind(t *testing.T) {
 	if _, ok := NewFetcher("/local/dir").(*dirFetcher); !ok {
 		t.Error("local path should give a dirFetcher")
 	}
+	if _, ok := NewFetcher("npm:@magic-spells/puzzle-pieces").(*npmFetcher); !ok {
+		t.Error("npm: source should build an npmFetcher")
+	}
+	f, ok := NewFetcher("npm:@magic-spells/puzzle-pieces@0.6.2").(*npmFetcher)
+	if !ok || f.pin != "0.6.2" || f.pkg != "@magic-spells/puzzle-pieces" {
+		t.Errorf("pinned npm source parsed wrong: %+v", f)
+	}
+	if _, ok := NewFetcher(defaultRegistry).(*npmFetcher); !ok {
+		t.Error("the default registry should now be the npm fetcher")
+	}
 }
 
 func TestCycleSafeResolution(t *testing.T) {
@@ -951,13 +961,13 @@ func (f *failFetcher) Source() string        { return f.source }
 func (f *failFetcher) Ref(rel string) string { return f.source + "/" + rel }
 
 func TestAddDefaultRegistryFailureHintsAtOverrides(t *testing.T) {
-	// The default public source failing must name both overrides — that error is
-	// the first thing a pre-publish user sees with no env var set.
+	// The default npm source failing must name every override — that error is the
+	// first thing a user sees when no pieces release matches their CLI version.
 	_, err := Add(Options{AppRoot: t.TempDir(), Names: []string{"button"}, Fetcher: &failFetcher{source: defaultRegistry}})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	for _, want := range []string{"--registry", "PUZZLE_PIECES_REGISTRY"} {
+	for _, want := range []string{"--pieces-version", "--registry", "PUZZLE_PIECES_REGISTRY"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("default-source error should mention %s, got: %v", want, err)
 		}

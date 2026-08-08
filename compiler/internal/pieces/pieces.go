@@ -79,12 +79,13 @@ type plannedUnit struct {
 func Add(opts Options) (*Result, error) {
 	regData, err := opts.Fetcher.Fetch("registry.json")
 	if err != nil {
-		// A dead default source is almost always "the registry isn't published
-		// yet / no override set" — name the two overrides, or the user is stuck
-		// staring at a bare 404 on a URL they never chose.
+		// A dead default source is almost always "no pieces release matches this
+		// CLI's major.minor yet / npm is unreachable" — name the three overrides,
+		// or the user is stuck staring at a bare error about a source they never
+		// chose.
 		if opts.Fetcher.Source() == defaultRegistry {
 			return nil, fmt.Errorf(
-				"%w\n  (the default public registry isn't reachable — point at a registry with --registry <path|url> or the PUZZLE_PIECES_REGISTRY env var)", err)
+				"%w\n  (the default npm registry didn't yield a matching pieces release — pin one with --pieces-version, or point at a registry with --registry <path|url|npm:pkg[@version]> or the PUZZLE_PIECES_REGISTRY env var)", err)
 		}
 		return nil, err
 	}

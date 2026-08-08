@@ -8,12 +8,16 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
-// defaultRegistry is the public puzzle-pieces registry, served as raw files off
-// GitHub. It is the last resort after --registry and PUZZLE_PIECES_REGISTRY so a
-// zero-config `puzzle add piece button` still works.
-const defaultRegistry = "https://raw.githubusercontent.com/magic-spells/puzzle-pieces/main/registry"
+// defaultRegistry is the published pieces registry on npm. It is the last
+// resort after --registry and PUZZLE_PIECES_REGISTRY, and it is VERSIONED:
+// the fetcher resolves the newest release whose major.minor matches this
+// CLI's own version, so a zero-config `puzzle add piece button` always gets
+// pieces authored for the compiler running it.
+const defaultRegistry = npmScheme + defaultNpmPackage
 
 // httpTimeout bounds a single registry request. A registry lives behind the
 // network, so a hung host must not wedge the CLI — 15s is generous for a few KB
@@ -49,9 +53,20 @@ func ResolveSource(flag string) string {
 	return defaultRegistry
 }
 
-// NewFetcher returns the Fetcher for a resolved source: an http(s) URL prefix
-// gets the network fetcher, anything else is treated as a local directory path.
+// NewFetcher returns the Fetcher for a resolved source: an npm:<pkg>[@version]
+// spec gets the versioned npm fetcher, an http(s) URL prefix the network
+// fetcher, anything else a local directory path.
 func NewFetcher(source string) Fetcher {
+	if strings.HasPrefix(source, npmScheme) {
+		pkg, pin := splitNpmSpec(strings.TrimPrefix(source, npmScheme))
+		return &npmFetcher{
+			pkg:        pkg,
+			pin:        pin,
+			cliVersion: version.Version,
+			base:       npmRegistryBase,
+			configured: source,
+		}
+	}
 	if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
 		return &httpFetcher{base: strings.TrimRight(source, "/")}
 	}
