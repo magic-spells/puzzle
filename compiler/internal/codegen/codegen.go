@@ -167,13 +167,17 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	// empty PuzzleView subclass named from the filename — and drive the rest of
 	// codegen from it exactly as if the user had written it.
 	scripts := sec.Scripts
+	// ONE tokenization of the <script> body per compile. Three consumers used to
+	// lex these same bytes independently: the class-name extraction, the
+	// import-collision warning scan, and the reserved-binding check.
+	scriptToks := tokenizeJS(sec.Scripts)
 	var className string
 	if strings.TrimSpace(scripts) == "" {
 		className = classNameFromFilename(opts.Filename)
 		scripts = "import { PuzzleView } from '@magic-spells/puzzle';\n" +
 			"export default class " + className + " extends PuzzleView {}\n"
 	} else {
-		className, err = extractClassName(scripts, opts.Filename, sec.ScriptsPos)
+		className, err = extractClassName(scripts, scriptToks, opts.Filename, sec.ScriptsPos)
 		if err != nil {
 			return "", err
 		}
@@ -245,7 +249,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	// <script>-import collision warnings (out-of-band; goldens unaffected). Scan
 	// the emitted render expressions for `__d.<name>` reads whose <name> is an
 	// import binding in <script> — those resolve to undefined at render (SPEC §6).
-	if imports := scriptImportBindings(sec.Scripts); len(imports) > 0 {
+	if imports := scriptImportBindings(scriptToks); len(imports) > 0 {
 		seen := map[string]bool{}
 		var hit []string
 		collectDataCollisions(rootExpr, imports, seen, &hit)
@@ -287,7 +291,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 	for _, src := range c.svgOrder {
 		emitted = append(emitted, c.svgIdent[src])
 	}
-	if err := checkReservedScriptBindings(sec.Scripts, emitted, opts.Filename, sec.ScriptsPos); err != nil {
+	if err := checkReservedScriptBindings(sec.Scripts, scriptToks, emitted, opts.Filename, sec.ScriptsPos); err != nil {
 		return "", err
 	}
 

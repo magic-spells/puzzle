@@ -148,7 +148,7 @@ func TestScriptImportBindings(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := scriptImportBindings(tc.scripts)
+			got := scriptImportBindings(tokenizeJS(tc.scripts))
 			for _, w := range tc.want {
 				if !got[w] {
 					t.Errorf("expected binding %q in %v", w, got)

@@ -44,6 +44,14 @@ imports, and `ClassName.prototype.render = function () { … }`. The user class
 body is never rewritten. Class extraction is LexSkip-aware and requires a real
 named `export default class … extends …` declaration.
 
+The `<script>` body is tokenized ONCE per compile (`tokenizeJS`, scriptcollide.go)
+and the one stream feeds all three consumers that used to lex those same bytes
+independently: class-name extraction, the import-collision warning scan, and the
+reserved-binding check. Tokens carry a `comment` bit because the consumers
+disagree about opaque units — a comment is whitespace to the class-keyword
+adjacency rule (`export default /* x */ class Foo {}` is a declaration) while a
+string or regex breaks it, and the binding scans treat every opaque unit alike.
+
 Mode comes from the app-relative path. Views/layouts preserve the
 `<puzzle-view>` root; inline components require one render root and do not emit
 a wrapper. Scope-aware expression rewriting prefixes model identifiers while

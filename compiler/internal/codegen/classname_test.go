@@ -137,10 +137,38 @@ func TestExtractClassName(t *testing.T) {
 			scripts: `const s = "export default class Foo extends PuzzleView {}";`,
 			wantErr: true,
 		},
+		{
+			// The comment exemption covers keyword ADJACENCY, not the class name:
+			// a comment where the name belongs leaves the declaration anonymous,
+			// exactly as the byte-scanning predecessor read it.
+			name:    "comment where the class name belongs is anonymous",
+			scripts: "export default class /* Foo */ Bar extends PuzzleView {}",
+			wantErr: true,
+			errText: "anonymous default class export is not supported",
+		},
+		{
+			// TypeScript generics: the constraint's `extends` sits inside angle
+			// brackets and must not satisfy the required inheritance clause.
+			name:    "generic constraint extends does not count as inheritance",
+			scripts: "export default class Foo<T extends Base> {}",
+			wantErr: true,
+			errText: "must extend PuzzleView",
+		},
+		{
+			name:    "generic class with a real extends clause",
+			scripts: "export default class Foo<T extends Base> extends PuzzleView {}",
+			want:    "Foo",
+		},
+		{
+			// A comment between the name and `extends` is transparent.
+			name:    "comment before the extends clause",
+			scripts: "export default class Foo /* base */ extends PuzzleView {}",
+			want:    "Foo",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := extractClassName(tc.scripts, "T.pzl", pos)
+			got, err := extractClassName(tc.scripts, tokenizeJS(tc.scripts), "T.pzl", pos)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("extractClassName() = %q, want error", got)

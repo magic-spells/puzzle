@@ -23,9 +23,10 @@ import (
 
 // extractClassName finds the exported class name in the opaque <script> body.
 // It returns a positioned error when there is no `export default class`
-// declaration or when the class is anonymous.
-func extractClassName(scripts, file string, scriptsPos parser.Position) (string, error) {
-	name, hasExtends, found := findDefaultClass(scripts)
+// declaration or when the class is anonymous. toks is the shared token stream
+// for `scripts` (tokenizeJS, computed once per compile).
+func extractClassName(scripts string, toks []jsTok, file string, scriptsPos parser.Position) (string, error) {
+	name, hasExtends, found := findDefaultClass(toks)
 	if !found {
 		return "", &parser.ParseError{
 			File: file, Line: scriptsPos.Line, Col: scriptsPos.Col,
@@ -47,78 +48,112 @@ func extractClassName(scripts, file string, scriptsPos parser.Position) (string,
 	return name, nil
 }
 
-// findDefaultClass scans s for the first REAL `export default class` keyword
-// sequence — three consecutive identifier tokens separated only by whitespace,
-// none of them inside a string/comment/regex/template literal (skipped via
-// parser.LexSkip). It returns the class name that follows (empty string for an
-// anonymous class — `class {}` or `class extends X`) and whether the sequence
-// was found at all. hasExtends reports whether that named declaration carries a
-// real class-level extends clause (the base identifier itself is intentionally
-// unrestricted). First match wins, matching the historical regex behavior, so
-// an anonymous first declaration is an error (not skipped to a later one).
-func findDefaultClass(s string) (name string, hasExtends bool, found bool) {
+// findDefaultClass scans the token stream for the first REAL `export default
+// class` keyword sequence — three consecutive identifier tokens, none of them
+// inside a string/comment/regex/template literal. It returns the class name that
+// follows (empty string for an anonymous class — `class {}` or `class extends
+// X`) and whether the sequence was found at all. hasExtends reports whether that
+// named declaration carries a real class-level extends clause (the base
+// identifier itself is intentionally unrestricted). First match wins, matching
+// the historical regex behavior, so an anonymous first declaration is an error
+// (not skipped to a later one).
+//
+// It consumes the SAME stream the binding scans use (scriptcollide.go) rather
+// than re-lexing the body — three independent walks over one <script> was the
+// whole cost this replaced.
+func findDefaultClass(toks []jsTok) (name string, hasExtends bool, found bool) {
 	// Keyword-sequence state: how many of export→default→class we've matched
-	// consecutively (whitespace-only between). A comment/string/regex or any
-	// non-whitespace operator byte breaks adjacency and resets to 0.
+	// consecutively. A string/regex/template or any punctuation token breaks
+	// adjacency and resets to 0; a COMMENT does not (it is whitespace to the
+	// grammar, so `export default /* x */ class Foo {}` is a real declaration
+	// while `export default "class"` is not).
 	const (
 		wantExport = iota
 		wantDefault
 		wantClass
 	)
 	state := wantExport
-	prevEndsExpr := false
-	// prevWasDot tracks whether the previous SIGNIFICANT token was a '.' member-
-	// access operator, so a keyword used as a property name (`obj.export`) is not
-	// mistaken for the keyword. A '.' is always a plain byte (LexSkip never starts
-	// a unit with it), so any consumed unit — string, comment, regex, identifier —
-	// clears it (a comment ending in '.', like `// do.`, must NOT make the next
-	// `export` look dotted).
+	// prevWasDot tracks whether the previous token was a '.' member-access
+	// operator, so a keyword used as a property name (`obj.export`) is not
+	// mistaken for the keyword. Any other token clears it — including a comment
+	// ending in '.', like `// do.`, which must NOT make the next `export` look
+	// dotted.
 	prevWasDot := false
-	i, n := 0, len(s)
-	for i < n {
-		c := s[i]
-		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
+	for i := 0; i < len(toks); i++ {
+		t := toks[i]
+		switch {
+		case t.ident != "":
 			switch {
-			case isIdentStart(c):
-				tok := s[i:next]
-				switch {
-				case state == wantExport && tok == "export" && !prevWasDot:
-					state = wantDefault
-				case state == wantDefault && tok == "default":
-					state = wantClass
-				case state == wantClass && tok == "abstract":
-					// TypeScript `export default abstract class Foo {}` — the
-					// modifier sits between `default` and `class`; keep waiting.
-				case state == wantClass && tok == "class":
-					name, hasExtends := classDeclarationAfter(s, next)
-					return name, hasExtends, true
-				case tok == "export" && !prevWasDot:
-					state = wantDefault // restart the sequence on a fresh `export`
-				default:
-					state = wantExport
-				}
-			case isCommentStart(s, i):
-				// A comment is whitespace to the grammar: `export default /* x */
-				// class Foo {}` and `export default // c⏎class Foo {}` are real
-				// declarations, so a comment must NOT break keyword adjacency.
-				// Strings/regexes/templates still do — `export default "class"`
-				// is not a class declaration.
+			case state == wantExport && t.ident == "export" && !prevWasDot:
+				state = wantDefault
+			case state == wantDefault && t.ident == "default":
+				state = wantClass
+			case state == wantClass && t.ident == "abstract":
+				// TypeScript `export default abstract class Foo {}` — the
+				// modifier sits between `default` and `class`; keep waiting.
+			case state == wantClass && t.ident == "class":
+				name, hasExtends := classDeclarationAfter(toks, i+1)
+				return name, hasExtends, true
+			case t.ident == "export" && !prevWasDot:
+				state = wantDefault // restart the sequence on a fresh `export`
 			default:
-				state = wantExport // string/regex/template breaks adjacency
+				state = wantExport
 			}
 			prevWasDot = false
-			prevEndsExpr = pee
-			i = next
-			continue
-		}
-		if !isASCIISpace(c) {
+		case t.comment:
+			prevWasDot = false
+		case t.opaque:
+			state = wantExport // string/regex/template breaks adjacency
+			prevWasDot = false
+		default:
 			state = wantExport // any operator/punctuation breaks adjacency
-			prevWasDot = c == '.'
+			prevWasDot = t.ch == '.'
 		}
-		prevEndsExpr = parser.LexPlainEndsExpr(c, prevEndsExpr)
-		i++
 	}
 	return "", false, false
+}
+
+// classDeclarationAfter reads the class name at toks[j] (the token after the
+// `class` keyword) and checks for a class-level `extends` before the body opens.
+// A non-identifier there — including a comment, which the byte-scanning
+// predecessor also refused — is an anonymous class. TypeScript generic parameter
+// lists are skipped by angle depth so `class C<T extends X> {}` does not mistake
+// the type constraint for the required inheritance clause.
+func classDeclarationAfter(toks []jsTok, j int) (name string, hasExtends bool) {
+	if j >= len(toks) || toks[j].ident == "" {
+		return "", false
+	}
+	name = toks[j].ident
+	if name == "extends" {
+		return "", true
+	}
+
+	angleDepth := 0
+	for i := j + 1; i < len(toks); i++ {
+		t := toks[i]
+		switch {
+		case t.ident != "":
+			if angleDepth == 0 && t.ident == "extends" {
+				return name, true
+			}
+		case t.opaque:
+			// strings/comments/regexes are transparent here
+		default:
+			switch t.ch {
+			case '<':
+				angleDepth++
+			case '>':
+				if angleDepth > 0 {
+					angleDepth--
+				}
+			case '{':
+				if angleDepth == 0 {
+					return name, false
+				}
+			}
+		}
+	}
+	return name, false
 }
 
 // isCommentStart reports whether the unit LexSkip is about to consume at i is a
@@ -128,57 +163,6 @@ func findDefaultClass(s string) (name string, hasExtends bool, found bool) {
 // look is an exact classification.
 func isCommentStart(s string, i int) bool {
 	return i+1 < len(s) && s[i] == '/' && (s[i+1] == '/' || s[i+1] == '*')
-}
-
-// classDeclarationAfter reads the class name following the `class` keyword and
-// checks for a class-level `extends` token before the body. TypeScript generic
-// parameter lists are skipped by angle depth so `class C<T extends X> {}` does
-// not mistake the type constraint for the required inheritance clause.
-func classDeclarationAfter(s string, i int) (name string, hasExtends bool) {
-	n := len(s)
-	for i < n && isASCIISpace(s[i]) {
-		i++
-	}
-	if i >= n || !isIdentStart(s[i]) {
-		return "", false
-	}
-	j := i
-	for j < n && isIdentChar(s[j]) {
-		j++
-	}
-	name = s[i:j]
-	if name == "extends" {
-		return "", true
-	}
-
-	angleDepth := 0
-	prevEndsExpr := false
-	for i = j; i < n; {
-		if next, pee, consumed := parser.LexSkip(s, i, prevEndsExpr); consumed {
-			if isIdentStart(s[i]) && angleDepth == 0 && s[i:next] == "extends" {
-				return name, true
-			}
-			prevEndsExpr = pee
-			i = next
-			continue
-		}
-		c := s[i]
-		switch c {
-		case '<':
-			angleDepth++
-		case '>':
-			if angleDepth > 0 {
-				angleDepth--
-			}
-		case '{':
-			if angleDepth == 0 {
-				return name, false
-			}
-		}
-		prevEndsExpr = parser.LexPlainEndsExpr(c, prevEndsExpr)
-		i++
-	}
-	return name, false
 }
 
 func isASCIISpace(b byte) bool {

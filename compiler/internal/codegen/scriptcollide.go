@@ -34,12 +34,24 @@ type jsTok struct {
 	ident  string // non-empty for an identifier token
 	ch     byte   // non-zero for a punctuation token
 	opaque bool   // a skipped string / comment / regex literal
-	off    int    // byte offset of the token's first byte in the scanned body
+	// comment narrows opaque to the two comment forms. The binding scans treat
+	// every opaque unit alike, but the class-name scan does not: a comment is
+	// whitespace to the grammar (`export default /* x */ class Foo {}` is a real
+	// declaration) while a string or regex breaks keyword adjacency.
+	comment bool
+	off     int // byte offset of the token's first byte in the scanned body
 }
 
 // tokenizeJS lexes s into jsToks, skipping whitespace and treating strings,
 // comments, and regex literals as single opaque tokens via parser.LexSkip (the
 // same regex-vs-division disambiguation the balanced scanners use).
+//
+// It runs ONCE per compile, over the <script> body, and the stream feeds all
+// three consumers that used to scan those bytes independently: the import-
+// collision warning, the reserved-binding check, and the class-name extraction
+// (classname.go). Sharing it also means the regex/division state is carried
+// cumulatively from the start of the body for every consumer, rather than each
+// restarting from a fresh prevEndsExpr partway through.
 func tokenizeJS(s string) []jsTok {
 	var toks []jsTok
 	prevEndsExpr := false
@@ -49,7 +61,7 @@ func tokenizeJS(s string) []jsTok {
 			if isIdentStart(c) {
 				toks = append(toks, jsTok{ident: s[i:next], off: i})
 			} else {
-				toks = append(toks, jsTok{opaque: true, off: i})
+				toks = append(toks, jsTok{opaque: true, comment: isCommentStart(s, i), off: i})
 			}
 			prevEndsExpr = pee
 			i = next
@@ -69,12 +81,8 @@ func tokenizeJS(s string) []jsTok {
 // (honoring `as` renames — the local name is bound, not the imported name),
 // and namespace (`* as ns`) forms; bare side-effect imports bind nothing.
 // Dynamic `import(...)` and `import.meta` are not binding forms and are skipped.
-func scriptImportBindings(scripts string) map[string]bool {
+func scriptImportBindings(toks []jsTok) map[string]bool {
 	set := map[string]bool{}
-	if scripts == "" {
-		return set
-	}
-	toks := tokenizeJS(scripts)
 	depth := 0 // only `import` at (){}[] depth 0 is a top-level statement
 	for i := 0; i < len(toks); {
 		t := toks[i]
@@ -176,17 +184,13 @@ func collectImportClause(toks []jsTok, j int, bind func(name string, off int)) i
 //   - `function`/`class` whose preceding token shows an EXPRESSION position — a
 //     named class expression (`const A = class ViewNode {}`) binds its name
 //     inside the expression only.
-func scriptTopLevelBindings(scripts string) map[string]int {
+func scriptTopLevelBindings(toks []jsTok) map[string]int {
 	set := map[string]int{}
-	if scripts == "" {
-		return set
-	}
 	bind := func(name string, off int) {
 		if _, dup := set[name]; !dup {
 			set[name] = off
 		}
 	}
-	toks := tokenizeJS(scripts)
 	depth := 0
 	// prev is the previous SIGNIFICANT token; strings, comments, and regex
 	// literals are transparent so a comment above a declaration does not hide the
@@ -265,8 +269,8 @@ func startsDeclaration(prev jsTok) bool {
 // The set is per-file and exact: `__s` is legal in a module that never coerces a
 // value for display, and the function-scope helpers (`__d`, `__f`) never collide
 // because they are shadowed inside the render body, not redeclared.
-func checkReservedScriptBindings(scripts string, emitted []string, file string, scriptsPos parser.Position) error {
-	bindings := scriptTopLevelBindings(scripts)
+func checkReservedScriptBindings(scripts string, toks []jsTok, emitted []string, file string, scriptsPos parser.Position) error {
+	bindings := scriptTopLevelBindings(toks)
 	if len(bindings) == 0 {
 		return nil
 	}
