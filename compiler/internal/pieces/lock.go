@@ -15,12 +15,15 @@ import (
 const LockFileName = "pieces.lock"
 
 // Lock is the pieces.lock document. Field order here is the emitted key order
-// (version, registry, pieces); map keys marshal sorted, giving a stable,
+// (version, registry, puzzle, pieces); map keys marshal sorted, giving a stable,
 // diff-friendly file.
 type Lock struct {
-	Version  int                  `json:"version"`
-	Registry string               `json:"registry"`
-	Pieces   map[string]LockEntry `json:"pieces"`
+	Version  int    `json:"version"`
+	Registry string `json:"registry"`
+	// Puzzle is the compiler version that performed the last add — with the
+	// resolved registry coordinates it makes a bug report's provenance exact.
+	Puzzle string               `json:"puzzle,omitempty"`
+	Pieces map[string]LockEntry `json:"pieces"`
 }
 
 // LockEntry records a piece's (or lib's) copied files: app-root-relative slash
@@ -60,9 +63,10 @@ func readLock(path string) (*Lock, error) {
 // preserving entries for pieces added in earlier runs. Re-adding a piece
 // REPLACES its entry (the files/hashes are now current); other keys are
 // untouched.
-func updateLock(path string, lock *Lock, source string, units []Unit) error {
+func updateLock(path string, lock *Lock, source, puzzleVersion string, units []Unit) error {
 	lock.Version = 1
 	lock.Registry = source
+	lock.Puzzle = puzzleVersion
 	for _, u := range units {
 		files := make(map[string]string, len(u.Files))
 		for _, f := range u.Files {

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
 // --- fixtures -----------------------------------------------------------------
@@ -329,6 +330,12 @@ func TestAddLockIsStableIndentedWithTrailingNewline(t *testing.T) {
 	}
 	if !bytes.Contains(data, []byte("\n  \"pieces\": {")) {
 		t.Errorf("pieces.lock should be 2-space indented, got:\n%s", data)
+	}
+	// Provenance sits between the registry coordinates and the pieces map — the
+	// key order the Lock struct comment promises. Built from version.Version so a
+	// release bump doesn't break the test.
+	if want := fmt.Sprintf("\n  \"puzzle\": %q,\n  \"pieces\": {", version.Version); !bytes.Contains(data, []byte(want)) {
+		t.Errorf("pieces.lock should carry %q in key order, got:\n%s", want, data)
 	}
 }
 
@@ -899,6 +906,17 @@ func TestNewFetcherKind(t *testing.T) {
 	if _, ok := NewFetcher("/local/dir").(*dirFetcher); !ok {
 		t.Error("local path should give a dirFetcher")
 	}
+	if _, ok := NewFetcher("npm:@magic-spells/puzzle-pieces").(*npmFetcher); !ok {
+		t.Error("npm: source should build an npmFetcher")
+	}
+	f, ok := NewFetcher("npm:@magic-spells/puzzle-pieces@0.6.2").(*npmFetcher)
+	if !ok || f.pin != "0.6.2" || f.pkg != "@magic-spells/puzzle-pieces" ||
+		f.base != npmRegistryBase || f.configured != "npm:@magic-spells/puzzle-pieces@0.6.2" {
+		t.Errorf("pinned npm source parsed wrong: %+v", f)
+	}
+	if _, ok := NewFetcher(defaultRegistry).(*npmFetcher); !ok {
+		t.Error("the default registry should now be the npm fetcher")
+	}
 }
 
 func TestCycleSafeResolution(t *testing.T) {
@@ -951,13 +969,13 @@ func (f *failFetcher) Source() string        { return f.source }
 func (f *failFetcher) Ref(rel string) string { return f.source + "/" + rel }
 
 func TestAddDefaultRegistryFailureHintsAtOverrides(t *testing.T) {
-	// The default public source failing must name both overrides — that error is
-	// the first thing a pre-publish user sees with no env var set.
+	// The default npm source failing must name every override — that error is the
+	// first thing a user sees when no pieces release matches their CLI version.
 	_, err := Add(Options{AppRoot: t.TempDir(), Names: []string{"button"}, Fetcher: &failFetcher{source: defaultRegistry}})
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	for _, want := range []string{"--registry", "PUZZLE_PIECES_REGISTRY"} {
+	for _, want := range []string{"--pieces-version", "--registry", "PUZZLE_PIECES_REGISTRY"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("default-source error should mention %s, got: %v", want, err)
 		}

@@ -92,13 +92,16 @@ Agent skill:
                                See also: puzzle upgrade skills, which refreshes only
                                the installs that already exist.
 
-The registry source is --registry, else $PUZZLE_PIECES_REGISTRY, else the public
-puzzle-pieces registry; it may be a local directory or an http(s) URL.`,
+The registry source is --registry, else $PUZZLE_PIECES_REGISTRY, else the
+@magic-spells/puzzle-pieces npm package, resolved to the newest release matching
+this CLI's major.minor version. A source may be npm:<package>[@version], a local
+directory, or an http(s) URL; --pieces-version pins the npm release exactly.`,
 	// MinimumNArgs(1), not ExactArgs(1): `add piece` takes one or more piece names
 	// after the "piece" selector; the other selectors ignore the trailing slice.
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		registry, _ := cmd.Flags().GetString("registry")
+		piecesVersion, _ := cmd.Flags().GetString("pieces-version")
 		overwrite, _ := cmd.Flags().GetBool("overwrite")
 		dir, _ := cmd.Flags().GetString("dir")
 		if dir == "" {
@@ -106,7 +109,7 @@ puzzle-pieces registry; it may be a local directory or an http(s) URL.`,
 		}
 		skillRoots, _ := cmd.Flags().GetStringArray("skill-root")
 		out := ui.New(os.Stdout)
-		return runAddWithEnvironment(os.Stdout, out, dir, args, registry, overwrite, addEnvironment{
+		return runAddWithEnvironment(os.Stdout, out, dir, args, registry, piecesVersion, overwrite, addEnvironment{
 			homeDir:     os.UserHomeDir,
 			input:       os.Stdin,
 			interactive: ui.IsTerminal(os.Stdin),
@@ -116,7 +119,8 @@ puzzle-pieces registry; it may be a local directory or an http(s) URL.`,
 }
 
 func init() {
-	addCmd.Flags().String("registry", "", "Piece registry source: a local directory or http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the public registry)")
+	addCmd.Flags().String("registry", "", "Piece registry source: npm:<package>[@version], a local directory, or an http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the @magic-spells/puzzle-pieces npm package)")
+	addCmd.Flags().String("pieces-version", "", "Exact @magic-spells/puzzle-pieces release to fetch (default: the newest release matching this CLI's major.minor)")
 	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces or skills")
 	addCmd.Flags().String("dir", "", "App root to add pieces into (default: walk up from the current directory for package.json/puzzle.config.js)")
 	addCmd.Flags().StringArray("skill-root", nil, "Config dir to install the skill into (repeatable); skips detection and the target prompt")
@@ -128,21 +132,21 @@ func init() {
 // copies the remaining args as piece names from the registry; "skills"/"skill"
 // installs the embedded Puzzle agent skill into detected tool config dirs.
 // runAdd is runAddWithEnvironment under the default environment: real home
-// directory, real stdin, no pinned skill roots.
+// directory, real stdin, no pinned skill roots, and no --pieces-version pin.
 func runAdd(w io.Writer, out *ui.Printer, dir string, args []string, registry string, overwrite bool) error {
-	return runAddWithEnvironment(w, out, dir, args, registry, overwrite, addEnvironment{
+	return runAddWithEnvironment(w, out, dir, args, registry, "", overwrite, addEnvironment{
 		homeDir:     os.UserHomeDir,
 		input:       os.Stdin,
 		interactive: ui.IsTerminal(os.Stdin),
 	})
 }
 
-func runAddWithEnvironment(w io.Writer, out *ui.Printer, dir string, args []string, registry string, overwrite bool, env addEnvironment) error {
+func runAddWithEnvironment(w io.Writer, out *ui.Printer, dir string, args []string, registry, piecesVersion string, overwrite bool, env addEnvironment) error {
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
 	case "tailwind", "tailwindcss":
 		return addTailwind(w, out, dir)
 	case "piece":
-		return addPieces(w, out, dir, registry, overwrite, args[1:])
+		return addPieces(w, out, dir, registry, piecesVersion, overwrite, args[1:])
 	case "skills", "skill":
 		return addSkills(w, out, overwrite, env)
 	default:
@@ -151,9 +155,12 @@ func runAddWithEnvironment(w io.Writer, out *ui.Printer, dir string, args []stri
 }
 
 // addPieces resolves the app root (walk-up, honoring --dir) and hands off to the
-// pieces package. The cmd layer stays thin: source selection, root walk-up, and
-// presentation live here; all copy/lock/resolve logic is in internal/pieces.
-func addPieces(w io.Writer, out *ui.Printer, dir, registry string, overwrite bool, names []string) error {
+// pieces package. The cmd layer stays thin: source selection, the optional
+// --pieces-version pin, root walk-up, and presentation live here; all
+// copy/lock/resolve logic is in internal/pieces. A non-empty piecesVersion is
+// applied to the resolved source, which fails loudly when the source is not an
+// npm one or already carries a pin.
+func addPieces(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string, overwrite bool, names []string) error {
 	if len(names) == 0 {
 		return fmt.Errorf("usage: puzzle add piece <name…>")
 	}
@@ -169,6 +176,15 @@ func addPieces(w io.Writer, out *ui.Printer, dir, registry string, overwrite boo
 	}
 
 	source := pieces.ResolveSource(registry)
+	// Trim like ResolveSource trims --registry: a padded flag value must never
+	// become part of the pinned spec, and an all-blank one reads as unset.
+	if v := strings.TrimSpace(piecesVersion); v != "" {
+		pinned, err := pieces.PinNpmSource(source, v)
+		if err != nil {
+			return err
+		}
+		source = pinned
+	}
 	res, err := pieces.Add(pieces.Options{
 		AppRoot:   root,
 		Names:     names,
