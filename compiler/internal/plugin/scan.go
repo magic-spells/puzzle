@@ -55,8 +55,10 @@ type Features struct {
 	Flip bool
 }
 
-// features projects the scan result onto the define bits.
-func (u Usage) features() Features {
+// Features projects the scan result onto the define bits. It is exported for
+// the long-lived builders, which hold a Usage directly and have to decide
+// whether the Defines frozen into an esbuild context went stale.
+func (u Usage) Features() Features {
 	return Features{
 		Flip: u.HasFlip,
 	}

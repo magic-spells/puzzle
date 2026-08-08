@@ -35,7 +35,7 @@ func (p *Plugin) SetUsage(usage Usage) {
 	defer p.mu.Unlock()
 
 	p.setFormattersLocked(usage.Formatters)
-	p.features = usage.features()
+	p.features = usage.Features()
 }
 
 func (p *Plugin) setFormattersLocked(used map[string]bool) {
