@@ -688,3 +688,109 @@ describe('static output ignores storage with a warning (D81, item B3)', () => {
 		expect(summary.warnings.some((w) => w.includes('ignores `storage`'))).toBe(false);
 	});
 });
+
+describe('static subset render (D155)', () => {
+	// The dev loop's route-level invalidation hook. The contract is that a subset
+	// render is INDISTINGUISHABLE from a full one for everything a later page
+	// depends on — the page list, the skip set, the warnings, the output paths and
+	// above all the slugs, which are assigned by walking the page list in order.
+	const renderBoth = async (cfg, only) => {
+		const fullDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-full-'));
+		const partDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-part-'));
+		const full = await prerenderToDir(cfg, {
+			outDir: fullDir,
+			shellPath: writeShell(fullDir),
+			mode: 'static',
+		});
+		const part = await prerenderToDir(cfg, {
+			outDir: partDir,
+			shellPath: writeShell(partDir),
+			mode: 'static',
+			only,
+		});
+		return { fullDir, partDir, full, part };
+	};
+
+	it('renders only the requested routes and reports the rest as reused', async () => {
+		const { fullDir, partDir, full, part } = await renderBoth(staticConfig(), ['/guide/templates']);
+
+		expect(part.written.map((page) => page.path)).toEqual(full.written.map((page) => page.path));
+		expect(part.written.filter((page) => !page.reused).map((page) => page.path)).toEqual([
+			'/guide/templates',
+		]);
+		// Slugs, output paths, modules and route snapshots are identical either way.
+		for (let i = 0; i < full.written.length; i++) {
+			expect(part.written[i].entry).toBe(full.written[i].entry);
+			expect(part.written[i].modules).toEqual(full.written[i].modules);
+			expect(part.written[i].route).toEqual(full.written[i].route);
+			expect(path.relative(partDir, part.written[i].file)).toBe(
+				path.relative(fullDir, full.written[i].file)
+			);
+		}
+		expect(part.skipped).toEqual(full.skipped);
+		expect(part.warnings).toEqual(full.warnings);
+	});
+
+	it('writes the rendered page byte-for-byte and writes nothing for a reused one', async () => {
+		const { fullDir, partDir, part } = await renderBoth(staticConfig(), ['/guide/templates']);
+
+		const rendered = part.written.find((page) => page.path === '/guide/templates');
+		expect(fs.readFileSync(rendered.file, 'utf8')).toBe(
+			fs.readFileSync(path.join(fullDir, 'guide', 'templates', 'index.html'), 'utf8')
+		);
+		for (const page of part.written) {
+			if (page.reused) expect(fs.existsSync(page.file)).toBe(false);
+		}
+	});
+
+	it('never runs beforeMount or data() for a page it is not rendering', async () => {
+		const seen = [];
+		class Counted extends PuzzleView {
+			data() {
+				seen.push('data');
+				return {};
+			}
+			render() {
+				return h('p', {}, [text('counted')]);
+			}
+		}
+		stamp(Counted, 'app/views/Counted.pzl');
+		const cfg = {
+			target: '#app',
+			beforeMount() {
+				seen.push('beforeMount');
+			},
+			routes: [
+				{ path: '/', name: 'home', view: Counted, layout: Layout },
+				{ path: '/two', name: 'two', view: Counted, layout: Layout },
+				{ path: '/three', name: 'three', view: Counted, layout: Layout },
+			],
+		};
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-hooks-'));
+		await prerenderToDir(cfg, {
+			outDir,
+			shellPath: writeShell(outDir),
+			mode: 'static',
+			only: ['/two'],
+		});
+		expect(seen).toEqual(['beforeMount', 'data']);
+	});
+
+	it('renders nothing at all for an empty filter, and still reports every page', async () => {
+		const { full, part } = await renderBoth(staticConfig(), []);
+		expect(part.written.every((page) => page.reused)).toBe(true);
+		expect(part.written).toHaveLength(full.written.length);
+		expect(part.count).toBe(full.count);
+	});
+
+	it('is ignored in hybrid mode, where every reachable route is always rendered', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-hybrid-'));
+		const summary = await prerenderToDir(staticConfig(), {
+			outDir,
+			shellPath: writeShell(outDir),
+			only: [],
+		});
+		expect(summary.written.every((page) => !page.reused)).toBe(true);
+		expect(fs.existsSync(path.join(outDir, 'index.html'))).toBe(true);
+	});
+});

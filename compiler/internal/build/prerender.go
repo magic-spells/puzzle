@@ -276,12 +276,17 @@ func prerenderBundleOptions(absRoot, stdin, outfile string, pl *plugin.Plugin) a
 // sentinel fails the build with node's stderr/stdout surfaced. label names the
 // mode in error text. It follows the node-execution + sentinel-parsing pattern
 // of config.readConfigViaNode.
-func runPrerender(entryFile, staging, label string) (string, error) {
+//
+// extra carries any further argv the generated entry understands — today only
+// the static dev builder's D155 route filter, a JSON array of route paths at
+// argv[4]. A one-shot build passes none.
+func runPrerender(entryFile, staging, label string, extra ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), prerenderTimeout)
 	defer cancel()
 
 	shellPath := filepath.Join(staging, "index.html")
-	cmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entryFile, staging, shellPath)
+	args := append([]string{"--enable-source-maps", entryFile, staging, shellPath}, extra...)
+	cmd := exec.CommandContext(ctx, "node", args...)
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout

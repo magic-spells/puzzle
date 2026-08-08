@@ -12,6 +12,14 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 )
 
+// bodyBlocks is how many prose sections each generated view renders. A one-
+// element view made the fixture render 148 pages in under 100ms, which is two
+// orders of magnitude faster per page than the reference deployment's docs
+// pages and made the render phase — the thing route-level invalidation exists
+// to skip — disappear into node's startup cost. Twelve blocks puts a generated
+// page in the same order of magnitude as a real one.
+const bodyBlocks = 12
+
 // largeStaticFixture generates a site in the shape of the reference deployment:
 // routes routes, each with its own view, plus a shared component library the
 // views import, so the .pzl count lands near 250 and the module graph is wide
@@ -58,12 +66,22 @@ export default class C%03d extends PuzzleView {}
 	imports.WriteString("import DefaultLayout from './layouts/Default.pzl';\n")
 	for i := 0; i < routes; i++ {
 		a, b := i%components, (i*3+1)%components
+		var body strings.Builder
+		for s := 0; s < bodyBlocks; s++ {
+			fmt.Fprintf(&body, `
+    <section class="block b%d">
+      <h2>Section %d</h2>
+      <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod.</p>
+      <ul><li>one</li><li>two</li><li>three</li><li>four</li></ul>
+      <pre><code>const x = %d;</code></pre>
+    </section>`, s, s, s)
+		}
 		files[fmt.Sprintf("app/views/V%03d.pzl", i)] = fmt.Sprintf(`<puzzle-view>
   <article>
     <h1>Page %d</h1>
     <A>alpha</A>
     <B>beta</B>
-    <p>{ label }</p>
+    <p>{ label }</p>`+body.String()+`
   </article>
 </puzzle-view>
 <script>
@@ -154,16 +172,38 @@ export default class V007 extends PuzzleView {
 	if err := builder.Rebuild(nil); err != nil {
 		t.Fatalf("warm-up dev rebuild: %v", err)
 	}
-	var warm []time.Duration
+	// The warm builder with route-level invalidation OFF: an empty change list is
+	// the classifier's "I know nothing" state, so every route is re-rendered.
+	// This is what a save cost after D154 and before D155.
+	var warmFull []time.Duration
 	for i := 0; i < 5; i++ {
 		edit(100 + i)
+		start := time.Now()
+		if err := builder.Rebuild(nil); err != nil {
+			t.Fatalf("dev full rebuild %d: %v", i, err)
+		}
+		if !builder.lastPlan.full {
+			t.Fatalf("dev full rebuild %d did not render everything", i)
+		}
+		warmFull = append(warmFull, time.Since(start))
+	}
+
+	// And with it on: the same leaf edit, classified down to the one route that
+	// can observe it.
+	var warm []time.Duration
+	for i := 0; i < 5; i++ {
+		edit(200 + i)
 		start := time.Now()
 		if err := builder.Rebuild([]string{leaf}); err != nil {
 			t.Fatalf("dev rebuild %d: %v", i, err)
 		}
+		if builder.lastPlan.full || len(builder.lastPlan.routes) != 1 {
+			t.Fatalf("dev rebuild %d classified as %+v, want one route", i, builder.lastPlan)
+		}
 		warm = append(warm, time.Since(start))
 	}
 
-	t.Logf("cold build.Build per save: median %v  (all: %v)", median(cold), cold)
-	t.Logf("StaticWatchBuilder per save: median %v  (all: %v)", median(warm), warm)
+	t.Logf("cold build.Build per save:        median %v  (all: %v)", median(cold), cold)
+	t.Logf("StaticWatchBuilder, full render:  median %v  (all: %v)", median(warmFull), warmFull)
+	t.Logf("StaticWatchBuilder, 1/%d routes:  median %v  (all: %v)", routes, median(warm), warm)
 }

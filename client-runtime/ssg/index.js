@@ -56,6 +56,15 @@ import { MANAGED_TAGS } from '../headTags.js';
  * @param {Router} [opts.routeRouter] INTERNAL — an already-constructed memory
  *   Router over `config.routes`, so prerenderToDir's up-front route validation and
  *   this pass share one compiled matcher table instead of building it twice.
+ * @param {string[]} [opts.only] STATIC MODE ONLY — the subset of route paths to
+ *   actually render. Every other reachable route still produces a page object
+ *   (so route enumeration, skip/duplicate detection, slug assignment and the
+ *   warning set are exactly what a full render produces), but it is flagged
+ *   `reused: true` and carries no `html`/`data`: no context is built for it, so
+ *   `beforeMount` and `data()` never run on its behalf. `undefined` renders
+ *   everything. This is the dev-loop's route-level invalidation hook (D155) —
+ *   the caller is responsible for supplying the previous render's output for
+ *   every reused page.
  * @returns {Promise<{
  *   pages: Array<{ path: string, html: string|null, title: string|null,
  *     head: { title: string|null, description: string|null, canonical: string|null,
@@ -107,6 +116,10 @@ export async function prerender(config, opts = {}) {
 		shadowedPaths.map(({ index, shadowedBy }) => [index, shadowedBy])
 	);
 	const entries = enumerateRoutes(config.routes ?? []);
+	// The render filter is honoured in static mode only: hybrid's per-page guard
+	// warning and shadow attribution assume every reachable route is rendered, and
+	// nothing needs a subset render there.
+	const only = isStatic && opts.only ? new Set(opts.only) : null;
 
 	const pages = [];
 	const skipped = [];
@@ -235,6 +248,23 @@ export async function prerender(config, opts = {}) {
 			continue;
 		}
 
+		// Subset render (D155): this route's output is unchanged since the last
+		// render, so the caller will supply it. The page object is still produced —
+		// it consumes its output-path claim and its slug, and the SAME slug must
+		// fall to the SAME route as in a full render or the per-page bundle URLs
+		// would shift under pages nobody re-rendered. `modules`/`route` are pure
+		// functions of the route entry (no context, no store), so the generated
+		// per-page entry module is byte-identical either way; `data` is deliberately
+		// absent, because a page with no fresh island must not be written.
+		if (only && !only.has(fullPath)) {
+			const page = { path: fullPath, html: null, title: null, head: null, reused: true };
+			if (chain.some((route) => route.prerender === false)) page.prerender = false;
+			page.modules = collectModules(entry);
+			page.route = serializeRouteJSON(entry);
+			pages.push(page);
+			continue;
+		}
+
 		// Opt-out: a `prerender: false` anywhere in the chain writes the untouched
 		// shell at this path (an SPA-only island inside a static site). In static
 		// mode the context is still built (beforeMount runs) and its store snapshot
@@ -308,11 +338,15 @@ export async function prerender(config, opts = {}) {
  *   static pages: the `/app.js` bundle tag is stripped, each page carries a
  *   `data-puzzle-static` target + an inline JSON data island + a per-page module
  *   script, and the summary gains the extra fields the Go static build needs.
+ * @param {string[]} [options.only] static mode only — render just these route
+ *   paths (see prerender). Every other page is reported in `written` with
+ *   `reused: true` and NO file is written for it; the caller must place the
+ *   previous render's file at the reported `file` path.
  * @returns {Promise<{ outDir: string, written: Array<object>, skipped: Array<{path,reason}>,
  *   warnings: string[], count: number, mode?: string, target?: string,
  *   apiURL?: string|null, hasFormatters?: boolean }>}
  */
-export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid' } = {}) {
+export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid', only } = {}) {
 	if (!outDir) throw new Error('[puzzle] prerenderToDir requires an outDir');
 	if (!shellPath) throw new Error('[puzzle] prerenderToDir requires a shellPath');
 
@@ -326,7 +360,7 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 
 	const targetId = parseTargetId(config.target);
 	const shell = fs.readFileSync(shellPath, 'utf8');
-	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter });
+	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter, only });
 
 	if (mode === 'static') {
 		return writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings });
@@ -411,6 +445,11 @@ async function writeFiles(files) {
  *
  * A page whose output file an earlier page already claimed is skipped here with
  * reason `'duplicate'` rather than overwriting it (see claimedPaths below).
+ *
+ * A page flagged `reused` by a subset render (D155) takes its output-path claim
+ * and its slug exactly as it would have, and is reported in `written` with
+ * `reused: true` — but no file is produced for it. Everything order-dependent
+ * therefore lands identically to a full render; only the writes differ.
  */
 async function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings }) {
 	// The app-bundle tag is stripped once (the shell is identical for every page) so
@@ -467,7 +506,23 @@ async function writeStaticDir({ config, outDir, shell, targetId, pages, skipped,
 		}
 		claimedPaths.set(outPath, page.path);
 
+		// The slug is assigned BEFORE the reuse check on purpose: slugs are
+		// order-dependent (uniqueSlug's collision counter walks the page list), so a
+		// subset render has to consume them for every page a full render would, or
+		// the surviving pages' `_puzzle/<slug>.js` URLs would renumber.
 		const slug = uniqueSlug(computeSlug(page.path), slugCounts);
+		if (page.reused) {
+			written.push({
+				path: page.path,
+				file: outPath,
+				prerender: page.prerender !== false,
+				entry: `_puzzle/${slug}.js`,
+				modules: page.modules,
+				route: page.route,
+				reused: true,
+			});
+			continue;
+		}
 		const html = injectStaticShell(baseShell, {
 			targetId,
 			base,

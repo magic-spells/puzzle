@@ -43,6 +43,8 @@ export interface PrerenderedPage {
 	modules?: { views: string[]; layout: string | null };
 	/** The page's plain-JSON route snapshot — static mode only. */
 	route?: object;
+	/** Enumerated but deliberately not rendered by a subset render (D155). */
+	reused?: boolean;
 }
 
 /** One leaf entry from `enumerateRoutes` — the prerenderer's per-page unit. */
@@ -82,6 +84,12 @@ export interface WrittenPage {
 	modules?: { views: string[]; layout: string | null };
 	/** The page's plain-JSON route snapshot — static mode only. */
 	route?: object;
+	/**
+	 * Set by a subset render (`only`): this page was enumerated and claimed its
+	 * output path and slug, but was deliberately not rendered. `file` does not
+	 * exist — the caller supplies the previous render's copy (D155).
+	 */
+	reused?: boolean;
 }
 
 /** The summary returned by `prerenderToDir`. */
@@ -122,6 +130,14 @@ export interface PrerenderToDirOptions {
 	 * per-page data island + module script, extended summary fields).
 	 */
 	mode?: 'hybrid' | 'static';
+	/**
+	 * Static mode only — render just these route paths (D155). Every other
+	 * reachable route is still enumerated, still claims its output path and slug,
+	 * and is still reported in `written` with `reused: true`, but no context is
+	 * built for it and no file is written: the caller must place the previous
+	 * render's file at the reported path. Omitted renders everything.
+	 */
+	only?: string[];
 }
 
 /**

@@ -41,6 +41,12 @@ SVG memo nested inside the cache is keyed by PATH, so an edited icon whose
 consuming `.pzl` is byte-identical would otherwise be served from the pre-edit
 scan with nothing able to notice. Both sides of an eviction are symlink-resolved
 (esbuild reports resolved paths, a watcher reports what the user spelled).
+That same `{#svg}` edge is also indexed the OTHER way round, asset → the `.pzl`
+files that inline it (`AssetConsumers`), because an inlined asset is a codegen
+watch file rather than an esbuild input and route-level invalidation
+([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]) has no metafile that can place it.
+Those entries are never removed: a stale one can only over-report consumers, and
+an over-reported consumer costs one re-render.
 
 The project usage walk has the same shape of problem: it reads and fully parses
 every `.pzl` to answer two questions (which builtins are called, is `flip`
