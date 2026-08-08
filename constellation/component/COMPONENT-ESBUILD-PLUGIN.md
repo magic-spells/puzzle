@@ -23,6 +23,17 @@ verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 
 The `.pzl` onLoad plugin reads a file, splits/parses it, generates JavaScript,
 and returns positioned esbuild messages without writing intermediate modules.
+The transform itself is pass-INDEPENDENT — the generated module is a pure
+function of (app root, path, bytes), since platform, dev/prod, defines and
+minification are applied to it afterwards by esbuild — so a one-shot build
+memoizes it in a build-scoped `CompileCache` shared by all three plugin
+instances. A pass that hits the memo still does its own per-pass work:
+registering the file's `<style>` block in ITS collector (never on a failed
+compile) and returning fresh copies of the message/watch-file slices. Codegen's
+out-of-band warnings print from the memo's compute function, so they appear once
+per build rather than once per pass. The cache is never attached on the
+watch/dev path, which keeps esbuild's own incremental onLoad cache the only memo
+there.
 Scripts use JS or TS loader according to `<script lang>`; styles collect in a
 mutex-protected path map; inline SVG dependencies join esbuild's watch set.
 

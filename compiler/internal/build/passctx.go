@@ -22,6 +22,11 @@ type passContext struct {
 	// esbuild Define map and the virtual formatter manifest are identical across
 	// passes by construction rather than by three walks agreeing.
 	usage plugin.Usage
+
+	// cache memoizes the .pzl transform (read → split → codegen) so the three
+	// passes compile each file once between them instead of three times. Its
+	// lifetime is this struct's, which is this Build call's.
+	cache *plugin.CompileCache
 }
 
 // newPassContext runs the once-per-build source scans.
@@ -30,7 +35,7 @@ func newPassContext(absRoot string) (*passContext, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &passContext{usage: usage}, nil
+	return &passContext{usage: usage, cache: plugin.NewCompileCache()}, nil
 }
 
 // plugin builds a fresh *plugin.Plugin for one esbuild pass, pre-loaded with
@@ -39,5 +44,6 @@ func newPassContext(absRoot string) (*passContext, error) {
 func (pc *passContext) plugin(absRoot string) *plugin.Plugin {
 	pl := plugin.New(absRoot)
 	pl.SetUsage(pc.usage)
+	pl.SetCompileCache(pc.cache)
 	return pl
 }
