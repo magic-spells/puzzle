@@ -158,6 +158,10 @@ func (p *Plugin) setup(build api.PluginBuild) {
 // pass; three identical copies of the same advisory said nothing extra and made
 // a static build's log look like three failures.
 func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
+	p.mu.Lock()
+	svgCache := p.cache.svgCache()
+	p.mu.Unlock()
+
 	// App-relative filename: drives ModeForPath (app/views, app/layouts →
 	// view mode) and makes error locations readable. Fall back to the
 	// absolute path if it is somehow outside the root.
@@ -203,6 +207,9 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 		// Bundled builds dedup {#svg} into shared virtual modules (D46
 		// amendment); the standalone pzlc path leaves this off and inlines.
 		SVGDedup: true,
+		// One read + scan per {#svg} asset per build, shared with the virtual
+		// asset-module loader below (nil on the watch path — no memo).
+		SVGCache: svgCache,
 	})
 	out.watchFiles = res.InlinedFiles
 	out.warnings = res.Warnings

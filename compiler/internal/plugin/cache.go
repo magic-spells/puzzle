@@ -73,6 +73,12 @@ type pzlResult struct {
 type CompileCache struct {
 	mu      sync.Mutex
 	entries map[string]*cacheEntry
+
+	// svg memoizes {#svg} asset reads + scans for the same build. It is shared
+	// with codegen (through Options.SVGCache) AND with the shared-asset virtual
+	// module loader, so an icon used at fifty sites across three passes is read
+	// and parsed once rather than 150+ times.
+	svg *codegen.SVGCache
 }
 
 type cacheEntry struct {
@@ -84,7 +90,16 @@ type cacheEntry struct {
 // "no caching" value — every method is nil-safe — which is what the watch/dev
 // path passes.
 func NewCompileCache() *CompileCache {
-	return &CompileCache{entries: map[string]*cacheEntry{}}
+	return &CompileCache{entries: map[string]*cacheEntry{}, svg: codegen.NewSVGCache()}
+}
+
+// svgCache returns the build's {#svg} memo, or nil when there is no cache (the
+// watch/dev path), which codegen and the asset loader both treat as "no memo".
+func (c *CompileCache) svgCache() *codegen.SVGCache {
+	if c == nil {
+		return nil
+	}
+	return c.svg
 }
 
 // SetCompileCache attaches a build-scoped memo shared with the other passes of

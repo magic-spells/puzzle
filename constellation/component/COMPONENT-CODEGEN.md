@@ -109,7 +109,16 @@ and remount it. A generated-key range loop stays stable and counts as zero
 slots. Balanced branches emit unchanged.
 
 Inline SVG reads one app asset, validates a literal root, emits an island SVG
-vnode, and registers the file with esbuild watch inputs. Scoped styles share a
+vnode, and registers the file with esbuild watch inputs. The read + scan is
+memoized per absolute path in an optional build-scoped `SVGCache`
+(`Options.SVGCache`), which the esbuild plugin also shares with its shared-asset
+virtual module loader — so an icon used at N sites across M files and three
+passes is read and parsed once, not 3N+1 times. The scan is NOT skipped in dedup
+mode even though `emitRawSVG` discards the attrs there: "valid" is defined by the
+scan, and a `<div>` root must still fail the .pzl compile with a ParseError
+positioned inside the SVG. Memoized scans hand out a COPY of the attr slice —
+`forBody` prepends a synthetic loop `key`, which would otherwise write through
+into every other use site. Scoped styles share a
 stable app-relative path hash with the plugin's `@scope` wrapper.
 
 Golden tests byte-compare focused fixtures plus the canonical todos output and

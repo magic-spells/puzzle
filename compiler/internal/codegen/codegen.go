@@ -95,6 +95,12 @@ type Options struct {
 	// codegen inlines the markup at every use site as before — a self-contained
 	// module with no unresolved virtual imports.
 	SVGDedup bool
+
+	// SVGCache memoizes {#svg} asset reads + scans across every file compiled in
+	// one build (svgcache.go). The esbuild plugin creates one per build and shares
+	// it with its shared-asset module loader; left nil, every use site reads and
+	// scans its file exactly as before.
+	SVGCache *SVGCache
 }
 
 // Result is the output of Compile: the generated module JS and the absolute (or
@@ -173,7 +179,7 @@ func compile(sec *parser.Sections, opts Options, inlined *[]string, warnings *[]
 		}
 	}
 
-	c := &compiler{file: opts.Filename, svgDedup: opts.SVGDedup}
+	c := &compiler{file: opts.Filename, svgDedup: opts.SVGDedup, svgCache: opts.SVGCache}
 	scope := map[string]bool{}
 
 	// Resolve {#svg} nodes (v1.14, D46): read each referenced file and splice an
@@ -366,6 +372,10 @@ func moduleStampPath(opts Options) string {
 
 type compiler struct {
 	file string
+
+	// svgCache memoizes {#svg} asset reads + scans for the whole build. Nil is
+	// valid and means "read and scan every time" (pzlc standalone, goldens).
+	svgCache *SVGCache
 
 	// Per-file @event handler-cache site counter (v1.29, D62 / SPEC §31). Each
 	// CACHEABLE (data-independent) @event value is emitted as
