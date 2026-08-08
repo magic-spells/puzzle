@@ -78,6 +78,12 @@ updating every place the number is written by hand:
 - the header badge in `demo/app/layouts/Default.pzl` (`{ pieceCount } pieces · v0.5.0`)
 - `demo/package.json`'s `@magic-spells/puzzle` dependency range, which should point at the
   matching framework release
+- the root `package.json` `version` — the published `@magic-spells/puzzle-pieces`
+  npm package the `add` CLI resolves against
+
+The PATCH digit is the registry's own: a piece bugfix publishes as e.g. 0.6.1
+(`npm publish` from the repo root) with no framework release and no demo bump.
+Only major.minor moves in lockstep with the framework.
 
 `registry/registry.json`'s `"version": 1` is the manifest SCHEMA version read by the `add`
 CLI — it is unrelated and must not be bumped along with the release.
@@ -210,11 +216,16 @@ CLI — it is unrelated and must not be bumped along with the release.
 ## The `add` CLI (shipped in the Puzzle Go CLI)
 
 `puzzle add piece <name…>` lives in the puzzle repo (`../puzzle/compiler/internal/pieces/`
-+ `add.go`) — there is NO npm package; making this repo public activates the default
-registry URL. Contract this registry must stay compatible with:
++ `add.go`) — there is NO npm package for the CLI itself; the default registry is the
+`@magic-spells/puzzle-pieces` npm package. Contract this registry must stay compatible
+with:
 
-- Registry source chain: `--registry <path|url>` flag → `PUZZLE_PIECES_REGISTRY` env var
-  → `https://raw.githubusercontent.com/magic-spells/puzzle-pieces/main/registry`.
+- Registry source chain: `--registry <path|url|npm:pkg[@version]>` flag →
+  `PUZZLE_PIECES_REGISTRY` env var → the `@magic-spells/puzzle-pieces` npm package,
+  resolved to the NEWEST published release whose major.minor equals the CLI's own
+  version (lockstep; `--pieces-version` pins an exact release). The CLI downloads
+  the npm tarball, unpacks it in memory, and reads `package/registry/…` out of it —
+  the package is never installed. The old raw-GitHub default is gone as of 0.6.0.
 - Reads `registry.json`, resolves `registryDependencies` transitively (dedupe), copies each
   file to its manifest `targetDir` (`app/components/ui/` for pieces, `app/lib/` for lib
   files). **Refuses to overwrite an existing target unless `--overwrite`** (all-or-nothing

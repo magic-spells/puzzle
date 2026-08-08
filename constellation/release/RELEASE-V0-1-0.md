@@ -10,7 +10,7 @@ connections:
 
 # v0.1.0 — first publish (public registry + add CLI)
 
-Theme: make the finished registry something an external Puzzle app can actually pull from. **Publishing = making this GitHub repo public** — no npm package. The shipped [[FEATURE-ADD-CLI]] (`puzzle add piece`, in the Puzzle Go CLI) defaults to `https://raw.githubusercontent.com/magic-spells/puzzle-pieces/main/registry`, so the flip to public activates the default registry URL directly. The earlier plan of an npm-hosted `npx @magic-spells/puzzle-pieces add` (registry embedded in a tarball) was superseded 2026-07-17; consumers by definition already have the `puzzle` CLI ([[DECISION-COPY-IN-DISTRIBUTION]]).
+Theme: make the finished registry something an external Puzzle app can actually pull from. **Publishing = making this GitHub repo public** — no npm package. The shipped [[FEATURE-ADD-CLI]] (`puzzle add piece`, in the Puzzle Go CLI) defaults to `https://raw.githubusercontent.com/magic-spells/puzzle-pieces/main/registry`, so the flip to public activates the default registry URL directly. The earlier plan of an npm-hosted `npx @magic-spells/puzzle-pieces add` (registry embedded in a tarball) was superseded 2026-07-17; consumers by definition already have the `puzzle` CLI ([[DECISION-COPY-IN-DISTRIBUTION]]). *(Later update: the npm-transport half of that plan was re-adopted for 0.6.0 — the registry ships as the versioned `@magic-spells/puzzle-pieces` package the CLI downloads, replacing the raw-GitHub default source; the `npx …` standalone CLI remains superseded. See [[FEATURE-ADD-CLI]].)*
 
 ## Done
 

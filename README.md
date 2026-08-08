@@ -2,7 +2,8 @@
 
 Beautifully-behaved UI components for the [Puzzle framework](https://github.com/magic-spells/puzzle).
 Tailwind-styled, accessible, morph-aware — and **copied into your app, not installed
-from npm**.
+from npm**. This package exists only as the transport for `puzzle add piece` — the CLI
+downloads it and copies sources into your app; you never install or import it.
 
 **[▶ Browse the component library](https://magic-spells.github.io/puzzle-pieces/)** —
 live docs and examples for every piece.

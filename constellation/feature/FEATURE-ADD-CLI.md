@@ -9,11 +9,11 @@ connections:
 
 # The add CLI — resolver + copier
 
-**Status: SHIPPED 2026-07-17 — as `puzzle add piece <name…>` in the Puzzle Go CLI** (framework-CLI integration chosen over a standalone npm package; there is no `@magic-spells/puzzle-pieces` npm package and none is planned). Lives in `../puzzle/compiler/internal/pieces/` + `add.go`, with 22 Go tests, verified end-to-end against this registry (button; date-picker → calendar + `lib/date-math.js` transitively; conflict refusal; consumer app builds with pieces + morph-engine). Because the repo is registry-shaped ([[DECISION-REGISTRY-SHAPED-REPO]]) the CLI is a pure resolver + file-copier, never a build tool.
+**Status: SHIPPED 2026-07-17 — as `puzzle add piece <name…>` in the Puzzle Go CLI** (framework-CLI integration chosen over a standalone npm CLI; the `@magic-spells/puzzle-pieces` npm package exists only as the versioned TRANSPORT the CLI downloads — `files: ["registry"]`, versioned in lockstep with the framework's major.minor, patch free for the registry — nobody installs or imports it). Lives in `../puzzle/compiler/internal/pieces/` + `add.go`, with 22 Go tests, verified end-to-end against this registry (button; date-picker → calendar + `lib/date-math.js` transitively; conflict refusal; consumer app builds with pieces + morph-engine). Because the repo is registry-shaped ([[DECISION-REGISTRY-SHAPED-REPO]]) the CLI is a pure resolver + file-copier, never a build tool.
 
 ## Shipped contract (what this registry must stay compatible with)
 
-1. **Registry source chain:** `--registry <path|url>` flag → `PUZZLE_PIECES_REGISTRY` env var → default `https://raw.githubusercontent.com/magic-spells/puzzle-pieces/main/registry`. The default URL goes live the moment this repo is public — that IS the publish ([[RELEASE-V0-1-0]]).
+1. **Registry source chain:** `--registry <path|url|npm:pkg[@version]>` flag → `PUZZLE_PIECES_REGISTRY` env var → default: the `@magic-spells/puzzle-pieces` npm package, resolved to the newest release matching the CLI's own major.minor (`--pieces-version` pins an exact version). The raw-GitHub default is gone; publishing the package is what activates the default source (the repo going public is no longer the mechanism — cf. [[RELEASE-V0-1-0]]).
 2. Reads `registry.json`; resolves requested pieces **plus `registryDependencies` transitively** (dedupe). Pieces → `app/components/ui/`, `lib/*.js` → `app/lib/`.
 3. **Refuses to overwrite an existing target unless `--overwrite`** — all-or-nothing pre-flight.
 4. **Prints — never auto-runs — the npm install** for accumulated `dependencies` (e.g. `@magic-spells/morph-engine`). Never rewrites user files (Puzzle D3 precedent: print snippets).
