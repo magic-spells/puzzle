@@ -91,6 +91,15 @@ type CompileCache struct {
 	// makes an icon edit invalidate its consumers.
 	byFile map[string]map[string]bool
 
+	// assetOwners is the {#svg} edge read the OTHER way round: asset path → the
+	// .pzl files that inline it. byFile answers "what must I forget", which is all
+	// eviction needs; route-level invalidation needs "what does this icon
+	// change", and an icon is not an esbuild input, so the module graph cannot
+	// answer it. Entries are never removed — a .pzl that stops inlining an icon
+	// leaves a stale edge, which can only over-report consumers, and an
+	// over-reported consumer costs one re-render.
+	assetOwners map[string]map[string]bool
+
 	// svg memoizes {#svg} asset reads + scans for the same build. It is shared
 	// with codegen (through Options.SVGCache) AND with the shared-asset virtual
 	// module loader, so an icon used at fifty sites across three passes is read
@@ -108,9 +117,10 @@ type cacheEntry struct {
 // path passes.
 func NewCompileCache() *CompileCache {
 	return &CompileCache{
-		entries: map[string]*cacheEntry{},
-		byFile:  map[string]map[string]bool{},
-		svg:     codegen.NewSVGCache(),
+		entries:     map[string]*cacheEntry{},
+		byFile:      map[string]map[string]bool{},
+		assetOwners: map[string]map[string]bool{},
+		svg:         codegen.NewSVGCache(),
 	}
 }
 
@@ -154,12 +164,13 @@ func (c *CompileCache) Evict(paths []string) {
 	}
 }
 
-// index records that key was produced from path (and from each of its {#svg}
-// dependencies). Callers hold no lock.
-func (c *CompileCache) index(key string, files []string) {
+// index records that key was produced from owner (a .pzl path) and from each of
+// its {#svg} dependencies (assets). Callers hold no lock.
+func (c *CompileCache) index(key, owner string, assets []string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	for _, f := range files {
+	own := resolveSymlinks(owner)
+	for _, f := range append([]string{own}, assets...) {
 		f = resolveSymlinks(f)
 		set := c.byFile[f]
 		if set == nil {
@@ -168,6 +179,43 @@ func (c *CompileCache) index(key string, files []string) {
 		}
 		set[key] = true
 	}
+	for _, f := range assets {
+		f = resolveSymlinks(f)
+		owners := c.assetOwners[f]
+		if owners == nil {
+			owners = map[string]bool{}
+			c.assetOwners[f] = owners
+		}
+		owners[own] = true
+	}
+}
+
+// AssetConsumers returns the symlink-resolved .pzl paths that inline any of
+// paths with {#svg}, as recorded by the transforms this cache has memoized. It
+// is the dependency edge no esbuild metafile carries: an inlined asset is a
+// watch file, not a module input, so route-level invalidation has to ask the
+// compiler which views a changed icon reaches. Unknown paths contribute
+// nothing; the caller decides what an empty answer means.
+func (c *CompileCache) AssetConsumers(paths []string) []string {
+	if c == nil || len(paths) == 0 {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range paths {
+		for _, key := range []string{p, resolveSymlinks(p)} {
+			for owner := range c.assetOwners[key] {
+				if seen[owner] {
+					continue
+				}
+				seen[owner] = true
+				out = append(out, owner)
+			}
+		}
+	}
+	return out
 }
 
 // svgCache returns the build's {#svg} memo, or nil when there is no cache (the
@@ -213,7 +261,7 @@ func (c *CompileCache) load(appRoot, path string, src []byte, compute func() pzl
 		e.res = compute()
 		// Index the entry under its own path and every {#svg} file it inlined, so
 		// a long-lived cache can invalidate it when any of them changes.
-		c.index(key, append([]string{path}, e.res.watchFiles...))
+		c.index(key, path, e.res.watchFiles)
 	})
 	return e.res
 }
