@@ -53,6 +53,9 @@ import { MANAGED_TAGS } from '../headTags.js';
  *   mode; `'static'` additionally captures each page's store snapshot (`data`), its
  *   view/layout `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot
  *   so prerenderToDir can emit true static pages (D81).
+ * @param {Router} [opts.routeRouter] INTERNAL — an already-constructed memory
+ *   Router over `config.routes`, so prerenderToDir's up-front route validation and
+ *   this pass share one compiled matcher table instead of building it twice.
  * @returns {Promise<{
  *   pages: Array<{ path: string, html: string|null, title: string|null,
  *     head: { title: string|null, description: string|null, canonical: string|null,
@@ -90,9 +93,15 @@ export async function prerender(config, opts = {}) {
 	// supports '#id' targets only — the shell surgery keys on the id).
 	parseTargetId(config.target);
 
-	// One Router owns route-shape validation + regex compilation, so the SSG never
-	// compiles matchers independently — it reads this one's compiled leaves.
-	const routeRouter = new Router(config.routes ?? [], { mode: 'memory' });
+	// One Router PER BUILD owns route-shape validation + regex compilation, so the
+	// SSG never compiles matchers independently — it reads this one's compiled
+	// leaves, and (in hybrid) hands the same instance to every page's ctx. Building
+	// one per page made route-regex compilation O(routes²) for nothing: the instance
+	// is never started, and the only page-varying bits are the two shadowed
+	// properties buildContext sets. prerenderToDir constructs it before the shell
+	// read (route errors must beat shell errors) and passes it in — `opts.routeRouter`
+	// is an internal handoff, not public API.
+	const routeRouter = opts.routeRouter ?? new Router(config.routes ?? [], { mode: 'memory' });
 	const shadowedPaths = findShadowedPaths(routeRouter.routeEntries);
 	const shadowedByIndex = new Map(
 		shadowedPaths.map(({ index, shadowedBy }) => [index, shadowedBy])
@@ -125,14 +134,53 @@ export async function prerender(config, opts = {}) {
 				"Remove `routerMode`, or drop output: 'static' if you need hash routing."
 		);
 	}
+	// The hybrid ctx router: the build's ONE unstarted memory Router, with url()
+	// shadowed once from the app's real routerMode/routerBase (both config
+	// constants). Lazy so a hybrid build that renders nothing never pays for it and
+	// a malformed `routerBase` still throws at the first page, exactly as before.
+	let hybridRouterReady = false;
+	const hybridRouter = () => {
+		if (!hybridRouterReady) {
+			hybridRouterReady = true;
+			// …a memory router carries no URL, so its url() returns paths UNPREFIXED: a
+			// based app would prerender `/about` where the live app renders `/docs/about`
+			// — a broken href for crawlers, no-JS visitors, and anyone clicking before
+			// takeover. Shadow url() with the app's real mode/base through the same
+			// encoder Router.url() and the static stub use. The compiled route table
+			// stays the real memory Router the takeover expects.
+			const base = normalizeBase(config.routerBase);
+			const routerMode = config.routerMode ?? 'history';
+			routeRouter.url = (path) => encodeURL(path, routerMode, base);
+		}
+		return routeRouter;
+	};
+
 	const createPageContext = async (entry) => {
 		builtContext = true;
 		// Both modes thread the page's route snapshot into their prerender router:
-		// static gives it to the throwing stub, while hybrid shadows current on the
-		// real unstarted memory Router. The beforeMount-only fallback below has no
-		// entry — it never renders, so a null route is fine.
+		// static gives it to a fresh throwing stub, while hybrid shadows `current` on
+		// the shared memory Router. The beforeMount-only fallback below has no entry —
+		// it never renders, so a null route is fine.
 		const route = entry ? makeRouteSnapshot(entry) : null;
-		return buildContext(config, { mode, route });
+		let router;
+		if (isStatic && route) {
+			router = makeRouterStub(route, { mode: 'history', base: config.routerBase });
+		} else {
+			router = hybridRouter();
+			if (route) {
+				// Own property shadows the prototype getter — the same instance-shadowing
+				// trick url() uses above, and for the same reason: `current` reads private
+				// fields, so a delegating facade would throw. Redefined per page (the
+				// instance is shared); nothing outlives the page's render, and the takeover
+				// replaces the whole instance in the browser anyway.
+				Object.defineProperty(router, 'current', {
+					value: route,
+					enumerable: true,
+					configurable: true,
+				});
+			}
+		}
+		return buildContext(config, { router });
 	};
 
 	for (const entry of entries) {
@@ -269,15 +317,16 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 	if (!shellPath) throw new Error('[puzzle] prerenderToDir requires a shellPath');
 
 	// Validate the complete route table FIRST, before the target selector and the
-	// shell read: prerender() builds its own Router, but only after those checks,
-	// and a bad route table should be the error a build reports either way. (It is
-	// also the only route validation an all-dynamic app with no beforeMount hook
-	// ever gets — every page is skipped before a per-page context is built.)
-	new Router(config.routes ?? [], { mode: 'memory' });
+	// shell read: a bad route table should be the error a build reports either way.
+	// (It is also the only route validation an all-dynamic app with no beforeMount
+	// hook ever gets — every page is skipped before a per-page context is built.)
+	// This instance IS prerender's route router — the compiled matcher table is
+	// built once per build, not once here and again inside.
+	const routeRouter = new Router(config.routes ?? [], { mode: 'memory' });
 
 	const targetId = parseTargetId(config.target);
 	const shell = fs.readFileSync(shellPath, 'utf8');
-	const { pages, skipped, warnings } = await prerender(config, { mode });
+	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter });
 
 	if (mode === 'static') {
 		return writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings });
@@ -410,16 +459,29 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 /**
  * Wire the build-time ctx the way PuzzleApp.mount() does (app.js §mount): a Store
  * over the models + apiURL, a FormatterRegistry seeded with the built-ins then the
- * config formatters registered over them, and a router facade. In HYBRID mode that
- * facade is an UNSTARTED memory-mode Router (full fidelity, no URL/DOM side effects
- * — the SPA takes over on load) whose url() is shadowed to encode with the app's real
- * routerMode/routerBase; in STATIC mode it is the base/mode-aware
- * makeRouterStub over the page's route snapshot, byte-matching the client kernel so
- * url()/current never diverge between prerender and rehydration.
+ * config formatters registered over them, and the page's `router` facade.
+ *
+ * Router facade parity (D81) is decided by the caller (prerender's
+ * createPageContext), which owns the per-build/per-page split. In HYBRID that
+ * facade is the build's single UNSTARTED memory-mode Router (full fidelity, no
+ * URL/DOM side effects — the SPA takes over on load) with url() shadowed from the
+ * app's real routerMode/routerBase and `current` shadowed with this page's route
+ * snapshot, so prerendered route-aware markup matches the live app. In STATIC it
+ * is a per-page makeRouterStub over the same snapshot — the SAME stub the browser
+ * kernel (static/index.js buildStaticContext) wires, with the mode FORCED to
+ * 'history', or router.url()/current would differ between the prerendered HTML and
+ * the client re-render for any based app (the `{ path | link }` formatter reads
+ * router.url; a view may read router.current). Static pages ship no router and no
+ * click interception, so a hash-shaped href (`#/about`) would be a dead link on a
+ * page that physically lives at /about/index.html; the file layout is path-shaped,
+ * so the hrefs must be too. `config.routerMode` is warned about in prerender() and
+ * otherwise ignored there; `routerBase` DOES flow through (a subpath deploy still
+ * wants prefixed hrefs).
+ *
  * `config.beforeMount` is awaited with a `{ store, config }` facade (not a real
  * PuzzleApp — documented) so a build-time store seed lands before the first data().
  */
-async function buildContext(config, { mode = 'hybrid', route = null } = {}) {
+async function buildContext(config, { router }) {
 	const { models = {}, formatters = {}, apiURL, storage, beforeRequest } = config;
 
 	const storeOptions = { apiURL };
@@ -430,49 +492,6 @@ async function buildContext(config, { mode = 'hybrid', route = null } = {}) {
 	// per-page entry module by the Go build, and a function does not survive that.)
 	if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;
 	const store = new Store(models, storeOptions);
-	// Router facade parity (D81): HYBRID keeps a real, unstarted memory Router because
-	// the SPA boots and takes over on load, but shadows current with this page's route
-	// snapshot so prerendered route-aware markup matches the live app. STATIC has no
-	// client router — the browser kernel (static/index.js) wires the base-aware
-	// makeRouterStub — so the prerender ctx uses that SAME stub over the SAME per-page
-	// snapshot here, or router.url()/current would differ between the prerendered HTML
-	// and the client re-render for any based app (the `{ path | link }` formatter reads
-	// router.url; a view may read router.current).
-	//
-	// The stub's MODE is forced to 'history' in static output, and the kernel forces it
-	// identically (static/index.js buildStaticContext) so both sides emit byte-identical
-	// hrefs. Static pages ship no router and no click interception, so a hash-shaped
-	// href (`#/about`) would be a dead link on a page that physically lives at
-	// /about/index.html; the file layout is path-shaped, so the hrefs must be too.
-	// `config.routerMode` is warned about in prerender() and otherwise ignored here.
-	// `routerBase` DOES flow through: a subpath deploy still wants prefixed hrefs.
-	let router;
-	if (mode === 'static' && route) {
-		router = makeRouterStub(route, { mode: 'history', base: config.routerBase });
-	} else {
-		router = new Router(config.routes ?? [], { mode: 'memory' });
-		// …but a memory router carries no URL, so its url() returns paths UNPREFIXED: a
-		// based app would prerender `/about` where the live app renders `/docs/about` —
-		// a broken href for crawlers, no-JS visitors, and anyone clicking before
-		// takeover. Shadow url() with the app's real mode/base through the same encoder
-		// Router.url() and the static stub use, and shadow current with the per-page
-		// snapshot. The compiled route table stays the real memory Router the takeover
-		// expects.
-		const base = normalizeBase(config.routerBase);
-		const routerMode = config.routerMode ?? 'history';
-		router.url = (path) => encodeURL(path, routerMode, base);
-		if (route) {
-			// Own property shadows the prototype getter — the same instance-shadowing
-			// trick url() uses above, and for the same reason: `current` reads private
-			// fields, so a delegating facade would throw. The takeover replaces the whole
-			// instance, so this never outlives the prerender.
-			Object.defineProperty(router, 'current', {
-				value: route,
-				enumerable: true,
-				configurable: true,
-			});
-		}
-	}
 	const registry = makeFormatterRegistry(formatters, (path) => router.url(path));
 
 	const ctx = { store, router, formatters: registry };
