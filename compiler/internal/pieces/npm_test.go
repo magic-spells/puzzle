@@ -4,6 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -217,5 +220,150 @@ func TestExtractRegistryTarballRejectsTraversal(t *testing.T) {
 func TestExtractRegistryTarballNotGzip(t *testing.T) {
 	if _, err := extractRegistryTarball(strings.NewReader("not a tarball")); err == nil {
 		t.Fatal("extractRegistryTarball on non-gzip input = nil error, want an error")
+	}
+}
+
+// --- npm fetcher --------------------------------------------------------------
+
+// fakeNpm serves a minimal npm registry: an abbreviated packument at /<pkg> and
+// tarballs at /tarballs/<version>.tgz. versions maps a version to the tarball's
+// FULL-path file map (the shape registryTarball takes).
+func fakeNpm(t *testing.T, versions map[string]map[string]string) *httptest.Server {
+	t.Helper()
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/tarballs/") {
+			v := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/tarballs/"), ".tgz")
+			files, ok := versions[v]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write(registryTarball(t, files))
+			return
+		}
+		type dist struct {
+			Tarball string `json:"tarball"`
+		}
+		type entry struct {
+			Dist dist `json:"dist"`
+		}
+		out := map[string]map[string]entry{"versions": {}}
+		for v := range versions {
+			out["versions"][v] = entry{Dist: dist{Tarball: srv.URL + "/tarballs/" + v + ".tgz"}}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(out); err != nil {
+			t.Errorf("encoding packument: %v", err)
+		}
+	}))
+	return srv
+}
+
+func newTestNpmFetcher(srvURL, cliVersion, pin string) *npmFetcher {
+	return &npmFetcher{pkg: defaultNpmPackage, pin: pin, cliVersion: cliVersion, base: srvURL, configured: npmScheme + defaultNpmPackage}
+}
+
+// Resolution is lazy and lockstep: nothing is fetched until the first Fetch,
+// which picks the HIGHEST 0.6.x for a 0.6.1 CLI, and every later Fetch reads the
+// already-unpacked in-memory map.
+func TestNpmFetcherResolvesLockstepAndFetches(t *testing.T) {
+	srv := fakeNpm(t, map[string]map[string]string{
+		"0.5.0": {"package/registry/registry.json": `{"v":"0.5.0"}`},
+		"0.6.0": {"package/registry/registry.json": `{"v":"0.6.0"}`},
+		"0.6.2": {
+			"package/registry/registry.json":        `{"v":"0.6.2"}`,
+			"package/registry/ui/button/Button.pzl": "<button/>",
+		},
+		"0.7.0": {"package/registry/registry.json": `{"v":"0.7.0"}`},
+	})
+	defer srv.Close()
+	f := newTestNpmFetcher(srv.URL, "0.6.1", "")
+
+	// Before any Fetch, Source is the CONFIGURED spec — Add compares that string
+	// against defaultRegistry to decide whether to print the override hint.
+	if want := npmScheme + defaultNpmPackage; f.Source() != want {
+		t.Errorf("pre-resolution Source() = %q, want %q", f.Source(), want)
+	}
+
+	data, err := f.Fetch("registry.json")
+	if err != nil {
+		t.Fatalf("Fetch(registry.json) returned error: %v", err)
+	}
+	if got := string(data); got != `{"v":"0.6.2"}` {
+		t.Errorf("Fetch(registry.json) = %q, want %q (the highest 0.6.x)", got, `{"v":"0.6.2"}`)
+	}
+
+	if want := npmScheme + defaultNpmPackage + "@0.6.2"; f.Source() != want {
+		t.Errorf("post-resolution Source() = %q, want %q", f.Source(), want)
+	}
+
+	// Served out of the in-memory map — no second download.
+	btn, err := f.Fetch("ui/button/Button.pzl")
+	if err != nil {
+		t.Fatalf("Fetch(ui/button/Button.pzl) returned error: %v", err)
+	}
+	if string(btn) != "<button/>" {
+		t.Errorf("Fetch(ui/button/Button.pzl) = %q, want %q", btn, "<button/>")
+	}
+
+	if _, err := f.Fetch("ui/ghost/Ghost.pzl"); err == nil {
+		t.Fatal("Fetch of a file absent from the tarball = nil error, want an error")
+	}
+}
+
+// An explicit pin overrides lockstep entirely — even when a higher patch on the
+// CLI's own line exists.
+func TestNpmFetcherHonorsPin(t *testing.T) {
+	srv := fakeNpm(t, map[string]map[string]string{
+		"0.6.0": {"package/registry/registry.json": `{"v":"0.6.0"}`},
+		"0.6.2": {"package/registry/registry.json": `{"v":"0.6.2"}`},
+	})
+	defer srv.Close()
+	f := newTestNpmFetcher(srv.URL, "0.6.9", "0.6.0")
+
+	data, err := f.Fetch("registry.json")
+	if err != nil {
+		t.Fatalf("Fetch(registry.json) returned error: %v", err)
+	}
+	if got := string(data); got != `{"v":"0.6.0"}` {
+		t.Errorf("Fetch(registry.json) = %q, want %q (the pinned release)", got, `{"v":"0.6.0"}`)
+	}
+}
+
+// No release shares the CLI's major.minor: the error must name the boundary it
+// needs AND everything that is actually published.
+func TestNpmFetcherNoMatchNamesTheBoundary(t *testing.T) {
+	srv := fakeNpm(t, map[string]map[string]string{
+		"0.4.0": {},
+		"0.5.2": {},
+	})
+	defer srv.Close()
+	f := newTestNpmFetcher(srv.URL, "0.3.1", "")
+
+	_, err := f.Fetch("registry.json")
+	if err == nil {
+		t.Fatal("Fetch with no matching release = nil error, want an error")
+	}
+	for _, want := range []string{"0.3", "0.4.0", "0.5.2"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q does not mention %q", err.Error(), want)
+		}
+	}
+}
+
+func TestNpmFetcherUnknownPinListsPublished(t *testing.T) {
+	srv := fakeNpm(t, map[string]map[string]string{
+		"0.6.0": {"package/registry/registry.json": "{}"},
+	})
+	defer srv.Close()
+	f := newTestNpmFetcher(srv.URL, "0.6.0", "9.9.9")
+
+	_, err := f.Fetch("registry.json")
+	if err == nil {
+		t.Fatal("Fetch with an unpublished pin = nil error, want an error")
+	}
+	if !strings.Contains(err.Error(), "0.6.0") {
+		t.Errorf("error %q does not list the published versions", err.Error())
 	}
 }
