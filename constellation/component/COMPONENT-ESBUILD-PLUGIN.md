@@ -35,7 +35,14 @@ removes the backup. Path-containment guards protect every swap target.
 
 Public assets come from `app/public` with a root `public` fallback. Reserved
 generated names (`app.js`, its map, `styles.css`) are rejected case-insensitively
-before pruning or on every dev rebuild. Successful dev rebuilds mirror deleted
+before pruning or on every dev rebuild. The copier writes differently per
+destination: into the private staging dir a plain write (no reader exists yet,
+so an atomic temp+rename buys nothing), and into the live `dist/` an atomic
+write that also SKIPS any file already matching on size + mtime — normally the
+whole tree on an incremental rebuild. Live-dist copies stamp the source mtime so
+that comparison stays meaningful. Staging deliberately copies rather than
+hardlinks: the prerender passes edit staging's copy of `public/index.html` in
+place, and a shared inode would write through into the app's own source asset. Successful dev rebuilds mirror deleted
 public files and prune CSS for `.pzl` modules no longer in the esbuild metafile;
 failed rebuilds keep last-good assets/CSS.
 
@@ -77,4 +84,11 @@ regression-guarded by `TestFormatterManifestFreshAcrossIncrementalRebuilds`.
 
 Static output performs a second node-platform bundle and runs
 [[COMPONENT-SSG]] before the staging swap. A timeout or render failure preserves
-the last good dist and surfaces source-mapped user errors.
+the last good dist and surfaces source-mapped user errors. The per-page browser
+bundle pass follows the SAME source-map policy as the main `app.js` pass —
+development linked, production only under `build.sourceMap` — decided BEFORE
+esbuild runs rather than by emitting maps unconditionally and deleting them
+after. Because a chunk's content hash is computed over bytes that no longer
+carry a `sourceMappingURL` comment, production `_puzzle/chunks/*` filenames
+differ from the generate-then-strip era; the contents are unchanged, and the
+hash now actually describes the shipped bytes.

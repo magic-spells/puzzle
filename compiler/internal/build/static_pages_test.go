@@ -359,3 +359,32 @@ func TestBuildStaticEmitsPages(t *testing.T) {
 		t.Errorf("%s must be deleted before the swap; it survived in dist/ (err=%v)", prerenderDir, err)
 	}
 }
+
+// TestStaticPagesSourcemapPolicy pins the per-page bundle pass to the same
+// source-map policy as the main app.js pass: development keeps linked maps,
+// production emits them only when build.sourceMap opts in. The pass used to emit
+// maps unconditionally and a post-pass deleted them again, so a regression here
+// means shipping (or throwing away) bytes the config never asked for.
+func TestStaticPagesSourcemapPolicy(t *testing.T) {
+	var on config.Config
+	on.Build.SourceMap = true
+
+	tests := []struct {
+		name string
+		cfg  config.Config
+		dev  bool
+		want api.SourceMap
+	}{
+		{"development keeps linked maps", config.Config{}, true, api.SourceMapLinked},
+		{"production without build.sourceMap emits none", config.Config{}, false, api.SourceMapNone},
+		{"production with build.sourceMap keeps linked maps", on, false, api.SourceMapLinked},
+		{"development with build.sourceMap keeps linked maps", on, true, api.SourceMapLinked},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := staticPagesSourcemap(tt.cfg, tt.dev); got != tt.want {
+				t.Fatalf("staticPagesSourcemap = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 )
 
@@ -1510,5 +1511,154 @@ func TestCLIBuild(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "dist", "app.js")); err != nil {
 		t.Errorf("CLI build produced no dist/app.js: %v", err)
+	}
+}
+
+// TestBuildOptionsConfigSkipsLoad proves Options.Config is used INSTEAD of
+// loading puzzle.config.js — not merged with it. The fixture's config file is
+// deliberately unloadable (it throws), which fails any build that reads it, so a
+// green build here is proof node was never spawned. The passed config's Tailwind
+// declaration is honored, so the value really is the one in effect.
+func TestBuildOptionsConfigSkipsLoad(t *testing.T) {
+	root := t.TempDir()
+	appDir := filepath.Join(root, "app")
+	if err := os.MkdirAll(filepath.Join(appDir, "public"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "app.js"), []byte("export default 1;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "public", "index.html"), []byte("<html><body></body></html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "puzzle.config.js"),
+		[]byte("throw new Error('this config must never be loaded');\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sanity: without Options.Config the same build fails on that config file.
+	if err := Build(root, Options{Development: true, Runner: &fakeRunner{}}); err == nil {
+		t.Fatal("expected a build with no Options.Config to fail on the throwing puzzle.config.js")
+	}
+
+	var cfg config.Config
+	cfg.Styles.Use = []string{"tailwindcss"}
+	fake := &fakeRunner{css: "/* threaded */"}
+	if err := Build(root, Options{Development: true, Runner: fake, Config: &cfg}); err != nil {
+		t.Fatalf("Build with Options.Config failed: %v", err)
+	}
+	if !fake.called {
+		t.Error("the threaded config declared Tailwind, so the runner must have been invoked")
+	}
+	css, err := os.ReadFile(filepath.Join(root, "dist", "styles.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(css), "/* threaded */") {
+		t.Error("styles.css must reflect the threaded config's Tailwind layer")
+	}
+}
+
+// TestCopyPublicLiveDistSkipsUnchanged proves the dev in-place copier does no
+// work when nothing under public/ changed: a second pass leaves the destination
+// inode untouched (so it never rewrote the file), still reports the file as
+// public-owned, and picks an edit up on the pass after that.
+func TestCopyPublicLiveDistSkipsUnchanged(t *testing.T) {
+	root := t.TempDir()
+	pub := filepath.Join(root, "app", "public")
+	if err := os.MkdirAll(pub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	asset := filepath.Join(pub, "logo.svg")
+	if err := os.WriteFile(asset, []byte("<svg/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dist := filepath.Join(root, "dist")
+
+	copied, err := copyPublic(root, dist, copyIntoLiveDist)
+	if err != nil {
+		t.Fatalf("first copy: %v", err)
+	}
+	if !copied["logo.svg"] {
+		t.Fatal("first copy did not report logo.svg")
+	}
+	target := filepath.Join(dist, "logo.svg")
+	before, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Mark the destination so a rewrite is detectable even if the timestamps
+	// happen to land identically: WriteFileAtomic renames a fresh file into
+	// place, which resets the mode we set here.
+	if err := os.Chmod(target, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	copied, err = copyPublic(root, dist, copyIntoLiveDist)
+	if err != nil {
+		t.Fatalf("second copy: %v", err)
+	}
+	if !copied["logo.svg"] {
+		t.Error("an up-to-date file must still be reported as public-owned")
+	}
+	after, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Mode().Perm() != 0o600 {
+		t.Errorf("unchanged public file was rewritten (mode reset to %v)", after.Mode().Perm())
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Error("unchanged public file was rewritten (mtime moved)")
+	}
+
+	// An actual edit must still land. Write a different length so the check
+	// cannot pass on size alone.
+	if err := os.WriteFile(asset, []byte("<svg id=\"new\"/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := copyPublic(root, dist, copyIntoLiveDist); err != nil {
+		t.Fatalf("third copy: %v", err)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "<svg id=\"new\"/>" {
+		t.Errorf("edited public file did not reach dist: %q", got)
+	}
+}
+
+// TestCopyPublicStagingWritesPlainCopies confirms the staging path produces
+// real, independent copies — not hardlinks. The prerender pass edits staging's
+// copy of the shell in place, so a shared inode would write back into the app's
+// own public/ source.
+func TestCopyPublicStagingWritesPlainCopies(t *testing.T) {
+	root := t.TempDir()
+	pub := filepath.Join(root, "app", "public")
+	if err := os.MkdirAll(pub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(pub, "index.html")
+	if err := os.WriteFile(src, []byte("<html><body></body></html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	staging := filepath.Join(root, ".staging")
+
+	if _, err := copyPublic(root, staging, copyIntoStaging); err != nil {
+		t.Fatalf("staging copy: %v", err)
+	}
+	// Rewrite the staged copy the way a prerender pass does.
+	staged := filepath.Join(staging, "index.html")
+	if err := os.WriteFile(staged, []byte("<html><body>PRERENDERED</body></html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(original), "PRERENDERED") {
+		t.Fatal("editing the staged copy wrote through to the app's public/ source — staging must not share inodes with public/")
 	}
 }

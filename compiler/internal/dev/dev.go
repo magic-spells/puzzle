@@ -185,6 +185,18 @@ func Serve(root string, opts Options) error {
 	if cfgErr != nil {
 		logWarning(stderr, "%s", configFallbackWarning(cfgErr))
 	}
+	// Hand the config we just loaded to every build.Build this session runs, so a
+	// rebuild does not re-spawn node to re-read a file dev has already decided not
+	// to reload (a config edit prints "restart to apply" and nothing else). The
+	// builds therefore see exactly the config the rest of the dev loop is using —
+	// previously the static rebuild silently picked up mid-session config edits
+	// that dev itself was ignoring. A config that FAILED to load is not passed
+	// along: dev degrades to the zero Config for its own decisions, but the build
+	// keeps its own hard failure on a malformed config file.
+	var buildCfg *config.Config
+	if cfgErr == nil {
+		buildCfg = &cfg
+	}
 
 	// Serving mode (D81). `output: 'static'` projects get the REAL static build in
 	// dev — prerendered pages, clean URLs, full page loads, per-page mountStatic
@@ -358,7 +370,7 @@ func Serve(root string, opts Options) error {
 			// that is atomically swapped in. A failed compile OR a failed prerender
 			// discards staging, so the last good pages keep serving and the browser
 			// gets the diagnostic through the D92 channel below.
-			err = build.Build(absRoot, build.Options{Development: true, Output: "static"})
+			err = build.Build(absRoot, build.Options{Development: true, Output: "static", Config: buildCfg})
 		case builder != nil:
 			if err = builder.ScanUsage(); err == nil {
 				err = builder.Rebuild()
@@ -367,7 +379,7 @@ func Serve(root string, opts Options) error {
 				err = pl.recompose()
 			}
 		default:
-			err = build.Build(absRoot, build.Options{Development: true, Fixtures: opts.Fixtures})
+			err = build.Build(absRoot, build.Options{Development: true, Fixtures: opts.Fixtures, Config: buildCfg})
 		}
 		if err != nil {
 			logBuildFailure(stderr, err)
@@ -973,16 +985,62 @@ func withinAnyDir(dirs []string, target string) bool {
 // rebuild and whether puzzle.config.js itself changed. A config change does NOT
 // rebuild — the config is loaded once at startup — so it is reported separately
 // (the dev loop prints a "restart to apply" advisory) and kept out of the
-// rebuild set.
+// rebuild set. Known editor/OS junk files are dropped entirely; a burst
+// consisting only of junk schedules no rebuild at all.
 func partitionChanges(changed []string, configPath string) (rebuildPaths []string, configChanged bool) {
 	for _, p := range changed {
 		if configPath != "" && p == configPath {
 			configChanged = true
 			continue
 		}
+		if isJunkChange(p) {
+			continue
+		}
 		rebuildPaths = append(rebuildPaths, p)
 	}
 	return rebuildPaths, configChanged
+}
+
+// isJunkChange reports whether a watched path is a file no build could ever
+// consume: Finder metadata, or an editor's swap/backup/lock scratch file. Saving
+// once in vim produces several of these under app/, and each one used to
+// schedule a full rebuild.
+//
+// This is a DENYLIST of specific known names and patterns, never an allowlist of
+// interesting extensions. public/ may contain literally anything — `.htaccess`,
+// `_headers`, `_redirects`, `.nojekyll`, `.well-known/*` are all real,
+// meaningful inputs — so anything unrecognized must rebuild.
+func isJunkChange(path string) bool {
+	name := filepath.Base(path)
+	switch name {
+	case ".DS_Store", "Thumbs.db", "desktop.ini":
+		return true
+	case "4913":
+		// vim writes (and immediately removes) a probe file named 4913 to test
+		// whether a directory is writable before saving into it.
+		return true
+	}
+	switch {
+	case strings.HasSuffix(name, "~"):
+		// vim/emacs/gedit backup copy.
+		return true
+	case strings.HasPrefix(name, ".#"):
+		// emacs lock symlink (.#file.pzl).
+		return true
+	case strings.HasPrefix(name, "#") && strings.HasSuffix(name, "#"):
+		// emacs auto-save (#file.pzl#).
+		return true
+	case strings.HasSuffix(name, "___jb_tmp___"), strings.HasSuffix(name, "___jb_old___"):
+		// JetBrains safe-write scratch files.
+		return true
+	}
+	// vim swap files: file.pzl.swp / .file.pzl.swp and the .swo/.swn/.swx
+	// siblings it rolls onto when several are open.
+	if ext := filepath.Ext(name); len(ext) == 4 && strings.HasPrefix(ext, ".sw") {
+		c := ext[3]
+		return c >= 'a' && c <= 'z'
+	}
+	return false
 }
 
 // withinDirResolved reports whether target, after symlink resolution, is inside

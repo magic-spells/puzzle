@@ -29,6 +29,13 @@ Cobra command surface shipped by the platform binary:
   development, true-static (D81), or hybrid-prerender (D67) build — the two
   output flags are mutually exclusive and must agree with any `output` config
   value — and prints raw/gzip output plus prerender summaries.
+  `--profile-build` adds a per-phase timing table (config load, usage scan,
+  browser bundle, tailwind, public copy, prerender bundle/render, per-page
+  bundles, source-map strip, staging swap) on **stderr**, leaving the stdout
+  summary that scripts parse untouched. `PUZZLE_PROFILE_BUILD=1` enables the
+  same table for any process that calls the builder, which is how a
+  `puzzle dev` static rebuild — a direct `build.Build` call with no flags of
+  its own — gets profiled. Disabled, the profiler is a nil pointer.
 - `puzzle dev [dir] --port` starts [[COMPONENT-DEV-SERVER]]. A busy port is not
   fatal: the server scans upward for the first free one and warns when it moved;
   `--strict-port` restores bind-or-fail ([[DECISION-D90-DEV-PORT-SCAN]]). An

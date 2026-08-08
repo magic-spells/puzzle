@@ -52,11 +52,32 @@ type Options struct {
 	// build-test seam for proving an input contributes zero production bytes;
 	// normal CLI builds leave it nil and pay nothing.
 	Metafile *string
+
+	// Config is an ALREADY-LOADED puzzle.config.js. Non-nil, Build uses it as-is
+	// and never shells out to node; nil, Build loads it itself.
+	//
+	// This exists for `puzzle dev`, which loads the config once at startup and
+	// deliberately refuses to reload it mid-session (a config edit only prints a
+	// "restart to apply" advisory). Its static rebuild path calls Build on every
+	// save, so without this the dev loop spawned a `node -e` subprocess per
+	// keystroke-burst to re-read a file it had already decided to ignore. A
+	// standalone `puzzle build` leaves this nil and is unaffected.
+	Config *config.Config
+
+	// Profile prints a per-phase timing table to stderr after the build
+	// (`puzzle build --profile-build`). The PUZZLE_PROFILE_BUILD environment
+	// variable turns it on too, which is how `puzzle dev`'s static rebuild — a
+	// direct Build call with no flags of its own — reaches the profiler. Off,
+	// the profiler is a nil pointer and every phase call is a nil check.
+	Profile bool
 }
 
 // Build compiles the app rooted at root (the directory containing app/app.js)
 // into root/dist. It returns a formatted error if esbuild reports any errors.
 func Build(root string, opts Options) error {
+	prof := newBuildProfile(profileEnabled(opts.Profile))
+	defer prof.report(os.Stderr)
+
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return fmt.Errorf("resolving app root: %w", err)
@@ -74,9 +95,19 @@ func Build(root string, opts Options) error {
 	// No config file is not an error. A malformed one now fails the build up
 	// front, BEFORE the stale-dist prune — previously runTailwind surfaced it
 	// only after the last good dist/ had already been cleared.
-	cfg, err := config.LoadConfig(absRoot)
-	if err != nil {
-		return err
+	// A caller that has already loaded the config (opts.Config) hands it over
+	// instead, which is what keeps `puzzle dev` from re-spawning node per rebuild.
+	var cfg config.Config
+	if opts.Config != nil {
+		cfg = *opts.Config
+	} else {
+		endConfig := prof.phase("config load")
+		loaded, err := config.LoadConfig(absRoot)
+		endConfig()
+		if err != nil {
+			return err
+		}
+		cfg = loaded
 	}
 
 	// The effective prerender mode reconciles the CLI flag with puzzle.config.js
@@ -142,8 +173,11 @@ func Build(root string, opts Options) error {
 	}()
 
 	pl := plugin.New(absRoot)
-	if err := scanUsage(absRoot, pl); err != nil {
-		return err
+	endScan := prof.phase("usage scan")
+	scanErr := scanUsage(absRoot, pl)
+	endScan()
+	if scanErr != nil {
+		return scanErr
 	}
 
 	// Takeover is a HYBRID-only capability for this bundle: only `output:
@@ -180,7 +214,9 @@ func Build(root string, opts Options) error {
 		}
 	}
 
+	endBundle := prof.phase("browser bundle")
 	result := api.Build(buildOpts)
+	endBundle()
 	if opts.Metafile != nil {
 		*opts.Metafile = result.Metafile
 	}
@@ -198,19 +234,25 @@ func Build(root string, opts Options) error {
 	// collected <style> blocks. A declared-but-unrunnable Tailwind fails the
 	// build — the pipeline is never silently skipped. Written into staging, not
 	// dist/, so a Tailwind failure above never touches the last good build.
+	endStyles := prof.phase("tailwind + styles")
 	tailwindCSS, err := runTailwind(absRoot, cfg, opts)
 	if err != nil {
+		endStyles()
 		return err
 	}
 	final := styles.Compose(tailwindCSS, pl.CSS())
-	if err := os.WriteFile(filepath.Join(staging, "styles.css"), []byte(final), 0o644); err != nil {
-		return fmt.Errorf("writing styles.css: %w", err)
+	writeErr := os.WriteFile(filepath.Join(staging, "styles.css"), []byte(final), 0o644)
+	endStyles()
+	if writeErr != nil {
+		return fmt.Errorf("writing styles.css: %w", writeErr)
 	}
 
 	// Static assets: index.html and anything else under the app's public/ dir,
 	// copied into staging. Keep the copied set so prerender modes can distinguish
 	// public-owned files from generated output before writing the final dist tree.
-	publicFiles, err := copyPublic(absRoot, staging)
+	endPublic := prof.phase("public copy")
+	publicFiles, err := copyPublic(absRoot, staging, copyIntoStaging)
+	endPublic()
 	if err != nil {
 		return fmt.Errorf("copying public assets: %w", err)
 	}
@@ -222,17 +264,17 @@ func Build(root string, opts Options) error {
 	// compile failure). mode was resolved up front, before any work.
 	switch mode {
 	case "hybrid":
-		if err := prerenderHybrid(absRoot, staging, publicFiles); err != nil {
-			return err
+		endHybrid := prof.phase("prerender (hybrid)")
+		hybridErr := prerenderHybrid(absRoot, staging, publicFiles)
+		endHybrid()
+		if hybridErr != nil {
+			return hybridErr
 		}
 	case "static":
-		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development); err != nil {
+		// The per-page pass decides its own source-map mode from cfg + dev
+		// (staticPagesSourcemap), so there is no generate-then-delete pass here.
+		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development, prof); err != nil {
 			return err
-		}
-		if !opts.Development && !cfg.Build.SourceMap {
-			if err := removeStaticSourceMaps(filepath.Join(staging, staticPagesDir)); err != nil {
-				return fmt.Errorf("disabling static source maps: %w", err)
-			}
 		}
 	}
 
@@ -243,8 +285,11 @@ func Build(root string, opts Options) error {
 	if filepath.Dir(outdir) != absRoot || filepath.Base(outdir) != "dist" {
 		return fmt.Errorf("refusing to replace unexpected dist path: %s", outdir)
 	}
-	if err := swapOutput(staging, outdir); err != nil {
-		return err
+	endSwap := prof.phase("staging swap")
+	swapErr := swapOutput(staging, outdir)
+	endSwap()
+	if swapErr != nil {
+		return swapErr
 	}
 	swapped = true
 
@@ -268,46 +313,6 @@ func resolveOutputMode(flag string, cfg config.Config) (string, error) {
 		return flag, nil
 	}
 	return cfgOut, nil
-}
-
-// removeStaticSourceMaps removes linked-map sidecars and their trailing
-// sourceMappingURL comments from the true-static browser output tree. Applying
-// the production opt-out after that separate browser pass keeps development
-// behavior and the temporary inline-mapped Node prerender bundle unchanged.
-func removeStaticSourceMaps(outdir string) error {
-	if _, err := os.Stat(outdir); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-
-	const sourceMapComment = "\n//# sourceMappingURL="
-	return filepath.WalkDir(outdir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		if strings.HasSuffix(entry.Name(), ".js.map") {
-			return os.Remove(path)
-		}
-		if filepath.Ext(entry.Name()) != ".js" {
-			return nil
-		}
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		js := string(data)
-		idx := strings.LastIndex(js, sourceMapComment)
-		if idx < 0 {
-			return nil
-		}
-		return os.WriteFile(path, []byte(js[:idx+1]), 0o644)
-	})
 }
 
 // swapOutput durably replaces outdir with staging. An existing output is moved
@@ -443,15 +448,44 @@ func ValidatePublic(root string) error {
 	return nil
 }
 
-// copyPublic copies the app's static assets into dist and returns the set of
-// dist-relative paths (slash-separated, files only) it wrote this pass. The
-// examples/todos keeps them under app/public/; a flat public/ at the root is
-// also honored. The returned set lets the incremental dev path mirror deletions
-// across rebuilds (WatchBuilder.Rebuild) and lets prerender builds reject route
-// outputs that would overwrite a copied asset. Compiler outputs (app.js,
-// app.js.map, styles.css) are never produced here, so they never appear in the
-// set — a mirror built from it can never delete a build output.
-func copyPublic(root, outdir string) (map[string]bool, error) {
+// publicCopyMode selects how copyPublic writes each file. The two destinations
+// have genuinely different requirements, and paying the strictest one everywhere
+// made the dev loop re-read and re-write the entire public tree on every save.
+type publicCopyMode int
+
+const (
+	// copyIntoStaging writes into the private, freshly created staging dir that
+	// nothing can observe until the whole tree is atomically swapped into dist/.
+	// There is no concurrent reader and no pre-existing file, so a plain write is
+	// enough: the temp-file + chmod + rename of an atomic write buys nothing here.
+	//
+	// Hardlinking from public/ instead of copying is deliberately NOT done. The
+	// prerender passes edit staging's copy of the shell (public/index.html) in
+	// place, so a hardlinked staging file would write straight through into the
+	// app's own source asset. Halving the copy cost is not worth a build that can
+	// corrupt its inputs.
+	copyIntoStaging publicCopyMode = iota
+
+	// copyIntoLiveDist writes into the dist/ the dev server is serving RIGHT NOW,
+	// so every write must be atomic — a client must never receive a half-written
+	// file. It also skips any file whose destination already matches on size and
+	// mtime, which on an incremental rebuild is normally the entire tree: nothing
+	// under public/ changed, so nothing needs rewriting. Copies stamp the source
+	// mtime onto the destination so that comparison stays meaningful.
+	copyIntoLiveDist
+)
+
+// copyPublic copies the app's static assets into outdir and returns the set of
+// dist-relative paths (slash-separated, files only) that belong to the public
+// tree this pass — including files skipped as already-current, since the set
+// describes ownership, not work done. The examples/todos keeps them under
+// app/public/; a flat public/ at the root is also honored. The returned set lets
+// the incremental dev path mirror deletions across rebuilds
+// (WatchBuilder.Rebuild) and lets prerender builds reject route outputs that
+// would overwrite a copied asset. Compiler outputs (app.js, app.js.map,
+// styles.css) are never produced here, so they never appear in the set — a
+// mirror built from it can never delete a build output.
+func copyPublic(root, outdir string, mode publicCopyMode) (map[string]bool, error) {
 	copied := make(map[string]bool)
 	src := publicDir(root)
 	if src == "" {
@@ -469,6 +503,14 @@ func copyPublic(root, outdir string) (map[string]bool, error) {
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if mode == copyIntoLiveDist && publicFileCurrent(target, info) {
+			copied[filepath.ToSlash(rel)] = true
+			return nil
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return err
@@ -476,16 +518,35 @@ func copyPublic(root, outdir string) (map[string]bool, error) {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
-		// Atomic write: in the dev fallback path this rewrites dist/index.html
-		// while the server may be serving it, so avoid the truncate-then-write
-		// window that could hand a client a partial file.
-		if err := fsutil.WriteFileAtomic(target, data, 0o644); err != nil {
+		if mode == copyIntoLiveDist {
+			if err := fsutil.WriteFileAtomic(target, data, 0o644); err != nil {
+				return err
+			}
+			// Carry the source mtime across so the next rebuild's skip check has
+			// something to compare against. Best-effort: a filesystem that refuses
+			// only costs the next rebuild a redundant copy.
+			_ = os.Chtimes(target, info.ModTime(), info.ModTime())
+		} else if err := os.WriteFile(target, data, 0o644); err != nil {
 			return err
 		}
 		copied[filepath.ToSlash(rel)] = true
 		return nil
 	})
 	return copied, err
+}
+
+// publicFileCurrent reports whether target is already an up-to-date copy of a
+// source file described by info — same size, same mtime. It is deliberately a
+// cheap stat rather than a content hash: the copier stamps the source mtime onto
+// every file it writes, so a match means "this build already produced this
+// file", and any doubt (missing file, stat error, drifted timestamp) falls
+// through to a plain re-copy.
+func publicFileCurrent(target string, info fs.FileInfo) bool {
+	dst, err := os.Stat(target)
+	if err != nil || dst.IsDir() {
+		return false
+	}
+	return dst.Size() == info.Size() && dst.ModTime().Equal(info.ModTime())
 }
 
 // FindRuntime walks up from start looking for the in-repo runtime: a directory

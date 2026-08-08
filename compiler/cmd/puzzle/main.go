@@ -42,7 +42,11 @@ a warning.
 
 With --fixtures, wire app/fixtures.js (or .ts) through the fixtures/mock runtime
 module so the built app seeds and mocks itself. Without the flag nothing from
-that module reaches the bundle. It cannot be combined with --static/--hybrid.`,
+that module reaches the bundle. It cannot be combined with --static/--hybrid.
+
+With --profile-build, print a per-phase timing table to stderr after the build.
+Setting PUZZLE_PROFILE_BUILD=1 does the same, and reaches the builds 'puzzle
+dev' runs for an output: 'static' project.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := "."
@@ -59,6 +63,7 @@ that module reaches the bundle. It cannot be combined with --static/--hybrid.`,
 		static, _ := cmd.Flags().GetBool("static")
 		hybrid, _ := cmd.Flags().GetBool("hybrid")
 		fixtures, _ := cmd.Flags().GetBool("fixtures")
+		profile, _ := cmd.Flags().GetBool("profile-build")
 
 		output, err := outputFlag(static, hybrid)
 		if err != nil {
@@ -70,6 +75,7 @@ that module reaches the bundle. It cannot be combined with --static/--hybrid.`,
 			Development: mode == "development",
 			Output:      output,
 			Fixtures:    fixtures,
+			Profile:     profile,
 		}); err != nil {
 			return err
 		}
@@ -163,6 +169,7 @@ func init() {
 	buildCmd.Flags().Bool("static", false, "Emit true static pages: per-route HTML + a per-page module bundle, no SPA takeover")
 	buildCmd.Flags().Bool("hybrid", false, "Prerender each static route to dist/<path>/index.html that the SPA runtime takes over")
 	buildCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module; not valid with --static/--hybrid")
+	buildCmd.Flags().Bool("profile-build", false, "Print a per-phase build timing table to stderr (also enabled by PUZZLE_PROFILE_BUILD=1, which reaches `puzzle dev` rebuilds)")
 	devCmd.Flags().Int("port", 3000, "Port for the dev server (scans upward if busy)")
 	devCmd.Flags().Bool("strict-port", false, "Fail if --port is busy instead of scanning for a free one")
 	devCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module")

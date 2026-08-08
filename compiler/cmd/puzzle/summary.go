@@ -7,8 +7,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
@@ -92,8 +94,16 @@ func printBuildSummary(out *ui.Printer, outdir, mode string, elapsed time.Durati
 // collectDist enumerates the regular files under outdir, sizes them, and gzip-
 // estimates the compressible ones. Shipped assets sort first (largest first);
 // source maps sink to the bottom.
+//
+// The walk only records what needs compressing; the read-and-gzip work then runs
+// across a GOMAXPROCS-bounded worker pool, because it is the whole cost of the
+// summary and every file is independent. The compression LEVEL stays
+// BestCompression on purpose: the printed numbers are what users compare across
+// builds and against their CDN, so they must not shift because the reporter got
+// faster.
 func collectDist(outdir string) ([]distFile, error) {
 	var files []distFile
+	var srcPaths []string // absolute source path per files index, "" when not gzipped
 	err := filepath.WalkDir(outdir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -111,18 +121,18 @@ func collectDist(outdir string) ([]distFile, error) {
 		}
 		rel = filepath.ToSlash(rel)
 
-		gz := int64(-1)
+		src := ""
 		if gzippable(rel) && info.Size() > 0 {
-			data, readErr := os.ReadFile(p)
-			if readErr != nil {
-				return readErr
-			}
-			gz = gzipSize(data)
+			src = p
 		}
-		files = append(files, distFile{rel: rel, size: info.Size(), gz: gz})
+		files = append(files, distFile{rel: rel, size: info.Size(), gz: -1})
+		srcPaths = append(srcPaths, src)
 		return nil
 	})
 	if err != nil {
+		return nil, err
+	}
+	if err := fillGzipSizes(files, srcPaths); err != nil {
 		return nil, err
 	}
 
@@ -137,6 +147,53 @@ func collectDist(outdir string) ([]distFile, error) {
 		return files[i].rel < files[j].rel
 	})
 	return files, nil
+}
+
+// fillGzipSizes reads and gzips every file with a non-empty source path,
+// writing the result into the matching files[i].gz. Entries are addressed by
+// index and each worker owns its own, so no locking is needed around the
+// results — only around the first error.
+func fillGzipSizes(files []distFile, srcPaths []string) error {
+	work := make(chan int)
+	workers := runtime.GOMAXPROCS(0)
+	if workers > len(files) {
+		workers = len(files)
+	}
+	if workers < 1 {
+		return nil
+	}
+
+	var (
+		mu       sync.Mutex
+		firstErr error
+		wg       sync.WaitGroup
+	)
+	wg.Add(workers)
+	for w := 0; w < workers; w++ {
+		go func() {
+			defer wg.Done()
+			for i := range work {
+				data, err := os.ReadFile(srcPaths[i])
+				if err != nil {
+					mu.Lock()
+					if firstErr == nil {
+						firstErr = err
+					}
+					mu.Unlock()
+					continue
+				}
+				files[i].gz = gzipSize(data)
+			}
+		}()
+	}
+	for i, src := range srcPaths {
+		if src != "" {
+			work <- i
+		}
+	}
+	close(work)
+	wg.Wait()
+	return firstErr
 }
 
 // gzipSize returns the byte length of data compressed at best gzip level — a

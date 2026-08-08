@@ -100,8 +100,10 @@ type staticModules struct {
 // prerenderStaticPages runs the true static-pages build against the app rooted
 // at absRoot, writing content-complete HTML pages (via the node prerender pass)
 // plus one per-page ES-module bundle under staging/_puzzle. cfg + dev select the
-// same minify/define/dropConsole policy as the main app.js pass.
-func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, cfg config.Config, dev bool) error {
+// same minify/define/dropConsole policy as the main app.js pass. prof may be nil
+// (profiling off); it splits this pass into its three expensive steps — the node
+// prerender bundle, the render run, and the per-page browser bundles.
+func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, cfg config.Config, dev bool, prof *buildProfile) error {
 	// A public/ asset that already produced a staging/_puzzle would be clobbered
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
@@ -134,11 +136,16 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 	)
 
 	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")
-	if err := bundlePrerenderEntry(absRoot, stdin, outfile, "--static"); err != nil {
-		return err
+	endPrerenderBundle := prof.phase("prerender bundle")
+	bundleErr := bundlePrerenderEntry(absRoot, stdin, outfile, "--static")
+	endPrerenderBundle()
+	if bundleErr != nil {
+		return bundleErr
 	}
 
+	endRender := prof.phase("prerender render")
 	payload, err := runPrerender(outfile, staging, "--static")
+	endRender()
 	if err != nil {
 		return err
 	}
@@ -196,8 +203,11 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 	//    land in _puzzle/chunks/ automatically. Skipped when there is nothing to
 	//    render (no static routes).
 	if len(entryFiles) > 0 {
-		if err := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev); err != nil {
-			return err
+		endPages := prof.phase("per-page bundles")
+		pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev)
+		endPages()
+		if pagesErr != nil {
+			return pagesErr
 		}
 	}
 
@@ -350,6 +360,23 @@ func absModuleImport(absRoot, rel string) string {
 	return filepath.ToSlash(filepath.Join(absRoot, filepath.FromSlash(rel)))
 }
 
+// staticPagesSourcemap selects the per-page bundle pass's source-map mode from
+// the SAME policy the main app.js pass uses (options.go newBundleOptions +
+// build.Build): development keeps linked maps, production emits them only when
+// puzzle.config.js opts in with `build.sourceMap`.
+//
+// The pass used to emit linked maps unconditionally and a post-pass then deleted
+// every .js.map under staging/_puzzle and rewrote every .js to strip its
+// sourceMappingURL comment — generating output solely to throw it away, and
+// re-reading and re-writing the whole tree to do it. Deciding here instead makes
+// the shipped bytes identical and the stripper unnecessary.
+func staticPagesSourcemap(cfg config.Config, dev bool) api.SourceMap {
+	if dev || cfg.Build.SourceMap {
+		return api.SourceMapLinked
+	}
+	return api.SourceMapNone
+}
+
 // bundleStaticPages runs the browser-platform, Splitting esbuild pass over the
 // generated per-page entries into outdir (staging/_puzzle). Target/minify/define
 // and the dropConsole policy match the main app.js pass exactly; EntryNames is
@@ -371,7 +398,7 @@ func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg c
 		Target:      api.ES2022,
 		Outdir:      outdir,
 		Write:       true,
-		Sourcemap:   api.SourceMapLinked,
+		Sourcemap:   staticPagesSourcemap(cfg, dev),
 		EntryNames:  "[name]",
 		ChunkNames:  "chunks/[name]-[hash]",
 		// Takeover: true — a static page's whole job is adopting the prerendered
