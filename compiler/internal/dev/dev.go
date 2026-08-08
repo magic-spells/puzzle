@@ -26,6 +26,7 @@ package dev
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -444,10 +445,17 @@ func Serve(root string, opts Options) error {
 		}
 	}()
 
+	// Drops bursts that are a metadata-only echo of a rebuild that already ran —
+	// the trailing CHTIMES an editor save delivers after a slow rebuild finishes
+	// draining events (see changes.go). Genuine successive saves carry different
+	// bytes and pass straight through.
+	filter := newChangeFilter()
+
 	watchErr := make(chan error, 1)
 	go func() {
 		watchErr <- runWatcher(ctx, watchDirs, configPath, debounceInterval, func(changed []string) {
 			rebuildPaths, configChanged := partitionChanges(changed, configPath)
+			rebuildPaths = filter.pending(rebuildPaths)
 			if len(rebuildPaths) > 0 {
 				rebuild(rebuildPaths, true)
 			}
@@ -1090,6 +1098,15 @@ type pipeline struct {
 	mu      sync.Mutex
 	oneShot func() (string, error) // set when the warm watcher is unavailable/dead
 	writeMu sync.Mutex
+	// lastWritten is the sha256 of the bytes recompose last put on disk, guarded
+	// by writeMu. One .pzl edit reaches recompose TWICE — once from the rebuild
+	// and once from the Tailwind output poll a moment later — and in the common
+	// case (a template edit with no new utility classes) both compose the same
+	// stylesheet. Comparing before writing collapses the pair into a single
+	// atomic write + rename against the file the dev server is serving, with no
+	// timer to tune and no window in which styles.css is momentarily stale.
+	lastWritten [32]byte
+	haveWritten bool
 }
 
 // enableOneShot switches the pipeline to run the Tailwind CLI once per
@@ -1127,7 +1144,8 @@ func (p *pipeline) tailwindCSS() (string, error) {
 	return string(data), nil
 }
 
-// recompose writes dist/styles.css = Tailwind layer + collected <style>.
+// recompose writes dist/styles.css = Tailwind layer + collected <style>, unless
+// that is byte-for-byte what it already wrote.
 func (p *pipeline) recompose() error {
 	tw, err := p.tailwindCSS()
 	if err != nil {
@@ -1138,11 +1156,19 @@ func (p *pipeline) recompose() error {
 		collected = p.collectedCSS()
 	}
 	final := styles.Compose(tw, collected)
+	sum := sha256.Sum256([]byte(final))
 	p.writeMu.Lock()
 	defer p.writeMu.Unlock()
+	if p.haveWritten && p.lastWritten == sum {
+		return nil
+	}
 	// Atomic write: the dev server may be serving dist/styles.css concurrently, so
 	// an in-place truncate-then-write could hand a client a truncated file.
-	return fsutil.WriteFileAtomic(filepath.Join(p.dist, "styles.css"), []byte(final), 0o644)
+	if err := fsutil.WriteFileAtomic(filepath.Join(p.dist, "styles.css"), []byte(final), 0o644); err != nil {
+		return err
+	}
+	p.lastWritten, p.haveWritten = sum, true
+	return nil
 }
 
 // reloadCoalescer debounces reload broadcasts: request() (re)arms a timer that
