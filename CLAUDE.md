@@ -68,6 +68,20 @@ Rules that follow from this:
 - `dependencies` — **real npm packages, plain JS only.** `.pzl` never ships via npm, so it
   never appears here. Morph pieces list `@magic-spells/morph-engine` (npm-safe plain JS).
 
+## Versioning
+
+**puzzle-pieces tracks the Puzzle framework version.** When the framework releases 0.5.0,
+this repo is 0.5.0 — there is no independent version line for the registry. Bumping means
+updating every place the number is written by hand:
+
+- `demo/package.json` `version`
+- the header badge in `demo/app/layouts/Default.pzl` (`{ pieceCount } pieces · v0.5.0`)
+- `demo/package.json`'s `@magic-spells/puzzle` dependency range, which should point at the
+  matching framework release
+
+`registry/registry.json`'s `"version": 1` is the manifest SCHEMA version read by the `add`
+CLI — it is unrelated and must not be bumped along with the release.
+
 ## Verification workflow
 
 - **Compile-verify:** `cd demo && npm run build`. `@magic-spells/puzzle` is installed from
