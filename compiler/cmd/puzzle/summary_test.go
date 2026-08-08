@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -85,6 +86,58 @@ func TestCollectDistSortsAndSizes(t *testing.T) {
 			if f.gz < 0 {
 				t.Errorf("app.js should be gzip-sized, got %d", f.gz)
 			}
+		}
+	}
+}
+
+// TestCollectDistGzipSizesMatchContents guards the parallel gzip pass: every
+// entry must carry the gzip size of ITS OWN file (an index mix-up across workers
+// would swap them), non-gzippable and empty files must stay at -1, and the
+// numbers must be identical to compressing each file directly.
+func TestCollectDistGzipSizesMatchContents(t *testing.T) {
+	dist := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dist, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Distinct, differently-compressible contents so a swapped result cannot
+	// coincidentally match.
+	contents := map[string]string{
+		"app.js":           strings.Repeat("console.log('a');\n", 200),
+		"styles.css":       strings.Repeat(".x{color:red}\n", 137),
+		"index.html":       "<html><body>" + strings.Repeat("hi ", 91) + "</body></html>",
+		"nested/data.json": `{"k":` + strings.Repeat(`"v",`, 63) + `"z":1}`,
+		"empty.js":         "",
+		"logo.png":         "\x89PNG not really",
+		"app.js.map":       `{"version":3,"sources":[]}`,
+	}
+	for rel, body := range contents {
+		if err := os.WriteFile(filepath.Join(dist, filepath.FromSlash(rel)), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files, err := collectDist(dist)
+	if err != nil {
+		t.Fatalf("collectDist: %v", err)
+	}
+	if len(files) != len(contents) {
+		t.Fatalf("collectDist returned %d files, want %d", len(files), len(contents))
+	}
+
+	for _, f := range files {
+		body, ok := contents[f.rel]
+		if !ok {
+			t.Fatalf("unexpected entry %q", f.rel)
+		}
+		if f.size != int64(len(body)) {
+			t.Errorf("%s: size = %d, want %d", f.rel, f.size, len(body))
+		}
+		want := int64(-1)
+		if gzippable(f.rel) && len(body) > 0 {
+			want = gzipSize([]byte(body))
+		}
+		if f.gz != want {
+			t.Errorf("%s: gz = %d, want %d", f.rel, f.gz, want)
 		}
 	}
 }
