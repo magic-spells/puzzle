@@ -360,6 +360,23 @@ func absModuleImport(absRoot, rel string) string {
 	return filepath.ToSlash(filepath.Join(absRoot, filepath.FromSlash(rel)))
 }
 
+// staticPagesSourcemap selects the per-page bundle pass's source-map mode from
+// the SAME policy the main app.js pass uses (options.go newBundleOptions +
+// build.Build): development keeps linked maps, production emits them only when
+// puzzle.config.js opts in with `build.sourceMap`.
+//
+// The pass used to emit linked maps unconditionally and a post-pass then deleted
+// every .js.map under staging/_puzzle and rewrote every .js to strip its
+// sourceMappingURL comment — generating output solely to throw it away, and
+// re-reading and re-writing the whole tree to do it. Deciding here instead makes
+// the shipped bytes identical and the stripper unnecessary.
+func staticPagesSourcemap(cfg config.Config, dev bool) api.SourceMap {
+	if dev || cfg.Build.SourceMap {
+		return api.SourceMapLinked
+	}
+	return api.SourceMapNone
+}
+
 // bundleStaticPages runs the browser-platform, Splitting esbuild pass over the
 // generated per-page entries into outdir (staging/_puzzle). Target/minify/define
 // and the dropConsole policy match the main app.js pass exactly; EntryNames is
@@ -381,7 +398,7 @@ func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg c
 		Target:      api.ES2022,
 		Outdir:      outdir,
 		Write:       true,
-		Sourcemap:   api.SourceMapLinked,
+		Sourcemap:   staticPagesSourcemap(cfg, dev),
 		EntryNames:  "[name]",
 		ChunkNames:  "chunks/[name]-[hash]",
 		// Takeover: true — a static page's whole job is adopting the prerendered

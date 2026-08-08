@@ -77,4 +77,11 @@ regression-guarded by `TestFormatterManifestFreshAcrossIncrementalRebuilds`.
 
 Static output performs a second node-platform bundle and runs
 [[COMPONENT-SSG]] before the staging swap. A timeout or render failure preserves
-the last good dist and surfaces source-mapped user errors.
+the last good dist and surfaces source-mapped user errors. The per-page browser
+bundle pass follows the SAME source-map policy as the main `app.js` pass —
+development linked, production only under `build.sourceMap` — decided BEFORE
+esbuild runs rather than by emitting maps unconditionally and deleting them
+after. Because a chunk's content hash is computed over bytes that no longer
+carry a `sourceMappingURL` comment, production `_puzzle/chunks/*` filenames
+differ from the generate-then-strip era; the contents are unchanged, and the
+hash now actually describes the shipped bytes.
