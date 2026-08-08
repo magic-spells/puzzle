@@ -44,6 +44,20 @@ keeps readable output and console. Failed builds discard staging and preserve
 the last good dist. Success renames old output aside, installs staging, then
 removes the backup. Path-containment guards protect every swap target.
 
+Every transient directory a build needs lives under `<root>/.puzzle/tmp/` —
+the staging tree (`staging-*`) and swapOutput's holding dir for the previous
+output (`dist-old-*`), which used to be `.dist-staging-*` / `dist.old-*`
+siblings of `dist/`. Same filesystem, so the install is still an atomic rename;
+but `<root>/.puzzle` carries a `.gitignore` holding `*`, so a leftover from a
+killed build is invisible to every tool that respects gitignore. That matters
+beyond tidiness: Tailwind v4 walks the project for sources, and a stale copy of
+`dist/` under a name no `dist` ignore rule matches turned a 112ms source scan
+into 14s on the reference site. `Build` and `puzzle dev` both call
+`SweepWorkDirs` at startup, which removes entries under `.puzzle/tmp` — and
+legacy `.dist-staging-*` / `dist.old-*` siblings, so existing projects self-heal
+— matching the exact known prefixes, real directories only (never a symlink),
+untouched for over ten minutes so a concurrently running build survives.
+
 Public assets come from `app/public` with a root `public` fallback. Reserved
 generated names (`app.js`, its map, `styles.css`) are rejected case-insensitively
 before pruning or on every dev rebuild. The copier writes differently per

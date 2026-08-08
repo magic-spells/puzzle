@@ -292,13 +292,13 @@ export default class Home extends PuzzleView {
 		t.Errorf("dist/index.html changed despite the failed static build:\nbefore=%q\nafter=%q", before, after)
 	}
 
-	// No staging or prerender leftovers under the app root.
-	entries, err := os.ReadDir(root)
+	// No staging or prerender leftovers in the build scratch tree.
+	entries, err := os.ReadDir(workTmp(root))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), ".dist-staging-") {
+		if strings.HasPrefix(e.Name(), stagingPrefix) {
 			t.Errorf("leftover staging dir after failed static build: %s", e.Name())
 		}
 	}

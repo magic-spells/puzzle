@@ -165,6 +165,12 @@ func Serve(root string, opts Options) error {
 	dist := filepath.Join(absRoot, "dist")
 	appDir := filepath.Join(absRoot, "app")
 
+	// Clear out any transient build directories a previous, interrupted run left
+	// behind. The static rebuild path reaches this through build.Build, but the
+	// SPA path never calls it — and either way a dev session is where a build is
+	// most likely to be killed mid-flight, so the sweep belongs at startup.
+	build.SweepWorkDirs(absRoot)
+
 	// Recursive watch roots: app/ always, plus a root-level public/ fallback when
 	// it resolves OUTSIDE app/ (app/public is already inside appDir, so it never
 	// needs a second watcher). Using build.PublicDir keeps the watched dir in
