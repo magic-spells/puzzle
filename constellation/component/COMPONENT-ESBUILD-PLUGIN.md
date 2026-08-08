@@ -31,18 +31,43 @@ instances. A pass that hits the memo still does its own per-pass work:
 registering the file's `<style>` block in ITS collector (never on a failed
 compile) and returning fresh copies of the message/watch-file slices. Codegen's
 out-of-band warnings print from the memo's compute function, so they appear once
-per build rather than once per pass. The cache is never attached on the
-watch/dev path, which keeps esbuild's own incremental onLoad cache the only memo
-there.
+per build rather than once per pass. The SPA watch/dev path attaches no cache, which keeps
+esbuild's own incremental onLoad cache the only memo there; the STATIC dev
+builder holds one for the whole session ([[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]).
+Cross-rebuild reuse is safe because the key carries a content hash — an edited
+file simply misses — but `Evict` still exists, indexed by a path→keys map that
+records both a `.pzl`'s own path and every file it inlines with `{#svg}`: the
+SVG memo nested inside the cache is keyed by PATH, so an edited icon whose
+consuming `.pzl` is byte-identical would otherwise be served from the pre-edit
+scan with nothing able to notice. Both sides of an eviction are symlink-resolved
+(esbuild reports resolved paths, a watcher reports what the user spelled).
+
+The project usage walk has the same shape of problem: it reads and fully parses
+every `.pzl` to answer two questions (which builtins are called, is `flip`
+used), which a one-shot build pays once and a dev session paid per rebuild.
+`plugin.UsageScanner` is that walk with a per-file memo keyed by path + mtime +
+size; `ScanUsage` is now a one-shot scanner, so the two share `scanFileUsage`
+and cannot answer differently. Both long-lived builders keep one scanner for the
+session.
 Scripts use JS or TS loader according to `<script lang>`; styles collect in a
 mutex-protected path map; inline SVG dependencies join esbuild's watch set.
 
 Build bundles `app/app.js` to staged `dist/app.js`, writes linked source maps
-and composed CSS, then copies public assets. Production targets ES2022,
+and composed CSS, then copies public assets. Its three passes' BuildOptions are
+assembled by `newBundleOptions`, `prerenderBundleOptions`, and
+`staticPagesBundleOptions` — extracted so the static dev builder can hold the
+identical passes open as persistent contexts and the shipped bytes cannot depend
+on which driver ran them. The per-page pass anchors `AbsWorkingDir` to its
+output tree: unminified output carries a `// <input path>` comment per module
+resolved against the process cwd, so the staging dir's random suffix used to
+leak into `_puzzle/*.js` and two dev builds of identical sources produced
+different bytes. Production is unaffected (minification strips the comments). Production targets ES2022,
 minifies, and drops console calls unless `build.dropConsole: false`; development
 keeps readable output and console. Failed builds discard staging and preserve
 the last good dist. Success renames old output aside, installs staging, then
-removes the backup. Path-containment guards protect every swap target.
+removes the backup — inline for a one-shot build (the process is about to exit),
+backgrounded for a dev rebuild, where deleting a 150-page tree is ~50ms a
+developer would otherwise wait through after the swap has already succeeded. Path-containment guards protect every swap target.
 
 Every transient directory a build needs lives under `<root>/.puzzle/tmp/` —
 the staging tree (`staging-*`) and swapOutput's holding dir for the previous
