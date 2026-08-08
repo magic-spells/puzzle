@@ -39,12 +39,14 @@ package build
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
@@ -94,6 +96,26 @@ type StaticWatchBuilder struct {
 	// into all three contexts' Defines, which only a scan can invalidate.
 	usage   plugin.Usage
 	defined plugin.Features
+
+	// graph is the reverse dependency graph captured after the last rebuild that
+	// produced both metafiles (route_deps.go). nil means "render everything".
+	graph *routeGraph
+
+	// routeCount is how many pages the last render enumerated — the denominator
+	// in the profile's partial-render row.
+	routeCount int
+
+	// lastPlan is the plan the most recent Rebuild actually EXECUTED — a partial
+	// that fell back reads as full here. Diagnostics and the equivalence test
+	// read it; nothing in the build path does.
+	lastPlan renderPlan
+
+	// pending accumulates every path handed to Rebuild since the last SUCCESSFUL
+	// graph capture. A failed rebuild leaves the graph describing pre-edit
+	// imports, so the edit that added an import must keep being classified until
+	// a graph that knows about it exists — otherwise a later save to the imported
+	// file would be attributed to too few routes.
+	pending map[string]bool
 }
 
 // StaticWatchOptions configure the static dev builder.
@@ -148,6 +170,7 @@ func NewStaticWatchBuilder(root string, opts StaticWatchOptions) (*StaticWatchBu
 		tailwind: opts.Tailwind,
 		cache:    plugin.NewCompileCache(),
 		scanner:  plugin.NewUsageScanner(),
+		pending:  map[string]bool{},
 	}
 	if err := b.buildContexts(); err != nil {
 		return nil, err
@@ -199,9 +222,14 @@ func (b *StaticWatchBuilder) buildContexts() error {
 		appCtx.Dispose()
 		return err
 	}
-	preCtx, ctxErr := api.Context(prerenderBundleOptions(
+	preOpts := prerenderBundleOptions(
 		b.root, preStdin, filepath.Join(b.warm, prerenderDir, "prerender.mjs"), b.prePl,
-	))
+	)
+	// The prerender bundle's module graph is what tells a change apart from a
+	// render-wide one (route_deps.go): app.js, routes.js, the models registry and
+	// the formatters module live here and nowhere else.
+	preOpts.Metafile = true
+	preCtx, ctxErr := api.Context(preOpts)
 	if ctxErr != nil {
 		appCtx.Dispose()
 		return fmt.Errorf("puzzle dev: creating prerender esbuild context: %s", ctxErr.Error())
@@ -240,6 +268,22 @@ func (b *StaticWatchBuilder) Rebuild(changed []string) error {
 	prof := newBuildProfile(profileEnabled(false))
 	defer prof.report(os.Stderr)
 
+	// Which routes this save can reach, decided BEFORE the compile memo is
+	// evicted: the {#svg} edge classification depends on lives in that memo's
+	// asset index, and eviction is exactly what drops it.
+	endClassify := prof.phase("route classify")
+	for _, p := range changed {
+		b.pending[p] = true
+	}
+	batch := make([]string, 0, len(b.pending))
+	for p := range b.pending {
+		batch = append(batch, p)
+	}
+	sort.Strings(batch)
+	plan := b.graph.classify(b.root, batch, b.cache.AssetConsumers)
+	b.lastPlan = plan
+	endClassify()
+
 	// The transform memo is keyed by content hash, so a changed .pzl misses on
 	// its own; this eviction is what invalidates a .pzl whose bytes did NOT
 	// change but whose inlined {#svg} asset did (and it keeps the map from
@@ -274,36 +318,64 @@ func (b *StaticWatchBuilder) Rebuild(changed []string) error {
 		endScan()
 	}
 
-	staging, err := os.MkdirTemp(b.workTmp, stagingPrefix+"*")
+	// One attempt at the plan the classifier chose, then — if anything about the
+	// partial path itself went wrong — one unconditional full render. A compile
+	// error, a failed prerender or a failed swap is NOT a fallback trigger: it is
+	// the same error a full render would produce, and retrying it would only
+	// double the time to the diagnostic.
+	staging, err := b.attempt(plan, prof)
 	if err != nil {
-		return fmt.Errorf("creating build staging dir under %s: %w", b.workTmp, err)
-	}
-	_ = os.Chmod(staging, 0o755)
-	swapped := false
-	defer func() {
-		if !swapped {
-			os.RemoveAll(staging)
+		var fb partialFallback
+		if !errors.As(err, &fb) {
+			return err
 		}
-	}()
-
-	if err := b.rebuildInto(staging, prof); err != nil {
-		return err
+		if prof != nil {
+			fmt.Fprintf(os.Stderr, "  puzzle dev · partial render fell back to full: %v\n", fb.cause)
+		}
+		b.lastPlan = fullRender("partial render fell back")
+		if staging, err = b.attempt(b.lastPlan, prof); err != nil {
+			return err
+		}
 	}
 
 	endSwap := prof.phase("staging swap")
 	swapErr := swapOutputWith(staging, b.outdir, b.workTmp, true)
 	endSwap()
 	if swapErr != nil {
+		os.RemoveAll(staging)
 		return swapErr
 	}
-	swapped = true
 	return nil
 }
+
+// attempt assembles one complete staging tree for plan and returns it ready to
+// swap. Every failure path removes the tree it created, so the caller only ever
+// holds a directory it is about to swap in.
+func (b *StaticWatchBuilder) attempt(plan renderPlan, prof *buildProfile) (string, error) {
+	staging, err := os.MkdirTemp(b.workTmp, stagingPrefix+"*")
+	if err != nil {
+		return "", fmt.Errorf("creating build staging dir under %s: %w", b.workTmp, err)
+	}
+	_ = os.Chmod(staging, 0o755)
+	if err := b.rebuildInto(staging, prof, plan); err != nil {
+		os.RemoveAll(staging)
+		return "", err
+	}
+	return staging, nil
+}
+
+// partialFallback marks the failures that mean "this rebuild cannot be done
+// partially" rather than "this project does not build". Only the route-level
+// path produces it, and the only cure is a full render.
+type partialFallback struct{ cause error }
+
+func (e partialFallback) Error() string { return "partial render unavailable: " + e.cause.Error() }
+func (e partialFallback) Unwrap() error { return e.cause }
 
 // rebuildInto assembles one complete static site inside staging. It mirrors the
 // one-shot pipeline's order and its guards; anything it returns discards
 // staging.
-func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile) error {
+func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, plan renderPlan) error {
 	// 1. The app pass — compile everything, collect <style>, report errors.
 	endBundle := prof.phase("browser bundle")
 	appResult := b.appCtx.Rebuild()
@@ -366,8 +438,29 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile) err
 		return formatBuildErrors("puzzle build --static: prerender bundle failed", preResult.Errors)
 	}
 
-	endRender := prof.phase("prerender render")
-	payload, err := runPrerender(filepath.Join(b.warm, prerenderDir, "prerender.mjs"), staging, "--static")
+	// The subset render (D155). The node process still starts, still runs
+	// beforeMount, and still enumerates, skips, claims and slugs EVERY route —
+	// only the render + serialize + write of the unaffected ones is skipped, and
+	// their last-good HTML is copied in below. Nothing is passed for a full
+	// render, which is byte-for-byte the pre-D155 call.
+	var only []string
+	if !plan.full {
+		only = plan.routes
+		if only == nil {
+			only = []string{}
+		}
+	}
+	renderArgs, argErr := prerenderOnlyArgs(only, plan.full)
+	if argErr != nil {
+		return partialFallback{argErr}
+	}
+
+	renderPhase := "prerender render"
+	if !plan.full {
+		renderPhase = fmt.Sprintf("partial render (%d/%d routes)", len(only), b.routeCount)
+	}
+	endRender := prof.phase(renderPhase)
+	payload, err := runPrerender(filepath.Join(b.warm, prerenderDir, "prerender.mjs"), staging, "--static", renderArgs...)
 	endRender()
 	if err != nil {
 		return err
@@ -383,6 +476,20 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile) err
 		}
 	}
 
+	// 5b. Every page the render skipped gets its last-good HTML back, taken from
+	//     the tree currently being served. A page that is missing there — a first
+	//     rebuild, a hand-deleted dist/, a route the previous render skipped —
+	//     means this staging tree would ship incomplete, so the whole rebuild
+	//     restarts as a full render.
+	if !plan.full {
+		endReuse := prof.phase(fmt.Sprintf("page reuse (%d/%d)", countReused(summary), len(summary.Written)))
+		reuseErr := b.reusePages(staging, summary)
+		endReuse()
+		if reuseErr != nil {
+			return partialFallback{reuseErr}
+		}
+	}
+
 	// 6. Per-page entries, and the page context that bundles them.
 	endEntries := prof.phase("page entries")
 	entryFiles, err := b.syncPageEntries(summary)
@@ -391,16 +498,160 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile) err
 		return err
 	}
 
+	pagesMetafile := ""
 	if len(entryFiles) > 0 {
 		endPages := prof.phase("per-page bundles")
-		pagesErr := b.bundlePages(staging, entryFiles)
+		var pagesErr error
+		pagesMetafile, pagesErr = b.bundlePages(staging, entryFiles)
 		endPages()
 		if pagesErr != nil {
 			return pagesErr
 		}
 	}
 
+	// 7. Refresh the reverse dependency graph from the two metafiles this rebuild
+	//    just produced. Both are complete even after a subset render — the page
+	//    pass always bundles every entry and the prerender bundle is never
+	//    filtered — so a partial rebuild leaves the next one just as well
+	//    informed. A graph that cannot be built leaves the previous one in place
+	//    and clears nothing, so the next save is classified conservatively.
+	endGraph := prof.phase("route graph")
+	b.captureGraph(summary, pagesMetafile, preResult.Metafile)
+	endGraph()
+
 	printStaticSummary(summary, len(entryFiles))
+	return nil
+}
+
+// captureGraph rebuilds the module→routes graph from this rebuild's metafiles
+// and, on success, forgets the accumulated pending change set: the graph now
+// describes the imports those changes produced.
+func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, preMetafile string) {
+	if pagesMetafile == "" || preMetafile == "" {
+		return
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	entriesDir := filepath.Join(b.warm, prerenderDir, "entries")
+	entryRoutes := make(map[string]string, len(summary.Written))
+	for _, page := range summary.Written {
+		slug, err := slugFromEntry(page.Entry)
+		if err != nil {
+			return
+		}
+		entryRoutes[filepath.Join(entriesDir, slug+".js")] = page.Path
+	}
+	// The page pass anchors AbsWorkingDir to its output tree's parent (the warm
+	// root); the prerender pass sets none, so esbuild resolved its metafile keys
+	// against the process working directory.
+	graph, err := buildRouteGraph(pagesMetafile, b.warm, preMetafile, cwd, entryRoutes)
+	if err != nil {
+		return
+	}
+	b.graph = graph
+	b.routeCount = len(summary.Written)
+	b.pending = map[string]bool{}
+}
+
+// prerenderOnlyArgs renders the route filter as the generated prerender entry's
+// argv[4]. A full render passes nothing at all, so the node command line is
+// byte-identical to the pre-D155 one.
+func prerenderOnlyArgs(only []string, full bool) ([]string, error) {
+	if full {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(only)
+	if err != nil {
+		return nil, fmt.Errorf("encoding the route filter: %w", err)
+	}
+	return []string{string(encoded)}, nil
+}
+
+// countReused reports how many of a summary's pages were not rendered.
+func countReused(summary staticSummary) int {
+	n := 0
+	for _, page := range summary.Written {
+		if page.Reused {
+			n++
+		}
+	}
+	return n
+}
+
+// reusePages puts every page the subset render skipped back where the render
+// would have written it, taken from the tree that is currently being served.
+//
+// The link is a HARDLINK where the filesystem allows one, with a byte copy as
+// the fallback. D154 rejected hardlinking dist/ because esbuild rewrites its
+// output files in place — but these are not esbuild outputs. A prerendered page
+// is written once by the node pass and then only ever replaced wholesale by the
+// next staging swap (which unlinks the old tree, leaving this link the sole
+// owner of the inode), so the two trees can share bytes without either being
+// able to mutate the other's view of them.
+// It runs with the same bounded concurrency the SSG writer uses, and for the
+// same reason: a page is independent of every other, and done one at a time the
+// whole rebuild queues behind the filesystem.
+func (b *StaticWatchBuilder) reusePages(staging string, summary staticSummary) error {
+	type job struct{ src, dst, route string }
+	jobs := make([]job, 0, len(summary.Written))
+	dirs := map[string]bool{}
+	for _, page := range summary.Written {
+		if !page.Reused {
+			continue
+		}
+		rel, err := filepath.Rel(staging, page.File)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("reused page %s resolved outside staging (%s)", page.Path, page.File)
+		}
+		jobs = append(jobs, job{src: filepath.Join(b.outdir, rel), dst: page.File, route: page.Path})
+		dirs[filepath.Dir(page.File)] = true
+	}
+	// Directories first, on one goroutine: a static site's pages share parents
+	// heavily, so this is far fewer mkdirs than one per page and it keeps the
+	// workers doing nothing but linking.
+	for dir := range dirs {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+
+	const workers = 16
+	var wg sync.WaitGroup
+	var next int64
+	errs := make([]error, workers)
+	for w := 0; w < workers && w < len(jobs); w++ {
+		wg.Add(1)
+		go func(slot int) {
+			defer wg.Done()
+			for {
+				i := int(atomic.AddInt64(&next, 1)) - 1
+				if i >= len(jobs) || errs[slot] != nil {
+					return
+				}
+				j := jobs[i]
+				if err := os.Link(j.src, j.dst); err == nil {
+					continue
+				}
+				data, err := os.ReadFile(j.src)
+				if err != nil {
+					errs[slot] = fmt.Errorf("no last-good output for route %s: %w", j.route, err)
+					return
+				}
+				if err := os.WriteFile(j.dst, data, 0o644); err != nil {
+					errs[slot] = err
+					return
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -482,6 +733,9 @@ func (b *StaticWatchBuilder) newPagesContext(entryFiles []string) (api.BuildCont
 	b.pagesPl = b.newPlugin(b.usage)
 	opts := staticPagesBundleOptions(b.root, entryFiles, filepath.Join(b.warm, staticPagesDir), b.cfg, true, b.pagesPl)
 	opts.Write = false
+	// One graph per route, rooted at that route's generated entry: the half of
+	// the reverse dependency graph that makes an edit attributable (route_deps.go).
+	opts.Metafile = true
 	ctx, err := api.Context(opts)
 	if err != nil {
 		return nil, fmt.Errorf("puzzle dev: creating per-page esbuild context: %s", err.Error())
@@ -494,30 +748,32 @@ func (b *StaticWatchBuilder) newPagesContext(entryFiles []string) (api.BuildCont
 // esbuild write into a warm directory we then copy) is what prunes the tree: a
 // deleted page's bundle and a re-hashed shared chunk simply never appear,
 // because staging holds only what this rebuild produced.
-func (b *StaticWatchBuilder) bundlePages(staging string, entryFiles []string) error {
+// It also hands back the pass's metafile, the per-route half of the reverse
+// dependency graph (route_deps.go).
+func (b *StaticWatchBuilder) bundlePages(staging string, entryFiles []string) (string, error) {
 	if b.pagesCtx == nil {
-		return fmt.Errorf("puzzle dev: per-page esbuild context missing for %d entries", len(entryFiles))
+		return "", fmt.Errorf("puzzle dev: per-page esbuild context missing for %d entries", len(entryFiles))
 	}
 	result := b.pagesCtx.Rebuild()
 	if len(result.Errors) > 0 {
-		return formatBuildErrors("puzzle build --static: per-page bundle failed", result.Errors)
+		return "", formatBuildErrors("puzzle build --static: per-page bundle failed", result.Errors)
 	}
 	warmPages := filepath.Join(b.warm, staticPagesDir)
 	stagingPages := filepath.Join(staging, staticPagesDir)
 	for _, out := range result.OutputFiles {
 		rel, err := filepath.Rel(warmPages, out.Path)
 		if err != nil || strings.HasPrefix(rel, "..") {
-			return fmt.Errorf("puzzle dev: unexpected per-page output path %s", out.Path)
+			return "", fmt.Errorf("puzzle dev: unexpected per-page output path %s", out.Path)
 		}
 		target := filepath.Join(stagingPages, rel)
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
+			return "", err
 		}
 		if err := os.WriteFile(target, out.Contents, 0o644); err != nil {
-			return fmt.Errorf("puzzle dev: writing page bundle %s: %w", rel, err)
+			return "", fmt.Errorf("puzzle dev: writing page bundle %s: %w", rel, err)
 		}
 	}
-	return nil
+	return result.Metafile, nil
 }
 
 // Dispose releases every esbuild context. After Dispose the builder must not be
