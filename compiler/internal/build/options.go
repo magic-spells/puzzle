@@ -86,13 +86,29 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 	}
 }
 
-func scanUsage(absRoot string, pl *plugin.Plugin) error {
-	usage, err := scanUsageOnce(absRoot)
+// scanUsage refreshes pl's usage bits from a walk of absRoot. scanner may be nil
+// for a one-shot walk; a long-lived builder passes its own so unchanged .pzl
+// files are not re-parsed on every rebuild (plugin.UsageScanner).
+func scanUsage(absRoot string, pl *plugin.Plugin, scanner *plugin.UsageScanner) (plugin.Usage, error) {
+	usage, err := scanUsageWith(absRoot, scanner)
 	if err != nil {
-		return err
+		return plugin.Usage{}, err
 	}
 	pl.SetUsage(usage)
-	return nil
+	return usage, nil
+}
+
+// scanUsageWith runs the usage walk through scanner when one is supplied, else
+// as a cold one-shot scan.
+func scanUsageWith(absRoot string, scanner *plugin.UsageScanner) (plugin.Usage, error) {
+	if scanner == nil {
+		return scanUsageOnce(absRoot)
+	}
+	usage, err := scanner.Scan(absRoot)
+	if err != nil {
+		return plugin.Usage{}, fmt.Errorf("scanning project usage: %w", err)
+	}
+	return usage, nil
 }
 
 // scanUsageOnce performs the project-wide usage walk and returns its immutable

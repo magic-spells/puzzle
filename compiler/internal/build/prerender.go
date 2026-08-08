@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -219,8 +220,25 @@ func appEntryPath(absRoot string) string {
 // plugin collects is discarded — styles.css was already composed by the main
 // pass; this pass exists only to run the app under node.
 func bundlePrerenderEntry(absRoot, stdin, outfile, label string, pc *passContext) error {
-	pl := pc.plugin(absRoot)
+	buildOpts := prerenderBundleOptions(absRoot, stdin, outfile, pc.plugin(absRoot))
 
+	result := api.Build(buildOpts)
+	if len(result.Errors) > 0 {
+		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
+			Kind:          api.ErrorMessage,
+			Color:         ui.New(os.Stderr).Enabled(),
+			TerminalWidth: 0,
+		})
+		return fmt.Errorf("puzzle build %s: prerender bundle failed:\n%s", label, strings.Join(lines, "\n"))
+	}
+	return nil
+}
+
+// prerenderBundleOptions assembles the node-platform pass's BuildOptions. It is
+// split out from bundlePrerenderEntry so the static dev builder can hold the
+// same pass open as a persistent api.Context and never risk drifting from what
+// a one-shot build compiles.
+func prerenderBundleOptions(absRoot, stdin, outfile string, pl *plugin.Plugin) api.BuildOptions {
 	buildOpts := api.BuildOptions{
 		Stdin: &api.StdinOptions{
 			Contents:   stdin,
@@ -248,17 +266,7 @@ func bundlePrerenderEntry(absRoot, stdin, outfile, label string, pc *passContext
 		LogLevel: api.LogLevelSilent,
 	}
 	configureRuntime(absRoot, &buildOpts, pl)
-
-	result := api.Build(buildOpts)
-	if len(result.Errors) > 0 {
-		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
-			Kind:          api.ErrorMessage,
-			Color:         ui.New(os.Stderr).Enabled(),
-			TerminalWidth: 0,
-		})
-		return fmt.Errorf("puzzle build %s: prerender bundle failed:\n%s", label, strings.Join(lines, "\n"))
-	}
-	return nil
+	return buildOpts
 }
 
 // runPrerender executes the bundled prerender entry under node, passing the

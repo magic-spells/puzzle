@@ -26,6 +26,7 @@ package dev
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -246,20 +247,29 @@ func Serve(root string, opts Options) error {
 	pl := &pipeline{dist: dist}
 	stylesStatus := ""
 
-	// Static output runs the full one-shot build per rebuild (see the rebuild
-	// closure): the prerender pass needs a complete, atomically swapped dist tree,
-	// which the incremental in-place builder deliberately does not produce. That
-	// path runs Tailwind itself, so neither the warm watcher nor the incremental
-	// context is started here.
-	tailwindEnabled := cfgErr == nil && cfg.TailwindEnabled() && !staticMode
-	if staticMode && cfgErr == nil && cfg.TailwindEnabled() {
-		// build.Build runs the Tailwind CLI itself, once per rebuild — say so
-		// rather than dropping the Styles line and implying no pipeline.
-		stylesStatus = tailwindStatus(resolveTailwindName(absRoot), false)
-	}
+	// Both serving modes now drive an incremental builder and, when the project
+	// declares Tailwind, the warm --watch child: static output gets
+	// build.StaticWatchBuilder (persistent esbuild contexts + a staging swap per
+	// rebuild) rather than a cold one-shot build per save.
+	tailwindEnabled := cfgErr == nil && cfg.TailwindEnabled()
 
 	var builder *build.WatchBuilder
-	if !staticMode {
+	var staticBuilder *build.StaticWatchBuilder
+	if staticMode {
+		var builderErr error
+		// The Tailwind accessor is installed below (SetTailwind), once the warm
+		// child's fate is known. In static mode nothing writes styles.css into the
+		// served dist/ directly — the file only ever arrives through an atomic swap
+		// alongside the pages it belongs to.
+		staticBuilder, builderErr = build.NewStaticWatchBuilder(absRoot, build.StaticWatchOptions{Config: cfg})
+		if builderErr != nil {
+			// No persistent contexts: degrade to the one-shot build.Build per change
+			// (slower, but identical output — including its own Tailwind run).
+			logWarning(stderr, "%v (falling back to non-incremental rebuilds)", builderErr)
+		} else {
+			defer staticBuilder.Dispose()
+		}
+	} else {
 		var builderErr error
 		builder, builderErr = build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures})
 		if builderErr != nil {
@@ -274,6 +284,19 @@ func Serve(root string, opts Options) error {
 			pl.collectedCSS = builder.CSS
 		}
 	}
+	// A static rebuild composes styles.css itself, into staging. The pipeline is
+	// still the thing that knows where the Tailwind layer comes from (the warm
+	// child's output file, or the one-shot fallback when that child is gone), so
+	// the builder reads it through the same accessor the SPA path composes from.
+	if staticBuilder != nil {
+		staticBuilder.SetTailwind(pl.tailwindCSS)
+	}
+	// The one-shot fallback for static mode runs Tailwind itself; a warm child
+	// alongside it would double-compose.
+	warmTailwind := tailwindEnabled && (builder != nil || staticBuilder != nil)
+	if tailwindEnabled && !warmTailwind {
+		stylesStatus = tailwindStatus(resolveTailwindName(absRoot), false)
+	}
 
 	// The warm Tailwind watcher's child process must be reaped on EVERY exit
 	// path. StartWatch's ctx-cancel goroutine handles the graceful shutdown, but
@@ -287,10 +310,21 @@ func Serve(root string, opts Options) error {
 		}
 	}()
 
-	// Warm Tailwind watcher — only alongside the incremental builder. (In the
+	// stylesChanged is what the Tailwind side calls when the warm child has
+	// rewritten its output. The two serving modes answer it differently and the
+	// rebuild closure is defined below, so it is a forward-declared hook rather
+	// than a direct recompose call:
+	//   - SPA mode recomposes dist/styles.css in place (the file is served
+	//     straight off disk, so the atomic write is the whole update);
+	//   - static mode must NOT touch the served dist/ — styles.css belongs to the
+	//     prerendered tree and only ever arrives through a staging swap — so it
+	//     asks for a (debounced) rebuild instead.
+	var stylesChanged func()
+
+	// Warm Tailwind watcher — only alongside an incremental builder. (In the
 	// full-fallback path build.Build already runs Tailwind one-shot, so a warm
 	// child would double-compose.)
-	if tailwindEnabled && builder != nil {
+	if warmTailwind {
 		tmp, err := os.CreateTemp("", "puzzle-tailwind-dev-*.css")
 		if err != nil {
 			logWarning(stderr, "could not create Tailwind output file: %v (styles: one-shot per rebuild)", err)
@@ -319,13 +353,11 @@ func Serve(root string, opts Options) error {
 				pl.twOutputPath = twOutput
 				stylesStatus = tailwindStatus(w.Name, true)
 
-				// (a) Recompose whenever the child rewrites its output file.
+				// (a) Update styles whenever the child rewrites its output file.
 				go pollFile(ctx, twOutput, tailwindPollInterval, func() {
-					if err := pl.recompose(); err != nil {
-						logWarning(stderr, "recompose styles: %v", err)
-						return
+					if stylesChanged != nil {
+						stylesChanged()
 					}
-					coalescer.request()
 				})
 
 				// If the child dies unexpectedly, fall back to one-shot so CSS keeps
@@ -340,8 +372,8 @@ func Serve(root string, opts Options) error {
 					}
 					logWarning(stderr, "tailwind --watch exited (%v); falling back to one-shot rebuilds", w.Err())
 					pl.enableOneShot(absRoot)
-					if err := pl.recompose(); err == nil {
-						coalescer.request()
+					if stylesChanged != nil {
+						stylesChanged()
 					}
 				}()
 			}
@@ -370,12 +402,16 @@ func Serve(root string, opts Options) error {
 		}
 		var err error
 		switch {
+		case staticBuilder != nil:
+			// The real static pipeline, incrementally: persistent esbuild contexts
+			// for the app, prerender, and per-page passes, composed into a fresh
+			// staging dir that is atomically swapped in. A failed compile OR a failed
+			// prerender discards staging, so the last good pages keep serving and the
+			// browser gets the diagnostic through the D92 channel below.
+			err = staticBuilder.Rebuild(changed)
 		case staticMode:
-			// The real static pipeline: bundle, Tailwind, public copy, node
-			// prerender pass, per-page mountStatic bundles — all into a staging dir
-			// that is atomically swapped in. A failed compile OR a failed prerender
-			// discards staging, so the last good pages keep serving and the browser
-			// gets the diagnostic through the D92 channel below.
+			// No persistent contexts (construction failed): the cold one-shot build,
+			// which produces the same output more slowly and runs Tailwind itself.
 			err = build.Build(absRoot, build.Options{Development: true, Output: "static", Config: buildCfg})
 		case builder != nil:
 			if err = builder.ScanUsage(); err == nil {
@@ -410,9 +446,35 @@ func Serve(root string, opts Options) error {
 		}
 	}
 
+	// With the rebuild closure in hand, wire the Tailwind hook described above.
+	if staticMode {
+		// Coalesce: the CLI rewrites its output file several times while a burst of
+		// class-name edits settles, and each rewrite would otherwise cost a full
+		// static rebuild. This is the same 150ms window the source watcher uses.
+		var mu sync.Mutex
+		var timer *time.Timer
+		stylesChanged = func() {
+			mu.Lock()
+			defer mu.Unlock()
+			if timer == nil {
+				timer = time.AfterFunc(debounceInterval, func() { rebuild(nil, false) })
+				return
+			}
+			timer.Reset(debounceInterval)
+		}
+	} else {
+		stylesChanged = func() {
+			if err := pl.recompose(); err != nil {
+				logWarning(stderr, "recompose styles: %v", err)
+				return
+			}
+			coalescer.request()
+		}
+	}
+
 	// Initial build: keep serving even if it fails (retry on next change).
 	if staticMode {
-		logInfo(stdout, "static output — prerendering every route on each rebuild (no router, plain page loads)")
+		logInfo(stdout, "static output — every route prerendered on each rebuild (no router, plain page loads)")
 	}
 	rebuild(nil, false)
 
@@ -444,10 +506,17 @@ func Serve(root string, opts Options) error {
 		}
 	}()
 
+	// Drops bursts that are a metadata-only echo of a rebuild that already ran —
+	// the trailing CHTIMES an editor save delivers after a slow rebuild finishes
+	// draining events (see changes.go). Genuine successive saves carry different
+	// bytes and pass straight through.
+	filter := newChangeFilter()
+
 	watchErr := make(chan error, 1)
 	go func() {
 		watchErr <- runWatcher(ctx, watchDirs, configPath, debounceInterval, func(changed []string) {
 			rebuildPaths, configChanged := partitionChanges(changed, configPath)
+			rebuildPaths = filter.pending(rebuildPaths)
 			if len(rebuildPaths) > 0 {
 				rebuild(rebuildPaths, true)
 			}
@@ -1090,6 +1159,15 @@ type pipeline struct {
 	mu      sync.Mutex
 	oneShot func() (string, error) // set when the warm watcher is unavailable/dead
 	writeMu sync.Mutex
+	// lastWritten is the sha256 of the bytes recompose last put on disk, guarded
+	// by writeMu. One .pzl edit reaches recompose TWICE — once from the rebuild
+	// and once from the Tailwind output poll a moment later — and in the common
+	// case (a template edit with no new utility classes) both compose the same
+	// stylesheet. Comparing before writing collapses the pair into a single
+	// atomic write + rename against the file the dev server is serving, with no
+	// timer to tune and no window in which styles.css is momentarily stale.
+	lastWritten [32]byte
+	haveWritten bool
 }
 
 // enableOneShot switches the pipeline to run the Tailwind CLI once per
@@ -1127,7 +1205,8 @@ func (p *pipeline) tailwindCSS() (string, error) {
 	return string(data), nil
 }
 
-// recompose writes dist/styles.css = Tailwind layer + collected <style>.
+// recompose writes dist/styles.css = Tailwind layer + collected <style>, unless
+// that is byte-for-byte what it already wrote.
 func (p *pipeline) recompose() error {
 	tw, err := p.tailwindCSS()
 	if err != nil {
@@ -1138,11 +1217,19 @@ func (p *pipeline) recompose() error {
 		collected = p.collectedCSS()
 	}
 	final := styles.Compose(tw, collected)
+	sum := sha256.Sum256([]byte(final))
 	p.writeMu.Lock()
 	defer p.writeMu.Unlock()
+	if p.haveWritten && p.lastWritten == sum {
+		return nil
+	}
 	// Atomic write: the dev server may be serving dist/styles.css concurrently, so
 	// an in-place truncate-then-write could hand a client a truncated file.
-	return fsutil.WriteFileAtomic(filepath.Join(p.dist, "styles.css"), []byte(final), 0o644)
+	if err := fsutil.WriteFileAtomic(filepath.Join(p.dist, "styles.css"), []byte(final), 0o644); err != nil {
+		return err
+	}
+	p.lastWritten, p.haveWritten = sum, true
+	return nil
 }
 
 // reloadCoalescer debounces reload broadcasts: request() (re)arms a timer that

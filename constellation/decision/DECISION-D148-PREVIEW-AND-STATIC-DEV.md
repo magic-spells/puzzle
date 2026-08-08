@@ -3,6 +3,7 @@ name: D148 — `puzzle preview` + real static serving in dev
 status: verified
 connections:
   - DECISION-D81-STATIC-PAGES-MODE
+  - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D90-DEV-PORT-SCAN
   - DECISION-D92-DEV-ERROR-OVERLAY
   - DECISION-D98-FIXTURES-MODULE-FLAG
@@ -34,9 +35,13 @@ Two halves of one principle — **you should see what ships before you deploy it
    shell. No watcher, no SSE, no injection, no `dev.proxy` — the artifact is
    checked as it sits on disk. Default port 4000 so it runs beside dev.
 2. **`puzzle dev` on an `output: 'static'` project runs the real pipeline**:
-   every rebuild is the full one-shot build (bundle + Tailwind + prerender +
+   every rebuild is the full static build (bundle + Tailwind + prerender +
    per-page modules, staging + atomic swap), served with static-host semantics
-   — clean URLs, genuine full-page navigations, real 404s, no router.
+   — clean URLs, genuine full-page navigations, real 404s, no router. How that
+   rebuild is DRIVEN — a cold `build.Build` per save, or the persistent
+   contexts of `StaticWatchBuilder` — is [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]'s
+   question, not this card's; the output and the last-good guarantee are the
+   same either way.
 
 ## Context
 
@@ -64,12 +69,15 @@ exactly the bug class a preview should expose.
   mechanism, and a dev 404 page carries the client too (self-heals when the
   route appears). A failed compile OR prerender keeps the last good pages
   serving (staging swap), with the retained build error replayed over SSE.
-- **Static dev pays full rebuilds.** No incremental esbuild context, no warm
-  Tailwind watcher — the prerender pass needs a complete, atomically swapped
-  tree the in-place incremental builder deliberately does not produce
-  (~400 ms on `examples/static-docs`; scales with site size; the startup
-  banner names the trade). `--fixtures` + static is rejected at dev startup
-  (D98's rule, failed fast instead of once per rebuild).
+- **Static dev rebuilds a COMPLETE tree and swaps it, every time.** The
+  prerender pass needs a whole, atomically swapped output — the in-place
+  incremental builder the SPA loop uses deliberately does not produce one — so
+  a static rebuild is never a patch of the served `dist/`. That constraint is
+  this card's; making those complete rebuilds warm (persistent esbuild
+  contexts, a session-long compile memo, the shared `tailwindcss --watch`
+  child) is [[DECISION-D154-STATIC-DEV-WARM-REBUILDS]]. `--fixtures` + static is
+  rejected at dev startup (D98's rule, failed fast instead of once per
+  rebuild).
 - **Preview mode resolution: config wins, artifact breaks ties.** A build via
   `--static`/`--hybrid` flag leaves no config key, so preview reads the mode
   back from the artifact's own marker (`data-puzzle-static` /
@@ -101,7 +109,7 @@ exactly the bug class a preview should expose.
 SPEC §13 gains the `preview` command; §36's "dev is unchanged (SPA)" contract
 is amended to static-mode real serving. The SPA dev path is byte-identical
 (resolution merely moved into the shared resolver — nested-`index.html`
-shadowing rule, symlink traversal backstop and all). Static dev's full-rebuild
-cost is the accepted price of "dev shows what ships"; if large static sites
-make it hurt, an incremental prerender is the upgrade path, not a return to
-SPA serving.
+shadowing rule, symlink traversal backstop and all). Serving what ships is not
+negotiable: when the cost of doing so hurt on large sites, the answer was to
+make the rebuild warm (D154) and — next — to make the prerender itself
+incremental, never to go back to serving the SPA.

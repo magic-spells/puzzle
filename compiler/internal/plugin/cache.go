@@ -20,10 +20,21 @@ package plugin
 // per-pass work reduces to re-registering the file's <style> block into that
 // pass's own CSS collector.
 //
-// Scope is exactly one Build call. There is no cross-build invalidation because
-// there is no cross-build lifetime: WatchBuilder (SPA dev) never attaches a
-// cache, so its incremental rebuilds keep re-running onLoad exactly as before
-// and esbuild's own onLoad result cache stays the only memo on that path.
+// Scope is one Build call for `puzzle build`, and the whole SESSION for the
+// static dev builder (StaticWatchBuilder), which keeps one cache alive across
+// rebuilds so a save re-transforms only what it touched.
+//
+// Cross-rebuild reuse is safe because the key carries a content hash: an edited
+// file simply misses. Eviction (Evict) is therefore about two other things —
+// keeping the map from growing one entry per keystroke-burst per file, and the
+// one genuine correctness hole, the SVG memo, which is keyed by PATH and would
+// otherwise serve pre-edit markup for an icon whose .pzl still hashes the same.
+// Over-eviction costs a re-transform and nothing else, so callers evict
+// generously.
+//
+// WatchBuilder (SPA dev) still attaches no cache: its rebuilds re-run onLoad
+// exactly as before and esbuild's own onLoad result cache stays the only memo on
+// that path.
 
 import (
 	"crypto/sha256"
@@ -74,6 +85,12 @@ type CompileCache struct {
 	mu      sync.Mutex
 	entries map[string]*cacheEntry
 
+	// byFile indexes the entry keys a source path participates in, so Evict does
+	// not have to walk (or parse) every key. A key is listed under the .pzl's own
+	// path AND under every file it inlines with {#svg} — the dependency edge that
+	// makes an icon edit invalidate its consumers.
+	byFile map[string]map[string]bool
+
 	// svg memoizes {#svg} asset reads + scans for the same build. It is shared
 	// with codegen (through Options.SVGCache) AND with the shared-asset virtual
 	// module loader, so an icon used at fifty sites across three passes is read
@@ -90,7 +107,67 @@ type cacheEntry struct {
 // "no caching" value — every method is nil-safe — which is what the watch/dev
 // path passes.
 func NewCompileCache() *CompileCache {
-	return &CompileCache{entries: map[string]*cacheEntry{}, svg: codegen.NewSVGCache()}
+	return &CompileCache{
+		entries: map[string]*cacheEntry{},
+		byFile:  map[string]map[string]bool{},
+		svg:     codegen.NewSVGCache(),
+	}
+}
+
+// Evict drops every memoized transform that names one of paths — the .pzl
+// itself, or any file it inlined via {#svg} — and the SVG memo for those paths.
+// A nil cache and an empty batch are no-ops.
+//
+// The .pzl entries do not strictly NEED evicting (their keys carry a content
+// hash, so a changed file misses on its own); the SVG memo does, and a .pzl
+// whose bytes are unchanged but whose inlined icon moved must miss too, which is
+// exactly what the {#svg} edge in byFile expresses. Dropping the .pzl entries as
+// well keeps a long dev session's map proportional to the tree rather than to
+// the number of saves.
+func (c *CompileCache) Evict(paths []string) {
+	if c == nil || len(paths) == 0 {
+		return
+	}
+	// Both sides are symlink-resolved: esbuild reports args.Path resolved, while
+	// a watcher hands back the path the user spelled (macOS /var vs /private/var
+	// alone would make every eviction miss).
+	resolved := make([]string, 0, len(paths)*2)
+	for _, p := range paths {
+		resolved = append(resolved, p, resolveSymlinks(p))
+	}
+	c.svg.Evict(resolved)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, p := range resolved {
+		keys := c.byFile[p]
+		for key := range keys {
+			delete(c.entries, key)
+			// The key may be indexed under other files too (its own path plus each
+			// icon it inlines); drop it from all of them so the index cannot outlive
+			// the entries it points at.
+			for _, other := range c.byFile {
+				delete(other, key)
+			}
+		}
+		delete(c.byFile, p)
+	}
+}
+
+// index records that key was produced from path (and from each of its {#svg}
+// dependencies). Callers hold no lock.
+func (c *CompileCache) index(key string, files []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, f := range files {
+		f = resolveSymlinks(f)
+		set := c.byFile[f]
+		if set == nil {
+			set = map[string]bool{}
+			c.byFile[f] = set
+		}
+		set[key] = true
+	}
 }
 
 // svgCache returns the build's {#svg} memo, or nil when there is no cache (the
@@ -132,6 +209,11 @@ func (c *CompileCache) load(appRoot, path string, src []byte, compute func() pzl
 	}
 	c.mu.Unlock()
 
-	e.once.Do(func() { e.res = compute() })
+	e.once.Do(func() {
+		e.res = compute()
+		// Index the entry under its own path and every {#svg} file it inlined, so
+		// a long-lived cache can invalidate it when any of them changes.
+		c.index(key, append([]string{path}, e.res.watchFiles...))
+	})
 	return e.res
 }

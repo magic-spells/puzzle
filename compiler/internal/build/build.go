@@ -337,6 +337,22 @@ func resolveOutputMode(flag string, cfg config.Config) (string, error) {
 // recoverable until staging has landed. If that second rename fails, the old output is put
 // back; after success the old sibling is removed.
 func swapOutput(staging, outdir, workTmpDir string) error {
+	return swapOutputWith(staging, outdir, workTmpDir, false)
+}
+
+// swapOutputWith is swapOutput with control over WHEN the superseded output tree
+// is deleted. A one-shot build removes it inline (deferAsync=false): the process
+// is about to exit, so a goroutine would simply be killed and the leftover would
+// survive until some later build's sweep.
+//
+// A dev session passes deferAsync=true. The swap has already succeeded by that
+// point — dist/ IS the new build — and removing the old tree is pure
+// housekeeping the developer is waiting on for no reason: on a 150-page site
+// that RemoveAll is ~50ms of every single save, comparable to the entire esbuild
+// half of the rebuild. Backgrounding it hands the browser its reload sooner. A
+// session killed before the goroutine finishes leaves one `dist-old-*` inside
+// .puzzle/tmp, which is exactly what SweepWorkDirs exists to reap.
+func swapOutputWith(staging, outdir, workTmpDir string, deferAsync bool) error {
 	switch _, err := os.Lstat(outdir); {
 	case os.IsNotExist(err):
 		if err := os.Rename(staging, outdir); err != nil {
@@ -372,6 +388,10 @@ func swapOutput(staging, outdir, workTmpDir string) error {
 	// build error would fail a build whose output is correct and complete (and
 	// the user would still have the fresh dist/ on disk). Warn instead, naming
 	// the leftover directory so it can be removed by hand.
+	if deferAsync {
+		go os.RemoveAll(old)
+		return nil
+	}
 	if err := os.RemoveAll(old); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: could not remove the previous dist %s: %v (the new build is in place; delete it by hand)\n", old, err)
 	}

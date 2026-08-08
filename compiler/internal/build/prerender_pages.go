@@ -23,6 +23,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -122,17 +123,10 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 	// 1. Node prerender pass in mode 'static': the JS side renders each static
 	//    route, captures its store payload into the page's data island, strips the
 	//    app.js tag, and returns the extended summary behind the sentinel.
-	entry, err := json.Marshal(appEntryPath(absRoot))
+	stdin, err := staticPrerenderStdin(absRoot)
 	if err != nil {
-		return fmt.Errorf("encoding prerender entry path: %w", err)
+		return err
 	}
-	stdin := fmt.Sprintf(
-		"import app from %s;\n"+
-			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
-			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static' });\n"+
-			"process.stdout.write('\\n%s' + JSON.stringify(summary));\n",
-		string(entry), prerenderSentinel,
-	)
 
 	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")
 	endPrerenderBundle := prof.phase("prerender bundle")
@@ -223,6 +217,26 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 
 	printStaticSummary(summary, len(entryFiles))
 	return nil
+}
+
+// staticPrerenderStdin builds the generated node entry for the static prerender
+// pass: import the app's default export plus prerenderToDir, render into the
+// outDir/shellPath passed on argv, and print the JSON summary behind the
+// sentinel. The app entry path is JSON-encoded so a root with spaces or quotes
+// stays a valid JS string literal. Shared with the dev builder, whose persistent
+// prerender context compiles this exact source.
+func staticPrerenderStdin(absRoot string) (string, error) {
+	entry, err := json.Marshal(appEntryPath(absRoot))
+	if err != nil {
+		return "", fmt.Errorf("encoding prerender entry path: %w", err)
+	}
+	return fmt.Sprintf(
+		"import app from %s;\n"+
+			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
+			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static' });\n"+
+			"process.stdout.write('\\n%s' + JSON.stringify(summary));\n",
+		string(entry), prerenderSentinel,
+	), nil
 }
 
 // slugFromEntry extracts the page slug from an "_puzzle/<slug>.js" entry path
@@ -383,8 +397,22 @@ func staticPagesSourcemap(cfg config.Config, dev bool) api.SourceMap {
 // surgery injected, and shared code splits into _puzzle/chunks/. The CSS this
 // fresh plugin collects is discarded — styles.css was composed by the main pass.
 func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool, pc *passContext) error {
-	pl := pc.plugin(absRoot)
+	result := api.Build(staticPagesBundleOptions(absRoot, entryFiles, outdir, cfg, dev, pc.plugin(absRoot)))
+	if len(result.Errors) > 0 {
+		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
+			Kind:          api.ErrorMessage,
+			Color:         ui.New(os.Stderr).Enabled(),
+			TerminalWidth: 0,
+		})
+		return fmt.Errorf("puzzle build --static: per-page bundle failed:\n%s", strings.Join(lines, "\n"))
+	}
+	return nil
+}
 
+// staticPagesBundleOptions assembles the per-page pass's BuildOptions. Split out
+// so the static dev builder can hold the identical pass open as a persistent
+// api.Context — the shipped bytes must not depend on which driver ran the pass.
+func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool, pl *plugin.Plugin) api.BuildOptions {
 	buildOpts := api.BuildOptions{
 		EntryPoints: entryFiles,
 		Bundle:      true,
@@ -403,6 +431,20 @@ func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg c
 		Define:   bundleDefines(pl, bundleFlags{Dev: dev, Takeover: true}),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
+		// Anchor esbuild's input-path bookkeeping to the OUTPUT TREE rather than
+		// to whatever directory the compiler was invoked from. Unminified output
+		// (every dev build) carries a `// <input path>` comment per module, and
+		// those paths are AbsWorkingDir-relative: left at the process cwd, the
+		// generated entry modules were labelled with the staging dir's random
+		// suffix, so two dev builds of identical sources produced different
+		// _puzzle/*.js bytes and the same build run from a different directory
+		// produced different bytes again. Anchored here, the labels are
+		// `.puzzle-prerender/entries/<slug>.js` and `../../app/views/…` — stable
+		// across runs, across working directories, and across the two drivers of
+		// this pass (a one-shot staging tree and the dev builder's warm tree sit
+		// at the same depth by construction). Production output is unaffected:
+		// minification strips the comments entirely.
+		AbsWorkingDir: filepath.Dir(outdir),
 	}
 	// Production (dev=false) matches the main bundle: minify everything and strip
 	// console.* unless build.dropConsole: false opts out.
@@ -415,17 +457,7 @@ func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg c
 		}
 	}
 	configureRuntime(absRoot, &buildOpts, pl)
-
-	result := api.Build(buildOpts)
-	if len(result.Errors) > 0 {
-		lines := api.FormatMessages(result.Errors, api.FormatMessagesOptions{
-			Kind:          api.ErrorMessage,
-			Color:         ui.New(os.Stderr).Enabled(),
-			TerminalWidth: 0,
-		})
-		return fmt.Errorf("puzzle build --static: per-page bundle failed:\n%s", strings.Join(lines, "\n"))
-	}
-	return nil
+	return buildOpts
 }
 
 // printStaticSummary reports the static build result in the build-summary style:

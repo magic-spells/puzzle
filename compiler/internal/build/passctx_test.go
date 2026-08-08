@@ -49,7 +49,7 @@ func TestPassContextPluginsShareUsage(t *testing.T) {
 	// …and it matches what an independent scan of the same tree would produce,
 	// so sharing the result never changes the defines a pass would have chosen.
 	fresh := plugin.New(root)
-	if err := scanUsage(root, fresh); err != nil {
+	if _, err := scanUsage(root, fresh, nil); err != nil {
 		t.Fatalf("scanUsage: %v", err)
 	}
 	if first != fresh.Features() {
