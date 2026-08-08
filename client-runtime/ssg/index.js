@@ -711,10 +711,7 @@ export function injectStaticShell(shell, { targetId, content, title, head, slug,
 		});
 	}
 
-	// The shared JSON-in-script rule (serialize.js): keeps the JSON valid (the escape
-	// only appears inside string values) while making a literal `</script>` in a record
-	// impossible to emit — so content cannot terminate the data island early.
-	const json = escapeScriptJson(JSON.stringify(data ?? {}));
+	const json = islandJson(data);
 	// Base-prefix the per-page module href so a subpath deploy (routerBase set) resolves
 	// it instead of 404ing at the domain root. `base` is the already-normalized prefix
 	// ('' for a root deploy → unchanged `/_puzzle/…`). The shell's own asset hrefs
@@ -734,6 +731,29 @@ export function injectStaticShell(shell, { targetId, content, title, head, slug,
 
 	const out = spliceShell(shell, ops);
 	return plan.bodyCloseIndex >= 0 ? out : out + scripts;
+}
+
+// The data island's payload, memoized across the pages of one build.
+//
+// The shared JSON-in-script rule (serialize.js) keeps the JSON valid (the escape
+// only appears inside string values) while making a literal `</script>` in a
+// record impossible to emit — so content cannot terminate the data island early.
+//
+// Most static builds seed the SAME store content for every route (a beforeMount
+// hook that loads shared data, and nothing route-specific), so the escape pass
+// re-derived one identical string per page. The memo key is the STRINGIFIED
+// payload itself, compared for exact equality: it cannot serve a stale island,
+// because a payload that differs by a single byte misses the cache. Only the
+// escape is skipped — the store snapshot is still serialized fresh per page.
+let lastIslandInput = null;
+let lastIslandOutput = null;
+function islandJson(data) {
+	const json = JSON.stringify(data ?? {});
+	if (json !== lastIslandInput) {
+		lastIslandInput = json;
+		lastIslandOutput = escapeScriptJson(json);
+	}
+	return lastIslandOutput;
 }
 
 /**
