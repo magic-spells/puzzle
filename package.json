@@ -1,8 +1,21 @@
 {
-  "private": true,
+  "name": "@magic-spells/puzzle-pieces",
+  "version": "0.6.0",
+  "description": "Copy-in UI component registry for the Puzzle framework. Fetched by `puzzle add piece` — never installed or imported directly.",
+  "license": "MIT",
   "type": "module",
+  "files": [
+    "registry"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/magic-spells/puzzle-pieces.git"
+  },
   "scripts": {
     "test": "node --test test/"
+  },
+  "peerDependencies": {
+    "@magic-spells/puzzle": "^0.6.0"
   },
   "devDependencies": {
     "@magic-spells/physics-engine": "^1.0.0",
