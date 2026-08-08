@@ -23,7 +23,6 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
-	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -103,7 +102,7 @@ type staticModules struct {
 // same minify/define/dropConsole policy as the main app.js pass. prof may be nil
 // (profiling off); it splits this pass into its three expensive steps — the node
 // prerender bundle, the render run, and the per-page browser bundles.
-func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, cfg config.Config, dev bool, prof *buildProfile) error {
+func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, cfg config.Config, dev bool, prof *buildProfile, pc *passContext) error {
 	// A public/ asset that already produced a staging/_puzzle would be clobbered
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
@@ -137,7 +136,7 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 
 	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")
 	endPrerenderBundle := prof.phase("prerender bundle")
-	bundleErr := bundlePrerenderEntry(absRoot, stdin, outfile, "--static")
+	bundleErr := bundlePrerenderEntry(absRoot, stdin, outfile, "--static", pc)
 	endPrerenderBundle()
 	if bundleErr != nil {
 		return bundleErr
@@ -204,7 +203,7 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 	//    render (no static routes).
 	if len(entryFiles) > 0 {
 		endPages := prof.phase("per-page bundles")
-		pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev)
+		pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev, pc)
 		endPages()
 		if pagesErr != nil {
 			return pagesErr
@@ -383,11 +382,8 @@ func staticPagesSourcemap(cfg config.Config, dev bool) api.SourceMap {
 // the bare slug so the emitted /_puzzle/<slug>.js matches the URLs the shell
 // surgery injected, and shared code splits into _puzzle/chunks/. The CSS this
 // fresh plugin collects is discarded — styles.css was composed by the main pass.
-func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool) error {
-	pl := plugin.New(absRoot)
-	if err := scanUsage(absRoot, pl); err != nil {
-		return err
-	}
+func bundleStaticPages(absRoot string, entryFiles []string, outdir string, cfg config.Config, dev bool, pc *passContext) error {
+	pl := pc.plugin(absRoot)
 
 	buildOpts := api.BuildOptions{
 		EntryPoints: entryFiles,

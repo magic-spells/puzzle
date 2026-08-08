@@ -17,7 +17,6 @@ import (
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
-	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -172,13 +171,18 @@ func Build(root string, opts Options) error {
 		}
 	}()
 
-	pl := plugin.New(absRoot)
+	// One usage scan for the WHOLE build. The scan is a serial walk that parses
+	// every .pzl in the project, and a static build has three esbuild passes that
+	// each used to redo it over identical bytes. passContext computes it once and
+	// hands the same immutable result to every pass's plugin, so the profiler
+	// reports a single "usage scan" row and the three passes cannot disagree.
 	endScan := prof.phase("usage scan")
-	scanErr := scanUsage(absRoot, pl)
+	pc, scanErr := newPassContext(absRoot)
 	endScan()
 	if scanErr != nil {
 		return scanErr
 	}
+	pl := pc.plugin(absRoot)
 
 	// Takeover is a HYBRID-only capability for this bundle: only `output:
 	// 'hybrid'` emits a `data-puzzle-ssg` container for the router to adopt. A
@@ -265,7 +269,7 @@ func Build(root string, opts Options) error {
 	switch mode {
 	case "hybrid":
 		endHybrid := prof.phase("prerender (hybrid)")
-		hybridErr := prerenderHybrid(absRoot, staging, publicFiles)
+		hybridErr := prerenderHybrid(absRoot, staging, publicFiles, pc)
 		endHybrid()
 		if hybridErr != nil {
 			return hybridErr
@@ -273,7 +277,7 @@ func Build(root string, opts Options) error {
 	case "static":
 		// The per-page pass decides its own source-map mode from cfg + dev
 		// (staticPagesSourcemap), so there is no generate-then-delete pass here.
-		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development, prof); err != nil {
+		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development, prof, pc); err != nil {
 			return err
 		}
 	}

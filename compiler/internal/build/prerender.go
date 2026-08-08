@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 )
@@ -103,7 +102,7 @@ type ssgSummary struct {
 // copyPublic just produced — it is the injection template. On any failure the
 // returned error surfaces node's stderr/stdout and staging is discarded by
 // Build's defer, so the previous dist/ is untouched.
-func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool) error {
+func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool, pc *passContext) error {
 	// A public/ asset copied to staging/.puzzle-prerender would be overwritten by
 	// the prerender bundle and then deleted with it — reject it before any of that
 	// happens. copyPublic has already run, so the collision is observable here.
@@ -130,7 +129,7 @@ func prerenderHybrid(absRoot, staging string, publicFiles map[string]bool) error
 	)
 
 	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")
-	if err := bundlePrerenderEntry(absRoot, stdin, outfile, "--hybrid"); err != nil {
+	if err := bundlePrerenderEntry(absRoot, stdin, outfile, "--hybrid", pc); err != nil {
 		return err
 	}
 
@@ -219,11 +218,8 @@ func appEntryPath(absRoot string) string {
 // same way. label names the mode in a bundle-failure error. The CSS the fresh
 // plugin collects is discarded — styles.css was already composed by the main
 // pass; this pass exists only to run the app under node.
-func bundlePrerenderEntry(absRoot, stdin, outfile, label string) error {
-	pl := plugin.New(absRoot)
-	if err := scanUsage(absRoot, pl); err != nil {
-		return err
-	}
+func bundlePrerenderEntry(absRoot, stdin, outfile, label string, pc *passContext) error {
+	pl := pc.plugin(absRoot)
 
 	buildOpts := api.BuildOptions{
 		Stdin: &api.StdinOptions{

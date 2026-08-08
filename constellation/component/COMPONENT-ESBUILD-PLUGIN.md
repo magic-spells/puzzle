@@ -76,9 +76,12 @@ the virtual formatter manifest from observed built-ins, while element attrs or
 component props named `flip` drive the literal `__PUZZLE_HAS_FLIP__` esbuild
 define. Since [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]] that is the ONLY
 usage define: the managed-head gate and its raw `.js`/`.ts` token scan are gone,
-so the walk reads only `.pzl` files. Every one-shot, watch/dev, and per-page
-static bundle recomputes or receives the same usage so the runtime probes fold
-without risking a false-negative. Esbuild
+so the walk reads only `.pzl` files. The scan runs ONCE per `build.Build`
+and its immutable result is threaded to every pass through a `passContext` —
+the constructor build code uses instead of `plugin.New`, so a pass cannot start
+from an unscanned zero `Usage` and drop a used runtime module. A static build's
+three esbuild passes previously each redid the walk over identical bytes. Only
+the long-lived watch/dev builder still re-scans, and only when a `.pzl` changed. Esbuild
 re-runs the formatter virtual module's `OnLoad` on every rebuild; this is
 regression-guarded by `TestFormatterManifestFreshAcrossIncrementalRebuilds`.
 
