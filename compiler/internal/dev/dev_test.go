@@ -1147,3 +1147,55 @@ func TestStaticModeKeepsServingLastGoodPagesOnBuildFailure(t *testing.T) {
 		t.Fatalf("SSE replay did not carry the build error: %q", body)
 	}
 }
+
+// TestPartitionChangesDropsJunk proves editor/OS scratch files never schedule a
+// rebuild, while the odd-looking-but-real files a public/ tree legitimately
+// contains still do. A burst of pure junk must produce no rebuild paths at all.
+func TestPartitionChangesDropsJunk(t *testing.T) {
+	junk := []string{
+		filepath.Join("proj", "app", ".DS_Store"),
+		filepath.Join("proj", "app", "Thumbs.db"),
+		filepath.Join("proj", "app", "desktop.ini"),
+		filepath.Join("proj", "app", "4913"),
+		filepath.Join("proj", "app", "views", "Home.pzl~"),
+		filepath.Join("proj", "app", "views", ".Home.pzl.swp"),
+		filepath.Join("proj", "app", "views", "Home.pzl.swo"),
+		filepath.Join("proj", "app", "views", ".#Home.pzl"),
+		filepath.Join("proj", "app", "views", "#Home.pzl#"),
+		filepath.Join("proj", "app", "views", "Home.pzl___jb_tmp___"),
+	}
+	for _, p := range junk {
+		if rp, _ := partitionChanges([]string{p}, ""); len(rp) != 0 {
+			t.Errorf("%s should have been filtered as junk, got rebuild paths %v", p, rp)
+		}
+	}
+
+	// A junk-only burst schedules nothing.
+	if rp, cc := partitionChanges(junk, ""); len(rp) != 0 || cc {
+		t.Errorf("junk-only burst: want no rebuild paths and no config change, got paths=%v changed=%v", rp, cc)
+	}
+
+	// Real inputs — including the dotfiles and extensionless files a public/
+	// tree legitimately ships — must survive.
+	real := []string{
+		filepath.Join("proj", "app", "views", "Home.pzl"),
+		filepath.Join("proj", "public", ".htaccess"),
+		filepath.Join("proj", "public", "_headers"),
+		filepath.Join("proj", "public", "_redirects"),
+		filepath.Join("proj", "public", ".nojekyll"),
+		filepath.Join("proj", "public", ".well-known", "apple-app-site-association"),
+		filepath.Join("proj", "public", "LICENSE"),
+		filepath.Join("proj", "app", "swatches.js"),
+	}
+	rp, _ := partitionChanges(real, "")
+	if len(rp) != len(real) {
+		t.Errorf("legitimate inputs were filtered: kept %v of %v", rp, real)
+	}
+
+	// Junk mixed into a real burst is dropped without suppressing the rebuild.
+	mixed := append(append([]string{}, junk...), filepath.Join("proj", "app", "views", "Home.pzl"))
+	rp, _ = partitionChanges(mixed, "")
+	if len(rp) != 1 || filepath.Base(rp[0]) != "Home.pzl" {
+		t.Errorf("mixed burst: want only Home.pzl, got %v", rp)
+	}
+}
