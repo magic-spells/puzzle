@@ -34,9 +34,13 @@ client runtime and the CLI:
 npm install -D @magic-spells/puzzle
 ```
 
-> **Status: 0.1.0** — the first public release. The browser runtime, Go
+> **Status: 0.5.0** — the current release. The browser runtime, Go
 > compiler, static generator, and CLI are implemented and covered by Go,
 > Vitest/jsdom, type, package, example, and browser-focused checks.
+>
+> Puzzle is pre-1.0, so **0.x minor bumps may carry breaking changes** — caret
+> ranges do not cross them. See
+> [CHANGELOG.md](CHANGELOG.md#upgrading-across-versions) before upgrading.
 >
 > **[constellation/doc/DOC-SPEC.md](constellation/doc/DOC-SPEC.md) is the canonical, frozen v1
 > contract** — its per-amendment sections (§12–§41) are the source of truth for

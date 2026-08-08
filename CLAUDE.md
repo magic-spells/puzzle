@@ -44,8 +44,9 @@ run.
 
 - Published: `0.1.0` (2026-07-21), `0.1.1` (2026-07-22, D77 init prompts),
   `0.1.2` (the embedded agent skill + `puzzle add skills`, D78/v1.45), `0.2.0`
-  (2026-07-24), `0.3.0` (2026-07-25), `0.3.1` (2026-07-25), and **`0.4.0`
-  (2026-07-28, the current `latest`)** are live on npm (all five packages, MIT, manual publish via
+  (2026-07-24), `0.3.0` (2026-07-25), `0.3.1` (2026-07-25), `0.4.0`
+  (2026-07-28), and **`0.5.0` (2026-08-07, the current `latest`)** are live on
+  npm (all five packages, MIT, manual publish via
   `npm run release:prep` — there is no CI publish). Everything from D88 onward
   shipped in `0.3.0` — minor, not patch: two new export subpaths (`./testing`,
   `./fixtures`) plus breaking changes in D110/D111/D112. **`0.3.0` is published
@@ -81,11 +82,9 @@ run.
   (`chore/d134-capitalized-markers`, pushed) is not yet merged into its
   `main`/`release/0.2.0`, and the site's merge is pending an unrelated
   in-progress worktree.
-- `0.5.0` (on `release/0.5.0`, **version-stamped and release-prepped, NOT yet
-  published** — every manifest, `version.go`, and `FRAMEWORK_VERSION` reads
-  `0.5.0`, `release:prep` is green, and `magic-spells-puzzle-0.5.0.tgz` is
-  built; the five `npm publish` calls and `verify:published` have not been run.
-  Check `npm view @magic-spells/puzzle versions` before trusting this): D144
+- `0.5.0` (2026-08-07, **published and `verify:published`-clean** — registry
+  metadata pins all four platform packages and a temp-dir install runs
+  `puzzle version 0.5.0`): D144
   Portal scoped v1
   (`<Portal>` marker + framework outlet + portal-aware `@event:outside`), D145
   error boundaries (`onError` funnel + script-side `errorContent()`), D146

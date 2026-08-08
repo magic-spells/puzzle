@@ -29,8 +29,7 @@ decision cards explain why the contract has its current shape.
   prompts, D77/v1.44), and `0.1.2` (the embedded agent skill + `puzzle add
   skills` installer, D78/v1.45) are live on npm — MIT, five packages, manual
   publish, no CI release path.
-- **`0.2.0`, `0.3.0`, and `0.3.1` are PUBLISHED.** `0.3.1` (npm, 2026-07-25)
-  is the current `latest`. `0.3.0` shipped without registry
+- **`0.2.0`, `0.3.0`, and `0.3.1` are PUBLISHED.** `0.3.0` shipped without registry
   `optionalDependencies`, so every global CLI install was broken; it is
   deprecated and superseded by `0.3.1`, which publishes the same feature set
   from the packed root tarball so the four platform binary pins reach the
@@ -62,11 +61,12 @@ decision cards explain why the contract has its current shape.
   surrogate pairs. The pre-publish review round added D115–D119 (mount-failure
   recovery, pack-time pin verification, static history-hrefs, lifecycle hook
   containment + mount epoch, router settlement/announcement).
-- **`0.4.0` is PUBLISHED** (2026-07-28, the current `latest`): the performance
+- **`0.4.0` is PUBLISHED** (2026-07-28): the performance
   round (D121/D122 profiler + DevTools protocol), the Grok review rounds
   (D132/D133), D134 capitalized composition markers with marker fallback
   bodies (D141), and the D135–D143 hardening set.
-- **`0.5.0` is in progress on `release/0.5.0`**: D144 `<Portal>` scoped v1
+- **`0.5.0` is PUBLISHED** (2026-08-07, the current `latest`,
+  `verify:published`-clean): D144 `<Portal>` scoped v1
   (v1.66), D145 error boundaries (v1.67), D146 transactional reused-ancestor
   refresh, D147 implicit two-way form binding
   ([[FEATURE-IMPLICIT-BINDING]], v1.68), and D148 `puzzle preview` + real
