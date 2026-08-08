@@ -608,34 +608,34 @@ function serializeRouteJSON(entry) {
  * Inject rendered markup and the resolved title/head into the app shell by STRING
  * SURGERY (no HTML-parser dependency). Finds the EMPTY target element by its id,
  * rebuilds it with a `data-puzzle-ssg` marker (the router's takeover signal) and
- * the content inside, then applies the head: with a resolved `head` (D84) the
- * title replacement AND the managed `data-puzzle-head` tags are applied
- * (applyHead); with only a bare `title` (a direct API caller predating D84) the
- * pre-D84 title-only path runs — no managed tags, byte-compatible. A missing or
- * non-empty target element is a descriptive throw.
+ * the content inside, and rewrites the shell's head region in the same pass: with
+ * a resolved `head` (D84) the title replacement AND the managed `data-puzzle-head`
+ * tags are applied; with only a bare `title` (a direct API caller predating D84)
+ * the title-only path runs — no managed tags, byte-compatible. Both read the
+ * per-shell plan compiled ONCE per build (getShellPlan, D151), so a page costs
+ * one splice over precomputed offsets rather than a document-wide rescan. A
+ * missing or non-empty target element is a descriptive throw.
  */
 export function injectShell(shell, { targetId, content, title, head }) {
-	// Match `<tag …id="targetId"…></tag>` with NOTHING (but whitespace) inside —
-	// the backreference \1 requires the same tag name to close (targetElementRe).
-	const match = shell.match(targetElementRe(targetId));
-	if (!match) {
+	const plan = getShellPlan(shell);
+	const target = findTarget(shell, plan, targetId);
+	if (!target) {
 		throw new Error(
 			`[puzzle] SSG target element not found or not empty — expected an EMPTY ` +
 				`<… id="${targetId}"></…> in the shell (config.target "#${targetId}")`
 		);
 	}
 
-	const [full, tag, attrs] = match;
-	const rebuilt = `<${tag}${attrs} data-puzzle-ssg>${content}</${tag}>`;
-	// Function replacement so a `$` in content/attrs is never read as a $-pattern.
-	let out = shell.replace(full, () => rebuilt);
-
-	if (head) {
-		out = applyHead(out, head);
-	} else if (title != null) {
-		out = replaceTitle(out, title);
-	}
-	return out;
+	const ops = [
+		{
+			start: target.start,
+			end: target.end,
+			text: `<${target.tag}${target.attrs} data-puzzle-ssg>${content}</${target.tag}>`,
+		},
+	];
+	const headOp = headOperation(shell, plan, { head, title });
+	if (headOp) ops.push(headOp);
+	return spliceShell(shell, ops);
 }
 
 // ---- static-mode shell surgery (D81) ----------------------------------------
@@ -648,8 +648,12 @@ const APP_BUNDLE_RE = /<script\b[^>]*\bsrc=["']\/?app\.js["'][^>]*><\/script>\s*
 
 /** Strip the app-bundle `<script>` from the shell. `found` is false if none matched. */
 function stripAppBundle(shell) {
-	const found = APP_BUNDLE_RE.test(shell);
-	return { shell: found ? shell.replace(APP_BUNDLE_RE, '') : shell, found };
+	const match = APP_BUNDLE_RE.exec(shell);
+	if (!match) return { shell, found: false };
+	return {
+		shell: shell.slice(0, match.index) + shell.slice(match.index + match[0].length),
+		found: true,
+	};
 }
 
 /**
@@ -663,25 +667,29 @@ function stripAppBundle(shell) {
  *    data island (`<` escaped to `<` so a `</script>` in a record can never
  *    break out of the script) and the per-page ES module `<script>`;
  *  - applies the title/head exactly as injectShell does (resolved `head` →
- *    applyHead with managed D84 tags; bare `title` → pre-D84 title-only path).
+ *    the managed D84 tags; bare `title` → the pre-D84 title-only path), scoped
+ *    to the shell's head region (D151).
  * The caller has already stripped the app-bundle tag from `shell`.
  */
 export function injectStaticShell(shell, { targetId, content, title, head, slug, data, base = '' }) {
-	let out = shell;
+	const plan = getShellPlan(shell);
+	const ops = [];
 
 	// A prerender:false page keeps its empty, UNMARKED target (the kernel mounts into
 	// it client-side); only a rendered page rebuilds the target with content + marker.
 	if (content != null) {
-		const match = shell.match(targetElementRe(targetId));
-		if (!match) {
+		const target = findTarget(shell, plan, targetId);
+		if (!target) {
 			throw new Error(
 				`[puzzle] static target element not found or not empty — expected an EMPTY ` +
 					`<… id="${targetId}"></…> in the shell (config.target "#${targetId}")`
 			);
 		}
-		const [full, tag, attrs] = match;
-		const rebuilt = `<${tag}${attrs} data-puzzle-static>${content}</${tag}>`;
-		out = out.replace(full, () => rebuilt);
+		ops.push({
+			start: target.start,
+			end: target.end,
+			text: `<${target.tag}${target.attrs} data-puzzle-static>${content}</${target.tag}>`,
+		});
 	}
 
 	// The shared JSON-in-script rule (serialize.js): keeps the JSON valid (the escape
@@ -695,16 +703,18 @@ export function injectStaticShell(shell, { targetId, content, title, head, slug,
 	const scripts =
 		`<script type="application/json" data-puzzle-static-data>${json}</script>` +
 		`<script type="module" src="${base}/_puzzle/${slug}.js"></script>`;
-	out = /<\/body>/i.test(out)
-		? out.replace(/<\/body>/i, () => `${scripts}</body>`)
-		: out + scripts;
-
-	if (head) {
-		out = applyHead(out, head);
-	} else if (title != null) {
-		out = replaceTitle(out, title);
+	// The island rides before the SHELL's `</body>` — a fixed offset from the plan, so
+	// rendered content can never move the anchor (a `</body>` inside a raw <script>
+	// block used to steal it) and no page rescans the document for it.
+	if (plan.bodyCloseIndex >= 0) {
+		ops.push({ start: plan.bodyCloseIndex, end: plan.bodyCloseIndex, text: scripts });
 	}
-	return out;
+
+	const headOp = headOperation(shell, plan, { head, title });
+	if (headOp) ops.push(headOp);
+
+	const out = spliceShell(shell, ops);
+	return plan.bodyCloseIndex >= 0 ? out : out + scripts;
 }
 
 /**
@@ -735,70 +745,248 @@ function uniqueSlug(base, counts) {
  * tag). `(?<![-\w])id=` requires a real attribute boundary before `id=` — a plain
  * `\b` matches after a hyphen too, so `data-id="app"`/`aria-id="app"` would falsely
  * satisfy the id lookup; the lookbehind excludes a preceding hyphen or word char.
+ * Compiled once per distinct target id (ids are config constants, so this is a
+ * one-entry map in every real build).
  */
+const targetRes = new Map();
 function targetElementRe(targetId) {
-	const idPattern = escapeRegExp(targetId);
-	return new RegExp('<(\\w+)([^>]*(?<![-\\w])id=["\']' + idPattern + '["\'][^>]*)>\\s*</\\1>');
+	let re = targetRes.get(targetId);
+	if (!re) {
+		const idPattern = escapeRegExp(targetId);
+		re = new RegExp('<(\\w+)([^>]*(?<![-\\w])id=["\']' + idPattern + '["\'][^>]*)>\\s*</\\1>');
+		targetRes.set(targetId, re);
+	}
+	return re;
 }
 
-/** Replace the first `<title>…</title>` with an HTML-escaped title. */
-function replaceTitle(html, title) {
-	return html.replace(
-		/<title>[\s\S]*?<\/title>/,
-		() => `<title>${escapeText(String(title))}</title>`
-	);
-}
+// ---- the compiled shell plan (D151) -----------------------------------------
+//
+// The shell is read ONCE per build and is identical for every page, so every
+// structural offset the injectors need — where the head region starts and ends,
+// where its `<title>` sits, where each `data-puzzle-head` marker sits, where the
+// target element is, where `</body>` is — is a constant of the build. The plan
+// computes them once; a page then costs one O(head) splice over the precomputed
+// offsets instead of a dozen document-wide regex scans (which, with the body
+// already injected, scanned the rendered page too).
+//
+// This is also what makes the ownership boundary structural rather than
+// hopeful: the head surgery can only ever touch bytes inside the shell's head
+// region, so rendered body markup — a `<svg><title>`, a `data-puzzle-head`
+// attribute a view happens to emit — is never rewritten.
 
-// ---- managed head surgery (D84) ---------------------------------------------
+const HEAD_OPEN_RE = /<head\b[^>]*>/i;
+const HEAD_CLOSE_RE = /<\/head>/i;
+const TITLE_ELEMENT_RE = /<title>[\s\S]*?<\/title>/;
+const TITLE_CLOSE_RE = /<\/title>/i;
+const BODY_CLOSE_RE = /<\/body>/i;
 
 /**
- * Apply a resolved head (head.js resolveHead) to shell HTML — the SSG half of
- * the D84 contract, shared by injectShell and injectStaticShell. The `<title>`
- * goes through the pre-existing replaceTitle for a NON-NULL head.title (null or
+ * One compiled marker matcher per managed tag. `spec.id` values are framework
+ * constants, so these are module-level literals — never rebuilt per page.
+ */
+const MANAGED_TAG_RES = MANAGED_TAGS.map((spec) => managedTagRe(spec.id));
+
+// Shell → plan. A build uses one or two shells (hybrid: the shell; static: the
+// app-bundle-stripped shell), and a long-lived process could see a few more
+// across builds, so the map is bounded and evicts oldest-first.
+const MAX_SHELL_PLANS = 4;
+const shellPlans = new Map();
+
+function getShellPlan(shell) {
+	let plan = shellPlans.get(shell);
+	if (plan) return plan;
+	plan = compileShellPlan(shell);
+	if (shellPlans.size >= MAX_SHELL_PLANS) shellPlans.delete(shellPlans.keys().next().value);
+	shellPlans.set(shell, plan);
+	return plan;
+}
+
+/**
+ * Locate the shell's head region and everything the head surgery edits inside it.
+ *
+ * The region is `<head …>` → `</head>` (case-insensitive; a missing open tag
+ * starts it at byte 0). A shell with NO `</head>` — a fragment or malformed shell
+ * — degrades exactly as it always has: the region becomes the prefix ending after
+ * the first `</title>`, so managed tags ride after the title; with neither anchor
+ * there is no region at all and inserts warn + skip rather than throw.
+ */
+function compileShellPlan(shell) {
+	let headStart = 0;
+	let headEnd = 0;
+	let hasAnchor = false;
+
+	const close = HEAD_CLOSE_RE.exec(shell);
+	if (close) {
+		headEnd = close.index;
+		const open = HEAD_OPEN_RE.exec(shell);
+		if (open && open.index + open[0].length <= headEnd) headStart = open.index + open[0].length;
+		hasAnchor = true;
+	} else {
+		const titleClose = TITLE_CLOSE_RE.exec(shell);
+		if (titleClose) {
+			headEnd = titleClose.index + titleClose[0].length;
+			hasAnchor = true;
+		}
+	}
+
+	const region = shell.slice(headStart, headEnd);
+	const edits = [];
+
+	// `<title>` is matched case-sensitively (the historical replaceTitle regex);
+	// the `</title>` fallback anchor above stays case-insensitive, as it always was.
+	let titleSpan = null;
+	const titleMatch = TITLE_ELEMENT_RE.exec(region);
+	if (titleMatch) {
+		titleSpan = {
+			start: headStart + titleMatch.index,
+			end: headStart + titleMatch.index + titleMatch[0].length,
+		};
+		edits.push({ start: titleSpan.start, end: titleSpan.end, spec: -1, first: true });
+	}
+
+	const markerCounts = new Array(MANAGED_TAGS.length).fill(0);
+	for (let i = 0; i < MANAGED_TAGS.length; i++) {
+		const re = MANAGED_TAG_RES[i];
+		re.lastIndex = 0;
+		let m;
+		while ((m = re.exec(region)) !== null) {
+			edits.push({
+				start: headStart + m.index,
+				end: headStart + m.index + m[0].length,
+				spec: i,
+				first: markerCounts[i] === 0,
+			});
+			markerCounts[i]++;
+		}
+	}
+	edits.sort((a, b) => a.start - b.start);
+
+	const bodyClose = BODY_CLOSE_RE.exec(shell);
+
+	return {
+		headStart,
+		headEnd,
+		hasAnchor,
+		titleSpan,
+		edits,
+		markerCounts,
+		bodyCloseIndex: bodyClose ? bodyClose.index : -1,
+		targets: new Map(),
+	};
+}
+
+/** The shell's empty target element span + tag/attrs, memoized on the plan. */
+function findTarget(shell, plan, targetId) {
+	let target = plan.targets.get(targetId);
+	if (target === undefined) {
+		const m = targetElementRe(targetId).exec(shell);
+		target = m
+			? { start: m.index, end: m.index + m[0].length, tag: m[1], attrs: m[2] }
+			: null;
+		plan.targets.set(targetId, target);
+	}
+	return target;
+}
+
+/**
+ * Apply non-overlapping replacement ops to the shell in ONE pass. Ops are
+ * `{ start, end, text }` in shell coordinates (a zero-length span inserts);
+ * they are sorted here, and an op overlapping an earlier one is dropped — only
+ * reachable for a pathological shell (a target element nested inside `<head>`),
+ * where the pre-D151 sequential-replace path produced garbage anyway.
+ */
+function spliceShell(shell, ops) {
+	if (ops.length > 1) ops.sort((a, b) => a.start - b.start);
+	let out = '';
+	let cursor = 0;
+	for (const op of ops) {
+		if (op.start < cursor) continue;
+		out += shell.slice(cursor, op.start) + op.text;
+		cursor = op.end;
+	}
+	return out + shell.slice(cursor);
+}
+
+// ---- managed head surgery (D84, D151) ---------------------------------------
+
+/**
+ * The head-region rewrite as a single splice op, or null when there is nothing to
+ * do. With a resolved `head` (D84) the whole region is rebuilt (renderHeadRegion);
+ * with only a bare `title` (a direct API caller predating D84) just the shell's
+ * `<title>` element is replaced — no managed tags, byte-compatible. Either way the
+ * op is confined to the SHELL HEAD: a `<title>` or `data-puzzle-head` attribute in
+ * rendered body markup is view output and is never touched (D151).
+ */
+function headOperation(shell, plan, { head, title }) {
+	if (head) {
+		return { start: plan.headStart, end: plan.headEnd, text: renderHeadRegion(shell, plan, head) };
+	}
+	if (title != null && plan.titleSpan) {
+		return {
+			start: plan.titleSpan.start,
+			end: plan.titleSpan.end,
+			text: `<title>${escapeText(String(title))}</title>`,
+		};
+	}
+	return null;
+}
+
+/**
+ * Rebuild the shell's head region for one resolved head (head.js resolveHead) —
+ * the SSG half of the D84 contract, shared by injectShell and injectStaticShell.
+ * The `<title>` element is replaced for a NON-NULL head.title (null or
  * never-resolved keeps the shell's title — the same leave-alone posture the SPA
  * applies to document.title). Then per managed tag identity (headTags.js
  * MANAGED_TAGS — since D111 this is the table's ONLY consumer; the runtime
  * syncTags that once shared it is deleted):
- *  - same-identity `data-puzzle-head` tags already in the shell are collapsed:
- *    the first is REPLACED in place and every stale duplicate is removed;
+ *  - same-identity `data-puzzle-head` tags already in the shell head are
+ *    collapsed: the first is REPLACED in place and every stale duplicate removed;
  *  - tags whose field no longer resolves are ALL REMOVED (the framework owns
- *    every marker-bearing tag, so a shell carrying a stale one is corrected);
- *  - the rest are collected and inserted ONCE immediately before `</head>`
- *    (case-insensitive). No `</head>` (fragment/malformed shell) DEGRADES:
- *    ride after the first `</title>` instead, or warn + skip — never throw,
- *    the page content is still worth writing.
+ *    every marker-bearing tag IN THE SHELL HEAD, so a shell carrying a stale one
+ *    is corrected);
+ *  - the rest are appended ONCE at the end of the region, i.e. immediately before
+ *    `</head>`. A shell with no `</head>` DEGRADES (see compileShellPlan): the
+ *    region ends after the first `</title>` so the tags ride there, or — with
+ *    neither anchor — they warn + skip; never a throw, the page content is still
+ *    worth writing.
  * All values are attribute-escaped (escapeAttr) so hostile metadata — quotes,
  * `</head>`, `<script>` — cannot break out of the generated tag.
  */
-function applyHead(html, head) {
-	let out = head.title != null ? replaceTitle(html, head.title) : html;
+function renderHeadRegion(shell, plan, head) {
+	const { headStart, headEnd, edits, markerCounts } = plan;
+	let out = '';
+	let cursor = headStart;
 
-	const inserts = [];
-	for (const spec of MANAGED_TAGS) {
-		const value = head[spec.field];
-		const markerRe = managedTagRe(spec.id);
-		if (value == null) {
-			out = out.replace(markerRe, '');
+	for (const edit of edits) {
+		if (edit.start < cursor) continue; // overlapping spans in a pathological shell
+		out += shell.slice(cursor, edit.start);
+		cursor = edit.end;
+		if (edit.spec < 0) {
+			out +=
+				head.title != null
+					? `<title>${escapeText(String(head.title))}</title>`
+					: shell.slice(edit.start, edit.end);
 			continue;
 		}
-		const tagHtml = buildHeadTag(spec, value);
-		let replaced = false;
-		out = out.replace(markerRe, () => {
-			if (replaced) return '';
-			replaced = true;
-			return tagHtml;
-		});
-		if (!replaced) {
-			inserts.push(tagHtml);
-		}
+		const spec = MANAGED_TAGS[edit.spec];
+		const value = head[spec.field];
+		// A resolving field replaces its FIRST marker in place; a non-resolving one
+		// removes every marker, and a duplicate is always collapsed away.
+		if (value != null && edit.first) out += buildHeadTag(spec, value);
 	}
+	out += shell.slice(cursor, headEnd);
 
-	if (inserts.length) {
-		const block = inserts.join('');
-		if (/<\/head>/i.test(out)) {
-			out = out.replace(/<\/head>/i, () => `${block}</head>`);
-		} else if (/<\/title>/i.test(out)) {
-			out = out.replace(/<\/title>/i, (m) => m + block);
+	let inserts = '';
+	for (let i = 0; i < MANAGED_TAGS.length; i++) {
+		if (markerCounts[i] > 0) continue; // already replaced in place above
+		const spec = MANAGED_TAGS[i];
+		const value = head[spec.field];
+		if (value == null) continue;
+		inserts += buildHeadTag(spec, value);
+	}
+	if (inserts) {
+		if (plan.hasAnchor) {
+			out += inserts;
 		} else {
 			console.warn(
 				'[puzzle] head injection skipped — the shell has no </head> (or </title>) to anchor the managed tags'

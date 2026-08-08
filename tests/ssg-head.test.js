@@ -1,7 +1,7 @@
 // Route head management, SSG half (D84, v1.50 — constellation/doc/DOC-SPEC.md §45):
 // the resolveHead per-field leaf→root walk (client-runtime/head.js), the `head`
 // field on prerendered pages, and the shell surgery (injectShell/injectStaticShell
-// applyHead): insertion before </head>, in-place replacement of same-identity
+// head surgery): insertion before </head>, in-place replacement of same-identity
 // marker tags, removal on a non-resolving field, attribute escaping of hostile
 // metadata, the title-only compatibility fallback, and both prerenderToDir output
 // modes carrying the tags in the written HTML. Node env: prerender is DOM-free.
