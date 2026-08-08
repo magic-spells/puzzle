@@ -87,6 +87,11 @@ type staticPage struct {
 	// verbatim into the mountStatic call. Kept raw so the Go side never models the
 	// chain shape.
 	Route json.RawMessage `json:"route"`
+	// Reused is set by a D155 subset render: the page was enumerated, claimed its
+	// output path and its slug, and was deliberately NOT rendered — File does not
+	// exist and the caller must supply the previous render's copy. Always false in
+	// a one-shot build, which never passes a route filter.
+	Reused bool `json:"reused"`
 }
 
 // staticModules names the app-relative source paths (the codegen __pzlModule
@@ -225,6 +230,13 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 // sentinel. The app entry path is JSON-encoded so a root with spaces or quotes
 // stays a valid JS string literal. Shared with the dev builder, whose persistent
 // prerender context compiles this exact source.
+//
+// argv[4], when present, is a JSON array of route paths: the SUBSET to render
+// (D155). It rides on argv rather than in this source because the dev builder
+// holds one persistent esbuild context over these exact bytes — a per-rebuild
+// source change would throw that context's cache away, which is the whole thing
+// being bought. A one-shot build passes three arguments and renders everything,
+// so this line is inert there.
 func staticPrerenderStdin(absRoot string) (string, error) {
 	entry, err := json.Marshal(appEntryPath(absRoot))
 	if err != nil {
@@ -233,7 +245,8 @@ func staticPrerenderStdin(absRoot string) (string, error) {
 	return fmt.Sprintf(
 		"import app from %s;\n"+
 			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
-			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static' });\n"+
+			"const only = process.argv[4] ? JSON.parse(process.argv[4]) : undefined;\n"+
+			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static', only });\n"+
 			"process.stdout.write('\\n%s' + JSON.stringify(summary));\n",
 		string(entry), prerenderSentinel,
 	), nil
