@@ -53,6 +53,17 @@ type Options struct {
 	// normal CLI builds leave it nil and pay nothing.
 	Metafile *string
 
+	// Config is an ALREADY-LOADED puzzle.config.js. Non-nil, Build uses it as-is
+	// and never shells out to node; nil, Build loads it itself.
+	//
+	// This exists for `puzzle dev`, which loads the config once at startup and
+	// deliberately refuses to reload it mid-session (a config edit only prints a
+	// "restart to apply" advisory). Its static rebuild path calls Build on every
+	// save, so without this the dev loop spawned a `node -e` subprocess per
+	// keystroke-burst to re-read a file it had already decided to ignore. A
+	// standalone `puzzle build` leaves this nil and is unaffected.
+	Config *config.Config
+
 	// Profile prints a per-phase timing table to stderr after the build
 	// (`puzzle build --profile-build`). The PUZZLE_PROFILE_BUILD environment
 	// variable turns it on too, which is how `puzzle dev`'s static rebuild — a
@@ -84,11 +95,19 @@ func Build(root string, opts Options) error {
 	// No config file is not an error. A malformed one now fails the build up
 	// front, BEFORE the stale-dist prune — previously runTailwind surfaced it
 	// only after the last good dist/ had already been cleared.
-	endConfig := prof.phase("config load")
-	cfg, err := config.LoadConfig(absRoot)
-	endConfig()
-	if err != nil {
-		return err
+	// A caller that has already loaded the config (opts.Config) hands it over
+	// instead, which is what keeps `puzzle dev` from re-spawning node per rebuild.
+	var cfg config.Config
+	if opts.Config != nil {
+		cfg = *opts.Config
+	} else {
+		endConfig := prof.phase("config load")
+		loaded, err := config.LoadConfig(absRoot)
+		endConfig()
+		if err != nil {
+			return err
+		}
+		cfg = loaded
 	}
 
 	// The effective prerender mode reconciles the CLI flag with puzzle.config.js

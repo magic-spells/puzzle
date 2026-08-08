@@ -185,6 +185,18 @@ func Serve(root string, opts Options) error {
 	if cfgErr != nil {
 		logWarning(stderr, "%s", configFallbackWarning(cfgErr))
 	}
+	// Hand the config we just loaded to every build.Build this session runs, so a
+	// rebuild does not re-spawn node to re-read a file dev has already decided not
+	// to reload (a config edit prints "restart to apply" and nothing else). The
+	// builds therefore see exactly the config the rest of the dev loop is using —
+	// previously the static rebuild silently picked up mid-session config edits
+	// that dev itself was ignoring. A config that FAILED to load is not passed
+	// along: dev degrades to the zero Config for its own decisions, but the build
+	// keeps its own hard failure on a malformed config file.
+	var buildCfg *config.Config
+	if cfgErr == nil {
+		buildCfg = &cfg
+	}
 
 	// Serving mode (D81). `output: 'static'` projects get the REAL static build in
 	// dev — prerendered pages, clean URLs, full page loads, per-page mountStatic
@@ -358,7 +370,7 @@ func Serve(root string, opts Options) error {
 			// that is atomically swapped in. A failed compile OR a failed prerender
 			// discards staging, so the last good pages keep serving and the browser
 			// gets the diagnostic through the D92 channel below.
-			err = build.Build(absRoot, build.Options{Development: true, Output: "static"})
+			err = build.Build(absRoot, build.Options{Development: true, Output: "static", Config: buildCfg})
 		case builder != nil:
 			if err = builder.ScanUsage(); err == nil {
 				err = builder.Rebuild()
@@ -367,7 +379,7 @@ func Serve(root string, opts Options) error {
 				err = pl.recompose()
 			}
 		default:
-			err = build.Build(absRoot, build.Options{Development: true, Fixtures: opts.Fixtures})
+			err = build.Build(absRoot, build.Options{Development: true, Fixtures: opts.Fixtures, Config: buildCfg})
 		}
 		if err != nil {
 			logBuildFailure(stderr, err)

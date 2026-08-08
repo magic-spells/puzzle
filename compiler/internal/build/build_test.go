@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 )
 
@@ -1510,5 +1511,50 @@ func TestCLIBuild(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "dist", "app.js")); err != nil {
 		t.Errorf("CLI build produced no dist/app.js: %v", err)
+	}
+}
+
+// TestBuildOptionsConfigSkipsLoad proves Options.Config is used INSTEAD of
+// loading puzzle.config.js — not merged with it. The fixture's config file is
+// deliberately unloadable (it throws), which fails any build that reads it, so a
+// green build here is proof node was never spawned. The passed config's Tailwind
+// declaration is honored, so the value really is the one in effect.
+func TestBuildOptionsConfigSkipsLoad(t *testing.T) {
+	root := t.TempDir()
+	appDir := filepath.Join(root, "app")
+	if err := os.MkdirAll(filepath.Join(appDir, "public"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "app.js"), []byte("export default 1;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "public", "index.html"), []byte("<html><body></body></html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "puzzle.config.js"),
+		[]byte("throw new Error('this config must never be loaded');\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Sanity: without Options.Config the same build fails on that config file.
+	if err := Build(root, Options{Development: true, Runner: &fakeRunner{}}); err == nil {
+		t.Fatal("expected a build with no Options.Config to fail on the throwing puzzle.config.js")
+	}
+
+	var cfg config.Config
+	cfg.Styles.Use = []string{"tailwindcss"}
+	fake := &fakeRunner{css: "/* threaded */"}
+	if err := Build(root, Options{Development: true, Runner: fake, Config: &cfg}); err != nil {
+		t.Fatalf("Build with Options.Config failed: %v", err)
+	}
+	if !fake.called {
+		t.Error("the threaded config declared Tailwind, so the runner must have been invoked")
+	}
+	css, err := os.ReadFile(filepath.Join(root, "dist", "styles.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(css), "/* threaded */") {
+		t.Error("styles.css must reflect the threaded config's Tailwind layer")
 	}
 }
