@@ -88,7 +88,10 @@ exactly the bug class a preview should expose.
   side by side never silently port-scan past each other. HTML is served
   `Cache-Control: no-cache` (a host usually wouldn't) so a stale page can
   never straddle two builds. Missing/empty `dist/` is a hard error naming
-  `puzzle build`.
+  `puzzle build`. Terminal affordances match dev: on a real TTY, cbreak `q`
+  quits (and the banner advertises it) via the shared
+  `compiler/internal/keys` package both commands use; on pipes/CI/Windows the
+  listener silently stays off and Ctrl+C is unaffected.
 
 ## Alternatives rejected
 

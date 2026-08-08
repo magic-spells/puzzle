@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/keys"
 	"github.com/magic-spells/puzzle/compiler/internal/serve"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
 	"github.com/magic-spells/puzzle/compiler/internal/version"
@@ -109,17 +110,40 @@ func Serve(root string, opts Options) error {
 		}
 	}()
 
+	// "press q to quit": put stdin into cbreak so a single 'q' keypress can end
+	// the server, but only when stdin is a real TTY (skipped on pipes/CI/Windows).
+	// This must run BEFORE printReady so the banner only advertises the hint when
+	// the listener is actually active. Preview has no long-lived context of its
+	// own, so the listener gets one that is cancelled when Serve returns; the
+	// deferred restore runs after httpSrv.Shutdown (defers unwind at Serve's
+	// return).
+	keysCtx, cancelKeys := context.WithCancel(context.Background())
+	defer cancelKeys()
+	var quitCh <-chan struct{}
+	if restore, ok := keys.StdinCbreak(); ok {
+		defer restore()
+		quitCh = keys.Listen(keysCtx, os.Stdin)
+	}
+
 	url := fmt.Sprintf("http://localhost:%d/", port)
-	printReady(stdout, url, modeLabel(mode), time.Since(start))
+	printReady(stdout, url, modeLabel(mode), time.Since(start), quitCh != nil)
 	if opts.OnReady != nil {
 		opts.OnReady()
 	}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	// A nil quitCh blocks forever in select, so `case <-quitCh:` is safe even
+	// when the key listener never started.
 	select {
 	case <-sigCh:
+		// Leading "\n" moves past the terminal's echoed "^C".
 		fmt.Fprintf(os.Stdout, "\n%s %s %s\n", stdout.Dim(ui.Clock()), stdout.Bold(stdout.Cyan("[puzzle]")), stdout.Dim("shutting down…"))
+	case <-quitCh:
+		// ECHO is off in cbreak mode, so the typed 'q' printed nothing — no
+		// leading newline needed here.
+		fmt.Fprintf(os.Stdout, "%s %s %s\n", stdout.Dim(ui.Clock()), stdout.Bold(stdout.Cyan("[puzzle]")), stdout.Dim("shutting down…"))
 	case err := <-serverErr:
 		return fmt.Errorf("preview server: %w", err)
 	}
@@ -250,7 +274,7 @@ func modeLabel(mode string) string {
 	}
 }
 
-func printReady(p *ui.Printer, url, mode string, elapsed time.Duration) {
+func printReady(p *ui.Printer, url, mode string, elapsed time.Duration, showQuitHint bool) {
 	fmt.Fprintln(os.Stdout)
 	fmt.Fprintf(
 		os.Stdout,
@@ -262,6 +286,10 @@ func printReady(p *ui.Printer, url, mode string, elapsed time.Duration) {
 	printInfoLine(p, "Local:", p.Cyan(url))
 	printInfoLine(p, "Serving:", p.Dim("dist/"))
 	printInfoLine(p, "Mode:", p.Dim(mode))
+	// Only advertise 'q' when the key listener is actually active (a real TTY).
+	if showQuitHint {
+		fmt.Fprintf(os.Stdout, "\n  %s\n", p.Dim("press q to quit"))
+	}
 	fmt.Fprintln(os.Stdout)
 }
 

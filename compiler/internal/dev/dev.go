@@ -49,6 +49,7 @@ import (
 	"github.com/magic-spells/puzzle/compiler/internal/build"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
+	"github.com/magic-spells/puzzle/compiler/internal/keys"
 	"github.com/magic-spells/puzzle/compiler/internal/serve"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
@@ -533,9 +534,9 @@ func Serve(root string, opts Options) error {
 	// the listener is actually active. The deferred restore runs after
 	// httpSrv.Shutdown (defers unwind at Serve's return).
 	var quitCh <-chan struct{}
-	if restore, ok := stdinCbreak(); ok {
+	if restore, ok := keys.StdinCbreak(); ok {
 		defer restore()
-		quitCh = listenKeys(ctx, os.Stdin)
+		quitCh = keys.Listen(ctx, os.Stdin)
 	}
 
 	url := fmt.Sprintf("http://localhost:%d/", port)

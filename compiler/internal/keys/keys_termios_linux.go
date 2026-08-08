@@ -4,7 +4,7 @@
 // the terminal attributes: TCGETS/TCSETS (BSD/darwin use TIOCGETA/TIOCSETA — see
 // keys_termios_bsd.go). This split mirrors how golang.org/x/term selects the
 // constant per platform.
-package dev
+package keys
 
 import "golang.org/x/sys/unix"
 

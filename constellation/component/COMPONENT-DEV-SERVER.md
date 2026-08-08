@@ -33,7 +33,7 @@ The HTTP server binds `127.0.0.1` synchronously before printing its ready banner
 
 Before reload, the injected client invokes [[COMPONENT-DEVSTATE]]; the full page always reloads, with state restored best-effort by the new bundle. No per-module swap is attempted.
 
-The terminal layer prints startup/build timing, changed paths, style status, and TTY-aware color. In a TTY, cbreak `q` exits while signals remain active. SIGINT/SIGTERM cancel watcher/SSE work and gracefully shut down HTTP. Testing caveat: `go run` does not forward SIGTERM to the child, so verify graceful shutdown against the built binary.
+The terminal layer prints startup/build timing, changed paths, style status, and TTY-aware color. In a TTY, cbreak `q` exits while signals remain active; the cbreak/listener plumbing lives in `compiler/internal/keys`, shared with `puzzle preview` so both commands quit the same way. SIGINT/SIGTERM cancel watcher/SSE work and gracefully shut down HTTP. Testing caveat: `go run` does not forward SIGTERM to the child, so verify graceful shutdown against the built binary.
 
 The config Serve loads at startup is handed to every `build.Build` the session runs (`build.Options.Config`), so a rebuild never re-spawns `node -e` to re-read a file dev has already decided not to reload — and the builds see exactly the config the rest of the loop uses, closing the gap where a static rebuild silently picked up a mid-session config edit that dev itself was ignoring. A config that FAILED to load is not passed along: dev degrades to the zero `Config` for its own decisions, while a build keeps its own hard failure on a malformed config file.
 

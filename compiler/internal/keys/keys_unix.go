@@ -1,15 +1,15 @@
 //go:build darwin || dragonfly || freebsd || linux || netbsd || openbsd
 
-// keys_unix.go puts stdin into "cbreak" mode so `puzzle dev` can read a single
-// keypress (the 'q' quit) without waiting for Enter, and without echoing the
-// keystroke to the terminal.
+// keys_unix.go puts stdin into "cbreak" mode so `puzzle dev` and `puzzle
+// preview` can read a single keypress (the 'q' quit) without waiting for Enter,
+// and without echoing the keystroke to the terminal.
 //
 // We deliberately use CBREAK, not full raw mode:
 //   - ISIG is left ON, so Ctrl+C still generates SIGINT — the existing signal
 //     path keeps working exactly as before; 'q' is an addition, not a
 //     replacement.
 //   - The output flags (OPOST/ONLCR) are left untouched, so the rebuild/log
-//     lines the dev loop prints keep their normal "\n"→"\r\n" translation and
+//     lines the serve loop prints keep their normal "\n"→"\r\n" translation and
 //     don't stair-step across the terminal.
 //
 // We only clear ICANON (line buffering) and ECHO (so the typed 'q' is invisible),
@@ -18,7 +18,7 @@
 // The TTY gate is free: IoctlGetTermios fails when stdin is not a terminal
 // (a pipe, file redirect, or CI), and we treat that failure as "not a TTY" and
 // return ok=false — the feature silently switches off and nothing else changes.
-package dev
+package keys
 
 import (
 	"os"
@@ -26,10 +26,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// stdinCbreak switches os.Stdin into cbreak mode and returns a restore func that
+// StdinCbreak switches os.Stdin into cbreak mode and returns a restore func that
 // reverts it to the original settings. When stdin is not a TTY (get-termios
 // fails) it returns (nil, false) and the caller skips the key listener.
-func stdinCbreak() (restore func(), ok bool) {
+func StdinCbreak() (restore func(), ok bool) {
 	fd := int(os.Stdin.Fd())
 
 	// A failed read IS the TTY check: pipes/files/CI have no termios.
