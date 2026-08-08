@@ -291,7 +291,7 @@ func (b *StaticWatchBuilder) Rebuild(changed []string) error {
 	}
 
 	endSwap := prof.phase("staging swap")
-	swapErr := swapOutput(staging, b.outdir, b.workTmp)
+	swapErr := swapOutputWith(staging, b.outdir, b.workTmp, true)
 	endSwap()
 	if swapErr != nil {
 		return swapErr
