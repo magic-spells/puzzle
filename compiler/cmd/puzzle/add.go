@@ -119,7 +119,7 @@ directory, or an http(s) URL; --pieces-version pins the npm release exactly.`,
 }
 
 func init() {
-	addCmd.Flags().String("registry", "", "Piece registry source: a local directory or http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the public registry)")
+	addCmd.Flags().String("registry", "", "Piece registry source: npm:<package>[@version], a local directory, or an http(s) URL (default: $PUZZLE_PIECES_REGISTRY or the @magic-spells/puzzle-pieces npm package)")
 	addCmd.Flags().String("pieces-version", "", "Exact @magic-spells/puzzle-pieces release to fetch (default: the newest release matching this CLI's major.minor)")
 	addCmd.Flags().Bool("overwrite", false, "Overwrite existing destination files when adding pieces or skills")
 	addCmd.Flags().String("dir", "", "App root to add pieces into (default: walk up from the current directory for package.json/puzzle.config.js)")
@@ -176,8 +176,10 @@ func addPieces(w io.Writer, out *ui.Printer, dir, registry, piecesVersion string
 	}
 
 	source := pieces.ResolveSource(registry)
-	if piecesVersion != "" {
-		pinned, err := pieces.PinNpmSource(source, piecesVersion)
+	// Trim like ResolveSource trims --registry: a padded flag value must never
+	// become part of the pinned spec, and an all-blank one reads as unset.
+	if v := strings.TrimSpace(piecesVersion); v != "" {
+		pinned, err := pieces.PinNpmSource(source, v)
 		if err != nil {
 			return err
 		}
