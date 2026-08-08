@@ -12,6 +12,7 @@ import (
 
 	"github.com/magic-spells/puzzle/compiler/internal/textutil"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
 // themeMarker is the header comment carried in the registry's theme/pieces.css.
@@ -176,7 +177,7 @@ func Add(opts Options) (*Result, error) {
 
 	// pieces.lock: merge in the units just copied (pieces, libs, and the theme),
 	// preserving prior entries.
-	if err := updateLock(result.LockPath, lock, result.Source, result.Units); err != nil {
+	if err := updateLock(result.LockPath, lock, result.Source, version.Version, result.Units); err != nil {
 		return nil, err
 	}
 

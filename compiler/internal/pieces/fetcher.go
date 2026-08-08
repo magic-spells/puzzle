@@ -19,9 +19,10 @@ import (
 // pieces authored for the compiler running it.
 const defaultRegistry = npmScheme + defaultNpmPackage
 
-// httpTimeout bounds a single registry request. A registry lives behind the
-// network, so a hung host must not wedge the CLI — 15s is generous for a few KB
-// of .pzl and JSON over raw.githubusercontent.com.
+// httpTimeout bounds a single registry request, whether that's a file off an
+// http(s) mirror or a packument/tarball off the npm registry. A registry lives
+// behind the network, so a hung host must not wedge the CLI — 15s is generous
+// for the few KB of .pzl, JSON, and gzipped tarball involved.
 const httpTimeout = 15 * time.Second
 
 // Fetcher reads registry resources by their registry-relative slash path

@@ -7,8 +7,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
 // --- version parsing ----------------------------------------------------------
@@ -374,5 +378,43 @@ func TestNpmFetcherUnknownPinListsPublished(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "0.6.0") {
 		t.Errorf("error %q does not list the published versions", err.Error())
+	}
+}
+
+func TestAddThroughNpmFetcherRecordsProvenance(t *testing.T) {
+	registryJSON := `{"version":1,"pieces":[{"name":"button","files":["Button.pzl"]}]}`
+	srv := fakeNpm(t, map[string]map[string]string{
+		"0.6.0": {
+			"package/registry/registry.json":        registryJSON,
+			"package/registry/ui/button/Button.pzl": "<button/>",
+			"package/registry/theme/pieces.css":     "/* puzzle-pieces design tokens */",
+		},
+	})
+	defer srv.Close()
+
+	app := t.TempDir()
+	res, err := Add(Options{
+		AppRoot: app,
+		Names:   []string{"button"},
+		Fetcher: newTestNpmFetcher(srv.URL, "0.6.0", ""),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "npm:" + defaultNpmPackage + "@0.6.0"; res.Source != want {
+		t.Errorf("Result.Source = %q, want %q", res.Source, want)
+	}
+	if _, err := os.Stat(filepath.Join(app, "app", "components", "ui", "Button.pzl")); err != nil {
+		t.Errorf("Button.pzl not copied: %v", err)
+	}
+	lock, err := readLock(filepath.Join(app, LockFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "npm:" + defaultNpmPackage + "@0.6.0"; lock.Registry != want {
+		t.Errorf("lock registry = %q, want %q", lock.Registry, want)
+	}
+	if lock.Puzzle != version.Version {
+		t.Errorf("lock puzzle = %q, want %q", lock.Puzzle, version.Version)
 	}
 }

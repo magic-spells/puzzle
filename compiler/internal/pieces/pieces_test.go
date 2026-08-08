@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
+	"github.com/magic-spells/puzzle/compiler/internal/version"
 )
 
 // --- fixtures -----------------------------------------------------------------
@@ -329,6 +330,12 @@ func TestAddLockIsStableIndentedWithTrailingNewline(t *testing.T) {
 	}
 	if !bytes.Contains(data, []byte("\n  \"pieces\": {")) {
 		t.Errorf("pieces.lock should be 2-space indented, got:\n%s", data)
+	}
+	// Provenance sits between the registry coordinates and the pieces map — the
+	// key order the Lock struct comment promises. Built from version.Version so a
+	// release bump doesn't break the test.
+	if want := fmt.Sprintf("\n  \"puzzle\": %q,\n  \"pieces\": {", version.Version); !bytes.Contains(data, []byte(want)) {
+		t.Errorf("pieces.lock should carry %q in key order, got:\n%s", want, data)
 	}
 }
 
@@ -903,7 +910,8 @@ func TestNewFetcherKind(t *testing.T) {
 		t.Error("npm: source should build an npmFetcher")
 	}
 	f, ok := NewFetcher("npm:@magic-spells/puzzle-pieces@0.6.2").(*npmFetcher)
-	if !ok || f.pin != "0.6.2" || f.pkg != "@magic-spells/puzzle-pieces" {
+	if !ok || f.pin != "0.6.2" || f.pkg != "@magic-spells/puzzle-pieces" ||
+		f.base != npmRegistryBase || f.configured != "npm:@magic-spells/puzzle-pieces@0.6.2" {
 		t.Errorf("pinned npm source parsed wrong: %+v", f)
 	}
 	if _, ok := NewFetcher(defaultRegistry).(*npmFetcher); !ok {
