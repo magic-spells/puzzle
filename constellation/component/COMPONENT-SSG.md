@@ -9,6 +9,7 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DECISION-D67-SSG-STATIC-BUILD
   - DECISION-D81-STATIC-PAGES-MODE
+  - DECISION-D151-SHELL-HEAD-OWNERSHIP
   - FEATURE-V1-33-SSG
   - FEATURE-V1-47-STATIC-PAGES
   - FILE-SSG-RUNTIME
@@ -59,7 +60,32 @@ framework event directive.
 
 ## Shared prerender core
 
-`@magic-spells/puzzle/ssg` turns PuzzleApp config + compiled ViewNode trees into static HTML. `prerender()` is DOM/filesystem-free; `prerenderToDir()` writes output for the Go build's node-platform prerender bundle. The orchestrator builds Store/Router/Formatter services, calls `beforeMount` with one `{ store, config }` facade (receiver and argument), enumerates static route chains, and — via the shared `assembleChain` (`ssg/assemble.js`) — preloads each chain's layout/views (`created()` + awaited `data()`, `this.route` populated, no `mounted()`/animations) and builds the nested keyed component vnode tree exactly as the router's `#navigate` does — the frozen snapshot carries the D83 seven-key shape (`pathname` = the static path, empty frozen query, `''` hash). Head fields resolve leaf → root per field through the `head.js` resolver the router shares (D84); the `MANAGED_TAGS` table in `headTags.js` is **this pass's alone** — since D111 the browser syncs only `document.title`, so prerender is the one place managed tags are ever built. Pages carry `head` beside the compatibility `title`, and both shell injectors replace same-identity `data-puzzle-head` tags in place, remove suppressed ones, and insert the rest before `</head>` — escaped string surgery, no HTML parser; head-absent callers keep exact pre-D84 behavior. The serializer (`ssg/serialize.js`) mirrors ViewManager semantics: escaped text/attrs — except RAWTEXT ([[DECISION-D113-SSG-RAWTEXT-RULE]]): `<script>`/`<style>` text is never entity-escaped; JSON-typed scripts (`application/json` or `+json` suffix) emit with `<` escaped to `\u003c` through the `escapeScriptJson` helper the static data island shares, and other script/style content emits raw with the build failing on `</script`/`</style` or the `<!--`+`<script` double-escape pair — controlled form initial state, inline components without wrappers, shared slot expansion, SVG string seeds verbatim, and framework attrs/events/keys/islands/refs omitted; conditional placeholder vnodes serialize to nothing. Static paths write directory-style `<path>/index.html`; a top-level catch-all writes `404.html`; dynamic parameter/splat routes are skipped with warnings; `prerender: false` writes the plain shell at that path. Route guards (D87) are SPA-runtime-only, so the orchestrator warns — never changes behavior: hybrid warns per rendered page whose chain declares a guard (its markup ships publicly; `prerender: false` routes stay quiet), and a static build warns once when any route declares a guard (no router — guards never run).
+`@magic-spells/puzzle/ssg` turns PuzzleApp config + compiled ViewNode trees into static HTML. `prerender()` is DOM/filesystem-free; `prerenderToDir()` writes output for the Go build's node-platform prerender bundle. The orchestrator builds Store/Router/Formatter services, calls `beforeMount` with one `{ store, config }` facade (receiver and argument), enumerates static route chains, and — via the shared `assembleChain` (`ssg/assemble.js`) — preloads each chain's layout/views (`created()` + awaited `data()`, `this.route` populated, no `mounted()`/animations) and builds the nested keyed component vnode tree exactly as the router's `#navigate` does — the frozen snapshot carries the D83 seven-key shape (`pathname` = the static path, empty frozen query, `''` hash). Head fields resolve leaf → root per field through the `head.js` resolver the router shares (D84); the `MANAGED_TAGS` table in `headTags.js` is **this pass's alone** — since D111 the browser syncs only `document.title`, so prerender is the one place managed tags are ever built. Pages carry `head` beside the compatibility `title`, and both shell injectors replace same-identity `data-puzzle-head` tags in place, remove suppressed ones, and insert the rest before `</head>` — escaped string surgery, no HTML parser; head-absent callers keep exact pre-D84 behavior. That surgery is confined to the shell's **head region** ([[DECISION-D151-SHELL-HEAD-OWNERSHIP]]): the shell is read once per build, so a compiled plan holds the head span, its `<title>`, every marker span, the empty target element, and `</body>` as build constants, and a page is one ordered splice over those offsets rather than a dozen document-wide rescans of the already-injected page. A `<title>` element or `data-puzzle-head` attribute in RENDERED markup is view output and is never rewritten. The serializer (`ssg/serialize.js`) mirrors ViewManager semantics: escaped text/attrs — except RAWTEXT ([[DECISION-D113-SSG-RAWTEXT-RULE]]): `<script>`/`<style>` text is never entity-escaped; JSON-typed scripts (`application/json` or `+json` suffix) emit with `<` escaped to `\u003c` through the `escapeScriptJson` helper the static data island shares, and other script/style content emits raw with the build failing on `</script`/`</style` or the `<!--`+`<script` double-escape pair — controlled form initial state, inline components without wrappers, shared slot expansion, SVG string seeds verbatim, and framework attrs/events/keys/islands/refs omitted; conditional placeholder vnodes serialize to nothing. Static paths write directory-style `<path>/index.html`; a top-level catch-all writes `404.html`; dynamic parameter/splat routes are skipped with warnings; `prerender: false` writes the plain shell at that path. Route guards (D87) are SPA-runtime-only, so the orchestrator warns — never changes behavior: hybrid warns per rendered page whose chain declares a guard (its markup ships publicly; `prerender: false` routes stay quiet), and a static build warns once when any route declares a guard (no router — guards never run).
+
+### Per-build vs per-page work
+
+The prerender pass is a loop over routes, so anything that is a constant of the
+build must be computed outside it ([[DECISION-D151-SHELL-HEAD-OWNERSHIP]] is the
+same principle applied to the shell). Three things moved out:
+
+- **The route Router.** Hybrid pages share ONE unstarted memory-mode `Router` —
+  the instance `prerenderToDir` already builds to validate the route table and
+  the one `prerender` reads compiled leaves from. Building it per page recompiled
+  every route matcher O(routes) times for an instance that never navigates and
+  whose two page-varying properties are shadowed anyway. `url()` is shadowed once
+  (a function of `routerMode`/`routerBase`); `current` is redefined per page.
+  Static keeps its per-page `makeRouterStub`, which IS the page's snapshot. Which
+  facade a page gets is decided in `createPageContext`; `buildContext` takes the
+  router it is handed.
+- **The data island's escape.** Memoized on the stringified payload compared for
+  exact equality — a docs site seeds identical store content for every route, and
+  an exact-match key can never serve a stale island. The store snapshot itself is
+  still taken per page.
+- **The writes.** Both writers assemble page HTML sequentially (pure CPU; a
+  shell/target error still surfaces for the first offending page), then write
+  through a bounded `fs.promises` worker pool with a Set of already-created
+  directories. First error wins and fails the build; `written`/summary order comes
+  from the page list, not completion order.
 
 ### The prerender `ctx.router`
 

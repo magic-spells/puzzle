@@ -156,6 +156,42 @@ describe('static prerender (D81)', () => {
 			expect(pages[0].data.note[0]).toMatchObject({ id: 'n1', body: 'hello' });
 		});
 
+		it('writes each page its OWN data island — the payload memo is content-keyed', async () => {
+			// The island's escape pass is memoized across a build (identical seeds are the
+			// common case). The key is the stringified payload itself, so a page whose
+			// store differs by one byte can never be served the previous page's island.
+			class PerPage extends PuzzleView {
+				created() {
+					this.ctx.store.createRecord('note', { id: this.route.path, body: this.route.path });
+				}
+				render() {
+					return h('p', {}, [text('x')]);
+				}
+			}
+			stamp(PerPage, 'app/views/PerPage.pzl');
+			const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-island-'));
+			const shellPath = path.join(dir, 'shell.html');
+			fs.writeFileSync(shellPath, SHELL);
+			const outDir = path.join(dir, 'dist');
+			await prerenderToDir(
+				{
+					target: '#app',
+					models: { note: Note },
+					routes: [
+						{ path: '/a', name: 'a', view: PerPage },
+						{ path: '/b', name: 'b', view: PerPage },
+						{ path: '/c', name: 'c', view: PerPage },
+					],
+				},
+				{ outDir, shellPath, mode: 'static' }
+			);
+
+			for (const page of ['a', 'b', 'c']) {
+				const html = fs.readFileSync(path.join(outDir, page, 'index.html'), 'utf8');
+				expect(html).toContain(`{"note":[{"id":"/${page}","body":"/${page}","__synced":false}]}`);
+			}
+		});
+
 		it('does not attach static fields in hybrid mode', async () => {
 			const { pages } = await prerender(staticConfig());
 			expect(pages[0].data).toBeUndefined();
