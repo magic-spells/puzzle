@@ -332,7 +332,11 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 		return writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings });
 	}
 
+	// Injection stays sequential — it is pure CPU, and a shell/target error must
+	// surface for the first offending page exactly as it always did. The files are
+	// then written concurrently (writeFiles).
 	const written = [];
+	const files = [];
 	for (const page of pages) {
 		const html =
 			page.prerender === false
@@ -344,12 +348,58 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 						head: page.head,
 					});
 		const outPath = pageOutputPath(outDir, page.path);
-		fs.mkdirSync(path.dirname(outPath), { recursive: true });
-		fs.writeFileSync(outPath, html);
+		files.push({ outPath, html });
 		written.push({ path: page.path, file: outPath, prerender: page.prerender !== false });
 	}
+	await writeFiles(files);
 
 	return { outDir, written, skipped, warnings, count: written.length };
+}
+
+/**
+ * Write every page file with bounded concurrency. Page HTML is independent, so the
+ * sync per-page `mkdirSync` + `writeFileSync` pair serialized the whole build
+ * behind the filesystem one route at a time; `WRITE_CONCURRENCY` workers keep it
+ * busy instead. Two details are load-bearing:
+ *  - `madeDirs` skips the mkdir for a directory this build already created. Docs
+ *    sections share parents heavily, so the recursive mkdir was mostly a repeated
+ *    stat of paths that already existed. (A duplicate mkdir would be harmless
+ *    anyway — `recursive: true` is idempotent — so the racy check is safe.)
+ *  - the FIRST error wins and stops the pool, then throws: a failed write fails
+ *    the build with the same error object the sync call produced.
+ * Order of the caller's `written`/summary arrays is unaffected — it is built from
+ * the page list, not from completion order.
+ */
+const WRITE_CONCURRENCY = 16;
+
+async function writeFiles(files) {
+	const madeDirs = new Set();
+	let next = 0;
+	let failure = null;
+
+	const worker = async () => {
+		while (failure === null) {
+			const index = next++;
+			if (index >= files.length) return;
+			const { outPath, html } = files[index];
+			try {
+				const dir = path.dirname(outPath);
+				if (!madeDirs.has(dir)) {
+					await fs.promises.mkdir(dir, { recursive: true });
+					madeDirs.add(dir);
+				}
+				await fs.promises.writeFile(outPath, html);
+			} catch (err) {
+				if (failure === null) failure = err;
+				return;
+			}
+		}
+	};
+
+	const workers = [];
+	for (let i = 0; i < Math.min(WRITE_CONCURRENCY, files.length); i++) workers.push(worker());
+	await Promise.all(workers);
+	if (failure) throw failure;
 }
 
 /**
@@ -362,7 +412,7 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
  * A page whose output file an earlier page already claimed is skipped here with
  * reason `'duplicate'` rather than overwriting it (see claimedPaths below).
  */
-function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings }) {
+async function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings }) {
 	// The app-bundle tag is stripped once (the shell is identical for every page) so
 	// a missing tag warns once, not per page.
 	const { shell: baseShell, found } = stripAppBundle(shell);
@@ -403,6 +453,7 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 	// route in reachable order and no dead second bundle is generated.
 	const claimedPaths = new Map();
 	const written = [];
+	const files = [];
 	for (const page of pages) {
 		const outPath = pageOutputPath(outDir, page.path);
 		if (claimedPaths.has(outPath)) {
@@ -426,8 +477,7 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 			slug,
 			data: page.data ?? {},
 		});
-		fs.mkdirSync(path.dirname(outPath), { recursive: true });
-		fs.writeFileSync(outPath, html);
+		files.push({ outPath, html });
 		written.push({
 			path: page.path,
 			file: outPath,
@@ -437,6 +487,7 @@ function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warni
 			route: page.route,
 		});
 	}
+	await writeFiles(files);
 
 	return {
 		outDir,
