@@ -1,5 +1,5 @@
 ---
-name: 'D151 — Build-scoped compile cache: one transform per source, shared by every esbuild pass'
+name: 'D152 — Build-scoped compile cache: one transform per source, shared by every esbuild pass'
 status: built
 connections:
   - COMPONENT-ESBUILD-PLUGIN
@@ -16,7 +16,7 @@ connections:
   - DECISION-D81-STATIC-PAGES-MODE
 ---
 
-# D151 — Build-scoped compile cache: one transform per source, shared by every esbuild pass
+# D152 — Build-scoped compile cache: one transform per source, shared by every esbuild pass
 
 ## Context
 

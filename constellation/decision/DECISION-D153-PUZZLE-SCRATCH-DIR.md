@@ -1,5 +1,5 @@
 ---
-name: 'D152 — All transient build directories live in a self-ignoring .puzzle/'
+name: 'D153 — All transient build directories live in a self-ignoring .puzzle/'
 status: built
 connections:
   - COMPONENT-ESBUILD-PLUGIN
@@ -10,7 +10,7 @@ connections:
   - DECISION-D98-FIXTURES-MODULE-FLAG
 ---
 
-# D152 — All transient build directories live in a self-ignoring .puzzle/
+# D153 — All transient build directories live in a self-ignoring .puzzle/
 
 ## Context
 
