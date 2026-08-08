@@ -52,11 +52,21 @@ type Options struct {
 	// build-test seam for proving an input contributes zero production bytes;
 	// normal CLI builds leave it nil and pay nothing.
 	Metafile *string
+
+	// Profile prints a per-phase timing table to stderr after the build
+	// (`puzzle build --profile-build`). The PUZZLE_PROFILE_BUILD environment
+	// variable turns it on too, which is how `puzzle dev`'s static rebuild — a
+	// direct Build call with no flags of its own — reaches the profiler. Off,
+	// the profiler is a nil pointer and every phase call is a nil check.
+	Profile bool
 }
 
 // Build compiles the app rooted at root (the directory containing app/app.js)
 // into root/dist. It returns a formatted error if esbuild reports any errors.
 func Build(root string, opts Options) error {
+	prof := newBuildProfile(profileEnabled(opts.Profile))
+	defer prof.report(os.Stderr)
+
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return fmt.Errorf("resolving app root: %w", err)
@@ -74,7 +84,9 @@ func Build(root string, opts Options) error {
 	// No config file is not an error. A malformed one now fails the build up
 	// front, BEFORE the stale-dist prune — previously runTailwind surfaced it
 	// only after the last good dist/ had already been cleared.
+	endConfig := prof.phase("config load")
 	cfg, err := config.LoadConfig(absRoot)
+	endConfig()
 	if err != nil {
 		return err
 	}
@@ -142,8 +154,11 @@ func Build(root string, opts Options) error {
 	}()
 
 	pl := plugin.New(absRoot)
-	if err := scanUsage(absRoot, pl); err != nil {
-		return err
+	endScan := prof.phase("usage scan")
+	scanErr := scanUsage(absRoot, pl)
+	endScan()
+	if scanErr != nil {
+		return scanErr
 	}
 
 	// Takeover is a HYBRID-only capability for this bundle: only `output:
@@ -180,7 +195,9 @@ func Build(root string, opts Options) error {
 		}
 	}
 
+	endBundle := prof.phase("browser bundle")
 	result := api.Build(buildOpts)
+	endBundle()
 	if opts.Metafile != nil {
 		*opts.Metafile = result.Metafile
 	}
@@ -198,19 +215,25 @@ func Build(root string, opts Options) error {
 	// collected <style> blocks. A declared-but-unrunnable Tailwind fails the
 	// build — the pipeline is never silently skipped. Written into staging, not
 	// dist/, so a Tailwind failure above never touches the last good build.
+	endStyles := prof.phase("tailwind + styles")
 	tailwindCSS, err := runTailwind(absRoot, cfg, opts)
 	if err != nil {
+		endStyles()
 		return err
 	}
 	final := styles.Compose(tailwindCSS, pl.CSS())
-	if err := os.WriteFile(filepath.Join(staging, "styles.css"), []byte(final), 0o644); err != nil {
-		return fmt.Errorf("writing styles.css: %w", err)
+	writeErr := os.WriteFile(filepath.Join(staging, "styles.css"), []byte(final), 0o644)
+	endStyles()
+	if writeErr != nil {
+		return fmt.Errorf("writing styles.css: %w", writeErr)
 	}
 
 	// Static assets: index.html and anything else under the app's public/ dir,
 	// copied into staging. Keep the copied set so prerender modes can distinguish
 	// public-owned files from generated output before writing the final dist tree.
+	endPublic := prof.phase("public copy")
 	publicFiles, err := copyPublic(absRoot, staging)
+	endPublic()
 	if err != nil {
 		return fmt.Errorf("copying public assets: %w", err)
 	}
@@ -222,16 +245,22 @@ func Build(root string, opts Options) error {
 	// compile failure). mode was resolved up front, before any work.
 	switch mode {
 	case "hybrid":
-		if err := prerenderHybrid(absRoot, staging, publicFiles); err != nil {
-			return err
+		endHybrid := prof.phase("prerender (hybrid)")
+		hybridErr := prerenderHybrid(absRoot, staging, publicFiles)
+		endHybrid()
+		if hybridErr != nil {
+			return hybridErr
 		}
 	case "static":
-		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development); err != nil {
+		if err := prerenderStaticPages(absRoot, staging, publicFiles, cfg, opts.Development, prof); err != nil {
 			return err
 		}
 		if !opts.Development && !cfg.Build.SourceMap {
-			if err := removeStaticSourceMaps(filepath.Join(staging, staticPagesDir)); err != nil {
-				return fmt.Errorf("disabling static source maps: %w", err)
+			endMaps := prof.phase("source-map strip")
+			mapErr := removeStaticSourceMaps(filepath.Join(staging, staticPagesDir))
+			endMaps()
+			if mapErr != nil {
+				return fmt.Errorf("disabling static source maps: %w", mapErr)
 			}
 		}
 	}
@@ -243,8 +272,11 @@ func Build(root string, opts Options) error {
 	if filepath.Dir(outdir) != absRoot || filepath.Base(outdir) != "dist" {
 		return fmt.Errorf("refusing to replace unexpected dist path: %s", outdir)
 	}
-	if err := swapOutput(staging, outdir); err != nil {
-		return err
+	endSwap := prof.phase("staging swap")
+	swapErr := swapOutput(staging, outdir)
+	endSwap()
+	if swapErr != nil {
+		return swapErr
 	}
 	swapped = true
 

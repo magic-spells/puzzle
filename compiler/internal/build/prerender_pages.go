@@ -100,8 +100,10 @@ type staticModules struct {
 // prerenderStaticPages runs the true static-pages build against the app rooted
 // at absRoot, writing content-complete HTML pages (via the node prerender pass)
 // plus one per-page ES-module bundle under staging/_puzzle. cfg + dev select the
-// same minify/define/dropConsole policy as the main app.js pass.
-func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, cfg config.Config, dev bool) error {
+// same minify/define/dropConsole policy as the main app.js pass. prof may be nil
+// (profiling off); it splits this pass into its three expensive steps — the node
+// prerender bundle, the render run, and the per-page browser bundles.
+func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, cfg config.Config, dev bool, prof *buildProfile) error {
 	// A public/ asset that already produced a staging/_puzzle would be clobbered
 	// by the per-page bundles — reject it up front (extends the reserved-output
 	// collision guard to the static tree). copyPublic has already run, so the
@@ -134,11 +136,16 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 	)
 
 	outfile := filepath.Join(staging, prerenderDir, "prerender.mjs")
-	if err := bundlePrerenderEntry(absRoot, stdin, outfile, "--static"); err != nil {
-		return err
+	endPrerenderBundle := prof.phase("prerender bundle")
+	bundleErr := bundlePrerenderEntry(absRoot, stdin, outfile, "--static")
+	endPrerenderBundle()
+	if bundleErr != nil {
+		return bundleErr
 	}
 
+	endRender := prof.phase("prerender render")
 	payload, err := runPrerender(outfile, staging, "--static")
+	endRender()
 	if err != nil {
 		return err
 	}
@@ -196,8 +203,11 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 	//    land in _puzzle/chunks/ automatically. Skipped when there is nothing to
 	//    render (no static routes).
 	if len(entryFiles) > 0 {
-		if err := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev); err != nil {
-			return err
+		endPages := prof.phase("per-page bundles")
+		pagesErr := bundleStaticPages(absRoot, entryFiles, filepath.Join(staging, staticPagesDir), cfg, dev)
+		endPages()
+		if pagesErr != nil {
+			return pagesErr
 		}
 	}
 
