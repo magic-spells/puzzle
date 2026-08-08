@@ -49,6 +49,19 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
+## 0.6.0 — Unreleased
+
+### Added
+
+- **Static raw template blocks (D150).** `{#raw}…{/raw}` disables Puzzle's
+  brace lexer for author-written source, so JSON, JavaScript, CSS, and examples
+  can contain literal `{ ... }`, `{#if}`, and formatter pipes. HTML inside the
+  block still parses normally, blocks do not nest, and the first
+  whitespace-tolerant `{/raw}` closes it. The body is static and cannot receive
+  runtime values; dynamic raw-HTML injection remains deferred. Client and
+  prerendered text round-trip identically, including `<` inside normal text and
+  JSON-typed `<script>` elements.
+
 ## 0.5.0 — 2026-08-07
 
 ### Added

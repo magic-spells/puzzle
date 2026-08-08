@@ -83,9 +83,19 @@ export function escapeAttr(s) {
  */
 function serializeAttrs(tag, attrs, { selected = false, controlledSelect = false } = {}) {
 	let out = '';
-	for (const [name, value] of Object.entries(attrs)) {
-		if (name === 'key' || name === 'island' || name === 'ref' || name === 'flip' || name.startsWith('@'))
+	for (const [vnodeName, value] of Object.entries(attrs)) {
+		const literalAt = vnodeName.startsWith('@@');
+		const name = literalAt ? vnodeName.slice(1) : vnodeName;
+		if (
+			!literalAt &&
+			(name === 'key' ||
+				name === 'island' ||
+				name === 'ref' ||
+				name === 'flip' ||
+				name.startsWith('@'))
+		) {
 			continue;
+		}
 		if (name === 'value' && (tag === 'select' || tag === 'textarea')) continue;
 		if (name === 'selected' && controlledSelect && tag === 'option') continue;
 		if (name === 'value') {

@@ -74,6 +74,12 @@ an explicit root `key` replaces the synthetic key. Valueless attrs follow a
 strict contract: a bare attribute emits `true`, an explicit `=""` emits an empty
 string (a former bug compiled `value=""` to `true` and rendered "true").
 
+Raw-block bodies arrive as ordinary static Text/Element AST nodes, so their
+text takes only the JS-string path and never expression resolution. A literal
+`@name` attribute from raw markup is emitted under the private `@@name` vnode
+key on host elements; [[COMPONENT-VIEW-MANAGER]] and [[COMPONENT-SSG]] decode
+that key back to the authored DOM attribute without entering listener logic.
+
 Data-independent event sites cache one closure per instance in `this.__h`,
 stabilizing DOM listeners and callback props. Sites that capture model or loop
 values emit fresh closures so their captured values stay correct. Modifiers

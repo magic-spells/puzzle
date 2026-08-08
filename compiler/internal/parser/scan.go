@@ -73,7 +73,7 @@ func lexRegexLiteralClosed(s string, open, end int) bool {
 
 var blockCloseKeywords = map[string]bool{
 	"if": true, "unless": true, "case": true, "for": true,
-	"svg": true, "comment": true,
+	"svg": true, "comment": true, "raw": true,
 }
 
 // isKnownBlockCloserAt reports whether s[open:] is a complete block closer.
@@ -196,6 +196,64 @@ func scanBlockComment(s string, open int) (end int, err error) {
 	return 0, fmt.Errorf("unterminated {#comment} — expected {/comment}")
 }
 
+// isBlockRawOpen reports whether s[open] begins a {#raw} lex-off block opener
+// (D150). The keyword match is exact; content after it is allowed and ignored,
+// matching {#comment}.
+func isBlockRawOpen(s string, open int) bool {
+	if open+2 > len(s) || s[open] != '{' || s[open+1] != '#' {
+		return false
+	}
+	return firstWord(s[open+2:]) == "raw"
+}
+
+// matchRawCloser reports whether s[open] begins a whitespace-tolerant {/raw}
+// closer (D150). On a match it returns the index just past the closing brace.
+func matchRawCloser(s string, open int) (ok bool, end int) {
+	i := open + 1
+	if i >= len(s) || s[i] != '/' {
+		return false, 0
+	}
+	i++
+	for i < len(s) && isSpaceByte(s[i]) {
+		i++
+	}
+	const kw = "raw"
+	if i+len(kw) > len(s) || s[i:i+len(kw)] != kw {
+		return false, 0
+	}
+	i += len(kw)
+	for i < len(s) && isSpaceByte(s[i]) {
+		i++
+	}
+	if i >= len(s) || s[i] != '}' {
+		return false, 0
+	}
+	return true, i + 1
+}
+
+// scanBlockRaw locates a {#raw}…{/raw} block (D150) without inspecting its
+// body as template grammar. Raw blocks do not nest: the FIRST valid closer wins.
+// bodyStart/bodyEnd delimit the bytes that remain subject to ordinary HTML
+// tokenization while braces are inert; end is just past the closer.
+func scanBlockRaw(s string, open int) (bodyStart, bodyEnd, end int, err error) {
+	openerEnd := strings.IndexByte(s[open+2:], '}')
+	if openerEnd < 0 {
+		return 0, 0, 0, fmt.Errorf("unterminated {#raw} — expected {/raw}")
+	}
+	bodyStart = open + 2 + openerEnd + 1
+	for i := bodyStart; i < len(s); {
+		if s[i] != '{' {
+			i++
+			continue
+		}
+		if ok, next := matchRawCloser(s, i); ok {
+			return bodyStart, i, next, nil
+		}
+		i++
+	}
+	return 0, 0, 0, fmt.Errorf("unterminated {#raw} — expected {/raw}")
+}
+
 // isTemplateCommentInner reports whether an already-scanned brace-group inner
 // (the text between '{' and '}') is a template comment (D70): the inline "##…"
 // form, or the block-comment "#comment…" opener. Used at the attribute-value
@@ -205,6 +263,12 @@ func isTemplateCommentInner(inner string) bool {
 		return true
 	}
 	return strings.HasPrefix(inner, "#") && firstWord(inner[1:]) == "comment"
+}
+
+// isTemplateRawInner reports whether an already-scanned attribute brace group
+// is a {#raw} opener. Raw blocks are text-position syntax only (D150).
+func isTemplateRawInner(inner string) bool {
+	return strings.HasPrefix(inner, "#") && firstWord(inner[1:]) == "raw"
 }
 
 // splitTopLevel splits s at top-level occurrences of the single-byte separator

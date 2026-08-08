@@ -1142,7 +1142,7 @@ func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline
 func (c *compiler) attrKV(a parser.Attr, scope map[string]bool, isComponent bool, emit bool) (string, error) {
 	switch at := a.(type) {
 	case *parser.StaticAttr:
-		if at.Name == "ref" {
+		if at.Name == "ref" && !at.LiteralName {
 			// Element ref (v1.39, D72): a framework-owned static attr — never a DOM
 			// attribute. It is emitted as a per-instance cached setter call so the
 			// runtime can wire this.refs.<name> to the mounted node. The parser has
@@ -1150,13 +1150,19 @@ func (c *compiler) attrKV(a parser.Attr, scope map[string]bool, isComponent bool
 			// the emitted string needs no further escaping.
 			return fmt.Sprintf("ref: this.__ref(%q)", at.Value), nil
 		}
+		name := at.Name
+		if at.LiteralName && !isComponent {
+			// Runtime-private escape for an authored @-attribute inside {#raw}.
+			// `@@click` cannot collide with source grammar and decodes to `@click`.
+			name = "@" + name
+		}
 		if at.Valueless {
-			return jsKey(at.Name) + ": true", nil // bare boolean attr (autofocus)
+			return jsKey(name) + ": true", nil // bare boolean attr (autofocus)
 		}
 		// An EXPLICIT empty value (value="") stays the empty string — keying on
 		// Value == "" here compiled it to `true`, so the runtime set the literal
 		// string "true" on inputs and passed true instead of '' as a component prop.
-		return jsKey(at.Name) + ": " + jsString(at.Value), nil
+		return jsKey(name) + ": " + jsString(at.Value), nil
 	case *parser.DynamicAttr:
 		if startsWithObjectLiteral(at.Expr) {
 			return "", c.cgErr(at.Pos, objectLiteralMsg)

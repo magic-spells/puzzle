@@ -66,6 +66,10 @@ One built-in is not a pure export: `link` (D79) needs the live router, so Puzzle
 
 All built-ins fail soft on nullish or invalid display input. Numeric precision normalizes to an integer in the `toFixed` range; date/locale/time-zone failures fall back to a string; sort copies before comparing and treats numeric arrays numerically. `raw`/`noescape` only skip formatter escaping—they do not inject HTML into text vnodes. `reverse` iterates strings by code POINT (`[...v]`, since 0.3.0), not UTF-16 code unit — `split('')` tore surrogate pairs, so emoji/astral text reversed into lone-surrogate garbage; a user-visible output change for such strings.
 
+Those value-level runtime formatters are unrelated to D150's
+`{#raw}…{/raw}` source block, which disables brace lexing before any formatter
+could run.
+
 The date family (`date`/`time`/`datetime`/`timeago`/`in_timezone`) treats a
 bare `YYYY-MM-DD` string as a **calendar date**
 ([[DECISION-D114-CALENDAR-DATE-FORMATTERS]]): one shared `parseDateInput`

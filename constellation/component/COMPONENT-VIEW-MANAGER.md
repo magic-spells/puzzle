@@ -120,6 +120,11 @@ alone survives patches, so `setAttr` refuses to re-attach a spent `once`
 binding until an explicit removal resets it — D38 semantics, zero listener
 cost after the spend), ref callbacks, boolean attrs/properties, and island
 children seeded once then never patched. Inline SVG uses the same island path with verbatim string children.
+The `@@name` private vnode key emitted for an `@name` attribute inside a D150
+raw block bypasses listener handling and attaches the literal attribute. HTML
+parsing accepts `@` names while `setAttribute` rejects them, so first mount
+attaches a parser-created `Attr` node; later patches update its value directly
+and removal uses the authored name.
 The `outside` modifier (D86) attaches its listener to `document` in the
 CAPTURE phase (one shared options object for add/remove so the capture flags
 can't mismatch); the containment gate runs before every other modifier step,

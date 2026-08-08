@@ -174,6 +174,15 @@ func (p *parser) parseChildren(ctx openCtx) ([]Node, *ParseError) {
 			if err := p.advance(); err != nil {
 				return nil, toPE(err)
 			}
+		case TokRaw:
+			rawNodes, perr := p.parseRaw(t, ctx)
+			if perr != nil {
+				return nil, perr
+			}
+			nodes = append(nodes, rawNodes...)
+			if err := p.advance(); err != nil {
+				return nil, toPE(err)
+			}
 		case TokComment:
 			if err := p.advance(); err != nil {
 				return nil, toPE(err)
@@ -208,6 +217,30 @@ func (p *parser) parseChildren(ctx openCtx) ([]Node, *ParseError) {
 			return nil, errAt(p.file, tokPos(t), "unexpected token %s", t.Type)
 		}
 	}
+}
+
+// parseRaw reconciles D150's two simultaneous rules with the parent context the
+// parser already owns: script/style are HTML RAWTEXT elements, so their whole
+// captured body is one literal Text node; everywhere else HTML stays structural
+// and a nested brace-disabled lexer/parser builds ordinary nodes.
+func (p *parser) parseRaw(t Token, ctx openCtx) ([]Node, *ParseError) {
+	pos := tokPos(t)
+	if ctx.kind == ctxElement && (ctx.name == "script" || ctx.name == "style") {
+		if t.Value == "" {
+			return nil, nil
+		}
+		return []Node{&Text{Value: t.Value, Pos: pos}}, nil
+	}
+	lx := newRawLexer(t.Value, pos, p.file)
+	nested, err := newParser(lx, p.file)
+	if err != nil {
+		return nil, toPE(err)
+	}
+	nodes, perr := nested.parseChildren(openCtx{kind: ctxRoot, pos: pos})
+	if perr != nil {
+		return nil, perr
+	}
+	return nodes, nil
 }
 
 // checkCloser validates that closer t terminates ctx; returns nil (match) or a
@@ -447,6 +480,7 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 			return attrs, true, nil
 		case TokAttrName:
 			name := t.Value
+			literalName := t.Raw && strings.HasPrefix(name, "@")
 			npos := tokPos(t)
 			if e := checkAttrNamespace(name, npos, p.file); e != nil {
 				return nil, false, e
@@ -467,10 +501,10 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 				}
 				attrs = append(attrs, a)
 			} else {
-				if strings.HasPrefix(name, "@") {
+				if strings.HasPrefix(name, "@") && !literalName {
 					return nil, false, errAt(p.file, npos, "event handler %s requires an ={ ... } expression", name)
 				}
-				attrs = append(attrs, &StaticAttr{Name: name, Value: "", Valueless: true, Pos: npos})
+				attrs = append(attrs, &StaticAttr{Name: name, Value: "", Valueless: true, LiteralName: literalName, Pos: npos})
 			}
 		case TokEOF:
 			return nil, false, errAt(p.file, tokPos(t), "unexpected end of input inside tag")
@@ -532,10 +566,16 @@ func isDirectiveWord(s string) bool {
 // buildAttr classifies an attribute given its name and value token.
 func buildAttr(name string, npos Position, v Token, file string) (Attr, *ParseError) {
 	vpos := tokPos(v)
+	if v.Raw {
+		return &StaticAttr{Name: name, Value: v.Value, LiteralName: strings.HasPrefix(name, "@"), Pos: npos}, nil
+	}
 	// Template comments (D70) are not template structure — an unquoted
 	// attr={##…} / attr={#comment…} would otherwise be treated as a JS expression.
 	if v.Type == TokAttrBrace && isTemplateCommentInner(v.Value) {
 		return nil, errAt(file, vpos, "template comments are not allowed in attribute values")
+	}
+	if v.Type == TokAttrBrace && isTemplateRawInner(v.Value) {
+		return nil, errAt(file, vpos, "{#raw} blocks are not allowed in attribute values")
 	}
 	if strings.HasPrefix(name, "@") {
 		if v.Type != TokAttrBrace {

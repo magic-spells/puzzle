@@ -69,6 +69,9 @@ func (c *attrCursor) parseSequence(topLevel bool) (parts []Part, term string, pe
 			if strings.HasPrefix(c.s[c.i:], "{##") || isBlockCommentOpen(c.s, c.i) {
 				return nil, "", errAt(c.file, pos, "template comments are not allowed in attribute values")
 			}
+			if isBlockRawOpen(c.s, c.i) {
+				return nil, "", errAt(c.file, pos, "{#raw} blocks are not allowed in attribute values")
+			}
 			inner, end, err := scanBraceGroup(c.s, c.i)
 			if err != nil {
 				return nil, "", errAt(c.file, pos, "unclosed '{' in attribute value")

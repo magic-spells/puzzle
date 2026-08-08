@@ -60,7 +60,7 @@ func TestScanBraceGroupRegex(t *testing.T) {
 
 func TestScanBraceGroupKnownClosers(t *testing.T) {
 	for _, src := range []string{
-		"{/if}", "{/ unless }", "{/case}", "{/ for}", "{/svg }", "{/ comment }",
+		"{/if}", "{/ unless }", "{/case}", "{/ for}", "{/svg }", "{/ comment }", "{/ raw }",
 	} {
 		t.Run(src, func(t *testing.T) {
 			inner, end, err := scanBraceGroup(src, 0)

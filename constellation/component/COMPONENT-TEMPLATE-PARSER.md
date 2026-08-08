@@ -37,6 +37,14 @@ case/when, item/range for, and slot nodes. Template comments are erased by the
 lexer: inline `{## … }` uses brace-depth scanning and block
 `{#comment}…{/comment}` discards raw, nestable content.
 
+Raw blocks ([[DECISION-D150-RAW-TEMPLATE-BLOCK]]) reuse the comment block's
+forward scan but preserve the body as one outer-lexer token. The parser owns the
+needed parent context: under script/style it emits that span as one literal Text
+node; elsewhere a nested brace-disabled HTML lexer builds ordinary element/text
+nodes. Attribute tokens from that nested pass are static; an `@`-prefixed name
+carries a literal-name bit so it cannot become an event. Raw blocks do not nest
+and are rejected at attribute-value positions.
+
 One shared balanced scanner handles expressions in templates and attributes,
 skipping JS strings, regexes, comments, and nested template-literal
 interpolations. Top-level split helpers recognize formatter pipes/arguments,

@@ -170,7 +170,11 @@ type StaticAttr struct {
 	Name      string
 	Value     string
 	Valueless bool
-	Pos       Position
+	// LiteralName marks an @-prefixed attribute captured inside {#raw}. Codegen
+	// privately escapes the vnode key so the runtime writes the authored DOM
+	// attribute instead of treating it as an event directive (D150).
+	LiteralName bool
+	Pos         Position
 }
 
 // DynamicAttr is `name={ expr }` — a single unquoted brace expression. Binding

@@ -83,6 +83,9 @@ decision cards explain why the contract has its current shape.
   with `@event:outside` logical containment, Portal slide-over vs native
   `<dialog>` modal); its dogfooding pass produced the Portal
   component-root steering error (wrapper idiom documented in D144).
+- **Next minor:** [[DECISION-D150-RAW-TEMPLATE-BLOCK]] adds the static
+  `{#raw}…{/raw}` lex-off block for author-written braces while preserving
+  ordinary HTML parsing and the existing parent-aware SSG RAWTEXT policy.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode

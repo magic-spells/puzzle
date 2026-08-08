@@ -58,6 +58,18 @@ Formatters transform a value for display, Liquid-style. They chain left to right
 
 Custom formatters are registered in the `PuzzleApp` config (`formatters: { ... }` in `app.js`) and used the same way; `this.ctx.formatters` exposes the registry if you ever need it in JS.
 
+Three always-registered compatibility formatters control value-level escaping:
+
+- `escape` converts `& < > " '` to HTML entities.
+- `raw` and `noescape` are pass-through aliases that stringify the value.
+
+All three still produce a **text vnode**. They do not inject HTML: `{ markup |
+raw }` displays the markup string as text, and `{ markup | escape }` displays
+the entity spellings literally because DOM text nodes do not entity-decode.
+They are also unrelated to `{#raw}`: formatters run on a runtime value after the
+template has already lexed, while a raw block makes author-written source braces
+literal at compile time.
+
 **Typos don't crash (v1.12, D43).** A formatter name that isn't registered renders the value **unchanged** and logs one `console.error` naming it — `[puzzle] unknown formatter "captialize" — value passed through unchanged (did you mean "capitalize"?)`. Formatters are resolved at render time (custom ones are registered in the app config), so this can't be a compile error — watch the console when a formatter seems to do nothing.
 
 **Formatters are display-only.** Filtering, sorting, and any other data logic belongs in `data()`, not in the template:
@@ -523,6 +535,41 @@ One Tailwind caveat (true of HTML comments too, and of Tailwind everywhere): its
 
 ---
 
+## Raw blocks: `{#raw}…{/raw}` (v1.70, D150)
+
+Use a raw block when static template text needs literal braces. Puzzle turns off
+brace grammar for the body, but keeps parsing HTML:
+
+```html
+<script type="application/json" data-tarot-options>
+  {#raw}{ "loop": true, "slidesPerView": 3 }{/raw}
+</script>
+
+<pre>{#raw}const shape = { a: 1, b: [2, 3] };{/raw}</pre>
+
+{#raw}<b>this is still a real element</b>{/raw}
+```
+
+Inside the block, interpolations, block tags, branches, formatter pipes, and
+event-looking brace values are literal. The body is static source — no runtime
+value can reach it — so this is not raw HTML injection.
+
+Raw blocks do not nest; the first closer wins. The closer tolerates whitespace
+(`{/raw}`, `{/ raw }`, `{/raw }`), and anything after the opener keyword is
+ignored. A literal `{/raw}` cannot appear in the body. Raw blocks are allowed at
+text positions, not inside attribute values; an unterminated block reports the
+opening position and the missing `{/raw}`.
+
+Prerendering preserves the same `textContent` as client rendering. Normal
+elements use ordinary HTML entity escaping. `<script>` and `<style>` use their
+RAWTEXT serialization rule; JSON-typed scripts safely encode `<` as `\u003c`,
+which `JSON.parse()` decodes to the original value.
+
+The `raw` and `noescape` **formatters** solve a different, value-level problem
+and cannot be used to put literal braces in template source.
+
+---
+
 ## Deferred syntax
 
 These boundaries are deliberate and remain unshipped:
@@ -530,7 +577,8 @@ These boundaries are deliberate and remain unshipped:
 - scoped slots (child data passed into parent-authored slot content);
 - array refs or refs inside loops;
 - dynamic `ref`, `slot`, or `island` names;
-- raw HTML injection syntax;
+- dynamic raw HTML injection syntax (`{@html expr}`); `{#raw}` is static source
+  and is documented above;
 - components or composition markers inside an island subtree.
 
 Previously deferred named slots, skeletons, `{#unless}`, `{#case}`, event
@@ -571,6 +619,7 @@ modifiers, and `{:else if}` are shipped and documented above.
 | Element ref | `ref="name"` → `this.refs.name` | `<canvas ref="chart"></canvas>` |
 | Comment (inline) | `{## text }` | `{## TODO: swap for real data }` |
 | Comment (block) | `{#comment} … {/comment}` (body raw — can wrap broken markup) | `{#comment}{#if wip}…{/comment}` |
+| Raw source block | `{#raw} … {/raw}` (braces literal; HTML still parsed) | `<pre>{#raw}const x = { a: 1 };{/raw}</pre>` |
 
 ## Related documentation
 

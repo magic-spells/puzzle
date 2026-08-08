@@ -95,6 +95,7 @@ Supported:
 - **DOM islands (v1.13, D44):** a bare static `island` attribute on a plain element makes its children browser-owned after mount — the template children render once as *seed content* and are never reconciled again, while the element's own attributes and listeners keep patching normally. See §17.
 - **Element refs (v1.39, D72):** a static `ref="name"` on a plain element binds the live DOM node to `this.refs.name` — populated before `mounted()`, re-pointed on replacement, nulled on removal; the attribute never reaches the DOM. Static-string only (`ref={ expr }` is a positioned compile error — the expression boundary makes a braces form unimplementable); see §38 for the full contract and error set.
 - **Comments (v1.37, D70):** `{## any text }` (inline, self-contained) and `{#comment} … {/comment}` (block; body discarded **raw** — interpolations, block tags, and malformed template code inside are ignored, so it can comment out broken markup; nested `{#comment}` blocks count). Both are erased at the lexer — no token, no vnode, nothing in the bundle — and are legal at any text position, including `<puzzle-skeleton>` bodies. Inline comments track `{`/`}` nesting depth with `\{`/`\}` escapes and are deliberately NOT string-aware (`{## don't }` is fine); a lone `}` needs `\}`. The block closer tolerates whitespace (`{/ comment }`); opener content after the keyword is ignored. HTML comments `<!-- -->` remain compile-time-stripped as always. Compile errors (positioned): unclosed `{##`, unterminated `{#comment}`, either spelling inside an attribute value, a stray `{/comment}`. Additive; comment-free templates compile byte-identically.
+- **Raw blocks (v1.70, D150):** `{#raw}…{/raw}` makes every brace in its body literal while preserving ordinary HTML parsing. See §57 for the full contract. Value-level `raw`/`noescape` formatters are unrelated: they run after lexing and cannot make source braces literal.
 
 Deferred: `$emit`/event bus. (Named slots shipped in v1.21 — D53, §24; `<puzzle-skeleton>` auto-swapping shipped in v1.8 — D39, §16.)
 
@@ -216,3 +217,41 @@ The compiler emits **positioned, non-fatal warnings** (never errors) for five te
 - **Lifecycle:** the framework owns the document listener. It attaches when the bound element mounts and detaches on every removal shape (conditional toggle, keyed-row removal, subtree teardown, full view destroy) and on the inline-null toggle (`@pointerdown:outside={ open ? close : null }`). The idiomatic form puts the binding on the panel root inside `{#if open}`, so the listener's lifetime tracks the panel; the always-mounted alternative is the root-element binding with the null-toggle.
 - `@click` and `@click:outside` on one element are independent bindings. Existing §5 compile errors are unchanged (`outside` on a component callback prop is rejected like every modifier).
 - **Documented limitations:** events inside an `<iframe>` never reach the parent document; on touch, `pointerdown` fires at scroll-start — prefer `@click:outside` where scroll tolerance matters. The event choice is the author's.
+
+## 57. Raw template blocks: `{#raw}…{/raw}` (v1.70)
+
+`{#raw}` disables Puzzle's brace lexer for its body. It is the static-source
+escape for JSON, JavaScript, CSS, and examples that need literal template-like
+syntax:
+
+```html
+<script type="application/json" data-tarot-options>
+  {#raw}{ "loop": true, "slidesPerView": 3 }{/raw}
+</script>
+
+<pre>{#raw}const shape = { a: 1, b: [2, 3] };{/raw}</pre>
+```
+
+- Every `{`/`}` sequence in the body is literal text: interpolations,
+  `{#if}`/`{#for}`/`{#comment}`, branches, closers, formatter pipes, and
+  brace-valued event bindings do not activate template grammar.
+- HTML remains structural. `{#raw}<b>hi</b>{/raw}` emits a real `<b>` vnode,
+  not the source string `"<b>hi</b>"`. Attributes inside that markup are static;
+  `@click={ handler }` is an authored literal attribute, never a Puzzle listener.
+- The block does not nest. The first tolerant closer wins: `{/raw}`,
+  `{/ raw }`, and `{/raw }` are equivalent. A literal `{/raw}` therefore cannot
+  occur in the body. Content after the opener keyword is ignored, matching
+  `{#comment}`.
+- Raw blocks are legal at text positions, including skeleton bodies. A raw
+  opener inside a quoted or brace-only attribute value is a positioned compile
+  error. An unterminated block errors at its opening brace with the expected
+  `{/raw}` closer.
+- The body is static, author-written source. It accepts no expression and no
+  runtime value, so it is not dynamic raw-HTML injection; `{@html expr}` remains
+  deferred.
+
+Client rendering creates literal text nodes. Prerendering is parent-aware:
+ordinary element text is entity-escaped in the HTML string and decoded back by
+the HTML parser, while `<script>`/`<style>` use §36's D113 RAWTEXT policy. A
+JSON-typed script still rewrites `<` to JSON-transparent `\u003c`, preserving
+`JSON.parse(element.textContent)` while preventing a closing-tag breakout.

@@ -1370,6 +1370,13 @@ function nextPersistentSibling(node) {
 // ---- attributes / properties / listeners --------------------------------------
 
 function setAttr(el, name, value, owner = null) {
+	// D150: codegen escapes a literal @-prefixed attribute from {#raw} as an
+	// impossible-in-source `@@name` vnode key so it cannot enter the listener path.
+	if (name.startsWith('@@')) {
+		setLiteralAtAttr(el, name.slice(1), value === true ? '' : stringify(value));
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+		return;
+	}
 	// `key`, `island` (D44), `ref` (D72), and `flip` (D85) are framework
 	// directives, never DOM markup — the ref setter is invoked by
 	// mount()/patchAttrs, and flip by patchKeyedChildren, not written here.
@@ -1457,7 +1464,28 @@ function setAttr(el, name, value, owner = null) {
 		devperfMutation();
 }
 
+// The HTML parser accepts @-prefixed attribute names, but setAttribute() rejects
+// them as invalid XML Names. Parse the NAME once into an Attr node, then attach
+// it; subsequent patches can update Attr.value directly (D150).
+function setLiteralAtAttr(el, name, value) {
+	const existing = el.getAttributeNode(name);
+	if (existing) {
+		existing.value = value;
+		return;
+	}
+	const template = document.createElement('template');
+	template.innerHTML = `<i ${name}></i>`;
+	const attr = template.content.firstElementChild.getAttributeNode(name).cloneNode();
+	attr.value = value;
+	el.setAttributeNode(attr);
+}
+
 function removeAttr(el, name) {
+	if (name.startsWith('@@')) {
+		el.removeAttribute(name.slice(1));
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+		return;
+	}
 	if (name === 'key' || name === 'island' || name === 'ref' || name === 'flip') return;
 
 	if (name.startsWith('@')) {

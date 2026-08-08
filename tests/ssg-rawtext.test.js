@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // SSG RAWTEXT serialization (D113) — prerendered `<script>`/`<style>` content must
 // reach the page the way the HTML parser reads it back: RAWTEXT is never
 // entity-decoded, so entity-escaping it ships `&amp;`/`&lt;` garbage to crawlers and
@@ -11,6 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { serialize, escapeScriptJson } from '../client-runtime/ssg/serialize.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { mount, patch } from '../client-runtime/views/viewManager.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -21,6 +23,49 @@ const inner = (html, tag) => html.slice(html.indexOf('>') + 1, html.lastIndexOf(
 const count = (s, re) => (s.match(re) || []).length;
 
 describe('SSG RAWTEXT elements (D113)', () => {
+	describe('{#raw} text round-trip (D150)', () => {
+		const value = {
+			compare: 'a < b',
+			breakout: '</script><script>alert(1)</script>',
+			ampersand: 'bright & clear',
+		};
+		const json = JSON.stringify(value);
+
+		for (const [tag, attrs] of [
+			['div', {}],
+			['script', { type: 'application/json' }],
+		]) {
+			it(`JSON containing < round-trips through client and prerendered <${tag}> textContent`, async () => {
+				const prerendered = await serialize(h(tag, attrs, [text(json)]));
+				const parsedHost = document.createElement('div');
+				parsedHost.innerHTML = prerendered;
+				const parsed = parsedHost.firstElementChild;
+				expect(JSON.parse(parsed.textContent)).toEqual(value);
+
+				const clientHost = document.createElement('div');
+				mount(h(tag, attrs, [text(json)]), clientHost, null, {});
+				expect(JSON.parse(clientHost.firstElementChild.textContent)).toEqual(value);
+			});
+		}
+
+		it('keeps a raw @event-shaped attribute literal in both paths', async () => {
+			const tree = h('button', { '@@click': '{ handler }' }, [text('x')]);
+			expect(await serialize(tree)).toBe('<button @click="{ handler }">x</button>');
+
+			const host = document.createElement('div');
+			const oldTree = h('button', { '@@click': '{ handler }' }, [text('x')]);
+			mount(oldTree, host, null, {});
+			expect(host.firstElementChild.getAttribute('@click')).toBe('{ handler }');
+
+			const updatedTree = h('button', { '@@click': '{ next }' }, [text('x')]);
+			patch(oldTree, updatedTree, host, {});
+			expect(host.firstElementChild.getAttribute('@click')).toBe('{ next }');
+
+			patch(updatedTree, h('button', {}, [text('x')]), host, {});
+			expect(host.firstElementChild.hasAttribute('@click')).toBe(false);
+		});
+	});
+
 	describe('JSON-typed scripts', () => {
 		const payload = {
 			'@context': 'https://schema.org',

@@ -95,6 +95,7 @@ The spec is split across six domain cards. Section numbers are globally unique a
 | 54 | The `--fixtures` build switch (v1.61) | [[DOC-SPEC-BUILD]] |
 | 55 | The DevTools bridge and wire protocol (v1.63) | [[DOC-SPEC-BUILD]] |
 | 56 | Dev-only runtime performance profiling + render assertions | [[DOC-SPEC-BUILD]] |
+| 57 | Raw template blocks: `{#raw}…{/raw}` (v1.70) | [[DOC-SPEC-TEMPLATE]] |
 | — | Deferred features (post-v1) | this card |
 | — | Open questions (tracked, not blocking) | this card |
 

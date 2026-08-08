@@ -649,6 +649,149 @@ func TestParseCommentErrors(t *testing.T) {
 	}
 }
 
+// TestParseRaw covers D150's lex-off block through the AST. Raw text becomes
+// literal Text nodes, but HTML inside the span remains ordinary elements.
+func TestParseRaw(t *testing.T) {
+	t.Run("JSON body is one literal text node", func(t *testing.T) {
+		root := parseContent(t, `<script type="application/json">{#raw}{ "loop": true, "slidesPerView": 3 }{/raw}</script>`)
+		script := elementChildren(root.Children)[0].(*Element)
+		if script.Tag != "script" {
+			t.Fatalf("tag: got %q, want script", script.Tag)
+		}
+		kids := elementChildren(script.Children)
+		if len(kids) != 1 {
+			t.Fatalf("script children: got %d, want 1", len(kids))
+		}
+		text, ok := kids[0].(*Text)
+		if !ok || text.Value != `{ "loop": true, "slidesPerView": 3 }` {
+			t.Fatalf("raw JSON: got %#v", kids[0])
+		}
+	})
+
+	t.Run("script raw body keeps tag-like and closing-tag text opaque", func(t *testing.T) {
+		body := `{ "html": "<b>x</b>", "closer": "</script>" }`
+		root := parseContent(t, `<script type="application/json">{#raw}`+body+`{/raw}</script>`)
+		script := elementChildren(root.Children)[0].(*Element)
+		kids := elementChildren(script.Children)
+		if len(kids) != 1 {
+			t.Fatalf("script children: got %d, want one opaque text node", len(kids))
+		}
+		text, ok := kids[0].(*Text)
+		if !ok || text.Value != body {
+			t.Fatalf("script raw body: got %#v, want %q", kids[0], body)
+		}
+	})
+
+	t.Run("HTML body parses as elements", func(t *testing.T) {
+		root := parseContent(t, `{#raw}<b>hi</b><i>{ literal }</i>{/raw}`)
+		kids := elementChildren(root.Children)
+		if len(kids) != 2 {
+			t.Fatalf("children: got %d, want 2", len(kids))
+		}
+		bold, ok := kids[0].(*Element)
+		if !ok || bold.Tag != "b" {
+			t.Fatalf("first child: got %#v, want <b>", kids[0])
+		}
+		italic, ok := kids[1].(*Element)
+		if !ok || italic.Tag != "i" {
+			t.Fatalf("second child: got %#v, want <i>", kids[1])
+		}
+		text := elementChildren(italic.Children)[0].(*Text)
+		if text.Value != "{ literal }" {
+			t.Fatalf("italic text: got %q", text.Value)
+		}
+	})
+
+	t.Run("block-looking text and formatter pipes stay literal", func(t *testing.T) {
+		root := parseContent(t, `<pre>{#raw}{#if ok}{#comment}x{/comment}{:else}{ value | upper }{/if}{/raw}</pre>`)
+		pre := elementChildren(root.Children)[0].(*Element)
+		text := elementChildren(pre.Children)[0].(*Text)
+		want := `{#if ok}{#comment}x{/comment}{:else}{ value | upper }{/if}`
+		if text.Value != want {
+			t.Fatalf("literal grammar: got %q, want %q", text.Value, want)
+		}
+	})
+
+	t.Run("closer whitespace variants", func(t *testing.T) {
+		for _, closer := range []string{"{/raw}", "{/ raw }", "{/raw }"} {
+			root := parseContent(t, "{#raw}x"+closer)
+			text := elementChildren(root.Children)[0].(*Text)
+			if text.Value != "x" {
+				t.Fatalf("closer %q: got %q", closer, text.Value)
+			}
+		}
+	})
+
+	t.Run("brace-valued attributes are static and @event is literal", func(t *testing.T) {
+		root := parseContent(t, `{#raw}<button @click={ handler } data-json={ {"x": 1} }>x</button>{/raw}`)
+		button := elementChildren(root.Children)[0].(*Element)
+		if len(button.Attrs) != 2 {
+			t.Fatalf("attrs: got %d, want 2", len(button.Attrs))
+		}
+		click, ok := button.Attrs[0].(*StaticAttr)
+		if !ok || click.Name != "@click" || click.Value != "{ handler }" || !click.LiteralName {
+			t.Fatalf("literal @click attr: got %#v", button.Attrs[0])
+		}
+		data, ok := button.Attrs[1].(*StaticAttr)
+		if !ok || data.Value != `{ {"x": 1} }` {
+			t.Fatalf("literal data attr: got %#v", button.Attrs[1])
+		}
+	})
+
+	t.Run("raw blocks work in skeleton bodies", func(t *testing.T) {
+		src := `<puzzle-view><span>loaded</span></puzzle-view>
+<puzzle-skeleton><pre>{#raw}{ "loading": true }{/raw}</pre></puzzle-skeleton>
+<script></script>`
+		sec, err := SplitSections(src, "test.pzl")
+		if err != nil {
+			t.Fatalf("split: %v", err)
+		}
+		root, err := ParseSkeleton(sec, "test.pzl")
+		if err != nil {
+			t.Fatalf("parse skeleton: %v", err)
+		}
+		pre := elementChildren(root.Children)[0].(*Element)
+		text := elementChildren(pre.Children)[0].(*Text)
+		if text.Value != `{ "loading": true }` {
+			t.Fatalf("skeleton raw text: got %q", text.Value)
+		}
+	})
+}
+
+func TestParseRawErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		content    string
+		wantSubstr string
+	}{
+		{"quoted attribute", `<div class="a {#raw}x{/raw}"></div>`, "{#raw} blocks are not allowed in attribute values"},
+		{"unquoted attribute", `<div data-x={#raw}></div>`, "{#raw} blocks are not allowed in attribute values"},
+		{"unterminated", `<p>x</p>{#raw}{ "x": 1 }`, "unterminated {#raw} — expected {/raw}"},
+		{"stray closer", `<p>x</p>{/raw}`, "unexpected {/raw}"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "<puzzle-view>" + tc.content + "</puzzle-view>\n<script></script>"
+			_, err := Parse([]byte(src), "test.pzl")
+			if err == nil || !strings.Contains(err.Error(), tc.wantSubstr) {
+				t.Fatalf("error: got %v, want substring %q", err, tc.wantSubstr)
+			}
+		})
+	}
+
+	t.Run("attribute error is positioned at raw opener", func(t *testing.T) {
+		src := "<puzzle-view>\n  <div class=\"a {#raw}x{/raw}\"></div>\n</puzzle-view>"
+		_, err := Parse([]byte(src), "test.pzl")
+		perr, ok := err.(*ParseError)
+		if !ok {
+			t.Fatalf("error: got %T %v, want *ParseError", err, err)
+		}
+		if perr.Line != 2 || perr.Col != 17 {
+			t.Fatalf("error position: got %d:%d, want 2:17", perr.Line, perr.Col)
+		}
+	})
+}
+
 // TestParseElseIf covers {:else if} chaining (D40), which desugars at parse time
 // into nested If nodes in the parent's Else list — codegen reuses the
 // conditional path unchanged.

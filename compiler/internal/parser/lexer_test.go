@@ -490,6 +490,68 @@ func TestLexTemplateCommentErrors(t *testing.T) {
 	})
 }
 
+// TestLexRawBlock covers D150's lexer boundary: braces are literal throughout
+// the body while HTML tokens remain structural, and the first tolerant closer
+// resumes ordinary template lexing.
+func TestLexRawBlock(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []tv
+	}{
+		{
+			name:  "JSON braces are text",
+			input: `{#raw}{ "loop": true, "slides": [1, 2] }{/raw}`,
+			want:  []tv{{TokRaw, `{ "loop": true, "slides": [1, 2] }`}},
+		},
+		{
+			name:  "template grammar is literal",
+			input: `{#raw}{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}{/raw}`,
+			want:  []tv{{TokRaw, `{#if ok}{ value | upper }{:else}{#comment}x{/comment}{/if}`}},
+		},
+		{
+			name:  "outer lexer preserves HTML for parent-aware parsing",
+			input: `{#raw}<b data-json={ {"x": 1} }>hi { name }</b>{/ raw }`,
+			want:  []tv{{TokRaw, `<b data-json={ {"x": 1} }>hi { name }</b>`}},
+		},
+		{
+			name:  "opener suffix ignored and normal lexing resumes",
+			input: `{#raw json}{ x }{/raw }{ y }`,
+			want:  []tv{{TokRaw, "{ x }"}, {TokInterp, " y "}},
+		},
+		{
+			name:  "raw blocks do not nest and the first closer wins",
+			input: `{#raw}outer {#raw} inner{/raw} tail`,
+			want:  []tv{{TokRaw, "outer {#raw} inner"}, {TokText, " tail"}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assertTokens(t, tc.input, tc.want)
+		})
+	}
+}
+
+func TestLexRawBlockErrors(t *testing.T) {
+	t.Run("unterminated error names closer and points at opener", func(t *testing.T) {
+		lx := newLexer("x\n  {#raw}{ x }", Position{Line: 1, Col: 1, Offset: 0}, "test.pzl")
+		for {
+			_, err := lx.Next()
+			if err == nil {
+				continue
+			}
+			perr := err.(*ParseError)
+			if !strings.Contains(perr.Message, "unterminated {#raw} — expected {/raw}") {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if perr.Line != 2 || perr.Col != 3 {
+				t.Fatalf("error position: got %d:%d, want 2:3", perr.Line, perr.Col)
+			}
+			break
+		}
+	})
+}
+
 // TestLexPositionsAfterComment guards that a token following a MULTILINE comment
 // carries file-accurate line/col — the raw comment scans must count newlines.
 func TestLexPositionsAfterComment(t *testing.T) {

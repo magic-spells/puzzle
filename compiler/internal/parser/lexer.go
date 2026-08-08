@@ -21,6 +21,7 @@ type TokenType int
 const (
 	TokEOF        TokenType = iota
 	TokText                 // literal text (brace escapes resolved)
+	TokRaw                  // {#raw} body captured verbatim; parser applies parent context
 	TokInterp               // { expr }            Value = raw inner
 	TokBlockOpen            // {#if ...}/{#for ...} Value = header after '#'
 	TokElse                 // {:else}
@@ -41,7 +42,7 @@ const (
 
 // tokenNames feeds Token.String / TokenType.String for readable test output.
 var tokenNames = map[TokenType]string{
-	TokEOF: "EOF", TokText: "Text", TokInterp: "Interp", TokBlockOpen: "BlockOpen",
+	TokEOF: "EOF", TokText: "Text", TokRaw: "Raw", TokInterp: "Interp", TokBlockOpen: "BlockOpen",
 	TokElse: "Else", TokElseIf: "ElseIf", TokWhen: "When", TokBlockClose: "BlockClose", TokTagOpen: "TagOpen",
 	TokTagClose: "TagClose", TokComment: "Comment", TokAttrName: "AttrName",
 	TokEquals: "Equals", TokAttrQuoted: "AttrQuoted", TokAttrBrace: "AttrBrace",
@@ -61,6 +62,7 @@ type Token struct {
 	Type   TokenType
 	Value  string
 	Quote  byte // delimiter for TokAttrQuoted, else 0
+	Raw    bool // attribute token captured while {#raw} has brace grammar disabled
 	Line   int
 	Col    int
 	Offset int
@@ -82,6 +84,7 @@ type lexer struct {
 	baseOffset  int
 	mode        lexMode
 	expectValue bool // true immediately after '=', so a bareword lexes as a value
+	rawBraces   bool // nested lexer for a captured raw body: HTML on, brace grammar off
 }
 
 // newLexer creates a lexer over content whose first byte sits at base in the
@@ -95,6 +98,15 @@ func newLexer(input string, base Position, file string) *lexer {
 		baseOffset: base.Offset,
 		mode:       modeText,
 	}
+}
+
+// newRawLexer tokenizes a captured {#raw} body as ordinary HTML while keeping
+// every brace literal. Parent-aware callers may instead keep the whole body as
+// text for HTML RAWTEXT elements (script/style).
+func newRawLexer(input string, base Position, file string) *lexer {
+	l := newLexer(input, base, file)
+	l.rawBraces = true
+	return l
 }
 
 // newAttrLexer creates a lexer that starts in tag mode, used to tokenize a
@@ -151,6 +163,12 @@ func (l *lexer) nextText() (Token, error) {
 	if l.pos >= len(l.input) {
 		return Token{Type: TokEOF, Line: l.line, Col: l.col, Offset: l.baseOffset + l.pos}, nil
 	}
+	if l.rawBraces {
+		if l.cur() == '<' {
+			return l.lexAngle()
+		}
+		return l.lexRawText()
+	}
 	switch l.cur() {
 	case '<':
 		return l.lexAngle()
@@ -159,6 +177,18 @@ func (l *lexer) nextText() (Token, error) {
 	default:
 		return l.lexText()
 	}
+}
+
+// lexRawText scans a captured raw-body fragment until HTML markup. It
+// deliberately performs no brace or backslash handling: those bytes are the
+// author-written literal value (D150).
+func (l *lexer) lexRawText() (Token, error) {
+	line, col, off := l.line, l.col, l.baseOffset+l.pos
+	start := l.pos
+	for l.pos < len(l.input) && l.cur() != '<' {
+		l.step()
+	}
+	return Token{Type: TokText, Value: l.input[start:l.pos], Line: line, Col: col, Offset: off}, nil
 }
 
 // lexText scans literal text until the next '<' or unescaped '{'. \{ and \}
@@ -263,6 +293,18 @@ func (l *lexer) lexBrace() (Token, error) {
 		l.jumpTo(end)
 		return l.nextText()
 	}
+	// {#raw} … {/raw}: locate the body and closer without lexing either, then
+	// hand the captured span to the parent-aware parser as one token (D150).
+	if isBlockRawOpen(l.input, l.pos) {
+		bodyStart, bodyEnd, end, err := scanBlockRaw(l.input, l.pos)
+		if err != nil {
+			return Token{}, l.errf(line, col, "unterminated {#raw} — expected {/raw}")
+		}
+		bodyPos := (Position{Line: line, Col: col, Offset: off}).advance(l.input[l.pos:bodyStart])
+		body := l.input[bodyStart:bodyEnd]
+		l.jumpTo(end)
+		return Token{Type: TokRaw, Value: body, Line: bodyPos.Line, Col: bodyPos.Col, Offset: bodyPos.Offset}, nil
+	}
 
 	inner, end, err := scanBraceGroup(l.input, l.pos)
 	if err != nil {
@@ -314,6 +356,7 @@ func (l *lexer) nextTag() (Token, error) {
 	}
 	line, col, off := l.line, l.col, l.baseOffset+l.pos
 	c := l.cur()
+	raw := l.rawBraces
 
 	switch {
 	case c == '>':
@@ -334,6 +377,12 @@ func (l *lexer) nextTag() (Token, error) {
 	case c == '"' || c == '\'':
 		return l.lexQuotedValue()
 	case c == '{':
+		if raw {
+			if !l.expectValue {
+				return Token{}, l.errf(line, col, "unexpected literal brace in tag")
+			}
+			return l.lexRawBraceValue()
+		}
 		inner, end, err := scanBraceGroup(l.input, l.pos)
 		if err != nil {
 			return Token{}, l.errf(line, col, "unclosed '{' in attribute value")
@@ -354,7 +403,7 @@ func (l *lexer) nextTag() (Token, error) {
 			val := l.input[l.pos:j]
 			l.jumpTo(j)
 			l.expectValue = false
-			return Token{Type: TokAttrBare, Value: val, Line: line, Col: col, Offset: off}, nil
+			return Token{Type: TokAttrBare, Value: val, Raw: raw, Line: line, Col: col, Offset: off}, nil
 		}
 		if c == '@' || isNameStart(c) {
 			j := l.pos
@@ -366,7 +415,7 @@ func (l *lexer) nextTag() (Token, error) {
 			}
 			name := l.input[l.pos:j]
 			l.jumpTo(j)
-			return Token{Type: TokAttrName, Value: name, Line: line, Col: col, Offset: off}, nil
+			return Token{Type: TokAttrName, Value: name, Raw: raw, Line: line, Col: col, Offset: off}, nil
 		}
 		return Token{}, l.errf(line, col, "unexpected character %q in tag", string(rune(c)))
 	}
@@ -380,9 +429,11 @@ func (l *lexer) lexQuotedValue() (Token, error) {
 	qLine, qCol := l.line, l.col
 	i := l.pos + 1
 	contentStart := i
-	for i < len(l.input) {
+	inRaw := l.rawBraces
+	limit := len(l.input)
+	for i < limit {
 		ch := l.input[i]
-		if ch == '{' {
+		if ch == '{' && !inRaw {
 			_, end, err := scanBraceGroup(l.input, i)
 			if err != nil {
 				return Token{}, l.errf(qLine, qCol, "unclosed '{' in attribute value")
@@ -395,16 +446,41 @@ func (l *lexer) lexQuotedValue() (Token, error) {
 		}
 		i++
 	}
-	if i >= len(l.input) {
+	if i >= limit {
 		return Token{}, l.errf(qLine, qCol, "unclosed attribute value")
 	}
-	raw := l.input[contentStart:i]
+	rawValue := l.input[contentStart:i]
 	l.step() // over opening quote -> now at contentStart
 	cLine, cCol, cOff := l.line, l.col, l.baseOffset+l.pos
 	l.jumpTo(i) // to closing quote
 	l.step()    // past closing quote
 	l.expectValue = false
-	return Token{Type: TokAttrQuoted, Value: raw, Quote: q, Line: cLine, Col: cCol, Offset: cOff}, nil
+	return Token{Type: TokAttrQuoted, Value: rawValue, Quote: q, Raw: inRaw, Line: cLine, Col: cCol, Offset: cOff}, nil
+}
+
+// lexRawBraceValue captures a brace-delimited attribute value inside {#raw} as
+// literal bytes, including its braces. The depth counter only finds the value's
+// boundary; none of the content is interpreted as template or JavaScript.
+func (l *lexer) lexRawBraceValue() (Token, error) {
+	line, col, off := l.line, l.col, l.baseOffset+l.pos
+	start := l.pos
+	depth := 0
+	for l.pos < len(l.input) {
+		switch l.cur() {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			l.step()
+			if depth == 0 {
+				l.expectValue = false
+				return Token{Type: TokAttrBare, Value: l.input[start:l.pos], Raw: true, Line: line, Col: col, Offset: off}, nil
+			}
+			continue
+		}
+		l.step()
+	}
+	return Token{}, l.errf(line, col, "unclosed literal brace attribute value inside {#raw}")
 }
 
 func isSpaceByte(b byte) bool {
