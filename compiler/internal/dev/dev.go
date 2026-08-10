@@ -488,12 +488,16 @@ func Serve(root string, opts Options) error {
 	}
 
 	// The warm child returns from StartWatch before it has compiled anything, so
-	// its output file is still the empty temp file we created. Building against it
-	// would ship an unstyled site as the FIRST thing the developer sees and then
-	// throw that build away the moment the poll noticed the real write. Wait for
-	// the first one instead (bounded — a child that never writes must not hold the
-	// server hostage).
-	if tw != nil {
+	// its output file is still the empty temp file we created. In static mode the
+	// initial build bakes that stylesheet into a full prerender, so building
+	// against the empty file would ship an unstyled site as the FIRST thing the
+	// developer sees and then throw the whole build away the moment the poll
+	// noticed the real write — wait for the first output instead (bounded — a
+	// child that never writes must not hold the server hostage). SPA mode does
+	// NOT wait: styles.css is served straight off disk and the poll recomposes it
+	// in place the moment the first output lands — one cheap atomic write, long
+	// before any browser tab loads — so the wait would only inflate startup.
+	if tw != nil && staticMode {
 		waitForTailwindOutput(ctx, twOutput, tw.Done(), tailwindFirstOutputWait)
 	}
 
@@ -501,9 +505,11 @@ func Serve(root string, opts Options) error {
 	// start: they read it with no synchronization of their own, and starting them
 	// here — rather than in the block that created the child, where the hook was
 	// still nil — is what orders the assignment above before those reads.
-	// pollFile seeds from the file as it stands, which after the wait above
-	// already holds the first output, so the write the initial build is about to
-	// consume does not also schedule a rebuild of its own.
+	// pollFile seeds from the file as it stands: in static mode the wait above
+	// means it already holds the first output, so the write the initial build is
+	// about to consume does not also schedule a rebuild of its own; in SPA mode
+	// the seed may be the empty file, and the first real write triggers the
+	// in-place recompose that styles the served CSS.
 	if tw != nil {
 		// (a) Update styles whenever the child rewrites its output file.
 		go pollFile(ctx, twOutput, tailwindPollInterval, stylesChanged)
@@ -1209,7 +1215,7 @@ const reloadCoalesceDelay = 100 * time.Millisecond
 // reliable trigger — fsnotify on one file is fragile across atomic replaces.
 const tailwindPollInterval = 150 * time.Millisecond
 
-// tailwindFirstOutputWait bounds how long the initial build waits for the warm
+// tailwindFirstOutputWait bounds how long the initial static build waits for the warm
 // child's first compile. It is generous because it is only ever paid in full by
 // a Tailwind that produces nothing at all — a working one lands in a few hundred
 // milliseconds and the wait ends the moment it does.
