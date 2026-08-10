@@ -156,6 +156,12 @@ func findIslandAttr(attrs []Attr) (island bool, dynamic bool, valued bool, pos P
 		switch t := a.(type) {
 		case *StaticAttr:
 			if t.Name == "island" {
+				// Inside {#raw} `island` is authored markup, not the directive
+				// (D150) — sample markup must not open an island subtree, and a
+				// documented island="false" must not be a compile error.
+				if t.LiteralName {
+					continue
+				}
 				if !t.Valueless {
 					return false, false, true, t.Pos
 				}

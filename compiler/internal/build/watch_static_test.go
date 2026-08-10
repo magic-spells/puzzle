@@ -364,6 +364,145 @@ export default [
 	})
 }
 
+// TestStaticWatchRecomposeStylesRendersNoRoutes: the warm Tailwind child
+// rewrites its output after every save, and a styles-only change must cost
+// exactly one stylesheet write. Not a single page may be re-rendered.
+func TestStaticWatchRecomposeStylesRendersNoRoutes(t *testing.T) {
+	requireStaticRuntime(t)
+	root := writeSSGFixture(t, staticEquivalenceFixture())
+	dist := filepath.Join(root, "dist")
+
+	layer := ".tw{color:red}"
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
+	if err != nil {
+		t.Fatalf("creating the static dev builder: %v", err)
+	}
+	defer builder.Dispose()
+	builder.SetTailwind(func() (string, error) { return layer, nil })
+
+	if err := builder.Rebuild(nil); err != nil {
+		t.Fatalf("initial rebuild failed: %v", err)
+	}
+	before := snapshotTree(t, dist)
+	page := filepath.Join(dist, "index.html")
+	stat, err := os.Stat(page)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	layer = ".tw{color:blue}"
+	changed, err := builder.RecomposeStyles()
+	if err != nil {
+		t.Fatalf("recomposing styles: %v", err)
+	}
+	if !changed {
+		t.Error("a new Tailwind layer must reach dist/styles.css")
+	}
+	got, err := os.ReadFile(filepath.Join(dist, "styles.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "color:blue") {
+		t.Errorf("dist/styles.css is missing the new Tailwind layer:\n%s", got)
+	}
+	if !strings.Contains(string(got), "rebeccapurple") {
+		t.Errorf("dist/styles.css lost the collected <style> layer:\n%s", got)
+	}
+
+	after := snapshotTree(t, dist)
+	for name, want := range before {
+		if name == "styles.css" {
+			continue
+		}
+		if after[name] != want {
+			t.Errorf("a styles-only change rewrote %s", name)
+		}
+	}
+	if now, err := os.Stat(page); err != nil {
+		t.Fatal(err)
+	} else if !now.ModTime().Equal(stat.ModTime()) {
+		t.Error("a styles-only change re-rendered dist/index.html")
+	}
+
+	// The same layer again is not a change: the browser is already holding it.
+	if changed, err := builder.RecomposeStyles(); err != nil || changed {
+		t.Errorf("recomposing an identical stylesheet: changed=%v err=%v", changed, err)
+	}
+}
+
+// TestStaticWatchFailedSwapKeepsChangesPending: until the swap lands, dist/ is
+// still the pre-edit site. A builder that believed otherwise would render only
+// the NEXT save's routes and hard-link this save's stale pages back in as
+// "last-good", serving them for the rest of the session.
+func TestStaticWatchFailedSwapKeepsChangesPending(t *testing.T) {
+	requireStaticRuntime(t)
+	root := writeSSGFixture(t, staticEquivalenceFixture())
+	dist := filepath.Join(root, "dist")
+
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
+	if err != nil {
+		t.Fatalf("creating the static dev builder: %v", err)
+	}
+	defer builder.Dispose()
+	if err := builder.Rebuild(nil); err != nil {
+		t.Fatalf("initial rebuild failed: %v", err)
+	}
+
+	about := filepath.Join(root, "app", "views", "About.pzl")
+	if err := os.WriteFile(about, []byte(`<puzzle-view>
+  <h1>About, swapped</h1>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class About extends PuzzleView {}
+</script>
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The staging swap is the only phase that writes into the app root itself
+	// (renaming dist/ aside); everything before it works inside .puzzle/tmp. So a
+	// read-only root fails the rebuild exactly at the swap.
+	if err := os.Chmod(root, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	swapErr := builder.Rebuild([]string{about})
+	if err := os.Chmod(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if swapErr == nil {
+		t.Fatal("a rebuild that cannot swap its staging tree in must fail")
+	}
+	if page, err := os.ReadFile(filepath.Join(dist, "about", "index.html")); err != nil {
+		t.Fatal(err)
+	} else if strings.Contains(string(page), "About, swapped") {
+		t.Fatal("the swap was supposed to fail; dist/ already has the new page")
+	}
+
+	// A later save of a DIFFERENT view. The About edit never reached dist/, so it
+	// has to still be in the batch.
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	if err := os.WriteFile(home, []byte(`<puzzle-view>
+  <h1>Home, later</h1>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.Rebuild([]string{home}); err != nil {
+		t.Fatalf("recovery rebuild failed: %v", err)
+	}
+	warm := snapshotTree(t, dist)
+	if err := Build(root, Options{Development: true, Output: "static"}); err != nil {
+		t.Fatalf("one-shot build failed: %v", err)
+	}
+	if d := diffTrees(warm, snapshotTree(t, dist)); d != "" {
+		t.Errorf("the site served after a failed swap is not the one-shot output:\n%s", d)
+	}
+}
+
 // TestStaticWatchBuilderFailureKeepsLastGoodSite pins the D148 guarantee for the
 // warm path: a compile error mid-session must not disturb the served site, and
 // the next good save must recover it.

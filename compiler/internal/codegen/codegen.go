@@ -1051,7 +1051,9 @@ func hasKeyAttr(attrs []parser.Attr) bool {
 	for _, a := range attrs {
 		switch at := a.(type) {
 		case *parser.StaticAttr:
-			if at.Name == "key" {
+			// A `key` captured inside {#raw} is authored markup, not the directive
+			// (D150), so it must not suppress the synthetic key.
+			if at.Name == "key" && !at.LiteralName {
 				return true
 			}
 		case *parser.DynamicAttr:
@@ -1067,6 +1069,46 @@ func hasKeyAttr(attrs []parser.Attr) bool {
 	return false
 }
 
+// reservedVnodeAttrs are the four attribute names the runtime intercepts by
+// name, unconditionally, in every path that could write them out: setAttr,
+// removeAttr, and the SSG serializer all drop them before markup is produced.
+var reservedVnodeAttrs = map[string]bool{"key": true, "island": true, "ref": true, "flip": true}
+
+// dropReservedLiteralAttrs removes the attributes that were captured inside
+// {#raw} — where the name is authored markup rather than a directive (D150) —
+// but whose name the runtime reserves anyway.
+//
+// Emitting them can only do harm and never good. It cannot render the authored
+// attribute: the runtime's interception is keyed on the bare name, and the
+// vnode-key escape that solves this for @-attributes (`@@click`) is decoded by
+// stripping ONE '@', so it can express no name that does not start with '@'. But
+// it can still trigger the directive: `key` becomes ViewNode.key (and, on a
+// {#for} row root, a second `key` property overriding the synthetic one),
+// `island` freezes the subtree, `flip` enrolls the element in FLIP measurement.
+// Dropping them leaves the rendered output exactly as it is today while making
+// the raw body inert, which is what the D150 contract asks for. Rendering them
+// as authored additionally needs a runtime-side literal escape that can encode
+// an arbitrary name.
+func dropReservedLiteralAttrs(attrs []parser.Attr) []parser.Attr {
+	keep := attrs
+	dropped := false
+	for i, a := range attrs {
+		at, ok := a.(*parser.StaticAttr)
+		if !ok || !at.LiteralName || !reservedVnodeAttrs[at.Name] {
+			if dropped {
+				keep = append(keep, a)
+			}
+			continue
+		}
+		if !dropped {
+			// First drop: copy the prefix so the caller's slice is never rewritten.
+			keep = append([]parser.Attr(nil), attrs[:i]...)
+			dropped = true
+		}
+	}
+	return keep
+}
+
 // printWidth is the empirically-derived line-wrap threshold for the attribute
 // object. The Phase 1 fixtures are hand-formatted (not by the repo's Prettier
 // config, which is tabs/printWidth 70): every single-attribute element with an
@@ -1079,6 +1121,7 @@ const printWidth = 120
 // value; for a single simple attribute, only when the inline first line would
 // exceed printWidth.
 func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string, startCol int, emptyChildren bool, scope map[string]bool, isComponent bool) (bool, error) {
+	attrs = dropReservedLiteralAttrs(attrs)
 	bind := detectAutoBind(tag, attrs, scope)
 	attrCount := len(attrs)
 	if bind != nil {
@@ -1105,6 +1148,7 @@ func (c *compiler) attrsMultiline(tag string, attrs []parser.Attr, tagStr string
 // emitAttrs emits the attribute object either inline `{ k: v }` or multi-line
 // (one attribute per line, trailing comma), per the precomputed decision.
 func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline bool, scope map[string]bool, isComponent bool) (string, error) {
+	attrs = dropReservedLiteralAttrs(attrs)
 	bind := detectAutoBind(tag, attrs, scope)
 	attrCount := len(attrs)
 	if bind != nil {
@@ -1156,6 +1200,9 @@ func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline
 func (c *compiler) attrKV(a parser.Attr, scope map[string]bool, isComponent bool, emit bool) (string, error) {
 	switch at := a.(type) {
 	case *parser.StaticAttr:
+		// LiteralName means the name came out of a {#raw} body, where it is
+		// authored markup rather than a directive (D150) — so a raw `ref` is a
+		// plain attribute value, never a this.refs wiring.
 		if at.Name == "ref" && !at.LiteralName {
 			// Element ref (v1.39, D72): a framework-owned static attr — never a DOM
 			// attribute. It is emitted as a per-instance cached setter call so the
@@ -1165,9 +1212,11 @@ func (c *compiler) attrKV(a parser.Attr, scope map[string]bool, isComponent bool
 			return fmt.Sprintf("ref: this.__ref(%q)", at.Value), nil
 		}
 		name := at.Name
-		if at.LiteralName && !isComponent {
+		if at.LiteralName && !isComponent && strings.HasPrefix(name, "@") {
 			// Runtime-private escape for an authored @-attribute inside {#raw}.
 			// `@@click` cannot collide with source grammar and decodes to `@click`.
+			// The escape is only defined for @-prefixed names — every other literal
+			// name is a legal DOM attribute and is emitted as authored.
 			name = "@" + name
 		}
 		if at.Valueless {

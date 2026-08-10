@@ -16,6 +16,12 @@ type parser struct {
 	lex  *lexer
 	file string
 	cur  Token
+	// raw is true for the nested parser that walks a captured {#raw} body. Inside
+	// that body HTML is still structural, but nothing in it is Puzzle grammar
+	// (D150): every tag is literal markup and every attribute is an authored
+	// literal, so the composition markers, component resolution, and the
+	// attribute-namespace reservation are all switched off.
+	raw bool
 }
 
 func newParser(lex *lexer, file string) (*parser, error) {
@@ -223,6 +229,12 @@ func (p *parser) parseChildren(ctx openCtx) ([]Node, *ParseError) {
 // parser already owns: script/style are HTML RAWTEXT elements, so their whole
 // captured body is one literal Text node; everywhere else HTML stays structural
 // and a nested brace-disabled lexer/parser builds ordinary nodes.
+//
+// The nested parser also runs with `raw` set, which turns off every part of the
+// grammar that is Puzzle rather than HTML: a body documenting <Children/>,
+// <Slot name="…"/>, <Portal>, or <Card/> must SHOW that markup, not instantiate
+// it, and a lowercase <slot>/<children> in sample markup is an ordinary element
+// rather than the D134 steering error.
 func (p *parser) parseRaw(t Token, ctx openCtx) ([]Node, *ParseError) {
 	pos := tokPos(t)
 	if ctx.kind == ctxElement && (ctx.name == "script" || ctx.name == "style") {
@@ -236,6 +248,7 @@ func (p *parser) parseRaw(t Token, ctx openCtx) ([]Node, *ParseError) {
 	if err != nil {
 		return nil, toPE(err)
 	}
+	nested.raw = true
 	nodes, perr := nested.parseChildren(openCtx{kind: ctxRoot, pos: pos})
 	if perr != nil {
 		return nil, perr
@@ -398,39 +411,45 @@ func (p *parser) parseElement() (Node, *ParseError) {
 	// resolution. Lowercase spellings remain positioned steering errors (D134).
 	// Paired capitalized forms carry ordinary template children as fallback
 	// content (D141); self-closing forms have no fallback.
+	//
+	// None of that applies inside {#raw}: the block exists so a template can show
+	// markup, so every tag there — <slot>, <Children/>, <Portal>, <Card/> — is a
+	// literal element built at the bottom of this function.
 	var slotName string
-	if name == "children" {
-		return nil, errAt(p.file, pos, "the default marker is spelled <Children/> since v1.64 (D134)")
-	}
-	if name == "slot" {
-		for _, a := range attrs {
-			if attrNameOf(a) == "name" {
-				return nil, errAt(p.file, pos, `named slots are spelled <Slot name="…"/> since v1.64 (D134)`)
+	if !p.raw {
+		if name == "children" {
+			return nil, errAt(p.file, pos, "the default marker is spelled <Children/> since v1.64 (D134)")
+		}
+		if name == "slot" {
+			for _, a := range attrs {
+				if attrNameOf(a) == "name" {
+					return nil, errAt(p.file, pos, `named slots are spelled <Slot name="…"/> since v1.64 (D134)`)
+				}
 			}
+			return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)")
 		}
-		return nil, errAt(p.file, pos, "bare <slot> is not a marker — use <Children/> for call-site content or <Slot/> for the router outlet (D134)")
-	}
-	if name == "portal" {
-		return nil, errAt(p.file, pos, "the portal marker is spelled <Portal>…</Portal> (D134/D144)")
-	}
-	if name == "Portal" {
-		if perr := portalMarkerAttrs(attrs, pos, p.file); perr != nil {
-			return nil, perr
+		if name == "portal" {
+			return nil, errAt(p.file, pos, "the portal marker is spelled <Portal>…</Portal> (D134/D144)")
 		}
-		if selfClose {
-			return nil, errAt(p.file, pos, "<Portal/> is paired-only — a portal carries the children it teleports: write <Portal>…</Portal>")
-		}
-	}
-	if name == "Children" || name == "Slot" {
-		if name == "Children" {
-			if perr := childrenMarkerAttrs(attrs, p.file); perr != nil {
+		if name == "Portal" {
+			if perr := portalMarkerAttrs(attrs, pos, p.file); perr != nil {
 				return nil, perr
 			}
-		} else {
-			var markerErr *ParseError
-			slotName, markerErr = slotMarkerFromAttrs(attrs, pos, p.file)
-			if markerErr != nil {
-				return nil, markerErr
+			if selfClose {
+				return nil, errAt(p.file, pos, "<Portal/> is paired-only — a portal carries the children it teleports: write <Portal>…</Portal>")
+			}
+		}
+		if name == "Children" || name == "Slot" {
+			if name == "Children" {
+				if perr := childrenMarkerAttrs(attrs, p.file); perr != nil {
+					return nil, perr
+				}
+			} else {
+				var markerErr *ParseError
+				slotName, markerErr = slotMarkerFromAttrs(attrs, pos, p.file)
+				if markerErr != nil {
+					return nil, markerErr
+				}
 			}
 		}
 	}
@@ -447,17 +466,19 @@ func (p *parser) parseElement() (Node, *ParseError) {
 		}
 	}
 
-	if name == "Children" {
-		return &Slot{Children: children, Pos: pos}, nil
-	}
-	if name == "Slot" {
-		return &Slot{Name: slotName, Children: children, Pos: pos}, nil
-	}
-	if name == "Portal" {
-		return &Portal{Children: children, Pos: pos}, nil
-	}
-	if isCapitalized(name) {
-		return &Component{Name: name, Props: attrs, Children: children, Pos: pos}, nil
+	if !p.raw {
+		if name == "Children" {
+			return &Slot{Children: children, Pos: pos}, nil
+		}
+		if name == "Slot" {
+			return &Slot{Name: slotName, Children: children, Pos: pos}, nil
+		}
+		if name == "Portal" {
+			return &Portal{Children: children, Pos: pos}, nil
+		}
+		if isCapitalized(name) {
+			return &Component{Name: name, Props: attrs, Children: children, Pos: pos}, nil
+		}
 	}
 	return &Element{Tag: name, Attrs: attrs, Children: children, Pos: pos}, nil
 }
@@ -480,10 +501,19 @@ func (p *parser) parseAttrs() (attrs []Attr, selfClose bool, perr *ParseError) {
 			return attrs, true, nil
 		case TokAttrName:
 			name := t.Value
-			literalName := t.Raw && strings.HasPrefix(name, "@")
+			// D150: EVERY attribute captured inside {#raw} is an authored literal,
+			// not just the @-prefixed ones. `ref`, `island`, `key`, and `flip` are
+			// framework directives in a live template and plain sample markup here,
+			// so the flag has to cover them too — otherwise raw documentation of a
+			// ref fails the build (refs.go) and a raw `island` freezes a subtree.
+			// The namespace reservation is Puzzle grammar as well, so a pasted
+			// `inkscape:label` in sample markup is literal rather than an error.
+			literalName := t.Raw
 			npos := tokPos(t)
-			if e := checkAttrNamespace(name, npos, p.file); e != nil {
-				return nil, false, e
+			if !literalName {
+				if e := checkAttrNamespace(name, npos, p.file); e != nil {
+					return nil, false, e
+				}
 			}
 			if err := p.advance(); err != nil {
 				return nil, false, toPE(err)
@@ -567,7 +597,10 @@ func isDirectiveWord(s string) bool {
 func buildAttr(name string, npos Position, v Token, file string) (Attr, *ParseError) {
 	vpos := tokPos(v)
 	if v.Raw {
-		return &StaticAttr{Name: name, Value: v.Value, LiteralName: strings.HasPrefix(name, "@"), Pos: npos}, nil
+		// Inside {#raw} the value bytes are literal AND so is the name (D150) — see
+		// parseAttrs. Every raw-body value token carries Raw, so this one branch
+		// covers the quoted, bare, and brace-delimited spellings alike.
+		return &StaticAttr{Name: name, Value: v.Value, LiteralName: true, Pos: npos}, nil
 	}
 	// Template comments (D70) are not template structure — an unquoted
 	// attr={##…} / attr={#comment…} would otherwise be treated as a JS expression.

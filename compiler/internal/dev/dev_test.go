@@ -1186,6 +1186,9 @@ func TestPartitionChangesDropsJunk(t *testing.T) {
 		filepath.Join("proj", "public", ".well-known", "apple-app-site-association"),
 		filepath.Join("proj", "public", "LICENSE"),
 		filepath.Join("proj", "app", "swatches.js"),
+		// Real assets whose extension only LOOKS like a vim swap file.
+		filepath.Join("proj", "public", "player.swf"),
+		filepath.Join("proj", "public", "legacy.swb"),
 	}
 	rp, _ := partitionChanges(real, "")
 	if len(rp) != len(real) {

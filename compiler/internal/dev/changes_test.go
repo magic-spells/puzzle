@@ -11,7 +11,8 @@ import (
 
 // TestChangeFilterDropsMetadataOnlyEcho is the unit statement of the
 // double-rebuild fix: the same bytes seen twice is one change, different bytes
-// is two.
+// is two. settled(true) after each accepted burst mirrors the dev loop, which
+// tells the filter how the rebuild it scheduled ended.
 func TestChangeFilterDropsMetadataOnlyEcho(t *testing.T) {
 	dir := t.TempDir()
 	f := filepath.Join(dir, "Home.pzl")
@@ -19,40 +20,82 @@ func TestChangeFilterDropsMetadataOnlyEcho(t *testing.T) {
 		t.Fatal(err)
 	}
 	filter := newChangeFilter()
-
-	if got := filter.pending([]string{f}); len(got) != 1 {
-		t.Fatalf("first sighting should pass, got %v", got)
+	accept := func(want int, why string) {
+		t.Helper()
+		got := filter.pending([]string{f})
+		if len(got) != want {
+			t.Fatalf("%s: want %d paths, got %v", why, want, got)
+		}
+		if len(got) > 0 {
+			filter.settled(true)
+		}
 	}
+
+	accept(1, "first sighting should pass")
 	// A bare touch: mtime moves, content does not.
 	now := time.Now().Add(time.Second)
 	if err := os.Chtimes(f, now, now); err != nil {
 		t.Fatal(err)
 	}
-	if got := filter.pending([]string{f}); len(got) != 0 {
-		t.Fatalf("metadata-only echo should be dropped, got %v", got)
-	}
+	accept(0, "metadata-only echo should be dropped")
 	// A real edit passes, and so does a second real edit right behind it.
 	os.WriteFile(f, []byte("two"), 0o644)
-	if got := filter.pending([]string{f}); len(got) != 1 {
-		t.Fatalf("content change should pass, got %v", got)
-	}
+	accept(1, "content change should pass")
 	os.WriteFile(f, []byte("three"), 0o644)
-	if got := filter.pending([]string{f}); len(got) != 1 {
-		t.Fatalf("a rapid successive save must not be swallowed, got %v", got)
-	}
+	accept(1, "a rapid successive save must not be swallowed")
 	// A rewrite with identical bytes is a no-op.
 	os.WriteFile(f, []byte("three"), 0o644)
-	if got := filter.pending([]string{f}); len(got) != 0 {
-		t.Fatalf("identical rewrite should be dropped, got %v", got)
-	}
+	accept(0, "identical rewrite should be dropped")
 	// Deletion is a change, and re-creation after it is a first sighting again.
 	os.Remove(f)
-	if got := filter.pending([]string{f}); len(got) != 1 {
-		t.Fatalf("deletion should pass, got %v", got)
-	}
+	accept(1, "deletion should pass")
 	os.WriteFile(f, []byte("three"), 0o644)
+	accept(1, "re-creation should pass")
+}
+
+// TestChangeFilterRetriesAfterFailedRebuild: the fix for a broken build is
+// usually somewhere else, and the save that follows it is often byte-identical.
+// A failed rebuild must leave that save able to retry.
+func TestChangeFilterRetriesAfterFailedRebuild(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "Home.pzl")
+	if err := os.WriteFile(f, []byte("broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	filter := newChangeFilter()
 	if got := filter.pending([]string{f}); len(got) != 1 {
-		t.Fatalf("re-creation should pass, got %v", got)
+		t.Fatalf("first sighting should pass, got %v", got)
+	}
+	filter.settled(false) // the rebuild it scheduled failed
+
+	if got := filter.pending([]string{f}); len(got) != 1 {
+		t.Fatalf("a re-save after a failed rebuild must retry, got %v", got)
+	}
+}
+
+// TestChangeFilterTouchOutsideEchoWindow: `touch`ing a .pzl is how you pick up
+// an edited module the watcher does not cover. It changes no bytes, so it is
+// only ever dropped as an echo of the rebuild that just ran — once that window
+// has closed it must schedule a rebuild like anything else.
+func TestChangeFilterTouchOutsideEchoWindow(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "Home.pzl")
+	if err := os.WriteFile(f, []byte("stable"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	filter := newChangeFilter()
+	filter.window = 20 * time.Millisecond
+
+	if got := filter.pending([]string{f}); len(got) != 1 {
+		t.Fatalf("first sighting should pass, got %v", got)
+	}
+	filter.settled(true)
+	if got := filter.pending([]string{f}); len(got) != 0 {
+		t.Fatalf("the echo inside the window should be dropped, got %v", got)
+	}
+	time.Sleep(40 * time.Millisecond)
+	if got := filter.pending([]string{f}); len(got) != 1 {
+		t.Fatalf("a touch after the echo window must rebuild, got %v", got)
 	}
 }
 
@@ -86,6 +129,7 @@ func TestOneSaveOneRebuildAcrossSlowRebuild(t *testing.T) {
 		// Stand in for a slow static rebuild: while this runs no fsnotify event
 		// is drained, so the save's trailing event lands in a fresh window.
 		time.Sleep(900 * time.Millisecond)
+		filter.settled(true)
 	})
 
 	time.Sleep(300 * time.Millisecond)

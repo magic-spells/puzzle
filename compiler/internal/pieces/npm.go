@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path"
 	"sort"
 	"strconv"
@@ -61,6 +62,90 @@ func selectVersion(published []string, cliVersion string) (string, error) {
 		}
 	}
 	return best, nil
+}
+
+// selectFallbackVersion implements the compatibility fallback for a zero-config
+// run whose own minor has no pieces release yet — the normal state of a fresh
+// `@magic-spells/puzzle` install, since the compiler and the registry are
+// published separately and the compiler usually goes first. It returns the
+// newest published NON-prerelease whose major.minor is strictly LOWER than the
+// CLI's, or "" when nothing older exists (the caller then keeps the hard error).
+//
+// Older, never newer: a registry authored for a LATER compiler may use grammar
+// this binary does not have, which is the failure the lockstep rule exists to
+// prevent. An earlier registry only misses features, which is what a fallback
+// can honestly promise.
+func selectFallbackVersion(published []string, cliVersion string) string {
+	cliMajor, cliMinor, _, _, ok := parseVersion(cliVersion)
+	if !ok {
+		return ""
+	}
+	best := ""
+	bestMajor, bestMinor, bestPatch := -1, -1, -1
+	for _, v := range published {
+		major, minor, patch, pre, ok := parseVersion(v)
+		if !ok || pre {
+			continue
+		}
+		if major > cliMajor || (major == cliMajor && minor >= cliMinor) {
+			continue
+		}
+		if major > bestMajor ||
+			(major == bestMajor && minor > bestMinor) ||
+			(major == bestMajor && minor == bestMinor && patch > bestPatch) {
+			best, bestMajor, bestMinor, bestPatch = v, major, minor, patch
+		}
+	}
+	return best
+}
+
+// compareVersions orders two published version strings the way a release
+// timeline does: numerically by major, minor, then patch, with a prerelease
+// sorting BEFORE the release it leads to (0.6.0-rc.1 < 0.6.0). A string that is
+// not three dot-separated integers cannot be placed on that line at all, so it
+// sorts below everything that can, alphabetically among its own kind — it is the
+// first thing dropped when the error listing truncates.
+func compareVersions(a, b string) int {
+	aMajor, aMinor, aPatch, aPre, aOK := parseVersion(a)
+	bMajor, bMinor, bPatch, bPre, bOK := parseVersion(b)
+	switch {
+	case !aOK && !bOK:
+		return strings.Compare(a, b)
+	case !aOK:
+		return -1
+	case !bOK:
+		return 1
+	}
+	for _, pair := range [][2]int{{aMajor, bMajor}, {aMinor, bMinor}, {aPatch, bPatch}} {
+		if pair[0] != pair[1] {
+			if pair[0] < pair[1] {
+				return -1
+			}
+			return 1
+		}
+	}
+	if aPre != bPre {
+		if aPre {
+			return -1
+		}
+		return 1
+	}
+	// Same numbers and same kind: two prerelease tags on one version. Their
+	// relative order is not meaningful to resolution (a prerelease is never
+	// auto-selected), so compare the strings for a stable listing.
+	return strings.Compare(a, b)
+}
+
+// sortVersions orders a published-version slice oldest-first by compareVersions.
+// It must NOT be sort.Strings: lexicographically "0.10.0" sorts before "0.9.0",
+// so the moment a package crosses a double-digit minor or patch the newest
+// releases are exactly the ones newestPublished's tail drops from the error
+// listing — the message would name the boundary and then omit the versions that
+// clear it.
+func sortVersions(versions []string) {
+	sort.Slice(versions, func(i, j int) bool {
+		return compareVersions(versions[i], versions[j]) < 0
+	})
 }
 
 // npmScheme marks a registry source as an npm package spec:
@@ -191,9 +276,21 @@ type npmFetcher struct {
 	cliVersion string // the compiler's own version (version.Version); tests fix it
 	base       string // npm registry API root; tests point at an httptest.Server
 	configured string // the source string as configured, pre-resolution
+	notice     io.Writer
 
 	resolved string            // version actually fetched; set by load
 	files    map[string][]byte // registry-relative path → bytes
+}
+
+// noticeWriter is where the compatibility-fallback line goes. It is stderr and
+// not the command's normal writer because resolution happens lazily inside the
+// first Fetch, long before RenderSummary prints the report to stdout — keeping
+// the notice on stderr means it cannot land in the middle of that block.
+func (n *npmFetcher) noticeWriter() io.Writer {
+	if n.notice != nil {
+		return n.notice
+	}
+	return os.Stderr
 }
 
 var _ Fetcher = (*npmFetcher)(nil)
@@ -282,7 +379,7 @@ func (n *npmFetcher) resolve() (version, tarballURL string, err error) {
 	for v := range pack.Versions {
 		published = append(published, v)
 	}
-	sort.Strings(published)
+	sortVersions(published)
 
 	pick := n.pin
 	if pick == "" {
@@ -292,8 +389,20 @@ func (n *npmFetcher) resolve() (version, tarballURL string, err error) {
 		}
 		if pick == "" {
 			cliMajor, cliMinor, _, _, _ := parseVersion(n.cliVersion)
-			return "", "", fmt.Errorf("no %s release matches puzzle %s (need %d.%d.x; published: %s)",
-				n.pkg, n.cliVersion, cliMajor, cliMinor, newestPublished(published, maxListedVersions))
+			// No release on this compiler's own line. That is the ordinary state of
+			// a fresh install — the compiler ships before the matching registry
+			// minor exists — so fall back to the newest OLDER release rather than
+			// making every zero-config `puzzle add piece` fail until pieces catches
+			// up. The notice names both versions so the mismatch is never silent.
+			fallback := selectFallbackVersion(published, n.cliVersion)
+			if fallback == "" {
+				return "", "", fmt.Errorf("no %s release matches puzzle %s (need %d.%d.x; published: %s)",
+					n.pkg, n.cliVersion, cliMajor, cliMinor, newestPublished(published, maxListedVersions))
+			}
+			fmt.Fprintf(n.noticeWriter(),
+				"note: no %s release matches puzzle %s (%d.%d.x is not published yet) — using %s, the newest compatible release. Pin an exact one with --pieces-version.\n",
+				n.pkg, n.cliVersion, cliMajor, cliMinor, fallback)
+			pick = fallback
 		}
 	}
 	entry, ok := pack.Versions[pick]
@@ -313,8 +422,9 @@ func (n *npmFetcher) resolve() (version, tarballURL string, err error) {
 // they can actually ask for.
 const maxListedVersions = 15
 
-// newestPublished renders the last n entries of a SORTED version slice, comma
-// separated, prefixed with "… " when entries were dropped.
+// newestPublished renders the last n entries of a slice sorted by sortVersions
+// (NOT sort.Strings — see there), comma separated, prefixed with "… " when
+// entries were dropped.
 func newestPublished(published []string, n int) string {
 	if n <= 0 || len(published) <= n {
 		return strings.Join(published, ", ")

@@ -38,6 +38,7 @@ package build
 // renders) and is deliberately not attempted here.
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,6 +51,7 @@ import (
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 	"github.com/magic-spells/puzzle/compiler/internal/ui"
@@ -98,23 +100,32 @@ type StaticWatchBuilder struct {
 	defined plugin.Features
 
 	// graph is the reverse dependency graph captured after the last rebuild that
-	// produced both metafiles (route_deps.go). nil means "render everything".
+	// produced both metafiles AND landed in dist/ (route_deps.go). nil means
+	// "render everything".
 	graph *routeGraph
 
 	// routeCount is how many pages the last render enumerated — the denominator
 	// in the profile's partial-render row.
 	routeCount int
 
+	// nextGraph and nextRouteCount hold what the in-flight rebuild captured,
+	// pending the staging swap. They are promoted (and pending cleared) only once
+	// that swap has committed: a rebuild whose swap failed left dist/ on its
+	// pre-edit pages, so adopting its graph would let the NEXT save render only
+	// its own routes and hard-link those stale pages back in as "last-good".
+	nextGraph      *routeGraph
+	nextRouteCount int
+
 	// lastPlan is the plan the most recent Rebuild actually EXECUTED — a partial
 	// that fell back reads as full here. Diagnostics and the equivalence test
 	// read it; nothing in the build path does.
 	lastPlan renderPlan
 
-	// pending accumulates every path handed to Rebuild since the last SUCCESSFUL
-	// graph capture. A failed rebuild leaves the graph describing pre-edit
-	// imports, so the edit that added an import must keep being classified until
-	// a graph that knows about it exists — otherwise a later save to the imported
-	// file would be attributed to too few routes.
+	// pending accumulates every path handed to Rebuild since the last graph
+	// capture that actually landed. A failed rebuild leaves the graph describing
+	// pre-edit imports, so the edit that added an import must keep being
+	// classified until a graph that knows about it exists — otherwise a later
+	// save to the imported file would be attributed to too few routes.
 	pending map[string]bool
 }
 
@@ -188,6 +199,51 @@ func (b *StaticWatchBuilder) SetTailwind(fn func() (string, error)) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.tailwind = fn
+}
+
+// RecomposeStyles rewrites the served dist/styles.css from the current Tailwind
+// layer and the collected <style>, rendering nothing. It is what the dev loop
+// calls when the warm `tailwindcss --watch` child rewrites its output: a utility
+// class appearing or disappearing changes the stylesheet and nothing else, and
+// styles.css is the one output no page's HTML embeds, so it can be swapped in on
+// its own. Asking for a Rebuild instead re-renders the WHOLE site on every save,
+// because a styles-only change carries no paths for the classifier to attribute.
+//
+// It reports whether the bytes on disk actually changed, so the caller can skip
+// a reload that would hand the browser what it already has. Until the first
+// rebuild has produced a dist/ there is nothing to update and this is a no-op.
+func (b *StaticWatchBuilder) RecomposeStyles() (bool, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if !dirExists(b.outdir) {
+		return false, nil
+	}
+	tailwindCSS := ""
+	if b.tailwind != nil {
+		var err error
+		if tailwindCSS, err = b.tailwind(); err != nil {
+			return false, err
+		}
+	}
+	collected := ""
+	if b.appPl != nil {
+		collected = b.appPl.CSS()
+	}
+	final := []byte(styles.Compose(tailwindCSS, collected))
+
+	// Compared against the file itself rather than a remembered hash: every
+	// staging swap replaces this file behind our back, so what is on disk is the
+	// only honest record of what is being served.
+	target := filepath.Join(b.outdir, "styles.css")
+	if prev, err := os.ReadFile(target); err == nil && bytes.Equal(prev, final) {
+		return false, nil
+	}
+	// Atomic, because the dev server may be handing this exact file out right now.
+	if err := fsutil.WriteFileAtomic(target, final, 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // buildContexts (re)creates the app and prerender contexts from the current
@@ -345,7 +401,26 @@ func (b *StaticWatchBuilder) Rebuild(changed []string) error {
 		os.RemoveAll(staging)
 		return swapErr
 	}
+	// Only now does what this rebuild rendered describe what is being served, so
+	// only now may its graph replace the old one and its changes stop being
+	// pending.
+	b.commitGraph()
 	return nil
+}
+
+// commitGraph adopts the graph the last successful rebuildInto captured and
+// forgets the accumulated pending change set: the served tree now matches the
+// imports that graph describes. A rebuild that could not build a graph (either
+// metafile missing or unreadable) leaves the previous one in place and clears
+// nothing, so the next save is classified conservatively.
+func (b *StaticWatchBuilder) commitGraph() {
+	if b.nextGraph == nil {
+		return
+	}
+	b.graph = b.nextGraph
+	b.routeCount = b.nextRouteCount
+	b.pending = map[string]bool{}
+	b.nextGraph = nil
 }
 
 // attempt assembles one complete staging tree for plan and returns it ready to
@@ -376,6 +451,11 @@ func (e partialFallback) Unwrap() error { return e.cause }
 // one-shot pipeline's order and its guards; anything it returns discards
 // staging.
 func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, plan renderPlan) error {
+	// Nothing this attempt captures is committed until its tree is swapped in, and
+	// a previous attempt's capture must never be: drop it up front so an early
+	// return here cannot leave one behind for commitGraph to adopt.
+	b.nextGraph = nil
+
 	// 1. The app pass — compile everything, collect <style>, report errors.
 	endBundle := prof.phase("browser bundle")
 	appResult := b.appCtx.Rebuild()
@@ -513,8 +593,8 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	//    just produced. Both are complete even after a subset render — the page
 	//    pass always bundles every entry and the prerender bundle is never
 	//    filtered — so a partial rebuild leaves the next one just as well
-	//    informed. A graph that cannot be built leaves the previous one in place
-	//    and clears nothing, so the next save is classified conservatively.
+	//    informed. It is only STAGED here; commitGraph installs it once the swap
+	//    has put the matching tree in dist/.
 	endGraph := prof.phase("route graph")
 	b.captureGraph(summary, pagesMetafile, preResult.Metafile)
 	endGraph()
@@ -524,8 +604,8 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 }
 
 // captureGraph rebuilds the module→routes graph from this rebuild's metafiles
-// and, on success, forgets the accumulated pending change set: the graph now
-// describes the imports those changes produced.
+// and parks it for commitGraph. Anything it cannot build simply leaves nothing
+// staged.
 func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, preMetafile string) {
 	if pagesMetafile == "" || preMetafile == "" {
 		return
@@ -550,9 +630,8 @@ func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, 
 	if err != nil {
 		return
 	}
-	b.graph = graph
-	b.routeCount = len(summary.Written)
-	b.pending = map[string]bool{}
+	b.nextGraph = graph
+	b.nextRouteCount = len(summary.Written)
 }
 
 // prerenderOnlyArgs renders the route filter as the generated prerender entry's

@@ -203,8 +203,17 @@ func (g *routeGraph) classify(root string, changed []string, assetConsumers func
 		return fullRender("no change list")
 	}
 
-	shell := resolvePath(filepath.Join(root, "app", "public", "index.html"))
-	publicDir := resolvePath(filepath.Join(root, "app", "public")) + string(filepath.Separator)
+	// The public tree is app/public/ in the examples but a root-level public/ is
+	// equally supported (publicDir, which the copier and the dev watcher both go
+	// through). Resolving it the same way here is what keeps the two rules below
+	// alive for a root-public project: hardcoding app/public made every public
+	// asset save an unknown path, so the whole fast path collapsed to a full
+	// render on a documented layout.
+	var shell, publicPrefix string
+	if src := publicDir(root); src != "" {
+		shell = resolvePath(filepath.Join(src, "index.html"))
+		publicPrefix = resolvePath(src) + string(filepath.Separator)
+	}
 
 	routes := map[string]bool{}
 	// attribute records one path's routes, or reports that it cannot be
@@ -224,14 +233,14 @@ func (g *routeGraph) classify(root string, changed []string, assetConsumers func
 		p := resolvePath(raw)
 
 		// The shell is spliced into every page: its own edit reaches all of them.
-		if p == shell {
+		if shell != "" && p == shell {
 			return fullRender("the app shell changed")
 		}
 		// Any other public asset is copied into staging verbatim and appears in no
 		// page's HTML. It needs no render at all — which is why this test precedes
 		// the existence check: a DELETED public asset is still just a copy that no
 		// longer happens.
-		if strings.HasPrefix(p, publicDir) {
+		if publicPrefix != "" && strings.HasPrefix(p, publicPrefix) {
 			continue
 		}
 		// A path that no longer exists is a delete or a rename. Either can remove a

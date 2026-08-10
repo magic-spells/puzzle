@@ -158,6 +158,39 @@ func TestNpmFetcherEmptyPackageRefusedBeforeRequest(t *testing.T) {
 	}
 }
 
+// The listing is sorted on the release timeline, not alphabetically: with
+// sort.Strings, "0.10.0" lands before "0.9.0" and the tail newestPublished keeps
+// drops precisely the newest releases the message exists to advertise.
+func TestSortVersionsIsNumericNotLexicographic(t *testing.T) {
+	got := []string{"0.9.0", "0.10.0", "0.2.0", "1.0.0", "0.10.2", "0.10.10", "nightly", "0.10.0-rc.1"}
+	sortVersions(got)
+	want := []string{"nightly", "0.2.0", "0.9.0", "0.10.0-rc.1", "0.10.0", "0.10.2", "0.10.10", "1.0.0"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("sortVersions = %v, want %v", got, want)
+	}
+	if listed := newestPublished(got, 3); listed != "… 0.10.2, 0.10.10, 1.0.0" {
+		t.Errorf("newestPublished after sorting = %q, want the three genuinely newest", listed)
+	}
+}
+
+func TestSelectFallbackVersion(t *testing.T) {
+	published := []string{"0.4.0", "0.5.0", "0.5.3", "0.5.10", "0.6.0-rc.1", "0.7.0", "bogus"}
+	if got := selectFallbackVersion(published, "0.6.0"); got != "0.5.10" {
+		t.Errorf("selectFallbackVersion(…, 0.6.0) = %q, want 0.5.10 (newest lower minor, numerically)", got)
+	}
+	// A prerelease on the CLI's own line is not a release, so it is not a
+	// fallback candidate either.
+	if got := selectFallbackVersion(published, "0.6.9"); got != "0.5.10" {
+		t.Errorf("selectFallbackVersion ignoring prereleases = %q, want 0.5.10", got)
+	}
+	if got := selectFallbackVersion(published, "0.4.0"); got != "" {
+		t.Errorf("selectFallbackVersion with nothing older = %q, want \"\"", got)
+	}
+	if got := selectFallbackVersion(published, "nope"); got != "" {
+		t.Errorf("selectFallbackVersion with an unparseable CLI version = %q, want \"\"", got)
+	}
+}
+
 // An error message must not dump hundreds of releases. The newest n survive, and
 // the truncation is visible.
 func TestNewestPublished(t *testing.T) {
@@ -376,6 +409,65 @@ func TestNpmFetcherHonorsPin(t *testing.T) {
 	}
 	if got := string(data); got != `{"v":"0.6.0"}` {
 		t.Errorf("Fetch(registry.json) = %q, want %q (the pinned release)", got, `{"v":"0.6.0"}`)
+	}
+}
+
+// A fresh compiler whose own pieces minor is not published yet is the ordinary
+// state right after a release, not a user error: resolution falls back to the
+// newest OLDER release and says which one, instead of failing every zero-config
+// `puzzle add piece`.
+func TestNpmFetcherFallsBackToNewestOlderRelease(t *testing.T) {
+	srv := fakeNpm(t, map[string]map[string]string{
+		"0.4.0":      {"package/registry/registry.json": `{"v":"0.4.0"}`},
+		"0.5.2":      {"package/registry/registry.json": `{"v":"0.5.2"}`},
+		"0.5.10":     {"package/registry/registry.json": `{"v":"0.5.10"}`},
+		"0.6.0-rc.1": {"package/registry/registry.json": `{"v":"0.6.0-rc.1"}`},
+	})
+	defer srv.Close()
+	f := newTestNpmFetcher(srv.URL, "0.6.0", "")
+	var notice bytes.Buffer
+	f.notice = &notice
+
+	data, err := f.Fetch("registry.json")
+	if err != nil {
+		t.Fatalf("Fetch(registry.json) returned error: %v", err)
+	}
+	// 0.5.10, not 0.5.2 — the fallback is chosen numerically, and the 0.6.0
+	// prerelease is never auto-selected.
+	if got := string(data); got != `{"v":"0.5.10"}` {
+		t.Errorf("Fetch(registry.json) = %q, want the newest older release 0.5.10", got)
+	}
+	if want := npmScheme + defaultNpmPackage + "@0.5.10"; f.Source() != want {
+		t.Errorf("Source() = %q, want %q — the lock must record what was actually fetched", f.Source(), want)
+	}
+	for _, want := range []string{"0.6.0", "0.5.10"} {
+		if !strings.Contains(notice.String(), want) {
+			t.Errorf("fallback notice %q does not name %q", notice.String(), want)
+		}
+	}
+}
+
+// An exact major.minor match still wins outright: the fallback never competes
+// with the lockstep release.
+func TestNpmFetcherPrefersExactMinorOverFallback(t *testing.T) {
+	srv := fakeNpm(t, map[string]map[string]string{
+		"0.5.10": {"package/registry/registry.json": `{"v":"0.5.10"}`},
+		"0.6.1":  {"package/registry/registry.json": `{"v":"0.6.1"}`},
+	})
+	defer srv.Close()
+	f := newTestNpmFetcher(srv.URL, "0.6.0", "")
+	var notice bytes.Buffer
+	f.notice = &notice
+
+	data, err := f.Fetch("registry.json")
+	if err != nil {
+		t.Fatalf("Fetch(registry.json) returned error: %v", err)
+	}
+	if got := string(data); got != `{"v":"0.6.1"}` {
+		t.Errorf("Fetch(registry.json) = %q, want the lockstep 0.6.1", got)
+	}
+	if notice.Len() != 0 {
+		t.Errorf("an exact match must print no fallback notice, got %q", notice.String())
 	}
 }
 

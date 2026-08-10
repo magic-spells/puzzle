@@ -11,10 +11,17 @@ import (
 )
 
 // defaultRegistry is the published pieces registry on npm. It is the last
-// resort after --registry and PUZZLE_PIECES_REGISTRY, and it is VERSIONED:
-// the fetcher resolves the newest release whose major.minor matches this
-// CLI's own version, so a zero-config `puzzle add piece button` always gets
-// pieces authored for the compiler running it.
+// resort after --registry and PUZZLE_PIECES_REGISTRY, and it is VERSIONED: the
+// fetcher prefers the newest release whose major.minor matches this CLI's own
+// version, so a zero-config `puzzle add piece button` gets pieces authored for
+// the compiler running it.
+//
+// That preference is not a requirement, because the two packages are published
+// separately and the compiler normally goes first: when this CLI's own minor has
+// no pieces release yet, the fetcher falls back to the newest published release
+// on a LOWER major.minor and says so (selectFallbackVersion). Only when nothing
+// older exists either — a registry that has never published anything this
+// compiler can use — is it a hard error. --pieces-version overrides all of it.
 const defaultRegistry = npmScheme + defaultNpmPackage
 
 // httpTimeout bounds a single registry-file request off an http(s) mirror, and

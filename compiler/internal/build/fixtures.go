@@ -174,24 +174,29 @@ func jsSpecifier(path string) string {
 	return strconv.Quote(filepath.ToSlash(path))
 }
 
-// cleanupFixturesWorkDir removes the generated `--fixtures` wrapper after a
-// one-shot build, and <absRoot>/.puzzle itself only when this build created that
-// directory and nothing else ended up in it. Anything else there is a user's (or
-// another tool's), and deleting it would be destructive. Failures are ignored: a
-// leftover scratch dir must never turn a successful build into a failed one.
+// cleanupFixturesWorkDir removes the generated `--fixtures` wrapper and
+// <absRoot>/.puzzle itself, but ONLY when this build created that directory —
+// i.e. when it found no .puzzle at all and therefore knows nothing else is using
+// one. Failures are ignored: a leftover scratch dir must never turn a successful
+// build into a failed one.
 //
 // The dev/watch path deliberately does not call this — its wrapper is generated
-// once at builder construction and has to survive for the process lifetime.
+// once at builder construction and has to survive for the process lifetime. That
+// is exactly why the `created` gate has to come FIRST: `puzzle dev --fixtures`
+// and a one-shot `puzzle build --fixtures` in the same app root share the single
+// <root>/.puzzle/fixtures path, so a build that removed it unconditionally
+// deleted the live dev session's esbuild entry out from under it and every later
+// rebuild failed until the session was restarted. A pre-existing .puzzle means
+// someone else's, so the wrapper is left alone; it is two generated files inside
+// a self-ignoring directory, and the next --fixtures run rewrites them.
 func cleanupFixturesWorkDir(absRoot string, created bool) {
-	workDir := filepath.Join(absRoot, puzzleWorkDir)
-	// The wrapper subtree is entirely compiler-generated ("Do not edit"), so the
-	// one-shot path always takes it away again. This is unconditional now that
-	// every build creates <root>/.puzzle for its scratch tree: gating it on
-	// `created` would leave the wrapper behind on every build after the first.
-	_ = os.RemoveAll(filepath.Join(workDir, fixturesEntryDir))
 	if !created {
 		return
 	}
+	workDir := filepath.Join(absRoot, puzzleWorkDir)
+	// The wrapper subtree is entirely compiler-generated ("Do not edit"), so a
+	// build that owns .puzzle always takes it away again.
+	_ = os.RemoveAll(filepath.Join(workDir, fixturesEntryDir))
 	// .puzzle itself goes only when this build created it AND it is now empty —
 	// a NON-recursive Remove, which fails harmlessly if anything else lives
 	// there (the .puzzle/tmp scratch tree, a user's file, another tool's cache).
