@@ -58,6 +58,22 @@ session.
 Scripts use JS or TS loader according to `<script lang>`; styles collect in a
 mutex-protected path map; inline SVG dependencies join esbuild's watch set.
 
+[[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]] makes the SPA
+call site honor that incremental shape: startup reuses the constructor scan and
+non-`.pzl` batches do not re-walk the project. The CSS collector gains a
+monotonic revision that changes only when a block is added, changed, or pruned,
+letting dev skip composition when an incremental graph rebuild leaves styles
+identical. The watch builder promotes the working collector to a committed
+snapshot only after full rebuild success; Tailwind callbacks read that snapshot
+so a partially successful esbuild pass cannot leak CSS beside last-good JS.
+Static dev similarly promotes its candidate only after the staging swap, and
+its styles-only path reads the committed snapshot.
+
+Public-only SPA batches mirror assets without rebuilding the browser graph when
+the changed paths were not inputs to the previous successful metafile. Public
+files imported by application code remain ordinary graph inputs and rebuild as
+before.
+
 Build bundles `app/app.js` to staged `dist/app.js`, writes linked source maps
 and composed CSS, then copies public assets. Its three passes' BuildOptions are
 assembled by `newBundleOptions`, `prerenderBundleOptions`, and
@@ -74,6 +90,12 @@ the last good dist. Success renames old output aside, installs staging, then
 removes the backup — inline for a one-shot build (the process is about to exit),
 backgrounded for a dev rebuild, where deleting a 150-page tree is ~50ms a
 developer would otherwise wait through after the swap has already succeeded. Path-containment guards protect every swap target.
+
+Under D156, one-shot browser bundling and Tailwind generation overlap behind
+deterministic browser-before-Tailwind error collection. Styles compose after
+the browser pass has populated its per-pass CSS collector; public copying and
+prerendering retain their order, so concurrency changes elapsed time rather
+than public collision, user-code execution, or artifact semantics.
 
 Every transient directory a build needs lives under `<root>/.puzzle/tmp/` —
 the staging tree (`staging-*`) and swapOutput's holding dir for the previous
@@ -100,7 +122,11 @@ that comparison stays meaningful. Staging deliberately copies rather than
 hardlinks: the prerender passes edit staging's copy of `public/index.html` in
 place, and a shared inode would write through into the app's own source asset. Successful dev rebuilds mirror deleted
 public files and prune CSS for `.pzl` modules no longer in the esbuild metafile;
-failed rebuilds keep last-good assets/CSS.
+an esbuild failure skips that public pass and D156 keeps working CSS private.
+The SPA public mirror writes live: an I/O failure after some successful copies
+can leave those assets updated, but its ownership set does not advance and the
+next public sync retries the full mirror. Full-output atomicity belongs to the
+staged one-shot/static pipelines, not the SPA incremental path.
 
 JavaScript `puzzle.config.js` loads once through a bounded Node process; Go
 never parses it. Optional scalar keys (`build.dropConsole`, `build.sourceMap`,

@@ -65,17 +65,24 @@ type Options struct {
 
 	// Profile prints a per-phase timing table to stderr after the build
 	// (`puzzle build --profile-build`). The PUZZLE_PROFILE_BUILD environment
-	// variable turns it on too, which is how `puzzle dev`'s static rebuild — a
-	// direct Build call with no flags of its own — reaches the profiler. Off,
-	// the profiler is a nil pointer and every phase call is a nil check.
+	// variable turns it on too. Off, the profiler is a nil pointer and every
+	// phase call is a nil check.
 	Profile bool
+
+	// Profiler folds phases into a caller-owned table instead of printing a
+	// separate `puzzle build` report. The dev server uses this only for its
+	// non-incremental fallback so startup/rebuild still emits exactly one table.
+	Profiler *PhaseProfile
 }
 
 // Build compiles the app rooted at root (the directory containing app/app.js)
 // into root/dist. It returns a formatted error if esbuild reports any errors.
 func Build(root string, opts Options) error {
-	prof := newBuildProfile(profileEnabled(opts.Profile))
-	defer prof.report(os.Stderr)
+	prof := opts.Profiler
+	if prof == nil {
+		prof = newBuildProfile(profileEnabled(opts.Profile))
+		defer prof.report(os.Stderr)
+	}
 
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -231,9 +238,25 @@ func Build(root string, opts Options) error {
 		}
 	}
 
+	// The browser graph and Tailwind source scan are independent: neither reads
+	// the other's output, and both write only to private destinations (staging for
+	// esbuild, a runner-owned temporary file for Tailwind). Run them together when
+	// Tailwind is enabled, then join BOTH before inspecting either result so no
+	// worker can outlive Build and race staging cleanup on an error path.
 	endBundle := prof.phase("browser bundle")
-	result := api.Build(buildOpts)
-	endBundle()
+	browser := func() api.BuildResult {
+		defer endBundle()
+		return api.Build(buildOpts)
+	}
+	var tailwind func() (string, error)
+	if cfg.TailwindEnabled() {
+		endTailwind := prof.phase("tailwind")
+		tailwind = func() (string, error) {
+			defer endTailwind()
+			return runTailwind(absRoot, cfg, opts)
+		}
+	}
+	result, tailwindCSS, tailwindErr := runBrowserAndTailwind(browser, tailwind)
 	if opts.Metafile != nil {
 		*opts.Metafile = result.Metafile
 	}
@@ -245,18 +268,19 @@ func Build(root string, opts Options) error {
 		})
 		return fmt.Errorf("puzzle build failed:\n%s", strings.Join(lines, "\n"))
 	}
+	// Preserve the historical failure priority: if both concurrent lanes fail,
+	// the browser compile error above wins; Tailwind is surfaced only after the
+	// browser bundle is known good.
+	if tailwindErr != nil {
+		return tailwindErr
+	}
 
 	// Styles → one global stylesheet (index.html links /styles.css): the
 	// Tailwind layer (when puzzle.config.js declares it) followed by the
 	// collected <style> blocks. A declared-but-unrunnable Tailwind fails the
 	// build — the pipeline is never silently skipped. Written into staging, not
 	// dist/, so a Tailwind failure above never touches the last good build.
-	endStyles := prof.phase("tailwind + styles")
-	tailwindCSS, err := runTailwind(absRoot, cfg, opts)
-	if err != nil {
-		endStyles()
-		return err
-	}
+	endStyles := prof.phase("styles compose")
 	final := styles.Compose(tailwindCSS, pl.CSS())
 	writeErr := os.WriteFile(filepath.Join(staging, "styles.css"), []byte(final), 0o644)
 	endStyles()
@@ -419,6 +443,43 @@ func runTailwind(absRoot string, cfg config.Config, opts Options) (string, error
 		return "", err
 	}
 	return css, nil
+}
+
+// runBrowserAndTailwind runs the two independent cold-build phases together
+// and joins both before returning. A nil tailwind function is the disabled
+// pipeline: the browser build stays synchronous, avoiding goroutine overhead
+// for apps that do not use Tailwind.
+//
+// Error arbitration deliberately stays with Build. This helper returns both
+// results only after both functions have completed, letting Build preserve its
+// long-standing browser-before-Tailwind failure priority without leaving a
+// worker behind on the losing error path.
+func runBrowserAndTailwind(
+	browser func() api.BuildResult,
+	tailwind func() (string, error),
+) (api.BuildResult, string, error) {
+	if tailwind == nil {
+		return browser(), "", nil
+	}
+
+	browserDone := make(chan api.BuildResult, 1)
+	type tailwindResult struct {
+		css string
+		err error
+	}
+	tailwindDone := make(chan tailwindResult, 1)
+
+	go func() {
+		browserDone <- browser()
+	}()
+	go func() {
+		css, err := tailwind()
+		tailwindDone <- tailwindResult{css: css, err: err}
+	}()
+
+	result := <-browserDone
+	tw := <-tailwindDone
+	return result, tw.css, tw.err
 }
 
 // reservedOutputNames are the root-level filenames the compiler itself writes

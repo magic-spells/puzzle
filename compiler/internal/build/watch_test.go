@@ -90,7 +90,7 @@ func TestWatchBuilderIncrementalRebuild(t *testing.T) {
 	}
 	defer b.Dispose()
 
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild(nil); err != nil {
 		t.Fatalf("first Rebuild: %v", err)
 	}
 	bundle := readDistBundle(t, root)
@@ -100,7 +100,7 @@ func TestWatchBuilderIncrementalRebuild(t *testing.T) {
 
 	// Edit the view and rebuild — the incremental context must pick it up.
 	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "MARKER_TWO"))
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild([]string{home}); err != nil {
 		t.Fatalf("second Rebuild: %v", err)
 	}
 	bundle = readDistBundle(t, root)
@@ -130,7 +130,7 @@ func TestWatchBuilderCSSResetOnDelete(t *testing.T) {
 	}
 	defer b.Dispose()
 
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild(nil); err != nil {
 		t.Fatalf("first Rebuild: %v", err)
 	}
 	css := b.CSS()
@@ -143,7 +143,7 @@ func TestWatchBuilderCSSResetOnDelete(t *testing.T) {
 	if err := os.Remove(extra); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild([]string{appJS, extra}); err != nil {
 		t.Fatalf("second Rebuild: %v", err)
 	}
 	css = b.CSS()
@@ -170,7 +170,7 @@ func TestWatchBuilderCSSResetOnStyleRemoval(t *testing.T) {
 	}
 	defer b.Dispose()
 
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild(nil); err != nil {
 		t.Fatalf("first Rebuild: %v", err)
 	}
 	if !strings.Contains(b.CSS(), ".home") {
@@ -188,7 +188,7 @@ export default class Home extends PuzzleView {}
 </script>
 `
 	write(t, home, noStyles)
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild([]string{home}); err != nil {
 		t.Fatalf("second Rebuild: %v", err)
 	}
 	if strings.Contains(b.CSS(), ".home") {
@@ -259,7 +259,7 @@ func TestWatchBuilderCSSPrunesUnimported(t *testing.T) {
 	}
 	defer b.Dispose()
 
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild(nil); err != nil {
 		t.Fatalf("first Rebuild: %v", err)
 	}
 	if css := b.CSS(); !strings.Contains(css, ".home") || !strings.Contains(css, ".extra") {
@@ -269,7 +269,7 @@ func TestWatchBuilderCSSPrunesUnimported(t *testing.T) {
 	// Drop the import but LEAVE Extra.pzl on disk. os.Stat still finds it, so only
 	// the module-graph prune can remove its CSS.
 	write(t, appJS, withoutExtra)
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild([]string{appJS}); err != nil {
 		t.Fatalf("second Rebuild: %v", err)
 	}
 	if css := b.CSS(); strings.Contains(css, ".extra") {
@@ -280,7 +280,7 @@ func TestWatchBuilderCSSPrunesUnimported(t *testing.T) {
 
 	// Re-add the import — onLoad re-runs and the CSS returns.
 	write(t, appJS, withExtra)
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild([]string{appJS}); err != nil {
 		t.Fatalf("third Rebuild: %v", err)
 	}
 	if css := b.CSS(); !strings.Contains(css, ".extra") {
@@ -303,7 +303,7 @@ func TestWatchBuilderFailedRebuildKeepsCSS(t *testing.T) {
 	}
 	defer b.Dispose()
 
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild(nil); err != nil {
 		t.Fatalf("first Rebuild: %v", err)
 	}
 	if !strings.Contains(b.CSS(), ".home") {
@@ -321,7 +321,7 @@ export default class Home extends PuzzleView {}
 .home { color: red; }
 </style>
 `)
-	if err := b.Rebuild(); err == nil {
+	if _, err := b.Rebuild([]string{home}); err == nil {
 		t.Fatal("expected the rebuild to fail on the unclosed {#if}")
 	}
 	if !strings.Contains(b.CSS(), ".home") {
@@ -360,7 +360,7 @@ func TestWatchBuilderInlineSVGRebuild(t *testing.T) {
 	}
 	defer b.Dispose()
 
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild(nil); err != nil {
 		t.Fatalf("first Rebuild: %v", err)
 	}
 	if bundle := readDistBundle(t, root); !strings.Contains(bundle, "MARKER_ONE") {
@@ -369,7 +369,7 @@ func TestWatchBuilderInlineSVGRebuild(t *testing.T) {
 
 	// Edit ONLY the svg file — the .pzl is untouched.
 	write(t, icon, `<svg viewBox="0 0 1 1"><path d="MARKER_TWO"/></svg>`)
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild([]string{icon}); err != nil {
 		t.Fatalf("second Rebuild: %v", err)
 	}
 	bundle := readDistBundle(t, root)
@@ -401,15 +401,19 @@ func TestWatchBuilderInlineSVGRecovery(t *testing.T) {
 	}
 	defer b.Dispose()
 
-	if err := b.Rebuild(); err == nil {
+	if _, err := b.Rebuild(nil); err == nil {
 		t.Fatal("expected the first Rebuild to fail on the missing svg")
 	}
 
 	// Create the previously-missing svg; WatchFiles recorded its path on the error
 	// result, so the cached failure is invalidated.
 	write(t, icon, `<svg viewBox="0 0 1 1"><path d="RECOVERED"/></svg>`)
-	if err := b.Rebuild(); err != nil {
+	recovered, err := b.Rebuild([]string{icon})
+	if err != nil {
 		t.Fatalf("Rebuild after creating the svg should succeed: %v", err)
+	}
+	if !recovered.PublicSynced || !recovered.CSSChanged {
+		t.Errorf("first successful rebuild metadata = %+v, want initial public/CSS work retained after failure", recovered)
 	}
 	if bundle := readDistBundle(t, root); !strings.Contains(bundle, "RECOVERED") {
 		t.Errorf("bundle missing RECOVERED after the svg appeared:\n%s", bundle)
@@ -438,7 +442,7 @@ func TestWatchBuilderMirrorsPublicDeletions(t *testing.T) {
 	}
 	defer b.Dispose()
 
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild(nil); err != nil {
 		t.Fatalf("first Rebuild: %v", err)
 	}
 	dist := filepath.Join(root, "dist")
@@ -452,7 +456,7 @@ func TestWatchBuilderMirrorsPublicDeletions(t *testing.T) {
 	if err := os.Remove(asset); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild([]string{asset}); err != nil {
 		t.Fatalf("second Rebuild: %v", err)
 	}
 	if _, err := os.Stat(distAsset); !os.IsNotExist(err) {
@@ -469,11 +473,248 @@ func TestWatchBuilderMirrorsPublicDeletions(t *testing.T) {
 
 	// Re-adding the asset restores it (prevPublic tracking stays consistent).
 	write(t, asset, "LOGO2")
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild([]string{asset}); err != nil {
 		t.Fatalf("third Rebuild: %v", err)
 	}
 	if got, err := os.ReadFile(distAsset); err != nil || string(got) != "LOGO2" {
 		t.Errorf("re-added public asset not restored: got=%q err=%v", got, err)
+	}
+}
+
+func TestWatchBuilderClassifiesIncrementalWorkFromChangedPaths(t *testing.T) {
+	root := scratchApp(t)
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	appJS := filepath.Join(root, "app", "app.js")
+	asset := filepath.Join(root, "app", "public", "logo.txt")
+	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME"))
+	write(t, appJS, "import Home from './views/Home.pzl';\nconsole.log(Home);\n")
+	write(t, asset, "LOGO-ONE")
+
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+
+	initial, err := b.Rebuild(nil)
+	if err != nil {
+		t.Fatalf("initial Rebuild: %v", err)
+	}
+	if initial.UsageScanned {
+		t.Error("initial rebuild repeated the usage scan already performed by the constructor")
+	}
+	if !initial.PublicSynced || !initial.CSSChanged || !initial.BundleBuilt {
+		t.Fatalf("initial metadata = %+v, want public sync and initial CSS commit", initial)
+	}
+
+	write(t, appJS, "import Home from './views/Home.pzl';\nconsole.log(Home); // js-only\n")
+	jsOnly, err := b.Rebuild([]string{appJS})
+	if err != nil {
+		t.Fatalf("JS-only Rebuild: %v", err)
+	}
+	if jsOnly.UsageScanned || jsOnly.PublicSynced || jsOnly.CSSChanged || !jsOnly.BundleBuilt {
+		t.Errorf("JS-only metadata = %+v, want every unrelated phase skipped", jsOnly)
+	}
+
+	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME-TEMPLATE-ONLY"))
+	templateOnly, err := b.Rebuild([]string{home})
+	if err != nil {
+		t.Fatalf("template-only Rebuild: %v", err)
+	}
+	if !templateOnly.UsageScanned || templateOnly.PublicSynced || templateOnly.CSSChanged || !templateOnly.BundleBuilt {
+		t.Errorf("template-only metadata = %+v, want usage only", templateOnly)
+	}
+
+	write(t, asset, "LOGO-TWO")
+	publicOnly, err := b.Rebuild([]string{asset})
+	if err != nil {
+		t.Fatalf("public-only Rebuild: %v", err)
+	}
+	if publicOnly.UsageScanned || !publicOnly.PublicSynced || publicOnly.CSSChanged || publicOnly.BundleBuilt {
+		t.Errorf("public-only metadata = %+v, want public sync only", publicOnly)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "dist", "logo.txt")); err != nil || string(got) != "LOGO-TWO" {
+		t.Errorf("public edit not mirrored: got=%q err=%v", got, err)
+	}
+}
+
+func TestWatchBuilderFailedOnLoadKeepsCommittedCSS(t *testing.T) {
+	root := scratchApp(t)
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME"))
+	write(t, filepath.Join(root, "app", "app.js"),
+		"import Home from './views/Home.pzl';\nconsole.log(Home);\n")
+
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("initial Rebuild: %v", err)
+	}
+	if css := b.CSS(); !strings.Contains(css, ".home { color: red; }") {
+		t.Fatalf("initial committed CSS missing red block:\n%s", css)
+	}
+
+	// Puzzle successfully transforms this file and updates the plugin collector,
+	// then esbuild rejects the preserved script syntax. This is the failure shape
+	// that can otherwise leak candidate CSS through the Tailwind output poll.
+	broken := strings.ReplaceAll(viewTmpl, ".home { color: red; }", ".home { color: blue; }")
+	broken = strings.Replace(broken,
+		"export default class Home extends PuzzleView {}",
+		"export default class Home extends PuzzleView { broken = ; }", 1)
+	write(t, home, strings.ReplaceAll(broken, "%MARKER%", "BROKEN"))
+	if _, err := b.Rebuild([]string{home}); err == nil {
+		t.Fatal("expected esbuild to reject the invalid preserved script")
+	}
+	if candidate := b.pl.CSS(); !strings.Contains(candidate, "color: blue") {
+		t.Fatalf("test did not reach the candidate-CSS mutation path:\n%s", candidate)
+	}
+	if committed := b.CSS(); !strings.Contains(committed, "color: red") || strings.Contains(committed, "color: blue") {
+		t.Errorf("failed rebuild leaked candidate CSS into the committed snapshot:\n%s", committed)
+	}
+
+	fixed := strings.Replace(broken,
+		"export default class Home extends PuzzleView { broken = ; }",
+		"export default class Home extends PuzzleView {}", 1)
+	write(t, home, strings.ReplaceAll(fixed, "%MARKER%", "FIXED"))
+	result, err := b.Rebuild([]string{home})
+	if err != nil {
+		t.Fatalf("recovery Rebuild: %v", err)
+	}
+	if !result.CSSChanged {
+		t.Fatal("successful recovery did not report the candidate CSS becoming committed")
+	}
+	if committed := b.CSS(); !strings.Contains(committed, "color: blue") || strings.Contains(committed, "color: red") {
+		t.Errorf("successful recovery did not promote blue CSS:\n%s", committed)
+	}
+}
+
+func TestWatchBuilderPublicSourceFallbackAfterDelete(t *testing.T) {
+	root := scratchApp(t)
+	write(t, filepath.Join(root, "app", "views", "Home.pzl"),
+		strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME"))
+	write(t, filepath.Join(root, "app", "app.js"),
+		"import Home from './views/Home.pzl';\nconsole.log(Home);\n")
+	appPublic := filepath.Join(root, "app", "public")
+	write(t, filepath.Join(appPublic, "app-only.txt"), "APP")
+	rootPublic := filepath.Join(root, "public")
+	if err := os.MkdirAll(rootPublic, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(rootPublic, "index.html"), "ROOT-INDEX")
+	write(t, filepath.Join(rootPublic, "root-only.txt"), "ROOT")
+
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("initial Rebuild: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "dist", "app-only.txt")); err != nil {
+		t.Fatalf("initial app/public asset missing: %v", err)
+	}
+
+	if err := os.RemoveAll(appPublic); err != nil {
+		t.Fatal(err)
+	}
+	result, err := b.Rebuild([]string{appPublic})
+	if err != nil {
+		t.Fatalf("fallback Rebuild: %v", err)
+	}
+	if !result.PublicSynced {
+		t.Fatal("deleting the previous public source did not schedule a full public sync")
+	}
+	if _, err := os.Stat(filepath.Join(root, "dist", "app-only.txt")); !os.IsNotExist(err) {
+		t.Errorf("asset owned by deleted app/public source lingered (err=%v)", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "dist", "root-only.txt")); err != nil || string(got) != "ROOT" {
+		t.Errorf("root public fallback not installed: got=%q err=%v", got, err)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "dist", "index.html")); err != nil || string(got) != "ROOT-INDEX" {
+		t.Errorf("root public shell not installed: got=%q err=%v", got, err)
+	}
+}
+
+func TestWatchBuilderRebuildsImportedPublicAsset(t *testing.T) {
+	root := scratchApp(t)
+	publicModule := filepath.Join(root, "app", "public", "message.js")
+	write(t, publicModule, `export default "PUBLIC_IMPORT_ONE";`)
+	write(t, filepath.Join(root, "app", "app.js"),
+		"import message from './public/message.js';\nconsole.log(message);\n")
+
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("initial Rebuild: %v", err)
+	}
+
+	write(t, publicModule, `export default "PUBLIC_IMPORT_TWO";`)
+	result, err := b.Rebuild([]string{publicModule})
+	if err != nil {
+		t.Fatalf("public-module Rebuild: %v", err)
+	}
+	if !result.BundleBuilt || !result.PublicSynced {
+		t.Fatalf("public-module metadata = %+v, want bundle and mirror", result)
+	}
+	if bundle := readDistBundle(t, root); !strings.Contains(bundle, "PUBLIC_IMPORT_TWO") {
+		t.Fatalf("bundle did not rebuild imported public module:\n%s", bundle)
+	}
+}
+
+func TestWatchBuilderPostBundlePublicFailureForcesCompleteRetry(t *testing.T) {
+	root := scratchApp(t)
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "HOME"))
+	write(t, filepath.Join(root, "app", "app.js"),
+		"import Home from './views/Home.pzl';\nconsole.log(Home);\n")
+
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("initial Rebuild: %v", err)
+	}
+
+	updated := strings.Replace(strings.ReplaceAll(viewTmpl, "%MARKER%", "UPDATED"),
+		"color: red", "color: purple", 1)
+	write(t, home, updated)
+	publicFile := filepath.Join(root, "app", "public", "blocked", "asset.txt")
+	if err := os.MkdirAll(filepath.Dir(publicFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, publicFile, "ASSET")
+	// A file where copyPublic needs a directory makes the post-esbuild public
+	// phase fail deterministically without permission assumptions.
+	blockedTarget := filepath.Join(root, "dist", "blocked")
+	write(t, blockedTarget, "not-a-directory")
+	if _, err := b.Rebuild([]string{home, publicFile}); err == nil {
+		t.Fatal("expected public sync to fail after the browser bundle")
+	}
+	if css := b.CSS(); strings.Contains(css, "purple") {
+		t.Fatalf("post-bundle public failure committed candidate CSS:\n%s", css)
+	}
+
+	if err := os.Remove(blockedTarget); err != nil {
+		t.Fatal(err)
+	}
+	result, err := b.Rebuild([]string{publicFile})
+	if err != nil {
+		t.Fatalf("public retry: %v", err)
+	}
+	if !result.BundleBuilt || !result.PublicSynced || !result.CSSChanged {
+		t.Fatalf("public retry metadata = %+v, want complete pending retry", result)
+	}
+	if css := b.CSS(); !strings.Contains(css, "purple") {
+		t.Fatalf("complete retry did not commit candidate CSS:\n%s", css)
 	}
 }
 

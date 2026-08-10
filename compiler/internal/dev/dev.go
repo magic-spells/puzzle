@@ -139,6 +139,10 @@ type Options struct {
 	// generated once, at builder construction, and lives under <root>/.puzzle/ —
 	// outside every watched directory, so it cannot feed a rebuild loop.
 	Fixtures bool
+	// Profile prints phase timings for startup and each rebuild. The environment
+	// form is resolved inside Serve so programmatic callers get the same behavior
+	// as `puzzle dev --profile-build`.
+	Profile bool
 	// OnReady, when set, runs after the server's ready banner is printed.
 	OnReady func()
 
@@ -159,6 +163,14 @@ func Serve(root string, opts Options) error {
 	serveStart := time.Now()
 	stdout := ui.New(os.Stdout)
 	stderr := ui.New(os.Stderr)
+	profileEnabled := build.ProfileEnabled(opts.Profile)
+	startupProfile := build.NewPhaseProfile(profileEnabled, "puzzle dev · startup")
+	startupReported := false
+	defer func() {
+		if !startupReported {
+			startupProfile.Report(os.Stderr)
+		}
+	}()
 
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -171,7 +183,9 @@ func Serve(root string, opts Options) error {
 	// behind. The static rebuild path reaches this through build.Build, but the
 	// SPA path never calls it — and either way a dev session is where a build is
 	// most likely to be killed mid-flight, so the sweep belongs at startup.
+	endSweep := startupProfile.Phase("workdir sweep")
 	build.SweepWorkDirs(absRoot)
+	endSweep()
 
 	// Recursive watch roots: app/ always, plus a root-level public/ fallback when
 	// it resolves OUTSIDE app/ (app/public is already inside appDir, so it never
@@ -189,7 +203,9 @@ func Serve(root string, opts Options) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	endConfig := startupProfile.Phase("config load")
 	cfg, cfgErr := config.LoadConfig(absRoot)
+	endConfig()
 	if cfgErr != nil {
 		logWarning(stderr, "%s", configFallbackWarning(cfgErr))
 	}
@@ -254,6 +270,7 @@ func Serve(root string, opts Options) error {
 	// rebuild) rather than a cold one-shot build per save.
 	tailwindEnabled := cfgErr == nil && cfg.TailwindEnabled()
 
+	endBuilderSetup := startupProfile.Phase("builder setup")
 	var builder *build.WatchBuilder
 	var staticBuilder *build.StaticWatchBuilder
 	if staticMode {
@@ -263,7 +280,7 @@ func Serve(root string, opts Options) error {
 		// arrives through the atomic swap, alongside the pages it was composed
 		// with; the builder rewrites the served copy on its own only for a
 		// styles-only change, which touches no page (RecomposeStyles).
-		staticBuilder, builderErr = build.NewStaticWatchBuilder(absRoot, build.StaticWatchOptions{Config: cfg})
+		staticBuilder, builderErr = build.NewStaticWatchBuilder(absRoot, build.StaticWatchOptions{Config: cfg, Profile: opts.Profile})
 		if builderErr != nil {
 			// No persistent contexts: degrade to the one-shot build.Build per change
 			// (slower, but identical output — including its own Tailwind run).
@@ -286,6 +303,7 @@ func Serve(root string, opts Options) error {
 			pl.collectedCSS = builder.CSS
 		}
 	}
+	endBuilderSetup()
 	// A static rebuild composes styles.css itself, into staging (and recomposes it
 	// alone for a styles-only change). The pipeline is still the thing that knows
 	// where the Tailwind layer comes from (the warm child's output file, or the
@@ -334,6 +352,7 @@ func Serve(root string, opts Options) error {
 	// Warm Tailwind watcher — only alongside an incremental builder. (In the
 	// full-fallback path build.Build already runs Tailwind one-shot, so a warm
 	// child would double-compose.)
+	endTailwindStart := startupProfile.Phase("tailwind watcher start")
 	if warmTailwind {
 		tmp, err := os.CreateTemp("", "puzzle-tailwind-dev-*.css")
 		if err != nil {
@@ -369,6 +388,7 @@ func Serve(root string, opts Options) error {
 			}
 		}
 	}
+	endTailwindStart()
 
 	// rebuild runs a development build and, on success, tells every connected
 	// browser to reload. It swallows the error (after printing) so neither the
@@ -378,12 +398,18 @@ func Serve(root string, opts Options) error {
 	// It returns the failure it printed (nil on success) so the watcher loop can
 	// tell the change filter that the bytes it accepted were NOT successfully
 	// built from — a re-save of the same bytes has to be able to retry.
-	rebuild := func(changed []string, logSuccess bool) error {
+	rebuild := func(changed []string, logSuccess bool, prof *build.PhaseProfile) error {
+		if prof == nil {
+			prof = build.NewPhaseProfile(profileEnabled, "puzzle dev · rebuild")
+			defer prof.Report(os.Stderr)
+		}
 		start := time.Now()
 		// Revalidate the public tree every rebuild: adding a file that collides
 		// with a reserved output (app.js/app.js.map/styles.css) while the server
 		// runs must surface as a visible build error, not a silent clobber.
+		endPublicValidation := prof.Phase("public validation")
 		if err := build.ValidatePublic(absRoot); err != nil {
+			endPublicValidation()
 			logBuildFailure(stderr, err)
 			message := err.Error()
 			srv.rememberBuildError(message)
@@ -393,6 +419,7 @@ func Serve(root string, opts Options) error {
 			}
 			return err
 		}
+		endPublicValidation()
 		var err error
 		switch {
 		case staticBuilder != nil:
@@ -401,20 +428,22 @@ func Serve(root string, opts Options) error {
 			// staging dir that is atomically swapped in. A failed compile OR a failed
 			// prerender discards staging, so the last good pages keep serving and the
 			// browser gets the diagnostic through the D92 channel below.
-			err = staticBuilder.Rebuild(changed)
+			err = staticBuilder.RebuildProfile(changed, prof)
 		case staticMode:
 			// No persistent contexts (construction failed): the cold one-shot build,
 			// which produces the same output more slowly and runs Tailwind itself.
-			err = build.Build(absRoot, build.Options{Development: true, Output: "static", Config: buildCfg})
+			err = build.Build(absRoot, build.Options{Development: true, Output: "static", Config: buildCfg, Profiler: prof})
 		case builder != nil:
-			if err = builder.ScanUsage(); err == nil {
-				err = builder.Rebuild()
-			}
+			var result build.RebuildResult
+			result, err = builder.RebuildProfile(changed, prof)
 			if err == nil {
+				pl.commitBuild(result.CSSChanged)
+				endStyles := prof.Phase("styles compose")
 				err = pl.recompose()
+				endStyles()
 			}
 		default:
-			err = build.Build(absRoot, build.Options{Development: true, Fixtures: opts.Fixtures, Config: buildCfg})
+			err = build.Build(absRoot, build.Options{Development: true, Fixtures: opts.Fixtures, Config: buildCfg, Profiler: prof})
 		}
 		if err != nil {
 			logBuildFailure(stderr, err)
@@ -476,9 +505,10 @@ func Serve(root string, opts Options) error {
 	} else if staticMode {
 		// The one-shot static fallback composes styles inside its own build, and
 		// runs Tailwind itself — no warm child exists to call this.
-		stylesChanged = func() { rebuild(nil, false) }
+		stylesChanged = func() { _ = rebuild(nil, false, nil) }
 	} else {
 		stylesChanged = func() {
+			pl.invalidateStyles()
 			if err := pl.recompose(); err != nil {
 				logWarning(stderr, "recompose styles: %v", err)
 				return
@@ -497,9 +527,11 @@ func Serve(root string, opts Options) error {
 	// NOT wait: styles.css is served straight off disk and the poll recomposes it
 	// in place the moment the first output lands — one cheap atomic write, long
 	// before any browser tab loads — so the wait would only inflate startup.
-	if tw != nil && staticMode {
+	waitForInitialTailwind(tw != nil && staticMode, func() {
+		endTailwindOutput := startupProfile.Phase("tailwind first output")
 		waitForTailwindOutput(ctx, twOutput, tw.Done(), tailwindFirstOutputWait)
-	}
+		endTailwindOutput()
+	})
 
 	// Only now, with stylesChanged assigned, do the watchers on the warm child
 	// start: they read it with no synchronization of their own, and starting them
@@ -534,13 +566,15 @@ func Serve(root string, opts Options) error {
 	if staticMode {
 		logInfo(stdout, "static output — every route prerendered on each rebuild (no router, plain page loads)")
 	}
-	rebuild(nil, false)
+	_ = rebuild(nil, false, startupProfile)
 
 	// Bind synchronously BEFORE the ready banner: a failed bind must surface as a
 	// clean error, with no false "ready" line printed and no browser opened on a
 	// dead port. A port already in use is not a failure — listenDev scans upward
 	// for a free one — but an exhausted scan still lands here.
+	endServerBind := startupProfile.Phase("server bind")
 	ln, err := serve.Listen(opts.Port, opts.StrictPort)
+	endServerBind()
 	if err != nil {
 		return fmt.Errorf("dev server: %w", err)
 	}
@@ -579,7 +613,7 @@ func Serve(root string, opts Options) error {
 				// settled both arms the echo window (measured from the moment this
 				// rebuild stopped draining events) and, on failure, drops what the
 				// filter had accepted so re-saving the same bytes retries.
-				filter.settled(rebuild(rebuildPaths, true) == nil)
+				filter.settled(rebuild(rebuildPaths, true, nil) == nil)
 			}
 			if configChanged {
 				// The config is read once at startup; a live edit needs a restart.
@@ -604,6 +638,8 @@ func Serve(root string, opts Options) error {
 	if staticMode {
 		outputStatus = "static (prerendered pages, no router)"
 	}
+	startupProfile.Report(os.Stderr)
+	startupReported = true
 	printReady(stdout, url, watchLabel(absRoot, appDir), stylesStatus, outputStatus, time.Since(serveStart), quitCh != nil)
 	if opts.OnReady != nil {
 		opts.OnReady()
@@ -1255,6 +1291,16 @@ func waitForTailwindOutput(ctx context.Context, path string, done <-chan struct{
 	}
 }
 
+// waitForInitialTailwind preserves the static-output correctness gate without
+// charging SPA startup for a stylesheet that can be published independently.
+// Keeping the mode decision in this tiny helper gives the performance contract
+// a deterministic test seam without depending on process timing.
+func waitForInitialTailwind(required bool, wait func()) {
+	if required {
+		wait()
+	}
+}
+
 // pipeline (re)composes dist/styles.css from the Tailwind layer and the
 // collected <style> blocks. The Tailwind layer comes from the warm watcher's
 // private output file; if that path is unavailable (watcher failed to start or
@@ -1269,6 +1315,12 @@ type pipeline struct {
 	mu      sync.Mutex
 	oneShot func() (string, error) // set when the warm watcher is unavailable/dead
 	writeMu sync.Mutex
+	// ready prevents a Tailwind callback from publishing CSS before the first
+	// successful browser bundle. dirty is retained across write failures so the
+	// next successful source build retries composition even when component CSS
+	// itself did not change.
+	ready bool
+	dirty bool
 	// lastWritten is the sha256 of the bytes recompose last put on disk, guarded
 	// by writeMu. One .pzl edit reaches recompose TWICE — once from the rebuild
 	// and once from the Tailwind output poll a moment later — and in the common
@@ -1278,6 +1330,19 @@ type pipeline struct {
 	// timer to tune and no window in which styles.css is momentarily stale.
 	lastWritten [32]byte
 	haveWritten bool
+}
+
+func (p *pipeline) commitBuild(cssChanged bool) {
+	p.writeMu.Lock()
+	defer p.writeMu.Unlock()
+	p.ready = true
+	p.dirty = p.dirty || cssChanged
+}
+
+func (p *pipeline) invalidateStyles() {
+	p.writeMu.Lock()
+	defer p.writeMu.Unlock()
+	p.dirty = true
 }
 
 // enableOneShot switches the pipeline to run the Tailwind CLI once per
@@ -1318,6 +1383,11 @@ func (p *pipeline) tailwindCSS() (string, error) {
 // recompose writes dist/styles.css = Tailwind layer + collected <style>, unless
 // that is byte-for-byte what it already wrote.
 func (p *pipeline) recompose() error {
+	p.writeMu.Lock()
+	defer p.writeMu.Unlock()
+	if !p.ready || !p.dirty {
+		return nil
+	}
 	tw, err := p.tailwindCSS()
 	if err != nil {
 		return fmt.Errorf("tailwind styles: %w", err)
@@ -1329,13 +1399,12 @@ func (p *pipeline) recompose() error {
 	final := styles.Compose(tw, collected)
 	sum := sha256.Sum256([]byte(final))
 	target := filepath.Join(p.dist, "styles.css")
-	p.writeMu.Lock()
-	defer p.writeMu.Unlock()
 	// The dedupe is a claim about the FILE, not about the bytes we last handed to
 	// the filesystem: something outside the dev loop (a `git clean`, a stray rm)
 	// can remove it, and then skipping the write would 404 every reload until the
 	// session is restarted. Confirm it is still there before honoring the memo.
 	if p.haveWritten && p.lastWritten == sum && fsutil.FileExists(target) {
+		p.dirty = false
 		return nil
 	}
 	// Atomic write: the dev server may be serving dist/styles.css concurrently, so
@@ -1344,6 +1413,7 @@ func (p *pipeline) recompose() error {
 		return err
 	}
 	p.lastWritten, p.haveWritten = sum, true
+	p.dirty = false
 	return nil
 }
 

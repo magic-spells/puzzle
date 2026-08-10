@@ -65,3 +65,12 @@ mount. Production bundles tree-shake that path.
 Parser, codegen, config, style, asset, and prerender failures are surfaced with
 actionable context and fail the build. No lane silently substitutes empty CSS,
 partial component output, or a half-written `dist/`.
+
+## D156 performance hardening
+
+[[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]] keeps this failure contract while
+overlapping browser compilation with Tailwind generation. A barrier preserves
+browser-before-Tailwind error priority; CSS composition, public copying, and
+prerendering remain ordered afterward. The SPA watch path classifies each
+changed batch so usage, public, and CSS work runs only when that batch can
+affect it; an unimported public-only batch mirrors without invoking esbuild.

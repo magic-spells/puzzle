@@ -3,18 +3,19 @@ package build
 import (
 	"bytes"
 	"strings"
+	"sync"
 	"testing"
 )
 
 // A disabled profiler must be safe to use everywhere Build threads it, and must
 // print nothing — that is the whole zero-cost claim.
 func TestNilProfileIsInert(t *testing.T) {
-	var prof *buildProfile
-	end := prof.phase("bundle")
+	var prof *PhaseProfile
+	end := prof.Phase("bundle")
 	end()
 
 	var buf bytes.Buffer
-	prof.report(&buf)
+	prof.Report(&buf)
 	if buf.Len() != 0 {
 		t.Fatalf("disabled profiler wrote %q", buf.String())
 	}
@@ -38,7 +39,57 @@ func TestProfileReportListsPhasesInOrder(t *testing.T) {
 		}
 	}
 	if i, j := strings.Index(out, "config load"), strings.Index(out, "browser bundle"); i > j {
-		t.Fatalf("phases out of completion order:\n%s", out)
+		t.Fatalf("phases out of start order:\n%s", out)
+	}
+}
+
+func TestPhaseProfileUsesLabel(t *testing.T) {
+	prof := NewPhaseProfile(true, "puzzle dev · rebuild")
+	prof.Phase("browser bundle")()
+
+	var buf bytes.Buffer
+	prof.Report(&buf)
+	if out := buf.String(); !strings.Contains(out, "puzzle dev · rebuild · profile") {
+		t.Fatalf("profile report missing its label:\n%s", out)
+	}
+}
+
+func TestPhaseProfileConcurrentCompletionKeepsStartOrder(t *testing.T) {
+	prof := NewPhaseProfile(true, "concurrent")
+	ends := []func(){
+		prof.Phase("first"),
+		prof.Phase("second"),
+		prof.Phase("third"),
+	}
+
+	triggers := []chan struct{}{make(chan struct{}), make(chan struct{}), make(chan struct{})}
+	completed := make(chan int, len(ends))
+	var wg sync.WaitGroup
+	for i, end := range ends {
+		wg.Add(1)
+		go func(i int, end func()) {
+			defer wg.Done()
+			<-triggers[i]
+			end()
+			completed <- i
+		}(i, end)
+	}
+	for _, i := range []int{2, 1, 0} {
+		close(triggers[i])
+		if got := <-completed; got != i {
+			t.Fatalf("phase %d completed while releasing phase %d", got, i)
+		}
+	}
+	wg.Wait()
+
+	var buf bytes.Buffer
+	prof.Report(&buf)
+	out := buf.String()
+	first := strings.Index(out, "first")
+	second := strings.Index(out, "second")
+	third := strings.Index(out, "third")
+	if first < 0 || second < 0 || third < 0 || !(first < second && second < third) {
+		t.Fatalf("concurrent phases not reported in start order:\n%s", out)
 	}
 }
 
@@ -56,14 +107,14 @@ func TestProfileEnabledReadsEnv(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Setenv(ProfileEnvVar, c.env)
-		if got := profileEnabled(false); got != c.want {
-			t.Fatalf("profileEnabled(false) with %s=%q = %v, want %v", ProfileEnvVar, c.env, got, c.want)
+		if got := ProfileEnabled(false); got != c.want {
+			t.Fatalf("ProfileEnabled(false) with %s=%q = %v, want %v", ProfileEnvVar, c.env, got, c.want)
 		}
 	}
 
 	// The explicit option wins regardless of the environment.
 	t.Setenv(ProfileEnvVar, "0")
-	if !profileEnabled(true) {
+	if !ProfileEnabled(true) {
 		t.Fatal("Options.Profile must enable profiling even when the env var says off")
 	}
 }
