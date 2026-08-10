@@ -82,11 +82,15 @@ same principle applied to the shell). Three things moved out:
   exact equality — a docs site seeds identical store content for every route, and
   an exact-match key can never serve a stale island. The store snapshot itself is
   still taken per page.
-- **The writes.** Both writers assemble page HTML sequentially (pure CPU; a
-  shell/target error still surfaces for the first offending page), then write
-  through a bounded `fs.promises` worker pool with a Set of already-created
-  directories. First error wins and fails the build; `written`/summary order comes
-  from the page list, not completion order.
+- **The writes.** Both writers claim every output path first (last-wins on the
+  hybrid path, mirroring the sequential writer's overwrite order; the static
+  path keeps its first-wins duplicate skip), then a generator injects each
+  page's HTML lazily into a bounded `fs.promises` worker pool with a Set of
+  already-created directories — at most a pool-width of injected pages is alive
+  at once, never a full second copy of the site. Claiming before producing is
+  the pool's contract: two workers must never race one path. First error wins
+  and fails the build; `written`/summary order comes from the page list, not
+  completion order.
 
 ### The prerender `ctx.router`
 
