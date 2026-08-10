@@ -271,13 +271,16 @@ func TestCleanupFixturesWorkDirNeverEatsUserContent(t *testing.T) {
 		return root
 	}
 
+	// A pre-existing .puzzle is somebody else's — most concretely a running
+	// `puzzle dev --fixtures`, whose wrapper is generated once and has to live for
+	// the process lifetime. A one-shot build must not touch either.
 	root := newWorkDir(t)
 	cleanupFixturesWorkDir(root, false)
 	if _, err := os.Stat(filepath.Join(root, ".puzzle")); err != nil {
 		t.Errorf("a pre-existing .puzzle (created = false) must survive: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".puzzle", "fixtures")); !os.IsNotExist(err) {
-		t.Errorf("the generated wrapper is compiler scratch and must go regardless (stat err = %v)", err)
+	if _, err := os.Stat(filepath.Join(root, ".puzzle", "fixtures")); err != nil {
+		t.Errorf("a build that did not create .puzzle must leave the fixtures entry dir alone: %v", err)
 	}
 
 	root = newWorkDir(t)

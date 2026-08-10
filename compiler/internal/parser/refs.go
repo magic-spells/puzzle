@@ -140,11 +140,22 @@ func checkElementRef(ref Attr, seen map[string]Position, inFor, inSkeleton bool,
 }
 
 // findRefAttr returns the first `ref` attribute among attrs (any kind), or nil.
+// A literal-name attribute is skipped: inside {#raw} `ref` is authored markup,
+// not the directive (D150), so sample markup showing ref="my-chart" or a second
+// ref="input" must not fail the build on the identifier or duplicate rules.
 func findRefAttr(attrs []Attr) Attr {
 	for _, a := range attrs {
-		if attrNameOf(a) == "ref" {
+		if attrNameOf(a) == "ref" && !isLiteralName(a) {
 			return a
 		}
 	}
 	return nil
+}
+
+// isLiteralName reports whether an attribute's NAME was captured inside {#raw},
+// which makes it authored markup rather than a framework directive (D150). Only
+// StaticAttr can carry the flag — a raw body produces no other attribute kind.
+func isLiteralName(a Attr) bool {
+	at, ok := a.(*StaticAttr)
+	return ok && at.LiteralName
 }

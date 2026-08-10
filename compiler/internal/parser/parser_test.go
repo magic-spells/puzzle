@@ -736,6 +736,71 @@ func TestParseRaw(t *testing.T) {
 		if !ok || data.Value != `{ {"x": 1} }` {
 			t.Fatalf("literal data attr: got %#v", button.Attrs[1])
 		}
+		if !data.LiteralName {
+			t.Fatalf("non-@ raw attr must also be a literal name: got %#v", data)
+		}
+	})
+
+	// Every attribute in a raw body is an authored literal, not just the
+	// @-prefixed ones: a framework directive name there is sample markup, so it
+	// must neither fail the build nor be wired up.
+	t.Run("framework directive attrs are literal names", func(t *testing.T) {
+		root := parseContent(t, `{#raw}<li ref="my-chart" island="false" key="row-1" flip>x</li>{/raw}`)
+		li := elementChildren(root.Children)[0].(*Element)
+		if len(li.Attrs) != 4 {
+			t.Fatalf("attrs: got %d, want 4", len(li.Attrs))
+		}
+		for _, a := range li.Attrs {
+			at, ok := a.(*StaticAttr)
+			if !ok || !at.LiteralName {
+				t.Fatalf("attr %#v is not a literal-name static attr", a)
+			}
+		}
+	})
+
+	t.Run("directive attr names that would fail validation are accepted", func(t *testing.T) {
+		// Each of these is a compile error in a live template: a non-identifier
+		// ref name, a duplicate ref name, a valued island, and a reserved
+		// attribute namespace. In sample markup they are just bytes.
+		for _, content := range []string{
+			`{#raw}<div ref="my-chart"></div>{/raw}`,
+			`{#raw}<div ref="input"></div><span ref="input"></span>{/raw}`,
+			`{#raw}<div island="false"></div>{/raw}`,
+			`{#raw}<input bind:value="x" />{/raw}`,
+		} {
+			src := "<puzzle-view>" + content + "</puzzle-view>\n<script></script>"
+			if _, err := Parse([]byte(src), "test.pzl"); err != nil {
+				t.Fatalf("raw body %q: unexpected error %v", content, err)
+			}
+		}
+	})
+
+	// A raw body documents markup, so composition markers and component tags are
+	// literal elements there — not instantiated, and not D134 steering errors.
+	t.Run("markers and components are literal elements", func(t *testing.T) {
+		root := parseContent(t, `{#raw}<slot></slot><children/><Children/><Slot name="header"/><Portal>x</Portal><Card title="a"/>{/raw}`)
+		kids := elementChildren(root.Children)
+		want := []string{"slot", "children", "Children", "Slot", "Portal", "Card"}
+		if len(kids) != len(want) {
+			t.Fatalf("children: got %d, want %d (%#v)", len(kids), len(want), kids)
+		}
+		for i, tag := range want {
+			el, ok := kids[i].(*Element)
+			if !ok {
+				t.Fatalf("child %d (%s): got %#v, want a literal *Element", i, tag, kids[i])
+			}
+			if el.Tag != tag {
+				t.Fatalf("child %d: tag %q, want %q", i, el.Tag, tag)
+			}
+		}
+	})
+
+	t.Run("marker grammar still applies outside the raw block", func(t *testing.T) {
+		src := "<puzzle-view>{#raw}<slot></slot>{/raw}<slot></slot></puzzle-view>\n<script></script>"
+		_, err := Parse([]byte(src), "test.pzl")
+		if err == nil || !strings.Contains(err.Error(), "bare <slot> is not a marker") {
+			t.Fatalf("error: got %v, want the D134 steering error", err)
+		}
 	})
 
 	t.Run("raw blocks work in skeleton bodies", func(t *testing.T) {

@@ -134,6 +134,38 @@ func TestRouteGraphClassify(t *testing.T) {
 	}
 }
 
+// A root-level public/ is a documented layout (publicDir resolves it and
+// `puzzle dev` watches it), so the shell special-case and the public-asset
+// skip have to find it there too — hardcoding app/public/ dropped every
+// root-public project onto the "an unknown file changed" full-render path.
+func TestRouteGraphClassifyRootPublic(t *testing.T) {
+	root, g := testGraph(t)
+	rel := func(p string) string { return filepath.Join(root, filepath.FromSlash(p)) }
+
+	// Move the public tree to <root>/public so publicDir resolves the fallback.
+	if err := os.RemoveAll(rel("app/public")); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"public/index.html", "public/logo.png"} {
+		p := rel(f)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if plan := g.classify(root, []string{rel("public/index.html")}, nil); !plan.full {
+		t.Errorf("a root-level shell must force a full render, got routes %v", plan.routes)
+	}
+	plan := g.classify(root, []string{rel("public/logo.png")}, nil)
+	if plan.full || len(plan.routes) != 0 {
+		t.Errorf("a root-level public asset must render nothing: full=%v (%s) routes=%v",
+			plan.full, plan.reason, plan.routes)
+	}
+}
+
 // TestRouteGraphNotReady covers the two states that predate any graph at all.
 func TestRouteGraphNotReady(t *testing.T) {
 	var nilGraph *routeGraph

@@ -366,26 +366,39 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 		return writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings });
 	}
 
-	// Injection stays sequential — it is pure CPU, and a shell/target error must
-	// surface for the first offending page exactly as it always did. The files are
-	// then written concurrently (writeFiles).
+	// Claim the output paths FIRST (paths only, no HTML). Two route paths can
+	// normalize to one file — `/caf%C3%A9` and `/café` decode identically — and the
+	// write pool would race two workers on it: nondeterministic winner, and an
+	// interleaved truncate/write leaves half a page on disk. The last claimant wins,
+	// which is what the sequential writer's overwrite produced. Unlike static output
+	// every page still appears in `written`: both routes are live in the SPA router,
+	// they just share a prerendered file.
 	const written = [];
-	const files = [];
+	const claimedPaths = new Map();
 	for (const page of pages) {
-		const html =
-			page.prerender === false
-				? shell // opt-out: the plain SPA shell, untouched (no head injection either)
-				: injectShell(shell, {
-						targetId,
-						content: page.html,
-						title: page.title,
-						head: page.head,
-					});
 		const outPath = pageOutputPath(outDir, page.path);
-		files.push({ outPath, html });
+		claimedPaths.set(outPath, page);
 		written.push({ path: page.path, file: outPath, prerender: page.prerender !== false });
 	}
-	await writeFiles(files);
+
+	// Injection is pure CPU and runs one page at a time as the pool pulls, so only
+	// the pool's window of injected HTML is alive at once — building the full file
+	// list first held a second copy of the whole site's markup at peak.
+	function* injectPages() {
+		for (const [outPath, page] of claimedPaths) {
+			const html =
+				page.prerender === false
+					? shell // opt-out: the plain SPA shell, untouched (no head injection either)
+					: injectShell(shell, {
+							targetId,
+							content: page.html,
+							title: page.title,
+							head: page.head,
+						});
+			yield { outPath, html };
+		}
+	}
+	await writeFiles(injectPages());
 
 	return { outDir, written, skipped, warnings, count: written.length };
 }
@@ -394,29 +407,34 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
  * Write every page file with bounded concurrency. Page HTML is independent, so the
  * sync per-page `mkdirSync` + `writeFileSync` pair serialized the whole build
  * behind the filesystem one route at a time; `WRITE_CONCURRENCY` workers keep it
- * busy instead. Two details are load-bearing:
+ * busy instead. Three details are load-bearing:
+ *  - `files` is an ITERATOR of `{ outPath, html }`, pulled one item per worker
+ *    turn, so the callers inject each page's HTML as the pool consumes it and at
+ *    most `WRITE_CONCURRENCY` injected pages are alive at once. The pulls are
+ *    serialized, so a producing generator still runs page by page in order.
  *  - `madeDirs` skips the mkdir for a directory this build already created. Docs
  *    sections share parents heavily, so the recursive mkdir was mostly a repeated
  *    stat of paths that already existed. (A duplicate mkdir would be harmless
  *    anyway — `recursive: true` is idempotent — so the racy check is safe.)
- *  - the FIRST error wins and stops the pool, then throws: a failed write fails
- *    the build with the same error object the sync call produced.
+ *  - the FIRST error wins and stops the pool, then throws: a failed write (or a
+ *    failed injection, which surfaces out of the pull) fails the build with the
+ *    same error object the sync call produced.
  * Order of the caller's `written`/summary arrays is unaffected — it is built from
- * the page list, not from completion order.
+ * the page list, not from completion order. Callers must claim output paths before
+ * producing, since two workers writing one path would race.
  */
 const WRITE_CONCURRENCY = 16;
 
 async function writeFiles(files) {
 	const madeDirs = new Set();
-	let next = 0;
 	let failure = null;
 
 	const worker = async () => {
 		while (failure === null) {
-			const index = next++;
-			if (index >= files.length) return;
-			const { outPath, html } = files[index];
 			try {
+				const step = files.next();
+				if (step.done) return;
+				const { outPath, html } = step.value;
 				const dir = path.dirname(outPath);
 				if (!madeDirs.has(dir)) {
 					await fs.promises.mkdir(dir, { recursive: true });
@@ -431,7 +449,7 @@ async function writeFiles(files) {
 	};
 
 	const workers = [];
-	for (let i = 0; i < Math.min(WRITE_CONCURRENCY, files.length); i++) workers.push(worker());
+	for (let i = 0; i < WRITE_CONCURRENCY; i++) workers.push(worker());
 	await Promise.all(workers);
 	if (failure) throw failure;
 }
@@ -492,26 +510,50 @@ async function writeStaticDir({ config, outDir, shell, targetId, pages, skipped,
 	// route in reachable order and no dead second bundle is generated.
 	const claimedPaths = new Map();
 	const written = [];
-	const files = [];
-	for (const page of pages) {
-		const outPath = pageOutputPath(outDir, page.path);
-		if (claimedPaths.has(outPath)) {
-			skipped.push({ path: page.path, reason: 'duplicate' });
-			warnings.push(
-				`[puzzle] skipped duplicate route "${page.path}" — earlier route ` +
-					`"${claimedPaths.get(outPath)}" already writes ${path.relative(outDir, outPath)} ` +
-					'(two routes cannot own one static page; remove or rename one of them)'
-			);
-			continue;
-		}
-		claimedPaths.set(outPath, page.path);
+	// The pool pulls pages through this generator, so only its window of injected
+	// HTML is alive at once — collecting every page's HTML first held a second copy
+	// of the whole site's markup at peak. The pulls are serialized, so claims, slugs
+	// and `written` still land in enumeration order exactly as they did.
+	function* injectPages() {
+		for (const page of pages) {
+			const outPath = pageOutputPath(outDir, page.path);
+			if (claimedPaths.has(outPath)) {
+				skipped.push({ path: page.path, reason: 'duplicate' });
+				warnings.push(
+					`[puzzle] skipped duplicate route "${page.path}" — earlier route ` +
+						`"${claimedPaths.get(outPath)}" already writes ${path.relative(outDir, outPath)} ` +
+						'(two routes cannot own one static page; remove or rename one of them)'
+				);
+				continue;
+			}
+			claimedPaths.set(outPath, page.path);
 
-		// The slug is assigned BEFORE the reuse check on purpose: slugs are
-		// order-dependent (uniqueSlug's collision counter walks the page list), so a
-		// subset render has to consume them for every page a full render would, or
-		// the surviving pages' `_puzzle/<slug>.js` URLs would renumber.
-		const slug = uniqueSlug(computeSlug(page.path), slugCounts);
-		if (page.reused) {
+			// The slug is assigned BEFORE the reuse check on purpose: slugs are
+			// order-dependent (uniqueSlug's collision counter walks the page list), so a
+			// subset render has to consume them for every page a full render would, or
+			// the surviving pages' `_puzzle/<slug>.js` URLs would renumber.
+			const slug = uniqueSlug(computeSlug(page.path), slugCounts);
+			if (page.reused) {
+				written.push({
+					path: page.path,
+					file: outPath,
+					prerender: page.prerender !== false,
+					entry: `_puzzle/${slug}.js`,
+					modules: page.modules,
+					route: page.route,
+					reused: true,
+				});
+				continue;
+			}
+			const html = injectStaticShell(baseShell, {
+				targetId,
+				base,
+				content: page.html, // null for a prerender:false page → empty, unmarked target
+				title: page.title,
+				head: page.head, // null for prerender:false → no head injection (D84)
+				slug,
+				data: page.data ?? {},
+			});
 			written.push({
 				path: page.path,
 				file: outPath,
@@ -519,30 +561,11 @@ async function writeStaticDir({ config, outDir, shell, targetId, pages, skipped,
 				entry: `_puzzle/${slug}.js`,
 				modules: page.modules,
 				route: page.route,
-				reused: true,
 			});
-			continue;
+			yield { outPath, html };
 		}
-		const html = injectStaticShell(baseShell, {
-			targetId,
-			base,
-			content: page.html, // null for a prerender:false page → empty, unmarked target
-			title: page.title,
-			head: page.head, // null for prerender:false → no head injection (D84)
-			slug,
-			data: page.data ?? {},
-		});
-		files.push({ outPath, html });
-		written.push({
-			path: page.path,
-			file: outPath,
-			prerender: page.prerender !== false,
-			entry: `_puzzle/${slug}.js`,
-			modules: page.modules,
-			route: page.route,
-		});
 	}
-	await writeFiles(files);
+	await writeFiles(injectPages());
 
 	return {
 		outDir,

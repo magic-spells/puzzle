@@ -55,8 +55,12 @@ rename), an empty change list and a graph that was never captured are all full
 renders. The two paths that need no render at all are named explicitly: a public
 asset other than the shell is copied into staging verbatim and appears in no
 page's HTML, and a standalone stylesheet is composed into `styles.css` whatever
-happens. The shell itself (`app/public/index.html`) is spliced into every page
-and is therefore always a full render.
+happens (a Tailwind output change takes the same zero-route path through
+`RecomposeStyles` — D154). The classifier resolves the public dir and shell
+through the same `publicDir(root)` fallback the build uses, so a root-level
+`public/` project gets the identical fast paths as `app/public`. The shell
+itself (`public/index.html`) is spliced into every page and is therefore always
+a full render.
 
 **`{#svg}` is the one edge no metafile carries.** An inlined asset is a codegen
 watch file, not a module input, so the compile cache — which already tracks the
@@ -87,12 +91,15 @@ NOT a fallback trigger: it is the same error a full render would produce, and
 retrying it would only double the time to the diagnostic. The one-shot
 production build passes no filter and is untouched.
 
-**Change paths accumulate until a rebuild succeeds.** The graph is refreshed
-only by a rebuild that completes, so a failed save leaves it describing pre-edit
-imports. Every path handed to `Rebuild` since the last successful capture is
-therefore classified again, or an import added during a broken save would never
-be accounted for and a later edit to the imported file would be attributed to
-too few routes.
+**Change paths accumulate until a rebuild lands.** The graph and the pending
+set commit only after the staging swap succeeds: the rebuild parks its captured
+graph, and `Rebuild` installs it, promotes the route count, and clears
+`pending` once the new tree is serving. A failed compile, render, or swap
+leaves both describing the pre-edit state, so every accumulated path is
+classified again on the next save. Anything less and an import added during a
+broken save would never be accounted for — or a swap that failed after a
+successful render would strand the serving tree's stale pages as "last-good"
+with the builder believing their changes landed.
 
 **The per-page esbuild pass still bundles everything.** It is ~130-175ms warm,
 its content-hashed chunks have to stay consistent across the whole route set,

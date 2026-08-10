@@ -170,9 +170,13 @@ type StaticAttr struct {
 	Name      string
 	Value     string
 	Valueless bool
-	// LiteralName marks an @-prefixed attribute captured inside {#raw}. Codegen
-	// privately escapes the vnode key so the runtime writes the authored DOM
-	// attribute instead of treating it as an event directive (D150).
+	// LiteralName marks an attribute captured inside {#raw}, where the name is
+	// authored markup rather than Puzzle grammar (D150). It suppresses every
+	// directive reading of the name: `ref` is not validated or wired to
+	// this.refs (refs.go, codegen), `island` does not mark a frozen subtree
+	// (island.go), `key` does not suppress a synthetic {#for} key (codegen), and
+	// an @-prefixed name gets the runtime-private vnode-key escape so the DOM
+	// attribute is written as authored instead of binding a listener.
 	LiteralName bool
 	Pos         Position
 }

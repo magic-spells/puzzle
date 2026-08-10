@@ -13,6 +13,7 @@ connections:
   - DECISION-D22-NO-ESCAPE-BY-DEFAULT
   - DECISION-D70-TEMPLATE-COMMENTS
   - DECISION-D113-SSG-RAWTEXT-RULE
+  - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
 ---
 
 # D150 — Raw template block: lex braces as literal text while preserving HTML
@@ -36,10 +37,23 @@ attributes still become ordinary vnodes. Opener content after `raw` is ignored,
 matching `{#comment}`.
 
 The parser emits raw-body text as ordinary `Text` nodes, so codegen emits string
-literals and never sends it through expression resolution. A brace-valued
-attribute inside the block is static. A literal attribute whose name begins
-with `@` uses a private vnode-key escape so ViewManager and the SSG serializer
-write the authored name instead of treating it as a listener directive.
+literals and never sends it through expression resolution. Every attribute
+inside the block is a static authored literal: a brace-valued attribute is
+static text, an `@`-prefixed name uses a private vnode-key escape so ViewManager
+and the SSG serializer write the authored name instead of binding a listener,
+and no raw attribute reaches directive handling — a sample `ref` skips ref
+validation and emission, `island` freezes nothing, and namespace checks do not
+apply. The four reserved names the runtime intercepts by bare key (`ref`,
+`island`, `key`, `flip`) are omitted from the emitted vnode rather than
+serialized: the `@@` escape can only encode `@`-prefixed names, and rendering
+them as authored would take a runtime-side attr escape in setAttr and the
+serializer — client bytes for an attribute no viewer can see. Rendered output is
+unchanged; the raw body is simply inert.
+
+The marker and component grammar is inert inside the block as well: `<slot>`,
+`<children>`, and capitalized tags (`<Card/>`, `<Slot/>`, `<Children/>`,
+`<Portal>`) parse as plain elements, so sample markup can show composition
+syntax without instantiating it or tripping the D134 steering error.
 
 Serialization reuses the existing parent-aware rules. Normal element text is
 entity-escaped in prerendered HTML and decoded back by the HTML parser;

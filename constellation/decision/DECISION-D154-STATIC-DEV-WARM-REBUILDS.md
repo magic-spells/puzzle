@@ -75,9 +75,16 @@ memo inside it, which is keyed by PATH — an edited icon whose consuming `.pzl`
 is byte-identical would otherwise be served from the pre-edit scan with nothing
 able to notice.
 
-**Nothing writes into the served `dist/`.** In static mode `styles.css` belongs
-to the prerendered tree, so the Tailwind output poll asks for a (debounced)
-rebuild rather than recomposing in place the way the SPA loop does.
+**A styles-only change writes exactly one file.** `styles.css` belongs to the
+prerendered tree but appears in no page's HTML, so the Tailwind output poll
+drives a debounced `RecomposeStyles`: compose the Tailwind layer with the
+collected `<style>` blocks and atomically swap `dist/styles.css` alone into the
+served tree — zero routes rendered, a reload only when the bytes changed. It
+dedupes against the file on disk rather than a remembered hash (every staging
+swap replaces that file behind its back) and is a no-op before the first
+`dist/` exists. Route-shaped work still goes through the full staging swap.
+The initial build waits (bounded) for the warm child's first non-empty output,
+so the first served build is styled and no catch-up rebuild follows.
 
 **The node prerender stays a fresh subprocess per rebuild.** It is now the
 single largest phase (~100ms of a ~250ms rebuild on a 148-route site), and a
@@ -114,7 +121,9 @@ mutated mid-serve; and a copy of the whole tree costs more than it saves once
 public assets are large.
 
 **Patch `dist/` incrementally instead of swapping.** Breaks the D148 guarantee
-outright: a failed prerender would leave a half-updated site serving.
+outright: a failed prerender would leave a half-updated site serving. The
+one-file stylesheet recompose is the deliberate exception — a single atomic
+write cannot leave pages and bundles out of step.
 
 **Persistent node render workers.** The biggest remaining win, and a much larger
 change than the rest of this decision combined. Left for a later phase rather

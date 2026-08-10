@@ -259,9 +259,10 @@ func Serve(root string, opts Options) error {
 	if staticMode {
 		var builderErr error
 		// The Tailwind accessor is installed below (SetTailwind), once the warm
-		// child's fate is known. In static mode nothing writes styles.css into the
-		// served dist/ directly — the file only ever arrives through an atomic swap
-		// alongside the pages it belongs to.
+		// child's fate is known. In static mode a REBUILD's styles.css only ever
+		// arrives through the atomic swap, alongside the pages it was composed
+		// with; the builder rewrites the served copy on its own only for a
+		// styles-only change, which touches no page (RecomposeStyles).
 		staticBuilder, builderErr = build.NewStaticWatchBuilder(absRoot, build.StaticWatchOptions{Config: cfg})
 		if builderErr != nil {
 			// No persistent contexts: degrade to the one-shot build.Build per change
@@ -285,10 +286,11 @@ func Serve(root string, opts Options) error {
 			pl.collectedCSS = builder.CSS
 		}
 	}
-	// A static rebuild composes styles.css itself, into staging. The pipeline is
-	// still the thing that knows where the Tailwind layer comes from (the warm
-	// child's output file, or the one-shot fallback when that child is gone), so
-	// the builder reads it through the same accessor the SPA path composes from.
+	// A static rebuild composes styles.css itself, into staging (and recomposes it
+	// alone for a styles-only change). The pipeline is still the thing that knows
+	// where the Tailwind layer comes from (the warm child's output file, or the
+	// one-shot fallback when that child is gone), so the builder reads it through
+	// the same accessor the SPA path composes from.
 	if staticBuilder != nil {
 		staticBuilder.SetTailwind(pl.tailwindCSS)
 	}
@@ -312,15 +314,22 @@ func Serve(root string, opts Options) error {
 	}()
 
 	// stylesChanged is what the Tailwind side calls when the warm child has
-	// rewritten its output. The two serving modes answer it differently and the
-	// rebuild closure is defined below, so it is a forward-declared hook rather
-	// than a direct recompose call:
-	//   - SPA mode recomposes dist/styles.css in place (the file is served
-	//     straight off disk, so the atomic write is the whole update);
-	//   - static mode must NOT touch the served dist/ — styles.css belongs to the
-	//     prerendered tree and only ever arrives through a staging swap — so it
-	//     asks for a (debounced) rebuild instead.
+	// rewritten its output. Both serving modes answer it by rewriting
+	// dist/styles.css in place — the stylesheet is served straight off disk and no
+	// page's HTML embeds it, so the atomic write IS the whole update — but they
+	// compose it from different collectors, so it is a forward-declared hook
+	// rather than a direct call.
+	//
+	// It is assigned below, before any goroutine that can call it is started; the
+	// pollFile and death-watch goroutines read it with no synchronization of their
+	// own and rely on that ordering.
 	var stylesChanged func()
+
+	// The warm child's output file and stderr sink, held at Serve scope (with tw
+	// itself, above) so the goroutines that watch them can be started further
+	// down, once stylesChanged exists and the child has compiled once.
+	var twOutput string
+	var tailwindErr io.WriteCloser
 
 	// Warm Tailwind watcher — only alongside an incremental builder. (In the
 	// full-fallback path build.Build already runs Tailwind one-shot, so a warm
@@ -332,10 +341,10 @@ func Serve(root string, opts Options) error {
 			stylesStatus = tailwindStatus(resolveTailwindName(absRoot), false)
 			pl.enableOneShot(absRoot)
 		} else {
-			twOutput := tmp.Name()
+			twOutput = tmp.Name()
 			tmp.Close()
 			defer os.Remove(twOutput) // private file: cleaned up on shutdown, never served
-			tailwindErr := newTailwindStderr(stderr)
+			tailwindErr = newTailwindStderr(stderr)
 
 			w, werr := styles.StartWatch(ctx, styles.WatchOptions{
 				AppRoot: absRoot,
@@ -345,38 +354,18 @@ func Serve(root string, opts Options) error {
 			})
 			if werr != nil {
 				tailwindErr.Close()
+				tailwindErr = nil
 				logWarning(stderr, "%v (styles: one-shot Tailwind per rebuild)", werr)
 				os.Remove(twOutput)
+				twOutput = ""
 				stylesStatus = tailwindStatus(resolveTailwindName(absRoot), false)
 				pl.enableOneShot(absRoot)
 			} else {
 				tw = w // reachable at Serve scope so the deferred Stop can reap it
 				pl.twOutputPath = twOutput
 				stylesStatus = tailwindStatus(w.Name, true)
-
-				// (a) Update styles whenever the child rewrites its output file.
-				go pollFile(ctx, twOutput, tailwindPollInterval, func() {
-					if stylesChanged != nil {
-						stylesChanged()
-					}
-				})
-
-				// If the child dies unexpectedly, fall back to one-shot so CSS keeps
-				// updating rather than silently freezing.
-				go func() {
-					<-w.Done()
-					tailwindErr.Close()
-					select {
-					case <-ctx.Done():
-						return // dying because we're shutting down: expected.
-					default:
-					}
-					logWarning(stderr, "tailwind --watch exited (%v); falling back to one-shot rebuilds", w.Err())
-					pl.enableOneShot(absRoot)
-					if stylesChanged != nil {
-						stylesChanged()
-					}
-				}()
+				// The goroutines that watch this child are started below, once
+				// stylesChanged is assigned — see the wait for its first output.
 			}
 		}
 	}
@@ -386,7 +375,10 @@ func Serve(root string, opts Options) error {
 	// initial build nor a later one can kill the loop. The rebuild duration
 	// reflects the esbuild pass + styles composition only — Tailwind runs in its
 	// own warm child, off this path (D27).
-	rebuild := func(changed []string, logSuccess bool) {
+	// It returns the failure it printed (nil on success) so the watcher loop can
+	// tell the change filter that the bytes it accepted were NOT successfully
+	// built from — a re-save of the same bytes has to be able to retry.
+	rebuild := func(changed []string, logSuccess bool) error {
 		start := time.Now()
 		// Revalidate the public tree every rebuild: adding a file that collides
 		// with a reserved output (app.js/app.js.map/styles.css) while the server
@@ -399,7 +391,7 @@ func Serve(root string, opts Options) error {
 			if opts.onRebuild != nil {
 				opts.onRebuild(err)
 			}
-			return
+			return err
 		}
 		var err error
 		switch {
@@ -432,7 +424,7 @@ func Serve(root string, opts Options) error {
 			if opts.onRebuild != nil {
 				opts.onRebuild(err)
 			}
-			return
+			return err
 		}
 		if logSuccess {
 			logRebuild(stdout, absRoot, changed, time.Since(start))
@@ -445,24 +437,46 @@ func Serve(root string, opts Options) error {
 		if opts.onRebuild != nil {
 			opts.onRebuild(nil)
 		}
+		return nil
 	}
 
 	// With the rebuild closure in hand, wire the Tailwind hook described above.
-	if staticMode {
-		// Coalesce: the CLI rewrites its output file several times while a burst of
-		// class-name edits settles, and each rewrite would otherwise cost a full
-		// static rebuild. This is the same 150ms window the source watcher uses.
+	if staticBuilder != nil {
+		// A styles-only change renders ZERO routes. The stylesheet is recomposed
+		// straight into the served dist/ — it is the one static output no page's
+		// HTML embeds, so it needs no staging swap — and a Rebuild would be far
+		// worse than redundant: it carries no changed paths, so the classifier can
+		// only answer "render everything", and the warm Tailwind child rewrites its
+		// output after every single save.
+		//
+		// Coalesced on the source watcher's 150ms window all the same: the CLI
+		// rewrites its output several times while a burst of class-name edits
+		// settles.
 		var mu sync.Mutex
 		var timer *time.Timer
+		recompose := func() {
+			changed, err := staticBuilder.RecomposeStyles()
+			if err != nil {
+				logWarning(stderr, "recompose styles: %v", err)
+				return
+			}
+			if changed {
+				coalescer.request()
+			}
+		}
 		stylesChanged = func() {
 			mu.Lock()
 			defer mu.Unlock()
 			if timer == nil {
-				timer = time.AfterFunc(debounceInterval, func() { rebuild(nil, false) })
+				timer = time.AfterFunc(debounceInterval, recompose)
 				return
 			}
 			timer.Reset(debounceInterval)
 		}
+	} else if staticMode {
+		// The one-shot static fallback composes styles inside its own build, and
+		// runs Tailwind itself — no warm child exists to call this.
+		stylesChanged = func() { rebuild(nil, false) }
 	} else {
 		stylesChanged = func() {
 			if err := pl.recompose(); err != nil {
@@ -471,6 +485,43 @@ func Serve(root string, opts Options) error {
 			}
 			coalescer.request()
 		}
+	}
+
+	// The warm child returns from StartWatch before it has compiled anything, so
+	// its output file is still the empty temp file we created. Building against it
+	// would ship an unstyled site as the FIRST thing the developer sees and then
+	// throw that build away the moment the poll noticed the real write. Wait for
+	// the first one instead (bounded — a child that never writes must not hold the
+	// server hostage).
+	if tw != nil {
+		waitForTailwindOutput(ctx, twOutput, tw.Done(), tailwindFirstOutputWait)
+	}
+
+	// Only now, with stylesChanged assigned, do the watchers on the warm child
+	// start: they read it with no synchronization of their own, and starting them
+	// here — rather than in the block that created the child, where the hook was
+	// still nil — is what orders the assignment above before those reads.
+	// pollFile seeds from the file as it stands, which after the wait above
+	// already holds the first output, so the write the initial build is about to
+	// consume does not also schedule a rebuild of its own.
+	if tw != nil {
+		// (a) Update styles whenever the child rewrites its output file.
+		go pollFile(ctx, twOutput, tailwindPollInterval, stylesChanged)
+
+		// If the child dies unexpectedly, fall back to one-shot so CSS keeps
+		// updating rather than silently freezing.
+		go func() {
+			<-tw.Done()
+			tailwindErr.Close()
+			select {
+			case <-ctx.Done():
+				return // dying because we're shutting down: expected.
+			default:
+			}
+			logWarning(stderr, "tailwind --watch exited (%v); falling back to one-shot rebuilds", tw.Err())
+			pl.enableOneShot(absRoot)
+			stylesChanged()
+		}()
 	}
 
 	// Initial build: keep serving even if it fails (retry on next change).
@@ -519,7 +570,10 @@ func Serve(root string, opts Options) error {
 			rebuildPaths, configChanged := partitionChanges(changed, configPath)
 			rebuildPaths = filter.pending(rebuildPaths)
 			if len(rebuildPaths) > 0 {
-				rebuild(rebuildPaths, true)
+				// settled both arms the echo window (measured from the moment this
+				// rebuild stopped draining events) and, on failure, drops what the
+				// filter had accepted so re-saving the same bytes retries.
+				filter.settled(rebuild(rebuildPaths, true) == nil)
 			}
 			if configChanged {
 				// The config is read once at startup; a live edit needs a restart.
@@ -1112,9 +1166,18 @@ func isJunkChange(path string) bool {
 	}
 	// vim swap files: file.pzl.swp / .file.pzl.swp and the .swo/.swn/.swx
 	// siblings it rolls onto when several are open.
+	//
+	// The extension alone is not enough to condemn a name — `.swf` and `.swb` are
+	// real asset extensions, and public/ may ship anything — so the rest of the
+	// name has to look like a swap file too: vim builds one from the WHOLE file
+	// name, so what precedes the swap extension still carries the original's own
+	// extension (Home.pzl.swp), usually hidden behind a leading dot. A plain
+	// player.swf has neither and rebuilds like any other asset.
 	if ext := filepath.Ext(name); len(ext) == 4 && strings.HasPrefix(ext, ".sw") {
-		c := ext[3]
-		return c >= 'a' && c <= 'z'
+		if c := ext[3]; c >= 'a' && c <= 'z' {
+			stem := strings.TrimSuffix(name, ext)
+			return strings.HasPrefix(name, ".") || strings.Contains(stem, ".")
+		}
 	}
 	return false
 }
@@ -1145,6 +1208,46 @@ const reloadCoalesceDelay = 100 * time.Millisecond
 // private output file for a rewrite. A single-file mtime poll is the simplest
 // reliable trigger — fsnotify on one file is fragile across atomic replaces.
 const tailwindPollInterval = 150 * time.Millisecond
+
+// tailwindFirstOutputWait bounds how long the initial build waits for the warm
+// child's first compile. It is generous because it is only ever paid in full by
+// a Tailwind that produces nothing at all — a working one lands in a few hundred
+// milliseconds and the wait ends the moment it does.
+const tailwindFirstOutputWait = 5 * time.Second
+
+// tailwindFirstOutputPoll is finer-grained than tailwindPollInterval: this wait
+// is on the startup path, so the cost of noticing late is a delayed banner.
+const tailwindFirstOutputPoll = 25 * time.Millisecond
+
+// waitForTailwindOutput blocks until path has content, the child exits, the
+// context is cancelled, or limit elapses — whichever comes first. StartWatch
+// returns before the CLI has compiled anything, so without this the first build
+// composes the empty file we created for it.
+func waitForTailwindOutput(ctx context.Context, path string, done <-chan struct{}, limit time.Duration) {
+	if path == "" {
+		return
+	}
+	deadline := time.NewTimer(limit)
+	defer deadline.Stop()
+	ticker := time.NewTicker(tailwindFirstOutputPoll)
+	defer ticker.Stop()
+	for {
+		if info, err := os.Stat(path); err == nil && info.Size() > 0 {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-done:
+			// The child died without ever writing; the death watcher installs the
+			// one-shot fallback, and there is nothing to wait for.
+			return
+		case <-deadline.C:
+			return
+		case <-ticker.C:
+		}
+	}
+}
 
 // pipeline (re)composes dist/styles.css from the Tailwind layer and the
 // collected <style> blocks. The Tailwind layer comes from the warm watcher's
@@ -1219,14 +1322,19 @@ func (p *pipeline) recompose() error {
 	}
 	final := styles.Compose(tw, collected)
 	sum := sha256.Sum256([]byte(final))
+	target := filepath.Join(p.dist, "styles.css")
 	p.writeMu.Lock()
 	defer p.writeMu.Unlock()
-	if p.haveWritten && p.lastWritten == sum {
+	// The dedupe is a claim about the FILE, not about the bytes we last handed to
+	// the filesystem: something outside the dev loop (a `git clean`, a stray rm)
+	// can remove it, and then skipping the write would 404 every reload until the
+	// session is restarted. Confirm it is still there before honoring the memo.
+	if p.haveWritten && p.lastWritten == sum && fsutil.FileExists(target) {
 		return nil
 	}
 	// Atomic write: the dev server may be serving dist/styles.css concurrently, so
 	// an in-place truncate-then-write could hand a client a truncated file.
-	if err := fsutil.WriteFileAtomic(filepath.Join(p.dist, "styles.css"), []byte(final), 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(target, []byte(final), 0o644); err != nil {
 		return err
 	}
 	p.lastWritten, p.haveWritten = sum, true
