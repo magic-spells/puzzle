@@ -343,14 +343,14 @@ export default class RichTextEditor extends PuzzleView {
 			const href = this._editor.getAttributes('link').href || '';
 			this.setData({ linkOpen: true, linkDraft: href });
 			this.refresh();
-			// refresh() is scheduler-based, so the row's input only exists on the
-			// next frame — focus it there, or the row is keyboard-unreachable.
-			requestAnimationFrame(() => {
-				const input = this.refs.linkInput;
-				if (!input) return;
-				input.focus();
-				if (href) input.select();
-			});
+			// An explicit refresh() renders synchronously, so the row's input is
+			// already mounted by the time it returns — focus it right here, or the
+			// row is keyboard-unreachable. Deliberately NOT deferred: Chrome pauses
+			// requestAnimationFrame in unfocused/occluded windows, so an rAF focus
+			// never fires there at all.
+			const input = this.refs.linkInput;
+			input?.focus();
+			if (href) input?.select();
 		},
 
 		applyLink: () => {
