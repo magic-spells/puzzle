@@ -72,6 +72,8 @@ import ProgressRingDoc from './views/components/ProgressRingDoc.pzl';
 import QuantityInputDoc from './views/components/QuantityInputDoc.pzl';
 import RadioGroupDoc from './views/components/RadioGroupDoc.pzl';
 import RatingDoc from './views/components/RatingDoc.pzl';
+import RichTextDoc from './views/components/RichTextDoc.pzl';
+import RichTextEditorDoc from './views/components/RichTextEditorDoc.pzl';
 import ScrollAreaDoc from './views/components/ScrollAreaDoc.pzl';
 import SearchFieldDoc from './views/components/SearchFieldDoc.pzl';
 import SelectDoc from './views/components/SelectDoc.pzl';
@@ -611,6 +613,20 @@ export default [
 		view: RatingDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Rating — Puzzle Pieces' },
+	},
+	{
+		path: '/components/rich-text',
+		name: 'rich-text',
+		view: RichTextDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Rich Text — Puzzle Pieces' },
+	},
+	{
+		path: '/components/rich-text-editor',
+		name: 'rich-text-editor',
+		view: RichTextEditorDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Rich Text Editor — Puzzle Pieces' },
 	},
 	{
 		path: '/components/scroll-area',

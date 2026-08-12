@@ -1,0 +1,179 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Rich Text Editor</h1>
+        <p class="mt-2 text-body">
+          WYSIWYG editing on Tiptap/ProseMirror with the Toolbar piece as its formatting bar.
+          The value is not HTML — it is a structured JSON document tree (Shopify's rich text
+          metafield shape, extended with alignment and more), controlled via
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
+          and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>.
+          Render stored documents with the Rich Text piece.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full">
+          <RichTextEditor label="Post body" placeholder="Write something…"
+            value={ doc } @change={ setDoc } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours.
+          It pulls in the toolbar piece and lib/rich-text-doc.js, and needs the Tiptap packages:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <CodeBlock code={ installNpm } class="mt-3"/>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="live-document" title="Live document" code={ codeLive }>
+          <div class="grid w-full gap-6 lg:grid-cols-2">
+            <RichTextEditor label="Editor" value={ doc } @change={ setDoc } />
+            <div>
+              <div class="mb-1.5 text-sm font-medium text-ink">Rendered with RichText</div>
+              <div class="rounded-lg border border-border bg-surface px-3 py-2">
+                <RichText doc={ doc } />
+              </div>
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
+          <div class="w-full">
+            <RichTextEditor label="Read-only" value={ doc } disabled={ true } />
+          </div>
+        </ExampleBox>
+
+        <section id="data-format" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Data format</h2>
+          <p class="mb-3 text-sm text-body">
+            The document is a node tree — a superset of Shopify's rich text metafield format
+            (their format plus align, underline/strike, blockquote, and code-block). Store it
+            as JSON; render it with the Rich Text piece or your own tree walker.
+          </p>
+          <CodeBlock code={ codeFormat }/>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import RichTextEditor from '@/components/ui/RichTextEditor.pzl';
+import RichText from '@/components/ui/RichText.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for RichTextEditor — follows the ButtonDoc exemplar shape.
+const installCmd = 'puzzle add piece rich-text-editor';
+const installNpm = 'npm install @tiptap/core @tiptap/pm @tiptap/starter-kit @tiptap/extension-text-align';
+const usageImport = `import RichTextEditor from '@/components/ui/RichTextEditor.pzl';`;
+const usageMarkup = `<RichTextEditor label="Post body" value={ doc } @change={ setDoc } />`;
+
+const codeHero = `<RichTextEditor label="Post body" placeholder="Write something…"
+  value={ doc } @change={ setDoc } />
+
+// parent
+events = {
+  setDoc: (doc) => this.setData('doc', doc),
+};`;
+
+const codeLive = `<RichTextEditor label="Editor" value={ doc } @change={ setDoc } />
+<RichText doc={ doc } />`;
+
+const codeDisabled = `<RichTextEditor label="Read-only" value={ doc } disabled={ true } />`;
+
+const codeFormat = `{
+  "type": "root",
+  "children": [
+    { "type": "heading", "level": 2,
+      "children": [{ "type": "text", "value": "Shipping" }] },
+    { "type": "paragraph", "align": "center",
+      "children": [
+        { "type": "text", "value": "Orders ship in " },
+        { "type": "text", "value": "2 days", "bold": true },
+        { "type": "link", "url": "/policy",
+          "children": [{ "type": "text", "value": "details" }] }
+      ] },
+    { "type": "list", "listType": "unordered",
+      "children": [
+        { "type": "list-item",
+          "children": [{ "type": "text", "value": "Free returns" }] }
+      ] }
+  ]
+}`;
+
+const SAMPLE_DOC = {
+	type: 'root',
+	children: [
+		{
+			type: 'heading',
+			level: 2,
+			children: [{ type: 'text', value: 'Hello, rich text' }],
+		},
+		{
+			type: 'paragraph',
+			children: [
+				{ type: 'text', value: 'Select some text and use the toolbar — ' },
+				{ type: 'text', value: 'bold', bold: true },
+				{ type: 'text', value: ', ' },
+				{ type: 'text', value: 'italic', italic: true },
+				{ type: 'text', value: ', lists, quotes, and ' },
+				{
+					type: 'link',
+					url: 'https://example.com',
+					children: [{ type: 'text', value: 'links' }],
+				},
+				{ type: 'text', value: '.' },
+			],
+		},
+	],
+};
+
+export default class RichTextEditorDoc extends PuzzleView {
+	created() {
+		this.setData({ doc: SAMPLE_DOC });
+	}
+
+	data(params, props) {
+		return {
+			...this.getData(),
+			installCmd,
+			installNpm,
+			usageImport,
+			usageMarkup,
+			codeHero,
+			codeLive,
+			codeDisabled,
+			codeFormat,
+			toc: [
+				{ label: 'Installation', href: '#installation' },
+				{ label: 'Usage', href: '#usage' },
+				{ label: 'Live document', href: '#live-document' },
+				{ label: 'Disabled', href: '#disabled' },
+				{ label: 'Data format', href: '#data-format' },
+			],
+		};
+	}
+
+	events = {
+		setDoc: (doc) => this.setData('doc', doc),
+	};
+}
+</script>
