@@ -25,11 +25,10 @@
         <CodeBlock code={ installCmd }/>
         <CodeBlock code={ installNpm } class="mt-3"/>
         <p class="mt-3 text-sm text-muted">
-          The
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">^17</code>
-          pin is deliberate: @tiptap/markdown — the dependency behind the Markdown Editor piece —
-          pins marked ^17, so installing ^18 here would give an app that uses both pieces two
-          copies of the parser in its bundle.
+          The <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">^17</code> pin is deliberate:
+          @tiptap/markdown — the dependency behind the Markdown Editor piece — pins marked ^17,
+          so installing ^18 here would give an app that uses both pieces two copies of the
+          parser in its bundle.
         </p>
       </section>
 
@@ -38,20 +37,18 @@
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
         <p class="mt-3 text-sm text-body">
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
-          is a plain markdown string the parent owns; an empty or whitespace-only string renders
-          nothing. Pass
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">newTab</code>
-          to open scheme-bearing (external) links in a new tab with rel=noopener noreferrer —
-          relative links are left alone.
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">class</code>
-          is appended to the root, so width and prose constraints are yours to set.
+          The <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code> prop is a plain markdown string the parent owns; an
+          empty or whitespace-only string renders nothing.
+          Pass <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">newTab</code> to open scheme-bearing (external) links in a new
+          tab with rel=noopener noreferrer — relative links are left alone.
+          Any <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">class</code> is appended to the root, so width and prose
+          constraints are yours to set.
         </p>
         <CodeBlock code={ usageNewTab } class="mt-3"/>
         <p class="mt-3 text-sm text-muted">
-          Content renders client-side only. The walker builds DOM inside an
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">island</code>
-          after mount, so on prerendered (static or hybrid) pages the markdown appears after
+          Content renders client-side only. The walker builds DOM inside
+          an <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">island</code> after mount,
+          so on prerendered (static or hybrid) pages the markdown appears after
           takeover rather than in the baked markup — worth weighing for content you need indexed.
         </p>
       </section>

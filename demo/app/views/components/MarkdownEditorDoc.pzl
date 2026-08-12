@@ -7,9 +7,8 @@
           WYSIWYG markdown editor on Tiptap/ProseMirror — Toolbar-driven headings,
           bold/italic/strike, inline code, lists, task lists, blockquote, code block, rules,
           links, and tables, with markdown typing shortcuts, emitting a controlled markdown
-          string via
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>;
-          render stored markdown with the Markdown piece.
+          string via <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>; render
+          stored markdown with the Markdown piece.
         </p>
       </header>
 
@@ -35,18 +34,12 @@
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
         <p class="mt-3 text-sm text-body">
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
-          is the markdown string and the parent owns it;
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
-          fires value-first with the full markdown string on every edit.
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code>
-          names the content region for assistive tech,
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">placeholder</code>
-          shows while the document is empty,
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">disabled</code>
-          makes it read-only, and
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">class</code>
-          is appended to the root.
+          The <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code> prop is the markdown string and the parent owns it;
+          the <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code> callback fires value-first with the full markdown
+          string on every edit. A <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code> names the content region for
+          assistive tech, a <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">placeholder</code> shows while the document is
+          empty, a <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">disabled</code> flag makes it read-only,
+          and any <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">class</code> is appended to the root.
         </p>
         <p class="mt-3 text-sm text-muted">
           The editor emits CANONICAL markdown, which may not be spelled the way you fed it:
@@ -98,7 +91,7 @@
             strikethrough, inline code, bullet lists, ordered lists, task lists, blockquotes,
             fenced code blocks, horizontal rules, links, and tables. Undo/redo use the standard
             shortcuts. When the caret is inside a table a second contextual toolbar appears with
-            the row/column/merge actions.
+            the row, column, and header actions.
           </p>
           <p class="mb-3 text-sm text-body">Deliberately absent, and why:</p>
           <ul class="mb-3 list-disc space-y-3 pl-5 text-sm text-body">
@@ -184,7 +177,7 @@ lists, quotes, and [links](https://example.com).
 `;
 
 const TABLE_MD = `Put the caret in a cell — a second toolbar appears with the
-row, column, and merge actions.
+row, column, and header actions.
 
 | Piece    | Value      | Renders with |
 | :------- | :--------- | :----------- |
