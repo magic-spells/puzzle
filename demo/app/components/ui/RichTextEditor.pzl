@@ -4,8 +4,10 @@
       <div id={ labelId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</div>
     {/if}
 
-    <Toolbar class="mb-2 w-full" label="Text formatting" disabled={ disabled }
-      items={ tbItems } @toggle={ onToggle } @press={ onPress }/>
+    <div class="mb-2" @pointerdown:prevent={ noopPointer }>
+      <Toolbar class="w-full" label="Text formatting" disabled={ disabled }
+        items={ tbItems } @toggle={ onToggle } @press={ onPress }/>
+    </div>
 
     {#if linkOpen}
       <div class="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
@@ -237,7 +239,12 @@ export default class RichTextEditor extends PuzzleView {
 	afterUpdate() {
 		const ed = this._editor;
 		if (!ed) return;
-		ed.setEditable(!this.props.disabled);
+		// setEditable dispatches a transaction even when the flag is unchanged,
+		// and every transaction runs _syncActive — calling it unconditionally on
+		// each render closes a render→transaction→render loop. Only write on a
+		// real change.
+		const editable = !this.props.disabled;
+		if (ed.isEditable !== editable) ed.setEditable(editable);
 		const v = this.props.value;
 		if (v == null) return;
 		const s = JSON.stringify(v);
@@ -254,7 +261,7 @@ export default class RichTextEditor extends PuzzleView {
 	_syncActive() {
 		const ed = this._editor;
 		if (!ed) return;
-		this.setData('active', {
+		const next = {
 			bold: ed.isActive('bold'),
 			italic: ed.isActive('italic'),
 			underline: ed.isActive('underline'),
@@ -268,7 +275,17 @@ export default class RichTextEditor extends PuzzleView {
 			ol: ed.isActive('orderedList'),
 			quote: ed.isActive('blockquote'),
 			codeBlock: ed.isActive('codeBlock'),
-		});
+		};
+		// Transactions fire constantly — every keystroke, every selection move,
+		// every setEditable — but the pressed states change on only a few of
+		// them. Re-rendering on each one rebuilds the whole toolbar per keystroke
+		// and, paired with a render that dispatches its own transaction, spins
+		// the render cycle until Puzzle's perf breaker cuts the chain. Bail when
+		// nothing actually flipped.
+		const prev = this.getData().active || {};
+		const keys = Object.keys(next);
+		if (keys.every((k) => !!prev[k] === !!next[k])) return;
+		this.setData('active', next);
 		this.refresh();
 	}
 
@@ -277,6 +294,16 @@ export default class RichTextEditor extends PuzzleView {
 	}
 
 	events = {
+		// pointerdown's default action is the focus transfer, so a toolbar click
+		// would blur the contenteditable and collapse ProseMirror's selection —
+		// the command then lands as a stored mark at the caret instead of over
+		// the selected text. Preventing the default on the toolbar wrapper keeps
+		// the selection alive across the click (the same preventDefault-on-
+		// mousedown pattern every contenteditable toolbar uses); the click still
+		// fires, and Tab/arrow keyboard access is untouched since that path never
+		// fires pointerdown. NOT applied to the link row — its input needs focus.
+		noopPointer: () => {},
+
 		onToggle: ({ value }) => {
 			const c = this._chain();
 			if (!c) return;
