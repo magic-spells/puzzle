@@ -66,7 +66,8 @@ import { MARKDOWN_CLASSES as C, isEmpty } from '../../lib/markdown-doc.js';
 // Props:
 //   value        markdown string; the parent owns it (controlled). The editor
 //                canonicalizes on emit while accepting equivalent source
-//                spellings without resetting selection or undo history.
+//                spellings without resetting selection or undo history. A
+//                null/undefined value leaves the current content in place.
 //   label        optional label above the toolbar; also the content region's
 //                accessible name (wired as aria-labelledby at mount; without a
 //                label the region falls back to a generic aria-label)
@@ -101,11 +102,12 @@ const CONTENT_CLASS =
 	'[&_h3]:mt-5 [&_h3:first-child]:mt-0 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3]:text-ink ' +
 	// .tableWrapper and .selectedCell are machine-generated ProseMirror class
 	// names reachable through arbitrary variants, so no <style> block is needed.
-	'[&_.tableWrapper]:mt-4 [&_.tableWrapper]:overflow-x-auto [&_.tableWrapper]:rounded-xl [&_.tableWrapper]:border [&_.tableWrapper]:border-border ' +
+	'[&_.tableWrapper]:mt-4 [&_.tableWrapper]:w-full [&_.tableWrapper]:overflow-x-auto [&_.tableWrapper]:rounded-xl [&_.tableWrapper]:border [&_.tableWrapper]:border-border ' +
+	'[&_tbody>tr:first-child]:border-b [&_tbody>tr:first-child]:border-border [&_tbody>tr:first-child]:bg-surface-sunken ' +
 	'[&_th]:border [&_th]:border-border [&_td]:border [&_td]:border-border [&_.selectedCell]:bg-brand-tint ' +
 	// TaskItem's node view renders li[data-checked] > label > input + div.
 	'[&_ul[data-type=taskList]]:list-none [&_ul[data-type=taskList]]:pl-0 ' +
-	'[&_li[data-type=taskItem]>label>input]:mt-1.5 [&_li[data-type=taskItem]>label>input]:size-4 [&_li[data-type=taskItem]>label>input]:shrink-0 [&_li[data-type=taskItem]>label>input]:accent-brand ' +
+	'[&_li[data-checked]>label>input]:mt-1.5 [&_li[data-checked]>label>input]:size-4 [&_li[data-checked]>label>input]:shrink-0 [&_li[data-checked]>label>input]:accent-brand ' +
 	'[&_li[data-checked=true]>div]:text-muted [&_li[data-checked=true]>div]:line-through';
 
 const FRAME_BASE =
@@ -246,8 +248,8 @@ export default class MarkdownEditor extends PuzzleView {
 						// Resize handles need machine-generated CSS from a <style> block;
 						// pieces forbid that chrome, so tables deliberately stay fixed.
 						resizable: false,
-						// Tiptap 3.30 defaults renderWrapper to false; enable it so the
-						// verified machine-generated .tableWrapper can carry the chrome.
+						// TableView gives the live editor .tableWrapper unconditionally,
+						// including when non-resizable; this only aligns static getHTML().
 						renderWrapper: true,
 						HTMLAttributes: { class: C.table },
 					},
@@ -273,7 +275,9 @@ export default class MarkdownEditor extends PuzzleView {
 			onUpdate: ({ editor }) => {
 				const md = editor.getMarkdown();
 				this._applied = md;
-				this._appliedRaw = md;
+				// Deliberately do NOT touch _appliedRaw here: refresh() synchronously
+				// runs afterUpdate() while the prop still holds its pre-keystroke value.
+				// _appliedRaw tracks only the last prop spelling seen.
 				this.setData('empty', isEmpty(md));
 				this.refresh();
 				this.props.change?.(md);
@@ -400,13 +404,14 @@ export default class MarkdownEditor extends PuzzleView {
 				const href = this._editor.getAttributes('link').href || '';
 				this.setData({ linkOpen: true, linkDraft: href });
 				this.refresh();
-				// The row is created by refresh(); defer focus until the browser's next
-				// frame so its input ref is settled before we hand keyboard focus to it.
-				requestAnimationFrame(() => {
-					const input = this.refs.linkInput;
-					input?.focus();
-					if (href) input?.select();
-				});
+				// An explicit refresh() renders synchronously, so the row's input is
+				// already mounted by the time it returns — focus it right here, or the
+				// row is keyboard-unreachable. Deliberately NOT deferred: Chrome pauses
+				// requestAnimationFrame in unfocused/occluded windows, so an rAF focus
+				// never fires there at all.
+				const input = this.refs.linkInput;
+				input?.focus();
+				if (href) input?.select();
 				return;
 			}
 			const c = this._chain();
