@@ -54,6 +54,8 @@ import KanbanDoc from './views/components/KanbanDoc.pzl';
 import KbdDoc from './views/components/KbdDoc.pzl';
 import LabelDoc from './views/components/LabelDoc.pzl';
 import LineChartDoc from './views/components/LineChartDoc.pzl';
+import MarkdownDoc from './views/components/MarkdownDoc.pzl';
+import MarkdownEditorDoc from './views/components/MarkdownEditorDoc.pzl';
 import MarqueeDoc from './views/components/MarqueeDoc.pzl';
 import MasonryDoc from './views/components/MasonryDoc.pzl';
 import MenubarDoc from './views/components/MenubarDoc.pzl';
@@ -487,6 +489,20 @@ export default [
 		view: LineChartDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Line Chart — Puzzle Pieces' },
+	},
+	{
+		path: '/components/markdown',
+		name: 'markdown',
+		view: MarkdownDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Markdown — Puzzle Pieces' },
+	},
+	{
+		path: '/components/markdown-editor',
+		name: 'markdown-editor',
+		view: MarkdownEditorDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Markdown Editor — Puzzle Pieces' },
 	},
 	{
 		path: '/components/marquee',

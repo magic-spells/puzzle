@@ -520,6 +520,40 @@
       "targetDir": "app/components/ui"
     },
     {
+      "name": "markdown",
+      "description": "Renders a markdown string as semantic HTML — a marked-lexer token walker building DOM with createElement/createTextNode, so markdown can never inject markup; CommonMark plus GFM tables, task lists, and strikethrough",
+      "files": [
+        "Markdown.pzl"
+      ],
+      "registryDependencies": [
+        "lib/markdown-doc.js"
+      ],
+      "dependencies": [
+        "marked"
+      ],
+      "targetDir": "app/components/ui"
+    },
+    {
+      "name": "markdown-editor",
+      "description": "WYSIWYG markdown editor on Tiptap/ProseMirror — Toolbar-driven headings, bold/italic/strike, inline code, lists, task lists, blockquote, code block, rules, links, and tables, with markdown typing shortcuts, emitting a controlled markdown string via @change; render stored markdown with the markdown piece",
+      "files": [
+        "MarkdownEditor.pzl"
+      ],
+      "registryDependencies": [
+        "toolbar",
+        "lib/markdown-doc.js"
+      ],
+      "dependencies": [
+        "@tiptap/core",
+        "@tiptap/pm",
+        "@tiptap/starter-kit",
+        "@tiptap/extension-list",
+        "@tiptap/extension-table",
+        "@tiptap/markdown"
+      ],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "marquee",
       "description": "Continuously scrolling ticker of slot content — seamless rAF loop with pause-on-hover, drag-to-scroll, direction and speed props, and prefers-reduced-motion respect",
       "files": [

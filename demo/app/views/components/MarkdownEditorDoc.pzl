@@ -1,0 +1,227 @@
+<puzzle-view class="w-full">
+  <div class="flex gap-12">
+    <article class="mx-auto w-full min-w-0 max-w-5xl">
+      <header class="mb-8">
+        <h1 class="text-3xl font-semibold tracking-tight text-ink">Markdown Editor</h1>
+        <p class="mt-2 text-body">
+          WYSIWYG markdown editor on Tiptap/ProseMirror — Toolbar-driven headings,
+          bold/italic/strike, inline code, lists, task lists, blockquote, code block, rules,
+          links, and tables, with markdown typing shortcuts, emitting a controlled markdown
+          string via
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>;
+          render stored markdown with the Markdown piece.
+        </p>
+      </header>
+
+      <ExampleBox code={ codeHero }>
+        <div class="w-full self-start">
+          <MarkdownEditor label="Post body" placeholder="Write something…"
+            value={ md } @change={ setMd } />
+        </div>
+      </ExampleBox>
+
+      <section id="installation" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Installation</h2>
+        <p class="mb-3 text-sm text-body">
+          Copy the piece into your app — it compiles with your build and the code is yours.
+          It pulls in the toolbar piece and lib/markdown-doc.js, and needs the Tiptap packages:
+        </p>
+        <CodeBlock code={ installCmd }/>
+        <CodeBlock code={ installNpm } class="mt-3"/>
+      </section>
+
+      <section id="usage" class="mt-12 scroll-mt-20">
+        <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
+        <CodeBlock code={ usageImport }/>
+        <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-body">
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>
+          is the markdown string and the parent owns it;
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@change</code>
+          fires value-first with the full markdown string on every edit.
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">label</code>
+          names the content region for assistive tech,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">placeholder</code>
+          shows while the document is empty,
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">disabled</code>
+          makes it read-only, and
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">class</code>
+          is appended to the root.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          The editor emits CANONICAL markdown, which may not be spelled the way you fed it:
+          feed it asterisk bullets and the next @change hands back dashes, extra blank lines
+          get normalized, and so on. It accepts equivalent spellings on the way in without
+          resetting the selection or undo history — but if you store what comes out, expect
+          the canonical form.
+        </p>
+      </section>
+
+      <div class="mt-12 space-y-12">
+        <ExampleBox id="live-document" title="Live document" code={ codeLive }>
+          <div class="grid w-full gap-6 self-start lg:grid-cols-2">
+            <MarkdownEditor label="Editor" value={ md } @change={ setMd } />
+            <div class="min-w-0 space-y-4">
+              <div>
+                <div class="mb-1.5 text-sm font-medium text-ink">Rendered with Markdown</div>
+                <div class="rounded-lg border border-border bg-surface px-3 py-2">
+                  <Markdown value={ md } />
+                </div>
+              </div>
+              <div>
+                <div class="mb-1.5 text-sm font-medium text-ink">The markdown string</div>
+                <!-- A plain <pre>, not CodeBlock: Code highlights once and keeps the
+                     result, so it is not built for a value that changes on every
+                     keystroke. -->
+                <pre class="max-h-80 overflow-auto rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[13px]/relaxed text-body whitespace-pre-wrap break-words">{ md }</pre>
+              </div>
+            </div>
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="tables" title="Tables" code={ codeTables }>
+          <div class="w-full self-start">
+            <MarkdownEditor label="Spec sheet" value={ tableMd } @change={ setTableMd } />
+          </div>
+        </ExampleBox>
+
+        <ExampleBox id="disabled" title="Disabled" code={ codeDisabled }>
+          <div class="w-full self-start">
+            <MarkdownEditor label="Read-only" value={ md } disabled={ true } />
+          </div>
+        </ExampleBox>
+
+        <section id="markdown-support" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Markdown support</h2>
+          <p class="mb-3 text-sm text-body">
+            The toolbar and the typing shortcuts cover H1 through H3, bold, italic,
+            strikethrough, inline code, bullet lists, ordered lists, task lists, blockquotes,
+            fenced code blocks, horizontal rules, links, and tables. Undo/redo use the standard
+            shortcuts. When the caret is inside a table a second contextual toolbar appears with
+            the row/column/merge actions.
+          </p>
+          <p class="mb-3 text-sm text-body">Deliberately absent, and why:</p>
+          <ul class="mb-3 list-disc space-y-3 pl-5 text-sm text-body">
+            <li>
+              <div class="font-medium text-ink">Underline and text alignment</div>
+              <div>
+                Markdown cannot express either one, so a button for them would produce
+                formatting that the string silently drops. Reach for the Rich Text Editor piece
+                when you need them — its JSON tree carries both.
+              </div>
+            </li>
+            <li>
+              <div class="font-medium text-ink">Images</div>
+              <div>
+                The editor schema has no image node, so an image typed as markdown will NOT
+                survive the round trip — it comes back as literal text. The Markdown RENDERER
+                displays images fine; this is an editor-side limit only.
+              </div>
+            </li>
+            <li>
+              <div class="font-medium text-ink">H4 through H6</div>
+              <div>
+                Headings stop at three levels, which is the range a document body actually
+                needs and keeps the toolbar honest.
+              </div>
+            </li>
+          </ul>
+          <p class="text-sm text-muted">
+            Store the string and render it with the Markdown piece — the two pieces share
+            lib/markdown-doc.js, so editor content and rendered output carry the same
+            typography classes.
+          </p>
+        </section>
+      </div>
+    </article>
+
+    <Toc class="sticky top-24 hidden h-fit w-48 shrink-0 self-start xl:block" items={ toc }/>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import MarkdownEditor from '@/components/ui/MarkdownEditor.pzl';
+import Markdown from '@/components/ui/Markdown.pzl';
+import ExampleBox from '@/components/docs/ExampleBox.pzl';
+import CodeBlock from '@/components/docs/CodeBlock.pzl';
+import Toc from '@/components/docs/Toc.pzl';
+
+// Docs page for MarkdownEditor — follows the ButtonDoc exemplar shape. Every
+// markdown and code sample lives here as a template-literal const: the compiler
+// parses template prose, so raw `#`, backticks, and angle brackets must never
+// sit inline in the markup above.
+const installCmd = 'puzzle add piece markdown-editor';
+const installNpm =
+	'npm install @tiptap/core @tiptap/pm @tiptap/starter-kit @tiptap/extension-list @tiptap/extension-table @tiptap/markdown';
+const usageImport = `import MarkdownEditor from '@/components/ui/MarkdownEditor.pzl';`;
+const usageMarkup = `<MarkdownEditor label="Post body" value={ md } @change={ setMd } />`;
+
+const codeHero = `<MarkdownEditor label="Post body" placeholder="Write something…"
+  value={ md } @change={ setMd } />
+
+// parent
+events = {
+  setMd: (md) => this.setData('md', md),
+};`;
+
+const codeLive = `<MarkdownEditor label="Editor" value={ md } @change={ setMd } />
+<Markdown value={ md } />`;
+
+const codeTables = `<MarkdownEditor label="Spec sheet" value={ tableMd } @change={ setTableMd } />`;
+
+const codeDisabled = `<MarkdownEditor label="Read-only" value={ md } disabled={ true } />`;
+
+const SAMPLE_MD = `## Hello, markdown
+
+Select some text and use the toolbar — **bold**, *italic*, ~~strike~~, \`code\`,
+lists, quotes, and [links](https://example.com).
+
+- Type \`- \` to start a bullet list
+- Type \`# \` for a heading
+
+> Everything you type round-trips through a markdown string.
+`;
+
+const TABLE_MD = `Put the caret in a cell — a second toolbar appears with the
+row, column, and merge actions.
+
+| Piece    | Value      | Renders with |
+| :------- | :--------- | :----------- |
+| Markdown | string     | Markdown     |
+| Rich Text | JSON tree | Rich Text    |
+`;
+
+export default class MarkdownEditorDoc extends PuzzleView {
+	created() {
+		this.setData({ md: SAMPLE_MD, tableMd: TABLE_MD });
+	}
+
+	data(params, props) {
+		return {
+			...this.getData(),
+			installCmd,
+			installNpm,
+			usageImport,
+			usageMarkup,
+			codeHero,
+			codeLive,
+			codeTables,
+			codeDisabled,
+			toc: [
+				{ label: 'Installation', href: '#installation' },
+				{ label: 'Usage', href: '#usage' },
+				{ label: 'Live document', href: '#live-document' },
+				{ label: 'Tables', href: '#tables' },
+				{ label: 'Disabled', href: '#disabled' },
+				{ label: 'Markdown support', href: '#markdown-support' },
+			],
+		};
+	}
+
+	events = {
+		setMd: (md) => this.setData('md', md),
+		setTableMd: (md) => this.setData('tableMd', md),
+	};
+}
+</script>
