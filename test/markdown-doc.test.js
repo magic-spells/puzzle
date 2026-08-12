@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
 	isEmpty,
+	decodeEntities,
 	safeUrl,
 	safeImageUrl,
 	safeLang,
@@ -18,6 +19,17 @@ test('isEmpty is whitespace-only, null and undefined', () => {
 	assert.equal(isEmpty(undefined), true);
 	assert.equal(isEmpty('#'), false);
 	assert.equal(isEmpty('a'), false);
+});
+
+// ---- entities -------------------------------------------------------------
+
+test('decodeEntities handles supported named and numeric references safely', () => {
+	assert.equal(decodeEntities('&amp;'), '&');
+	assert.equal(decodeEntities('&#8212;'), '—');
+	assert.equal(decodeEntities('&#x2014;'), '—');
+	assert.equal(decodeEntities('&nbsp;'), '\u00a0');
+	assert.equal(decodeEntities('&bogus;'), '&bogus;');
+	assert.equal(decodeEntities('&#xFFFFFFFF;'), '&#xFFFFFFFF;');
 });
 
 // ---- safeUrl --------------------------------------------------------------

@@ -27,6 +27,48 @@ export function isEmpty(md) {
 	return !String(md ?? '').trim();
 }
 
+// marked leaves entity references encoded in token text because its normal
+// HTML renderer relies on the browser to decode them. The DOM walker writes
+// text nodes directly, so decode the CommonMark prose subset without pulling
+// in a DOM. Unknown names and invalid numeric code points stay literal.
+const NAMED_ENTITIES = {
+	amp: '&',
+	lt: '<',
+	gt: '>',
+	quot: '"',
+	apos: "'",
+	nbsp: '\u00a0',
+	copy: '©',
+	reg: '®',
+	trade: '™',
+	hellip: '…',
+	mdash: '—',
+	ndash: '–',
+	lsquo: '‘',
+	rsquo: '’',
+	ldquo: '“',
+	rdquo: '”',
+	times: '×',
+	middot: '·',
+};
+
+export function decodeEntities(str) {
+	return String(str ?? '').replace(/&(#(?:[xX][\da-fA-F]+|\d+)|[a-z]+);/g, (entity, body) => {
+		if (body[0] !== '#') return NAMED_ENTITIES[body] ?? entity;
+		const hex = body[1] === 'x' || body[1] === 'X';
+		const codePoint = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+		if (
+			!Number.isInteger(codePoint) ||
+			codePoint <= 0 ||
+			codePoint > 0x10ffff ||
+			(codePoint >= 0xd800 && codePoint <= 0xdfff)
+		) {
+			return entity;
+		}
+		return String.fromCodePoint(codePoint);
+	});
+}
+
 // One source of truth for content typography — the editor feeds these to
 // Tiptap as per-node HTMLAttributes and the Markdown renderer applies them
 // while walking the lexer tokens, so WYSIWYG parity is by construction. This

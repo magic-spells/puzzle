@@ -7,7 +7,7 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { Lexer } from 'marked';
-import { MARKDOWN_CLASSES as C, isEmpty, safeUrl, safeImageUrl, safeLang } from '../../lib/markdown-doc.js';
+import { MARKDOWN_CLASSES as C, isEmpty, decodeEntities, safeUrl, safeImageUrl, safeLang } from '../../lib/markdown-doc.js';
 
 // Markdown — renders a markdown string as semantic HTML. CommonMark plus GFM
 // tables, task lists, and strikethrough are tokenized by marked's Lexer only;
@@ -29,10 +29,11 @@ import { MARKDOWN_CLASSES as C, isEmpty, safeUrl, safeImageUrl, safeLang } from 
 //
 // Security: every node is built only with document.createElement and
 // createTextNode, so markdown can never inject markup. The only user-controlled
-// attribute writes are href/src (guarded by safeUrl/safeImageUrl), title/alt
-// (inert attribute values), and the code language class (regex-filtered after
-// taking the first whitespace-delimited word). Raw HTML renders as literal
-// visible text by design.
+// writes that reach a URL or class context are href/src (guarded by
+// safeUrl/safeImageUrl) and the code language class (regex-filtered after
+// taking the first whitespace-delimited word). Title/alt are inert attribute
+// values; ordered-list start and checkbox checked are numeric/boolean. Raw HTML
+// renders as literal visible text by design.
 
 function isExternal(href) {
 	const value = String(href ?? '').replace(/[\t\n\r]/g, '');
@@ -42,14 +43,16 @@ function isExternal(href) {
 function inlineDom(tokens, newTab = false) {
 	const frag = document.createDocumentFragment();
 	for (const tok of tokens || []) {
-		switch (tok.type) {
+			switch (tok.type) {
 			case 'text':
 				frag.appendChild(
-					tok.tokens ? inlineDom(tok.tokens, newTab) : document.createTextNode(tok.text)
+					tok.tokens
+						? inlineDom(tok.tokens, newTab)
+						: document.createTextNode(decodeEntities(tok.text))
 				);
 				break;
 			case 'escape':
-				frag.appendChild(document.createTextNode(tok.text));
+				frag.appendChild(document.createTextNode(decodeEntities(tok.text)));
 				break;
 			case 'strong':
 			case 'em':
@@ -75,7 +78,7 @@ function inlineDom(tokens, newTab = false) {
 				const href = safeUrl(tok.href);
 				a.className = C.link;
 				a.href = href;
-				if (tok.title) a.title = tok.title;
+				if (tok.title) a.title = decodeEntities(tok.title);
 				if (newTab && href !== '#' && isExternal(tok.href)) {
 					a.target = '_blank';
 					a.rel = 'noopener noreferrer';
@@ -88,8 +91,8 @@ function inlineDom(tokens, newTab = false) {
 				const img = document.createElement('img');
 				img.className = C.image;
 				img.src = safeImageUrl(tok.href);
-				img.alt = tok.text || '';
-				if (tok.title) img.title = tok.title;
+				img.alt = decodeEntities(tok.text || '');
+				if (tok.title) img.title = decodeEntities(tok.title);
 				img.loading = 'lazy';
 				img.decoding = 'async';
 				frag.appendChild(img);
@@ -187,6 +190,8 @@ function blockDom(tok, newTab = false) {
 		case 'space':
 		case 'def':
 			return document.createDocumentFragment();
+		case 'text':
+			return inlineDom(tok.tokens || [tok], newTab);
 		case 'heading': {
 			const depth = Math.min(6, Math.max(1, Math.round(tok.depth) || 1));
 			const heading = document.createElement(`h${depth}`);
@@ -247,14 +252,19 @@ export default class Markdown extends PuzzleView {
 		const host = this.refs.host;
 		if (!host) return;
 		const md = String(this.props.value ?? '');
-		if (md === this._renderedKey) return;
-		this._renderedKey = md;
+		const newTab = this.props.newTab === true;
+		const key = `${newTab ? '1' : '0'}|${md}`;
+		if (key === this._renderedKey) return;
 		host.textContent = '';
-		if (isEmpty(md)) return;
+		if (isEmpty(md)) {
+			this._renderedKey = key;
+			return;
+		}
 		const tokens = Lexer.lex(md, { gfm: true, breaks: false });
 		const frag = document.createDocumentFragment();
-		for (const token of tokens) frag.appendChild(blockDom(token, this.props.newTab === true));
+		for (const token of tokens) frag.appendChild(blockDom(token, newTab));
 		host.appendChild(frag);
+		this._renderedKey = key;
 	}
 
 	mounted() {

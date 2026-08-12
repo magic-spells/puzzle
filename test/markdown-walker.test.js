@@ -5,6 +5,7 @@ import { Lexer } from 'marked';
 import {
 	MARKDOWN_CLASSES as C,
 	isEmpty,
+	decodeEntities,
 	safeUrl,
 	safeImageUrl,
 	safeLang,
@@ -19,7 +20,15 @@ const script = markdownSource.match(/<script>\s*([\s\S]*?)\s*<\/script>/)?.[1];
 
 assert.ok(script, 'Markdown.pzl contains a script block');
 
-globalThis.__markdownWalkerDeps = { Lexer, C, isEmpty, safeUrl, safeImageUrl, safeLang };
+globalThis.__markdownWalkerDeps = {
+	Lexer,
+	C,
+	isEmpty,
+	decodeEntities,
+	safeUrl,
+	safeImageUrl,
+	safeLang,
+};
 const moduleSource = script
 	.replace("import { PuzzleView } from '@magic-spells/puzzle';", 'class PuzzleView {}')
 	.replace(
@@ -27,12 +36,12 @@ const moduleSource = script
 		'const { Lexer } = globalThis.__markdownWalkerDeps;'
 	)
 	.replace(
-		"import { MARKDOWN_CLASSES as C, isEmpty, safeUrl, safeImageUrl, safeLang } from '../../lib/markdown-doc.js';",
-		'const { C, isEmpty, safeUrl, safeImageUrl, safeLang } = globalThis.__markdownWalkerDeps;'
+		"import { MARKDOWN_CLASSES as C, isEmpty, decodeEntities, safeUrl, safeImageUrl, safeLang } from '../../lib/markdown-doc.js';",
+		'const { C, isEmpty, decodeEntities, safeUrl, safeImageUrl, safeLang } = globalThis.__markdownWalkerDeps;'
 	)
 	.concat('\nexport { blockDom, inlineDom };');
 const moduleUrl = `data:text/javascript;base64,${Buffer.from(moduleSource).toString('base64')}`;
-const { blockDom, inlineDom } = await import(moduleUrl);
+const { default: Markdown, blockDom, inlineDom } = await import(moduleUrl);
 delete globalThis.__markdownWalkerDeps;
 
 const escapeText = (value) =>
@@ -118,6 +127,19 @@ function findAll(node, tagName) {
 	return found;
 }
 
+test('changing newTab re-renders an unchanged markdown value', () => {
+	const view = new Markdown();
+	const host = document.createElement('div');
+	view.refs = { host };
+	view.props = { value: '[external](https://example.com)', newTab: false };
+	view._render();
+	assert.equal(findAll(host, 'a')[0].target, undefined);
+
+	view.props.newTab = true;
+	view._render();
+	assert.equal(findAll(host, 'a')[0].target, '_blank');
+});
+
 test('heading depths 1 and 6 render the matching semantic tag and class', () => {
 	const headings = render('# One\n\n###### Six').childNodes;
 
@@ -125,6 +147,14 @@ test('heading depths 1 and 6 render the matching semantic tag and class', () => 
 	assert.equal(headings[0].className, C.heading1);
 	assert.equal(headings[1].tagName, 'h6');
 	assert.equal(headings[1].className, C.heading6);
+});
+
+test('prose entities decode while code-span entities stay literal', () => {
+	const rendered = render('prose &amp; `&amp;`');
+	const code = findAll(rendered, 'code')[0];
+
+	assert.equal(rendered.textContent, 'prose & &amp;');
+	assert.equal(code.textContent, '&amp;');
 });
 
 test('tight lists keep inline content bare while loose lists keep paragraphs', () => {
@@ -183,12 +213,54 @@ test('unsafe link schemes are neutralized', () => {
 	assert.equal(link.target, undefined);
 });
 
+test('unsafe image schemes are neutralized through safeImageUrl', () => {
+	const image = findAll(
+		render('![A &amp; B](javascript:alert(1) "T &copy;")'),
+		'img'
+	)[0];
+
+	assert.equal(image.src, '#');
+	assert.equal(image.alt, 'A & B');
+	assert.equal(image.title, 'T ©');
+});
+
 test('newTab applies only to external scheme-bearing links', () => {
-	const links = findAll(render('[external](https://example.com) [local](/docs)', true), 'a');
+	const links = findAll(
+		render('[external](https://example.com "A &amp; B") [local](/docs)', true),
+		'a'
+	);
 
 	assert.equal(links[0].target, '_blank');
 	assert.equal(links[0].rel, 'noopener noreferrer');
+	assert.equal(links[0].title, 'A & B');
 	assert.equal(links[1].target, undefined);
+});
+
+test('newTab excludes neutralized and relative links', () => {
+	const links = findAll(
+		render(
+			'[external](https://example.com) [unsafe](javascript:alert(1)) [relative](/path)',
+			true
+		),
+		'a'
+	);
+
+	assert.equal(links[0].href, 'https://example.com');
+	assert.equal(links[0].target, '_blank');
+	assert.equal(links[0].rel, 'noopener noreferrer');
+	assert.equal(links[1].href, '#');
+	assert.equal(links[1].target, undefined);
+	assert.equal(links[1].rel, undefined);
+	assert.equal(links[2].href, '/path');
+	assert.equal(links[2].target, undefined);
+	assert.equal(links[2].rel, undefined);
+});
+
+test('code fences use only the first info-string word as the language class', () => {
+	const code = findAll(render('```js title="x"\nconst x = 1;\n```'), 'code')[0];
+
+	assert.equal(code.className, 'language-js');
+	assert.equal(code.textContent, 'const x = 1;');
 });
 
 test('raw HTML is visible literal text and never becomes an element', () => {
@@ -204,4 +276,11 @@ test('space and unknown tokens render nothing', () => {
 	assert.equal(blockDom({ type: 'space' }).toHtml(), '');
 	assert.equal(blockDom({ type: 'mystery' }).toHtml(), '');
 	assert.equal(inlineDom([{ type: 'mystery', raw: '<b>x</b>' }]).toHtml(), '');
+});
+
+test('block-level text tokens render their inline content', () => {
+	assert.equal(
+		blockDom({ type: 'text', text: '&amp;', tokens: [{ type: 'text', text: '&amp;' }] }).textContent,
+		'&'
+	);
 });
