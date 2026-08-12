@@ -19,9 +19,10 @@
 // with Shopify's format. Newlines inside a text `value` are soft line breaks.
 //
 // fromTiptap()/toTiptap() convert against Tiptap's ProseMirror JSON so the
-// editor engine stays swappable. Two deliberate normalizations (stable after
-// one editor pass): Tiptap link MARKS group into link NODES, and a list item
-// with several paragraphs flattens to newline-separated inline content.
+// editor engine stays swappable. Three deliberate normalizations (stable after
+// one editor pass): Tiptap link MARKS group into link NODES, a list item
+// with several paragraphs flattens to newline-separated inline content, and an
+// empty text node ({ value: '' }) is dropped rather than written out.
 //
 // Registry lib file: copied to app/lib/rich-text-doc.js. Pure JS, no DOM —
 // unit-tested DOM-free in the repo's test/ suite.
@@ -120,6 +121,14 @@ function withAlign(node, pmNode) {
 
 // List items flatten paragraph wrappers to inline content: paragraphs join
 // with '\n' texts, nested lists ride along as blocks (Shopify's shape).
+//
+// A nested list is itself a block boundary, so the paragraph after one starts a
+// fresh run — no '\n' separator. That reset is what keeps the conversion
+// idempotent: listItemToPm folds a leading '\n' into the trailing paragraph as
+// a hardBreak rather than consuming it, so emitting a separator here would make
+// every round-trip prepend one more newline to a [paragraph, list, paragraph]
+// item. Both shapes ('A', list, 'B') and a legacy ('A', list, '\n', 'B') are
+// fixed points.
 function listItemChildrenFromPm(nodes) {
 	const out = [];
 	let sawParagraph = false;
@@ -130,6 +139,7 @@ function listItemChildrenFromPm(nodes) {
 			sawParagraph = true;
 		} else if (n.type === 'bulletList' || n.type === 'orderedList') {
 			out.push(listFromPm(n));
+			sawParagraph = false;
 		}
 	}
 	return out;

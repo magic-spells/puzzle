@@ -361,6 +361,89 @@ test('round-trip: a soft break normalizes once, then is stable', () => {
 	assert.deepEqual(fromTiptap(toTiptap(once)), once);
 });
 
+// Regression: a list item with content AFTER a nested list used to accumulate
+// one '\n' text per round-trip, because the paragraph separator was re-emitted
+// on every pass while toTiptap folded the previous one into the paragraph.
+test('a list item with a paragraph after a nested list is stable', () => {
+	const pm = {
+		type: 'doc',
+		content: [
+			{
+				type: 'bulletList',
+				content: [
+					{
+						type: 'listItem',
+						content: [
+							{ type: 'paragraph', content: [{ type: 'text', text: 'A' }] },
+							{
+								type: 'bulletList',
+								content: [
+									{
+										type: 'listItem',
+										content: [
+											{ type: 'paragraph', content: [{ type: 'text', text: 'n' }] },
+										],
+									},
+								],
+							},
+							{ type: 'paragraph', content: [{ type: 'text', text: 'B' }] },
+						],
+					},
+				],
+			},
+		],
+	};
+	const item = (d) => d.children[0].children[0].children;
+	const pass1 = fromTiptap(pm);
+	// The nested list is its own block boundary — no '\n' separator after it.
+	assert.deepEqual(item(pass1), [
+		{ type: 'text', value: 'A' },
+		{
+			type: 'list',
+			listType: 'unordered',
+			children: [{ type: 'list-item', children: [{ type: 'text', value: 'n' }] }],
+		},
+		{ type: 'text', value: 'B' },
+	]);
+	const pass2 = fromTiptap(toTiptap(pass1));
+	assert.deepEqual(pass2, pass1);
+	assert.deepEqual(fromTiptap(toTiptap(pass2)), pass1);
+});
+
+// A doc already stored in the older shape (explicit '\n' after the nested list)
+// must also be a fixed point, so existing content can't drift on an edit pass.
+test('a legacy newline after a nested list neither grows nor vanishes', () => {
+	const doc = {
+		type: 'root',
+		children: [
+			{
+				type: 'list',
+				listType: 'unordered',
+				children: [
+					{
+						type: 'list-item',
+						children: [
+							{ type: 'text', value: 'A' },
+							{
+								type: 'list',
+								listType: 'unordered',
+								children: [
+									{ type: 'list-item', children: [{ type: 'text', value: 'n' }] },
+								],
+							},
+							{ type: 'text', value: '\n' },
+							{ type: 'text', value: 'B' },
+						],
+					},
+				],
+			},
+		],
+	};
+	const once = fromTiptap(toTiptap(doc));
+	assert.deepEqual(once, doc);
+	assert.deepEqual(fromTiptap(toTiptap(once)), doc);
+});
+
 // ---- classes map ----------------------------------------------------------
 
 test('RICH_TEXT_CLASSES exposes a class string per node kind', () => {
