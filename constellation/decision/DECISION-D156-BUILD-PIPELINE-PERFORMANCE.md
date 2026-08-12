@@ -50,23 +50,31 @@ classification so the dev server cannot drift from its invariants:
 - the usage scan performed while constructing the esbuild context is reused by
   the initial rebuild, and later scans run only when a `.pzl` path changed;
 - the cheap root-level public validation remains unconditional, while the full
-  public-tree mirror runs on the initial rebuild and on batches touching the
-  current or last-successful public directory, including deletes and renames;
+  public-tree mirror runs on the initial rebuild, on batches touching the
+  current or last-successful public directory (including deletes and renames),
+  and whenever the resolved public source differs from the last-synced one — a
+  public tree that appears mid-session or switches location syncs on the next
+  rebuild without any changed path touching it;
 - a public-only batch skips esbuild when none of its paths participated in the
-  last successful module graph. Imported public files still rebuild both the
+  last successful module graph, with both sides of that comparison
+  symlink-normalized so the watcher's spelling of a path and esbuild's resolved
+  spelling land on the same key. Imported public files still rebuild both the
   browser bundle and public mirror;
 - the plugin advances a CSS revision only when a collected block is added,
   changed, or removed. The builder publishes a committed CSS snapshot/revision
-  only after the entire rebuild succeeds, and the caller recomposes only when
-  that committed revision moves.
+  only after the entire rebuild succeeds; that revision gates snapshot
+  promotion, not composition. The dev pipeline recomposes on every successful
+  rebuild and Tailwind trigger, and its byte memo skips the disk write when
+  the composed output is unchanged and still on disk — which is also what
+  recreates an externally deleted styles.css on the next rebuild.
 
 A failed esbuild pass skips public mirroring and may have populated the plugin's
 private working map, but neither the normal path nor a Tailwind poll can expose
 that CSS beside last-good JavaScript. Snapshotting the working map is deferred
 until a later successful pass because esbuild may reuse successful onLoad work
-from the failed attempt. A failed stylesheet write stays dirty and retries on
-the next source or Tailwind trigger. Tailwind output remains its own recompose
-trigger, gated on the first successful SPA bundle. Public mirroring remains a
+from the failed attempt. A failed stylesheet write never arms the byte memo, so
+the next source or Tailwind trigger retries it naturally. Tailwind output
+remains its own recompose trigger, gated on the first successful SPA bundle. Public mirroring remains a
 live-dist operation: if its I/O fails after some copies, ownership bookkeeping
 does not advance and the next eligible rebuild retries the full mirror; making
 the entire SPA output transactionally atomic is a separate change.

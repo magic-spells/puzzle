@@ -434,10 +434,9 @@ func Serve(root string, opts Options) error {
 			// which produces the same output more slowly and runs Tailwind itself.
 			err = build.Build(absRoot, build.Options{Development: true, Output: "static", Config: buildCfg, Profiler: prof})
 		case builder != nil:
-			var result build.RebuildResult
-			result, err = builder.RebuildProfile(changed, prof)
+			_, err = builder.RebuildProfile(changed, prof)
 			if err == nil {
-				pl.commitBuild(result.CSSChanged)
+				pl.commitBuild()
 				endStyles := prof.Phase("styles compose")
 				err = pl.recompose()
 				endStyles()
@@ -508,7 +507,6 @@ func Serve(root string, opts Options) error {
 		stylesChanged = func() { _ = rebuild(nil, false, nil) }
 	} else {
 		stylesChanged = func() {
-			pl.invalidateStyles()
 			if err := pl.recompose(); err != nil {
 				logWarning(stderr, "recompose styles: %v", err)
 				return
@@ -1316,11 +1314,8 @@ type pipeline struct {
 	oneShot func() (string, error) // set when the warm watcher is unavailable/dead
 	writeMu sync.Mutex
 	// ready prevents a Tailwind callback from publishing CSS before the first
-	// successful browser bundle. dirty is retained across write failures so the
-	// next successful source build retries composition even when component CSS
-	// itself did not change.
+	// successful browser bundle.
 	ready bool
-	dirty bool
 	// lastWritten is the sha256 of the bytes recompose last put on disk, guarded
 	// by writeMu. One .pzl edit reaches recompose TWICE — once from the rebuild
 	// and once from the Tailwind output poll a moment later — and in the common
@@ -1332,17 +1327,10 @@ type pipeline struct {
 	haveWritten bool
 }
 
-func (p *pipeline) commitBuild(cssChanged bool) {
+func (p *pipeline) commitBuild() {
 	p.writeMu.Lock()
 	defer p.writeMu.Unlock()
 	p.ready = true
-	p.dirty = p.dirty || cssChanged
-}
-
-func (p *pipeline) invalidateStyles() {
-	p.writeMu.Lock()
-	defer p.writeMu.Unlock()
-	p.dirty = true
 }
 
 // enableOneShot switches the pipeline to run the Tailwind CLI once per
@@ -1385,7 +1373,7 @@ func (p *pipeline) tailwindCSS() (string, error) {
 func (p *pipeline) recompose() error {
 	p.writeMu.Lock()
 	defer p.writeMu.Unlock()
-	if !p.ready || !p.dirty {
+	if !p.ready {
 		return nil
 	}
 	tw, err := p.tailwindCSS()
@@ -1404,7 +1392,6 @@ func (p *pipeline) recompose() error {
 	// can remove it, and then skipping the write would 404 every reload until the
 	// session is restarted. Confirm it is still there before honoring the memo.
 	if p.haveWritten && p.lastWritten == sum && fsutil.FileExists(target) {
-		p.dirty = false
 		return nil
 	}
 	// Atomic write: the dev server may be serving dist/styles.css concurrently, so
@@ -1413,7 +1400,6 @@ func (p *pipeline) recompose() error {
 		return err
 	}
 	p.lastWritten, p.haveWritten = sum, true
-	p.dirty = false
 	return nil
 }
 

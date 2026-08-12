@@ -62,16 +62,20 @@ mutex-protected path map; inline SVG dependencies join esbuild's watch set.
 call site honor that incremental shape: startup reuses the constructor scan and
 non-`.pzl` batches do not re-walk the project. The CSS collector gains a
 monotonic revision that changes only when a block is added, changed, or pruned,
-letting dev skip composition when an incremental graph rebuild leaves styles
-identical. The watch builder promotes the working collector to a committed
+letting the watch builder skip re-joining and re-promoting its committed
+snapshot when an incremental graph rebuild leaves styles identical (the dev
+pipeline still recomposes each rebuild; its byte memo dedupes the disk
+write). The watch builder promotes the working collector to a committed
 snapshot only after full rebuild success; Tailwind callbacks read that snapshot
 so a partially successful esbuild pass cannot leak CSS beside last-good JS.
 Static dev similarly promotes its candidate only after the staging swap, and
 its styles-only path reads the committed snapshot.
 
 Public-only SPA batches mirror assets without rebuilding the browser graph when
-the changed paths were not inputs to the previous successful metafile. Public
-files imported by application code remain ordinary graph inputs and rebuild as
+the changed paths were not inputs to the previous successful metafile — a
+comparison made with both sides symlink-resolved, since the metafile carries
+esbuild's resolved spelling and the watcher carries the user's. Public files
+imported by application code remain ordinary graph inputs and rebuild as
 before.
 
 Build bundles `app/app.js` to staged `dist/app.js`, writes linked source maps

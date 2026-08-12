@@ -668,6 +668,86 @@ func TestWatchBuilderRebuildsImportedPublicAsset(t *testing.T) {
 	}
 }
 
+// A symlinked project root spells every watcher path differently from esbuild's
+// metafile keys. Without normalization on both sides, an imported public module
+// looks public-only and dist/app.js goes stale.
+func TestWatchBuilderRebuildsImportedPublicAssetThroughSymlinkedRoot(t *testing.T) {
+	real := scratchApp(t)
+	publicModule := filepath.Join(real, "app", "public", "message.js")
+	write(t, publicModule, `export default "SYMLINK_IMPORT_ONE";`)
+	write(t, filepath.Join(real, "app", "app.js"),
+		"import message from './public/message.js';\nconsole.log(message);\n")
+
+	link := filepath.Join(t.TempDir(), "app-root")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	b, err := NewWatchBuilder(link, WatchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("initial Rebuild: %v", err)
+	}
+
+	write(t, publicModule, `export default "SYMLINK_IMPORT_TWO";`)
+	result, err := b.Rebuild([]string{filepath.Join(link, "app", "public", "message.js")})
+	if err != nil {
+		t.Fatalf("public-module Rebuild: %v", err)
+	}
+	if !result.BundleBuilt {
+		t.Fatalf("symlinked public-module metadata = %+v, want bundle rebuilt", result)
+	}
+	if bundle := readDistBundle(t, link); !strings.Contains(bundle, "SYMLINK_IMPORT_TWO") {
+		t.Fatalf("bundle did not rebuild imported public module through symlinked root:\n%s", bundle)
+	}
+}
+
+// A project can start with no public tree and gain one mid-session; no changed
+// path touches a public directory in that batch, so the appearance itself is
+// what has to trigger the mirror.
+func TestWatchBuilderSyncsPublicDirectoryThatAppearsMidSession(t *testing.T) {
+	root := scratchApp(t)
+	if err := os.RemoveAll(filepath.Join(root, "app", "public")); err != nil {
+		t.Fatal(err)
+	}
+	appJS := filepath.Join(root, "app", "app.js")
+	write(t, appJS, "console.log('APP_ONE');\n")
+
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.Dispose()
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("initial Rebuild: %v", err)
+	}
+
+	late := filepath.Join(root, "public", "late.txt")
+	if err := os.MkdirAll(filepath.Dir(late), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, late, "LATE")
+	write(t, appJS, "console.log('APP_TWO');\n")
+
+	result, err := b.Rebuild([]string{appJS})
+	if err != nil {
+		t.Fatalf("post-appearance Rebuild: %v", err)
+	}
+	if !result.PublicSynced {
+		t.Fatalf("post-appearance metadata = %+v, want public mirrored", result)
+	}
+	mirrored, err := os.ReadFile(filepath.Join(root, "dist", "late.txt"))
+	if err != nil {
+		t.Fatalf("late public file not mirrored into dist: %v", err)
+	}
+	if string(mirrored) != "LATE" {
+		t.Fatalf("mirrored late.txt = %q, want LATE", mirrored)
+	}
+}
+
 func TestWatchBuilderPostBundlePublicFailureForcesCompleteRetry(t *testing.T) {
 	root := scratchApp(t)
 	home := filepath.Join(root, "app", "views", "Home.pzl")

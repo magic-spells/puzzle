@@ -27,7 +27,7 @@ func TestRecompose(t *testing.T) {
 		twOutputPath: twFile,
 		collectedCSS: func() string { return ".block{color:red}" },
 	}
-	pl.commitBuild(true)
+	pl.commitBuild()
 	if err := pl.recompose(); err != nil {
 		t.Fatalf("recompose: %v", err)
 	}
@@ -52,7 +52,7 @@ func TestRecomposeMissingTailwindFile(t *testing.T) {
 		twOutputPath: filepath.Join(t.TempDir(), "does-not-exist.css"),
 		collectedCSS: func() string { return ".only{color:green}" },
 	}
-	pl.commitBuild(true)
+	pl.commitBuild()
 	if err := pl.recompose(); err != nil {
 		t.Fatalf("recompose should tolerate a missing Tailwind file: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestRecomposeOnTailwindWrite(t *testing.T) {
 		twOutputPath: twFile,
 		collectedCSS: func() string { return ".block{color:red}" },
 	}
-	pl.commitBuild(true)
+	pl.commitBuild()
 	coalescer := newReloadCoalescer(20*time.Millisecond, srv.hub.broadcast)
 
 	// Subscribe an SSE client and wait for it to register.
@@ -112,7 +112,6 @@ func TestRecomposeOnTailwindWrite(t *testing.T) {
 
 	// Start the output poll that the dev loop runs for case (a).
 	go pollFile(ctx, twFile, 30*time.Millisecond, func() {
-		pl.invalidateStyles()
 		if err := pl.recompose(); err != nil {
 			t.Errorf("recompose: %v", err)
 			return
@@ -152,7 +151,6 @@ func TestPipelineDoesNotPublishBeforeSuccessfulBundle(t *testing.T) {
 	}
 	pl := &pipeline{dist: dist, collectedCSS: func() string { return ".candidate{color:red}" }}
 
-	pl.invalidateStyles()
 	if err := pl.recompose(); err != nil {
 		t.Fatalf("recompose before first bundle: %v", err)
 	}
@@ -160,7 +158,7 @@ func TestPipelineDoesNotPublishBeforeSuccessfulBundle(t *testing.T) {
 		t.Fatalf("styles changed before a successful bundle: %q", got)
 	}
 
-	pl.commitBuild(false)
+	pl.commitBuild()
 	if err := pl.recompose(); err != nil {
 		t.Fatalf("recompose after bundle commit: %v", err)
 	}
@@ -169,11 +167,14 @@ func TestPipelineDoesNotPublishBeforeSuccessfulBundle(t *testing.T) {
 	}
 }
 
-func TestPipelineRetriesDirtyCompositionAfterWriteFailure(t *testing.T) {
+// TestPipelineRetriesCompositionAfterWriteFailure: the sha256 memo only advances
+// after a successful atomic write, so a failed composition is retried by the
+// next recompose with no extra state to carry.
+func TestPipelineRetriesCompositionAfterWriteFailure(t *testing.T) {
 	parent := t.TempDir()
 	dist := filepath.Join(parent, "missing", "dist")
 	pl := &pipeline{dist: dist, collectedCSS: func() string { return ".retry{color:blue}" }}
-	pl.commitBuild(true)
+	pl.commitBuild()
 
 	if err := pl.recompose(); err == nil {
 		t.Fatal("expected composition into a missing dist directory to fail")
@@ -181,14 +182,35 @@ func TestPipelineRetriesDirtyCompositionAfterWriteFailure(t *testing.T) {
 	if err := os.MkdirAll(dist, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A later successful source build may have no CSS delta. The failed write's
-	// dirty bit must still force this retry.
-	pl.commitBuild(false)
 	if err := pl.recompose(); err != nil {
-		t.Fatalf("dirty retry: %v", err)
+		t.Fatalf("retry: %v", err)
 	}
 	if got := readFile(t, filepath.Join(dist, "styles.css")); !strings.Contains(got, ".retry{color:blue}") {
 		t.Fatalf("retry did not publish styles: %q", got)
+	}
+}
+
+// TestRecomposeRecreatesExternallyDeletedStylesheet: the memo is a claim about
+// the file. A save that changes no CSS still restores a stylesheet removed from
+// outside the dev loop.
+func TestRecomposeRecreatesExternallyDeletedStylesheet(t *testing.T) {
+	dist := t.TempDir()
+	target := filepath.Join(dist, "styles.css")
+	pl := &pipeline{dist: dist, collectedCSS: func() string { return ".keep{color:red}" }}
+	pl.commitBuild()
+	if err := pl.recompose(); err != nil {
+		t.Fatalf("recompose: %v", err)
+	}
+	want := readFile(t, target)
+
+	if err := os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+	if err := pl.recompose(); err != nil {
+		t.Fatalf("recompose after external delete: %v", err)
+	}
+	if got := readFile(t, target); got != want {
+		t.Fatalf("stylesheet not recreated identically: got %q, want %q", got, want)
 	}
 }
 

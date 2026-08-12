@@ -45,12 +45,17 @@ A config file that fails to load is **not** fatal — dev keeps serving from the
 
 [[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]] makes the SPA watch builder own
 change classification. Its constructor's usage scan is reused for startup;
-later usage scans require a `.pzl` change, the full public mirror requires an
-initial or public-path batch, and a public-only batch skips esbuild unless that
-asset participated in the prior module graph. Stylesheet composition requires a moved
-committed component-CSS revision or fresh Tailwind output. Root public
-validation stays unconditional. Tailwind callbacks cannot see working CSS from
-a failed esbuild pass in either SPA or static dev; the static builder adopts its
-candidate only after the staging swap, and a failed stylesheet write stays
-dirty for retry. `puzzle dev --profile-build` exposes startup and each rebuild
+later usage scans require a `.pzl` change; the full public mirror requires an
+initial batch, a public-path batch, or a resolved public source that differs
+from the last-synced one (a public tree created mid-session syncs on the next
+rebuild); and a public-only batch skips esbuild unless that asset participated
+in the prior module graph, compared with both sides symlink-normalized. Once
+the first bundle lands, every successful rebuild and Tailwind trigger
+recomposes styles.css; the byte memo skips the write when the composed output
+is unchanged and still on disk, which also recreates an externally deleted
+styles.css on the next rebuild. Root public validation stays unconditional.
+Tailwind callbacks cannot see working CSS from a failed esbuild pass in either
+SPA or static dev; the static builder adopts its candidate only after the
+staging swap, and a failed stylesheet write leaves the byte memo unarmed so the
+next trigger retries it. `puzzle dev --profile-build` exposes startup and each rebuild
 as stable stderr phase tables in every output mode.

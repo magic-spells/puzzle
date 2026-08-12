@@ -15,8 +15,10 @@ Source binding for the owning component card. Behavioral intent stays in the con
 
 [[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]] makes rebuild input explicit:
 the builder receives the changed batch, owns usage/public classification, and
-returns whether its committed component-CSS revision moved so the dev server
-can avoid unrelated recomposition. Public-only batches also skip esbuild unless
-the changed asset belongs to the last successful module graph. Working plugin
+reports whether its committed component-CSS revision moved (test and profiling
+evidence; the dev server recomposes each rebuild and dedupes by bytes). A
+public source that appears or moves syncs on the next rebuild. Public-only
+batches also skip esbuild unless the changed asset belongs to the last
+successful module graph, compared symlink-resolved. Working plugin
 CSS is promoted only after a full successful rebuild; Tailwind never reads
 partially updated state.

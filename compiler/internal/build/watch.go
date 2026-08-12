@@ -45,8 +45,11 @@ type WatchBuilder struct {
 	// the first Rebuild — nothing is ever pruned on the first pass.
 	prevPublic map[string]bool
 	// publicSource is the source directory used by the last successful public
-	// sync. Keeping it separately from PublicDir(root)'s current answer is what
-	// lets a delete/rename of app/public switch cleanly to the root fallback.
+	// sync ("" when the project had no public tree). Keeping it separately from
+	// publicDir(root)'s current answer is what lets a delete/rename of app/public
+	// switch cleanly to the root fallback, and what makes a public tree that
+	// APPEARS mid-session sync on the next rebuild: the two disagree, and no
+	// changed path need touch either directory.
 	publicSource string
 	// landed becomes true only after a whole Rebuild succeeds. Until then every
 	// attempt retains initial-build behavior, including a full public sync.
@@ -190,7 +193,8 @@ func (b *WatchBuilder) RebuildProfile(changed []string, prof *PhaseProfile) (Reb
 func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildResult, error) {
 	var out RebuildResult
 	currentPublic := publicDir(b.root)
-	syncPublic := !b.landed || pathsTouchDir(changed, currentPublic) || pathsTouchDir(changed, b.publicSource)
+	syncPublic := !b.landed || currentPublic != b.publicSource ||
+		pathsTouchDir(changed, currentPublic) || pathsTouchDir(changed, b.publicSource)
 	publicOnly := b.landed && !b.pendingBundleCommit && b.haveBundleInputs && len(changed) > 0 &&
 		pathsOnlyTouchPublic(changed, currentPublic, b.publicSource) &&
 		!pathsTouchInputs(changed, b.bundleInputs)
@@ -315,16 +319,17 @@ func pathTouchesDir(path, dir string) bool {
 }
 
 func pathsTouchInputs(changed []string, inputs map[string]bool) bool {
+	// Both sides go through resolvePath: inputs carry esbuild's spelling of a
+	// path (symlinks resolved) and changed carries the watcher's, so a bare
+	// filepath.Abs comparison misses under a symlinked root and wrongly skips
+	// esbuild for an imported public file.
 	for _, path := range changed {
-		abs, err := filepath.Abs(path)
-		if err != nil {
-			return true
-		}
-		if inputs[abs] {
+		resolved := resolvePath(path)
+		if inputs[resolved] {
 			return true
 		}
 		for input := range inputs {
-			if pathTouchesDir(input, abs) {
+			if pathTouchesDir(input, resolved) {
 				return true
 			}
 		}
@@ -359,9 +364,9 @@ func (b *WatchBuilder) commitCSS(force bool) bool {
 // source paths in the module graph, normalized to match the plugin's css map
 // keys (esbuild's resolved args.Path). Metafile input keys are working-directory
 // relative; namespaced virtual inputs (the formatter manifest) never end in
-// .pzl, so filtering on that suffix drops them. filepath.Abs resolves the
-// cwd-relative key against the same working directory esbuild used; PruneCSS
-// applies the final symlink normalization on both sides.
+// .pzl, so filtering on that suffix drops them. metafileAllInputs resolves the
+// cwd-relative key against the same working directory esbuild used and
+// normalizes symlinks; PruneCSS's own normalization is idempotent over that.
 func metafileInputs(metafileJSON string) (map[string]bool, error) {
 	all, err := metafileAllInputs(metafileJSON)
 	if err != nil {
@@ -385,11 +390,7 @@ func metafileAllInputs(metafileJSON string) (map[string]bool, error) {
 	}
 	out := make(map[string]bool, len(mf.Inputs))
 	for key := range mf.Inputs {
-		abs, err := filepath.Abs(key)
-		if err != nil {
-			continue
-		}
-		out[abs] = true
+		out[resolvePath(key)] = true
 	}
 	return out, nil
 }
