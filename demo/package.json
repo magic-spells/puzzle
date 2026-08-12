@@ -17,7 +17,8 @@
     "@tiptap/extension-text-align": "^3.30.0",
     "@tiptap/pm": "^3.30.0",
     "@tiptap/starter-kit": "^3.30.0",
-    "highlight.js": "^11.11.1"
+    "highlight.js": "^11.11.1",
+    "marked": "^17.0.1"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.1.14",

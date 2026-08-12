@@ -7,3 +7,4 @@ import './sheet-math.test.js';
 import './snap-points.test.js';
 import './rich-text-doc.test.js';
 import './markdown-doc.test.js';
+import './markdown-walker.test.js';
