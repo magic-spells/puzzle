@@ -5,4 +5,6 @@ import './sheet-engine.test.js';
 import './scroll-policy.test.js';
 import './sheet-math.test.js';
 import './snap-points.test.js';
+import './input-otp-component.test.js';
 import './rich-text-doc.test.js';
+import './rich-text-parity.test.js';

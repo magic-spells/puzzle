@@ -24,6 +24,12 @@
 // with several paragraphs flattens to newline-separated inline content, and an
 // empty text node ({ value: '' }) is dropped rather than written out.
 //
+// A STORED DOC IS UNTRUSTED INPUT — specifically every `link.url` in it. Docs
+// arrive from databases, APIs, imports and pastes, and a `javascript:` URL that
+// reaches an href is script execution in your page. Never assign `link.url` to
+// an href yourself; run it through safeLinkUrl() below, which is the one policy
+// both the RichText renderer and the RichTextEditor enforce.
+//
 // Registry lib file: copied to app/lib/rich-text-doc.js. Pure JS, no DOM —
 // unit-tested DOM-free in the repo's test/ suite.
 
@@ -43,6 +49,29 @@ export function isEmpty(doc) {
 	return doc.children.every(
 		(n) => n.type === 'paragraph' && textOf(n).trim() === ''
 	);
+}
+
+// The single URL policy for `link.url`, applied at BOTH ends: RichText runs it
+// before setting an href, and RichTextEditor hands it to Tiptap's Link
+// `isAllowedUri` so the editor refuses to create what the renderer would refuse
+// to link. Returns the url unchanged when allowed, or null when rejected.
+//
+// Allowed: relative forms (leading /, #, ?, . — or no scheme at all before the
+// first /?# boundary) and the https, http, mailto and tel schemes. Everything
+// else is rejected, `javascript:` and `data:` being the ones that matter.
+export function safeLinkUrl(url) {
+	const raw = String(url ?? '');
+	// URL parsers strip tab and newline characters BEFORE parsing (WHATWG), so
+	// "java\nscript:alert(1)" reaches the browser as "javascript:alert(1)" and a
+	// naive test on the raw string sees a harmless scheme-less path. Test a
+	// stripped copy, but return the ORIGINAL — stripping is for the check only.
+	const test = raw.replace(/[\t\n\r]/g, '');
+	const colon = test.indexOf(':');
+	const boundary = test.search(/[/?#]/);
+	const relative = /^[/#?.]/.test(test);
+	const noScheme = colon === -1 || (boundary !== -1 && boundary < colon);
+	const allowedScheme = colon > 0 && /^(https?|mailto|tel)$/i.test(test.slice(0, colon));
+	return relative || noScheme || allowedScheme ? raw : null;
 }
 
 // One source of truth for content typography — the editor feeds these to

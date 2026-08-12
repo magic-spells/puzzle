@@ -6,7 +6,7 @@
 
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
-import { RICH_TEXT_CLASSES as C, isEmpty } from '../../lib/rich-text-doc.js';
+import { RICH_TEXT_CLASSES as C, isEmpty, safeLinkUrl } from '../../lib/rich-text-doc.js';
 
 // RichText — renders a stored rich text document (the RichTextEditor's
 // Shopify-style JSON tree, see lib/rich-text-doc.js for the format) as
@@ -64,15 +64,9 @@ function inlineDom(nodes) {
 			frag.appendChild(textDom(n));
 		} else if (n.type === 'link') {
 			const a = document.createElement('a');
-			const url = String(n.url || '');
-			// URL parsers strip tabs/newlines before parsing, so test a normalized copy.
-			const testUrl = url.replace(/[\t\n\r]/g, '');
-			const colon = testUrl.indexOf(':');
-			const boundary = testUrl.search(/[/?#]/);
-			const relative = /^[/#?.]/.test(testUrl);
-			const noScheme = colon === -1 || (boundary !== -1 && boundary < colon);
-			const allowedScheme = colon > 0 && /^(https?|mailto|tel)$/i.test(testUrl.slice(0, colon));
-			a.href = relative || noScheme || allowedScheme ? url : '#';
+			// Stored link URLs are untrusted; safeLinkUrl is the same policy the
+			// editor enforces through Tiptap (see lib/rich-text-doc.js).
+			a.href = safeLinkUrl(n.url) ?? '#';
 			if (n.title) a.title = n.title;
 			if (n.target) {
 				a.target = n.target;
@@ -86,6 +80,9 @@ function inlineDom(nodes) {
 	return frag;
 }
 
+// Inline text-align is deliberate — the sanctioned bend of the Tailwind-only
+// rule. Tiptap's TextAlign extension emits exactly this inline style, so
+// matching it keeps the editor and the renderer pixel-identical.
 function alignStyle(el, node) {
 	if (node.align === 'center' || node.align === 'right') {
 		el.style.textAlign = node.align;

@@ -27,7 +27,7 @@
       </div>
     {/if}
 
-    <div class={ frameClass } @click={ focusEditor }>
+    <div class={ frameClass }>
       <div island ref="mount"></div>
       {#if showPlaceholder}
         <div aria-hidden="true" class="pointer-events-none absolute left-3 top-2 leading-7 text-muted">{ placeholder }</div>
@@ -47,6 +47,7 @@ import {
 	toTiptap,
 	emptyDoc,
 	isEmpty,
+	safeLinkUrl,
 	RICH_TEXT_CLASSES as C,
 } from '../../lib/rich-text-doc.js';
 
@@ -69,6 +70,13 @@ import {
 //                changes are applied only when they differ from the last doc
 //                this editor emitted, so echoing @change back is free and
 //                external resets (e.g. loading a saved doc) still land.
+//                Delivery is by IDENTITY — pass a NEW object to change the
+//                content; mutating the current doc in place is ignored. A null
+//                value does NOT clear the editor either: pass emptyDoc().
+//                Echo @change SYNCHRONOUSLY (simplest: store the doc exactly as
+//                received). A parent that debounces, or round-trips through a
+//                server, before writing the value back will hand this editor a
+//                stale doc mid-typing and revert keystrokes still in flight.
 //   label        optional label above the toolbar; also the content region's
 //                accessible name (wired as aria-labelledby at mount; without a
 //                label the region falls back to a generic aria-label)
@@ -200,7 +208,13 @@ export default class RichTextEditor extends PuzzleView {
 					code: false,
 					horizontalRule: false,
 					heading: { levels: [2, 3] },
-					link: { openOnClick: false, HTMLAttributes: { class: C.link } },
+					link: {
+						openOnClick: false,
+						HTMLAttributes: { class: C.link },
+						// Same URL policy the RichText renderer applies, so the editor
+						// refuses to create a link the renderer would refuse to link.
+						isAllowedUri: (url) => safeLinkUrl(url) != null,
+					},
 					paragraph: { HTMLAttributes: { class: C.paragraph } },
 					bulletList: { HTMLAttributes: { class: `${C.list} ${C.bulletList}` } },
 					orderedList: { HTMLAttributes: { class: `${C.list} ${C.orderedList}` } },
@@ -361,7 +375,13 @@ export default class RichTextEditor extends PuzzleView {
 			}
 			// Bare domains get a scheme; site-relative (/…) and hash (#…) pass through.
 			const url = /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(raw) ? raw : `https://${raw}`;
-			this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
+			// setLink returns false when the URL fails the link policy, which aborts
+			// the chain and applies nothing. Keep the row open with the text intact
+			// so a rejected URL reads as "that wasn't accepted, here's what I typed"
+			// instead of silently closing and discarding it — the surviving row is
+			// the whole error affordance.
+			const applied = this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
+			if (!applied) return;
 			this.setData({ linkOpen: false, linkDraft: '' });
 			this.refresh();
 		},
@@ -379,13 +399,6 @@ export default class RichTextEditor extends PuzzleView {
 			// editor instead of letting it fall to <body>. (applyLink/removeLink
 			// already refocus through _chain().)
 			this._editor?.commands.focus();
-		},
-
-		// Clicking the frame's padding (below short content) focuses the editor.
-		focusEditor: (event) => {
-			if (event.target === event.currentTarget) {
-				this._editor?.commands.focus('end');
-			}
 		},
 	};
 }
