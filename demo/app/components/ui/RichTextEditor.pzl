@@ -130,6 +130,9 @@ export default class RichTextEditor extends PuzzleView {
 		// Serialized form of the last doc we emitted (or applied), used to tell
 		// parent echoes apart from genuine external value changes.
 		this._applied = null;
+		// The value prop as last SEEN by afterUpdate, tracked by identity so a
+		// self-triggered re-render can be told from a real prop change.
+		this._lastSeenValue = undefined;
 		this.setData({
 			active: {},
 			empty: true,
@@ -183,6 +186,7 @@ export default class RichTextEditor extends PuzzleView {
 	mounted() {
 		const value = this.props.value || emptyDoc();
 		this._applied = JSON.stringify(value);
+		this._lastSeenValue = this.props.value;
 		// Seed the emptiness flag data() switches to post-mount, or a non-empty
 		// starting value would render under the placeholder until the first edit.
 		this.setData('empty', isEmpty(value));
@@ -246,10 +250,20 @@ export default class RichTextEditor extends PuzzleView {
 		const editable = !this.props.disabled;
 		if (ed.isEditable !== editable) ed.setEditable(editable);
 		const v = this.props.value;
+		// afterUpdate also runs for renders WE caused (onUpdate/_syncActive call
+		// setData + refresh synchronously), and those run BEFORE the parent's
+		// @change commit — which is rAF-scheduled — delivers the new prop. So on
+		// a self-refresh `props.value` is still the doc from before the keystroke,
+		// and a JSON-only comparison misreads our own stale prop as an external
+		// reset: setContent would revert the keystroke and collapse the selection
+		// to doc start. Identity-gate first — if the prop reference did not
+		// change, there is nothing external to apply.
+		if (v === this._lastSeenValue) return;
+		this._lastSeenValue = v;
 		if (v == null) return;
 		const s = JSON.stringify(v);
-		// Only genuine external changes reach setContent — parent echoes of our
-		// own @change match _applied and no-op, so typing is never interrupted.
+		// The prop DID change; it may still be the parent echoing our own emitted
+		// doc back as a fresh reference, which matches _applied and no-ops.
 		if (s !== this._applied) {
 			this._applied = s;
 			ed.commands.setContent(toTiptap(v)); // emitUpdate defaults to false
