@@ -1,0 +1,330 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <div id={ labelId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</div>
+    {/if}
+
+    <Toolbar class="mb-2 w-full" label="Text formatting" disabled={ disabled }
+      items={ tbItems } @toggle={ onToggle } @press={ onPress }/>
+
+    {#if linkOpen}
+      <div class="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
+        @keydown:escape={ closeLink }>
+        <input
+          type="url"
+          class="block w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-muted transition-colors outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          placeholder="https://example.com or /path"
+          aria-label="Link URL"
+          value={ linkDraft }
+          @keydown:enter={ applyLink }
+        />
+        <button type="button" class={ linkBtnClass } @click={ applyLink }>Set</button>
+        <button type="button" class={ linkBtnClass } @click={ removeLink }>Remove</button>
+        <button type="button" class={ linkBtnClass } @click={ closeLink }>Cancel</button>
+      </div>
+    {/if}
+
+    <div class={ frameClass } @click={ focusEditor }>
+      <div island ref="mount"></div>
+      {#if showPlaceholder}
+        <div aria-hidden="true" class="pointer-events-none absolute left-3 top-2 leading-7 text-muted">{ placeholder }</div>
+      {/if}
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { Editor } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
+import TextAlign from '@tiptap/extension-text-align';
+import Toolbar from './Toolbar.pzl';
+import {
+	fromTiptap,
+	toTiptap,
+	emptyDoc,
+	isEmpty,
+	RICH_TEXT_CLASSES as C,
+} from '../../lib/rich-text-doc.js';
+
+// RichTextEditor — WYSIWYG rich text editing on Tiptap/ProseMirror, with the
+// Toolbar piece as the formatting bar. The value is NOT HTML: it is the
+// Shopify-style JSON document tree defined in lib/rich-text-doc.js, converted
+// to and from Tiptap's ProseMirror JSON at the boundary so the engine stays an
+// implementation detail. Render stored docs with the RichText piece.
+//
+// Requires: npm install @tiptap/core @tiptap/pm @tiptap/starter-kit
+// @tiptap/extension-text-align (declared in piece.json), plus the toolbar
+// piece and lib/rich-text-doc.js registry files.
+//
+//   <RichTextEditor value={ doc } @change={ setDoc } />
+//   <RichTextEditor label="Body" placeholder="Write something…"
+//                   value={ doc } @change={ setDoc } />
+//
+// Props:
+//   value        the document tree; the parent owns it (controlled). Incoming
+//                changes are applied only when they differ from the last doc
+//                this editor emitted, so echoing @change back is free and
+//                external resets (e.g. loading a saved doc) still land.
+//   label        optional label above the toolbar; also the content region's
+//                accessible name (aria-label, applied at mount)
+//   placeholder  muted hint shown while the document is empty
+//   disabled     disables the toolbar and makes the content read-only
+//   class        appended to the root
+// Callbacks (value-first):
+//   @change(doc) fires on every edit with the full document tree
+//
+// Formatting: bold / italic / underline / strike, H2 / H3, align left/center/
+// right, bullet + ordered lists, blockquote, code block, links (inline URL row
+// — Enter or Set applies, empty URL or Remove clears; bare domains get https://
+// prefixed). Undo/redo ride on the standard keyboard shortcuts via Tiptap.
+//
+// The Tiptap instance mounts inside an `island` div: ProseMirror owns that DOM
+// and Puzzle's patcher must never touch it. Everything editor-related lives in
+// mounted()/destroyed(), so prerender (SSG) never sees a browser API. Content
+// typography comes from RICH_TEXT_CLASSES via per-extension HTMLAttributes —
+// the same classes RichText renders with — except heading sizes, which Tiptap
+// can't vary per level through HTMLAttributes; those are mirrored below in
+// CONTENT_CLASS as arbitrary variants (keep in sync with the lib map).
+let uid = 0;
+
+const CONTENT_CLASS =
+	'min-h-40 px-3 py-2 text-ink outline-none ' +
+	// Mirrors RICH_TEXT_CLASSES.heading2 / heading3 (see header comment):
+	'[&_h2]:mt-6 [&_h2:first-child]:mt-0 [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:text-ink ' +
+	'[&_h3]:mt-5 [&_h3:first-child]:mt-0 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3]:text-ink';
+
+const FRAME_BASE =
+	'relative rounded-lg border border-border bg-surface transition-colors ' +
+	'outline-ring focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring';
+
+const LINK_BTN =
+	'shrink-0 cursor-pointer rounded-md px-2.5 py-1.5 text-sm font-medium text-body ' +
+	'transition-colors hover:bg-surface-sunken hover:text-ink ' +
+	'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+// 24×24 stroke-current icon paths (Toolbar's icon contract).
+const I = {
+	bold: 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8',
+	italic: 'M19 4h-9M14 20H5M15 4L9 20',
+	underline: 'M6 4v6a6 6 0 0 0 12 0V4M4 20h16',
+	strike: 'M16 4H9a3 3 0 0 0-2.83 4M14 12a4 4 0 0 1 0 8H6M4 12h16',
+	alignLeft: 'M15 12H3M17 18H3M21 6H3',
+	alignCenter: 'M17 12H7M19 18H5M21 6H3',
+	alignRight: 'M21 12H9M21 18H7M21 6H3',
+	ul: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+	ol: 'M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1',
+	quote: 'M17 6H3M21 12H8M21 18H8M3 12v6',
+	codeBlock: 'M16 18l6-6-6-6M8 6l-6 6 6 6',
+	link: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+};
+
+export default class RichTextEditor extends PuzzleView {
+	created() {
+		this._fallbackId = `pp-rte-${++uid}`;
+		this._editor = null;
+		// Serialized form of the last doc we emitted (or applied), used to tell
+		// parent echoes apart from genuine external value changes.
+		this._applied = null;
+		this.setData({
+			active: {},
+			empty: true,
+			linkOpen: false,
+			linkDraft: '',
+		});
+	}
+
+	data(params, props) {
+		const g = this.getData();
+		const a = g.active || {};
+		const disabled = !!props.disabled;
+		const empty = this._editor ? !!g.empty : isEmpty(props.value);
+		const toggle = (value, label, icon, pressed) => ({
+			type: 'toggle', value, label, icon, iconOnly: true, pressed: !!pressed,
+		});
+		return {
+			label: props.label,
+			labelId: `${this._fallbackId}-label`,
+			placeholder: props.placeholder,
+			showPlaceholder: !!props.placeholder && empty,
+			disabled,
+			linkOpen: !!g.linkOpen,
+			linkDraft: g.linkDraft ?? '',
+			linkBtnClass: LINK_BTN,
+			rootClass: props.class || '',
+			frameClass: [FRAME_BASE, disabled ? 'opacity-50' : ''].filter(Boolean).join(' '),
+			tbItems: [
+				toggle('bold', 'Bold', I.bold, a.bold),
+				toggle('italic', 'Italic', I.italic, a.italic),
+				toggle('underline', 'Underline', I.underline, a.underline),
+				toggle('strike', 'Strikethrough', I.strike, a.strike),
+				{ type: 'separator' },
+				{ type: 'toggle', value: 'h2', label: 'H2', pressed: !!a.h2 },
+				{ type: 'toggle', value: 'h3', label: 'H3', pressed: !!a.h3 },
+				{ type: 'separator' },
+				toggle('alignLeft', 'Align left', I.alignLeft, a.alignLeft),
+				toggle('alignCenter', 'Align center', I.alignCenter, a.alignCenter),
+				toggle('alignRight', 'Align right', I.alignRight, a.alignRight),
+				{ type: 'separator' },
+				toggle('ul', 'Bulleted list', I.ul, a.ul),
+				toggle('ol', 'Numbered list', I.ol, a.ol),
+				toggle('quote', 'Blockquote', I.quote, a.quote),
+				toggle('codeBlock', 'Code block', I.codeBlock, a.codeBlock),
+				{ type: 'separator' },
+				{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true },
+			],
+		};
+	}
+
+	mounted() {
+		const value = this.props.value || emptyDoc();
+		this._applied = JSON.stringify(value);
+		this._editor = new Editor({
+			element: this.refs.mount,
+			editable: !this.props.disabled,
+			content: toTiptap(value),
+			extensions: [
+				StarterKit.configure({
+					// Inline code and horizontal rule are outside the doc contract.
+					code: false,
+					horizontalRule: false,
+					heading: { levels: [2, 3] },
+					link: { openOnClick: false, HTMLAttributes: { class: C.link } },
+					paragraph: { HTMLAttributes: { class: C.paragraph } },
+					bulletList: { HTMLAttributes: { class: `${C.list} ${C.bulletList}` } },
+					orderedList: { HTMLAttributes: { class: `${C.list} ${C.orderedList}` } },
+					listItem: { HTMLAttributes: { class: C.listItem } },
+					blockquote: { HTMLAttributes: { class: C.blockquote } },
+					codeBlock: { HTMLAttributes: { class: C.codeBlock } },
+				}),
+				TextAlign.configure({ types: ['heading', 'paragraph'] }),
+			],
+			editorProps: {
+				attributes: {
+					class: CONTENT_CLASS,
+					'aria-label': this.props.label || 'Rich text editor',
+				},
+			},
+			onUpdate: ({ editor }) => {
+				const doc = fromTiptap(editor.getJSON());
+				this._applied = JSON.stringify(doc);
+				this.setData('empty', isEmpty(doc));
+				this.refresh();
+				const { change } = this.props;
+				if (typeof change === 'function') change(doc);
+			},
+			// Fires on every state change including selection moves — keeps the
+			// toolbar's pressed states tracking the caret.
+			onTransaction: () => this._syncActive(),
+		});
+		this._syncActive();
+	}
+
+	destroyed() {
+		this._editor?.destroy();
+		this._editor = null;
+	}
+
+	afterUpdate() {
+		const ed = this._editor;
+		if (!ed) return;
+		ed.setEditable(!this.props.disabled);
+		const v = this.props.value;
+		if (v == null) return;
+		const s = JSON.stringify(v);
+		// Only genuine external changes reach setContent — parent echoes of our
+		// own @change match _applied and no-op, so typing is never interrupted.
+		if (s !== this._applied) {
+			this._applied = s;
+			ed.commands.setContent(toTiptap(v)); // emitUpdate defaults to false
+			this.setData('empty', isEmpty(v));
+			this.refresh();
+		}
+	}
+
+	_syncActive() {
+		const ed = this._editor;
+		if (!ed) return;
+		this.setData('active', {
+			bold: ed.isActive('bold'),
+			italic: ed.isActive('italic'),
+			underline: ed.isActive('underline'),
+			strike: ed.isActive('strike'),
+			h2: ed.isActive('heading', { level: 2 }),
+			h3: ed.isActive('heading', { level: 3 }),
+			alignLeft: !ed.isActive({ textAlign: 'center' }) && !ed.isActive({ textAlign: 'right' }),
+			alignCenter: ed.isActive({ textAlign: 'center' }),
+			alignRight: ed.isActive({ textAlign: 'right' }),
+			ul: ed.isActive('bulletList'),
+			ol: ed.isActive('orderedList'),
+			quote: ed.isActive('blockquote'),
+			codeBlock: ed.isActive('codeBlock'),
+		});
+		this.refresh();
+	}
+
+	_chain() {
+		return this._editor?.chain().focus();
+	}
+
+	events = {
+		onToggle: ({ value }) => {
+			const c = this._chain();
+			if (!c) return;
+			switch (value) {
+				case 'bold': c.toggleBold().run(); break;
+				case 'italic': c.toggleItalic().run(); break;
+				case 'underline': c.toggleUnderline().run(); break;
+				case 'strike': c.toggleStrike().run(); break;
+				case 'h2': c.toggleHeading({ level: 2 }).run(); break;
+				case 'h3': c.toggleHeading({ level: 3 }).run(); break;
+				case 'alignLeft': c.setTextAlign('left').run(); break;
+				case 'alignCenter': c.setTextAlign('center').run(); break;
+				case 'alignRight': c.setTextAlign('right').run(); break;
+				case 'ul': c.toggleBulletList().run(); break;
+				case 'ol': c.toggleOrderedList().run(); break;
+				case 'quote': c.toggleBlockquote().run(); break;
+				case 'codeBlock': c.toggleCodeBlock().run(); break;
+			}
+		},
+
+		onPress: (value) => {
+			if (value !== 'link' || !this._editor) return;
+			const href = this._editor.getAttributes('link').href || '';
+			this.setData({ linkOpen: true, linkDraft: href });
+			this.refresh();
+		},
+
+		applyLink: () => {
+			const raw = (this.getData().linkDraft || '').trim();
+			if (!raw) {
+				this.events.removeLink();
+				return;
+			}
+			// Bare domains get a scheme; site-relative (/…) and hash (#…) pass through.
+			const url = /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(raw) ? raw : `https://${raw}`;
+			this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
+			this.setData({ linkOpen: false, linkDraft: '' });
+			this.refresh();
+		},
+
+		removeLink: () => {
+			this._chain()?.extendMarkRange('link').unsetLink().run();
+			this.setData({ linkOpen: false, linkDraft: '' });
+			this.refresh();
+		},
+
+		closeLink: () => {
+			this.setData({ linkOpen: false, linkDraft: '' });
+			this.refresh();
+		},
+
+		// Clicking the frame's padding (below short content) focuses the editor.
+		focusEditor: (event) => {
+			if (event.target === event.currentTarget) {
+				this._editor?.commands.focus('end');
+			}
+		},
+	};
+}
+</script>
