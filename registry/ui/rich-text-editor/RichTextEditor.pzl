@@ -16,6 +16,7 @@
           placeholder="https://example.com or /path"
           aria-label="Link URL"
           value={ linkDraft }
+          ref="linkInput"
           @keydown:enter={ applyLink }
         />
         <button type="button" class={ linkBtnClass } @click={ applyLink }>Set</button>
@@ -36,8 +37,8 @@
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import { Editor } from '@tiptap/core';
-import StarterKit from '@tiptap/starter-kit';
-import TextAlign from '@tiptap/extension-text-align';
+import { StarterKit } from '@tiptap/starter-kit';
+import { TextAlign } from '@tiptap/extension-text-align';
 import Toolbar from './Toolbar.pzl';
 import {
 	fromTiptap,
@@ -67,7 +68,8 @@ import {
 //                this editor emitted, so echoing @change back is free and
 //                external resets (e.g. loading a saved doc) still land.
 //   label        optional label above the toolbar; also the content region's
-//                accessible name (aria-label, applied at mount)
+//                accessible name (wired as aria-labelledby at mount; without a
+//                label the region falls back to a generic aria-label)
 //   placeholder  muted hint shown while the document is empty
 //   disabled     disables the toolbar and makes the content read-only
 //   class        appended to the root
@@ -179,6 +181,9 @@ export default class RichTextEditor extends PuzzleView {
 	mounted() {
 		const value = this.props.value || emptyDoc();
 		this._applied = JSON.stringify(value);
+		// Seed the emptiness flag data() switches to post-mount, or a non-empty
+		// starting value would render under the placeholder until the first edit.
+		this.setData('empty', isEmpty(value));
 		this._editor = new Editor({
 			element: this.refs.mount,
 			editable: !this.props.disabled,
@@ -202,7 +207,11 @@ export default class RichTextEditor extends PuzzleView {
 			editorProps: {
 				attributes: {
 					class: CONTENT_CLASS,
-					'aria-label': this.props.label || 'Rich text editor',
+					// The rendered label names the content region when there is one;
+					// only one of the two naming attributes is ever emitted.
+					...(this.props.label
+						? { 'aria-labelledby': `${this._fallbackId}-label` }
+						: { 'aria-label': 'Rich text editor' }),
 				},
 			},
 			onUpdate: ({ editor }) => {
@@ -293,6 +302,14 @@ export default class RichTextEditor extends PuzzleView {
 			const href = this._editor.getAttributes('link').href || '';
 			this.setData({ linkOpen: true, linkDraft: href });
 			this.refresh();
+			// refresh() is scheduler-based, so the row's input only exists on the
+			// next frame — focus it there, or the row is keyboard-unreachable.
+			requestAnimationFrame(() => {
+				const input = this.refs.linkInput;
+				if (!input) return;
+				input.focus();
+				if (href) input.select();
+			});
 		},
 
 		applyLink: () => {
@@ -317,6 +334,10 @@ export default class RichTextEditor extends PuzzleView {
 		closeLink: () => {
 			this.setData({ linkOpen: false, linkDraft: '' });
 			this.refresh();
+			// The focused input unmounts with the row; hand focus back to the
+			// editor instead of letting it fall to <body>. (applyLink/removeLink
+			// already refocus through _chain().)
+			this._editor?.commands.focus();
 		},
 
 		// Clicking the frame's padding (below short content) focuses the editor.
