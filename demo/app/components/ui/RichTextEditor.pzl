@@ -280,7 +280,7 @@ export default class RichTextEditor extends PuzzleView {
 		// doc back as a fresh reference, which matches _applied and no-ops.
 		if (s !== this._applied) {
 			this._applied = s;
-			ed.commands.setContent(toTiptap(v)); // emitUpdate defaults to false
+			ed.commands.setContent(toTiptap(v), { emitUpdate: false }); // emitUpdate defaults to TRUE in Tiptap 3.30 — suppress the echo
 			this.setData('empty', isEmpty(v));
 			this.refresh();
 		}
