@@ -1,0 +1,464 @@
+<puzzle-view>
+  <div class={ rootClass }>
+    {#if label}
+      <div id={ labelId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</div>
+    {/if}
+
+    <div class="mb-2" @pointerdown:prevent={ noopPointer }>
+      <Toolbar class="w-full" label="Markdown formatting" disabled={ disabled }
+        items={ tbItems } @toggle={ onToggle } @press={ onPress }/>
+      {#if inTable}
+        <Toolbar class="mt-2 w-full" label="Table" disabled={ disabled }
+          items={ tableItems } @press={ onPress }/>
+      {/if}
+    </div>
+
+    {#if linkOpen}
+      <div class="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
+        @keydown:escape={ closeLink }>
+        <input
+          type="url"
+          class="block w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-muted transition-colors outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          placeholder="https://example.com or /path"
+          aria-label="Link URL"
+          value={ linkDraft }
+          ref="linkInput"
+          @keydown:enter={ applyLink }
+        />
+        <button type="button" class={ linkBtnClass } @click={ applyLink }>Set</button>
+        <button type="button" class={ linkBtnClass } @click={ removeLink }>Remove</button>
+        <button type="button" class={ linkBtnClass } @click={ closeLink }>Cancel</button>
+      </div>
+    {/if}
+
+    <div class={ frameClass } @click={ focusEditor }>
+      <div island ref="mount"></div>
+      {#if showPlaceholder}
+        <div aria-hidden="true" class="pointer-events-none absolute left-3 top-2 leading-7 text-muted">{ placeholder }</div>
+      {/if}
+    </div>
+  </div>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import { Editor } from '@tiptap/core';
+import { StarterKit } from '@tiptap/starter-kit';
+import { TaskList, TaskItem } from '@tiptap/extension-list';
+import { TableKit } from '@tiptap/extension-table';
+import { Markdown } from '@tiptap/markdown';
+import Toolbar from './Toolbar.pzl';
+import { MARKDOWN_CLASSES as C, isEmpty } from '../../lib/markdown-doc.js';
+
+// MarkdownEditor — WYSIWYG markdown editing on Tiptap/ProseMirror, with the
+// Toolbar piece as the formatting bar. The controlled value is a plain markdown
+// string. @change emits Tiptap's canonical markdown spelling; render stored
+// markdown with the Markdown piece.
+//
+// Requires: npm install @tiptap/core @tiptap/pm @tiptap/starter-kit
+// @tiptap/extension-list @tiptap/extension-table @tiptap/markdown (declared in
+// piece.json), plus the toolbar piece and lib/markdown-doc.js registry file.
+//
+//   <MarkdownEditor value={ markdown } @change={ setMarkdown } />
+//   <MarkdownEditor label="Body" placeholder="Write something…"
+//                   value={ markdown } @change={ setMarkdown } />
+//
+// Props:
+//   value        markdown string; the parent owns it (controlled). The editor
+//                canonicalizes on emit while accepting equivalent source
+//                spellings without resetting selection or undo history.
+//   label        optional label above the toolbar; also the content region's
+//                accessible name (wired as aria-labelledby at mount; without a
+//                label the region falls back to a generic aria-label)
+//   placeholder  muted hint shown while the markdown document is empty
+//   disabled     disables the toolbars and makes the content read-only
+//   class        appended to the root
+// Callbacks (value-first):
+//   @change(md) fires on every edit with the full canonical markdown string
+//
+// Formatting: H1 / H2 / H3, bold / italic / strike, inline code, bullet +
+// ordered + task lists, blockquote, code block, horizontal rules, links, and
+// tables. Underline and text alignment are deliberately absent because markdown
+// cannot express them. Images are render-side only: the editor schema has no
+// image node, so typed ![alt](url) markdown will not survive an edit cycle.
+// Markdown typing shortcuts and standard undo/redo keyboard shortcuts work via
+// Tiptap.
+//
+// The Tiptap instance mounts inside an `island` div: ProseMirror owns that DOM
+// and Puzzle's patcher must never touch it. Everything editor-related lives in
+// mounted()/destroyed(), so prerender (SSG) never sees a browser API. Content
+// typography comes from MARKDOWN_CLASSES via per-extension HTMLAttributes — the
+// same classes Markdown renders with — except heading sizes, which Tiptap can't
+// vary per level through HTMLAttributes; those are mirrored below in
+// CONTENT_CLASS as arbitrary variants (keep in sync with the lib map).
+let uid = 0;
+
+const CONTENT_CLASS =
+	'min-h-40 px-3 py-2 text-ink outline-none ' +
+	// Keep in sync with lib map: MARKDOWN_CLASSES.heading1 / heading2 / heading3.
+	'[&_h1]:mt-8 [&_h1:first-child]:mt-0 [&_h1]:text-3xl [&_h1]:font-semibold [&_h1]:tracking-tight [&_h1]:text-ink ' +
+	'[&_h2]:mt-6 [&_h2:first-child]:mt-0 [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:text-ink ' +
+	'[&_h3]:mt-5 [&_h3:first-child]:mt-0 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3]:text-ink ' +
+	// .tableWrapper and .selectedCell are machine-generated ProseMirror class
+	// names reachable through arbitrary variants, so no <style> block is needed.
+	'[&_.tableWrapper]:mt-4 [&_.tableWrapper]:overflow-x-auto [&_.tableWrapper]:rounded-xl [&_.tableWrapper]:border [&_.tableWrapper]:border-border ' +
+	'[&_th]:border [&_th]:border-border [&_td]:border [&_td]:border-border [&_.selectedCell]:bg-brand-tint ' +
+	// TaskItem's node view renders li[data-checked] > label > input + div.
+	'[&_ul[data-type=taskList]]:list-none [&_ul[data-type=taskList]]:pl-0 ' +
+	'[&_li[data-type=taskItem]>label>input]:mt-1.5 [&_li[data-type=taskItem]>label>input]:size-4 [&_li[data-type=taskItem]>label>input]:shrink-0 [&_li[data-type=taskItem]>label>input]:accent-brand ' +
+	'[&_li[data-checked=true]>div]:text-muted [&_li[data-checked=true]>div]:line-through';
+
+const FRAME_BASE =
+	'relative rounded-lg border border-border bg-surface transition-colors ' +
+	'outline-ring focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring';
+
+const LINK_BTN =
+	'shrink-0 cursor-pointer rounded-md px-2.5 py-1.5 text-sm font-medium text-body ' +
+	'transition-colors hover:bg-surface-sunken hover:text-ink ' +
+	'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+
+// 24×24 stroke-current icon paths (Toolbar's icon contract).
+const I = {
+	bold: 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8',
+	italic: 'M19 4h-9M14 20H5M15 4L9 20',
+	strike: 'M16 4H9a3 3 0 0 0-2.83 4M14 12a4 4 0 0 1 0 8H6M4 12h16',
+	code: 'M8 6l-6 6 6 6M16 6l6 6-6 6M14 4l-4 16',
+	ul: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+	ol: 'M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1',
+	task: 'M3 5h4v4H3zM4 7l1 1 3-3M11 7h10M3 15h4v4H3zM4 17l1 1 3-3M11 17h10',
+	quote: 'M17 6H3M21 12H8M21 18H8M3 12v6',
+	codeBlock: 'M16 18l6-6-6-6M8 6l-6 6 6 6',
+	link: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71',
+	hr: 'M4 12h16M2 8h.01M22 8h.01M2 16h.01M22 16h.01',
+	table: 'M3 4h18v16H3zM3 9h18M3 15h18M9 4v16M15 4v16',
+	rowBefore: 'M4 5h16M4 10h16v9H4zM12 2v6M9 5l3-3 3 3',
+	rowAfter: 'M4 5h16v9H4zM4 19h16M12 16v6M9 19l3 3 3-3',
+	delRow: 'M4 6h16v12H4zM4 12h16M9 9l6 6M15 9l-6 6',
+	colBefore: 'M5 4v16M10 4h9v16h-9zM2 12h6M5 9l-3 3 3 3',
+	colAfter: 'M5 4h9v16H5zM19 4v16M16 12h6M19 9l3 3-3 3',
+	delCol: 'M6 4h12v16H6zM12 4v16M9 9l6 6M15 9l-6 6',
+	headerRow: 'M4 4h16v16H4zM4 9h16M9 4v5M15 4v5',
+	delTable: 'M4 5h16v15H4zM8 2h8M9 9l6 6M15 9l-6 6',
+};
+
+export default class MarkdownEditor extends PuzzleView {
+	created() {
+		this._fallbackId = `pp-mde-${++uid}`;
+		this._editor = null;
+		// Canonical markdown for the last document emitted or externally applied.
+		this._applied = null;
+		// Raw value prop spelling last seen, separate because markdown is not canonical.
+		this._appliedRaw = null;
+		this.setData({
+			active: {},
+			empty: true,
+			linkOpen: false,
+			linkDraft: '',
+		});
+	}
+
+	data(params, props) {
+		const g = this.getData();
+		const a = g.active || {};
+		const disabled = !!props.disabled;
+		const empty = this._editor ? !!g.empty : isEmpty(props.value);
+		const toggle = (value, label, icon, pressed) => ({
+			type: 'toggle', value, label, icon, iconOnly: true, pressed: !!pressed,
+		});
+		const tableButton = (value, label, icon) => ({
+			type: 'button', value, label, icon, iconOnly: true,
+		});
+		return {
+			label: props.label,
+			labelId: `${this._fallbackId}-label`,
+			placeholder: props.placeholder,
+			showPlaceholder: !!props.placeholder && empty,
+			disabled,
+			linkOpen: !!g.linkOpen,
+			linkDraft: g.linkDraft ?? '',
+			linkBtnClass: LINK_BTN,
+			rootClass: props.class || '',
+			frameClass: [FRAME_BASE, disabled ? 'opacity-50' : ''].filter(Boolean).join(' '),
+			inTable: !!a.inTable,
+			tbItems: [
+				toggle('bold', 'Bold', I.bold, a.bold),
+				toggle('italic', 'Italic', I.italic, a.italic),
+				toggle('strike', 'Strikethrough', I.strike, a.strike),
+				toggle('code', 'Inline code', I.code, a.code),
+				{ type: 'separator' },
+				{ type: 'toggle', value: 'h1', label: 'H1', pressed: !!a.h1 },
+				{ type: 'toggle', value: 'h2', label: 'H2', pressed: !!a.h2 },
+				{ type: 'toggle', value: 'h3', label: 'H3', pressed: !!a.h3 },
+				{ type: 'separator' },
+				toggle('ul', 'Bulleted list', I.ul, a.ul),
+				toggle('ol', 'Numbered list', I.ol, a.ol),
+				toggle('task', 'Task list', I.task, a.task),
+				toggle('quote', 'Blockquote', I.quote, a.quote),
+				toggle('codeBlock', 'Code block', I.codeBlock, a.codeBlock),
+				{ type: 'separator' },
+				{ type: 'button', value: 'link', label: 'Link', icon: I.link, iconOnly: true },
+				{ type: 'button', value: 'hr', label: 'Horizontal rule', icon: I.hr, iconOnly: true },
+				{ type: 'button', value: 'table', label: 'Insert table', icon: I.table, iconOnly: true },
+			],
+			tableItems: [
+				tableButton('rowBefore', 'Add row before', I.rowBefore),
+				tableButton('rowAfter', 'Add row after', I.rowAfter),
+				tableButton('delRow', 'Delete row', I.delRow),
+				{ type: 'separator' },
+				tableButton('colBefore', 'Add column before', I.colBefore),
+				tableButton('colAfter', 'Add column after', I.colAfter),
+				tableButton('delCol', 'Delete column', I.delCol),
+				{ type: 'separator' },
+				tableButton('headerRow', 'Toggle header row', I.headerRow),
+				tableButton('delTable', 'Delete table', I.delTable),
+			],
+		};
+	}
+
+	mounted() {
+		const value = String(this.props.value ?? '');
+		// Seed the emptiness flag data() switches to post-mount, or a non-empty
+		// starting value would render under the placeholder until the first edit.
+		this.setData('empty', isEmpty(value));
+		this._editor = new Editor({
+			element: this.refs.mount,
+			editable: !this.props.disabled,
+			content: value,
+			contentType: 'markdown',
+			extensions: [
+				StarterKit.configure({
+					underline: false,
+					heading: { levels: [1, 2, 3] },
+					link: { openOnClick: false, HTMLAttributes: { class: C.link } },
+					paragraph: { HTMLAttributes: { class: C.paragraph } },
+					bulletList: { HTMLAttributes: { class: `${C.list} ${C.bulletList}` } },
+					orderedList: { HTMLAttributes: { class: `${C.list} ${C.orderedList}` } },
+					listItem: { HTMLAttributes: { class: C.listItem } },
+					blockquote: { HTMLAttributes: { class: C.blockquote } },
+					codeBlock: { HTMLAttributes: { class: C.codeBlock } },
+					code: { HTMLAttributes: { class: C.inlineCode } },
+					horizontalRule: { HTMLAttributes: { class: C.rule } },
+				}),
+				TaskList.configure({ HTMLAttributes: { class: C.taskList } }),
+				TaskItem.configure({ nested: true, HTMLAttributes: { class: C.taskItem } }),
+				TableKit.configure({
+					table: {
+						// Resize handles need machine-generated CSS from a <style> block;
+						// pieces forbid that chrome, so tables deliberately stay fixed.
+						resizable: false,
+						// Tiptap 3.30 defaults renderWrapper to false; enable it so the
+						// verified machine-generated .tableWrapper can carry the chrome.
+						renderWrapper: true,
+						HTMLAttributes: { class: C.table },
+					},
+					tableRow: { HTMLAttributes: { class: C.tableRow } },
+					tableHeader: { HTMLAttributes: { class: C.tableHead } },
+					tableCell: { HTMLAttributes: { class: C.tableCell } },
+				}),
+				Markdown.configure({
+					markedOptions: { gfm: true, breaks: false },
+					indentation: { style: 'space', size: 2 },
+				}),
+			],
+			editorProps: {
+				attributes: {
+					class: CONTENT_CLASS,
+					// The rendered label names the content region when there is one;
+					// only one of the two naming attributes is ever emitted.
+					...(this.props.label
+						? { 'aria-labelledby': `${this._fallbackId}-label` }
+						: { 'aria-label': 'Markdown editor' }),
+				},
+			},
+			onUpdate: ({ editor }) => {
+				const md = editor.getMarkdown();
+				this._applied = md;
+				this._appliedRaw = md;
+				this.setData('empty', isEmpty(md));
+				this.refresh();
+				this.props.change?.(md);
+			},
+			// Fires on every state change including selection moves — keeps the
+			// toolbar's pressed states tracking the caret.
+			onTransaction: () => this._syncActive(),
+		});
+		this._applied = this._editor.getMarkdown();
+		this._appliedRaw = value;
+		this.setData('empty', isEmpty(this._applied));
+		this._syncActive();
+	}
+
+	destroyed() {
+		this._editor?.destroy();
+		this._editor = null;
+	}
+
+	afterUpdate() {
+		const ed = this._editor;
+		if (!ed) return;
+		// setEditable dispatches a transaction even when the flag is unchanged,
+		// and every transaction runs _syncActive — calling it unconditionally on
+		// each render closes a render→transaction→render loop. Only write on a
+		// real change.
+		const editable = !this.props.disabled;
+		if (ed.isEditable !== editable) ed.setEditable(editable);
+
+		// Markdown is not a canonical source form: `# Hi` and `#  Hi`, or `* a`
+		// and `- a`, can parse to the same document and serialize one way. A parent
+		// may echo its original spelling after the editor emits the canonical one.
+		// Comparing only raw strings would then call setContent while typing,
+		// jumping the caret and destroying undo history. Track raw echoes for the
+		// fast path, then compare parsed-and-serialized documents before applying.
+		const v = this.props.value;
+		if (v == null) return;
+		const raw = String(v);
+		if (raw === this._appliedRaw) return;
+		this._appliedRaw = raw;
+		let canonical;
+		try {
+			canonical = ed.markdown ? ed.markdown.serialize(ed.markdown.parse(raw)) : null;
+		} catch {
+			canonical = null;
+		}
+		if (canonical != null && canonical === this._applied) return;
+		this._applied = canonical ?? raw;
+		ed.commands.setContent(raw, { contentType: 'markdown', emitUpdate: false });
+		// emitUpdate defaults TRUE in Tiptap 3.30 — explicit false prevents an
+		// external set from echoing a spurious @change back to the parent.
+		this.setData('empty', isEmpty(this._applied));
+		this.refresh();
+	}
+
+	_syncActive() {
+		const ed = this._editor;
+		if (!ed) return;
+		const next = {
+			bold: ed.isActive('bold'),
+			italic: ed.isActive('italic'),
+			strike: ed.isActive('strike'),
+			code: ed.isActive('code'),
+			h1: ed.isActive('heading', { level: 1 }),
+			h2: ed.isActive('heading', { level: 2 }),
+			h3: ed.isActive('heading', { level: 3 }),
+			ul: ed.isActive('bulletList'),
+			ol: ed.isActive('orderedList'),
+			task: ed.isActive('taskList'),
+			quote: ed.isActive('blockquote'),
+			codeBlock: ed.isActive('codeBlock'),
+			inTable: ed.isActive('table'),
+		};
+		// Transactions fire constantly — every keystroke, every selection move,
+		// every setEditable — but the pressed states change on only a few of
+		// them. Re-rendering on each one rebuilds the whole toolbar per keystroke
+		// and, paired with a render that dispatches its own transaction, spins
+		// the render cycle until Puzzle's perf breaker cuts the chain. Bail when
+		// nothing actually flipped.
+		const prev = this.getData().active || {};
+		const keys = Object.keys(next);
+		if (keys.every((k) => !!prev[k] === !!next[k])) return;
+		this.setData('active', next);
+		this.refresh();
+	}
+
+	_chain() {
+		return this._editor?.chain().focus();
+	}
+
+	events = {
+		// pointerdown's default action is the focus transfer, so a toolbar click
+		// would blur the contenteditable and collapse ProseMirror's selection —
+		// the command then lands as a stored mark at the caret instead of over
+		// the selected text. Preventing the default on the toolbar wrapper keeps
+		// the selection alive across the click (the same preventDefault-on-
+		// mousedown pattern every contenteditable toolbar uses); the click still
+		// fires, and Tab/arrow keyboard access is untouched since that path never
+		// fires pointerdown. NOT applied to the link row — its input needs focus.
+		noopPointer: () => {},
+
+		onToggle: ({ value }) => {
+			const c = this._chain();
+			if (!c) return;
+			switch (value) {
+				case 'bold': c.toggleBold().run(); break;
+				case 'italic': c.toggleItalic().run(); break;
+				case 'strike': c.toggleStrike().run(); break;
+				case 'code': c.toggleCode().run(); break;
+				case 'h1': c.toggleHeading({ level: 1 }).run(); break;
+				case 'h2': c.toggleHeading({ level: 2 }).run(); break;
+				case 'h3': c.toggleHeading({ level: 3 }).run(); break;
+				case 'ul': c.toggleBulletList().run(); break;
+				case 'ol': c.toggleOrderedList().run(); break;
+				case 'task': c.toggleTaskList().run(); break;
+				case 'quote': c.toggleBlockquote().run(); break;
+				case 'codeBlock': c.toggleCodeBlock().run(); break;
+			}
+		},
+
+		onPress: (value) => {
+			if (value === 'link') {
+				if (!this._editor) return;
+				const href = this._editor.getAttributes('link').href || '';
+				this.setData({ linkOpen: true, linkDraft: href });
+				this.refresh();
+				// The row is created by refresh(); defer focus until the browser's next
+				// frame so its input ref is settled before we hand keyboard focus to it.
+				requestAnimationFrame(() => {
+					const input = this.refs.linkInput;
+					input?.focus();
+					if (href) input?.select();
+				});
+				return;
+			}
+			const c = this._chain();
+			if (!c) return;
+			switch (value) {
+				case 'hr': c.setHorizontalRule().run(); break;
+				case 'table': c.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); break;
+				case 'rowBefore': c.addRowBefore().run(); break;
+				case 'rowAfter': c.addRowAfter().run(); break;
+				case 'delRow': c.deleteRow().run(); break;
+				case 'colBefore': c.addColumnBefore().run(); break;
+				case 'colAfter': c.addColumnAfter().run(); break;
+				case 'delCol': c.deleteColumn().run(); break;
+				case 'headerRow': c.toggleHeaderRow().run(); break;
+				case 'delTable': c.deleteTable().run(); break;
+			}
+		},
+
+		applyLink: () => {
+			const raw = (this.getData().linkDraft || '').trim();
+			if (!raw) {
+				this.events.removeLink();
+				return;
+			}
+			// Bare domains get a scheme; site-relative (/…) and hash (#…) pass through.
+			const url = /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(raw) ? raw : `https://${raw}`;
+			this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
+			this.setData({ linkOpen: false, linkDraft: '' });
+			this.refresh();
+		},
+
+		removeLink: () => {
+			this._chain()?.extendMarkRange('link').unsetLink().run();
+			this.setData({ linkOpen: false, linkDraft: '' });
+			this.refresh();
+		},
+
+		closeLink: () => {
+			this.setData({ linkOpen: false, linkDraft: '' });
+			this.refresh();
+			// The focused input unmounts with the row; hand focus back to the
+			// editor instead of letting it fall to <body>. (applyLink/removeLink
+			// already refocus through _chain().)
+			this._editor?.commands.focus();
+		},
+
+		// Clicking the frame's padding (below short content) focuses the editor.
+		focusEditor: (event) => {
+			if (event.target === event.currentTarget) {
+				this._editor?.commands.focus('end');
+			}
+		},
+	};
+}
+</script>
