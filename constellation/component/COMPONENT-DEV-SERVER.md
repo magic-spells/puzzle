@@ -40,3 +40,22 @@ The config Serve loads at startup is handed to every `build.Build` the session r
 Tailwind uses one warm child process in its own process group — in BOTH serving modes now — and every Serve exit path synchronously reaps it. In static mode Serve waits (bounded) for the child's first non-empty output before the initial build — that build bakes the stylesheet into a full prerender, so building against the empty file would ship an unstyled first page and immediately discard the whole build. SPA mode does NOT wait: `styles.css` is served straight off disk and the output poll recomposes it in place the moment the first output lands, so a startup wait would only inflate `ready in` (~3× on small projects) to prevent a flash no browser is open to see; the poll and death-watch goroutines start only after the styles callback is assigned, so the wiring is race-free under `-race`. `pipeline.recompose` skips a write whose composed bytes match what it last wrote — honored only while the served `styles.css` still exists on disk, so an external delete is healed by the next recompose — collapsing the double composition a single edit produced (once from the rebuild, once from the output poll a moment later) into one atomic write against the file the server is handing out. If the watcher cannot start or dies, the pipeline reports the fallback and uses one-shot composition. Config edits advise a restart because config loads once per dev process.
 
 A config file that fails to load is **not** fatal — dev keeps serving from the zero `Config` — but the warning has to name every key that loss drops, not just Tailwind. `dev.proxy` is the misleading one: with no proxy registered, the SPA history fallback answers `/api/*` with `index.html`, so the app reports a JSON parse error on `"<!doctype html>"` with nothing tying it back to the config. `configFallbackWarning` names both losses and says to restart. (`LoadConfig` returns no error when there is no config file at all, so a zero-config app never sees it.)
+
+## D156 performance hardening
+
+[[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]] makes the SPA watch builder own
+change classification. Its constructor's usage scan is reused for startup;
+later usage scans require a `.pzl` change; the full public mirror requires an
+initial batch, a public-path batch, or a resolved public source that differs
+from the last-synced one (a public tree created mid-session syncs on the next
+rebuild); and a public-only batch skips esbuild unless that asset participated
+in the prior module graph, compared with both sides symlink-normalized. Once
+the first bundle lands, every successful rebuild and Tailwind trigger
+recomposes styles.css; the byte memo skips the write when the composed output
+is unchanged and still on disk, which also recreates an externally deleted
+styles.css on the next rebuild. Root public validation stays unconditional.
+Tailwind callbacks cannot see working CSS from a failed esbuild pass in either
+SPA or static dev; the static builder adopts its candidate only after the
+staging swap, and a failed stylesheet write leaves the byte memo unarmed so the
+next trigger retries it. `puzzle dev --profile-build` exposes startup and each rebuild
+as stable stderr phase tables in every output mode.

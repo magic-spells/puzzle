@@ -314,7 +314,7 @@ func TestWatchBuilderFixtures(t *testing.T) {
 	if got, want := b.entry, filepath.Join(root, ".puzzle", "fixtures", "app.js"); got != want {
 		t.Errorf("watch entry = %q, want %q", got, want)
 	}
-	if err := b.Rebuild(); err != nil {
+	if _, err := b.Rebuild(nil); err != nil {
 		t.Fatalf("Rebuild: %v", err)
 	}
 	js, err := os.ReadFile(filepath.Join(root, "dist", "app.js"))

@@ -100,7 +100,10 @@ are served with static semantics — clean URLs, plain full-page navigation, a r
 404, and the per-page mount modules. Default and 'hybrid' projects are unaffected.
 
 With --fixtures, wire app/fixtures.js (or .ts) through the fixtures/mock runtime
-module so the served app seeds and mocks itself.`,
+module so the served app seeds and mocks itself.
+
+With --profile-build, print per-phase startup and rebuild timing tables to
+stderr. PUZZLE_PROFILE_BUILD=1 enables the same profiling.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := "."
@@ -110,10 +113,12 @@ module so the served app seeds and mocks itself.`,
 		port, _ := cmd.Flags().GetInt("port")
 		strictPort, _ := cmd.Flags().GetBool("strict-port")
 		fixtures, _ := cmd.Flags().GetBool("fixtures")
+		profile, _ := cmd.Flags().GetBool("profile-build")
 		return dev.Serve(dir, dev.Options{
 			Port:       port,
 			StrictPort: strictPort,
 			Fixtures:   fixtures,
+			Profile:    profile,
 			OnReady: func() {
 				printUpdateNotice(os.Stdout, ui.New(os.Stdout))
 			},
@@ -173,6 +178,7 @@ func init() {
 	devCmd.Flags().Int("port", 3000, "Port for the dev server (scans upward if busy)")
 	devCmd.Flags().Bool("strict-port", false, "Fail if --port is busy instead of scanning for a free one")
 	devCmd.Flags().Bool("fixtures", false, "Install app/fixtures.js (or .ts) via the fixtures/mock runtime module")
+	devCmd.Flags().Bool("profile-build", false, "Print per-phase startup and rebuild timing tables to stderr (also enabled by PUZZLE_PROFILE_BUILD=1)")
 	// Preview defaults to a different port than dev on purpose: previewing a
 	// build while a dev server runs is the common case, and the scan silently
 	// moving off 3000 would hide which server answered.

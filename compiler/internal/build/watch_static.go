@@ -73,6 +73,7 @@ type StaticWatchBuilder struct {
 	warm    string // <root>/.puzzle/tmp/dev-static
 	workTmp string // <root>/.puzzle/tmp
 	cfg     config.Config
+	profile bool
 
 	// tailwind returns the current Tailwind layer for the composed stylesheet.
 	// The dev loop points it at the warm `tailwindcss --watch` child's latest
@@ -127,6 +128,15 @@ type StaticWatchBuilder struct {
 	// classified until a graph that knows about it exists — otherwise a later
 	// save to the imported file would be attributed to too few routes.
 	pending map[string]bool
+
+	// CSS collected by appPl is working state: esbuild can successfully run some
+	// plugin onLoad callbacks before another module fails the pass. Only promote
+	// that state after the matching staging tree lands, so a later Tailwind poll
+	// cannot publish CSS from a failed build over the last-good site.
+	committedCSS     string
+	haveCommittedCSS bool
+	nextCSS          string
+	haveNextCSS      bool
 }
 
 // StaticWatchOptions configure the static dev builder.
@@ -138,6 +148,10 @@ type StaticWatchOptions struct {
 
 	// Tailwind returns the current Tailwind CSS layer. nil means no pipeline.
 	Tailwind func() (string, error)
+
+	// Profile enables per-phase rebuild tables. PUZZLE_PROFILE_BUILD is also
+	// honored; the explicit option carries `puzzle dev --profile-build`.
+	Profile bool
 }
 
 // NewStaticWatchBuilder prepares the warm output tree and the two esbuild
@@ -178,6 +192,7 @@ func NewStaticWatchBuilder(root string, opts StaticWatchOptions) (*StaticWatchBu
 		warm:     warm,
 		workTmp:  tmpDir,
 		cfg:      opts.Config,
+		profile:  opts.Profile,
 		tailwind: opts.Tailwind,
 		cache:    plugin.NewCompileCache(),
 		scanner:  plugin.NewUsageScanner(),
@@ -216,7 +231,7 @@ func (b *StaticWatchBuilder) RecomposeStyles() (bool, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if !dirExists(b.outdir) {
+	if !b.haveCommittedCSS || !dirExists(b.outdir) {
 		return false, nil
 	}
 	tailwindCSS := ""
@@ -226,11 +241,7 @@ func (b *StaticWatchBuilder) RecomposeStyles() (bool, error) {
 			return false, err
 		}
 	}
-	collected := ""
-	if b.appPl != nil {
-		collected = b.appPl.CSS()
-	}
-	final := []byte(styles.Compose(tailwindCSS, collected))
+	final := []byte(styles.Compose(tailwindCSS, b.committedCSS))
 
 	// Compared against the file itself rather than a remembered hash: every
 	// staging swap replaces this file behind our back, so what is on disk is the
@@ -318,11 +329,20 @@ func (b *StaticWatchBuilder) newPlugin(usage plugin.Usage) *plugin.Plugin {
 // Every failure path leaves dist/ exactly as it was: staging is discarded and
 // the error is returned for the caller to print and push down the D92 channel.
 func (b *StaticWatchBuilder) Rebuild(changed []string) error {
+	prof := NewPhaseProfile(ProfileEnabled(b.profile), "puzzle dev · rebuild")
+	defer prof.Report(os.Stderr)
+	return b.rebuild(changed, prof)
+}
+
+// RebuildProfile folds this rebuild into a caller-owned profile, used for the
+// initial dev startup table.
+func (b *StaticWatchBuilder) RebuildProfile(changed []string, prof *PhaseProfile) error {
+	return b.rebuild(changed, prof)
+}
+
+func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-
-	prof := newBuildProfile(profileEnabled(false))
-	defer prof.report(os.Stderr)
 
 	// Which routes this save can reach, decided BEFORE the compile memo is
 	// evicted: the {#svg} edge classification depends on lives in that memo's
@@ -404,6 +424,12 @@ func (b *StaticWatchBuilder) Rebuild(changed []string) error {
 	// Only now does what this rebuild rendered describe what is being served, so
 	// only now may its graph replace the old one and its changes stop being
 	// pending.
+	if b.haveNextCSS {
+		b.committedCSS = b.nextCSS
+		b.haveCommittedCSS = true
+		b.nextCSS = ""
+		b.haveNextCSS = false
+	}
 	b.commitGraph()
 	return nil
 }
@@ -421,6 +447,8 @@ func (b *StaticWatchBuilder) commitGraph() {
 	b.routeCount = b.nextRouteCount
 	b.pending = map[string]bool{}
 	b.nextGraph = nil
+	b.nextCSS = ""
+	b.haveNextCSS = false
 }
 
 // attempt assembles one complete staging tree for plan and returns it ready to
@@ -468,6 +496,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 			b.appPl.PruneCSS(keep)
 		}
 	}
+	candidateCSS := b.appPl.CSS()
 
 	// 2. Public assets, into the private staging tree (plain writes, no atomic
 	//    dance: nothing can observe staging until the swap).
@@ -489,7 +518,7 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 			return err
 		}
 	}
-	writeErr := os.WriteFile(filepath.Join(staging, "styles.css"), []byte(styles.Compose(tailwindCSS, b.appPl.CSS())), 0o644)
+	writeErr := os.WriteFile(filepath.Join(staging, "styles.css"), []byte(styles.Compose(tailwindCSS, candidateCSS)), 0o644)
 	endStyles()
 	if writeErr != nil {
 		return fmt.Errorf("writing styles.css: %w", writeErr)
@@ -598,6 +627,8 @@ func (b *StaticWatchBuilder) rebuildInto(staging string, prof *buildProfile, pla
 	endGraph := prof.phase("route graph")
 	b.captureGraph(summary, pagesMetafile, preResult.Metafile)
 	endGraph()
+	b.nextCSS = candidateCSS
+	b.haveNextCSS = true
 
 	printStaticSummary(summary, len(entryFiles))
 	return nil

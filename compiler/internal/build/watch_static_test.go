@@ -567,6 +567,55 @@ export default class About extends PuzzleView {}
 	}
 }
 
+// TestStaticWatchFailedBuildKeepsCommittedCSS proves the Tailwind-only path
+// cannot publish plugin working state from a failed esbuild pass. esbuild may
+// run Card.pzl's onLoad (updating its CSS) before rejecting its JavaScript.
+func TestStaticWatchFailedBuildKeepsCommittedCSS(t *testing.T) {
+	requireStaticRuntime(t)
+	root := writeSSGFixture(t, staticEquivalenceFixture())
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
+	if err != nil {
+		t.Fatalf("creating the static dev builder: %v", err)
+	}
+	defer builder.Dispose()
+	if err := builder.Rebuild(nil); err != nil {
+		t.Fatalf("initial rebuild failed: %v", err)
+	}
+
+	card := filepath.Join(root, "app", "components", "Card.pzl")
+	broken := `<puzzle-view><section class="card"><Children/></section></puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Card extends PuzzleView { broken( }
+</script>
+<style>
+.card { color: dodgerblue; }
+</style>
+`
+	if err := os.WriteFile(card, []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.Rebuild([]string{card}); err == nil {
+		t.Fatal("invalid JavaScript should fail after the plugin collected CSS")
+	}
+
+	builder.SetTailwind(func() (string, error) { return ".tw { display: block; }\n", nil })
+	changed, err := builder.RecomposeStyles()
+	if err != nil {
+		t.Fatalf("recomposing after the failed build: %v", err)
+	}
+	if !changed {
+		t.Fatal("new Tailwind bytes should rewrite the committed stylesheet")
+	}
+	css, err := os.ReadFile(filepath.Join(root, "dist", "styles.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(css); !strings.Contains(got, "rebeccapurple") || strings.Contains(got, "dodgerblue") {
+		t.Fatalf("failed-build CSS leaked through RecomposeStyles:\n%s", got)
+	}
+}
+
 // TestSameEntrySet covers the cheap route-set comparison that decides whether
 // the per-page esbuild context has to be replaced.
 func TestSameEntrySet(t *testing.T) {

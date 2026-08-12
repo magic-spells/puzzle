@@ -27,6 +27,7 @@ func TestRecompose(t *testing.T) {
 		twOutputPath: twFile,
 		collectedCSS: func() string { return ".block{color:red}" },
 	}
+	pl.commitBuild()
 	if err := pl.recompose(); err != nil {
 		t.Fatalf("recompose: %v", err)
 	}
@@ -51,6 +52,7 @@ func TestRecomposeMissingTailwindFile(t *testing.T) {
 		twOutputPath: filepath.Join(t.TempDir(), "does-not-exist.css"),
 		collectedCSS: func() string { return ".only{color:green}" },
 	}
+	pl.commitBuild()
 	if err := pl.recompose(); err != nil {
 		t.Fatalf("recompose should tolerate a missing Tailwind file: %v", err)
 	}
@@ -83,6 +85,7 @@ func TestRecomposeOnTailwindWrite(t *testing.T) {
 		twOutputPath: twFile,
 		collectedCSS: func() string { return ".block{color:red}" },
 	}
+	pl.commitBuild()
 	coalescer := newReloadCoalescer(20*time.Millisecond, srv.hub.broadcast)
 
 	// Subscribe an SSE client and wait for it to register.
@@ -137,6 +140,97 @@ func TestRecomposeOnTailwindWrite(t *testing.T) {
 	got := readFile(t, filepath.Join(dist, "styles.css"))
 	if !strings.Contains(got, ".tw-flex{display:flex}") || !strings.Contains(got, ".block{color:red}") {
 		t.Errorf("styles.css not recomposed with both layers:\n%s", got)
+	}
+}
+
+func TestPipelineDoesNotPublishBeforeSuccessfulBundle(t *testing.T) {
+	dist := t.TempDir()
+	target := filepath.Join(dist, "styles.css")
+	if err := os.WriteFile(target, []byte("last-good"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pl := &pipeline{dist: dist, collectedCSS: func() string { return ".candidate{color:red}" }}
+
+	if err := pl.recompose(); err != nil {
+		t.Fatalf("recompose before first bundle: %v", err)
+	}
+	if got := readFile(t, target); got != "last-good" {
+		t.Fatalf("styles changed before a successful bundle: %q", got)
+	}
+
+	pl.commitBuild()
+	if err := pl.recompose(); err != nil {
+		t.Fatalf("recompose after bundle commit: %v", err)
+	}
+	if got := readFile(t, target); !strings.Contains(got, ".candidate{color:red}") {
+		t.Fatalf("pending styles were not published after bundle commit: %q", got)
+	}
+}
+
+// TestPipelineRetriesCompositionAfterWriteFailure: the sha256 memo only advances
+// after a successful atomic write, so a failed composition is retried by the
+// next recompose with no extra state to carry.
+func TestPipelineRetriesCompositionAfterWriteFailure(t *testing.T) {
+	parent := t.TempDir()
+	dist := filepath.Join(parent, "missing", "dist")
+	pl := &pipeline{dist: dist, collectedCSS: func() string { return ".retry{color:blue}" }}
+	pl.commitBuild()
+
+	if err := pl.recompose(); err == nil {
+		t.Fatal("expected composition into a missing dist directory to fail")
+	}
+	if err := os.MkdirAll(dist, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := pl.recompose(); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if got := readFile(t, filepath.Join(dist, "styles.css")); !strings.Contains(got, ".retry{color:blue}") {
+		t.Fatalf("retry did not publish styles: %q", got)
+	}
+}
+
+// TestRecomposeRecreatesExternallyDeletedStylesheet: the memo is a claim about
+// the file. A save that changes no CSS still restores a stylesheet removed from
+// outside the dev loop.
+func TestRecomposeRecreatesExternallyDeletedStylesheet(t *testing.T) {
+	dist := t.TempDir()
+	target := filepath.Join(dist, "styles.css")
+	pl := &pipeline{dist: dist, collectedCSS: func() string { return ".keep{color:red}" }}
+	pl.commitBuild()
+	if err := pl.recompose(); err != nil {
+		t.Fatalf("recompose: %v", err)
+	}
+	want := readFile(t, target)
+
+	if err := os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+	if err := pl.recompose(); err != nil {
+		t.Fatalf("recompose after external delete: %v", err)
+	}
+	if got := readFile(t, target); got != want {
+		t.Fatalf("stylesheet not recreated identically: got %q, want %q", got, want)
+	}
+}
+
+func TestWaitForInitialTailwindOnlyBlocksStaticMode(t *testing.T) {
+	tests := []struct {
+		name     string
+		required bool
+		want     int
+	}{
+		{name: "spa", required: false, want: 0},
+		{name: "static", required: true, want: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			waitForInitialTailwind(tt.required, func() { calls++ })
+			if calls != tt.want {
+				t.Fatalf("wait calls = %d, want %d", calls, tt.want)
+			}
+		})
 	}
 }
 

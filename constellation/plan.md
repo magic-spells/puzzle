@@ -86,6 +86,11 @@ decision cards explain why the contract has its current shape.
 - **Next minor:** [[DECISION-D150-RAW-TEMPLATE-BLOCK]] adds the static
   `{#raw}…{/raw}` lex-off block for author-written braces while preserving
   ordinary HTML parsing and the existing parent-aware SSG RAWTEXT policy.
+- **Current 0.6 compiler hardening:**
+  [[FEATURE-BUILD-PIPELINE-PERFORMANCE-HARDENING]] / [[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]]
+  pins the restored SPA startup boundary, removes unrelated warm-rebuild work,
+  adds dev phase profiles, and overlaps side-effect-safe one-shot phases while
+  keeping prerender execution and atomic output behind a success barrier.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode

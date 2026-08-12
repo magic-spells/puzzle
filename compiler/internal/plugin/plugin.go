@@ -29,11 +29,12 @@ type Plugin struct {
 	appRoot   string
 	assetsDir string // <appRoot>/app/assets — {#svg} paths resolve from here (D46)
 
-	mu         sync.Mutex
-	css        map[string]string // keyed by absolute file path for deterministic ordering
-	formatters map[string]bool
-	features   Features // DCE define bits from the most recent SetUsage
-	runtimeDir string
+	mu          sync.Mutex
+	css         map[string]string // keyed by absolute file path for deterministic ordering
+	cssRevision uint64            // moves only when the effective css map changes
+	formatters  map[string]bool
+	features    Features // DCE define bits from the most recent SetUsage
+	runtimeDir  string
 	// cache is the build-scoped .pzl transform memo shared with this build's
 	// other esbuild passes, or nil for "transform every time" (WatchBuilder).
 	cache *CompileCache
@@ -132,9 +133,13 @@ func (p *Plugin) setup(build api.PluginBuild) {
 		// as before: a broken edit must not drop the last good block.
 		p.mu.Lock()
 		if res.hasStyles {
-			p.css[args.Path] = res.cssBody
-		} else {
+			if previous, ok := p.css[args.Path]; !ok || previous != res.cssBody {
+				p.css[args.Path] = res.cssBody
+				p.cssRevision++
+			}
+		} else if _, ok := p.css[args.Path]; ok {
 			delete(p.css, args.Path)
+			p.cssRevision++
 		}
 		p.mu.Unlock()
 
@@ -234,16 +239,45 @@ func (p *Plugin) transformPZL(path string, src []byte) pzlResult {
 func (p *Plugin) CSS() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.cssLocked()
+}
+
+// CSSSnapshot returns the current canonical stylesheet and the revision of the
+// effective collector state that produced it. The pair is captured under one
+// lock so a long-lived build driver can atomically promote it from candidate
+// state to last-good state after a successful rebuild.
+func (p *Plugin) CSSSnapshot() (string, uint64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.cssLocked(), p.cssRevision
+}
+
+// CSSRevision returns the current collector revision without joining every
+// block. A revision moves only when the effective map changes, so incremental
+// callers can avoid sorting and composing CSS after an unrelated rebuild.
+func (p *Plugin) CSSRevision() uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.cssRevision
+}
+
+// cssLocked returns the canonical stylesheet. p.mu must be held.
+func (p *Plugin) cssLocked() string {
 
 	// Prune styles from files that no longer exist. Under an incremental dev
 	// rebuild (build.WatchBuilder) a deleted .pzl's onLoad never re-runs, so its
 	// entry would otherwise linger; a fresh one-shot build.Build starts with an
 	// empty map and never hits this. (A file that still exists but was un-imported
 	// is not pruned here — a rare case outside the "deleted file" contract.)
+	pruned := false
 	for path := range p.css {
 		if _, err := os.Stat(path); err != nil {
 			delete(p.css, path)
+			pruned = true
 		}
+	}
+	if pruned {
+		p.cssRevision++
 	}
 
 	paths := make([]string, 0, len(p.css))
@@ -286,10 +320,15 @@ func (p *Plugin) PruneCSS(keep map[string]bool) {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	pruned := false
 	for path := range p.css {
 		if !resolved[resolveSymlinks(path)] {
 			delete(p.css, path)
+			pruned = true
 		}
+	}
+	if pruned {
+		p.cssRevision++
 	}
 }
 

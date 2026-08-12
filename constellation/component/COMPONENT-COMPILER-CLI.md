@@ -41,6 +41,10 @@ Cobra command surface shipped by the platform binary:
   `--strict-port` restores bind-or-fail ([[DECISION-D90-DEV-PORT-SCAN]]). An
   `output: 'static'` project gets the real prerender pipeline per rebuild
   instead of the SPA loop ([[DECISION-D148-PREVIEW-AND-STATIC-DEV]]).
+  [[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]] adds
+  `--profile-build`, printing stable startup and per-rebuild phase tables for
+  SPA, hybrid, and static dev to stderr; `PUZZLE_PROFILE_BUILD=1` enables the
+  same behavior without a flag.
 - `puzzle preview [dir] [--port N] [--strict-port]` (D148) serves an existing
   `dist/` with production-host semantics per resolved output mode (SPA history
   fallback / hybrid prerendered-page-first / static clean URLs + real 404s) via

@@ -768,6 +768,47 @@ func TestPruneCSS(t *testing.T) {
 	}
 }
 
+func TestCSSRevisionTracksOnlyEffectiveCollectorChanges(t *testing.T) {
+	root := writeApp(t, map[string]string{
+		"app/app.js":                appJS,
+		"app/views/Home.pzl":        homePzl,
+		"app/components/Button.pzl": buttonPzl,
+	})
+	res, pl := buildApp(t, root)
+	if len(res.Errors) > 0 {
+		t.Fatalf("unexpected build errors: %v", res.Errors)
+	}
+
+	initial := pl.CSSRevision()
+	if initial == 0 {
+		t.Fatal("collecting styled modules did not advance the CSS revision")
+	}
+	css, snapshotRevision := pl.CSSSnapshot()
+	if snapshotRevision != initial || !strings.Contains(css, ".btn") || !strings.Contains(css, ".home") {
+		t.Fatalf("CSSSnapshot = (revision %d, %q), want revision %d with both blocks", snapshotRevision, css, initial)
+	}
+	if got := pl.CSSRevision(); got != initial {
+		t.Fatalf("read-only CSS snapshot advanced revision: got %d want %d", got, initial)
+	}
+
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	button := filepath.Join(root, "app", "components", "Button.pzl")
+	pl.PruneCSS(map[string]bool{home: true, button: true})
+	if got := pl.CSSRevision(); got != initial {
+		t.Fatalf("no-op graph prune advanced revision: got %d want %d", got, initial)
+	}
+
+	pl.PruneCSS(map[string]bool{home: true})
+	afterPrune := pl.CSSRevision()
+	if afterPrune != initial+1 {
+		t.Fatalf("effective graph prune revision = %d, want %d", afterPrune, initial+1)
+	}
+	pl.PruneCSS(map[string]bool{home: true})
+	if got := pl.CSSRevision(); got != afterPrune {
+		t.Fatalf("repeated no-op prune advanced revision: got %d want %d", got, afterPrune)
+	}
+}
+
 // TestFormatterManifestFreshAcrossIncrementalRebuilds documents that the virtual
 // formatter manifest re-emits the CURRENT used-formatter set on every incremental
 // ctx.Rebuild(): a formatter first used mid-session reaches the bundle on the next

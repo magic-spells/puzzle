@@ -10,7 +10,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/evanw/esbuild/pkg/api"
 	"github.com/magic-spells/puzzle/compiler/internal/config"
 	"github.com/magic-spells/puzzle/compiler/internal/styles"
 )
@@ -27,6 +29,70 @@ func (f *fakeRunner) Run(opts styles.RunOptions) (string, error) {
 	f.called = true
 	f.production = opts.Production
 	return f.css, nil
+}
+
+// TestRunBrowserAndTailwindOverlapAndJoin pins the concurrency contract without
+// relying on wall-clock timing: both lanes must reach their barriers before
+// either is released, and the helper must not return while either lane remains
+// blocked.
+func TestRunBrowserAndTailwindOverlapAndJoin(t *testing.T) {
+	browserStarted := make(chan struct{})
+	tailwindStarted := make(chan struct{})
+	releaseBrowser := make(chan struct{})
+	releaseTailwind := make(chan struct{})
+
+	type joinedResult struct {
+		browser api.BuildResult
+		css     string
+		err     error
+	}
+	done := make(chan joinedResult, 1)
+	go func() {
+		browser, css, err := runBrowserAndTailwind(
+			func() api.BuildResult {
+				close(browserStarted)
+				<-releaseBrowser
+				return api.BuildResult{Metafile: "browser-result"}
+			},
+			func() (string, error) {
+				close(tailwindStarted)
+				<-releaseTailwind
+				return "tailwind-result", nil
+			},
+		)
+		done <- joinedResult{browser: browser, css: css, err: err}
+	}()
+
+	for name, started := range map[string]<-chan struct{}{
+		"browser":  browserStarted,
+		"tailwind": tailwindStarted,
+	} {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s lane did not start while the other lane was blocked", name)
+		}
+	}
+
+	close(releaseBrowser)
+	select {
+	case <-done:
+		t.Fatal("helper returned before the Tailwind lane completed")
+	default:
+	}
+
+	close(releaseTailwind)
+	select {
+	case got := <-done:
+		if got.browser.Metafile != "browser-result" {
+			t.Errorf("browser result was lost: %+v", got.browser)
+		}
+		if got.css != "tailwind-result" || got.err != nil {
+			t.Errorf("Tailwind result = (%q, %v), want (%q, nil)", got.css, got.err, "tailwind-result")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("helper did not return after both lanes completed")
+	}
 }
 
 // exampleRoot locates the in-repo examples/todos relative to this test file
@@ -343,7 +409,7 @@ func TestBuildTakeoverDefineDCE(t *testing.T) {
 			t.Fatalf("NewWatchBuilder: %v", err)
 		}
 		defer b.Dispose()
-		if err := b.Rebuild(); err != nil {
+		if _, err := b.Rebuild(nil); err != nil {
 			t.Fatalf("Rebuild: %v", err)
 		}
 		js := readDistBundle(t, root)
@@ -811,6 +877,46 @@ func TestBuildTailwindRunnerErrorFailsBuild(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "could not be run") {
 		t.Errorf("expected the runner's error to propagate, got: %v", err)
+	}
+}
+
+// TestBuildBrowserErrorWinsConcurrentTailwindError proves eagerly running the
+// two cold phases does not make completion order decide the diagnostic. The
+// browser error remains authoritative, the Tailwind lane is still joined, and
+// the browser metafile result is still assigned before Build returns.
+func TestBuildBrowserErrorWinsConcurrentTailwindError(t *testing.T) {
+	root := writeConsoleFixture(t)
+	if err := os.WriteFile(filepath.Join(root, "app", "app.js"),
+		[]byte("export default ;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := config.Config{Styles: config.Styles{Use: []string{"tailwindcss"}}}
+	fake := &errRunner{}
+	metafile := "not-assigned"
+	err := Build(root, Options{
+		Development: true,
+		Runner:      fake,
+		Config:      &cfg,
+		Metafile:    &metafile,
+	})
+	if err == nil {
+		t.Fatal("expected the broken browser entry and Tailwind runner to fail")
+	}
+	if !strings.Contains(err.Error(), "puzzle build failed") {
+		t.Fatalf("browser error must win over Tailwind error, got: %v", err)
+	}
+	if strings.Contains(err.Error(), errTailwindUnavailable.Error()) {
+		t.Fatalf("browser error unexpectedly included the lower-priority Tailwind failure: %v", err)
+	}
+	if !fake.called {
+		t.Error("Tailwind lane was not run and joined")
+	}
+	if metafile == "not-assigned" {
+		t.Error("browser metafile result was not assigned on the error path")
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "dist")); !os.IsNotExist(statErr) {
+		t.Errorf("failed concurrent phases must not install dist/: %v", statErr)
 	}
 }
 
