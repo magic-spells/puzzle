@@ -16,6 +16,10 @@
     {#if linkOpen}
       <div class="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
         @keydown:escape={ closeLink }>
+        <!-- Implicit two-way binding (D147) is load-bearing: applyLink reads
+             getData().linkDraft, which is only written because the compiler
+             synthesizes the bind (@keydown does not suppress it). linkDraft is
+             LOCAL state, not prop-derived, so no data() commit reverts it. -->
         <input
           type="url"
           class="block w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-muted transition-colors outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
@@ -48,7 +52,7 @@ import { TaskList, TaskItem } from '@tiptap/extension-list';
 import { TableKit } from '@tiptap/extension-table';
 import { Markdown } from '@tiptap/markdown';
 import Toolbar from './Toolbar.pzl';
-import { MARKDOWN_CLASSES as C, isEmpty } from '../../lib/markdown-doc.js';
+import { MARKDOWN_CLASSES as C, isEmpty, isSafeUrl } from '../../lib/markdown-doc.js';
 
 // MarkdownEditor — WYSIWYG markdown editing on Tiptap/ProseMirror, with the
 // Toolbar piece as the formatting bar. The controlled value is a plain markdown
@@ -231,7 +235,13 @@ export default class MarkdownEditor extends PuzzleView {
 				StarterKit.configure({
 					underline: false,
 					heading: { levels: [1, 2, 3] },
-					link: { openOnClick: false, HTMLAttributes: { class: C.link } },
+					link: {
+						openOnClick: false,
+						HTMLAttributes: { class: C.link },
+						// Same URL policy the Markdown renderer applies, so the editor
+						// refuses to create a link the renderer would refuse to link.
+						isAllowedUri: (url) => isSafeUrl(url),
+					},
 					paragraph: { HTMLAttributes: { class: C.paragraph } },
 					bulletList: { HTMLAttributes: { class: `${C.list} ${C.bulletList}` } },
 					orderedList: { HTMLAttributes: { class: `${C.list} ${C.orderedList}` } },
@@ -438,7 +448,13 @@ export default class MarkdownEditor extends PuzzleView {
 			}
 			// Bare domains get a scheme; site-relative (/…) and hash (#…) pass through.
 			const url = /^([a-z][a-z0-9+.-]*:|\/|#)/i.test(raw) ? raw : `https://${raw}`;
-			this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
+			// setLink returns false when the URL fails the link policy, which aborts
+			// the chain and applies nothing. Keep the row open with the text intact
+			// so a rejected URL reads as "that wasn't accepted, here's what I typed"
+			// instead of silently closing and discarding it — the surviving row is
+			// the whole error affordance.
+			const applied = this._chain()?.extendMarkRange('link').setLink({ href: url }).run();
+			if (!applied) return;
 			this.setData({ linkOpen: false, linkDraft: '' });
 			this.refresh();
 		},

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
 	isEmpty,
 	decodeEntities,
+	isSafeUrl,
 	safeUrl,
 	safeImageUrl,
 	safeLang,
@@ -54,6 +55,8 @@ test('safeUrl neutralizes script and data URLs', () => {
 	for (const url of ['javascript:alert(1)', 'JaVaScRiPt:x', 'data:text/html,x', 'vbscript:x']) {
 		assert.equal(safeUrl(url), '#', url);
 	}
+	// A leading colon leaves an empty scheme, which matches no allowlist entry.
+	assert.equal(safeUrl(':foo'), '#');
 });
 
 // A URL parser strips tabs and newlines before parsing, so `java<TAB>script:`
@@ -63,6 +66,21 @@ test('safeUrl normalizes tabs and newlines before testing the scheme', () => {
 	assert.equal(safeUrl('java\tscript:x'), '#');
 	assert.equal(safeUrl('java\nscript:x'), '#');
 	assert.equal(safeUrl('java\rscript:x'), '#');
+});
+
+// isSafeUrl is the boolean face of the same policy, handed to Tiptap's Link
+// `isAllowedUri` so MarkdownEditor can't create a link Markdown would collapse.
+// It exists BECAUSE safeUrl's return is ambiguous: a bare '#' is a legal href
+// that comes back looking exactly like the neutralized sentinel.
+test('isSafeUrl agrees with safeUrl and still accepts a bare #', () => {
+	for (const url of ['https://x', 'mailto:a@b', '/rel', '#hash', 'example.com/x']) {
+		assert.equal(isSafeUrl(url), true, url);
+	}
+	for (const url of ['javascript:alert(1)', 'data:text/html,x', 'ftp://x', 'sms:+1', ':foo']) {
+		assert.equal(isSafeUrl(url), false, url);
+	}
+	assert.equal(isSafeUrl('#'), true);
+	assert.equal(safeUrl('#'), '#');
 });
 
 // ---- safeImageUrl ---------------------------------------------------------

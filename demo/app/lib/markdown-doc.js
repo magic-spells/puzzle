@@ -118,7 +118,7 @@ export const MARKDOWN_CLASSES = {
 
 // ---- URL / attribute guards -----------------------------------------------
 //
-// (RichText.pzl carries its own inline copy of the link guard on purpose — the
+// (rich-text-doc.js carries its own copy of the link guard on purpose — the
 // rich-text pair does not depend on this file.)
 
 // URL parsers strip tabs/newlines before parsing, so test a NORMALIZED copy
@@ -140,15 +140,25 @@ function schemeOf(testUrl) {
 	return testUrl.slice(0, colon);
 }
 
+// The link policy as a BOOLEAN, for callers that must decide rather than
+// rewrite: MarkdownEditor hands this to Tiptap's Link `isAllowedUri` so the
+// editor refuses to create a link the Markdown renderer would refuse to link
+// (Tiptap's own default allowlist is wider — ftp:, sms:, xmpp: and friends
+// would be accepted here and render as '#' there). Reading safeUrl's return
+// instead would be ambiguous: '#' is both the neutralized sentinel and a
+// perfectly legal href.
+export function isSafeUrl(url) {
+	const testUrl = normalize(url);
+	const scheme = schemeOf(testUrl);
+	if (/^[/#?.]/.test(testUrl) || scheme === null) return true;
+	return /^(https?|mailto|tel)$/i.test(scheme);
+}
+
 // Link href: relative and scheme-less URLs pass through; of the schemes, only
 // the navigational ones are allowed. Anything else collapses to '#'.
 export function safeUrl(url) {
 	const raw = String(url ?? '');
-	const testUrl = normalize(raw);
-	const relative = /^[/#?.]/.test(testUrl);
-	const scheme = schemeOf(testUrl);
-	if (relative || scheme === null) return raw;
-	return /^(https?|mailto|tel)$/i.test(scheme) ? raw : '#';
+	return isSafeUrl(raw) ? raw : '#';
 }
 
 // Image src: a tighter allowlist than safeUrl — an <img> never navigates, so

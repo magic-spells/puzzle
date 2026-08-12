@@ -12,6 +12,10 @@
     {#if linkOpen}
       <div class="mb-2 flex items-center gap-2 rounded-lg border border-border bg-surface p-2"
         @keydown:escape={ closeLink }>
+        <!-- Implicit two-way binding (D147) is load-bearing: applyLink reads
+             getData().linkDraft, which is only written because the compiler
+             synthesizes the bind (@keydown does not suppress it). linkDraft is
+             LOCAL state, not prop-derived, so no data() commit reverts it. -->
         <input
           type="url"
           class="block w-full rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm text-ink placeholder:text-muted transition-colors outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"

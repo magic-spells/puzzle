@@ -43,7 +43,7 @@ function isExternal(href) {
 function inlineDom(tokens, newTab = false) {
 	const frag = document.createDocumentFragment();
 	for (const tok of tokens || []) {
-			switch (tok.type) {
+		switch (tok.type) {
 			case 'text':
 				frag.appendChild(
 					tok.tokens

@@ -5,6 +5,7 @@ import {
 	isEmpty,
 	fromTiptap,
 	toTiptap,
+	safeLinkUrl,
 	RICH_TEXT_CLASSES,
 } from '../registry/lib/rich-text-doc.js';
 
@@ -442,6 +443,50 @@ test('a legacy newline after a nested list neither grows nor vanishes', () => {
 	const once = fromTiptap(toTiptap(doc));
 	assert.deepEqual(once, doc);
 	assert.deepEqual(fromTiptap(toTiptap(once)), doc);
+});
+
+// ---- safeLinkUrl ----------------------------------------------------------
+//
+// One security predicate, two callers: RichText runs it before assigning an
+// href and RichTextEditor hands it to Tiptap's Link `isAllowedUri`. Rejection
+// is a null return, not a '#' rewrite — the caller decides what to do with it.
+
+test('safeLinkUrl returns navigational, relative and scheme-less URLs unchanged', () => {
+	for (const url of [
+		'https://x',
+		'http://x',
+		'mailto:a@b',
+		'tel:+1',
+		'/rel',
+		'#hash',
+		'?q',
+		'./rel',
+		'example.com/x',
+	]) {
+		assert.equal(safeLinkUrl(url), url, url);
+	}
+});
+
+test('safeLinkUrl rejects script and data URLs', () => {
+	for (const url of [
+		'javascript:alert(1)',
+		'JaVaScRiPt:x',
+		'data:text/html,x',
+		'vbscript:x',
+		// A leading colon leaves an empty scheme, which matches no allowlist entry.
+		':foo',
+	]) {
+		assert.equal(safeLinkUrl(url), null, url);
+	}
+});
+
+// A URL parser strips tabs and newlines before parsing, so `java<TAB>script:`
+// navigates as javascript: — the guard must test a normalized copy, not the raw
+// string. Pin both separators.
+test('safeLinkUrl normalizes tabs and newlines before testing the scheme', () => {
+	assert.equal(safeLinkUrl('java\tscript:x'), null);
+	assert.equal(safeLinkUrl('java\nscript:x'), null);
+	assert.equal(safeLinkUrl('java\rscript:x'), null);
 });
 
 // ---- classes map ----------------------------------------------------------
