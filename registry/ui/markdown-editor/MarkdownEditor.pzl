@@ -35,7 +35,7 @@
       </div>
     {/if}
 
-    <div class={ frameClass } @click={ focusEditor }>
+    <div class={ frameClass }>
       <div island ref="mount"></div>
       {#if showPlaceholder}
         <div aria-hidden="true" class="pointer-events-none absolute left-3 top-2 leading-7 text-muted">{ placeholder }</div>
@@ -472,13 +472,6 @@ export default class MarkdownEditor extends PuzzleView {
 			// editor instead of letting it fall to <body>. (applyLink/removeLink
 			// already refocus through _chain().)
 			this._editor?.commands.focus();
-		},
-
-		// Clicking the frame's padding (below short content) focuses the editor.
-		focusEditor: (event) => {
-			if (event.target === event.currentTarget) {
-				this._editor?.commands.focus('end');
-			}
 		},
 	};
 }
