@@ -4,7 +4,7 @@
       {#if numbers}
         <pre aria-hidden="true" class="sticky left-0 z-10 shrink-0 select-none bg-surface py-4 pl-4 pr-3 text-right font-mono text-[13px]/relaxed text-faint whitespace-pre">{ lineNumbers }</pre>
       {/if}
-      <pre data-code-pre class={ codeClass }>{ code }</pre>
+      <pre island data-code-pre class={ codeClass }>{ code }</pre>
     </div>
 
     {#if collapsedNow}
@@ -83,13 +83,20 @@ import { highlight } from '../../lib/highlight.js';
 //
 // Highlighting is applied imperatively AFTER render (mounted/afterUpdate): the
 // vdom renders the snippet as escaped text, then we swap in hljs-classed HTML.
-// Safe against reconciliation — the text vnode never changes, so patches skip
-// it, and afterUpdate re-applies whenever a render did rebuild the <pre>.
+// The <pre> is an `island`, so the patcher never touches its children again —
+// without that, replacing the text node with innerHTML detaches the node the
+// patcher writes into, and a later `code` change lands in a node that is no
+// longer in the document (the old snippet stays on screen). The island makes
+// this piece the sole owner of that subtree; _applyHighlight keys its work on
+// lang + code so unrelated re-renders (copy feedback, expand/collapse) are
+// no-ops and a real prop change always re-highlights.
 const COLLAPSED_MAX = '7rem';
+const COPIED_MS = 1500;
 
 export default class Code extends PuzzleView {
   created() {
     this._copyTimer = null;
+    this._hlKey = null;
     this.setData({ copied: false, expanded: false });
   }
 
@@ -99,13 +106,18 @@ export default class Code extends PuzzleView {
 
   _applyHighlight() {
     const pre = this.element?.querySelector('[data-code-pre]');
+    if (!pre) return;
     const code = this.props.code || '';
-    if (!pre || !code) return;
-    if (pre.dataset.hlDone === '1' && pre.querySelector('span')) return;
+    const key = `${this.props.lang || ''} ${code}`;
+    if (this._hlKey === key) return;
+    this._hlKey = key;
+    if (!code) {
+      pre.textContent = '';
+      return;
+    }
     const html = highlight(code, this.props.lang);
-    if (html == null) return;
-    pre.innerHTML = html;
-    pre.dataset.hlDone = '1';
+    if (html != null) pre.innerHTML = html;
+    else pre.textContent = code; // highlighter failed: plain text fallback
   }
 
   mounted() {
@@ -155,6 +167,10 @@ export default class Code extends PuzzleView {
     const lines = code.split('\n').length;
     return {
       code,
+      // `lang` is not read by the template — it is returned so a lang-only prop
+      // change still commits a render and therefore reaches afterUpdate, where
+      // _applyHighlight re-highlights the island.
+      lang: props.lang || '',
       numbers,
       copy,
       collapsible,
@@ -208,17 +224,25 @@ export default class Code extends PuzzleView {
         this.refresh();
       });
     },
+    // Mirrors CopyButton: the checkmark is gated on the clipboard promise, so a
+    // rejected write (permissions, insecure context) shows no feedback and
+    // never leaves an unhandled rejection behind.
     copyCode: () => {
       const code = this.props.code || '';
-      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(code);
-      this.setData({ copied: true });
-      this.refresh();
-      if (this._copyTimer) clearTimeout(this._copyTimer);
-      this._copyTimer = setTimeout(() => {
-        this._copyTimer = null;
-        this.setData({ copied: false });
-        this.refresh();
-      }, 1600);
+      if (!navigator.clipboard?.writeText) return;
+      navigator.clipboard.writeText(code).then(
+        () => {
+          this.setData({ copied: true });
+          this.refresh();
+          if (this._copyTimer) clearTimeout(this._copyTimer);
+          this._copyTimer = setTimeout(() => {
+            this._copyTimer = null;
+            this.setData({ copied: false });
+            this.refresh();
+          }, COPIED_MS);
+        },
+        () => {}
+      );
     },
   };
 }

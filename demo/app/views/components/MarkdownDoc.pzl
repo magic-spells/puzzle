@@ -87,7 +87,7 @@
             </li>
             <li>
               Image srcs run through safeImageUrl, which is stricter — relative, http, https, and
-              data:image/ only; anything else becomes #.
+              data:image/ only; a rejected or empty source renders no image at all.
             </li>
             <li>
               Code-fence language tags become a language-* class, so they are filtered to a plain

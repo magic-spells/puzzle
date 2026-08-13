@@ -164,14 +164,22 @@ export function safeUrl(url) {
 // Image src: a tighter allowlist than safeUrl — an <img> never navigates, so
 // mailto:/tel: are meaningless here, and `data:` is admitted for image types
 // only (data:text/html is a script vector when a URL reaches a navigable).
+//
+// Returns NULL for rejected input, so callers emit no <img> at all. There is no
+// '#' tombstone here (safeUrl keeps its own, since '#' is a fine link target):
+// '#', a bare '?…' query and the empty string all resolve to the CURRENT
+// document URL, so an <img> built from them makes the browser GET the page
+// itself — a referer leak, a log entry and a broken-image icon. `![alt]()`
+// yields an empty href straight out of marked, so this is ordinary input.
 export function safeImageUrl(url) {
 	const raw = String(url ?? '');
 	const testUrl = normalize(raw);
-	const relative = /^[/#?.]/.test(testUrl);
+	if (!testUrl || /^[#?]/.test(testUrl)) return null;
+	const relative = /^[/.]/.test(testUrl);
 	const scheme = schemeOf(testUrl);
 	if (relative || scheme === null) return raw;
 	if (/^https?$/i.test(scheme)) return raw;
-	return /^data:image\//i.test(testUrl) ? raw : '#';
+	return /^data:image\//i.test(testUrl) ? raw : null;
 }
 
 // Code-fence info strings become a `language-*` class, so they are user content

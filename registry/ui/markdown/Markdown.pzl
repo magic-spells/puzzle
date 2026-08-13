@@ -88,9 +88,13 @@ function inlineDom(tokens, newTab = false) {
 				break;
 			}
 			case 'image': {
+				// safeImageUrl returns null for a rejected or empty source —
+				// emit nothing rather than an <img> that GETs the page itself.
+				const src = safeImageUrl(tok.href);
+				if (src === null) break;
 				const img = document.createElement('img');
 				img.className = C.image;
-				img.src = safeImageUrl(tok.href);
+				img.src = src;
 				img.alt = decodeEntities(tok.text || '');
 				if (tok.title) img.title = decodeEntities(tok.title);
 				img.loading = 'lazy';

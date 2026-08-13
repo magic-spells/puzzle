@@ -89,12 +89,23 @@ test('safeImageUrl allows http(s), relative and data:image sources', () => {
 	for (const url of ['https://x', 'data:image/png;base64,AAAA', '/rel']) {
 		assert.equal(safeImageUrl(url), url, url);
 	}
+	assert.equal(safeImageUrl('img/a.png'), 'img/a.png');
+	assert.equal(safeImageUrl('./a.png'), './a.png');
+	assert.equal(safeImageUrl('/a.png'), '/a.png');
+	assert.equal(safeImageUrl('https://x/y.png'), 'https://x/y.png');
+	assert.equal(safeImageUrl('data:image/png;base64,AA'), 'data:image/png;base64,AA');
 });
 
+// Rejected sources return null, not a '#' tombstone: '#', '?…' and '' all
+// resolve to the current document URL, so an <img> built from them makes the
+// browser GET the page itself. null tells the walker to emit no element.
 test('safeImageUrl rejects non-image data, script and navigational schemes', () => {
 	for (const url of ['data:text/html,x', 'javascript:x', 'mailto:a@b']) {
-		assert.equal(safeImageUrl(url), '#', url);
+		assert.equal(safeImageUrl(url), null, url);
 	}
+	assert.equal(safeImageUrl(''), null);
+	assert.equal(safeImageUrl('#foo'), null);
+	assert.equal(safeImageUrl('?q=1'), null);
 });
 
 // ---- safeLang -------------------------------------------------------------

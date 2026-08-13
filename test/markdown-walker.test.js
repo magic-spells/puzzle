@@ -213,13 +213,21 @@ test('unsafe link schemes are neutralized', () => {
 	assert.equal(link.target, undefined);
 });
 
-test('unsafe image schemes are neutralized through safeImageUrl', () => {
-	const image = findAll(
-		render('![A &amp; B](javascript:alert(1) "T &copy;")'),
-		'img'
-	)[0];
+test('unsafe image schemes emit no <img> at all', () => {
+	// A rejected src used to become '#', which resolves to the current document
+	// URL — the browser would GET the page as an image. Emit nothing instead.
+	assert.equal(findAll(render('![A &amp; B](javascript:alert(1) "T &copy;")'), 'img').length, 0);
+});
 
-	assert.equal(image.src, '#');
+test('an empty image source emits no <img> at all', () => {
+	assert.equal(findAll(render('![x]()'), 'img').length, 0);
+});
+
+test('a valid image source still renders with alt and title decoded', () => {
+	const image = findAll(render('![A &amp; B](/img/a.png "T &copy;")'), 'img')[0];
+
+	assert.ok(image, 'valid image renders an <img>');
+	assert.equal(image.src, '/img/a.png');
 	assert.equal(image.alt, 'A & B');
 	assert.equal(image.title, 'T ©');
 });
