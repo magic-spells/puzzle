@@ -36,8 +36,10 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - Root exports: `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
   `PuzzleValidationError`, `PuzzleAdapterError`, and compiler support exports.
-- Subpaths: `@magic-spells/puzzle/morph`, `/ssg`, `/static`, `/testing`,
-  `/fixtures`, and `/puzzle-env`. (`/static` exports `mountStatic`, the
+- Subpaths: `@magic-spells/puzzle/morph`, `/router-modes`, `/ssg`, `/static`,
+  `/testing`, `/fixtures`, and `/puzzle-env`. (`/router-modes` exports
+  `hashRouter()` and `memoryRouter({ initialPath })`, the opt-in router modes —
+  history routing is the inline default and needs no import, D159; `/static` exports `mountStatic`, the
   per-page kernel for `output: 'static'`; `/testing` exports the app-author
   test utilities — `mountView`, `createTestApp`, `settled`, `type` (drives a
   two-way-bound control, D147), `installFakeAnimate`, `installFakeObserver`,
@@ -46,9 +48,9 @@ second specification. Decision cards hold rationale and git holds chronology.
 - `puzzle` binary shim selects an optional platform binary for macOS/Linux on
   arm64/x64. Unsupported systems get a Go-install fallback message.
 - App config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
-  `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode`,
-  `routerInitialPath`, `routerBase`, `transitionMode`, `beforeMount`, `mounted`,
-  `beforeUnmount`, `onError`, and `errorView`.
+  `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode` (a mode
+  object from `/router-modes`; a string throws), `routerBase`, `transitionMode`,
+  `beforeMount`, `mounted`, `beforeUnmount`, `onError`, and `errorView`.
 - The app is SPA-first. Prerendered output comes in two modes (D67/D81), never a
   request-time SSR server or hydration protocol: `output: 'hybrid'` ships
   prerendered pages the SPA takes over at navigation zero; `output: 'static'`

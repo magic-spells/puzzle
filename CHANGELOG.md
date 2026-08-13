@@ -53,6 +53,28 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Changed
 
+- **BREAKING: hash and memory routing are imported factories (D159).**
+  `routerMode` no longer takes a string. History routing stays the zero-config
+  default (omit `routerMode`); hash and memory routing are opt-in imports from
+  the new `@magic-spells/puzzle/router-modes` subpath, so a history-mode app
+  no longer ships either mode's code — the fragment parsing, the entry stack,
+  and their commit/click/scroll branches all tree-shake away.
+
+  | Before | After |
+  |---|---|
+  | `routerMode: 'history'` | omit it |
+  | `routerMode: 'hash'` | `routerMode: hashRouter()` |
+  | `routerMode: 'memory'`, `routerInitialPath: '/x'` | `routerMode: memoryRouter({ initialPath: '/x' })` |
+
+  ```js
+  import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes';
+  ```
+
+  A mode string is a constructor throw naming the import, so nothing fails
+  silently. The `routerInitialPath` app-config field is removed —
+  `memoryRouter({ initialPath })` replaces it (`createTestApp` still accepts
+  `routerInitialPath` as its own option). `output: 'static'` no longer carries
+  `routerMode` into a generated page at all; it was already ignored there.
 - **BREAKING: error fallback UI is one app-level view (D145 amended).**
   `PuzzleView.errorContent(error)` — the per-view member returning hand-built
   `ViewNode` trees — is removed. Register one ordinary compiled view instead:
