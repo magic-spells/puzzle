@@ -502,6 +502,44 @@ export default class Posts extends PuzzleView {}
 	}
 }
 
+func TestScanUsagePortalAndRaw(t *testing.T) {
+	const script = `<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Home extends PuzzleView {}
+</script>
+`
+	for _, tt := range []struct {
+		name       string
+		template   string
+		skeleton   string
+		wantPortal bool
+		wantRawAt  bool
+	}{
+		{name: "absent", template: `<puzzle-view><p>plain</p></puzzle-view>`},
+		{name: "portal", template: `<puzzle-view><Portal><p>remote</p></Portal></puzzle-view>`, wantPortal: true},
+		{name: "raw is deliberately over-inclusive", template: `<puzzle-view>{#raw}<p>plain</p>{/raw}</puzzle-view>`, wantRawAt: true},
+		{name: "Portal sample inside raw is not a Portal node", template: `<puzzle-view>{#raw}<Portal><p @x="y">sample</p></Portal>{/raw}</puzzle-view>`, wantRawAt: true},
+		{name: "portal in skeleton", template: `<puzzle-view><p>plain</p></puzzle-view>`, skeleton: `<puzzle-skeleton><Portal><p>loading</p></Portal></puzzle-skeleton>`, wantPortal: true},
+		{name: "raw in skeleton", template: `<puzzle-view><p>plain</p></puzzle-view>`, skeleton: `<puzzle-skeleton>{#raw}<p>loading</p>{/raw}</puzzle-skeleton>`, wantRawAt: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := writeApp(t, map[string]string{
+				"app/views/Home.pzl": tt.template + "\n" + tt.skeleton + "\n" + script,
+			})
+			usage, err := ScanUsage(root)
+			if err != nil {
+				t.Fatalf("ScanUsage: %v", err)
+			}
+			if usage.HasPortal != tt.wantPortal {
+				t.Errorf("HasPortal = %v, want %v", usage.HasPortal, tt.wantPortal)
+			}
+			if usage.HasRawAt != tt.wantRawAt {
+				t.Errorf("HasRawAt = %v, want %v", usage.HasRawAt, tt.wantRawAt)
+			}
+		})
+	}
+}
+
 // The scan reads .pzl templates ONLY. Managed-head field names in plain .js/.ts
 // modules used to flip a HasHeadTags bit here; that bit is gone — the managed
 // tags are emitted exclusively by the build-time SSG injector, so there is no
@@ -522,8 +560,8 @@ export default class Home extends PuzzleView {}
 	if err != nil {
 		t.Fatalf("ScanUsage: %v", err)
 	}
-	if usage.HasFlip {
-		t.Error("HasFlip = true without a flip attribute")
+	if got := usage.Features(); got != (Features{}) {
+		t.Errorf("Features = %+v without template feature usage", got)
 	}
 	// escape is the always-seeded safety default; nothing else may appear.
 	for name := range usage.Formatters {
@@ -544,15 +582,15 @@ func TestPluginFeaturesCarryEveryUsageBit(t *testing.T) {
 	pl.SetUsage(Usage{
 		Formatters: map[string]bool{"upcase": true},
 		HasFlip:    true,
+		HasPortal:  true,
+		HasRawAt:   true,
 	})
-	want := Features{Flip: true}
+	want := Features{Flip: true, Portal: true, RawAt: true}
 	if got := pl.Features(); got != want {
 		t.Errorf("Features() = %+v, want %+v", got, want)
 	}
 
-	// Flip is the only define bit since D111 retired the managed-head gate, so
-	// there is no cross-wiring left to catch here. What still matters is that a
-	// later SetUsage REPLACES the bits rather than accumulating them: a stale
+	// A later SetUsage REPLACES every bit rather than accumulating it: a stale
 	// true would keep a module in the bundle after the edit that removed its
 	// last use, which is the same silent-divergence failure this test guards.
 	pl.SetUsage(Usage{Formatters: map[string]bool{}})

@@ -26,7 +26,8 @@
 
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
-import { mount, setPortalHost } from '../views/viewManager.js';
+import { mount } from '../views/viewManager.js';
+import { setPortalHost } from '../views/portal.js';
 import { assembleChain, makeRouteSnapshot, makeRouterStub } from '../ssg/assemble.js';
 import { preloadTakeoverComponents } from '../ssg/preload.js';
 
@@ -76,7 +77,8 @@ export async function mountStatic({
 	// assembly the prerenderer ran, so the client tree matches the prerendered markup.
 	// Portal outlet host (D144): the same lazy outlet the SPA runtime creates, as a
 	// sibling of the static page's mount target.
-	setPortalHost(targetEl.parentNode ?? document.body);
+	if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
+		setPortalHost(targetEl.parentNode ?? document.body);
 
 	const chain = route.chain.map((def, i) => ({ ...def, view: views[i] }));
 	const entry = { fullPath: route.path, chain, layout };

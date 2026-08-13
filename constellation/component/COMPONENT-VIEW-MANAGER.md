@@ -138,7 +138,10 @@ The `@@name` private vnode key emitted for an `@name` attribute inside a D150
 raw block bypasses listener handling and attaches the literal attribute. HTML
 parsing accepts `@` names while `setAttribute` rejects them, so first mount
 attaches a parser-created `Attr` node; later patches update its value directly
-and removal uses the authored name.
+and removal uses the authored name. D89's `__PUZZLE_HAS_RAW_AT__` gate wraps
+both `@@` branches and the helper reference, so apps with no raw block drop the
+shim; the scan deliberately enables it for every raw block, not only ones whose
+body currently contains `@`.
 The `outside` modifier (D86) attaches its listener to `document` in the
 CAPTURE phase (one shared options object for add/remove so the capture flags
 can't mismatch); the containment gate runs before every other modifier step,
@@ -159,6 +162,12 @@ sites — the two that reference the import — sit behind an inlined
 a `flip` attr, dropping the module. The `'flip' in attrs` detection itself is
 intentionally un-probed (it holds no import alive, so gating it would only skip
 an `in` check). Detection covers component props too, not just element attrs.
+
+Portal range/outlet bookkeeping lives in `views/portal.js`. ViewManager keeps
+only the `PORTAL_TAG` integration branches, and every call imported from that
+module carries D89's full inline `__PUZZLE_HAS_PORTAL__` probe. Compiled-out
+Portal vnodes degrade to inert local comments with a one-shot dev warning;
+outside listeners use ordinary physical containment when the bit is false.
 
 D121 instruments actual DOM write/insert/remove/move sites and component-props
 bailouts during `ViewManager.render`. Nested component render scopes attribute

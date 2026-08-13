@@ -4,8 +4,8 @@ package plugin
 //
 // ScanUsage is a serial walk that READS AND FULLY PARSES every .pzl in the
 // project (SplitSections + ParseTemplate, plus ParseSkeleton when present) to
-// answer two questions: which built-in formatters are called anywhere, and does
-// anything use the D85 `flip` attribute. Both are properties of the source
+// answer the formatter union plus the D85 flip, D144 Portal, and D150 raw-block
+// feature facts. All are properties of the source
 // tree, and a one-shot build runs the walk once — fine.
 //
 // A dev session runs it on EVERY rebuild, over a tree in which exactly one file
@@ -18,7 +18,7 @@ package plugin
 // file, and hashing requires reading it. The failure mode of a stamp collision
 // (a same-size edit written back inside the filesystem's mtime resolution) is
 // bounded and self-correcting in the direction that matters: a stale entry can
-// only lose a NEWLY-added formatter or flip usage for one rebuild, and the next
+// only lose NEWLY-added usage for one rebuild, and the next
 // edit to that file — or any edit that moves its size — restores it. The
 // compile path is unaffected: it is keyed by content hash (cache.go), so the
 // generated module is never stale.
@@ -39,6 +39,8 @@ import (
 type fileUsage struct {
 	formatters []string
 	hasFlip    bool
+	hasPortal  bool
+	hasRawAt   bool
 }
 
 // scanStamp identifies a file version cheaply enough to check without reading.
@@ -129,6 +131,12 @@ func mergeFileUsage(usage *Usage, fu fileUsage) {
 	if fu.hasFlip {
 		usage.HasFlip = true
 	}
+	if fu.hasPortal {
+		usage.HasPortal = true
+	}
+	if fu.hasRawAt {
+		usage.HasRawAt = true
+	}
 }
 
 // scanFileUsage reads and parses one .pzl and returns its contribution. It is
@@ -169,7 +177,7 @@ func scanFileUsage(root, path string, allow map[string]bool) fileUsage {
 		}
 	}
 
-	fu := fileUsage{hasFlip: one.HasFlip}
+	fu := fileUsage{hasFlip: one.HasFlip, hasPortal: one.HasPortal, hasRawAt: one.HasRawAt}
 	for formatter := range one.Formatters {
 		fu.formatters = append(fu.formatters, formatter)
 	}

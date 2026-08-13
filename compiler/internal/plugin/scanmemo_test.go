@@ -48,6 +48,24 @@ export default class V extends PuzzleView {}
 </script>
 `
 
+const portalView = `<puzzle-view>
+  <Portal><p>remote</p></Portal>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class V extends PuzzleView {}
+</script>
+`
+
+const rawView = `<puzzle-view>
+  {#raw}<p @x="y">literal</p>{/raw}
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class V extends PuzzleView {}
+</script>
+`
+
 // TestUsageScannerMatchesColdScan is the equivalence statement: whatever the
 // tree looks like, an incremental Scan must answer exactly what a cold
 // ScanUsage answers — through edits, additions, and deletions.
@@ -69,8 +87,8 @@ func TestUsageScannerMatchesColdScan(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: warm scan: %v", step, err)
 		}
-		if warm.HasFlip != cold.HasFlip {
-			t.Errorf("%s: HasFlip warm=%v cold=%v", step, warm.HasFlip, cold.HasFlip)
+		if warm.Features() != cold.Features() {
+			t.Errorf("%s: features warm=%+v cold=%+v", step, warm.Features(), cold.Features())
 		}
 		if len(warm.Formatters) != len(cold.Formatters) {
 			t.Errorf("%s: formatters warm=%v cold=%v", step, warm.Formatters, cold.Formatters)
@@ -100,6 +118,24 @@ func TestUsageScannerMatchesColdScan(t *testing.T) {
 	u = assertSame("edit removes flip")
 	if u.HasFlip {
 		t.Fatal("flip removed by an edit was still reported")
+	}
+
+	writePZL(t, b, portalView)
+	u = assertSame("edit adds Portal")
+	if !u.HasPortal || u.HasRawAt {
+		t.Fatalf("Portal edit usage wrong: %+v", u)
+	}
+
+	writePZL(t, b, rawView)
+	u = assertSame("edit replaces Portal with raw")
+	if u.HasPortal || !u.HasRawAt {
+		t.Fatalf("raw edit usage wrong: %+v", u)
+	}
+
+	writePZL(t, b, plainView)
+	u = assertSame("edit removes raw")
+	if u.HasRawAt {
+		t.Fatal("raw removed by an edit was still reported")
 	}
 
 	// A brand new file contributes.

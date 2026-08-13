@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { PORTAL_TAG, ViewNode } from '../client-runtime/views/ViewNode.js';
-import { ViewManager, mount, teardownPortals, setPortalHost } from '../client-runtime/views/viewManager.js';
+import { setPortalHost, teardownPortals } from '../client-runtime/views/portal.js';
+import { ViewManager, mount } from '../client-runtime/views/viewManager.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -22,6 +23,7 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 afterEach(() => {
 	teardownPortals();
+	delete globalThis.__PUZZLE_HAS_PORTAL__;
 	document.body.replaceChildren();
 });
 
@@ -227,5 +229,27 @@ describe('Portal (D144)', () => {
 		const host = container();
 		mount(portal([h('p', {}, [text('x')])]), host, null, {});
 		expect(outlet().parentNode).toBe(wrapper);
+	});
+
+	it('warns once and renders inert when Portal support was compiled out', () => {
+		globalThis.__PUZZLE_HAS_PORTAL__ = false;
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const host = container();
+		const vm = new ViewManager(host, {});
+
+		expect(() =>
+			vm.render(h('div', {}, [portal([h('p', { class: 'remote' }, [text('one')])])]))
+		).not.toThrow();
+		expect(outlet()).toBe(null);
+		expect(host.querySelector('.remote')).toBe(null);
+		expect(host.firstChild.firstChild.nodeType).toBe(Node.COMMENT_NODE);
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain('Portal support was compiled out');
+
+		// Same-identity patches keep the inert placeholder; repeated encounters do
+		// not spam, and teardown stays non-throwing.
+		expect(() => vm.render(h('div', {}, [portal([h('p', {}, [text('two')])])]))).not.toThrow();
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(() => vm.clear()).not.toThrow();
 	});
 });

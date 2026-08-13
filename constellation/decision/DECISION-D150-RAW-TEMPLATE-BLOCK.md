@@ -55,6 +55,14 @@ The marker and component grammar is inert inside the block as well: `<slot>`,
 `<Portal>`) parse as plain elements, so sample markup can show composition
 syntax without instantiating it or tripping the D134 steering error.
 
+The client-only literal-`@` shim is usage-gated under D89. Any parsed raw block
+in either the main template or skeleton sets the deliberately over-inclusive
+`HasRawAt` scan bit and emits `__PUZZLE_HAS_RAW_AT__=true`; the ViewManager's two
+`@@` branches and `setLiteralAtAttr` call use the full inline probe. A raw block
+without an `@` attribute may retain a few unnecessary bytes, but a false
+negative can never send `@x` through the throwing `setAttribute` path. Undefined
+means enabled for unbundled consumers and Vitest.
+
 Serialization reuses the existing parent-aware rules. Normal element text is
 entity-escaped in prerendered HTML and decoded back by the HTML parser;
 `script`/`style` content takes D113's RAWTEXT path. JSON-typed scripts retain
