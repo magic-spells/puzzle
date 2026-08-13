@@ -6,7 +6,7 @@
         <p class="mt-2 text-body">
           One message row — avatar with an initials fallback, an author/time meta line, and a
           sent/received bubble. Group consecutive messages from the same author with
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">showMeta={ false }</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ 'showMeta={ false }' }</code>
           for a compact follow-up, and drop ChatAttachment chips into the
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">attachments</code>
           slot.

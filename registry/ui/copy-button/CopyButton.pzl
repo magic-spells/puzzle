@@ -26,12 +26,14 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // CopyButton — a click-to-copy control: writes `value` to the clipboard, then
-// shows a transient "copied" state (check icon, swapped label/aria-label, and
-// an aria-live announcement) for ~1.5s before reverting. Icon-only when no
-// `label` is given (aria-label carries the accessible name); with a `label`
-// the visible text swaps to "Copied" too. Variant/size mirror Button's own
-// vocabulary — default is a subtle ghost look meant to sit inline next to a
-// code snippet, a field value, or a share link.
+// shows a transient "copied" state (check icon, swapped label, and an
+// aria-live announcement) for ~1.5s before reverting. Icon-only when no
+// `label` is given — only then is an `aria-label` emitted, because an
+// aria-label OVERRIDES visible text: labeling a "Copy link" button
+// "Copy Copy link" is what the accessible name would become. With a `label`
+// the visible text is the accessible name and swaps to "Copied" too.
+// Variant/size mirror Button's own vocabulary — default is a subtle ghost look
+// meant to sit inline next to a code snippet, a field value, or a share link.
 //
 //   <CopyButton value={ apiKey }/>                          icon-only, ghost
 //   <CopyButton value={ url } label="Copy link"/>            labeled
@@ -50,7 +52,9 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // Clipboard failures (denied permission, insecure context, no Clipboard API)
 // are swallowed — the button just never enters the copied state. The revert
-// timer is cleared on teardown so it never fires setData on a dead view.
+// timer is cleared on teardown so it never fires setData on a dead view, and
+// an in-flight clipboard write that resolves after teardown fires nothing
+// (the runtime guards setData/refresh, but not the parent's @copy callback).
 const BASE =
   'inline-flex items-center justify-center gap-2 whitespace-nowrap select-none ' +
   'font-medium cursor-pointer transition-colors ' +
@@ -85,10 +89,12 @@ const COPIED_MS = 1500;
 export default class CopyButton extends PuzzleView {
   created() {
     this._timer = null;
+    this._destroyed = false;
     this.setData({ copied: false });
   }
 
   destroyed() {
+    this._destroyed = true;
     if (this._timer) clearTimeout(this._timer);
   }
 
@@ -109,7 +115,10 @@ export default class CopyButton extends PuzzleView {
         .filter(Boolean)
         .join(' '),
       disabled: !!props.disabled,
-      ariaLabel: copied ? 'Copied' : label ? `Copy ${label}` : 'Copy',
+      // Only icon-only buttons need an aria-label; on a labeled button it would
+      // OVERRIDE the visible text ("Copy link" → "Copy Copy link"). A null
+      // attribute value is removed by the patcher, so nothing is emitted.
+      ariaLabel: iconOnly ? (copied ? 'Copied' : 'Copy') : null,
       label,
       displayLabel: copied ? 'Copied' : label,
       liveText: copied ? 'Copied' : '',
@@ -125,6 +134,9 @@ export default class CopyButton extends PuzzleView {
       const value = this.props.value || '';
       navigator.clipboard.writeText(value).then(
         () => {
+          // The write can resolve after teardown: setData/refresh are guarded by
+          // the runtime, but the parent's @copy callback is not — bail entirely.
+          if (this._destroyed) return;
           this.setData({ copied: true });
           this.refresh();
           const { copy } = this.props;

@@ -64,7 +64,7 @@
         </p>
         <CodeBlock code={ codeData }/>
         <p class="mt-3 text-sm text-body">
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@move({ cardId, toColumnId, toIndex, event })</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '@move({ cardId, toColumnId, toIndex, event })' }</code>
           hands you a <em>splice-into-the-remaining-list</em> index:
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">toIndex</code>
           is where the card should land in the destination column <em>after</em> it has been removed from its source, so it is always in

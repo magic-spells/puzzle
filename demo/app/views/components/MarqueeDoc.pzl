@@ -90,7 +90,7 @@
           <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Behavior</h2>
           <ul class="space-y-1.5 text-sm text-body">
             <li><span class="font-medium text-ink">Seamless loop</span> — the slotted content is measured and cloned enough times to overfill the viewport; the track wraps by exactly one copy's width so there is never a gap</li>
-            <li><span class="font-medium text-ink">Pause on hover</span> — the scroll stops while the pointer is over the marquee (mouse only); disable with <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">pauseOnHover={ false }</code></li>
+            <li><span class="font-medium text-ink">Pause on hover</span> — the scroll stops while the pointer is over the marquee (mouse only); disable with <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ 'pauseOnHover={ false }' }</code></li>
             <li><span class="font-medium text-ink">Drag to scroll</span> — press and drag along the scroll axis to move the ticker by hand; touch drags the marquee while still letting the page scroll on the cross axis</li>
             <li><span class="font-medium text-ink">Reduced motion</span> — under <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">prefers-reduced-motion</code> the auto-scroll never starts; the content renders static and the duplicate copies are <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">aria-hidden</code> so assistive tech reads the sequence once</li>
           </ul>

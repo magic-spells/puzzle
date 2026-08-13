@@ -89,7 +89,7 @@
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">aria-pressed</code>;
           the parent owns each toggle's
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">pressed</code> state and writes it back
-          from <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">@toggle({ value, pressed })</code>.
+          from <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '@toggle({ value, pressed })' }</code>.
           Separators are <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">role="separator"</code>
           and are never focusable.
         </p>

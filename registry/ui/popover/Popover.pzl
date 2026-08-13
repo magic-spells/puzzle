@@ -37,7 +37,7 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 //   <Popover label="Options">…rich panel content…</Popover>
 //   <Popover align="end" side="top">
-//     <button slot="trigger" class="…">Custom trigger</button>
+//     <span slot="trigger" class="…">Custom trigger</span>
 //     …content…
 //   </Popover>
 //
@@ -48,8 +48,12 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141):
 // the plain `label` text. Fill slot="trigger" for arbitrary trigger content and it
-// REPLACES that fallback — a filled slot wins over `label`. Pass neither and the
-// button renders empty and unclickable.
+// REPLACES that fallback — a filled slot wins over `label`, so a custom trigger
+// must carry its own accessible name (aria-label or an .sr-only span) instead of
+// leaning on `label`. Pass neither and the button renders empty and unclickable.
+// The slot fills the CONTENTS OF the component-owned button, so supply
+// non-interactive content only — a <button>/<a> in the slot nests an interactive
+// element inside a button, which is invalid HTML the parser then re-shapes.
 //
 // Focus is deliberately NOT trapped — this is a popover, not a modal — and open
 // does not steal focus. The panel is rendered right after the trigger, so tabbing

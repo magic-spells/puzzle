@@ -5,7 +5,7 @@
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Pie Chart</h1>
         <p class="mt-2 text-body">
           A config-first part-to-whole donut. Hand it an array of
-          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ label, value }</code>
+          <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">{ '{ label, value }' }</code>
           and it renders slices in fixed slot colors, an always-present legend, per-slice hover tooltips with
           percent-of-total, and an accessible data table. Pass
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">totalLabel</code>
