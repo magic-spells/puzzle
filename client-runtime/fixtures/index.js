@@ -10,9 +10,10 @@
  * build defines threaded through the store constructor, `seed()`,
  * `resetFixtureSeed()` and `_fetch` (v1.59, D96) — four gated branches, two
  * "was compiled out" throws, and a core file that had to know this feature
- * exists. D98 inverts that: the core keeps exactly ONE seam, `Store._network`
- * (the single place an adapter request touches the network), and EVERYTHING
- * else lives here.
+ * exists. D98 inverts that: fixtures intercept exactly ONE seam,
+ * `Store._network` (the single place an adapter request touches the network).
+ * Since D157 that seam is installed by the opt-in adapter module, which this
+ * subpath explicitly invokes above.
  *
  * `installFixtures()` patches the prototypes:
  *
@@ -49,12 +50,19 @@
  */
 
 import { PuzzleApp } from '../app.js';
+import { adapter } from '../datastore/adapter.js';
 import { Store } from '../datastore/store.js';
 import { DEFAULT_FIXTURE_SEED, generateFixture } from './generator.js';
 import { mockFetch } from './mock.js';
 import { clearStates, reseed, setBaseSeed, stateFor } from './state.js';
 
 export { DEFAULT_FIXTURE_SEED } from './generator.js';
+
+// Fixtures intercept the adapter's network seam, so opting into /fixtures also
+// installs the adapter surface before installFixtures() captures `_network`.
+// The adapter module itself remains side-effect-free; this explicit factory call
+// belongs to the fixture subpath that needs the seam.
+adapter({ endpoint: '/' });
 
 /**
  * The config passed to the most recent `installFixtures()`, or null when the
@@ -208,7 +216,7 @@ function resetFixtureSeed(seedValue) {
 // ---- Store.prototype._network ---------------------------------------------
 
 /**
- * The mock interception (D98). Runs in place of the core's one-line `_network`,
+ * The mock interception (D98). Runs in place of the adapter's `_network`,
  * i.e. after `beforeRequest` and instead of `fetch`.
  *
  * Two sources of mock config, merged with the fixtures file winning per key: the

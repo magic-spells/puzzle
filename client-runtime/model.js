@@ -286,8 +286,6 @@ const MERGE_SKIP = new Set([...POLLUTION_SKIP, '_store', '_type', '_synced', '_d
  * Callers cannot tell those apart and must not have to, so the string lives here
  * and the Store imports it. Not re-exported from index.js — internal, not API.
  */
-export const DELETED_SAVE_MESSAGE = '[puzzle] cannot save a deleted record';
-
 // Per-record local-mutation state used by save-response reconciliation. Weak
 // storage keeps it off the deliberate record shape and releases it with the
 // record. Each update() advances the record revision once and stamps every field
@@ -629,43 +627,6 @@ export class PuzzleModel {
 	destroy() {
 		this._store?.removeRecord(this);
 		return this;
-	}
-
-	/**
-	 * Sync this record to the server (constellation/doc/DOC-SPEC.md §22, D50). The
-	 * Store owns the network; the verb just delegates. Local-first: the mutation is
-	 * already on screen, so a failed save() rejects and keeps the dirty local state
-	 * (retry by calling again). A deleted record cannot be resurrected through this
-	 * verb; any other store-less record has nowhere to sync. Both reject asynchronously
-	 * (never a sync throw) so callers only ever `await`.
-	 * @returns {Promise<PuzzleModel>}
-	 */
-	save() {
-		if (this._deleted) {
-			return Promise.reject(new Error(DELETED_SAVE_MESSAGE));
-		}
-		if (!this._store) {
-			return Promise.reject(
-				new Error('[puzzle] cannot save() a store-less record — create it via store.createRecord() first')
-			);
-		}
-		return this._store.saveRecord(this);
-	}
-
-	/**
-	 * Confirmed server delete (constellation/doc/DOC-SPEC.md §22, D50): DELETE first,
-	 * local remove on ack. Distinct from destroy() (local-only). A removed instance
-	 * resolves idempotently; a never-added instance still rejects asynchronously.
-	 * @returns {Promise<PuzzleModel>}
-	 */
-	delete() {
-		if (this._deleted) return Promise.resolve(this);
-		if (!this._store) {
-			return Promise.reject(
-				new Error('[puzzle] cannot delete() a record that was never added to a store')
-			);
-		}
-		return this._store.deleteRecord(this);
 	}
 
 	toJSON() {

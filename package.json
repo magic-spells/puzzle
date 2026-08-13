@@ -14,6 +14,10 @@
 			"types": "./types/index.d.ts",
 			"default": "./client-runtime/index.js"
 		},
+		"./adapter": {
+			"types": "./types/adapter.d.ts",
+			"default": "./client-runtime/datastore/adapter.js"
+		},
 		"./morph": {
 			"types": "./types/morph.d.ts",
 			"default": "./client-runtime/morph.js"

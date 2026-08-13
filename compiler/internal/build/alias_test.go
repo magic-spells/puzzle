@@ -19,7 +19,10 @@ import (
 func aliasFixture() ssgFixtureFiles {
 	return ssgFixtureFiles{
 		"app/app.js": `import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import routes from '@/routes.js';
+const adapterConfig = adapter({ endpoint: '/api/items' });
+if (adapterConfig.endpoint !== '/api/items') throw new Error('adapter alias failed');
 const app = new PuzzleApp({ target: '#app', routes });
 app.mount();
 export default app;

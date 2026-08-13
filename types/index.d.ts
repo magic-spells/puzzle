@@ -261,12 +261,8 @@ export interface Store {
 	findOne(type: string, id: any): any;
 	/** List records of a type, optionally filtered (auto-subscribes). */
 	findMany(type: string, options?: FindManyOptions): any[];
-	/** GET the collection endpoint and upsert every record (D21). */
-	loadAll(type: string): Promise<any[]>;
-	/** GET one record by id and upsert it (D21). */
-	loadOne(type: string, id: any): Promise<any>;
-	/** Custom-endpoint escape hatch (v1.18, D50). */
-	request(type: string, path?: string, options?: RequestOptions): Promise<any>;
+	// Adapter methods are attached by `adapter(config)` and declared through
+	// module augmentation in types/adapter.d.ts.
 	// `seed()` and `resetFixtureSeed()` are NOT declared here: the core Store does
 	// not have them (D98). They are attached by `installFixtures()` and declared
 	// through module augmentation in types/fixtures.d.ts, so they type-check only
@@ -523,12 +519,6 @@ export declare class PuzzleModel {
 	/** Remove the record from its store (local-only). */
 	destroy(): this;
 
-	/** Sync the record to the server: POST when new, PUT thereafter; serialized with delete() per record (v1.18, D50). */
-	save(): Promise<this>;
-
-	/** Confirmed server delete, then local remove; a never-synced record removes locally with no request. Serialized with save() per record; resolves the record (v1.18, D50). */
-	delete(): Promise<this>;
-
 	/** Validate this record's current field values (non-throwing). */
 	validate(): ValidationResult;
 
@@ -596,14 +586,6 @@ export declare const Puzzle: {
 export declare class PuzzleValidationError extends Error {
 	constructor(errors?: Array<{ field: string; rule: string; message: string }>);
 	errors: Array<{ field: string; rule: string; message: string }>;
-}
-
-/** Thrown when an adapter request responds non-OK (constellation/doc/DOC-SPEC.md §22). */
-export declare class PuzzleAdapterError extends Error {
-	constructor(status: number, statusText?: string, body?: any);
-	status: number;
-	statusText?: string;
-	body?: any;
 }
 
 // ----------------------------------------------------------------------------
