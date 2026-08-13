@@ -104,9 +104,16 @@ function blockDom(node) {
 		case 'heading': {
 			const level = Math.min(6, Math.max(1, Math.round(node.level) || 2));
 			const h = document.createElement(`h${level}`);
-			// The toolbar produces levels 2 and 3; anything deeper reuses the h3
-			// treatment rather than inventing unstyled sizes.
-			h.className = level <= 2 ? C.heading2 : C.heading3;
+			// The block-style dropdown produces levels 1-4; anything deeper reuses
+			// the h4 treatment rather than inventing unstyled sizes.
+			h.className =
+				level === 1
+					? C.heading1
+					: level === 2
+						? C.heading2
+						: level === 3
+							? C.heading3
+							: C.heading4;
 			alignStyle(h, node);
 			h.appendChild(inlineDom(node.children));
 			return h;

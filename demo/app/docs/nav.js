@@ -59,7 +59,7 @@ export const SECTIONS = [
 		{ name: "rating", title: "Rating", path: "/components/rating",
 			description: "Star rating — read-only display with half-star support and an interactive radiogroup input mode with keyboard nav and hover preview" },
 		{ name: "rich-text-editor", title: "Rich Text Editor", path: "/components/rich-text-editor",
-			description: "Rich text editor on Tiptap/ProseMirror — Toolbar-driven bold/italic/underline/strike, H2/H3, alignment, lists, blockquote, code block, and links, emitting a controlled Shopify-style JSON document tree via @change" },
+			description: "Rich text editor on Tiptap/ProseMirror — a block-style dropdown (Normal text, Heading 1-4) plus Toolbar-driven bold/italic/underline/strike, alignment, lists, blockquote, code block, and links, emitting a controlled Shopify-style JSON document tree via @change" },
 		{ name: "search-field", title: "Search Field", path: "/components/search-field",
 			description: "Search input with a leading magnifier icon and a trailing clear button; submits on Enter" },
 		{ name: "select", title: "Select", path: "/components/select",

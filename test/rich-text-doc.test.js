@@ -290,6 +290,21 @@ test('toTiptap writes heading level and align attrs', () => {
 
 // ---- round-trip -----------------------------------------------------------
 
+// The block-style dropdown offers levels 1-4, so the outer levels must survive
+// the conversion both ways, not just the 2/3 the old toolbar produced.
+test('round-trip: heading levels 1 and 4 survive fromTiptap(toTiptap(doc))', () => {
+	const doc = {
+		type: 'root',
+		children: [
+			{ type: 'heading', level: 1, children: [{ type: 'text', value: 'Top' }] },
+			{ type: 'heading', level: 4, children: [{ type: 'text', value: 'Deep' }] },
+		],
+	};
+	const pm = toTiptap(doc);
+	assert.deepEqual(pm.content.map((n) => n.attrs.level), [1, 4]);
+	assert.deepEqual(fromTiptap(pm), doc);
+});
+
 test('round-trip: fromTiptap(toTiptap(doc)) is identity on a rich doc', () => {
 	const doc = {
 		type: 'root',
@@ -493,7 +508,7 @@ test('safeLinkUrl normalizes tabs and newlines before testing the scheme', () =>
 
 test('RICH_TEXT_CLASSES exposes a class string per node kind', () => {
 	for (const key of [
-		'paragraph', 'heading2', 'heading3', 'list', 'bulletList',
+		'paragraph', 'heading1', 'heading2', 'heading3', 'heading4', 'list', 'bulletList',
 		'orderedList', 'listItem', 'blockquote', 'codeBlock', 'link',
 	]) {
 		assert.equal(typeof RICH_TEXT_CLASSES[key], 'string', key);
