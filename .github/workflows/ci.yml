@@ -6,16 +6,17 @@ on:
 
 jobs:
   test:
-    # The sheet motion suites pin EXACT floats minted on macOS/arm64 (ported
-    # byte-identical from @magic-spells/sheet — assertions are never loosened
-    # to fit a platform). ubuntu/x64 rounds one accumulated step differently
-    # in the last ULP, so the pins must run on the platform that minted them.
+    # The sheet motion suites pin EXACT floats (ported byte-identical from
+    # @magic-spells/sheet — assertions are never loosened to fit an
+    # environment). The last-ULP values are Node-version-sensitive: node 22
+    # fails test 24 by one ULP on the SAME arm64 hardware where node 25
+    # passes, so CI pins the node line the values were minted under.
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 25
       - name: Registry lib tests
         run: |
           npm ci
