@@ -48,7 +48,9 @@ export default class Todo extends PuzzleModel {
     return this;
   }
 
-  // Opt-in server location (D21/D157): installs the read/write adapter verbs.
+  // Server sync (D21/D157): store.loadAll/loadOne + record.save()/delete()
+  // against this endpoint. No backend? Delete this and the adapter import
+  // above to shrink the bundle — everything else works without a server.
   static adapter = adapter({
     endpoint: '/api/todos',
   });

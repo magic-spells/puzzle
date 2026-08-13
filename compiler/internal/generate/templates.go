@@ -121,7 +121,8 @@ export default class __NAME__ extends PuzzleModel {
     return this.name;
   }
 
-  // Server location (D21): consumed by store.loadAll('__MODEL__') / loadOne.
+  // Server sync (D21/D157): store.loadAll('__MODEL__') / loadOne / save() / delete().
+  // No backend? Delete this and the adapter import above to shrink the bundle.
   static adapter = adapter({
     endpoint: '/api/__MODEL__s',
   });
