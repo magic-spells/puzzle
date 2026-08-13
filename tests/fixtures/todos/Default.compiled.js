@@ -1,27 +1,7 @@
 
 import { PuzzleView } from '@magic-spells/puzzle';
 
-export default class DefaultLayout extends PuzzleView {
-  created() {
-    this.setData({
-      version: '1.0.0'
-    });
-  }
-
-  data(params, props) {
-    return {
-      title: props.title || 'Puzzle Todos',
-      showVersion: true
-    };
-  }
-
-  // Layout-level event handlers
-  events = {
-    headerClick: () => {
-      console.log('Header clicked!');
-    }
-  };
-}
+export default class DefaultLayout extends PuzzleView {}
 
 import { ViewNode, SLOT_TAG } from '@magic-spells/puzzle';
 

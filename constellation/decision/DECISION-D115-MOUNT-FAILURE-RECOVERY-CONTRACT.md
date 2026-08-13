@@ -9,11 +9,11 @@ connections:
 ---
 
 The failed-first-mount teardown in `mountComponent`'s rejection handler
-recovers through state on the **instance and its captured owner position**,
-which every same-identity vnode generation shares, instead of through links on
-the mount-time vnode that a same-turn parent render may already have replaced.
+recovers through state on the **instance and its owned position**, which every
+same-identity vnode generation shares, instead of through links on the
+mount-time vnode that a same-turn parent render may already have replaced.
 D145 amends the old router-preload exemption: every failed view is destroyed
-and replaced locally; its owner determines reconstruction and liveness.
+and replaced locally; retry re-enters the owner's existing rebuild path.
 
 ## Context
 
@@ -37,9 +37,9 @@ an orphaned comment. The exact failure the teardown was written to prevent.
 
 Router-preloaded views add a second ownership requirement. The Router pins the
 instance and commits URL/title/history synchronously, so local teardown must
-also mark that chain non-reusable and, after a successful explicit retry,
-replace the Router's committed instance bookkeeping. Leaving the broken view
-mounted is no longer permitted.
+also mark that chain non-reusable. Explicit retry forces the Router's normal
+same-location replacement; its `keep = 0` rebuild installs fresh bookkeeping.
+Leaving the broken view mounted is no longer permitted.
 
 ## Decision
 
@@ -63,9 +63,9 @@ mounted is no longer permitted.
   destroys the error view and marker. Without one, the next parent patch uses
   the same destroyed-instance/placeholder recovery to mount fresh.
 - **Router-preloaded views are replaced too.** The Router marks a failed
-  chain/layout non-reusable. Retry rebuilds the routed unit and descendants
-  its teardown owned, then swaps committed instance bookkeeping only after the
-  fresh mount succeeds.
+  chain/layout non-reusable. Retry internally replaces the current location,
+  so the ordinary navigation pipeline reruns the complete route chain and
+  commits fresh bookkeeping only after its load gate succeeds.
 
 ## Alternatives rejected
 

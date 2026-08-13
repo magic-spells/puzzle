@@ -108,16 +108,8 @@ export class PuzzleView {
 	#bindPending = null;
 	#bindWarned = null;
 	#vm = null;
-	// Position ownership for D145's app-level error view. The ViewManager or Router
-	// captures the constructor/props/slots/route inputs and supplies liveness +
-	// reconstruction callbacks; the failed instance only owns the visible
-	// replacement and its identity-stable retry callback.
-	#failureOwner = null;
-	#mountInputs = null;
 	#pendingFailure = null;
-	#errorState = null;
-	#isErrorView = false;
-	#errorViewFailed = null;
+	#errorView = null;
 	#mounted = false;
 	// Anchor-race gate (Change A): set true when the non-skeleton async mount()
 	// branch resumes to find its first render superseded (no commit landed) —
@@ -520,46 +512,20 @@ export class PuzzleView {
 		}
 	}
 
-	/** INTERNAL — install the parent/router owner for this exact mounted position. */
-	__setFailureOwner(owner) {
-		this.#failureOwner = owner ?? null;
-	}
-
-	/** INTERNAL — keep a same-identity parent patch attached to the error replacement. */
-	__retainFailurePosition(vnode) {
-		this.#failureOwner?.update?.(vnode);
-		if (this.#mountInputs) {
-			this.#mountInputs.props = vnode.props;
-			this.#mountInputs.children = vnode.children;
-		}
-	}
-
 	/** INTERNAL — whether this failed position is waiting for an explicit retry. */
 	__hasErrorReplacement() {
-		return !!this.#errorState?.active;
+		return !!this.#errorView;
 	}
 
-	/** INTERNAL — error-view instances report once and stop instead of recursing. */
-	__markErrorView(onFailed) {
-		this.#isErrorView = true;
-		this.#errorViewFailed = onFailed;
+	/** Preserve the manager's exact position before destroying this view. */
+	#plantFailurePlaceholder() {
+		return this.#vm?.plantFailurePlaceholder();
 	}
 
-	/** INTERNAL — preserve the manager's exact position before destroying this view. */
-	__plantFailurePlaceholder() {
-		return this.#vm?.plantFailurePlaceholder() ?? null;
-	}
-
-	/** INTERNAL — tear down a replacement when its parent/router removes the position. */
-	__disposeFailurePosition() {
-		const state = this.#errorState;
-		if (state?.active) {
-			state.active = false;
-			state.errorView?.destroy();
-			state.errorView = null;
-			state.placeholder?.remove();
-			this.#failureOwner?.dispose?.(this);
-		}
+	/** Tear down a replacement when its parent/router removes the position. */
+	#disposeFailurePosition() {
+		this.#errorView?.destroy();
+		this.#errorView = null;
 		this.__failedPlaceholder?.remove();
 		this.__failedPlaceholder = null;
 	}
@@ -568,36 +534,34 @@ export class PuzzleView {
 	 * INTERNAL — destroy the failed view and mount the app's ordinary error view at
 	 * this exact position. Returns whether that error view mounted successfully.
 	 */
-	async __showErrorView(error, info, { placeholder = null } = {}) {
+	async __showErrorView(error, info) {
 		if (!this.#vm) {
 			if (!this.#destroyed) this.#pendingFailure = { error, info };
 			return false;
 		}
-		if (this.#destroyed && !this.#errorState?.active) return false;
-		if (this.#errorState?.active) return !!this.#errorState.errorView;
-		if (this.#failureOwner && !this.#failureOwner.isCurrent?.(this)) return false;
+		if (this.#destroyed && !this.#errorView) return false;
+		if (this.#errorView) return true;
 
-		placeholder ??= this.__plantFailurePlaceholder();
-		this.#failureOwner?.failed?.(this);
+		const placeholder = this.#plantFailurePlaceholder();
+		this.ctx.router?.__failedView?.(this);
 		this.destroy();
 		if (placeholder) this.__failedPlaceholder = placeholder;
 
 		const ErrorView = getErrorView(this.ctx);
 		if (!ErrorView) return false;
 
-		const state = {
-			active: true,
-			errorView: null,
-			placeholder,
-			inFlight: false,
-			retry: null,
+		let inFlight = false;
+		const retry = async () => {
+			if (!this.#errorView || inFlight) return;
+			inFlight = true;
+			this.#errorView.destroy();
+			this.#errorView = null;
+			await (this.ctx.router?.__failedView?.(this, true) ?? this.__retryParent?.refresh());
 		};
-		state.retry = () => this.#retryErrorView(state);
-		this.#errorState = state;
-		return this.#mountErrorView(state, ErrorView, error, info);
+		return this.#mountErrorView(ErrorView, error, info, retry);
 	}
 
-	async #mountErrorView(state, ErrorView, error, info) {
+	async #mountErrorView(ErrorView, error, info, retry) {
 		let errorView;
 		try {
 			errorView = new ErrorView(this.ctx);
@@ -611,19 +575,18 @@ export class PuzzleView {
 			);
 			return false;
 		}
-		state.errorView = errorView;
-		errorView.__markErrorView(() => {
-			if (state.errorView === errorView) state.errorView = null;
+		this.#errorView = errorView;
+		errorView.__errorViewFailed = () => {
+			if (this.#errorView === errorView) this.#errorView = null;
 			errorView.destroy();
-		});
+		};
 		try {
 			await errorView.mount(this.#vm.container, {
-				props: { error, info, retry: state.retry },
-				ref: state.placeholder,
+				props: { error, info, retry },
+				ref: this.__failedPlaceholder,
 			});
-			if (!state.active || (this.#failureOwner && !this.#failureOwner.isCurrent?.(this))) {
+			if (this.#errorView !== errorView) {
 				errorView.destroy();
-				if (state.errorView === errorView) state.errorView = null;
 				return false;
 			}
 			return !errorView.isDestroyed;
@@ -636,73 +599,8 @@ export class PuzzleView {
 				err
 			);
 			errorView.destroy();
-			if (state.errorView === errorView) state.errorView = null;
+			if (this.#errorView === errorView) this.#errorView = null;
 			return false;
-		}
-	}
-
-	async #retryErrorView(state) {
-		if (!state.active || state.inFlight) return;
-		if (this.#failureOwner && !this.#failureOwner.isCurrent?.(this)) return;
-		state.inFlight = true;
-		state.errorView?.destroy();
-		state.errorView = null;
-
-		try {
-			const result = this.#failureOwner?.reconstruct
-				? await this.#failureOwner.reconstruct(this, state.placeholder)
-				: await this.#reconstructSelf(state.placeholder);
-			if (!state.active || (this.#failureOwner && !this.#failureOwner.isCurrent?.(this))) {
-				result?.view?.destroy();
-				return;
-			}
-			if (result?.error) {
-				const route = result.view?.route ?? this.#mountInputs?.route ?? null;
-				const info = reportError(
-					this.ctx,
-					result.error,
-					{ phase: 'mount', view: result.view, route },
-					'[puzzle] error-view retry failed:',
-					result.error
-				);
-				result.view?.destroy();
-				await this.#mountErrorView(state, getErrorView(this.ctx), result.error, info);
-				return;
-			}
-			result?.commit?.();
-			state.active = false;
-			state.placeholder?.remove();
-			this.__failedPlaceholder = null;
-			this.#errorState = null;
-		} finally {
-			state.inFlight = false;
-		}
-	}
-
-	async #reconstructSelf(placeholder) {
-		const inputs = this.#mountInputs;
-		let view;
-		try {
-			view = new this.constructor(this.ctx);
-			view.__setFailureOwner(this.#failureOwner);
-			if (inputs.preloaded) {
-				await view.preload({ params: inputs.params, props: inputs.props, route: inputs.route });
-				await view.mount(inputs.container, {
-					children: inputs.children,
-					ref: placeholder,
-					preloaded: true,
-				});
-			} else {
-				await view.mount(inputs.container, {
-					params: inputs.params,
-					props: inputs.props,
-					children: inputs.children,
-					ref: placeholder,
-				});
-			}
-			return { view };
-		} catch (error) {
-			return { view, error };
 		}
 	}
 
@@ -713,7 +611,7 @@ export class PuzzleView {
 	 */
 	get element() {
 		return (
-			this.#errorState?.errorView?.element ??
+			this.#errorView?.element ??
 			(this.__failedPlaceholder?.parentNode ? this.__failedPlaceholder : null) ??
 			this.#vm?.element ??
 			null
@@ -795,14 +693,6 @@ export class PuzzleView {
 			this.#props = props;
 		}
 		this.#children = children;
-		this.#mountInputs = {
-			container,
-			params: preloaded ? this.#params : params,
-			props: preloaded ? this.#props : props,
-			children,
-			preloaded,
-			route: this.#route,
-		};
 		this.#vm.anchorAt(ref);
 
 		// preloaded: created() + data() already ran in preload() (constellation/doc/DOC-APP-ANATOMY.md
@@ -1236,13 +1126,13 @@ export class PuzzleView {
 		const info = reportError(
 			this.ctx,
 			err,
-			{ phase: this.#isErrorView ? 'error-view' : phase, view: this, route: this.route },
+			{ phase: this.__errorViewFailed ? 'error-view' : phase, view: this, route: this.route },
 			message,
 			err
 		);
-		if (this.#isErrorView) {
-			const marker = this.__plantFailurePlaceholder();
-			this.#errorViewFailed?.();
+		if (this.__errorViewFailed) {
+			const marker = this.#plantFailurePlaceholder();
+			this.__errorViewFailed();
 			marker?.remove();
 			return;
 		}
@@ -1263,7 +1153,7 @@ export class PuzzleView {
 	 */
 	destroy() {
 		if (this.#destroyed) {
-			this.__disposeFailurePosition();
+			this.#disposeFailurePosition();
 			return;
 		}
 		this.#destroyed = true;

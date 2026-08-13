@@ -169,13 +169,20 @@ describe('app-level error view replacement', () => {
 });
 
 describe('errorView retry', () => {
-	it('rebuilds a failed routed layout and its owned chain, then restores router reuse', async () => {
+	it('retries a failed routed layout through a full current-location replacement', async () => {
 		let shouldFail = true;
 		let retry;
 		let layouts = 0;
 		let pages = 0;
+		let layoutData = 0;
+		let pageData = 0;
+		const errorViews = [];
 
 		class ErrorView extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				errorViews.push(this);
+			}
 			mounted() {
 				retry = this.props.retry;
 			}
@@ -188,6 +195,10 @@ describe('errorView retry', () => {
 				super(ctx);
 				layouts++;
 			}
+			data() {
+				layoutData++;
+				return {};
+			}
 			mounted() {
 				if (shouldFail) throw new Error('layout boom');
 			}
@@ -199,6 +210,10 @@ describe('errorView retry', () => {
 			constructor(ctx) {
 				super(ctx);
 				pages++;
+			}
+			data() {
+				pageData++;
+				return {};
 			}
 			render() {
 				return h('span', { class: 'page' }, [text(this.route.path)]);
@@ -221,7 +236,18 @@ describe('errorView retry', () => {
 		await retry();
 		await flush();
 		expect(app.find('.layout-error')).not.toBeNull();
-		expect(retry).toBe(stableRetry);
+		expect(errorViews).toHaveLength(2);
+		expect(errorViews[0].props.retry).toBe(stableRetry);
+		expect(retry).not.toBe(stableRetry);
+		expect(layouts).toBe(2);
+		expect(pages).toBe(2);
+		expect(layoutData).toBe(2);
+		expect(pageData).toBe(2);
+
+		await stableRetry();
+		await flush();
+		expect(layouts).toBe(2);
+		expect(pages).toBe(2);
 
 		shouldFail = false;
 		await retry();
@@ -229,6 +255,8 @@ describe('errorView retry', () => {
 		expect(app.find('.layout .page').textContent).toBe('/');
 		expect(layouts).toBe(3);
 		expect(pages).toBe(3);
+		expect(layoutData).toBe(3);
+		expect(pageData).toBe(3);
 
 		await app.router.push('/next');
 		await flush();
@@ -317,10 +345,11 @@ describe('errorView retry', () => {
 		expect(parents).toBe(2);
 	});
 
-	it('reconstructs the original view from constructor through mount', async () => {
+	it('refreshes the owner and mounts the component fresh from constructor through mount', async () => {
 		let attempts = 0;
 		let shouldFail = true;
 		let retry;
+		let hostData = 0;
 		const lifecycle = [];
 
 		class ErrorView extends PuzzleView {
@@ -354,6 +383,10 @@ describe('errorView retry', () => {
 			}
 		}
 		class Host extends PuzzleView {
+			data() {
+				hostData++;
+				return {};
+			}
 			render() {
 				return h('puzzle-view', {}, [comp(Child)]);
 			}
@@ -374,6 +407,7 @@ describe('errorView retry', () => {
 		expect(app.find('.ready').textContent).toBe('ready');
 		expect(app.find('.app-error')).toBeNull();
 		expect(attempts).toBe(2);
+		expect(hostData).toBe(2);
 		expect(lifecycle.slice(-5)).toEqual(['constructor', 'created', 'data', 'render', 'mounted']);
 	});
 

@@ -47,10 +47,12 @@ the swap (see [[DECISION-D39-SKELETON]] / [[DECISION-D52-SKELETON-ANTIFLASH]]).
 Contained mount/refresh failures report once, preserve the manager's exact
 position, and destroy the failed instance. With an app `errorView`, a fresh
 ordinary view mounts there with `{ error, info, retry }`; retry is stable,
-single-flight, and delegates reconstruction to the captured component/router
-owner. Without one, the comment position remains for the owner's ordinary next
-patch. Error-view failures are reported as `phase: 'error-view'` and stop
-without recursion. There is no per-view `errorContent` API or ancestor walk
+single-flight, and delegates to an already-owned rebuild path: the Router
+forces a same-location replacement for routed instances, while a child asks
+its parent to refresh so the normal D115 patch mounts a fresh child. Without
+one, the comment position remains for the owner's ordinary next patch.
+Error-view failures are reported as `phase: 'error-view'` and stop without
+recursion. There is no per-view `errorContent` API or ancestor walk
 ([[DECISION-D145-ERROR-BOUNDARIES]]).
 
 Public instance surface includes `ctx`, `props`, `route`, `element`, `refs`,

@@ -202,37 +202,14 @@ export class ViewManager {
 	 * bracketed range by DOM removal, and place the recovery marker at that range.
 	 */
 	plantFailurePlaceholder() {
-		const placeholder = document.createComment('puzzle');
 		if (this.treeUnknown) {
-			releaseAborted(this.unknownTrees);
-			this.unknownTrees = null;
-			const range = this.unknownRange;
-			const after = range?.after;
-			const ref = after?.parentNode === this.container ? after : null;
-			if (range) {
-				const before = range.before;
-				let node =
-					before?.parentNode === this.container
-						? before.nextSibling
-						: this.container.firstChild;
-				while (node && node !== ref) {
-					const next = node.nextSibling;
-					node.remove();
-					node = next;
-				}
-			}
+			const tree = this.renderFresh(new ViewNode(PLACEHOLDER_TAG));
 			this.currentTree = null;
-			this.anchor = null;
-			this.treeUnknown = false;
-			this.unknownRange = null;
-			this.container.insertBefore(placeholder, ref);
-		} else {
-			const at = this.element;
-			this.container.insertBefore(
-				placeholder,
-				at?.parentNode === this.container ? at : null
-			);
+			return tree.el;
 		}
+		const placeholder = document.createComment('puzzle');
+		const at = this.element;
+		this.container.insertBefore(placeholder, at?.parentNode === this.container ? at : null);
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
 		return placeholder;
 	}
@@ -667,8 +644,7 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 	const takeoverPreloaded =
 		(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
 	const child = vnode.instance ?? new vnode.tag(ctx);
-	const position = componentFailureOwner(vnode, child, parent, ctx, owner, preloaded);
-	child.__setFailureOwner?.(position);
+	child.__retryParent = owner;
 	vnode.component = child;
 	child
 		.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded })
@@ -729,104 +705,6 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 	return vnode.el;
 }
 
-/** Capture one component position for explicit error-view retry. */
-function componentFailureOwner(initialVnode, initialChild, parent, ctx, owner, preloaded) {
-	const state = { vnode: initialVnode, child: initialChild, active: true };
-	const position = {
-		isCurrent(view) {
-			return state.active && state.child === view && state.vnode.component === view;
-		},
-		update(vnode) {
-			state.vnode = vnode;
-		},
-		failed(view) {
-			ctx.router?.__markViewFailed?.(view);
-		},
-		dispose(view) {
-			if (state.child === view) state.active = false;
-		},
-		async reconstruct(failed, placeholder) {
-			let view;
-			let mountedChildren = state.vnode.children;
-			const createdPinned = [];
-			const routedReplacements = [];
-			try {
-				view = new state.vnode.tag(ctx);
-				view.__setFailureOwner?.(position);
-				if (preloaded) {
-					await view.preload({
-						params: failed.params,
-						props: state.vnode.props,
-						route: failed.route,
-					});
-					mountedChildren = [];
-					for (const child of state.vnode.children) {
-						mountedChildren.push(
-							await reconstructPinnedVNode(
-								child,
-								ctx,
-								failed.route,
-								createdPinned,
-								routedReplacements
-							)
-						);
-					}
-					await view.mount(parent, {
-						children: mountedChildren,
-						ref: placeholder,
-						preloaded: true,
-					});
-				} else {
-					await view.mount(parent, {
-						props: state.vnode.props,
-						children: state.vnode.children,
-						ref: placeholder,
-					});
-				}
-				return {
-					view,
-					commit() {
-						state.child = view;
-						state.vnode.component = view;
-						state.vnode.instance = preloaded ? view : null;
-						state.vnode.children = mountedChildren;
-						state.vnode.el = view.element;
-						ctx.router?.__replaceFailedView?.(failed, view);
-						for (const [oldView, freshView] of routedReplacements) {
-							ctx.router?.__replaceFailedView?.(oldView, freshView);
-						}
-					},
-				};
-			} catch (error) {
-				for (const fresh of createdPinned) fresh.destroy();
-				return { view, error };
-			}
-		},
-	};
-	return position;
-}
-
-/** Rebuild a router-pinned descendant vnode after its failed ancestor was destroyed. */
-async function reconstructPinnedVNode(vnode, ctx, route, created, replacements) {
-	if (!vnode?.isComponent || vnode.instance == null) return vnode;
-	const oldView = vnode.instance;
-	const freshView = new vnode.tag(ctx);
-	created.push(freshView);
-	await freshView.preload({
-		params: oldView.params,
-		props: vnode.props,
-		route: oldView.route ?? route,
-	});
-	const children = [];
-	for (const child of vnode.children) {
-		children.push(await reconstructPinnedVNode(child, ctx, route, created, replacements));
-	}
-	const rebuilt = new ViewNode(vnode.tag, vnode.props, children);
-	rebuilt.instance = freshView;
-	replacements.push([oldView, freshView]);
-	return rebuilt;
-}
-
 // ---- patch ------------------------------------------------------------------
 
 /**
@@ -869,7 +747,6 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		if (dead?.isDestroyed && dead.__hasErrorReplacement?.()) {
 			newVnode.component = dead;
 			newVnode.instance = oldVnode.instance;
-			dead.__retainFailurePosition?.(newVnode);
 			newVnode.el = dead.element;
 			return;
 		}
@@ -984,7 +861,6 @@ function reassertSelectValue(el, attrs) {
  */
 function patchComponent(oldVnode, newVnode) {
 	const child = (newVnode.component = oldVnode.component);
-	child.__retainFailurePosition?.(newVnode);
 	const props = shallowEqual(oldVnode.props, newVnode.props) ? undefined : newVnode.props;
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		devperfComponentPatch(child, props === undefined);

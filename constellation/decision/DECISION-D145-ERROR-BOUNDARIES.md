@@ -57,23 +57,34 @@ where the failed view stood; the broken instance is destroyed first. An
 instance whose `data()` or render just threw is never asked to render its own
 fallback face.
 
-**Explicit retry.** `retry()` destroys the error view and reconstructs the
-ORIGINAL view from scratch — constructor, `created()`, `data()`, render,
-mount — from the owner-captured constructor, props, slot children, and route
-inputs. Single-flight: calls during an active attempt are ignored. If the
-parent's patch or a navigation already replaced the position, retry is a
-no-op. A failed retry reports through the funnel and mounts a fresh error view
-carrying the new error. Nothing retries automatically, ever.
+**Explicit retry through the owner's normal rebuild path.** `retry()` destroys
+the error view and asks the position's existing owner to rebuild from scratch.
+For a routed view or layout, the Router internally replaces its current
+location while bypassing only the public same-path short circuit;
+`chainInvalid` forces `keep = 0`, so the complete routed chain runs
+constructor, `created()`, `data()`, render, and mount again. For a child
+component, the failed instance's D115 placeholder remains at the vnode
+position and the parent runs its ordinary `refresh()`; `patchComponent` sees
+the destroyed instance and mounts a fresh child from the newly rendered vnode.
+This deliberately re-derives current props and slots instead of replaying
+captured mount inputs. Single-flight: calls during an active attempt are
+ignored. If the parent patch or a navigation already removed the error-view
+instance, retry is a no-op. A failed retry reports through the funnel and
+mounts a fresh error view carrying the new error. Nothing retries
+automatically, ever.
 
 **Ownership follows the failed position.** A failed child component's
 replacement is owned by the parent's patch — a later patch that removes or
 replaces the original component removes the replacement with it, and keyed
 reorders cannot strand it. A failed routed view's replacement sits in the
 route container and is owned by the router: navigating away tears it down
-normally, and a failed chain is never reused. Because replacement always lands
-AT the failed position — never at an ancestor — no ancestor can render over
-router-owned descendants, and no router chain-invalidation path exists for
-error rendering.
+normally, and a failed chain is never reused. Retry does not introduce a
+second reconstruction engine or a position-owner protocol: Router retry is a
+forced same-location replace through the normal navigation pipeline, and
+component retry is the normal D115 placeholder remount reached through the
+parent's refresh. Because replacement always lands AT the failed position —
+never at an ancestor — no ancestor can render over router-owned descendants,
+and no router chain-invalidation path exists for error rendering.
 
 **The error view failing** (its own `data()`, render, or mount) reports once
 with `phase: 'error-view'` and stops — the runtime never mounts an error view

@@ -19,8 +19,8 @@ owner protects its own invariant:
 - **Router-owned** (preloaded chain views): the failed view is likewise
   destroyed and replaced at its exact committed position. The Router keeps the
   URL/title/history/scroll commit, marks the failed chain non-reusable, owns
-  navigation-away cleanup, and supplies full routed reconstruction to explicit
-  retry. On navigation-zero takeover, the error view gets the position first;
+  navigation-away cleanup, and retries by forcing its normal same-location
+  replacement (`keep = 0`). On navigation-zero takeover, the error view gets the position first;
   only its absence/failure restores prerendered content (D140/D145).
 - **Static-kernel root** (`mountStatic`): the root is destroyed and the
   prerendered content restored — a static page has no later patch to remount

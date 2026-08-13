@@ -106,8 +106,9 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Contained mount/refresh failures report through app `onError`, destroy the
   failed instance, and preserve its exact position. An app `errorView` mounts
   there as a fresh ordinary view with `{ error, info, retry }`; retry is stable,
-  single-flight, and reconstructs the original from owner-captured inputs. With
-  no error view, the invisible marker remains for ordinary owner recovery.
+  single-flight, and re-enters the owner's ordinary rebuild path: a forced
+  same-location Router replace or the component parent's refresh. With no error
+  view, the invisible marker remains for ordinary owner recovery.
   Error-view failures report once as `phase: 'error-view'` and never recurse.
 - The vnode manager handles inline components, slots, SVG namespaces, controlled
   form properties, events/modifiers, keyed moves, islands, refs, and teardown.
@@ -279,9 +280,10 @@ error-view); unregistered → the original `console.error` per catch site.
 app-wide fallback: a failed view or component is replaced in place by a fresh
 error-view instance (parent, siblings, and layout survive) receiving
 `{ error, info, retry }` props — `retry()` destroys it and reconstructs the
-original view; never automatic, never recursive. Without `errorView`, failures
-report and the position keeps its recovery placeholder. Event handlers and
-formatters surface uncaught.
+original through the Router's full same-location rebuild or the component
+parent's ordinary refresh; never automatic, never recursive. Without
+`errorView`, failures report and the position keeps its recovery placeholder.
+Event handlers and formatters surface uncaught.
 
 ## Deliberately not shipped
 

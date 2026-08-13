@@ -117,11 +117,12 @@ ancestor re-render (regression-tested).
 A contained routed mount/refresh failure marks the chain non-reusable, destroys
 the failed view, and replaces only its exact owned position with the app error
 view or the invisible recovery marker. Navigation away disposes that
-replacement normally. Explicit retry reconstructs the failed routed unit and
-any descendants its destruction owned, then atomically replaces the committed
-Router instance bookkeeping; a successful retry makes the healthy chain
-reusable again. The old ancestor-boundary chain truncation/invalidation path is
-gone—replacement never renders above the failed position
+replacement normally. Explicit retry reconstructs the routed views and reruns
+all route-chain data by forcing an internal same-location `replace` through the
+ordinary navigation pipeline; `chainInvalid` makes `keep = 0`, and the commit
+naturally installs healthy instance bookkeeping. A superseding navigation
+makes the stale retry a no-op. The old ancestor-boundary chain
+truncation/invalidation path is gone—replacement never renders above the failed position
 ([[DECISION-D145-ERROR-BOUNDARIES]]).
 
 Sequential transitions await the old unit's out phase before commit. A failing

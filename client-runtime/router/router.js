@@ -1859,7 +1859,6 @@ export class Router {
 						// Mounted directly (the ViewManager does not auto-play it in) → the
 						// router plays it in as the animator.
 						const restoreTakeover = this.#takeoverSSG(topView);
-						this.#ownDirectFailure(topView, next);
 						this.#observeMount(
 							topView.mount(this.#container, { children: rootVnode.children, preloaded: true }),
 							topView,
@@ -1907,7 +1906,6 @@ export class Router {
 						// this fresh layout mounts ALONGSIDE them (duplicated page). A marker-
 						// less app makes this a no-op and the branch stays byte-identical.
 						const restoreTakeover = this.#takeoverSSG(topView);
-						this.#ownDirectFailure(layout, next);
 						this.#observeMount(
 							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
 							layout,
@@ -1920,7 +1918,6 @@ export class Router {
 						// INITIAL nav: a layout does NOT animate on first paint — the topmost
 						// view plays in exactly once via the ViewManager's slot-child chain.
 						const restoreTakeover = this.#takeoverSSG(topView);
-						this.#ownDirectFailure(layout, next);
 						this.#observeMount(
 							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
 							layout,
@@ -1967,127 +1964,20 @@ export class Router {
 		}
 	}
 
-	/** INTERNAL — keep failed routed chains/layouts out of the reuse prefix. */
-	__markViewFailed(view) {
+	/** INTERNAL — mark a routed failure, or retry it through the normal rebuild. */
+	__failedView(view, retry = false) {
 		const st = this.#state;
-		if (!st) return;
+		if (!st) return retry ? null : undefined;
+		const routed = st.layout === view || st.views.includes(view);
+		if (retry) {
+			return routed ? this.#navigate(st.path, { push: false, replace: true }) : null;
+		}
 		if (st.layout === view) {
 			st.layoutInvalid = true;
 			st.chainInvalid = true;
-		} else if (st.views.includes(view)) {
+		} else if (routed) {
 			st.chainInvalid = true;
 		}
-	}
-
-	/** INTERNAL — replace recovered routed bookkeeping and allow reuse again. */
-	__replaceFailedView(failed, fresh) {
-		const st = this.#state;
-		if (!st) return;
-		if (st.layout === failed) {
-			st.layout = fresh;
-			st.layoutInvalid = false;
-		} else {
-			const index = st.views.indexOf(failed);
-			if (index !== -1) st.views[index] = fresh;
-		}
-		st.chainInvalid = !!st.layoutInvalid || st.views.some((view) => view.isDestroyed);
-	}
-
-	/** Capture a directly-mounted routed root/layout for replacement + retry. */
-	#ownDirectFailure(view, next) {
-		const index = next.views.indexOf(view);
-		const layout = next.layout === view;
-		const position = {
-			active: true,
-			isCurrent: (candidate) => {
-				if (!position.active) return false;
-				const st = this.#state;
-				return layout
-					? next.layout === candidate || st?.layout === candidate
-					: next.views[index] === candidate || st?.views[index] === candidate;
-			},
-			failed: (candidate) => {
-				if (layout) {
-					next.layoutInvalid = true;
-					next.chainInvalid = true;
-				} else {
-					next.chainInvalid = true;
-				}
-				this.__markViewFailed(candidate);
-			},
-			dispose: (candidate) => {
-				const st = this.#state;
-				const ownsPosition = layout
-					? next.layout === candidate || st?.layout === candidate
-					: next.views[index] === candidate || st?.views[index] === candidate;
-				if (ownsPosition) position.active = false;
-			},
-			reconstruct: async (_failed, placeholder) => {
-				const freshViews = [];
-				let freshLayout = null;
-				let primary = null;
-				try {
-					for (const node of next.entry.chain) {
-						const fresh = new node.view(this.#ctx);
-						freshViews.push(fresh);
-						await fresh.preload({ params: next.params, props: {}, route: next.to });
-					}
-
-					let childVnode = null;
-					for (let i = next.entry.chain.length - 1; i >= 0; i--) {
-						const vnode = new ViewNode(
-							next.entry.chain[i].view,
-							{ key: next.keys[i] },
-							childVnode ? [childVnode] : []
-						);
-						vnode.instance = freshViews[i];
-						childVnode = vnode;
-					}
-
-					if (layout) {
-						freshLayout = new next.entry.layout(this.#ctx);
-						primary = freshLayout;
-						freshLayout.__setFailureOwner?.(position);
-						await freshLayout.preload({ params: next.params, props: {}, route: next.to });
-						await freshLayout.mount(this.#container, {
-							children: [childVnode],
-							ref: placeholder,
-							preloaded: true,
-						});
-					} else {
-						primary = freshViews[0];
-						primary.__setFailureOwner?.(position);
-						await primary.mount(this.#container, {
-							children: childVnode.children,
-							ref: placeholder,
-							preloaded: true,
-						});
-					}
-					return {
-						view: primary,
-						commit: () => {
-							next.views = freshViews;
-							if (layout) {
-								next.layout = freshLayout;
-							}
-							next.chainInvalid = false;
-							next.layoutInvalid = false;
-							if (this.#state) {
-								this.#state.views = freshViews;
-								if (layout) this.#state.layout = freshLayout;
-								this.#state.chainInvalid = false;
-								this.#state.layoutInvalid = false;
-							}
-						},
-					};
-				} catch (error) {
-					freshLayout?.destroy();
-					for (const fresh of freshViews) fresh.destroy();
-					return { view: primary ?? freshViews.at(-1), error };
-				}
-			},
-		};
-		view.__setFailureOwner?.(position);
 	}
 
 	/**
@@ -2284,6 +2174,7 @@ export class Router {
 
 	/** Record the freshly-mounted navigation as the current committed state. */
 	#commitState(next) {
+		const layoutInvalid = !!next.layoutInvalid || !!next.layout?.isDestroyed;
 		this.#state = {
 			path: next.rawPath,
 			// The parsed URL parts (v1.49, D83), split ONCE by #navigate's
@@ -2297,8 +2188,9 @@ export class Router {
 			keys: next.keys,
 			layout: next.layout,
 			layoutClass: next.entry.layout,
-			chainInvalid: !!next.chainInvalid,
-			layoutInvalid: !!next.layoutInvalid,
+			chainInvalid:
+				layoutInvalid || !!next.chainInvalid || next.views.some((view) => view.isDestroyed),
+			layoutInvalid,
 		};
 		// A real commit ends any redirect chain. Blocks, failures, unmatched
 		// targets, and same-path redirect no-ops intentionally do not reset it.

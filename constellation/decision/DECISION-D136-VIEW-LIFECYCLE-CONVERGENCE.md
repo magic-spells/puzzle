@@ -43,11 +43,12 @@ or async) that lands while `#pendingMountHook` is set means the first render
 can never commit — previously a permanently blank comment, invisible to
 ViewManager recovery because the mount promise had already resolved.
 Now the shared D145 failure path asks the view's manager to plant the exact
-position marker, destroys the instance, and stores the owner-captured position.
+position marker and destroys the instance. The normal parent reference is
+enough for component retry; routed retry is recognized from Router state.
 With no app error view, the next parent patch mounts a FRESH instance as D115
 requires. With one, a fresh error view occupies the marker until explicit retry
-or owner replacement. Deliberately eager: deterministic reconstruction beats
-waiting for a hypothetical later refresh to succeed.
+or owner replacement. Deliberately eager: deterministic owner-driven recovery
+beats waiting for a hypothetical later refresh to succeed.
 
 ## 3. Leave inertness
 

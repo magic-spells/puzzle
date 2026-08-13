@@ -93,13 +93,13 @@ carries its own `Promise.resolve(...).catch(log)` — the enter-side mirror of
 `destroyAnimated()`'s leave-hook guard, and the same idiom the router's
 `#playInLogged` uses.
 
-For D145 failures, `mountComponent` captures the component constructor, current
-props, slot children, route/preload state, parent container, and live vnode
-position. The failed instance retains that owner while a fresh app error view
-occupies the same marker. Same-identity patches transfer the replacement;
-removal destroys it; retry mounts a fresh original instance and commits it back
-to the vnode only if that owner still controls the position. Failed routed
-component retries also replace Router bookkeeping.
+For D145 failures, the failed instance retains the ordinary parent view while a
+fresh app error view occupies the D115 marker. Same-identity patches transfer
+the replacement and removal destroys it. Component retry destroys the error
+view, exposes the destroyed-instance/placeholder state again, and calls the
+parent's normal `refresh()`; the newly rendered vnode reaches `patch()`'s
+existing recovery arm and mounts a fresh child with current props and slots.
+There is no captured-vnode reconstruction path.
 
 Since [[DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT]], that recovery keys off
 the **instance**, not the mount-time vnode: the handler runs in a microtask, so
@@ -109,8 +109,9 @@ instance (`__failedPlaceholder`), and `patch()`'s recovery test is
 `component == null || component.isDestroyed` (the getter, never the
 always-truthy `destroyed` hook method) with an attached-only insertion-ref
 guard. Router-preloaded instances now use the same exact-position replacement
-rule. Their owner is still the Router, but ownership supplies reconstruction
-and failed-chain bookkeeping rather than exempting teardown.
+rule. The Router's committed state identifies them at retry time, forces its
+normal same-location navigation with `keep = 0`, and retains failed-chain
+bookkeeping rather than exempting teardown.
 
 When a patch throws partway, `treeUnknown` forbids all later diffs against its
 lying vnode links. The replacement path releases both aborted trees (nested
