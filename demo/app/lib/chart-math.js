@@ -170,21 +170,37 @@ export function bandScale(count, r0, r1, paddingInner = 0.2, paddingOuter = 0.1)
  * non-finite coordinate) is a gap: the path lifts the pen and starts a fresh
  * `M` subpath at the next real point, so missing data leaves a break rather than
  * a straight jump across it.
+ *
+ * A run of exactly ONE point (a single-value series, or a value marooned between
+ * two gaps) closes with a zero-length `L` back to itself. A bare `M` paints
+ * nothing at all, so without that the point is simply invisible; the degenerate
+ * segment renders as a dot — which requires the consuming `<path>` to carry
+ * `stroke-linecap="round"` (a butt cap still paints nothing). Multi-point runs
+ * are emitted exactly as before.
  * @param {Array<Point | null>} pts
  * @returns {string} the path `d` string ("" for no drawable points)
  */
 export function linePath(pts) {
 	if (!Array.isArray(pts)) return '';
 	let d = '';
-	let penDown = false;
+	let run = 0;
+	let lastX = 0;
+	let lastY = 0;
+	const closeRun = () => {
+		if (run === 1) d += `L${fmt(lastX)} ${fmt(lastY)}`;
+	};
 	for (const p of pts) {
 		if (p == null || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) {
-			penDown = false;
+			closeRun();
+			run = 0;
 			continue;
 		}
-		d += `${penDown ? 'L' : 'M'}${fmt(p[0])} ${fmt(p[1])}`;
-		penDown = true;
+		d += `${run > 0 ? 'L' : 'M'}${fmt(p[0])} ${fmt(p[1])}`;
+		lastX = p[0];
+		lastY = p[1];
+		run += 1;
 	}
+	closeRun();
 	return d;
 }
 
@@ -273,7 +289,10 @@ export function arcPath(cx, cy, rOuter, rInner, a0, a1) {
 /**
  * Cumulative stack bounds for a set of series. For each row (an object) the
  * `keys` are stacked in order: the first key sits on 0, each subsequent key
- * starts where the previous ended. Missing / non-finite cells count as 0.
+ * starts where the previous ended. Cells are coerced with `Number()` first —
+ * the chart pieces normalize the same way, so a numeric STRING (`'30'`, a very
+ * common shape for JSON/CSV-sourced rows) stacks exactly like the number it
+ * spells. Missing / non-numeric / non-finite cells count as 0.
  * @param {Array<Record<string, number>>} rows
  * @param {string[]} keys series keys, drawn bottom → top in this order
  * @returns {Record<string, Array<[number, number]>>} per-key `[y0, y1]` pairs,
@@ -288,7 +307,8 @@ export function stackSeries(rows, keys) {
 		let acc = 0;
 		for (const key of keyList) {
 			const raw = row ? row[key] : 0;
-			const v = Number.isFinite(raw) ? raw : 0;
+			const n = Number(raw);
+			const v = Number.isFinite(n) ? n : 0;
 			out[key].push([acc, acc + v]);
 			acc += v;
 		}

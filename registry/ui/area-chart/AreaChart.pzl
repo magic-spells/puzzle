@@ -139,6 +139,12 @@ import { extent, niceDomain, linearScale, bandScale, linePath, areaPath, stackSe
 // shows each series' OWN value, never the cumulative total. Colors are assigned
 // in fixed slot order by series position (series[0] → chart-1, …); max 8 series.
 //
+// SINGLE-POINT DATA: a lone row (or a value marooned between gaps) has no
+// horizontal extent, so its FILL is a zero-width shape and paints nothing — in
+// stacked bands and unstacked areas alike. That is by design; visibility comes
+// from the edge line, where chart-math's linePath closes a one-point run with a
+// zero-length segment that the round stroke-linecap renders as a dot.
+//
 // PROPS — identical to LineChart (data, xKey, series, height=288, label,
 // formatValue, showGrid, showLegend, class) plus:
 //   stacked  bool  cumulative stacked bands (default false = overlapping areas).
