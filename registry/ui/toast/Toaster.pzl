@@ -3,8 +3,8 @@
     class={ containerClasses }
     role="region"
     aria-label="Notifications"
-    @mouseenter={ pauseTimers }
-    @mouseleave={ resumeTimers }>
+    @pointerenter={ pauseTimers(event) }
+    @pointerleave={ resumeTimers(event) }>
     {#for item in items}
       <div
         class="pointer-events-auto flex items-start gap-3 rounded-lg border bg-surface p-4 shadow-lg text-sm transition-all duration-[180ms] motion-reduce:transition-none starting:opacity-0 starting:scale-95 { item.border } {#if item.leaving}pointer-events-none opacity-0 scale-95{/if}"
@@ -63,6 +63,9 @@ import { getToasts, subscribe, dismiss, pauseAll, resumeAll } from './toast.js';
 //
 // Hovering anywhere over the container pauses every timer (pauseAll) and
 // leaving resumes them (resumeAll), mirroring notification-stack's hover pause.
+// Pointer (not mouse) enter/leave, gated to real mice: a touch tap fires
+// synthetic mouseenter with no matching mouseleave, which would pause every
+// toast timer forever — pointerType keeps pause-on-hover mouse-only.
 
 // Container corner + column direction. Bottom corners stack downward
 // (flex-col) and top corners upward (flex-col-reverse) so the newest toast —
@@ -124,8 +127,14 @@ export default class Toaster extends PuzzleView {
 
   events = {
     close: (id) => dismiss(id),
-    pauseTimers: () => pauseAll(),
-    resumeTimers: () => resumeAll(),
+    pauseTimers: (event) => {
+      if (event.pointerType !== 'mouse') return;
+      pauseAll();
+    },
+    resumeTimers: (event) => {
+      if (event.pointerType !== 'mouse') return;
+      resumeAll();
+    },
   };
 }
 </script>

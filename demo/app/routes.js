@@ -54,6 +54,8 @@ import KanbanDoc from './views/components/KanbanDoc.pzl';
 import KbdDoc from './views/components/KbdDoc.pzl';
 import LabelDoc from './views/components/LabelDoc.pzl';
 import LineChartDoc from './views/components/LineChartDoc.pzl';
+import MarkdownDoc from './views/components/MarkdownDoc.pzl';
+import MarkdownEditorDoc from './views/components/MarkdownEditorDoc.pzl';
 import MarqueeDoc from './views/components/MarqueeDoc.pzl';
 import MasonryDoc from './views/components/MasonryDoc.pzl';
 import MenubarDoc from './views/components/MenubarDoc.pzl';
@@ -72,6 +74,8 @@ import ProgressRingDoc from './views/components/ProgressRingDoc.pzl';
 import QuantityInputDoc from './views/components/QuantityInputDoc.pzl';
 import RadioGroupDoc from './views/components/RadioGroupDoc.pzl';
 import RatingDoc from './views/components/RatingDoc.pzl';
+import RichTextDoc from './views/components/RichTextDoc.pzl';
+import RichTextEditorDoc from './views/components/RichTextEditorDoc.pzl';
 import ScrollAreaDoc from './views/components/ScrollAreaDoc.pzl';
 import SearchFieldDoc from './views/components/SearchFieldDoc.pzl';
 import SelectDoc from './views/components/SelectDoc.pzl';
@@ -487,6 +491,20 @@ export default [
 		meta: { title: 'Line Chart — Puzzle Pieces' },
 	},
 	{
+		path: '/components/markdown',
+		name: 'markdown',
+		view: MarkdownDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Markdown — Puzzle Pieces' },
+	},
+	{
+		path: '/components/markdown-editor',
+		name: 'markdown-editor',
+		view: MarkdownEditorDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Markdown Editor — Puzzle Pieces' },
+	},
+	{
 		path: '/components/marquee',
 		name: 'marquee',
 		view: MarqueeDoc,
@@ -611,6 +629,20 @@ export default [
 		view: RatingDoc,
 		layout: DefaultLayout,
 		meta: { title: 'Rating — Puzzle Pieces' },
+	},
+	{
+		path: '/components/rich-text',
+		name: 'rich-text',
+		view: RichTextDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Rich Text — Puzzle Pieces' },
+	},
+	{
+		path: '/components/rich-text-editor',
+		name: 'rich-text-editor',
+		view: RichTextEditorDoc,
+		layout: DefaultLayout,
+		meta: { title: 'Rich Text Editor — Puzzle Pieces' },
 	},
 	{
 		path: '/components/scroll-area',
