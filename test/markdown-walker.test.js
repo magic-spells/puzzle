@@ -191,6 +191,16 @@ test('task lists render owned disabled checkboxes without literal task prefixes'
 	assert.match(rendered.toHtml(), /<input[^>]*type="checkbox"[^>]*disabled/);
 });
 
+test('a checked task body is struck through while an unchecked one is not', () => {
+	const bodies = findAll(render('- [x] done\n- [ ] todo'), 'span');
+
+	assert.equal(bodies.length, 2);
+	assert.equal(bodies[0].className, C.taskBodyDone);
+	assert.match(bodies[0].className, /line-through/);
+	assert.equal(bodies[1].className, C.taskBody);
+	assert.doesNotMatch(bodies[1].className, /line-through/);
+});
+
 test('tables apply column alignment to headers and cells and pad short rows', () => {
 	const token = Lexer.lex('|a|b|\n|:-:|--:|\n|1|2|', { gfm: true, breaks: false })[0];
 	token.rows[0].pop();

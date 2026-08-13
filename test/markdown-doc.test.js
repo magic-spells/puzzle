@@ -154,6 +154,7 @@ test('MARKDOWN_CLASSES exposes exactly the documented keys', () => {
 		'tableRow',
 		'tableWrap',
 		'taskBody',
+		'taskBodyDone',
 		'taskCheckbox',
 		'taskItem',
 		'taskList',

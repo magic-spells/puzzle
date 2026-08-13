@@ -96,6 +96,7 @@ export const MARKDOWN_CLASSES = {
 	taskItem: 'flex items-start gap-2 leading-7',
 	taskCheckbox: 'mt-1.5 size-4 shrink-0 accent-brand',
 	taskBody: 'min-w-0',
+	taskBodyDone: 'min-w-0 text-muted line-through',
 	blockquote: 'mt-4 first:mt-0 border-l-2 border-border pl-4 italic text-muted',
 	codeBlock:
 		'mt-4 first:mt-0 overflow-x-auto rounded-lg bg-surface-sunken p-4 font-mono text-[13px]/relaxed text-body whitespace-pre',

@@ -117,6 +117,10 @@ const CONTENT_CLASS =
 	// TaskItem's node view renders li[data-checked] > label > input + div.
 	'[&_ul[data-type=taskList]]:list-none [&_ul[data-type=taskList]]:pl-0 ' +
 	'[&_li[data-checked]>label>input]:mt-1.5 [&_li[data-checked]>label>input]:size-4 [&_li[data-checked]>label>input]:shrink-0 [&_li[data-checked]>label>input]:accent-brand ' +
+	// Keep in sync with lib map: MARKDOWN_CLASSES.taskBodyDone (minus its
+	// layout-only min-w-0) — a done task must read the same muted + struck in
+	// the editor as in <Markdown>. Tiptap's checked state lives on the li, so
+	// this side needs the selector form.
 	'[&_li[data-checked=true]>div]:text-muted [&_li[data-checked=true]>div]:line-through';
 
 const FRAME_BASE =

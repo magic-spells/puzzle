@@ -137,7 +137,7 @@ function listDom(tok, newTab) {
 			checkbox.className = C.taskCheckbox;
 			li.appendChild(checkbox);
 			body = document.createElement('span');
-			body.className = C.taskBody;
+			body.className = item.checked ? C.taskBodyDone : C.taskBody;
 			li.appendChild(body);
 		}
 		// A list item can mix tight inline text, loose blocks, and nested lists;
