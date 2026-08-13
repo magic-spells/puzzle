@@ -102,6 +102,16 @@ bare alias. Vitest tests import the module by relative path
 (`../client-runtime/datastore/adapter.js`); the vitest alias maps only the bare
 specifier, and a subpath specifier in tests would prefix-match it.
 
+**Scope: this is Puzzle's REST adapter.** The convention verbs assume
+resource-shaped JSON over GET/POST/PUT/DELETE. Non-REST backends (GraphQL,
+RPC, bespoke endpoints) use the same module's protocol-agnostic plumbing —
+`store.request()` + `store.upsert()` under `beforeRequest` and the `_network`
+mock seam — via short model methods (the D50-documented pattern). If a
+first-class adapter for another protocol is ever built, it is a sibling
+subpath with its own factory (e.g. a `/graphql` export), never a mode of this
+one: subpath namespacing means each app imports exactly the protocol it uses.
+None is planned; a real app outgrowing `request()` is the trigger.
+
 ## Alternatives rejected
 
 - **Keeping `static adapter = {...}` as a plain config object** — a config
