@@ -45,7 +45,7 @@ supersession branch, and `#abandon`.
 bumps `#runToken`, and re-renders from the already-computed model — `data()`
 never runs twice on the ordinary path. `discard()` drops only the
 subscriptions that run added. A discard is invisible to the app: no render, no
-lifecycle hook, no error boundary, no `onStoreChange` (D145's
+lifecycle hook, no error-view replacement, no `onStoreChange` (D145's
 `phase: 'navigation'` report stays the single signal for a failed navigation).
 
 **Commit-conflict convergence.** `prepareRefresh` captures `#runToken` at

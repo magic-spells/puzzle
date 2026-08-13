@@ -117,9 +117,12 @@ Rules that bite:
   A portal-only view is fine.
 - **Error handling.** `new PuzzleApp({ onError(error, { phase, view, route }) })`
   hears every framework-contained failure (mount, refresh, navigation);
-  a view's script-side `errorContent(error)` renders fallback UI where the view
-  failed to mount — nearest boundary wins, return null to decline outward, and
-  the owner's `refresh()` retries. Event handlers and formatters stay uncaught.
+  `errorView: AppErrorView` (an ordinary compiled `.pzl` view) is the app-wide
+  fallback — a failed view/component is replaced in place by a fresh error-view
+  instance (parent and siblings survive) with `{ error, info, retry }` props;
+  `retry()` reconstructs the original view, never automatically. There is no
+  per-view error member — write error UI as normal template markup, never as
+  hand-built ViewNodes. Event handlers and formatters stay uncaught.
 - **`island` freezes children.** An element with the `island` attribute keeps
   its children untouched by patching after mount (for third-party DOM widgets);
   the element's own attrs/listeners still patch. Components, slots, and view

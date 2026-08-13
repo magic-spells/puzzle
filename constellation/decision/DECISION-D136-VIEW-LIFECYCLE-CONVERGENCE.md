@@ -42,13 +42,12 @@ A fire-and-forget refresh failure (parent prop update or store-change, sync
 or async) that lands while `#pendingMountHook` is set means the first render
 can never commit — previously a permanently blank comment, invisible to
 ViewManager recovery because the mount promise had already resolved.
-Now `#handleBackgroundRefreshFailure` plants the D115 placeholder (the shared
-`plantFailedMountPlaceholder`, factored out of `mountComponent`'s rejection
-handler), destroys the instance, and stashes `__failedPlaceholder` so the
-next parent patch mounts a FRESH instance. Deliberately eager: a
-deterministic remount beats waiting for a hypothetical later refresh to
-succeed. Router-preloaded views never set `#pendingMountHook` (preload
-resolves before their synchronous mount) and are untouched.
+Now the shared D145 failure path asks the view's manager to plant the exact
+position marker, destroys the instance, and stores the owner-captured position.
+With no app error view, the next parent patch mounts a FRESH instance as D115
+requires. With one, a fresh error view occupies the marker until explicit retry
+or owner replacement. Deliberately eager: deterministic reconstruction beats
+waiting for a hypothetical later refresh to succeed.
 
 ## 3. Leave inertness
 
@@ -80,8 +79,8 @@ reactive — inertness is a property of leaving, not of having left once.
 rejected start (navigation #0 failing its commit) previously left the app
 claiming mounted with live listeners while `mount()` rejected. The await now
 carries the exact `beforeMount` abort pattern: epoch-guarded `#teardown()`,
-rethrow. Note the D115 boundary: router-owned post-commit `render()`/
-`mounted()` failures are observed-and-logged and do NOT reject `start()` —
-only genuine navigation-#0 commit rejections reach this path.
+rethrow. Router-owned post-commit `render()`/`mounted()` failures are observed,
+reported, and locally replaced under D145; they do NOT reject `start()`. Only
+genuine navigation-#0 commit rejections reach this path.
 
 Amends SPEC §12/§34 (inline notes) and the D115/D118 contracts it extends.

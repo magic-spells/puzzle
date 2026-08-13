@@ -29,8 +29,9 @@ notes:
       b.key!==b.key)`) so a NaN key self-matches instead of being replaced every render. (3) Failed
       FIRST mount: mountComponent's .catch now destroys the dead instance, leaves a bare comment
       placeholder at the position, and nulls vnode.component/instance; patch() mounts a FRESH
-      instance when oldVnode.component==null; unmount drops the leftover placeholder. Prevents a
-      broken instance being reused forever (mounted() never firing, setData() inert). Tests:
+      instance when oldVnode.component==null; unmount drops the leftover placeholder. D145 now
+      extends that position ownership with a fresh app-level error view and explicit retry while
+      preserving the no-errorView parent-patch recovery. Tests: tests/error-boundaries.test.js and
       tests/keyed-reconciliation.test.js.
     sha: d9591d6
   - kind: verified
@@ -39,8 +40,6 @@ notes:
       probes post-reduction, detection covers component props) appended to this card's body — prior
       stamp (d9591d6) predated that paragraph.
     sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
-verified_at: '2026-07-25T05:23:56.086Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # ViewManager and ViewNode
@@ -94,6 +93,14 @@ carries its own `Promise.resolve(...).catch(log)` — the enter-side mirror of
 `destroyAnimated()`'s leave-hook guard, and the same idiom the router's
 `#playInLogged` uses.
 
+For D145 failures, `mountComponent` captures the component constructor, current
+props, slot children, route/preload state, parent container, and live vnode
+position. The failed instance retains that owner while a fresh app error view
+occupies the same marker. Same-identity patches transfer the replacement;
+removal destroys it; retry mounts a fresh original instance and commits it back
+to the vnode only if that owner still controls the position. Failed routed
+component retries also replace Router bookkeeping.
+
 Since [[DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT]], that recovery keys off
 the **instance**, not the mount-time vnode: the handler runs in a microtask, so
 a same-turn parent re-render can already have transferred the instance to a new
@@ -101,9 +108,15 @@ vnode via `patchComponent` — the handler stashes its placeholder on the
 instance (`__failedPlaceholder`), and `patch()`'s recovery test is
 `component == null || component.isDestroyed` (the getter, never the
 always-truthy `destroyed` hook method) with an attached-only insertion-ref
-guard. Router-preloaded instances are exempt from the teardown entirely — the
-Router owns that lifetime and expects a failed committed view to stand until
-the next navigation replaces it.
+guard. Router-preloaded instances now use the same exact-position replacement
+rule. Their owner is still the Router, but ownership supplies reconstruction
+and failed-chain bookkeeping rather than exempting teardown.
+
+When a patch throws partway, `treeUnknown` forbids all later diffs against its
+lying vnode links. The replacement path releases both aborted trees (nested
+instances, refs, document `outside` listeners, portals), clears only the
+bracketed manager range, plants the stable marker, and mounts fresh. Healthy
+paths retain the normal diff.
 
 Composition uses `SLOT_TAG` and shared `expandSlots`: `<Children/>` fills
 the default bucket, `<Slot name="x"/>` fills named buckets, and `<Slot/>` is
