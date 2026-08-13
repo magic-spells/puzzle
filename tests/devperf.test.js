@@ -158,11 +158,10 @@ describe('dev performance render instrumentation', () => {
 		expect(neighborRenders.every((event) => event.depth === 1)).toBe(true);
 		expect(neighbor.element.textContent).toBe('2');
 
-		// And the thrower itself still renders once it stops throwing.
-		exploding.instance.setData('explode', false);
-		exploding.instance.setData('label', 'recovered');
-		await settled();
-		expect(exploding.element.textContent).toBe('recovered');
+		// The thrower is intentionally destroyed by D145; its invisible recovery
+		// placeholder does not poison later instrumentation.
+		expect(exploding.instance.isDestroyed).toBe(true);
+		expect(exploding.element.nodeType).toBe(Node.COMMENT_NODE);
 	});
 
 	it('reports both halves of a reentrant render and leaves no scope behind', async () => {

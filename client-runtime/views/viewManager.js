@@ -26,7 +26,7 @@ import { ViewNode, PLACEHOLDER_TAG, PORTAL_TAG } from './ViewNode.js';
 import { beginFlip, playFlip } from './flip.js';
 import { devperfComponentPatch, devperfMutation } from '../devperf.js';
 import { displayValue as stringify } from '../display.js';
-import { reportError } from '../errors.js';
+import { getErrorView, reportError } from '../errors.js';
 
 // these must be assigned as element properties, not attributes
 const PROPS = new Set(['value', 'checked', 'disabled', 'selected', 'muted']);
@@ -66,7 +66,7 @@ export class ViewManager {
 		this.anchor = null;
 		// A patch() threw partway: the DOM matches NEITHER currentTree nor the tree
 		// that was being applied, so nothing may be diffed against it again. The
-		// error boundary renders through renderFresh() while this is set (D145).
+		// next render routes through renderFresh() while this is set (D145).
 		this.treeUnknown = false;
 		// The two live siblings bracketing this manager's DOM range, captured
 		// immediately before the patch that threw. Both sit OUTSIDE the range, so an
@@ -96,13 +96,9 @@ export class ViewManager {
 	 * Slot markers are expanded against `slotChildren` before diffing.
 	 */
 	render(rawTree) {
-		// D145's "never patched over an unknown tree" is an invariant of the MANAGER,
-		// not of the boundary path that usually restores it. A view with no
-		// errorContent anywhere above it (the default) leaves __showErrorBoundary
-		// returning false, so nothing clears treeUnknown and the next ordinary render
-		// would diff against a currentTree whose vnodes point at detached nodes —
-		// updates land on orphans and the visible DOM freezes. Route it through the
-		// same fresh mount the boundary uses.
+		// D145's "never patched over an unknown tree" is an invariant of the manager.
+		// Route the next ordinary render through a fresh mount so it never diffs
+		// against vnodes whose DOM links may be detached.
 		if (this.treeUnknown) return this.renderFresh(rawTree);
 		const newTree = expandSlots(rawTree, this.slotChildren);
 		if (!this.currentTree) {
@@ -120,7 +116,7 @@ export class ViewManager {
 			// error face against it resolves insertion refs to moved or removed
 			// nodes. Record the corrupt range instead and leave `currentTree` alone:
 			// neither tree is true, so the manager reports the tree as UNKNOWN and
-			// the next boundary render goes through renderFresh().
+			// the next render goes through renderFresh().
 			const el = this.currentTree.el ?? null;
 			const bracketed = el != null && el.parentNode === this.container;
 			const before = bracketed ? el.previousSibling : null;
@@ -201,14 +197,44 @@ export class ViewManager {
 	}
 
 	/**
-	 * Mount a failed view's own boundary face beside the D115 placeholder. The
-	 * failed instance is already destroyed, so nested fallback components belong
-	 * to its surviving owner (the parent view), not to the dead view.
+	 * Preserve this manager's exact position before a failed view is destroyed.
+	 * For an aborted patch, release both lying vnode trees once, clear the trusted
+	 * bracketed range by DOM removal, and place the recovery marker at that range.
 	 */
-	mountErrorFallback(rawTree, ref, owner) {
-		const tree = expandSlots(rawTree, []);
-		mount(tree, this.container, ref, this.ctx, owner);
-		return tree;
+	plantFailurePlaceholder() {
+		const placeholder = document.createComment('puzzle');
+		if (this.treeUnknown) {
+			releaseAborted(this.unknownTrees);
+			this.unknownTrees = null;
+			const range = this.unknownRange;
+			const after = range?.after;
+			const ref = after?.parentNode === this.container ? after : null;
+			if (range) {
+				const before = range.before;
+				let node =
+					before?.parentNode === this.container
+						? before.nextSibling
+						: this.container.firstChild;
+				while (node && node !== ref) {
+					const next = node.nextSibling;
+					node.remove();
+					node = next;
+				}
+			}
+			this.currentTree = null;
+			this.anchor = null;
+			this.treeUnknown = false;
+			this.unknownRange = null;
+			this.container.insertBefore(placeholder, ref);
+		} else {
+			const at = this.element;
+			this.container.insertBefore(
+				placeholder,
+				at?.parentNode === this.container ? at : null
+			);
+		}
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) devperfMutation();
+		return placeholder;
 	}
 
 	/** The DOM node currently occupying this subtree's position (or null). */
@@ -218,7 +244,7 @@ export class ViewManager {
 
 	/** Remove everything this manager mounted. */
 	clear() {
-		// A destroy that arrives BEFORE any boundary render still has to release the
+		// A destroy that arrives BEFORE any replacement render still has to release the
 		// aborted patch's two trees — unmount(currentTree) below reaches only the old
 		// one, and only through positions that may no longer be true.
 		if (this.unknownTrees) {
@@ -625,18 +651,6 @@ export function mount(vnode, parent, ref, ctx, owner = null) {
  * created()/data() are not run twice and its mount is synchronous — the
  * atomic-commit contract in constellation/doc/DOC-VIEW-LIFECYCLE.md §4.
  */
-export function plantFailedMountPlaceholder(child) {
-	const anchor = child.element;
-	const placeholder =
-		anchor && anchor.parentNode
-			? anchor.parentNode.insertBefore(document.createComment('puzzle'), anchor)
-			: null;
-	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
-		if (placeholder) devperfMutation();
-	}
-	return placeholder;
-}
-
 function mountComponent(vnode, parent, ref, ctx, owner) {
 	if ((typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverFailed) {
 		const placeholder = document.createComment('puzzle');
@@ -653,7 +667,8 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 	const takeoverPreloaded =
 		(typeof __PUZZLE_TAKEOVER__ === 'undefined' || __PUZZLE_TAKEOVER__) && vnode.takeoverPreloaded;
 	const child = vnode.instance ?? new vnode.tag(ctx);
-	child.__setErrorParent?.(owner);
+	const position = componentFailureOwner(vnode, child, parent, ctx, owner, preloaded);
+	child.__setFailureOwner?.(position);
 	vnode.component = child;
 	child
 		.mount(parent, { props: vnode.props, children: vnode.children, ref, preloaded })
@@ -690,60 +705,18 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 				);
 			},
 			(err) => {
-				const boundary = child.__prepareErrorBoundary?.(err);
-				// A ROUTER-PRELOADED instance (`vnode.instance`, pinned by router.js) is not
-				// ours to tear down: the Router owns that lifetime, committed the view
-				// SYNCHRONOUSLY, and its own #observeMount logs a post-commit mount failure
-				// EXPECTING the failed view to stay committed until the next navigation
-				// replaces and destroys it. Destroying it here would leave router.current
-				// pointing at a dead, unrefreshable view the Router knows nothing about — and
-				// would swap the committed markup for a comment behind its back. Log only;
-				// the instance and the vnode's links are left exactly as they are.
-				if (preloaded && !takeoverPreloaded) {
-					reportError(
-						ctx,
-						err,
-						{ phase: 'mount', view: child, route: child.route },
-						'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
-						err
-					);
-					child.__showErrorBoundary?.(boundary);
-					return;
-				}
-				reportError(
+				const info = reportError(
 					ctx,
 					err,
 					{ phase: 'mount', view: child, route: child.route },
-					'[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
+					preloaded && !takeoverPreloaded
+						? '[puzzle] routed view mount failed — the failed position was replaced:'
+						: getErrorView(ctx)
+							? '[puzzle] component mount failed — the failed position was replaced:'
+							: '[puzzle] component mount failed — the component was destroyed and will remount on the next patch:',
 					err
 				);
-				// The instance never reached a working mounted state (data()/render()/
-				// mounted() threw on the first mount). Left as-is, patchComponent would REUSE
-				// this dead instance on every later render without ever re-mounting it, so a
-				// render that no longer throws still gets a permanently-broken component:
-				// mounted() never fires and setData() re-renders are inert. Tear it down and
-				// leave a bare comment holding the position, so patch() mounts a FRESH
-				// instance here on the next render (see patch()).
-				//
-				// Recovery keys off the INSTANCE, not this vnode. mount() is async, so this
-				// handler runs in a MICROTASK — a parent re-render in the SAME turn (a store
-				// flush, a setData() from the parent's mounted()) can already have patched
-				// this position, and patchComponent copied `child` onto a NEW vnode that is
-				// now the live tree node. `vnode` is an orphan by the time we get here, so
-				// nulling its links recovers nothing: the live vnode still points at the
-				// instance we are about to destroy, and its recovery test would never fire.
-				// The destroyed instance is the one thing both vnodes share — stash the
-				// placeholder on it so patch() finds it through WHICHEVER vnode holds the
-				// component. The vnode nulls below stay: they are correct (and the cheaper
-				// path) whenever nothing raced.
-				const placeholder = plantFailedMountPlaceholder(child);
-				child.destroy(); // release any partial subscriptions; removes the child's own anchor
-				if (placeholder) {
-					vnode.el = placeholder;
-					child.__failedPlaceholder = placeholder;
-				}
-				child.__showErrorBoundary?.(boundary, { failedMount: true, placeholder });
-				vnode.component = null;
+				child.__showErrorView?.(err, info);
 				vnode.instance = null;
 				// Gated: ungated this would ADD the property outside the constructor in a
 				// non-takeover build — exactly the hidden-class transition the gate above
@@ -754,6 +727,104 @@ function mountComponent(vnode, parent, ref, ctx, owner) {
 		);
 	vnode.el = child.element;
 	return vnode.el;
+}
+
+/** Capture one component position for explicit error-view retry. */
+function componentFailureOwner(initialVnode, initialChild, parent, ctx, owner, preloaded) {
+	const state = { vnode: initialVnode, child: initialChild, active: true };
+	const position = {
+		isCurrent(view) {
+			return state.active && state.child === view && state.vnode.component === view;
+		},
+		update(vnode) {
+			state.vnode = vnode;
+		},
+		failed(view) {
+			ctx.router?.__markViewFailed?.(view);
+		},
+		dispose(view) {
+			if (state.child === view) state.active = false;
+		},
+		async reconstruct(failed, placeholder) {
+			let view;
+			let mountedChildren = state.vnode.children;
+			const createdPinned = [];
+			const routedReplacements = [];
+			try {
+				view = new state.vnode.tag(ctx);
+				view.__setFailureOwner?.(position);
+				if (preloaded) {
+					await view.preload({
+						params: failed.params,
+						props: state.vnode.props,
+						route: failed.route,
+					});
+					mountedChildren = [];
+					for (const child of state.vnode.children) {
+						mountedChildren.push(
+							await reconstructPinnedVNode(
+								child,
+								ctx,
+								failed.route,
+								createdPinned,
+								routedReplacements
+							)
+						);
+					}
+					await view.mount(parent, {
+						children: mountedChildren,
+						ref: placeholder,
+						preloaded: true,
+					});
+				} else {
+					await view.mount(parent, {
+						props: state.vnode.props,
+						children: state.vnode.children,
+						ref: placeholder,
+					});
+				}
+				return {
+					view,
+					commit() {
+						state.child = view;
+						state.vnode.component = view;
+						state.vnode.instance = preloaded ? view : null;
+						state.vnode.children = mountedChildren;
+						state.vnode.el = view.element;
+						ctx.router?.__replaceFailedView?.(failed, view);
+						for (const [oldView, freshView] of routedReplacements) {
+							ctx.router?.__replaceFailedView?.(oldView, freshView);
+						}
+					},
+				};
+			} catch (error) {
+				for (const fresh of createdPinned) fresh.destroy();
+				return { view, error };
+			}
+		},
+	};
+	return position;
+}
+
+/** Rebuild a router-pinned descendant vnode after its failed ancestor was destroyed. */
+async function reconstructPinnedVNode(vnode, ctx, route, created, replacements) {
+	if (!vnode?.isComponent || vnode.instance == null) return vnode;
+	const oldView = vnode.instance;
+	const freshView = new vnode.tag(ctx);
+	created.push(freshView);
+	await freshView.preload({
+		params: oldView.params,
+		props: vnode.props,
+		route: oldView.route ?? route,
+	});
+	const children = [];
+	for (const child of vnode.children) {
+		children.push(await reconstructPinnedVNode(child, ctx, route, created, replacements));
+	}
+	const rebuilt = new ViewNode(vnode.tag, vnode.props, children);
+	rebuilt.instance = freshView;
+	replacements.push([oldView, freshView]);
+	return rebuilt;
 }
 
 // ---- patch ------------------------------------------------------------------
@@ -795,6 +866,13 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 		// every render), and hence the placeholder read off the instance: this vnode's
 		// own `el` is the child's now-detached anchor.
 		const dead = oldVnode.component;
+		if (dead?.isDestroyed && dead.__hasErrorReplacement?.()) {
+			newVnode.component = dead;
+			newVnode.instance = oldVnode.instance;
+			dead.__retainFailurePosition?.(newVnode);
+			newVnode.el = dead.element;
+			return;
+		}
 		if (dead == null || dead.isDestroyed) {
 			const placeholder = dead?.__failedPlaceholder ?? oldVnode.el;
 			// Only an ATTACHED node is a usable insertion ref — insertBefore against a
@@ -806,8 +884,6 @@ export function patch(oldVnode, newVnode, parent, ctx, owner = null) {
 				ctx,
 				owner
 			);
-			const fallback = dead?.__failedFallback ?? placeholder?.__failedFallback;
-			if (fallback) unmount(fallback);
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				if (placeholder?.parentNode) devperfMutation();
 			}
@@ -908,6 +984,7 @@ function reassertSelectValue(el, attrs) {
  */
 function patchComponent(oldVnode, newVnode) {
 	const child = (newVnode.component = oldVnode.component);
+	child.__retainFailurePosition?.(newVnode);
 	const props = shallowEqual(oldVnode.props, newVnode.props) ? undefined : newVnode.props;
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		devperfComponentPatch(child, props === undefined);
@@ -959,21 +1036,17 @@ function unmount(vnode) {
 		// placeholder (mountComponent's catch nulled `component`). No instance to
 		// destroy — just drop the placeholder node so it doesn't linger in the DOM.
 		if (!child) {
-			const fallback = vnode.el?.__failedFallback;
-			if (fallback) unmount(fallback);
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				if (vnode.el?.parentNode) devperfMutation();
 			}
 			vnode.el?.remove();
 			return;
 		}
-		// A boundary face mounted beside a destroyed instance's recovery comment is
-		// outside the child's cleared ViewManager tree. If the owner removes this
-		// position instead of retrying it, tear that face down explicitly.
-		if (child.isDestroyed && child.__failedFallback) {
-			unmount(child.__failedFallback);
-			child.__failedPlaceholder?.remove();
-			child.__failedFallback = null;
+		// A failed position is represented by its destroyed original instance. A
+		// parent removal destroys the fresh error view and its marker exactly once.
+		if (child.isDestroyed) {
+			child.destroy();
+			vnode.el?.remove();
 			return;
 		}
 		// LEAVE animation (constellation/doc/DOC-SPEC.md §12): when the leaving
@@ -1064,7 +1137,7 @@ function releaseSubtree(vnode) {
  * still the only record of WHAT exists: nested component instances (and their store
  * subscriptions), element refs (D72), `outside` listeners parked on document (D86),
  * and portaled content living in the outlet. Raw node removal releases none of it,
- * and once the manager adopts the boundary face nothing can reach these trees again.
+	 * and once the manager adopts the error view nothing can reach these trees again.
  *
  * Both trees are walked because the aborted patch may have mounted components from
  * the incoming tree while leaving the outgoing tree's components live. An instance
@@ -1073,7 +1146,7 @@ function releaseSubtree(vnode) {
  * deletes the keys it detaches, so the second visit is a no-op.
  *
  * This runs on an already-failing path, so every subtree is guarded: a throwing
- * user beforeDestroy()/ref must not stop the boundary face from mounting.
+	 * user beforeDestroy()/ref must not stop the error view from mounting.
  */
 function releaseAborted(trees) {
 	if (!trees) return;

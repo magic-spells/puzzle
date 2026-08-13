@@ -1250,9 +1250,8 @@ export class Router {
 
 		// keep = shared chain PREFIX length by node object identity. Reused
 		// ancestors keep their instances; everything from `keep` down is fresh.
-		// An INVALIDATED chain (an error boundary rendered over router-owned
-		// content and destroyed it — __invalidateChain) can reuse nothing: keep
-		// stays 0 so every level is rebuilt.
+		// A chain containing a failed routed view can reuse nothing: keep stays 0
+		// so every level is rebuilt on the next navigation.
 		let keep = 0;
 		if (cur && !cur.chainInvalid) {
 			const a = cur.entry.chain;
@@ -1309,9 +1308,9 @@ export class Router {
 		// preload is STARTED here but not awaited, the commit proceeds, and the
 		// preloaded mount renders the skeleton until data() commits. The D19
 		// failure guarantee narrows for these: the URL has already moved when a
-		// skeleton view's data() rejects (logged; the skeleton stays up — surfacing
-		// load errors is the view's job). Reused ancestors always gate: they show
-		// real content, which must never regress mid-navigation.
+		// skeleton view's data() rejects (reported, then replaced at that exact
+		// position by the app error view or recovery placeholder). Reused ancestors
+		// always gate: they show real content, which must never regress mid-navigation.
 		//
 		// SSG takeover (v1.33, D67) exception: on navigation #0 of a prerendered app
 		// (no `cur` AND the container still carries the `data-puzzle-ssg` marker
@@ -1367,7 +1366,7 @@ export class Router {
 					const p = v.preload({ params, props: {}, route: to });
 					if (hasSkeleton(v)) {
 						p.catch((err) => {
-							reportError(
+							const info = reportError(
 								this.#ctx,
 								err,
 								{ phase: 'navigation', view: v, route: to },
@@ -1377,10 +1376,10 @@ export class Router {
 							// Straight through: preload() runs off-DOM, so this rejection can
 							// land before mount() ever creates the view's ViewManager. The
 							// view buffers the error in that window and flushes it at the end
-							// of mount() (PuzzleView #pendingBoundaryError) — deferring by a
+							// of mount() (PuzzleView #pendingFailure) — deferring by a
 							// microtask never reached the mount and left the user on the
 							// skeleton forever.
-							v.__renderErrorBoundary?.(err);
+							v.__showErrorView?.(err, info);
 						});
 					} else {
 						loads.push(p);
@@ -1860,6 +1859,7 @@ export class Router {
 						// Mounted directly (the ViewManager does not auto-play it in) → the
 						// router plays it in as the animator.
 						const restoreTakeover = this.#takeoverSSG(topView);
+						this.#ownDirectFailure(topView, next);
 						this.#observeMount(
 							topView.mount(this.#container, { children: rootVnode.children, preloaded: true }),
 							topView,
@@ -1907,6 +1907,7 @@ export class Router {
 						// this fresh layout mounts ALONGSIDE them (duplicated page). A marker-
 						// less app makes this a no-op and the branch stays byte-identical.
 						const restoreTakeover = this.#takeoverSSG(topView);
+						this.#ownDirectFailure(layout, next);
 						this.#observeMount(
 							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
 							layout,
@@ -1919,6 +1920,7 @@ export class Router {
 						// INITIAL nav: a layout does NOT animate on first paint — the topmost
 						// view plays in exactly once via the ViewManager's slot-child chain.
 						const restoreTakeover = this.#takeoverSSG(topView);
+						this.#ownDirectFailure(layout, next);
 						this.#observeMount(
 							layout.mount(this.#container, { children: [rootVnode], preloaded: true }),
 							layout,
@@ -1965,51 +1967,127 @@ export class Router {
 		}
 	}
 
-	/**
-	 * INTERNAL (D145) — an error boundary is about to render over content the
-	 * router owns. `boundaryView` is the boundary itself; everything the router
-	 * committed BELOW it is destroyed by that render, so the committed chain can
-	 * no longer be reused: drop the instance bookkeeping and force the next
-	 * navigation to rebuild every level (`keep` degrades to 0 via `chainInvalid`,
-	 * which is checked before the prefix walk so an emptied `views` array is never
-	 * indexed).
-	 *
-	 * Instances are dropped from `views`/`keys` only where they are actually
-	 * destroyed — the surviving prefix stays, because #swap resolves the OUTGOING
-	 * unit it tears down from `cur.layout`/`cur.views[keep]`. Dropping a live
-	 * instance there would strand its DOM (error face included) in the container
-	 * and the next navigation would mount alongside it. Same reason the layout
-	 * reference is kept when the layout is the boundary: it is flagged unreusable
-	 * (`layoutInvalid`) so a fresh one is built, while the old one still resolves
-	 * as the animator and is destroyed.
-	 *
-	 * Underscore-prefixed: internal runtime plumbing, not public router API.
-	 */
-	__invalidateChain(boundaryView) {
+	/** INTERNAL — keep failed routed chains/layouts out of the reuse prefix. */
+	__markViewFailed(view) {
 		const st = this.#state;
 		if (!st) return;
-		st.chainInvalid = true;
-		const i = boundaryView ? st.views.indexOf(boundaryView) : -1;
-		if (i !== -1) {
-			// A routed ancestor is the boundary: it survives (it draws the face);
-			// every level below it is destroyed by that render.
-			st.views = st.views.slice(0, i + 1);
-			st.keys = st.keys.slice(0, i + 1);
-			return;
-		}
-		if (st.layout) {
-			// The layout — or a plain component between it and the chain — is the
-			// boundary, so no routed view survives. The layout instance itself is
-			// still on screen; keep the reference, refuse the reuse.
-			st.views = [];
-			st.keys = [];
+		if (st.layout === view) {
 			st.layoutInvalid = true;
-			return;
+			st.chainInvalid = true;
+		} else if (st.views.includes(view)) {
+			st.chainInvalid = true;
 		}
-		// No layout: chain level 0 is router-mounted into the container, so a
-		// boundary nested inside it survives with it. Keep exactly that level.
-		st.views = st.views.slice(0, 1);
-		st.keys = st.keys.slice(0, 1);
+	}
+
+	/** INTERNAL — replace recovered routed bookkeeping and allow reuse again. */
+	__replaceFailedView(failed, fresh) {
+		const st = this.#state;
+		if (!st) return;
+		if (st.layout === failed) {
+			st.layout = fresh;
+			st.layoutInvalid = false;
+		} else {
+			const index = st.views.indexOf(failed);
+			if (index !== -1) st.views[index] = fresh;
+		}
+		st.chainInvalid = !!st.layoutInvalid || st.views.some((view) => view.isDestroyed);
+	}
+
+	/** Capture a directly-mounted routed root/layout for replacement + retry. */
+	#ownDirectFailure(view, next) {
+		const index = next.views.indexOf(view);
+		const layout = next.layout === view;
+		const position = {
+			active: true,
+			isCurrent: (candidate) => {
+				if (!position.active) return false;
+				const st = this.#state;
+				return layout
+					? next.layout === candidate || st?.layout === candidate
+					: next.views[index] === candidate || st?.views[index] === candidate;
+			},
+			failed: (candidate) => {
+				if (layout) {
+					next.layoutInvalid = true;
+					next.chainInvalid = true;
+				} else {
+					next.chainInvalid = true;
+				}
+				this.__markViewFailed(candidate);
+			},
+			dispose: (candidate) => {
+				const st = this.#state;
+				const ownsPosition = layout
+					? next.layout === candidate || st?.layout === candidate
+					: next.views[index] === candidate || st?.views[index] === candidate;
+				if (ownsPosition) position.active = false;
+			},
+			reconstruct: async (_failed, placeholder) => {
+				const freshViews = [];
+				let freshLayout = null;
+				let primary = null;
+				try {
+					for (const node of next.entry.chain) {
+						const fresh = new node.view(this.#ctx);
+						freshViews.push(fresh);
+						await fresh.preload({ params: next.params, props: {}, route: next.to });
+					}
+
+					let childVnode = null;
+					for (let i = next.entry.chain.length - 1; i >= 0; i--) {
+						const vnode = new ViewNode(
+							next.entry.chain[i].view,
+							{ key: next.keys[i] },
+							childVnode ? [childVnode] : []
+						);
+						vnode.instance = freshViews[i];
+						childVnode = vnode;
+					}
+
+					if (layout) {
+						freshLayout = new next.entry.layout(this.#ctx);
+						primary = freshLayout;
+						freshLayout.__setFailureOwner?.(position);
+						await freshLayout.preload({ params: next.params, props: {}, route: next.to });
+						await freshLayout.mount(this.#container, {
+							children: [childVnode],
+							ref: placeholder,
+							preloaded: true,
+						});
+					} else {
+						primary = freshViews[0];
+						primary.__setFailureOwner?.(position);
+						await primary.mount(this.#container, {
+							children: childVnode.children,
+							ref: placeholder,
+							preloaded: true,
+						});
+					}
+					return {
+						view: primary,
+						commit: () => {
+							next.views = freshViews;
+							if (layout) {
+								next.layout = freshLayout;
+							}
+							next.chainInvalid = false;
+							next.layoutInvalid = false;
+							if (this.#state) {
+								this.#state.views = freshViews;
+								if (layout) this.#state.layout = freshLayout;
+								this.#state.chainInvalid = false;
+								this.#state.layoutInvalid = false;
+							}
+						},
+					};
+				} catch (error) {
+					freshLayout?.destroy();
+					for (const fresh of freshViews) fresh.destroy();
+					return { view: primary ?? freshViews.at(-1), error };
+				}
+			},
+		};
+		view.__setFailureOwner?.(position);
 	}
 
 	/**
@@ -2017,29 +2095,29 @@ export class Router {
 	 * render()/mounted() throw inside it surfaces as a REJECTED promise (not a sync
 	 * throw — the commit block keeps running, no rollback: D19/D61). Left
 	 * unobserved that becomes an unhandled rejection; log it once here instead. The
-	 * failed view is still committed to #state, so a later navigation replaces and
-	 * destroys it normally. On navigation-zero SSG takeover the error boundary gets
+	 * failed view is still represented in #state, so a later navigation replaces its
+	 * position normally. On navigation-zero SSG takeover the error view gets
 	 * the first refusal: restoreTakeover puts the exact prerendered nodes + marker
-	 * back ONLY when no boundary rendered (including when the boundary's own render
+	 * back ONLY when no error view rendered (including when the error view's own render
 	 * threw), because the restore's replaceChildren() detaches the failed view's
 	 * ViewManager anchor — restoring first guaranteed the one path meant to surface
-	 * the failure could not draw. When a boundary does render, the prerendered
+	 * the failure could not draw. When an error view does render, the prerendered
 	 * content stays cleared and the user sees the error face. The committed failed
-	 * instance remains router-owned either way.
+	 * position remains router-owned either way.
 	 * (Child views mounted through the ViewManager's keyed patch are already observed
 	 * there; this covers the three mounts the router drives directly: bare root view,
 	 * layout swap, initial-nav layout.)
 	 */
 	#observeMount(p, view, route, restoreTakeover = null) {
-		Promise.resolve(p).catch((err) => {
-			reportError(
+		Promise.resolve(p).catch(async (err) => {
+			const info = reportError(
 				this.#ctx,
 				err,
 				{ phase: 'mount', view, route },
-				'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+				'[puzzle] routed view mount failed — the failed position was replaced:',
 				err
 			);
-			const shown = view.__renderErrorBoundary?.(err);
+			const shown = await view.__showErrorView?.(err, info);
 			if (!shown) restoreTakeover?.();
 		});
 	}
@@ -2057,8 +2135,8 @@ export class Router {
 	 * the incoming top view's ENTER animation so content the user is already
 	 * reading doesn't re-animate. The returned callback restores the exact nodes
 	 * and marker if the async mount promise rejects on render()/mounted() AND no
-	 * error boundary drew a face in the cleared container (#observeMount decides —
-	 * the restore would detach the anchor the boundary needs).
+	 * error view drew a face in the cleared container (#observeMount decides —
+	 * the restore would detach the anchor the replacement needs).
 	 * `topView` is views[keep] — the view the ViewManager auto-plays in (behind a
 	 * layout) or the router plays in directly (no layout). A non-SSG app has no
 	 * marker, so this is a no-op and behavior is byte-identical.
@@ -2219,6 +2297,8 @@ export class Router {
 			keys: next.keys,
 			layout: next.layout,
 			layoutClass: next.entry.layout,
+			chainInvalid: !!next.chainInvalid,
+			layoutInvalid: !!next.layoutInvalid,
 		};
 		// A real commit ends any redirect chain. Blocks, failures, unmatched
 		// targets, and same-path redirect no-ops intentionally do not reset it.
@@ -2674,25 +2754,25 @@ export class Router {
 			const p = view.refresh({ params, route });
 			if (p && typeof p.catch === 'function') {
 				p.catch((err) => {
-					reportError(
+					const info = reportError(
 						this.#ctx,
 						err,
 						{ phase: 'refresh', view, route },
 						'[puzzle] layout refresh failed:',
 						err
 					);
-					view.__renderErrorBoundary?.(err);
+					view.__showErrorView?.(err, info);
 				});
 			}
 		} catch (err) {
-			reportError(
+			const info = reportError(
 				this.#ctx,
 				err,
 				{ phase: 'refresh', view, route },
 				'[puzzle] layout refresh failed:',
 				err
 			);
-			view.__renderErrorBoundary?.(err);
+			view.__showErrorView?.(err, info);
 		}
 	}
 

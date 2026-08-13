@@ -9,7 +9,7 @@
  * { transitionMode } (overlapping route transitions, D56), v1.31 with
  * { beforeMount, mounted, beforeUnmount } (app lifecycle hooks, D66), and v1.56
  * with { focusBehavior } (router focus + route announcement, D93), plus
- * { onError } for framework-contained application errors.
+ * { onError, errorView } for framework-contained application errors.
  * Everything else (app-level settings/computed/events/methods) stays deferred
  * post-v1 (re-rejected at the D66 triage — SPEC §34).
  *
@@ -29,7 +29,8 @@ import { makeFormatterRegistry } from './formatters.js';
 import { Router } from './router/router.js';
 import { snapshotToStorage, restoreStoreFromStorage, restoreViewsFromStorage } from './devstate.js';
 import { devtoolsAppMounted, devtoolsAppUnmounted } from './devtools.js';
-import { reportError, setErrorHandler } from './errors.js';
+import { reportError, setErrorConfig } from './errors.js';
+import { PuzzleView } from './views/PuzzleView.js';
 import { setPortalHost, teardownPortals } from './views/viewManager.js';
 
 // Dev HMR guard (constellation/doc/DOC-SPEC.md §27, D57): gates the state-preserving reload
@@ -143,8 +144,19 @@ export class PuzzleApp {
 	 * @param {Function} [config.onError] app error hook:
 	 *   `onError(error, { phase, view, route })`, called for framework-contained
 	 *   application errors. A throwing/rejecting hook is logged and swallowed
+	 * @param {typeof PuzzleView} [config.errorView] ordinary compiled PuzzleView
+	 *   constructor mounted at a failed view's position with
+	 *   `{ error, info, retry }` props
 	 */
 	constructor(config = {}) {
+		const ErrorView = config.errorView;
+		if (
+			ErrorView != null &&
+			(typeof ErrorView !== 'function' ||
+				(ErrorView !== PuzzleView && !(ErrorView.prototype instanceof PuzzleView)))
+		) {
+			throw new Error('[puzzle] config.errorView must be a PuzzleView constructor when set');
+		}
 		this.config = config;
 		this.ctx = null;
 		this.router = null;
@@ -237,6 +249,7 @@ export class PuzzleApp {
 			beforeMount,
 			mounted,
 			onError,
+			errorView,
 		} = this.config;
 
 		// 1. Resolve the mount element — a selector string or an Element.
@@ -295,7 +308,7 @@ export class PuzzleApp {
 		}
 
 		this.ctx = { store: this.#store, router: this.router, formatters: this.formatters };
-		setErrorHandler(this.ctx, onError);
+		setErrorConfig(this.ctx, onError, errorView);
 
 		// Claim mounted BEFORE the async start(): the initial navigation may await a
 		// slow data(), and an unmount() during that window must actually tear down.
@@ -538,6 +551,7 @@ export class PuzzleApp {
 		teardownPortals();
 		if (this._container) this._container.replaceChildren();
 
+		setErrorConfig(this.ctx, null, null);
 		this.ctx = null;
 		this.#store = null; // getter throws again post-unmount (store torn down)
 		this.router = null;

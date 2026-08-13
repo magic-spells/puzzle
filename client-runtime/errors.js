@@ -6,12 +6,22 @@
  * same reporter without widening the public context surface.
  */
 
-const HANDLERS = new WeakMap();
+const CONFIG = new WeakMap();
 
-/** Register the app's optional onError hook for one mounted ctx lifetime. */
+/** Register the app's error config for one mounted ctx lifetime. */
+export function setErrorConfig(ctx, handler, errorView) {
+	if (typeof handler === 'function' || errorView) CONFIG.set(ctx, { handler, errorView });
+	else CONFIG.delete(ctx);
+}
+
+/** Update only the reporter while preserving the app-level error view. */
 export function setErrorHandler(ctx, handler) {
-	if (typeof handler === 'function') HANDLERS.set(ctx, handler);
-	else HANDLERS.delete(ctx);
+	setErrorConfig(ctx, handler, CONFIG.get(ctx)?.errorView);
+}
+
+/** The app's ordinary PuzzleView constructor used for replacement error UI. */
+export function getErrorView(ctx) {
+	return (ctx && CONFIG.get(ctx)?.errorView) ?? null;
 }
 
 /**
@@ -20,17 +30,16 @@ export function setErrorHandler(ctx, handler) {
  * onError is contained here and is never sent through the funnel recursively.
  */
 export function reportError(ctx, error, info, ...consoleArgs) {
-	const handler = ctx && HANDLERS.get(ctx);
-	if (!handler) {
-		if (consoleArgs.length) console.error(...consoleArgs);
-		return;
-	}
-
+	const handler = ctx && CONFIG.get(ctx)?.handler;
 	const stableInfo = Object.freeze({
 		phase: info.phase,
 		view: info.view ?? null,
 		route: info.route ?? null,
 	});
+	if (!handler) {
+		if (consoleArgs.length) console.error(...consoleArgs);
+		return stableInfo;
+	}
 
 	try {
 		const result = handler(error, stableInfo);
@@ -40,6 +49,7 @@ export function reportError(ctx, error, info, ...consoleArgs) {
 	} catch (handlerError) {
 		logHandlerError(handlerError);
 	}
+	return stableInfo;
 }
 
 function logHandlerError(error) {

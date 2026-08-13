@@ -18,11 +18,11 @@
  * - setData() → re-render only, data() does NOT re-run
  */
 
-import { ViewManager, plantFailedMountPlaceholder } from './viewManager.js';
+import { ViewManager } from './viewManager.js';
 import { playAnimation, prefersReducedMotion, isValidSpec, warnOnceForSpec } from './animate.js';
 import { observeVisible } from './visibility.js';
 import { registerView, unregisterView } from '../devstate.js';
-import { reportError } from '../errors.js';
+import { getErrorView, reportError } from '../errors.js';
 import {
 	devperfCanRender,
 	devperfMarkCause,
@@ -108,13 +108,16 @@ export class PuzzleView {
 	#bindPending = null;
 	#bindWarned = null;
 	#vm = null;
-	// Nearest owning PuzzleView for error-boundary lookup. Set by the parent's
-	// ViewManager when it instantiates/adopts this component; null for app roots.
-	#errorParent = null;
-	// An error whose boundary resolved to THIS instance before it had a
-	// ViewManager (a pre-mount preload/data() rejection). mount() flushes it once
-	// the manager exists and the first render has been attempted.
-	#pendingBoundaryError = null;
+	// Position ownership for D145's app-level error view. The ViewManager or Router
+	// captures the constructor/props/slots/route inputs and supplies liveness +
+	// reconstruction callbacks; the failed instance only owns the visible
+	// replacement and its identity-stable retry callback.
+	#failureOwner = null;
+	#mountInputs = null;
+	#pendingFailure = null;
+	#errorState = null;
+	#isErrorView = false;
+	#errorViewFailed = null;
 	#mounted = false;
 	// Anchor-race gate (Change A): set true when the non-skeleton async mount()
 	// branch resumes to find its first render superseded (no commit landed) —
@@ -517,105 +520,190 @@ export class PuzzleView {
 		}
 	}
 
-	/**
-	 * INTERNAL — record the owning view for nearest-boundary lookup. ViewManager
-	 * calls this when it creates or adopts a child component.
-	 */
-	__setErrorParent(parent) {
-		this.#errorParent = parent ?? null;
+	/** INTERNAL — install the parent/router owner for this exact mounted position. */
+	__setFailureOwner(owner) {
+		this.#failureOwner = owner ?? null;
 	}
 
-	/**
-	 * Resolve and render the nearest optional `errorContent(error)` boundary.
-	 *
-	 * `errorContent` is a script-side member returning one ViewNode tree; it needs
-	 * no compiler syntax. A boundary handles its own failures and descendants,
-	 * with the nearest implementation winning. Returning null declines the error
-	 * and lets lookup continue outward.
-	 *
-	 * The two-step prepare/show split preserves D115/D136 ownership: component
-	 * mount recovery captures the fallback before destroying the failed instance,
-	 * then mounts that face beside the existing recovery placeholder. The owning
-	 * parent retries by calling refresh(), whose next patch mounts a fresh instance
-	 * through that same placeholder and removes the fallback.
-	 */
-	__prepareErrorBoundary(error) {
-		let boundary = this;
-		let boundaryError = error;
-		while (boundary) {
-			if (typeof boundary.errorContent === 'function') {
-				try {
-					const tree = boundary.errorContent(boundaryError);
-					if (tree) return { boundary, tree, error: boundaryError };
-				} catch (err) {
-					reportError(
-						boundary.ctx,
-						err,
-						{ phase: 'boundary', view: boundary, route: boundary.route },
-						'[puzzle] errorContent() failed:',
-						err
-					);
-					boundaryError = err;
-				}
-			}
-			boundary = boundary.#errorParent;
+	/** INTERNAL — keep a same-identity parent patch attached to the error replacement. */
+	__retainFailurePosition(vnode) {
+		this.#failureOwner?.update?.(vnode);
+		if (this.#mountInputs) {
+			this.#mountInputs.props = vnode.props;
+			this.#mountInputs.children = vnode.children;
 		}
-		return null;
 	}
 
-	/** INTERNAL — display a boundary result prepared by __prepareErrorBoundary. */
-	__showErrorBoundary(captured, { failedMount = false, placeholder = null } = {}) {
-		if (!captured) return false;
-		const { boundary, tree } = captured;
+	/** INTERNAL — whether this failed position is waiting for an explicit retry. */
+	__hasErrorReplacement() {
+		return !!this.#errorState?.active;
+	}
+
+	/** INTERNAL — error-view instances report once and stop instead of recursing. */
+	__markErrorView(onFailed) {
+		this.#isErrorView = true;
+		this.#errorViewFailed = onFailed;
+	}
+
+	/** INTERNAL — preserve the manager's exact position before destroying this view. */
+	__plantFailurePlaceholder() {
+		return this.#vm?.plantFailurePlaceholder() ?? null;
+	}
+
+	/** INTERNAL — tear down a replacement when its parent/router removes the position. */
+	__disposeFailurePosition() {
+		const state = this.#errorState;
+		if (state?.active) {
+			state.active = false;
+			state.errorView?.destroy();
+			state.errorView = null;
+			state.placeholder?.remove();
+			this.#failureOwner?.dispose?.(this);
+		}
+		this.__failedPlaceholder?.remove();
+		this.__failedPlaceholder = null;
+	}
+
+	/**
+	 * INTERNAL — destroy the failed view and mount the app's ordinary error view at
+	 * this exact position. Returns whether that error view mounted successfully.
+	 */
+	async __showErrorView(error, info, { placeholder = null } = {}) {
+		if (!this.#vm) {
+			if (!this.#destroyed) this.#pendingFailure = { error, info };
+			return false;
+		}
+		if (this.#destroyed && !this.#errorState?.active) return false;
+		if (this.#errorState?.active) return !!this.#errorState.errorView;
+		if (this.#failureOwner && !this.#failureOwner.isCurrent?.(this)) return false;
+
+		placeholder ??= this.__plantFailurePlaceholder();
+		this.#failureOwner?.failed?.(this);
+		this.destroy();
+		if (placeholder) this.__failedPlaceholder = placeholder;
+
+		const ErrorView = getErrorView(this.ctx);
+		if (!ErrorView) return false;
+
+		const state = {
+			active: true,
+			errorView: null,
+			placeholder,
+			inFlight: false,
+			retry: null,
+		};
+		state.retry = () => this.#retryErrorView(state);
+		this.#errorState = state;
+		return this.#mountErrorView(state, ErrorView, error, info);
+	}
+
+	async #mountErrorView(state, ErrorView, error, info) {
+		let errorView;
 		try {
-			if (failedMount && boundary === this) {
-				const mountedTree = this.#vm?.mountErrorFallback(tree, placeholder, this.#errorParent);
-				if (!mountedTree) return false;
-				this.__failedFallback = mountedTree;
-				if (placeholder) placeholder.__failedFallback = mountedTree;
-			} else {
-				if (!boundary.#vm || boundary.#destroyed) {
-					// PRE-MOUNT failure on this instance's own boundary: the router starts
-					// a skeleton view's preload() un-awaited, so a data() rejection can land
-					// before mount() ever creates the ViewManager. Buffer the error rather
-					// than dropping it — mount() flushes it once #vm exists, which is the
-					// difference between the declared errorContent() and an eternal
-					// skeleton. An ANCESTOR boundary is already mounted, so it renders
-					// immediately and never buffers (no double-fire).
-					if (boundary === this && !this.#vm && !this.#destroyed) {
-						this.#pendingBoundaryError = captured.error ?? null;
-					}
-					return false;
-				}
-				if (boundary !== this) {
-					// The ancestor's render unmounts — and DESTROYS — everything under it,
-					// including a routed chain the Router owns and still names in its
-					// committed state. Tell the router first so the next navigation
-					// rebuilds from scratch instead of reusing destroyed instances.
-					this.ctx?.router?.__invalidateChain?.(boundary);
-				}
-				// A patch threw partway through this manager's last render, so its tree
-				// no longer describes the DOM (D145/F7): mount the boundary face fresh
-				// over the corrupt range instead of diffing against a stale tree.
-				if (boundary.#vm.treeUnknown) boundary.#vm.renderFresh(tree);
-				else boundary.#vm.render(tree);
-			}
-			return true;
+			errorView = new ErrorView(this.ctx);
 		} catch (err) {
 			reportError(
-				boundary.ctx,
+				this.ctx,
 				err,
-				{ phase: 'boundary', view: boundary, route: boundary.route },
-				'[puzzle] errorContent() render failed:',
+				{ phase: 'error-view', route: info.route },
+				'[puzzle] error view failed:',
 				err
 			);
 			return false;
 		}
+		state.errorView = errorView;
+		errorView.__markErrorView(() => {
+			if (state.errorView === errorView) state.errorView = null;
+			errorView.destroy();
+		});
+		try {
+			await errorView.mount(this.#vm.container, {
+				props: { error, info, retry: state.retry },
+				ref: state.placeholder,
+			});
+			if (!state.active || (this.#failureOwner && !this.#failureOwner.isCurrent?.(this))) {
+				errorView.destroy();
+				if (state.errorView === errorView) state.errorView = null;
+				return false;
+			}
+			return !errorView.isDestroyed;
+		} catch (err) {
+			reportError(
+				this.ctx,
+				err,
+				{ phase: 'error-view', view: errorView, route: info.route },
+				'[puzzle] error view failed:',
+				err
+			);
+			errorView.destroy();
+			if (state.errorView === errorView) state.errorView = null;
+			return false;
+		}
 	}
 
-	/** INTERNAL convenience for live failures that need no D115 teardown first. */
-	__renderErrorBoundary(error) {
-		return this.__showErrorBoundary(this.__prepareErrorBoundary(error));
+	async #retryErrorView(state) {
+		if (!state.active || state.inFlight) return;
+		if (this.#failureOwner && !this.#failureOwner.isCurrent?.(this)) return;
+		state.inFlight = true;
+		state.errorView?.destroy();
+		state.errorView = null;
+
+		try {
+			const result = this.#failureOwner?.reconstruct
+				? await this.#failureOwner.reconstruct(this, state.placeholder)
+				: await this.#reconstructSelf(state.placeholder);
+			if (!state.active || (this.#failureOwner && !this.#failureOwner.isCurrent?.(this))) {
+				result?.view?.destroy();
+				return;
+			}
+			if (result?.error) {
+				const route = result.view?.route ?? this.#mountInputs?.route ?? null;
+				const info = reportError(
+					this.ctx,
+					result.error,
+					{ phase: 'mount', view: result.view, route },
+					'[puzzle] error-view retry failed:',
+					result.error
+				);
+				result.view?.destroy();
+				await this.#mountErrorView(state, getErrorView(this.ctx), result.error, info);
+				return;
+			}
+			result?.commit?.();
+			state.active = false;
+			state.placeholder?.remove();
+			this.__failedPlaceholder = null;
+			this.#errorState = null;
+		} finally {
+			state.inFlight = false;
+		}
+	}
+
+	async #reconstructSelf(placeholder) {
+		const inputs = this.#mountInputs;
+		let view;
+		try {
+			view = new this.constructor(this.ctx);
+			view.__setFailureOwner(this.#failureOwner);
+			if (inputs.preloaded) {
+				await view.preload({ params: inputs.params, props: inputs.props, route: inputs.route });
+				await view.mount(inputs.container, {
+					children: inputs.children,
+					ref: placeholder,
+					preloaded: true,
+				});
+			} else {
+				await view.mount(inputs.container, {
+					params: inputs.params,
+					props: inputs.props,
+					children: inputs.children,
+					ref: placeholder,
+				});
+			}
+			return { view };
+		} catch (error) {
+			return { view, error };
+		}
 	}
 
 	/**
@@ -624,7 +712,12 @@ export class PuzzleView {
 	 * a parent's sibling insertion refs stay valid (constellation/doc/DOC-APP-ANATOMY.md §4).
 	 */
 	get element() {
-		return this.#vm?.element ?? null;
+		return (
+			this.#errorState?.errorView?.element ??
+			(this.__failedPlaceholder?.parentNode ? this.__failedPlaceholder : null) ??
+			this.#vm?.element ??
+			null
+		);
 	}
 
 	/**
@@ -702,6 +795,14 @@ export class PuzzleView {
 			this.#props = props;
 		}
 		this.#children = children;
+		this.#mountInputs = {
+			container,
+			params: preloaded ? this.#params : params,
+			props: preloaded ? this.#props : props,
+			children,
+			preloaded,
+			route: this.#route,
+		};
 		this.#vm.anchorAt(ref);
 
 		// preloaded: created() + data() already ran in preload() (constellation/doc/DOC-APP-ANATOMY.md
@@ -752,27 +853,27 @@ export class PuzzleView {
 				// refresh committed normally, #loaded is already true → complete inline.
 				if (!this.#loaded) {
 					this.#pendingMountHook = true;
-					this.#flushPendingBoundaryError();
+					this.#flushPendingFailure();
 					return this;
 				}
 			}
 		}
 
 		this.#completeMount();
-		this.#flushPendingBoundaryError();
+		this.#flushPendingFailure();
 		return this;
 	}
 
 	/**
-	 * Surface an error buffered before this instance had a ViewManager (see
-	 * #pendingBoundaryError). Runs once — the field is cleared BEFORE the render,
-	 * so a boundary that throws while drawing cannot re-enter this flush.
+	 * Surface an already-reported error buffered before this instance had a
+	 * ViewManager. Runs once; the error view receives the exact frozen info object
+	 * the reporting funnel saw.
 	 */
-	#flushPendingBoundaryError() {
-		const err = this.#pendingBoundaryError;
-		if (err === null || this.#destroyed) return;
-		this.#pendingBoundaryError = null;
-		this.__renderErrorBoundary(err);
+	#flushPendingFailure() {
+		const pending = this.#pendingFailure;
+		if (!pending || this.#destroyed) return;
+		this.#pendingFailure = null;
+		this.__showErrorView(pending.error, pending.info);
 	}
 
 	/**
@@ -1132,24 +1233,24 @@ export class PuzzleView {
 	}
 
 	#handleViewFailure(message, err, phase) {
-		reportError(
+		const info = reportError(
 			this.ctx,
 			err,
-			{ phase, view: this, route: this.route },
+			{ phase: this.#isErrorView ? 'error-view' : phase, view: this, route: this.route },
 			message,
 			err
 		);
-		const boundary = this.__prepareErrorBoundary(err);
-		if (!this.#pendingMountHook || this.#destroyed) {
-			this.__showErrorBoundary(boundary);
+		if (this.#isErrorView) {
+			const marker = this.__plantFailurePlaceholder();
+			this.#errorViewFailed?.();
+			marker?.remove();
 			return;
 		}
-		this.#pendingMountHook = false;
-		this.#enterPending = false;
-		const placeholder = plantFailedMountPlaceholder(this);
-		this.destroy();
-		if (placeholder) this.__failedPlaceholder = placeholder;
-		this.__showErrorBoundary(boundary, { failedMount: true, placeholder });
+		if (this.#pendingMountHook) {
+			this.#pendingMountHook = false;
+			this.#enterPending = false;
+		}
+		this.__showErrorView(err, info);
 	}
 
 	/**
@@ -1161,7 +1262,10 @@ export class PuzzleView {
 	 * ANIMATED teardown, call destroyAnimated() instead.
 	 */
 	destroy() {
-		if (this.#destroyed) return;
+		if (this.#destroyed) {
+			this.__disposeFailurePosition();
+			return;
+		}
 		this.#destroyed = true;
 		// Dev HMR (constellation/doc/DOC-SPEC.md §27, D57): leave the live-view registry so a
 		// snapshot never keys a torn-down instance. Paired with the mount() add.
@@ -2042,14 +2146,7 @@ export class PuzzleView {
 			try {
 				this.#renderNow();
 			} catch (err) {
-				reportError(
-					this.ctx,
-					err,
-					{ phase: 'render', view: this, route: this.route },
-					'[puzzle] render update failed:',
-					err
-				);
-				this.__renderErrorBoundary(err);
+				this.#handleViewFailure('[puzzle] render update failed:', err, 'render');
 			}
 		});
 	}

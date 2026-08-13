@@ -377,7 +377,7 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 		expect(el.textContent).toBe('n: 2');
 	});
 
-	it('a throwing update never wedges the scheduler', async () => {
+	it('a throwing update is contained and replaced by the default recovery placeholder', async () => {
 		let boom = true;
 		class V extends Counter {
 			beforeUpdate() { if (boom) { boom = false; throw new Error('boom'); } }
@@ -389,9 +389,9 @@ describe('PuzzleView — setData semantics (SPEC §4)', () => {
 
 		v.setData('count', 1);
 		v.flushUpdates(); // throws internally, reported, not rethrown
-		v.setData('count', 2);
-		v.flushUpdates();
-		expect(el.textContent).toBe('count: 2'); // scheduler recovered
+		expect(v.isDestroyed).toBe(true);
+		expect(el.textContent).toBe('');
+		expect(el.firstChild?.nodeType).toBe(Node.COMMENT_NODE);
 		errSpy.mockRestore();
 	});
 });
@@ -700,7 +700,7 @@ describe('PuzzleView — skeleton loading (v1.8, D39)', () => {
 		expect(el.textContent).toBe('second');
 	});
 
-	it('a data() rejection behind a skeleton is logged; the mount promise still resolves', async () => {
+	it('a data() rejection behind a skeleton is logged and leaves the recovery placeholder', async () => {
 		const gate = deferred();
 		const V = makeSkeletonView(gate);
 		const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -712,7 +712,9 @@ describe('PuzzleView — skeleton loading (v1.8, D39)', () => {
 			'[puzzle] data() failed behind a skeleton:',
 			expect.any(Error)
 		);
-		expect(el.querySelector('.is-loading')).toBeTruthy(); // skeleton stays up
+		expect(el.querySelector('.is-loading')).toBeNull();
+		expect(el.firstChild?.nodeType).toBe(Node.COMMENT_NODE);
+		expect(v.isDestroyed).toBe(true);
 		expect(v.loaded).toBe(false);
 		errSpy.mockRestore();
 	});
@@ -993,8 +995,8 @@ describe('controlled `checked` keeps its content attribute coherent', () => {
 
 // ---------------------------------------------------------------------------
 // D145 states "never patched over an unknown tree" as an invariant of the
-// MANAGER. A view with no errorContent above it leaves the boundary path unused,
-// so nothing clears treeUnknown; the next ordinary render must still not diff
+// MANAGER. A view with no app error view uses the invisible recovery placeholder;
+// a later owner-driven render must still not diff
 // against a currentTree whose vnodes point at detached nodes.
 // ---------------------------------------------------------------------------
 describe('ViewManager — an unknown tree is never patched over', () => {
@@ -1028,8 +1030,8 @@ describe('ViewManager — an unknown tree is never patched over', () => {
 		const v = await new Fragile().mount(el);
 		expect(el.querySelector('.row-1').textContent).toBe('D1');
 
-		// Abort a patch partway. No errorContent anywhere → the boundary path is
-		// never taken and treeUnknown stays set.
+		// Abort a patch partway. With no app error view, the replacement path leaves
+		// only the stable recovery position.
 		poisoned = true;
 		n = 2;
 		const logged = vi.spyOn(console, 'error').mockImplementation(() => {});

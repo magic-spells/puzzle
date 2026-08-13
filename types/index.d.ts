@@ -112,7 +112,7 @@ export type FocusBehavior = (
 	from: RouteSnapshot | null
 ) => Element | null | undefined | false;
 
-/** Stable metadata passed to PuzzleAppConfig.onError. */
+/** Stable metadata shared by PuzzleAppConfig.onError and the app error view. */
 export interface PuzzleErrorInfo {
 	readonly phase:
 		| 'mount'
@@ -120,7 +120,7 @@ export interface PuzzleErrorInfo {
 		| 'navigation'
 		| 'render'
 		| 'bind'
-		| 'boundary'
+		| 'error-view'
 		| 'enter'
 		| 'leave'
 		| 'transition'
@@ -135,6 +135,16 @@ export type PuzzleErrorHandler = (
 	error: unknown,
 	info: PuzzleErrorInfo
 ) => void | Promise<void>;
+
+/** Props passed to a fresh app-level error view at a failed view's position. */
+export interface PuzzleErrorViewProps {
+	readonly error: unknown;
+	readonly info: PuzzleErrorInfo;
+	readonly retry: () => void | Promise<void>;
+}
+
+/** Constructor accepted by PuzzleAppConfig.errorView. */
+export type PuzzleViewConstructor = new (ctx?: PuzzleContext) => PuzzleView;
 
 /** A single enter/leave animation spec (constellation/doc/DOC-SPEC.md §12). */
 export interface AnimationSpec {
@@ -410,14 +420,6 @@ export declare class PuzzleView {
 	refresh(): void | Promise<void>;
 
 	/**
-	 * Optional per-view error boundary. Return one ViewNode tree to replace this
-	 * view (or the failed child position) when this view or a descendant fails.
-	 * The nearest implementation wins. The surviving owner retries with
-	 * `refresh()`, which restores the normal render and remounts failed children.
-	 */
-	errorContent?(error: unknown): ViewNode | null | undefined;
-
-	/**
 	 * Event handlers referenced from the template (`@click={ handler }`).
 	 * A class field of arrow functions.
 	 */
@@ -678,6 +680,12 @@ export interface PuzzleAppConfig {
 	 * is logged and swallowed without recursion.
 	 */
 	onError?: PuzzleErrorHandler;
+	/**
+	 * Ordinary compiled PuzzleView constructor used for framework-contained error
+	 * UI. A fresh instance replaces only the failed view and receives
+	 * `{ error, info, retry }` props.
+	 */
+	errorView?: PuzzleViewConstructor;
 }
 
 /**
