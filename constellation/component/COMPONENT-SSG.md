@@ -19,8 +19,8 @@ connections:
   - FILE-STATIC-MOUNT
   - FILE-BUILD-PRERENDER
   - FILE-BUILD-PRERENDER-PAGES
-verified_at: '2026-07-25T05:23:59.370Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-13T04:52:57.013Z'
+verified_sha: e76df0fd873bd4739a754d9861197a9f24074a5f
 notes:
   - kind: state
     text: >-
@@ -46,6 +46,12 @@ notes:
       Re-verified after D113: RAWTEXT branch + escapeScriptJson reviewed against the card's
       serializer prose; ssg suites and full runs green at merged main.
     sha: bf351981a2ed01bf1e9c21f30acc529959247221
+  - kind: verified
+    text: >-
+      Empty-subset contract verified against ssg/index.js: the zero-page beforeMount fallback now
+      requires only === null, so only: [] builds no context while a full render with no writable
+      page still fails fast.
+    sha: e76df0fd873bd4739a754d9861197a9f24074a5f
 ---
 
 # Static generation runtime

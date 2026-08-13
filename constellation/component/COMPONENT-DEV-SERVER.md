@@ -1,7 +1,7 @@
 ---
 name: Dev server & watcher
 status: verified
-verified_at: '2026-07-25T05:24:00.566Z'
+verified_at: '2026-08-13T04:52:59.916Z'
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-DEVSTATE
@@ -18,7 +18,12 @@ notes:
       The warm Tailwind child runs in its own process group and can survive the parent. Serve must
       synchronously stop it on every return path; relying only on the cancellation goroutine can
       orphan the process when the CLI exits immediately after an error.
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+  - kind: verified
+    text: >-
+      Static-dev public classification aligned with the SPA bundle-input test and verified against
+      route_deps.go classify.
+    sha: e76df0fd873bd4739a754d9861197a9f24074a5f
+verified_sha: e76df0fd873bd4739a754d9861197a9f24074a5f
 ---
 
 # Dev server (`puzzle dev`)

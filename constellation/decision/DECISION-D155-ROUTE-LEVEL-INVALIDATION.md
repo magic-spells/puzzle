@@ -1,6 +1,6 @@
 ---
 name: D155 — route-level invalidation in static dev
-status: built
+status: verified
 connections:
   - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D148-PREVIEW-AND-STATIC-DEV
@@ -10,6 +10,15 @@ connections:
   - COMPONENT-SSG
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-BUILD-WATCH
+verified_at: '2026-08-13T04:52:53.633Z'
+verified_sha: e76df0fd873bd4739a754d9861197a9f24074a5f
+notes:
+  - kind: verified
+    text: >-
+      Public-asset and empty-subset contracts re-scoped and verified against the classifier: an
+      imported public module is attributed to its pages, a render-wide one forces a full render, a
+      deleted one forces a full render, and only a path in neither graph set is copy-only.
+    sha: e76df0fd873bd4739a754d9861197a9f24074a5f
 ---
 
 # D155 — route-level invalidation in static dev
