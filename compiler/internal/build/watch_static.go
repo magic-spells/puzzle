@@ -460,6 +460,9 @@ func (b *StaticWatchBuilder) attempt(plan renderPlan, prof *buildProfile) (strin
 		return "", fmt.Errorf("creating build staging dir under %s: %w", b.workTmp, err)
 	}
 	_ = os.Chmod(staging, 0o755)
+	// Same reason as the one-shot path: this tree's writes land in
+	// subdirectories, so only a heartbeat keeps it out of a sibling sweep.
+	defer keepWorkDirFresh(staging)()
 	if err := b.rebuildInto(staging, prof, plan); err != nil {
 		os.RemoveAll(staging)
 		return "", err

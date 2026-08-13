@@ -32,6 +32,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -150,4 +151,52 @@ func matchesAnyPrefix(name string, prefixes []string) bool {
 		}
 	}
 	return false
+}
+
+// workDirHeartbeat is how often a running build re-stamps its staging root. A
+// var, not a const, so a test can drive the ticker without driving the clock.
+var workDirHeartbeat = time.Minute
+
+// keepWorkDirFresh stamps dir's mtime now and every workDirHeartbeat until the
+// returned stop runs. stop is idempotent, so a `defer stop()` beside an earlier
+// explicit one is safe.
+//
+// The sweep ages the staging root's OWN inode, and a directory's mtime moves
+// only when an entry is created or removed directly inside it: writing
+// about/index.html or _puzzle/*.js into subdirectories does not touch it, and
+// neither does rewriting a top-level file whose name already exists. A build
+// that crosses staleWorkAge without adding a top-level name therefore looks
+// abandoned to a second puzzle process in the same repo — `puzzle dev`
+// alongside a manual build is the ordinary case this design declined to
+// forbid — which would then RemoveAll a tree that is still being written into.
+//
+// A pid or lock file remains the wrong instrument: pids are reused, and a
+// killed build cannot clean up its own marker. One utimes syscall a minute
+// makes the sweep's stated rule — nothing touched inside staleWorkAge is
+// removed — true as written, without walking a single descendant.
+func keepWorkDirFresh(dir string) (stop func()) {
+	touch := func() {
+		now := time.Now()
+		_ = os.Chtimes(dir, now, now)
+	}
+	touch()
+	// Read the interval HERE, not in the goroutine: the caller owns it, and a
+	// test that restores it after stop() would otherwise race the goroutine's
+	// own first read.
+	every := workDirHeartbeat
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		ticker := time.NewTicker(every)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				touch()
+			}
+		}
+	}()
+	return func() { once.Do(func() { close(done) }) }
 }
