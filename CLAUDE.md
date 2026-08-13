@@ -24,7 +24,7 @@ repo is shaped as a copyable registry.
 ```
 registry/                     # SOURCE OF TRUTH
 ├── registry.json             # aggregated index of every piece manifest
-├── theme/pieces.css          # @theme design tokens (light + dark)
+├── theme/*.css               # @theme design tokens (light + dark): pieces.css default + warm/void/dim alternates
 ├── lib/*.js                  # shared plain-JS helpers (date-math.js, panel-stack.js, …)
 └── ui/<name>/
     ├── <Name>.pzl            # one or more component files
@@ -66,7 +66,9 @@ Rules that follow from this:
 - `registryDependencies` — other registry files pulled in transitively: `lib/*.js` files go
   to `app/lib/`; sibling pieces (e.g. DatePicker → `calendar`) go to their own targetDir.
 - `dependencies` — **real npm packages, plain JS only.** `.pzl` never ships via npm, so it
-  never appears here. Morph pieces list `@magic-spells/morph-engine` (npm-safe plain JS).
+  never appears here. Examples: morph pieces → `@magic-spells/morph-engine`, sheet /
+  bottom-sheet → `@magic-spells/physics-engine`, the rich-text/markdown editors →
+  `@tiptap/*`, `code` → `highlight.js`, `markdown` → `marked`.
 
 ## Versioning
 
@@ -98,12 +100,15 @@ CLI — it is unrelated and must not be bumped along with the release.
   are taken by sibling projects). Browser-smoke interactive pieces in a FOREGROUNDED tab —
   Puzzle's rAF-based view scheduler stalls re-renders in a hidden/backgrounded tab.
 - **Node tests:** `npm test` at the repo root runs the DOM-free suites in `test/` against
-  `registry/lib/` (currently the sheet motion libs: engine, policy, drag). These are
+  `registry/lib/`: the sheet motion libs (engine, math, snap points, drag, scroll policy),
+  the markdown and rich-text document models, an InputOTP suite, and parity suites that
+  assert the demo copies are byte-identical to their `registry/` sources. These are
   repo-internal — nothing under `test/` or the root `package.json` is ever copied to a
-  consumer. The assertions are ported byte-identical from the source `@magic-spells/sheet`
-  repo and pin exact numbers, not bounds; any edit to `registry/lib/sheet-*.js` requires
-  the suite green, and porting upstream changes means copying their new tests with only
-  the import paths adjusted — never loosening an assertion to make a port fit.
+  consumer. The sheet assertions are ported byte-identical from the source
+  `@magic-spells/sheet` repo and pin exact numbers, not bounds; any edit to
+  `registry/lib/sheet-*.js` requires the suite green, and porting upstream changes means
+  copying their new tests with only the import paths adjusted — never loosening an
+  assertion to make a port fit.
 
 ## Piece conventions
 
@@ -234,7 +239,9 @@ with:
   `app/styles/pieces.css` when the app has neither the tokens nor the file, and the
   one-line `@import './pieces.css';` wiring step is printed (styles.css is user-owned).
   Detection keys on the `puzzle-pieces design tokens` header comment in `pieces.css` —
-  **don't reword that comment without updating the CLI's marker.**
+  **don't reword that comment without updating the CLI's marker.** `registry.json`'s
+  `themes` array lists the alternates (warm, void, dim) for the docs site; the CLI reads
+  only the singular `theme` key.
 - Copies stay **byte-identical** to the registry (no stamped headers); `pieces.lock` at the
   consumer app root records sha256 content hashes per piece/lib so a future `diff`/`update`
   can distinguish upstream-changed from locally-customized.

@@ -36,10 +36,11 @@ source with a `piece.json` manifest describing its files and dependencies.
 
 ## What's inside
 
-**90 pieces**, from primitives (Button, Field, Select, Checkbox, Switch) through
+**94 pieces**, from primitives (Button, Field, Select, Checkbox, Switch) through
 overlays (Dialog, Sheet, Popover, DropdownMenu, Command), data display (DataTable,
 Timeline, Tree, StatCard), charts (LineChart, BarChart, AreaChart, PieChart,
-Sparkline), and app-scale composites (Kanban, Sidebar, ChatScroller, Stepper).
+Sparkline), rich editing (RichTextEditor, MarkdownEditor), and app-scale composites
+(Kanban, Sidebar, ChatScroller, Stepper).
 Browse them all in the [live component library](https://magic-spells.github.io/puzzle-pieces/),
 in [`registry/ui/`](./registry/ui/), or by running the docs app locally:
 
@@ -50,7 +51,8 @@ cd demo && npm install && npm run dev   # http://localhost:3070
 Every piece is a native Puzzle component compiling to plain semantic HTML with ARIA
 and Tailwind utility classes against the semantic tokens in
 [`registry/theme/pieces.css`](./registry/theme/pieces.css) — no custom elements, no
-hex colors, controlled-component APIs throughout.
+hex colors, controlled-component APIs throughout. Three alternate themes (warm,
+void, dim) ship alongside the default in [`registry/theme/`](./registry/theme/).
 
 ## License
 
