@@ -97,6 +97,20 @@ run.
   (wrap `<Portal>` in a root element; documented in D144), and the D76 change
   that points `puzzle upgrade` at the running CLI rather than the cwd. Cards
   truthed through D149.
+- **`0.6.0` is in progress on `release/0.6.0`** (NOT stamped or published —
+  every manifest still reads `0.5.0`): D150 `{#raw}` static raw template
+  block; the pieces npm transport (a D32 amendment, not a new card — default
+  registry is `npm:@magic-spells/puzzle-pieces` resolved to the CLI's
+  major.minor, older-only fallback with a printed notice, `--pieces-version`
+  pin, `pieces.lock` gains a `puzzle` field); and the D151–D156 build/dev
+  performance round (shell-head plan, build-scoped compile cache, `.puzzle/`
+  scratch dir, warm static dev rebuilds, route-level invalidation, pipeline
+  hardening + `--profile-build`). No runtime API changes. Cards truthed
+  through D156; next free card is D157. **Publish sequencing:**
+  `@magic-spells/puzzle-pieces` `0.6.0` (ready in its repo's `release/0.6.0`,
+  not yet on npm — the package 404s) must be published at or before the CLI's
+  release; no older pieces release exists to fall back to, so a fresh `0.6.0`
+  install's `puzzle add piece` hard-fails until it ships.
 - Product line: v1 through v1.69 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69; D146 is a correctness amendment
   with no product-line entry),
@@ -149,6 +163,14 @@ run.
   Check with `rg -n '"@magic-spells/puzzle":' examples/*/package.json
   compiler/internal/scaffold/templates/*/package.json`. Leave each template's
   own `"version"` field alone; that is the scaffolded app's starting version.
+- Since 0.6.0 the pieces registry is version-locked: `puzzle add piece`
+  resolves `@magic-spells/puzzle-pieces` to the CLI's major.minor. Publish the
+  matching pieces release (from the puzzle-pieces repo) at or before the CLI
+  release, or zero-config `add piece` falls back to an older minor — or
+  hard-fails when none exists.
+- Sweep the release-facing prose no script checks: the README status banner,
+  CHANGELOG completeness for the version being shipped, and
+  `DOC-RELEASE-SURFACE.md`. The banner sat at `0.1.0` through four releases.
 
 ## Architecture at a glance
 

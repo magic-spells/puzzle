@@ -34,7 +34,7 @@ client runtime and the CLI:
 npm install -D @magic-spells/puzzle
 ```
 
-> **Status: 0.5.0** — the current release. The browser runtime, Go
+> **Status: 0.6.0** — the current release. The browser runtime, Go
 > compiler, static generator, and CLI are implemented and covered by Go,
 > Vitest/jsdom, type, package, example, and browser-focused checks.
 >
@@ -53,6 +53,7 @@ npm install -D @magic-spells/puzzle
 - **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and write sync
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
+- **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
 - **Nested routing** with view slots — history, hash, and memory modes; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
 - **Virtual DOM** with efficient diffing and pk-aware list keying
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
@@ -61,7 +62,7 @@ npm install -D @magic-spells/puzzle
 - **SPA-first output with two optional prerender modes** — `output: 'hybrid'` (prerendered pages the SPA takes over) and `output: 'static'` (true static pages, no router or `app.js`); no request-time SSR server or hydration layer
 - **[Puzzle Pieces](https://github.com/magic-spells/puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magic-spells.github.io/puzzle-pieces/))
 
-> **Experimental in 0.1.0:** overlapping route transitions (`transitionMode:
+> **Experimental:** overlapping route transitions (`transitionMode:
 > 'overlap'`) and shared-element morph transitions (`@magic-spells/puzzle/morph`)
 > work and are tested individually, but their interaction matrix with other
 > opt-in features (nested reused layouts, hash/base-path routing, anchors) has
@@ -400,6 +401,12 @@ you can drop into any app:
 puzzle add piece <name>
 ```
 
+Pieces are fetched from the `@magic-spells/puzzle-pieces` npm package,
+version-matched to your CLI — puzzle 0.6.x pulls the newest pieces 0.6.x — so a
+piece is always authored for the compiler installing it. `--pieces-version`
+pins an exact release; `--registry` accepts `npm:pkg[@version]`, a local
+directory, or an http(s) URL.
+
 Preview every piece in the live catalog at
 [magic-spells.github.io/puzzle-pieces](https://magic-spells.github.io/puzzle-pieces/).
 
@@ -445,6 +452,10 @@ puzzle build --hybrid
 # Serve an existing build the way a production host will
 puzzle preview
 puzzle preview ./my-app --port 4000
+
+# Per-phase timing tables for builds and dev rebuilds
+puzzle build --profile-build
+puzzle dev --profile-build
 
 # Upgrade the installed CLI, or only check what is available
 puzzle upgrade
