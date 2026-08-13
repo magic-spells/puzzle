@@ -7,6 +7,7 @@
  */
 
 import { PuzzleApp } from '../app.js';
+import { installAdapterCapability } from '../capabilities.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import {
@@ -35,6 +36,7 @@ export { installFixtures } from '../fixtures/index.js';
 export async function mountView(ViewClass, options = {}) {
 	requireDocument('mountView');
 	ensureTracking();
+	installAdapterCapability(options.adapter, 'options.adapter');
 
 	const container = document.createElement('div');
 	const context = makeContext(options);

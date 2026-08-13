@@ -1,5 +1,4 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class User extends PuzzleModel {
   // Schema definition — see constellation/doc/DOC-SPEC.md §7. String ids so the server-seeded
@@ -31,7 +30,7 @@ export default class User extends PuzzleModel {
 
   // Server location (D21): consumed by store.loadAll('user') on the read path.
   // Write sync and custom adapter methods are post-v1.
-  static adapter = adapter({
+  static adapter = {
     endpoint: '/users.json'
-  });
+  };
 }

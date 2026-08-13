@@ -3,6 +3,8 @@ import { Store } from '../client-runtime/datastore/store.js';
 import { adapter } from '../client-runtime/datastore/adapter.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 
+adapter.install();
+
 // Computed properties are ordinary JavaScript getters (SPEC §7). Keep the
 // getter on an intermediate prototype so every case exercises the full property
 // lookup Puzzle must mirror before assigning an incoming own key.
@@ -19,7 +21,7 @@ const computedModel = () =>
 			a: Puzzle.string(),
 			b: Puzzle.string(),
 		};
-		static adapter = adapter({ endpoint: '/records' });
+		static adapter = { endpoint: '/records' };
 	};
 
 // readBody() consumes text(), so this deliberately mirrors the Store's network

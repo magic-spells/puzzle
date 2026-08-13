@@ -57,10 +57,11 @@ export default class Todo extends PuzzleModel {
 
 **v1 enforcement:** `.default()` and `.primary()` are honored by the store. Validation rules (`required`, `min`, `max`, `oneOf`, `validate`) were stored-but-inert in v1; **since v1.16 they enforce at the local write boundary** (`createRecord`/`update` throw `PuzzleValidationError`; `Model.validate(data)`/`record.validate()` return `{ valid, errors }`) — see §20 (D48). Relationships (`Puzzle.hasMany(...)` / `Puzzle.belongsTo(...)`) shipped in v1.17 as lazy store-backed getters — see §21 (D49) — replacing the old `static relationships` block.
 
-**Server access (D21/D157):** the model imports `adapter` from
-`@magic-spells/puzzle/adapter` and declares its server location as
-`static adapter = adapter({ endpoint: '/api/todos' })`. The factory installs
-the read path (`store.loadAll` / `loadOne`), write sync
+**Server access (D21/D157):** the model declares its server location as the
+bare object `static adapter = { endpoint: '/api/todos' }`; model files import
+nothing extra. The app imports `adapter` from `@magic-spells/puzzle/adapter`
+and passes it once to `PuzzleApp`. That capability installs the read path
+(`store.loadAll` / `loadOne`), write sync
 (`record.save()`/`delete()`), `store.upsert()`, and `store.request()`. Without a
 factory call those methods are absent from core. Query fault-in remains
 deferred. Local persistence is in-memory with optional localStorage.
@@ -86,9 +87,9 @@ record.update({ completed: true }); // triggers subscribed data() re-runs
 record.destroy();
 ```
 
-The server methods in this example exist only when a model module has already
-called `adapter(config)` from `@magic-spells/puzzle/adapter`. Local Store methods
-are always present.
+The server methods in this example exist only when the app passed the `adapter`
+capability from `@magic-spells/puzzle/adapter`. Local Store methods are always
+present.
 
 Any query made inside `data()` auto-subscribes the component; changes to matching records re-run `data()`.
 
@@ -141,8 +142,9 @@ static schema = {
 ## 22. Adapter write sync (v1.18)
 
 The write half of the D21 adapter story. Shipped in v1.18 (D50) and moved to the
-opt-in subpath by D157. The same
-`static adapter = adapter({ endpoint })` declaration drives everything; local
+opt-in subpath by D157. The same bare
+`static adapter = { endpoint }` declaration drives everything once the app has
+passed the capability; local
 mutation semantics (`createRecord`/`update`/`destroy`) are unchanged — **sync is
 a separate, explicit verb.**
 
@@ -175,7 +177,7 @@ new PuzzleApp({
 });
 ```
 
-- **One seam.** Every server call — the D21 read path, the D50 write verbs (`save`/`delete`), and `store.request()` — routes through a single private `Store._fetch(url, init, context)` installed by the `/adapter` factory. The read path sends an explicit `{ method: 'GET' }` (wire-identical to a bare fetch) so a hook never has to special-case a missing init.
+- **One seam.** Every server call — the D21 read path, the D50 write verbs (`save`/`delete`), and `store.request()` — routes through a single private `Store._fetch(url, init, context)` installed by the `/adapter` capability. The read path sends an explicit `{ method: 'GET' }` (wire-identical to a bare fetch) so a hook never has to special-case a missing init.
 - **Synchronous.** The hook may mutate `init` in place **or** return a replacement object; a truthy object return wins, otherwise the possibly-mutated original is used. An async hook is deferred — see the cut list.
 - **`method` and `body` are re-stamped from the original init after the hook runs**, and the URL is a separate `fetch` argument. A hook can change *how* a request is sent, never *what* it is. This is load-bearing: §22's write path captures `requestKey = record[pk]` before the await and reconciles against exactly that key afterwards, so a hook that flipped POST→PUT or rewrote the body would silently break identity re-checks, pk adoption, and the `_synced` contract.
 - **The context argument is frozen** — information about the request, not a second output channel.
@@ -190,7 +192,7 @@ new PuzzleApp({
 Two development/test affordances on the data layer (D95). Since D98 they live
 in `@magic-spells/puzzle/fixtures`, outside core. It enters an app bundle only
 through the §54 `--fixtures` build switch, or a direct import in tests (also
-re-exported from `/testing`). `/fixtures` imports and installs `/adapter`, then
+re-exported from `/testing`). `/fixtures` imports and installs the adapter capability, then
 replaces `Store._network(url, init, context)`, the single place an adapter
 request touches `fetch`, called by §49's `_fetch` **after** `beforeRequest`
 runs.
@@ -205,7 +207,7 @@ Config shape — in an app this is the default export of `app/fixtures.js` (§54
 
 **Fixtures.** `store.seed(type, countOrArray, overrides)` generates records from the schema alone — no extra declaration. Generation reads the §7 descriptors: `.default()` wins first (left absent so `applyDefaults` resolves it, preserving function-default and deep-clone semantics), `.oneOf()`/`.min()`/`.max()` are never violated, and records go through the normal `createRecord` path so §20 validation and pk assignment behave exactly as at runtime. A `belongsTo` FK wires to a real existing parent when one exists and is left unset otherwise. Determinism comes from the install seed driving **two** derived PRNG streams — one for values, one for mock rolls, so seeding more records never perturbs which requests fail. `resetFixtureSeed()` resets both. **The auto-generated primary key is the one non-deterministic field** (`_genId` uses `Math.random()`/`Date.now()`); an author-supplied `.primary().required()` key is fully deterministic.
 
-**Mock adapter.** `static adapter = adapter({ endpoint, mock: { data, latency, failRate, fail, handler } })` — and/or the install config's `mock[type]` — serves the adapter verbs from an in-memory collection.
+**Mock adapter.** `static adapter = { endpoint, mock: { data, latency, failRate, fail, handler } }` — and/or the install config's `mock[type]` — serves the adapter verbs from an in-memory collection.
 
 - **Interception replaces the adapter's `_network` seam** and returns a Response-shaped object, so `loadAll`/`loadOne`/`save`/`delete`/`request` run **completely unmodified** and the real §22 write path is exercised rather than a parallel one. The collection is deep-cloned from `mock.data` on first use.
 - Default CRUD: `GET` endpoint → array; `GET endpoint/:id` → object or 404; `POST` → insert (201); `PUT endpoint/:id` → merge (200); `DELETE endpoint/:id` → 204. `handler({ method, url, path, body, collection })` overrides any of it and is how `request()`'s arbitrary paths get mocked; a falsy return falls through.
@@ -217,24 +219,33 @@ Config shape — in an app this is the default export of `app/fixtures.js` (§54
 ## 58. Opt-in server adapter subpath (v1.72)
 
 The D21/D50/D91 server runtime is exported from
-`@magic-spells/puzzle/adapter`, not the package root. A model opts in by calling
-the factory while its module evaluates:
+`@magic-spells/puzzle/adapter`, not the package root. An app opts in once by
+passing the exported capability; models keep plain server-location data:
 
 ```js
-import { PuzzleModel } from '@magic-spells/puzzle';
+// app/app.js
+import { PuzzleApp } from '@magic-spells/puzzle';
 import { adapter } from '@magic-spells/puzzle/adapter';
 
+const app = new PuzzleApp({ target: '#app', routes, models, adapter });
+
+// app/models/post.js
+import { PuzzleModel } from '@magic-spells/puzzle';
+
 class Post extends PuzzleModel {
-  static adapter = adapter({ endpoint: '/api/posts' });
+  static adapter = { endpoint: '/api/posts' };
 }
 ```
 
-The first factory call idempotently installs the server methods on `Store` and
-`PuzzleModel`, validates that `endpoint` is a non-empty string, and returns the
-same config object. Apps that never call it have no `loadAll`, `loadOne`,
-`upsert`, `request`, `save`, or `delete` methods and ship none of the network
-runtime. `PuzzleAdapterError` is exported only from `/adapter`. Per-record write
-chains live in adapter-module `WeakMap` state keyed by Store; core records retain
-their `_synced`/`_deleted` provenance and core keeps `apiURL`/`beforeRequest`
-configuration inertly. A development build warns once if a bare adapter object
-reaches the installed runtime without the factory wrapper.
+`adapter` is a frozen opaque capability whose internal idempotent installer
+grafts the server methods onto `Store` and `PuzzleModel` before Store
+construction. A truthy non-capability `config.adapter` is a construction-time
+error naming the `/adapter` import. Apps that never pass it have no `loadAll`,
+`loadOne`, `upsert`, `request`, `save`, or `delete` methods and ship none of the
+network runtime. In development, registering a model with a truthy static
+adapter config but omitting the capability warns with the model name and fix.
+`PuzzleAdapterError` is exported only from `/adapter`. Per-record write chains
+live in adapter-module `WeakMap` state keyed by Store; core records retain their
+`_synced`/`_deleted` provenance and core keeps `apiURL`/`beforeRequest`
+configuration inertly. SSG, the static kernel, `/testing`, and `/fixtures`
+install the same received/imported capability before constructing stores.

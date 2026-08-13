@@ -10,6 +10,8 @@
  * view/layout classes are the same `any`-tolerant shape PuzzleApp accepts).
  */
 
+import type { PuzzleAppConfig } from './index.js';
+
 /** A serialized route def (no classes) — one link of `StaticRoute.chain`. */
 export interface StaticRouteDef {
 	path: string;
@@ -42,6 +44,8 @@ export interface MountStaticOptions {
 	apiURL?: string;
 	/** Storage-like object for opt-in persistence, handed to the Store. */
 	storage?: any;
+	/** REST adapter capability, installed before the static Store is constructed. */
+	adapter?: PuzzleAppConfig['adapter'];
 	/**
 	 * IGNORED (D117). Accepted for config parity — the generated per-page entry
 	 * still passes the app's configured mode through — but static output has no

@@ -19,6 +19,13 @@
 /** A field/record value — the framework never constrains model field types. */
 export type PuzzleValue = any;
 
+declare const puzzleAdapterCapabilityBrand: unique symbol;
+
+/** Opaque shape accepted only from the `@magic-spells/puzzle/adapter` export. */
+export interface PuzzleAdapterCapability {
+	readonly [puzzleAdapterCapabilityBrand]: true;
+}
+
 /**
  * A route definition (constellation/doc/DOC-SPEC.md §9). `view`/`layout` are
  * PuzzleView subclasses (constructors) — typed loosely so `.pzl` default
@@ -261,7 +268,7 @@ export interface Store {
 	findOne(type: string, id: any): any;
 	/** List records of a type, optionally filtered (auto-subscribes). */
 	findMany(type: string, options?: FindManyOptions): any[];
-	// Adapter methods are attached by `adapter(config)` and declared through
+	// Adapter methods are attached by the app's adapter capability and declared through
 	// module augmentation in types/adapter.d.ts.
 	// `seed()` and `resetFixtureSeed()` are NOT declared here: the core Store does
 	// not have them (D98). They are attached by `installFixtures()` and declared
@@ -606,6 +613,8 @@ export interface PuzzleAppConfig {
 	apiURL?: string;
 	/** Storage-like object for opt-in persistence. */
 	storage?: any;
+	/** REST adapter capability imported from `@magic-spells/puzzle/adapter`. */
+	adapter?: PuzzleAdapterCapability;
 	/**
 	 * Adapter request hook (v1.55, D91): `beforeRequest(init, { type, method, url })`,
 	 * called synchronously before every adapter fetch. Mutate `init` or return a

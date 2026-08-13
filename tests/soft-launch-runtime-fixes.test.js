@@ -7,6 +7,8 @@ import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 
+adapter.install();
+
 // Verified soft-launch runtime fixes. Each block targets exactly one fix;
 // the setup style mirrors tests/store.test.js and tests/view.test.js.
 
@@ -25,7 +27,7 @@ class ApiTodo extends PuzzleModel {
 		id: Puzzle.string().primary(),
 		text: Puzzle.string(),
 	};
-	static adapter = adapter({ endpoint: '/api/todos' });
+	static adapter = { endpoint: '/api/todos' };
 }
 
 const makeStore = (options) => new Store({ todo: Todo }, options);

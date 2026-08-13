@@ -1,4 +1,5 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import routes from './routes.js';
 import models from './models/index.js';
 
@@ -14,6 +15,9 @@ const app = new PuzzleApp({
 
   // Models registration
   models,
+
+  // Install server sync once for every model with a static adapter config.
+  adapter,
 
   // Base URL for the D21 server read path. Adapter endpoints are joined onto
   // this, so store.loadAll('post') fetches /api/posts.json — a static JSON seed

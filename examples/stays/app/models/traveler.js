@@ -1,5 +1,4 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Traveler extends PuzzleModel {
   // The signed-in user (a single record, id 'me'). `stamps` is a Puzzle.array()
@@ -14,7 +13,7 @@ export default class Traveler extends PuzzleModel {
     stamps: Puzzle.array().default(() => []),
   };
 
-  static adapter = adapter({
+  static adapter = {
     endpoint: '/traveler.json',
-  });
+  };
 }

@@ -80,8 +80,8 @@ literal, so a bare index also reaches `Object.prototype`: a persisted blob keyed
 `PuzzleModel` fallback — and the caller's `primaryKey()` would throw on a path
 that must stay fail-soft.
 
-The core Store owns no server verbs. Calling `adapter(config)` from
-`@magic-spells/puzzle/adapter` installs `loadAll`, `loadOne`, `upsert`,
+The core Store owns no server verbs. Passing the `adapter` capability from
+`@magic-spells/puzzle/adapter` to `PuzzleApp` installs `loadAll`, `loadOne`, `upsert`,
 `saveRecord`, `deleteRecord`, `request`, and their private helpers on its
 prototype ([[DECISION-D157-ADAPTER-SUBPATH]]). Reads shape-check before mutation
 and preserve identity; writes serialize per record across save and delete using
@@ -95,7 +95,7 @@ and confirmed `delete()`, so stale references delete idempotently and can never
 
 The installed adapter funnels requests through `_fetch` (the D91
 `beforeRequest` hook runs there) and delegates the network call to `_network`.
-The `/fixtures` module imports `/adapter` so that seam exists, then replaces it
+The `/fixtures` module imports and installs the adapter capability so that seam exists, then replaces it
 at install time strictly after the hook shapes the init. Core knows nothing
 about either module; `seed()`/`resetFixtureSeed()` are likewise absent unless
 fixtures are installed.

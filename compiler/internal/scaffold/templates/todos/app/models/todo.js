@@ -1,5 +1,4 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Todo extends PuzzleModel {
   // Schema definition — see constellation/doc/DOC-SPEC.md §7
@@ -49,9 +48,10 @@ export default class Todo extends PuzzleModel {
   }
 
   // Server sync (D21/D157): store.loadAll/loadOne + record.save()/delete()
-  // against this endpoint. No backend? Delete this and the adapter import
-  // above to shrink the bundle — everything else works without a server.
-  static adapter = adapter({
+  // against this endpoint. The adapter capability is passed once in app.js.
+  // No backend? Delete this block and the app.js adapter import/key to shrink
+  // the bundle — everything else works without a server.
+  static adapter = {
     endpoint: '/api/todos',
-  });
+  };
 }

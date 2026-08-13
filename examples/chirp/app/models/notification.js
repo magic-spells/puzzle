@@ -1,5 +1,4 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Notification extends PuzzleModel {
   // Schema — see constellation/doc/DOC-SPEC.md §7. An activity notification aimed
@@ -19,7 +18,7 @@ export default class Notification extends PuzzleModel {
   };
 
   // Server location (D21): consumed by store.loadAll('notification').
-  static adapter = adapter({
+  static adapter = {
     endpoint: '/notifications.json',
-  });
+  };
 }

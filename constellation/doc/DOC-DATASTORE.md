@@ -29,8 +29,10 @@ declare:
   `date()`, `object()`, `array()`, `belongsTo()`, and `hasMany()`;
 - modifiers `primary`, `required`, `default`, `min`, `max`,
   `oneOf`, and custom validation;
-- optional server sync via `static adapter = adapter({ endpoint: '/api/posts' })`,
-  importing the factory from `@magic-spells/puzzle/adapter`;
+- optional server sync via the bare model config
+  `static adapter = { endpoint: '/api/posts' }`, with the app importing the
+  capability from `@magic-spells/puzzle/adapter` and passing it once to
+  `new PuzzleApp({ ..., adapter })`;
 - ordinary getters and instance methods.
 
 A stored record is an instance of that model class. Primary keys are immutable.
@@ -42,7 +44,7 @@ remain valid.
 Views access the store as `this.ctx.store`.
 
 The local methods are core. The server methods shown below are installed only
-after a model calls the `/adapter` factory.
+when the app passes the `/adapter` capability to `PuzzleApp`.
 
 | API | Behavior |
 | --- | --- |

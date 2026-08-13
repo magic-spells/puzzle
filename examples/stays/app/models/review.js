@@ -1,5 +1,4 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Review extends PuzzleModel {
   // Reviews reference their listing by listingId; views join them via
@@ -25,7 +24,7 @@ export default class Review extends PuzzleModel {
     return `linear-gradient(135deg, ${a.from || '#e8e8ee'}, ${a.to || '#d4d4de'})`;
   }
 
-  static adapter = adapter({
+  static adapter = {
     endpoint: '/reviews.json',
-  });
+  };
 }

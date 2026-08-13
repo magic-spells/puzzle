@@ -41,6 +41,7 @@ import type {
 	PuzzleErrorViewProps,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
+import type { AdapterCapability } from '@magic-spells/puzzle/adapter';
 import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
 import { enableMorph } from '@magic-spells/puzzle/morph';
@@ -54,6 +55,7 @@ import {
 import type {
 	PrerenderResult,
 	PrerenderedPage,
+	PrerenderToDirResult,
 	ResolvedRouteHead,
 	RouteEntry,
 } from '@magic-spells/puzzle/ssg';
@@ -84,7 +86,7 @@ class Todo extends PuzzleModel {
 		comments: Puzzle.hasMany('comment', { key: 'todoId' }),
 	};
 
-	static adapter = adapter({ endpoint: '/todos' });
+	static adapter = { endpoint: '/todos' };
 
 	// Instance getter works because records ARE model instances (§7).
 	get label(): string {
@@ -266,6 +268,7 @@ const config: PuzzleAppConfig = {
 	target: '#app',
 	routes,
 	models: { todo: Todo },
+	adapter,
 	formatters: { upcase },
 	apiURL: '',
 	beforeRequest: attachAuth,
@@ -293,6 +296,15 @@ const config: PuzzleAppConfig = {
 		void [error, typedInfo.phase, typedInfo.view, typedInfo.route];
 	},
 };
+
+const adapterCapability: AdapterCapability = adapter;
+type RawAdapterAccepted = { endpoint: string } extends NonNullable<
+	PuzzleAppConfig['adapter']
+>
+	? true
+	: false;
+const rawAdapterAccepted: RawAdapterAccepted = false;
+void [adapterCapability, rawAdapterAccepted];
 
 const app = new PuzzleApp(config);
 
@@ -339,7 +351,7 @@ void mockBlock;
 
 class MockedTodo extends PuzzleModel {
 	static schema = { id: Puzzle.string().primary(), title: Puzzle.string().required() };
-	static adapter: ModelAdapter = adapter({
+	static adapter: ModelAdapter = {
 		endpoint: '/todos',
 		mock: {
 			data: [{ id: '1', title: 'seeded' }],
@@ -352,7 +364,7 @@ class MockedTodo extends PuzzleModel {
 				return { status: 200, body: { archived: collection.size } };
 			},
 		},
-	});
+	};
 }
 void MockedTodo;
 
@@ -414,6 +426,10 @@ const leafChain: any[] = leaf.chain;
 const leafLayout: any | null = leaf.layout;
 void [leafPath, leafChain, leafLayout];
 
+declare const staticSummary: PrerenderToDirResult;
+const summaryHasAdapter: boolean | undefined = staticSummary.hasAdapter;
+void summaryHasAdapter;
+
 prerender(config, { mode: 'static' }).then((result: PrerenderResult) => {
 	const page: PrerenderedPage = result.pages[0];
 	// The three static-mode-only capture fields (all optional — absent in hybrid).
@@ -459,6 +475,7 @@ const staticOptions: MountStaticOptions = {
 	models: { todo: Todo },
 	formatters: { upcase },
 	apiURL: '',
+	adapter,
 	// The three options the kernel destructures beyond the summary basics.
 	// (`routerMode` is accepted for config parity but ignored — D117.)
 	storage: window.localStorage,
@@ -483,10 +500,10 @@ mountStatic(staticOptions).then(() => {
 // ---------------------------------------------------------------------------
 
 async function typeIntoBoundInput(): Promise<void> {
-	const view = await mountView(TodoListView);
+	const view = await mountView(TodoListView, { adapter });
 	// Handle form: selector or element, chainable like click().
 	await view.type('input.draft', 'hello');
-	await (await createTestApp({ routes: [{ path: '/', view: TodoListView }] })).type(
+	await (await createTestApp({ routes: [{ path: '/', view: TodoListView }], adapter })).type(
 		'input.draft',
 		'hello'
 	);

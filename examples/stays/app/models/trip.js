@@ -1,5 +1,4 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Trip extends PuzzleModel {
   // A booking. `status` is a simple lifecycle string ('upcoming' | 'completed').
@@ -23,7 +22,7 @@ export default class Trip extends PuzzleModel {
     return Math.max(0, Math.round(ms / 86_400_000));
   }
 
-  static adapter = adapter({
+  static adapter = {
     endpoint: '/trips.json',
-  });
+  };
 }

@@ -21,8 +21,8 @@ and custom `validate`.
 The base class provides schema normalization, primary-key discovery, per-record
 default application (object/array defaults deep-clone), `update`, local-only
 `destroy`, static and instance `validate`, and `toJSON`. Adapter-backed
-`save`/`delete` are absent from core and installed on the prototype by
-`adapter(config)` from `@magic-spells/puzzle/adapter`. Validation reports `{ valid, errors }`; static `validate` accepts
+`save`/`delete` are absent from core and installed on the prototype by the
+app-level capability from `@magic-spells/puzzle/adapter`. Validation reports `{ valid, errors }`; static `validate` accepts
 `{ fields }` for partial checks (the same field-subset machinery `update()` uses)
 and exempts a nullish primary key — `createRecord` generates it, so the pre-create
 form check accepts the same input, while `''` still fails. That exemption covers

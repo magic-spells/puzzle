@@ -7,6 +7,8 @@ import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 
+adapter.install();
+
 // Adapter request hook (constellation/doc/DOC-SPEC.md, v1.55, D91): one
 // synchronous `beforeRequest(init, { type, method, url })` in front of EVERY
 // adapter fetch — the D21 read path (loadAll/loadOne) and the D50 write verbs
@@ -19,7 +21,7 @@ class ApiTodo extends PuzzleModel {
 		text: Puzzle.string().required(),
 		completed: Puzzle.boolean().default(false),
 	};
-	static adapter = adapter({ endpoint: '/api/todos' });
+	static adapter = { endpoint: '/api/todos' };
 }
 
 const API = 'https://x.test/v1';
@@ -550,6 +552,7 @@ describe('PuzzleApp config threading (v1.55, D91)', () => {
 			target: '#app',
 			apiURL: API,
 			models: { todo: ApiTodo },
+			adapter,
 			routes: [{ path: '/', name: 'home', view: HomeView }],
 			...extra,
 		});

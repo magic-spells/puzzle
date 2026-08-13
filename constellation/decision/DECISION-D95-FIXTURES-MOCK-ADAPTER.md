@@ -16,7 +16,7 @@ connections:
 ---
 
 `store.seed(type, n)` generates believable records from the schema alone, and
-`static adapter = adapter({ endpoint, mock: … })` serves the adapter verbs from
+`static adapter = { endpoint, mock: … }` serves the adapter verbs from
 an in-memory collection with configurable latency and failure.
 
 **Integration reshaped by [[DECISION-D98-FIXTURES-MODULE-FLAG]] (v1.61):** everything below about *what* seed/mock do still holds, but the code now lives entirely in `@magic-spells/puzzle/fixtures` and attaches via `installFixtures(config)` (prototype patching + a WeakMap for state) instead of being baked into `store.js`; the `fixtureSeed` app/Store option became the install config's `seed`; and per-type mock config can also come from the install config, merged over `static adapter.mock`.

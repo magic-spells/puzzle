@@ -22,7 +22,7 @@ notes:
 # D50 — Adapter write path: explicit `save()`/`delete()` verbs, local-first, validate-before-sync (v1.18)
 
 Completes the [[DECISION-D21-ADAPTER-READ-PATH]] adapter story on the write side. The
-same `static adapter = adapter({ endpoint })` declaration now drives `record.save()` (create +
+same bare `static adapter = { endpoint }` declaration now drives `record.save()` (create +
 update sync), `record.delete()` (confirmed server delete), and `store.request()` (the
 custom-endpoint escape hatch). See [[DOC-SPEC-DATA]] §22.
 

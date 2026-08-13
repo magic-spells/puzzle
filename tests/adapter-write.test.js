@@ -9,6 +9,8 @@ import {
 } from '../client-runtime/model.js';
 import * as pkg from '../client-runtime/index.js';
 
+adapter.install();
+
 // Adapter write sync (constellation/doc/DOC-SPEC.md §22, D50): explicit
 // save()/delete()/request() verbs, local-first, validate-before-sync.
 
@@ -18,7 +20,7 @@ class ApiTodo extends PuzzleModel {
 		text: Puzzle.string().required(),
 		completed: Puzzle.boolean().default(false),
 	};
-	static adapter = adapter({ endpoint: '/api/todos' });
+	static adapter = { endpoint: '/api/todos' };
 
 	// The documented store.request() idiom: wrap it in an instance method.
 	archive() {
@@ -59,7 +61,7 @@ afterEach(() => {
 });
 
 describe('adapter write sync — package surface', () => {
-	it('keeps prototype installation factory-gated (module import alone is inert)', async () => {
+	it('keeps prototype installation capability-gated (module import alone is inert)', async () => {
 		vi.resetModules();
 		const { Store: FreshStore } = await import('../client-runtime/datastore/store.js');
 		expect(FreshStore.prototype.loadAll).toBeUndefined();
@@ -67,7 +69,7 @@ describe('adapter write sync — package surface', () => {
 		const { adapter: freshAdapter } = await import('../client-runtime/datastore/adapter.js');
 		expect(FreshStore.prototype.loadAll).toBeUndefined();
 
-		freshAdapter({ endpoint: '/api/fresh' });
+		freshAdapter.install();
 		expect(FreshStore.prototype.loadAll).toBeTypeOf('function');
 	});
 
@@ -81,28 +83,11 @@ describe('adapter write sync — package surface', () => {
 		expect(err.body).toEqual({ m: 1 });
 	});
 
-	it('the factory returns the config, validates endpoint, and installs idempotently', () => {
-		const config = { endpoint: '/api/notes' };
+	it('exports one frozen capability and installs idempotently', () => {
 		const loadAll = Store.prototype.loadAll;
-		expect(adapter(config)).toBe(config);
+		expect(Object.isFrozen(adapter)).toBe(true);
+		adapter.install();
 		expect(Store.prototype.loadAll).toBe(loadAll);
-		expect(() => adapter({})).toThrow(/string endpoint/);
-		expect(() => adapter({ endpoint: 42 })).toThrow(/string endpoint/);
-	});
-
-	it('warns once in development when a bare adapter object reaches the store', async () => {
-		class BareAdapterTodo extends PuzzleModel {
-			static adapter = { endpoint: '/api/bare' };
-		}
-		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		mockFetch({ body: [] });
-		const store = new Store({ bare: BareAdapterTodo });
-
-		await store.loadAll('bare');
-		await store.loadAll('bare');
-
-		expect(warn).toHaveBeenCalledTimes(1);
-		expect(warn).toHaveBeenCalledWith(expect.stringContaining('@magic-spells/puzzle/adapter'));
 	});
 });
 

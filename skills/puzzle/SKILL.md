@@ -268,7 +268,6 @@ schema` with `Puzzle` builders (the only documented way to define fields):
 
 ```js
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Todo extends PuzzleModel {
   static schema = {
@@ -277,8 +276,16 @@ export default class Todo extends PuzzleModel {
     completed: Puzzle.boolean().default(false),
     createdAt: Puzzle.date().default(() => new Date()),
   };
-  // static adapter = adapter({ endpoint: '/api/todos' }); // enables server sync
+  // static adapter = { endpoint: '/api/todos' }; // server location, still plain data
 }
+```
+
+Enable server sync once in `app/app.js`; model files need no adapter import:
+
+```js
+import { adapter } from '@magic-spells/puzzle/adapter';
+
+const app = new PuzzleApp({ target: '#app', routes, models, adapter });
 ```
 
 Builders: `string() number() boolean() date() array() object()`, plus
@@ -292,8 +299,8 @@ Views reach the store as `this.ctx.store`:
 
 - Local: `createRecord(type, data)` (validates, defaults, notifies),
   `findOne(type, id)`, `findMany(type, { filter }?)`.
-- Server (needs `static adapter = adapter({ endpoint })` from
-  `@magic-spells/puzzle/adapter`): `loadOne`/`loadAll` (GET + identity-preserving
+- Server (needs a bare `static adapter = { endpoint }` plus the `/adapter`
+  capability passed once to `PuzzleApp`): `loadOne`/`loadAll` (GET + identity-preserving
   upsert), `record.save()` (POST new / PUT synced), `record.delete()`,
   `store.request()` for custom endpoints — apply returned records with
   `store.upsert(type, payload)`, don't re-fetch.
@@ -314,7 +321,8 @@ comparison in `belongsTo`/`hasMany` uses the same rule. Only numbers normalize:
 
 ```js
 new PuzzleApp({
-  beforeRequest(init, { type, method, url }) {
+	adapter,
+	beforeRequest(init, { type, method, url }) {
     init.headers = { ...init.headers, Authorization: `Bearer ${token()}` };
   },
 });
@@ -360,7 +368,7 @@ await app.router.push('/todos/1');
 
 - `mountView(ViewClass, options)` mounts ONE view against a detached container.
   Options: `params`, `props`, `children`, `ref`, `route`, `models`, `store`,
-  `router`, `formatters`, `ctx`. Returns a handle: `instance`, `container`,
+  `router`, `formatters`, `adapter`, `ctx`. Returns a handle: `instance`, `container`,
   `element`, `ctx`, `store`, `router`, `find(sel)`, `findAll(sel)`,
   `click(target)`, `setProps(props)`, `destroy()`.
 - `createTestApp(config)` boots a REAL `PuzzleApp` — `target` and

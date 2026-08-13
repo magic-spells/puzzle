@@ -28,7 +28,7 @@ Completes the D21 adapter story on the write side. Driven by
 ## Intent
 
 A locally-changed record syncs to the server without app-level fetch plumbing,
-driven by the same `static adapter = adapter({ endpoint })` the read path uses.
+driven by the same bare `static adapter = { endpoint }` the read path uses.
 
 ## Scope
 

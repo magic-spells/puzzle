@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createTestApp, settled } from '../client-runtime/testing/index.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import TodoHome from './fixtures/todos/Home.compiled.js';
 import DefaultLayout from './fixtures/todos/Default.compiled.js';
 import Todo from './fixtures/todos/todo.model.js';
@@ -22,6 +23,7 @@ beforeEach(async () => {
 			},
 		],
 		models: { todo: Todo },
+		adapter,
 	});
 });
 
@@ -100,4 +102,3 @@ describe('@magic-spells/puzzle/testing — todos dogfood', () => {
 		expect(rowByText('keep-me')).toBe(keepNode);
 	});
 });
-

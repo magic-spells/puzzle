@@ -31,7 +31,7 @@ restores development state, starts navigation, and resolves to the app after
 the first route lands.
 
 Public config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
-`scrollBehavior`, `routerMode`, `routerInitialPath`, `routerBase`,
+`adapter`, `scrollBehavior`, `routerMode`, `routerInitialPath`, `routerBase`,
 `transitionMode`, `beforeMount`, `mounted`, `beforeUnmount`, `onError`, and
 `errorView`. `errorView` is validated as a `PuzzleView` constructor immediately
 at app construction. See
@@ -92,3 +92,9 @@ by [[COMPONENT-SSG]].
 services. The root package exports `PuzzleApp`, `PuzzleView`, `PuzzleModel`,
 `Puzzle`, `PuzzleValidationError`, and compiler-support values;
 `PuzzleAdapterError` belongs to the opt-in `/adapter` subpath.
+
+When `config.adapter` is present, `PuzzleApp` validates the opaque capability
+and installs it before Store construction. In development, a registered model
+with a truthy static adapter config and no capability warns with the model name
+and the `@magic-spells/puzzle/adapter` import fix. Core never imports that
+subpath; it only validates and invokes the received capability.

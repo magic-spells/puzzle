@@ -71,22 +71,25 @@ one is *not* a compile error; it silently builds a different product.
 - **BREAKING: server sync is the opt-in `/adapter` subpath (D157).** The
   adapter — `loadAll`/`loadOne`, `record.save()`/`delete()`,
   `store.request()`/`upsert()`, and `PuzzleAdapterError` — moved out of the
-  core store into `@magic-spells/puzzle/adapter`. Declare it with the factory:
+  core store into `@magic-spells/puzzle/adapter`. Model declarations are
+  unchanged from 0.5.0; keep the bare config object and enable the runtime once
+  in the app config:
 
   ```js
   import { adapter } from '@magic-spells/puzzle/adapter';
 
-  export default class Todo extends PuzzleModel {
-    static adapter = adapter({ endpoint: '/api/todos' });
-  }
+  const app = new PuzzleApp({ target: '#app', routes, models, adapter });
+
+  // models/todo.js — unchanged
+  static adapter = { endpoint: '/api/todos' };
   ```
 
-  Apps that never import the subpath ship none of the adapter (−1.6 KB gzip on
-  the reference apps); `record.save()` without the import is a plain
-  `TypeError`, and a bare `static adapter = { endpoint }` object warns in dev
-  with this migration. `PuzzleAdapterError` now imports from
-  `@magic-spells/puzzle/adapter`; the `beforeRequest` app-config hook and
-  `/fixtures` mocking behave exactly as before.
+  The breaking migration is only for server-backed apps: add the imported
+  `adapter` value to `new PuzzleApp(...)`, and import `PuzzleAdapterError` from
+  `@magic-spells/puzzle/adapter` instead of the package root. Apps that never
+  pass the capability ship none of the adapter (about −1.6 KB gzip on the
+  reference apps); `record.save()` without it remains a plain `TypeError`.
+  The `beforeRequest` hook and `/fixtures` mocking otherwise behave as before.
 
 ### Added
 

@@ -74,7 +74,7 @@ time, so nothing needs to be pre-wired:
   deleted by `uninstall()`); per-store PRNG/mock state lives in a module
   `WeakMap`, zero fields on the store.
 - Mock interception replaces `Store.prototype._network` — the single place an
-  adapter request touches `fetch`, installed by the `/adapter` factory and
+  adapter request touches `fetch`, installed by the `/adapter` capability and
   imported explicitly by `/fixtures`, called by
   `_fetch` *after* `beforeRequest` runs. The seam exists because replicating
   D91's load-bearing method/body re-stamping outside the adapter module would
@@ -134,7 +134,7 @@ state to defend against.
 
 ## Consequences
 
-- `store.js` carries no adapter seam; `/fixtures` explicitly installs `/adapter`
+- `store.js` carries no adapter seam; `/fixtures` explicitly installs the `/adapter` capability
   before capturing `_network`. `app.js` loses
   the `fixtureSeed` plumbing (the seed now rides `installFixtures({ seed })` /
   the fixtures file). All 13 probes, both defines, the scan tokens, and the

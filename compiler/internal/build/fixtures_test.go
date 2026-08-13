@@ -40,18 +40,19 @@ func writeFixturesApp(t *testing.T, withConfig bool) string {
 	files := map[string]string{
 		// A PLAIN .js model, which is where a real app declares its adapter.
 		"app/models.js": `import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
 export class Item extends PuzzleModel {
   static schema = { id: Puzzle.string().primary(), label: Puzzle.string() };
-  static adapter = adapter({ endpoint: '/api/items', mock: { data: [{ id: '1', label: 'one' }] } });
+  static adapter = { endpoint: '/api/items', mock: { data: [{ id: '1', label: 'one' }] } };
 }
 `,
 		"app/app.js": `import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import { Item } from './models.js';
 import Home from './views/Home.pzl';
 const app = new PuzzleApp({
   target: '#app',
   models: { item: Item },
+  adapter,
   routes: [{ path: '/', view: Home }],
 });
 app.mount();

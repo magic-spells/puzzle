@@ -120,6 +120,7 @@ resolved against `app/assets/`, and CSS `@import`s are unaffected.
 ### app/app.js
 ```javascript
 import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import routes from './routes.js';
 import models from './models/index.js';
 
@@ -135,6 +136,9 @@ const app = new PuzzleApp({
 
   // Models registration
   models,
+
+  // Install the optional server adapter verbs once for this app.
+  adapter,
 
   // Base URL for the D21 server read path. Adapter endpoints are joined onto
   // this, so store.loadAll('post') fetches /api/posts.json — a static JSON seed
@@ -162,7 +166,7 @@ app.mount();
 export default app;
 ```
 
-The v1 config surface is `target`, `routes`, `models`, `formatters`, and `apiURL`, plus the optional amendments (`scrollBehavior`, `routerMode`, the v1.31 lifecycle hooks `beforeMount`/`mounted`/`beforeUnmount`, …) — see [[DOC-SPEC]] §2 and §34. Seeding the store with `store.loadAll` in `beforeMount` is the D21 read path; see [Two data() gotchas](#two-data-gotchas) for why it must never run inside `data()`.
+The v1 config surface is `target`, `routes`, `models`, `formatters`, and `apiURL`, plus optional capabilities and amendments (`adapter`, `scrollBehavior`, `routerMode`, the v1.31 lifecycle hooks `beforeMount`/`mounted`/`beforeUnmount`, …) — see [[DOC-SPEC]] §2 and §34. Seeding the store with `store.loadAll` in `beforeMount` is the D21 read path; see [Two data() gotchas](#two-data-gotchas) for why it must never run inside `data()`.
 
 ### app/routes.js
 ```javascript
@@ -233,7 +237,6 @@ Models define your data structure with `Puzzle` schema field builders, plus comp
 ### models/user.js
 ```javascript
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class User extends PuzzleModel {
   // Schema definition — see [[DOC-SPEC]] §7. String ids so the server-seeded
@@ -265,16 +268,15 @@ export default class User extends PuzzleModel {
 
   // Server location (D21): consumed by store.loadAll('user') on the read path,
   // and by record.save()/delete() for write sync (v1.18, D50).
-  static adapter = adapter({
+  static adapter = {
     endpoint: '/users.json'
-  });
+  };
 }
 ```
 
 ### models/post.js
 ```javascript
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Post extends PuzzleModel {
   // Schema definition — see [[DOC-SPEC]] §7. authorId cross-references a User;
@@ -305,9 +307,9 @@ export default class Post extends PuzzleModel {
   }
 
   // Server location (D21): consumed by store.loadAll('post') on the read path.
-  static adapter = adapter({
+  static adapter = {
     endpoint: '/posts.json'
-  });
+  };
 }
 ```
 
@@ -343,11 +345,12 @@ export const models = {
 export default models;
 ```
 
-**The adapter factory drives both read and write paths.** Import `adapter` from
-`@magic-spells/puzzle/adapter` and assign
-`static adapter = adapter({ endpoint })`; the call installs `loadAll`/`loadOne`,
-`upsert`/`request`, and record `save`/`delete`. A model with no adapter simply
-opts out, and an app that never calls the factory ships none of that runtime.
+**The adapter capability drives both read and write paths.** Keep each model's
+config bare (`static adapter = { endpoint }`), then import `adapter` from
+`@magic-spells/puzzle/adapter` in `app.js` and pass it once to `PuzzleApp`. The
+capability installs `loadAll`/`loadOne`, `upsert`/`request`, and record
+`save`/`delete`. A model with no adapter simply opts out, and an app that never
+passes the capability ships none of that runtime.
 `record.destroy()` stays local-only. Validation remains core: `createRecord` and
 `update` throw `PuzzleValidationError`, while `validate()` returns a renderable
 result. See [[DOC-SPEC]] §20/§22/§58 and D21/D48/D50/D157.

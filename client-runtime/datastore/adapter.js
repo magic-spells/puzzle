@@ -1,11 +1,12 @@
 /**
  * Opt-in server adapter runtime (D157).
  *
- * Importing this module has no side effects. The first adapter(config) call
- * installs the server surface on Store and PuzzleModel; apps that never call
- * the factory keep the entire implementation out of their bundle.
+ * Importing this module has no side effects. Passing the exported capability
+ * to PuzzleApp installs the server surface on Store and PuzzleModel; apps that
+ * never pass it keep the entire implementation out of their bundle.
  */
 
+import { createAdapterCapability } from '../capabilities.js';
 import { Store } from './store.js';
 import {
 	PuzzleModel,
@@ -18,10 +19,8 @@ import {
 const DELETED_SAVE_MESSAGE = '[puzzle] cannot save a deleted record';
 
 const noop = () => {};
-const adapterConfigs = new WeakSet();
 const writeChainsByStore = new WeakMap();
 let installed = false;
-let warnedBareConfig = false;
 
 /**
  * Thrown by adapter write verbs when the server responds non-OK.
@@ -207,23 +206,10 @@ class AdapterStoreMethods {
 	 */
 	_requireEndpoint(type) {
 		const config = this.modelFor(type).adapter;
-		if (
-			(typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) &&
-			config &&
-			typeof config === 'object' &&
-			!adapterConfigs.has(config) &&
-			!warnedBareConfig
-		) {
-			warnedBareConfig = true;
-			console.warn(
-				"[puzzle] bare static adapter config detected — import { adapter } from " +
-					"'@magic-spells/puzzle/adapter' and wrap it: static adapter = adapter({ endpoint: '/api/...' })"
-			);
-		}
 		const endpoint = config?.endpoint;
 		if (!endpoint) {
 			throw new Error(
-				`[puzzle] no adapter declared for '${type}' — add static adapter = adapter({ endpoint: '/api/...' }) to the model`
+				`[puzzle] no adapter declared for '${type}' — add static adapter = { endpoint: '/api/...' } to the model`
 			);
 		}
 		return endpoint;
@@ -615,18 +601,5 @@ function installAdapter() {
 	installed = true;
 }
 
-/**
- * Validate and brand a model adapter config, installing the opt-in runtime on
- * first use. The exact config object is returned for static adapter = adapter(…).
- */
-export function adapter(config) {
-	installAdapter();
-	if (config == null || typeof config !== 'object' || Array.isArray(config)) {
-		throw new TypeError('[puzzle] adapter(config) expects an object with a string endpoint');
-	}
-	if (typeof config.endpoint !== 'string' || config.endpoint.length === 0) {
-		throw new TypeError('[puzzle] adapter(config) requires a non-empty string endpoint');
-	}
-	adapterConfigs.add(config);
-	return config;
-}
+/** Opaque app-config capability; its internal install is idempotent. */
+export const adapter = createAdapterCapability(installAdapter);

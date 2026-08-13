@@ -14,6 +14,8 @@ import { adapter } from '../client-runtime/datastore/adapter.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 
+adapter.install();
+
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
 const slot = () => new ViewNode(SLOT_TAG);
@@ -24,7 +26,7 @@ class Org extends PuzzleModel {
 		id: Puzzle.string().primary(),
 		name: Puzzle.string().required(),
 	};
-	static adapter = adapter({ endpoint: '/orgs' });
+	static adapter = { endpoint: '/orgs' };
 }
 const makeStore = () => new Store({ org: Org });
 

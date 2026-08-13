@@ -410,10 +410,11 @@ Per [[DOC-SPEC-DATA]] §7 and §20, v1 draws a precise line between what the sto
     **Template-access caveat:** reading a relationship in the template renders current state but subscribes nothing (render runs outside the tracked eval) — always seed the traversal from `data()`.
   - **The property name is reserved.** Assigning to it (e.g. an embedded `{ author: {...} }` server payload) warns once and is ignored — set the FK field instead. This keeps `Object.assign(record, payload)` safe on the server read path.
 
-- **Server access (D21 read + D50 write, extracted by D157):** import
-  `adapter` from `@magic-spells/puzzle/adapter` and declare
-  `static adapter = adapter({ endpoint: '/api/todos' })`. The factory installs
-  the server verbs; without it core records have no `save()`/`delete()` and the
+- **Server access (D21 read + D50 write, extracted by D157):** declare the bare
+  model config `static adapter = { endpoint: '/api/todos' }`, import `adapter`
+  from `@magic-spells/puzzle/adapter` in `app.js`, and pass it once to
+  `new PuzzleApp({ ..., adapter })`. The capability installs the server verbs;
+  without it core records have no `save()`/`delete()` and the
   Store has no `loadAll()`/`loadOne()`/`upsert()`/`request()`. Reads fetch from
   `apiURL + endpoint` and preserve identity. Writes are local-first with the
   same endpoint; `save()` validates before any request. Write verbs reject with

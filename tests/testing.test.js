@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
 import { PuzzleView, ViewNode } from '../client-runtime/index.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import {
 	createTestApp,
 	installFakeAnimate,
@@ -31,6 +32,24 @@ afterEach(() => {
 });
 
 describe('@magic-spells/puzzle/testing — mountView', () => {
+	it('accepts the adapter capability option and rejects a raw object', async () => {
+		class Probe extends PuzzleView {
+			data() {
+				return { installed: typeof this.ctx.store.loadAll === 'function' };
+			}
+			render() {
+				return h('span', {}, [text(this.getData().installed)]);
+			}
+		}
+
+		await expect(mountView(Probe, { adapter: { endpoint: '/api' } })).rejects.toThrow(
+			/options\.adapter.*@magic-spells\/puzzle\/adapter/
+		);
+		const view = await mountView(Probe, { adapter });
+		handles.push(view);
+		expect(view.element.textContent).toBe('true');
+	});
+
 	it('mounts detached with the complete ctx, query helpers, click(), and setProps()', async () => {
 		class Counter extends PuzzleView {
 			data(params, props) {

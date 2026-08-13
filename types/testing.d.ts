@@ -35,6 +35,8 @@ export interface MountViewOptions {
 	router?: Router;
 	models?: Record<string, any>;
 	formatters?: Record<string, Formatter>;
+	/** Install the REST adapter capability before constructing the default Store. */
+	adapter?: PuzzleAppConfig['adapter'];
 }
 
 export interface MountedView<T extends PuzzleView = PuzzleView> {

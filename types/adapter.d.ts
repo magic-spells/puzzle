@@ -1,12 +1,12 @@
 /** Public declarations for the opt-in @magic-spells/puzzle/adapter subpath. */
 
-import type { ModelAdapter, PuzzleModel, RequestOptions } from './index.js';
+import type { PuzzleAdapterCapability, PuzzleModel, RequestOptions } from './index.js';
 
-/**
- * Install the adapter runtime on Store/PuzzleModel and return the exact config
- * object for `static adapter = adapter({ endpoint })`.
- */
-export declare function adapter<T extends ModelAdapter>(config: T): T;
+/** Opaque app-config capability for Puzzle's REST adapter runtime. */
+export interface AdapterCapability extends PuzzleAdapterCapability {}
+
+/** Pass once as `new PuzzleApp({ ..., adapter })`. */
+export declare const adapter: AdapterCapability;
 
 /** Thrown when an adapter write/request responds non-OK. */
 export declare class PuzzleAdapterError extends Error {

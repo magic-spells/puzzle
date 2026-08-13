@@ -50,7 +50,7 @@ class Todo extends PuzzleModel {
 		text: Puzzle.string().required(),
 		completed: Puzzle.boolean().default(false),
 	};
-	static adapter = adapter({ endpoint: '/api/todos' });
+	static adapter = { endpoint: '/api/todos' };
 }
 
 const container = (id = 'app') => {
@@ -90,6 +90,7 @@ describe('PuzzleApp — beforeMount (SPEC §30, D60)', () => {
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: todoRoutes(),
 			beforeMount(a) {
 				a.store.createRecord('todo', { text: 'seeded-todo' });
@@ -108,6 +109,7 @@ describe('PuzzleApp — beforeMount (SPEC §30, D60)', () => {
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: todoRoutes(),
 			beforeMount(a) {
 				// resolve only after a macrotask; mount() must wait for it
@@ -147,6 +149,7 @@ describe('PuzzleApp — beforeMount (SPEC §30, D60)', () => {
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: todoRoutes(),
 			beforeMount(a) {
 				if (throwOnce) {
@@ -239,6 +242,7 @@ describe('PuzzleApp — beforeUnmount (SPEC §30, D60)', () => {
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: homeRoutes(),
 			beforeUnmount(a) {
 				// Services still live: the store is readable here (persistence flush).
