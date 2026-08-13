@@ -29,8 +29,9 @@ notes:
       b.key!==b.key)`) so a NaN key self-matches instead of being replaced every render. (3) Failed
       FIRST mount: mountComponent's .catch now destroys the dead instance, leaves a bare comment
       placeholder at the position, and nulls vnode.component/instance; patch() mounts a FRESH
-      instance when oldVnode.component==null; unmount drops the leftover placeholder. Prevents a
-      broken instance being reused forever (mounted() never firing, setData() inert). Tests:
+      instance when oldVnode.component==null; unmount drops the leftover placeholder. D145 now
+      extends that position ownership with a fresh app-level error view and explicit retry while
+      preserving the no-errorView parent-patch recovery. Tests: tests/error-boundaries.test.js and
       tests/keyed-reconciliation.test.js.
     sha: d9591d6
   - kind: verified
@@ -39,8 +40,6 @@ notes:
       probes post-reduction, detection covers component props) appended to this card's body — prior
       stamp (d9591d6) predated that paragraph.
     sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
-verified_at: '2026-07-25T05:23:56.086Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # ViewManager and ViewNode
@@ -94,6 +93,14 @@ carries its own `Promise.resolve(...).catch(log)` — the enter-side mirror of
 `destroyAnimated()`'s leave-hook guard, and the same idiom the router's
 `#playInLogged` uses.
 
+For D145 failures, the failed instance retains the ordinary parent view while a
+fresh app error view occupies the D115 marker. Same-identity patches transfer
+the replacement and removal destroys it. Component retry destroys the error
+view, exposes the destroyed-instance/placeholder state again, and calls the
+parent's normal `refresh()`; the newly rendered vnode reaches `patch()`'s
+existing recovery arm and mounts a fresh child with current props and slots.
+There is no captured-vnode reconstruction path.
+
 Since [[DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT]], that recovery keys off
 the **instance**, not the mount-time vnode: the handler runs in a microtask, so
 a same-turn parent re-render can already have transferred the instance to a new
@@ -101,9 +108,16 @@ vnode via `patchComponent` — the handler stashes its placeholder on the
 instance (`__failedPlaceholder`), and `patch()`'s recovery test is
 `component == null || component.isDestroyed` (the getter, never the
 always-truthy `destroyed` hook method) with an attached-only insertion-ref
-guard. Router-preloaded instances are exempt from the teardown entirely — the
-Router owns that lifetime and expects a failed committed view to stand until
-the next navigation replaces it.
+guard. Router-preloaded instances now use the same exact-position replacement
+rule. The Router's committed state identifies them at retry time, forces its
+normal same-location navigation with `keep = 0`, and retains failed-chain
+bookkeeping rather than exempting teardown.
+
+When a patch throws partway, `treeUnknown` forbids all later diffs against its
+lying vnode links. The replacement path releases both aborted trees (nested
+instances, refs, document `outside` listeners, portals), clears only the
+bracketed manager range, plants the stable marker, and mounts fresh. Healthy
+paths retain the normal diff.
 
 Composition uses `SLOT_TAG` and shared `expandSlots`: `<Children/>` fills
 the default bucket, `<Slot name="x"/>` fills named buckets, and `<Slot/>` is
@@ -124,7 +138,10 @@ The `@@name` private vnode key emitted for an `@name` attribute inside a D150
 raw block bypasses listener handling and attaches the literal attribute. HTML
 parsing accepts `@` names while `setAttribute` rejects them, so first mount
 attaches a parser-created `Attr` node; later patches update its value directly
-and removal uses the authored name.
+and removal uses the authored name. D89's `__PUZZLE_HAS_RAW_AT__` gate wraps
+both `@@` branches and the helper reference, so apps with no raw block drop the
+shim; the scan deliberately enables it for every raw block, not only ones whose
+body currently contains `@`.
 The `outside` modifier (D86) attaches its listener to `document` in the
 CAPTURE phase (one shared options object for add/remove so the capture flags
 can't mismatch); the containment gate runs before every other modifier step,
@@ -145,6 +162,12 @@ sites — the two that reference the import — sit behind an inlined
 a `flip` attr, dropping the module. The `'flip' in attrs` detection itself is
 intentionally un-probed (it holds no import alive, so gating it would only skip
 an `in` check). Detection covers component props too, not just element attrs.
+
+Portal range/outlet bookkeeping lives in `views/portal.js`. ViewManager keeps
+only the `PORTAL_TAG` integration branches, and every call imported from that
+module carries D89's full inline `__PUZZLE_HAS_PORTAL__` probe. Compiled-out
+Portal vnodes degrade to inert local comments with a one-shot dev warning;
+outside listeners use ordinary physical containment when the bit is false.
 
 D121 instruments actual DOM write/insert/remove/move sites and component-props
 bailouts during `ViewManager.render`. Nested component render scopes attribute

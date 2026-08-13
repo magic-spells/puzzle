@@ -62,8 +62,9 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 	return buildOpts
 }
 
-// bundleDefines builds the literal define map. __PUZZLE_HAS_FLIP__ is a SOURCE
-// fact: plugin.ScanUsage reads the templates for the D85 `flip` attribute.
+// bundleDefines builds the literal define map. The __PUZZLE_HAS_* values are
+// SOURCE facts: plugin.ScanUsage reads templates for flip, Portal, and raw-block
+// usage.
 // __PUZZLE_DEV__ and __PUZZLE_TAKEOVER__ are BUILD facts carried by bundleFlags.
 //
 // __PUZZLE_TAKEOVER__ = false strips the router's three `data-puzzle-ssg`
@@ -80,9 +81,11 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 	f := pl.Features()
 	return map[string]string{
-		"__PUZZLE_DEV__":      strconv.FormatBool(flags.Dev),
-		"__PUZZLE_HAS_FLIP__": strconv.FormatBool(f.Flip),
-		"__PUZZLE_TAKEOVER__": strconv.FormatBool(flags.Takeover),
+		"__PUZZLE_DEV__":        strconv.FormatBool(flags.Dev),
+		"__PUZZLE_HAS_FLIP__":   strconv.FormatBool(f.Flip),
+		"__PUZZLE_HAS_PORTAL__": strconv.FormatBool(f.Portal),
+		"__PUZZLE_HAS_RAW_AT__": strconv.FormatBool(f.RawAt),
+		"__PUZZLE_TAKEOVER__":   strconv.FormatBool(flags.Takeover),
 	}
 }
 

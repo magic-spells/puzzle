@@ -1,6 +1,6 @@
 ---
 name: PuzzleApp
-status: verified
+status: built
 connections:
   - COMPONENT-STORE
   - COMPONENT-ROUTER
@@ -18,8 +18,6 @@ notes:
       app.store throws before mount starts and after unmount. External wiring may
       call const pending = app.mount(); wire(app.store); await pending, or live in
       beforeMount.
-verified_at: '2026-07-25T05:23:57.477Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # PuzzleApp
@@ -34,8 +32,17 @@ the first route lands.
 
 Public config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
 `scrollBehavior`, `routerMode`, `routerInitialPath`, `routerBase`,
-`transitionMode`, `beforeMount`, `mounted`, and `beforeUnmount`. See
+`transitionMode`, `beforeMount`, `mounted`, `beforeUnmount`, `onError`, and
+`errorView`. `errorView` is validated as a `PuzzleView` constructor immediately
+at app construction. See
 [[DOC-SPEC-ANATOMY]] §2 and the amendment sections.
+
+At mount, `onError` and `errorView` are stored together in a WeakMap keyed by
+the app ctx; ctx remains exactly `{ store, router, formatters }`. Contained
+mount/refresh failures report through `onError` first, then a fresh error-view
+instance replaces the failed view at its owned position with `{ error, info,
+retry }` props ([[DECISION-D145-ERROR-BOUNDARIES]]). Teardown deletes the
+WeakMap entry.
 
 Lifecycle order:
 

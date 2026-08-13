@@ -16,6 +16,10 @@ type parser struct {
 	lex  *lexer
 	file string
 	cur  Token
+	// hasRaw records that this top-level template/skeleton parser consumed a
+	// D150 raw block. Raw bodies flatten to ordinary AST nodes, so the synthetic
+	// root carries this fact to ScanUsage after parsing.
+	hasRaw bool
 	// raw is true for the nested parser that walks a captured {#raw} body. Inside
 	// that body HTML is still structural, but nothing in it is Puzzle grammar
 	// (D150): every tag is literal markup and every attribute is an authored
@@ -87,10 +91,11 @@ func ParseTemplate(sec *Sections, filename string) (*Element, error) {
 		return nil, perr
 	}
 	root := &Element{
-		Tag:      "puzzle-view",
-		Attrs:    sec.TemplateAttrs,
-		Children: nodes,
-		Pos:      sec.ViewTagPos,
+		Tag:         "puzzle-view",
+		Attrs:       sec.TemplateAttrs,
+		Children:    nodes,
+		Pos:         sec.ViewTagPos,
+		ContainsRaw: p.hasRaw,
 	}
 	if perr := validateIslands(root, filename); perr != nil {
 		return nil, perr
@@ -123,9 +128,10 @@ func ParseSkeleton(sec *Sections, filename string) (*Element, error) {
 		return nil, perr
 	}
 	root := &Element{
-		Tag:      "puzzle-skeleton",
-		Children: nodes,
-		Pos:      sec.SkeletonTagPos,
+		Tag:         "puzzle-skeleton",
+		Children:    nodes,
+		Pos:         sec.SkeletonTagPos,
+		ContainsRaw: p.hasRaw,
 	}
 	if perr := validateIslands(root, filename); perr != nil {
 		return nil, perr
@@ -181,6 +187,7 @@ func (p *parser) parseChildren(ctx openCtx) ([]Node, *ParseError) {
 				return nil, toPE(err)
 			}
 		case TokRaw:
+			p.hasRaw = true
 			rawNodes, perr := p.parseRaw(t, ctx)
 			if perr != nil {
 				return nil, perr

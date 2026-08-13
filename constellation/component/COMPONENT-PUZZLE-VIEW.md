@@ -1,6 +1,6 @@
 ---
 name: PuzzleView
-status: verified
+status: built
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ANIMATIONS
@@ -16,8 +16,6 @@ notes:
       Keep raw source values and data()-derived display values under different
       keys. A successful data() replaces the model layer, so reusing one key for
       raw local state and a reshaped model value loses the raw value by design.
-verified_at: '2026-07-29T05:19:19.600Z'
-verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
 ---
 
 # PuzzleView
@@ -45,6 +43,17 @@ async components wait. When `renderSkeleton` is defined, the `#loaded` latch
 renders the skeleton while unloaded, `mounted()` fires against it, and the mount
 resolves without awaiting `data()`, with an anti-flash min-duration hold before
 the swap (see [[DECISION-D39-SKELETON]] / [[DECISION-D52-SKELETON-ANTIFLASH]]).
+
+Contained mount/refresh failures report once, preserve the manager's exact
+position, and destroy the failed instance. With an app `errorView`, a fresh
+ordinary view mounts there with `{ error, info, retry }`; retry is stable,
+single-flight, and delegates to an already-owned rebuild path: the Router
+forces a same-location replacement for routed instances, while a child asks
+its parent to refresh so the normal D115 patch mounts a fresh child. Without
+one, the comment position remains for the owner's ordinary next patch.
+Error-view failures are reported as `phase: 'error-view'` and stop without
+recursion. There is no per-view `errorContent` API or ancestor walk
+([[DECISION-D145-ERROR-BOUNDARIES]]).
 
 Public instance surface includes `ctx`, `props`, `route`, `element`, `refs`,
 `getData`, `setData`, `refresh`, `memo`, `isDestroyed`, `playIn`, `playOut`, and

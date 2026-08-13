@@ -48,7 +48,7 @@ second specification. Decision cards hold rationale and git holds chronology.
 - App config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
   `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode`,
   `routerInitialPath`, `routerBase`, `transitionMode`, `beforeMount`, `mounted`,
-  and `beforeUnmount`.
+  `beforeUnmount`, `onError`, and `errorView`.
 - The app is SPA-first. Prerendered output comes in two modes (D67/D81), never a
   request-time SSR server or hydration protocol: `output: 'hybrid'` ships
   prerendered pages the SPA takes over at navigation zero; `output: 'static'`
@@ -103,6 +103,13 @@ second specification. Decision cards hold rationale and git holds chronology.
   plus `viewWillShow`/`viewDidShow` and `viewWillHide`/`viewDidHide`.
 - `this.route` is the pre-commit-safe route snapshot. `this.element`,
   `this.refs`, `this.memo()`, `getData()`, `setData()`, and `refresh()` are live.
+- Contained mount/refresh failures report through app `onError`, destroy the
+  failed instance, and preserve its exact position. An app `errorView` mounts
+  there as a fresh ordinary view with `{ error, info, retry }`; retry is stable,
+  single-flight, and re-enters the owner's ordinary rebuild path: a forced
+  same-location Router replace or the component parent's refresh. With no error
+  view, the invisible marker remains for ordinary owner recovery.
+  Error-view failures report once as `phase: 'error-view'` and never recurse.
 - The vnode manager handles inline components, slots, SVG namespaces, controlled
   form properties, events/modifiers, keyed moves, islands, refs, and teardown.
   Keyed identity is the `(tag, key)` pair by SameValueZero, so type-distinct
@@ -267,11 +274,16 @@ second specification. Decision cards hold rationale and git holds chronology.
 ## Error handling (D145)
 
 `new PuzzleApp({ onError(error, { phase, view, route }) })` receives every
-framework-contained error (mount, refresh, navigation, transition/leave,
-boundary); unregistered → the original `console.error` per catch site. A view's
-script-side `errorContent(error)` renders fallback UI in place of the
-failed-mount placeholder; nearest boundary wins, null declines outward, owner
-`refresh()` retries. Event handlers and formatters surface uncaught.
+framework-contained error (mount, refresh, navigation, transition/leave, bind,
+error-view); unregistered → the original `console.error` per catch site.
+`errorView: AppErrorView` registers one ordinary compiled `.pzl` view as the
+app-wide fallback: a failed view or component is replaced in place by a fresh
+error-view instance (parent, siblings, and layout survive) receiving
+`{ error, info, retry }` props — `retry()` destroys it and reconstructs the
+original through the Router's full same-location rebuild or the component
+parent's ordinary refresh; never automatic, never recursive. Without
+`errorView`, failures report and the position keeps its recovery placeholder.
+Event handlers and formatters surface uncaught.
 
 ## Deliberately not shipped
 

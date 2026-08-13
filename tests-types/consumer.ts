@@ -39,6 +39,7 @@ import type {
 	ModelAdapter,
 	FocusBehavior,
 	PuzzleErrorInfo,
+	PuzzleErrorViewProps,
 } from '@magic-spells/puzzle';
 import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
@@ -130,11 +131,6 @@ class TodoListView extends PuzzleView {
 		},
 		selectAll: () => this.setData({ filter: 'all', selectedId: null }),
 	};
-
-	errorContent(error: unknown) {
-		void error;
-		return undefined;
-	}
 
 	async data(params?: Record<string, string>, props?: any): Promise<object> {
 		const id = params?.id ?? props?.id;
@@ -259,6 +255,13 @@ const attachAuth: BeforeRequestHook = (init, context) => {
 const replaceInit: BeforeRequestHook = (init) => ({ ...init, credentials: 'include' });
 void replaceInit;
 
+class AppErrorView extends PuzzleView {
+	data(_params?: Record<string, string>, props?: PuzzleErrorViewProps) {
+		props?.retry();
+		return { message: String(props?.error), phase: props?.info.phase };
+	}
+}
+
 const config: PuzzleAppConfig = {
 	target: '#app',
 	routes,
@@ -272,6 +275,7 @@ const config: PuzzleAppConfig = {
 	transitionMode: 'sequential',
 	scrollBehavior,
 	focusBehavior,
+	errorView: AppErrorView,
 	async beforeMount(app) {
 		// `this` is the PuzzleApp; store is live and awaited before nav #0 (§34).
 		const self: PuzzleApp = this;

@@ -423,10 +423,12 @@ func TestBuildTakeoverDefineDCE(t *testing.T) {
 }
 
 // definesFixture parameterizes the throwaway one-route app the runtime-probe DCE
-// tests build. flipAttr is appended to the keyed <li>; routeMeta is appended to
-// the route object literal; extraFiles adds sibling modules.
+// tests build. The three feature fields add exact template usage; routeMeta is
+// appended to the route object literal; extraFiles adds sibling modules.
 type definesFixture struct {
 	flipAttr   string
+	portal     bool
+	raw        bool
 	routeMeta  string
 	extraFiles map[string]string
 }
@@ -459,12 +461,20 @@ import Home from './views/Home.pzl';
 app.mount();
 export default app;
 `
+	featureMarkup := ""
+	if fx.portal {
+		featureMarkup += "  <Portal><div>remote</div></Portal>\n"
+	}
+	if fx.raw {
+		featureMarkup += "  {#raw}<span @x=\"y\">literal</span>{/raw}\n"
+	}
 	view := `<puzzle-view>
   <ul>
     {#for item in items}
       <li key={ item.id }` + fx.flipAttr + `>{ item.label }</li>
     {/for}
   </ul>
+` + featureMarkup + `
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
@@ -502,19 +512,18 @@ export default class Home extends PuzzleView {
 // production build, so asserting its absence would pass vacuously).
 const flipEasing = "cubic-bezier(0.2, 0, 0, 1)"
 
+const portalMarker = "data-puzzle-portal"
+
+const rawAtEscape = "@@"
+
 // headTagMarker is the `data-puzzle-head` attribute the SSG stamps on every
 // managed tag — the same kind of minification-proof literal as flipEasing. It
 // must appear in PRERENDERED HTML and never in a browser bundle.
 const headTagMarker = "data-puzzle-head"
 
-// TestBuildUsageDefinesDCE proves the project usage SCAN drives the
-// __PUZZLE_HAS_FLIP__ runtime probe end to end: a production app with no `flip`
-// attribute drops flip.js entirely, while a readable development build that uses
-// it keeps the module's distinctive literal AND identifier (proving it is
-// genuinely linked in, not merely that a string survived).
-//
-// It is the only build-wide feature probe. Managed head tags are no longer gated
-// by one — see TestBuildNeverBundlesHeadTagMachinery.
+// TestBuildUsageDefinesDCE proves the project usage scan drives all D89-style
+// runtime probes end to end. Assertions use literals that survive production
+// minification; identifiers would mangle and make absence checks vacuous.
 func TestBuildUsageDefinesDCE(t *testing.T) {
 	without := writeDefinesFixture(t, definesFixture{})
 	if err := Build(without, Options{Development: false}); err != nil {
@@ -524,22 +533,40 @@ func TestBuildUsageDefinesDCE(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(withoutJS), flipEasing) {
-		t.Errorf("bundle without a flip attribute retained %q", flipEasing)
+	for _, marker := range []string{flipEasing, portalMarker, rawAtEscape} {
+		if strings.Contains(string(withoutJS), marker) {
+			t.Errorf("bundle without feature usage retained %q", marker)
+		}
 	}
 
 	with := writeDefinesFixture(t, definesFixture{flipAttr: " flip"})
-	if err := Build(with, Options{Development: true}); err != nil {
+	if err := Build(with, Options{Development: false}); err != nil {
 		t.Fatalf("Build with feature usage failed: %v", err)
 	}
 	withJS, err := os.ReadFile(filepath.Join(with, "dist", "app.js"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, marker := range []string{flipEasing, "beginFlip"} {
-		if !strings.Contains(string(withJS), marker) {
-			t.Errorf("bundle with a flip attribute should retain %q", marker)
-		}
+	if !strings.Contains(string(withJS), flipEasing) {
+		t.Errorf("bundle with a flip attribute should retain %q", flipEasing)
+	}
+
+	withPortal := writeDefinesFixture(t, definesFixture{portal: true})
+	if err := Build(withPortal, Options{Development: false}); err != nil {
+		t.Fatalf("Build with Portal usage failed: %v", err)
+	}
+	portalJS := readFile(t, filepath.Join(withPortal, "dist", "app.js"))
+	if !strings.Contains(portalJS, portalMarker) {
+		t.Errorf("bundle with <Portal> should retain %q", portalMarker)
+	}
+
+	withRaw := writeDefinesFixture(t, definesFixture{raw: true})
+	if err := Build(withRaw, Options{Development: false}); err != nil {
+		t.Fatalf("Build with raw usage failed: %v", err)
+	}
+	rawJS := readFile(t, filepath.Join(withRaw, "dist", "app.js"))
+	if !strings.Contains(rawJS, rawAtEscape) {
+		t.Errorf("bundle with {#raw} should retain the %q literal-attribute shim", rawAtEscape)
 	}
 }
 

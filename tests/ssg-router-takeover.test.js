@@ -162,7 +162,7 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.textContent).toBe('Still readable');
 		expect(el.hasAttribute('data-puzzle-ssg')).toBe(true);
 		expect(error).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			'[puzzle] routed view mount failed — the failed position was replaced:',
 			expect.any(Error)
 		);
 		error.mockRestore();
@@ -196,24 +196,26 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.querySelector('.fresh-layout')).toBeNull();
 		expect(el.hasAttribute('data-puzzle-ssg')).toBe(true);
 		expect(error).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			'[puzzle] routed view mount failed — the failed position was replaced:',
 			expect.any(Error)
 		);
 		error.mockRestore();
 	});
 
-	it('shows the error boundary instead of restoring when the failed view declares one', async () => {
+	it('mounts the app error view before considering prerendered restoration', async () => {
 		// The restore closure replaceChildren()s the prerendered nodes back, which
-		// DETACHES the failed view's ViewManager anchor — a boundary rendering after
-		// that could never insert anything. The boundary gets the first refusal
+		// DETACHES the failed view's ViewManager anchor — an error view mounting after
+		// that could never insert anything. The error view gets the first refusal
 		// (D145/F9): when it draws, the prerendered content stays cleared and the
 		// marker stays off, because the page is now the error face.
+		class ErrorView extends PuzzleView {
+			render() {
+				return h('p', { class: 'fallback' }, [text(this.props.error.message)]);
+			}
+		}
 		class BadMountedRoot extends PuzzleView {
 			mounted() {
 				throw new Error('takeover mounted failed');
-			}
-			errorContent(error) {
-				return h('p', { class: 'fallback' }, [text(error.message)]);
 			}
 			render() {
 				return h('h1', { class: 'home' }, [text('Home')]);
@@ -225,6 +227,7 @@ describe('router SSG takeover (M2)', () => {
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: BadMountedRoot }],
 			routerMode: 'memory',
+			errorView: ErrorView,
 		});
 
 		await expect(app.mount()).resolves.toBe(app);
@@ -235,26 +238,28 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.querySelector('h1.home')).toBeNull(); // prerendered content stays cleared
 		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false);
 		expect(error).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			'[puzzle] routed view mount failed — the failed position was replaced:',
 			expect.any(Error)
 		);
 		error.mockRestore();
 	});
 
-	it('falls back to the restore when the boundary render itself throws', async () => {
-		// `shown` is false for a boundary that could not draw, so the prerendered
+	it('falls back to the restore when the error view itself throws', async () => {
+		// `shown` is false for an error view that could not draw, so the prerendered
 		// page still comes back — the fallback of last resort.
-		class BadMountedRoot extends PuzzleView {
-			mounted() {
-				throw new Error('takeover mounted failed');
-			}
-			errorContent() {
+		class BadErrorView extends PuzzleView {
+			render() {
 				return h('p', {
 					class: 'fallback',
 					ref: () => {
 						throw new Error('fallback boom');
 					},
 				});
+			}
+		}
+		class BadMountedRoot extends PuzzleView {
+			mounted() {
+				throw new Error('takeover mounted failed');
 			}
 			render() {
 				return h('h1', { class: 'home' }, [text('Home')]);
@@ -267,6 +272,7 @@ describe('router SSG takeover (M2)', () => {
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: BadMountedRoot }],
 			routerMode: 'memory',
+			errorView: BadErrorView,
 		});
 
 		await expect(app.mount()).resolves.toBe(app);
@@ -279,8 +285,8 @@ describe('router SSG takeover (M2)', () => {
 		error.mockRestore();
 	});
 
-	it('restores the prerendered nodes and marker when the failed view has NO boundary', async () => {
-		// The no-boundary half of the pair above: behavior is unchanged — the exact
+	it('restores the prerendered nodes and marker when the app has no error view', async () => {
+		// The no-error-view half of the pair above: the exact
 		// nodes and the marker come back.
 		class BadMountedRoot extends PuzzleView {
 			mounted() {
@@ -306,7 +312,7 @@ describe('router SSG takeover (M2)', () => {
 		expect(el.textContent).toBe('Prerendered');
 		expect(el.hasAttribute('data-puzzle-ssg')).toBe(true);
 		expect(error).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			'[puzzle] routed view mount failed — the failed position was replaced:',
 			expect.any(Error)
 		);
 		error.mockRestore();

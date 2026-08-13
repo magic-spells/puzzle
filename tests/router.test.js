@@ -1705,7 +1705,7 @@ describe('Router — skeleton views skip the data() gate (v1.8, D39)', () => {
 		expect(el.textContent).toContain('FED');
 	});
 
-	it('a rejecting data() behind a skeleton logs; the URL has already moved and the skeleton stays', async () => {
+	it('a rejecting data() behind a skeleton logs and replaces it at the committed position', async () => {
 		const gate = deferred();
 		const PostView = makePostView(gate);
 		const routes = [
@@ -1724,7 +1724,8 @@ describe('Router — skeleton views skip the data() gate (v1.8, D39)', () => {
 			'[puzzle] skeleton view data() failed:',
 			expect.any(Error)
 		);
-		expect(el.querySelector('.post.is-loading')).not.toBeNull(); // still up
+		expect(el.querySelector('.post.is-loading')).toBeNull();
+		expect(el.querySelector('.layout main')?.firstChild?.nodeType).toBe(Node.COMMENT_NODE);
 		errSpy.mockRestore();
 	});
 
@@ -1847,7 +1848,7 @@ describe('Router — router-owned mount() rejections are observed (Fix 1)', () =
 		await drainRejections();
 
 		expect(errSpy).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			'[puzzle] routed view mount failed — the failed position was replaced:',
 			expect.any(Error)
 		);
 		expect(unhandled).toHaveLength(0);
@@ -1881,12 +1882,12 @@ describe('Router — router-owned mount() rejections are observed (Fix 1)', () =
 		await drainRejections();
 
 		expect(errSpy).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			'[puzzle] routed view mount failed — the failed position was replaced:',
 			expect.any(Error)
 		);
 		expect(unhandled).toHaveLength(0);
 		expect(router.current.path).toBe('/bad');
-		expect(el.querySelector('.badmount')).not.toBeNull(); // rendered before mounted() threw
+		expect(el.querySelector('.badmount')).toBeNull();
 
 		await router.push('/');
 		expect(router.current.path).toBe('/');
@@ -1910,7 +1911,7 @@ describe('Router — router-owned mount() rejections are observed (Fix 1)', () =
 		await drainRejections();
 
 		expect(errSpy).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			'[puzzle] routed view mount failed — the failed position was replaced:',
 			expect.any(Error)
 		);
 		expect(unhandled).toHaveLength(0);

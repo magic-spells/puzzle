@@ -51,6 +51,23 @@ one is *not* a compile error; it silently builds a different product.
 
 ## 0.6.0 — Unreleased
 
+### Changed
+
+- **BREAKING: error fallback UI is one app-level view (D145 amended).**
+  `PuzzleView.errorContent(error)` — the per-view member returning hand-built
+  `ViewNode` trees — is removed. Register one ordinary compiled view instead:
+  `new PuzzleApp({ errorView: AppErrorView })`. On a framework-contained
+  mount/refresh failure the failed view or component is replaced in place by a
+  fresh error-view instance (parent, siblings, and layout survive) receiving
+  `{ error, info, retry }` props; `retry()` re-runs the failed work through
+  the normal pipeline (a same-location navigation for routed views, the
+  owner's refresh for components), is single-flight, and never fires
+  automatically. The error view's own failure reports once as
+  `phase: 'error-view'` (replacing the old `boundary` phase) and never
+  recurses. `onError` and the no-fallback default behavior are unchanged.
+  Migration: move `errorContent()` markup into an `AppError.pzl` template and
+  pass its class as `errorView`.
+
 ### Added
 
 - **Static raw template blocks (D150).** `{#raw}…{/raw}` disables Puzzle's

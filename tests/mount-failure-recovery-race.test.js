@@ -293,8 +293,8 @@ describe('a superseding first-mount refresh failure recovers from the anchor rac
 	});
 });
 
-describe('a router-preloaded instance is never torn down by the view manager', () => {
-	it('a rejected preloaded mount is logged only — instance, DOM, and vnode links survive', async () => {
+describe('a router-preloaded failure is replaced at its owned position', () => {
+	it('destroys the rejected instance and leaves the default recovery placeholder', async () => {
 		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
 		class Routed extends PuzzleView {
 			data() {
@@ -328,24 +328,16 @@ describe('a router-preloaded instance is never torn down by the view manager', (
 		await flush();
 
 		expect(err).toHaveBeenCalledWith(
-			'[puzzle] view mount failed after commit — the view stays mounted (router owns its lifetime):',
+			'[puzzle] routed view mount failed — the failed position was replaced:',
 			expect.any(Error)
 		);
 
-		// The Router owns this lifetime: the view stays alive, subscribed, and committed
-		// until the next navigation replaces it.
-		expect(view.isDestroyed).toBe(false);
-		expect(store.keysBySubscriber.has(view)).toBe(true);
+		// D145 replaces the failed position locally even for a preloaded routed view.
+		expect(view.isDestroyed).toBe(true);
+		expect(store.keysBySubscriber.has(view)).toBe(false);
 		expect(vnode.component).toBe(view);
-		expect(vnode.instance).toBe(view);
-		const routedEl = el.querySelector('.routed');
-		expect(routedEl).not.toBeNull();
-		expect(routedEl.isConnected).toBe(true);
-		expect(el.innerHTML).not.toContain('<!--puzzle-->');
-
-		// …and it is still a working view — router.current can refresh it.
-		view.setData({ label: 'refreshed' });
-		await flush();
-		expect(el.querySelector('.routed').textContent).toBe('refreshed');
+		expect(vnode.instance).toBeNull();
+		expect(el.querySelector('.routed')).toBeNull();
+		expect(el.firstChild?.nodeType).toBe(Node.COMMENT_NODE);
 	});
 });

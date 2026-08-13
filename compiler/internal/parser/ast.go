@@ -17,6 +17,12 @@ type Element struct {
 	Children []Node
 	Pos      Position
 
+	// ContainsRaw is set only on the synthetic template/skeleton root when its
+	// source contained at least one D150 {#raw} block. The block body expands
+	// into ordinary Text/Element nodes, so this preserves the exact source fact
+	// needed by the build-wide usage scan.
+	ContainsRaw bool
+
 	// RawInner, when non-nil, carries a verbatim markup string that codegen
 	// emits as the ViewNode's string children (island seed, D44) instead of
 	// reconciled child vnodes — set only by codegen's {#svg} resolve pass

@@ -31,10 +31,11 @@ static) was destroyed with no recovery path.
   mounting into a disconnected `DocumentFragment` would break both. So the mount
   still happens in the live container, and the *failure* path restores.
 - **Hybrid:** `#takeoverSSG` captures the child nodes + marker value and returns
-  a restore callback; `#observeMount` invokes it from the mount promise's
-  rejection handler (a microtask — before the next paint) before logging. The
-  failed instance stays committed (`#state`), exactly the pre-existing
-  posture — a later navigation replaces and destroys it normally.
+  a restore callback. `#observeMount` reports the failure, destroys the failed
+  instance, and first attempts D145's app error view at the same position. Only
+  when no error view is configured or that view fails does it invoke the restore
+  callback. The Router retains failed-chain bookkeeping so navigation away
+  replaces the position normally.
 - **The marker is restored too, and every container-mount branch re-runs the
   takeover clear** — including the layout-swap branch, where the marker can only
   be present after a failed navigation-#0 restore. A no-layout app self-heals on
@@ -53,9 +54,9 @@ static) was destroyed with no recovery path.
 
 ## Consequences
 
-- A failed takeover shows stale-but-real prerendered content with dead
-  interactivity, and logs — strictly better than the blank page, but not a
-  working app; surfacing the failure remains the app's job.
+- With `errorView`, a failed takeover shows live authored error UI. Otherwise it
+  shows stale-but-real prerendered content with dead interactivity and logs —
+  strictly better than a blank page, but not a working app.
 - Restoration happens on the rejection microtask; the container is empty only
   between the synchronous clear and the rejection, never across a paint.
 

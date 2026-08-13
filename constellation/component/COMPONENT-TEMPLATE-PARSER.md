@@ -43,7 +43,11 @@ needed parent context: under script/style it emits that span as one literal Text
 node; elsewhere a nested brace-disabled HTML lexer builds ordinary element/text
 nodes. Attribute tokens from that nested pass are static; an `@`-prefixed name
 carries a literal-name bit so it cannot become an event. Raw blocks do not nest
-and are rejected at attribute-value positions.
+and are rejected at attribute-value positions. Because their expanded AST is
+otherwise indistinguishable from ordinary markup, the synthetic template or
+skeleton root also records that at least one raw block was parsed; D89's usage
+scan consumes that deliberately over-inclusive fact to retain the literal-`@`
+client shim.
 
 One shared balanced scanner handles expressions in templates and attributes,
 skipping JS strings, regexes, comments, and nested template-literal

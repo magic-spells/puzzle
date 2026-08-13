@@ -1,6 +1,6 @@
 ---
 name: Router
-status: verified
+status: built
 connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-VIEW-MANAGER
@@ -21,8 +21,6 @@ notes:
       else), and url() now delegates to the exported encodeURL shared with both prerender paths.
       Added the dev-only route-commit emit to the D100 bridge.
     sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
-verified_at: '2026-07-25T05:23:58.437Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
 # Router
@@ -116,6 +114,17 @@ each navigation, not only the divergent survivor: patchComponent pushes children
 through on every re-render, so a survivor-only swap would be reverted by a later
 ancestor re-render (regression-tested).
 
+A contained routed mount/refresh failure marks the chain non-reusable, destroys
+the failed view, and replaces only its exact owned position with the app error
+view or the invisible recovery marker. Navigation away disposes that
+replacement normally. Explicit retry reconstructs the routed views and reruns
+all route-chain data by forcing an internal same-location `replace` through the
+ordinary navigation pipeline; `chainInvalid` makes `keep = 0`, and the commit
+naturally installs healthy instance bookkeeping. A superseding navigation
+makes the stale retry a no-op. The old ancestor-boundary chain
+truncation/invalidation path is gone—replacement never renders above the failed position
+([[DECISION-D145-ERROR-BOUNDARIES]]).
+
 Sequential transitions await the old unit's out phase before commit. A failing
 leave hook is logged and the swap continues so the incoming preloaded chain is
 not leaked. `transitionMode: 'overlap'` pins the leaver at its measured fixed
@@ -140,8 +149,10 @@ opt-out. Failed/initial navigations do not move scroll.
 Hybrid output takeover (`output: 'hybrid'`, D67) recognizes matching
 `data-puzzle-ssg` markup at navigation zero, replaces it inside the commit
 window, removes the marker, and skips the initial enter animation. After that
-the page is the same SPA. A failed takeover mount restores the snapshotted
-prerendered nodes + marker on the rejection microtask ([[DECISION-D140-TAKEOVER-MOUNT-RESTORATION]]),
+the page is the same SPA. A failed takeover mount first offers the exact
+position to the app error view; only an absent or failed error view restores
+the snapshotted prerendered nodes + marker on the rejection microtask
+([[DECISION-D140-TAKEOVER-MOUNT-RESTORATION]]),
 and every container-mount branch — including a layout swap — re-runs the
 takeover clear so the restored marker cannot duplicate the page. (True static
 output, `output: 'static'`/D81, involves no router — those pages are mounted by

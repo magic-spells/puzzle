@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 )
 
 // repoRoot returns the module root (three levels up from compiler/internal/build),
@@ -110,6 +112,49 @@ func TestWatchBuilderIncrementalRebuild(t *testing.T) {
 	if strings.Contains(bundle, "MARKER_ONE") {
 		t.Errorf("second bundle still contains the stale MARKER_ONE")
 	}
+}
+
+// Esbuild freezes Define when an api.Context is created. Every usage bit must
+// therefore replace the watch context when it flips; updating only plugin state
+// would leave the incremental bundle on stale Portal/raw gates.
+func TestWatchBuilderReplacesContextWhenUsageDefinesFlip(t *testing.T) {
+	root := scratchApp(t)
+	home := filepath.Join(root, "app", "views", "Home.pzl")
+	write(t, home, strings.ReplaceAll(viewTmpl, "%MARKER%", "PLAIN"))
+	write(t, filepath.Join(root, "app", "app.js"),
+		"import Home from './views/Home.pzl';\nconsole.log(Home);\n")
+
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+	if got := b.defined; got != (plugin.Features{}) {
+		t.Fatalf("initial features = %+v, want all false", got)
+	}
+
+	assertReplace := func(name, source string, want plugin.Features) {
+		t.Helper()
+		before := b.ctx
+		write(t, home, source)
+		if _, err := b.Rebuild([]string{home}); err != nil {
+			t.Fatalf("%s Rebuild: %v", name, err)
+		}
+		if b.ctx == before {
+			t.Errorf("%s kept the esbuild context after usage features changed", name)
+		}
+		if b.defined != want {
+			t.Errorf("%s defined = %+v, want %+v", name, b.defined, want)
+		}
+	}
+
+	assertReplace("Portal on", `<puzzle-view><Portal><p>remote</p></Portal></puzzle-view>
+<script>import { PuzzleView } from '@magic-spells/puzzle'; export default class Home extends PuzzleView {}</script>
+`, plugin.Features{Portal: true})
+	assertReplace("raw replaces Portal", `<puzzle-view>{#raw}<p @x="y">literal</p>{/raw}</puzzle-view>
+<script>import { PuzzleView } from '@magic-spells/puzzle'; export default class Home extends PuzzleView {}</script>
+`, plugin.Features{RawAt: true})
+	assertReplace("all off", strings.ReplaceAll(viewTmpl, "%MARKER%", "PLAIN"), plugin.Features{})
 }
 
 // TestWatchBuilderCSSResetOnDelete proves the shared <style> collector drops a

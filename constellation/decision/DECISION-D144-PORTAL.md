@@ -1,6 +1,6 @@
 ---
 name: D144 — Portal (scoped v1)
-status: verified
+status: built
 connections:
   - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
   - DECISION-D141-MARKER-FALLBACK-BODIES
@@ -43,6 +43,13 @@ binding and loop-variable name like `SLOT_TAG`.
 
 ## Runtime contract
 
+- Portal state and operations live in `client-runtime/views/portal.js`, a real
+  module seam gated by D89's `__PUZZLE_HAS_PORTAL__` usage define. Every
+  import-holding call site uses the full inline probe; undefined means enabled
+  for unbundled consumers and Vitest. With an explicit false define, a Portal
+  vnode leaves an inert local comment and warns once in development. Production
+  remains non-throwing, and `@event:outside` falls back to physical
+  `el.contains` containment.
 - ONE outlet (`<div data-puzzle-portal>`) appended beside the app mount
   container (host set by `PuzzleApp.mount()` / `mountStatic`; `<body>`
   fallback), created lazily on the first portal mount, removed when the last
@@ -84,7 +91,9 @@ dev build warns when `setPortalHost()` would stomp live portal state. Scoping
 the state to ctx is the compatible upgrade if a real embedding case ever
 funds it.
 
-Compiler tree walkers all recurse into `*parser.Portal` except three that are
+The build-wide usage walk marks any `*parser.Portal` as `HasPortal` before
+recursing into its children, so apps without Portal drop `portal.js` entirely.
+Other compiler tree walkers all recurse into `*parser.Portal` except three that are
 deliberately exempt: loop-key roots (contractually elements/components),
 `buildTextRun` (receives pre-filtered text runs only), and `condStaticLen`
 (counts a Portal as one fixed vnode without descending — its local

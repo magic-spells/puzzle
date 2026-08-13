@@ -45,6 +45,8 @@ func builtinAllowlist() (map[string]bool, error) {
 type Usage struct {
 	Formatters map[string]bool
 	HasFlip    bool
+	HasPortal  bool
+	HasRawAt   bool
 }
 
 // Features are the build-wide DCE bits — one boolean per gated runtime module —
@@ -52,7 +54,9 @@ type Usage struct {
 // WatchBuilder can decide with one == whether the Define set frozen into its
 // esbuild context went stale.
 type Features struct {
-	Flip bool
+	Flip   bool
+	Portal bool
+	RawAt  bool
 }
 
 // Features projects the scan result onto the define bits. It is exported for
@@ -60,13 +64,16 @@ type Features struct {
 // whether the Defines frozen into an esbuild context went stale.
 func (u Usage) Features() Features {
 	return Features{
-		Flip: u.HasFlip,
+		Flip:   u.HasFlip,
+		Portal: u.HasPortal,
+		RawAt:  u.HasRawAt,
 	}
 }
 
 // ScanUsage walks scanRoot for first-party source usage that controls runtime
-// tree-shaking: it parses .pzl templates for formatter chains and flip
-// attributes. Both are template facts, so only .pzl files are read.
+// tree-shaking: it parses .pzl templates for formatter chains, flip attributes,
+// Portal nodes, and raw blocks. All are template facts, so only .pzl files are
+// read.
 //
 // The scan deliberately errs toward OVER-inclusion: it walks the whole project
 // (not just app/) so a component imported from a sibling directory still
@@ -115,6 +122,12 @@ func skipScanDir(name string) bool {
 func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 	switch node := n.(type) {
 	case *parser.Element:
+		if node.ContainsRaw {
+			// Deliberately over-inclusive: any raw block keeps the D150 literal-@
+			// attribute shim. A false negative would send an authored `@x` name to
+			// setAttribute(), which throws; a false positive costs only the shim.
+			usage.HasRawAt = true
+		}
 		if hasFlipAttr(node.Attrs) {
 			usage.HasFlip = true
 		}
@@ -144,6 +157,7 @@ func collectUsage(n parser.Node, usage *Usage, allow map[string]bool) {
 			collectUsage(child, usage, allow)
 		}
 	case *parser.Portal:
+		usage.HasPortal = true
 		// Portaled children are ordinary compiled content — same discovery.
 		for _, child := range node.Children {
 			collectUsage(child, usage, allow)
