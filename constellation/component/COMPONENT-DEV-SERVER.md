@@ -49,7 +49,13 @@ later usage scans require a `.pzl` change; the full public mirror requires an
 initial batch, a public-path batch, or a resolved public source that differs
 from the last-synced one (a public tree created mid-session syncs on the next
 rebuild); and a public-only batch skips esbuild unless that asset participated
-in the prior module graph, compared with both sides symlink-normalized. Once
+in the prior module graph, compared with both sides symlink-normalized. Static
+dev applies the same test at its own layer: a public path the last committed
+route graph knows about is classified as the module it is — attributed to its
+pages, render-wide, or a full render when it disappears — and only a path in
+neither graph set is the zero-route copy-only change
+([[DECISION-D155-ROUTE-LEVEL-INVALIDATION]]). Neither path treats living under
+`public/` as proof that a file is an asset. Once
 the first bundle lands, every successful rebuild and Tailwind trigger
 recomposes styles.css; the byte memo skips the write when the composed output
 is unchanged and still on disk, which also recreates an externally deleted
