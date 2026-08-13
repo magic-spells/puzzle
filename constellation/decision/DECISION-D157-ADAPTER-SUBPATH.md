@@ -112,6 +112,14 @@ subpath with its own factory (e.g. a `/graphql` export), never a mode of this
 one: subpath namespacing means each app imports exactly the protocol it uses.
 None is planned; a real app outgrowing `request()` is the trigger.
 
+The per-model declaration is what keeps that door open: because every model
+names its own adapter via the factory it calls, a future protocol migration is
+a two-line change in one model file, and different models in one app may use
+different adapters. An app-level enable (or the pre-D157 hardwired store)
+makes one protocol an app-wide assumption with no seam to swap at — the
+model-owned factory call is simultaneously the tree-shake signal and the
+rewire point.
+
 ## Alternatives rejected
 
 - **Keeping `static adapter = {...}` as a plain config object** — a config
