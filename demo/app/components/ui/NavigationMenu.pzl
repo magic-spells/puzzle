@@ -138,6 +138,7 @@ export default class NavigationMenu extends PuzzleView {
     this._uid = ++uid;
     this._openTimer = null; // hover-intent open delay
     this._closeTimer = null; // hover-intent close delay
+    this._hoverOpened = null; // index opened by the current hover interaction
     this._docBound = false; // outside-pointerdown listener attached only while open
     this._pendingFocusFirst = false; // focus first panel link after the next render
     // Stable ref for the outside-click listener (added in openAt, removed in
@@ -219,6 +220,7 @@ export default class NavigationMenu extends PuzzleView {
   openAt(index) {
     this._clearTimers();
     if (this.getData().openIndex === index) return;
+    this._hoverOpened = null;
     this.setData({ openIndex: index, panelLeft: 0 });
     this.refresh();
     if (!this._docBound) {
@@ -232,6 +234,7 @@ export default class NavigationMenu extends PuzzleView {
 
   closeMenu({ refocus = false } = {}) {
     this._clearTimers();
+    this._hoverOpened = null;
     const idx = this.getData().openIndex;
     if (idx == null) return;
     this.setData({ openIndex: null, panelLeft: 0 });
@@ -257,12 +260,14 @@ export default class NavigationMenu extends PuzzleView {
     // A panel is already open on a sibling — switch immediately, no delay.
     if (this.getData().openIndex != null) {
       this.openAt(index);
+      this._hoverOpened = index;
       return;
     }
     if (this._openTimer) clearTimeout(this._openTimer);
     this._openTimer = setTimeout(() => {
       this._openTimer = null;
       this.openAt(index);
+      this._hoverOpened = index;
     }, 150);
   }
 
@@ -328,11 +333,21 @@ export default class NavigationMenu extends PuzzleView {
       if (item.kind === 'trigger') this.scheduleClose();
     },
     onTriggerClick: (i, event) => {
-      if (this.getData().openIndex === i) this.closeMenu({ refocus: false });
-      else this.openAt(i);
+      if (this.getData().openIndex === i) {
+        if (this._hoverOpened === i) {
+          // This click's own hover opened it — adopt, don't toggle.
+          this._hoverOpened = null;
+          return;
+        }
+        this.closeMenu({ refocus: false });
+      } else {
+        this._hoverOpened = null;
+        this.openAt(i);
+      }
     },
     // ArrowDown on a trigger: open (if needed) and drop focus into the panel.
     onTriggerDown: (i, event) => {
+      this._hoverOpened = null;
       this._pendingFocusFirst = true;
       this.openAt(i);
     },

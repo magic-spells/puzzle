@@ -114,9 +114,10 @@ export default class ContextMenu extends PuzzleView {
 
     // Close on any interaction outside the open menu.
     this._onDocPointerDown = (event) => {
-      if (this.getData().open && this.element && !this.element.contains(event.target)) {
-        this.closeMenu();
-      }
+      if (!this.getData().open) return;
+      const panel = this.element?.querySelector('[data-cm-panel]');
+      if (panel && panel.contains(event.target)) return; // panel clicks: let rows activate
+      this.closeMenu();
     };
     // A second right-click OUTSIDE the surface closes us (the native menu / the
     // surface's own handler takes over); inside the surface, onContextMenu re-opens.

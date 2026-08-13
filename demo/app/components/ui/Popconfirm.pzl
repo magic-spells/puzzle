@@ -3,12 +3,11 @@
     <span
       class="inline-flex"
       data-popconfirm-trigger
-      aria-haspopup="dialog"
-      aria-expanded={ open ? 'true' : 'false' }
-      aria-controls={ panelId }
       @click={ toggle }
       @keydown:escape={ onEscape(event) }>
-      <Slot name="trigger">{ triggerLabel }</Slot>
+      <Slot name="trigger">
+        <button type="button" class={ triggerClass }>{ triggerLabel }</button>
+      </Slot>
     </span>
 
     {#if open}
@@ -73,15 +72,14 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //     <button slot="trigger" class="…">Delete</button>
 //   </Popconfirm>
 //
-// TRIGGER. The consumer supplies their OWN interactive element (a real <button>) in the
-// "trigger" slot; we wrap it in a span that carries the click-to-open handler and the
-// aria-controls/aria-expanded wiring. We do not render our own button, so there is no
-// nested-button problem.
+// TRIGGER. Pass `label` for the stock button, or supply your OWN focusable control in the
+// "trigger" slot. Custom triggers replace the fallback entirely and must carry their own
+// accessible name. The wrapper delegates click-to-open while popup ARIA is synchronized
+// imperatively onto the real focusable control in either mode.
 //
 // TRIGGER CHROME — the "trigger" slot's FALLBACK BODY is the stock chrome (D141):
-// the bare `label` text. Fill slot="trigger" with your own element and it REPLACES
-// that fallback — a filled slot wins over `label`. Pass neither and the trigger
-// renders empty and unclickable.
+// a real secondary button whose text comes from `label`. Fill slot="trigger" with your
+// own element and it REPLACES that fallback — a filled slot wins over `label`.
 //
 // open — OPTIONAL-CONTROLLED (HoverCard's shape): omit it and the piece owns its open
 // state; pass it and the parent owns it — the piece only ASKS to open/close via
@@ -120,6 +118,7 @@ const BTN_BASE =
   'disabled:opacity-50 disabled:pointer-events-none h-8 px-3 text-sm';
 const BTN_PRIMARY = 'bg-brand text-brand-ink hover:bg-brand-dark';
 const BTN_DANGER = 'bg-danger text-danger-ink hover:bg-danger-dark';
+const BTN_SECONDARY = 'bg-surface-sunken text-ink hover:bg-border';
 const BTN_OUTLINE =
   'border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken';
 
@@ -128,6 +127,8 @@ export default class Popconfirm extends PuzzleView {
     this._uid = ++uid;
     this._wasOpen = false; // last effective-open seen by the transition detector
     this._restoreOnClose = false; // whether the pending close should refocus the trigger
+    this._ariaTarget = null;
+    this._ariaPrev = null;
     // Local UI state (uncontrolled mode + placement). `placement` is the effective
     // (possibly flipped) side; it reflects the requested side while closed.
     this.setData({ uncontrolledOpen: false, placement: 'top' });
@@ -142,12 +143,14 @@ export default class Popconfirm extends PuzzleView {
       if (this.element && this.element.contains(e.target)) return;
       this._requestCancel({ restoreFocus: false });
     };
+    this._syncTriggerAria();
     // Cover the parent mounting us already-open (controlled open={ true }).
     this._syncOpenEffects();
   }
 
   destroyed() {
     document.removeEventListener('pointerdown', this._onDocPointer);
+    this._restoreTriggerAria();
   }
 
   // ---- controlled / uncontrolled open resolution ---------------------------
@@ -196,6 +199,7 @@ export default class Popconfirm extends PuzzleView {
       ].join(' '),
       cancelClass: [BTN_BASE, BTN_OUTLINE].join(' '),
       confirmClass: [BTN_BASE, props.variant === 'danger' ? BTN_DANGER : BTN_PRIMARY].join(' '),
+      triggerClass: [BTN_BASE, BTN_SECONDARY].join(' '),
     };
   }
 
@@ -257,6 +261,7 @@ export default class Popconfirm extends PuzzleView {
 
   afterUpdate() {
     this._syncOpenEffects();
+    this._syncTriggerAria();
   }
 
   _onOpened() {
@@ -295,6 +300,34 @@ export default class Popconfirm extends PuzzleView {
         'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
       ) || wrap
     );
+  }
+
+  _syncTriggerAria() {
+    const trig = this._triggerFocusEl();
+    if (!trig || trig === this.element) return;
+    if (this._ariaTarget !== trig) {
+      this._restoreTriggerAria();
+      this._ariaTarget = trig;
+      this._ariaPrev = {
+        haspopup: trig.getAttribute('aria-haspopup'),
+        controls: trig.getAttribute('aria-controls'),
+        expanded: trig.getAttribute('aria-expanded'),
+      };
+    }
+    trig.setAttribute('aria-haspopup', 'dialog');
+    trig.setAttribute('aria-controls', this.getData().panelId);
+    trig.setAttribute('aria-expanded', this.getData().open ? 'true' : 'false');
+  }
+
+  _restoreTriggerAria() {
+    if (!this._ariaTarget || !this._ariaPrev) return;
+    for (const [name, value] of Object.entries(this._ariaPrev)) {
+      const attribute = name === 'haspopup' ? 'aria-haspopup' : `aria-${name}`;
+      if (value == null) this._ariaTarget.removeAttribute(attribute);
+      else this._ariaTarget.setAttribute(attribute, value);
+    }
+    this._ariaTarget = null;
+    this._ariaPrev = null;
   }
 
   // Flip to the opposite side only when the panel doesn't fit on the requested side AND

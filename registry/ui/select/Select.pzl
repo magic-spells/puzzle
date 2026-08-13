@@ -136,7 +136,7 @@ import { MorphEngine } from '@magic-spells/morph-engine';
 // listbox while open and the active option is tracked with aria-activedescendant
 // — no DOM focus ever moves into the list, so the vdom never fights a browser
 // focus move. The trigger owns keydown while closed (to open); the listbox owns
-// it while open. Outside-click closes via a document listener that lives only
+// it while open. Outside-pointerdown closes via a document listener that lives only
 // while the panel is open (attached in show(), removed in hide()).
 
 // Per-instance id seed so trigger/panel/option ids are unique across instances.
@@ -185,11 +185,10 @@ export default class Select extends PuzzleView {
     this.setData({ open: false, activeIndex: -1, placement: 'bottom', maxHeight: 0, panelTop: null });
   }
 
-  // Outside-click close: attached only while open (see show/hide). Guarded by
-  // `open` and by containment, so the click that OPENED the panel (still on the
-  // trigger, inside this.element) never closes it back.
+  // Outside-pointerdown close: attached only while open (see show/hide). Guarded
+  // by `open` and containment so in-component pointer interactions stay intact.
   mounted() {
-    this._onDocClick = (e) => {
+    this._onDocPointerDown = (e) => {
       if (!this.getData().open) return;
       if (this.element && this.element.contains(e.target)) return;
       this.hide({ restoreFocus: false });
@@ -197,7 +196,7 @@ export default class Select extends PuzzleView {
   }
 
   destroyed() {
-    document.removeEventListener('click', this._onDocClick);
+    document.removeEventListener('pointerdown', this._onDocPointerDown);
     if (this._taTimer) clearTimeout(this._taTimer);
     this._morph?.destroy();
     this._morph = null;
@@ -315,7 +314,7 @@ export default class Select extends PuzzleView {
         const trigger = this.element?.querySelector('[data-select-trigger]');
         const listbox = this.element?.querySelector('[data-select-panel]');
         if (trigger && listbox) {
-          document.addEventListener('click', this._onDocClick);
+          document.addEventListener('pointerdown', this._onDocPointerDown);
           const { show } = this.props;
           if (typeof show === 'function') show();
           this._morph.show({ from: trigger, to: listbox });
@@ -343,7 +342,7 @@ export default class Select extends PuzzleView {
       this.refresh();
     }
 
-    document.addEventListener('click', this._onDocClick);
+    document.addEventListener('pointerdown', this._onDocPointerDown);
 
     const { show } = this.props;
     if (typeof show === 'function') show();
@@ -375,7 +374,7 @@ export default class Select extends PuzzleView {
 
     this._ta = '';
     if (this._taTimer) clearTimeout(this._taTimer);
-    document.removeEventListener('click', this._onDocClick);
+    document.removeEventListener('pointerdown', this._onDocPointerDown);
 
     const { hide } = this.props;
     if (typeof hide === 'function') hide();

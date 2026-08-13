@@ -2,9 +2,9 @@
   <span
     class="relative inline-flex"
     @pointerenter={ onEnter }
-    @pointerleave={ onLeave }
+    @pointerleave={ onPointerLeave }
     @focusin={ onFocusIn }
-    @focusout={ onLeave }
+    @focusout={ onFocusOut(event) }
     @keydown:escape={ onEscape(event) }>
     <Slot/>
     {#if visible}
@@ -87,11 +87,21 @@ export default class Tooltip extends PuzzleView {
     const target = this.element?.querySelector(
       'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
     );
-    if (target) target.setAttribute('aria-describedby', `pieces-tooltip-${this._uid}`);
+    if (!target) return;
+    this._tipTarget = target;
+    this._prevDescribedby = target.getAttribute('aria-describedby');
+    const id = this.getData().tipId;
+    const tokens = (this._prevDescribedby || '').split(/\s+/).filter(Boolean);
+    if (!tokens.includes(id)) tokens.push(id);
+    target.setAttribute('aria-describedby', tokens.join(' '));
   }
 
   destroyed() {
     if (this._timer) clearTimeout(this._timer);
+    if (this._tipTarget) {
+      if (this._prevDescribedby == null) this._tipTarget.removeAttribute('aria-describedby');
+      else this._tipTarget.setAttribute('aria-describedby', this._prevDescribedby);
+    }
   }
 
   data(params, props) {
@@ -104,7 +114,7 @@ export default class Tooltip extends PuzzleView {
     return {
       visible,
       text: props.text != null ? String(props.text) : '',
-      tipId: `pieces-tooltip-${this._uid}`,
+      tipId: props.id || `pieces-tooltip-${this._uid}`,
       panelClass: [PANEL_BASE, PLACEMENT[placement], props.class || ''].join(' '),
       arrowClass: [ARROW_BASE, ARROW[placement]].join(' '),
     };
@@ -182,8 +192,15 @@ export default class Tooltip extends PuzzleView {
       this._show();
     },
 
-    // Both pointerleave and focusout hide immediately (any pending timer clears).
-    onLeave: (event) => {
+    onPointerLeave: () => {
+      // Keyboard focus keeps the description visible (WCAG 1.4.13).
+      if (this.element && this.element.contains(document.activeElement)) return;
+      this._hide();
+    },
+
+    onFocusOut: (event) => {
+      // Only hide when focus actually left the wrapper (HoverCard pattern).
+      if (this.element && event.relatedTarget && this.element.contains(event.relatedTarget)) return;
       this._hide();
     },
 

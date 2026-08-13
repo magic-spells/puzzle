@@ -187,6 +187,7 @@ export default class Menubar extends PuzzleView {
   created() {
     this._uid = ++_uid;
     this._docBound = false;
+    this._hoverOpened = null; // index opened by the current hover interaction
     // Roving-focus targets applied after the next render (afterUpdate reads +
     // clears them). Kept off the model — a DOM focus target is not view data.
     this._pendingItemFocus = null;
@@ -226,6 +227,7 @@ export default class Menubar extends PuzzleView {
   // ---- open / close ----------------------------------------------------------
 
   openMenu(index, activeItem) {
+    if (this.getData().openIndex !== index) this._hoverOpened = null;
     this.setData({ openIndex: index, activeItem, panelLeft: 0 });
     if (!this._docBound) {
       document.addEventListener('pointerdown', this._onDocPointerDown);
@@ -237,6 +239,7 @@ export default class Menubar extends PuzzleView {
   }
 
   closeMenu(opts = {}) {
+    this._hoverOpened = null;
     if (this.getData().openIndex == null) return;
     if (this._docBound) {
       document.removeEventListener('pointerdown', this._onDocPointerDown);
@@ -259,6 +262,7 @@ export default class Menubar extends PuzzleView {
 
   // Open (if needed) the menu at mi and drop focus onto its first/last item.
   openInto(mi, fromEnd) {
+    this._hoverOpened = null;
     const menu = this.getData().menus[mi];
     const items = menu ? menu.items : [];
     const idx = fromEnd ? lastFocusable(items) : firstFocusable(items);
@@ -380,8 +384,17 @@ export default class Menubar extends PuzzleView {
     onTopClick: (mi, event) => {
       if (this.getData().disabled) return;
       this.setData('focusTop', mi);
-      if (this.getData().openIndex === mi) this.closeMenu({});
-      else this.openMenu(mi, -1); // mouse open: menu shown, no item focused yet
+      if (this.getData().openIndex === mi) {
+        if (this._hoverOpened === mi) {
+          // This click's own hover opened it — adopt, don't toggle.
+          this._hoverOpened = null;
+          return;
+        }
+        this.closeMenu({});
+      } else {
+        this._hoverOpened = null;
+        this.openMenu(mi, -1); // mouse open: menu shown, no item focused yet
+      }
     },
     // Classic menubar: once any menu is open, hovering another top switches to it.
     onTopEnter: (mi, event) => {
@@ -390,10 +403,12 @@ export default class Menubar extends PuzzleView {
       if (d.openIndex != null && d.openIndex !== mi) {
         this.setData('focusTop', mi);
         this.openMenu(mi, -1);
+        this._hoverOpened = mi;
       }
     },
     onTopKeydown: (mi, event) => {
       if (this.getData().disabled) return;
+      this._hoverOpened = null;
       switch (event.key) {
         case 'ArrowRight':
           event.preventDefault();
