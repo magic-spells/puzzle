@@ -86,6 +86,12 @@ decision cards explain why the contract has its current shape.
 - **Next minor:** [[DECISION-D150-RAW-TEMPLATE-BLOCK]] adds the static
   `{#raw}…{/raw}` lex-off block for author-written braces while preserving
   ordinary HTML parsing and the existing parent-aware SSG RAWTEXT policy.
+- **0.6 errorView amendment (v1.71, breaking):**
+  [[DECISION-D145-ERROR-BOUNDARIES]] rewritten — error fallback UI is one
+  app-level `errorView` compiled view with `{ error, info, retry }` props;
+  per-view `errorContent()`/ViewNode authoring removed, retry re-runs the
+  normal navigation/refresh pipeline, `boundary` phase renamed `error-view`.
+  Byte-neutral by measurement; adopted as an API simplification.
 - **Current 0.6 compiler hardening:**
   [[FEATURE-BUILD-PIPELINE-PERFORMANCE-HARDENING]] / [[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]]
   pins the restored SPA startup boundary, removes unrelated warm-rebuild work,
