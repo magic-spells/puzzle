@@ -14,6 +14,9 @@
 //      templates and examples/*/package.json.
 //   2. Pack allowlist — delegate to scripts/verify-pack.mjs (the tarball must ship
 //      only the runtime + declarations + bin shim).
+//   2.5. README size banner — scripts/measure-size.mjs --check builds the two
+//      reference apps (hello-world, todos) and fails if the README's gzip
+//      figures no longer match the measurement.
 //   3. Cross-compile the four per-platform CLI binaries into npm/<pkg>/bin/puzzle,
 //      version-stamped via -ldflags.
 //   4. Copy LICENSE.txt (MIT) into each platform package dir.
@@ -190,6 +193,14 @@ try {
 	execFileSync('node', ['scripts/verify-pack.mjs'], { cwd: repoRoot, stdio: 'inherit' });
 } catch {
 	fail('verify-pack.mjs reported packaging problems (see output above)');
+}
+
+// --- 2.5 README size banner check ------------------------------------------
+console.log('\nrelease-prep: measuring reference bundles (scripts/measure-size.mjs --check)...');
+try {
+	execFileSync('node', ['scripts/measure-size.mjs', '--check'], { cwd: repoRoot, stdio: 'inherit' });
+} catch {
+	fail('measure-size.mjs --check failed — the README size banner is stale (see output above)');
 }
 
 // --- 3. Cross-compile the four CLI binaries --------------------------------

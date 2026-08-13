@@ -1,6 +1,6 @@
 ---
 name: D145 — app-level onError + the app error view (errorView)
-status: built
+status: verified
 connections:
   - DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT
   - DECISION-D136-VIEW-LIFECYCLE-CONVERGENCE
@@ -9,6 +9,16 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-APP
+verified_at: '2026-08-13T07:40:41.404Z'
+verified_sha: 11b25c8a5d8331299c7780fbb0a7a2c4efbfbc35
+notes:
+  - kind: verified
+    text: >-
+      errorView contract verified at the PR #58 merge: replacement mounting, single-flight retry via
+      same-location navigation / owner refresh, 'error-view' terminal phase, errorContent fully
+      removed from runtime and types. 1,589 vitest + full Go suites green; byte-neutral by
+      measurement (+126 gzip).
+    sha: 11b25c8a5d8331299c7780fbb0a7a2c4efbfbc35
 ---
 
 # D145 — app-level `onError` + the app error view (`errorView`)
