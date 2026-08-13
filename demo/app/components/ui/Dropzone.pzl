@@ -267,9 +267,11 @@ export default class Dropzone extends PuzzleView {
     },
 
     onDragOver: (event) => {
-      if (this.props.disabled) return;
-      // preventDefault is required or the browser navigates to the dropped file.
+      // Always cancel: an uncancelled dragover makes the browser navigate to the
+      // dropped file. Only after claiming the drag do we no-op.
       event.preventDefault();
+      event.stopPropagation();
+      if (this.props.disabled) return;
       if (!this.getData().dragging) {
         this.setData({ dragging: true });
         this.refresh();
@@ -288,11 +290,9 @@ export default class Dropzone extends PuzzleView {
 
     onDrop: (event) => {
       event.preventDefault();
+      event.stopPropagation();
+      if (this.props.disabled) return;
       this.setData({ dragging: false });
-      if (this.props.disabled) {
-        this.refresh();
-        return;
-      }
       this.processFiles(event.dataTransfer && event.dataTransfer.files, event);
       this.refresh();
     },

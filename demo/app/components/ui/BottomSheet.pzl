@@ -2,7 +2,8 @@
   <dialog
     class={ dialogClass }
     aria-labelledby={ labelledby }
-    @cancel={ handleCancel }>
+    @cancel={ handleCancel }
+    @close={ handleClose }>
 
     <div
       ref="backdrop"
@@ -76,9 +77,10 @@ import {
 //
 // CONTROLLED BY THE PARENT. `open` is required and never mutated here.
 // User-driven dismissal calls @close(reason), where reason is 'escape',
-// 'backdrop', or 'drag'; the parent flips `open` and syncOpen() reconciles the
-// native dialog. Native `cancel` is always preventDefault'd so the browser
-// cannot close behind Puzzle's vdom.
+// 'backdrop', 'drag', or 'close' for a native close the piece did not drive; the
+// parent flips `open` and syncOpen() reconciles the native dialog. Native
+// `cancel` is always preventDefault'd so the browser cannot close behind Puzzle's
+// vdom.
 //
 // SNAP CONTRACT. `snapPoints` accepts percentages as an array or a comma/space
 // string. `snap` is optional-controlled: pass it and the parent owns the current
@@ -131,8 +133,13 @@ const DIALOG =
   'fixed inset-0 m-0 h-[100dvh] max-h-none w-full max-w-none border-0 bg-transparent p-0 ' +
   'open:flex flex-col justify-end overflow-hidden text-body [&::backdrop]:bg-transparent';
 
+// `touch-pinch-zoom` rather than `touch-none`, here and on every other rigid
+// drag surface below. The two are not the same refusal: `none` also refuses a
+// two-finger pinch, and the UA refuses it before the drag-claim logic is ever
+// consulted, so a low-vision user could not enlarge a form in the sheet (WCAG
+// 1.4.4). A pinch cannot collide with the single-finger drag being protected.
 const BACKDROP =
-  'absolute inset-0 bg-black/50 backdrop-blur-sm touch-none';
+  'absolute inset-0 bg-black/50 backdrop-blur-sm touch-pinch-zoom';
 
 // Caps the sheet on wide viewports; below the cap it stays full-bleed, so phones
 // are unaffected. Centring lives in PANEL_BASE as an auto inline margin (the
@@ -182,9 +189,9 @@ const PANEL_INSET =
   'w-[calc(100%-1.5rem)] rounded-2xl border border-border ' +
   'shadow-[0_1px_20px_-4px_rgb(0_0_0/0.3),0_0_7px_0_rgb(0_0_0/0.1)]';
 
-const HEADER = 'shrink-0 touch-none select-none px-4';
-const CONTENT = 'min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4';
-const FOOTER = 'shrink-0 touch-none bg-surface p-4 empty:hidden';
+const HEADER = 'shrink-0 touch-pinch-zoom select-none px-4';
+const CONTENT = 'min-h-0 flex-1 touch-manipulation overflow-y-auto overscroll-contain px-4';
+const FOOTER = 'shrink-0 touch-pinch-zoom bg-surface p-4 empty:hidden';
 
 export default class BottomSheet extends PuzzleView {
   #enter = null;
@@ -204,6 +211,10 @@ export default class BottomSheet extends PuzzleView {
   #snapPoints = [];
   #localSnap = null;
   #committedSnap = null;
+  // dialog.close() queues its event. A counter survives that gap and overlapping
+  // internal closes without misreporting them as native user closes.
+  #expectedCloses = 0;
+  #nativeClosed = false;
 
   data(params, props) {
     const id = (this._id ??= `pp-bottom-sheet-${++uid}`);
@@ -361,10 +372,16 @@ export default class BottomSheet extends PuzzleView {
     this.refs.panel.style.transform = '';
     this.refs.backdrop.style.opacity = '';
     this.#scrimOpacity = null;
-    dialog.close();
+    this.#closeDialog(dialog);
     this.#unlockBody();
     const { hidden } = this.props;
     if (typeof hidden === 'function') hidden();
+  }
+
+  #closeDialog(dialog = this.element) {
+    if (!dialog?.open) return;
+    this.#expectedCloses += 1;
+    dialog.close();
   }
 
   #playEnter() {
@@ -447,8 +464,12 @@ export default class BottomSheet extends PuzzleView {
     const dialog = this.element;
     if (!dialog) return;
     const shouldOpen = !!this.props.open;
+    if (!shouldOpen) this.#nativeClosed = false;
 
     if (shouldOpen) {
+      // Keep native reality stable until the controlled parent acknowledges the
+      // close; otherwise any unrelated update would immediately showModal().
+      if (this.#nativeClosed) return;
       if (this.#exit) {
         this.#exit.panel.cancel();
         this.#exit.backdrop.cancel();
@@ -524,7 +545,7 @@ export default class BottomSheet extends PuzzleView {
     this.#scrimOpacity = null;
     this.#engine?.removeAllListeners();
     this.#engine = null;
-    if (this.element?.open) this.element.close();
+    this.#closeDialog();
     this.#unlockBody();
   }
 
@@ -948,6 +969,22 @@ export default class BottomSheet extends PuzzleView {
       event.preventDefault();
       if (this.props.dismissible === false) return;
       this.#requestClose('escape');
+    },
+    handleClose: () => {
+      if (this.#expectedCloses > 0) {
+        this.#expectedCloses -= 1;
+        return;
+      }
+      this.#nativeClosed = true;
+      this.#cancelAnimations();
+      this.#abandonDrag();
+      this.refs.panel.style.transform = '';
+      this.refs.backdrop.style.opacity = '';
+      this.#scrimOpacity = null;
+      this.#unlockBody();
+      this.#requestClose('close');
+      const { hidden } = this.props;
+      if (typeof hidden === 'function') hidden();
     },
     dragStart: (event) => {
       if (this.props.dismissible === false) return;

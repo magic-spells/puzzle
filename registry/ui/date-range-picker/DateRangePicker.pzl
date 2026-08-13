@@ -170,7 +170,7 @@ import { parseISODate, toDate, compareDates } from '../../lib/date-math.js';
 //                           the first click emits { start, end:'' } (new range begun); the
 //                           second emits the completed { start, end } (swapped so start ≤
 //                           end). A third click begins a fresh range. Presets emit their
-//                           full { start, end } directly.
+//                           full { start, end } ordered the same way.
 //   @show() / @hide()       fire on the user's open/close intent (trigger, Escape,
 //                           outside-click, or a completed range) so a controlled parent
 //                           can flip `open`.
@@ -505,7 +505,13 @@ export default class DateRangePicker extends PuzzleView {
     // Apply a preset range directly, then close.
     onPreset: (p, event) => {
       this.setData('preview', '');
-      this._emit({ start: p.start, end: p.end }, event);
+      let { start, end } = p;
+      const startDate = parseISODate(start);
+      const endDate = parseISODate(end);
+      if (startDate && endDate && compareDates(endDate, startDate) < 0) {
+        [start, end] = [end, start]; // honor the @change ordering contract
+      }
+      this._emit({ start, end }, event);
       this._requestClose({ restoreFocus: true });
     },
 

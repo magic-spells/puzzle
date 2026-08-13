@@ -207,15 +207,18 @@ export default class TagsInput extends PuzzleView {
     return current.concat([tag]);
   }
 
-  // Commit the draft as a single tag; clear the draft and emit if it changed.
+  // Commit the draft as a single tag; rejected non-empty text stays editable.
   _commitDraft(event) {
     if (this.props.disabled) return;
     const current = this._values(this.props);
-    const next = this._commitOne(current, this.getData().draft);
-    this.setData({ draft: '' });
+    const draft = this.getData().draft;
+    const next = this._commitOne(current, draft);
     if (next !== current) {
+      this.setData({ draft: '' });
       const { change } = this.props;
       if (typeof change === 'function') change(next, event);
+    } else if (!String(draft ?? '').trim()) {
+      this.setData({ draft: '' });
     }
     this.refresh();
     this._focusInput();
@@ -278,11 +281,17 @@ export default class TagsInput extends PuzzleView {
       if (!delims.length || !delims.some((d) => text.includes(d))) return;
       event.preventDefault();
       const splitRe = new RegExp('[' + delims.map((d) => '\\' + d).join('') + ']');
-      const parts = text.split(splitRe);
+      const existing = this.getData().draft || '';
+      const parts = (existing + text).split(splitRe);
       let current = this._values(this.props);
       const before = current;
-      for (const part of parts) current = this._commitOne(current, part);
-      this.setData({ draft: '' });
+      const rejected = [];
+      for (const part of parts) {
+        const next = this._commitOne(current, part);
+        if (next === current && String(part).trim()) rejected.push(String(part).trim());
+        current = next;
+      }
+      this.setData({ draft: rejected.join(' ') });
       if (current !== before) {
         const { change } = this.props;
         if (typeof change === 'function') change(current, event);

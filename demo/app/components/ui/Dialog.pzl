@@ -4,6 +4,7 @@
     aria-labelledby={ labelledby }
     aria-describedby={ describedby }
     @cancel={ handleCancel(event) }
+    @close={ handleClose }
     @click={ handleBackdropClick(event) }>
     {#if hasHeader}
       <header class="mb-4">
@@ -43,11 +44,11 @@ import { MorphEngine } from '@magic-spells/morph-engine';
 //     <Button slot="footer" variant="destructive" @press={ confirm }>Delete</Button>
 //   </Dialog>
 //
-// WHAT `@close` MEANS. It fires ONLY for user-driven dismissal — pressing
-// Escape (native `cancel`) or clicking the backdrop — and only when the dialog
-// is `dismissible`. Footer buttons are NOT wired to it: a slotted "Cancel" or
-// "Confirm" button calls the PARENT's own handler, and the parent flips `open`
-// (which routes back through afterUpdate → close()). Keeps one owner for state.
+// WHAT `@close` MEANS. It fires for user-driven dismissal — pressing Escape
+// (native `cancel`) or clicking the backdrop when `dismissible`, plus a native
+// close the piece did not drive (such as <form method="dialog">). Footer buttons
+// are not wired to it unless they use that native form behavior: otherwise they
+// call the parent's own handler, and the parent flips `open`. Keeps one owner.
 //
 // CANCEL-EVENT CHOICE. The native `cancel` event is ALWAYS preventDefault'd, so
 // the browser never closes the element out from under the vdom. When dismissible
@@ -93,6 +94,11 @@ const SIZE = {
 };
 
 export default class Dialog extends PuzzleView {
+  // dialog.close() queues its event, so this counter survives the async gap and
+  // overlapping internal closes cannot be mistaken for native user closes.
+  #expectedCloses = 0;
+  #nativeClosed = false;
+
   data(params, props) {
     // Stable id generated once per instance so label/description wiring
     // survives re-renders.
@@ -130,8 +136,12 @@ export default class Dialog extends PuzzleView {
     const dialog = this.element;
     if (!dialog) return;
     const shouldOpen = !!this.props.open;
+    if (!shouldOpen) this.#nativeClosed = false;
 
     if (shouldOpen) {
+      // A native close is reality until the parent acknowledges it by taking the
+      // controlled prop false. Do not reopen on an unrelated render meanwhile.
+      if (this.#nativeClosed) return;
       // Reopening mid-exit: cancel the out animation — the element never closed.
       if (this._exit) {
         this._exit.cancel();
@@ -154,7 +164,7 @@ export default class Dialog extends PuzzleView {
       if (morphLive) {
         // Drop out of the top layer first (the element stays visible via its
         // forced display + fixed centering), then morph back to the trigger.
-        if (dialog.open) dialog.close();
+        this.#closeDialog(dialog);
         this._morph.hide();
         return;
       }
@@ -189,12 +199,20 @@ export default class Dialog extends PuzzleView {
     // started painting, so showModal() here repaints a visible surface in place.
     engine.on('reveal', () => {
       const dialog = this.element;
-      if (dialog && !dialog.open && this.props.open) dialog.showModal();
+      if (dialog && !dialog.open && this.props.open && !this.#nativeClosed) {
+        dialog.showModal();
+      }
     });
     return engine;
   }
 
   // ---- fade in / out (non-morph path) ----------------------------------------
+
+  #closeDialog(dialog = this.element) {
+    if (!dialog?.open) return;
+    this.#expectedCloses += 1;
+    dialog.close();
+  }
 
   playEnter(dialog) {
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
@@ -212,7 +230,7 @@ export default class Dialog extends PuzzleView {
   // (pseudo-elements are out of WAAPI's reach).
   playExit(dialog) {
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-      dialog.close();
+      this.#closeDialog(dialog);
       return;
     }
     dialog.dataset.closing = '';
@@ -227,7 +245,7 @@ export default class Dialog extends PuzzleView {
     anim.onfinish = () => {
       if (this._exit !== anim) return; // superseded by a reopen
       this._exit = null;
-      dialog.close();
+      this.#closeDialog(dialog);
       anim.cancel(); // drop the forwards fill now that the element is closed
       delete dialog.dataset.closing;
     };
@@ -256,6 +274,14 @@ export default class Dialog extends PuzzleView {
       if (this.props.dismissible === false) return;
       const { close } = this.props;
       if (typeof close === 'function') close(event);
+    },
+    handleClose: () => {
+      if (this.#expectedCloses > 0) {
+        this.#expectedCloses -= 1;
+        return;
+      }
+      this.#nativeClosed = true;
+      this.props.close?.();
     },
     // Backdrop click: the click lands on the <dialog> element itself only when
     // it hit the ::backdrop (clicks on inner content have a deeper target).

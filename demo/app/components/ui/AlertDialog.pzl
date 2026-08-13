@@ -103,6 +103,7 @@ export default class AlertDialog extends PuzzleView {
       descId: `${id}-desc`,
       labelledby: title ? `${id}-title` : false,
       describedby: description ? `${id}-desc` : false,
+      panelClass: [PANEL, props.class || ''].filter(Boolean).join(' '),
       confirmLabel: props.confirmLabel || 'Continue',
       cancelLabel: props.cancelLabel || 'Cancel',
       cancelClass: [BTN_BASE, BTN_OUTLINE].join(' '),
