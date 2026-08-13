@@ -18,6 +18,10 @@
 			"types": "./types/morph.d.ts",
 			"default": "./client-runtime/morph.js"
 		},
+		"./router-modes": {
+			"types": "./types/router-modes.d.ts",
+			"default": "./client-runtime/router/modes.js"
+		},
 		"./ssg": {
 			"types": "./types/ssg.d.ts",
 			"default": "./client-runtime/ssg/index.js"
