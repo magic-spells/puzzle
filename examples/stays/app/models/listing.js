@@ -1,4 +1,5 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Listing extends PuzzleModel {
   // Schema — see constellation/doc/DOC-SPEC.md §7. Listings are the heart of the
@@ -76,7 +77,7 @@ export default class Listing extends PuzzleModel {
   }
 
   // Server location (D21): consumed by store.loadAll('listing') on the read path.
-  static adapter = {
+  static adapter = adapter({
     endpoint: '/listings.json',
-  };
+  });
 }

@@ -1,4 +1,5 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Track extends PuzzleModel {
   static schema = {
@@ -18,7 +19,7 @@ export default class Track extends PuzzleModel {
     return this.update({ liked: !this.liked });
   }
 
-  static adapter = {
+  static adapter = adapter({
     endpoint: '/tracks.json',
-  };
+  });
 }

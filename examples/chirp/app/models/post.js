@@ -1,4 +1,5 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Post extends PuzzleModel {
   // Schema — see constellation/doc/DOC-SPEC.md §7. A chirp (post). Seed rows use
@@ -49,7 +50,7 @@ export default class Post extends PuzzleModel {
   }
 
   // Server location (D21): consumed by store.loadAll('post') on the read path.
-  static adapter = {
+  static adapter = adapter({
     endpoint: '/posts.json',
-  };
+  });
 }

@@ -1,4 +1,5 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Host extends PuzzleModel {
   // Hosts are referenced by Listing.hostId. `superhost` is a boolean badge;
@@ -26,7 +27,7 @@ export default class Host extends PuzzleModel {
     return `linear-gradient(135deg, ${a.from || '#e8e8ee'}, ${a.to || '#d4d4de'})`;
   }
 
-  static adapter = {
+  static adapter = adapter({
     endpoint: '/hosts.json',
-  };
+  });
 }

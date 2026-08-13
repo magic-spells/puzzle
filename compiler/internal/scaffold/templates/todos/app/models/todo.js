@@ -1,4 +1,5 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Todo extends PuzzleModel {
   // Schema definition — see constellation/doc/DOC-SPEC.md §7
@@ -47,9 +48,8 @@ export default class Todo extends PuzzleModel {
     return this;
   }
 
-  // Server location (D21): consumed by store.loadAll('todo') / loadOne on
-  // the read path. Write sync and custom adapter methods are post-v1.
-  static adapter = {
+  // Opt-in server location (D21/D157): installs the read/write adapter verbs.
+  static adapter = adapter({
     endpoint: '/api/todos',
-  };
+  });
 }

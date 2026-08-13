@@ -1,4 +1,5 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Artist extends PuzzleModel {
   // Schema — see constellation/doc/DOC-SPEC.md §7. This example leans on the
@@ -37,7 +38,7 @@ export default class Artist extends PuzzleModel {
   }
 
   // Server location (D21): consumed by store.loadAll('artist') on the read path.
-  static adapter = {
+  static adapter = adapter({
     endpoint: '/artists.json',
-  };
+  });
 }

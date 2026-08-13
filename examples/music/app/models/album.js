@@ -1,4 +1,5 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Album extends PuzzleModel {
   // `year` shows the numeric range modifiers (.min/.max) and a custom .validate()
@@ -29,7 +30,7 @@ export default class Album extends PuzzleModel {
     return Number.isFinite(y) ? `${Math.floor(y / 10) * 10}s` : '';
   }
 
-  static adapter = {
+  static adapter = adapter({
     endpoint: '/albums.json',
-  };
+  });
 }

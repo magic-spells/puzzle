@@ -105,6 +105,7 @@ export default class __NAME__ extends PuzzleView {
 
 // modelTemplate mirrors examples/todos/app/models/todo.js (constellation/doc/DOC-MODELS.md).
 const modelTemplate = `import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class __NAME__ extends PuzzleModel {
   // Schema definition — see constellation/doc/DOC-SPEC.md §7
@@ -121,8 +122,8 @@ export default class __NAME__ extends PuzzleModel {
   }
 
   // Server location (D21): consumed by store.loadAll('__MODEL__') / loadOne.
-  static adapter = {
+  static adapter = adapter({
     endpoint: '/api/__MODEL__s',
-  };
+  });
 }
 `

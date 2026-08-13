@@ -1,4 +1,5 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class User extends PuzzleModel {
   // Schema — see constellation/doc/DOC-SPEC.md §7. A Chirp account. `id` is 'me'
@@ -58,7 +59,7 @@ export default class User extends PuzzleModel {
   }
 
   // Server location (D21): consumed by store.loadAll('user') on the read path.
-  static adapter = {
+  static adapter = adapter({
     endpoint: '/users.json',
-  };
+  });
 }
