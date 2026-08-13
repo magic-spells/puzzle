@@ -62,9 +62,18 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // The surface both renderings share — one edit point for the card's shape.
 const SURFACE = 'rounded-lg border border-border bg-surface p-3 text-left';
 
+// `touch-pinch-zoom` claims the single-finger gesture for dragging. Without a
+// declared touch-action the UA starts its own pan (the board scrolls horizontally)
+// before the 5px drag threshold is crossed, and by the time the card calls
+// preventDefault the events are already `cancelable === false` — the gesture is
+// lost. Not `touch-none`, for the reason Sheet.pzl:296-303 spells out: `none` also
+// refuses a two-finger pinch, which a low-vision user needs to enlarge the board
+// (WCAG 1.4.4), and a pinch can never collide with a one-finger drag. Consequence:
+// on touch, the board is scrolled from the column gaps and headers, not from a
+// card — the whole card is the drag handle by design.
 const CARD_BASE =
   SURFACE +
-  ' block w-full shadow-sm select-none transition-shadow hover:shadow-md ' +
+  ' block w-full shadow-sm select-none touch-pinch-zoom transition-shadow hover:shadow-md ' +
   'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2';
 
 // The ghost sets the independent `rotate` property (Tailwind v4), so the tilt

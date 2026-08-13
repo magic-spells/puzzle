@@ -46,6 +46,17 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // (instant under prefers-reduced-motion) and re-pins. @pin(isPinned) fires
 // whenever the pinned state flips, so the parent can mirror it (badge, etc.).
 //
+// THE JUMP LATCH. A smooth jump would otherwise flicker the pill back on for
+// every intermediate frame, so the jump sets a latch that makes scroll samples
+// no-ops until it lands. A latch that only releases on arrival is a trap: the UA
+// cancels its own smooth scroll the instant the reader touches the wheel/screen,
+// no arrival sample ever comes, and pinned would stay stuck true forever (pill
+// gone, content growth still yanking the view down). So the latch releases three
+// ways — on arrival, on the reader's first wheel/touchstart (their intent wins
+// over the animation), and on a JUMP_RELEASE_MS backstop for the cases that emit
+// neither (throttled tab, a scroll that never moves). Every release re-derives
+// pinned from the real position rather than assuming it.
+//
 // GROWTH IS WATCHED WITH A ResizeObserver on an inner wrapper around the slot —
 // NOT a MutationObserver — so it catches both new nodes and any reflow (images
 // loading, a message expanding) with one cheap callback. The scroll handler is
@@ -60,13 +71,29 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // Callback:
 //   @pin(isPinned)  fired when pinned-to-bottom state changes
 const PIN_THRESHOLD = 40; // px from the bottom that still counts as "pinned"
+// Backstop for a smooth jump that never reports arrival (see THE JUMP LATCH).
+const JUMP_RELEASE_MS = 2000;
 
 export default class ChatScroller extends PuzzleView {
   #ro = null;
   #raf = null;
   // Suppresses scroll-driven unpinning during a programmatic smooth jump, so the
-  // pill doesn't flicker back on mid-animation; released once we reach the bottom.
+  // pill doesn't flicker back on mid-animation. See THE JUMP LATCH above for the
+  // three ways it releases.
   #suppress = false;
+  #jumpTimer = null;
+  // The element the intent listeners are bound to, kept so destroyed() can detach
+  // them without depending on the template still being queryable.
+  #scrollTarget = null;
+
+  #onScrollIntent = () => {
+    // The reader grabbed the wheel/screen mid-jump: the UA has cancelled the
+    // smooth scroll, so no arrival sample is coming. Release now and re-derive
+    // pinned from where they actually are.
+    if (!this.#suppress) return;
+    this.#releaseJump();
+    this.updatePinned();
+  };
 
   data(params, props) {
     const prev = this.getData();
@@ -101,16 +128,36 @@ export default class ChatScroller extends PuzzleView {
     return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
+  // Drop the jump latch and its backstop together — they are always armed and
+  // disarmed as a pair.
+  #releaseJump() {
+    this.#suppress = false;
+    if (this.#jumpTimer) {
+      clearTimeout(this.#jumpTimer);
+      this.#jumpTimer = null;
+    }
+  }
+
   mounted() {
     // Start at the bottom (newest message visible).
     this.scrollToBottom(false);
     // Watch content growth; while pinned, follow it down.
     if (typeof ResizeObserver !== 'undefined') {
       this.#ro = new ResizeObserver(() => {
-        if (this.getData().pinned) this.scrollToBottom(false);
+        // Never fight a jump in flight: the jump already targets the bottom, and
+        // the observer re-engages the moment the latch releases.
+        if (this.getData().pinned && !this.#suppress) this.scrollToBottom(false);
       });
       const inner = this.inner();
       if (inner) this.#ro.observe(inner);
+    }
+    // Manual scroll intent, which the `scroll` event alone cannot distinguish
+    // from the programmatic jump's own frames.
+    const vp = this.viewport();
+    if (vp) {
+      this.#scrollTarget = vp;
+      vp.addEventListener('wheel', this.#onScrollIntent, { passive: true });
+      vp.addEventListener('touchstart', this.#onScrollIntent, { passive: true });
     }
   }
 
@@ -123,6 +170,12 @@ export default class ChatScroller extends PuzzleView {
       cancelAnimationFrame(this.#raf);
       this.#raf = null;
     }
+    this.#releaseJump();
+    if (this.#scrollTarget) {
+      this.#scrollTarget.removeEventListener('wheel', this.#onScrollIntent);
+      this.#scrollTarget.removeEventListener('touchstart', this.#onScrollIntent);
+      this.#scrollTarget = null;
+    }
   }
 
   updatePinned() {
@@ -133,7 +186,7 @@ export default class ChatScroller extends PuzzleView {
     // During a smooth jump, ignore intermediate positions until we land, so the
     // pill stays hidden throughout the animation instead of blinking.
     if (this.#suppress) {
-      if (pinned) this.#suppress = false;
+      if (pinned) this.#releaseJump();
       return;
     }
     if (pinned !== this.getData().pinned) {
@@ -153,7 +206,13 @@ export default class ChatScroller extends PuzzleView {
     },
 
     jumpToLatest: () => {
+      this.#releaseJump();
       this.#suppress = true;
+      this.#jumpTimer = setTimeout(() => {
+        this.#jumpTimer = null;
+        this.#suppress = false;
+        this.updatePinned();
+      }, JUMP_RELEASE_MS);
       this.scrollToBottom(true);
       if (!this.getData().pinned) {
         this.setData({ pinned: true });

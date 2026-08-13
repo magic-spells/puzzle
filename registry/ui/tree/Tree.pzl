@@ -82,8 +82,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                                the Tree also flips its internal set + refresh().)
 //
 // KEYBOARD (roving tabindex — the whole tree is a single Tab stop; exactly one
-// visible treeitem is tabbable: the selected row if visible, else the first enabled
-// root). Focus moves imperatively over the flattened visible order:
+// visible treeitem is tabbable, and per APG it is the LAST-FOCUSED row, not the
+// selected one: arrowing down five rows and tabbing away must return you to row
+// five, not to the selection. Falls back to the selected row, then to the first
+// enabled root, when nothing has been focused yet or that row is gone). Focus
+// moves imperatively over the flattened visible order:
 //   Down / Up      next / previous visible row
 //   Right          collapsed parent → expand; expanded parent → focus first child;
 //                  leaf → nothing
@@ -164,15 +167,26 @@ export default class Tree extends PuzzleView {
   // ---- render model --------------------------------------------------------
 
   data(params, props) {
+    const prev = this.getData();
     const value = props.value != null ? String(props.value) : '';
     const expandedSet = this._expandedSet();
     const rows = flatten(props.nodes, expandedSet, value, 0, []);
     const base = `pieces-tree-${this._uid}`;
 
-    // Roving tabindex lands on the selected row when it is visible; otherwise the
-    // first enabled root keeps the tree reachable as a single Tab stop.
+    // ROVING TABINDEX FOLLOWS FOCUS, NOT SELECTION (APG). Whoever the reader last
+    // moved focus to — by arrow key or by click — owns the tree's single Tab stop,
+    // so tabbing out and shift-tabbing back returns to where they were rather than
+    // teleporting to the selection. focusedId is local state (setData in
+    // _setFocused), carried across data() re-runs through `prev` so a parent
+    // re-render cannot lose the reader's place. Two fallbacks in order: the row is
+    // gone or now disabled (a collapsed branch, a filtered list) → the selected
+    // row if visible → the first enabled root, which keeps the tree reachable at
+    // all times.
+    const focusedId = prev && prev.focusedId != null ? prev.focusedId : null;
     let rovingId = null;
-    if (value && rows.some((r) => r.id === value)) {
+    if (focusedId && rows.some((r) => r.id === focusedId && !r.disabled)) {
+      rovingId = focusedId;
+    } else if (value && rows.some((r) => r.id === value)) {
       rovingId = value;
     } else {
       const firstEnabled = rows.find((r) => !r.disabled);
@@ -205,6 +219,7 @@ export default class Tree extends PuzzleView {
 
     return {
       rows,
+      focusedId,
       treeLabel: props.label || 'Tree',
       rootClass: [TREE_BASE, props.class || ''].join(' '),
     };
@@ -242,7 +257,20 @@ export default class Tree extends PuzzleView {
     const items = this.element
       ? this.element.querySelectorAll('[role="treeitem"]')
       : null;
-    if (items && items[index]) items[index].focus();
+    if (!items || !items[index]) return;
+    items[index].focus();
+    const row = this.getData().rows[index];
+    this._setFocused(row ? row.id : null);
+  }
+
+  // Hand the roving tabindex to `id`. refresh() is what makes it stick: setData
+  // alone re-renders without re-running data(), and every row's tabindex is derived
+  // there — the attribute would stay on the old row until some unrelated re-render.
+  // Rows are keyed by id, so the patch reuses the same <li> and DOM focus survives.
+  _setFocused(id) {
+    if (!id || this.getData().focusedId === id) return;
+    this.setData({ focusedId: id });
+    this.refresh();
   }
 
   events = {
@@ -250,6 +278,9 @@ export default class Tree extends PuzzleView {
       const { rows } = this.getData();
       const row = rows.find((r) => r.id === id);
       if (!row || row.disabled) return;
+      // A click focuses the <li> (it is tabindex-bearing), so the tab stop has to
+      // move with it — otherwise clicking row 7 and tabbing back lands on row 1.
+      this._setFocused(row.id);
       this.requestSelect(row, event);
       if (row.hasChildren) this.requestToggle(row, event);
     },
@@ -291,6 +322,9 @@ export default class Tree extends PuzzleView {
         case ' ':
           event.preventDefault();
           if (row.disabled) break;
+          // This row already holds DOM focus (it is the keydown target); make the
+          // tab stop agree even if the reader tabbed straight in and never arrowed.
+          this._setFocused(row.id);
           this.requestSelect(row, event);
           if (row.hasChildren) this.requestToggle(row, event);
           break;

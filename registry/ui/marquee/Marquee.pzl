@@ -31,11 +31,11 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //
 // MECHANISM — pure JS rAF, NO CSS @keyframes, NO shared-file change. The slot
 // content is wrapped in one "copy" group; at mount the piece measures that copy,
-// clones it enough times to overfill the viewport, marks the clones
-// aria-hidden="true" (so AT reads the sequence once), and then advances an offset
-// by `speed * dt` every animation frame — writing `track.style.transform =
-// 'translateX(offset)'` directly. Setting the CSS `transform` PROPERTY imperatively
-// sidesteps the Tailwind translate-*-in-transition gotcha entirely (Tailwind's
+// clones it enough times to overfill the viewport, neuters those clones (see A11Y
+// below), and then advances an offset by `speed * dt` every animation frame —
+// writing `track.style.transform = 'translateX(offset)'` directly. Setting the CSS
+// `transform` PROPERTY imperatively sidesteps the Tailwind
+// translate-*-in-transition gotcha entirely (Tailwind's
 // `translate-*` sets the `translate` property, which won't compose in a transition;
 // we never use it). The offset wraps by exactly one copy's extent (content size +
 // gap) for a seamless infinite loop — the same loopDistance technique a hand-rolled
@@ -55,7 +55,18 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   class         merged onto the root (width, height, rounding, borders, …)
 //
 // A11Y — the obsolete `marquee` role is intentionally not used; the root is a plain
-// region and the visible content is announced once (clones are aria-hidden).
+// region. THE CLONES ARE FULLY INERT, not merely unannounced: `aria-hidden` alone
+// would leave cloned links and buttons in the Tab order (the axe `aria-hidden-focus`
+// violation — a focus stop a screen reader cannot describe), duplicate every `id` in
+// the document (breaking getElementById / label `for` / aria-labelledby, which all
+// resolve to the FIRST match), and submit every cloned form control's `name` N times.
+// So each clone gets `inert` (one attribute that removes it from AT, focus, and hit
+// testing), has every `id` stripped, and has its form controls disabled and unnamed.
+// The net effect: exactly ONE interactive, announced, identifiable copy of the slot
+// content exists no matter how many clones the measurement asks for.
+// Slot content is therefore PRESENTATIONAL ticker content by contract — an item may
+// be a link or a button, but the piece guarantees only the original copy of it is
+// reachable, so nothing should depend on a specific clone being operable.
 // prefers-reduced-motion is respected: no auto-scroll runs, the content renders
 // static (drag still works — it is user-driven, not motion).
 const ROOT = 'relative overflow-hidden select-none';
@@ -148,9 +159,6 @@ export default class Marquee extends PuzzleView {
 
   // --- element lookups --------------------------------------------------------
 
-  _root() {
-    return this.element && this.element.querySelector('[data-marquee-root]');
-  }
   _track() {
     return this.element && this.element.querySelector('[data-marquee-track]');
   }
@@ -189,9 +197,21 @@ export default class Marquee extends PuzzleView {
     // covered while the offset lives in (-loop, 0].
     const needed = Math.max(2, Math.ceil((viewport + this._loop) / this._loop) + 1);
     for (let i = 1; i < needed; i++) {
+      // cloneNode(true) is a verbatim copy — ids, focusability and form names
+      // included — so every clone has to be neutered before it enters the DOM.
+      // See the A11Y note in the header for why each line is load-bearing.
       const clone = copy.cloneNode(true);
       clone.setAttribute('data-marquee-clone', '');
       clone.setAttribute('aria-hidden', 'true');
+      // inert removes the subtree from AT, the Tab order, and hit testing at once;
+      // aria-hidden stays for the (older) engines that lack inert support.
+      clone.setAttribute('inert', '');
+      if (clone.id) clone.removeAttribute('id');
+      for (const el of clone.querySelectorAll('[id]')) el.removeAttribute('id');
+      for (const el of clone.querySelectorAll('input, select, textarea, button')) {
+        el.disabled = true;
+        el.removeAttribute('name'); // never submit duplicated values
+      }
       track.appendChild(clone);
     }
 
