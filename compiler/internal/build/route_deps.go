@@ -240,8 +240,22 @@ func (g *routeGraph) classify(root string, changed []string, assetConsumers func
 		// page's HTML. It needs no render at all — which is why this test precedes
 		// the existence check: a DELETED public asset is still just a copy that no
 		// longer happens.
+		//
+		// Except that public/ sits INSIDE the module resolve tree, so a view or
+		// app.js may import a module that lives there; the SPA watcher already
+		// treats one as a bundle input rather than a public-only change
+		// (pathsTouchInputs). A public path the last committed graph knows about is
+		// a module first and an asset second: fall through to the module rules
+		// below so it is attributed to its pages, forces a full render when only
+		// the prerender graph reaches it, and forces one when it disappears —
+		// instead of reporting the zero-route plan that would reuse every page's
+		// stale HTML while the bundles around it changed. {#svg} gets no say here:
+		// resolveSVGAsset refuses any path outside app/assets/, so an inlined-asset
+		// edge can never start under public/.
 		if publicPrefix != "" && strings.HasPrefix(p, publicPrefix) {
-			continue
+			if _, known := g.byModule[p]; !known && !g.global[p] {
+				continue
+			}
 		}
 		// A path that no longer exists is a delete or a rename. Either can remove a
 		// module the graph still believes in, so it is never partial.

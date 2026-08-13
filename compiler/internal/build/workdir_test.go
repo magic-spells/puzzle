@@ -168,3 +168,75 @@ func TestBuildStagesInsideTheScratchDir(t *testing.T) {
 		}
 	}
 }
+
+// A live build's staging tree survives a sibling process's sweep even though its
+// own writes land in subdirectories, which never bump the root's mtime.
+func TestKeepWorkDirFreshSurvivesSweep(t *testing.T) {
+	root := t.TempDir()
+	tmp, err := ensureWorkTmp(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	staging, err := os.MkdirTemp(tmp, stagingPrefix+"*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A build that has been running past the stale threshold: the tree exists and
+	// work is happening inside it, but its root inode is cold.
+	old := time.Now().Add(-2 * staleWorkAge)
+	if err := os.Chtimes(staging, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	stop := keepWorkDirFresh(staging)
+	defer stop()
+	// The heartbeat stamps once immediately, so a sweep racing a build's first
+	// minute cannot win either.
+	SweepWorkDirs(root)
+	if _, err := os.Stat(staging); err != nil {
+		t.Fatalf("a heartbeat-kept staging tree was swept: %v", err)
+	}
+
+	// Once the build is over the tree is ordinary residue again.
+	stop()
+	if err := os.Chtimes(staging, old, old); err != nil {
+		t.Fatal(err)
+	}
+	SweepWorkDirs(root)
+	if _, err := os.Stat(staging); !os.IsNotExist(err) {
+		t.Fatalf("a stopped heartbeat must leave the tree sweepable, stat err = %v", err)
+	}
+}
+
+// The ticker half: a running heartbeat keeps stamping, not just once.
+func TestKeepWorkDirFreshTicks(t *testing.T) {
+	prev := workDirHeartbeat
+	workDirHeartbeat = 10 * time.Millisecond
+	defer func() { workDirHeartbeat = prev }()
+
+	dir := t.TempDir()
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(dir, old, old); err != nil {
+		t.Fatal(err)
+	}
+	stop := keepWorkDirFresh(dir)
+	defer stop()
+
+	// The immediate stamp is not what this asserts: backdate again AFTER it, so
+	// only a tick can move the mtime forward.
+	if err := os.Chtimes(dir, old, old); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		info, err := os.Stat(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.ModTime().After(old.Add(time.Minute)) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("the heartbeat never bumped the directory mtime")
+}

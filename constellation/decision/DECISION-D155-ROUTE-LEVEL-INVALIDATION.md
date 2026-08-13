@@ -1,6 +1,6 @@
 ---
 name: D155 — route-level invalidation in static dev
-status: built
+status: verified
 connections:
   - DECISION-D154-STATIC-DEV-WARM-REBUILDS
   - DECISION-D148-PREVIEW-AND-STATIC-DEV
@@ -10,6 +10,15 @@ connections:
   - COMPONENT-SSG
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-BUILD-WATCH
+verified_at: '2026-08-13T04:52:53.633Z'
+verified_sha: e76df0fd873bd4739a754d9861197a9f24074a5f
+notes:
+  - kind: verified
+    text: >-
+      Public-asset and empty-subset contracts re-scoped and verified against the classifier: an
+      imported public module is attributed to its pages, a render-wide one forces a full render, a
+      deleted one forces a full render, and only a path in neither graph set is copy-only.
+    sha: e76df0fd873bd4739a754d9861197a9f24074a5f
 ---
 
 # D155 — route-level invalidation in static dev
@@ -52,15 +61,30 @@ rebuild that produces them, from the same passes the build already runs.
 **The classifier only ever narrows on evidence.** A batch is the most
 conservative of its members. An unknown file, a vanished file (a delete or a
 rename), an empty change list and a graph that was never captured are all full
-renders. The two paths that need no render at all are named explicitly: a public
-asset other than the shell is copied into staging verbatim and appears in no
-page's HTML, and a standalone stylesheet is composed into `styles.css` whatever
-happens (a Tailwind output change takes the same zero-route path through
-`RecomposeStyles` — D154). The classifier resolves the public dir and shell
-through the same `publicDir(root)` fallback the build uses, so a root-level
-`public/` project gets the identical fast paths as `app/public`. The shell
-itself (`public/index.html`) is spliced into every page and is therefore always
-a full render.
+renders. The two paths that need no render at all are named explicitly: an
+UNIMPORTED public asset other than the shell is copied into staging verbatim and
+appears in no page's HTML, and a standalone stylesheet is composed into
+`styles.css` whatever happens (a Tailwind output change takes the same
+zero-route path through `RecomposeStyles` — D154). The classifier resolves the
+public dir and shell through the same `publicDir(root)` fallback the build uses,
+so a root-level `public/` project gets the identical fast paths as `app/public`.
+The shell itself (`public/index.html`) is spliced into every page and is
+therefore always a full render.
+
+**`public/` is inside the module resolve tree, so living there is not what makes
+a file an asset.** A view or `app.js` can `import` a module that happens to sit
+under `public/`, and the SPA watcher already counts one as a bundle input rather
+than a public-only change. A public path the last committed graph knows about is
+therefore a module first and an asset second: it is attributed to its pages,
+forces a full render when only the prerender graph reaches it, and forces one
+when it disappears. Only a path in neither graph set takes the copy-only
+zero-route path — deleted or not, since a copy that no longer happens still
+needs no render. Skipping the graph for everything under the prefix let a page
+bundle rebuild around markup nobody re-rendered, which is precisely the
+disagreement between a warm `dist/` and a clean `--static` build this card
+exists to prevent. `{#svg}` needs no say in that branch: the asset resolver
+refuses any path outside `app/assets/`, so an inlined-asset edge can never
+start under `public/`.
 
 **`{#svg}` is the one edge no metafile carries.** An inlined asset is a codegen
 watch file, not a module input, so the compile cache — which already tracks the
@@ -73,9 +97,13 @@ output-path claim and its slug, and is still reported in `written`, flagged
 `reused`. No context is built for it, so `beforeMount` and `data()` never run on
 its behalf and no file is written. Only the writes differ between a subset
 render and a full one, which is what makes every order-dependent decision land
-identically. The filter rides on the node process's `argv[4]` rather than in the
-generated entry's source, because the dev builder holds one persistent esbuild
-context over exactly those bytes.
+identically. An EMPTY subset is the limit case and behaves like one: it is what
+a public-asset save produces, it renders nothing, and it builds no context at
+all — the zero-page `beforeMount` fail-fast applies to a full render, where no
+filter was given, so a no-op rebuild never runs application setup. The filter
+rides on the node process's `argv[4]` rather than in the generated entry's
+source, because the dev builder holds one persistent esbuild context over
+exactly those bytes.
 
 **Reused pages are hardlinked, not re-rendered and not copied.** D154 rejected
 hardlinking `dist/` because esbuild rewrites its output files in place — but a

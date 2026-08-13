@@ -182,6 +182,10 @@ func Build(root string, opts Options) error {
 	// MkdirTemp creates the dir 0700; dist/ is conventionally 0755 (it may be
 	// served directly), so match that after the swap-in.
 	_ = os.Chmod(staging, 0o755)
+	// A long build writes into this tree's SUBDIRECTORIES, which never bumps its
+	// root mtime — keep it warm so a sibling process's sweep cannot mistake it
+	// for the residue of a killed build.
+	defer keepWorkDirFresh(staging)()
 	swapped := false
 	defer func() {
 		// Leave nothing behind on failure (and on the success path the rename has
