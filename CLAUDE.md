@@ -176,9 +176,12 @@ run.
   matching pieces release (from the puzzle-pieces repo) at or before the CLI
   release, or zero-config `add piece` falls back to an older minor — or
   hard-fails when none exists.
-- Sweep the release-facing prose no script checks: the README status banner,
-  CHANGELOG completeness for the version being shipped, and
-  `DOC-RELEASE-SURFACE.md`. The banner sat at `0.1.0` through four releases.
+- Sweep the release-facing prose no script checks: CHANGELOG completeness for
+  the version being shipped and `DOC-RELEASE-SURFACE.md`. The README size
+  banner IS scripted now — `release:prep` runs
+  `scripts/measure-size.mjs --check` (builds `examples/hello-world` +
+  `examples/todos` in production and fails on a stale figure; regenerate with
+  `npm run measure:size`) after its banner sat stale through four releases.
 
 ## Architecture at a glance
 
