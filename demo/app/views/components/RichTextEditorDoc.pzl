@@ -4,7 +4,8 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Rich Text Editor</h1>
         <p class="mt-2 text-body">
-          WYSIWYG editing on Tiptap/ProseMirror with the Toolbar piece as its formatting bar.
+          WYSIWYG editing on Tiptap/ProseMirror with a block-style dropdown (Normal text,
+          Heading 1-4) and the Toolbar piece as its formatting bar.
           The value is not HTML — it is a structured JSON document tree (Shopify's rich text
           metafield shape, extended with alignment and more), controlled via
           <code class="rounded bg-surface-sunken px-1.5 py-0.5 font-mono text-[13px] text-ink">value</code>

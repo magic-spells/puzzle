@@ -9,9 +9,11 @@
         <button
           type="button"
           data-style-trigger
+          ref="styleTrigger"
           class={ styleTriggerClass }
           id={ styleTriggerId }
           title="Block style"
+          role="combobox"
           aria-haspopup="listbox"
           aria-expanded={ styleExpanded }
           aria-controls={ stylePanelId }
@@ -126,9 +128,9 @@ import {
 // Callbacks (value-first):
 //   @change(doc) fires on every edit with the full document tree
 //
-// Formatting: a block-style dropdown (Normal text, Heading 1–4) followed by the
-// toolbar's bold / italic / underline / strike, align left/center/
-// right, bullet + ordered lists, blockquote, code block, links (inline URL row
+// Formatting: a block-style dropdown (Normal text, Heading 1-4) followed by the
+// toolbar's bold / italic / underline / strike, align left/center/right,
+// bullet + ordered lists, blockquote, code block, links (inline URL row
 // — Enter or Set applies, empty URL or Remove clears; bare domains get https://
 // prefixed). Undo/redo ride on the standard keyboard shortcuts via Tiptap.
 //
@@ -140,6 +142,7 @@ import {
 // can't vary per level through HTMLAttributes; those are mirrored below in
 // CONTENT_CLASS as arbitrary variants (keep in sync with the lib map).
 let uid = 0;
+const EMITTED_LIMIT = 30;
 
 const CONTENT_CLASS =
 	'min-h-40 px-3 py-2 text-ink outline-none ' +
@@ -208,6 +211,9 @@ export default class RichTextEditor extends PuzzleView {
 		// The value prop as last SEEN by afterUpdate, tracked by identity so a
 		// self-triggered re-render can be told from a real prop change.
 		this._lastSeenValue = undefined;
+		// Recent serialized docs this editor emitted, used to recognize delayed
+		// controlled-value echoes even after the editor has advanced past them.
+		this._emitted = [];
 		this.setData({
 			active: {},
 			empty: true,
@@ -294,6 +300,8 @@ export default class RichTextEditor extends PuzzleView {
 		const value = this.props.value || emptyDoc();
 		this._applied = JSON.stringify(value);
 		this._lastSeenValue = this.props.value;
+		// A mounted editor starts with no outstanding emissions from this instance.
+		this._emitted = [];
 		// Seed the emptiness flag data() switches to post-mount, or a non-empty
 		// starting value would render under the placeholder until the first edit.
 		this.setData('empty', isEmpty(value));
@@ -335,7 +343,10 @@ export default class RichTextEditor extends PuzzleView {
 			},
 			onUpdate: ({ editor }) => {
 				const doc = fromTiptap(editor.getJSON());
-				this._applied = JSON.stringify(doc);
+				const serialized = JSON.stringify(doc);
+				this._applied = serialized;
+				this._emitted.push(serialized);
+				if (this._emitted.length > EMITTED_LIMIT) this._emitted.shift();
 				this.setData('empty', isEmpty(doc));
 				this.refresh();
 				const { change } = this.props;
@@ -375,6 +386,15 @@ export default class RichTextEditor extends PuzzleView {
 		this._lastSeenValue = v;
 		if (v == null) return;
 		const s = JSON.stringify(v);
+		// Second echo shape, and the destructive one: the parent's setData render
+		// is frame-scheduled while _applied advances synchronously per keystroke,
+		// so an emission burst spanning frames can deliver an OLDER emission e_i
+		// after typing has already advanced the editor to e_j. It passes the
+		// identity gate (genuinely a new reference) and fails the compare below
+		// (older than _applied), so it would be misread as an external reset and
+		// replayed through setContent. The bounded ring recognizes any recent own
+		// output first. Record the spelling, but do NOT regress _applied.
+		if (this._emitted.includes(s)) return;
 		// The prop DID change; it may still be the parent echoing our own emitted
 		// doc back as a fresh reference, which matches _applied and no-ops.
 		if (s !== this._applied) {
@@ -485,6 +505,17 @@ export default class RichTextEditor extends PuzzleView {
 				styleActive: open ? this._styleIndex() : -1,
 			});
 			this.refresh();
+			// A mouse open never focuses the trigger — the wrapper prevents
+			// pointerdown to protect the editor's selection — so without this the
+			// listbox would sit open with focus still in ProseMirror: arrows would
+			// move the caret, Enter would insert a newline, and the keyboard
+			// highlight would never move. Taking focus is safe: ProseMirror keeps
+			// its selection in state across a blur and chooseStyle's chain().focus()
+			// restores it, and block-style commands act on the caret's block, so
+			// nothing here depends on the DOM selection surviving. Escape
+			// deliberately leaves focus ON the trigger (listbox convention — the
+			// user may want to reopen); only applying returns focus to the editor.
+			if (open) this.refs.styleTrigger?.focus();
 		},
 
 		closeStyle: () => {
