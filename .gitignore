@@ -9,6 +9,9 @@ node_modules/
 # Puzzle cached files
 .puzzle/
 
+# Browser-automation scratch artifacts (Playwright MCP snapshots/screenshots)
+.playwright-mcp/
+
 # Local agent settings (session-specific permissions)
 .claude/settings.local.json
 
