@@ -73,11 +73,12 @@ time, so nothing needs to be pre-wired:
 - `Store.prototype.seed` / `resetFixtureSeed` are **added** by install (and
   deleted by `uninstall()`); per-store PRNG/mock state lives in a module
   `WeakMap`, zero fields on the store.
-- Mock interception replaces `Store.prototype._network` — a **~5-line seam**
-  left in core, the single place an adapter request touches `fetch`, called by
+- Mock interception replaces `Store.prototype._network` — the single place an
+  adapter request touches `fetch`, installed by the `/adapter` factory and
+  imported explicitly by `/fixtures`, called by
   `_fetch` *after* `beforeRequest` runs. The seam exists because replicating
-  D91's load-bearing method/body re-stamping outside core would drift; it is
-  the one concession, versus 154 lines before.
+  D91's load-bearing method/body re-stamping outside the adapter module would
+  drift; `/fixtures` therefore imports the same implementation it intercepts.
 - `PuzzleApp.prototype.mount` is wrapped to run the config's optional
   `setup(app)` at beforeMount timing (after the user's own hook, before
   navigation #0 — the D66 seeding window).
@@ -133,15 +134,16 @@ state to defend against.
 
 ## Consequences
 
-- `store.js` returns to its D91 shape plus the `_network` seam; `app.js` loses
+- `store.js` carries no adapter seam; `/fixtures` explicitly installs `/adapter`
+  before capturing `_network`. `app.js` loses
   the `fixtureSeed` plumbing (the seed now rides `installFixtures({ seed })` /
   the fixtures file). All 13 probes, both defines, the scan tokens, and the
   three "compiled out" error messages are gone.
 - Production/dev bundles without the flag carry zero fixture bytes regardless
   of compiler version — the stale-binary class of bug is structurally
-  impossible. Measured on `examples/todos`: plain build 62560 raw / 20414 gzip
-  (Release-1 baseline was 62506 / 20394, so the whole system's core cost is
-  the ~54-byte seam; the D96 state was 63317 / 20702, so D98 also recovered
+  impossible. The pre-D157 measurement on `examples/todos` was: plain build
+  62560 raw / 20414 gzip (Release-1 baseline was 62506 / 20394, so the then-core
+  cost was the ~54-byte seam; the D96 state was 63317 / 20702, so D98 also recovered
   the stub/probe residue). `--fixtures` build: 70599 / 23439 with the demo
   `app/fixtures.js`, engine markers present, `.puzzle/` cleaned up after.
 - **The generated wrapper imports must be pinned side-effectful.** The package

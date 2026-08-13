@@ -22,7 +22,7 @@ notes:
 # D50 — Adapter write path: explicit `save()`/`delete()` verbs, local-first, validate-before-sync (v1.18)
 
 Completes the [[DECISION-D21-ADAPTER-READ-PATH]] adapter story on the write side. The
-same `static adapter = { endpoint }` declaration now drives `record.save()` (create +
+same `static adapter = adapter({ endpoint })` declaration now drives `record.save()` (create +
 update sync), `record.delete()` (confirmed server delete), and `store.request()` (the
 custom-endpoint escape hatch). See [[DOC-SPEC-DATA]] §22.
 
@@ -64,7 +64,7 @@ mocks.
   (Rejected: a declarative `adapter.methods` map — codegen-ish surface for something a
   three-line instance method states more clearly.)
 - **Failures reject with `PuzzleAdapterError`** (`.status`, `.statusText`, `.body`
-  when parseable) — exported from the package root. The D21 read path keeps its plain
+  when parseable) — exported from `@magic-spells/puzzle/adapter`. The D21 read path keeps its plain
   Errors (message-stable); new verbs get the structured shape.
 - **Query fault-in: explicitly re-deferred.** `findMany`'s synchronous, pure-local
   return is load-bearing for the tracking/subscription machinery and the render
@@ -79,7 +79,8 @@ fault-in). Also rejected: `record.destroy()` growing a `{ server: true }` option
 mutating shipped semantics behind a flag; a distinct verb is honest.
 
 ## Consequences
-Runtime-only (model.js + store.js + index.js). Acceptance: a todos app persists
+Runtime-only in the opt-in `/adapter` module, which installs the verbs on the
+core model/store prototypes ([[DECISION-D157-ADAPTER-SUBPATH]]). Acceptance: a todos app persists
 create/toggle/delete to a REST endpoint with **no hand-written fetch** —
 `store.loadAll` at boot, `todo.save()` after create/toggle, `todo.delete()` on remove.
 Validation composes (D48): nothing invalid leaves the client. The synced flag is

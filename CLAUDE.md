@@ -112,15 +112,16 @@ run.
   navigation/refresh pipeline; the `boundary` phase is renamed
   `error-view`. Byte-neutral by measurement (+126 gzip framework-side,
   −71 net with the todos demo cleanup); treated as an API simplification,
-  not a size lever. Cards truthed
-  through D156; next free card is D157. **Publish sequencing:**
+  not a size lever; and D157 extracts server sync into the opt-in
+  `@magic-spells/puzzle/adapter` subpath. Cards truthed through D157; next free
+  card is D158. **Publish sequencing:**
   `@magic-spells/puzzle-pieces` `0.6.0` (ready in its repo's `release/0.6.0`,
   not yet on npm — the package 404s) must be published at or before the CLI's
   release; no older pieces release exists to fall back to, so a fresh `0.6.0`
   install's `puzzle add piece` hard-fails until it ships.
-- Product line: v1 through v1.71 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
+- Product line: v1 through v1.72 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
-  amendment = v1.71; D146 is a correctness amendment
+  amendment = v1.71, D157 = v1.72; D146 is a correctness amendment
   with no product-line entry),
   plus the July
   21 pre-release correctness/performance hardening pass and the July 24
@@ -128,8 +129,9 @@ run.
   decision record — do not restate them here; they move faster than this file.
   (There is deliberately no DOC-DECISIONS index card: each decision lives in
   its numbered card only, never in two spots.)
-- Public package: `@magic-spells/puzzle`, with root, `./morph`, `./ssg`,
-  `./static`, and `./puzzle-env` exports plus a `puzzle` binary shim and four
+- Public package: `@magic-spells/puzzle`, with root, `./adapter`, `./morph`,
+  `./ssg`, `./static`, `./testing`, `./fixtures`, and `./puzzle-env` exports
+  plus a `puzzle` binary shim and four
   optional platform binary packages (macOS/Linux, arm64/x64).
 - Architecture: SPA-first browser runtime with two optional prerender output
   modes. `output: 'hybrid'` emits content-complete HTML the same SPA runtime
@@ -198,8 +200,9 @@ run.
   mount/patch, keyed reconciliation, components, slots, islands, refs, events.
 - `views/animate.js` + `views/visibility.js`: WAAPI animation normalization and
   shared IntersectionObserver scheduling for visible-trigger enters.
-- `datastore/store.js` + `model.js`: records, schema builders, validation,
-  relationships, subscriptions, persistence, adapters, read/write sync.
+- `datastore/store.js` + `model.js`: core records, schema builders, validation,
+  relationships, subscriptions, and persistence; `datastore/adapter.js` is the
+  opt-in server read/write sync runtime.
 - `formatters*`: display formatter registry, missing-name guard, built-in
   tree-shaking.
 - `devstate.js`: development-only state snapshot/restore across full reloads;

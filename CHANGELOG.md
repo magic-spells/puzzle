@@ -68,6 +68,26 @@ one is *not* a compile error; it silently builds a different product.
   Migration: move `errorContent()` markup into an `AppError.pzl` template and
   pass its class as `errorView`.
 
+- **BREAKING: server sync is the opt-in `/adapter` subpath (D157).** The
+  adapter — `loadAll`/`loadOne`, `record.save()`/`delete()`,
+  `store.request()`/`upsert()`, and `PuzzleAdapterError` — moved out of the
+  core store into `@magic-spells/puzzle/adapter`. Declare it with the factory:
+
+  ```js
+  import { adapter } from '@magic-spells/puzzle/adapter';
+
+  export default class Todo extends PuzzleModel {
+    static adapter = adapter({ endpoint: '/api/todos' });
+  }
+  ```
+
+  Apps that never import the subpath ship none of the adapter (−1.6 KB gzip on
+  the reference apps); `record.save()` without the import is a plain
+  `TypeError`, and a bare `static adapter = { endpoint }` object warns in dev
+  with this migration. `PuzzleAdapterError` now imports from
+  `@magic-spells/puzzle/adapter`; the `beforeRequest` app-config hook and
+  `/fixtures` mocking behave exactly as before.
+
 ### Added
 
 - **Static raw template blocks (D150).** `{#raw}…{/raw}` disables Puzzle's

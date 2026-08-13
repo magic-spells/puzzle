@@ -15,7 +15,9 @@ connections:
   - DOC-DATASTORE
 ---
 
-`store.seed(type, n)` generates believable records from the schema alone, and `static adapter = { mock: … }` serves the adapter verbs from an in-memory collection with configurable latency and failure.
+`store.seed(type, n)` generates believable records from the schema alone, and
+`static adapter = adapter({ endpoint, mock: … })` serves the adapter verbs from
+an in-memory collection with configurable latency and failure.
 
 **Integration reshaped by [[DECISION-D98-FIXTURES-MODULE-FLAG]] (v1.61):** everything below about *what* seed/mock do still holds, but the code now lives entirely in `@magic-spells/puzzle/fixtures` and attaches via `installFixtures(config)` (prototype patching + a WeakMap for state) instead of being baked into `store.js`; the `fixtureSeed` app/Store option became the install config's `seed`; and per-type mock config can also come from the install config, merged over `static adapter.mock`.
 
@@ -31,7 +33,11 @@ Puzzle is unusually well-placed here because **the schema already declares the t
 
 **Fixtures** read `Model.normalizedSchema()` / `relationshipDefs()`. Precedence: explicit overrides → `belongsTo` FK wiring → `.default()` (left *absent* so `applyDefaults` resolves it, preserving function-default and deep-clone semantics) → generated value. Records go through the normal `createRecord` path, so D48 validation, defaults, and pk assignment behave exactly as at runtime — a fixture that could not exist in production is worthless. `.oneOf()`/`.min()`/`.max()` are never violated. A `belongsTo` FK wires to a real existing parent when one exists and is left unset otherwise, rather than pointing at a nonexistent id.
 
-**The mock adapter intercepts inside `Store._fetch`** — the single seam D91 created — and returns a **Response-shaped object** (`ok`/`status`/`statusText`/`json()`/`text()`, hand-rolled because the real `Response` is not uniformly available across the Node and jsdom environments this must run in). That is the whole point of the design: intercept there and `loadAll`/`loadOne`/`save`/`delete`/`request` all work **completely unmodified**, exercising the real D50 write path rather than a parallel one. The collection is held on the Store, deep-cloned from `mock.data` on first use so a shared fixture array is never mutated underneath a test.
+**The mock adapter replaces `Store._network`**, installed by the D157 adapter
+factory after D91's `_fetch` hook, and returns a **Response-shaped object**. That
+placement keeps `loadAll`/`loadOne`/`save`/`delete`/`request` completely
+unmodified while `beforeRequest` still runs. The collection lives in fixture
+module WeakMap state keyed by Store and is deep-cloned from `mock.data`.
 
 `latency` (a number or `[min, max]`) is the knob that makes skeletons developable. `failRate` and `fail: true` produce non-ok responses that flow through the real error paths — `PuzzleAdapterError` for writes, the D21 throw for reads — rather than rejecting the fetch itself. `handler({ method, url, path, body, collection })` is the escape hatch for `store.request()`'s arbitrary paths, falling through to default CRUD on a falsy return.
 
@@ -45,7 +51,10 @@ Puzzle is unusually well-placed here because **the schema already declares the t
 - **Server-assigns-its-own-key pk adoption is unreachable through default CRUD.** `createRecord` always assigns a local pk, so the spec'd POST semantics ("assign one if absent") honor it and adoption never fires. That path is exercised through `handler`, which is still the real `save()` path. Making POST always reassign would silently re-key every seeded record.
 - **Custom `.validate()` predicates are opaque to generation** — a generated value can fail one, surfacing as the normal `PuzzleValidationError` at `createRecord`. The fix is an override.
 - `store.seed()` and `adapter.mock.data` are independent: seeded records are local and unsynced, so a `save()` POSTs *into* the mock collection. There is no supported way today to generate a fixture array without inserting records.
-- **Production cost is handled by [[DECISION-D96-FIXTURE-MOCK-TREESHAKE]].** As first built, both modules shipped in every production bundle (~2 KB gzip — more than D89's entire saving). D96 gates them behind usage-scanned defines, so an app using neither ships neither. An app that *does* declare a `mock` block still ships it, which is what the one-time `console.warn` per model class on first interception guards: it is unconditional and dev-visible, since `build.dropConsole` strips all `console.*` in production by default and the framework's advisory warnings are dev-mode-only by design.
+- **Production exclusion is structural under [[DECISION-D98-FIXTURES-MODULE-FLAG]].**
+  Without `--fixtures` or a direct test import, nothing references this module.
+  `/fixtures` explicitly imports `/adapter` because the mock needs its network
+  seam; core references neither.
 
 ## Alternatives rejected
 

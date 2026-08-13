@@ -12,7 +12,11 @@ verified_at: '2026-07-25T05:24:29.299Z'
 verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
 ---
 
-Every adapter fetch now routes through one private `Store._fetch(url, init, context)`, and an optional `beforeRequest` hook on the app config gets to shape the `init` before it goes out. This is how an app attaches auth headers, `credentials`, or an `AbortSignal` to the whole adapter surface at once.
+Every adapter fetch routes through one private `Store._fetch(url, init, context)`
+installed by `@magic-spells/puzzle/adapter`, and an optional `beforeRequest` hook
+on the app config gets to shape the `init` before it goes out. This is how an app
+attaches auth headers, `credentials`, or an `AbortSignal` to the whole adapter
+surface at once.
 
 ## Context
 

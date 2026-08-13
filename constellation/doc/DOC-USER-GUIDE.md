@@ -233,6 +233,7 @@ Models define your data structure with `Puzzle` schema field builders, plus comp
 ### models/user.js
 ```javascript
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class User extends PuzzleModel {
   // Schema definition — see [[DOC-SPEC]] §7. String ids so the server-seeded
@@ -264,15 +265,16 @@ export default class User extends PuzzleModel {
 
   // Server location (D21): consumed by store.loadAll('user') on the read path,
   // and by record.save()/delete() for write sync (v1.18, D50).
-  static adapter = {
+  static adapter = adapter({
     endpoint: '/users.json'
-  };
+  });
 }
 ```
 
 ### models/post.js
 ```javascript
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Post extends PuzzleModel {
   // Schema definition — see [[DOC-SPEC]] §7. authorId cross-references a User;
@@ -303,9 +305,9 @@ export default class Post extends PuzzleModel {
   }
 
   // Server location (D21): consumed by store.loadAll('post') on the read path.
-  static adapter = {
+  static adapter = adapter({
     endpoint: '/posts.json'
-  };
+  });
 }
 ```
 
@@ -341,7 +343,14 @@ export const models = {
 export default models;
 ```
 
-**The `adapter` drives both the read and write paths.** A model's `static adapter = { endpoint }` is consumed on the read path by `store.loadAll(type)` / `store.loadOne(type, id)`, which GET `apiURL + endpoint` and upsert the results (D21). A model with no `adapter` (like `comment` above) simply opts out of that path. Write sync shipped in v1.18 (D50): `record.save()` POSTs a never-synced record and PUTs a synced one (local-first — a failed save keeps the dirty state and rejects), `record.delete()` DELETEs then removes locally, and `store.request()` reaches custom endpoints; `record.destroy()` stays local-only. Validation enforces too — since v1.16 (D48) `createRecord`/`update` throw `PuzzleValidationError` on invalid data, while `Model.validate(data)` / `record.validate()` return `{ valid, errors }` without throwing for form UX (server upserts and storage hydration stay exempt). See [[DOC-SPEC]] §20/§22 and the D21/D48/D50 decision cards.
+**The adapter factory drives both read and write paths.** Import `adapter` from
+`@magic-spells/puzzle/adapter` and assign
+`static adapter = adapter({ endpoint })`; the call installs `loadAll`/`loadOne`,
+`upsert`/`request`, and record `save`/`delete`. A model with no adapter simply
+opts out, and an app that never calls the factory ships none of that runtime.
+`record.destroy()` stays local-only. Validation remains core: `createRecord` and
+`update` throw `PuzzleValidationError`, while `validate()` returns a renderable
+result. See [[DOC-SPEC]] §20/§22/§58 and D21/D48/D50/D157.
 
 ---
 

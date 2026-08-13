@@ -142,8 +142,9 @@ For data, install the self-contained fixtures module first (D98, SPEC §52) —
 `const uninstall = installFixtures({ seed })` in setup, `uninstall()` in
 teardown (it is re-exported from `/testing`). Installing attaches
 `store.seed(type, n)` (schema-derived fixtures) and the mock adapter, which
-serves the adapter verbs offline from `static adapter = { mock: { latency,
-failRate, fail } }` and/or the install config's per-type `mock` entries — the
+serves the adapter verbs offline from
+`static adapter = adapter({ endpoint, mock: { latency, failRate, fail } })`
+and/or the install config's per-type `mock` entries — the
 latency and failure knobs are how skeleton timing and `data()`-rejection paths
 get exercised at all. In a running app the same module is wired by `puzzle dev
 --fixtures` / `puzzle build --fixtures` from `app/fixtures.js` (SPEC §54);

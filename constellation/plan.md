@@ -179,7 +179,8 @@ errors in the browser, D93 router focus + route announcement, D94
 D98 — the fixtures/mock system as a fully self-contained
 `@magic-spells/puzzle/fixtures` module attached via `installFixtures()` and the
 `puzzle dev|build --fixtures` flag (wired from `app/fixtures.js` through a
-generated wrapper entry; core keeps only the ~5-line `Store._network` seam).
+generated wrapper entry; `/fixtures` imports the opt-in `/adapter` runtime and
+replaces its `Store._network` seam, while core carries neither module).
 
 Two intermediate states were built and replaced on the branch: D95's original
 integration baked ~154 lines into `store.js`, and D96 tree-shook it back out

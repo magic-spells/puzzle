@@ -147,8 +147,10 @@ one-shot CLI; dev maintains a warm watcher. Collected component CSS follows
 Tailwind output, and scoped blocks wrap in `@scope ([data-<path-hash>])` using
 the same symlink-normalized app-relative name as codegen.
 
-Resolution aliases the root package, `/morph`, `/ssg`, `/static`, and
-`/fixtures` for in-repo builds. Under `--fixtures` (D98) the entry point is a
+Resolution aliases the root package, `/adapter`, `/morph`, `/ssg`, `/static`,
+and `/fixtures` for in-repo builds. Subpaths have explicit aliases because the
+bare alias resolves to a file and cannot resolve suffixes. Under `--fixtures`
+(D98) the entry point is a
 generated wrapper whose two imports a small resolver plugin pins
 `SideEffects: true` — the package declares `"sideEffects": false`, and without
 the pin esbuild tree-shakes both bare wrapper imports into an empty bundle.

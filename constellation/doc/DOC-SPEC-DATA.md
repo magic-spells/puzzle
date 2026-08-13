@@ -57,7 +57,13 @@ export default class Todo extends PuzzleModel {
 
 **v1 enforcement:** `.default()` and `.primary()` are honored by the store. Validation rules (`required`, `min`, `max`, `oneOf`, `validate`) were stored-but-inert in v1; **since v1.16 they enforce at the local write boundary** (`createRecord`/`update` throw `PuzzleValidationError`; `Model.validate(data)`/`record.validate()` return `{ valid, errors }`) — see §20 (D48). Relationships (`Puzzle.hasMany(...)` / `Puzzle.belongsTo(...)`) shipped in v1.17 as lazy store-backed getters — see §21 (D49) — replacing the old `static relationships` block.
 
-**Server access (D21):** the model declares its server location — `static adapter = { endpoint: '/api/todos' }` — and v1 consumes it on the **read path** via `store.loadAll(type)` / `store.loadOne(type, id)` (§8). Write sync and custom adapter methods shipped in v1.18 — `record.save()`/`record.delete()`/`store.request()`, see §22 (D50); query fault-in remains deferred. Local persistence is in-memory with optional localStorage.
+**Server access (D21/D157):** the model imports `adapter` from
+`@magic-spells/puzzle/adapter` and declares its server location as
+`static adapter = adapter({ endpoint: '/api/todos' })`. The factory installs
+the read path (`store.loadAll` / `loadOne`), write sync
+(`record.save()`/`delete()`), `store.upsert()`, and `store.request()`. Without a
+factory call those methods are absent from core. Query fault-in remains
+deferred. Local persistence is in-memory with optional localStorage.
 
 **Read-path response bodies** are read the same way the write verbs read theirs: parsed JSON when the body parses, raw text when it doesn't, `undefined` when empty. A 2xx whose body is empty or unparseable therefore reaches `loadAll`/`loadOne`'s own shape guard — `[puzzle] loadAll('todo') expected a JSON array from the server` — rather than escaping as a bare `SyntaxError` with no type, no URL, and no indication it came from Puzzle. *(Amended, D137: the shape guard also requires the model's primary key on every record — checked up front, before any upsert, all-or-nothing — because a pk-less server record would otherwise mint an auto-generated id marked `_synced`, whose next `save()` PUTs to a URL the server never had. Storage hydration keeps its fail-soft auto-generation.)* *(Amended, D138: the load merge rides D125's per-field revision gate — the loader snapshots each existing record's mutation revision at dispatch, so a field edited WHILE the load was in flight keeps its local value while untouched fields take the server's. Pre-dispatch edits still take the server value; records absent at dispatch merge server-wins; `upsert()`/`request()` stay imperative-overwrite.)* The practical triggers are non-JSON 2xx responses: an error page served with a 200, a captive-portal or auth-redirect interstitial, a content-encoding mismatch. A consequence worth knowing: anything replacing the fetch seam must return a genuinely Response-shaped object with a working `text()`, not `json()` alone.
 
@@ -79,6 +85,10 @@ await store.loadOne('todo', id);
 record.update({ completed: true }); // triggers subscribed data() re-runs
 record.destroy();
 ```
+
+The server methods in this example exist only when a model module has already
+called `adapter(config)` from `@magic-spells/puzzle/adapter`. Local Store methods
+are always present.
 
 Any query made inside `data()` auto-subscribes the component; changes to matching records re-run `data()`.
 
@@ -130,7 +140,11 @@ static schema = {
 
 ## 22. Adapter write sync (v1.18)
 
-The write half of the D21 adapter story. Shipped in v1.18 (D50); a store/model amendment — no compiler, router, or view changes. The same `static adapter = { endpoint }` declaration drives everything; local mutation semantics (`createRecord`/`update`/`destroy`) are byte-identical to v1 — **sync is a separate, explicit verb.**
+The write half of the D21 adapter story. Shipped in v1.18 (D50) and moved to the
+opt-in subpath by D157. The same
+`static adapter = adapter({ endpoint })` declaration drives everything; local
+mutation semantics (`createRecord`/`update`/`destroy`) are unchanged — **sync is
+a separate, explicit verb.**
 
 ```js
 const todo = store.createRecord('todo', { text: 'Ship v1.18' }); // local, instant (unchanged)
@@ -145,7 +159,7 @@ await store.request('todo', `/${todo.id}/archive`, { method: 'POST' }); // custo
 - **`record.delete()`** — confirmed delete: DELETE first, local remove (normal notify path) on 2xx **or 404** (idempotent); other failures reject and the record stays. `record.destroy()` remains local-only, unchanged. **Since D132:** a **never-synced** record's `delete()` is a local removal with **no request** — the server has no row, so the old unconditional DELETE could only 404 or strand the record behind a 4xx (the D21 no-adapter rejection is checked first, so an endpoint-less model still reports that rather than quietly acting like `destroy()`); a `delete()` whose record is already `_deleted` (or store-less) when its turn comes resolves idempotently with no request, so two concurrent `delete()`s issue exactly one DELETE.
 - **Write serialization (D132):** ALL of a record's server writes — `save()` **and** `delete()` — run through one per-record in-flight chain (formerly the save-only chain). Each link reads the record's state when it *reaches the front*, never when it was enqueued: a delete fired during a first save waits and builds its URL from the **adopted server pk** (previously the concurrent DELETE either left a server orphan or missed the re-keyed record and resolved having deleted nothing), and a queued save that finds its record removed rejects with the same message `record.save()` gives at call time instead of resurrecting the row. Rejections stay isolated across verbs exactly as within save-save chaining: the prior link's failure is swallowed for chaining only, and every caller observes its own promise.
 - **`store.request(type, path, { method, body, headers })`** — the custom-endpoint escape hatch: prefixes `apiURL + adapter.endpoint`, JSON in/out, normalized errors. Idiom: wrap it in model instance methods.
-- **Errors:** the new verbs reject with `PuzzleAdapterError` (`.status`, `.statusText`, `.body` when parseable) — exported from the package root. The D21 read path keeps its existing plain-Error messages.
+- **Errors:** the new verbs reject with `PuzzleAdapterError` (`.status`, `.statusText`, `.body` when parseable) — exported from `@magic-spells/puzzle/adapter`. The D21 read path keeps its existing plain-Error messages.
 - **Still deferred:** query fault-in (`findMany`'s synchronous pure-local return is load-bearing — its own decision someday), offline queueing, conflict resolution, automatic write-through.
 
 ## 49. Adapter request hook: `beforeRequest` (v1.55)
@@ -161,7 +175,7 @@ new PuzzleApp({
 });
 ```
 
-- **One seam.** Every server call — the D21 read path, the D50 write verbs (`save`/`delete`), and `store.request()` — routes through a single private `Store._fetch(url, init, context)`. The read path now sends an explicit `{ method: 'GET' }` (wire-identical to a bare fetch) so a hook never has to special-case a missing init.
+- **One seam.** Every server call — the D21 read path, the D50 write verbs (`save`/`delete`), and `store.request()` — routes through a single private `Store._fetch(url, init, context)` installed by the `/adapter` factory. The read path sends an explicit `{ method: 'GET' }` (wire-identical to a bare fetch) so a hook never has to special-case a missing init.
 - **Synchronous.** The hook may mutate `init` in place **or** return a replacement object; a truthy object return wins, otherwise the possibly-mutated original is used. An async hook is deferred — see the cut list.
 - **`method` and `body` are re-stamped from the original init after the hook runs**, and the URL is a separate `fetch` argument. A hook can change *how* a request is sent, never *what* it is. This is load-bearing: §22's write path captures `requestKey = record[pk]` before the await and reconciles against exactly that key afterwards, so a hook that flipped POST→PUT or rewrote the body would silently break identity re-checks, pk adoption, and the `_synced` contract.
 - **The context argument is frozen** — information about the request, not a second output channel.
@@ -173,7 +187,13 @@ new PuzzleApp({
 
 ## 52. Schema-driven fixtures + the mock adapter (v1.57; self-contained module v1.61)
 
-Two development/test affordances on the data layer (D95). Since D98 they live **entirely** in `@magic-spells/puzzle/fixtures` — a self-contained module that is never referenced by the core runtime. It enters an app bundle only through the §54 `--fixtures` build switch, or a direct import in tests (also re-exported from `/testing`). Core carries exactly one seam for it: `Store._network(url, init, context)`, the single place an adapter request touches `fetch`, called by §49's `_fetch` **after** `beforeRequest` runs.
+Two development/test affordances on the data layer (D95). Since D98 they live
+in `@magic-spells/puzzle/fixtures`, outside core. It enters an app bundle only
+through the §54 `--fixtures` build switch, or a direct import in tests (also
+re-exported from `/testing`). `/fixtures` imports and installs `/adapter`, then
+replaces `Store._network(url, init, context)`, the single place an adapter
+request touches `fetch`, called by §49's `_fetch` **after** `beforeRequest`
+runs.
 
 **Installation.** `installFixtures(config)` attaches the system from outside: it adds `seed()`/`resetFixtureSeed()` to `Store.prototype`, replaces `_network` with mock interception, and wraps `mount` so the config's optional `setup(app)` runs at §34 beforeMount timing (after the author's own hook, before navigation #0 — the sanctioned seeding window). All PRNG/mock state lives in a module `WeakMap` keyed by store — **zero fields on the Store**. It returns `uninstall()`, matching the `installFakeAnimate`/`installFakeObserver` convention; uninstall restores the true originals and deletes the added methods.
 
@@ -185,12 +205,36 @@ Config shape — in an app this is the default export of `app/fixtures.js` (§54
 
 **Fixtures.** `store.seed(type, countOrArray, overrides)` generates records from the schema alone — no extra declaration. Generation reads the §7 descriptors: `.default()` wins first (left absent so `applyDefaults` resolves it, preserving function-default and deep-clone semantics), `.oneOf()`/`.min()`/`.max()` are never violated, and records go through the normal `createRecord` path so §20 validation and pk assignment behave exactly as at runtime. A `belongsTo` FK wires to a real existing parent when one exists and is left unset otherwise. Determinism comes from the install seed driving **two** derived PRNG streams — one for values, one for mock rolls, so seeding more records never perturbs which requests fail. `resetFixtureSeed()` resets both. **The auto-generated primary key is the one non-deterministic field** (`_genId` uses `Math.random()`/`Date.now()`); an author-supplied `.primary().required()` key is fully deterministic.
 
-**Mock adapter.** `static adapter = { endpoint, mock: { data, latency, failRate, fail, handler } }` — and/or the install config's `mock[type]` — serves the adapter verbs from an in-memory collection.
+**Mock adapter.** `static adapter = adapter({ endpoint, mock: { data, latency, failRate, fail, handler } })` — and/or the install config's `mock[type]` — serves the adapter verbs from an in-memory collection.
 
-- **Interception replaces §52's `_network` seam** and returns a Response-shaped object, so `loadAll`/`loadOne`/`save`/`delete`/`request` run **completely unmodified** and the real §22 write path is exercised rather than a parallel one. The collection is deep-cloned from `mock.data` on first use.
+- **Interception replaces the adapter's `_network` seam** and returns a Response-shaped object, so `loadAll`/`loadOne`/`save`/`delete`/`request` run **completely unmodified** and the real §22 write path is exercised rather than a parallel one. The collection is deep-cloned from `mock.data` on first use.
 - Default CRUD: `GET` endpoint → array; `GET endpoint/:id` → object or 404; `POST` → insert (201); `PUT endpoint/:id` → merge (200); `DELETE endpoint/:id` → 204. `handler({ method, url, path, body, collection })` overrides any of it and is how `request()`'s arbitrary paths get mocked; a falsy return falls through.
 - `latency` (number or `[min, max]`) is what makes §16 skeletons and their `min-duration` hold developable at all. `failRate`/`fail` produce **non-ok responses**, so failures flow through the real error paths (`PuzzleAdapterError` on writes, the §8 throw on reads) — this is the supported way to exercise the `data()`-rejection handling §16 asks authors to write.
 - §49's `beforeRequest` still runs in mock mode; no network call happens.
 - A one-time `console.warn` per model class fires on first interception. It is unconditional and dev-visible: `build.dropConsole` strips all `console.*` in production by default, so gating it would be theater.
 - **Without `installFixtures`, a model-declared `mock` block is inert data and requests reach the real endpoint.** That is the documented meaning of building without `--fixtures` — an explicit switch, not a heuristic, so there is no compiled-out state to defend with stubs (D96's refuse-throw is gone).
 
+## 58. Opt-in server adapter subpath (v1.72)
+
+The D21/D50/D91 server runtime is exported from
+`@magic-spells/puzzle/adapter`, not the package root. A model opts in by calling
+the factory while its module evaluates:
+
+```js
+import { PuzzleModel } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
+
+class Post extends PuzzleModel {
+  static adapter = adapter({ endpoint: '/api/posts' });
+}
+```
+
+The first factory call idempotently installs the server methods on `Store` and
+`PuzzleModel`, validates that `endpoint` is a non-empty string, and returns the
+same config object. Apps that never call it have no `loadAll`, `loadOne`,
+`upsert`, `request`, `save`, or `delete` methods and ship none of the network
+runtime. `PuzzleAdapterError` is exported only from `/adapter`. Per-record write
+chains live in adapter-module `WeakMap` state keyed by Store; core records retain
+their `_synced`/`_deleted` provenance and core keeps `apiURL`/`beforeRequest`
+configuration inertly. A development build warns once if a bare adapter object
+reaches the installed runtime without the factory wrapper.

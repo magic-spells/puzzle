@@ -268,6 +268,7 @@ schema` with `Puzzle` builders (the only documented way to define fields):
 
 ```js
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default class Todo extends PuzzleModel {
   static schema = {
@@ -276,7 +277,7 @@ export default class Todo extends PuzzleModel {
     completed: Puzzle.boolean().default(false),
     createdAt: Puzzle.date().default(() => new Date()),
   };
-  // static adapter = { endpoint: '/api/todos' };  // enables loadOne/loadAll/save/delete
+  // static adapter = adapter({ endpoint: '/api/todos' }); // enables server sync
 }
 ```
 
@@ -291,7 +292,8 @@ Views reach the store as `this.ctx.store`:
 
 - Local: `createRecord(type, data)` (validates, defaults, notifies),
   `findOne(type, id)`, `findMany(type, { filter }?)`.
-- Server (needs `static adapter`): `loadOne`/`loadAll` (GET + identity-preserving
+- Server (needs `static adapter = adapter({ endpoint })` from
+  `@magic-spells/puzzle/adapter`): `loadOne`/`loadAll` (GET + identity-preserving
   upsert), `record.save()` (POST new / PUT synced), `record.delete()`,
   `store.request()` for custom endpoints — apply returned records with
   `store.upsert(type, payload)`, don't re-fetch.

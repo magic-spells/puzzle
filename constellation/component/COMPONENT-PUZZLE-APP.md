@@ -89,5 +89,6 @@ this seam. `mount()` is a no-op outside a DOM so an app entry remains importable
 by [[COMPONENT-SSG]].
 
 `app.store`, `app.router`, `app.formatters`, and `app.ctx` expose the live
-services. The root package exports `PuzzleApp`, `PuzzleView`, `PuzzleModel`, and
-`Puzzle` plus the documented error classes and compiler-support values.
+services. The root package exports `PuzzleApp`, `PuzzleView`, `PuzzleModel`,
+`Puzzle`, `PuzzleValidationError`, and compiler-support values;
+`PuzzleAdapterError` belongs to the opt-in `/adapter` subpath.

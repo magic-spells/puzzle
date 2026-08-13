@@ -29,7 +29,8 @@ declare:
   `date()`, `object()`, `array()`, `belongsTo()`, and `hasMany()`;
 - modifiers `primary`, `required`, `default`, `min`, `max`,
   `oneOf`, and custom validation;
-- `static adapter = { endpoint: '/api/posts' }`;
+- optional server sync via `static adapter = adapter({ endpoint: '/api/posts' })`,
+  importing the factory from `@magic-spells/puzzle/adapter`;
 - ordinary getters and instance methods.
 
 A stored record is an instance of that model class. Primary keys are immutable.
@@ -39,6 +40,9 @@ remain valid.
 ## Store API
 
 Views access the store as `this.ctx.store`.
+
+The local methods are core. The server methods shown below are installed only
+after a model calls the `/adapter` factory.
 
 | API | Behavior |
 | --- | --- |
@@ -79,7 +83,7 @@ Local record methods:
 - `record.toJSON()`: return enumerable data only.
 
 `PuzzleValidationError` represents local schema failures.
-`PuzzleAdapterError` carries HTTP/request context — `.status`, `.statusText`,
+`PuzzleAdapterError`, exported from `@magic-spells/puzzle/adapter`, carries HTTP/request context — `.status`, `.statusText`,
 and `.body` (parsed JSON when parseable, else text). A failed save keeps the
 dirty local record for retry; a failed delete keeps it in the store. Only the
 first save adopts server keys: on an update-save a differing response pk warns
