@@ -19,7 +19,6 @@ import {
 	PuzzleModel,
 	Puzzle,
 	PuzzleValidationError,
-	PuzzleAdapterError,
 	displayValue,
 } from '@magic-spells/puzzle';
 import type {
@@ -41,6 +40,7 @@ import type {
 	PuzzleErrorInfo,
 	PuzzleErrorViewProps,
 } from '@magic-spells/puzzle';
+import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
 import { enableMorph } from '@magic-spells/puzzle/morph';
@@ -84,7 +84,7 @@ class Todo extends PuzzleModel {
 		comments: Puzzle.hasMany('comment', { key: 'todoId' }),
 	};
 
-	static adapter = { endpoint: '/todos' };
+	static adapter = adapter({ endpoint: '/todos' });
 
 	// Instance getter works because records ARE model instances (§7).
 	get label(): string {
@@ -300,7 +300,11 @@ const app = new PuzzleApp(config);
 app.mount().then((mounted) => {
 	const todos = mounted.store.findMany('todo', { filter: (t) => !t.done });
 	const seeded = mounted.store.createRecord('todo', { title: 'a' });
-	void seeded;
+	mounted.store.upsert('todo', { id: 'server-1', title: 'server' });
+	void mounted.store.loadOne('todo', 'server-1');
+	void mounted.store.request('todo', '/server-1/archive', { method: 'POST' });
+	void seeded.save();
+	void seeded.delete();
 	mounted.router?.push('/todos');
 	mounted.router?.go(1);
 	return todos.length;
@@ -335,7 +339,7 @@ void mockBlock;
 
 class MockedTodo extends PuzzleModel {
 	static schema = { id: Puzzle.string().primary(), title: Puzzle.string().required() };
-	static adapter: ModelAdapter = {
+	static adapter: ModelAdapter = adapter({
 		endpoint: '/todos',
 		mock: {
 			data: [{ id: '1', title: 'seeded' }],
@@ -348,7 +352,7 @@ class MockedTodo extends PuzzleModel {
 				return { status: 200, body: { archived: collection.size } };
 			},
 		},
-	};
+	});
 }
 void MockedTodo;
 

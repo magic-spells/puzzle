@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Store, PuzzleAdapterError } from '../client-runtime/datastore/store.js';
+import { Store } from '../client-runtime/datastore/store.js';
+import { adapter, PuzzleAdapterError } from '../client-runtime/datastore/adapter.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { installFixtures } from '../client-runtime/fixtures/index.js';
 
-// Adapter mock (v1.57, D95): `static adapter = { endpoint, mock: {…} }` is served
+// Adapter mock (v1.57, D95): `static adapter = adapter({ endpoint, mock: {…} })` is served
 // from memory by the /fixtures module's replacement of Store._network — the ONE
-// seam the core keeps (D98). That placement is the whole design:
+// seam the opt-in adapter installs (D98/D157). That placement is the whole design:
 // loadAll/loadOne/save/delete/request run completely unmodified, so these tests
 // exercise the real D21 read path and the real D50 write path (pk adoption, the
 // _synced flip, the identity re-checks).
@@ -20,7 +21,7 @@ const modelWith = (mock, schema) => {
 			text: Puzzle.string().required(),
 			done: Puzzle.boolean().default(false),
 		};
-		static adapter = { endpoint: '/api/todos', mock };
+		static adapter = adapter({ endpoint: '/api/todos', mock });
 	}
 	return MockTodo;
 };

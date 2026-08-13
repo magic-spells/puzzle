@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
@@ -24,7 +25,7 @@ class ApiTodo extends PuzzleModel {
 		id: Puzzle.string().primary(),
 		text: Puzzle.string(),
 	};
-	static adapter = { endpoint: '/api/todos' };
+	static adapter = adapter({ endpoint: '/api/todos' });
 }
 
 const makeStore = (options) => new Store({ todo: Todo }, options);

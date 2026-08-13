@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 
 class Todo extends PuzzleModel {
@@ -862,7 +863,7 @@ describe('Store — server read path (D21)', () => {
 			text: Puzzle.string().required(),
 			completed: Puzzle.boolean().default(false),
 		};
-		static adapter = { endpoint: '/api/todos' };
+		static adapter = adapter({ endpoint: '/api/todos' });
 	}
 
 	const apiStore = () => new Store({ todo: ApiTodo }, { apiURL: 'https://x.test/v1' });

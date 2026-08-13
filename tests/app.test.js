@@ -5,6 +5,7 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
 
 // Hand-written stand-ins for what the compiler emits (same convention as
@@ -46,7 +47,7 @@ class Todo extends PuzzleModel {
 		text: Puzzle.string().required(),
 		completed: Puzzle.boolean().default(false),
 	};
-	static adapter = { endpoint: '/api/todos' };
+	static adapter = adapter({ endpoint: '/api/todos' });
 }
 
 const container = (id = 'app') => {

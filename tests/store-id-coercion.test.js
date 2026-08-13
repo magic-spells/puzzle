@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 
 // D112: the record Map was the only type-sensitive identity in the datastore —
@@ -184,7 +185,7 @@ describe('Store — id key normalization on the write path (D112)', () => {
 			id: Puzzle.string().primary(),
 			title: Puzzle.string().required(),
 		};
-		static adapter = { endpoint: '/api/posts' };
+		static adapter = adapter({ endpoint: '/api/posts' });
 	}
 
 	it('a numeric pk echo for a string-keyed record is not a pk change', async () => {

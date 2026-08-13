@@ -2,11 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PuzzleApp, PuzzleView, ViewNode } from '../client-runtime/index.js';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { installFixtures } from '../client-runtime/fixtures/index.js';
 
-// D98: fixtures + the adapter mock are a DETACHABLE module. The core keeps one
-// seam (Store._network) and knows nothing else about them; installFixtures()
+// D98/D157: fixtures + the adapter mock are a DETACHABLE module. /fixtures
+// imports the adapter runtime so Store._network exists; installFixtures()
 // attaches seed()/resetFixtureSeed(), replaces _network, and wraps
 // PuzzleApp.mount so the fixtures config's setup() runs before navigation #0.
 // These tests cover the attach/detach contract itself — generation and the mock's
@@ -24,7 +25,7 @@ const modelWith = (mock) => {
 			id: Puzzle.string().primary(),
 			text: Puzzle.string().required(),
 		};
-		static adapter = { endpoint: '/api/todos', mock };
+		static adapter = adapter({ endpoint: '/api/todos', mock });
 	}
 	return MockTodo;
 };

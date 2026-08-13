@@ -6,6 +6,7 @@
 // alias in this repo's vitest config, so the fixture imports the runtime by
 // relative path. Everything below the import is byte-for-byte the user's model.
 import { PuzzleModel, Puzzle } from '../../../client-runtime/index.js';
+import { adapter } from '../../../client-runtime/datastore/adapter.js';
 
 export default class Todo extends PuzzleModel {
   // Schema definition — see constellation/doc/DOC-SPEC.md §7
@@ -59,9 +60,8 @@ export default class Todo extends PuzzleModel {
     return this;
   }
 
-  // Server location (D21): consumed by store.loadAll('todo') / loadOne on
-  // the read path. Write sync and custom adapter methods are post-v1.
-  static adapter = {
+  // Opt-in server location (D21/D157): installs the read/write adapter verbs.
+  static adapter = adapter({
     endpoint: '/api/todos',
-  };
+  });
 }

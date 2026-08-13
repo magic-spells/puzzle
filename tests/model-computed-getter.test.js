@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 
 // Computed properties are ordinary JavaScript getters (SPEC §7). Keep the
@@ -18,7 +19,7 @@ const computedModel = () =>
 			a: Puzzle.string(),
 			b: Puzzle.string(),
 		};
-		static adapter = { endpoint: '/records' };
+		static adapter = adapter({ endpoint: '/records' });
 	};
 
 // readBody() consumes text(), so this deliberately mirrors the Store's network
