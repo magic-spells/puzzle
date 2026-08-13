@@ -783,6 +783,58 @@ describe('static subset render (D155)', () => {
 		expect(part.count).toBe(full.count);
 	});
 
+	it('builds no context at all for an empty filter', async () => {
+		// An empty subset is the dev loop's "a public asset changed" rebuild. It
+		// renders no route, so it must not construct the application either —
+		// otherwise every public-asset save runs beforeMount's side effects and a
+		// save that touched no route can fail on application setup.
+		const seen = [];
+		class Counted extends PuzzleView {
+			data() {
+				seen.push('data');
+				return {};
+			}
+			render() {
+				return h('p', {}, [text('counted')]);
+			}
+		}
+		stamp(Counted, 'app/views/Counted.pzl');
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-empty-'));
+		await prerenderToDir(
+			{
+				target: '#app',
+				beforeMount() {
+					seen.push('beforeMount');
+				},
+				routes: [
+					{ path: '/', name: 'home', view: Counted, layout: Layout },
+					{ path: '/two', name: 'two', view: Counted, layout: Layout },
+				],
+			},
+			{ outDir, shellPath: writeShell(outDir), mode: 'static', only: [] }
+		);
+		expect(seen).toEqual([]);
+	});
+
+	it('still runs beforeMount for a full render whose route table produces no static page', async () => {
+		// The historical fail-fast posture, which only an explicit `only` subset
+		// opts out of: a throwing beforeMount fails the build even when every route
+		// is dynamic and nothing is written.
+		const seen = [];
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-nopages-'));
+		await prerenderToDir(
+			{
+				target: '#app',
+				beforeMount() {
+					seen.push('beforeMount');
+				},
+				routes: [{ path: '/blog/:id', name: 'post', view: Home, layout: Layout }],
+			},
+			{ outDir, shellPath: writeShell(outDir), mode: 'static' }
+		);
+		expect(seen).toEqual(['beforeMount']);
+	});
+
 	it('is ignored in hybrid mode, where every reachable route is always rendered', async () => {
 		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pzl-only-hybrid-'));
 		const summary = await prerenderToDir(staticConfig(), {

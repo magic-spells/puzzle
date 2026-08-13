@@ -316,7 +316,14 @@ export async function prerender(config, opts = {}) {
 
 	// Preserve the old fail-fast lifecycle-hook posture even for a route table that
 	// produces no written static pages: a throwing beforeMount still fails the build.
-	if (!builtContext && typeof config.beforeMount === 'function') {
+	//
+	// An explicit `only` subset is the one caller that opts out. The dev loop passes
+	// `only: []` for a rebuild that renders no route at all (a public asset moved),
+	// and building the application to render nothing would run beforeMount's side
+	// effects on a no-op rebuild and let application setup fail a save that touched
+	// no route. `only === null` means no filter was given — a real full render — so
+	// every case this guard covered before the subset render existed is unchanged.
+	if (!builtContext && only === null && typeof config.beforeMount === 'function') {
 		await createPageContext();
 	}
 
