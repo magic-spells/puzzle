@@ -3,8 +3,8 @@
     class={ rootClass }
     style={ rootStyle }
     data-marquee-root
-    @mouseenter={ onEnter }
-    @mouseleave={ onLeave }
+    @pointerenter={ onEnter(event) }
+    @pointerleave={ onLeave(event) }
     @pointerdown={ onDown(event) }>
     <div class={ trackClass } data-marquee-track>
       <div class={ copyClass } data-marquee-copy>
@@ -197,6 +197,10 @@ export default class Marquee extends PuzzleView {
 
     this._normalize();
     this._apply();
+    // If mount-time _start() bailed because the copy had no layout yet (loop 0),
+    // this successful rebuild is the only chance to get moving — _start() is
+    // fully guarded, so this is a no-op when already running/paused/dragging.
+    this._start();
   }
 
   _gapPx(track, vertical) {
@@ -301,14 +305,19 @@ export default class Marquee extends PuzzleView {
   }
 
   events = {
-    onEnter: () => {
+    // Pointer (not mouse) enter/leave, gated to real mice: a touch tap fires
+    // synthetic mouseenter with no matching mouseleave, which would pause the
+    // marquee forever — pointerType lets us keep pause-on-hover mouse-only.
+    onEnter: (event) => {
       if (this.props.pauseOnHover === false) return;
+      if (event.pointerType !== 'mouse') return;
       this._hoverPaused = true;
       this._stop();
     },
 
-    onLeave: () => {
+    onLeave: (event) => {
       if (this.props.pauseOnHover === false) return;
+      if (event.pointerType !== 'mouse') return;
       this._hoverPaused = false;
       if (!this._dragging) this._start();
     },
