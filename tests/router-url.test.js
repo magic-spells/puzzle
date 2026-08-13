@@ -14,6 +14,7 @@ import { Router } from '../client-runtime/router/router.js';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -26,7 +27,7 @@ class HomeView extends PuzzleView {
 
 describe('Router.url() — argument guard (D79)', () => {
 	it('throws a [puzzle]-tagged error on a non-string argument', () => {
-		const r = new Router([], { mode: 'history' });
+		const r = new Router([]);
 		for (const bad of [5, null, undefined, {}, [], true, () => {}]) {
 			expect(() => r.url(bad)).toThrow(/\[puzzle\]/);
 		}
@@ -44,9 +45,13 @@ describe('Router.url() — non-path strings pass through unchanged (D79)', () =>
 		'',
 	];
 
-	for (const mode of ['history', 'hash', 'memory']) {
-		it(`returns non-'/' strings unchanged in ${mode} mode`, () => {
-			const r = new Router([], { mode });
+	for (const [name, makeMode] of [
+		['history', () => undefined],
+		['hash', hashRouter],
+		['memory', memoryRouter],
+	]) {
+		it(`returns non-'/' strings unchanged in ${name} mode`, () => {
+			const r = new Router([], { mode: makeMode() });
 			for (const s of passthroughs) {
 				expect(r.url(s)).toBe(s);
 			}
@@ -56,7 +61,7 @@ describe('Router.url() — non-path strings pass through unchanged (D79)', () =>
 
 describe('Router.url() — memory mode (D79)', () => {
 	it('returns the path unchanged (no URL carrier)', () => {
-		const r = new Router([], { mode: 'memory' });
+		const r = new Router([], { mode: memoryRouter() });
 		expect(r.url('/a')).toBe('/a');
 		expect(r.url('/a/b')).toBe('/a/b');
 		expect(r.url('/')).toBe('/');
@@ -65,13 +70,13 @@ describe('Router.url() — memory mode (D79)', () => {
 
 describe('Router.url() — history mode (D79)', () => {
 	it('no base → path unchanged', () => {
-		const r = new Router([], { mode: 'history' });
+		const r = new Router([]);
 		expect(r.url('/a/b')).toBe('/a/b');
 		expect(r.url('/')).toBe('/');
 	});
 
 	it("base '/app' → base-prefixed path", () => {
-		const r = new Router([], { mode: 'history', base: '/app' });
+		const r = new Router([], { base: '/app' });
 		expect(r.url('/a')).toBe('/app/a');
 		expect(r.url('/')).toBe('/app/');
 	});
@@ -79,7 +84,7 @@ describe('Router.url() — history mode (D79)', () => {
 
 describe('Router.url() — hash mode (D79)', () => {
 	it('no base → path carried in the fragment', () => {
-		const r = new Router([], { mode: 'hash' });
+		const r = new Router([], { mode: hashRouter() });
 		expect(r.url('/a')).toBe('#/a');
 		expect(r.url('/a?x=1')).toBe('#/a?x=1');
 		expect(r.url('/docs#faq')).toBe('#/docs#faq');
@@ -87,7 +92,7 @@ describe('Router.url() — hash mode (D79)', () => {
 	});
 
 	it("base '/app' → base rides ahead of the whole fragment", () => {
-		const r = new Router([], { mode: 'hash', base: '/app' });
+		const r = new Router([], { mode: hashRouter(), base: '/app' });
 		expect(r.url('/a')).toBe('#/app/a');
 	});
 });
@@ -141,7 +146,7 @@ describe('built-in `link` formatter (D79)', () => {
 
 	it("hash-mode app: link('/x') → '#/x'", async () => {
 		container();
-		const app = make({ target: '#app', routes, routerMode: 'hash' });
+		const app = make({ target: '#app', routes, routerMode: hashRouter() });
 		await app.mount();
 		expect(app.formatters.getAll().link('/x')).toBe('#/x');
 	});

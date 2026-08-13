@@ -4,6 +4,7 @@ import { PuzzleApp, PuzzleView, ViewNode } from '../client-runtime/index.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { installFixtures } from '../client-runtime/fixtures/index.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 // D98: fixtures + the adapter mock are a DETACHABLE module. The core keeps one
 // seam (Store._network) and knows nothing else about them; installFixtures()
@@ -194,7 +195,7 @@ describe('setup(app) — beforeMount timing, before navigation #0', () => {
 		const app = new PuzzleApp({
 			models: { note: Note },
 			routes: [{ path: '/', view: Home }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 			target: container,
 			...config,
 		});

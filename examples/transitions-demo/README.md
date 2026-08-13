@@ -17,7 +17,8 @@ instantly visible on every navigation.
 
 ## How it works
 
-- **Memory-mode routers** (`routerMode: 'memory'`, `routerInitialPath: '/'`) —
+- **Memory-mode routers** (`routerMode: memoryRouter({ initialPath: '/' })`,
+  imported from `@magic-spells/puzzle/router-modes`) —
   two apps coexist on one page with zero URL / history / `document.title` side
   effects. See [SPEC §15](../../constellation/doc/DOC-SPEC.md).
 - **One shared layout** across all three routes, so navigation takes the

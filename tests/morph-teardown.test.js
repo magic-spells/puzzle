@@ -16,6 +16,7 @@ import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { enableMorph } from '../client-runtime/morph.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 vi.mock('@magic-spells/morph-engine', () => {
 	class FakeMorphEngine {
@@ -108,8 +109,7 @@ describe('enableMorph teardown + double-install guard', () => {
 		const app = new PuzzleApp({
 			target: container(),
 			routes: [{ path: '/', name: 'home', view: Leaf }],
-			routerMode: 'memory',
-			routerInitialPath: '/',
+			routerMode: memoryRouter({ initialPath: '/' }),
 		});
 		enableMorph(app);
 		await app.mount();
@@ -148,8 +148,7 @@ describe('enableMorph teardown + double-install guard', () => {
 		const app = new PuzzleApp({
 			target: container(),
 			routes: [{ path: '/', name: 'home', view: Leaf }],
-			routerMode: 'memory',
-			routerInitialPath: '/',
+			routerMode: memoryRouter({ initialPath: '/' }),
 		});
 		enableMorph(app);
 		const live = () => clickCaptureCalls(addSpy) - clickCaptureCalls(removeSpy);

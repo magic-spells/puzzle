@@ -16,6 +16,7 @@ import { prerender } from '../client-runtime/ssg/index.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import LocalForm from './fixtures/binding/LocalForm.compiled.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -113,7 +114,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: Home }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 		await app.mount();
 
@@ -128,7 +129,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: Home, layout: Layout }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 		await app.mount();
 		await tick(); // the layout's slot-child playIn is chained async
@@ -152,7 +153,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'bad', view: BadRender }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 
 		await expect(app.mount()).resolves.toBe(app);
@@ -185,7 +186,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: Home, layout: BadMountedLayout }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 
 		await expect(app.mount()).resolves.toBe(app);
@@ -226,7 +227,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: BadMountedRoot }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 			errorView: ErrorView,
 		});
 
@@ -271,7 +272,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: BadMountedRoot }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 			errorView: BadErrorView,
 		});
 
@@ -302,7 +303,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: BadMountedRoot }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 
 		await expect(app.mount()).resolves.toBe(app);
@@ -350,7 +351,7 @@ describe('router SSG takeover (M2)', () => {
 				{ path: '/', name: 'home', view: Home, layout: BadMountedLayout },
 				{ path: '/other', name: 'other', view: Other, layout: OtherLayout },
 			],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 		await app.mount();
 		await tick();
@@ -376,8 +377,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/components/badge', name: 'badge', view: Home }],
-			routerMode: 'memory',
-			routerInitialPath: '/components/badge/',
+			routerMode: memoryRouter({ initialPath: '/components/badge/' }),
 		});
 		await app.mount();
 
@@ -403,8 +403,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/user/:id', name: 'user', view: UserView }],
-			routerMode: 'memory',
-			routerInitialPath: '/user/123/',
+			routerMode: memoryRouter({ initialPath: '/user/123/' }),
 		});
 		await app.mount();
 
@@ -453,7 +452,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: SkeletonView }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 		await app.mount();
 		mo.disconnect();
@@ -499,7 +498,7 @@ describe('router SSG takeover (M2)', () => {
 		const el = ssgContainer(pages[0].html);
 		const prerendered = el.innerHTML;
 		clientGate = deferred();
-		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+		const app = boot({ target: '#app', routes, routerMode: memoryRouter() });
 
 		const mounting = app.mount();
 		await tick(); // a paint opportunity while the nested data() macrotask is pending
@@ -530,7 +529,7 @@ describe('router SSG takeover (M2)', () => {
 		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
 		const el = ssgContainer(pages[0].html);
 		const prerendered = el.innerHTML;
-		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+		const app = boot({ target: '#app', routes, routerMode: memoryRouter() });
 
 		await app.mount();
 
@@ -542,7 +541,7 @@ describe('router SSG takeover (M2)', () => {
 		const routes = [{ path: '/', name: 'enter', view: EnterPage }];
 		const { pages } = await prerender({ target: '#app', routes }, { mode: 'hybrid' });
 		const el = ssgContainer(pages[0].html);
-		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+		const app = boot({ target: '#app', routes, routerMode: memoryRouter() });
 
 		await app.mount();
 		await tick(); // the nested playIn is chained off mountComponent's mount promise
@@ -558,7 +557,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'enter', view: EnterPage }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 
 		await app.mount();
@@ -590,7 +589,7 @@ describe('router SSG takeover (M2)', () => {
 		const el = ssgContainer(pages[0].html);
 		rejectOnClient = true;
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+		const app = boot({ target: '#app', routes, routerMode: memoryRouter() });
 
 		await expect(app.mount()).resolves.toBe(app);
 
@@ -624,7 +623,7 @@ describe('router SSG takeover (M2)', () => {
 		const el = ssgContainer(pages[0].html);
 		throwOnClient = true;
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+		const app = boot({ target: '#app', routes, routerMode: memoryRouter() });
 
 		await expect(app.mount()).resolves.toBe(app);
 
@@ -646,7 +645,7 @@ describe('router SSG takeover (M2)', () => {
 				{ path: '/', name: 'home', view: Home },
 				{ path: '/sk', name: 'sk', view: SkeletonView },
 			],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 		await app.mount(); // takeover of '/'
 		expect(el.hasAttribute('data-puzzle-ssg')).toBe(false);
@@ -675,7 +674,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: SkeletonView }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 		await app.mount(); // does NOT wait on data() — skeleton exemption
 
@@ -714,7 +713,7 @@ describe('router SSG takeover (M2)', () => {
 		const app = boot({
 			target: '#app',
 			routes: [{ path: '/', name: 'home', view: PlainHome }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 		let mounted = false;
 		const mounting = app.mount().then(() => {
@@ -790,7 +789,7 @@ describe('router SSG takeover (M2)', () => {
 		// A pending nested data() at takeover time: without gate 2 the router would
 		// commit before the leaf resolved and the prerendered content would blank.
 		leafGate = deferred();
-		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+		const app = boot({ target: '#app', routes, routerMode: memoryRouter() });
 		const mounting = app.mount();
 		await tick();
 		const firstPaint = el.innerHTML;
@@ -821,7 +820,7 @@ describe('router SSG takeover (M2)', () => {
 		expect(pages[0].html).not.toContain('bind');
 
 		const el = ssgContainer(pages[0].html);
-		const app = boot({ target: '#app', routes, routerMode: 'memory' });
+		const app = boot({ target: '#app', routes, routerMode: memoryRouter() });
 		await app.mount();
 
 		// The takeover re-mounts the tree, which moves controlled form state from

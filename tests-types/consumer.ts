@@ -43,6 +43,8 @@ import type {
 } from '@magic-spells/puzzle';
 import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
+import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes';
+import type { RouterMode } from '@magic-spells/puzzle/router-modes';
 import { enableMorph } from '@magic-spells/puzzle/morph';
 import type { MorphEngine } from '@magic-spells/puzzle/morph';
 import {
@@ -269,9 +271,9 @@ const config: PuzzleAppConfig = {
 	formatters: { upcase },
 	apiURL: '',
 	beforeRequest: attachAuth,
-	routerMode: 'history',
+	// History routing is the default and needs no `routerMode`; the opt-in modes
+	// are imported factories (D159), and the handle they produce is opaque.
 	routerBase: '/app',
-	routerInitialPath: '/',
 	transitionMode: 'sequential',
 	scrollBehavior,
 	focusBehavior,
@@ -295,6 +297,25 @@ const config: PuzzleAppConfig = {
 };
 
 const app = new PuzzleApp(config);
+
+// ---------------------------------------------------------------------------
+// router-modes subpath: the two opt-in mode factories (D159)
+// ---------------------------------------------------------------------------
+
+// Both factories produce the same opaque handle, and it is what `routerMode`
+// accepts — a mode string no longer type-checks.
+const hashMode: RouterMode = hashRouter();
+const memoryMode: RouterMode = memoryRouter({ initialPath: '/about' });
+void memoryRouter(); // options are optional; initialPath defaults to '/'
+
+const hashApp = new PuzzleApp({ target: '#app', routes, routerMode: hashMode });
+const memoryApp = new PuzzleApp({
+	target: '#app',
+	routes,
+	routerMode: memoryMode,
+	routerBase: '/app', // still accepted alongside a mode (inert in memory)
+});
+void [hashApp, memoryApp];
 
 // mount() resolves to the app; store/router usable after.
 app.mount().then((mounted) => {
@@ -455,10 +476,9 @@ const staticOptions: MountStaticOptions = {
 	models: { todo: Todo },
 	formatters: { upcase },
 	apiURL: '',
-	// The three options the kernel destructures beyond the summary basics.
-	// (`routerMode` is accepted for config parity but ignored — D117.)
+	// The two options the kernel destructures beyond the summary basics. (A static
+	// page carries no `routerMode` at all — D117/D159.)
 	storage: window.localStorage,
-	routerMode: 'history',
 	routerBase: '/app',
 };
 
@@ -469,7 +489,6 @@ mountStatic(staticOptions).then(() => {
 		views: [TodoListView],
 		route: { path: '/', params: {}, chain: [{ path: '/' }] },
 		storage: window.sessionStorage,
-		routerMode: 'hash',
 		routerBase: '',
 	});
 });

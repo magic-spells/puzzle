@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Hash-based routing (v1.6, D34): opt in with `{ mode: 'hash' }` to carry the
+// Hash-based routing (v1.6, D34): opt in with `{ mode: hashRouter() }` to carry the
 // route in `location.hash` (`/#/user/123`) instead of the pathname. The public
 // API stays PATH-SHAPED (push('/user/123'), current.path === '/user/123') — only
 // the read/write/interceptor seams change. Same jsdom conventions as
@@ -13,6 +13,7 @@ import { Router } from '../client-runtime/router/router.js';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { hashRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -81,7 +82,7 @@ let routers = [];
 async function bootHash(routes, url = '/', options = {}) {
 	history.replaceState({}, '', url);
 	const el = container();
-	const router = new Router(routes, { mode: 'hash', ...options });
+	const router = new Router(routes, { mode: hashRouter(), ...options });
 	routers.push(router);
 	await router.start(el, ctx());
 	return { router, el };
@@ -99,10 +100,47 @@ afterEach(() => {
 });
 
 describe('Router hash mode — construction & mode parity (D34)', () => {
-	it('throws on an unknown mode', () => {
-		expect(() => new Router([], { mode: 'bogus' })).toThrow(
-			/unknown router mode: "bogus"/
+	it('throws on a mode STRING, naming the import (D159)', () => {
+		// Every string is rejected — the legacy mode names and a typo alike — and the
+		// message must point at the module the factories live in.
+		for (const bogus of ['bogus', 'hash', 'memory', 'history']) {
+			expect(() => new Router([], { mode: bogus })).toThrow(
+				new RegExp(`routerMode must be a mode object, not the string "${bogus}"`)
+			);
+			expect(() => new Router([], { mode: bogus })).toThrow(
+				/@magic-spells\/puzzle\/router-modes/
+			);
+		}
+		// A non-string, non-mode value is rejected too (a bare object, a function).
+		expect(() => new Router([], { mode: {} })).toThrow(/routerMode must be a mode object/);
+		expect(() => new Router([], { mode: 7 })).toThrow(/routerMode must be a mode object, not a number/);
+	});
+
+	it('a history app registers no hash behavior at all (D159)', async () => {
+		// The seams hash mode owns must stay inert in the default mode: a '#/route'
+		// href falls through to the browser, and a route fragment on the URL is not
+		// read as a path.
+		const el = container();
+		const router = new Router(
+			[
+				{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+				{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+			],
+			{}
 		);
+		routers.push(router);
+		history.replaceState({}, '', '/#/about');
+		await router.start(el, ctx());
+		expect(router.current.path).toBe('/'); // the fragment is NOT a route here
+		const a = document.createElement('a');
+		a.setAttribute('href', '#/about');
+		document.body.appendChild(a);
+		const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+		a.dispatchEvent(event);
+		await Promise.resolve();
+		expect(event.defaultPrevented).toBe(false); // left to the browser
+		expect(router.current.path).toBe('/');
+		a.remove();
 	});
 
 	it("mode 'history' and an omitted mode both write a plain path URL (hash empty)", async () => {
@@ -125,7 +163,7 @@ describe('Router hash mode — construction & mode parity (D34)', () => {
 
 		// explicit history mode → identical
 		const el2 = container();
-		const rHistory = new Router(routes, { mode: 'history' });
+		const rHistory = new Router(routes);
 		routers.push(rHistory);
 		await rHistory.start(el2, ctx());
 		await rHistory.push('/about');
@@ -416,7 +454,7 @@ describe('PuzzleApp — routerMode pass-through (D34)', () => {
 		apps = [];
 	});
 
-	it("routerMode: 'hash' routes from the fragment on mount()", async () => {
+	it("routerMode: hashRouter() routes from the fragment on mount()", async () => {
 		history.replaceState({}, '', '/#/about');
 		const el = container();
 		const app = new PuzzleApp({
@@ -425,7 +463,7 @@ describe('PuzzleApp — routerMode pass-through (D34)', () => {
 				{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
 				{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
 			],
-			routerMode: 'hash',
+			routerMode: hashRouter(),
 		});
 		apps.push(app);
 		await app.mount();

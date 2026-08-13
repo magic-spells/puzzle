@@ -13,6 +13,7 @@ import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import WrappedLayout from './fixtures/slot-forwarding/WrappedLayout.compiled.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -48,7 +49,7 @@ describe('default-slot forwarding — compiled layout (D71)', () => {
 				{ path: '/', name: 'home', view: HomeView, layout: WrappedLayout },
 				{ path: '/about', name: 'about', view: AboutView, layout: WrappedLayout },
 			],
-			{ mode: 'memory' }
+			{ mode: memoryRouter() }
 		);
 		routers.push(router);
 		await router.start(el, { store: null, router: null, formatters: { getAll: () => ({}) } });

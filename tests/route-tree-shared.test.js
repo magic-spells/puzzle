@@ -16,6 +16,7 @@ import { enumerateRoutes } from '../client-runtime/ssg/index.js';
 import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 // --- helpers ---------------------------------------------------------------
 
@@ -100,7 +101,7 @@ describe('routeTree — walkRouteTree', () => {
 		// knows nor cares — it just composes; the Router's makeEntry is where it throws.
 		const bad = { path: '/app', children: [{ path: '/oops' }] };
 		expect(() => walkFullPaths([bad])).not.toThrow();
-		expect(() => new Router([bad], { mode: 'memory' })).toThrow(
+		expect(() => new Router([bad], { mode: memoryRouter() })).toThrow(
 			/child route path must be relative/
 		);
 	});
@@ -162,7 +163,7 @@ let routers = [];
 async function boot(routes) {
 	const el = document.createElement('div');
 	document.body.appendChild(el);
-	const router = new Router(routes, { mode: 'memory' });
+	const router = new Router(routes, { mode: memoryRouter() });
 	routers.push(router);
 	await router.start(el, { store: null, router, formatters: null });
 	return router;

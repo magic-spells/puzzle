@@ -21,6 +21,7 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -57,7 +58,7 @@ afterEach(() => {
 async function boot(routes) {
 	const el = container();
 	const store = new Store({ todo: Todo });
-	const router = new Router(routes, { mode: 'memory', initialPath: '/' });
+	const router = new Router(routes, { mode: memoryRouter({ initialPath: '/' }) });
 	routers.push(router);
 	await router.start(el, { store, router: null, formatters: null });
 	return { router, el, store };

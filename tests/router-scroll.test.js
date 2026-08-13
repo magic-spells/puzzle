@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { hashRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -479,7 +480,7 @@ describe('Router scroll — hash mode anchors (v1.10, D41)', () => {
 
 	it('push writes the double-hash URL and scrolls to the in-fragment anchor', async () => {
 		const rectSpy = stubRect(500);
-		const { router } = await boot(ROUTES, { mode: 'hash' });
+		const { router } = await boot(ROUTES, { mode: hashRouter() });
 		await router.push('/docs#faq');
 
 		expect(location.hash).toBe('#/docs#faq');
@@ -491,7 +492,7 @@ describe('Router scroll — hash mode anchors (v1.10, D41)', () => {
 
 	it("a '#/...#anchor' link is intercepted; a bare '#faq' href falls through", async () => {
 		const rectSpy = stubRect(500);
-		const { router } = await boot(ROUTES, { mode: 'hash' });
+		const { router } = await boot(ROUTES, { mode: hashRouter() });
 		const pushSpy = vi.spyOn(router, 'push');
 
 		// bare in-page anchor — native, not intercepted

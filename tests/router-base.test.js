@@ -16,6 +16,7 @@ import { Router } from '../client-runtime/router/router.js';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -87,7 +88,7 @@ const baseRoutes = [
 let routers = [];
 
 // Boot with a base. `url` seeds location BEFORE start() reads it (the deep link);
-// `options` merge over { base } (e.g. { mode: 'hash' }).
+// `options` merge over { base } (e.g. { mode: hashRouter() }).
 async function bootBase(routes, url, base = '/myapp', options = {}) {
 	history.replaceState({}, '', url);
 	const el = container();
@@ -268,7 +269,7 @@ describe('Router base — history mode (D51)', () => {
 describe('Router base — hash mode (D51)', () => {
 	it('initial nav at #/myapp/user/1 matches with a base-free current', async () => {
 		const { router, el } = await bootBase(baseRoutes, '/#/myapp/user/1', '/myapp', {
-			mode: 'hash',
+			mode: hashRouter(),
 		});
 		expect(el.querySelector('.user')).not.toBeNull();
 		expect(router.current.path).toBe('/user/1');
@@ -277,7 +278,7 @@ describe('Router base — hash mode (D51)', () => {
 	});
 
 	it("push writes '#/myapp/...' and keeps current base-free", async () => {
-		const { router } = await bootBase(baseRoutes, '/', '/myapp', { mode: 'hash' });
+		const { router } = await bootBase(baseRoutes, '/', '/myapp', { mode: hashRouter() });
 		await router.push('/about');
 		expect(location.hash).toBe('#/myapp/about');
 		expect(location.pathname).toBe('/');
@@ -285,7 +286,7 @@ describe('Router base — hash mode (D51)', () => {
 	});
 
 	it("composes the D41 anchor in-fragment ('#/myapp/docs#faq' → path '/docs#faq')", async () => {
-		const { router, el } = await bootBase(baseRoutes, '/', '/myapp', { mode: 'hash' });
+		const { router, el } = await bootBase(baseRoutes, '/', '/myapp', { mode: hashRouter() });
 		await router.push('/docs#faq');
 		expect(location.hash).toBe('#/myapp/docs#faq');
 		expect(router.current.path).toBe('/docs#faq');
@@ -293,7 +294,7 @@ describe('Router base — hash mode (D51)', () => {
 	});
 
 	it("treats a non-base '#/other' fragment as a non-route (routes '/')", async () => {
-		const { router, el } = await bootBase(baseRoutes, '/#/other', '/myapp', { mode: 'hash' });
+		const { router, el } = await bootBase(baseRoutes, '/#/other', '/myapp', { mode: hashRouter() });
 		// #currentPath → null for an out-of-base fragment → start falls back to '/'
 		expect(router.current.path).toBe('/');
 		expect(el.querySelector('.home')).not.toBeNull();
@@ -305,7 +306,7 @@ describe('Router base — hash mode (D51)', () => {
 		// fell back to '/', dropping the query. It must route the app root WITH the query,
 		// mirroring history mode (pathname === base keeps location.search).
 		const { router, el } = await bootBase(baseRoutes, '/#/myapp?tab=2', '/myapp', {
-			mode: 'hash',
+			mode: hashRouter(),
 		});
 		expect(router.current.path).toBe('/?tab=2');
 		expect(router.current.pathname).toBe('/');
@@ -314,7 +315,7 @@ describe('Router base — hash mode (D51)', () => {
 	});
 
 	it("handles a popstate to '#/myapp?tab=3' (root + query) instead of ignoring it", async () => {
-		const { router } = await bootBase(baseRoutes, '/#/myapp/about', '/myapp', { mode: 'hash' });
+		const { router } = await bootBase(baseRoutes, '/#/myapp/about', '/myapp', { mode: hashRouter() });
 		expect(router.current.path).toBe('/about');
 
 		// simulate a back/forward landing on the bare-base + query fragment
@@ -328,7 +329,7 @@ describe('Router base — hash mode (D51)', () => {
 
 	it("intercepts a '#/myapp?q=1' root-query link and pushes '/?q=1'", async () => {
 		const { router, el } = await bootBase(baseRoutes, '/#/myapp/about', '/myapp', {
-			mode: 'hash',
+			mode: hashRouter(),
 		});
 		const pushSpy = vi.spyOn(router, 'push');
 		const link = document.createElement('a');
@@ -346,7 +347,7 @@ describe('Router base — hash mode (D51)', () => {
 	});
 
 	it("intercepts a '#/myapp/...' link but leaves a bare '#anchor' and a non-base '#/other' alone", async () => {
-		const { router, el } = await bootBase(baseRoutes, '/', '/myapp', { mode: 'hash' });
+		const { router, el } = await bootBase(baseRoutes, '/', '/myapp', { mode: hashRouter() });
 		const pushSpy = vi.spyOn(router, 'push');
 
 		// bare in-page anchor — not intercepted
@@ -382,7 +383,7 @@ describe('Router base — hash mode (D51)', () => {
 
 	it("intercepts the EXACT-base '#/myapp' link and routes to '/' (symmetric with #currentPath)", async () => {
 		const { router, el } = await bootBase(baseRoutes, '/#/myapp/about', '/myapp', {
-			mode: 'hash',
+			mode: hashRouter(),
 		});
 		expect(el.querySelector('.about')).not.toBeNull();
 		const pushSpy = vi.spyOn(router, 'push');
@@ -439,7 +440,7 @@ describe('Router base — hash mode (D51)', () => {
 describe('Router base — memory mode (D51: base inert)', () => {
 	it('accepts a base without throwing and navigates normally', async () => {
 		const el = container();
-		const router = new Router(baseRoutes, { mode: 'memory', base: '/myapp' });
+		const router = new Router(baseRoutes, { mode: memoryRouter(), base: '/myapp' });
 		routers.push(router);
 		await router.start(el, ctx());
 		expect(router.current.path).toBe('/'); // initialPath default, base inert
@@ -469,7 +470,7 @@ describe('Router base — no-base regression (D51)', () => {
 	it('a base-less hash router writes plain fragments identical to today', async () => {
 		history.replaceState({}, '', '/');
 		const el = container();
-		const router = new Router(baseRoutes, { mode: 'hash' });
+		const router = new Router(baseRoutes, { mode: hashRouter() });
 		routers.push(router);
 		await router.start(el, ctx());
 		await router.push('/about');

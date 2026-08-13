@@ -22,6 +22,7 @@ import { prerender } from '../client-runtime/ssg/index.js';
 import { Router, encodeURL, normalizeBase } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -72,7 +73,7 @@ describe('hybrid prerender — routerBase (D51/D79)', () => {
 
 	it('normalizes the base exactly like the Router does', async () => {
 		const html = await homeHtml(config({ routerBase: 'docs/' }));
-		expect(html).toContain(`href="${new Router([], { mode: 'history', base: 'docs/' }).url('/about')}"`);
+		expect(html).toContain(`href="${new Router([], { base: 'docs/' }).url('/about')}"`);
 		expect(html).toContain('href="/docs/about"');
 	});
 
@@ -100,7 +101,7 @@ describe('hybrid prerender — default (no base, history) is unchanged', () => {
 	});
 
 	it("an explicit routerMode 'history' encodes identically", async () => {
-		expect(await homeHtml(config({ routerMode: 'history' }))).toContain('href="/about"');
+		expect(await homeHtml(config({}))).toContain('href="/about"');
 	});
 
 	it('keeps the real memory Router beyond its snapshot current (navigable API)', async () => {
@@ -112,39 +113,44 @@ describe('hybrid prerender — default (no base, history) is unchanged', () => {
 
 describe('hash apps: rejected by hybrid, flattened to history by static output (P2.1)', () => {
 	it('hybrid + hash is rejected before any page renders', async () => {
-		await expect(prerender(config({ routerMode: 'hash' }))).rejects.toThrow(
+		await expect(prerender(config({ routerMode: hashRouter() }))).rejects.toThrow(
 			/hybrid prerender output requires history routing/
 		);
 	});
 
 	it('hybrid + memory is rejected the same way', async () => {
-		await expect(prerender(config({ routerMode: 'memory' }))).rejects.toThrow(
+		await expect(prerender(config({ routerMode: memoryRouter() }))).rejects.toThrow(
 			/hybrid prerender output requires history routing/
 		);
 	});
 
 	it('static output of a hash app emits PATH-shaped hrefs, never "#/"', async () => {
-		const html = await homeHtml(config({ routerMode: 'hash' }), { mode: 'static' });
+		const html = await homeHtml(config({ routerMode: hashRouter() }), { mode: 'static' });
 		expect(html).toContain('href="/about"');
 		expect(html).not.toContain('href="#/about"');
 		expect(html).not.toContain('#/');
 	});
 
 	it('static output of a hash app warns that routerMode is ignored', async () => {
-		const { warnings } = await prerender(config({ routerMode: 'hash' }), { mode: 'static' });
-		expect(warnings.some((w) => w.includes('ignores `routerMode: "hash"`'))).toBe(true);
+		const { warnings } = await prerender(config({ routerMode: hashRouter() }), { mode: 'static' });
+		expect(warnings.some((w) => w.includes('ignores routerMode (hash routing)'))).toBe(true);
 		expect(warnings.some((w) => w.includes('links are emitted history-style'))).toBe(true);
 	});
 
 	it("static output of a memory app is flattened + warned identically", async () => {
-		const cfg = config({ routerMode: 'memory' });
+		const cfg = config({ routerMode: memoryRouter() });
 		const { pages, warnings } = await prerender(cfg, { mode: 'static' });
 		expect(pages[0].html).toContain('href="/about"');
-		expect(warnings.some((w) => w.includes('ignores `routerMode: "memory"`'))).toBe(true);
+		expect(warnings.some((w) => w.includes('ignores routerMode (memory routing)'))).toBe(true);
+	});
+
+	it('a leftover mode STRING is still named in the warning (mid-migration apps)', async () => {
+		const { warnings } = await prerender(config({ routerMode: 'hash' }), { mode: 'static' });
+		expect(warnings.some((w) => w.includes('ignores routerMode (the string "hash")'))).toBe(true);
 	});
 
 	it('static output of a based hash app keeps the base and stays path-shaped', async () => {
-		const cfg = config({ routerMode: 'hash', routerBase: '/docs' });
+		const cfg = config({ routerMode: hashRouter(), routerBase: '/docs' });
 		const html = await homeHtml(cfg, { mode: 'static' });
 		expect(html).toContain('href="/docs/about"');
 		expect(html).not.toContain('#/docs/about');
@@ -156,7 +162,7 @@ describe('hash apps: rejected by hybrid, flattened to history by static output (
 	});
 
 	it("static output with routerMode 'history' (or unset) warns about nothing new", async () => {
-		for (const cfg of [config({ routerMode: 'history' }), config()]) {
+		for (const cfg of [config({}), config()]) {
 			const { warnings } = await prerender(cfg, { mode: 'static' });
 			expect(warnings.some((w) => w.includes('routerMode'))).toBe(false);
 		}
@@ -165,8 +171,8 @@ describe('hash apps: rejected by hybrid, flattened to history by static output (
 	it('a hash app renders the SAME href in static prerender and in the SPA it is not', async () => {
 		// The regression in one line: the live hash SPA renders '#/about', the static
 		// build renders '/about' — because a static page is a document, not an SPA.
-		const cfg = config({ routerMode: 'hash' });
-		expect(new Router([], { mode: 'hash' }).url('/about')).toBe('#/about');
+		const cfg = config({ routerMode: hashRouter() });
+		expect(new Router([], { mode: hashRouter() }).url('/about')).toBe('#/about');
 		expect(await homeHtml(cfg, { mode: 'static' })).toContain('href="/about"');
 	});
 });
@@ -174,21 +180,30 @@ describe('hash apps: rejected by hybrid, flattened to history by static output (
 describe('encodeURL parity with Router.url()', () => {
 	const paths = ['/', '/a', '/a/b', '/a?x=1', '/docs#faq', 'https://example.com', 'mailto:a@b.com', '#anchor', '#/x', ''];
 
-	for (const mode of ['history', 'hash', 'memory']) {
+	// encodeURL takes the same mode object the Router holds (null = history, D159),
+	// so the prerender-side encoder and the live router can never drift.
+	for (const [name, makeMode] of [
+		['history', () => undefined],
+		['hash', hashRouter],
+		['memory', memoryRouter],
+	]) {
 		for (const base of ['', '/', '/app', 'app/']) {
-			it(`agrees with Router.url() in ${mode} mode with base ${JSON.stringify(base)}`, () => {
-				const router = new Router([], { mode, base });
+			it(`agrees with Router.url() in ${name} mode with base ${JSON.stringify(base)}`, () => {
+				const router = new Router([], { mode: makeMode(), base });
+				// The Router instantiates its own mode instance; encodeURL needs one too.
+				const descriptor = makeMode();
+				const instance = descriptor ? descriptor.create() : null;
 				for (const path of paths) {
-					expect(encodeURL(path, mode, normalizeBase(base))).toBe(router.url(path));
+					expect(encodeURL(path, instance, normalizeBase(base))).toBe(router.url(path));
 				}
 			});
 		}
 	}
 
 	it('throws on a non-string path exactly as Router.url() does', () => {
-		const router = new Router([], { mode: 'history' });
+		const router = new Router([]);
 		for (const bad of [5, null, undefined, {}, [], true, () => {}]) {
-			expect(() => encodeURL(bad, 'history', '')).toThrow(/\[puzzle\]/);
+			expect(() => encodeURL(bad, null, '')).toThrow(/\[puzzle\]/);
 			expect(() => router.url(bad)).toThrow(/\[puzzle\]/);
 		}
 	});

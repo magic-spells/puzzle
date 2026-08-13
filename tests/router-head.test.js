@@ -19,6 +19,7 @@ import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { MANAGED_TAGS } from '../client-runtime/headTags.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -239,7 +240,7 @@ describe('Router head sync (D84) — memory mode performs no document work (D42)
 			{ path: '/', name: 'home', view: HomeView, meta: HOME_META },
 			{ path: '/about', name: 'about', view: AboutView, meta: { title: 'About', description: 'x' } },
 		];
-		const { router } = await boot(routes, { mode: 'memory' });
+		const { router } = await boot(routes, { mode: memoryRouter() });
 
 		expect(document.title).toBe('');
 		expect(allHeadTags()).toHaveLength(0);
