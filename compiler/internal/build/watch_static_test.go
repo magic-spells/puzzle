@@ -31,18 +31,23 @@ export default class Card extends PuzzleView {}
 	files["app/assets/icons/logo.svg"] = `<svg viewBox="0 0 24 24"><path d="M0 ORIGINAL"/></svg>`
 	files["app/views/Home.pzl"] = `<puzzle-view>
   <h1>Home</h1>
+  <p>{label}</p>
   <Card>body</Card>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Card from '../components/Card.pzl';
+import { tone } from '../public/tokens.js';
 export default class Home extends PuzzleView {
-  data() { return { greeting: 'hello' }; }
+  data() { return { greeting: 'hello', label: tone }; }
 }
 </script>
 `
 	files["app/public/robots.txt"] = "User-agent: *\n"
 	files["app/public/assets/note.txt"] = "one\n"
+	// A module that lives under public/ and is imported by one page — the case
+	// that separates "copied verbatim" from "compiled in".
+	files["app/public/tokens.js"] = "export const tone = 'ORIGINAL';\n"
 	return files
 }
 
@@ -245,6 +250,13 @@ export default class Card extends PuzzleView {}
 
 	step("public asset deleted", []string{abs("app/public/added.txt")}, &wantPlan{routes: []string{}}, func() {
 		remove("app/public/added.txt")
+	})
+
+	// public/ is inside the resolve tree, so a module that lives there is a
+	// module: editing it re-renders the page that imports it rather than taking
+	// the copy-only zero-route path its unimported neighbours take.
+	step("imported public module edit", []string{abs("app/public/tokens.js")}, &wantPlan{routes: []string{"/"}}, func() {
+		write("app/public/tokens.js", "export const tone = 'REVISED';\n")
 	})
 
 	// The one edit a content-hash-keyed transform memo cannot see on its own:

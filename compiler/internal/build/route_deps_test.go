@@ -44,6 +44,9 @@ func testGraph(t *testing.T) (root string, g *routeGraph) {
 		"warm/a.js", "warm/b.js",
 		"app/views/A.pzl", "app/views/B.pzl", "app/components/Shared.pzl",
 		"app/app.js", "app/routes.js", "app/public/index.html", "app/public/logo.png",
+		// public/ is inside the module resolve tree: data.js is imported by one
+		// page's view, wide.js only by the app entry.
+		"app/public/data.js", "app/public/wide.js",
 		"app/styles/extra.css", "app/assets/icon.svg",
 	}
 	for _, f := range files {
@@ -59,16 +62,19 @@ func testGraph(t *testing.T) (root string, g *routeGraph) {
 	pages := metafileJSON(t, map[string][]string{
 		"a.js":                         {"../app/views/A.pzl"},
 		"b.js":                         {"../app/views/B.pzl"},
-		"../app/views/A.pzl":           {"../app/components/Shared.pzl"},
+		"../app/views/A.pzl":           {"../app/components/Shared.pzl", "../app/public/data.js"},
 		"../app/views/B.pzl":           {"../app/components/Shared.pzl"},
 		"../app/components/Shared.pzl": {},
+		"../app/public/data.js":        {},
 	})
 	pre := metafileJSON(t, map[string][]string{
-		"app/app.js":                {"app/routes.js"},
+		"app/app.js":                {"app/routes.js", "app/public/wide.js"},
 		"app/routes.js":             {"app/views/A.pzl", "app/views/B.pzl"},
-		"app/views/A.pzl":           {"app/components/Shared.pzl"},
+		"app/views/A.pzl":           {"app/components/Shared.pzl", "app/public/data.js"},
 		"app/views/B.pzl":           {"app/components/Shared.pzl"},
 		"app/components/Shared.pzl": {},
+		"app/public/data.js":        {},
+		"app/public/wide.js":        {},
 	})
 
 	g, err := buildRouteGraph(pages, base, pre, root, map[string]string{
@@ -107,6 +113,9 @@ func TestRouteGraphClassify(t *testing.T) {
 		{"the app entry is render-wide", []string{rel("app/app.js")}, true, ""},
 		{"the shell reaches every page", []string{rel("app/public/index.html")}, true, ""},
 		{"another public asset reaches none", []string{rel("app/public/logo.png")}, false, ""},
+		{"a public module a page imports is that page", []string{rel("app/public/data.js")}, false, "/a"},
+		{"a public module only the app entry imports is render-wide", []string{rel("app/public/wide.js")}, true, ""},
+		{"an imported public module unions with a view", []string{rel("app/public/data.js"), rel("app/views/B.pzl")}, false, "/a,/b"},
 		{"a standalone stylesheet reaches none", []string{rel("app/styles/extra.css")}, false, ""},
 		{"an inlined asset reaches its consumers", []string{rel("app/assets/icon.svg")}, false, "/a"},
 		{"a file nothing knows about is a full render", []string{rel("app/mystery.js")}, true, ""},
@@ -131,6 +140,24 @@ func TestRouteGraphClassify(t *testing.T) {
 	}
 	if plan := g.classify(root, []string{rel("app/views/A.pzl")}, consumers); !plan.full {
 		t.Errorf("a deleted .pzl must force a full render, got %v", plan.routes)
+	}
+
+	// The same rule under public/: a path the graph believes is a module cannot
+	// take the copy-only path just because it lives beside the assets. Its
+	// disappearance removes a module the bundle still imports.
+	if err := os.Remove(rel("app/public/data.js")); err != nil {
+		t.Fatal(err)
+	}
+	if plan := g.classify(root, []string{rel("app/public/data.js")}, consumers); !plan.full {
+		t.Errorf("a deleted imported public module must force a full render, got %v", plan.routes)
+	}
+	// …while a deleted UNIMPORTED public asset stays the zero-render copy that no
+	// longer happens.
+	if err := os.Remove(rel("app/public/logo.png")); err != nil {
+		t.Fatal(err)
+	}
+	if plan := g.classify(root, []string{rel("app/public/logo.png")}, consumers); plan.full || len(plan.routes) != 0 {
+		t.Errorf("a deleted unimported public asset must render nothing: full=%v routes=%v", plan.full, plan.routes)
 	}
 }
 
