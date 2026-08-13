@@ -97,6 +97,7 @@ import { MARKDOWN_CLASSES as C, isEmpty, isSafeUrl } from '../../lib/markdown-do
 // vary per level through HTMLAttributes; those are mirrored below in
 // CONTENT_CLASS as arbitrary variants (keep in sync with the lib map).
 let uid = 0;
+const EMITTED_LIMIT = 30;
 
 const CONTENT_CLASS =
 	'min-h-40 px-3 py-2 text-ink outline-none ' +
@@ -155,6 +156,9 @@ export default class MarkdownEditor extends PuzzleView {
 		this._applied = null;
 		// Raw value prop spelling last seen, separate because markdown is not canonical.
 		this._appliedRaw = null;
+		// Recent markdown strings this editor emitted, used to recognize delayed
+		// controlled-value echoes even after the editor has advanced past them.
+		this._emitted = [];
 		this.setData({
 			active: {},
 			empty: true,
@@ -223,6 +227,8 @@ export default class MarkdownEditor extends PuzzleView {
 
 	mounted() {
 		const value = String(this.props.value ?? '');
+		// A mounted editor starts with no outstanding emissions from this instance.
+		this._emitted = [];
 		// Seed the emptiness flag data() switches to post-mount, or a non-empty
 		// starting value would render under the placeholder until the first edit.
 		this.setData('empty', isEmpty(value));
@@ -285,8 +291,11 @@ export default class MarkdownEditor extends PuzzleView {
 			onUpdate: ({ editor }) => {
 				const md = editor.getMarkdown();
 				this._applied = md;
+				this._emitted.push(md);
+				if (this._emitted.length > EMITTED_LIMIT) this._emitted.shift();
 				// Deliberately do NOT touch _appliedRaw here: refresh() synchronously
-				// runs afterUpdate() while the prop still holds its pre-keystroke value.
+				// runs afterUpdate() while the prop still holds its pre-keystroke value;
+				// the emission ring separately catches older scheduled parent echoes.
 				// _appliedRaw tracks only the last prop spelling seen.
 				this.setData('empty', isEmpty(md));
 				this.refresh();
@@ -317,16 +326,27 @@ export default class MarkdownEditor extends PuzzleView {
 		const editable = !this.props.disabled;
 		if (ed.isEditable !== editable) ed.setEditable(editable);
 
-		// Markdown is not a canonical source form: `# Hi` and `#  Hi`, or `* a`
-		// and `- a`, can parse to the same document and serialize one way. A parent
-		// may echo its original spelling after the editor emits the canonical one.
-		// Comparing only raw strings would then call setContent while typing,
-		// jumping the caret and destroying undo history. Track raw echoes for the
-		// fast path, then compare parsed-and-serialized documents before applying.
+		// Controlled markdown has two timing traps. First, onUpdate's refresh() is
+		// synchronous and reaches afterUpdate() before @change can update the parent,
+		// so the prop still contains its pre-keystroke spelling; _appliedRaw's exact
+		// fast path recognizes that unchanged prop. Second, the parent's setData()
+		// render is frame-scheduled: an older emission e_i can arrive after typing has
+		// already advanced the editor to e_j. Comparing e_i only with the latest
+		// _applied would misclassify our own stale echo as an external reset. That is
+		// especially destructive at input-rule boundaries: Tiptap 3.30 serializes an
+		// empty heading as '', so replaying that emission erases the new heading node.
+		// The bounded emission ring recognizes any recent own output before canonical
+		// comparison. Canonicalization still handles equivalent spellings (`# Hi` vs
+		// `#  Hi`, `* a` vs `- a`) from a normalizing parent; only a genuinely new
+		// document reaches setContent.
 		const v = this.props.value;
 		if (v == null) return;
 		const raw = String(v);
 		if (raw === this._appliedRaw) return;
+		if (this._emitted.includes(raw)) {
+			this._appliedRaw = raw;
+			return;
+		}
 		this._appliedRaw = raw;
 		let canonical;
 		try {
