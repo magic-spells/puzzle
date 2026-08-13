@@ -26,12 +26,13 @@
           placeholder="https://example.com or /path"
           aria-label="Link URL"
           value={ linkDraft }
+          disabled={ disabled }
           ref="linkInput"
           @keydown:enter={ applyLink }
         />
-        <button type="button" class={ linkBtnClass } @click={ applyLink }>Set</button>
-        <button type="button" class={ linkBtnClass } @click={ removeLink }>Remove</button>
-        <button type="button" class={ linkBtnClass } @click={ closeLink }>Cancel</button>
+        <button type="button" class={ linkBtnClass } disabled={ disabled } @click={ applyLink }>Set</button>
+        <button type="button" class={ linkBtnClass } disabled={ disabled } @click={ removeLink }>Remove</button>
+        <button type="button" class={ linkBtnClass } disabled={ disabled } @click={ closeLink }>Cancel</button>
       </div>
     {/if}
 
@@ -101,10 +102,13 @@ const EMITTED_LIMIT = 30;
 
 const CONTENT_CLASS =
 	'min-h-40 px-3 py-2 text-ink outline-none ' +
-	// Keep in sync with lib map: MARKDOWN_CLASSES.heading1 / heading2 / heading3.
+	// Keep in sync with lib map: MARKDOWN_CLASSES.heading1 through heading6.
 	'[&_h1]:mt-8 [&_h1:first-child]:mt-0 [&_h1]:text-3xl [&_h1]:font-semibold [&_h1]:tracking-tight [&_h1]:text-ink ' +
 	'[&_h2]:mt-6 [&_h2:first-child]:mt-0 [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:text-ink ' +
 	'[&_h3]:mt-5 [&_h3:first-child]:mt-0 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3]:text-ink ' +
+	'[&_h4]:mt-4 [&_h4:first-child]:mt-0 [&_h4]:text-base [&_h4]:font-semibold [&_h4]:tracking-tight [&_h4]:text-ink ' +
+	'[&_h5]:mt-4 [&_h5:first-child]:mt-0 [&_h5]:text-sm [&_h5]:font-semibold [&_h5]:tracking-tight [&_h5]:text-ink ' +
+	'[&_h6]:mt-4 [&_h6:first-child]:mt-0 [&_h6]:text-sm [&_h6]:font-semibold [&_h6]:tracking-tight [&_h6]:text-muted ' +
 	// .tableWrapper and .selectedCell are machine-generated ProseMirror class
 	// names reachable through arbitrary variants, so no <style> block is needed.
 	'[&_.tableWrapper]:mt-4 [&_.tableWrapper]:w-full [&_.tableWrapper]:overflow-x-auto [&_.tableWrapper]:rounded-xl [&_.tableWrapper]:border [&_.tableWrapper]:border-border ' +
@@ -144,7 +148,6 @@ const I = {
 	colBefore: 'M5 4v16M10 4h9v16h-9zM2 12h6M5 9l-3 3 3 3',
 	colAfter: 'M5 4h9v16H5zM19 4v16M16 12h6M19 9l3 3-3 3',
 	delCol: 'M6 4h12v16H6zM12 4v16M9 9l6 6M15 9l-6 6',
-	headerRow: 'M4 4h16v16H4zM4 9h16M9 4v5M15 4v5',
 	delTable: 'M4 5h16v15H4zM8 2h8M9 9l6 6M15 9l-6 6',
 };
 
@@ -156,9 +159,8 @@ export default class MarkdownEditor extends PuzzleView {
 		this._applied = null;
 		// Raw value prop spelling last seen, separate because markdown is not canonical.
 		this._appliedRaw = null;
-		// Recent markdown strings this editor emitted, used to recognize delayed
-		// controlled-value echoes even after the editor has advanced past them.
-		this._emitted = [];
+		// Ordered markdown emissions still awaiting their controlled-value echoes.
+		this._pending = [];
 		this.setData({
 			active: {},
 			empty: true,
@@ -219,7 +221,6 @@ export default class MarkdownEditor extends PuzzleView {
 				tableButton('colAfter', 'Add column after', I.colAfter),
 				tableButton('delCol', 'Delete column', I.delCol),
 				{ type: 'separator' },
-				tableButton('headerRow', 'Toggle header row', I.headerRow),
 				tableButton('delTable', 'Delete table', I.delTable),
 			],
 		};
@@ -228,7 +229,7 @@ export default class MarkdownEditor extends PuzzleView {
 	mounted() {
 		const value = String(this.props.value ?? '');
 		// A mounted editor starts with no outstanding emissions from this instance.
-		this._emitted = [];
+		this._pending = [];
 		// Seed the emptiness flag data() switches to post-mount, or a non-empty
 		// starting value would render under the placeholder until the first edit.
 		this.setData('empty', isEmpty(value));
@@ -240,7 +241,7 @@ export default class MarkdownEditor extends PuzzleView {
 			extensions: [
 				StarterKit.configure({
 					underline: false,
-					heading: { levels: [1, 2, 3] },
+					heading: { levels: [1, 2, 3, 4, 5, 6] },
 					link: {
 						openOnClick: false,
 						HTMLAttributes: { class: C.link },
@@ -291,11 +292,11 @@ export default class MarkdownEditor extends PuzzleView {
 			onUpdate: ({ editor }) => {
 				const md = editor.getMarkdown();
 				this._applied = md;
-				this._emitted.push(md);
-				if (this._emitted.length > EMITTED_LIMIT) this._emitted.shift();
+				this._pending.push(md);
+				if (this._pending.length > EMITTED_LIMIT) this._pending.shift();
 				// Deliberately do NOT touch _appliedRaw here: refresh() synchronously
 				// runs afterUpdate() while the prop still holds its pre-keystroke value;
-				// the emission ring separately catches older scheduled parent echoes.
+				// the pending queue separately catches older scheduled parent echoes.
 				// _appliedRaw tracks only the last prop spelling seen.
 				this.setData('empty', isEmpty(md));
 				this.refresh();
@@ -319,12 +320,15 @@ export default class MarkdownEditor extends PuzzleView {
 	afterUpdate() {
 		const ed = this._editor;
 		if (!ed) return;
-		// setEditable dispatches a transaction even when the flag is unchanged,
-		// and every transaction runs _syncActive — calling it unconditionally on
-		// each render closes a render→transaction→render loop. Only write on a
-		// real change.
+		// setEditable defaults to emitUpdate=true, which synchronously fires the
+		// 'update' event → onUpdate → props.change — so a disabled toggle would
+		// look like an edit. Pass false. The isEditable guard additionally breaks
+		// the afterUpdate → update → refresh → afterUpdate loop.
 		const editable = !this.props.disabled;
-		if (ed.isEditable !== editable) ed.setEditable(editable);
+		if (ed.isEditable !== editable) ed.setEditable(editable, false);
+		if (this.props.disabled && this.getData().linkOpen) {
+			this.setData({ linkOpen: false, linkDraft: '' });
+		}
 
 		// Controlled markdown has two timing traps. First, onUpdate's refresh() is
 		// synchronous and reaches afterUpdate() before @change can update the parent,
@@ -335,7 +339,7 @@ export default class MarkdownEditor extends PuzzleView {
 		// _applied would misclassify our own stale echo as an external reset. That is
 		// especially destructive at input-rule boundaries: Tiptap 3.30 serializes an
 		// empty heading as '', so replaying that emission erases the new heading node.
-		// The bounded emission ring recognizes any recent own output before canonical
+		// The pending-emissions queue recognizes delayed own output before canonical
 		// comparison. Canonicalization still handles equivalent spellings (`# Hi` vs
 		// `#  Hi`, `* a` vs `- a`) from a normalizing parent; only a genuinely new
 		// document reaches setContent.
@@ -343,10 +347,16 @@ export default class MarkdownEditor extends PuzzleView {
 		if (v == null) return;
 		const raw = String(v);
 		if (raw === this._appliedRaw) return;
-		if (this._emitted.includes(raw)) {
+		const idx = this._pending.indexOf(raw);
+		if (idx !== -1) {
+			// Parent echoed emission #idx — consume it and everything older.
+			// Anything still newer stays pending; a later prop matching an
+			// already-consumed spelling is a real reset and falls through.
+			this._pending.splice(0, idx + 1);
 			this._appliedRaw = raw;
 			return;
 		}
+		this._pending.length = 0; // external set/reset supersedes pending history
 		this._appliedRaw = raw;
 		let canonical;
 		try {
@@ -357,6 +367,7 @@ export default class MarkdownEditor extends PuzzleView {
 		if (canonical != null && canonical === this._applied) return;
 		this._applied = canonical ?? raw;
 		ed.commands.setContent(raw, { contentType: 'markdown', emitUpdate: false });
+		this._pending.length = 0;
 		// emitUpdate defaults TRUE in Tiptap 3.30 — explicit false prevents an
 		// external set from echoing a spurious @change back to the parent.
 		this.setData('empty', isEmpty(this._applied));
@@ -455,12 +466,12 @@ export default class MarkdownEditor extends PuzzleView {
 				case 'colBefore': c.addColumnBefore().run(); break;
 				case 'colAfter': c.addColumnAfter().run(); break;
 				case 'delCol': c.deleteColumn().run(); break;
-				case 'headerRow': c.toggleHeaderRow().run(); break;
 				case 'delTable': c.deleteTable().run(); break;
 			}
 		},
 
 		applyLink: () => {
+			if (this.props.disabled) return;
 			const raw = (this.getData().linkDraft || '').trim();
 			if (!raw) {
 				this.events.removeLink();
@@ -480,6 +491,7 @@ export default class MarkdownEditor extends PuzzleView {
 		},
 
 		removeLink: () => {
+			if (this.props.disabled) return;
 			this._chain()?.extendMarkRange('link').unsetLink().run();
 			this.setData({ linkOpen: false, linkDraft: '' });
 			this.refresh();

@@ -64,12 +64,13 @@
           placeholder="https://example.com or /path"
           aria-label="Link URL"
           value={ linkDraft }
+          disabled={ disabled }
           ref="linkInput"
           @keydown:enter={ applyLink }
         />
-        <button type="button" class={ linkBtnClass } @click={ applyLink }>Set</button>
-        <button type="button" class={ linkBtnClass } @click={ removeLink }>Remove</button>
-        <button type="button" class={ linkBtnClass } @click={ closeLink }>Cancel</button>
+        <button type="button" class={ linkBtnClass } disabled={ disabled } @click={ applyLink }>Set</button>
+        <button type="button" class={ linkBtnClass } disabled={ disabled } @click={ removeLink }>Remove</button>
+        <button type="button" class={ linkBtnClass } disabled={ disabled } @click={ closeLink }>Cancel</button>
       </div>
     {/if}
 
@@ -215,9 +216,8 @@ export default class RichTextEditor extends PuzzleView {
 		// The value prop as last SEEN by afterUpdate, tracked by identity so a
 		// self-triggered re-render can be told from a real prop change.
 		this._lastSeenValue = undefined;
-		// Recent serialized docs this editor emitted, used to recognize delayed
-		// controlled-value echoes even after the editor has advanced past them.
-		this._emitted = [];
+		// Ordered serialized emissions still awaiting controlled-value echoes.
+		this._pending = [];
 		this.setData({
 			active: {},
 			empty: true,
@@ -305,7 +305,7 @@ export default class RichTextEditor extends PuzzleView {
 		this._applied = JSON.stringify(value);
 		this._lastSeenValue = this.props.value;
 		// A mounted editor starts with no outstanding emissions from this instance.
-		this._emitted = [];
+		this._pending = [];
 		// Seed the emptiness flag data() switches to post-mount, or a non-empty
 		// starting value would render under the placeholder until the first edit.
 		this.setData('empty', isEmpty(value));
@@ -349,8 +349,8 @@ export default class RichTextEditor extends PuzzleView {
 				const doc = fromTiptap(editor.getJSON());
 				const serialized = JSON.stringify(doc);
 				this._applied = serialized;
-				this._emitted.push(serialized);
-				if (this._emitted.length > EMITTED_LIMIT) this._emitted.shift();
+				this._pending.push(serialized);
+				if (this._pending.length > EMITTED_LIMIT) this._pending.shift();
 				this.setData('empty', isEmpty(doc));
 				this.refresh();
 				const { change } = this.props;
@@ -371,12 +371,18 @@ export default class RichTextEditor extends PuzzleView {
 	afterUpdate() {
 		const ed = this._editor;
 		if (!ed) return;
-		// setEditable dispatches a transaction even when the flag is unchanged,
-		// and every transaction runs _syncActive — calling it unconditionally on
-		// each render closes a render→transaction→render loop. Only write on a
-		// real change.
+		// setEditable defaults to emitUpdate=true, which synchronously fires the
+		// 'update' event → onUpdate → props.change — so a disabled toggle would
+		// look like an edit. Pass false. The isEditable guard additionally breaks
+		// the afterUpdate → update → refresh → afterUpdate loop.
 		const editable = !this.props.disabled;
-		if (ed.isEditable !== editable) ed.setEditable(editable);
+		if (ed.isEditable !== editable) ed.setEditable(editable, false);
+		if (this.props.disabled && this.getData().linkOpen) {
+			this.setData({ linkOpen: false, linkDraft: '' });
+		}
+		if (this.props.disabled && this.getData().styleOpen) {
+			this.setData({ styleOpen: false });
+		}
 		const v = this.props.value;
 		// afterUpdate also runs for renders WE caused (onUpdate/_syncActive call
 		// setData + refresh synchronously), and those run BEFORE the parent's
@@ -396,14 +402,23 @@ export default class RichTextEditor extends PuzzleView {
 		// after typing has already advanced the editor to e_j. It passes the
 		// identity gate (genuinely a new reference) and fails the compare below
 		// (older than _applied), so it would be misread as an external reset and
-		// replayed through setContent. The bounded ring recognizes any recent own
-		// output first. Record the spelling, but do NOT regress _applied.
-		if (this._emitted.includes(s)) return;
+		// replayed through setContent. The pending-emissions queue recognizes
+		// delayed own output first without swallowing intentional resets.
+		const idx = this._pending.indexOf(s);
+		if (idx !== -1) {
+			// Parent echoed emission #idx — consume it and everything older.
+			// Anything still newer stays pending; a later prop matching an
+			// already-consumed spelling is a real reset and falls through.
+			this._pending.splice(0, idx + 1);
+			return;
+		}
+		this._pending.length = 0; // external set/reset supersedes pending history
 		// The prop DID change; it may still be the parent echoing our own emitted
 		// doc back as a fresh reference, which matches _applied and no-ops.
 		if (s !== this._applied) {
 			this._applied = s;
 			ed.commands.setContent(toTiptap(v), { emitUpdate: false }); // emitUpdate defaults to TRUE in Tiptap 3.30 — suppress the echo
+			this._pending.length = 0;
 			this.setData('empty', isEmpty(v));
 			this.refresh();
 		}
@@ -581,6 +596,7 @@ export default class RichTextEditor extends PuzzleView {
 		},
 
 		chooseStyle: (opt) => {
+			if (this.props.disabled) return;
 			const c = this._chain();
 			// SET, not toggle: picking "Heading 2" while already inside an H2 must
 			// leave it an H2, never flip back to a paragraph. _chain() focuses, so
@@ -609,6 +625,7 @@ export default class RichTextEditor extends PuzzleView {
 		},
 
 		applyLink: () => {
+			if (this.props.disabled) return;
 			const raw = (this.getData().linkDraft || '').trim();
 			if (!raw) {
 				this.events.removeLink();
@@ -628,6 +645,7 @@ export default class RichTextEditor extends PuzzleView {
 		},
 
 		removeLink: () => {
+			if (this.props.disabled) return;
 			this._chain()?.extendMarkRange('link').unsetLink().run();
 			this.setData({ linkOpen: false, linkDraft: '' });
 			this.refresh();
