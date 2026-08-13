@@ -1,10 +1,50 @@
 <puzzle-view>
-  <div class={ rootClass }>
+  <div class={ rootClass } @keydown:escape={ closeStyle }>
     {#if label}
       <div id={ labelId } class="mb-1.5 block text-sm font-medium text-ink">{ label }</div>
     {/if}
 
-    <div class="mb-2" @pointerdown:prevent={ noopPointer }>
+    <div class="mb-2 flex items-center gap-2" @pointerdown:prevent={ noopPointer }>
+      <div class="relative">
+        <button
+          type="button"
+          data-style-trigger
+          class={ styleTriggerClass }
+          id={ styleTriggerId }
+          title="Block style"
+          aria-haspopup="listbox"
+          aria-expanded={ styleExpanded }
+          aria-controls={ stylePanelId }
+          aria-activedescendant={ styleActiveId }
+          disabled={ disabled }
+          @click={ toggleStyle }
+          @keydown={ onStyleKey(event) }>
+          <span class="truncate">{ styleLabel }</span>
+          <svg class="size-3.5 shrink-0 text-muted" viewBox="0 0 20 20" fill="none"
+            stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M6 8l4 4 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        {#if styleOpen}
+          <ul class={ stylePanelClass } id={ stylePanelId } role="listbox" tabindex="-1"
+            aria-labelledby={ styleTriggerId } @pointerdown:outside={ onStyleOutside(event) }>
+            {#for opt in styleOptions}
+              <li id={ opt.id } key={ opt.key } role="option" aria-selected={ opt.ariaSelected }
+                class={ opt.class } @click={ chooseStyle(opt) }>
+                <span class="truncate">{ opt.label }</span>
+                {#if opt.selected}
+                  <svg class="size-4 shrink-0 text-brand" viewBox="0 0 20 20" fill="none"
+                    stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M5 10l3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                {/if}
+              </li>
+            {/for}
+          </ul>
+        {/if}
+      </div>
+
       <Toolbar class="w-full" label="Text formatting" disabled={ disabled }
         items={ tbItems } @toggle={ onToggle } @press={ onPress }/>
     </div>
@@ -86,7 +126,8 @@ import {
 // Callbacks (value-first):
 //   @change(doc) fires on every edit with the full document tree
 //
-// Formatting: bold / italic / underline / strike, H2 / H3, align left/center/
+// Formatting: a block-style dropdown (Normal text, Heading 1–4) followed by the
+// toolbar's bold / italic / underline / strike, align left/center/
 // right, bullet + ordered lists, blockquote, code block, links (inline URL row
 // — Enter or Set applies, empty URL or Remove clears; bare domains get https://
 // prefixed). Undo/redo ride on the standard keyboard shortcuts via Tiptap.
@@ -102,9 +143,35 @@ let uid = 0;
 
 const CONTENT_CLASS =
 	'min-h-40 px-3 py-2 text-ink outline-none ' +
-	// Mirrors RICH_TEXT_CLASSES.heading2 / heading3 (see header comment):
+	// Mirrors RICH_TEXT_CLASSES.heading1…heading4 (see header comment):
+	'[&_h1]:mt-8 [&_h1:first-child]:mt-0 [&_h1]:text-3xl [&_h1]:font-semibold [&_h1]:tracking-tight [&_h1]:text-ink ' +
 	'[&_h2]:mt-6 [&_h2:first-child]:mt-0 [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:tracking-tight [&_h2]:text-ink ' +
-	'[&_h3]:mt-5 [&_h3:first-child]:mt-0 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3]:text-ink';
+	'[&_h3]:mt-5 [&_h3:first-child]:mt-0 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:tracking-tight [&_h3]:text-ink ' +
+	'[&_h4]:mt-4 [&_h4:first-child]:mt-0 [&_h4]:text-base [&_h4]:font-semibold [&_h4]:tracking-tight [&_h4]:text-ink';
+
+// The block-style dropdown's fixed options. Level 0 is the paragraph row.
+const BLOCK_STYLES = [
+	{ level: 0, label: 'Normal text' },
+	{ level: 1, label: 'Heading 1' },
+	{ level: 2, label: 'Heading 2' },
+	{ level: 3, label: 'Heading 3' },
+	{ level: 4, label: 'Heading 4' },
+];
+
+const STYLE_TRIGGER =
+	'inline-flex h-8 shrink-0 items-center justify-between gap-1.5 rounded-md px-2 ' +
+	'text-sm font-medium whitespace-nowrap text-body cursor-pointer transition-colors ' +
+	'border border-border bg-surface hover:bg-surface-sunken hover:text-ink ' +
+	'outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
+	'disabled:opacity-50 disabled:pointer-events-none';
+
+const STYLE_PANEL =
+	'absolute left-0 top-full z-30 mt-1 min-w-44 rounded-lg border border-border ' +
+	'bg-surface p-1 shadow-lg';
+
+const STYLE_OPTION =
+	'flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 ' +
+	'text-sm whitespace-nowrap transition-colors';
 
 const FRAME_BASE =
 	'relative rounded-lg border border-border bg-surface transition-colors ' +
@@ -146,6 +213,9 @@ export default class RichTextEditor extends PuzzleView {
 			empty: true,
 			linkOpen: false,
 			linkDraft: '',
+			styleOpen: false,
+			// Keyboard-highlighted row in the open style listbox; -1 = none.
+			styleActive: -1,
 		});
 	}
 
@@ -157,7 +227,39 @@ export default class RichTextEditor extends PuzzleView {
 		const toggle = (value, label, icon, pressed) => ({
 			type: 'toggle', value, label, icon, iconOnly: true, pressed: !!pressed,
 		});
+		const level = this._currentLevel();
+		const styleOpen = !!g.styleOpen;
+		const styleActive = g.styleActive ?? -1;
+		const styleOptions = BLOCK_STYLES.map((s, i) => {
+			const selected = s.level === level;
+			// The keyboard row wins the background so arrow navigation stays visible
+			// even while sitting on the already-selected style.
+			const state = i === styleActive
+				? 'bg-surface-sunken text-ink'
+				: selected
+					? 'bg-faint text-ink'
+					: 'text-body hover:bg-surface-sunken hover:text-ink';
+			return {
+				key: s.level,
+				id: `${this._fallbackId}-style-${s.level}`,
+				level: s.level,
+				label: s.label,
+				selected,
+				ariaSelected: selected ? 'true' : 'false',
+				class: [STYLE_OPTION, selected ? 'font-medium' : '', state].filter(Boolean).join(' '),
+			};
+		});
 		return {
+			styleOpen,
+			styleOptions,
+			styleLabel: (BLOCK_STYLES.find((s) => s.level === level) || BLOCK_STYLES[0]).label,
+			styleExpanded: styleOpen ? 'true' : 'false',
+			styleTriggerId: `${this._fallbackId}-style-trigger`,
+			stylePanelId: `${this._fallbackId}-style-panel`,
+			styleActiveId:
+				styleOpen && styleActive >= 0 ? styleOptions[styleActive].id : false,
+			styleTriggerClass: STYLE_TRIGGER,
+			stylePanelClass: STYLE_PANEL,
 			label: props.label,
 			labelId: `${this._fallbackId}-label`,
 			placeholder: props.placeholder,
@@ -173,9 +275,6 @@ export default class RichTextEditor extends PuzzleView {
 				toggle('italic', 'Italic', I.italic, a.italic),
 				toggle('underline', 'Underline', I.underline, a.underline),
 				toggle('strike', 'Strikethrough', I.strike, a.strike),
-				{ type: 'separator' },
-				{ type: 'toggle', value: 'h2', label: 'H2', pressed: !!a.h2 },
-				{ type: 'toggle', value: 'h3', label: 'H3', pressed: !!a.h3 },
 				{ type: 'separator' },
 				toggle('alignLeft', 'Align left', I.alignLeft, a.alignLeft),
 				toggle('alignCenter', 'Align center', I.alignCenter, a.alignCenter),
@@ -207,7 +306,7 @@ export default class RichTextEditor extends PuzzleView {
 					// Inline code and horizontal rule are outside the doc contract.
 					code: false,
 					horizontalRule: false,
-					heading: { levels: [2, 3] },
+					heading: { levels: [1, 2, 3, 4] },
 					link: {
 						openOnClick: false,
 						HTMLAttributes: { class: C.link },
@@ -294,8 +393,10 @@ export default class RichTextEditor extends PuzzleView {
 			italic: ed.isActive('italic'),
 			underline: ed.isActive('underline'),
 			strike: ed.isActive('strike'),
+			h1: ed.isActive('heading', { level: 1 }),
 			h2: ed.isActive('heading', { level: 2 }),
 			h3: ed.isActive('heading', { level: 3 }),
+			h4: ed.isActive('heading', { level: 4 }),
 			alignLeft: !ed.isActive({ textAlign: 'center' }) && !ed.isActive({ textAlign: 'right' }),
 			alignCenter: ed.isActive({ textAlign: 'center' }),
 			alignRight: ed.isActive({ textAlign: 'right' }),
@@ -321,6 +422,26 @@ export default class RichTextEditor extends PuzzleView {
 		return this._editor?.chain().focus();
 	}
 
+	// Current block style as a heading level, 0 meaning paragraph. Drives both
+	// the trigger's label and which listbox row reads as selected. A paragraph
+	// inside a list, a blockquote and a code block all report 0 (Normal text).
+	_currentLevel() {
+		const a = this.getData().active || {};
+		return a.h1 ? 1 : a.h2 ? 2 : a.h3 ? 3 : a.h4 ? 4 : 0;
+	}
+
+	// Row index of the current block style, so opening the listbox lands the
+	// keyboard highlight on what's already applied.
+	_styleIndex() {
+		const level = this._currentLevel();
+		return Math.max(0, BLOCK_STYLES.findIndex((s) => s.level === level));
+	}
+
+	_setStyleActive(index) {
+		this.setData('styleActive', index);
+		this.refresh();
+	}
+
 	events = {
 		// pointerdown's default action is the focus transfer, so a toolbar click
 		// would blur the contenteditable and collapse ProseMirror's selection —
@@ -340,8 +461,6 @@ export default class RichTextEditor extends PuzzleView {
 				case 'italic': c.toggleItalic().run(); break;
 				case 'underline': c.toggleUnderline().run(); break;
 				case 'strike': c.toggleStrike().run(); break;
-				case 'h2': c.toggleHeading({ level: 2 }).run(); break;
-				case 'h3': c.toggleHeading({ level: 3 }).run(); break;
 				case 'alignLeft': c.setTextAlign('left').run(); break;
 				case 'alignCenter': c.setTextAlign('center').run(); break;
 				case 'alignRight': c.setTextAlign('right').run(); break;
@@ -350,6 +469,93 @@ export default class RichTextEditor extends PuzzleView {
 				case 'quote': c.toggleBlockquote().run(); break;
 				case 'codeBlock': c.toggleCodeBlock().run(); break;
 			}
+		},
+
+		// ---- block-style dropdown ------------------------------------------
+		// Focus deliberately never moves on open: a mouse click can't move it
+		// (the wrapper prevents pointerdown so the editor keeps its selection),
+		// and a keyboard user is already on the trigger. The trigger therefore
+		// keeps DOM focus the whole time and carries aria-activedescendant.
+
+		toggleStyle: () => {
+			if (this.props.disabled) return;
+			const open = !this.getData().styleOpen;
+			this.setData({
+				styleOpen: open,
+				styleActive: open ? this._styleIndex() : -1,
+			});
+			this.refresh();
+		},
+
+		closeStyle: () => {
+			if (!this.getData().styleOpen) return;
+			this.setData({ styleOpen: false, styleActive: -1 });
+			this.refresh();
+		},
+
+		// The trigger sits OUTSIDE the panel, so a click on it would dismiss here
+		// and immediately reopen in @click. Skip it and let the trigger's own
+		// toggle own that interaction (the guard Select.pzl's listener uses).
+		onStyleOutside: (event) => {
+			if (event.target?.closest?.('[data-style-trigger]')) return;
+			this.events.closeStyle();
+		},
+
+		onStyleKey: (event) => {
+			const g = this.getData();
+			const n = BLOCK_STYLES.length;
+			if (!g.styleOpen) {
+				if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(event.key)) {
+					event.preventDefault();
+					this.events.toggleStyle();
+				}
+				return;
+			}
+			const i = g.styleActive;
+			switch (event.key) {
+				case 'Escape':
+					event.preventDefault();
+					this.events.closeStyle();
+					break;
+				case 'ArrowDown':
+					event.preventDefault();
+					this._setStyleActive(i < 0 ? 0 : (i + 1) % n);
+					break;
+				case 'ArrowUp':
+					event.preventDefault();
+					this._setStyleActive(i < 0 ? n - 1 : (i - 1 + n) % n);
+					break;
+				case 'Home':
+					event.preventDefault();
+					this._setStyleActive(0);
+					break;
+				case 'End':
+					event.preventDefault();
+					this._setStyleActive(n - 1);
+					break;
+				case 'Enter':
+				case ' ':
+					event.preventDefault();
+					if (i >= 0) this.events.chooseStyle(BLOCK_STYLES[i]);
+					break;
+				case 'Tab':
+					// Let focus move naturally; just close.
+					this.events.closeStyle();
+					break;
+			}
+		},
+
+		chooseStyle: (opt) => {
+			const c = this._chain();
+			// SET, not toggle: picking "Heading 2" while already inside an H2 must
+			// leave it an H2, never flip back to a paragraph. _chain() focuses, so
+			// the editor takes focus back from the keyboard path too.
+			if (c) {
+				if (opt.level === 0) c.setParagraph().run();
+				else c.setHeading({ level: opt.level }).run();
+			}
+			this.setData({ styleOpen: false, styleActive: -1 });
+			this.refresh();
 		},
 
 		onPress: (value) => {

@@ -78,13 +78,15 @@ export function safeLinkUrl(url) {
 // Tiptap as per-node HTMLAttributes and the RichText renderer applies them
 // while walking the tree, so WYSIWYG parity is by construction. This file is
 // copied into app/lib/, inside Tailwind's scan, so the utilities compile.
-// (heading2/heading3 are ALSO mirrored as arbitrary variants in
+// (heading1–heading4 are ALSO mirrored as arbitrary variants in
 // RichTextEditor.pzl's content class — Tiptap HTMLAttributes can't vary by
 // heading level. Keep the two in sync.)
 export const RICH_TEXT_CLASSES = {
 	paragraph: 'mt-3 first:mt-0 leading-7 text-body',
+	heading1: 'mt-8 first:mt-0 text-3xl font-semibold tracking-tight text-ink',
 	heading2: 'mt-6 first:mt-0 text-2xl font-semibold tracking-tight text-ink',
 	heading3: 'mt-5 first:mt-0 text-lg font-semibold tracking-tight text-ink',
+	heading4: 'mt-4 first:mt-0 text-base font-semibold tracking-tight text-ink',
 	list: 'mt-3 first:mt-0 space-y-1 pl-6 text-body',
 	bulletList: 'list-disc',
 	orderedList: 'list-decimal',

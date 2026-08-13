@@ -717,7 +717,7 @@
     },
     {
       "name": "rich-text-editor",
-      "description": "Rich text editor on Tiptap/ProseMirror — Toolbar-driven bold/italic/underline/strike, H2/H3, alignment, lists, blockquote, code block, and links, emitting a controlled Shopify-style JSON document tree via @change; render stored docs with the rich-text piece",
+      "description": "Rich text editor on Tiptap/ProseMirror — a block-style dropdown (Normal text, Heading 1-4) plus Toolbar-driven bold/italic/underline/strike, alignment, lists, blockquote, code block, and links, emitting a controlled Shopify-style JSON document tree via @change; render stored docs with the rich-text piece",
       "files": [
         "RichTextEditor.pzl"
       ],
