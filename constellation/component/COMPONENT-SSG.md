@@ -80,7 +80,8 @@ same principle applied to the shell). Three things moved out:
   the one `prerender` reads compiled leaves from. Building it per page recompiled
   every route matcher O(routes) times for an instance that never navigates and
   whose two page-varying properties are shadowed anyway. `url()` is shadowed once
-  (a function of `routerMode`/`routerBase`); `current` is redefined per page.
+  (history encoding over `routerBase` — hybrid refuses any other mode); `current`
+  is redefined per page.
   Static keeps its per-page `makeRouterStub`, which IS the page's snapshot. Which
   facade a page gets is decided in `createPageContext`; `buildContext` takes the
   router it is handed.
@@ -104,16 +105,16 @@ Both modes need a `router` in `ctx` that answers `url()` and `current` exactly
 as the browser will, or a prerendered `href` (the `{ path | link }` formatter
 reads `router.url`) disagrees with the client's re-render. **Static** mode uses
 `makeRouterStub` over the page's route snapshot: every navigation method
-throws, `current` is the snapshot, and `url()` is the shared encoder — with the
-mode FORCED to `'history'` regardless of `config.routerMode`
-([[DECISION-D117-STATIC-OUTPUT-HISTORY-HREFS]]): static pages are path-shaped
-files with no router, so a hash-shaped href is dead; a configured hash/memory
-mode gets a prerender warning, and `routerBase` still applies. **Hybrid**
+throws, `current` is the snapshot, and `url()` is the shared encoder — hard-coded
+to HISTORY encoding, with `config.routerMode` never reaching the page at all
+([[DECISION-D117-STATIC-OUTPUT-HISTORY-HREFS]], [[DECISION-D159-ROUTER-MODE-FACTORIES]]):
+static pages are path-shaped files with no router, so a hash-shaped href is dead;
+a configured mode gets a prerender warning, and `routerBase` still applies. **Hybrid**
 keeps a real *unstarted memory-mode* `Router` — the SPA takeover needs the
 compiled route table, and the instance cannot be wrapped in a delegating facade
 because `current` reads private fields. Two instance properties are shadowed on
-it ([[DECISION-D142-HYBRID-ROUTE-SNAPSHOT]]): `url()` with the app's real
-`routerMode`/`routerBase` (a memory router returns paths unprefixed, so a
+it ([[DECISION-D142-HYBRID-ROUTE-SNAPSHOT]]): `url()` with history encoding over
+the app's real `routerBase` (a memory router returns paths unprefixed, so a
 `routerBase: '/docs'` app would otherwise prerender `href="/about"` where the
 live router renders `/docs/about` — a 404 for crawlers, no-JS visitors, and
 anyone clicking before takeover), and `current` with the page's frozen route

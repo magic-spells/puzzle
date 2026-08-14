@@ -20,7 +20,7 @@ Part of the Puzzle docs — see [[DOC-SPEC]] for the frozen v1 contract.
 
 Puzzle is SPA-only, and the router is the piece that makes it feel like an application: it maps URLs to views, wraps them in layouts, delivers `:param` segments to `data()`, and keeps the browser history honest. This document covers the full v1 routing surface: route definitions, params, layouts and `<Slot/>`, navigation, and the route lifecycle.
 
-**The router defaults to the HTML5 history API.** In this default (history) mode your server — or `puzzle dev`, which does it for you — must serve `index.html` for every app route, the standard history-API fallback. For static hosts where you can't configure that fallback (GitHub Pages, S3, `file://`), **v1.6 adds opt-in hash routing** (`routerMode: 'hash'`, D34) which carries the route in `location.hash` instead — no server rewrite needed. See [Hash mode (v1.6)](#hash-mode-v16) below.
+**The router defaults to the HTML5 history API.** In this default (history) mode your server — or `puzzle dev`, which does it for you — must serve `index.html` for every app route, the standard history-API fallback. For static hosts where you can't configure that fallback (GitHub Pages, S3, `file://`), **v1.6 adds opt-in hash routing** (`routerMode: hashRouter()`, D34/D159) which carries the route in `location.hash` instead — no server rewrite needed. See [Hash mode (v1.6)](#hash-mode-v16) below.
 
 ---
 
@@ -550,13 +550,17 @@ A function that **throws** is logged and treated as "leave scroll alone" — the
 
 ```js
 // app.js
+import { hashRouter } from '@magic-spells/puzzle/router-modes';
+
 const app = new PuzzleApp({
   target: '#app',
   routes,
   models,
-  routerMode: 'hash',   // route lives in location.hash; default is 'history'
+  routerMode: hashRouter(),   // route lives in location.hash; omit for history
 });
 ```
+
+The mode is an **imported factory** (D159), not a config string: history routing is the built-in default, and hash/memory routing only enters your bundle when you import it. A leftover `routerMode: 'hash'` string is a constructor throw that names the import.
 
 The URL then looks like `https://host/app/index.html#/user/123?tab=posts` — the pathname stays put and the route (with any query) lives after the `#`.
 
@@ -568,7 +572,7 @@ The app-facing API is **path-shaped in both modes** — no `#` ever appears in y
 - `this.ctx.router.push('/user/123')` is unchanged.
 - `router.current.path` is `'/user/123'`, and `params.id` is `'123'`.
 
-Flip `routerMode` in that one config line and everything else — views, layouts, nested routes, `meta.title` — behaves exactly as before.
+Change that one config line (and its import) and everything else — views, layouts, nested routes, `meta.title` — behaves exactly as before.
 
 ### Links
 
@@ -579,7 +583,7 @@ Flip `routerMode` in that one config line and everything else — views, layouts
 <a href="{ '/user/' + user.id | link }">{ user.name }</a>
 ```
 
-The formatter calls `router.url(path)` at render time: history mode renders `/about` (prefixed under a `routerBase`), hash mode renders `#/about`, memory mode leaves it unchanged. Strings not starting with `/` pass through untouched, so external URLs and `mailto:` links can be piped safely (or just not piped). Because the **attribute itself** is rewritten, cmd-click, open-in-new-tab, and copy-link all get the correct URL — something click interception alone could never fix. Flipping `routerMode` (or `routerBase`) is then truly a one-line change with zero template edits. `router.url()` is also public for script-land hrefs.
+The formatter calls `router.url(path)` at render time: history mode renders `/about` (prefixed under a `routerBase`), hash mode renders `#/about`, memory mode leaves it unchanged. Strings not starting with `/` pass through untouched, so external URLs and `mailto:` links can be piped safely (or just not piped). Because the **attribute itself** is rewritten, cmd-click, open-in-new-tab, and copy-link all get the correct URL — something click interception alone could never fix. Switching `routerMode` (or `routerBase`) is then truly a one-line change with zero template edits. `router.url()` is also public for script-land hrefs.
 
 How the interceptor treats hrefs in hash mode (unchanged by D79):
 
@@ -601,12 +605,13 @@ Scroll behavior (v1.5), transition animations (v1.1), and nested routes (v1.3) a
 
 ```js
 // app.js
+import { memoryRouter } from '@magic-spells/puzzle/router-modes';
+
 const app = new PuzzleApp({
   target: '#app',
   routes,
   models,
-  routerMode: 'memory',
-  routerInitialPath: '/dashboard',   // optional; default '/' (memory mode only)
+  routerMode: memoryRouter({ initialPath: '/dashboard' }),   // initialPath default '/'
 });
 ```
 
@@ -615,7 +620,7 @@ Everything app-facing is unchanged: route definitions, `push()`, `current.path`,
 - **Back/forward is programmatic** — there's no browser chrome, so use `router.back()` / `router.forward()` / `router.go(n)` (below). The router keeps its own entry stack with browser semantics (`push()` after going back truncates the forward entries).
 - **`meta.title` does not set `document.title`** — an embedded widget must not rename the host page's tab.
 - **Scroll management is a no-op** — `scrollBehavior` is accepted but inert; there are no history entries to restore against, and an embed shares the window with its host.
-- **`routerInitialPath`** names the first route (there's no URL to read). Setting it in history/hash mode is a constructor throw — the URL is the initial path there.
+- **`initialPath`** names the first route (there's no URL to read). It is an option of `memoryRouter()`, so there is no way to set it in a mode that reads the URL.
 
 > **Embed caveat.** Link interception is document-global in every mode, so same-origin pathname links in the *host* page get intercepted too. Keep an embedded app's links scoped, or navigate programmatically.
 

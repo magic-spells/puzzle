@@ -35,7 +35,7 @@ serves `index.html` and the flat seed JSON next to it.
 
 | Feature in the app | Framework surface |
 | --- | --- |
-| Route in `location.hash`, static-host friendly | **Hash routing** — `routerMode: 'hash'` (SPEC §15, D34) |
+| Route in `location.hash`, static-host friendly | **Hash routing** — `routerMode: hashRouter()`, imported from `@magic-spells/puzzle/router-modes` (SPEC §15, D34/D159) |
 | Links are written path-shaped (`{ '/album/' + album.id \| link }`) and the formatter emits the mode-appropriate href, so switching `routerMode` needs no template changes | **Built-in `link` formatter** (D79) |
 | Home / Artist / Album paint a skeleton, then swap in real data | **Skeleton loading** — `<puzzle-skeleton>` + async `data()` (SPEC §16, D39); the store itself is seeded in the app's `beforeMount` hook (SPEC §30, D60) |
 | Icon set picks its glyph by name; repeat button picks its icon by mode | **`{#case}` / `{:when}`** multi-branch (D37) |

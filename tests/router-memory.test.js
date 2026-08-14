@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Memory-mode routing (v1.11, D42): opt in with `{ mode: 'memory' }` to keep the
+// Memory-mode routing (v1.11, D42): opt in with `{ mode: memoryRouter() }` to keep the
 // route ENTIRELY in router state — location/history are never read or written.
 // For tests (no jsdom history gymnastics) and embedded/iframe apps that must not
 // touch the host page's URL. The public API stays PATH-SHAPED and mode-agnostic
@@ -14,6 +14,7 @@ import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
+import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -71,11 +72,11 @@ class UserView extends PuzzleView {
 // Track live routers so listeners never leak into the next test.
 let routers = [];
 
-// Boot in memory mode. `options` (e.g. { initialPath, scrollBehavior }) merge over
-// { mode: 'memory' }.
-async function bootMemory(routes, options = {}) {
+// Boot in memory mode. `options` merge over the mode: `initialPath` seeds
+// memoryRouter(), anything else (e.g. scrollBehavior) is a Router option.
+async function bootMemory(routes, { initialPath, ...options } = {}) {
 	const el = container();
-	const router = new Router(routes, { mode: 'memory', ...options });
+	const router = new Router(routes, { mode: memoryRouter({ initialPath }), ...options });
 	routers.push(router);
 	await router.start(el, ctx());
 	return { router, el };
@@ -94,38 +95,46 @@ afterEach(() => {
 });
 
 describe('Router memory mode — construction (D42)', () => {
-	it('accepts mode "memory"', () => {
-		expect(() => new Router([], { mode: 'memory' })).not.toThrow();
+	it('accepts a memoryRouter() mode object', () => {
+		expect(() => new Router([], { mode: memoryRouter() })).not.toThrow();
 	});
 
-	it('throws on an unknown mode with the updated message', () => {
-		expect(() => new Router([], { mode: 'bogus' })).toThrow(
-			/unknown router mode: "bogus" \(expected 'history', 'hash', or 'memory'\)/
+	it("throws on the legacy mode string 'memory', naming the import (D159)", () => {
+		expect(() => new Router([], { mode: 'memory' })).toThrow(
+			/routerMode must be a mode object, not the string "memory"/
+		);
+		expect(() => new Router([], { mode: 'memory' })).toThrow(
+			/@magic-spells\/puzzle\/router-modes/
 		);
 	});
 
-	it('throws when initialPath is set with history mode', () => {
-		expect(() => new Router([], { mode: 'history', initialPath: '/x' })).toThrow(
-			/"initialPath" is only valid in memory mode/
-		);
-	});
-
-	it('throws when initialPath is set with the default (history) mode', () => {
-		expect(() => new Router([], { initialPath: '/x' })).toThrow(
-			/"initialPath" is only valid in memory mode/
-		);
-	});
-
-	it('throws when initialPath is set with hash mode', () => {
-		expect(() => new Router([], { mode: 'hash', initialPath: '/x' })).toThrow(
-			/"initialPath" is only valid in memory mode/
-		);
+	it('gives each Router its own entry stack, even from one descriptor (D159)', async () => {
+		// The descriptor is a factory handle: two Routers built from it must not
+		// share the stack (a shared one would let the second's push move the first).
+		const isolationRoutes = [
+			{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+			{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+			{ path: '/user/:id', name: 'user', view: UserView, layout: DefaultLayout },
+		];
+		const mode = memoryRouter({ initialPath: '/about' });
+		const a = new Router(isolationRoutes, { mode });
+		const b = new Router(isolationRoutes, { mode });
+		routers.push(a, b);
+		await a.start(container(), ctx());
+		await b.start(container(), ctx());
+		await a.push('/user/1');
+		expect(a.current.path).toBe('/user/1');
+		expect(b.current.path).toBe('/about');
+		await b.back();
+		expect(b.current.path).toBe('/about'); // nothing behind its own seed
+		await a.back();
+		expect(a.current.path).toBe('/about');
 	});
 
 	it('go()/back()/forward() before start() do not throw (null #stack guard, D42)', () => {
 		// Before start() the in-memory stack is null; the guard must degrade silently
 		// (previously #index + n read #stack.length → TypeError).
-		const router = new Router([], { mode: 'memory' });
+		const router = new Router([], { mode: memoryRouter() });
 		routers.push(router);
 		expect(() => router.back()).not.toThrow();
 		expect(() => router.forward()).not.toThrow();
@@ -217,7 +226,7 @@ describe('Router memory mode — route guards (D87)', () => {
 					},
 				},
 			],
-			{ mode: 'memory', initialPath: '/a' }
+			{ mode: memoryRouter({ initialPath: '/a' }) }
 		);
 		routers.push(router);
 		const el = container();
@@ -1246,7 +1255,7 @@ describe('PuzzleApp — memory mode pass-through (D42)', () => {
 		apps = [];
 	});
 
-	it("routerMode: 'memory' + routerInitialPath routes without touching the URL", async () => {
+	it("routerMode: memoryRouter() + routerInitialPath routes without touching the URL", async () => {
 		const el = container();
 		const app = new PuzzleApp({
 			target: el,
@@ -1254,8 +1263,7 @@ describe('PuzzleApp — memory mode pass-through (D42)', () => {
 				{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
 				{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
 			],
-			routerMode: 'memory',
-			routerInitialPath: '/about',
+			routerMode: memoryRouter({ initialPath: '/about' }),
 		});
 		apps.push(app);
 		await app.mount();

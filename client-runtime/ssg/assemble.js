@@ -105,23 +105,23 @@ const ROUTER_METHODS = ['push', 'replace', 'back', 'forward', 'go', 'start', 'st
  * client re-render. Navigation throws; `url()` IS Router.url's encoder (the shared
  * encodeURL), so the two can never drift; `current` is the page snapshot.
  *
+ * Encoding is HISTORY-style, hard-coded (D159): a static page physically lives at
+ * /about/index.html and ships no router or click interception, so a hash-shaped
+ * href would be a dead link and a memory-shaped one would drop the base. Both
+ * callers already forced 'history' before the mode became an object.
+ *
  * @param {object} route the D83 route snapshot (makeRouteSnapshot output)
- * @param {{ mode?: 'history'|'hash'|'memory', base?: string }} [opts]
+ * @param {{ base?: string }} [opts]
  * @returns {object} a `{ url, current, push, replace, … }` router facade
  */
-export function makeRouterStub(route, { mode = 'history', base = '' } = {}) {
-	if (mode !== 'history' && mode !== 'hash' && mode !== 'memory') {
-		throw new Error(
-			`[puzzle] unknown router mode: "${mode}" (expected 'history', 'hash', or 'memory')`
-		);
-	}
+export function makeRouterStub(route, { base = '' } = {}) {
 	const normalizedBase = normalizeBase(base);
 	const stub = {};
 	const throwNoRouter = () => {
 		throw new Error('[puzzle] static output has no router — use plain links');
 	};
 	for (const method of ROUTER_METHODS) stub[method] = throwNoRouter;
-	stub.url = (path) => encodeURL(path, mode, normalizedBase);
+	stub.url = (path) => encodeURL(path, null, normalizedBase);
 	Object.defineProperty(stub, 'current', {
 		enumerable: true,
 		get: () => route,

@@ -4,8 +4,8 @@
  * Instantiate once with the v1 config surface and call `mount()`. The config
  * surface is frozen (SPEC §2): { target, routes, models, formatters, apiURL,
  * storage }, amended by v1.5 with { scrollBehavior } (D33), v1.6 with
- * { routerMode } (D34), v1.11 with { routerInitialPath } (memory mode only,
- * D42), v1.19 with { routerBase } (sub-path deploys, D51), v1.24 with
+ * { routerMode } (D34/D42, an imported mode object since D159), v1.19 with
+ * { routerBase } (sub-path deploys, D51), v1.24 with
  * { transitionMode } (overlapping route transitions, D56), v1.31 with
  * { beforeMount, mounted, beforeUnmount } (app lifecycle hooks, D66), and v1.56
  * with { focusBehavior } (router focus + route announcement, D93), plus
@@ -112,13 +112,12 @@ export class PuzzleApp {
 	 *   new content is mounted so it may query the committed DOM (a falsy return
 	 *   skips focusing for that navigation, a throw is logged and treated as
 	 *   falsy). Inert in memory mode, like `scrollBehavior`
-	 * @param {('history'|'hash'|'memory')} [config.routerMode] router URL carrier
-	 *   (v1.6, D34; v1.11, D42): omit/`'history'` for pathname routing, `'hash'` for
-	 *   `location.hash` routing on static hosts, `'memory'` for URL-less routing in
-	 *   router state (tests/embeds)
-	 * @param {string} [config.routerInitialPath] memory mode only (v1.11, D42): the
-	 *   first route, default `'/'` (there is no URL to read). A constructor throw in
-	 *   history/hash mode — the URL is the initial path there
+	 * @param {object} [config.routerMode] router URL carrier (v1.6, D34; v1.11,
+	 *   D42; opt-in imports since D159): omit for history routing (the pathname —
+	 *   the default), or pass `hashRouter()` for `location.hash` routing on static
+	 *   hosts / `memoryRouter({ initialPath })` for URL-less routing in router
+	 *   state (tests/embeds), both imported from
+	 *   `@magic-spells/puzzle/router-modes`. A mode STRING is a constructor throw
 	 * @param {string} [config.routerBase] serve the app under a sub-path (v1.19,
 	 *   D51): `'/myapp'` (leading '/' ensured, trailing '/' trimmed; `''`/`'/'` = no
 	 *   base). Carried on the URL only — routes, `push()`, `current`, `params`, and
@@ -243,7 +242,6 @@ export class PuzzleApp {
 			scrollBehavior,
 			focusBehavior,
 			routerMode,
-			routerInitialPath,
 			routerBase,
 			transitionMode,
 			beforeMount,
@@ -278,22 +276,17 @@ export class PuzzleApp {
 
 		// 4. Router + the shared context object injected into every view. Pass
 		//    `mode` through only when routerMode is set, so the Router's own default
-		//    ('history') stands otherwise — mirroring how `storage` is conditionally
-		//    passed to the Store above (D34).
+		//    (history routing, inline) stands otherwise — mirroring how `storage` is
+		//    conditionally passed to the Store above (D34/D159).
 		const routerOptions = { scrollBehavior };
 		// focusBehavior → Router `focusBehavior`, passed through ONLY when set so the
 		// Router's own default (focus the committed leaf root + announce the title)
 		// stands otherwise (v1.56, D93) — mirroring the conditional passthroughs below.
 		if (focusBehavior !== undefined) routerOptions.focusBehavior = focusBehavior;
 		if (routerMode !== undefined) routerOptions.mode = routerMode;
-		// routerInitialPath → Router `initialPath`, passed through ONLY when set so
-		// the Router's own default ('/') stands otherwise and the memory-only throw
-		// stays fail-fast (a set value in history/hash mode is a constructor error,
-		// D42) — mirroring the routerMode/storage conditional passthrough.
-		if (routerInitialPath !== undefined) routerOptions.initialPath = routerInitialPath;
 		// routerBase → Router `base`, passed through ONLY when set so the Router's own
 		// default ('' — no base) stands otherwise (v1.19, D51) — mirroring the
-		// routerMode/routerInitialPath conditional passthrough.
+		// routerMode conditional passthrough.
 		if (routerBase !== undefined) routerOptions.base = routerBase;
 		// transitionMode → Router `transitionMode`, passed through ONLY when set so
 		// the Router's own default ('sequential' — byte-identical to v1.23) stands

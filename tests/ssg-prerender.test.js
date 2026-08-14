@@ -11,6 +11,7 @@ import { Router } from '../client-runtime/router/router.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -209,7 +210,7 @@ describe('SSG prerender (M1)', () => {
 		}
 		const routes = [{ path: '/café', name: 'cafe', view: ShowsPath }];
 		const { pages } = await prerender({ target: '#app', routes });
-		const canonical = new Router(routes, { mode: 'memory' }).routeEntries[0].matchPath;
+		const canonical = new Router(routes, { mode: memoryRouter() }).routeEntries[0].matchPath;
 
 		expect(canonical).toBe('/caf%C3%A9');
 		expect(pages[0].html).toBe('<p>/caf%C3%A9</p>');

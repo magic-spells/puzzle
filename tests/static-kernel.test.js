@@ -15,6 +15,7 @@ import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import LocalForm from './fixtures/binding/LocalForm.compiled.js';
+import { hashRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -483,11 +484,13 @@ describe('static kernel — mountStatic (D81)', () => {
 	});
 
 	it('ctx.router.url() ignores routerMode — hash config, path-shaped hrefs, byte-equal to the prerender (P2.1)', async () => {
-		// The generated per-page entry still passes the app's configured routerMode into
-		// mountStatic (the Go build echoes summary.routerMode verbatim), so the KERNEL is
-		// what has to ignore it — otherwise the client re-render would rewrite every href
-		// to '#/…' over prerendered '/…' markup, and those links go nowhere on a page with
-		// no router. Both stubs force history, so the two outputs are byte-identical.
+		// A static build never carries the app's routerMode into the page at all (D159:
+		// the summary drops it and the generated entry never emits it), so both the
+		// prerender stub and the kernel stub encode history-style and the two outputs
+		// are byte-identical. Were it honoured, the client re-render would rewrite every
+		// href to '#/…' over prerendered '/…' markup — links that go nowhere on a page
+		// with no router. mountStatic is called here exactly as the generated entry
+		// calls it: no routerMode.
 		let captured = null;
 		class LinkProbe extends PuzzleView {
 			created() {
@@ -501,13 +504,13 @@ describe('static kernel — mountStatic (D81)', () => {
 		stamp(LinkProbe, 'app/views/LinkProbe.pzl');
 		const cfg = {
 			target: '#app',
-			routerMode: 'hash', // a hash-configured app built to static output
+			routerMode: hashRouter(), // a hash-configured app built to static output
 			routes: [{ path: '/', name: 'home', view: LinkProbe }],
 		};
 		const { pages, warnings } = await prerender(cfg, { mode: 'static' });
 		const page = pages[0];
 		expect(page.html).toContain('href="/about"');
-		expect(warnings.some((w) => w.includes('ignores `routerMode: "hash"`'))).toBe(true);
+		expect(warnings.some((w) => w.includes('ignores routerMode (hash routing)'))).toBe(true);
 
 		const el = seedDocument({ content: page.html, data: page.data });
 		const prerendered = el.innerHTML;
@@ -516,7 +519,6 @@ describe('static kernel — mountStatic (D81)', () => {
 			target: '#app',
 			views: [LinkProbe],
 			route: page.route,
-			routerMode: 'hash', // what the generated entry passes
 		});
 		await tick();
 
@@ -540,7 +542,7 @@ describe('static kernel — mountStatic (D81)', () => {
 		stamp(BasedProbe, 'app/views/BasedProbe.pzl');
 		const cfg = {
 			target: '#app',
-			routerMode: 'hash',
+			routerMode: hashRouter(),
 			routerBase: '/docs',
 			routes: [{ path: '/', name: 'home', view: BasedProbe }],
 		};
@@ -555,7 +557,6 @@ describe('static kernel — mountStatic (D81)', () => {
 			target: '#app',
 			views: [BasedProbe],
 			route: page.route,
-			routerMode: 'hash',
 			routerBase: '/docs',
 		});
 		await tick();

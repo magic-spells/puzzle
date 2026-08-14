@@ -24,6 +24,7 @@ import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -102,7 +103,7 @@ describe('router morph handler (v1.23, D55)', () => {
 				],
 			},
 		];
-		const router = new Router(routes, { mode: 'memory' });
+		const router = new Router(routes, { mode: memoryRouter() });
 		routers.push(router);
 		return router;
 	}
@@ -214,7 +215,7 @@ describe('router morph handler (v1.23, D55)', () => {
 		const app = new PuzzleApp({
 			target: container(),
 			routes: [{ path: '/', name: 'home', view: Home }],
-			routerMode: 'memory',
+			routerMode: memoryRouter(),
 		});
 		const enter = vi.fn();
 		app.setMorphHandler({ enter, leave: () => null }); // router is still null here
@@ -288,7 +289,7 @@ describe('router morph — supersession during the out phase (v1.23, D55)', () =
 			{ path: '/b', name: 'b', view: animatedLeaf('b') },
 			{ path: '/c', name: 'c', view: animatedLeaf('c') },
 		];
-		const router = new Router(routes, { mode: 'memory', initialPath: '/a' });
+		const router = new Router(routes, { mode: memoryRouter({ initialPath: '/a' }) });
 		routers.push(router);
 
 		// leave() returns a promise that NEVER settles (models a morph engine whose

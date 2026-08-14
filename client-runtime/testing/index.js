@@ -7,6 +7,7 @@
  */
 
 import { PuzzleApp } from '../app.js';
+import { memoryRouter } from '../router/modes.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import {
@@ -85,19 +86,22 @@ export async function type(target, text) {
 }
 
 /**
- * Boot a real PuzzleApp in routerMode:'memory' against a detached target.
- * `target` and `routerMode` from config are deliberately overridden; every
- * other PuzzleApp option, including routerInitialPath, is passed through.
+ * Boot a real PuzzleApp in memory routing against a detached target — the mode
+ * factory is imported here (D159) so a test never wires it itself. `target` and
+ * `routerMode` from config are deliberately overridden; every other PuzzleApp
+ * option is passed through. `routerInitialPath` is consumed HERE (it is the one
+ * memoryRouter option a test needs) rather than passed to PuzzleApp.
  */
 export async function createTestApp(config = {}) {
 	requireDocument('createTestApp');
 	ensureTracking();
 
+	const { routerInitialPath, ...appConfig } = config;
 	const container = document.createElement('div');
 	const app = new PuzzleApp({
-		...config,
+		...appConfig,
 		target: container,
-		routerMode: 'memory',
+		routerMode: memoryRouter({ initialPath: routerInitialPath }),
 	});
 	const mount = trackWork(app.mount());
 	let store = null;

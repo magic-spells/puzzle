@@ -60,7 +60,7 @@
  *   the CURRENT entry in place: history.replaceState (hash mode '#'-encoded,
  *   base-prefixed like push) with the existing __puzzleScrollKey preserved (no
  *   #savePosition, no new entry key — the entry keeps its identity), or in
- *   memory mode an in-place stack[#index] overwrite (no truncate, no append,
+ *   a urlless mode an in-place entry overwrite (no truncate, no append,
  *   no index move). Default scroll on a replace is LEAVE-ALONE (a
  *   filter-typing keystroke must not jump to top); an explicit `#anchor` on the
  *   replace target still lands like push's, and a custom scrollBehavior
@@ -234,39 +234,28 @@
  * skips focusing for that navigation (the announcement still fires), and a throw
  * is logged and treated as falsy (the same posture a throwing scrollBehavior has).
  *
- * Hash mode (v1.6, D34): opt in with `{ mode: 'hash' }` (default `'history'`) to
- * carry the route in `location.hash` (`/#/user/123`) instead of the pathname —
- * for static hosts with no server-side rewrite. It touches THREE seams only:
- * reading the URL (#currentPath parses `#/...`), writing it on push (pushState
- * gets `'#' + path`), and the click interceptor (`#/...` hrefs are intercepted,
- * bare `#anchor` hrefs fall through). The public API stays PATH-SHAPED in both
- * modes — push('/user/123'), current.path === '/user/123' — so views and route
- * defs never mention the '#'. We listen on popstate ONLY (never hashchange):
- * fragment navigations fire popstate in supported browsers, the same bet Vue
- * Router 4 makes. A popstate whose hash is a NON-route fragment (`#section2`, an
- * in-page anchor) is ignored — the rendered view is left alone.
+ * Routing modes (v1.6 D34 hash, v1.11 D42 memory, restructured by D159): HISTORY
+ * routing is inline here and is the zero-config default. Hash and memory routing
+ * are OPT-IN IMPORTS — `hashRouter()` / `memoryRouter({ initialPath })` from
+ * `@magic-spells/puzzle/router-modes` (router/modes.js) — passed as the `mode`
+ * option, so an app that does not use them never ships their code. The strings
+ * `'hash'`/`'memory'`/`'history'` are a constructor throw pointing at the import.
+ * The public API stays PATH-SHAPED and mode-agnostic in every mode:
+ * push('/user/123'), current.path === '/user/123'.
  *
- * Memory mode (v1.11, D34 reserved the slot, D42 built it): opt in with
- * `{ mode: 'memory' }` to keep the route ENTIRELY in router state — `location`
- * and `history` are never read or written. For tests (no jsdom history fakery)
- * and embedded/iframe apps that must not touch the host page's URL. An in-memory
- * entry stack (`#stack` of `{ path }` + `#index`) replaces `history`: push()
- * truncates any forward entries and appends (browser semantics); the initial nav
- * is seeded from the `initialPath` option (default `'/'` — there is no URL to
- * read). The FULL D19/D28/D30 pipeline runs unchanged (atomic commit, cancellation
- * tokens, sequential transitions, nested chains); only the URL side effects vanish.
- * Deliberate differences (D42): NO document-level side effects — no popstate
- * listener is registered and #syncHead is a no-op (an embed must not rename the
- * host tab or edit the host <head>, D84); scroll is a NO-OP (#scrollEnabled() returns false → no window.scrollTo,
- * no sessionStorage, no scrollRestoration touch); the click interceptor STAYS ACTIVE
- * (same-origin pathname links route in memory, exactly the history-mode path — the
- * hash-specific `#/` rules never apply, so a bare `#anchor` href falls through to
- * the browser as in history mode). The public API stays PATH-SHAPED and
- * mode-agnostic. Programmatic history — go(n)/back()/forward() — is added in ALL
- * modes here (§9): history/hash delegate to history.go(n) (the popstate path runs
- * the pipeline); memory mode moves #index and runs the pipeline as a POP, index
- * moving ONLY at commit (a superseded pop leaves it put — D19). Out-of-range n is
- * a silent no-op (browser history.go semantics).
+ * A mode object supplies ONLY the deviations from history, at the seams below —
+ * `readPath` (URL read, #currentPath), `encode` (URL write, #encodedUrl/url()),
+ * `clickFragment`/`clickLink` (the interceptor), and, for a `urlless` mode, the
+ * entry bookkeeping `history` normally provides (`start`/`commit`/`go`/
+ * `clearPending`/`reset`). `urlless` (memory) additionally gates out every
+ * document-level side effect: no popstate listener, no scroll (#scrollEnabled),
+ * no focus/announcement (#focusEnabled), no title/head (#syncHead) — an embed
+ * shares the window with a host page the router has no claim on. Programmatic
+ * history — go(n)/back()/forward() — works in all modes: history/hash delegate
+ * to history.go(n) (the popstate path runs the pipeline); a urlless mode moves
+ * its own index and runs the pipeline as a POP, the index moving ONLY at commit
+ * (a superseded pop leaves it put — D19). Out-of-range n is a silent no-op
+ * (browser history.go semantics). See router/modes.js for each mode's contract.
  *
  * Base path (v1.19, D51): `{ base: '/myapp' }` serves the app under a sub-path.
  * Applied at the path-shape boundary, mode-agnostically — the SAME three seams
@@ -379,13 +368,14 @@ export class Router {
 	#onClick;
 	#onPopState;
 
-	// ---- routing mode (v1.6, D34; memory v1.11, D42) ------------------------
-	// 'history' (default) carries the route in location.pathname; 'hash' carries
-	// it in location.hash ('#/path'); 'memory' carries it entirely in router state
-	// (#stack/#index below) and never reads or writes location/history. Only the
+	// ---- routing mode (v1.6, D34; memory v1.11, D42; D159) ------------------
+	// NULL = history routing: the route rides in location.pathname, inline in this
+	// file, the zero-config default. Otherwise the per-Router instance an imported
+	// mode factory produced (router/modes.js — hashRouter()/memoryRouter()),
+	// consulted only at the seams where that mode deviates. Only the
 	// read/write/interceptor seams differ — the path-shaped API (push,
-	// current.path) is mode-agnostic across all three.
-	#mode;
+	// current.path) is mode-agnostic across all modes.
+	#mode = null;
 
 	// ---- transition mode (v1.24, D56; per-route/per-view override v1.30, D65) ----
 	// 'sequential' (default) ⇒ #swap awaits the out before mounting the incoming
@@ -409,28 +399,9 @@ export class Router {
 	// #navigate pushState site), and the click interceptor (#handleClick) only
 	// takes URLs under it. The app-facing surface — push(), matching, current,
 	// params, this.route — never sees the base; only the URL (and <a href>) carry
-	// it. Inert in memory mode (no URL exists), like scrollBehavior. '' ⇒ every
+	// it. Inert in a urlless mode (no URL exists), like scrollBehavior. '' ⇒ every
 	// seam is byte-identical to the base-less router.
 	#base;
-
-	// ---- in-memory history (v1.11, D42) -------------------------------------
-	// Memory mode only. #stack is the entry list ({ path } each) and #index the
-	// current position; push() truncates forward entries and appends, go/back/
-	// forward move #index. Both move ONLY at commit (D19). Null in history/hash
-	// mode. #initialPath seeds the first entry (default '/'); a non-null value in
-	// history/hash mode is a constructor throw (the URL is the initial path there).
-	#stack = null;
-	#index = -1;
-	// Memory mode only (v1.11, D42): the TARGET index of the most recent in-flight
-	// go()/back()/forward() pop, or null when no pop is pending. #index moves only at
-	// commit (D19), so two SYNCHRONOUS back() calls would otherwise both read the same
-	// #index and compute the same target, collapsing into one move. go() computes its
-	// base from `#pendingIndex ?? #index` so a chain of synchronous pops advances by
-	// one each; it is cleared at every commit (#commitLocation) and on the failure path
-	// when this nav is still latest, and reset by any push (which supersedes a pending
-	// pop and truncates forward entries). Always null in history/hash mode.
-	#pendingIndex = null;
-	#initialPath;
 
 	// ---- scroll behavior (v1.5, D33; persistence v1.10, D41) ----------------
 	// `false` disables scroll management; a function customizes it; undefined =
@@ -478,12 +449,10 @@ export class Router {
 	 *   disable both (no live region is created); `(to, from) => Element|null|false`
 	 *   to choose the target — called after mount, falsy = skip focusing for that
 	 *   navigation, a throw is logged and treated as falsy. Inert in memory mode.
-	 * @param {('history'|'hash'|'memory')} [options.mode] URL carrier: `'history'`
-	 *   (default, pathname), `'hash'` (`location.hash`, for static hosts, D34), or
-	 *   `'memory'` (router state only, no URL — for tests/embeds, D42).
-	 * @param {string} [options.initialPath] memory mode only (D42): the first
-	 *   route, default `'/'`. A non-null value in history/hash mode is a throw (the
-	 *   URL is the initial path there; a silently ignored field would hide a bug).
+	 * @param {object} [options.mode] URL carrier (D34/D42, restructured by D159):
+	 *   omit for history routing (the pathname — the default), or pass the object
+	 *   an imported factory produced — `hashRouter()` / `memoryRouter(options)`
+	 *   from `@magic-spells/puzzle/router-modes`. A MODE STRING is a throw.
 	 * @param {string} [options.base] serve the app under a sub-path (v1.19, D51):
 	 *   `'/myapp'` (leading '/' ensured, trailing '/' trimmed; `''`/`'/'` = no
 	 *   base, the default). Carried on the URL only — app code stays base-free. A
@@ -499,38 +468,36 @@ export class Router {
 	 */
 	constructor(
 		routes = [],
-		{
-			scrollBehavior,
-			focusBehavior,
-			mode = 'history',
-			initialPath = null,
-			base = '',
-			transitionMode = 'sequential',
-		} = {}
+		{ scrollBehavior, focusBehavior, mode = null, base = '', transitionMode = 'sequential' } = {}
 	) {
-		if (mode !== 'history' && mode !== 'hash' && mode !== 'memory') {
-			throw new Error(
-				`[puzzle] unknown router mode: "${mode}" (expected 'history', 'hash', or 'memory')`
-			);
+		// A mode is an OBJECT from an imported factory (D159). Strings used to select
+		// hash/memory routing; they now name a module the bundler can see, so every
+		// history-mode app stops shipping code it never runs. Fail fast and name the
+		// import — silently ignoring 'hash' would route the whole app wrong.
+		if (mode != null) {
+			if (typeof mode !== 'object' || typeof mode.create !== 'function') {
+				throw new Error(
+					`[puzzle] routerMode must be a mode object, not ${
+						typeof mode === 'string' ? `the string "${mode}"` : `a ${typeof mode}`
+					} — history routing is the default (omit it); for hash or memory routing ` +
+						"import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes' " +
+						'and pass e.g. routerMode: hashRouter()'
+				);
+			}
+			// One instance PER ROUTER: a mode object holding entry state (memory's
+			// stack) must never be shared by two Routers built from one descriptor.
+			this.#mode = mode.create();
 		}
-		// transitionMode validation mirrors the unknown-mode throw above (same
-		// config-error posture, D56): only the two known values are accepted.
+		// transitionMode validation mirrors the mode throw above (same config-error
+		// posture, D56): only the two known values are accepted.
 		if (transitionMode !== 'sequential' && transitionMode !== 'overlap') {
 			throw new Error(
 				`[puzzle] unknown transitionMode: "${transitionMode}" (expected 'sequential' or 'overlap')`
 			);
 		}
 		this.#defaultTransitionMode = transitionMode;
-		// initialPath is memory-only: fail fast if set in a URL-carrying mode (D42).
-		if (initialPath != null && mode !== 'memory') {
-			throw new Error(
-				`[puzzle] "initialPath" is only valid in memory mode (got mode "${mode}") — the URL is the initial path in history/hash mode`
-			);
-		}
-		this.#mode = mode;
-		this.#initialPath = normalizeRoutePath(initialPath ?? '/');
 		// Normalize + validate the base at construction (D51, config-error posture
-		// like the unknown-mode throw above): '#'/'?' in a base is a hard error, and
+		// like the mode throw above): '#'/'?' in a base is a hard error, and
 		// '', '/', and a trailing '/' all collapse to the canonical form.
 		this.#base = normalizeBase(base);
 		this.#scrollBehavior = scrollBehavior;
@@ -574,9 +541,9 @@ export class Router {
 		this.#container = container;
 		this.#ctx = ctx;
 		document.addEventListener('click', this.#onClick);
-		// Memory mode registers NO popstate listener — location/history are never
+		// A urlless mode registers NO popstate listener — location/history are never
 		// touched, so there is nothing to hear (D42). The click interceptor stays.
-		if (this.#mode !== 'memory') {
+		if (!this.#mode?.urlless) {
 			window.addEventListener('popstate', this.#onPopState);
 		}
 
@@ -617,14 +584,12 @@ export class Router {
 			this.#announcedTitle = document.title;
 		}
 
-		// Memory mode (D42): there is no URL to read. Seed the in-memory stack with
-		// the initial entry and run nav #0 to initialPath (push:false — the seed is
-		// the entry, no extra push). #scrollEnabled() is false above, so none of the
+		// A urlless mode (memory, D42) has no URL to read: it seeds its own entry
+		// stack and hands back navigation #0's path (push:false — the seed IS the
+		// entry, no extra push). #scrollEnabled() is false above, so none of the
 		// scroll/storage/scrollRestoration setup ran.
-		if (this.#mode === 'memory') {
-			this.#stack = [{ path: this.#initialPath }];
-			this.#index = 0;
-			await this.#navigate(this.#initialPath, { push: false });
+		if (this.#mode?.urlless) {
+			await this.#navigate(this.#mode.start(), { push: false });
 			return this;
 		}
 
@@ -637,41 +602,20 @@ export class Router {
 	/**
 	 * The current route path for this mode, path-shaped (pathname+search style)
 	 * and BASE-STRIPPED (v1.19, D51) — the app-facing surface never sees the base.
-	 * history: `location.pathname + location.search`. hash: parse `location.hash`
-	 * — `''`/`'#'` → `'/'`; `'#/...'` → the fragment minus the '#' (keeping any
-	 * `?query` that lives inside it); anything else (a bare `#anchor`) → `null`,
-	 * meaning "not a route fragment" so the caller leaves the view alone. D34.
+	 * History reads `location.pathname + location.search` inline; any other mode
+	 * delegates to its own `readPath(base)` (hash parses `location.hash`, D34 —
+	 * see router/modes.js), which may return `null` for "not a route fragment", so
+	 * the caller leaves the view alone. A urlless mode never gets here (it seeds
+	 * navigation #0 itself and registers no popstate listener).
 	 *
-	 * With a base configured (D51): the base is stripped AFTER the mode-specific
-	 * raw read. history: `pathname === base` → `'/'`; `pathname` under `base + '/'`
-	 * → sliced; a pathname NOT under the base warns once and passes through
-	 * un-stripped (→ catch-all — visible, not silent misrouting). hash: the base
-	 * rides in-fragment, so `'#' + base` → `'/'`, `'#' + base + '/...'` → sliced,
-	 * and any OTHER fragment (including a `'#/...'` outside the base) → `null`
-	 * (non-route). A bare `''`/`'#'` still → `'/'` (the host root maps to the app
-	 * root). No base ⇒ every branch is byte-identical to today.
+	 * With a base configured (D51) the base is stripped AFTER the mode-specific
+	 * raw read: `pathname === base` → `'/'`; `pathname` under `base + '/'` →
+	 * sliced; a pathname NOT under the base warns once and passes through
+	 * un-stripped (→ catch-all — visible, not silent misrouting). No base ⇒ every
+	 * branch is byte-identical to the base-less router.
 	 */
 	#currentPath() {
-		if (this.#mode === 'hash') {
-			const hash = location.hash;
-			if (hash === '' || hash === '#') return '/';
-			if (this.#base) {
-				if (hash === '#' + this.#base) return '/';
-				// A query directly after the base with no trailing slash ('#'+base+'?...')
-				// is the app ROOT carrying that query — mirror history mode below, where
-				// pathname===base returns '/'+location.search. Without this branch the
-				// fragment matched neither the exact-base nor the base+'/' case and fell
-				// to null, so #currentPath dropped the query (start() → '/', popstate
-				// ignored). D51/D83.
-				if (hash.startsWith('#' + this.#base + '?')) {
-					return '/' + hash.slice(1 + this.#base.length);
-				}
-				if (hash.startsWith('#' + this.#base + '/')) return hash.slice(1 + this.#base.length);
-				return null; // '#/...' outside the base is a non-route fragment (D51)
-			}
-			if (hash.startsWith('#/')) return hash.slice(1);
-			return null;
-		}
+		if (this.#mode) return this.#mode.readPath(this.#base);
 		const pathname = location.pathname;
 		if (this.#base) {
 			if (pathname === this.#base) return '/' + location.search;
@@ -733,9 +677,9 @@ export class Router {
 		this.#state = null;
 		this.#container = null;
 		this.#ctx = null;
-		this.#stack = null;
-		this.#index = -1;
-		this.#pendingIndex = null;
+		// A urlless mode owns entry state of its own (memory's stack/index): drop it
+		// so a restart re-seeds from scratch instead of resuming a dead session.
+		this.#mode?.reset?.();
 		this.#guardRedirectCount = 0;
 		this.#guardRedirecting = false;
 		this.#pendingNavPath = null;
@@ -885,8 +829,8 @@ export class Router {
 		// no-op guard. Without this, an auth guard in mounted()/viewWillShow that
 		// redirects to the very path being committed (landing on '/login' and
 		// pushing '/login') would run a full redundant navigation + duplicate
-		// history entry. go() likewise must recompute from the now-committed memory
-		// index so it preserves #pendingIndex's normal double-back semantics.
+		// history entry. go() likewise must recompute from the mode's now-committed
+		// index so it preserves the normal double-back semantics.
 		if (pending.kind === 'go') {
 			this.go(pending.n);
 		} else if (pending.kind === 'replace') {
@@ -900,13 +844,16 @@ export class Router {
 	 * Programmatic history (v1.11, D42), all modes. Move `n` entries — negative =
 	 * back, positive = forward. History/hash mode delegate to `history.go(n)`: the
 	 * browser moves the URL and fires popstate, which the existing listener turns
-	 * into a pop navigation (the whole pipeline). Memory mode moves #index and runs
-	 * the pipeline as a POP to the target entry's path; the index advances ONLY at
-	 * commit (see #navigate), so a superseded pop leaves it put (D19). Out-of-range
-	 * `n` is a silent no-op (browser `history.go` semantics).
+	 * into a pop navigation (the whole pipeline). A urlless mode walks its own
+	 * entry stack (modes.js) and runs the pipeline as a POP to the target entry's
+	 * path; its index advances ONLY at commit (see #commitLocation), so a
+	 * superseded pop leaves it put (D19). Out-of-range `n`, and a `n` that lands on
+	 * the entry already targeted, are a silent no-op (browser `history.go`
+	 * semantics; before start()/after stop() there is likewise nothing to move).
 	 */
 	go(n) {
-		if (this.#mode !== 'memory') {
+		const mode = this.#mode;
+		if (!mode?.urlless) {
 			// go(0) reloads the page in browsers; delegating preserves that parity.
 			history.go(n);
 			return;
@@ -917,21 +864,9 @@ export class Router {
 			// to return; this matches push()/replace()'s commit-window posture.
 			return;
 		}
-		// Before start() (or after stop()) the in-memory stack is null (D42) — degrade
-		// silently, matching how history/hash go() no-ops when there is nothing to move.
-		if (!this.#stack) return;
-		// Base off the PENDING pop target when one is in flight, not #index (which
-		// only moves at commit, D19). Without this two synchronous back() calls both
-		// read #index and target the same entry, collapsing into a single move; here
-		// the second sees #pendingIndex and steps once further. `target === base` (so
-		// go(0), or a forward that exactly undoes the pending back) is a no-op.
-		const base = this.#pendingIndex ?? this.#index;
-		const target = base + n;
-		// Out of range → no-op. go(0) is also a no-op here: a browser would reload,
-		// which memory mode has no notion of (D42).
-		if (target < 0 || target >= this.#stack.length || target === base) return;
-		this.#pendingIndex = target;
-		return this.#navigate(this.#stack[target].path, { push: false, pop: true, memoryIndex: target });
+		const target = mode.go(n);
+		if (!target) return;
+		return this.#navigate(target.path, { push: false, pop: true, memoryIndex: target.index });
 	}
 
 	/** Go back one entry (v1.11, D42). Equivalent to go(-1). */
@@ -1057,7 +992,7 @@ export class Router {
 			// not merely clear the animation fill that hid the root.
 			stalled._restoreFromLeaving();
 		}
-		this.#pendingIndex = null;
+		this.#mode?.clearPending?.();
 		// This navigation terminated without committing (guard block/failure, data
 		// failure, or a same-path redirect no-op) and still owns the token: clear the
 		// in-flight target so a later push to that path is not wrongly no-op'd.
@@ -1073,8 +1008,8 @@ export class Router {
 	 * together" invariant. Rewrite the entry the browser popped to back to `path`.
 	 *
 	 * We do NOT history.go(delta) back to the pre-pop entry: history/hash mode keeps
-	 * no browser-history index (only memory mode tracks #index/#stack), so the delta
-	 * is unknowable. replaceState instead COLLAPSES the guarded entry — trading the
+	 * no browser-history index (only a urlless mode tracks its own entry stack), so
+	 * the delta is unknowable. replaceState COLLAPSES the guarded entry — trading the
 	 * exact back/forward stack shape for the URL/tree invariant (the guarded forward
 	 * entry is lost). Because replaceState fires no popstate there is no echo
 	 * navigation to suppress and the guard cannot re-run — the very reason a
@@ -1082,23 +1017,23 @@ export class Router {
 	 * The URL is re-encoded exactly as #commitLocation writes it (shared #encodedUrl:
 	 * base prefix, plain in history mode / '#'-encoded in hash mode); history.state rides through
 	 * untouched so the entry keeps whatever __puzzleScrollKey #handlePopState settled
-	 * on it. Memory mode has no browser URL (and no popstate listener); its #index
-	 * already stayed on the committed entry (the blocked pop cleared #pendingIndex
-	 * without moving #index), so there is nothing to repair.
+	 * on it. A urlless mode has no browser URL (and no popstate listener); its index
+	 * already stayed on the committed entry (the blocked pop cleared the pending pop
+	 * target without moving the index), so there is nothing to repair.
 	 */
 	#restoreCommittedUrl(path) {
-		if (this.#mode === 'memory') return;
+		if (this.#mode?.urlless) return;
 		history.replaceState(history.state, '', this.#encodedUrl(path));
 	}
 
 	/**
-	 * The one write-side URL encoder: base prefixed before the mode-specific
-	 * encoding (v1.19, D51), then plain in history mode / '#'-prefixed in hash
-	 * mode (D34). Every writer (#commitLocation, #restoreCommittedUrl) must go
-	 * through here so committed and restored URLs stay byte-identical.
+	 * The one write-side URL encoder: history prefixes the base (v1.19, D51);
+	 * every other mode owns the whole encoding (hash returns `'#' + base + path`,
+	 * D34 — modes.js). Every writer (#commitLocation, #restoreCommittedUrl) must
+	 * go through here so committed and restored URLs stay byte-identical.
 	 */
 	#encodedUrl(path) {
-		return this.#mode === 'hash' ? '#' + this.#base + path : this.#base + path;
+		return this.#mode ? this.#mode.encode(path, this.#base) : this.#base + path;
 	}
 
 	async #navigate(
@@ -1148,11 +1083,11 @@ export class Router {
 		// A real push supersedes any in-flight memory pop and truncates forward
 		// entries (D42), so the pending pop target is moot — reset it here (at the
 		// point supersession becomes real) so a go() arriving before this push commits
-		// bases off #index, not a stale pop target. No-op in history/hash mode and for
-		// pops (which set #pendingIndex in go()). (Fix 3 / D42.) A replace supersedes
-		// a pending pop the same way (D83) — it targets the CURRENT entry, not the
-		// pop's.
-		if (push || replace) this.#pendingIndex = null;
+		// bases off the committed index, not a stale pop target. No-op in history/hash
+		// mode and for pops (which set the pending target in go()). (Fix 3 / D42.) A
+		// replace supersedes a pending pop the same way (D83) — it targets the CURRENT
+		// entry, not the pop's.
+		if (push || replace) this.#mode?.clearPending?.();
 		const current = this.current;
 		// Guard `from` is the same top-level-frozen route snapshot shape as `to`;
 		// nav #0 has no committed route and therefore receives null (D87).
@@ -1639,61 +1574,44 @@ export class Router {
 	 */
 	#commitLocation(next) {
 		const { rawPath, entry, push, replace, memoryIndex } = next;
-		// The URL written for this path (#encodedUrl — the write half of the
-		// path-shape boundary). rawPath stays path-shaped (base-free) for
-		// #state/current either way. Unused in memory mode (no URL carrier);
-		// shared by push + replace.
-		const url = this.#encodedUrl(rawPath);
-		if (push) {
-			if (this.#mode === 'memory') {
-				// In-memory stack (D42): truncate any forward entries, append the new
-				// one, advance the index. This is the commit point — a failed or
-				// superseded nav never reaches here, so the stack tracks committed
-				// navigations only (D19/D61). No pushState, no scroll key.
-				this.#stack.length = this.#index + 1;
-				this.#stack.push({ path: rawPath });
-				this.#index = this.#stack.length - 1;
+		if (this.#mode?.urlless) {
+			// A urlless mode moves its own entry stack instead of the URL (D42): push
+			// truncates forward entries and appends, replace overwrites in place, a pop
+			// advances the index to the target go() computed — and any in-flight pop
+			// target is cleared, since it has now landed or been superseded. This is
+			// the commit point, so the stack tracks committed navigations only
+			// (D19/D61). No pushState, no scroll key.
+			this.#mode.commit(rawPath, push, replace, memoryIndex);
+		} else if (push) {
+			// The URL written for this path (#encodedUrl — the write half of the
+			// path-shape boundary). rawPath stays path-shaped (base-free) for
+			// #state/current either way.
+			const url = this.#encodedUrl(rawPath);
+			if (this.#scrollEnabled()) {
+				// Persist the position captured at nav start (#navigate's departScroll):
+				// at commit time the outgoing view is already destroyed and the collapsed
+				// page clamps window.scrollY to 0 in a real browser.
+				this.#savePosition(next.departScroll);
+				this.#scrollKey = this.#newEntryKey();
+				history.pushState({ __puzzleScrollKey: this.#scrollKey }, '', url);
 			} else {
-				if (this.#scrollEnabled()) {
-					// Persist the position captured at nav start (#navigate's departScroll):
-					// at commit time the outgoing view is already destroyed and the collapsed
-					// page clamps window.scrollY to 0 in a real browser.
-					this.#savePosition(next.departScroll);
-					this.#scrollKey = this.#newEntryKey();
-					history.pushState({ __puzzleScrollKey: this.#scrollKey }, '', url);
-				} else {
-					history.pushState({}, '', url);
-				}
+				history.pushState({}, '', url);
 			}
 		} else if (replace) {
 			// replace() commit (v1.49, D83) — the D19/D61 atomicity is inherited: a
 			// failed or superseded replace never reaches here, so this only ever
-			// runs for the winning navigation, inside the commit window.
-			if (this.#mode === 'memory') {
-				// In-place overwrite of the current entry: NO truncate, NO append, NO
-				// index move — stack length and position are invariants of a replace.
-				this.#stack[this.#index] = { path: rawPath };
+			// runs for the winning navigation, inside the commit window. The entry
+			// keeps its IDENTITY: no #savePosition, no #newEntryKey — the replacement
+			// state re-carries the existing __puzzleScrollKey, so a later pop restores
+			// whatever position was saved under this entry as if it were never
+			// rewritten.
+			const url = this.#encodedUrl(rawPath);
+			if (this.#scrollEnabled()) {
+				history.replaceState({ __puzzleScrollKey: this.#scrollKey }, '', url);
 			} else {
-				// The entry keeps its IDENTITY on a replace: no #savePosition, no
-				// #newEntryKey — the replacement state re-carries the existing
-				// __puzzleScrollKey, so a later pop restores whatever position was saved
-				// under this entry as if it were never rewritten (v1.49, D83).
-				if (this.#scrollEnabled()) {
-					history.replaceState({ __puzzleScrollKey: this.#scrollKey }, '', url);
-				} else {
-					history.replaceState({}, '', url);
-				}
+				history.replaceState({}, '', url);
 			}
-		} else if (this.#mode === 'memory' && memoryIndex != null) {
-			// Memory-mode go/back/forward (D42): the pop advances #index at THIS commit
-			// point — a superseded pop never reaches here, so the index tracks committed
-			// navigations only, exactly like the push branch.
-			this.#index = memoryIndex;
 		}
-		// Any in-flight memory pop has now landed (or been superseded by this commit):
-		// clear its pending target so the next go() bases off the freshly-committed
-		// #index (Fix 3 / D42). Already null in history/hash mode.
-		this.#pendingIndex = null;
 		this.#syncHead(entry);
 	}
 
@@ -2266,11 +2184,12 @@ export class Router {
 	// ---- scroll behavior (v1.5, D33) ----------------------------------------
 
 	#scrollEnabled() {
-		// Memory mode: scroll is a NO-OP (D42). There are no history entries to key
-		// restoration off, and an embed shares the window with a host page the router
-		// has no claim on — so this gates out ALL scroll bookkeeping (window.scrollTo,
-		// sessionStorage, scrollRestoration). scrollBehavior is accepted but inert.
-		if (this.#mode === 'memory') return false;
+		// A urlless mode (memory): scroll is a NO-OP (D42). There are no history
+		// entries to key restoration off, and an embed shares the window with a host
+		// page the router has no claim on — so this gates out ALL scroll bookkeeping
+		// (window.scrollTo, sessionStorage, scrollRestoration). scrollBehavior is
+		// accepted but inert.
+		if (this.#mode?.urlless) return false;
 		return this.#scrollBehavior !== false && typeof window.scrollTo === 'function';
 	}
 
@@ -2403,7 +2322,7 @@ export class Router {
 	 * taken accessibility ownership itself.
 	 */
 	#focusEnabled() {
-		if (this.#mode === 'memory') return false;
+		if (this.#mode?.urlless) return false;
 		return this.#focusBehavior !== false;
 	}
 
@@ -2718,10 +2637,10 @@ export class Router {
 	 * headTags.js is therefore build-time only and never enters a browser bundle.
 	 */
 	#syncHead(entry) {
-		// Memory mode performs NO document work (D42): an embedded widget must not
+		// A urlless mode performs NO document work (D42): an embedded widget must not
 		// rename the host page's tab or edit the host <head> — document-level side
 		// effects like the URL.
-		if (this.#mode === 'memory') return;
+		if (this.#mode?.urlless) return;
 		syncTitle(resolveHead(entry.chain));
 	}
 
@@ -2748,44 +2667,6 @@ export class Router {
 	}
 
 	/**
-	 * hash-mode click interception, shared by #handleClick's relative-href and
-	 * absolute-URL branches (D34/D51): given the fragment to test (a relative href
-	 * starting with '#', or an absolute same-page URL's `.hash`), route it if it
-	 * names an in-app fragment and return true. With a base the fragment must be
-	 * exactly '#' + base (→ '/'), the base followed directly by a query (→ '/?...'),
-	 * or under '#' + base + '/'; base-less, any '#/...' is a route. A bare '#anchor'
-	 * matches nothing → returns false (browser handles it). preventDefault is called
-	 * HERE, before push (its placement in the original inlined cascades), so the
-	 * return value is advisory.
-	 */
-	#tryHashFragment(fragment, e) {
-		if (this.#base) {
-			if (fragment === '#' + this.#base) {
-				e.preventDefault();
-				this.push('/');
-				return true;
-			}
-			if (fragment.startsWith('#' + this.#base + '?')) {
-				e.preventDefault();
-				this.push('/' + fragment.slice(1 + this.#base.length));
-				return true;
-			}
-			if (fragment.startsWith('#' + this.#base + '/')) {
-				e.preventDefault();
-				this.push(fragment.slice(1 + this.#base.length));
-				return true;
-			}
-			return false;
-		}
-		if (fragment.startsWith('#/')) {
-			e.preventDefault();
-			this.push(fragment.slice(1));
-			return true;
-		}
-		return false;
-	}
-
-	/**
 	 * Intercept in-app <a> clicks. Falls through to the browser for anything that
 	 * isn't a plain left-click on a same-origin navigational link (D19).
 	 */
@@ -2803,12 +2684,9 @@ export class Router {
 		if (!href) return;
 		if (href.startsWith('#')) {
 			// history mode: any '#'-href is an in-page anchor, left to the browser.
-			// hash mode: '#/...' IS a route — intercept it; a bare '#anchor' is still
-			// an in-page anchor, left alone (D34). With a base (D51) both the exact
-			// '#' + base (→ '/') and '#' + base + '/...' fragments are routes (push
-			// base-stripped, symmetric with #currentPath); any other '#/...' falls
-			// through to the browser like a non-route fragment.
-			if (this.#mode === 'hash') this.#tryHashFragment(href, e);
+			// A mode may claim it instead — hash routing intercepts '#/...' (D34,
+			// modes.js) while still leaving a bare '#anchor' to the browser.
+			this.#mode?.clickFragment?.(href, e, this.#base, this);
 			return;
 		}
 		if (href.startsWith('mailto:') || href.startsWith('tel:')) return;
@@ -2821,24 +2699,18 @@ export class Router {
 		}
 		if (url.origin !== location.origin) return; // external
 
-		if (this.#mode === 'hash') {
-			// hash mode: a same-page URL carrying a '#/...' fragment is an in-app
-			// route; a differing pathname is a real navigation away from the app
-			// shell — never push its pathname. Fall through to the browser otherwise.
-			// With a base (D51) the fragment must be the exact '#' + base (→ '/') or
-			// under '#' + base + '/', mirroring the relative-href branch above.
-			if (url.pathname === location.pathname) this.#tryHashFragment(url.hash, e);
-			return;
-		}
+		// A mode that owns absolute-URL clicks decides alone and stops the cascade
+		// (hash routing: only a same-page URL carrying a route fragment is in-app).
+		if (this.#mode?.clickLink?.(url, e, this.#base, this)) return;
 
 		// history mode: with a base (D51) intercept ONLY same-origin URLs UNDER the
 		// base (=== base or under base + '/') and push the base-STRIPPED path; a
 		// same-origin link outside the base is a real navigation away from the app
 		// and falls through to the browser (more correct than intercept-everything).
-		// Memory mode keeps the base inert — the interceptor stays active but never
-		// strips (there is no URL to prefix), so it behaves exactly as the base-less
-		// history path.
-		if (this.#base && this.#mode === 'history') {
+		// A urlless mode keeps the base inert — the interceptor stays active but
+		// never strips (there is no URL to prefix), so it behaves exactly as the
+		// base-less history path.
+		if (this.#base && !this.#mode) {
 			if (url.pathname !== this.#base && !url.pathname.startsWith(this.#base + '/')) {
 				return; // outside the app base — let the browser navigate away
 			}
@@ -3058,8 +2930,9 @@ export function normalizeBase(base) {
  * prerender paths need the SAME encoding without a live Router: the static router
  * stub (ssg/assemble.js) and the hybrid prerender ctx (ssg/index.js) both call it,
  * so a prerendered `href` and the client's re-render can never disagree. `base` is
- * an ALREADY-normalized base (normalizeBase above); `mode` is already validated by
- * whoever holds it.
+ * an ALREADY-normalized base (normalizeBase above); `mode` is a Router mode
+ * instance (router/modes.js) or null/undefined for history encoding — the SSG
+ * callers are history-only by construction and pass nothing.
  */
 export function encodeURL(path, mode, base) {
 	if (typeof path !== 'string') {
@@ -3067,9 +2940,7 @@ export function encodeURL(path, mode, base) {
 	}
 	if (path[0] !== '/') return path;
 	path = normalizeRoutePath(path);
-	if (mode === 'memory') return path;
-	if (mode === 'hash') return '#' + base + path;
-	return base + path;
+	return mode ? mode.encode(path, base) : base + path;
 }
 
 /** Reduce a full path to the pathname used for matching (drop query + hash). */
