@@ -121,18 +121,22 @@ describe('static kernel — mountStatic (D81)', () => {
 			static adapter = { endpoint: '/notes' };
 		}
 		class Probe extends PuzzleView {
-			data() {
-				return { installed: typeof this.ctx.store.loadAll === 'function' };
+			async data() {
+				const notes = await this.ctx.store.loadAll('note');
+				return { installed: typeof this.ctx.store.loadAll === 'function', count: notes.length };
 			}
 			render() {
-				return h('main', {}, [text(this.getData().installed)]);
+				return h('main', {}, [text(`${this.getData().installed}:${this.getData().count}`)]);
 			}
 		}
 		stamp(Probe, 'app/views/Probe.pzl');
+		const configured = adapter.defaults({
+			loadAll: async () => [{ id: 'n1' }],
+		});
 		const cfg = {
 			target: '#app',
 			models: { note: ApiNote },
-			adapter,
+			adapter: configured,
 			routes: [{ path: '/', view: Probe }],
 		};
 		const { pages } = await prerender(cfg, { mode: 'static' });
@@ -143,10 +147,10 @@ describe('static kernel — mountStatic (D81)', () => {
 			views: [Probe],
 			route: pages[0].route,
 			models: { note: ApiNote },
-			adapter,
+			adapter: configured,
 		});
 
-		expect(document.querySelector('#app').textContent).toBe('true');
+		expect(document.querySelector('#app').textContent).toBe('true:1');
 	});
 
 	it('mounts to markup identical to the prerendered output (parity)', async () => {

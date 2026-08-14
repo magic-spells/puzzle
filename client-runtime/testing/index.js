@@ -137,7 +137,10 @@ export async function createTestApp(config = {}) {
 
 function makeContext(options) {
 	const supplied = options.ctx ?? {};
-	const store = options.store ?? supplied.store ?? new Store(options.models ?? {});
+	const store =
+		options.store ??
+		supplied.store ??
+		new Store(options.models ?? {}, { adapter: options.adapter });
 	const router =
 		options.router ?? supplied.router ?? makeInertRouter(options.route ?? null);
 	const formatters =

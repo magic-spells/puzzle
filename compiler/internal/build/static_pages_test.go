@@ -124,6 +124,7 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		s,
 		"app/models/index.ts",
 		"app/formatters.ts",
+		"",
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -163,6 +164,27 @@ func TestStaticEntrySourceFull(t *testing.T) {
 	}
 }
 
+func TestStaticEntrySourceUsesConventionalAdapterModule(t *testing.T) {
+	s := cannedSummary()
+	src, err := staticEntrySource(
+		"/abs/app-root",
+		s.Written[0],
+		s,
+		"",
+		"",
+		"app/adapter.js",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(src, `import adapter from "/abs/app-root/app/adapter.js";`) {
+		t.Fatalf("generated entry did not import the app adapter capability:\n%s", src)
+	}
+	if strings.Contains(src, `import { adapter } from '@magic-spells/puzzle/adapter';`) {
+		t.Fatalf("generated entry fell back to the bare capability:\n%s", src)
+	}
+}
+
 // TestStaticEntrySourceMinimal generates the entry for a layout-less, multi-view
 // page in an app with NO models and NO formatters files: those imports and the
 // call shorthands must be omitted, layout is null, apiURL is null.
@@ -173,7 +195,7 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 	s.APIURL = nil
 	s.RouterBase = nil
 	s.HasAdapter = false
-	src, err := staticEntrySource(root, page, s, "", "")
+	src, err := staticEntrySource(root, page, s, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +237,7 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 func TestStaticEntrySourceObservesMountRejection(t *testing.T) {
 	s := cannedSummary()
 	for _, page := range s.Written {
-		src, err := staticEntrySource("/abs/app-root", page, s, "", "")
+		src, err := staticEntrySource("/abs/app-root", page, s, "", "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -241,7 +263,7 @@ func TestStaticEntrySourceObservesMountRejection(t *testing.T) {
 // A bare console.error handler compiles to `.catch(() => {})` there.
 func TestStaticEntrySourceMountFailureSurvivesConsoleStripping(t *testing.T) {
 	s := cannedSummary()
-	src, err := staticEntrySource("/abs/app-root", s.Written[0], s, "", "")
+	src, err := staticEntrySource("/abs/app-root", s.Written[0], s, "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

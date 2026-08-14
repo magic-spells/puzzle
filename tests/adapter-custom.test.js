@@ -273,7 +273,186 @@ describe('bound adapter surface and enhanced fetch', () => {
 	});
 });
 
+describe('app-wide adapter defaults', () => {
+	it('applies to every endpoint model, beats generated REST, and leaves model config untouched', async () => {
+		const articleConfig = { endpoint: '/articles' };
+		const pageConfig = { endpoint: '/pages' };
+		class Article extends Post {
+			static adapter = articleConfig;
+		}
+		class Page extends Post {
+			static adapter = pageConfig;
+		}
+		const configured = adapter.defaults({
+			async loadAll(fetch, _options, { endpoint }) {
+				return (await (await fetch(API + endpoint)).json()).data;
+			},
+		});
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(response({ data: [{ id: 'a1', title: 'Article' }] }))
+			.mockResolvedValueOnce(response({ data: [{ id: 'p1', title: 'Page' }] }));
+		vi.stubGlobal('fetch', fetchSpy);
+		const store = new Store(
+			{ article: Article, page: Page },
+			{ apiURL: API, adapter: configured }
+		);
+
+		await expect(store.loadAll('article')).resolves.toMatchObject([{ title: 'Article' }]);
+		await expect(store.loadAll('page')).resolves.toMatchObject([{ title: 'Page' }]);
+
+		expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+			`${API}/articles`,
+			`${API}/pages`,
+		]);
+		expect(Article.adapter).toBe(articleConfig);
+		expect(Page.adapter).toBe(pageConfig);
+	});
+
+	it("lets a model's own verb beat the app default", async () => {
+		const appLoadAll = vi.fn(async () => [{ id: 'default', title: 'Default' }]);
+		const modelLoadAll = vi.fn(async () => [{ id: 'model', title: 'Model' }]);
+		class SpecificPost extends Post {
+			static adapter = { endpoint: '/posts', loadAll: modelLoadAll };
+		}
+		const configured = adapter.defaults({ loadAll: appLoadAll });
+		const store = new Store({ post: SpecificPost }, { adapter: configured });
+
+		await expect(store.loadAll('post')).resolves.toMatchObject([{ title: 'Model' }]);
+		expect(modelLoadAll).toHaveBeenCalledTimes(1);
+		expect(appLoadAll).not.toHaveBeenCalled();
+	});
+
+	it('applies the normal Response handling and shape guards to app defaults', async () => {
+		class ResponsePost extends Post {
+			static adapter = { endpoint: '/posts' };
+		}
+		const configured = adapter.defaults({
+			loadOne: (fetch, id, { endpoint }) => fetch(`${API}${endpoint}/${id}`),
+		});
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ id: 'p1', title: 'Parsed' })));
+		const store = new Store(
+			{ post: ResponsePost },
+			{ apiURL: API, adapter: configured }
+		);
+
+		await expect(store.loadOne('post', 'p1')).resolves.toMatchObject({ title: 'Parsed' });
+	});
+
+	it('passes the correct type and raw endpoint context for each model', async () => {
+		class Article extends Post {
+			static adapter = { endpoint: '/articles' };
+		}
+		class LocalPost extends Post {}
+		const contexts = [];
+		const configured = adapter.defaults({
+			loadOne(_fetch, id, context) {
+				contexts.push(context);
+				return { id, title: context.type };
+			},
+		});
+		const store = new Store(
+			{ article: Article, local: LocalPost },
+			{ apiURL: API, adapter: configured }
+		);
+
+		await store.loadOne('article', 'a1');
+		await store.loadOne('local', 'l1');
+
+		expect(contexts).toEqual([
+			{ type: 'article', endpoint: '/articles' },
+			{ type: 'local', endpoint: undefined },
+		]);
+	});
+
+	it('keeps different default dialects isolated between stores', async () => {
+		class SharedPost extends Post {
+			static adapter = { endpoint: '/posts' };
+		}
+		const first = adapter.defaults({
+			loadAll: async () => [{ id: 'p1', title: 'First dialect' }],
+		});
+		const second = adapter.defaults({
+			loadAll: async () => [{ id: 'p1', title: 'Second dialect' }],
+		});
+		const firstStore = new Store({ post: SharedPost }, { adapter: first });
+		const secondStore = new Store({ post: SharedPost }, { adapter: second });
+
+		const [firstRecords, secondRecords] = await Promise.all([
+			firstStore.loadAll('post'),
+			secondStore.loadAll('post'),
+		]);
+
+		expect(firstRecords[0].title).toBe('First dialect');
+		expect(secondRecords[0].title).toBe('Second dialect');
+	});
+
+	it('composes with beforeRequest and the fixtures network seam', async () => {
+		class FixturePost extends Post {
+			static adapter = { endpoint: '/posts' };
+		}
+		const configured = adapter.defaults({
+			async loadAll(fetch, _options, { endpoint }) {
+				const res = await fetch(`${API}${endpoint}/published`, {
+					headers: { 'X-Dialect': 'envelope' },
+				});
+				return (await res.json()).data;
+			},
+		});
+		const beforeRequest = vi.fn((init) => {
+			init.headers = { ...init.headers, Authorization: 'Bearer fixture' };
+		});
+		const fetchSpy = vi.fn(() => {
+			throw new Error('app default reached global fetch');
+		});
+		vi.stubGlobal('fetch', fetchSpy);
+		const uninstall = installFixtures({
+			mock: {
+				post: {
+					handler: ({ method, path }) =>
+						method === 'GET' && path === '/published'
+							? { body: { data: [{ id: 'p1', title: 'Fixture default' }] } }
+							: null,
+				},
+			},
+		});
+		try {
+			const store = new Store(
+				{ post: FixturePost },
+				{ apiURL: API, adapter: configured, beforeRequest }
+			);
+			await expect(store.loadAll('post')).resolves.toMatchObject([
+				{ title: 'Fixture default' },
+			]);
+			expect(beforeRequest).toHaveBeenCalledWith(
+				expect.objectContaining({
+					method: 'GET',
+					headers: {
+						'X-Dialect': 'envelope',
+						Authorization: 'Bearer fixture',
+					},
+				}),
+				expect.objectContaining({ type: 'post', url: `${API}/posts/published` })
+			);
+			expect(fetchSpy).not.toHaveBeenCalled();
+		} finally {
+			uninstall();
+		}
+	});
+});
+
 describe('adapter config validation', () => {
+	it('returns new frozen capabilities and warns once for non-verb defaults keys', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const configured = adapter.defaults({ publish: async () => {}, retries: 2 });
+
+		expect(configured).not.toBe(adapter);
+		expect(Object.isFrozen(configured)).toBe(true);
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain('adapter.defaults()');
+		expect(warn.mock.calls[0][0]).toContain('"publish", "retries"');
+	});
+
 	it('warns once per model for keys that are neither endpoint nor functions', () => {
 		class InvalidPost extends Post {
 			static adapter = { endpoint: '/posts', serializer: 'json-api', retries: 2 };

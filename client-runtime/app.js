@@ -269,9 +269,8 @@ export class PuzzleApp {
 			setPortalHost(el.parentNode ?? (typeof document !== 'undefined' ? document.body : null));
 
 		// 2. Store: install optional capabilities before constructing any records,
-		//    then pass storage through only when provided so
-		//    the Store's own default (no persistence) stands otherwise. The adapter
-		//    request hook (v1.55, D91) rides the same conditional convention.
+		//    then hand the app's datastore options through. Store applies its own
+		//    defaults for absent persistence, adapter, and request-hook values.
 		adapter?.install();
 		if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && !adapter) {
 			for (const [type, Model] of Object.entries(models)) {
@@ -282,10 +281,7 @@ export class PuzzleApp {
 				);
 			}
 		}
-		const storeOptions = { apiURL };
-		if (storage !== undefined) storeOptions.storage = storage;
-		if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;
-		this.#store = new Store(models, storeOptions);
+		this.#store = new Store(models, { storage, beforeRequest, apiURL, adapter });
 
 		// 3. Formatters: shared built-in/custom wiring plus the live-router-backed
 		//    `link` encoder. The closure reads this.router lazily so a re-mount never

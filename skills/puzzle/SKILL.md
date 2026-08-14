@@ -280,12 +280,35 @@ export default class Todo extends PuzzleModel {
 }
 ```
 
-Enable server sync once in `app/app.js`; model files need no adapter import:
+Enable server sync once through `app/adapter.js`; model files need no adapter import:
 
 ```js
+// app/adapter.js — bare REST capability
+import { adapter } from '@magic-spells/puzzle/adapter';
+export default adapter;
+
+// app/app.js
+import adapter from './adapter.js';
+const app = new PuzzleApp({ target: '#app', routes, models, adapter });
+```
+
+For an app-wide API dialect, export `adapter.defaults({ ...verbs })` instead.
+The transport ladder, most-specific first, is: model function → app default →
+endpoint-generated REST. App defaults use the same five verbs but receive a
+trailing `{ type, endpoint }` argument after the normal verb arguments;
+`endpoint` is undefined for a model without one. A model function always wins
+and keeps its existing signature unchanged:
+
+```js
+// app/adapter.js — unwrap the same envelope for every model
 import { adapter } from '@magic-spells/puzzle/adapter';
 
-const app = new PuzzleApp({ target: '#app', routes, models, adapter });
+export default adapter.defaults({
+  async loadAll(fetch, options, { endpoint }) {
+    const response = await fetch(endpoint);
+    return (await response.json()).data;
+  },
+});
 ```
 
 Builders: `string() number() boolean() date() array() object()`, plus

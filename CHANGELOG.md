@@ -152,6 +152,28 @@ one is *not* a compile error; it silently builds a different product.
   already bound, including custom methods. Using global `fetch` explicitly
   bypasses `beforeRequest` and fixture interception.
 
+  App-wide dialects live on a configured capability, conventionally exported
+  from `app/adapter.js`. Dispatch is model function → app default → generated
+  endpoint transport, so a model remains the most-specific override. Defaults
+  receive `{ type, endpoint }` after the normal verb arguments (`endpoint` is
+  undefined when the model has none):
+
+  ```js
+  // app/adapter.js
+  import { adapter } from '@magic-spells/puzzle/adapter';
+
+  export default adapter.defaults({
+    async loadAll(fetch, options, { endpoint }) {
+      const response = await fetch(endpoint);
+      return (await response.json()).data;
+    },
+  });
+  ```
+
+  Each `defaults()` call returns a new frozen capability scoped to its app, so
+  multiple apps on one page can use different dialects. The normal Response
+  handling, shape guards, `beforeRequest`, and fixtures seam apply unchanged.
+
 ### Added
 
 - **Static raw template blocks (D150).** `{#raw}…{/raw}` disables Puzzle's

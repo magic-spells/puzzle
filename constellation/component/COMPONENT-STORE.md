@@ -85,11 +85,15 @@ The core Store owns no server verbs. Passing the `adapter` capability from
 `adapter`, `upsert`, `saveRecord`, `deleteRecord`, `request`, and their private
 helpers on its prototype ([[DECISION-D157-ADAPTER-SUBPATH]]). Under
 [[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]], a model's adapter is per-verb fetch
-functions; endpoint shorthand generates missing REST defaults and author
-functions win. Store dispatches transport, then owns Response normalization,
-shape/key guards, and all reconciliation. Reads preserve identity and accumulate
-paginated loads; writes serialize per record across save and delete using
-adapter-module `WeakMap` state keyed by Store. The installed implementation
+functions. Dispatch resolves the model's own function first, the app
+capability's `adapter.defaults()` function second, and endpoint-generated REST
+transport last. App defaults receive `{ type, endpoint }` after the normal verb
+arguments; model functions keep their original signatures. Store retains the
+opaque capability value but never imports its module. It dispatches transport,
+then owns Response normalization, shape/key guards, and all reconciliation.
+Reads preserve identity and accumulate paginated loads; writes serialize per
+record across save and delete using adapter-module `WeakMap` state keyed by
+Store. The installed implementation
 validates before sync, adopts server keys atomically, protects against
 destroy/replacement/collision races, and throws the subpath's
 `PuzzleAdapterError` for adapter failures. `removeRecord` stays in core and flags the instance
