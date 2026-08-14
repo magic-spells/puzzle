@@ -296,7 +296,7 @@ func Serve(root string, opts Options) error {
 		}
 	} else {
 		var builderErr error
-		builder, builderErr = build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures})
+		builder, builderErr = build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures, Splitting: splitting})
 		if builderErr != nil {
 			// No incremental context: degrade fully to the non-incremental one-shot
 			// build.Build per change (slower, but correct — including its own Tailwind).
