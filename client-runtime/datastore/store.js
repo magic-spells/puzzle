@@ -43,16 +43,19 @@ const RELS_INSTALLED = Symbol('puzzleRelationshipsInstalled');
 export class Store {
 	/**
 	 * @param {object} models   type name → model class (from PuzzleApp config)
-	 * @param {object} options  { storage, storageKey, apiURL, beforeRequest } —
+	 * @param {object} options  { storage, storageKey, apiURL, adapter, beforeRequest } —
 	 *   storage is any Storage-like object (getItem/setItem); pass
 	 *   window.localStorage to persist. apiURL is the base for the D21 server read
-	 *   path. beforeRequest is the adapter request hook (v1.55, D91) — see _fetch.
+	 *   path. adapter is the opaque app capability retained for the optional module;
+	 *   core never imports or interprets it. beforeRequest is the adapter request
+	 *   hook (v1.55, D91) — see _fetch.
 	 */
 	constructor(models = {}, options = {}) {
 		this.models = models;
 		this.storage = options.storage || null;
 		this.storageKey = options.storageKey || 'puzzle-store';
 		this.apiURL = options.apiURL || '';
+		this._a = options.adapter;
 		// Adapter request hook (v1.55, D91). Stored ONLY when it is a function, so
 		// the overwhelmingly common no-hook path costs one truthiness check in
 		// _fetch() and nothing else — a non-function config value is simply absent

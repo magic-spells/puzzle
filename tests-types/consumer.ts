@@ -10,7 +10,7 @@
  *
  * Nothing here runs. `tsc --noEmit --strict` failing is the whole test: it
  * guards that the declared surface stays usable (and catches a declaration that
- * silently drifts from the runtime). No `@ts-expect-error` / `any` escape hatches.
+ * silently drifts from the runtime).
  */
 
 import {
@@ -44,6 +44,8 @@ import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
 import type {
 	AdapterCapability,
 	AdapterConfig,
+	AdapterDefaultContext,
+	AdapterDefaults,
 	AdapterFetch,
 	AdapterRecord,
 } from '@magic-spells/puzzle/adapter';
@@ -306,6 +308,18 @@ const attachAuth: BeforeRequestHook = (init, context) => {
 const replaceInit: BeforeRequestHook = (init) => ({ ...init, credentials: 'include' });
 void replaceInit;
 
+const appDefaults: AdapterDefaults = {
+	async loadAll(fetch, _options, { type, endpoint }: AdapterDefaultContext) {
+		const response = await fetch(`${endpoint}?type=${type}`);
+		return (await response.json()).data as AdapterRecord[];
+	},
+	loadOne: (fetch, id, { endpoint }) => fetch(`${endpoint}/${id}`),
+};
+const configuredAdapter: AdapterCapability = adapter.defaults(appDefaults);
+
+// @ts-expect-error app defaults are deliberately limited to the five framework verbs.
+adapter.defaults({ publish: (_fetch: AdapterFetch) => Promise.resolve() });
+
 class AppErrorView extends PuzzleView {
 	data(_params?: Record<string, string>, props?: PuzzleErrorViewProps) {
 		props?.retry();
@@ -347,13 +361,14 @@ const config: PuzzleAppConfig = {
 };
 
 const adapterCapability: AdapterCapability = adapter;
+const configuredApp = new PuzzleApp({ target: '#app', routes, adapter: configuredAdapter });
 type RawAdapterAccepted = { endpoint: string } extends NonNullable<
 	PuzzleAppConfig['adapter']
 >
 	? true
 	: false;
 const rawAdapterAccepted: RawAdapterAccepted = false;
-void [adapterCapability, rawAdapterAccepted];
+void [adapterCapability, configuredApp, rawAdapterAccepted];
 
 const app = new PuzzleApp(config);
 

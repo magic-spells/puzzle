@@ -124,6 +124,38 @@ describe('PuzzleApp — boot (APP_ANATOMY §3)', () => {
 		expect(warn).toHaveBeenCalledWith(expect.stringContaining('PuzzleApp'));
 	});
 
+	it('keeps configured adapter defaults isolated between two apps on one page', async () => {
+		container('first');
+		container('second');
+		const firstAdapter = adapter.defaults({
+			loadAll: async () => [{ id: 't1', text: 'First dialect' }],
+		});
+		const secondAdapter = adapter.defaults({
+			loadAll: async () => [{ id: 't1', text: 'Second dialect' }],
+		});
+		const first = make({
+			target: '#first',
+			models: { todo: Todo },
+			routes: [{ path: '/', view: HomeView }],
+			adapter: firstAdapter,
+		});
+		const second = make({
+			target: '#second',
+			models: { todo: Todo },
+			routes: [{ path: '/', view: HomeView }],
+			adapter: secondAdapter,
+		});
+
+		await Promise.all([first.mount(), second.mount()]);
+		const [firstRecords, secondRecords] = await Promise.all([
+			first.store.loadAll('todo'),
+			second.store.loadAll('todo'),
+		]);
+
+		expect(firstRecords[0].text).toBe('First dialect');
+		expect(secondRecords[0].text).toBe('Second dialect');
+	});
+
 	// transitionMode passthrough (v1.24, D56): the config key reaches the Router
 	// — an invalid value surfaces the Router's own constructor throw at mount(),
 	// and a valid one mounts cleanly. Overlap SEQUENCING itself is covered in

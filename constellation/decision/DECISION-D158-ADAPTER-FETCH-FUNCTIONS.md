@@ -98,6 +98,42 @@ bound as the first argument (generated defaults included), so
 `store.adapter('post').publish(7)` works and custom reads compose with
 `store.upsert` for merging.
 
+**App-wide dialects: `adapter.defaults(verbs)`.** Most nonstandard APIs are
+nonstandard everywhere — the `{ data }` envelope wraps every endpoint, not one
+model's. The capability carries the app's dialect, conventionally written in
+its own `app/adapter.js` so `app.js` stays a wiring manifest:
+
+```js
+// app/adapter.js — the app's server dialect
+import { adapter } from '@magic-spells/puzzle/adapter';
+
+export default adapter.defaults({
+  loadOne: async (fetch, id, { endpoint }) => {
+    const res = await fetch(`${endpoint}/${id}`);
+    return (await res.json()).data;
+  },
+});
+
+// app/app.js
+import adapter from './adapter.js';
+new PuzzleApp({ target: '#app', routes, models, adapter });
+```
+
+Dispatch precedence, most-specific wins: the model's own function → the app
+default → the endpoint-generated REST transport. App-level functions receive
+`{ type, endpoint }` as a trailing context argument (they serve many models,
+so unlike a per-model function they cannot close over their URL; `endpoint`
+is undefined for models without one). Defaults apply to the five verbs only —
+keys that are not verb names warn in dev. `adapter.defaults()` returns a new
+recognized capability (the identity check accepts every capability the module
+created, so configured and bare capabilities validate alike); the defaults
+ride the capability value into each store, so two apps in one page can carry
+different dialects. **This is the LAST tier.** Sub-verb hooks (`buildURL`,
+`handleResponse` — Ember's concept explosion), per-group defaults, and
+serializer-style transforms are out of scope permanently; a dialect the three
+tiers cannot express is written as whole verb functions, which fully own
+their conversation.
+
 **`endpoint` is required only by what needs it.** A verb the app invokes with
 neither an author function nor an `endpoint` to generate a default from is
 the existing "no adapter declared" error, now phrased per-verb. Config
@@ -141,3 +177,12 @@ the adapter module only.
 - **Calling the argument `ctx`** — collides with the view-side `this.ctx`
   (store/router context): one small framework must not carry two unrelated
   objects under one name.
+- **App-wide overrides via static-object assignment from app.js** (a loop
+  mutating each `Model.adapter` before construction) — works, but it is
+  order-sensitive mutation at a distance, invisible to TypeScript, and reads
+  as a patch rather than a feature ("a nasty hack — dirty"). `adapter.defaults()`
+  states the same intent declaratively on the capability.
+- **A shared per-model factory as the ONLY app-wide answer**
+  (`static adapter = api('/api/posts')`) — still a fine complementary idiom,
+  but as the only mechanism it edits every model file to express an app-level
+  fact; the dialect belongs on the capability.

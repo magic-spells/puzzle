@@ -778,6 +778,7 @@ func (b *StaticWatchBuilder) reusePages(staging string, summary staticSummary) e
 func (b *StaticWatchBuilder) syncPageEntries(summary staticSummary) ([]string, error) {
 	modelsModule := findStaticModule(b.root, "app/models/index.js", "app/models/index.ts")
 	formattersModule := findStaticModule(b.root, "app/formatters.js", "app/formatters.ts")
+	adapterModule := findStaticModule(b.root, "app/adapter.js", "app/adapter.ts")
 
 	entriesDir := filepath.Join(b.warm, prerenderDir, "entries")
 	if err := os.MkdirAll(entriesDir, 0o755); err != nil {
@@ -791,7 +792,7 @@ func (b *StaticWatchBuilder) syncPageEntries(summary staticSummary) ([]string, e
 		if err != nil {
 			return nil, err
 		}
-		src, err := staticEntrySource(b.root, page, summary, modelsModule, formattersModule)
+		src, err := staticEntrySource(b.root, page, summary, modelsModule, formattersModule, adapterModule)
 		if err != nil {
 			return nil, err
 		}

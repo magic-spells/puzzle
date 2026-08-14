@@ -44,7 +44,7 @@ export interface MountStaticOptions {
 	apiURL?: string;
 	/** Storage-like object for opt-in persistence, handed to the Store. */
 	storage?: any;
-	/** REST adapter capability, installed before the static Store is constructed. */
+	/** Adapter capability, installed and retained before the static Store is constructed. */
 	adapter?: PuzzleAppConfig['adapter'];
 	/**
 	 * Normalized route URL prefix. The app's `routerMode` is deliberately NOT

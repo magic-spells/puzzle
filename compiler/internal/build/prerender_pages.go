@@ -166,6 +166,7 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 	//    resolve it once.
 	modelsModule := findStaticModule(absRoot, "app/models/index.js", "app/models/index.ts")
 	formattersModule := findStaticModule(absRoot, "app/formatters.js", "app/formatters.ts")
+	adapterModule := findStaticModule(absRoot, "app/adapter.js", "app/adapter.ts")
 
 	entriesDir := filepath.Join(staging, prerenderDir, "entries")
 	if err := os.MkdirAll(entriesDir, 0o755); err != nil {
@@ -177,7 +178,7 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 		if err != nil {
 			return err
 		}
-		src, err := staticEntrySource(absRoot, page, summary, modelsModule, formattersModule)
+		src, err := staticEntrySource(absRoot, page, summary, modelsModule, formattersModule, adapterModule)
 		if err != nil {
 			return err
 		}
@@ -273,12 +274,22 @@ func slugFromEntry(entry string) (string, error) {
 // specifiers and embedded values are JSON-encoded (space/quote safe, forward
 // slashes). The models/formatters imports (and their shorthand call properties)
 // are emitted only when the source files exist — an absent binding must never be
-// referenced. route + service options are embedded verbatim from the summary.
-func staticEntrySource(absRoot string, page staticPage, summary staticSummary, modelsModule, formattersModule string) (string, error) {
+// referenced. A conventional app/adapter module preserves configured defaults;
+// older apps without one retain the bare-capability import. Route + service
+// options are embedded verbatim from the summary.
+func staticEntrySource(absRoot string, page staticPage, summary staticSummary, modelsModule, formattersModule, adapterModule string) (string, error) {
 	var b strings.Builder
 	b.WriteString("import { mountStatic } from '@magic-spells/puzzle/static';\n")
 	if summary.HasAdapter {
-		b.WriteString("import { adapter } from '@magic-spells/puzzle/adapter';\n")
+		if adapterModule != "" {
+			spec, err := json.Marshal(absModuleImport(absRoot, adapterModule))
+			if err != nil {
+				return "", err
+			}
+			fmt.Fprintf(&b, "import adapter from %s;\n", spec)
+		} else {
+			b.WriteString("import { adapter } from '@magic-spells/puzzle/adapter';\n")
+		}
 	}
 
 	viewIdents := make([]string, len(page.Modules.Views))

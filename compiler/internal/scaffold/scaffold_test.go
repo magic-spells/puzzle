@@ -99,6 +99,7 @@ func TestCreateTodos(t *testing.T) {
 	want := []string{
 		".gitignore",
 		"README.md",
+		"app/adapter.js",
 		"app/app.js",
 		"app/components/TodoItem.pzl",
 		"app/layouts/Default.pzl",

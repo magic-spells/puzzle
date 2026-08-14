@@ -63,7 +63,8 @@ shorthand that generates the standard five; an author `loadAll`, `loadOne`,
 `create`, `update`, or `delete` function wins over its generated default, and
 an all-custom adapter needs no endpoint. Model files import nothing extra. The
 app imports `adapter` from `@magic-spells/puzzle/adapter` and passes it once to
-`PuzzleApp`; that capability installs the read/write paths, `store.adapter()`,
+`PuzzleApp`, or passes `adapter.defaults({ ...verbs })` to define an app-wide
+dialect. That capability installs the read/write paths, `store.adapter()`,
 `store.upsert()`, and `store.request()`. Query fault-in remains deferred. Local
 persistence is in-memory with optional localStorage.
 
@@ -176,6 +177,12 @@ object(s); create/update require a pk-bearing object or a nullish no-echo;
 delete ignores its return after checking a returned Response. Each missing
 verb requires `endpoint` or rejects with a per-verb no-adapter error.
 
+Transport dispatch is model function → app `adapter.defaults()` function →
+endpoint-generated REST. App defaults receive `{ type, endpoint }` after the
+normal verb arguments (`endpoint` may be undefined); per-model functions keep
+the signatures above. Configured capabilities are scoped to the Store, so apps
+on one page may carry different dialects.
+
 `store.loadAll(type, options?)` forwards the options object unchanged to an
 author transport. The generated transport serializes non-nullish entries with
 `URLSearchParams`; calls without options retain the original byte-identical
@@ -263,7 +270,10 @@ class Post extends PuzzleModel {
 
 `adapter` is a frozen opaque capability whose internal idempotent installer
 grafts the server methods onto `Store` and `PuzzleModel` before Store
-construction. The installed Store surface also includes D158's
+construction. `adapter.defaults(verbs)` returns another frozen recognized
+capability carrying app-wide implementations of the five framework verbs; its
+identity is retained by each Store without core importing the adapter module.
+The installed Store surface also includes D158's
 `store.adapter(type)` bound-function view. A truthy non-capability
 `config.adapter` is a construction-time
 error naming the `/adapter` import. Apps that never pass it have no `loadAll`,

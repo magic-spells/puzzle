@@ -1,5 +1,5 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
-import { adapter } from '@magic-spells/puzzle/adapter';
+import adapter from './adapter.js';
 import routes from './routes.js';
 import models from './models/index.js';
 
@@ -17,7 +17,8 @@ const app = new PuzzleApp({
   models,
 
   // Install server sync for models with a static adapter config. No backend?
-  // Delete this import + key and the model adapter block to shrink the bundle.
+  // Delete this import + key, app/adapter.js, and the model adapter block
+  // to shrink the bundle.
   adapter,
 
   // Global formatters available in all templates

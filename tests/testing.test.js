@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PuzzleView, ViewNode } from '../client-runtime/index.js';
 import { adapter } from '../client-runtime/datastore/adapter.js';
+import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import {
 	createTestApp,
 	installFakeAnimate,
@@ -45,9 +46,20 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		await expect(mountView(Probe, { adapter: { endpoint: '/api' } })).rejects.toThrow(
 			/options\.adapter.*@magic-spells\/puzzle\/adapter/
 		);
-		const view = await mountView(Probe, { adapter });
+		class Note extends PuzzleModel {
+			static schema = { id: Puzzle.string().primary() };
+			static adapter = { endpoint: '/notes' };
+		}
+		const configured = adapter.defaults({
+			loadAll: async () => [{ id: 'n1' }],
+		});
+		const view = await mountView(Probe, {
+			adapter: configured,
+			models: { note: Note },
+		});
 		handles.push(view);
 		expect(view.element.textContent).toBe('true');
+		await expect(view.store.loadAll('note')).resolves.toHaveLength(1);
 	});
 
 	it('mounts detached with the complete ctx, query helpers, click(), and setProps()', async () => {
