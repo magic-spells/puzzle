@@ -1,10 +1,10 @@
 ---
 name: SPEC.md — the frozen v1 contract
-status: built
-verified_at: '2026-07-25T05:53:25.564Z'
+status: verified
+verified_at: '2026-08-14T05:01:26.637Z'
 connections:
   - DOC-VIEW-LIFECYCLE
-verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+verified_sha: d74916a0e021b6bb86394551171838fbab161347
 notes:
   - kind: verified
     text: >-
@@ -98,6 +98,7 @@ The spec is split across six domain cards. Section numbers are globally unique a
 | 57 | Raw template blocks: `{#raw}…{/raw}` (v1.70) | [[DOC-SPEC-TEMPLATE]] |
 | 58 | Opt-in server adapter subpath (v1.72; fetch-function contract v1.73) | [[DOC-SPEC-DATA]] |
 | 59 | Opt-in SPA code splitting — `build.splitting` (v1.75) | [[DOC-SPEC-BUILD]] |
+| 60 | App-level error handling: `onError` + the `errorView` replacement view (v1.67; error-view contract v1.71) | [[DOC-SPEC-VIEW]] |
 | — | Deferred features (post-v1) | this card |
 | — | Open questions (tracked, not blocking) | this card |
 
@@ -132,7 +133,7 @@ Explicitly out of scope for v1. Docs may describe them only if marked **"Planned
 - ~~`<Portal>`~~ — shipped in v1.66 as the scoped v1 (D144): an attribute-free paired `<Portal>…</Portal>` marker teleporting its children into one framework-created outlet beside the app mount container, with explicit remote teardown, logical `@event:outside` containment, and empty SSG serialization (content appears at takeover). User-placed named outlets (`to`/`name`) remain deferred — the attributes are reserved compile errors. `<dialog>.showModal()` stays the recommended tool for focus-trapped modals; Portal covers non-modal overlays and the reactive-foreign-container gap ([[DECISION-D144-PORTAL]]).
 - A **`puzzle dev` mock API server** (`dev: { mock: … }`, the long-standing open question below) — considered alongside D95 and deferred once the client-side mock adapter shipped. The adapter intercepts at the Store's fetch seam, so it needs no server and behaves **identically in `puzzle dev` and in Vitest**, which a dev-server mock structurally cannot. Shipping both would mean two overlapping mechanisms with different reach. The case a server uniquely serves — mocking plain `fetch` calls that never go through an adapter, and seeing the traffic in the network tab — is real but thin. Revisit if it comes up; `dev.proxy`'s config block and handler-chain registration are the seam it would use.
 - An **async `beforeRequest`** (§49, D91) — the obvious next ask is inline token refresh, but awaiting the hook puts an `await` in front of every adapter call and needs a story for coalescing concurrent refreshes against the §22 per-record save chain. Refresh arguably belongs in a wrapper around the verb. Widening sync→async later is compatible; narrowing is not. A whole-`fetch` override (`options.fetch`) is deferred on the same grounds — strictly more powerful, but it hands the app the entire request contract and lets a bad implementation break the §22 guards silently.
-- Lazy route views + code splitting + link preloading — real for large apps, but Puzzle bundles are small enough that the pressure is weak today, and it undercuts the §16 skeleton story (a skeleton cannot render before its module arrives). Deserves its own release; static mode's per-page splitting is the in-repo precedent. (Also listed at §36.)
+- Lazy route views + link preloading — real for large apps, but they undercut the §16 skeleton story (a skeleton cannot render before its module arrives). ~~Code splitting~~ shipped in v1.75 as the opt-in `build.splitting` (§59, D160) — dependency-driven, not route-driven; route-level laziness remains deferred on top of it. (Also listed at §36.)
 
 ## Open questions (tracked, not blocking)
 

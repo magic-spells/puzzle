@@ -1,7 +1,7 @@
 ---
 name: SPEC — build, output modes, dev loop, and tooling
 kind: reference
-status: built
+status: verified
 connections:
   - DOC-SPEC
   - COMPONENT-COMPILER-CLI
@@ -9,8 +9,8 @@ connections:
   - COMPONENT-DEV-SERVER
   - COMPONENT-SSG
   - COMPONENT-DEVSTATE
-verified_at: '2026-07-25T05:53:23.935Z'
-verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+verified_at: '2026-08-14T05:01:29.002Z'
+verified_sha: d74916a0e021b6bb86394551171838fbab161347
 notes:
   - kind: verified
     text: >-
@@ -25,11 +25,12 @@ The frozen v1 contract for the toolchain: the CLI surface, dev HMR and build-err
 
 The scaffolding and diagnostics commands SPEC §11 left for later. Shipped in v1.4 (D32); the CLI is no longer just `dev` + `build`. Additive — no change to `dev`/`build`, the compiler, or the runtime.
 
-**D156 profiling amendment.** `puzzle dev --profile-build` prints an
-opt-in phase table to stderr for startup and every rebuild in SPA, hybrid, and
-static projects. `PUZZLE_PROFILE_BUILD=1` enables the same tables for both
-`puzzle build` and `puzzle dev`. Profiling never changes stdout, generated
-artifacts, rebuild selection, or failure behavior.
+**D156 profiling amendment.** `--profile-build` on both `puzzle build` and
+`puzzle dev` prints an opt-in phase table to stderr — for the one-shot build,
+and for startup and every rebuild in SPA, hybrid, and static dev.
+`PUZZLE_PROFILE_BUILD=1` enables the same tables without the flag. Profiling
+never changes stdout, generated artifacts, rebuild selection, or failure
+behavior.
 
 - **`puzzle init <app-name> [--template default|todos] [--dir <parent>]`** — scaffolds a complete Tailwind-first app (`app/` source with `app/app.js` entry, `puzzle.config.js`, `index.html`) from an embedded template tree. `default` is a minimal starter; `todos` is the todos example app. **Non-interactive by design** — flags and defaults only, so it stays scriptable (CI, `npx`); the one exception (D32 amendment) is a bare `puzzle init` on a TTY, which prompts for the missing app name (zero args on a non-TTY still errors, so pipes/CI never hang). *(v1.44/D77 widens the TTY exception: template and TypeScript prompts when those flags are absent — see §42; non-TTY behavior is unchanged.)* App names are validated npm-safe; a non-empty target directory is refused.
 - **`puzzle generate <component|view|layout|model> <Name> [--path <dir>] [--force]`** (alias `g`) — writes a stub into `app/components|views|layouts|models`, finding the project root by walking up for `package.json`/`puzzle.config.js`. `.pzl` type names are PascalCase, model names lowercase.
@@ -81,7 +82,7 @@ An additive build OUTPUT mode that prerenders every static route to its own HTML
 
 **404 (v1.34):** the top-level catch-all route (`path: '*'`, D19) renders to `dist/404.html` — the file static hosts (GitHub Pages, Netlify, Render, Cloudflare) serve for unknown paths — with the same preload/serialize/title/marker treatment as any page (`prerender: false` on its chain writes the plain shell there instead). A build with NO catch-all emits an advisory warning that unknown URLs will get the host's default 404. In `hybrid` mode the live router additionally serves this view for unmatched client paths; in `static` mode there is no client router, so the file is what serves unknown URLs. The `puzzle init` templates (default and todos) ship a `NotFound.pzl` view wired as the catch-all.
 
-**Boundaries:** dynamic routes (`:param`, and any non-catch-all `*` pattern) are skipped with a build warning in both modes (a static build has no way to run them client-side either — dynamic content in static mode awaits `staticPaths()` or a `prerender: false` runtime-fetch island). `prerender: false` anywhere in a route chain writes the plain shell at that path — an SPA island in hybrid mode, a client-rendered island (data island + entry module, no marker) in static mode. Deferred on top: a `staticPaths()` enumeration hook, ~~a head-management API (per-route meta/og)~~ (shipping in v1.50, §45/D84), DOM-adoption hydration, a true zero-JS per-route opt-out for static mode, lazy route views + code splitting, ~~`puzzle preview`~~ (shipped in v1.69, §13/D148), and flat `name.html` output as a config knob.
+**Boundaries:** dynamic routes (`:param`, and any non-catch-all `*` pattern) are skipped with a build warning in both modes (a static build has no way to run them client-side either — dynamic content in static mode awaits `staticPaths()` or a `prerender: false` runtime-fetch island). `prerender: false` anywhere in a route chain writes the plain shell at that path — an SPA island in hybrid mode, a client-rendered island (data island + entry module, no marker) in static mode. Deferred on top: a `staticPaths()` enumeration hook, ~~a head-management API (per-route meta/og)~~ (shipping in v1.50, §45/D84), DOM-adoption hydration, a true zero-JS per-route opt-out for static mode, lazy route views (~~code splitting~~ shipped in v1.75 as the opt-in `build.splitting` — §59/D160; route-level laziness remains deferred on top of it), ~~`puzzle preview`~~ (shipped in v1.69, §13/D148), and flat `name.html` output as a config knob.
 
 ## 41. CLI update notification + `puzzle upgrade` (v1.43)
 
@@ -148,7 +149,7 @@ A fifth export subpath (D94, amended by D121) — `mountView`, `createTestApp`, 
 
 - The flag requires `app/fixtures.js` (or `.ts`); missing is a clear error. Its default export is §52's install config: `{ seed, mock, setup }`.
 - The compiler generates a **two-module wrapper entry** under `<root>/.puzzle/` and swaps the esbuild entry point: a wiring module (`installFixtures(config)` in its body) imported **before** the real `app/app.js`. Two modules because static imports hoist — only a dependency module's body is guaranteed to run before the app entry constructs and mounts. The wrapper keeps the `dist/app.js` output name.
-- `.puzzle/` is a generated dot-directory (the usage scan already prunes dot-dirs); it is removed after one-shot builds and kept for the life of a `puzzle dev` process.
+- `.puzzle/` is the compiler's self-ignoring scratch root (it carries a `*` `.gitignore`, and the usage scan already prunes dot-dirs). The fixtures wrapper lives there, and since D153 so does every transient build directory (`tmp/staging-*`, `tmp/dist-old-*`), swept by age at build/dev startup — see [[DECISION-D153-PUZZLE-SCRATCH-DIR]]. The wrapper is removed after one-shot builds and kept for the life of a `puzzle dev` process.
 - The flag is constant per process, so watch rebuilds never re-decide it — none of the define-staleness machinery applies.
 - `--fixtures` with `--static`/`--hybrid` (or a config `output`) is **rejected**; prerender + fixtures interplay is deferred. A `puzzle.config.js` equivalent of the flag is also deferred — the explicit CLI switch *is* the dev-vs-real-API toggle.
 - Use cases: `puzzle dev` against the real API, `puzzle dev --fixtures` against fakes, `puzzle build --fixtures` for a shareable preview with baked-in data.

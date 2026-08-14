@@ -11,6 +11,18 @@ connections:
   - COMPONENT-PUZZLE-MODEL
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
+notes:
+  - kind: gotcha
+    text: >-
+      Verified behavior change vs 0.5.0 (2026-08-14 review, undocumented): the save-response guard
+      (adapter.js ~508-517) now throws for any non-nullish non-object 2xx body (text/plain "OK",
+      JSON `true`), where 0.5.0 kept local state and marked synced. Because the HTTP write already
+      succeeded but _synced stays false, the NEXT save() dispatches create again and duplicates the
+      server row. May be intended ("pk required … nullish for 'no echo'", this card line ~73) but it
+      is a silent migration hazard: not in the CHANGELOG, and adapter.js ~569-575 still carries the
+      now-unreachable `responsePk == null && pk in body` branch from the old contract (dead code).
+      Either restore non-object-body tolerance or document it as breaking and delete the dead branch
+      — Cory's call.
 ---
 
 A model's `static adapter` object is a set of **fetch functions** the store

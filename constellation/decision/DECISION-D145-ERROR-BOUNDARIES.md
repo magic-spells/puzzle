@@ -19,6 +19,21 @@ notes:
       removed from runtime and types. 1,589 vitest + full Go suites green; byte-neutral by
       measurement (+126 gzip).
     sha: 11b25c8a5d8331299c7780fbb0a7a2c4efbfbc35
+  - kind: gotcha
+    text: >-
+      Verified gap (2026-08-14 review, unreleased 0.6.0): retry() can blank a routed position
+      permanently. retry destroys the error view and clears #errorView BEFORE knowing the rebuild
+      will mount anything (PuzzleView.js retry closure → router __failedView(view, true)). A
+      rejection in the LOAD phase of the forced same-location replace (a still-failing data())
+      aborts pre-commit via #recoverFailedNavigation — a path with no errorView surface — leaving
+      only the recovery comment. A same-path push is then deduped, so the user cannot recover
+      without visiting a different route. Repro: routed view whose render() throws (error view
+      mounts fine) and whose data() rejects; one Retry click → blank page.
+      tests/error-boundaries.test.js covers the persistent-mounted()-throw case (post-commit,
+      re-surfaces fine); the load-phase case is uncovered. Fix direction: keep the error view until
+      the rebuild commits, or give the navigation-load failure path the same errorView surface mount
+      failures have. Contradicts this card's "a failed retry mounts a fresh error view" claim for
+      load-phase failures until fixed.
 ---
 
 # D145 — app-level `onError` + the app error view (`errorView`)

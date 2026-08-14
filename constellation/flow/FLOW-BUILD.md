@@ -1,6 +1,6 @@
 ---
 name: Build flow
-status: built
+status: verified
 triggers:
   - { kind: manual }
 connections:
@@ -14,9 +14,9 @@ connections:
   - FILE-BUILD-OPTIONS
   - FILE-BUILD-WATCH
   - FILE-BUILD-PRERENDER
-verified_at: '2026-07-25T05:26:59.408Z'
+verified_at: '2026-08-14T05:01:18.453Z'
 notes: []
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_sha: d74916a0e021b6bb86394551171838fbab161347
 ---
 
 # Build flow
@@ -31,18 +31,25 @@ runtime bundle.
 
 ## Production build
 
-1. Validate config and public assets before touching the existing output.
-   Generated names are reserved case-insensitively so public files cannot
-   overwrite `app.js`, its map, or `styles.css`. The guard is root-level only:
+1. Sweep stale transient directories, then validate config and public assets
+   before touching the existing output. Generated names are reserved
+   case-insensitively so public files cannot overwrite `app.js`, its map,
+   `styles.css`, or — with splitting on — the `chunks/` directory
+   ([[DECISION-D160-SPA-CODE-SPLITTING]]). The guard is root-level only:
    nested files with those names, `index.html`, and other assets copy fine
    (guarded by `TestBuildAllowsNestedReservedNames`).
-2. Compile every reachable `.pzl` module. User `<script>` stays JavaScript;
-   TypeScript mode is transpile-only.
+2. Compile every reachable `.pzl` module through the build-scoped compile
+   cache ([[DECISION-D152-BUILD-SCOPED-COMPILE-CACHE]]). User `<script>` stays
+   JavaScript; TypeScript mode is transpile-only.
 3. Compose `styles.css` from the optional Tailwind layer and collected component
    styles in deterministic order.
-4. Copy public assets and write the bundle into a staging directory.
+4. Copy public assets and write the bundle — split into `chunks/` when
+   `build.splitting` is on — into a staging directory under `.puzzle/tmp/`
+   ([[DECISION-D153-PUZZLE-SCRATCH-DIR]]).
 5. When static output is enabled, [[COMPONENT-SSG]] prerenders eligible routes.
-6. Atomically replace `dist/`. A failed build leaves the last good output intact.
+6. Atomically replace `dist/` (the previous output is renamed into
+   `.puzzle/tmp/` before removal). A failed build leaves the last good output
+   intact.
 
 Default production output is minified ES2022 ESM with linked source maps and
 console calls removed unless config opts out.

@@ -22,14 +22,21 @@ connections:
   - COMPONENT-DEV-SERVER
   - FLOW-BUILD
   - FLOW-REACTIVITY
-verified_at: '2026-07-25T05:26:59.621Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-14T05:01:26.065Z'
+verified_sha: d74916a0e021b6bb86394551171838fbab161347
+notes:
+  - kind: verified
+    text: >-
+      0.6.0 sweep: header version, {#raw}, adapter.defaults() dispatch tier, --profile-build, pieces
+      npm transport, splitting vs not-shipped list, SPA-default phrasing, formatters/manifest
+      subpath — all reconciled against the release/0.6.0 code.
+    sha: d74916a0e021b6bb86394551171838fbab161347
 ---
 
 # Puzzle release surface
 
 Compact inventory of what ships in `@magic-spells/puzzle` — kept current with
-the released surface (0.3.0 as of this writing), not pinned to one version. [[DOC-SPEC]] remains the binding contract; this card is the map, not a
+the released surface (0.6.0 as of this writing), not pinned to one version. [[DOC-SPEC]] remains the binding contract; this card is the map, not a
 second specification. Decision cards hold rationale and git holds chronology.
 
 ## Package and application
@@ -45,7 +52,10 @@ second specification. Decision cards hold rationale and git holds chronology.
   two-way-bound control, D147), `installFakeAnimate`, `installFakeObserver`,
   D94 — and re-exports `installFixtures`; `/fixtures` is the self-contained fixtures + mock-adapter
   module, D98, bundled into an app only by the `--fixtures` flag; `/adapter`
-  exports the frozen `adapter` capability and `PuzzleAdapterError`, D157.)
+  exports the frozen `adapter` capability — plus `adapter.defaults()`, the
+  app-wide dialect tier — and `PuzzleAdapterError`, D157/D158. A
+  compiler-internal `/formatters/manifest` subpath also exists for the
+  tree-shaken formatter manifest.)
 - `puzzle` binary shim selects an optional platform binary for macOS/Linux on
   arm64/x64. Unsupported systems get a Go-install fallback message.
 - App config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
@@ -80,7 +90,8 @@ second specification. Decision cards hold rationale and git holds chronology.
   write `setData` + refresh. Attr namespaces (`bind:value`) are a positioned
   compile error reserving the space (`xml`/`xlink`/`xmlns` allowlisted).
 - `{#if}` with `{:else if}`/`{:else}`, `{#unless}`, `{#case}` with `{:when}`,
-  item/range `{#for}` with optional counters, template comments, and inline SVG.
+  item/range `{#for}` with optional counters, template comments, inline SVG,
+  and static raw markup blocks (`{#raw}…{/raw}`, D150).
 - DOM events support bare/call handlers, `prevent`, `stop`, `once`, `outside`
   (document-capture outside-dismiss, D86), and keyboard filters. Component
   event attributes compile to callback props.
@@ -133,10 +144,12 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Store queries auto-subscribe inside `data()`. Collection and record keys are
   batched, hidden-tab safe, isolated per subscriber, and torn down with views.
 - Server sync is opt-in: models keep a bare `static adapter` object of per-verb
-  fetch functions; `endpoint` generates missing REST defaults, author functions
-  win, and endpoint is optional for a fully custom adapter (D158). The app
-  imports the D157 capability from `@magic-spells/puzzle/adapter` and passes it
-  once to `PuzzleApp`; apps that never pass it ship none of the Store/record
+  fetch functions; `endpoint` generates missing REST defaults, and endpoint is
+  optional for a fully custom adapter (D158). Verb dispatch is model function →
+  app-wide default (`adapter.defaults({ verb })`, passed as the capability) →
+  endpoint-generated REST, with `{ type, endpoint }` context as the trailing
+  argument. The app imports the D157 capability from
+  `@magic-spells/puzzle/adapter` and passes it once to `PuzzleApp`; apps that never pass it ship none of the Store/record
   verbs. Reads preserve identity and accept pagination options. Writes retain
   sync provenance, revision/collision/destroy guards, and typed adapter errors.
 - Generated transports, enhanced fetch, and `store.request()` route through one internal fetch seam, so the optional
@@ -172,7 +185,8 @@ second specification. Decision cards hold rationale and git holds chronology.
   leaf→root inheritance with explicit-null suppression, D84). Delivery is
   split: the browser syncs `document.title` on every navigation, while the
   marked `<head>` tags are baked per page by the prerender and never touched
-  at runtime (D111) — so they are inert under `output: 'spa'`.
+  at runtime (D111) — so they are inert in the default SPA build (no `output`
+  key configured).
 - `push`, `replace` (no history entry, scroll untouched by default, D83),
   `go`, `back`, and `forward`; guarded same-origin link interception;
   router base paths and anchors; `router.url()` + the built-in `link`
@@ -265,6 +279,8 @@ second specification. Decision cards hold rationale and git holds chronology.
 
 - `puzzle init` (`default`/`todos`, optional TypeScript project config).
 - `puzzle dev`, `puzzle build`, and `puzzle build --static` / `--hybrid`.
+- `--profile-build` on `build` and `dev` (or `PUZZLE_PROFILE_BUILD=1`, D156):
+  opt-in per-phase timing tables on stderr; never changes artifacts or stdout.
 - `puzzle preview [--port] [--strict-port]` (D148): serves an existing `dist/`
   with production-host semantics per output mode — SPA history fallback,
   hybrid prerendered-page-first, static clean URLs + real 404s. Port 4000
@@ -274,8 +290,13 @@ second specification. Decision cards hold rationale and git holds chronology.
   module installs before the app entry runs; rejected alongside
   `--static`/`--hybrid`. Without the flag no fixture bytes can ship.
 - `puzzle generate` / `g` for components, views, layouts, and models.
-- `puzzle add tailwind` and `puzzle add piece` with local/HTTPS registries,
-  dependency resolution, path-containment checks, and `pieces.lock` hashes.
+- `puzzle add tailwind` and `puzzle add piece`. The default piece source is
+  the npm registry — `npm:@magic-spells/puzzle-pieces` resolved to the CLI's
+  major.minor, older-only fallback with a printed notice, `--pieces-version`
+  to pin (a D32 amendment); `--registry` accepts `npm:pkg[@version]`, a local
+  dir, or HTTPS. Dependency resolution, path-containment checks, and
+  `pieces.lock` hashes apply to all transports; the lock records the resolving
+  `puzzle` version.
 - `puzzle add skills` (alias `skill`, D78): installs the `go:embed`-ed agent
   skill into detected `~/.claude` / `~/.codex` / `~/.cursor` config dirs;
   `--skill-root <dir>` (repeatable, D97) pins them instead. Installs carry a
@@ -307,7 +328,9 @@ Event handlers and formatters surface uncaught.
 
 ## Deliberately not shipped
 
-No SSR server, hydration, lazy route/code splitting,
+No SSR server, hydration, lazy route loading (code splitting itself is the
+opt-in `build.splitting`, D160),
 named-route navigation, scoped slots, array refs, built-in virtual list,
 per-module hot swap, Sass pipeline, event bus, global keyboard API, app-level
-computed/settings/methods, devtools hook, or automatic query fault-in.
+computed/settings/methods, app-config devtools hook (the D100 bridge is
+extension-injected, not config), or automatic query fault-in.

@@ -37,9 +37,9 @@ and independent one-shot compilation phases run serially.
 
 ## Decision
 
-**Profile every dev mode on demand.** `puzzle dev --profile-build` and
-`PUZZLE_PROFILE_BUILD=1` report stable, per-phase startup and rebuild tables to
-stderr for SPA, hybrid, and static projects. Disabled profiling stays allocation
+**Profile every mode on demand.** `--profile-build` (on both `puzzle build`
+and `puzzle dev`) and `PUZZLE_PROFILE_BUILD=1` report stable, per-phase
+startup and rebuild tables to stderr for SPA, hybrid, and static projects. Disabled profiling stays allocation
 free at phase call sites. Concurrent phases register an ordinal at start and
 finish under a mutex, so report order is deterministic rather than
 completion-ordered.

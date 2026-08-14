@@ -1,7 +1,7 @@
 ---
-name: "D42 — routerMode: 'memory' (URL-less routing) + go/back/forward API (v1.11)"
+name: "D42 — memory routing (routerMode: memoryRouter(), URL-less) + go/back/forward API (v1.11)"
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-14T05:01:18.187Z'
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-PUZZLE-APP
@@ -12,11 +12,18 @@ connections:
   - DECISION-D33-ROUTER-SCROLL
   - DECISION-D19-NAVIGATION-COMMIT
   - FEATURE-V1-11-MEMORY-MODE
+verified_sha: d74916a0e021b6bb86394551171838fbab161347
+notes:
+  - kind: verified
+    text: >-
+      Rewritten for the D159 surface: memoryRouter({ initialPath }) replaces the routerInitialPath
+      app-config field; memory semantics unchanged and re-checked against modes.js.
+    sha: d74916a0e021b6bb86394551171838fbab161347
 ---
 
-# D42 — `routerMode: 'memory'` (URL-less routing) + go/back/forward API (v1.11)
+# D42 — memory routing (`routerMode: memoryRouter()`, URL-less) + go/back/forward API (v1.11)
 
-The third `routerMode` value ([[DECISION-D34-HASH-ROUTING]] reserved the slot):
+The third router mode (`memoryRouter()` from `@magic-spells/puzzle/router-modes` — [[DECISION-D159-ROUTER-MODE-FACTORIES]] owns the selection surface; [[DECISION-D34-HASH-ROUTING]] reserved the slot):
 the route lives entirely in router state — `location` and `history` are never
 read or written. For tests (no jsdom history gymnastics) and embedded/iframe
 apps that must not touch the host page's URL. Ships with the first programmatic
@@ -25,7 +32,7 @@ See [[DOC-SPEC-ROUTER]] §15.
 
 ## Context
 D34 built the mode seams (read-URL / write-URL / link-interceptor) and noted
-memory mode "would slot into the same enum". The framework's own router tests
+memory mode would slot into the same `routerMode` field. The framework's own router tests
 fake `history` through jsdom; consumers testing components that navigate have it
 worse. Embeds (a Puzzle widget inside a non-Puzzle page) cannot use either
 existing mode without clobbering the host URL.
@@ -67,15 +74,13 @@ Sub-decisions, each with its rejected alternative:
   mount-scoped interception is a possible future refinement, not a v1.11 one.
   (Rejected: no interception in memory mode — an in-app link would then trigger
   a full page navigation, the worst outcome.)
-- **`routerInitialPath` sets the first route.** With no URL to read, the initial
-  navigation needs a source: a new optional PuzzleApp config field (Router
-  option `initialPath`), default `'/'`, honored **only** in memory mode —
-  setting it in history/hash mode is a constructor throw (fail-fast, like the
-  mode enum and route-shape throws; the URL is the initial path in those modes,
-  and a silently ignored field hides a config bug). Third amendment to the
-  frozen §2 config surface, after `scrollBehavior` (v1.5) and `routerMode`
-  (v1.6). (Rejected: always starting at `'/'` — deep-linked embeds and tests
-  would need an awkward extra `push()` with an extra `data()` round.)
+- **`memoryRouter({ initialPath })` sets the first route.** With no URL to read,
+  the initial navigation needs a source: an option on the memory-mode factory
+  (Router option `initialPath`), default `'/'`. It rides the mode object, so it
+  structurally cannot be set in history/hash mode — those modes read the URL as
+  the initial path ([[DECISION-D159-ROUTER-MODE-FACTORIES]]). (Rejected: always
+  starting at `'/'` — deep-linked embeds and tests would need an awkward extra
+  `push()` with an extra `data()` round.)
 
 ## Alternatives rejected
 - **History-API shim, memory-only navigation methods, title-setting, scroll
@@ -85,7 +90,7 @@ Sub-decisions, each with its rejected alternative:
   root deployment today) — deliberate scope widening for a later amendment.
 
 ## Consequences
-Router + one PuzzleApp config passthrough; no compiler or runtime-kernel change.
-§2 gains `routerInitialPath`; §9 gains `go`/`back`/`forward` in all modes.
+Router-only; no compiler or runtime-kernel change. The initial path rides the
+`memoryRouter()` options; §9 gains `go`/`back`/`forward` in all modes.
 Non-breaking: existing apps are byte-identical; the new methods are additive.
 The framework's own future tests (and consumers') can drop jsdom URL fakery.

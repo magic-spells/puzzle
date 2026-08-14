@@ -97,8 +97,10 @@ run.
   (wrap `<Portal>` in a root element; documented in D144), and the D76 change
   that points `puzzle upgrade` at the running CLI rather than the cwd. Cards
   truthed through D149.
-- **`0.6.0` is in progress on `release/0.6.0`** (NOT stamped or published —
-  every manifest still reads `0.5.0`): D150 `{#raw}` static raw template
+- **`0.6.0` is in progress on `release/0.6.0`** (stamped but NOT published —
+  root manifest, the four platform manifests, `version.go`, `devtools.js`
+  `FRAMEWORK_VERSION`, and every example/template range read `0.6.0`; npm
+  `latest` is still `0.5.0`): D150 `{#raw}` static raw template
   block; the pieces npm transport (a D32 amendment, not a new card — default
   registry is `npm:@magic-spells/puzzle-pieces` resolved to the CLI's
   major.minor, older-only fallback with a printed notice, `--pieces-version`
@@ -115,7 +117,9 @@ run.
   not a size lever; D157 extracts server sync into the opt-in
   `@magic-spells/puzzle/adapter` subpath (a capability value passed once in
   the app config); D158 makes model adapters per-verb fetch functions with
-  endpoint-generated REST defaults; and D159 turns hash/memory routing into
+  endpoint-generated REST defaults, plus `adapter.defaults()` — the app-wide
+  dialect tier (dispatch: model function → app default → generated REST); and
+  D159 turns hash/memory routing into
   imported factories from `/router-modes` (`routerMode: hashRouter()` —
   strings throw, history stays the inline default, `routerInitialPath` folds
   into `memoryRouter({ initialPath })`); and D160 adds opt-in SPA code

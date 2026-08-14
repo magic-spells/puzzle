@@ -8,8 +8,8 @@ connections:
   - DECISION-D79-LINK-FORMATTER
   - COMPONENT-SSG
   - FILE-SSG-RUNTIME
-verified_at: '2026-07-25T05:24:10.389Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-14T05:01:18.315Z'
+verified_sha: d74916a0e021b6bb86394551171838fbab161347
 notes:
   - kind: verified
     text: >-
@@ -62,7 +62,7 @@ passthrough into dead links.
 
 ## Consequences
 
-- `output: 'static'` + `routerMode: 'hash'` apps get working path-shaped
+- `output: 'static'` + `routerMode: hashRouter()` apps get working path-shaped
   links again, plus a warning explaining why the mode is ignored.
 - The D79 stub-equivalence property (prerender href === rehydration href)
   now holds under every routerMode, not just history.

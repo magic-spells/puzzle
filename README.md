@@ -51,13 +51,14 @@ npm install -D @magic-spells/puzzle
 - **Single-file components** (`.pzl`) with template + scripts + styles — optional TypeScript (`<script lang="ts">`), scoped styles (`<style scoped>`), skeletons, comments, slots, and refs
 - **Reactive data** with automatic view updates
 - **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
-- **Model/store architecture** with adapters, relationships, schema validation, persistence, and write sync
+- **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath, so apps that never talk to a server ship none of it
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
-- **Nested routing** with view slots — history, hash, and memory modes; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
+- **Nested routing** with view slots — history routing by default, with `hashRouter()` and `memoryRouter()` factories imported from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
 - **Virtual DOM** with efficient diffing and pk-aware list keying
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
+- **App-level error view** — one compiled `errorView` replaces a view or component that fails to render, receiving `{ error, info, retry }`; an `onError` hook funnels every framework-contained error to one place
 - **Go-based compiler** for fast builds and state-preserving live reload (store and JSON-safe local view state survive edits)
 - **SPA-first output with two optional prerender modes** — `output: 'hybrid'` (prerendered pages the SPA takes over) and `output: 'static'` (true static pages, no router or `app.js`); no request-time SSR server or hydration layer
 - **[Puzzle Pieces](https://github.com/magic-spells/puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magic-spells.github.io/puzzle-pieces/))
@@ -466,7 +467,7 @@ puzzle add skills
 puzzle upgrade skills
 ```
 
-Both commands are built and verified today. `puzzle build` compiles `.pzl` files and produces a working bundle; `puzzle dev` watches `app/`, rebuilds on change, and delivers full-page live reload over SSE (the reload client is injected into `index.html` at serve time). Both run the declared style pipeline automatically — `styles: { use: ['tailwindcss'] }` in `puzzle.config.js` (tailwindcss-only in v1) — so Tailwind output is included in the served/built `styles.css`.
+Every command above is built and verified today. `puzzle build` compiles `.pzl` files and produces a working bundle; `puzzle dev` watches `app/`, rebuilds on change, and delivers full-page live reload over SSE (the reload client is injected into `index.html` at serve time). Both run the declared style pipeline automatically — `styles: { use: ['tailwindcss'] }` in `puzzle.config.js` (tailwindcss-only in v1) — so Tailwind output is included in the served/built `styles.css`.
 
 By default a build emits one `dist/app.js`, and a dynamic `import()` is inlined
 into it. Set `build: { splitting: true }` in `puzzle.config.js` and each dynamic
@@ -475,8 +476,9 @@ only when that code path runs — the way to keep a heavy on-demand dependency (
 chart library, a diagram renderer, an editor) off the first page load. The entry
 keeps its `app.js` name, static imports are unaffected, and total shipped bytes
 do not grow: esbuild's ESM splitting has no chunk-loader runtime. The build's
-size banner also names your largest dependencies and flags any single one over
-200 KB.
+size banner also names your largest dependencies and, in a production build,
+flags any single one over 200 KB. The threshold is calibrated against minified
+bytes, so a development build lists the breakdown without ever warning.
 
 On an interactive terminal, `build` and `dev` also use a cached, non-blocking
 daily check to mention newer Puzzle releases. Set `PUZZLE_NO_UPDATE_CHECK=1` to

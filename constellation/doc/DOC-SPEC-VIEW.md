@@ -6,14 +6,20 @@ connections:
   - DOC-SPEC
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-ANIMATIONS
-verified_at: '2026-07-25T05:53:19.716Z'
-verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+verified_at: '2026-08-14T05:01:28.752Z'
+verified_sha: d74916a0e021b6bb86394551171838fbab161347
 notes:
   - kind: verified
     text: >-
       Sections moved byte-for-byte from DOC-SPEC (scripted split, verified by SHA-identical section
       census); §N numbers unchanged
     sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+  - kind: verified
+    text: >-
+      §60 added: the app-level onError + errorView contract (v1.67/v1.71, from D145). Known code gap
+      tracked as a gotcha on DECISION-D145-ERROR-BOUNDARIES: a load-phase failure during retry
+      blanks the routed position.
+    sha: d74916a0e021b6bb86394551171838fbab161347
 ---
 
 The frozen v1 contract for the view runtime: animations, skeleton loading, `this.memo()`, app lifecycle hooks, cross-view morphs, element refs, scroll-triggered enters, and the `flip` directive. See [[DOC-SPEC]] for the section index and the rest of the contract.
@@ -221,4 +227,16 @@ A keyed `{#for}` row root may declare `flip` (bare) or `flip={ flipOptions }` �
 - Newly inserted rows keep the enter path (§12/§39); leaving rows keep the out-animation path and are never FLIP candidates. No wrapper elements; the loop key is the only identity system.
 - `prefers-reduced-motion` and missing Web Animations mean no measurement work at all; a list with no `flip` attributes (or unchanged order) costs nothing beyond a cheap scan. A `flip` on an unkeyed row warns once (positional-diff lists have no stable identity to animate).
 - Simultaneous author-controlled transform *animations* on the same element may conflict — documented; a wrapper element is the escape hatch.
+
+## 60. App-level error handling — `onError` + the app error view `errorView` (v1.67; error-view contract v1.71)
+
+Two optional PuzzleApp config keys (§2) on top of the D115/D136/D143 recovery machinery; both live in a ctx-keyed WeakMap — the documented three-service ctx object is not widened. Full rationale: [[DECISION-D145-ERROR-BOUNDARIES]].
+
+**The funnel.** Every framework-contained app error reports through one funnel (`client-runtime/errors.js`). `onError(error, info)` receives a frozen `info = { phase, view, route }` — phases: `mount`, `refresh`, `navigation`, `transition`, `leave`, `bind`, `error-view`. With no hook registered, the funnel replays the exact `console.error` the catch site always made. A throwing (or rejecting async) `onError` is contained at the funnel with its own `console.error` and never re-enters it. Deliberately not funneled: rethrow-to-caller paths (`beforeMount`, `router.start()`), explicit navigation verdicts (a guard returning false), input-capability fallbacks, and event handlers/formatters — those surface uncaught as ever.
+
+**The error view.** `errorView` registers **one** ordinary compiled view — the default export of any `.pzl` file; a value that is not a view constructor is a construction-time config error. When a framework-contained mount/refresh failure lands, the runtime — after the funnel report — destroys the failed instance and mounts a fresh error-view instance at the exact failed position (**replacement, never re-render**: an instance whose `data()` or render just threw is never asked to render its own fallback). Parent, siblings, and the surrounding layout keep their state. The error view is a normal PuzzleView receiving props `error` (the failure as thrown), `info` (the same frozen object the funnel passed), and `retry` (a callback, identity-stable for the error view's lifetime).
+
+**Retry** rebuilds through the position's normal owner, never a second engine: for a routed view/layout the Router forces a same-location replace through the normal navigation pipeline (`chainInvalid` forces `keep = 0`, so the whole chain re-runs constructor → `created()` → `data()` → render → mount); for a child component the D115 placeholder stays at the vnode position and the parent's ordinary `refresh()` remounts a fresh child — props and slots re-derived, not replayed. Single-flight; a retry after the position was already removed is a no-op; a failed retry reports through the funnel and mounts a fresh error view carrying the new error. Nothing retries automatically, ever.
+
+**Edges.** The error view itself failing reports once with `phase: 'error-view'` and stops — the runtime never mounts an error view for the error view; the failed-mount placeholder stays recoverable. SSG takeover: a failed takeover mount renders the error view first; only when none is configured (or it also failed) is the prerendered page restored. Prerender-time failures (both output modes) fail the build — the error view never renders into generated HTML. With no `errorView` configured, the funnel still reports every failure and failed positions keep the invisible D115 recovery placeholder. There is no per-view error API — no `errorContent`, no boundary walk, no `<ErrorBoundary>` marker.
 

@@ -1,7 +1,7 @@
 ---
 name: Dev server & watcher
 status: verified
-verified_at: '2026-08-13T04:52:59.916Z'
+verified_at: '2026-08-14T05:01:14.680Z'
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-DEVSTATE
@@ -23,7 +23,7 @@ notes:
       Static-dev public classification aligned with the SPA bundle-input test and verified against
       route_deps.go classify.
     sha: e76df0fd873bd4739a754d9861197a9f24074a5f
-verified_sha: e76df0fd873bd4739a754d9861197a9f24074a5f
+verified_sha: d74916a0e021b6bb86394551171838fbab161347
 ---
 
 # Dev server (`puzzle dev`)

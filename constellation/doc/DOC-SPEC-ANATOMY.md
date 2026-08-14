@@ -6,8 +6,8 @@ connections:
   - DOC-SPEC
   - COMPONENT-PUZZLE-APP
   - COMPONENT-ESBUILD-PLUGIN
-verified_at: '2026-07-25T05:53:16.920Z'
-verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+verified_at: '2026-08-14T05:01:28.843Z'
+verified_sha: d74916a0e021b6bb86394551171838fbab161347
 notes:
   - kind: verified
     text: >-
@@ -64,7 +64,7 @@ const app = new PuzzleApp({
 app.mount();
 ```
 
-That is the **entire** v1 config surface: `target`, `routes`, `models`, `formatters`, `apiURL`. (v1.5 adds an optional `scrollBehavior` — see §14; v1.6 adds an optional `routerMode`, an imported mode object since D159 — see §15; v1.19 adds an optional `routerBase` — see §23; v1.24 adds an optional `transitionMode` — see §26; v1.31 adds optional `beforeMount`/`mounted`/`beforeUnmount` app lifecycle hooks — see §34; v1.72 adds the optional `adapter` capability — see §58.) App-level `settings`, `computed`, global `events` (including keyboard-shortcut strings), and `methods` remain deferred — see the cut list.
+That is the **entire** v1 config surface: `target`, `routes`, `models`, `formatters`, `apiURL`. (v1.5 adds an optional `scrollBehavior` — see §14; v1.6 adds an optional `routerMode`, an imported mode object since D159 — see §15; v1.19 adds an optional `routerBase` — see §23; v1.24 adds an optional `transitionMode` — see §26; v1.31 adds optional `beforeMount`/`mounted`/`beforeUnmount` app lifecycle hooks — see §34; v1.67/v1.71 add the optional `onError` hook and `errorView` view — see §60; v1.72 adds the optional `adapter` capability — see §58.) App-level `settings`, `computed`, global `events` (including keyboard-shortcut strings), and `methods` remain deferred — see the cut list.
 
 ## 3. `.pzl` file anatomy
 

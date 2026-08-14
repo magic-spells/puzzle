@@ -66,8 +66,8 @@ node-side prerender stores, the static kernel, and `/testing`'s
 matching option. Installation happens before any store or record exists, so
 nothing can observe a half-enabled state.
 
-**Misconfiguration is loud in dev.** At store construction, a registered model
-with a truthy `static adapter` while no capability was passed produces a
+**Misconfiguration is loud in dev.** At PuzzleApp construction, a registered
+model with a truthy `static adapter` while no capability was passed produces a
 dev-only warning naming the model and the fix ("pass `adapter` from
 `@magic-spells/puzzle/adapter` to PuzzleApp"). The check inspects config only
 — core never references the adapter module — and production builds strip it.
