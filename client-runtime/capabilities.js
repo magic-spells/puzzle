@@ -1,14 +1,14 @@
-let adapterCapability;
+const adapterCapabilities = new WeakSet();
 
 /** Create the opaque value exported by the opt-in adapter subpath. */
-export function createAdapterCapability(install) {
-	adapterCapability = Object.freeze({ install });
-	return adapterCapability;
+export function createAdapterCapability(value) {
+	adapterCapabilities.add(Object.freeze(value));
+	return value;
 }
 
 /** Whether a value is the adapter capability produced by the adapter subpath. */
 export function isAdapterCapability(value) {
-	return value === adapterCapability;
+	return adapterCapabilities.has(value);
 }
 
 /** Validate and install the adapter capability without importing its module. */

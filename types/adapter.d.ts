@@ -16,6 +16,41 @@ export type AdapterLoadAllOptions = Record<
 /** A server-returned record shape. The framework validates primary keys at runtime. */
 export type AdapterRecord = Record<string, any>;
 
+/** Per-model identity supplied last to every app-wide adapter default. */
+export interface AdapterDefaultContext {
+	type: string;
+	endpoint?: string;
+}
+
+/** App-wide implementations for the five framework adapter verbs. */
+export interface AdapterDefaults<TRecord extends PuzzleModel = PuzzleModel> {
+	loadAll?(
+		fetch: AdapterFetch,
+		options: AdapterLoadAllOptions | undefined,
+		context: AdapterDefaultContext
+	): AdapterMaybePromise<Response | AdapterRecord[]>;
+	loadOne?(
+		fetch: AdapterFetch,
+		id: any,
+		context: AdapterDefaultContext
+	): AdapterMaybePromise<Response | AdapterRecord>;
+	create?(
+		fetch: AdapterFetch,
+		record: TRecord,
+		context: AdapterDefaultContext
+	): AdapterMaybePromise<Response | AdapterRecord | null | undefined>;
+	update?(
+		fetch: AdapterFetch,
+		record: TRecord,
+		context: AdapterDefaultContext
+	): AdapterMaybePromise<Response | AdapterRecord | null | undefined>;
+	delete?(
+		fetch: AdapterFetch,
+		record: TRecord,
+		context: AdapterDefaultContext
+	): AdapterMaybePromise<unknown>;
+}
+
 /**
  * Per-model transport functions. `endpoint` is optional REST shorthand; any
  * authored verb wins over its generated default. Custom function keys are
@@ -73,11 +108,19 @@ export type BoundAdapterConfig<TConfig extends AdapterConfig<any> = AdapterConfi
 		[key: string]: any;
 	};
 
-/** Opaque app-config capability for Puzzle's REST adapter runtime. */
+/** Opaque app-config capability for Puzzle's adapter runtime. */
 export interface AdapterCapability extends PuzzleAdapterCapability {}
 
+/** The bare capability additionally creates app-configured capability values. */
+export interface AdapterFactoryCapability extends AdapterCapability {
+	/** Return a new capability carrying app-wide defaults for framework verbs. */
+	defaults<TDefaults extends AdapterDefaults>(
+		verbs: TDefaults & Record<Exclude<keyof TDefaults, keyof AdapterDefaults>, never>
+	): AdapterCapability;
+}
+
 /** Pass once as `new PuzzleApp({ ..., adapter })`. */
-export declare const adapter: AdapterCapability;
+export declare const adapter: AdapterFactoryCapability;
 
 /** Thrown when an adapter write/request responds non-OK. */
 export declare class PuzzleAdapterError extends Error {

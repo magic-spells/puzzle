@@ -47,6 +47,7 @@ import { preloadTakeoverComponents } from '../ssg/preload.js';
  * @param {object} [options.formatters] the app custom formatters map
  * @param {string} [options.apiURL] the store's base API URL
  * @param {object} [options.storage] Storage-like persistence object
+ * @param {object} [options.adapter] opaque adapter capability
  * @param {string} [options.routerBase] normalized route URL prefix
  * @returns {Promise<void>}
  */
@@ -59,6 +60,7 @@ export async function mountStatic({
 	formatters,
 	apiURL,
 	storage,
+	adapter,
 	routerBase,
 } = {}) {
 	const targetEl = document.querySelector(target);
@@ -84,6 +86,7 @@ export async function mountStatic({
 		formatters,
 		apiURL,
 		storage,
+		adapter,
 		routerBase,
 		route: routeSnapshot,
 	});
@@ -167,7 +170,7 @@ function buildStaticContext({
 	route,
 }) {
 	installAdapterCapability(adapter, 'config.adapter');
-	const storeOptions = { apiURL };
+	const storeOptions = { apiURL, adapter };
 	if (storage !== undefined) storeOptions.storage = storage;
 	const store = new Store(models, storeOptions);
 

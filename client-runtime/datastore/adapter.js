@@ -39,6 +39,24 @@ function validateAdapterConfig(type, Model, config) {
 	);
 }
 
+function validateAdapterDefaults(verbs) {
+	if (!verbs || typeof verbs !== 'object' || Array.isArray(verbs)) {
+		console.warn(
+			'[puzzle] adapter.defaults() expects an object whose keys are adapter verbs and whose values are functions'
+		);
+		return;
+	}
+	const invalid = Object.entries(verbs)
+		.filter(([key, value]) => !ADAPTER_VERBS.includes(key) || typeof value !== 'function')
+		.map(([key]) => key);
+	if (!invalid.length) return;
+	console.warn(
+		`[puzzle] adapter.defaults() has invalid ${invalid.length === 1 ? 'key' : 'keys'} ${invalid
+			.map((key) => JSON.stringify(key))
+			.join(', ')} — defaults keys must be loadAll, loadOne, create, update, or delete, and every value must be a function`
+	);
+}
+
 /**
  * Thrown by adapter write verbs when the server responds non-OK.
  */
@@ -140,8 +158,8 @@ class AdapterStoreMethods {
 
 	/**
 	 * Return the model adapter with every author function bound to this model's
-	 * enhanced fetch. When endpoint shorthand is present, missing standard verbs
-	 * are filled with generated REST transports. Stable per store+type.
+	 * enhanced fetch. Standard verbs resolve model function → app default →
+	 * endpoint-generated REST transport. Stable per store+type.
 	 */
 	adapter(type) {
 		let bindings = adapterBindingsByStore.get(this);
@@ -155,6 +173,7 @@ class AdapterStoreMethods {
 		const declared = Model.adapter;
 		const config =
 			declared && typeof declared === 'object' && !Array.isArray(declared) ? declared : {};
+		const defaults = this._a?.d;
 		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 			validateAdapterConfig(type, Model, declared);
 		}
@@ -169,10 +188,13 @@ class AdapterStoreMethods {
 		for (const [key, value] of Object.entries(config)) {
 			bound[key] = typeof value === 'function' ? (...args) => value(fetch, ...args) : value;
 		}
-		if (config.endpoint) {
-			const url = this.apiURL + config.endpoint;
-			for (const verb of ADAPTER_VERBS) {
-				if (typeof bound[verb] !== 'function') {
+		const defaultContext = { type, endpoint: config.endpoint };
+		const url = config.endpoint && this.apiURL + config.endpoint;
+		for (const verb of ADAPTER_VERBS) {
+			if (typeof bound[verb] !== 'function') {
+				if (typeof defaults?.[verb] === 'function') {
+					bound[verb] = (...args) => defaults[verb](fetch, ...args, defaultContext);
+				} else if (config.endpoint) {
 					bound[verb] = (arg) => generatedTransport(type, url, verb, fetch, arg);
 				}
 			}
@@ -706,5 +728,15 @@ function installAdapter() {
 	installed = true;
 }
 
+function createDefaultsCapability(verbs = {}) {
+	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+		validateAdapterDefaults(verbs);
+	}
+	return createAdapterCapability({ install: installAdapter, d: verbs });
+}
+
 /** Opaque app-config capability; its internal install is idempotent. */
-export const adapter = createAdapterCapability(installAdapter);
+export const adapter = createAdapterCapability({
+	install: installAdapter,
+	defaults: createDefaultsCapability,
+});

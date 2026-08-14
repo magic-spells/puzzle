@@ -33,7 +33,8 @@ declare:
   `{ endpoint: '/api/posts' }` generates the standard REST five, while author
   verbs override individual transports or replace them without an endpoint.
   The app imports the capability from `@magic-spells/puzzle/adapter` and passes
-  it once to `new PuzzleApp({ ..., adapter })`;
+  it once to `new PuzzleApp({ ..., adapter })`; an app-wide dialect instead
+  passes `adapter.defaults({ ...verbs })`, with model functions still winning;
 - ordinary getters and instance methods.
 
 A stored record is an instance of that model class. Primary keys are immutable.
@@ -76,6 +77,9 @@ D91 hook plus fixtures interception. A framework verb may return its Response
 for Puzzle to status-check and parse, or return parsed data directly. In both
 cases Puzzle applies the same primary-key/shape guards and framework-owned
 reconciliation. Global fetch is legal but bypasses the hook and mock seam.
+Dispatch is model function → app default → endpoint-generated REST. App-default
+functions receive a trailing `{ type, endpoint }` context (with `endpoint`
+undefined when absent); per-model function signatures are unchanged.
 
 The endpoint-generated `loadAll` serializes non-nullish option values with
 `URLSearchParams`; authored transports receive the exact options object. Pages

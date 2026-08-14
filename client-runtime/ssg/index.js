@@ -624,7 +624,7 @@ async function buildContext(config, { router }) {
 	const { models = {}, formatters = {}, apiURL, storage, adapter, beforeRequest } = config;
 
 	installAdapterCapability(adapter, 'config.adapter');
-	const storeOptions = { apiURL };
+	const storeOptions = { apiURL, adapter };
 	if (storage !== undefined) storeOptions.storage = storage;
 	// The adapter request hook rides along (v1.55, D91) so a build-time beforeMount
 	// seed hits an authenticated API exactly the way the browser store would. (The

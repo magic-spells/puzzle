@@ -619,7 +619,7 @@ export interface PuzzleAppConfig {
 	apiURL?: string;
 	/** Storage-like object for opt-in persistence. */
 	storage?: any;
-	/** REST adapter capability imported from `@magic-spells/puzzle/adapter`. */
+	/** Bare or defaults-configured capability from `@magic-spells/puzzle/adapter`. */
 	adapter?: PuzzleAdapterCapability;
 	/**
 	 * Adapter request hook (v1.55, D91): `beforeRequest(init, { type, method, url })`,
