@@ -148,9 +148,16 @@ func Build(root string, opts Options) error {
 		entry = fixtures.Entry
 	}
 
+	// Code splitting for the SPA bundle is opt-in (build.splitting) and is forced
+	// OFF in static mode: that pass's app.js is deleted before the swap
+	// (prerender_pages.go), so its chunks would ship as orphans nothing imports.
+	// Resolved here, before ValidatePublic, because it decides whether dist/chunks
+	// is a reserved output name for this build.
+	splitting := cfg.Splitting() && mode != "static"
+
 	// Reject a public/ tree that would clobber compiler output BEFORE touching
 	// dist/ — a config error must never destroy the last good build.
-	if err := ValidatePublic(absRoot); err != nil {
+	if err := ValidatePublic(absRoot, splitting); err != nil {
 		return err
 	}
 
@@ -214,8 +221,9 @@ func Build(root string, opts Options) error {
 	// static page — the per-page mountStatic bundles are) can never reach those
 	// branches, so the define folds them — and ssg/preload.js — away.
 	buildOpts := newBundleOptions(absRoot, entry, staging, pl, bundleFlags{
-		Dev:      opts.Development,
-		Takeover: mode == "hybrid",
+		Dev:       opts.Development,
+		Takeover:  mode == "hybrid",
+		Splitting: splitting,
 	})
 	buildOpts.Metafile = opts.Metafile != nil
 	if opts.Fixtures {
@@ -499,6 +507,13 @@ var reservedOutputNames = map[string]bool{
 	"styles.css": true,
 }
 
+// chunksDirName is the dist-relative directory the SPA pass emits lazy chunks
+// into when build.splitting is on (options.go ChunkNames). It is reserved only
+// while splitting is enabled — an app that never opts in keeps its
+// public/chunks/ assets — which is why ValidatePublic takes the flag rather than
+// listing the name in reservedOutputNames.
+const chunksDirName = "chunks"
+
 // PublicDir returns the resolved static-assets source directory (app/public,
 // else a root-level public/), or "" if neither exists. Exported so `puzzle dev`
 // can watch a root-level public/ tree that lies OUTSIDE the watched app/ dir
@@ -529,7 +544,12 @@ func publicDir(root string) string {
 // bundle/stylesheet the build just produced. Nested occurrences are allowed. It
 // is exported so `puzzle dev` (a separate package) can revalidate on every
 // incremental rebuild. No public/ dir is not an error.
-func ValidatePublic(root string) error {
+//
+// splitting extends the check to the root-level chunks/ ENTRY (file or
+// directory), which the SPA pass owns only while build.splitting is on — the
+// same class of collision the static pass rejects for _puzzle
+// (prerender_pages.go). Off, that name belongs to the app again.
+func ValidatePublic(root string, splitting bool) error {
 	src := publicDir(root)
 	if src == "" {
 		return nil
@@ -539,10 +559,16 @@ func ValidatePublic(root string) error {
 		return fmt.Errorf("reading public assets: %w", err)
 	}
 	for _, e := range entries {
+		name := e.Name()
+		if splitting && strings.EqualFold(name, chunksDirName) {
+			return fmt.Errorf(
+				"public asset %s would overwrite compiler output dist/%s (a reserved output name while build.splitting is on); rename or remove it",
+				filepath.Join(src, name), chunksDirName,
+			)
+		}
 		if e.IsDir() {
 			continue
 		}
-		name := e.Name()
 		if reservedOutputNames[strings.ToLower(name)] {
 			return fmt.Errorf(
 				"public asset %s would overwrite compiler output dist/%s (%s is a reserved output name); rename or remove it",
