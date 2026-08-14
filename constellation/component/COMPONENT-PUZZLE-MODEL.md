@@ -20,8 +20,9 @@ and custom `validate`.
 
 The base class provides schema normalization, primary-key discovery, per-record
 default application (object/array defaults deep-clone), `update`, local-only
-`destroy`, adapter-backed `save`/`delete`, static and instance `validate`, and
-`toJSON`. Validation reports `{ valid, errors }`; static `validate` accepts
+`destroy`, static and instance `validate`, and `toJSON`. Adapter-backed
+`save`/`delete` are absent from core and installed on the prototype by the
+app-level capability from `@magic-spells/puzzle/adapter`. Validation reports `{ valid, errors }`; static `validate` accepts
 `{ fields }` for partial checks (the same field-subset machinery `update()` uses)
 and exempts a nullish primary key — `createRecord` generates it, so the pre-create
 form check accepts the same input, while `''` still fails. That exemption covers
@@ -38,6 +39,14 @@ measured.
 Once `removeRecord` flags an instance `_deleted`, `save()` rejects (no
 resurrection) and `delete()` resolves idempotently; a never-added instance still
 rejects both, asynchronously.
+
+The model's static adapter is a set of fetch functions. Endpoint shorthand
+generates `loadAll`, `loadOne`, `create`, `update`, and `delete`; any author
+function overrides its verb, and endpoint is optional when the invoked verbs
+are supplied directly. Those functions own only transport. Store-owned
+validation, mutation-revision guards, pk adoption, `_synced` provenance, write
+chaining, persistence, and notification remain identical across generated and
+author transports.
 
 Relationships are excluded from defaults, validation, and JSON. The Store
 installs lazy prototype getters using conventional or overridden foreign keys;

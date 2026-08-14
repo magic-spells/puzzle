@@ -35,22 +35,24 @@ second specification. Decision cards hold rationale and git holds chronology.
 ## Package and application
 
 - Root exports: `PuzzleApp`, `PuzzleView`, `PuzzleModel`, `Puzzle`,
-  `PuzzleValidationError`, `PuzzleAdapterError`, and compiler support exports.
-- Subpaths: `@magic-spells/puzzle/morph`, `/router-modes`, `/ssg`, `/static`,
-  `/testing`, `/fixtures`, and `/puzzle-env`. (`/router-modes` exports
+  `PuzzleValidationError`, and compiler support exports.
+- Subpaths: `@magic-spells/puzzle/adapter`, `/morph`, `/router-modes`, `/ssg`,
+  `/static`, `/testing`, `/fixtures`, and `/puzzle-env`. (`/router-modes` exports
   `hashRouter()` and `memoryRouter({ initialPath })`, the opt-in router modes —
   history routing is the inline default and needs no import, D159; `/static` exports `mountStatic`, the
   per-page kernel for `output: 'static'`; `/testing` exports the app-author
   test utilities — `mountView`, `createTestApp`, `settled`, `type` (drives a
   two-way-bound control, D147), `installFakeAnimate`, `installFakeObserver`,
   D94 — and re-exports `installFixtures`; `/fixtures` is the self-contained fixtures + mock-adapter
-  module, D98, bundled into an app only by the `--fixtures` flag.)
+  module, D98, bundled into an app only by the `--fixtures` flag; `/adapter`
+  exports the frozen `adapter` capability and `PuzzleAdapterError`, D157.)
 - `puzzle` binary shim selects an optional platform binary for macOS/Linux on
   arm64/x64. Unsupported systems get a Go-install fallback message.
 - App config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
-  `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode` (a mode
-  object from `/router-modes`; a string throws), `routerBase`, `transitionMode`,
-  `beforeMount`, `mounted`, `beforeUnmount`, `onError`, and `errorView`.
+  `adapter`, `beforeRequest`, `scrollBehavior`, `focusBehavior`, `routerMode`
+  (a mode object from `/router-modes`; a string throws), `routerBase`,
+  `transitionMode`, `beforeMount`, `mounted`, `beforeUnmount`, `onError`, and
+  `errorView`.
 - The app is SPA-first. Prerendered output comes in two modes (D67/D81), never a
   request-time SSR server or hydration protocol: `output: 'hybrid'` ships
   prerendered pages the SPA takes over at navigation zero; `output: 'static'`
@@ -130,26 +132,31 @@ second specification. Decision cards hold rationale and git holds chronology.
   `.primary().required()` field; hydration/upsert stay fail-soft).
 - Store queries auto-subscribe inside `data()`. Collection and record keys are
   batched, hidden-tab safe, isolated per subscriber, and torn down with views.
-- Reads: `loadAll`/`loadOne` through model adapters with identity-preserving
-  upsert. Writes: `save`, `delete`, and custom `request`, with POST/PUT sync
-  provenance, collision/destroy guards, and typed adapter errors.
-- Every adapter call routes through one internal fetch seam, so the optional
+- Server sync is opt-in: models keep a bare `static adapter` object of per-verb
+  fetch functions; `endpoint` generates missing REST defaults, author functions
+  win, and endpoint is optional for a fully custom adapter (D158). The app
+  imports the D157 capability from `@magic-spells/puzzle/adapter` and passes it
+  once to `PuzzleApp`; apps that never pass it ship none of the Store/record
+  verbs. Reads preserve identity and accept pagination options. Writes retain
+  sync provenance, revision/collision/destroy guards, and typed adapter errors.
+- Generated transports, enhanced fetch, and `store.request()` route through one internal fetch seam, so the optional
   `beforeRequest(init, { type, method, url })` config hook attaches auth headers,
   `credentials`, or an `AbortSignal` to all of them (D91). Synchronous;
   `method`/`body`/URL are not the hook's to change. Carried by the prerender
-  path; structurally unavailable under `output: 'static'`.
+  path; structurally unavailable under `output: 'static'`. Explicit global
+  fetch in an author function bypasses this seam and fixture interception.
 - Relationships are lazy store-backed getters and participate in tracking.
 - Development/test affordances (D95, reshaped by D98): `installFixtures(config)`
   from `/fixtures` attaches `store.seed(type, n, overrides)` — records generated
   from the schema alone, deterministic via the install `seed` and two derived
   PRNG streams; the auto-generated pk is the one non-deterministic field — and
-  the mock adapter: `static adapter = { mock: { data, latency, failRate, fail,
-  handler } }` and/or the install config's per-type `mock` entries (fixtures
+  the mock adapter: `static adapter = { endpoint, mock: { data,
+  latency, failRate, fail, handler } }` and/or the install config's per-type `mock` entries (fixtures
   file wins per key) serve the verbs from an in-memory collection by replacing
-  the core's one `_network` seam, so every adapter verb runs unmodified and
+  the `/adapter` module's `_network` seam, so every adapter verb runs unmodified and
   `beforeRequest` still fires. `latency` makes skeletons developable;
   `failRate`/`fail` are the supported way to exercise a `data()` rejection.
-  Nothing in core references the module — it ships only under `--fixtures`
+  Nothing in core references either adapter or fixtures — fixtures ships only under `--fixtures`
   (wired from `app/fixtures.js`) or a direct test import, and `uninstall()`
   detaches it.
 - Optional Storage hydration/persistence is fail-soft. Persistence serializes
@@ -204,8 +211,10 @@ second specification. Decision cards hold rationale and git holds chronology.
   a whole module — `views/flip.js`, behind `__PUZZLE_HAS_FLIP__`, now the only
   usage define (D111 retired the managed-head one, so the scan reads only
   `.pzl`) — so an app pays only for what it uses; the fixture
-  generator and mock adapter are excluded structurally instead (D98): nothing
-  imports `/fixtures` unless `puzzle dev|build --fixtures` generates the wiring
+  generator and mock adapter are excluded structurally instead (D98), as is
+  the server adapter itself (D157): nothing imports `/fixtures` unless
+  `puzzle dev|build --fixtures` generates the wiring, and nothing imports
+  `/adapter` unless an app passes its capability (or fixtures needs its seam).
   entry from `app/fixtures.js`. Source maps are **opt-in** —
   `build.sourceMap` (default off) emits linked maps for SPA + true-static prod
   bundles; dev keeps linked maps regardless (D88).

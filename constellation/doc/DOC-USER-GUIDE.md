@@ -120,6 +120,7 @@ resolved against `app/assets/`, and CSS `@import`s are unaffected.
 ### app/app.js
 ```javascript
 import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import routes from './routes.js';
 import models from './models/index.js';
 
@@ -135,6 +136,9 @@ const app = new PuzzleApp({
 
   // Models registration
   models,
+
+  // Install the optional server adapter verbs once for this app.
+  adapter,
 
   // Base URL for the D21 server read path. Adapter endpoints are joined onto
   // this, so store.loadAll('post') fetches /api/posts.json — a static JSON seed
@@ -162,7 +166,7 @@ app.mount();
 export default app;
 ```
 
-The v1 config surface is `target`, `routes`, `models`, `formatters`, and `apiURL`, plus the optional amendments (`scrollBehavior`, `routerMode`, the v1.31 lifecycle hooks `beforeMount`/`mounted`/`beforeUnmount`, …) — see [[DOC-SPEC]] §2 and §34. Seeding the store with `store.loadAll` in `beforeMount` is the D21 read path; see [Two data() gotchas](#two-data-gotchas) for why it must never run inside `data()`.
+The v1 config surface is `target`, `routes`, `models`, `formatters`, and `apiURL`, plus optional capabilities and amendments (`adapter`, `scrollBehavior`, `routerMode`, the v1.31 lifecycle hooks `beforeMount`/`mounted`/`beforeUnmount`, …) — see [[DOC-SPEC]] §2 and §34. Seeding the store with `store.loadAll` in `beforeMount` is the D21 read path; see [Two data() gotchas](#two-data-gotchas) for why it must never run inside `data()`.
 
 ### app/routes.js
 ```javascript
@@ -341,7 +345,16 @@ export const models = {
 export default models;
 ```
 
-**The `adapter` drives both the read and write paths.** A model's `static adapter = { endpoint }` is consumed on the read path by `store.loadAll(type)` / `store.loadOne(type, id)`, which GET `apiURL + endpoint` and upsert the results (D21). A model with no `adapter` (like `comment` above) simply opts out of that path. Write sync shipped in v1.18 (D50): `record.save()` POSTs a never-synced record and PUTs a synced one (local-first — a failed save keeps the dirty state and rejects), `record.delete()` DELETEs then removes locally, and `store.request()` reaches custom endpoints; `record.destroy()` stays local-only. Validation enforces too — since v1.16 (D48) `createRecord`/`update` throw `PuzzleValidationError` on invalid data, while `Model.validate(data)` / `record.validate()` return `{ valid, errors }` without throwing for form UX (server upserts and storage hydration stay exempt). See [[DOC-SPEC]] §20/§22 and the D21/D48/D50 decision cards.
+**The adapter capability drives both read and write paths.** Keep each model's
+config bare: `endpoint` generates the REST transports, while author fetch
+functions override individual verbs or form a no-endpoint adapter. Then import `adapter` from
+`@magic-spells/puzzle/adapter` in `app.js` and pass it once to `PuzzleApp`. The
+capability installs `loadAll`/`loadOne`, `adapter`/`upsert`/`request`, and record
+`save`/`delete`. A model with no adapter simply opts out, and an app that never
+passes the capability ships none of that runtime.
+`record.destroy()` stays local-only. Validation remains core: `createRecord` and
+`update` throw `PuzzleValidationError`, while `validate()` returns a renderable
+result. See [[DOC-SPEC]] §20/§22/§58 and D21/D48/D50/D157/D158.
 
 ---
 

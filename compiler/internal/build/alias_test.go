@@ -19,8 +19,9 @@ import (
 func aliasFixture() ssgFixtureFiles {
 	return ssgFixtureFiles{
 		"app/app.js": `import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import routes from '@/routes.js';
-const app = new PuzzleApp({ target: '#app', routes });
+const app = new PuzzleApp({ target: '#app', routes, adapter });
 app.mount();
 export default app;
 `,

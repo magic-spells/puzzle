@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { prerender, prerenderToDir, injectStaticShell } from '../client-runtime/ssg/index.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { Router } from '../client-runtime/router/router.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
@@ -426,6 +427,7 @@ describe('static prerender (D81)', () => {
 			expect(summary.target).toBe('app');
 			expect(summary.apiURL).toBeNull();
 			expect(summary.hasFormatters).toBe(false);
+			expect(summary.hasAdapter).toBe(false);
 		});
 
 		it('warns once (not per page) when no /app.js tag is present', async () => {
@@ -438,18 +440,20 @@ describe('static prerender (D81)', () => {
 			expect(appJsWarnings).toHaveLength(1);
 		});
 
-		it('reports apiURL + hasFormatters from config', async () => {
+		it('reports apiURL + hasFormatters + hasAdapter from config', async () => {
 			const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-cfg-'));
 			const shellPath = writeShell(outDir);
 			const cfg = {
 				target: '#app',
 				apiURL: 'https://api.example.com',
+				adapter,
 				formatters: { shout: (s) => String(s).toUpperCase() },
 				routes: [{ path: '/', name: 'home', view: Home }],
 			};
 			const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
 			expect(summary.apiURL).toBe('https://api.example.com');
 			expect(summary.hasFormatters).toBe(true);
+			expect(summary.hasAdapter).toBe(true);
 		});
 
 		it('leaves a prerender:false page`s target empty + unmarked but still injects scripts', async () => {

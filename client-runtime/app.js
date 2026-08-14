@@ -3,7 +3,7 @@
  *
  * Instantiate once with the v1 config surface and call `mount()`. The config
  * surface is frozen (SPEC §2): { target, routes, models, formatters, apiURL,
- * storage }, amended by v1.5 with { scrollBehavior } (D33), v1.6 with
+ * storage, adapter }, amended by v1.5 with { scrollBehavior } (D33), v1.6 with
  * { routerMode } (D34/D42, an imported mode object since D159), v1.19 with
  * { routerBase } (sub-path deploys, D51), v1.24 with
  * { transitionMode } (overlapping route transitions, D56), v1.31 with
@@ -24,6 +24,7 @@
  * `app.store` and `app.router` are exposed as readable properties for debugging.
  */
 
+import { isAdapterCapability } from './capabilities.js';
 import { Store } from './datastore/store.js';
 import { makeFormatterRegistry } from './formatters.js';
 import { Router } from './router/router.js';
@@ -90,6 +91,8 @@ export class PuzzleApp {
 	 * @param {object} [config.formatters] app-level template formatters (override built-ins)
 	 * @param {string} [config.apiURL] base URL for the D21 server read path
 	 * @param {object} [config.storage] Storage-like object for persistence (opt-in)
+	 * @param {object} [config.adapter] capability imported from
+	 *   `@magic-spells/puzzle/adapter`; installs the optional server sync surface
 	 * @param {Function} [config.beforeRequest] adapter request hook (v1.55, D91):
 	 *   `beforeRequest(init, { type, method, url })`, called SYNCHRONOUSLY before
 	 *   every adapter fetch (`loadAll`/`loadOne`, `save()`, `delete()`,
@@ -148,6 +151,11 @@ export class PuzzleApp {
 	 *   `{ error, info, retry }` props
 	 */
 	constructor(config = {}) {
+		if (config.adapter && !isAdapterCapability(config.adapter)) {
+			throw new TypeError(
+				"[puzzle] config.adapter must be the adapter capability imported from '@magic-spells/puzzle/adapter'"
+			);
+		}
 		const ErrorView = config.errorView;
 		if (
 			ErrorView != null &&
@@ -238,6 +246,7 @@ export class PuzzleApp {
 			formatters = {},
 			apiURL,
 			storage,
+			adapter,
 			beforeRequest,
 			scrollBehavior,
 			focusBehavior,
@@ -259,9 +268,20 @@ export class PuzzleApp {
 		if (typeof __PUZZLE_HAS_PORTAL__ === 'undefined' || __PUZZLE_HAS_PORTAL__)
 			setPortalHost(el.parentNode ?? (typeof document !== 'undefined' ? document.body : null));
 
-		// 2. Store: models registry in; pass storage through only when provided so
+		// 2. Store: install optional capabilities before constructing any records,
+		//    then pass storage through only when provided so
 		//    the Store's own default (no persistence) stands otherwise. The adapter
 		//    request hook (v1.55, D91) rides the same conditional convention.
+		adapter?.install();
+		if ((typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) && !adapter) {
+			for (const [type, Model] of Object.entries(models)) {
+				if (!Model?.adapter) continue;
+				const name = Model.name || type;
+				console.warn(
+					`[puzzle] model "${name}" declares static adapter config, but no adapter capability was passed — import { adapter } from '@magic-spells/puzzle/adapter' and pass it to PuzzleApp: new PuzzleApp({ ..., adapter })`
+				);
+			}
+		}
 		const storeOptions = { apiURL };
 		if (storage !== undefined) storeOptions.storage = storage;
 		if (beforeRequest !== undefined) storeOptions.beforeRequest = beforeRequest;

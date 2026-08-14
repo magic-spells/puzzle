@@ -45,6 +45,7 @@ Decisions this locks in:
 ```js
 // app.js
 import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import routes from './routes.js';
 import models from './models/index.js';
 
@@ -52,6 +53,7 @@ const app = new PuzzleApp({
   target: '#app',       // CSS selector for the mount element
   routes,               // array of route definitions
   models,               // model registry from /models/index.js
+  adapter,              // optional: installs server sync for model adapter configs
   formatters: {         // optional: app-level template formatters
     pluralize: (count, singular, plural) =>
       count === 1 ? singular : plural || singular + 's',
@@ -62,7 +64,7 @@ const app = new PuzzleApp({
 app.mount();
 ```
 
-That is the **entire** v1 config surface: `target`, `routes`, `models`, `formatters`, `apiURL`. (v1.5 adds an optional `scrollBehavior` — see §14; v1.6 adds an optional `routerMode`, an imported mode object since D159 — see §15; v1.19 adds an optional `routerBase` — see §23; v1.24 adds an optional `transitionMode` — see §26; v1.31 adds optional `beforeMount`/`mounted`/`beforeUnmount` app lifecycle hooks — see §34.) App-level `settings`, `computed`, global `events` (including keyboard-shortcut strings), and `methods` remain deferred — see the cut list.
+That is the **entire** v1 config surface: `target`, `routes`, `models`, `formatters`, `apiURL`. (v1.5 adds an optional `scrollBehavior` — see §14; v1.6 adds an optional `routerMode`, an imported mode object since D159 — see §15; v1.19 adds an optional `routerBase` — see §23; v1.24 adds an optional `transitionMode` — see §26; v1.31 adds optional `beforeMount`/`mounted`/`beforeUnmount` app lifecycle hooks — see §34; v1.72 adds the optional `adapter` capability — see §58.) App-level `settings`, `computed`, global `events` (including keyboard-shortcut strings), and `methods` remain deferred — see the cut list.
 
 ## 3. `.pzl` file anatomy
 

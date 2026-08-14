@@ -11,6 +11,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { prerender } from '../client-runtime/ssg/index.js';
 import { mountStatic } from '../client-runtime/static/index.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
@@ -114,6 +115,40 @@ afterEach(() => {
 });
 
 describe('static kernel — mountStatic (D81)', () => {
+	it('installs the app adapter capability before constructing its Store', async () => {
+		class ApiNote extends PuzzleModel {
+			static schema = { id: Puzzle.string().primary() };
+			static adapter = { endpoint: '/notes' };
+		}
+		class Probe extends PuzzleView {
+			data() {
+				return { installed: typeof this.ctx.store.loadAll === 'function' };
+			}
+			render() {
+				return h('main', {}, [text(this.getData().installed)]);
+			}
+		}
+		stamp(Probe, 'app/views/Probe.pzl');
+		const cfg = {
+			target: '#app',
+			models: { note: ApiNote },
+			adapter,
+			routes: [{ path: '/', view: Probe }],
+		};
+		const { pages } = await prerender(cfg, { mode: 'static' });
+		seedDocument({ content: pages[0].html, data: pages[0].data });
+
+		await mountStatic({
+			target: '#app',
+			views: [Probe],
+			route: pages[0].route,
+			models: { note: ApiNote },
+			adapter,
+		});
+
+		expect(document.querySelector('#app').textContent).toBe('true');
+	});
+
 	it('mounts to markup identical to the prerendered output (parity)', async () => {
 		const { pages } = await prerender(config(), { mode: 'static' });
 		const page = pages[0];

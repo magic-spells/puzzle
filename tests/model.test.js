@@ -256,7 +256,7 @@ describe('PuzzleModel', () => {
 	// real OWN key, and the store's shape guards only reject null/array/non-object,
 	// so a payload like {"id":1,"__proto__":{}} reaches the constructor. A naive
 	// Object.assign would hit Object.prototype's __proto__ SETTER and re-prototype
-	// the record, severing every PuzzleModel method (update/save/validate/toJSON).
+	// the record, severing every core PuzzleModel method (update/validate/toJSON).
 	describe('prototype-pollution safety (Object.assign __proto__ hole)', () => {
 		it('constructing from data with an own __proto__ key keeps methods intact', () => {
 			// JSON.parse (not an object literal — `{__proto__:...}` is proto syntax,
@@ -266,7 +266,8 @@ describe('PuzzleModel', () => {
 			expect(Object.getPrototypeOf(todo)).toBe(Todo.prototype);
 			expect(todo).toBeInstanceOf(Todo);
 			expect(typeof todo.update).toBe('function');
-			expect(typeof todo.save).toBe('function');
+			// D157: server verbs are naturally absent until /adapter is called.
+			expect(todo.save).toBeUndefined();
 			expect(typeof todo.validate).toBe('function');
 			expect(typeof todo.toJSON).toBe('function');
 			// the dangerous key is dropped, real data preserved

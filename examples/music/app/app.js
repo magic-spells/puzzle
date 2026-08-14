@@ -1,4 +1,5 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import { enableMorph } from '@magic-spells/puzzle/morph';
 import { hashRouter } from '@magic-spells/puzzle/router-modes';
 import routes from './routes.js';
@@ -11,6 +12,7 @@ const app = new PuzzleApp({
   target: '#app',
   routes,
   models,
+  adapter,
   // Route rides in location.hash (`…/index.html#/album/x`), so the built example
   // hosts on any static host — GitHub Pages / S3 / file:// — with no server
   // rewrite rules (SPEC §15, D34). App code stays path-shaped; only URLs differ.

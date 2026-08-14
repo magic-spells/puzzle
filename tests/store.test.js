@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
+
+adapter.install();
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 
 class Todo extends PuzzleModel {
@@ -1059,7 +1062,9 @@ describe('Store — server read path (D21)', () => {
 	it('rejects with a clear message when the model declares no adapter', async () => {
 		mockFetch([]);
 		const store = makeStore(); // Todo has no static adapter
-		await expect(store.loadAll('todo')).rejects.toThrow(/no adapter declared for 'todo'/);
+		await expect(store.loadAll('todo')).rejects.toThrow(
+			/no adapter loadAll\(\) declared for 'todo'/
+		);
 		vi.unstubAllGlobals();
 	});
 

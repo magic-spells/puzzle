@@ -4,8 +4,8 @@
  * fixtures file's `mock` block.
  *
  * Part of the detachable `/fixtures` module (D98): nothing in the core runtime
- * imports this file. Interception happens in `Store._network` — the one seam the
- * core keeps — which `installFixtures()` replaces on the prototype. That
+ * imports this file. Interception happens in `Store._network` — the seam the
+ * adapter capability installs — which `installFixtures()` replaces on the prototype. That
  * placement is the entire point of the design: `loadAll` / `loadOne` / `save()` /
  * `delete()` / `request()` run COMPLETELY UNMODIFIED, so what a mocked app
  * exercises is the real D21 read path and the real D50 write path (pk adoption,

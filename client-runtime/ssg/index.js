@@ -32,6 +32,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { installAdapterCapability } from '../capabilities.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { Router, encodeURL, normalizeBase } from '../router/router.js';
@@ -353,7 +354,7 @@ export async function prerender(config, opts = {}) {
  *   previous render's file at the reported `file` path.
  * @returns {Promise<{ outDir: string, written: Array<object>, skipped: Array<{path,reason}>,
  *   warnings: string[], count: number, mode?: string, target?: string,
- *   apiURL?: string|null, hasFormatters?: boolean }>}
+ *   apiURL?: string|null, hasFormatters?: boolean, hasAdapter?: boolean }>}
  */
 export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid', only } = {}) {
 	if (!outDir) throw new Error('[puzzle] prerenderToDir requires an outDir');
@@ -468,7 +469,7 @@ async function writeFiles(files) {
  * a collision-free slug, inject the static shell (content + `data-puzzle-static`
  * marker, inline JSON data island, per-page module script), and collect the extended
  * summary the Go static build consumes (per page: `entry`, `modules`, `route`; top
- * level: `mode`, `target`, `apiURL`, `hasFormatters`).
+ * level: `mode`, `target`, `apiURL`, `hasFormatters`, `hasAdapter`).
  *
  * A page whose output file an earlier page already claimed is skipped here with
  * reason `'duplicate'` rather than overwriting it (see claimedPaths below).
@@ -588,6 +589,7 @@ async function writeStaticDir({ config, outDir, shell, targetId, pages, skipped,
 		routerBase: config.routerBase,
 		hasModels: Object.keys(config.models ?? {}).length > 0,
 		hasFormatters: Object.keys(config.formatters ?? {}).length > 0,
+		hasAdapter: Boolean(config.adapter),
 	};
 }
 
@@ -619,8 +621,9 @@ async function writeStaticDir({ config, outDir, shell, targetId, pages, skipped,
  * PuzzleApp — documented) so a build-time store seed lands before the first data().
  */
 async function buildContext(config, { router }) {
-	const { models = {}, formatters = {}, apiURL, storage, beforeRequest } = config;
+	const { models = {}, formatters = {}, apiURL, storage, adapter, beforeRequest } = config;
 
+	installAdapterCapability(adapter, 'config.adapter');
 	const storeOptions = { apiURL };
 	if (storage !== undefined) storeOptions.storage = storage;
 	// The adapter request hook rides along (v1.55, D91) so a build-time beforeMount

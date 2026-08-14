@@ -5,6 +5,7 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
 
 // Hand-written stand-ins for what the compiler emits (same convention as
@@ -96,6 +97,33 @@ describe('PuzzleApp — boot (APP_ANATOMY §3)', () => {
 		expect(app.ctx).toBeNull();
 	});
 
+	it('rejects a truthy non-capability adapter at construction with the public import', () => {
+		for (const invalid of [
+			{ endpoint: '/api/todos' },
+			Object.freeze({ install() {} }),
+		]) {
+			expect(() => new PuzzleApp({ target: '#app', adapter: invalid })).toThrow(
+				/config\.adapter.*@magic-spells\/puzzle\/adapter/
+			);
+		}
+	});
+
+	it('warns in development when a registered model declares an adapter without the capability', async () => {
+		const el = container();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const app = make({
+			target: el,
+			models: { todo: Todo },
+			routes: [{ path: '/', view: HomeView }],
+		});
+
+		await app.mount();
+
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('Todo'));
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('@magic-spells/puzzle/adapter'));
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('PuzzleApp'));
+	});
+
 	// transitionMode passthrough (v1.24, D56): the config key reaches the Router
 	// — an invalid value surfaces the Router's own constructor throw at mount(),
 	// and a valid one mounts cleanly. Overlap SEQUENCING itself is covered in
@@ -132,6 +160,7 @@ describe('PuzzleApp — pre-mount store access fails loudly', () => {
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: [{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout }],
 		});
 
@@ -177,6 +206,7 @@ describe('PuzzleApp — models & store wiring', () => {
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: [{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout }],
 		});
 		await app.mount();
@@ -202,6 +232,7 @@ describe('PuzzleApp — models & store wiring', () => {
 			target: '#app',
 			apiURL: 'https://api.example.com',
 			models: { todo: Todo },
+			adapter,
 			routes: [{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout }],
 		});
 		await app.mount();
@@ -321,6 +352,7 @@ describe('PuzzleApp — full teardown (unmount destroys the view chain)', () => 
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: [{ path: '/', name: 'home', view: SubView, layout: LogLayout }],
 		});
 		await app.mount();
@@ -363,6 +395,7 @@ describe('PuzzleApp — full teardown (unmount destroys the view chain)', () => 
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: [{ path: '/', name: 'home', view: SlowView, layout: DefaultLayout }],
 		});
 

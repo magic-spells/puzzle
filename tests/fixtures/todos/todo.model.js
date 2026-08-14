@@ -59,8 +59,7 @@ export default class Todo extends PuzzleModel {
     return this;
   }
 
-  // Server location (D21): consumed by store.loadAll('todo') / loadOne on
-  // the read path. Write sync and custom adapter methods are post-v1.
+  // Server location (D21/D157); the app installs the adapter capability once.
   static adapter = {
     endpoint: '/api/todos',
   };

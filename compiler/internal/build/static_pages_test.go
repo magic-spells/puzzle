@@ -93,6 +93,7 @@ func cannedSummary() staticSummary {
 		RouterBase:    json.RawMessage(`"/docs"`),
 		HasModels:     true,
 		HasFormatters: true,
+		HasAdapter:    true,
 		Written: []staticPage{
 			{
 				Path:      "/",
@@ -129,6 +130,7 @@ func TestStaticEntrySourceFull(t *testing.T) {
 	}
 	wants := []string{
 		`import { mountStatic } from '@magic-spells/puzzle/static';`,
+		`import { adapter } from '@magic-spells/puzzle/adapter';`,
 		`import V0 from "/abs/app-root/app/views/Home.pzl";`,
 		`import L0 from "/abs/app-root/app/layouts/Default.pzl";`,
 		`import models from "/abs/app-root/app/models/index.ts";`,
@@ -139,6 +141,7 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		`route: {"path":"/","params":{},"chain":[{"path":"/","name":"home"}]},`,
 		`models,`,
 		`formatters,`,
+		`adapter,`,
 		`apiURL: "https://api.example.com",`,
 		`routerBase: "/docs",`,
 		`}).catch((err) => {`,
@@ -169,6 +172,7 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 	page := s.Written[1]
 	s.APIURL = nil
 	s.RouterBase = nil
+	s.HasAdapter = false
 	src, err := staticEntrySource(root, page, s, "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -190,8 +194,10 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 		"import L0",
 		"import models",
 		"import formatters",
+		"import { adapter }",
 		"\n  models,",
 		"\n  formatters,",
+		"\n  adapter,",
 		"\n  storage:",
 		"\n  routerMode:",
 		"\n  routerBase:",

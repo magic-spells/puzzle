@@ -28,7 +28,7 @@ Completes the D21 adapter story on the write side. Driven by
 ## Intent
 
 A locally-changed record syncs to the server without app-level fetch plumbing,
-driven by the same `static adapter = { endpoint }` the read path uses.
+driven by the same bare `static adapter = { endpoint }` the read path uses.
 
 ## Scope
 
@@ -49,8 +49,8 @@ driven by the same `static adapter = { endpoint }` the read path uses.
 - **`store.request(type, path, { method, body, headers })`** — the
   custom-endpoint escape hatch; documented idiom wraps it in model instance
   methods.
-- **`PuzzleAdapterError`** (`.status`/`.statusText`/`.body`) from the package
-  root; the D21 read path keeps its plain-Error messages.
+- **`PuzzleAdapterError`** (`.status`/`.statusText`/`.body`) from the opt-in
+  `/adapter` subpath; the D21 read path keeps its plain-Error messages.
 
 **Out (rejected/re-deferred in D50):** automatic write-through, optimistic
 delete with restore, a declarative `adapter.methods` map, query fault-in
@@ -59,8 +59,8 @@ queueing, conflict resolution.
 
 ## Outcome
 
-Shipped in v1.18. Runtime-only — model.js (`_synced`, `save()`, `delete()`),
-store.js (`saveRecord`/`deleteRecord`/`request` + error class), index.js
-export; `tests/adapter-write.test.js` (27 tests). Acceptance met in tests: a
+Shipped in v1.18 and extracted to `@magic-spells/puzzle/adapter` by D157. Core
+keeps `_synced` provenance and local mutation; the subpath installs the server
+verbs and exports the adapter error. Acceptance met in tests: a
 todos-shaped app persists create/toggle/delete with zero hand-written fetch.
 Suite at 460 at ship time.

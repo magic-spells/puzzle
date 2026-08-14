@@ -70,6 +70,9 @@ type staticSummary struct {
 	// build warns when they exist but app/formatters.js does not (they would be
 	// missing client-side in static mode).
 	HasFormatters bool `json:"hasFormatters"`
+	// HasAdapter carries the non-serializable app capability across the node→Go
+	// summary boundary so each browser entry can import and pass the same value.
+	HasAdapter bool `json:"hasAdapter"`
 }
 
 // staticPage is one written page in the static summary.
@@ -274,6 +277,9 @@ func slugFromEntry(entry string) (string, error) {
 func staticEntrySource(absRoot string, page staticPage, summary staticSummary, modelsModule, formattersModule string) (string, error) {
 	var b strings.Builder
 	b.WriteString("import { mountStatic } from '@magic-spells/puzzle/static';\n")
+	if summary.HasAdapter {
+		b.WriteString("import { adapter } from '@magic-spells/puzzle/adapter';\n")
+	}
 
 	viewIdents := make([]string, len(page.Modules.Views))
 	for i, mod := range page.Modules.Views {
@@ -334,6 +340,9 @@ func staticEntrySource(absRoot string, page staticPage, summary staticSummary, m
 	}
 	if formattersModule != "" {
 		b.WriteString("  formatters,\n")
+	}
+	if summary.HasAdapter {
+		b.WriteString("  adapter,\n")
 	}
 	fmt.Fprintf(&b, "  apiURL: %s,\n", apiURLJSON)
 	if len(summary.RouterBase) > 0 {

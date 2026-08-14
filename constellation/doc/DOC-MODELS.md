@@ -410,11 +410,21 @@ Per [[DOC-SPEC-DATA]] §7 and §20, v1 draws a precise line between what the sto
     **Template-access caveat:** reading a relationship in the template renders current state but subscribes nothing (render runs outside the tracked eval) — always seed the traversal from `data()`.
   - **The property name is reserved.** Assigning to it (e.g. an embedded `{ author: {...} }` server payload) warns once and is ignored — set the FK field instead. This keeps `Object.assign(record, payload)` safe on the server read path.
 
-- **Server access (D21 read + D50 write):** the model declares its server location — `static adapter = { endpoint: '/api/todos' }` — and both halves of the adapter consume it. **Read path (D21):** `await store.loadAll('todo')` / `await store.loadOne('todo', id)` fetch from `apiURL + endpoint` and upsert records (subscribed views re-render when data arrives). **Write path (D50):** `record.save()` (POST first, PUT once synced), idempotent `record.delete()` (confirmed DELETE), and `store.request(type, path, opts)` (custom endpoints) — all local-first with the same `endpoint`. `save()` **validates the full record first (§20): invalid rejects with `PuzzleValidationError` and makes no request.** Write verbs reject with `PuzzleAdapterError`; the read path keeps its plain-`Error` messages. `store.upsert(type, objectOrArray)` applies server-authoritative custom-action data without another GET, preserving existing record identity and marking records synced.
+- **Server access (D21 read + D50 write, extracted by D157 and generalized by
+  D158):** declare a bare model adapter. `{ endpoint: '/api/todos' }` generates
+  the REST five; author fetch functions override per verb or work without an
+  endpoint. Import `adapter`
+  from `@magic-spells/puzzle/adapter` in `app.js`, and pass it once to
+  `new PuzzleApp({ ..., adapter })`. The capability installs the server verbs;
+  without it core records have no `save()`/`delete()` and the
+  Store has no `loadAll()`/`loadOne()`/`adapter()`/`upsert()`/`request()`.
+  Transports receive enhanced fetch; Puzzle then preserves identity and owns
+  reconciliation. `save()` validates before any request. A returned non-OK
+  Response rejects with the subpath's `PuzzleAdapterError`.
 
-  The custom-endpoint idiom wraps `request()` in a model method, then explicitly
-  upserts each record in the raw response. Envelope responses are not merged
-  automatically:
+  Custom adapter functions are called through `store.adapter(type)` and compose
+  with `upsert()`. The older endpoint-prefixed `request()` idiom remains valid;
+  in either case envelope records are merged explicitly:
 
   ```js
   async checkIn() {

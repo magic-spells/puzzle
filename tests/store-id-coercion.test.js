@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
+
+adapter.install();
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 
 // D112: the record Map was the only type-sensitive identity in the datastore —

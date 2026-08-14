@@ -80,34 +80,33 @@ literal, so a bare index also reaches `Object.prototype`: a persisted blob keyed
 `PuzzleModel` fallback — and the caller's `primaryKey()` would throw on a path
 that must stay fail-soft.
 
-Adapter reads (`loadAll`, `loadOne`) shape-check before mutation and upsert by
-primary key while preserving record identity. Public `upsert(type, objectOrArray)`
-is the same merge for server-authoritative payloads the app already holds (the
-companion to `request()`): existing records update in place, new ones instantiate
-validation-exempt and synced. Every payload must be a JSON object carrying an
-explicit primary key — the guard that keeps a phantom generated-id record from
-being marked synced and PUTting to a nonsense URL; arrays preflight every element
-before any mutation and persist once. Writes serialize per record across BOTH
-verbs — `saveRecord` and `deleteRecord` share one `_writeChains` chain via
-`_chain(record, fn)` (D132), each link reading record state when it reaches the
-front — validate first, POST unsynced records and PUT synced records, adopt
-server keys atomically, protect against destroy/replacement/collision races, and
-throw `PuzzleAdapterError` for adapter failures. Confirmed delete accepts 2xx or
-404; a never-synced record's `delete()` removes locally with no request, an
-already-`_deleted` one resolves idempotently, and `_saveRecordNow` re-checks
-`_deleted` at run time so a queued save cannot resurrect a removed record's row;
-`request()` covers custom endpoints. `removeRecord` flags the instance
+The core Store owns no server verbs. Passing the `adapter` capability from
+`@magic-spells/puzzle/adapter` to `PuzzleApp` installs `loadAll`, `loadOne`,
+`adapter`, `upsert`, `saveRecord`, `deleteRecord`, `request`, and their private
+helpers on its prototype ([[DECISION-D157-ADAPTER-SUBPATH]]). Under
+[[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]], a model's adapter is per-verb fetch
+functions; endpoint shorthand generates missing REST defaults and author
+functions win. Store dispatches transport, then owns Response normalization,
+shape/key guards, and all reconciliation. Reads preserve identity and accumulate
+paginated loads; writes serialize per record across save and delete using
+adapter-module `WeakMap` state keyed by Store. The installed implementation
+validates before sync, adopts server keys atomically, protects against
+destroy/replacement/collision races, and throws the subpath's
+`PuzzleAdapterError` for adapter failures. `removeRecord` stays in core and flags the instance
 `_deleted` before detaching it — one terminal state shared by local `destroy()`
 and confirmed `delete()`, so stale references delete idempotently and can never
 `save()` a resurrected copy.
 
-Every adapter request funnels through private `_fetch` (the D91 `beforeRequest`
-hook runs there), which delegates the actual network call to `_network(url,
-init, context)` — a trivial `fetch` passthrough that exists as the ONE
-sanctioned interception seam (D98): the `/fixtures` module's mock adapter
-replaces it at install time, strictly after the hook has shaped the init. The
-store itself knows nothing about fixtures — `seed()`/`resetFixtureSeed()` are
-prototype-attached by `installFixtures()` and absent otherwise.
+The installed adapter constructs one memoized enhanced fetch per Store+type and
+pre-binds it to every function exposed by `store.adapter(type)`, including the
+five generated defaults. Its signature and Response result match platform
+fetch; it does not prefix URLs or parse JSON. It funnels through `_fetch` (the
+D91 `beforeRequest` hook runs there) and delegates the network call to
+`_network`. The `/fixtures` module imports and installs the adapter capability
+so that seam exists, then replaces it at install time strictly after the hook
+shapes the init. Global fetch bypasses both additions by design. Core knows
+nothing about either module; `seed()`/`resetFixtureSeed()` are likewise absent
+unless fixtures are installed.
 
 Relationship getters are installed on model prototypes at Store construction.
 Their queries use the same tracking path as explicit Store calls.

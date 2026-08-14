@@ -111,6 +111,8 @@ export interface PrerenderToDirResult {
 	hasModels?: boolean;
 	/** Whether the config registered any custom formatters — static mode only. */
 	hasFormatters?: boolean;
+	/** Whether the app passed the adapter capability — static mode only. */
+	hasAdapter?: boolean;
 }
 
 /** Options for `prerenderToDir`. */

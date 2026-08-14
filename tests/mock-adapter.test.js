@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { Store, PuzzleAdapterError } from '../client-runtime/datastore/store.js';
+import { Store } from '../client-runtime/datastore/store.js';
+import { PuzzleAdapterError } from '../client-runtime/datastore/adapter.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { installFixtures } from '../client-runtime/fixtures/index.js';
 
 // Adapter mock (v1.57, D95): `static adapter = { endpoint, mock: {…} }` is served
 // from memory by the /fixtures module's replacement of Store._network — the ONE
-// seam the core keeps (D98). That placement is the whole design:
+// seam the opt-in adapter installs (D98/D157). That placement is the whole design:
 // loadAll/loadOne/save/delete/request run completely unmodified, so these tests
 // exercise the real D21 read path and the real D50 write path (pk adoption, the
 // _synced flip, the identity re-checks).
@@ -497,8 +498,11 @@ describe('production posture — one advisory warning per model', () => {
 		await store.loadOne('todo', 't1');
 		await store.request('todo', '/t1');
 
-		expect(warn).toHaveBeenCalledTimes(1);
-		expect(warn.mock.calls[0][0]).toBe(
+		const mockWarnings = warn.mock.calls.filter(([message]) =>
+			message.includes('is served by its adapter mock')
+		);
+		expect(mockWarnings).toHaveLength(1);
+		expect(mockWarnings[0][0]).toBe(
 			"[puzzle] model 'todo' is served by its adapter mock — no request reaches /api/todos"
 		);
 	});

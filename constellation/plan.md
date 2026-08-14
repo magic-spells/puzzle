@@ -97,6 +97,13 @@ decision cards explain why the contract has its current shape.
   pins the restored SPA startup boundary, removes unrelated warm-rebuild work,
   adds dev phase profiles, and overlaps side-effect-safe one-shot phases while
   keeping prerender execution and atomic output behind a success barrier.
+- **Current 0.6 adapter work (v1.72–v1.73):**
+  [[DECISION-D157-ADAPTER-SUBPATH]] moves server sync behind the opt-in
+  `@magic-spells/puzzle/adapter` capability. [[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]
+  makes each model adapter a set of per-verb fetch functions: endpoint shorthand
+  generates REST defaults, author verbs win, enhanced fetch carries auth and
+  fixture interception, and framework reconciliation stays transport-agnostic.
+  The next free decision number is D160.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode
@@ -179,7 +186,8 @@ errors in the browser, D93 router focus + route announcement, D94
 D98 — the fixtures/mock system as a fully self-contained
 `@magic-spells/puzzle/fixtures` module attached via `installFixtures()` and the
 `puzzle dev|build --fixtures` flag (wired from `app/fixtures.js` through a
-generated wrapper entry; core keeps only the ~5-line `Store._network` seam).
+generated wrapper entry; `/fixtures` imports the opt-in `/adapter` runtime and
+replaces its `Store._network` seam, while core carries neither module).
 
 Two intermediate states were built and replaced on the branch: D95's original
 integration baked ~154 lines into `store.js`, and D96 tree-shook it back out

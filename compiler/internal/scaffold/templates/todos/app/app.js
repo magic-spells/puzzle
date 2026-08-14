@@ -1,10 +1,11 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import routes from './routes.js';
 import models from './models/index.js';
 
 // Create and configure the Puzzle app.
 // The v1 config surface is intentionally small: target, routes, models,
-// formatters, apiURL — see constellation/doc/DOC-SPEC.md §2.
+// adapter, formatters, apiURL — see constellation/doc/DOC-SPEC.md §2.
 const app = new PuzzleApp({
   // Where the app mounts
   target: '#app',
@@ -14,6 +15,10 @@ const app = new PuzzleApp({
 
   // Models registration
   models,
+
+  // Install server sync for models with a static adapter config. No backend?
+  // Delete this import + key and the model adapter block to shrink the bundle.
+  adapter,
 
   // Global formatters available in all templates
   // (display transformation only — logic belongs in data())

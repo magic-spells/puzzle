@@ -120,7 +120,8 @@ export default class __NAME__ extends PuzzleModel {
     return this.name;
   }
 
-  // Server location (D21): consumed by store.loadAll('__MODEL__') / loadOne.
+  // Server location (D21/D157). To enable loadAll/loadOne/save/delete, import
+  // the adapter capability in app.js and pass it once to PuzzleApp.
   static adapter = {
     endpoint: '/api/__MODEL__s',
   };

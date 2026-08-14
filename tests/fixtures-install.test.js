@@ -6,8 +6,8 @@ import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { installFixtures } from '../client-runtime/fixtures/index.js';
 import { memoryRouter } from '../client-runtime/router/modes.js';
 
-// D98: fixtures + the adapter mock are a DETACHABLE module. The core keeps one
-// seam (Store._network) and knows nothing else about them; installFixtures()
+// D98/D157: fixtures + the adapter mock are a DETACHABLE module. /fixtures
+// imports the adapter runtime so Store._network exists; installFixtures()
 // attaches seed()/resetFixtureSeed(), replaces _network, and wraps
 // PuzzleApp.mount so the fixtures config's setup() runs before navigation #0.
 // These tests cover the attach/detach contract itself — generation and the mock's
@@ -53,8 +53,8 @@ const install = (config) => {
 	return uninstall;
 };
 
-describe('install / uninstall — the core is left exactly as found', () => {
-	it('uninstall() restores _network and REMOVES the two attached methods', () => {
+describe('install / uninstall — fixture patches are fully detached', () => {
+	it('uninstall() restores the installed adapter _network and REMOVES the two attached methods', () => {
 		const originalNetwork = Store.prototype._network;
 		const originalMount = PuzzleApp.prototype.mount;
 		expect(Store.prototype.seed).toBeUndefined();
@@ -72,7 +72,8 @@ describe('install / uninstall — the core is left exactly as found', () => {
 		expect(Store.prototype.seed).toBeUndefined();
 		expect(Store.prototype.resetFixtureSeed).toBeUndefined();
 		expect(new Store({}).seed).toBeUndefined();
-		expect(Store.prototype._network).toBe(originalNetwork);
+		expect(Store.prototype._network).toBeTypeOf('function');
+		if (originalNetwork) expect(Store.prototype._network).toBe(originalNetwork);
 		expect(PuzzleApp.prototype.mount).toBe(originalMount);
 	});
 
@@ -81,7 +82,8 @@ describe('install / uninstall — the core is left exactly as found', () => {
 		const uninstall = installFixtures();
 		uninstall();
 		expect(() => uninstall()).not.toThrow();
-		expect(Store.prototype._network).toBe(originalNetwork);
+		expect(Store.prototype._network).toBeTypeOf('function');
+		if (originalNetwork) expect(Store.prototype._network).toBe(originalNetwork);
 	});
 
 	it('an un-mocked type still reaches the real network through the original _network', async () => {

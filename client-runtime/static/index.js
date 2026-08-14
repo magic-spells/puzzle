@@ -24,6 +24,7 @@
  * page by the Go static build (compiler/internal/build), one entry per written page.
  */
 
+import { installAdapterCapability } from '../capabilities.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { mount } from '../views/viewManager.js';
@@ -161,9 +162,11 @@ function buildStaticContext({
 	formatters = {},
 	apiURL,
 	storage,
+	adapter,
 	routerBase,
 	route,
 }) {
+	installAdapterCapability(adapter, 'config.adapter');
 	const storeOptions = { apiURL };
 	if (storage !== undefined) storeOptions.storage = storage;
 	const store = new Store(models, storeOptions);

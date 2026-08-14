@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { PuzzleModel, Puzzle, PuzzleValidationError } from '../client-runtime/model.js';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
+
+adapter.install();
 import * as pkg from '../client-runtime/index.js';
 
 // A model exercising every rule kind, in a fixed schema-declaration order so

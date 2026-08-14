@@ -24,6 +24,13 @@ export type { RouterMode };
 /** A field/record value — the framework never constrains model field types. */
 export type PuzzleValue = any;
 
+declare const puzzleAdapterCapabilityBrand: unique symbol;
+
+/** Opaque shape accepted only from the `@magic-spells/puzzle/adapter` export. */
+export interface PuzzleAdapterCapability {
+	readonly [puzzleAdapterCapabilityBrand]: true;
+}
+
 /**
  * A route definition (constellation/doc/DOC-SPEC.md §9). `view`/`layout` are
  * PuzzleView subclasses (constructors) — typed loosely so `.pzl` default
@@ -266,12 +273,8 @@ export interface Store {
 	findOne(type: string, id: any): any;
 	/** List records of a type, optionally filtered (auto-subscribes). */
 	findMany(type: string, options?: FindManyOptions): any[];
-	/** GET the collection endpoint and upsert every record (D21). */
-	loadAll(type: string): Promise<any[]>;
-	/** GET one record by id and upsert it (D21). */
-	loadOne(type: string, id: any): Promise<any>;
-	/** Custom-endpoint escape hatch (v1.18, D50). */
-	request(type: string, path?: string, options?: RequestOptions): Promise<any>;
+	// Adapter methods are attached by the app's adapter capability and declared through
+	// module augmentation in types/adapter.d.ts.
 	// `seed()` and `resetFixtureSeed()` are NOT declared here: the core Store does
 	// not have them (D98). They are attached by `installFixtures()` and declared
 	// through module augmentation in types/fixtures.d.ts, so they type-check only
@@ -499,7 +502,8 @@ export interface AdapterMock {
 
 /** A model's API adapter descriptor. */
 export interface ModelAdapter {
-	endpoint: string;
+	/** Optional REST shorthand; `/adapter` augments this interface with typed verbs. */
+	endpoint?: string;
 	/** Development/test mock served in place of the network (v1.57, D95). */
 	mock?: AdapterMock;
 	[key: string]: any;
@@ -516,7 +520,7 @@ export declare class PuzzleModel {
 	/** Field/relationship declarations built with `Puzzle.*`. */
 	static schema?: Record<string, SchemaField | Relationship>;
 
-	/** API adapter — `{ endpoint }` drives the store's server read/write path. */
+	/** API adapter — per-verb fetch functions, optionally filled by `{ endpoint }` REST shorthand. */
 	static adapter?: ModelAdapter;
 
 	/** Validate a plain data object against the schema (non-throwing). */
@@ -527,12 +531,6 @@ export declare class PuzzleModel {
 
 	/** Remove the record from its store (local-only). */
 	destroy(): this;
-
-	/** Sync the record to the server: POST when new, PUT thereafter; serialized with delete() per record (v1.18, D50). */
-	save(): Promise<this>;
-
-	/** Confirmed server delete, then local remove; a never-synced record removes locally with no request. Serialized with save() per record; resolves the record (v1.18, D50). */
-	delete(): Promise<this>;
 
 	/** Validate this record's current field values (non-throwing). */
 	validate(): ValidationResult;
@@ -603,14 +601,6 @@ export declare class PuzzleValidationError extends Error {
 	errors: Array<{ field: string; rule: string; message: string }>;
 }
 
-/** Thrown when an adapter request responds non-OK (constellation/doc/DOC-SPEC.md §22). */
-export declare class PuzzleAdapterError extends Error {
-	constructor(status: number, statusText?: string, body?: any);
-	status: number;
-	statusText?: string;
-	body?: any;
-}
-
 // ----------------------------------------------------------------------------
 // PuzzleApp (constellation/doc/DOC-SPEC.md §1–§2)
 // ----------------------------------------------------------------------------
@@ -629,6 +619,8 @@ export interface PuzzleAppConfig {
 	apiURL?: string;
 	/** Storage-like object for opt-in persistence. */
 	storage?: any;
+	/** REST adapter capability imported from `@magic-spells/puzzle/adapter`. */
+	adapter?: PuzzleAdapterCapability;
 	/**
 	 * Adapter request hook (v1.55, D91): `beforeRequest(init, { type, method, url })`,
 	 * called synchronously before every adapter fetch. Mutate `init` or return a

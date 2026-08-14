@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
+
+adapter.install();
 
 // Computed properties are ordinary JavaScript getters (SPEC §7). Keep the
 // getter on an intermediate prototype so every case exercises the full property

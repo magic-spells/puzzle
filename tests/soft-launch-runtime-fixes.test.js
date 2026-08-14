@@ -2,9 +2,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+
+adapter.install();
 
 // Verified soft-launch runtime fixes. Each block targets exactly one fix;
 // the setup style mirrors tests/store.test.js and tests/view.test.js.

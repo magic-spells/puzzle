@@ -162,6 +162,7 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 		// Subpath exports need their own entries — the bare alias points at a
 		// FILE, so prefix substitution would produce index.js/morph. Longest
 		// key wins, so the bare specifier stays untouched (v1.23, D55).
+		buildOpts.Alias["@magic-spells/puzzle/adapter"] = filepath.Join(filepath.Dir(runtime), "datastore", "adapter.js")
 		buildOpts.Alias["@magic-spells/puzzle/morph"] = filepath.Join(filepath.Dir(runtime), "morph.js")
 		// The opt-in router modes (D159): hashRouter()/memoryRouter() live in their
 		// own module so a history-mode app never pulls them into the graph. Only an

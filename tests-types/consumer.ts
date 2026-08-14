@@ -19,7 +19,6 @@ import {
 	PuzzleModel,
 	Puzzle,
 	PuzzleValidationError,
-	PuzzleAdapterError,
 	displayValue,
 } from '@magic-spells/puzzle';
 import type {
@@ -41,6 +40,13 @@ import type {
 	PuzzleErrorInfo,
 	PuzzleErrorViewProps,
 } from '@magic-spells/puzzle';
+import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
+import type {
+	AdapterCapability,
+	AdapterConfig,
+	AdapterFetch,
+	AdapterRecord,
+} from '@magic-spells/puzzle/adapter';
 import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
 import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes';
@@ -56,6 +62,7 @@ import {
 import type {
 	PrerenderResult,
 	PrerenderedPage,
+	PrerenderToDirResult,
 	ResolvedRouteHead,
 	RouteEntry,
 } from '@magic-spells/puzzle/ssg';
@@ -93,6 +100,48 @@ class Todo extends PuzzleModel {
 		return `${this.title} (${this.priority})`;
 	}
 }
+
+// D158: endpoint is optional when every invoked verb is author-defined. This
+// fully custom adapter intentionally uses global fetch, which is also legal
+// (and deliberately bypasses beforeRequest plus fixture interception).
+class FullyCustomPost extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		title: Puzzle.string().required(),
+	};
+
+	static adapter: AdapterConfig<FullyCustomPost> = {
+		async loadAll() {
+			const response = await fetch('/custom/posts');
+			return (await response.json()).items as AdapterRecord[];
+		},
+		async loadOne(_fetch, id) {
+			const response = await fetch(`/custom/posts/${id}`);
+			return (await response.json()).item as AdapterRecord;
+		},
+		async create(_fetch, record) {
+			const response = await fetch('/custom/posts', {
+				method: 'POST',
+				body: JSON.stringify(record.toJSON()),
+			});
+			return (await response.json()) as AdapterRecord;
+		},
+		async update(_fetch, record) {
+			return record.toJSON();
+		},
+		async delete(_fetch, record) {
+			await fetch(`/custom/posts/${record.id}`, { method: 'DELETE' });
+		},
+	};
+}
+
+const publishingAdapter = {
+	endpoint: '/todos',
+	publish: (fetch: AdapterFetch, id: string) =>
+		fetch(`/todos/${id}/publish`, { method: 'PATCH' }),
+} satisfies AdapterConfig<Todo> & {
+	publish(fetch: AdapterFetch, id: string): Promise<Response>;
+};
 
 // static + instance validate() both return a ValidationResult.
 const staticResult: ValidationResult = Todo.validate({ title: 'x' });
@@ -268,6 +317,7 @@ const config: PuzzleAppConfig = {
 	target: '#app',
 	routes,
 	models: { todo: Todo },
+	adapter,
 	formatters: { upcase },
 	apiURL: '',
 	beforeRequest: attachAuth,
@@ -296,7 +346,25 @@ const config: PuzzleAppConfig = {
 	},
 };
 
+const adapterCapability: AdapterCapability = adapter;
+type RawAdapterAccepted = { endpoint: string } extends NonNullable<
+	PuzzleAppConfig['adapter']
+>
+	? true
+	: false;
+const rawAdapterAccepted: RawAdapterAccepted = false;
+void [adapterCapability, rawAdapterAccepted];
+
 const app = new PuzzleApp(config);
+
+const restAdapter = app.store.adapter<typeof Todo.adapter>('todo');
+const restLoad = restAdapter.loadAll({ page: 2, limit: 20 });
+const customAdapter = app.store.adapter<typeof publishingAdapter>('todo');
+const publishResult: Promise<Response> = customAdapter.publish('server-1');
+const noEndpointAdapter = app.store.adapter<typeof FullyCustomPost.adapter>('post');
+void noEndpointAdapter.loadAll?.();
+void app.store.loadAll('todo', { page: 2, limit: 20 });
+void [restLoad, publishResult];
 
 // ---------------------------------------------------------------------------
 // router-modes subpath: the two opt-in mode factories (D159)
@@ -321,7 +389,11 @@ void [hashApp, memoryApp];
 app.mount().then((mounted) => {
 	const todos = mounted.store.findMany('todo', { filter: (t) => !t.done });
 	const seeded = mounted.store.createRecord('todo', { title: 'a' });
-	void seeded;
+	mounted.store.upsert('todo', { id: 'server-1', title: 'server' });
+	void mounted.store.loadOne('todo', 'server-1');
+	void mounted.store.request('todo', '/server-1/archive', { method: 'POST' });
+	void seeded.save();
+	void seeded.delete();
 	mounted.router?.push('/todos');
 	mounted.router?.go(1);
 	return todos.length;
@@ -431,6 +503,10 @@ const leafChain: any[] = leaf.chain;
 const leafLayout: any | null = leaf.layout;
 void [leafPath, leafChain, leafLayout];
 
+declare const staticSummary: PrerenderToDirResult;
+const summaryHasAdapter: boolean | undefined = staticSummary.hasAdapter;
+void summaryHasAdapter;
+
 prerender(config, { mode: 'static' }).then((result: PrerenderResult) => {
 	const page: PrerenderedPage = result.pages[0];
 	// The three static-mode-only capture fields (all optional — absent in hybrid).
@@ -476,7 +552,8 @@ const staticOptions: MountStaticOptions = {
 	models: { todo: Todo },
 	formatters: { upcase },
 	apiURL: '',
-	// The two options the kernel destructures beyond the summary basics. (A static
+	adapter,
+	// The three options the kernel destructures beyond the summary basics. (A static
 	// page carries no `routerMode` at all — D117/D159.)
 	storage: window.localStorage,
 	routerBase: '/app',
@@ -498,10 +575,10 @@ mountStatic(staticOptions).then(() => {
 // ---------------------------------------------------------------------------
 
 async function typeIntoBoundInput(): Promise<void> {
-	const view = await mountView(TodoListView);
+	const view = await mountView(TodoListView, { adapter });
 	// Handle form: selector or element, chainable like click().
 	await view.type('input.draft', 'hello');
-	await (await createTestApp({ routes: [{ path: '/', view: TodoListView }] })).type(
+	await (await createTestApp({ routes: [{ path: '/', view: TodoListView }], adapter })).type(
 		'input.draft',
 		'hello'
 	);

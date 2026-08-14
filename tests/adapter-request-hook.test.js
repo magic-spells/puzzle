@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Store } from '../client-runtime/datastore/store.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
 import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+
+adapter.install();
 
 // Adapter request hook (constellation/doc/DOC-SPEC.md, v1.55, D91): one
 // synchronous `beforeRequest(init, { type, method, url })` in front of EVERY
@@ -549,6 +552,7 @@ describe('PuzzleApp config threading (v1.55, D91)', () => {
 			target: '#app',
 			apiURL: API,
 			models: { todo: ApiTodo },
+			adapter,
 			routes: [{ path: '/', name: 'home', view: HomeView }],
 			...extra,
 		});

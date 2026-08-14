@@ -1,4 +1,5 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import routes from './routes.js';
 import models from './models/index.js';
 import { seedStore } from './seed.js';
@@ -30,6 +31,7 @@ const app = new PuzzleApp({
   target: '#app',
   routes,
   models,
+  adapter,
   // No apiURL prefix: each model's adapter endpoint (e.g. '/posts.json') is
   // root-relative, so the seed files sit flat at the site root next to
   // index.html (dist/posts.json) and host anywhere with zero path wiring.

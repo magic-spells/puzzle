@@ -4,6 +4,7 @@ import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 
 // App lifecycle hooks (v1.28, SPEC §30, D60): beforeMount / mounted /
 // beforeUnmount on the PuzzleApp config. Conventions copied from tests/app.test.js
@@ -89,6 +90,7 @@ describe('PuzzleApp — beforeMount (SPEC §30, D60)', () => {
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: todoRoutes(),
 			beforeMount(a) {
 				a.store.createRecord('todo', { text: 'seeded-todo' });
@@ -107,6 +109,7 @@ describe('PuzzleApp — beforeMount (SPEC §30, D60)', () => {
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: todoRoutes(),
 			beforeMount(a) {
 				// resolve only after a macrotask; mount() must wait for it
@@ -146,6 +149,7 @@ describe('PuzzleApp — beforeMount (SPEC §30, D60)', () => {
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: todoRoutes(),
 			beforeMount(a) {
 				if (throwOnce) {
@@ -238,6 +242,7 @@ describe('PuzzleApp — beforeUnmount (SPEC §30, D60)', () => {
 		const app = make({
 			target: '#app',
 			models: { todo: Todo },
+			adapter,
 			routes: homeRoutes(),
 			beforeUnmount(a) {
 				// Services still live: the store is readable here (persistence flush).

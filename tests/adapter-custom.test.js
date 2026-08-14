@@ -1,0 +1,292 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { adapter, PuzzleAdapterError } from '../client-runtime/datastore/adapter.js';
+import { Store } from '../client-runtime/datastore/store.js';
+import { installFixtures } from '../client-runtime/fixtures/index.js';
+import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
+
+adapter.install();
+
+const API = 'https://x.test/v1';
+
+const response = (body, init = {}) =>
+	new Response(body === undefined ? null : JSON.stringify(body), {
+		status: init.status || 200,
+		statusText: init.statusText,
+		headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+	});
+
+class Post extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		title: Puzzle.string().required(),
+		published: Puzzle.boolean().default(false),
+	};
+}
+
+afterEach(() => {
+	vi.unstubAllGlobals();
+	vi.restoreAllMocks();
+});
+
+describe('author adapter transports', () => {
+	it('accepts parsed envelope data from author loadAll/loadOne functions', async () => {
+		class EnvelopePost extends Post {
+			static adapter = {
+				async loadAll(fetch) {
+					return (await (await fetch('/v2/posts')).json()).data;
+				},
+				async loadOne(fetch, id) {
+					return (await (await fetch(`/v2/posts/${id}`)).json()).data;
+				},
+			};
+		}
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(response({ data: [{ id: 'p1', title: 'All' }] }))
+			.mockResolvedValueOnce(response({ data: { id: 'p2', title: 'One' } }));
+		vi.stubGlobal('fetch', fetchSpy);
+		const store = new Store({ post: EnvelopePost });
+
+		const all = await store.loadAll('post');
+		const one = await store.loadOne('post', 'p2');
+
+		expect(all.map((post) => post.id)).toEqual(['p1']);
+		expect(one.title).toBe('One');
+		expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual(['/v2/posts', '/v2/posts/p2']);
+	});
+
+	it('accepts a Response-return one-liner and normalizes non-OK responses', async () => {
+		class ResponsePost extends Post {
+			static adapter = { loadAll: (fetch) => fetch('/v2/posts') };
+		}
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(response([{ id: 'p1', title: 'One line' }]))
+			.mockResolvedValueOnce(
+				response({ error: 'denied' }, { status: 403, statusText: 'Forbidden' })
+			);
+		vi.stubGlobal('fetch', fetchSpy);
+		const store = new Store({ post: ResponsePost });
+
+		await expect(store.loadAll('post')).resolves.toHaveLength(1);
+		const failure = store.loadAll('post');
+		await expect(failure).rejects.toBeInstanceOf(PuzzleAdapterError);
+		await expect(failure).rejects.toMatchObject({
+			status: 403,
+			statusText: 'Forbidden',
+			body: { error: 'denied' },
+		});
+	});
+
+	it('supports a fully custom adapter with no endpoint and global fetch', async () => {
+		class CustomPost extends Post {
+			static adapter = {
+				async loadAll() {
+					const res = await fetch('/bespoke/posts?state=live');
+					return (await res.json()).items;
+				},
+				async loadOne(_fetch, id) {
+					return (await (await fetch(`/bespoke/posts/${id}`)).json()).item;
+				},
+				async create(_fetch, record) {
+					return (
+						await (
+							await fetch('/bespoke/posts', {
+								method: 'POST',
+								body: JSON.stringify(record.toJSON()),
+							})
+						).json()
+					).item;
+				},
+				async update(_fetch, record) {
+					return (
+						await (
+							await fetch(`/bespoke/posts/${record.id}`, {
+								method: 'POST',
+								body: JSON.stringify(record.toJSON()),
+							})
+						).json()
+					).item;
+				},
+				delete(_fetch, record) {
+					return fetch(`/bespoke/posts/${record.id}`, { method: 'DELETE' });
+				},
+			};
+		}
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(response({ items: [{ id: 'p1', title: 'Live' }] }))
+			.mockResolvedValueOnce(response({ item: { id: 'p2', title: 'One' } }))
+			.mockResolvedValueOnce(response({ item: { id: 'p3', title: 'Created' } }))
+			.mockResolvedValueOnce(response({ item: { id: 'p3', title: 'Updated' } }))
+			.mockResolvedValueOnce(response(undefined, { status: 204 }));
+		vi.stubGlobal('fetch', fetchSpy);
+		const beforeRequest = vi.fn();
+		const store = new Store({ post: CustomPost }, { apiURL: API, beforeRequest });
+
+		await expect(store.loadAll('post')).resolves.toHaveLength(1);
+		await expect(store.loadOne('post', 'p2')).resolves.toMatchObject({ title: 'One' });
+		const post = store.createRecord('post', { id: 'p3', title: 'Draft' });
+		await post.save();
+		post.update({ title: 'Local update' });
+		await post.save();
+		await post.delete();
+
+		expect(fetchSpy.mock.calls.map(([url, init]) => [url, init?.method])).toEqual([
+			['/bespoke/posts?state=live', undefined],
+			['/bespoke/posts/p2', undefined],
+			['/bespoke/posts', 'POST'],
+			['/bespoke/posts/p3', 'POST'],
+			['/bespoke/posts/p3', 'DELETE'],
+		]);
+		expect(store.findOne('post', 'p3')).toBeNull();
+		expect(beforeRequest).not.toHaveBeenCalled();
+	});
+
+	it('reports the exact missing verb on a partial no-endpoint adapter', async () => {
+		class ReadOnlyPost extends Post {
+			static adapter = { loadAll: async () => [{ id: 'p1', title: 'Read only' }] };
+		}
+		const store = new Store({ post: ReadOnlyPost });
+		await store.loadAll('post');
+		const post = store.createRecord('post', { id: 'p2', title: 'Unsavable' });
+
+		await expect(post.save()).rejects.toThrow(
+			"[puzzle] no adapter create() declared for 'post'"
+		);
+	});
+});
+
+describe('pagination', () => {
+	it('serializes generated options, forwards author options verbatim, and accumulates pages', async () => {
+		class RestPost extends Post {
+			static adapter = { endpoint: '/posts' };
+		}
+		const fetchSpy = vi
+			.fn()
+			.mockResolvedValueOnce(response([{ id: 'p1', title: 'Page one' }]))
+			.mockResolvedValueOnce(response([{ id: 'p2', title: 'Page two' }]));
+		vi.stubGlobal('fetch', fetchSpy);
+		const restStore = new Store({ post: RestPost }, { apiURL: API });
+
+		await restStore.loadAll('post', { page: 1, cursor: null, limit: 20 });
+		await restStore.loadAll('post', { page: 2, cursor: undefined, limit: 20 });
+
+		expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+			`${API}/posts?page=1&limit=20`,
+			`${API}/posts?page=2&limit=20`,
+		]);
+		expect(restStore.findMany('post').map((post) => post.id)).toEqual(['p1', 'p2']);
+
+		const options = { cursor: 'next', limit: 5 };
+		let received;
+		class PaginatedPost extends Post {
+			static adapter = {
+				loadAll(_fetch, value) {
+					received = value;
+					return [{ id: 'p3', title: 'Author page' }];
+				},
+			};
+		}
+		await new Store({ post: PaginatedPost }).loadAll('post', options);
+		expect(received).toBe(options);
+	});
+});
+
+describe('bound adapter surface and enhanced fetch', () => {
+	it('memoizes store.adapter(type) and binds custom methods that compose with upsert', async () => {
+		class PublishPost extends Post {
+			static adapter = {
+				endpoint: '/posts',
+				async publish(fetch, id) {
+					return (await fetch(`${API}/posts/${id}/publish`, { method: 'PATCH' })).json();
+				},
+			};
+		}
+		const fetchSpy = vi.fn(async () =>
+			response({ id: 'p1', title: 'Published', published: true })
+		);
+		vi.stubGlobal('fetch', fetchSpy);
+		const store = new Store({ post: PublishPost }, { apiURL: API });
+		const bound = store.adapter('post');
+
+		expect(store.adapter('post')).toBe(bound);
+		expect(bound.loadAll).toBeTypeOf('function');
+		const post = store.upsert('post', await bound.publish('p1'));
+
+		expect(post.published).toBe(true);
+		expect(fetchSpy).toHaveBeenCalledWith(`${API}/posts/p1/publish`, { method: 'PATCH' });
+	});
+
+	it('preserves author init headers, runs beforeRequest, and reaches the fixtures seam', async () => {
+		class FixturePost extends Post {
+			static adapter = {
+				endpoint: '/posts',
+				async loadAll(fetch) {
+					const res = await fetch(`${API}/posts/published`, {
+						headers: { 'X-Author': 'yes' },
+					});
+					return res.json();
+				},
+			};
+		}
+		const beforeRequest = vi.fn((init) => {
+			init.headers = { ...init.headers, Authorization: 'Bearer fixture' };
+		});
+		const fetchSpy = vi.fn(() => {
+			throw new Error('fixture-backed enhanced fetch reached global fetch');
+		});
+		vi.stubGlobal('fetch', fetchSpy);
+		const uninstall = installFixtures({
+			mock: {
+				post: {
+					handler: ({ method, path }) =>
+						method === 'GET' && path === '/published'
+							? { body: [{ id: 'p1', title: 'Fixture' }] }
+							: null,
+				},
+			},
+		});
+		try {
+			const store = new Store({ post: FixturePost }, { apiURL: API, beforeRequest });
+			const fixtureNetwork = store._network;
+			store._network = function (url, init, context) {
+				expect(Object.isFrozen(context)).toBe(true);
+				return fixtureNetwork.call(this, url, init, context);
+			};
+			await expect(store.loadAll('post')).resolves.toHaveLength(1);
+			expect(beforeRequest).toHaveBeenCalledWith(
+				expect.objectContaining({
+					method: 'GET',
+					headers: { 'X-Author': 'yes', Authorization: 'Bearer fixture' },
+				}),
+				expect.objectContaining({
+					type: 'post',
+					method: 'GET',
+					url: `${API}/posts/published`,
+				})
+			);
+			expect(fetchSpy).not.toHaveBeenCalled();
+		} finally {
+			uninstall();
+		}
+	});
+});
+
+describe('adapter config validation', () => {
+	it('warns once per model for keys that are neither endpoint nor functions', () => {
+		class InvalidPost extends Post {
+			static adapter = { endpoint: '/posts', serializer: 'json-api', retries: 2 };
+		}
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const first = new Store({ post: InvalidPost }, { apiURL: API });
+		const second = new Store({ post: InvalidPost }, { apiURL: API });
+
+		first.adapter('post');
+		first.adapter('post');
+		second.adapter('post');
+
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(warn.mock.calls[0][0]).toContain('"serializer", "retries"');
+	});
+});

@@ -46,11 +46,13 @@ export class Item extends PuzzleModel {
 }
 `,
 		"app/app.js": `import { PuzzleApp } from '@magic-spells/puzzle';
+import { adapter } from '@magic-spells/puzzle/adapter';
 import { Item } from './models.js';
 import Home from './views/Home.pzl';
 const app = new PuzzleApp({
   target: '#app',
   models: { item: Item },
+  adapter,
   routes: [{ path: '/', view: Home }],
 });
 app.mount();

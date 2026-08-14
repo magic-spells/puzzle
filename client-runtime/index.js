@@ -13,7 +13,6 @@
 
 export { PuzzleApp } from './app.js';
 export { PuzzleModel, Puzzle, PuzzleValidationError } from './model.js';
-export { PuzzleAdapterError } from './datastore/store.js';
 export { PuzzleView } from './views/PuzzleView.js';
 export { FormatterRegistry } from './formatters.js';
 

@@ -9,6 +9,7 @@
 // `// @vitest-environment jsdom` itself (the pragma is per-file, not importable).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PuzzleApp } from '../../client-runtime/index.js';
+import { adapter } from '../../client-runtime/datastore/adapter.js';
 import installFakeAnimate from './fake-waapi.js';
 
 // The live fake-WAAPI handle for the current test (set in beforeEach). jsdom has
@@ -139,6 +140,7 @@ export function runTodosSuite({ TodoHome, DefaultLayout, Todo, label }) {
 				{ path: '/', name: 'home', view: TodoHome, layout: DefaultLayout, meta: { title: 'Puzzle Todos' } },
 			],
 			models: { todo: Todo },
+			adapter,
 		};
 		if (storage !== undefined) config.storage = storage;
 		if (apiURL !== undefined) config.apiURL = apiURL;
