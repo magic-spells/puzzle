@@ -17,6 +17,7 @@ import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { expandSlots } from '../client-runtime/views/viewManager.js';
 import { serialize } from '../client-runtime/ssg/serialize.js';
 import { Router } from '../client-runtime/router/router.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -196,7 +197,7 @@ describe('default-slot forwarding — router end-to-end (D71)', () => {
 
 	const boot = async (routes) => {
 		const el = container();
-		const router = new Router(routes, { mode: 'memory' });
+		const router = new Router(routes, { mode: memoryRouter() });
 		routers.push(router);
 		await router.start(el, { store: null, router: null, formatters: null });
 		return { router, el };

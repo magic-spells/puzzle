@@ -164,6 +164,11 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 		// key wins, so the bare specifier stays untouched (v1.23, D55).
 		buildOpts.Alias["@magic-spells/puzzle/adapter"] = filepath.Join(filepath.Dir(runtime), "datastore", "adapter.js")
 		buildOpts.Alias["@magic-spells/puzzle/morph"] = filepath.Join(filepath.Dir(runtime), "morph.js")
+		// The opt-in router modes (D159): hashRouter()/memoryRouter() live in their
+		// own module so a history-mode app never pulls them into the graph. Only an
+		// app that imports the subpath resolves it, so an older checkout missing the
+		// file errs only then — the same lazy posture as /ssg and /static below.
+		buildOpts.Alias["@magic-spells/puzzle/router-modes"] = filepath.Join(filepath.Dir(runtime), "router", "modes.js")
 		// The SSG runtime (prerenderToDir) resolves the same way — the hybrid
 		// build's prerender bundle imports it. The target file may not exist in
 		// an older checkout; esbuild only errs if something actually imports it,

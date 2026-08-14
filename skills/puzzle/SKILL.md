@@ -403,9 +403,9 @@ await app.router.push('/todos/1');
   `router`, `formatters`, `adapter`, `ctx`. Returns a handle: `instance`, `container`,
   `element`, `ctx`, `store`, `router`, `find(sel)`, `findAll(sel)`,
   `click(target)`, `setProps(props)`, `destroy()`.
-- `createTestApp(config)` boots a REAL `PuzzleApp` — `target` and
-  `routerMode: 'memory'` are forced, everything else (including
-  `routerInitialPath`) passes through. Handle: `app`, `store`, `router`, `ctx`,
+- `createTestApp(config)` boots a REAL `PuzzleApp` — `target` and memory
+  routing are forced (`routerInitialPath` seeds it), everything else passes
+  through. Handle: `app`, `store`, `router`, `ctx`,
   `find`, `findAll`, `click`, `destroy()`.
 - `settled()` awaits the framework's pending render/flush work. `click()` and
   `setProps()` already await it; use it directly after mutating the store.
@@ -540,7 +540,7 @@ production-host semantics for any mode (SPA deep-link fallback, static real
    (`app/public/index.html`) may carry inline scripts (analytics, theme
    pre-paint). All other behavior: `mounted()` / cleanup in `destroyed()`.
 5. **Static mode has no router and emits only plain path hrefs.** Hash-style
-   `#/...` links are an SPA/hybrid concern (`routerMode: 'hash'`) with no
+   `#/...` links are an SPA/hybrid concern (`routerMode: hashRouter()`) with no
    meaning on a static site — never hand-write them in templates that build
    statically; path-shaped `| link` hrefs render as plain paths in static
    output and as `#/...` in a hash-mode SPA, from the same template.

@@ -39,7 +39,7 @@ async function boot(url = '/', options = {}, routeTable = routes) {
 	history.replaceState({}, '', url);
 	const el = document.createElement('div');
 	document.body.appendChild(el);
-	const router = new Router(routeTable, { mode: 'history', ...options });
+	const router = new Router(routeTable, { ...options });
 	routers.push(router);
 	await router.start(el, ctx());
 	return { router, el };

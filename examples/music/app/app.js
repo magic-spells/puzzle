@@ -1,6 +1,7 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
 import { adapter } from '@magic-spells/puzzle/adapter';
 import { enableMorph } from '@magic-spells/puzzle/morph';
+import { hashRouter } from '@magic-spells/puzzle/router-modes';
 import routes from './routes.js';
 import models from './models/index.js';
 import { loadState, saveState } from './storage.js';
@@ -15,7 +16,7 @@ const app = new PuzzleApp({
   // Route rides in location.hash (`…/index.html#/album/x`), so the built example
   // hosts on any static host — GitHub Pages / S3 / file:// — with no server
   // rewrite rules (SPEC §15, D34). App code stays path-shaped; only URLs differ.
-  routerMode: 'hash',
+  routerMode: hashRouter(),
   // No apiURL prefix: each model's adapter endpoint (e.g. '/artists.json') is
   // root-relative, so the seed files sit flat at the site root next to
   // index.html (dist/artists.json) and host anywhere with zero path wiring.

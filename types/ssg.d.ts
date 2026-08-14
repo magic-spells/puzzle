@@ -107,11 +107,6 @@ export interface PrerenderToDirResult {
 	apiURL?: string | null;
 	/** The app's normalized route URL prefix — static mode only. */
 	routerBase?: string;
-	/**
-	 * The app's configured router mode — static mode only. Reported for summary
-	 * fidelity; the static kernel always emits history-style hrefs (D117).
-	 */
-	routerMode?: 'history' | 'hash' | 'memory';
 	/** Whether the config registered any models — static mode only. */
 	hasModels?: boolean;
 	/** Whether the config registered any custom formatters — static mode only. */

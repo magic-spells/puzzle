@@ -12,6 +12,11 @@
  * plus the internal/compiler-support exports re-exported from the package root.
  */
 
+// The opt-in router modes (D159) live in their own subpath so history-mode apps
+// never bundle them; the config type re-exports the opaque handle they produce.
+import type { RouterMode } from './router-modes.js';
+export type { RouterMode };
+
 // ----------------------------------------------------------------------------
 // Shared shapes
 // ----------------------------------------------------------------------------
@@ -634,10 +639,13 @@ export interface PuzzleAppConfig {
 	 * element itself. Inert in memory mode; navigation #0 never moves focus.
 	 */
 	focusBehavior?: false | FocusBehavior;
-	/** Router URL carrier (v1.6/v1.11): pathname, hash, or in-memory. */
-	routerMode?: 'history' | 'hash' | 'memory';
-	/** Memory-mode initial route (v1.11, D42). */
-	routerInitialPath?: string;
+	/**
+	 * Router URL carrier (v1.6 D34 / v1.11 D42, opt-in imports since D159). Omit
+	 * for history routing (the pathname — the default), or pass a mode object from
+	 * `@magic-spells/puzzle/router-modes`: `hashRouter()` or
+	 * `memoryRouter({ initialPath })`. A mode STRING is a constructor error.
+	 */
+	routerMode?: RouterMode;
 	/** Serve the app under a sub-path (v1.19, D51). */
 	routerBase?: string;
 	/**

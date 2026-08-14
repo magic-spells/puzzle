@@ -47,15 +47,11 @@ export interface MountStaticOptions {
 	/** REST adapter capability, installed before the static Store is constructed. */
 	adapter?: PuzzleAppConfig['adapter'];
 	/**
-	 * IGNORED (D117). Accepted for config parity — the generated per-page entry
-	 * still passes the app's configured mode through — but static output has no
-	 * router and its files are path-shaped on disk, so `ctx.router.url()` (and
-	 * therefore the `link` formatter) always emits history-style hrefs.
-	 */
-	routerMode?: 'history' | 'hash' | 'memory';
-	/**
-	 * Normalized route URL prefix — unlike `routerMode` this DOES apply: a
-	 * sub-path deploy wants its hrefs prefixed.
+	 * Normalized route URL prefix. The app's `routerMode` is deliberately NOT
+	 * carried into a static page (D117/D159): static output has no router and its
+	 * files are path-shaped on disk, so `ctx.router.url()` (and therefore the
+	 * `link` formatter) always emits history-style hrefs — but a sub-path deploy
+	 * still wants them prefixed.
 	 */
 	routerBase?: string;
 }

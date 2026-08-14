@@ -25,15 +25,20 @@ notes:
 
 # Router
 
-Route compiler and navigation state machine for history, hash, and memory
-modes. Public surface: `start`, `stop`, `push`, `replace` (push's
+Route compiler and navigation state machine. HISTORY routing is inline here and
+is the zero-config default; hash and memory routing are opt-in mode objects an
+app imports from `@magic-spells/puzzle/router-modes` (`router/modes.js`) and
+passes as `mode`, so a history-mode bundle carries neither
+([[DECISION-D159-ROUTER-MODE-FACTORIES]]). A mode string is a constructor throw
+naming the import. Public surface: `start`, `stop`, `push`, `replace` (push's
 no-history-entry sibling — same pipeline, `replaceState`/in-place memory-stack
 overwrite, current scroll-entry key kept, scroll untouched by default; D83),
 `go`, `back`, `forward`, `current`, `url` (path-shaped route → mode-encoded
 href, the render-time inverse of the link interceptor; non-`/` strings pass
 through — D79), and the narrow `setMorphHandler` integration seam.
 
-`url()` is a thin call into the module-level `encodeURL(path, mode, base)`,
+`url()` is a thin call into the module-level `encodeURL(path, mode, base)`
+(`mode` = the Router's mode instance, or null for history),
 which the module exports alongside `normalizeBase` precisely so the DOM-free
 prerender paths can reuse the *same* encoder without a live Router: the static
 router stub and the hybrid prerender ctx both call it ([[COMPONENT-SSG]]). That

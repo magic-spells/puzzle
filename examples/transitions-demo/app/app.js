@@ -1,4 +1,5 @@
 import { PuzzleApp } from '@magic-spells/puzzle';
+import { memoryRouter } from '@magic-spells/puzzle/router-modes';
 import routes from './routes.js';
 
 // ---------------------------------------------------------------------------
@@ -11,16 +12,15 @@ import routes from './routes.js';
 //
 // The routers run in MEMORY mode (SPEC §15) — the route lives entirely in
 // router state, so two apps coexist on one page with zero URL / history /
-// document.title side effects stepping on each other. `routerInitialPath`
-// names the first route (there is no URL to read in memory mode).
+// document.title side effects stepping on each other. memoryRouter's
+// `initialPath` names the first route (there is no URL to read in memory mode).
 // ---------------------------------------------------------------------------
 
 const seqApp = new PuzzleApp({
   target: '#app-seq',
   routes,
   models: {},
-  routerMode: 'memory',
-  routerInitialPath: '/'
+  routerMode: memoryRouter({ initialPath: '/' }),
   // no transitionMode → 'sequential' (byte-identical to v1.23): the old view's
   // `out` fully plays, THEN the new view mounts and plays `in` — the tell-tale
   // blank gap between the two slides.
@@ -30,8 +30,7 @@ const overlapApp = new PuzzleApp({
   target: '#app-overlap',
   routes,
   models: {},
-  routerMode: 'memory',
-  routerInitialPath: '/',
+  routerMode: memoryRouter({ initialPath: '/' }),
   transitionMode: 'overlap'
   // 'overlap' (SPEC §26): the router pins the leaver in place (position:fixed at
   // its measured rect, no wrapper) and mounts the newcomer immediately, so both

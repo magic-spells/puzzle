@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { SLOT_TAG, ViewNode } from '../client-runtime/views/ViewNode.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -140,7 +141,7 @@ describe('marker fallback bodies (D141)', () => {
 			},
 		];
 		const el = container();
-		activeRouter = new Router(routes, { mode: 'memory', initialPath: '/empty' });
+		activeRouter = new Router(routes, { mode: memoryRouter({ initialPath: '/empty' }) });
 		await activeRouter.start(el, { store: null, router: activeRouter, formatters: null });
 
 		expect(el.querySelector('.outlet-fallback')?.textContent).toBe('Nothing selected');

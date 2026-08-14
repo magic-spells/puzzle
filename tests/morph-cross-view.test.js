@@ -22,6 +22,7 @@ import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
 import { enableMorph } from '../client-runtime/morph.js';
 import { installFakeAnimate } from './helpers/fake-waapi.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 // A fake MorphEngine defined INSIDE the mock factory (vi.mock is hoisted above the
 // test-file body, so it can't close over anything declared here). enableMorph
@@ -199,8 +200,7 @@ describe('cross-view capture flights (v1.35, D68)', () => {
 		const app = new PuzzleApp({
 			target: container(),
 			routes,
-			routerMode: 'memory',
-			routerInitialPath: initialPath,
+			routerMode: memoryRouter({ initialPath: initialPath }),
 		});
 		apps.push(app);
 		const engine = enableMorph(app, morphOptions);
@@ -472,8 +472,7 @@ describe('cross-view capture flights (v1.35, D68)', () => {
 			const app = new PuzzleApp({
 				target: container(),
 				routes,
-				routerMode: 'memory',
-				routerInitialPath: '/a',
+				routerMode: memoryRouter({ initialPath: '/a' }),
 			});
 			apps.push(app);
 			const engine = enableMorph(app);
@@ -622,8 +621,7 @@ describe('cross-view capture flights (v1.35, D68)', () => {
 			const app = new PuzzleApp({
 				target: container(),
 				routes,
-				routerMode: 'memory',
-				routerInitialPath: '/a',
+				routerMode: memoryRouter({ initialPath: '/a' }),
 			});
 			apps.push(app);
 			enableMorph(app);
@@ -725,8 +723,7 @@ describe('cross-view capture flights (v1.35, D68)', () => {
 				const app = new PuzzleApp({
 					target: container(),
 					routes,
-					routerMode: 'memory',
-					routerInitialPath: '/a',
+					routerMode: memoryRouter({ initialPath: '/a' }),
 				});
 				apps.push(app);
 				const engine = enableMorph(app);

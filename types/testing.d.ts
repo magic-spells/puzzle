@@ -55,7 +55,14 @@ export interface MountedView<T extends PuzzleView = PuzzleView> {
 	destroy(): void;
 }
 
-export type TestAppConfig = Omit<PuzzleAppConfig, 'target' | 'routerMode'>;
+export type TestAppConfig = Omit<PuzzleAppConfig, 'target' | 'routerMode'> & {
+	/**
+	 * The first route to boot at (default `'/'`). Consumed by `createTestApp`
+	 * itself and handed to the memory mode it wires (D159) — a test never builds
+	 * `routerMode`, which is forced.
+	 */
+	routerInitialPath?: string;
+};
 
 export interface TestApp {
 	readonly app: PuzzleApp;
@@ -84,7 +91,8 @@ export declare function mountView<T extends PuzzleView>(
 
 /**
  * Mount a real PuzzleApp into a detached element with routerMode forced to
- * `'memory'`; visit() uses the real guard/load/commit router pipeline.
+ * memory routing (`routerInitialPath` seeds it); visit() uses the real
+ * guard/load/commit router pipeline.
  */
 export declare function createTestApp(config?: TestAppConfig): Promise<TestApp>;
 

@@ -16,6 +16,7 @@ import { Router } from '../client-runtime/router/router.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
+import { hashRouter, memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -540,7 +541,7 @@ describe('static prerender router facade parity (D81, item B4)', () => {
 	it('static mode prefixes url() by routerBase and IGNORES routerMode — matching the client stub (P2.1)', async () => {
 		const cfg = {
 			target: '#app',
-			routerMode: 'hash',
+			routerMode: hashRouter(),
 			routerBase: '/app',
 			routes: [{ path: '/', name: 'home', view: Linked }],
 		};
@@ -549,7 +550,7 @@ describe('static prerender router facade parity (D81, item B4)', () => {
 		// static page installs no router to intercept a '#/' link.
 		expect(pages[0].html).toContain('href="/app/next"');
 		expect(pages[0].html).not.toContain('href="#/app/next"');
-		expect(warnings.some((w) => w.includes('ignores `routerMode: "hash"`'))).toBe(true);
+		expect(warnings.some((w) => w.includes('ignores routerMode (hash routing)'))).toBe(true);
 	});
 
 	it('static mode with no mode/base falls back to history semantics (unprefixed) — matching the client default', async () => {
@@ -587,7 +588,7 @@ describe('static prerender router facade parity (D81, item B4)', () => {
 		]);
 		const target = document.createElement('div');
 		document.body.appendChild(target);
-		const router = new Router(routes, { mode: 'memory' });
+		const router = new Router(routes, { mode: memoryRouter() });
 
 		try {
 			await router.start(target, { store: null, router, formatters: null });
@@ -641,28 +642,31 @@ describe('hybrid × hash/memory guard (D81, item B6)', () => {
 	});
 
 	it('hybrid + hash rejects (a hash router would render home over every prerendered page)', async () => {
-		await expect(prerender(cfg('hash'))).rejects.toThrow(/hybrid prerender output requires history routing/);
+		await expect(prerender(cfg(hashRouter()))).rejects.toThrow(
+			/hybrid prerender output requires history routing/
+		);
 	});
 
 	it('hybrid + memory rejects', async () => {
-		await expect(prerender(cfg('memory'))).rejects.toThrow(/history routing/);
+		await expect(prerender(cfg(memoryRouter()))).rejects.toThrow(/history routing/);
 	});
 
-	it('hybrid + history (or unset) is allowed', async () => {
-		expect((await prerender(cfg('history'))).pages).toHaveLength(1);
+	it('hybrid + an unset mode (history, the default) is allowed', async () => {
 		expect((await prerender(cfg(undefined))).pages).toHaveLength(1);
 	});
 
 	it('static + hash is allowed, but the mode is ignored with a warning (P2.1)', async () => {
-		const { pages, warnings } = await prerender(cfg('hash'), { mode: 'static' });
+		const { pages, warnings } = await prerender(cfg(hashRouter()), { mode: 'static' });
 		expect(pages).toHaveLength(1);
-		expect(warnings.some((w) => w.includes('ignores `routerMode: "hash"`'))).toBe(true);
+		expect(warnings.some((w) => w.includes('ignores routerMode (hash routing)'))).toBe(true);
 	});
 
 	it('prerenderToDir hybrid + hash rejects — fails the Go build', async () => {
 		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-hybrid-hash-'));
 		const shellPath = writeShell(outDir);
-		await expect(prerenderToDir(cfg('hash'), { outDir, shellPath })).rejects.toThrow(/history routing/);
+		await expect(prerenderToDir(cfg(hashRouter()), { outDir, shellPath })).rejects.toThrow(
+			/history routing/
+		);
 	});
 });
 

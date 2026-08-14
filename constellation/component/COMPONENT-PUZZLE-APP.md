@@ -31,7 +31,8 @@ restores development state, starts navigation, and resolves to the app after
 the first route lands.
 
 Public config: `target`, `routes`, `models`, `formatters`, `apiURL`, `storage`,
-`adapter`, `scrollBehavior`, `routerMode`, `routerInitialPath`, `routerBase`,
+`adapter`, `scrollBehavior`, `routerMode` (a mode object from
+`@magic-spells/puzzle/router-modes`; strings throw — D159), `routerBase`,
 `transitionMode`, `beforeMount`, `mounted`, `beforeUnmount`, `onError`, and
 `errorView`. `errorView` is validated as a `PuzzleView` constructor immediately
 at app construction. See

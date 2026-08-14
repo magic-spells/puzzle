@@ -91,7 +91,6 @@ func cannedSummary() staticSummary {
 		Target:        "app",
 		APIURL:        json.RawMessage(`"https://api.example.com"`),
 		RouterBase:    json.RawMessage(`"/docs"`),
-		RouterMode:    json.RawMessage(`"hash"`),
 		HasModels:     true,
 		HasFormatters: true,
 		HasAdapter:    true,
@@ -144,7 +143,6 @@ func TestStaticEntrySourceFull(t *testing.T) {
 		`formatters,`,
 		`adapter,`,
 		`apiURL: "https://api.example.com",`,
-		`routerMode: "hash",`,
 		`routerBase: "/docs",`,
 		`}).catch((err) => {`,
 	}
@@ -158,6 +156,11 @@ func TestStaticEntrySourceFull(t *testing.T) {
 	if strings.Contains(src, "storage:") {
 		t.Errorf("generated entry must not emit storage\n---\n%s", src)
 	}
+	// routerMode is never emitted either (D159): static pages have no router, and a
+	// mode is an imported object that would serialize to a dead `{}` here.
+	if strings.Contains(src, "routerMode:") {
+		t.Errorf("generated entry must not emit routerMode\n---\n%s", src)
+	}
 }
 
 // TestStaticEntrySourceMinimal generates the entry for a layout-less, multi-view
@@ -168,7 +171,6 @@ func TestStaticEntrySourceMinimal(t *testing.T) {
 	s := cannedSummary()
 	page := s.Written[1]
 	s.APIURL = nil
-	s.RouterMode = nil
 	s.RouterBase = nil
 	s.HasAdapter = false
 	src, err := staticEntrySource(root, page, s, "", "")

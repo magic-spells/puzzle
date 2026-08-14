@@ -22,6 +22,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Router } from '../client-runtime/router/router.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
+import { memoryRouter } from '../client-runtime/router/modes.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
 const text = (value) => new ViewNode('text', { value });
@@ -436,7 +437,7 @@ describe('Router focus — skip cases (D93)', () => {
 
 	it('memory mode is a complete no-op — no focus, no live region', async () => {
 		const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
-		const { router } = await boot(ROUTES, { mode: 'memory' });
+		const { router } = await boot(ROUTES, { mode: memoryRouter() });
 		expect(liveRegion()).toBeNull();
 
 		await router.push('/about');
