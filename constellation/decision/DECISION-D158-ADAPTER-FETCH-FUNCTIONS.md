@@ -103,25 +103,6 @@ neither an author function nor an `endpoint` to generate a default from is
 the existing "no adapter declared" error, now phrased per-verb. Config
 validation stays dev-loud: non-function, non-`endpoint` keys warn once.
 
-**App-wide dialects are plain JavaScript, not a framework tier.** Because a
-model's `adapter` is a mutable object on a class `app.js` already imports,
-overriding a verb for every model is ordinary assignment before
-`new PuzzleApp(...)`:
-
-```js
-for (const Model of Object.values(models)) {
-  const { endpoint } = Model.adapter ?? {};
-  if (!endpoint) continue;
-  Model.adapter.loadOne = async (fetch, id) =>
-    (await (await fetch(`${endpoint}/${id}`)).json()).data;
-}
-```
-
-Equivalently, a shared factory (`static adapter = api('/api/posts')`) writes
-the dialect once and names it in each model. Both are the blessed patterns;
-assignments must precede app construction (the store binds each model's
-adapter on first use — module top level satisfies this automatically).
-
 D157 is unchanged: the capability passed to `PuzzleApp` is still what ships
 and installs the module; models with no `adapter` object remain purely local;
 dispatch and the enhanced-fetch builder cost a few hundred raw bytes inside
@@ -129,14 +110,6 @@ the adapter module only.
 
 ## Alternatives rejected
 
-- **An app-level defaults tier (`adapter.defaults({ loadOne })`, Ember's
-  application-adapter concept)** — genuinely precedented (the most-used piece
-  of Ember's system) and cheap in bytes, but it is a third dispatch tier and a
-  new API where plain assignment from app.js already achieves the same result
-  with zero added concepts. Ember's lesson is that adapter complexity kills by
-  concept count, each layer individually justified; the docs page fitting on
-  one screen is the invariant. Re-open only for real apps the assignment and
-  shared-factory idioms demonstrably fail.
 - **A fixed dialect with bypass-only escape (the pre-D158 state)** — an
   envelope response or a POST-for-update API forfeited all five conventions
   and rewrote the transport on `request()`/`upsert()`. EmberData's lesson is
