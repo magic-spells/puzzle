@@ -681,6 +681,11 @@ func TestBuildNeverBundlesHeadTagMachinery(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(dist, "app.js")); !os.IsNotExist(err) {
 			t.Errorf("dist/app.js must be absent in static mode (err=%v)", err)
 		}
+		// The SPA pass's chunk directory is equally absent: static mode discards
+		// that pass's output, so a chunk surviving it would be an orphan.
+		if _, err := os.Stat(filepath.Join(dist, chunksDirName)); !os.IsNotExist(err) {
+			t.Errorf("dist/%s must be absent in static mode (err=%v)", chunksDirName, err)
+		}
 
 		pages := filepath.Join(dist, staticPagesDir)
 		bundles := 0
@@ -1294,6 +1299,199 @@ func TestBuildFailedCompileLeavesDistIntact(t *testing.T) {
 	}
 }
 
+// lazyMarker is a string literal unique to the lazily imported module, so it
+// survives production minification and its ABSENCE from app.js is real evidence
+// the module moved into a chunk.
+const lazyMarker = "LAZY_MARKER_XYZ"
+
+// writeSplitFixture materializes a minimal app whose entry reaches a sibling
+// module ONLY through a dynamic import(), so the module is inlined into app.js
+// when splitting is off and lands in its own chunk when it is on. The import is
+// parked on globalThis so neither tree-shaking nor minification can drop it. No
+// runtime import (the '@magic-spells/puzzle' alias need not resolve) and no
+// styles.use, mirroring writeConsoleFixture. cfg, when non-empty, is written as
+// puzzle.config.js.
+func writeSplitFixture(t *testing.T, cfg string) string {
+	t.Helper()
+	root := t.TempDir()
+	files := map[string]string{
+		"app/app.js": `globalThis.__loadLazy = async () => {
+  const mod = await import('./lib/lazy.js');
+  return mod.marker;
+};
+export default 1;
+`,
+		"app/lib/lazy.js":       "export const marker = \"" + lazyMarker + "\";\n",
+		"app/public/index.html": "<html><body></body></html>",
+	}
+	if cfg != "" {
+		files["puzzle.config.js"] = cfg
+	}
+	for rel, body := range files {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+// globChunks collects every .js file under dir. A missing dir yields nothing —
+// the callers that require chunks assert on the count themselves.
+func globChunks(t *testing.T, dir string) []string {
+	t.Helper()
+	var out []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if os.IsNotExist(walkErr) {
+				return nil
+			}
+			return walkErr
+		}
+		if !d.IsDir() && filepath.Ext(path) == ".js" {
+			out = append(out, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// TestSplittingEmitsLazyChunk proves build.splitting: true moves a dynamically
+// imported module out of app.js and into a hashed chunk under dist/chunks/.
+func TestSplittingEmitsLazyChunk(t *testing.T) {
+	requireNodeBin(t)
+	root := writeSplitFixture(t, "export default { build: { splitting: true } };\n")
+	if err := Build(root, Options{Development: false}); err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	appJS := readFile(t, filepath.Join(root, "dist", "app.js"))
+	if strings.Contains(appJS, lazyMarker) {
+		t.Fatal("lazy module was inlined into app.js despite build.splitting")
+	}
+	chunks := globChunks(t, filepath.Join(root, "dist", chunksDirName))
+	if len(chunks) == 0 {
+		t.Fatalf("no chunk emitted under dist/%s", chunksDirName)
+	}
+	found := false
+	for _, c := range chunks {
+		if strings.Contains(readFile(t, c), lazyMarker) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("no chunk under dist/%s contains the lazy module", chunksDirName)
+	}
+}
+
+// TestSplittingOffByDefault pins the default: with the key absent the build is
+// the single-file output it has always been — dynamic import inlined, no chunks
+// directory at all.
+func TestSplittingOffByDefault(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		cfg  string
+	}{
+		{name: "no config file"},
+		{name: "empty config", cfg: "export default {};\n"},
+		{name: "explicit false", cfg: "export default { build: { splitting: false } };\n"},
+		{name: "null means unset", cfg: "export default { build: { splitting: null } };\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.cfg != "" {
+				requireNodeBin(t)
+			}
+			root := writeSplitFixture(t, tt.cfg)
+			if err := Build(root, Options{Development: false}); err != nil {
+				t.Fatalf("Build failed: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(root, "dist", chunksDirName)); !os.IsNotExist(err) {
+				t.Fatalf("dist/%s must not exist when splitting is off (err=%v)", chunksDirName, err)
+			}
+			if !strings.Contains(readFile(t, filepath.Join(root, "dist", "app.js")), lazyMarker) {
+				t.Fatal("lazy module must be inlined into app.js when splitting is off")
+			}
+		})
+	}
+}
+
+// TestStaticModeLeavesNoOrphanChunks proves the static-mode force-off: the SPA
+// pass's output is discarded in static mode (app.js is deleted before the swap),
+// so splitting it would strand chunks nothing imports.
+func TestStaticModeLeavesNoOrphanChunks(t *testing.T) {
+	requireStaticRuntime(t)
+	files := baseSSGFixture()
+	files["puzzle.config.js"] = "export default { build: { splitting: true }, output: 'static' };\n"
+	files["app/lib/lazy.js"] = "export const marker = \"" + lazyMarker + "\";\n"
+	files["app/app.js"] = `import { PuzzleApp } from '@magic-spells/puzzle';
+import routes from './routes.js';
+globalThis.__loadLazy = async () => {
+  const mod = await import('./lib/lazy.js');
+  return mod.marker;
+};
+const app = new PuzzleApp({ target: '#app', routes });
+app.mount();
+export default app;
+`
+	root := writeSSGFixture(t, files)
+	if err := Build(root, Options{Development: false}); err != nil {
+		t.Fatalf("static Build failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "dist", "app.js")); !os.IsNotExist(err) {
+		t.Errorf("static mode must not ship app.js (err=%v)", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "dist", chunksDirName)); !os.IsNotExist(err) {
+		t.Errorf("static mode must not ship orphan SPA chunks (err=%v)", err)
+	}
+}
+
+// TestPublicChunksDirRejectedWhenSplitting proves a public/chunks tree — which
+// would be copied over the emitted chunk set — fails the build up front, the
+// same guard the reserved root-level output names get.
+func TestPublicChunksDirRejectedWhenSplitting(t *testing.T) {
+	requireNodeBin(t)
+	root := writeSplitFixture(t, "export default { build: { splitting: true } };\n")
+	collision := filepath.Join(root, "app", "public", chunksDirName, "x.js")
+	if err := os.MkdirAll(filepath.Dir(collision), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(collision, []byte("USER ASSET"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := Build(root, Options{Development: false})
+	if err == nil {
+		t.Fatal("expected a reserved-directory error for public/chunks when splitting is on")
+	}
+	if !strings.Contains(err.Error(), chunksDirName) {
+		t.Fatalf("error should name the reserved %s directory, got %v", chunksDirName, err)
+	}
+}
+
+// TestPublicChunksDirAllowedWithoutSplitting is the other half of the guard: the
+// reservation exists only while splitting can emit into that directory, so an
+// app that never opts in keeps its public/chunks assets.
+func TestPublicChunksDirAllowedWithoutSplitting(t *testing.T) {
+	root := writeSplitFixture(t, "")
+	asset := filepath.Join(root, "app", "public", chunksDirName, "x.js")
+	if err := os.MkdirAll(filepath.Dir(asset), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(asset, []byte("USER ASSET"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Build(root, Options{Development: false}); err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if got := readFile(t, filepath.Join(root, "dist", chunksDirName, "x.js")); got != "USER ASSET" {
+		t.Fatalf("public/%s/x.js should have been copied verbatim, got %q", chunksDirName, got)
+	}
+}
+
 // TestBuildRejectsReservedPublicNames proves a root-level public asset whose
 // name collides with a compiler output (app.js / app.js.map / styles.css) fails
 // the build — the copy would otherwise silently overwrite the bundle/stylesheet.
@@ -1538,7 +1736,7 @@ func TestValidatePublicReservedNamesCaseInsensitive(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(publicDir, name), []byte("USER ASSET"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			err := ValidatePublic(root)
+			err := ValidatePublic(root, false)
 			if err == nil {
 				t.Fatalf("expected %q to be rejected as a reserved output name", name)
 			}

@@ -22,3 +22,10 @@ batches also skip esbuild unless the changed asset belongs to the last
 successful module graph, compared symlink-resolved. Working plugin
 CSS is promoted only after a full successful rebuild; Tailwind never reads
 partially updated state.
+Under [[DECISION-D160-SPA-CODE-SPLITTING]] a splitting dev build runs with
+`Write: false` and materializes the outputs itself, then deletes the previous
+rebuild's outputs this one did not produce. Dev keeps `dist/` warm, so an edited
+lazy module's re-hashed chunk would otherwise accumulate beside its predecessor
+forever. Only paths this builder wrote are prune candidates, so the public
+mirror stays `prevPublic`'s job and `app.js` (rewritten every pass) is safe by
+construction. With the flag off, `Write: true` and none of this runs.

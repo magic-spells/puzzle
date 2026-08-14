@@ -65,6 +65,20 @@ type WatchBuilder struct {
 	// still needs a complete retry before it can become committed.
 	pendingBundleCommit bool
 
+	// splitting is WatchOptions.Splitting, held because it decides both how the
+	// esbuild context is configured and whether rebuild writes and prunes the
+	// outputs itself.
+	splitting bool
+	// prevOutputs is the set of dist-relative paths THIS builder wrote on the
+	// previous rebuild (splitting only). A one-shot build prunes for free — it
+	// stages a fresh tree and swaps it in — but dev keeps dist warm, so every
+	// content edit to a lazily imported module re-hashes its chunk and would
+	// leave the old file behind forever. Diffing the output set is the dev
+	// equivalent of that wipe, and it is deliberately narrow: only paths esbuild
+	// reported are candidates, so public-mirrored assets stay prevPublic's job.
+	// nil before the first rebuild — nothing is ever pruned on the first pass.
+	prevOutputs map[string]bool
+
 	// scanner memoizes the project usage walk per file so an unchanged .pzl is
 	// not re-parsed on every rebuild.
 	scanner *plugin.UsageScanner
@@ -97,6 +111,11 @@ type RebuildResult struct {
 
 // WatchOptions configure the incremental dev builder.
 type WatchOptions struct {
+	// Splitting mirrors build.splitting (puzzle.config.js) into the dev loop, so
+	// a developer sees the same lazy chunks the production build will emit. It
+	// also switches this builder off esbuild's own writer — see the prevOutputs
+	// field for why.
+	Splitting bool
 	// Fixtures bundles the generated `--fixtures` wrapper entry instead of
 	// app/app.js (D98), installing the fixtures/mock module before the app boots.
 	// The wrapper is generated ONCE here, at construction, and left in place for
@@ -146,15 +165,7 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 	// the HMR snapshot/restore hooks are live for `puzzle dev`. __PUZZLE_TAKEOVER__
 	// is true too — `puzzle dev` has no resolved output mode, and a dev bundle must
 	// never be the thing that silently drops a code path.
-	buildOpts := newBundleOptions(absRoot, entry, outdir, pl, bundleFlags{Dev: true, Takeover: true})
-	// Metafile carries the module graph's Inputs, used after each rebuild to prune
-	// CSS from files no longer imported (see Rebuild → plugin.PruneCSS).
-	buildOpts.Metafile = true
-	if opts.Fixtures {
-		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())
-	}
-
-	ctx, ctxErr := api.Context(buildOpts)
+	ctx, ctxErr := api.Context(watchBundleOptions(absRoot, entry, outdir, pl, opts.Splitting, opts.Fixtures, fixtures))
 	if ctxErr != nil {
 		return nil, fmt.Errorf("puzzle dev: creating esbuild context: %s", ctxErr.Error())
 	}
@@ -169,7 +180,29 @@ func NewWatchBuilder(root string, opts WatchOptions) (*WatchBuilder, error) {
 		scanner:     scanner,
 		fixtures:    fixtures,
 		useFixtures: opts.Fixtures,
+		splitting:   opts.Splitting,
 	}, nil
+}
+
+// watchBundleOptions assembles the dev context's BuildOptions. Shared by
+// construction and refreshUsage's context replacement so a rebuilt context can
+// never drift from the original one.
+func watchBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, splitting, useFixtures bool, fixtures fixturesWrapper) api.BuildOptions {
+	buildOpts := newBundleOptions(absRoot, entry, outdir, pl, bundleFlags{Dev: true, Takeover: true, Splitting: splitting})
+	// Metafile carries the module graph's Inputs, used after each rebuild to prune
+	// CSS from files no longer imported (see Rebuild → plugin.PruneCSS). It is
+	// produced regardless of Write.
+	buildOpts.Metafile = true
+	if splitting {
+		// Take over the writing (the same move StaticWatchBuilder.bundlePages
+		// makes): esbuild's own writer only ever adds files to the warm dist, and
+		// the pruning diff in rebuild needs the output set to compare against.
+		buildOpts.Write = false
+	}
+	if useFixtures {
+		buildOpts.Plugins = append(buildOpts.Plugins, fixtures.Plugin())
+	}
+	return buildOpts
 }
 
 // Rebuild runs one incremental esbuild pass (reusing caches). changed is the
@@ -227,6 +260,14 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 		})
 		return out, fmt.Errorf("puzzle build failed:\n%s", strings.Join(lines, "\n"))
 	}
+	if !publicOnly && b.splitting {
+		// Write:false is on, so nothing has reached dist yet. Materialize this
+		// pass's outputs, then delete whatever the previous pass wrote that this
+		// one did not — the re-hashed chunk of an edited lazy module.
+		if err := b.writeSplitOutputs(result); err != nil {
+			return out, err
+		}
+	}
 	if !publicOnly {
 		b.pendingBundleCommit = true
 		inputs, err := metafileAllInputs(result.Metafile)
@@ -281,6 +322,40 @@ func (b *WatchBuilder) rebuild(changed []string, prof *PhaseProfile) (RebuildRes
 	}
 	b.landed = true
 	return out, nil
+}
+
+// writeSplitOutputs materializes a splitting rebuild's outputs into the warm
+// dist and prunes the outputs the previous rebuild wrote that this one did not.
+// It clones StaticWatchBuilder.bundlePages' write loop, including its refusal to
+// write outside the configured outdir.
+//
+// The prune only ever considers paths THIS builder wrote (prevOutputs), so
+// dist/app.js — rewritten every pass — and the public mirror are both safe by
+// construction; the only files that can disappear are stale chunks.
+func (b *WatchBuilder) writeSplitOutputs(result api.BuildResult) error {
+	written := make(map[string]bool, len(result.OutputFiles))
+	for _, out := range result.OutputFiles {
+		rel, err := filepath.Rel(b.outdir, out.Path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("puzzle dev: unexpected bundle output path %s", out.Path)
+		}
+		target := filepath.Join(b.outdir, rel)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return fmt.Errorf("puzzle dev: creating %s: %w", filepath.Dir(rel), err)
+		}
+		if err := os.WriteFile(target, out.Contents, 0o644); err != nil {
+			return fmt.Errorf("puzzle dev: writing %s: %w", rel, err)
+		}
+		written[filepath.ToSlash(rel)] = true
+	}
+	for rel := range b.prevOutputs {
+		if written[rel] {
+			continue
+		}
+		_ = os.Remove(filepath.Join(b.outdir, filepath.FromSlash(rel)))
+	}
+	b.prevOutputs = written
+	return nil
 }
 
 func pathsHavePZL(changed []string) bool {
@@ -408,12 +483,7 @@ func (b *WatchBuilder) refreshUsage() error {
 		return nil
 	}
 
-	buildOpts := newBundleOptions(b.root, b.entry, b.outdir, b.pl, bundleFlags{Dev: true, Takeover: true})
-	buildOpts.Metafile = true
-	if b.useFixtures {
-		buildOpts.Plugins = append(buildOpts.Plugins, b.fixtures.Plugin())
-	}
-	next, err := api.Context(buildOpts)
+	next, err := api.Context(watchBundleOptions(b.root, b.entry, b.outdir, b.pl, b.splitting, b.useFixtures, b.fixtures))
 	if err != nil {
 		return fmt.Errorf("puzzle dev: refreshing esbuild context: %s", err.Error())
 	}

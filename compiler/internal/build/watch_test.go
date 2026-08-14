@@ -843,6 +843,152 @@ func TestWatchBuilderPostBundlePublicFailureForcesCompleteRetry(t *testing.T) {
 	}
 }
 
+// splitScratchApp is scratchApp plus a module reachable only through a dynamic
+// import(), so a splitting dev build emits exactly one lazy chunk for it. marker
+// is the literal the lazy module exports — changing it between rebuilds changes
+// the chunk's content hash, which is what makes stale chunks observable.
+func splitScratchApp(t *testing.T, marker string) (root, lazy string) {
+	t.Helper()
+	root = scratchApp(t)
+	if err := os.MkdirAll(filepath.Join(root, "app", "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	lazy = filepath.Join(root, "app", "lib", "lazy.js")
+	write(t, lazy, "export const marker = \""+marker+"\";\n")
+	write(t, filepath.Join(root, "app", "app.js"),
+		"globalThis.__loadLazy = async () => (await import('./lib/lazy.js')).marker;\nexport default 1;\n")
+	return root, lazy
+}
+
+// distChunkSet lists the dist-relative chunk paths currently on disk.
+func distChunkSet(t *testing.T, root string) map[string]bool {
+	t.Helper()
+	dir := filepath.Join(root, "dist", chunksDirName)
+	out := map[string]bool{}
+	for _, p := range globChunks(t, dir) {
+		rel, err := filepath.Rel(dir, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[rel] = true
+	}
+	return out
+}
+
+// TestDevRebuildPrunesStaleChunks pins the dev pruning contract. dist stays warm
+// across rebuilds, so a re-hashed chunk would otherwise accumulate beside its
+// predecessor and ship if the developer deployed dist/ without a fresh build.
+func TestDevRebuildPrunesStaleChunks(t *testing.T) {
+	root, lazy := splitScratchApp(t, "CHUNK_MARKER_ONE")
+
+	b, err := NewWatchBuilder(root, WatchOptions{Splitting: true})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("first Rebuild: %v", err)
+	}
+	first := distChunkSet(t, root)
+	if len(first) != 1 {
+		t.Fatalf("first rebuild chunk set = %v, want exactly one lazy chunk", first)
+	}
+	if !strings.Contains(readDistBundle(t, root), chunksDirName+"/") {
+		t.Error("dev app.js should import its lazy module from chunks/")
+	}
+
+	write(t, lazy, "export const marker = \"CHUNK_MARKER_TWO\";\n")
+	if _, err := b.Rebuild([]string{lazy}); err != nil {
+		t.Fatalf("second Rebuild: %v", err)
+	}
+	second := distChunkSet(t, root)
+	if len(second) != 1 {
+		t.Fatalf("second rebuild chunk set = %v, want exactly one live chunk (stale chunks were not pruned)", second)
+	}
+	for rel := range first {
+		if second[rel] {
+			t.Errorf("chunk %s survived an edit that must have re-hashed it", rel)
+		}
+	}
+	for rel := range second {
+		if !strings.Contains(readFile(t, filepath.Join(root, "dist", chunksDirName, rel)), "CHUNK_MARKER_TWO") {
+			t.Errorf("live chunk %s does not carry the edited marker", rel)
+		}
+	}
+
+	// Pruning must never reach the entry or the mirrored public tree.
+	for _, name := range []string{"app.js", "index.html"} {
+		if _, err := os.Stat(filepath.Join(root, "dist", name)); err != nil {
+			t.Errorf("pruning removed dist/%s: %v", name, err)
+		}
+	}
+}
+
+// TestDevRebuildKeepsChunksWithoutEdit is the other half: a rebuild that changes
+// nothing must leave the chunk set exactly as it was — the prune is a diff, not
+// a wipe-and-rewrite.
+func TestDevRebuildKeepsChunksWithoutEdit(t *testing.T) {
+	root, _ := splitScratchApp(t, "CHUNK_MARKER_STABLE")
+
+	b, err := NewWatchBuilder(root, WatchOptions{Splitting: true})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("first Rebuild: %v", err)
+	}
+	first := distChunkSet(t, root)
+	if len(first) == 0 {
+		t.Fatal("first rebuild emitted no chunk")
+	}
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("second Rebuild: %v", err)
+	}
+	second := distChunkSet(t, root)
+	if len(second) != len(first) {
+		t.Fatalf("chunk set changed across a no-op rebuild: %v then %v", first, second)
+	}
+	for rel := range first {
+		if !second[rel] {
+			t.Errorf("chunk %s was deleted by a no-op rebuild", rel)
+		}
+	}
+}
+
+// TestDevRebuildWithoutSplittingEmitsSingleFile pins the default dev shape: with
+// the flag off the builder still lets esbuild write straight into dist, the
+// dynamic import is inlined, and no chunks directory appears.
+func TestDevRebuildWithoutSplittingEmitsSingleFile(t *testing.T) {
+	root, lazy := splitScratchApp(t, "CHUNK_MARKER_INLINE")
+
+	b, err := NewWatchBuilder(root, WatchOptions{})
+	if err != nil {
+		t.Fatalf("NewWatchBuilder: %v", err)
+	}
+	defer b.Dispose()
+
+	if _, err := b.Rebuild(nil); err != nil {
+		t.Fatalf("first Rebuild: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "dist", chunksDirName)); !os.IsNotExist(err) {
+		t.Errorf("dist/%s must not exist for a non-splitting dev build (err=%v)", chunksDirName, err)
+	}
+	if !strings.Contains(readDistBundle(t, root), "CHUNK_MARKER_INLINE") {
+		t.Error("the dynamically imported module must be inlined when splitting is off")
+	}
+
+	write(t, lazy, "export const marker = \"CHUNK_MARKER_INLINE_TWO\";\n")
+	if _, err := b.Rebuild([]string{lazy}); err != nil {
+		t.Fatalf("second Rebuild: %v", err)
+	}
+	if !strings.Contains(readDistBundle(t, root), "CHUNK_MARKER_INLINE_TWO") {
+		t.Error("incremental rebuild did not pick up the edited module")
+	}
+}
+
 func readDistBundle(t *testing.T, root string) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(root, "dist", "app.js"))

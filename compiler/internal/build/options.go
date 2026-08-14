@@ -27,6 +27,16 @@ type bundleFlags struct {
 	// node-platform prerender bundle, which GENERATES the markup and never
 	// adopts it.
 	Takeover bool
+	// Splitting enables esbuild code splitting for the browser bundle: a dynamic
+	// import() emits a lazy chunk under chunks/ instead of being inlined into
+	// app.js. Opt-in per app (build.splitting in puzzle.config.js).
+	//
+	// It rides on the flags, never on the shared options, because it is
+	// incompatible with two of the passes that share them: esbuild rejects
+	// Splitting alongside Outfile, which is how the node-platform prerender pass
+	// writes (prerender.go), and the static-mode SPA pass's output is deleted
+	// before the swap, so splitting it would strand chunks nothing imports.
+	Splitting bool
 }
 
 // newBundleOptions assembles the shared esbuild BuildOptions. All runtime probes
@@ -56,6 +66,22 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 		// Keep development builds byte-for-byte on their existing linked-map
 		// behavior. Production enables linked maps only through build.sourceMap.
 		buildOpts.Sourcemap = api.SourceMapLinked
+	}
+	if flags.Splitting {
+		// The entry keeps its stable app.js name (EntryNames is left alone), so the
+		// shell HTML is unchanged; everything a dynamic import() pulls in lands in
+		// the reserved chunks/ directory beside it, imported with native ESM. There
+		// is no chunk-loader runtime to pay for.
+		//
+		// AbsWorkingDir is deliberately NOT anchored here, unlike the static-pages
+		// pass: this pass's metafile input keys are resolved against the PROCESS
+		// working directory by metafileAllInputs (watch.go), which drives dev CSS
+		// pruning and the public-only rebuild shortcut. Anchoring the pass would
+		// silently break both whenever the app root is not the cwd. Unminified dev
+		// chunks therefore carry cwd-relative input-path comments — exactly what
+		// app.js has always carried — and production minifies them away.
+		buildOpts.Splitting = true
+		buildOpts.ChunkNames = chunksDirName + "/[name]-[hash]"
 	}
 
 	configureRuntime(absRoot, &buildOpts, pl)

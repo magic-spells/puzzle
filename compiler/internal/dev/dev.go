@@ -243,6 +243,12 @@ func Serve(root string, opts Options) error {
 		}
 	}
 
+	// Code splitting is an SPA-bundle capability (build.splitting): a static
+	// project's pages are bundled by their own already-splitting pass, and its
+	// app.js is never shipped. Held here because it decides both how the dev
+	// builder bundles and whether dist/chunks is a reserved output name.
+	splitting := cfg.Splitting() && !staticMode
+
 	srv := newServer(dist, serveMode, ctx, cfg.Dev.Proxy)
 
 	// Reload broadcasts are coalesced (D27): one .pzl edit triggers BOTH an
@@ -290,7 +296,7 @@ func Serve(root string, opts Options) error {
 		}
 	} else {
 		var builderErr error
-		builder, builderErr = build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures})
+		builder, builderErr = build.NewWatchBuilder(absRoot, build.WatchOptions{Fixtures: opts.Fixtures, Splitting: splitting})
 		if builderErr != nil {
 			// No incremental context: degrade fully to the non-incremental one-shot
 			// build.Build per change (slower, but correct — including its own Tailwind).
@@ -408,7 +414,7 @@ func Serve(root string, opts Options) error {
 		// with a reserved output (app.js/app.js.map/styles.css) while the server
 		// runs must surface as a visible build error, not a silent clobber.
 		endPublicValidation := prof.Phase("public validation")
-		if err := build.ValidatePublic(absRoot); err != nil {
+		if err := build.ValidatePublic(absRoot, splitting); err != nil {
 			endPublicValidation()
 			logBuildFailure(stderr, err)
 			message := err.Error()

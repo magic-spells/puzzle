@@ -97,6 +97,7 @@ The spec is split across six domain cards. Section numbers are globally unique a
 | 56 | Dev-only runtime performance profiling + render assertions | [[DOC-SPEC-BUILD]] |
 | 57 | Raw template blocks: `{#raw}…{/raw}` (v1.70) | [[DOC-SPEC-TEMPLATE]] |
 | 58 | Opt-in server adapter subpath (v1.72; fetch-function contract v1.73) | [[DOC-SPEC-DATA]] |
+| 59 | Opt-in SPA code splitting — `build.splitting` (v1.75) | [[DOC-SPEC-BUILD]] |
 | — | Deferred features (post-v1) | this card |
 | — | Open questions (tracked, not blocking) | this card |
 

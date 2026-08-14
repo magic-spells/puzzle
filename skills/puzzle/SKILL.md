@@ -55,6 +55,28 @@ Linked source maps are **opt-in** in production (`build: { sourceMap: true }`);
 dev always emits them. Note that a JSON `null` means "unset" for these keys, not
 `false`.
 
+**Code splitting.** By default the SPA build emits ONE `dist/app.js` and a
+dynamic `import()` is inlined into it — a heavy on-demand dependency (mermaid, a
+chart library, an editor) is paid for on every page load. Set
+`build: { splitting: true }` and each dynamic `import()` becomes a lazy chunk
+under `dist/chunks/`, fetched by the browser only when that code path runs.
+The entry keeps its stable `app.js` name, so the shell HTML is unchanged, and
+esbuild's ESM splitting has no chunk-loader runtime, so total bytes do not grow.
+Static imports are untouched — an app with no dynamic `import()` builds to the
+same single file as before. Notes:
+
+- **`chunks/` becomes a reserved output name** while the flag is on: a
+  root-level `public/chunks` asset fails the build (as `app.js` already does).
+- `output: 'static'` ignores the flag — those pages get their own already-split
+  per-page bundles and no `app.js` ships. `hybrid` splits like the SPA.
+- The build's size banner prints a **largest-dependencies** breakdown from
+  esbuild's metafile and, in production, flags any single dependency over
+  200 KB — the signal to move it behind a dynamic `import()`. Your own code and
+  the framework itself are listed but never flagged.
+- With splitting on, vendoring a chunked ESM build as a static asset (loading it
+  through a variable URL so esbuild leaves it alone) is no longer necessary —
+  write a plain `await import('pkg')` instead.
+
 **Dev API proxy.** `dev: { proxy: { '/api': 'http://localhost:3091' } }` forwards
 matching prefixes to a backend so the app can use same-origin paths
 (`apiURL: ''`) with no CORS middleware. Paths are forwarded unrewritten. A `/`

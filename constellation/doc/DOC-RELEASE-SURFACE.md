@@ -218,6 +218,15 @@ second specification. Decision cards hold rationale and git holds chronology.
   entry from `app/fixtures.js`. Source maps are **opt-in** —
   `build.sourceMap` (default off) emits linked maps for SPA + true-static prod
   bundles; dev keeps linked maps regardless (D88).
+- Code splitting is **opt-in** — `build.splitting` (default off, D160) makes
+  every dynamic `import()` in the SPA/hybrid bundle a lazy chunk under
+  `dist/chunks/`; unset builds emit the single `app.js` they always have.
+  `output: 'static'` ignores it (its per-page bundles already split), `chunks/`
+  is a reserved output name while it is on, and `puzzle dev` splits and prunes
+  stale chunks per rebuild. The build size banner additionally reports
+  per-dependency emitted bytes from esbuild's metafile, warning in production
+  past 200 KB for a single dependency (app code and the framework runtime are
+  listed but never flagged).
 - Tailwind-first style pipeline; scoped blocks wrapped in native `@scope`.
 - Public assets copied with generated-name collision checks. One-shot builds
   stage and atomically swap `dist`, preserving the last good build on failure.

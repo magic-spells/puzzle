@@ -268,6 +268,69 @@ func TestLoadConfigSourceMapNonBooleanRejected(t *testing.T) {
 	}
 }
 
+func TestLoadConfigSplitting(t *testing.T) {
+	requireNode(t)
+
+	t.Run("absent means false", func(t *testing.T) {
+		cfg, err := LoadConfig(writeConfig(t, "export default {};\n"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Splitting() {
+			t.Fatal("splitting must default to false")
+		}
+		if cfg.Build.Splitting != nil {
+			t.Errorf("Build.Splitting = %v, want nil (unset)", *cfg.Build.Splitting)
+		}
+	})
+
+	t.Run("null means unset", func(t *testing.T) {
+		cfg, err := LoadConfig(writeConfig(t, "export default { build: { splitting: null } };\n"))
+		if err != nil {
+			t.Fatalf("a null value should be treated as unset, got error: %v", err)
+		}
+		if cfg.Splitting() {
+			t.Fatal("null must mean unset, not true")
+		}
+		if cfg.Build.Splitting != nil {
+			t.Errorf("Build.Splitting = %v, want nil (unset)", *cfg.Build.Splitting)
+		}
+	})
+
+	t.Run("explicit true", func(t *testing.T) {
+		cfg, err := LoadConfig(writeConfig(t, "export default { build: { splitting: true } };\n"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !cfg.Splitting() {
+			t.Fatal("explicit true must enable splitting")
+		}
+	})
+
+	t.Run("explicit false", func(t *testing.T) {
+		cfg, err := LoadConfig(writeConfig(t, "export default { build: { splitting: false } };\n"))
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Splitting() {
+			t.Fatal("explicit false must keep splitting off")
+		}
+		if cfg.Build.Splitting == nil || *cfg.Build.Splitting {
+			t.Error("Build.Splitting should record the explicit false")
+		}
+	})
+
+	t.Run("non-boolean rejected", func(t *testing.T) {
+		_, err := LoadConfig(writeConfig(t, "export default { build: { splitting: 'yes' } };\n"))
+		if err == nil {
+			t.Fatal("expected an error for a non-boolean build.splitting")
+		}
+		if !strings.Contains(err.Error(), "build.splitting") || !strings.Contains(err.Error(), "must be a boolean") {
+			t.Fatalf("want boolean-type error naming build.splitting, got %v", err)
+		}
+	})
+}
+
 func TestLoadConfigDevProxy(t *testing.T) {
 	requireNode(t)
 	root := writeConfig(t, "export default { dev: { proxy: { '/api': 'http://localhost:3091' } } };\n")

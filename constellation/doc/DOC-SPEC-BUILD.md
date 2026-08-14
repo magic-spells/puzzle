@@ -275,3 +275,43 @@ gzip output by a few bytes with zero retained instrumentation.
   `measureRenders`; no test framework is imported. Production DCE is proved by a
   dev-only sentinel scan and an esbuild metafile assertion that attributes zero
   production `bytesInOutput` to `client-runtime/devperf.js`.
+
+## 59. Opt-in SPA code splitting — `build.splitting` (v1.75)
+
+`build: { splitting: true }` in `puzzle.config.js` builds the SPA browser bundle
+with esbuild code splitting: every dynamic `import()` becomes a lazy chunk under
+`dist/chunks/` that the browser fetches when that code path runs, instead of
+being inlined into `app.js`. Shipped in v1.75 ([[DECISION-D160-SPA-CODE-SPLITTING]]).
+
+- **Opt-in, and unset means off.** With the key absent the build emits exactly
+  the single `dist/app.js` it always has. `null` is unset, not `false`, like the
+  other `build.*` scalars (§13); a non-boolean is a config error naming the key.
+- **The entry name is stable.** Splitting never renames `app.js`, so the shell
+  HTML (`<script type="module" src="/app.js">`) is unchanged. Chunks carry a
+  content hash (`chunks/<name>-<hash>.js`) and import each other as native ESM —
+  esbuild's ESM splitting emits no chunk-loader runtime, so total shipped bytes
+  do not grow.
+- **Static imports are untouched.** An app with no dynamic `import()` builds to
+  one file with the flag on. Authors choose split points by writing `import()`;
+  there is no per-view or per-component fragmentation.
+- **`chunks/` is a reserved output name while the flag is on.** A root-level
+  `public/chunks` entry fails the build up front, case-folded, exactly as
+  `app.js` / `app.js.map` / `styles.css` do (§13). With the flag off that name
+  belongs to the app again.
+- **`output: 'static'` forces it off.** That mode's `app.js` is deleted before
+  the staging swap, so splitting it would ship chunks nothing imports; its
+  per-page bundles already split on their own (§36). `hybrid` splits like the
+  SPA — its bundle is the shipped runtime after takeover.
+- **`puzzle dev` splits too**, and prunes: the dev builder writes the pass's
+  outputs itself and deletes the previous rebuild's outputs that this one did
+  not produce, so an edited lazy module's re-hashed chunk replaces its
+  predecessor instead of accumulating in a warm `dist/`. Pruning only ever
+  considers paths that builder wrote — the public mirror and `app.js` are never
+  candidates.
+- **The build size banner reports composition.** `puzzle build` prints
+  per-dependency emitted bytes (esbuild metafile `bytesInOutput`, grouped by the
+  package under the innermost `node_modules/`; everything else is `app`), and
+  warns for any single dependency over 200 KB, naming `import()` +
+  `build.splitting` as the fix. The threshold describes MINIFIED bytes, so the
+  warning is production-only; the app's own code and the framework runtime are
+  listed but never advised, since neither can move behind a dynamic `import()`.
