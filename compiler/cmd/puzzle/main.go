@@ -71,17 +71,22 @@ dev' runs for an output: 'static' project.`,
 		}
 
 		start := time.Now()
+		// The metafile drives the summary's bundle-composition breakdown: which
+		// dependency accounts for how much of the emitted bytes. Asking for it
+		// costs esbuild only the JSON it already has the data to produce.
+		var metafile string
 		if err := build.Build(dir, build.Options{
 			Development: mode == "development",
 			Output:      output,
 			Fixtures:    fixtures,
 			Profile:     profile,
+			Metafile:    &metafile,
 		}); err != nil {
 			return err
 		}
 		out := ui.New(os.Stdout)
 		outdir := filepath.Join(dir, "dist")
-		printBuildSummary(out, outdir, mode, time.Since(start))
+		printBuildSummary(out, outdir, mode, metafile, time.Since(start))
 		printUpdateNotice(os.Stdout, out)
 		return nil
 	},

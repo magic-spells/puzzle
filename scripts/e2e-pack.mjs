@@ -24,9 +24,9 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,6 +41,15 @@ function run(cmd, args, cwd) {
 function fail(msg) {
 	console.error(`\n[e2e-pack] FAIL: ${msg}`);
 	process.exitCode = 1;
+}
+
+// Every emitted script under dist/, dist-relative. A build with
+// `build: { splitting: true }` emits lazy chunks under dist/chunks/ beside
+// app.js, and those are shipped bytes too — assertions must cover them.
+function distScripts(dist) {
+	return readdirSync(dist, { recursive: true, withFileTypes: true })
+		.filter((e) => e.isFile() && e.name.endsWith('.js'))
+		.map((e) => relative(dist, join(e.parentPath ?? e.path, e.name)));
 }
 
 // Temp workspace OUTSIDE the repo so the compiler's in-repo runtime alias never
@@ -90,13 +99,19 @@ try {
 	for (const f of required) {
 		if (!existsSync(join(dist, f))) throw new Error(`missing build artifact dist/${f}`);
 	}
-	const appJs = readFileSync(join(dist, 'app.js'), 'utf8');
-	if (appJs.includes('puzzle-env')) {
-		throw new Error("dist/app.js contains a 'puzzle-env' stray (ambient shim leaked into the bundle)");
+	// The stray-shim check covers EVERY emitted script, not just the entry: with
+	// build.splitting on, a leak can land in a lazy chunk just as easily.
+	const emitted = distScripts(dist);
+	for (const rel of emitted) {
+		if (readFileSync(join(dist, rel), 'utf8').includes('puzzle-env')) {
+			throw new Error(`dist/${rel} contains a 'puzzle-env' stray (ambient shim leaked into the bundle)`);
+		}
 	}
 
 	console.log('\n[e2e-pack] PASS — packed tarball installs and builds a real app:');
-	console.log(`  dist/${required.join(', dist/')} present; no 'puzzle-env' strays in app.js`);
+	console.log(
+		`  dist/${required.join(', dist/')} present; no 'puzzle-env' strays in ${emitted.length} emitted script(s)`
+	);
 } catch (err) {
 	fail(err.message);
 } finally {

@@ -16,13 +16,24 @@
 // run to run. Node builtins only.
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { gzipSync, brotliCompressSync, constants } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const check = process.argv.includes('--check');
+
+// Every emitted script under dist/, sorted so the concatenation below is stable
+// run to run. Source maps are excluded — they are never shipped to users. An app
+// built with `build: { splitting: true }` emits lazy chunks beside app.js, and
+// those bytes count toward what it costs to run the app.
+function distScripts(dist) {
+	return readdirSync(dist, { recursive: true, withFileTypes: true })
+		.filter((e) => e.isFile() && e.name.endsWith('.js'))
+		.map((e) => join(e.parentPath ?? e.path, e.name))
+		.sort();
+}
 
 const APPS = [
 	{ name: 'hello-world', dir: 'examples/hello-world' },
@@ -38,7 +49,11 @@ for (const app of APPS) {
 		['run', './compiler/cmd/puzzle', 'build', app.dir, '--mode', 'production'],
 		{ cwd: repoRoot, stdio: ['ignore', 'ignore', 'inherit'] }
 	);
-	const js = readFileSync(join(repoRoot, app.dir, 'dist', 'app.js'));
+	// Sum EVERY emitted script, not just app.js: a split app's weight is app.js
+	// plus its lazy chunks, and a figure that counted only the entry would report
+	// splitting as a free win. Concatenating before compressing is the honest
+	// single number — the bytes a user has downloaded once every chunk is in.
+	const js = Buffer.concat(distScripts(join(repoRoot, app.dir, 'dist')).map((p) => readFileSync(p)));
 	results.push({
 		name: app.name,
 		raw: js.length,

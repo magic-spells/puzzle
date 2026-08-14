@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -26,10 +28,11 @@ type distFile struct {
 }
 
 // printBuildSummary walks the freshly-written dist/ tree and prints a per-file
-// table with human-readable sizes + gzip estimates, then a totals footer. It
-// degrades cleanly on a non-TTY: the ui.Printer no-ops color codes, and the
-// alignment is plain spaces, so piped/CI output stays readable.
-func printBuildSummary(out *ui.Printer, outdir, mode string, elapsed time.Duration) {
+// table with human-readable sizes + gzip estimates, then the bundle-composition
+// breakdown (from esbuild's metafile, empty when the caller has none), then a
+// totals footer. It degrades cleanly on a non-TTY: the ui.Printer no-ops color
+// codes, and the alignment is plain spaces, so piped/CI output stays readable.
+func printBuildSummary(out *ui.Printer, outdir, mode, metafile string, elapsed time.Duration) {
 	files, err := collectDist(outdir)
 	if err != nil || len(files) == 0 {
 		// Never let a reporting hiccup mask a successful build — fall back to
@@ -83,12 +86,132 @@ func printBuildSummary(out *ui.Printer, outdir, mode string, elapsed time.Durati
 		fmt.Fprintf(os.Stdout, "  %s  %s %s %s\n", name, raw, out.Dim("│"), gzCol)
 	}
 
+	printComposition(os.Stdout, out, dependencyTotals(metafile))
+
 	fmt.Fprintln(os.Stdout)
 	footer := fmt.Sprintf("built in %s  %s",
 		formatMillis(elapsed),
 		out.Dim(fmt.Sprintf("· %d files · %s raw (%s gzip)", shipped, humanSize(totalRaw), humanSize(totalGz))),
 	)
 	fmt.Fprintf(os.Stdout, "  %s %s\n", out.Green("✓"), footer)
+}
+
+// depSize is one dependency's contribution to the emitted bundle: the summed
+// bytesInOutput of every module esbuild attributed to that package.
+type depSize struct {
+	name  string
+	bytes int64
+}
+
+// heavyDependencyBytes is the point at which one dependency stops being a cost
+// of doing business and starts being the bundle. It is deliberately generous:
+// the report exists to catch the accidental 3 MB inline (an `import('mermaid')`
+// with nowhere to split to), not to nag about a fat date library.
+const heavyDependencyBytes = 200 * 1024
+
+// compositionListLimit caps the printed breakdown. Five rows is enough to see
+// where the weight is without turning the build banner into a report.
+const compositionListLimit = 5
+
+// dependencyTotals aggregates an esbuild metafile into per-dependency emitted
+// bytes, largest first. Attribution uses bytesInOutput — what actually SHIPPED
+// after tree-shaking and minification — not the input file's size on disk, so
+// the numbers add up to the bundle the user is looking at.
+//
+// An absent or unparseable metafile yields nothing, and the caller prints
+// nothing: the composition report is a courtesy, never a reason to fail or to
+// muddy a successful build.
+func dependencyTotals(metafileJSON string) []depSize {
+	if strings.TrimSpace(metafileJSON) == "" {
+		return nil
+	}
+	var mf struct {
+		Outputs map[string]struct {
+			Inputs map[string]struct {
+				BytesInOutput int64 `json:"bytesInOutput"`
+			} `json:"inputs"`
+		} `json:"outputs"`
+	}
+	if err := json.Unmarshal([]byte(metafileJSON), &mf); err != nil {
+		return nil
+	}
+
+	totals := map[string]int64{}
+	for _, out := range mf.Outputs {
+		for input, contribution := range out.Inputs {
+			totals[dependencyGroup(input)] += contribution.BytesInOutput
+		}
+	}
+	deps := make([]depSize, 0, len(totals))
+	for name, bytes := range totals {
+		deps = append(deps, depSize{name: name, bytes: bytes})
+	}
+	sort.Slice(deps, func(i, j int) bool {
+		if deps[i].bytes != deps[j].bytes {
+			return deps[i].bytes > deps[j].bytes
+		}
+		return deps[i].name < deps[j].name
+	})
+	return deps
+}
+
+// dependencyGroup names the package a metafile input belongs to: the package
+// directly under the LAST node_modules segment (so a nested dependency is
+// attributed to the nested package, which is the thing to go look at), keeping
+// both segments of a scoped name. Everything else — the app's own modules, the
+// plugin's virtual inputs — groups as "app".
+func dependencyGroup(input string) string {
+	const marker = "node_modules/"
+	idx := strings.LastIndex(input, marker)
+	if idx < 0 {
+		return "app"
+	}
+	rest := input[idx+len(marker):]
+	parts := strings.Split(rest, "/")
+	if len(parts) == 0 || parts[0] == "" {
+		return "app"
+	}
+	if strings.HasPrefix(parts[0], "@") && len(parts) > 1 {
+		return parts[0] + "/" + parts[1]
+	}
+	return parts[0]
+}
+
+// printComposition renders the per-dependency breakdown and, for anything past
+// heavyDependencyBytes, the one-line advisory that names the fix. Nothing is
+// printed for an empty breakdown.
+func printComposition(w io.Writer, out *ui.Printer, deps []depSize) {
+	if len(deps) == 0 {
+		return
+	}
+
+	shown := deps
+	if len(shown) > compositionListLimit {
+		shown = shown[:compositionListLimit]
+	}
+	nameW := 0
+	for _, d := range shown {
+		if len(d.name) > nameW {
+			nameW = len(d.name)
+		}
+	}
+
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  %s\n", out.Dim("largest dependencies"))
+	for _, d := range shown {
+		fmt.Fprintf(w, "  %-*s  %s\n", nameW, d.name, humanSize(d.bytes))
+	}
+
+	for _, d := range deps {
+		if d.bytes < heavyDependencyBytes {
+			break // sorted largest first — nothing after this crosses the line
+		}
+		if d.name == "app" {
+			continue // the app's own code is not a dependency to swap out
+		}
+		fmt.Fprintf(w, "  %s %s contributes %s — consider loading it with a dynamic import() and build.splitting, or a lighter alternative\n",
+			out.Yellow("!"), d.name, humanSize(d.bytes))
+	}
 }
 
 // collectDist enumerates the regular files under outdir, sizes them, and gzip-
