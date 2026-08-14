@@ -11,10 +11,10 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Five breaking changes are easy to miss on a multi-version jump. Most of them
-fail loudly — a compile error, a constructor throw, an import that will not
-resolve. Two change behavior quietly, and those are the ones to grep for:
-`output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0).
+Five breaking changes are easy to miss on a multi-version jump. Most fail
+loudly — a compile error, a constructor throw, an unresolvable import. Two are
+quiet; grep for them: `output: 'static'` (renamed, 0.2.0) and `errorContent()`
+(removed, 0.6.0).
 
 **`routerMode` takes a factory, not a string (0.6.0, D159).** History routing is
 the zero-config default — omit `routerMode` entirely. Hash and memory routing
@@ -27,16 +27,15 @@ routerMode: hashRouter(),
 routerMode: memoryRouter({ initialPath: '/x' }),  // replaces routerInitialPath
 ```
 
-A leftover `'hash'` or `'memory'` string throws at `new PuzzleApp(...)` with a
-message naming the import. That is a runtime throw at app construction, not a
-compile error — the app does not boot, but the build succeeds.
+A leftover `'hash'` or `'memory'` string throws at `new PuzzleApp(...)` naming
+the import — a runtime throw, not a compile error: the build succeeds but the
+app does not boot.
 
 **Per-view `errorContent()` is removed (0.6.0, D145 amended).** Register one
-ordinary compiled view instead — `new PuzzleApp({ errorView: AppErrorView })` —
-which receives `{ error, info, retry }` when a view or component fails to
-render. Nothing reads `errorContent()` any more and nothing reports it, so a
-view that used to render a fallback face silently leaves the blank hole it was
-written to prevent. Grep for the name before upgrading.
+app-level view instead — `new PuzzleApp({ errorView: AppErrorView })` — which
+receives `{ error, info, retry }` when a view or component fails to render. A
+leftover `errorContent()` is silently ignored (nothing reads or reports it), so
+grep for the name before upgrading.
 
 **Server sync is opt-in (0.6.0, D157).** The adapter runtime lives at
 `@magic-spells/puzzle/adapter` and is enabled once, by value:
@@ -47,10 +46,9 @@ import { adapter } from '@magic-spells/puzzle/adapter';
 const app = new PuzzleApp({ target: '#app', routes, models, adapter });
 ```
 
-Model `static adapter = { endpoint }` declarations are unchanged. Importing
-`PuzzleAdapterError` from the package root no longer resolves; import it from
-the subpath. Forgetting the capability leaves `record.save()` a plain
-`TypeError` at call time.
+Model `static adapter = { endpoint }` declarations are unchanged.
+`PuzzleAdapterError` moved to the subpath. Without the capability,
+`record.save()` is a plain `TypeError` at call time.
 
 **Composition markers are capitalized (0.4.0, D134).** Lowercase `<children/>`
 and `<slot>` are no longer valid in any position:
@@ -212,70 +210,50 @@ one is *not* a compile error; it silently builds a different product.
   multiple apps on one page can use different dialects. The normal Response
   handling, shape guards, `beforeRequest`, and fixtures seam apply unchanged.
 
-- **Faster builds and dev rebuilds (D151–D156).** The pipeline was reworked end
-  to end. Emitted bytes and failure contracts are unchanged: a build still
-  stages and atomically swaps `dist/`, and a failure still leaves the last good
-  output serving.
+- **Faster builds and dev rebuilds (D151–D156).** Emitted bytes and failure
+  contracts are unchanged — builds still stage and atomically swap `dist/`,
+  and a failure keeps the last good output serving.
 
-  - **One transform per source, shared by every pass (D152).** A
-    `puzzle build --static` runs three esbuild passes over the same project and
-    used to construct each one independently — three reads, six parse walks and
-    three codegen runs per `.pzl`. A build-scoped compile cache (keyed on path
-    plus a hash of the file bytes) and a single project usage scan now serve all
-    three, along with one read per `{#svg}` asset.
-  - **Managed head injection edits only the shell head (D151).** Both prerender
-    writers used to run thirteen to seventeen full-document regex scans per
-    page; they now splice a shell plan compiled once per build (~342ms of a
-    148-route site's build, gone). It is a correctness fix too: an inline
-    `<svg><title>` or a `data-puzzle-head` attribute in **view** output is not
-    framework-owned and is no longer rewritten.
-  - **Transient build directories live in a self-ignoring `.puzzle/` (D153).**
-    The staging tree and the previous output's holding directory moved out of
-    the app root into `.puzzle/tmp/`, which carries its own `.gitignore`. A
-    killed build's leftovers used to sit where Tailwind's gitignore-respecting
-    source scan would walk them — ten of them took that scan from 112ms to 14s.
-    `puzzle build` and `puzzle dev` startup now sweep stale ones, including the
-    legacy app-root names, so existing projects heal on their next build.
-  - **Warm static dev rebuilds (D154).** `puzzle dev` on an `output: 'static'`
-    project rebuilds through persistent esbuild contexts, a session-long compile
-    memo, and the same warm `tailwindcss --watch` child SPA dev has used since
-    D27, instead of re-running a cold `puzzle build --static` per save. A
-    styles-only save writes exactly one file and renders no routes.
-  - **Route-level invalidation (D155).** A warm static rebuild renders only the
-    routes the save can reach — attributed through the build's own esbuild
-    metafiles — and hardlinks every other page out of the tree being served into
-    the new staging tree, so the swap still publishes a complete site. A change
-    the classifier cannot place, and a partial render that cannot finish, both
-    fall back to a full render. Output is byte-for-byte what
-    `puzzle build --static` produces either way. Together with D154, a leaf edit
-    on a 148-route reference site went from ~2.3s save-to-served to ~250ms.
-  - **SPA rebuild work follows the changed batch (D156).** The usage scan
-    performed while constructing the esbuild context is reused by the first
-    rebuild and reruns only when a `.pzl` path changed; a public-only batch
-    whose paths never entered the module graph skips esbuild entirely; CSS is
-    recomposed only when the collected blocks moved; and independent one-shot
+  - **Build-scoped compile cache (D152).** One usage scan and one transform per
+    source (keyed on path + content hash) now feed all three static-build
+    esbuild passes; each `{#svg}` asset is read once.
+  - **Shell-head plan (D151).** Head injection compiles the shell once per
+    build and splices per page instead of running 13–17 full-document scans
+    (~342ms off a 148-route build). Also a correctness fix: a `<title>` or
+    `data-puzzle-head` in **view** output is no longer rewritten.
+  - **`.puzzle/` scratch dir (D153).** Staging and previous-output holding
+    dirs moved from the app root into the self-gitignored `.puzzle/tmp/`.
+    Killed-build leftovers — which could take Tailwind's source scan from
+    112ms to 14s — are swept at build/dev startup, legacy names included.
+  - **Warm static dev rebuilds (D154).** Static-mode `puzzle dev` reuses
+    persistent esbuild contexts, a session compile memo, and the warm Tailwind
+    child instead of a cold `puzzle build --static` per save; a styles-only
+    save writes one file and renders no routes.
+  - **Route-level invalidation (D155).** A warm rebuild renders only the
+    routes a save can reach (attributed via the build's esbuild metafiles) and
+    hardlinks the rest into staging; anything the classifier cannot place
+    falls back to a full render. Output stays byte-for-byte what
+    `puzzle build --static` produces. With D154, a leaf edit on a 148-route
+    site went from ~2.3s save-to-served to ~250ms.
+  - **Change-aware SPA rebuilds (D156).** The usage scan reruns only when a
+    `.pzl` changed, unimported public-only batches skip esbuild, CSS
+    recomposes only when the collected blocks moved, and independent one-shot
     phases run concurrently.
-  - **`--profile-build`.** `puzzle build --profile-build` and
-    `puzzle dev --profile-build` — or `PUZZLE_PROFILE_BUILD=1`, which also
-    reaches dev rebuilds — print per-phase timing tables to stderr for SPA,
-    hybrid, and static projects. Report order is deterministic even for
-    concurrent phases, and profiling off is allocation-free at the call sites.
+  - **`--profile-build`** on `build` and `dev` (or `PUZZLE_PROFILE_BUILD=1`)
+    prints deterministic per-phase timing tables to stderr; disabled, it is
+    allocation-free.
 
-- **`puzzle add piece` fetches from npm, version-locked.** The default registry
-  source is now the published `@magic-spells/puzzle-pieces` package, resolved to
-  the newest release matching the running CLI's major.minor — pieces `0.6.x`
-  pair with puzzle `0.6.x`, and the patch digit belongs to the registry.
-  Prereleases are never auto-selected. Because the two packages are published
-  separately and the compiler usually goes first, a CLI whose own minor has no
-  pieces release yet falls back to the newest published release on a **lower**
-  major.minor and prints a note naming both versions; never a higher one, whose
-  grammar this binary may not have. Only when nothing older exists either is it
-  a hard error. `--pieces-version` pins an exact release, and `--registry` (and
-  `$PUZZLE_PIECES_REGISTRY`) now takes `npm:<package>[@version]` alongside a
-  local directory and an http(s) URL. `pieces.lock` gains a `puzzle` field
-  recording the compiler version that performed the last add. Pieces are still
-  copied into your app verbatim; nothing is imported from the package at
-  runtime.
+- **`puzzle add piece` fetches from npm, version-locked.** The default source
+  is the published `@magic-spells/puzzle-pieces` package, resolved to the
+  newest release matching the CLI's major.minor (pieces `0.6.x` for puzzle
+  `0.6.x`; prereleases never auto-selected). A CLI whose minor has no pieces
+  release yet falls back to the newest **older** major.minor with a printed
+  note — never a newer one, whose grammar this binary may not know — and
+  hard-errors only when nothing older exists. `--pieces-version` pins an exact
+  release; `--registry` (or `$PUZZLE_PIECES_REGISTRY`) takes
+  `npm:<package>[@version]`, a local directory, or an http(s) URL.
+  `pieces.lock` gains a `puzzle` field recording the adding compiler version.
+  Pieces are still copied in verbatim; nothing imports the package at runtime.
 
 ### Added
 

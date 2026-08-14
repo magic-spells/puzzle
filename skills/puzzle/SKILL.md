@@ -43,9 +43,9 @@ CLI (bin `puzzle`, installed with `@magic-spells/puzzle`):
 `piece <name…>`, `skills`), `upgrade`, `doctor`, `info`.
 
 - `dev` and `build` both take `--fixtures` (see Fixtures below).
-- `dev` and `build` both take `--profile-build` (also `PUZZLE_PROFILE_BUILD=1`,
-  which reaches dev rebuilds): a per-phase timing table on stderr. Reach for it
-  before guessing why a build or a save feels slow.
+- `dev` and `build` both take `--profile-build` (or `PUZZLE_PROFILE_BUILD=1`):
+  per-phase timing tables on stderr — check it before guessing why a build or
+  save feels slow.
 - A busy `--port` is not fatal: `dev` scans upward for the first free one and
   warns when it moved. `--strict-port` restores bind-or-fail.
 - `puzzle upgrade skills` refreshes the installed agent skill from the running
@@ -114,9 +114,8 @@ Template syntax: `{ expr | formatter }` (formatters are registered display
 helpers — the project term is *formatter*, never *filter*),
 `{#if}/{:else if}/{:else}/{/if}`, `{#unless}`, `{#for item in items, i}`
 (trailing `, name` binds the index), `{#case}/{:when}`, `{#raw}…{/raw}` (brace
-grammar off inside, so JSON, JavaScript, CSS, and syntax examples keep their
-literal braces while HTML still parses normally — the body is authored source
-only, blocks do not nest, and use inside an attribute value is a compile error),
+grammar off inside — literal braces compile as-is, HTML still parses; no
+nesting, and attribute-value use is a compile error),
 `@event={ handler }` with modifiers, component imports used as capitalized tags.
 `<script lang="ts">` for TypeScript (transpile-only — types stripped, never
 checked, at compile).
@@ -126,8 +125,8 @@ Rules that bite:
 - **Text is text.** Template text is NOT HTML-entity decoded and interpolations
   become text nodes — you cannot inject markup through `{ expr }`. The one
   raw-markup exception is compile-time `{#svg 'path.svg'}` inline SVG.
-  `{#raw}` is not a second one: it turns the brace lexer off over authored
-  source, and no runtime value can reach inside it.
+  `{#raw}` is not a second one — it only turns the brace lexer off; no runtime
+  value can reach inside it.
 - **Two marker tags, three meanings.** `<Children/>` marks where a component's
   default children render; `<Slot name="x"/>` declares a named region (the
   caller routes a direct child in with a static `slot="x"` attribute);
@@ -261,8 +260,8 @@ Form controls bind themselves — write NO input handler:
   og/twitter/canonical tags are baked per page **at build time only** and are
   never touched at runtime. Crawlers and unfurlers GET each URL fresh and never
   client-navigate, so they always read the correct baked copy. The consequence:
-  in the default SPA build (no `output` key, so no prerender pass — `'spa'` is
-  not a valid value; the only two are `'static'` and `'hybrid'`)
+  in the default SPA build (no `output` key — the only valid values are
+  `'static'` and `'hybrid'`, so no prerender pass runs)
   `description`/`canonical`/`socialImage` are accepted but **inert** — if you
   need social previews, build
   `hybrid` or `static`. Do not write code that reads an og tag out of the live
@@ -629,18 +628,17 @@ shell).
 
 ## puzzle-pieces (component library)
 
-Copy-in registry, shadcn-style: the files land in your app, and nothing is
-imported from the registry package at runtime. Use `puzzle add piece <name…>`
-(copies each piece + its transitive piece/lib dependencies into the app
-verbatim, records hashes in `pieces.lock`; `--overwrite` to refresh; required
-npm packages and the theme merge are printed as next steps). The default SOURCE
-is the published `@magic-spells/puzzle-pieces` npm package, version-locked to
-the running CLI's major.minor (pieces `0.6.x` for puzzle `0.6.x`); when that
-minor is not published yet the CLI falls back to the newest OLDER release and
-prints a note naming both versions. `--pieces-version` pins an exact release;
-`--registry` (or `$PUZZLE_PIECES_REGISTRY`) overrides the source with
-`npm:<package>[@version]`, a local directory, or an http(s) URL. Once copied, a
-piece is YOUR code: import it like any component (`import Button from
-'../components/ui/Button.pzl'`) and use it as a capitalized tag. Pieces follow a `BASE` + `VARIANT`/`SIZE` class-map convention with a
+Copy-in registry, shadcn-style: the files land in your app; nothing imports
+the registry package at runtime. Use `puzzle add piece <name…>` (copies each
+piece + its transitive piece/lib dependencies verbatim, records hashes in
+`pieces.lock`; `--overwrite` to refresh; required npm packages and the theme
+merge are printed as next steps). The default source is the
+`@magic-spells/puzzle-pieces` npm package, version-locked to the CLI's
+major.minor (falls back to the newest OLDER release with a printed note).
+`--pieces-version` pins a release; `--registry` (or `$PUZZLE_PIECES_REGISTRY`)
+takes `npm:<package>[@version]`, a local directory, or an http(s) URL. Once
+copied, a piece is YOUR code: import it like any component (`import Button
+from '../components/ui/Button.pzl'`) and use it as a capitalized tag. Pieces
+follow a `BASE` + `VARIANT`/`SIZE` class-map convention with a
 `class` prop for caller overrides. Audit copied pieces for SSG rule #1 above
 before prerendering them.

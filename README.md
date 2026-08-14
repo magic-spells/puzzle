@@ -51,14 +51,14 @@ npm install -D @magic-spells/puzzle
 - **Single-file components** (`.pzl`) with template + scripts + styles — optional TypeScript (`<script lang="ts">`), scoped styles (`<style scoped>`), skeletons, comments, slots, and refs
 - **Reactive data** with automatic view updates
 - **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
-- **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath, so apps that never talk to a server ship none of it
+- **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath (local-only apps ship none of it)
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
-- **Nested routing** with view slots — history routing by default, with `hashRouter()` and `memoryRouter()` factories imported from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
+- **Nested routing** with view slots — history by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
 - **Virtual DOM** with efficient diffing and pk-aware list keying
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
-- **App-level error view** — one compiled `errorView` replaces a view or component that fails to render, receiving `{ error, info, retry }`; an `onError` hook funnels every framework-contained error to one place
+- **App-level error handling** — one compiled `errorView` replaces a failed view in place with `{ error, info, retry }`; the `onError` hook funnels every framework-contained error
 - **Go-based compiler** for fast builds and state-preserving live reload (store and JSON-safe local view state survive edits)
 - **SPA-first output with two optional prerender modes** — `output: 'hybrid'` (prerendered pages the SPA takes over) and `output: 'static'` (true static pages, no router or `app.js`); no request-time SSR server or hydration layer
 - **[Puzzle Pieces](https://github.com/magic-spells/puzzle-pieces) component library** — ready-made `.pzl` components installed with `puzzle add piece <name>` ([browse the catalog](https://magic-spells.github.io/puzzle-pieces/))
@@ -476,9 +476,9 @@ only when that code path runs — the way to keep a heavy on-demand dependency (
 chart library, a diagram renderer, an editor) off the first page load. The entry
 keeps its `app.js` name, static imports are unaffected, and total shipped bytes
 do not grow: esbuild's ESM splitting has no chunk-loader runtime. The build's
-size banner also names your largest dependencies and, in a production build,
-flags any single one over 200 KB. The threshold is calibrated against minified
-bytes, so a development build lists the breakdown without ever warning.
+size banner also names your largest dependencies and, in production builds,
+flags any single one over 200 KB (the threshold assumes minified bytes, so dev
+builds never warn).
 
 On an interactive terminal, `build` and `dev` also use a cached, non-blocking
 daily check to mention newer Puzzle releases. Set `PUZZLE_NO_UPDATE_CHECK=1` to
