@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/charmbracelet/huh v0.6.0
-	github.com/evanw/esbuild v0.19.11
+	github.com/evanw/esbuild v0.28.2
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.8.0
