@@ -64,6 +64,12 @@ type Build struct {
 	// SourceMap is the build.sourceMap setting. It defaults to false, so
 	// production builds emit no linked source map unless explicitly enabled.
 	SourceMap bool
+
+	// Splitting is the tri-state build.splitting setting: nil means the key was
+	// absent (default off this release), a non-nil pointer is the explicit user
+	// value. Pointer storage so a later release can flip the default in the
+	// accessor without changing stored semantics.
+	Splitting *bool
 }
 
 // Dev mirrors the `dev` block of puzzle.config.js.
@@ -92,6 +98,14 @@ func (c Config) DropConsole() bool {
 	return *c.Build.DropConsole
 }
 
+// Splitting reports whether the SPA browser bundle should be built with esbuild
+// code splitting, so a dynamic import() emits a lazy chunk under dist/chunks/
+// instead of being inlined into app.js. Default is off; enable with
+// build: { splitting: true }.
+func (c Config) Splitting() bool {
+	return c.Build.Splitting != nil && *c.Build.Splitting
+}
+
 // rawConfig is the permissive shape used to decode the JSON that node prints.
 // styles.use entries are kept as raw messages so object entries (deferred) can
 // be distinguished from strings and reported precisely; build booleans are raw
@@ -103,6 +117,7 @@ type rawConfig struct {
 	Build struct {
 		DropConsole json.RawMessage `json:"dropConsole"`
 		SourceMap   json.RawMessage `json:"sourceMap"`
+		Splitting   json.RawMessage `json:"splitting"`
 	} `json:"build"`
 	Dev Dev `json:"dev"`
 	// Output is kept raw so a non-string or unsupported value can be named
@@ -272,6 +287,19 @@ func validate(raw rawConfig) (Config, error) {
 				ConfigFileName, strings.TrimSpace(string(raw.Build.SourceMap)),
 			)
 		}
+	}
+
+	// build.splitting: opt-in code splitting for the SPA browser bundle. Anything
+	// non-boolean is rejected; null means unset (off).
+	if !unset(raw.Build.Splitting) {
+		var split bool
+		if err := json.Unmarshal(raw.Build.Splitting, &split); err != nil {
+			return Config{}, fmt.Errorf(
+				"%s: build.splitting must be a boolean; got %s",
+				ConfigFileName, strings.TrimSpace(string(raw.Build.Splitting)),
+			)
+		}
+		cfg.Build.Splitting = &split
 	}
 
 	// dev.proxy is consumed only by puzzle dev. Prefixes stay intact when
