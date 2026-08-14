@@ -35,9 +35,10 @@ Puzzle is unusually well-placed here because **the schema already declares the t
 
 **The mock adapter replaces `Store._network`**, installed by the D157 adapter
 factory after D91's `_fetch` hook, and returns a **Response-shaped object**. That
-placement keeps `loadAll`/`loadOne`/`save`/`delete`/`request` completely
-unmodified while `beforeRequest` still runs. The collection lives in fixture
-module WeakMap state keyed by Store and is deep-cloned from `mock.data`.
+placement keeps generated verbs, D158 enhanced-fetch calls, and `request()`
+unmodified while `beforeRequest` still runs. Author code that explicitly uses
+global fetch bypasses the mock, as it bypasses the hook. The collection lives in
+fixture module WeakMap state keyed by Store and is deep-cloned from `mock.data`.
 
 `latency` (a number or `[min, max]`) is the knob that makes skeletons developable. `failRate` and `fail: true` produce non-ok responses that flow through the real error paths — `PuzzleAdapterError` for writes, the D21 throw for reads — rather than rejecting the fetch itself. `handler({ method, url, path, body, collection })` is the escape hatch for `store.request()`'s arbitrary paths, falling through to default CRUD on a falsy return.
 

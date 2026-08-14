@@ -91,6 +91,45 @@ one is *not* a compile error; it silently builds a different product.
   reference apps); `record.save()` without it remains a plain `TypeError`.
   The `beforeRequest` hook and `/fixtures` mocking otherwise behave as before.
 
+- **Adapters are fetch functions; REST is the shorthand (D158).** A model's
+  `static adapter` may define any of the five transport functions directly.
+  An `endpoint` now only generates defaults for missing verbs, so author
+  functions win per verb and a fully custom adapter needs no endpoint. The
+  framing is simple: define your fetch function; Puzzle keeps ownership of
+  identity-preserving merge, revision guards, write ordering, persistence,
+  and notifications.
+
+  ```js
+  // Standard REST: generates loadAll/loadOne/create/update/delete.
+  static adapter = { endpoint: '/api/posts' };
+
+  // Nonstandard URL, standard payload: return the Response.
+  static adapter = {
+    loadAll: (fetch) => fetch('/v2/posts?include=all'),
+  };
+
+  // Envelope API plus a custom method.
+  static adapter = {
+    endpoint: '/api/posts',
+    async loadAll(fetch, options) {
+      const query = new URLSearchParams(options);
+      return (await (await fetch(`/api/posts?${query}`)).json()).data;
+    },
+    publish: (fetch, id) => fetch(`/api/posts/${id}/publish`, { method: 'PATCH' }),
+  };
+  ```
+
+  The supplied `fetch` has the standard fetch signature and returns a normal
+  `Response`; it additionally runs `beforeRequest` and uses the fixtures mock
+  seam. Returning that `Response` from a framework verb asks Puzzle to check
+  status, parse JSON, and apply the normal response guards. Returning parsed
+  data is equally valid. `store.loadAll(type, options)` forwards pagination
+  options to an author transport; the endpoint-generated default serializes
+  them as a query string, and separate pages accumulate in the normalized
+  store. `store.adapter(type)` exposes the same functions with enhanced fetch
+  already bound, including custom methods. Using global `fetch` explicitly
+  bypasses `beforeRequest` and fixture interception.
+
 ### Added
 
 - **Static raw template blocks (D150).** `{#raw}…{/raw}` disables Puzzle's

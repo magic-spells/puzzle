@@ -41,7 +41,12 @@ import type {
 	PuzzleErrorViewProps,
 } from '@magic-spells/puzzle';
 import { adapter, PuzzleAdapterError } from '@magic-spells/puzzle/adapter';
-import type { AdapterCapability } from '@magic-spells/puzzle/adapter';
+import type {
+	AdapterCapability,
+	AdapterConfig,
+	AdapterFetch,
+	AdapterRecord,
+} from '@magic-spells/puzzle/adapter';
 import { installFixtures, DEFAULT_FIXTURE_SEED } from '@magic-spells/puzzle/fixtures';
 import type { FixturesConfig } from '@magic-spells/puzzle/fixtures';
 import { enableMorph } from '@magic-spells/puzzle/morph';
@@ -93,6 +98,48 @@ class Todo extends PuzzleModel {
 		return `${this.title} (${this.priority})`;
 	}
 }
+
+// D158: endpoint is optional when every invoked verb is author-defined. This
+// fully custom adapter intentionally uses global fetch, which is also legal
+// (and deliberately bypasses beforeRequest plus fixture interception).
+class FullyCustomPost extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		title: Puzzle.string().required(),
+	};
+
+	static adapter: AdapterConfig<FullyCustomPost> = {
+		async loadAll() {
+			const response = await fetch('/custom/posts');
+			return (await response.json()).items as AdapterRecord[];
+		},
+		async loadOne(_fetch, id) {
+			const response = await fetch(`/custom/posts/${id}`);
+			return (await response.json()).item as AdapterRecord;
+		},
+		async create(_fetch, record) {
+			const response = await fetch('/custom/posts', {
+				method: 'POST',
+				body: JSON.stringify(record.toJSON()),
+			});
+			return (await response.json()) as AdapterRecord;
+		},
+		async update(_fetch, record) {
+			return record.toJSON();
+		},
+		async delete(_fetch, record) {
+			await fetch(`/custom/posts/${record.id}`, { method: 'DELETE' });
+		},
+	};
+}
+
+const publishingAdapter = {
+	endpoint: '/todos',
+	publish: (fetch: AdapterFetch, id: string) =>
+		fetch(`/todos/${id}/publish`, { method: 'PATCH' }),
+} satisfies AdapterConfig<Todo> & {
+	publish(fetch: AdapterFetch, id: string): Promise<Response>;
+};
 
 // static + instance validate() both return a ValidationResult.
 const staticResult: ValidationResult = Todo.validate({ title: 'x' });
@@ -307,6 +354,15 @@ const rawAdapterAccepted: RawAdapterAccepted = false;
 void [adapterCapability, rawAdapterAccepted];
 
 const app = new PuzzleApp(config);
+
+const restAdapter = app.store.adapter<typeof Todo.adapter>('todo');
+const restLoad = restAdapter.loadAll({ page: 2, limit: 20 });
+const customAdapter = app.store.adapter<typeof publishingAdapter>('todo');
+const publishResult: Promise<Response> = customAdapter.publish('server-1');
+const noEndpointAdapter = app.store.adapter<typeof FullyCustomPost.adapter>('post');
+void noEndpointAdapter.loadAll?.();
+void app.store.loadAll('todo', { page: 2, limit: 20 });
+void [restLoad, publishResult];
 
 // mount() resolves to the app; store/router usable after.
 app.mount().then((mounted) => {

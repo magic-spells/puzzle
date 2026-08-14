@@ -346,14 +346,15 @@ export default models;
 ```
 
 **The adapter capability drives both read and write paths.** Keep each model's
-config bare (`static adapter = { endpoint }`), then import `adapter` from
+config bare: `endpoint` generates the REST transports, while author fetch
+functions override individual verbs or form a no-endpoint adapter. Then import `adapter` from
 `@magic-spells/puzzle/adapter` in `app.js` and pass it once to `PuzzleApp`. The
-capability installs `loadAll`/`loadOne`, `upsert`/`request`, and record
+capability installs `loadAll`/`loadOne`, `adapter`/`upsert`/`request`, and record
 `save`/`delete`. A model with no adapter simply opts out, and an app that never
 passes the capability ships none of that runtime.
 `record.destroy()` stays local-only. Validation remains core: `createRecord` and
 `update` throw `PuzzleValidationError`, while `validate()` returns a renderable
-result. See [[DOC-SPEC]] §20/§22/§58 and D21/D48/D50/D157.
+result. See [[DOC-SPEC]] §20/§22/§58 and D21/D48/D50/D157/D158.
 
 ---
 

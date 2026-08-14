@@ -29,10 +29,11 @@ declare:
   `date()`, `object()`, `array()`, `belongsTo()`, and `hasMany()`;
 - modifiers `primary`, `required`, `default`, `min`, `max`,
   `oneOf`, and custom validation;
-- optional server sync via the bare model config
-  `static adapter = { endpoint: '/api/posts' }`, with the app importing the
-  capability from `@magic-spells/puzzle/adapter` and passing it once to
-  `new PuzzleApp({ ..., adapter })`;
+- optional server sync via a bare `static adapter` object of fetch functions;
+  `{ endpoint: '/api/posts' }` generates the standard REST five, while author
+  verbs override individual transports or replace them without an endpoint.
+  The app imports the capability from `@magic-spells/puzzle/adapter` and passes
+  it once to `new PuzzleApp({ ..., adapter })`;
 - ordinary getters and instance methods.
 
 A stored record is an instance of that model class. Primary keys are immutable.
@@ -51,8 +52,9 @@ when the app passes the `/adapter` capability to `PuzzleApp`.
 | `createRecord(type, data)` | Apply defaults, generate/validate the primary key, validate all fields, insert, and notify. |
 | `findOne(type, id)` | Return one record or `null`; tracked inside `data()`. Number/string-insensitive on `id` (D112). |
 | `findMany(type, { filter }?)` | Return local records, optionally filtered; tracked at collection level. |
-| `loadOne(type, id)` | GET the adapter endpoint/id and identity-preserving upsert. |
-| `loadAll(type)` | GET the collection endpoint and upsert every returned record. |
+| `loadOne(type, id)` | Run the model's one-record transport and identity-preserving upsert. |
+| `loadAll(type, options?)` | Run the collection transport, forwarding pagination options, and upsert every returned record. |
+| `adapter(type)` | Return the memoized adapter with enhanced fetch bound to all standard and custom functions. |
 | `upsert(type, objectOrArray)` | Apply server-authoritative object(s) by explicit primary key, preserving identity and marking records synchronized. |
 | `request(type, path?, options?)` | Custom adapter request with method/body/headers; 204/empty responses map to `null`. |
 
@@ -66,21 +68,35 @@ distinct. A record's own primary-key field keeps its original type; a
 type-variant duplicate is a duplicate (`createRecord` throws, `upsert` updates in
 place).
 
-**Shaping outgoing requests: `beforeRequest` (D91).** Every adapter call — reads,
-writes, and `request()` — funnels through one place, and the optional synchronous
-`beforeRequest(init, { type, method, url })` config hook shapes the `init` before
-it goes out. This is the auth-header seam; it is deliberately synchronous, so
-inline token refresh is not supported (see the SPEC's deferred list).
+**Transport functions (D158).** Standard verbs receive enhanced fetch first:
+`loadAll(fetch, options?)`, `loadOne(fetch, id)`, `create(fetch, record)`,
+`update(fetch, record)`, and `delete(fetch, record)`. It is platform-shaped —
+URL plus init in, `Response` out, with no prefixing or JSON magic — and adds the
+D91 hook plus fixtures interception. A framework verb may return its Response
+for Puzzle to status-check and parse, or return parsed data directly. In both
+cases Puzzle applies the same primary-key/shape guards and framework-owned
+reconciliation. Global fetch is legal but bypasses the hook and mock seam.
+
+The endpoint-generated `loadAll` serializes non-nullish option values with
+`URLSearchParams`; authored transports receive the exact options object. Pages
+accumulate in the identity map rather than replacing the collection.
+
+**Shaping outgoing requests: `beforeRequest` (D91).** Generated transports,
+enhanced fetch calls, and `request()` funnel through one place, and the optional
+synchronous `beforeRequest(init, { type, method, url })` config hook shapes the
+`init` before it goes out. This is the auth-header seam; it is deliberately
+synchronous, so inline token refresh is not supported.
 
 Local record methods:
 
 - `record.update(patch)`: validate patched fields, mutate locally, notify;
 - `record.destroy()`: remove locally, mark this instance deleted, and notify;
 - `record.validate()`: return `{ valid, errors }` without throwing;
-- `record.save()`: validate the full record, POST when new or PUT when already
-  synchronized, then safely apply the response; reject before the adapter when
-  the instance is already deleted;
-- `record.delete()`: DELETE first, then remove locally on success or 404; once
+- `record.save()`: validate the full record, dispatch `create` when new or
+  `update` when synchronized, then safely apply the response; the endpoint
+  defaults are POST and PUT respectively;
+- `record.delete()`: dispatch delete first, then remove locally on success; the
+  endpoint default treats 404 as success. Once
   removed, later calls on the same instance resolve without another request;
 - `record.toJSON()`: return enumerable data only.
 
@@ -113,7 +129,22 @@ collection using the conventional or configured foreign key.
 Relationships are lazy getters backed by the same store. Reading them inside
 `data()` participates in normal record/collection dependency tracking.
 
-## Custom endpoint responses
+## Custom transports and endpoint responses
+
+Custom adapter methods are never called by the framework. Invoke them through
+`store.adapter(type)`, which binds enhanced fetch as their first argument, and
+merge returned records explicitly:
+
+```js
+static adapter = {
+  endpoint: '/api/posts',
+  async publish(fetch, id) {
+    return (await fetch(`/api/posts/${id}/publish`, { method: 'PATCH' })).json();
+  },
+};
+
+const post = store.upsert('post', await store.adapter('post').publish(id));
+```
 
 `store.request()` returns parsed response data without changing the Store. When
 a custom action returns fresh records, apply them explicitly with

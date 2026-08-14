@@ -51,10 +51,10 @@ exports `adapter` — a frozen marker whose internal `install()` grafts the
 server surface (mixin-style, `Object.defineProperties` of descriptors, one
 time, idempotent) onto the existing classes:
 
-- `Store.prototype`: `loadAll`, `loadOne`, `upsert` (the public
+- `Store.prototype`: `loadAll`, `loadOne`, `adapter`, `upsert` (the public
   server-authoritative merge), `saveRecord`, `deleteRecord`, `request`, and
-  the private helpers (`_fetchAdapter`, `_upsert`, `_requireEndpoint`,
-  `_fetch`, `_network`, `_chain`, `_saveRecordNow`, `_deleteRecordNow`).
+  the private dispatch, enhanced-fetch, reconciliation, network, and write-chain
+  helpers.
 - `PuzzleModel.prototype`: `save`, `delete`.
 
 `PuzzleApp` validates `config.adapter` (anything truthy that is not the
@@ -115,15 +115,12 @@ bare alias. Vitest tests import the module by relative path
 (`../client-runtime/datastore/adapter.js`); the vitest alias maps only the
 bare specifier, and a subpath specifier in tests would prefix-match it.
 
-**Scope: this is Puzzle's REST adapter.** The convention verbs assume
-resource-shaped JSON over GET/POST/PUT/DELETE. Non-REST backends (GraphQL,
-RPC, bespoke endpoints) use the same module's protocol-agnostic plumbing —
-`store.request()` + `store.upsert()` under `beforeRequest` and the `_network`
-mock seam — via short model methods (the D50-documented pattern). If a
-first-class adapter for another protocol is ever built, it is a sibling
-subpath with its own capability (e.g. a `/graphql` export), never a mode of
-this one: subpath namespacing means each app imports exactly the protocol it
-uses. None is planned; a real app outgrowing `request()` is the trigger.
+**Scope after D158: this is Puzzle's server-adapter capability.** Endpoint
+shorthand generates the resource-shaped REST convention; author fetch functions
+may speak GraphQL, RPC, or bespoke HTTP while retaining the same normalized
+Store reconciliation and network seam. A future protocol-specific sibling
+subpath is needed only if it brings machinery beyond fetch functions, never
+merely to select a different URL or payload shape.
 
 ## Alternatives rejected
 

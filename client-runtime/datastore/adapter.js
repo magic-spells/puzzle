@@ -17,10 +17,27 @@ import {
 } from '../model.js';
 
 const DELETED_SAVE_MESSAGE = '[puzzle] cannot save a deleted record';
+const ADAPTER_VERBS = ['loadAll', 'loadOne', 'create', 'update', 'delete'];
 
 const noop = () => {};
 const writeChainsByStore = new WeakMap();
+const adapterBindingsByStore = new WeakMap();
+const warnedAdapterConfigs = new WeakSet();
 let installed = false;
+
+function validateAdapterConfig(type, Model, config) {
+	if (!config || typeof config !== 'object' || Array.isArray(config)) return;
+	const invalid = Object.entries(config)
+		.filter(([key, value]) => key !== 'endpoint' && typeof value !== 'function')
+		.map(([key]) => key);
+	if (!invalid.length || warnedAdapterConfigs.has(Model)) return;
+	warnedAdapterConfigs.add(Model);
+	console.warn(
+		`[puzzle] model '${type}' has invalid adapter ${invalid.length === 1 ? 'key' : 'keys'} ${invalid
+			.map((key) => JSON.stringify(key))
+			.join(', ')} — adapter keys must be "endpoint" or functions`
+	);
+}
 
 /**
  * Thrown by adapter write verbs when the server responds non-OK.
@@ -51,6 +68,64 @@ async function readBody(res) {
 	}
 }
 
+function queryURL(url, options) {
+	if (options == null) return url;
+	const search = new URLSearchParams();
+	for (const [key, value] of Object.entries(options)) {
+		if (value != null) search.append(key, String(value));
+	}
+	const query = search.toString();
+	return query ? url + (url.includes('?') ? '&' : '?') + query : url;
+}
+
+async function responseData(response) {
+	if (!response.ok) {
+		throw new PuzzleAdapterError(
+			response.status,
+			response.statusText,
+			await readBody(response)
+		);
+	}
+	return readBody(response);
+}
+
+function isResponse(value) {
+	return typeof Response !== 'undefined' && value instanceof Response;
+}
+
+async function generatedTransport(type, url, verb, fetch, arg) {
+	let method;
+	let body;
+	if (verb === 'loadAll') {
+		method = 'GET';
+		url = queryURL(url, arg);
+	} else if (verb === 'loadOne') {
+		method = 'GET';
+		url += '/' + encodeURIComponent(arg);
+	} else {
+		method = verb === 'create' ? 'POST' : verb === 'update' ? 'PUT' : 'DELETE';
+		if (verb !== 'create') {
+			const pk = arg.constructor.primaryKey();
+			url += '/' + encodeURIComponent(arg[pk]);
+		}
+		if (verb !== 'delete') body = JSON.stringify(arg.toJSON());
+	}
+	const init = { method };
+	if (body !== undefined) {
+		init.headers = { 'Content-Type': 'application/json' };
+		init.body = body;
+	}
+	const response = await fetch(url, init);
+	if (verb === 'loadAll' || verb === 'loadOne') {
+		if (!response.ok) {
+			throw new Error(`[puzzle] load '${type}' failed: ${response.status} ${response.statusText}`);
+		}
+		return readBody(response);
+	}
+	if (verb === 'delete' && response.status === 404) return;
+	return responseData(response);
+}
+
 function writeChainsFor(store) {
 	let chains = writeChainsByStore.get(store);
 	if (!chains) {
@@ -61,6 +136,61 @@ function writeChainsFor(store) {
 }
 
 class AdapterStoreMethods {
+	// ---- adapter dispatch + bound author surface (D158) -------
+
+	/**
+	 * Return the model adapter with every author function bound to this model's
+	 * enhanced fetch. When endpoint shorthand is present, missing standard verbs
+	 * are filled with generated REST transports. Stable per store+type.
+	 */
+	adapter(type) {
+		let bindings = adapterBindingsByStore.get(this);
+		if (!bindings) {
+			bindings = new Map();
+			adapterBindingsByStore.set(this, bindings);
+		}
+		if (bindings.has(type)) return bindings.get(type);
+
+		const Model = this.modelFor(type);
+		const declared = Model.adapter;
+		const config =
+			declared && typeof declared === 'object' && !Array.isArray(declared) ? declared : {};
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			validateAdapterConfig(type, Model, declared);
+		}
+		const fetch = (input, init) => {
+			const requestInit = init && typeof init === 'object' ? { ...init } : {};
+			const request = typeof Request !== 'undefined' && input instanceof Request ? input : null;
+			const method = String(requestInit.method || request?.method || 'GET').toUpperCase();
+			requestInit.method = method;
+			return this._fetch(input, requestInit, { type, method, url: request?.url || String(input) });
+		};
+		const bound = {};
+		for (const [key, value] of Object.entries(config)) {
+			bound[key] = typeof value === 'function' ? (...args) => value(fetch, ...args) : value;
+		}
+		if (config.endpoint) {
+			const url = this.apiURL + config.endpoint;
+			for (const verb of ADAPTER_VERBS) {
+				if (typeof bound[verb] !== 'function') {
+					bound[verb] = (arg) => generatedTransport(type, url, verb, fetch, arg);
+				}
+			}
+		}
+		bindings.set(type, bound);
+		return bound;
+	}
+
+	_adapterVerb(type, verb) {
+		const fn = this.adapter(type)[verb];
+		if (typeof fn === 'function') return fn;
+		throw new Error(
+			`[puzzle] no adapter ${verb}() declared for '${type}' — add ${verb}(fetch${
+				verb === 'loadOne' ? ', id' : verb === 'create' || verb === 'update' || verb === 'delete' ? ', record' : ''
+			}) or an endpoint for the generated default`
+		);
+	}
+
 	// ---- server read path (D21) ------------------------------
 
 	/**
@@ -68,7 +198,7 @@ class AdapterStoreMethods {
 	 * Records with matching primary keys are updated in place — no duplicates.
 	 * Subscribers are notified as data lands (batched, as usual).
 	 */
-	async loadAll(type) {
+	async loadAll(type, options) {
 		const pk = this.modelFor(type).primaryKey();
 		const revisionsAtDispatch = new Map(
 			Array.from(this._typeMap(type).values(), (record) => [
@@ -76,7 +206,7 @@ class AdapterStoreMethods {
 				recordMutationRevision(record),
 			])
 		);
-		const list = await this._fetchAdapter(type, '');
+		const list = await this._adapterResult(this._adapterVerb(type, 'loadAll')(options));
 		if (!Array.isArray(list)) {
 			throw new Error(`[puzzle] loadAll('${type}') expected a JSON array from the server`);
 		}
@@ -108,7 +238,7 @@ class AdapterStoreMethods {
 	async loadOne(type, id) {
 		const existing = this._typeMap(type).get(recordKey(id));
 		const revisionAtDispatch = existing ? recordMutationRevision(existing) : undefined;
-		const data = await this._fetchAdapter(type, '/' + encodeURIComponent(id));
+		const data = await this._adapterResult(this._adapterVerb(type, 'loadOne')(id));
 		// Response-shape guard (mirrors loadAll): a null/array/non-object body would
 		// slip through _upsert → _instantiate as a bogus record (200 null → an empty
 		// record with a generated pk marked _synced; an array spreads indices as fields).
@@ -161,17 +291,9 @@ class AdapterStoreMethods {
 		return isArray ? records : records[0];
 	}
 
-	async _fetchAdapter(type, suffix) {
-		const endpoint = this._requireEndpoint(type);
-		// An explicit `{ method: 'GET' }` rather than a bare fetch(url): identical on
-		// the wire, and it hands beforeRequest the same init shape every other verb
-		// passes, so a hook never has to special-case the read path (v1.55, D91).
-		const url = this.apiURL + endpoint + suffix;
-		const res = await this._fetch(url, { method: 'GET' }, { type, method: 'GET', url });
-		if (!res.ok) {
-			throw new Error(`[puzzle] load '${type}' failed: ${res.status} ${res.statusText}`);
-		}
-		return readBody(res);
+	async _adapterResult(result) {
+		const value = await result;
+		return isResponse(value) ? responseData(value) : value;
 	}
 
 	/**
@@ -198,15 +320,9 @@ class AdapterStoreMethods {
 
 	// ---- server write path (constellation/doc/DOC-SPEC.md §22, D50) ------------
 
-	/**
-	 * Resolve a model's adapter endpoint or throw the D21 no-adapter message.
-	 * Shared by the read path (_fetchAdapter) and the write verbs; every caller
-	 * is async, so this throw becomes a rejected promise — never a sync throw
-	 * at the call site.
-	 */
+	/** Resolve the endpoint used by the unchanged store.request() escape hatch. */
 	_requireEndpoint(type) {
-		const config = this.modelFor(type).adapter;
-		const endpoint = config?.endpoint;
+		const endpoint = this.modelFor(type).adapter?.endpoint;
 		if (!endpoint) {
 			throw new Error(
 				`[puzzle] no adapter declared for '${type}' — add static adapter = { endpoint: '/api/...' } to the model`
@@ -216,10 +332,10 @@ class AdapterStoreMethods {
 	}
 
 	/**
-	 * The ONE adapter fetch (v1.55, D91). Every server call — the D21 read path
-	 * (loadAll/loadOne), the D50 write verbs (save/delete), and request() — goes
-	 * through here, so `beforeRequest` is the single place an app attaches auth
-	 * headers, `credentials`, or an AbortSignal to all of them at once.
+	 * The ONE adapter fetch (v1.55/D91, extended by D158). Generated transports,
+	 * the enhanced fetch given to author functions, and request() go through here,
+	 * so `beforeRequest` attaches auth headers, credentials, or an AbortSignal to
+	 * all of them at once. An author explicitly using global fetch bypasses it.
 	 *
 	 * The hook is SYNCHRONOUS and may either mutate `init` in place or return a
 	 * replacement object; a truthy object return wins, otherwise the (possibly
@@ -247,29 +363,29 @@ class AdapterStoreMethods {
 	 * tooling can intercept a request AFTER the hook has run without this method
 	 * — or any verb above it — knowing such tooling exists.
 	 *
-	 * @param {string} url      the fully built request URL
+	 * @param {RequestInfo | URL} url the author-supplied or generated request target
 	 * @param {object} init     the fetch init this verb requires
 	 * @param {object} context  { type, method, url } — frozen before the hook sees it
 	 */
 	_fetch(url, init, context) {
-		if (!this.beforeRequest) return this._network(url, init, context);
+		const frozenContext = Object.freeze(context);
+		if (!this.beforeRequest) return this._network(url, init, frozenContext);
 		const method = init.method;
 		const body = init.body;
-		const returned = this.beforeRequest(init, Object.freeze(context));
+		const returned = this.beforeRequest(init, frozenContext);
 		const final =
 			returned && typeof returned === 'object' && returned !== init ? { ...returned } : init;
 		final.method = method;
 		if (body === undefined) delete final.body;
 		else final.body = body;
-		return this._network(url, final, context);
+		return this._network(url, final, frozenContext);
 	}
 
 	/**
-	 * The one place an adapter request touches the network (D98). Dev/test
-	 * tooling — the /fixtures module's mock adapter — replaces this method to
-	 * serve requests from memory; nothing else calls it. `context` is the same
-	 * frozen { type, method, url } _fetch built, so a replacement can dispatch
-	 * per model type without re-deriving anything.
+	 * The one place generated/enhanced adapter traffic touches the network (D98).
+	 * Dev/test tooling replaces this method to serve requests from memory.
+	 * `context` is the same frozen { type, method, url } _fetch built, so a
+	 * replacement can dispatch per model type without re-deriving anything.
 	 */
 	_network(url, init, context) {
 		return fetch(url, init);
@@ -280,11 +396,12 @@ class AdapterStoreMethods {
 	 * record.save(); the Store owns the network.
 	 *
 	 * Order: validate the FULL record first (§20, D48) — invalid rejects with
-	 * PuzzleValidationError and NO request is made. Then POST apiURL+endpoint for a
-	 * never-synced record, PUT endpoint/:id for a synced one. A non-OK response
+	 * PuzzleValidationError and NO request is made. Then dispatch create for a
+	 * never-synced record, update for a synced one (the generated defaults are
+	 * POST apiURL+endpoint and PUT endpoint/:id). A non-OK Response
 	 * rejects with PuzzleAdapterError and leaves local state untouched (still dirty;
 	 * retry = call again). On 2xx a JSON-OBJECT body merges via the exempt upsert
-	 * path (server-computed fields, no validation); 204/empty/non-object keeps local
+	 * path (server-computed fields, no validation); 204/empty keeps local
 	 * state. Server pk adoption: a FIRST save whose response carries a different pk
 	 * re-keys the index atomically; an UPDATE-save with a differing pk warns and
 	 * drops it from the merge. On success the record is marked synced.
@@ -344,45 +461,38 @@ class AdapterStoreMethods {
 
 		const type = record._type;
 		const Model = this.modelFor(type);
-		const endpoint = this._requireEndpoint(type);
 		const pk = Model.primaryKey();
+		const wasSynced = record._synced;
+		const transport = this._adapterVerb(type, wasSynced ? 'update' : 'create');
 
 		// a. validate the full record BEFORE any network (§20, D48).
 		const errors = Model._collectErrors(record.toJSON());
 		if (errors.length) throw new PuzzleValidationError(errors);
 
-		// b. POST (create) for a never-synced record, PUT (update) otherwise.
+		// b. Dispatch create for a never-synced record, update otherwise. The
+		// transport owns the HTTP conversation; every reconciliation rule below is
+		// framework-owned and therefore identical for generated and author verbs.
 		// Capture the key the record is indexed under NOW, before the await — the
 		// post-response identity check reconciles against exactly this key.
-		const wasSynced = record._synced;
 		const requestKey = recordKey(record[pk]);
-		const url = wasSynced
-			? this.apiURL + endpoint + '/' + encodeURIComponent(record[pk])
-			: this.apiURL + endpoint;
-		const method = wasSynced ? 'PUT' : 'POST';
 		// Capture the local mutation revision beside the exact body sent. A later
 		// update() advances the edited fields beyond this boundary, so the response
 		// can still contribute untouched server fields without overwriting them.
 		const requestRevision = recordMutationRevision(record);
-		const requestBody = JSON.stringify(record.toJSON());
-		const res = await this._fetch(
-			url,
-			{
-				method,
-				headers: { 'Content-Type': 'application/json' },
-				body: requestBody,
-			},
-			{ type, method, url }
-		);
+		const body = await this._adapterResult(transport(record));
 
-		// c. failure: reject; local state stays dirty, unchanged.
-		if (!res.ok) {
-			throw new PuzzleAdapterError(res.status, res.statusText, await readBody(res));
+		// c. success: merge a JSON-object body via the exempt path (no validation,
+		// mirroring _upsert's update branch); 204/empty keeps local state.
+		if (body != null && (typeof body !== 'object' || Array.isArray(body))) {
+			throw new Error(
+				`[puzzle] adapter ${wasSynced ? 'update' : 'create'}('${type}') expected a JSON object or nullish response`
+			);
 		}
-
-		// d. success: merge a JSON-object body via the exempt path (no validation,
-		// mirroring _upsert's update branch); 204/empty/non-object keeps local state.
-		const body = await readBody(res);
+		if (body != null && body[pk] == null) {
+			throw new Error(
+				`[puzzle] adapter ${wasSynced ? 'update' : 'create'}('${type}') requires primary key "${pk}" on the returned record`
+			);
+		}
 
 		// Identity re-check (constellation/doc/DOC-SPEC.md §22, D50): the record may have
 		// been removeRecord'd — or replaced at its key — while the request was in flight.
@@ -392,7 +502,7 @@ class AdapterStoreMethods {
 		const map = this._typeMap(type);
 		if (map.get(requestKey) !== record) return record;
 
-		const isObject = body != null && typeof body === 'object' && !Array.isArray(body);
+		const isObject = body != null;
 		if (isObject) {
 			const responsePk = body[pk];
 			// Same normalization the index uses: a server echoing numeric 1 for a record
@@ -454,7 +564,7 @@ class AdapterStoreMethods {
 			return record;
 		}
 
-		// 204 / empty / non-object body: keep local state, mark synced.
+		// 204 / empty body: keep local state, mark synced.
 		record._synced = true;
 		this._persist();
 		return record;
@@ -462,9 +572,9 @@ class AdapterStoreMethods {
 
 	/**
 	 * Confirmed server delete (constellation/doc/DOC-SPEC.md §22, D50). Called by
-	 * record.delete(). DELETE endpoint/:id, then remove locally via the normal
-	 * notify path on 2xx OR 404 (already gone — idempotent). Any other status
-	 * rejects with PuzzleAdapterError and the record stays.
+	 * record.delete(). Dispatches the delete transport, then removes locally. The
+	 * generated DELETE endpoint/:id treats 404 as already gone. A returned non-OK
+	 * Response rejects with PuzzleAdapterError and the record stays.
 	 *
 	 * Serialized behind the record's write chain (see _chain), so a delete fired
 	 * during a save waits for it: the URL below is then built from the primary key
@@ -489,11 +599,11 @@ class AdapterStoreMethods {
 
 		const type = record._type;
 		const Model = this.modelFor(type);
-		// Endpoint FIRST, before the never-synced short-circuit below: delete() is
-		// the server verb, so a model with no adapter reports that the same way it
-		// always has rather than quietly behaving like destroy().
-		const endpoint = this._requireEndpoint(type);
 		const pk = Model.primaryKey();
+		// Resolve the verb FIRST, before the never-synced short-circuit below:
+		// delete() is the server verb, so a partial adapter still reports its missing
+		// delete transport rather than quietly behaving like destroy().
+		const transport = this._adapterVerb(type, 'delete');
 
 		// b. never round-tripped with the server — nothing exists to DELETE. Remove
 		// locally (notifying as usual) and skip the network: the request could only
@@ -508,21 +618,16 @@ class AdapterStoreMethods {
 		// post-response identity check reconciles against exactly this key.
 		const requestKey = recordKey(record[pk]);
 
-		const url = this.apiURL + endpoint + '/' + encodeURIComponent(record[pk]);
-		const res = await this._fetch(url, { method: 'DELETE' }, { type, method: 'DELETE', url });
-		if (res.ok || res.status === 404) {
-			// Identity re-check (mirrors saveRecord's, constellation/doc/DOC-SPEC.md §22):
-			// while the DELETE was in flight, THIS record may have been destroyed locally
-			// and a NEWER record created under the same id. removeRecord unconditionally
-			// evicts the id, so without this guard an in-flight delete of A would evict an
-			// unrelated B that reused A's id. Only remove when this instance still indexes
-			// the request-time key.
-			if (this._typeMap(type).get(requestKey) === record) {
-				this.removeRecord(record); // notifies as usual
-			}
-			return record;
+		await this._adapterResult(transport(record));
+		// Identity re-check (mirrors saveRecord's, constellation/doc/DOC-SPEC.md §22):
+		// while the delete transport was in flight, THIS record may have been destroyed
+		// locally and a NEWER record created under the same id. removeRecord
+		// unconditionally evicts the id, so without this guard an in-flight delete of A
+		// would evict an unrelated B that reused A's id.
+		if (this._typeMap(type).get(requestKey) === record) {
+			this.removeRecord(record); // notifies as usual
 		}
-		throw new PuzzleAdapterError(res.status, res.statusText, await readBody(res));
+		return record;
 	}
 
 	/**

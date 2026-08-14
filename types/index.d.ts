@@ -497,7 +497,8 @@ export interface AdapterMock {
 
 /** A model's API adapter descriptor. */
 export interface ModelAdapter {
-	endpoint: string;
+	/** Optional REST shorthand; `/adapter` augments this interface with typed verbs. */
+	endpoint?: string;
 	/** Development/test mock served in place of the network (v1.57, D95). */
 	mock?: AdapterMock;
 	[key: string]: any;
@@ -514,7 +515,7 @@ export declare class PuzzleModel {
 	/** Field/relationship declarations built with `Puzzle.*`. */
 	static schema?: Record<string, SchemaField | Relationship>;
 
-	/** API adapter — `{ endpoint }` drives the store's server read/write path. */
+	/** API adapter — per-verb fetch functions, optionally filled by `{ endpoint }` REST shorthand. */
 	static adapter?: ModelAdapter;
 
 	/** Validate a plain data object against the schema (non-throwing). */

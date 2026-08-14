@@ -276,7 +276,7 @@ export default class Todo extends PuzzleModel {
     completed: Puzzle.boolean().default(false),
     createdAt: Puzzle.date().default(() => new Date()),
   };
-  // static adapter = { endpoint: '/api/todos' }; // server location, still plain data
+  // static adapter = { endpoint: '/api/todos' }; // generates the five REST transports
 }
 ```
 
@@ -299,13 +299,45 @@ Views reach the store as `this.ctx.store`:
 
 - Local: `createRecord(type, data)` (validates, defaults, notifies),
   `findOne(type, id)`, `findMany(type, { filter }?)`.
-- Server (needs a bare `static adapter = { endpoint }` plus the `/adapter`
-  capability passed once to `PuzzleApp`): `loadOne`/`loadAll` (GET + identity-preserving
-  upsert), `record.save()` (POST new / PUT synced), `record.delete()`,
-  `store.request()` for custom endpoints — apply returned records with
-  `store.upsert(type, payload)`, don't re-fetch.
+- Server (needs a `static adapter` plus the `/adapter` capability passed once
+  to `PuzzleApp`): `loadOne`/`loadAll` (identity-preserving upsert),
+  `record.save()`, and `record.delete()`. `{ endpoint: '/api/todos' }` is the
+  REST shorthand: it generates GET/POST/PUT/DELETE transports. Override only
+  the verbs your API changes, or omit `endpoint` for a fully custom adapter.
+  `store.request()` remains the endpoint-prefixed JSON escape hatch.
 - Records mutate in place: `record.update(patch)`, `record.destroy()`,
   `record.validate()` → `{ valid, errors }` (non-throwing, for form UX).
+
+Adapter functions receive an enhanced `fetch` as their first argument. It has
+the standard fetch signature and returns a standard `Response`, but also runs
+`beforeRequest` and routes through the fixtures mock seam. Puzzle owns response
+validation and reconciliation after a framework verb returns:
+
+```js
+// REST shorthand
+static adapter = { endpoint: '/api/posts' };
+
+// Different URL, standard payload: Puzzle checks/parses the Response.
+static adapter = { loadAll: (fetch) => fetch('/v2/posts') };
+
+// Envelope + custom method
+static adapter = {
+  async loadAll(fetch, options) {
+    const query = new URLSearchParams(options);
+    return (await (await fetch(`/v2/posts?${query}`)).json()).data;
+  },
+  async publish(fetch, id) {
+    return (await fetch(`/v2/posts/${id}/publish`, { method: 'PATCH' })).json();
+  },
+};
+
+await store.loadAll('post', { page: 1 });
+await store.loadAll('post', { page: 2 }); // pages accumulate; existing ids merge
+const post = store.upsert('post', await store.adapter('post').publish(id));
+```
+
+Using global `fetch` instead of the supplied parameter is legal and literal:
+it bypasses both `beforeRequest` and fixtures interception.
 
 **Record identity ignores number/string spelling.** `findOne('todo', id)` returns
 the same record whether `id` is `7` or `'7'` — which matters constantly, because
@@ -316,8 +348,8 @@ comparison in `belongsTo`/`hasMany` uses the same rule. Only numbers normalize:
 `findOne('post', this.route.params.id)` is correct as written — do not add
 `Number(...)` coercion.
 
-**Auth headers: `beforeRequest`.** Every adapter call — reads, writes, and
-`store.request()` — funnels through one hook you set in the app config:
+**Auth headers: `beforeRequest`.** Generated transports, supplied-fetch calls,
+and `store.request()` funnel through one hook you set in the app config:
 
 ```js
 new PuzzleApp({

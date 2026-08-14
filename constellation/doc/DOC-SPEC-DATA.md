@@ -57,14 +57,15 @@ export default class Todo extends PuzzleModel {
 
 **v1 enforcement:** `.default()` and `.primary()` are honored by the store. Validation rules (`required`, `min`, `max`, `oneOf`, `validate`) were stored-but-inert in v1; **since v1.16 they enforce at the local write boundary** (`createRecord`/`update` throw `PuzzleValidationError`; `Model.validate(data)`/`record.validate()` return `{ valid, errors }`) — see §20 (D48). Relationships (`Puzzle.hasMany(...)` / `Puzzle.belongsTo(...)`) shipped in v1.17 as lazy store-backed getters — see §21 (D49) — replacing the old `static relationships` block.
 
-**Server access (D21/D157):** the model declares its server location as the
-bare object `static adapter = { endpoint: '/api/todos' }`; model files import
-nothing extra. The app imports `adapter` from `@magic-spells/puzzle/adapter`
-and passes it once to `PuzzleApp`. That capability installs the read path
-(`store.loadAll` / `loadOne`), write sync
-(`record.save()`/`delete()`), `store.upsert()`, and `store.request()`. Without a
-factory call those methods are absent from core. Query fault-in remains
-deferred. Local persistence is in-memory with optional localStorage.
+**Server access (D21/D157/D158):** the model's bare `static adapter` object is
+a set of per-verb fetch functions. `{ endpoint: '/api/todos' }` is REST
+shorthand that generates the standard five; an author `loadAll`, `loadOne`,
+`create`, `update`, or `delete` function wins over its generated default, and
+an all-custom adapter needs no endpoint. Model files import nothing extra. The
+app imports `adapter` from `@magic-spells/puzzle/adapter` and passes it once to
+`PuzzleApp`; that capability installs the read/write paths, `store.adapter()`,
+`store.upsert()`, and `store.request()`. Query fault-in remains deferred. Local
+persistence is in-memory with optional localStorage.
 
 **Read-path response bodies** are read the same way the write verbs read theirs: parsed JSON when the body parses, raw text when it doesn't, `undefined` when empty. A 2xx whose body is empty or unparseable therefore reaches `loadAll`/`loadOne`'s own shape guard — `[puzzle] loadAll('todo') expected a JSON array from the server` — rather than escaping as a bare `SyntaxError` with no type, no URL, and no indication it came from Puzzle. *(Amended, D137: the shape guard also requires the model's primary key on every record — checked up front, before any upsert, all-or-nothing — because a pk-less server record would otherwise mint an auto-generated id marked `_synced`, whose next `save()` PUTs to a URL the server never had. Storage hydration keeps its fail-soft auto-generation.)* *(Amended, D138: the load merge rides D125's per-field revision gate — the loader snapshots each existing record's mutation revision at dispatch, so a field edited WHILE the load was in flight keeps its local value while untouched fields take the server's. Pre-dispatch edits still take the server value; records absent at dispatch merge server-wins; `upsert()`/`request()` stay imperative-overwrite.)* The practical triggers are non-JSON 2xx responses: an error page served with a 200, a captive-portal or auth-redirect interstitial, a content-encoding mismatch. A consequence worth knowing: anything replacing the fetch seam must return a genuinely Response-shaped object with a working `text()`, not `json()` alone.
 
@@ -78,9 +79,8 @@ store.findOne('todo', id);
 store.findMany('todo');
 store.findMany('todo', { filter: (t) => !t.completed });
 
-// server read path (D21): reads the model's static adapter.endpoint,
-// prefixes the app's apiURL, upserts records (subscribers notified)
-await store.loadAll('todo');
+// server read path: dispatches the model's load verb, then upserts
+await store.loadAll('todo', { page: 2 });
 await store.loadOne('todo', id);
 
 record.update({ completed: true }); // triggers subscribed data() re-runs
@@ -141,12 +141,11 @@ static schema = {
 
 ## 22. Adapter write sync (v1.18)
 
-The write half of the D21 adapter story. Shipped in v1.18 (D50) and moved to the
-opt-in subpath by D157. The same bare
-`static adapter = { endpoint }` declaration drives everything once the app has
-passed the capability; local
-mutation semantics (`createRecord`/`update`/`destroy`) are unchanged — **sync is
-a separate, explicit verb.**
+The write half of the D21 adapter story. Shipped in v1.18 (D50), moved to the
+opt-in subpath by D157, and generalized by D158. The model's `static adapter`
+supplies per-verb transports; `endpoint` generates any missing REST defaults.
+Local mutation semantics (`createRecord`/`update`/`destroy`) are unchanged —
+**sync is a separate, explicit verb.**
 
 ```js
 const todo = store.createRecord('todo', { text: 'Ship v1.18' }); // local, instant (unchanged)
@@ -164,6 +163,30 @@ await store.request('todo', `/${todo.id}/archive`, { method: 'POST' }); // custo
 - **Errors:** the new verbs reject with `PuzzleAdapterError` (`.status`, `.statusText`, `.body` when parseable) — exported from `@magic-spells/puzzle/adapter`. The D21 read path keeps its existing plain-Error messages.
 - **Still deferred:** query fault-in (`findMany`'s synchronous pure-local return is load-bearing — its own decision someday), offline queueing, conflict resolution, automatic write-through.
 
+**D158 transport contract.** The five framework verbs are
+`loadAll(fetch, options?)`, `loadOne(fetch, id)`, `create(fetch, record)`,
+`update(fetch, record)`, and `delete(fetch, record)`. The supplied fetch has the
+same URL/init signature and `Response` result as platform fetch, with no URL
+prefixing and no automatic JSON behavior; it additionally runs §49's hook and
+routes through §52's network seam. An author may return parsed data or a real
+`Response`. For a returned Response, Puzzle performs the non-OK
+`PuzzleAdapterError` conversion and body parsing, then applies the same shape
+guards and reconciliation as generated transports. Reads require pk-bearing
+object(s); create/update require a pk-bearing object or a nullish no-echo;
+delete ignores its return after checking a returned Response. Each missing
+verb requires `endpoint` or rejects with a per-verb no-adapter error.
+
+`store.loadAll(type, options?)` forwards the options object unchanged to an
+author transport. The generated transport serializes non-nullish entries with
+`URLSearchParams`; calls without options retain the original byte-identical
+collection URL. Loading several pages accumulates records in the Store and
+merges duplicate primary keys. `store.adapter(type)` returns a stable per-store,
+per-type view with enhanced fetch pre-bound to every function, generated verbs
+included; custom methods are author-invoked only and commonly compose with
+`store.upsert()`. A function using global fetch instead bypasses the hook and
+mock seam exactly as written. Non-function keys other than `endpoint` warn once
+per model in development.
+
 ## 49. Adapter request hook: `beforeRequest` (v1.55)
 
 One optional app-config function shapes the `fetch` init for **every** adapter call (D91). This is where an app attaches auth headers, `credentials`, or an `AbortSignal` — previously impossible on the read path, which was a bare `fetch(url)` with no init object at all, so a token-authenticated app could not use §8's `loadAll`/`loadOne` and had to route around the adapter design entirely.
@@ -177,7 +200,7 @@ new PuzzleApp({
 });
 ```
 
-- **One seam.** Every server call — the D21 read path, the D50 write verbs (`save`/`delete`), and `store.request()` — routes through a single private `Store._fetch(url, init, context)` installed by the `/adapter` capability. The read path sends an explicit `{ method: 'GET' }` (wire-identical to a bare fetch) so a hook never has to special-case a missing init.
+- **One seam.** Every generated transport, every call through the D158 enhanced fetch, and `store.request()` routes through a single private `Store._fetch(url, init, context)` installed by the `/adapter` capability. Generated reads send an explicit `{ method: 'GET' }` (wire-identical to a bare fetch) so a hook never has to special-case a missing init. Global fetch intentionally bypasses this seam.
 - **Synchronous.** The hook may mutate `init` in place **or** return a replacement object; a truthy object return wins, otherwise the possibly-mutated original is used. An async hook is deferred — see the cut list.
 - **`method` and `body` are re-stamped from the original init after the hook runs**, and the URL is a separate `fetch` argument. A hook can change *how* a request is sent, never *what* it is. This is load-bearing: §22's write path captures `requestKey = record[pk]` before the await and reconciles against exactly that key afterwards, so a hook that flipped POST→PUT or rewrote the body would silently break identity re-checks, pk adoption, and the `_synced` contract.
 - **The context argument is frozen** — information about the request, not a second output channel.
@@ -193,9 +216,10 @@ Two development/test affordances on the data layer (D95). Since D98 they live
 in `@magic-spells/puzzle/fixtures`, outside core. It enters an app bundle only
 through the §54 `--fixtures` build switch, or a direct import in tests (also
 re-exported from `/testing`). `/fixtures` imports and installs the adapter capability, then
-replaces `Store._network(url, init, context)`, the single place an adapter
-request touches `fetch`, called by §49's `_fetch` **after** `beforeRequest`
-runs.
+replaces `Store._network(url, init, context)`, the single place a generated
+transport, enhanced-fetch call, or `store.request()` touches global fetch,
+called by §49's `_fetch` **after** `beforeRequest` runs. Author code that names
+global fetch directly does not enter this seam.
 
 **Installation.** `installFixtures(config)` attaches the system from outside: it adds `seed()`/`resetFixtureSeed()` to `Store.prototype`, replaces `_network` with mock interception, and wraps `mount` so the config's optional `setup(app)` runs at §34 beforeMount timing (after the author's own hook, before navigation #0 — the sanctioned seeding window). All PRNG/mock state lives in a module `WeakMap` keyed by store — **zero fields on the Store**. It returns `uninstall()`, matching the `installFakeAnimate`/`installFakeObserver` convention; uninstall restores the true originals and deletes the added methods.
 
@@ -216,7 +240,7 @@ Config shape — in an app this is the default export of `app/fixtures.js` (§54
 - A one-time `console.warn` per model class fires on first interception. It is unconditional and dev-visible: `build.dropConsole` strips all `console.*` in production by default, so gating it would be theater.
 - **Without `installFixtures`, a model-declared `mock` block is inert data and requests reach the real endpoint.** That is the documented meaning of building without `--fixtures` — an explicit switch, not a heuristic, so there is no compiled-out state to defend with stubs (D96's refuse-throw is gone).
 
-## 58. Opt-in server adapter subpath (v1.72)
+## 58. Opt-in server adapter subpath (v1.72; fetch-function contract v1.73)
 
 The D21/D50/D91 server runtime is exported from
 `@magic-spells/puzzle/adapter`, not the package root. An app opts in once by
@@ -239,7 +263,9 @@ class Post extends PuzzleModel {
 
 `adapter` is a frozen opaque capability whose internal idempotent installer
 grafts the server methods onto `Store` and `PuzzleModel` before Store
-construction. A truthy non-capability `config.adapter` is a construction-time
+construction. The installed Store surface also includes D158's
+`store.adapter(type)` bound-function view. A truthy non-capability
+`config.adapter` is a construction-time
 error naming the `/adapter` import. Apps that never pass it have no `loadAll`,
 `loadOne`, `upsert`, `request`, `save`, or `delete` methods and ship none of the
 network runtime. In development, registering a model with a truthy static

@@ -112,16 +112,17 @@ run.
   navigation/refresh pipeline; the `boundary` phase is renamed
   `error-view`. Byte-neutral by measurement (+126 gzip framework-side,
   −71 net with the todos demo cleanup); treated as an API simplification,
-  not a size lever; and D157 extracts server sync into the opt-in
-  `@magic-spells/puzzle/adapter` subpath. Cards truthed through D157; next free
-  card is D158. **Publish sequencing:**
+  not a size lever; D157 extracts server sync into the opt-in
+  `@magic-spells/puzzle/adapter` subpath; and D158 makes model adapters
+  per-verb fetch functions with endpoint-generated REST defaults. Cards truthed
+  through D158; the next free decision number is D160. **Publish sequencing:**
   `@magic-spells/puzzle-pieces` `0.6.0` (ready in its repo's `release/0.6.0`,
   not yet on npm — the package 404s) must be published at or before the CLI's
   release; no older pieces release exists to fall back to, so a fresh `0.6.0`
   install's `puzzle add piece` hard-fails until it ships.
-- Product line: v1 through v1.72 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
+- Product line: v1 through v1.73 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
-  amendment = v1.71, D157 = v1.72; D146 is a correctness amendment
+  amendment = v1.71, D157 = v1.72, D158 = v1.73; D146 is a correctness amendment
   with no product-line entry),
   plus the July
   21 pre-release correctness/performance hardening pass and the July 24

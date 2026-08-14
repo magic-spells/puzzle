@@ -129,17 +129,19 @@ second specification. Decision cards hold rationale and git holds chronology.
   `.primary().required()` field; hydration/upsert stay fail-soft).
 - Store queries auto-subscribe inside `data()`. Collection and record keys are
   batched, hidden-tab safe, isolated per subscriber, and torn down with views.
-- Server sync is opt-in: models keep bare `static adapter = { endpoint }` data,
-  while the app imports the capability from `@magic-spells/puzzle/adapter` and
-  passes it once to `PuzzleApp`. Apps that never pass the capability ship none
-  of the Store/record verbs (D157). Reads: `loadAll`/`loadOne` with identity-preserving
-  upsert. Writes: `save`, `delete`, and custom `request`, with POST/PUT sync
-  provenance, collision/destroy guards, and typed adapter errors.
-- Every adapter call routes through one internal fetch seam, so the optional
+- Server sync is opt-in: models keep a bare `static adapter` object of per-verb
+  fetch functions; `endpoint` generates missing REST defaults, author functions
+  win, and endpoint is optional for a fully custom adapter (D158). The app
+  imports the D157 capability from `@magic-spells/puzzle/adapter` and passes it
+  once to `PuzzleApp`; apps that never pass it ship none of the Store/record
+  verbs. Reads preserve identity and accept pagination options. Writes retain
+  sync provenance, revision/collision/destroy guards, and typed adapter errors.
+- Generated transports, enhanced fetch, and `store.request()` route through one internal fetch seam, so the optional
   `beforeRequest(init, { type, method, url })` config hook attaches auth headers,
   `credentials`, or an `AbortSignal` to all of them (D91). Synchronous;
   `method`/`body`/URL are not the hook's to change. Carried by the prerender
-  path; structurally unavailable under `output: 'static'`.
+  path; structurally unavailable under `output: 'static'`. Explicit global
+  fetch in an author function bypasses this seam and fixture interception.
 - Relationships are lazy store-backed getters and participate in tracking.
 - Development/test affordances (D95, reshaped by D98): `installFixtures(config)`
   from `/fixtures` attaches `store.seed(type, n, overrides)` — records generated

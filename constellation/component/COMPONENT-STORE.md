@@ -81,10 +81,14 @@ literal, so a bare index also reaches `Object.prototype`: a persisted blob keyed
 that must stay fail-soft.
 
 The core Store owns no server verbs. Passing the `adapter` capability from
-`@magic-spells/puzzle/adapter` to `PuzzleApp` installs `loadAll`, `loadOne`, `upsert`,
-`saveRecord`, `deleteRecord`, `request`, and their private helpers on its
-prototype ([[DECISION-D157-ADAPTER-SUBPATH]]). Reads shape-check before mutation
-and preserve identity; writes serialize per record across save and delete using
+`@magic-spells/puzzle/adapter` to `PuzzleApp` installs `loadAll`, `loadOne`,
+`adapter`, `upsert`, `saveRecord`, `deleteRecord`, `request`, and their private
+helpers on its prototype ([[DECISION-D157-ADAPTER-SUBPATH]]). Under
+[[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]], a model's adapter is per-verb fetch
+functions; endpoint shorthand generates missing REST defaults and author
+functions win. Store dispatches transport, then owns Response normalization,
+shape/key guards, and all reconciliation. Reads preserve identity and accumulate
+paginated loads; writes serialize per record across save and delete using
 adapter-module `WeakMap` state keyed by Store. The installed implementation
 validates before sync, adopts server keys atomically, protects against
 destroy/replacement/collision races, and throws the subpath's
@@ -93,12 +97,16 @@ destroy/replacement/collision races, and throws the subpath's
 and confirmed `delete()`, so stale references delete idempotently and can never
 `save()` a resurrected copy.
 
-The installed adapter funnels requests through `_fetch` (the D91
-`beforeRequest` hook runs there) and delegates the network call to `_network`.
-The `/fixtures` module imports and installs the adapter capability so that seam exists, then replaces it
-at install time strictly after the hook shapes the init. Core knows nothing
-about either module; `seed()`/`resetFixtureSeed()` are likewise absent unless
-fixtures are installed.
+The installed adapter constructs one memoized enhanced fetch per Store+type and
+pre-binds it to every function exposed by `store.adapter(type)`, including the
+five generated defaults. Its signature and Response result match platform
+fetch; it does not prefix URLs or parse JSON. It funnels through `_fetch` (the
+D91 `beforeRequest` hook runs there) and delegates the network call to
+`_network`. The `/fixtures` module imports and installs the adapter capability
+so that seam exists, then replaces it at install time strictly after the hook
+shapes the init. Global fetch bypasses both additions by design. Core knows
+nothing about either module; `seed()`/`resetFixtureSeed()` are likewise absent
+unless fixtures are installed.
 
 Relationship getters are installed on model prototypes at Store construction.
 Their queries use the same tracking path as explicit Store calls.

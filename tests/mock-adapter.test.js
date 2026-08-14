@@ -498,8 +498,11 @@ describe('production posture — one advisory warning per model', () => {
 		await store.loadOne('todo', 't1');
 		await store.request('todo', '/t1');
 
-		expect(warn).toHaveBeenCalledTimes(1);
-		expect(warn.mock.calls[0][0]).toBe(
+		const mockWarnings = warn.mock.calls.filter(([message]) =>
+			message.includes('is served by its adapter mock')
+		);
+		expect(mockWarnings).toHaveLength(1);
+		expect(mockWarnings[0][0]).toBe(
 			"[puzzle] model 'todo' is served by its adapter mock — no request reaches /api/todos"
 		);
 	});

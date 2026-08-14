@@ -259,23 +259,15 @@ describe('save() — 2xx response merge', () => {
 		expect(todo._synced).toBe(true);
 	});
 
-	it('a 2xx body carrying id:null merges the rest and keeps the local pk (no index desync)', async () => {
+	it('rejects a non-nullish response whose primary key is null', async () => {
 		mockFetch({ body: { id: null, title: 'x', text: 'renamed' } });
 		const store = apiStore();
 		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
 
-		const sub = { onStoreChange: vi.fn() };
-		store.withTracking(sub, () => store.findOne('todo', 't1'));
-		const notifySpy = vi.spyOn(store, '_notify');
-
-		await todo.save();
-
-		expect(todo.id).toBe('t1'); // local pk kept, not blanked to null
-		expect(todo.text).toBe('renamed'); // rest merged
-		expect(store.findOne('todo', 't1')).toBe(todo); // map still finds it
-		expect(notifySpy).not.toHaveBeenCalledWith('todo', null); // never notified under null
-		store.flush();
-		expect(sub.onStoreChange).toHaveBeenCalled(); // notified under the real pk
+		await expect(todo.save()).rejects.toThrow(/requires primary key "id"/);
+		expect(todo.id).toBe('t1');
+		expect(todo.text).toBe('x');
+		expect(todo._synced).toBe(false);
 	});
 });
 
@@ -434,19 +426,29 @@ describe('save() — reconciliation with an unstamped constructor (D125 matrix)'
 	// 3. THE case the revision machinery exists for (finding O-1): the edit lands
 	//    after the body was serialized, so the server never saw it and its response
 	//    must not roll it back — while every field the user did NOT touch merges.
-	it('save → update mid-flight: the response never overwrites the mid-flight edit', async () => {
+	//    D158 routes this case through an AUTHOR update transport to prove the guard
+	//    belongs to framework reconciliation, not the generated PUT implementation.
+	it('save → update mid-flight: an overridden update never overwrites the mid-flight edit', async () => {
 		const gate = deferred();
-		vi.stubGlobal('fetch', vi.fn(() => gate.promise));
-		const store = apiStore();
-		const todo = store.createRecord('todo', { id: 't1', text: 'A', completed: false });
+		const sent = [];
+		class CustomUpdateTodo extends ApiTodo {
+			static adapter = {
+				endpoint: '/api/todos',
+				update(_fetch, record) {
+					sent.push(record.toJSON());
+					return gate.promise;
+				},
+			};
+		}
+		const store = new Store({ todo: CustomUpdateTodo }, { apiURL: 'https://x.test/v1' });
+		const todo = store.upsert('todo', { id: 't1', text: 'A', completed: false });
 
 		const saving = todo.save();
-		await Promise.resolve(); // body serialized and dispatched with text 'A'
+		await Promise.resolve(); // author update captured text 'A'
+		expect(sent[0].text).toBe('A');
 		todo.update({ text: 'B' });
 
-		gate.resolve(
-			makeRes({ body: { id: 't1', text: 'A', completed: true, serverRevision: 3 } })
-		);
+		gate.resolve({ id: 't1', text: 'A', completed: true, serverRevision: 3 });
 		await saving;
 
 		expect(todo.text).toBe('B'); // mid-flight edit survives
@@ -1117,14 +1119,14 @@ describe('store.request()', () => {
 });
 
 describe('no-adapter and store-less rejections', () => {
-	it('save() on a model without an adapter rejects with the D21-style message', async () => {
+	it('save() on a model without an adapter names the missing create verb', async () => {
 		class Plain extends PuzzleModel {
 			static schema = { id: Puzzle.string().primary(), text: Puzzle.string() };
 		}
 		const store = new Store({ plain: Plain }, { apiURL: 'https://x.test' });
 		const fetchSpy = mockFetch({ body: '' });
 		const rec = store.createRecord('plain', { id: 'p1', text: 'x' });
-		await expect(rec.save()).rejects.toThrow(/no adapter declared for 'plain'/);
+		await expect(rec.save()).rejects.toThrow(/no adapter create\(\) declared for 'plain'/);
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
@@ -1140,7 +1142,7 @@ describe('no-adapter and store-less rejections', () => {
 		await expect(rec.delete()).rejects.toThrow(/never added/);
 	});
 
-	it('request() rejects when the model declares no adapter', async () => {
+	it('request() rejects when the model declares no endpoint', async () => {
 		class Plain extends PuzzleModel {
 			static schema = { id: Puzzle.string().primary() };
 		}
