@@ -339,6 +339,24 @@ const post = store.upsert('post', await store.adapter('post').publish(id));
 Using global `fetch` instead of the supplied parameter is legal and literal:
 it bypasses both `beforeRequest` and fixtures interception.
 
+**App-wide dialects are plain JavaScript** — no framework tier. Adapters are
+mutable objects on model classes `app.js` already imports, so fix a dialect
+once, before `new PuzzleApp(...)`:
+
+```js
+// app.js — every model's loadOne unwraps { data }, models untouched
+for (const Model of Object.values(models)) {
+  const { endpoint } = Model.adapter ?? {};
+  if (!endpoint) continue;
+  Model.adapter.loadOne = async (fetch, id) =>
+    (await (await fetch(`${endpoint}/${id}`)).json()).data;
+}
+```
+
+Or write the dialect as a shared factory and use it where the endpoint would
+go: `static adapter = api('/api/posts')`. Assignments must happen before app
+construction (adapters bind on first store use).
+
 **Record identity ignores number/string spelling.** `findOne('todo', id)` returns
 the same record whether `id` is `7` or `'7'` — which matters constantly, because
 route params are always strings while JSON payloads usually carry numbers. FK
