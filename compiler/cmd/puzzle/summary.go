@@ -86,7 +86,7 @@ func printBuildSummary(out *ui.Printer, outdir, mode, metafile string, elapsed t
 		fmt.Fprintf(os.Stdout, "  %s  %s %s %s\n", name, raw, out.Dim("│"), gzCol)
 	}
 
-	printComposition(os.Stdout, out, dependencyTotals(metafile))
+	printComposition(os.Stdout, out, dependencyTotals(metafile), mode == "production")
 
 	fmt.Fprintln(os.Stdout)
 	footer := fmt.Sprintf("built in %s  %s",
@@ -107,7 +107,16 @@ type depSize struct {
 // of doing business and starts being the bundle. It is deliberately generous:
 // the report exists to catch the accidental 3 MB inline (an `import('mermaid')`
 // with nowhere to split to), not to nag about a fat date library.
+//
+// It is calibrated against MINIFIED bytes, so the warning is production-only —
+// an unminified dev build puts everything, the framework included, over the
+// line, and a warning that always fires is noise.
 const heavyDependencyBytes = 200 * 1024
+
+// frameworkPackage is never the answer to "what should I lazy-load?" — it is
+// the module that boots the page, so it cannot be behind a dynamic import().
+// It still appears in the breakdown; it just never draws the advisory.
+const frameworkPackage = "@magic-spells/puzzle"
 
 // compositionListLimit caps the printed breakdown. Five rows is enough to see
 // where the weight is without turning the build banner into a report.
@@ -179,8 +188,9 @@ func dependencyGroup(input string) string {
 
 // printComposition renders the per-dependency breakdown and, for anything past
 // heavyDependencyBytes, the one-line advisory that names the fix. Nothing is
-// printed for an empty breakdown.
-func printComposition(w io.Writer, out *ui.Printer, deps []depSize) {
+// printed for an empty breakdown. warn is false for a development build, whose
+// unminified bytes the threshold does not describe.
+func printComposition(w io.Writer, out *ui.Printer, deps []depSize, warn bool) {
 	if len(deps) == 0 {
 		return
 	}
@@ -202,12 +212,15 @@ func printComposition(w io.Writer, out *ui.Printer, deps []depSize) {
 		fmt.Fprintf(w, "  %-*s  %s\n", nameW, d.name, humanSize(d.bytes))
 	}
 
+	if !warn {
+		return
+	}
 	for _, d := range deps {
 		if d.bytes < heavyDependencyBytes {
 			break // sorted largest first — nothing after this crosses the line
 		}
-		if d.name == "app" {
-			continue // the app's own code is not a dependency to swap out
+		if d.name == "app" || d.name == frameworkPackage {
+			continue // neither the app's own code nor the framework is swappable
 		}
 		fmt.Fprintf(w, "  %s %s contributes %s — consider loading it with a dynamic import() and build.splitting, or a lighter alternative\n",
 			out.Yellow("!"), d.name, humanSize(d.bytes))

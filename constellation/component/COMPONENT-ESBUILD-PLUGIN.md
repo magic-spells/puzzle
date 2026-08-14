@@ -116,9 +116,27 @@ legacy `.dist-staging-*` / `dist.old-*` siblings, so existing projects self-heal
 — matching the exact known prefixes, real directories only (never a symlink),
 untouched for over ten minutes so a concurrently running build survives.
 
+The SPA pass splits on request ([[DECISION-D160-SPA-CODE-SPLITTING]]):
+`build: { splitting: true }` gives `newBundleOptions` a `Splitting` flag and
+`ChunkNames: "chunks/[name]-[hash]"`, so a dynamic `import()` becomes a lazy
+chunk under `dist/chunks/` instead of being inlined. The entry name is
+untouched, so the shell HTML is unchanged, and ESM splitting emits no
+chunk-loader runtime, so total bytes do not grow. It is a per-pass flag, never a
+shared option: esbuild rejects `Splitting` alongside the prerender pass's
+`Outfile`, and static mode forces it off because its `app.js` is deleted before
+the swap and the chunks would survive as orphans. The dev builder absorbs the
+multi-output shape by writing the pass's outputs itself under `Write: false` and
+deleting the previous rebuild's outputs this one did not produce — a warm
+`dist/` would otherwise accumulate every re-hashed chunk of an edited lazy
+module. Unlike the per-page pass, this one does NOT anchor `AbsWorkingDir`: its
+metafile input keys are resolved against the process cwd by `metafileAllInputs`,
+so anchoring would break dev CSS pruning whenever the app root is not the cwd.
+
 Public assets come from `app/public` with a root `public` fallback. Reserved
 generated names (`app.js`, its map, `styles.css`) are rejected case-insensitively
-before pruning or on every dev rebuild. The copier writes differently per
+before pruning or on every dev rebuild; a root-level `chunks/` entry joins them
+for the duration of a splitting build, and belongs to the app again when the
+flag is off. The copier writes differently per
 destination: into the private staging dir a plain write (no reader exists yet,
 so an atomic temp+rename buys nothing), and into the live `dist/` an atomic
 write that also SKIPS any file already matching on size + mtime — normally the

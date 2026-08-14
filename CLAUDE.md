@@ -118,16 +118,21 @@ run.
   endpoint-generated REST defaults; and D159 turns hash/memory routing into
   imported factories from `/router-modes` (`routerMode: hashRouter()` —
   strings throw, history stays the inline default, `routerInitialPath` folds
-  into `memoryRouter({ initialPath })`). Cards truthed
-  through D159; the next free decision number is D160. **Publish sequencing:**
+  into `memoryRouter({ initialPath })`); and D160 adds opt-in SPA code
+  splitting (`build: { splitting: true }` makes a dynamic `import()` a lazy
+  chunk under `dist/chunks/` — default off, static mode forces it off, dev
+  prunes stale chunks per rebuild, and the size banner gained a per-dependency
+  composition report), which also bumps embedded esbuild 0.19.11 → 0.28.2.
+  Cards truthed
+  through D160; the next free decision number is D161. **Publish sequencing:**
   `@magic-spells/puzzle-pieces` `0.6.0` (ready in its repo's `release/0.6.0`,
   not yet on npm — the package 404s) must be published at or before the CLI's
   release; no older pieces release exists to fall back to, so a fresh `0.6.0`
   install's `puzzle add piece` hard-fails until it ships.
-- Product line: v1 through v1.73 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
+- Product line: v1 through v1.75 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
-  amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74; D146 is a
-  correctness amendment with no product-line entry),
+  amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75;
+  D146 is a correctness amendment with no product-line entry),
   plus the July
   21 pre-release correctness/performance hardening pass and the July 24
   deep-review round. The `constellation/decision/` cards are the authoritative

@@ -154,6 +154,33 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Added
 
+- **Opt-in SPA code splitting.** `build: { splitting: true }` makes every
+  dynamic `import()` in the SPA bundle a lazy chunk under `dist/chunks/`
+  instead of inlining it into `app.js`, so a heavy on-demand dependency is
+  fetched only when its code path runs. Measured on a starter app with
+  `chart.js` behind an `await import()`: `app.js` 263.4 KB → 63.6 KB
+  (89.8 KB → 20.9 KB gzip), with the 199.3 KB remainder in one chunk; total
+  shipped bytes are unchanged, because esbuild's ESM splitting has no
+  chunk-loader runtime. The entry keeps its stable `app.js` name, so the shell
+  HTML is untouched, and static imports behave exactly as before.
+
+  Default OFF this release — with the key absent (or `null`, which means unset)
+  every build emits the same single file it does today. While the flag is on,
+  `chunks/` is a reserved output name and a root-level `public/chunks` asset
+  fails the build, the same guard `app.js` has. `output: 'static'` ignores the
+  flag: its per-page bundles already split, and its `app.js` never ships.
+  `puzzle dev` splits too, pruning a re-hashed chunk's predecessor on every
+  rebuild so a warm `dist/` never accumulates orphans.
+- **Bundle composition in the build banner.** `puzzle build` now prints a
+  largest-dependencies breakdown from esbuild's metafile and, in production,
+  warns when a single dependency contributes more than 200 KB, pointing at
+  `import()` + `build.splitting`. Your own code and the framework runtime are
+  listed but never flagged — neither can move behind a dynamic import.
+- **Embedded esbuild 0.19.11 → 0.28.2.** Nine minor versions of bundler fixes,
+  including the ESM cross-chunk ordering work that makes splitting dependable.
+  Output bytes shift slightly (the todos example's gzip figure moved 22.5 KB →
+  22.4 KB); no API change.
+
 - **Static raw template blocks (D150).** `{#raw}…{/raw}` disables Puzzle's
   brace lexer for author-written source, so JSON, JavaScript, CSS, and examples
   can contain literal `{ ... }`, `{#if}`, and formatter pipes. HTML inside the

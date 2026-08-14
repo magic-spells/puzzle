@@ -103,7 +103,13 @@ decision cards explain why the contract has its current shape.
   makes each model adapter a set of per-verb fetch functions: endpoint shorthand
   generates REST defaults, author verbs win, enhanced fetch carries auth and
   fixture interception, and framework reconciliation stays transport-agnostic.
-  The next free decision number is D160.
+- **Current 0.6 bundle work (v1.75):** [[DECISION-D160-SPA-CODE-SPLITTING]] /
+  [[FEATURE-SPA-CODE-SPLITTING]] make a dynamic `import()` a lazy chunk under
+  `dist/chunks/` behind `build: { splitting: true }` — default off, forced off
+  in static mode, pruned across dev rebuilds — and add a per-dependency
+  composition report to the build size banner. Phase 2 (lazy route views) is a
+  separate design.
+  The next free decision number is D161.
 - What shipped in `0.2.0`, in order:
   - Mode-agnostic path-shaped links — `router.url()` + the built-in `link`
     formatter (D79/v1.46) — and the true static-pages output mode

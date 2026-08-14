@@ -468,6 +468,16 @@ puzzle upgrade skills
 
 Both commands are built and verified today. `puzzle build` compiles `.pzl` files and produces a working bundle; `puzzle dev` watches `app/`, rebuilds on change, and delivers full-page live reload over SSE (the reload client is injected into `index.html` at serve time). Both run the declared style pipeline automatically — `styles: { use: ['tailwindcss'] }` in `puzzle.config.js` (tailwindcss-only in v1) — so Tailwind output is included in the served/built `styles.css`.
 
+By default a build emits one `dist/app.js`, and a dynamic `import()` is inlined
+into it. Set `build: { splitting: true }` in `puzzle.config.js` and each dynamic
+`import()` becomes a lazy chunk under `dist/chunks/` that the browser fetches
+only when that code path runs — the way to keep a heavy on-demand dependency (a
+chart library, a diagram renderer, an editor) off the first page load. The entry
+keeps its `app.js` name, static imports are unaffected, and total shipped bytes
+do not grow: esbuild's ESM splitting has no chunk-loader runtime. The build's
+size banner also names your largest dependencies and flags any single one over
+200 KB.
+
 On an interactive terminal, `build` and `dev` also use a cached, non-blocking
 daily check to mention newer Puzzle releases. Set `PUZZLE_NO_UPDATE_CHECK=1` to
 disable it; the check is skipped automatically when `CI` is set.

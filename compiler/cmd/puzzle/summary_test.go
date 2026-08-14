@@ -174,7 +174,7 @@ func TestPrintCompositionWarnsHeavyDependency(t *testing.T) {
 	printComposition(&buf, ui.New(os.Stdout), dependencyTotals(metafileWith(map[string]int{
 		"node_modules/heavyweight/dist/index.js": heavy,
 		"app/app.js":                             1024,
-	})))
+	})), true)
 	got := buf.String()
 
 	if !strings.Contains(got, "heavyweight") {
@@ -195,7 +195,7 @@ func TestPrintCompositionStaysQuietUnderThreshold(t *testing.T) {
 	printComposition(&buf, ui.New(os.Stdout), dependencyTotals(metafileWith(map[string]int{
 		"node_modules/small/index.js": 4096,
 		"app/app.js":                  2048,
-	})))
+	})), true)
 	got := buf.String()
 
 	if !strings.Contains(got, "small") {
@@ -206,13 +206,57 @@ func TestPrintCompositionStaysQuietUnderThreshold(t *testing.T) {
 	}
 }
 
+// TestPrintCompositionNeverAdvisesUnswappableCode keeps the advisory actionable:
+// the app's own modules and the framework runtime both cross the threshold on a
+// real app, and neither can move behind a dynamic import() — the framework is
+// what boots the page. Both still appear in the breakdown.
+func TestPrintCompositionNeverAdvisesUnswappableCode(t *testing.T) {
+	var buf bytes.Buffer
+	printComposition(&buf, ui.New(os.Stdout), dependencyTotals(metafileWith(map[string]int{
+		"node_modules/@magic-spells/puzzle/client-runtime/index.js": 300 * 1024,
+		"app/app.js": 250 * 1024,
+	})), true)
+	got := buf.String()
+
+	if !strings.Contains(got, frameworkPackage) || !strings.Contains(got, "app") {
+		t.Errorf("both groups should still be listed in the breakdown:\n%s", got)
+	}
+	if strings.Contains(got, "build.splitting") {
+		t.Errorf("neither the framework nor app code should draw the advisory:\n%s", got)
+	}
+}
+
+// TestPrintCompositionWarningIsProductionOnly pins the calibration: the 200 KB
+// threshold describes minified bytes, so an unminified development build — where
+// everything is over the line — prints the breakdown and no advisory.
+func TestPrintCompositionWarningIsProductionOnly(t *testing.T) {
+	deps := dependencyTotals(metafileWith(map[string]int{
+		"node_modules/heavyweight/dist/index.js": 900 * 1024,
+	}))
+
+	var dev bytes.Buffer
+	printComposition(&dev, ui.New(os.Stdout), deps, false)
+	if !strings.Contains(dev.String(), "heavyweight") {
+		t.Errorf("a development build should still print the breakdown:\n%s", dev.String())
+	}
+	if strings.Contains(dev.String(), "build.splitting") {
+		t.Errorf("a development build must not warn on unminified bytes:\n%s", dev.String())
+	}
+
+	var prod bytes.Buffer
+	printComposition(&prod, ui.New(os.Stdout), deps, true)
+	if !strings.Contains(prod.String(), "build.splitting") {
+		t.Errorf("the same bytes in production must warn:\n%s", prod.String())
+	}
+}
+
 // TestPrintCompositionEmptyMetafileIsSilent covers the degraded path: no
 // metafile (a reporting hiccup, or a build that never asked for one) must not
 // print an empty section.
 func TestPrintCompositionEmptyMetafileIsSilent(t *testing.T) {
 	for _, mf := range []string{"", "not json", `{"outputs":{}}`} {
 		var buf bytes.Buffer
-		printComposition(&buf, ui.New(os.Stdout), dependencyTotals(mf))
+		printComposition(&buf, ui.New(os.Stdout), dependencyTotals(mf), true)
 		if buf.Len() != 0 {
 			t.Errorf("metafile %q printed %q, want nothing", mf, buf.String())
 		}
