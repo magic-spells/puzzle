@@ -87,6 +87,18 @@ one is *not* a compile error; it silently builds a different product.
 
 ## 0.6.0 — Unreleased
 
+### Fixed
+
+- **Links inside a web component's shadow root are now intercepted.** The router
+  found the clicked anchor with `closest('a')`, which walks the light tree — but
+  shadow DOM retargets the event to the host, so an `<a>` inside a component's
+  shadow root was missed and the click fell through to a full page load. The
+  lookup now reads `composedPath()` (closest() stays as the fallback for
+  synthetic events). Related: an explicit `target="_self"` is now intercepted
+  like a bare anchor — it names THIS frame, so it is the default spelled out,
+  not an opt-out. `_blank`/`_parent`/`_top`/named targets still fall through to
+  the browser.
+
 ### Changed
 
 - **BREAKING: hash and memory routing are imported factories (D159).**

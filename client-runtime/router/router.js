@@ -2675,9 +2675,13 @@ export class Router {
 		if (e.button !== 0) return; // non-left
 		if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // modified
 
-		const a = e.target.closest && e.target.closest('a');
+		const a = findAnchor(e);
 		if (!a) return;
-		if (a.hasAttribute('target')) return;
+		// Only '_self' navigates THIS frame, so only it can be ours. '_blank',
+		// '_parent', '_top' and named frames all move a different browsing
+		// context — the browser has to do those. An explicit '_self' is the
+		// default spelled out (component libraries emit it), not an opt-out.
+		if (!isSelfTarget(a.getAttribute('target'))) return;
 		if (a.hasAttribute('download')) return;
 
 		const href = a.getAttribute('href');
@@ -2727,6 +2731,40 @@ export class Router {
 		e.preventDefault();
 		this.push(url.pathname + url.search + url.hash);
 	}
+}
+
+/**
+ * The anchor a click actually landed on, or null.
+ *
+ * Shadow DOM retargets at the boundary: a click on an <a> inside a web
+ * component's shadow root arrives with `target` set to the HOST element, so
+ * closest() walks the light tree, misses the anchor, and the click falls
+ * through to a full page load. composedPath() is the only view of the flattened
+ * tree, and it runs innermost-outward — the first anchor in it is the one
+ * clicked (a later match could be an outer anchor the click never touched).
+ *
+ * Closed shadow roots never appear in the path, so links inside them stay
+ * browser navigations. closest() stays as the fallback for synthetic events
+ * carrying no composedPath.
+ */
+/** Whether a `target` names THIS frame: absent, empty, or '_self' (any case). */
+function isSelfTarget(target) {
+	if (target == null) return true;
+	const t = target.trim().toLowerCase();
+	return t === '' || t === '_self';
+}
+
+function findAnchor(e) {
+	const path = typeof e.composedPath === 'function' ? e.composedPath() : null;
+	if (path) {
+		for (const node of path) {
+			if (node?.nodeName === 'A') return node;
+			// Stop at the boundary: past the document the path holds only window,
+			// and nothing above it can be the clicked link.
+			if (node === document) break;
+		}
+	}
+	return (e.target?.closest && e.target.closest('a')) || null;
 }
 
 // ---- route compilation (nested → flat leaf Entries) -------------------------
