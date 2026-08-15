@@ -89,6 +89,26 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Fixed
 
+- **A static build ships the adapter the app actually configured (D157/D158).**
+  `output: 'static'` generates each page's entry, and that entry re-imported the
+  bare `adapter` capability whenever `app/adapter.js` did not exist — so an app
+  that passed `adapter.defaults({ ... })` straight into its config prerendered
+  with its own verbs and then shipped pages that installed different ones, with
+  no build warning. Depending on the model that meant every page throwing
+  `no adapter loadAll() declared`, or quietly falling back to generated REST. The
+  entry now binds the capability by identity: the bare export is re-imported, a
+  configured one that IS `app/adapter.js`'s default export is imported from
+  there, and an inline-configured one makes the page read `app.config.adapter`
+  off the app entry (an advisory line reports the page weight that costs, and
+  suggests `app/adapter.js`). An `app/adapter.js` holding something the config
+  did not pass is now bypassed instead of trusted.
+- **A skipped route no longer forces whole-site re-renders in static dev.** Route
+  classification (D155) cuts its render-wide walk at chain roots, but a route the
+  prerender skips — a dynamic `:id` with no `staticPaths`, a shadowed route —
+  reported none, so the walk descended through it and marked every component it
+  shared with a rendered page render-wide. A `/blog` index beside `/blog/:id`
+  sharing one card component re-rendered the entire site on every save. Output
+  was always correct; only rebuild time was wrong.
 - **Links inside a web component's shadow root are now intercepted.** The router
   found the clicked anchor with `closest('a')`, which walks the light tree — but
   shadow DOM retargets the event to the host, so an `<a>` inside a component's

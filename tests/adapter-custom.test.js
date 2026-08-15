@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { adapter, PuzzleAdapterError } from '../client-runtime/datastore/adapter.js';
+import { isConfiguredAdapter } from '../client-runtime/capabilities.js';
 import { Store } from '../client-runtime/datastore/store.js';
 import { installFixtures } from '../client-runtime/fixtures/index.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
@@ -451,6 +452,17 @@ describe('adapter config validation', () => {
 		expect(warn).toHaveBeenCalledTimes(1);
 		expect(warn.mock.calls[0][0]).toContain('adapter.defaults()');
 		expect(warn.mock.calls[0][0]).toContain('"publish", "retries"');
+	});
+
+	// The static build reads this to decide whether a page can re-import the bare
+	// capability or has to reach the exact configured value the render installed.
+	it('tells a configured capability from the bare export', () => {
+		expect(isConfiguredAdapter(adapter)).toBe(false);
+		expect(isConfiguredAdapter(adapter.defaults({}))).toBe(true);
+		expect(isConfiguredAdapter(adapter.defaults({ loadAll: async () => [] }))).toBe(true);
+		// Nothing that is not a capability at all can pass.
+		expect(isConfiguredAdapter(undefined)).toBe(false);
+		expect(isConfiguredAdapter({ install() {} })).toBe(false);
 	});
 
 	it('warns once per model for keys that are neither endpoint nor functions', () => {

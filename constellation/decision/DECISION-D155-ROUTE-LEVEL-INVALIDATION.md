@@ -53,10 +53,50 @@ module → the routes whose chain contains it: a file in that set is
 ATTRIBUTABLE, and only its routes can differ. The prerender bundle's metafile is
 rooted at `app/app.js` and therefore holds everything the render reads that no
 single page owns — `routes.js`, the models registry, the formatters module,
-`beforeMount` and the rest of the app entry. A file in that graph and in no
-page's graph is RENDER-WIDE: it can move the store seed or the route table, and
-every page's markup and data island with it. Both are captured after each
+`beforeMount` and the rest of the app entry. Both are captured after each
 rebuild that produces them, from the same passes the build already runs.
+
+**RENDER-WIDE is the part of the prerender graph ABOVE the route chain, walked
+for directly.** Start from that graph's in-degree-zero roots and descend, but
+never traverse INTO a chain root; everything the walk reaches is what shapes
+every page. Roots are found by in-degree rather than by name, because the pass is
+rooted at a generated stdin module whose metafile key matches no file on disk.
+The CUT is the chain roots rather than `routes.js`, which nothing in the Go build
+can name — it is `app.js`'s business, found only by convention — while the chain
+roots are known exactly: the prerender summary reports each page's view and
+layout modules. Below a chain root is the route's own subtree, which the per-page
+graphs already attribute route by route.
+
+**Membership in the two sets is computed independently, and render-wide wins.**
+They OVERLAP, and that is the whole subtlety: a store seed that `beforeMount`
+runs AND that one view imports is the everyday shape. `classify` therefore
+consults render-wide FIRST. Attributing such a module to the pages that happen to
+import it would render those and leave every other page's stale HTML — and its
+stale data island — in place for the rest of the session, with no periodic full
+render to wash it out.
+
+**A skipped route contributes chain roots too.** A route the render skips (a
+dynamic `:id` with no `staticPaths`, a shadowed or unreachable one) ships no
+page, so it is in no per-page graph — but its views still hang off the route
+table in the prerender graph. Without them the walk descends THROUGH the skipped
+route and marks everything below it render-wide, including every component it
+shares with a rendered page: a `/blog` index beside `/blog/:id` sharing one card
+component would re-render the whole site on every save. So the summary reports
+`modules` for skipped routes as well, and the builder adds them to the cut. A
+skipped route need not satisfy the `__pzlModule` contract the way a rendered one
+does, so a missing stamp is dropped rather than raised — a root the walk never
+learns about only costs conservatism.
+
+**Every way the walk can fail to describe the graph marks the WHOLE prerender
+graph render-wide** — no chain roots at all, no in-degree-zero roots (a cycle
+spanning every module), a metafile carrying no inputs. That keeps this rule on
+the same ladder as the rest of the classifier.
+
+One shape is knowingly unhandled: a view or layout imported DIRECTLY by `app.js`
+is still a chain root, so the walk cuts at it and its private subtree stays
+page-attributed even though `app.js` can run it at module scope. An app that
+consumes a view's module scope from its entry can therefore under-render that
+subtree. It is exotic and it is accepted.
 
 **The classifier only ever narrows on evidence.** A batch is the most
 conservative of its members. An unknown file, a vanished file (a delete or a
@@ -154,9 +194,23 @@ and pruning it would buy little. Only the RENDER is skipped.
   It is noise against a real render and dominant against a trivial one.
 - The equivalence test asserts the CLASSIFICATION of every step as well as
   byte-identity with a one-shot build, so a partial path that quietly degraded
-  would fail rather than pass for free.
+  would fail rather than pass for free. A component shared between a rendered
+  route and a skipped one has its own case, because that degradation is invisible
+  in the output — the site is always correct, just re-rendered whole.
 
 ## Alternatives rejected
+
+**Define render-wide by SUBTRACTION — the prerender graph minus every page's
+graph.** One line instead of a walk, and wrong for the case that matters: a
+module that is both page-reachable and render-wide subtracts out of the
+render-wide set entirely, so page attribution swallows it and every other page
+serves stale HTML for the rest of the session. Membership has to be decided on
+its own evidence, which is what the walk from in-degree-zero roots does.
+
+**Cut the walk at `routes.js` instead of at the chain roots.** It is the
+conceptually obvious boundary and the Go build cannot name it: `routes.js` is a
+convention inside `app.js`, never reported by anything. The chain roots are
+reported exactly, so they are the one boundary this side can draw honestly.
 
 **Diff the rendered HTML and keep what matches.** Renders everything to discover
 that most of it was unnecessary — it buys the writes, not the render, which is

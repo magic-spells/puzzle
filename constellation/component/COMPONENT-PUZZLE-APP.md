@@ -87,7 +87,10 @@ injected a hook.
 `setMorphHandler(handler)` stashes the router-agnostic integration before or
 after mount and forwards it to [[COMPONENT-ROUTER]]. `enableMorph(app)` uses
 this seam. `mount()` is a no-op outside a DOM so an app entry remains importable
-by [[COMPONENT-SSG]].
+by [[COMPONENT-SSG]], and a no-op under `__PUZZLE_CAPTURE__` so a static page's
+generated entry can import that same app entry purely to read `app.config`
+([[DECISION-D157-ADAPTER-SUBPATH]]) without booting an SPA over the prerendered
+page. The define is false in every other pass, so the guard folds away.
 
 `app.store`, `app.router`, `app.formatters`, and `app.ctx` expose the live
 services. The root package exports `PuzzleApp`, `PuzzleView`, `PuzzleModel`,

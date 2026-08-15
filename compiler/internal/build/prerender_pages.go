@@ -38,12 +38,9 @@ const staticPagesDir = "_puzzle"
 // ssgSummary) with the per-page module/entry/route facts and the top-level
 // mode/target/store/router wiring facts the per-page entry generation needs.
 type staticSummary struct {
-	Written []staticPage `json:"written"`
-	Skipped []struct {
-		Path   string `json:"path"`
-		Reason string `json:"reason"`
-	} `json:"skipped"`
-	Warnings []string `json:"warnings"`
+	Written  []staticPage    `json:"written"`
+	Skipped  []staticSkipped `json:"skipped"`
+	Warnings []string        `json:"warnings"`
 
 	// Mode echoes the requested mode ("static") — a cheap contract check that the
 	// JS side ran the intended path.
@@ -73,6 +70,25 @@ type staticSummary struct {
 	// HasAdapter carries the non-serializable app capability across the node→Go
 	// summary boundary so each browser entry can import and pass the same value.
 	HasAdapter bool `json:"hasAdapter"`
+	// AdapterConfigured is true when config.adapter carries app-wide defaults
+	// (adapter.defaults(...)) rather than being the bare capability. A configured
+	// capability holds functions, so re-importing the bare one from the subpath
+	// would install DIFFERENT behavior than the prerender ran.
+	AdapterConfigured bool `json:"adapterConfigured"`
+	// AdapterModuleMatches answers whether the conventional app/adapter module's
+	// default export IS config.adapter. Nil when no such module was passed to the
+	// prerender (there is none on disk), so an app with the file and a config that
+	// ignores it is never mistaken for one that wired it up.
+	AdapterModuleMatches *bool `json:"adapterModuleMatches"`
+}
+
+// staticSkipped is one route the prerender did not render. Modules carries its
+// chain's view/layout stamps in static mode — a skipped route ships no page, but
+// its views are still chain roots for the dev builder's render-wide walk (D155).
+type staticSkipped struct {
+	Path    string        `json:"path"`
+	Reason  string        `json:"reason"`
+	Modules staticModules `json:"modules"`
 }
 
 // staticPage is one written page in the static summary.
@@ -128,10 +144,18 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 		return err
 	}
 
+	// Whether the app ships a models registry, a formatters module, or a
+	// conventional adapter module is a build-wide fact; resolve it once. The
+	// adapter module is needed BEFORE the render — the prerender entry imports it
+	// so the summary can report whether it is the value the config passed.
+	modelsModule := findStaticModule(absRoot, "app/models/index.js", "app/models/index.ts")
+	formattersModule := findStaticModule(absRoot, "app/formatters.js", "app/formatters.ts")
+	adapterModule := findStaticModule(absRoot, "app/adapter.js", "app/adapter.ts")
+
 	// 1. Node prerender pass in mode 'static': the JS side renders each static
 	//    route, captures its store payload into the page's data island, strips the
 	//    app.js tag, and returns the extended summary behind the sentinel.
-	stdin, err := staticPrerenderStdin(absRoot)
+	stdin, err := staticPrerenderStdin(absRoot, adapterModule)
 	if err != nil {
 		return err
 	}
@@ -161,13 +185,7 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 		}
 	}
 
-	// 2. Generate one mountStatic entry file per written page. Whether the app
-	//    ships a models registry / a formatters module is a build-wide fact, so
-	//    resolve it once.
-	modelsModule := findStaticModule(absRoot, "app/models/index.js", "app/models/index.ts")
-	formattersModule := findStaticModule(absRoot, "app/formatters.js", "app/formatters.ts")
-	adapterModule := findStaticModule(absRoot, "app/adapter.js", "app/adapter.ts")
-
+	// 2. Generate one mountStatic entry file per written page.
 	entriesDir := filepath.Join(staging, prerenderDir, "entries")
 	if err := os.MkdirAll(entriesDir, 0o755); err != nil {
 		return fmt.Errorf("puzzle build --static: creating entry dir: %w", err)
@@ -199,6 +217,9 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 	if summary.HasFormatters && formattersModule == "" {
 		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"),
 			"custom formatters registered in app.js will not exist client-side in static mode — export them from app/formatters.js or app/formatters.ts")
+	}
+	if staticCaptured(summary, adapterModule) {
+		fmt.Fprintf(os.Stdout, "  %s %s\n", out.Yellow("!"), staticCaptureNote)
 	}
 
 	// 4. Splitting esbuild pass over all entries → staging/_puzzle. Shared chunks
@@ -235,24 +256,44 @@ func prerenderStaticPages(absRoot, staging string, publicFiles map[string]bool, 
 // stays a valid JS string literal. Shared with the dev builder, whose persistent
 // prerender context compiles this exact source.
 //
+// adapterModule, when non-empty, is the app-relative conventional adapter module
+// (app/adapter.js|ts). It is imported here purely so the render can answer
+// whether that module's default export IS `config.adapter` — an identity the Go
+// side cannot see and the summary cannot serialize. A NAMESPACE import is
+// deliberate: this file may exist for unrelated reasons and export no default at
+// all, which `import x from` would make a hard bundle error while a namespace
+// read is merely undefined (a non-match, which is the truthful answer). Its
+// presence is the only thing that changes these bytes, so the dev builder's
+// persistent context is rebuilt only when the file appears or disappears.
+//
 // argv[4], when present, is a JSON array of route paths: the SUBSET to render
 // (D155). It rides on argv rather than in this source because the dev builder
 // holds one persistent esbuild context over these exact bytes — a per-rebuild
 // source change would throw that context's cache away, which is the whole thing
 // being bought. A one-shot build passes three arguments and renders everything,
 // so this line is inert there.
-func staticPrerenderStdin(absRoot string) (string, error) {
+func staticPrerenderStdin(absRoot, adapterModule string) (string, error) {
 	entry, err := json.Marshal(appEntryPath(absRoot))
 	if err != nil {
 		return "", fmt.Errorf("encoding prerender entry path: %w", err)
 	}
+	adapterImport, adapterOption := "", ""
+	if adapterModule != "" {
+		spec, err := json.Marshal(absModuleImport(absRoot, adapterModule))
+		if err != nil {
+			return "", fmt.Errorf("encoding the app adapter module path: %w", err)
+		}
+		adapterImport = fmt.Sprintf("import * as __pzlAdapterModule from %s;\n", spec)
+		adapterOption = ", adapterModule: __pzlAdapterModule.default"
+	}
 	return fmt.Sprintf(
 		"import app from %s;\n"+
+			"%s"+
 			"import { prerenderToDir } from '@magic-spells/puzzle/ssg';\n"+
 			"const only = process.argv[4] ? JSON.parse(process.argv[4]) : undefined;\n"+
-			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static', only });\n"+
+			"const summary = await prerenderToDir(app?.config ?? app, { outDir: process.argv[2], shellPath: process.argv[3], mode: 'static', only%s });\n"+
 			"process.stdout.write('\\n%s' + JSON.stringify(summary));\n",
-		string(entry), prerenderSentinel,
+		string(entry), adapterImport, adapterOption, prerenderSentinel,
 	), nil
 }
 
@@ -274,22 +315,21 @@ func slugFromEntry(entry string) (string, error) {
 // specifiers and embedded values are JSON-encoded (space/quote safe, forward
 // slashes). The models/formatters imports (and their shorthand call properties)
 // are emitted only when the source files exist — an absent binding must never be
-// referenced. A conventional app/adapter module preserves configured defaults;
-// older apps without one retain the bare-capability import. Route + service
-// options are embedded verbatim from the summary.
+// referenced. Route + service options are embedded verbatim from the summary;
+// the adapter is resolved by staticAdapterImport.
 func staticEntrySource(absRoot string, page staticPage, summary staticSummary, modelsModule, formattersModule, adapterModule string) (string, error) {
 	var b strings.Builder
 	b.WriteString("import { mountStatic } from '@magic-spells/puzzle/static';\n")
+	// adapterBinding is emitted after every import, so the generated module reads
+	// as an import block followed by statements.
+	adapterBinding := ""
 	if summary.HasAdapter {
-		if adapterModule != "" {
-			spec, err := json.Marshal(absModuleImport(absRoot, adapterModule))
-			if err != nil {
-				return "", err
-			}
-			fmt.Fprintf(&b, "import adapter from %s;\n", spec)
-		} else {
-			b.WriteString("import { adapter } from '@magic-spells/puzzle/adapter';\n")
+		adapterImport, binding, err := staticAdapterImport(absRoot, summary, adapterModule)
+		if err != nil {
+			return "", err
 		}
+		b.WriteString(adapterImport)
+		adapterBinding = binding
 	}
 
 	viewIdents := make([]string, len(page.Modules.Views))
@@ -341,6 +381,7 @@ func staticEntrySource(absRoot string, page staticPage, summary staticSummary, m
 		apiURLJSON = string(summary.APIURL)
 	}
 
+	b.WriteString(adapterBinding)
 	b.WriteString("mountStatic({\n")
 	fmt.Fprintf(&b, "  target: %s,\n", targetJSON)
 	fmt.Fprintf(&b, "  views: [%s],\n", strings.Join(viewIdents, ", "))
@@ -374,6 +415,59 @@ func staticEntrySource(absRoot string, page staticPage, summary staticSummary, m
 	b.WriteString("});\n")
 	return b.String(), nil
 }
+
+// staticAdapterImport emits the lines that bind `adapter` in a page entry to the
+// SAME capability value the prerender installed (D157/D158), as an import and a
+// (usually empty) statement the caller places after the whole import block.
+// Three tiers, in order of how cheap the resulting page is:
+//
+//  1. The config passed the BARE capability: re-import it from the subpath. Two
+//     imports of one frozen export are one value, so identity holds for free.
+//  2. The config passed a configured capability (adapter.defaults(...)) that IS
+//     the conventional app/adapter module's default export: import that module.
+//     This is the layout the docs recommend, and it keeps a page's graph to its
+//     own chain.
+//  3. Otherwise the capability was configured inline in app.js — or a module
+//     exists but holds a DIFFERENT value — so the only place the exact value can
+//     be reached is the app entry itself. Import it and read `app.config`;
+//     `__PUZZLE_CAPTURE__` makes its top-level `app.mount()` inert so importing
+//     the SPA entry cannot boot an SPA over the prerendered page.
+//
+// Tier 3 is a fallback, never an error: configuring the adapter inline is legal
+// app code and must build. It costs page weight (the app entry pulls the route
+// table and every view into the shared chunk), which staticCaptureNote reports.
+func staticAdapterImport(absRoot string, summary staticSummary, adapterModule string) (string, string, error) {
+	if !summary.AdapterConfigured {
+		return "import { adapter } from '@magic-spells/puzzle/adapter';\n", "", nil
+	}
+	if adapterModule != "" && summary.AdapterModuleMatches != nil && *summary.AdapterModuleMatches {
+		spec, err := json.Marshal(absModuleImport(absRoot, adapterModule))
+		if err != nil {
+			return "", "", err
+		}
+		return fmt.Sprintf("import adapter from %s;\n", spec), "", nil
+	}
+	spec, err := json.Marshal(absModuleImport(absRoot, appEntryPath(absRoot)))
+	if err != nil {
+		return "", "", err
+	}
+	return fmt.Sprintf("import __pzlApp from %s;\n", spec),
+		"const adapter = (__pzlApp?.config ?? __pzlApp).adapter;\n",
+		nil
+}
+
+// staticCaptured reports whether this build's entries take the capture tier.
+func staticCaptured(summary staticSummary, adapterModule string) bool {
+	if !summary.HasAdapter || !summary.AdapterConfigured {
+		return false
+	}
+	return adapterModule == "" || summary.AdapterModuleMatches == nil || !*summary.AdapterModuleMatches
+}
+
+// staticCaptureNote is the advisory the capture tier prints: the build works,
+// but every page now carries the whole app graph, and moving the capability into
+// app/adapter.js is the one-line fix.
+const staticCaptureNote = "config.adapter is configured in app.js, so each static page imports app/app.js to reach it — the route table and every view land in the shared page chunk; export the capability from app/adapter.js (or app/adapter.ts) and pass that value to keep pages lean"
 
 // findStaticModule returns the first conventional app module that exists,
 // preferring JavaScript when both JavaScript and TypeScript variants are present.
@@ -458,7 +552,12 @@ func staticPagesBundleOptions(absRoot string, entryFiles []string, outdir string
 		// Takeover: true — a static page's whole job is adopting the prerendered
 		// markup it was emitted alongside (mountStatic rehydrates the data island
 		// and mounts over it), so these bundles must keep the preload path.
-		Define:   bundleDefines(pl, bundleFlags{Dev: dev, Takeover: true}),
+		// Capture: true — a static page mounts through mountStatic, never through
+		// PuzzleApp.mount(), so the app entry a capture-tier entry imports must not
+		// boot. Unconditional rather than tier-dependent: the other tiers never pull
+		// PuzzleApp into the graph, so the define is inert there, and this keeps the
+		// dev builder's frozen page context from going stale on an adapter change.
+		Define:   bundleDefines(pl, bundleFlags{Dev: dev, Takeover: true, Capture: true}),
 		Plugins:  []api.Plugin{pl.ESBuild()},
 		LogLevel: api.LogLevelSilent,
 		// Anchor esbuild's input-path bookkeeping to the OUTPUT TREE rather than

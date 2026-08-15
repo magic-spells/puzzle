@@ -330,8 +330,9 @@ export default class DefaultLayout extends PuzzleView {}
 `)
 	})
 
-	// app.js owns beforeMount, the store seed and the service wiring — it is in
-	// the prerender graph and in no page's graph, so it can never be partial.
+	// app.js owns beforeMount, the store seed and the service wiring — it is the
+	// prerender graph's own root, above every chain root, so it can never be
+	// partial.
 	step("app entry edit (render-wide)", []string{abs("app/app.js")}, &wantPlan{full: true}, func() {
 		write("app/app.js", `import { PuzzleApp } from '@magic-spells/puzzle';
 import routes from './routes.js';
@@ -789,5 +790,79 @@ export default class About extends PuzzleView {}
 	}
 	if !builder.lastPlan.full {
 		t.Errorf("a change batch carrying a failed save's render-wide edit must be full, got %v", builder.lastPlan.routes)
+	}
+}
+
+// TestStaticWatchSkippedRouteViewIsChainRoot: a route the prerender SKIPS still
+// hangs off the route table, so its views have to cut the render-wide walk like
+// any other chain root. Without them the walk descends through the skipped route
+// and marks every component it shares with a rendered page render-wide — the
+// `/blog` index beside `/blog/:id` shape — so one component edit re-renders the
+// whole site on every save.
+func TestStaticWatchSkippedRouteViewIsChainRoot(t *testing.T) {
+	requireStaticRuntime(t)
+	files := baseSSGFixture()
+	card := `<puzzle-view>
+  <article class="card"><Children/></article>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class Card extends PuzzleView {}
+</script>
+`
+	files["app/components/Card.pzl"] = card
+	// Home renders at '/'; Post is the view of the DYNAMIC '/blog/:id' route,
+	// which v1 skips. Both import the same component.
+	files["app/views/Home.pzl"] = `<puzzle-view>
+  <Card>home</Card>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Card from '../components/Card.pzl';
+export default class Home extends PuzzleView {}
+</script>
+`
+	files["app/views/Post.pzl"] = `<puzzle-view>
+  <Card>post</Card>
+</puzzle-view>
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+import Card from '../components/Card.pzl';
+export default class Post extends PuzzleView {}
+</script>
+`
+	root := writeSSGFixture(t, files)
+
+	builder, err := NewStaticWatchBuilder(root, StaticWatchOptions{Config: config.Config{Output: "static"}})
+	if err != nil {
+		t.Fatalf("creating the static dev builder: %v", err)
+	}
+	defer builder.Dispose()
+	if err := builder.Rebuild(nil); err != nil {
+		t.Fatalf("initial rebuild failed: %v", err)
+	}
+
+	component := filepath.Join(root, "app", "components", "Card.pzl")
+	if err := os.WriteFile(component, []byte(strings.Replace(card, "card", "card revised", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := builder.Rebuild([]string{component}); err != nil {
+		t.Fatalf("component rebuild failed: %v", err)
+	}
+	plan := builder.lastPlan
+	if plan.full {
+		t.Fatalf("a component shared with a SKIPPED route classified render-wide (%s) — every save re-renders the site", plan.reason)
+	}
+	if strings.Join(plan.routes, ",") != "/" {
+		t.Errorf("component edit rendered %v, want just the route that ships it", plan.routes)
+	}
+
+	// And the partial output is still the site a one-shot build produces.
+	warm := snapshotTree(t, filepath.Join(root, "dist"))
+	if err := Build(root, Options{Development: true, Output: "static"}); err != nil {
+		t.Fatalf("one-shot build failed: %v", err)
+	}
+	if d := diffTrees(warm, snapshotTree(t, filepath.Join(root, "dist"))); d != "" {
+		t.Errorf("the partial rebuild is not the one-shot output:\n%s", d)
 	}
 }

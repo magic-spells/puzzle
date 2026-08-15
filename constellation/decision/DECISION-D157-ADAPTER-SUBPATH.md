@@ -66,6 +66,33 @@ node-side prerender stores, the static kernel, and `/testing`'s
 matching option. Installation happens before any store or record exists, so
 nothing can observe a half-enabled state.
 
+**Static output binds the SAME capability value, in three tiers.** An
+`output: 'static'` app ships no `app.js`; each page gets a compiler-generated
+entry instead, and that entry has to reach the exact value the prerender
+installed — a configured capability holds functions, so nothing about it can
+cross the node→Go summary except its identity. The summary therefore carries two
+facts (`adapterConfigured`, `adapterModuleMatches`) and the build resolves them,
+cheapest page first:
+
+1. **Bare.** The config passed the bare export, so the entry re-imports it from
+   the subpath. Two imports of one frozen export are one value.
+2. **Conventional.** The config passed a configured capability that IS the
+   default export of `app/adapter.js` (or `.ts`) — the layout D158 recommends —
+   so the entry imports that module. Identity is checked, not assumed: the
+   prerender namespace-imports the file and compares it to `config.adapter`, so a
+   module holding something else is bypassed rather than trusted.
+3. **Capture.** Otherwise the capability was configured inline in `app.js` and
+   exists nowhere else, so the entry imports the app entry and reads
+   `app.config.adapter`. `__PUZZLE_CAPTURE__` — a define true only for the
+   per-page static pass — makes a top-level `app.mount()` inert, so importing the
+   SPA entry cannot boot an SPA over the prerendered page. It costs page weight
+   (the app entry pulls the route table and every view into the shared page
+   chunk), which the build says in an advisory line, and it is never an error:
+   configuring the adapter inline is legal app code and must build.
+
+`app/adapter.js` is therefore an optimization and an organizing convention, never
+a requirement.
+
 **Misconfiguration is loud in dev.** At PuzzleApp construction, a registered
 model with a truthy `static adapter` while no capability was passed produces a
 dev-only warning naming the model and the fix ("pass `adapter` from
@@ -146,6 +173,15 @@ merely to select a different URL or payload shape.
 - **A D89 scan/define gate** — requires detecting adapter config inside opaque
   script bytes; D89 rejected script-token scanning, and D96/D98 demonstrated
   the stale-binary and false-positive hazards of scanning for JS-side signals.
+- **Trusting `app/adapter.js` by NAME in a static build** — the file is a
+  convention, not a claim about the config. An app whose config passes something
+  else got pages that installed a different adapter than the markup beside them
+  was rendered with (silently different data), and an app whose `app/adapter.js`
+  is an unrelated helper got a throw on every page blaming `config.adapter`.
+  Comparing identity costs one namespace import in the prerender entry.
+- **Requiring `app/adapter.js` whenever the adapter is configured** — makes a
+  build error out of legal app code, and out of the shape a small app writes
+  first. The capture tier builds it instead and reports what it costs.
 - **Throwing stubs left in core** (`save()` that explains the missing
   capability) — D96 measured ~1 KB of "compiled out" error text shipping in
   every bundle; the bare TypeError plus the dev-time warning covers the same

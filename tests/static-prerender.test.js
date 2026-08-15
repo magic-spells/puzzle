@@ -114,11 +114,56 @@ describe('static prerender (D81)', () => {
 
 		const summary = await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
 
-		expect(summary.skipped).toEqual([{ path: '/user/:id', reason: 'dynamic' }]);
+		expect(summary.skipped).toEqual([
+			{
+				path: '/user/:id',
+				reason: 'dynamic',
+				modules: { views: ['app/views/Home.pzl'], layout: 'app/layouts/Default.pzl' },
+			},
+		]);
 		expect(summary.warnings.some((warning) => warning.includes('shadowed route'))).toBe(false);
 		expect(summary.written.some((page) => page.path === '/user/new')).toBe(true);
 		expect(fs.existsSync(path.join(outDir, 'user', 'new', 'index.html'))).toBe(true);
 		warn.mockRestore();
+	});
+
+	// A skipped route ships no page, but its views are still chain roots for the
+	// dev builder's render-wide walk (D155): omit them and every component the
+	// route shares with a rendered page reads as render-wide, so one component
+	// edit re-renders the whole site.
+	describe('skipped-route chain modules', () => {
+		const dynamicConfig = () => ({
+			target: '#app',
+			routes: [{ path: '/blog/:id', name: 'post', view: Home, layout: Layout }],
+		});
+
+		it('reports them for a skipped static route', async () => {
+			const { skipped } = await prerender(dynamicConfig(), { mode: 'static' });
+			expect(skipped[0].modules).toEqual({
+				views: ['app/views/Home.pzl'],
+				layout: 'app/layouts/Default.pzl',
+			});
+		});
+
+		it('does not report them in hybrid output, which has no per-page graph', async () => {
+			const { skipped } = await prerender(dynamicConfig());
+			expect(skipped[0].modules).toBeUndefined();
+		});
+
+		it('drops a missing stamp instead of failing the build', async () => {
+			// A hand-written view is a build ERROR on a rendered route (CONTRACT 2),
+			// but a skipped one ships no module and must not be held to it.
+			class Unstamped extends PuzzleView {
+				render() {
+					return h('p', {}, [text('unstamped')]);
+				}
+			}
+			const { skipped } = await prerender(
+				{ target: '#app', routes: [{ path: '/blog/:id', name: 'post', view: Unstamped }] },
+				{ mode: 'static' }
+			);
+			expect(skipped[0].modules).toEqual({ views: [], layout: null });
+		});
 	});
 
 	describe('per-page store snapshot capture', () => {
@@ -367,7 +412,11 @@ describe('static prerender (D81)', () => {
 			expect(summary.written.filter((w) => w.path === '/about')).toHaveLength(1);
 			expect(summary.written[0].entry).toBe('_puzzle/about.js');
 			expect(summary.count).toBe(1);
-			expect(summary.skipped).toContainEqual({ path: '/about', reason: 'duplicate' });
+			expect(summary.skipped).toContainEqual({
+				path: '/about',
+				reason: 'duplicate',
+				modules: { views: ['app/views/Second.pzl'], layout: null },
+			});
 			expect(
 				summary.warnings.some(
 					(w) => w.includes('duplicate route "/about"') && w.includes('about/index.html')
@@ -396,7 +445,11 @@ describe('static prerender (D81)', () => {
 
 			expect(summary.count).toBe(1);
 			expect(summary.written[0].path).toBe('/caf%C3%A9');
-			expect(summary.skipped).toContainEqual({ path: '/café', reason: 'duplicate' });
+			expect(summary.skipped).toContainEqual({
+				path: '/café',
+				reason: 'duplicate',
+				modules: { views: ['app/views/Only.pzl'], layout: null },
+			});
 			expect(
 				summary.warnings.some(
 					(w) => w.includes('duplicate route "/café"') && w.includes('"/caf%C3%A9"')
@@ -454,6 +507,54 @@ describe('static prerender (D81)', () => {
 			expect(summary.apiURL).toBe('https://api.example.com');
 			expect(summary.hasFormatters).toBe(true);
 			expect(summary.hasAdapter).toBe(true);
+		});
+
+		// The static build generates each page's entry, so it has to bind the SAME
+		// capability value the render installed. A configured capability holds
+		// functions and cannot cross this summary — only these two facts can, and
+		// the build resolves them into an import.
+		describe('adapter identity facts', () => {
+			const adapterSummary = async (cfgAdapter, options = {}) => {
+				const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-adapter-'));
+				const shellPath = writeShell(outDir);
+				const cfg = { ...staticConfig(), adapter: cfgAdapter };
+				return prerenderToDir(cfg, { outDir, shellPath, mode: 'static', ...options });
+			};
+
+			it('reports the bare capability as unconfigured', async () => {
+				const summary = await adapterSummary(adapter);
+				expect(summary.hasAdapter).toBe(true);
+				expect(summary.adapterConfigured).toBe(false);
+			});
+
+			it('reports an adapter.defaults() capability as configured', async () => {
+				const summary = await adapterSummary(adapter.defaults({}));
+				expect(summary.adapterConfigured).toBe(true);
+			});
+
+			it('reports no conventional module as null, not false', async () => {
+				expect((await adapterSummary(adapter.defaults({}))).adapterModuleMatches).toBeNull();
+			});
+
+			it('matches a module that IS the configured capability', async () => {
+				const configured = adapter.defaults({});
+				const summary = await adapterSummary(configured, { adapterModule: configured });
+				expect(summary.adapterModuleMatches).toBe(true);
+			});
+
+			it('does not match a module holding a different capability', async () => {
+				const summary = await adapterSummary(adapter.defaults({}), {
+					adapterModule: adapter.defaults({}),
+				});
+				expect(summary.adapterModuleMatches).toBe(false);
+			});
+
+			it('does not match a module that is not a capability at all', async () => {
+				const summary = await adapterSummary(adapter.defaults({}), {
+					adapterModule: (path) => `/api${path}`,
+				});
+				expect(summary.adapterModuleMatches).toBe(false);
+			});
 		});
 
 		it('leaves a prerender:false page`s target empty + unmarked but still injects scripts', async () => {
