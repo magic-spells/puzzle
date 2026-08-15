@@ -274,6 +274,9 @@ func aliasRuntime(buildOpts *api.BuildOptions, pl *plugin.Plugin, runtime string
 	// The static-pages kernel (mountStatic, D81) — each generated per-page entry
 	// imports it.
 	buildOpts.Alias["@magic-spells/puzzle/static"] = filepath.Join(dir, "static", "index.js")
+	// The test-harness module (mountView/createTestApp) — an app's test files
+	// import it, and a test run inside this repo resolves through this table too.
+	buildOpts.Alias["@magic-spells/puzzle/testing"] = filepath.Join(dir, "testing", "index.js")
 	// The detachable fixtures/mock module (D98) — only the `--fixtures` wrapper
 	// entry imports it. A PUBLISHED app needs no alias at all: the generated
 	// wrapper lives under <appRoot>/.puzzle/, so node_modules resolution walks up

@@ -1,8 +1,11 @@
 package build
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -42,23 +45,68 @@ func configureWithEnv(t *testing.T, runtimeRoot, appRoot string) map[string]stri
 	return opts.Alias
 }
 
+// exportedSpecifiers reads the REPO's package.json "exports" map and returns
+// every specifier an app can import at runtime.
+//
+// Deriving the list beats hand-maintaining one: a hand-written list omits a new
+// subpath exactly when aliasRuntime does, so the two agree and the test passes
+// while the import is broken.
+//
+// Two kinds of export are excluded, both because no alias entry is correct:
+//   - a types-only export (no "default" condition) is erased before bundling.
+//   - the formatters manifest is a plugin-virtual specifier; the plugin's
+//     onResolve claims it before esbuild consults the alias table.
+func exportedSpecifiers(t *testing.T) []string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(repoRoot(t), "package.json"))
+	if err != nil {
+		t.Fatalf("read package.json: %v", err)
+	}
+	var pkg struct {
+		Exports map[string]json.RawMessage `json:"exports"`
+	}
+	if err := json.Unmarshal(raw, &pkg); err != nil {
+		t.Fatalf("parse package.json: %v", err)
+	}
+	if len(pkg.Exports) == 0 {
+		t.Fatal("package.json declares no exports — the fixture for this test is gone")
+	}
+
+	var specs []string
+	for subpath, value := range pkg.Exports {
+		spec := "@magic-spells/puzzle"
+		if subpath != "." {
+			spec += strings.TrimPrefix(subpath, ".")
+		}
+		if spec == plugin.ManifestSpecifier {
+			continue
+		}
+		var conditions map[string]string
+		if err := json.Unmarshal(value, &conditions); err != nil {
+			// A plain-string export target: a real runtime resolution.
+			specs = append(specs, spec)
+			continue
+		}
+		if conditions["default"] == "" {
+			continue // types-only, e.g. ./puzzle-env
+		}
+		specs = append(specs, spec)
+	}
+	sort.Strings(specs)
+	return specs
+}
+
 // The bare specifier and every subpath export must point INTO the named
 // checkout. A partial fan-out is the dangerous case: the app would bundle a
-// working-tree core alongside a published /adapter or /router-modes.
+// working-tree core alongside a published /adapter or /router-modes — or, when
+// a subpath is missing entirely, fail to resolve at all, since the bare alias
+// names a FILE and esbuild would ask for index.js/testing.
 func TestRuntimeEnvAliasesEverySubpath(t *testing.T) {
 	runtimeRoot := writeFakeRuntime(t)
 	alias := configureWithEnv(t, runtimeRoot, t.TempDir())
 
 	want := filepath.Join(runtimeRoot, "client-runtime")
-	for _, spec := range []string{
-		"@magic-spells/puzzle",
-		"@magic-spells/puzzle/adapter",
-		"@magic-spells/puzzle/morph",
-		"@magic-spells/puzzle/router-modes",
-		"@magic-spells/puzzle/ssg",
-		"@magic-spells/puzzle/static",
-		"@magic-spells/puzzle/fixtures",
-	} {
+	for _, spec := range exportedSpecifiers(t) {
 		got, ok := alias[spec]
 		if !ok {
 			t.Errorf("%s was not aliased — it would resolve through node_modules instead", spec)
