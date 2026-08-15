@@ -475,18 +475,30 @@ export class Router {
 		// history-mode app stops shipping code it never runs. Fail fast and name the
 		// import — silently ignoring 'hash' would route the whole app wrong.
 		if (mode != null) {
+			const modesImport =
+				" — history routing is the default (omit it); for hash or memory routing import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes' and pass e.g. routerMode: hashRouter()";
 			if (typeof mode !== 'object' || typeof mode.create !== 'function') {
-				throw new Error(
-					`[puzzle] routerMode must be a mode object, not ${
-						typeof mode === 'string' ? `the string "${mode}"` : `a ${typeof mode}`
-					} — history routing is the default (omit it); for hash or memory routing ` +
-						"import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes' " +
-						'and pass e.g. routerMode: hashRouter()'
-				);
+				// 'object' is the only typeof here that takes 'an' (strings are named
+				// outright, and number/boolean/function/symbol/bigint all take 'a').
+				const described =
+					typeof mode === 'string'
+						? `the string "${mode}"`
+						: typeof mode === 'object'
+							? 'an object with no create() function'
+							: `a ${typeof mode}`;
+				throw new Error(`[puzzle] routerMode must be a mode object, not ${described}${modesImport}`);
 			}
 			// One instance PER ROUTER: a mode object holding entry state (memory's
 			// stack) must never be shared by two Routers built from one descriptor.
 			this.#mode = mode.create();
+			// A descriptor that builds nothing must not pass: #mode stays null, and a
+			// null #mode reads as HISTORY everywhere — the exact silent wrong-routing
+			// this validation exists to prevent, only reached by a duck-typed object.
+			if (!this.#mode) {
+				throw new Error(
+					`[puzzle] routerMode ${JSON.stringify(mode.name)} create() returned nothing${modesImport}`
+				);
+			}
 		}
 		// transitionMode validation mirrors the mode throw above (same config-error
 		// posture, D56): only the two known values are accepted.

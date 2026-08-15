@@ -399,6 +399,13 @@ const hashMode: RouterMode = hashRouter();
 const memoryMode: RouterMode = memoryRouter({ initialPath: '/about' });
 void memoryRouter(); // options are optional; initialPath defaults to '/'
 
+// A mode is only ever a factory's return value. A hand-written descriptor has
+// the right shape but cannot build the instance the Router needs, so the brand
+// rejects it at compile time rather than at `new Router(...)`.
+// @ts-expect-error a structural look-alike is not a RouterMode.
+const forgedMode: RouterMode = { name: 'hash', create: () => ({}) };
+void forgedMode;
+
 const hashApp = new PuzzleApp({ target: '#app', routes, routerMode: hashMode });
 const memoryApp = new PuzzleApp({
 	target: '#app',

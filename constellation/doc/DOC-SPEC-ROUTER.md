@@ -123,7 +123,9 @@ new PuzzleApp({ routerMode: memoryRouter({ initialPath: '/about' }) });
 - **`hashRouter()`** → the route lives in `location.hash`; the pathname is left alone.
 - **`memoryRouter(options)`** (v1.11, D42) → the route lives entirely in router state; `location` and `history` are never read or written — see below.
 
-A mode **string** (`'hash'`, `'memory'`, `'history'`) and any other non-mode value are a **constructor throw** naming the import (fail-fast, like the route-shape throws). `routerMode` passes straight through to `new Router(routes, { mode })`, which builds one mode instance per Router — a descriptor may be reused without two routers sharing entry state.
+A mode **string** (`'hash'`, `'memory'`, `'history'`) is a **constructor throw** naming the import (fail-fast, like the route-shape throws). `routerMode` passes straight through to `new Router(routes, { mode })`, which builds one mode instance per Router — a descriptor may be reused without two routers sharing entry state.
+
+Validation is by shape, in two steps: a value that is not an object with a callable `create` throws, and so does one whose `create()` yields nothing. The second check matters because an unbuilt mode leaves the Router with no mode at all, which reads as history routing everywhere — a wrong app that starts cleanly, which is the failure the throw exists to prevent. Typed apps get this earlier: `RouterMode` is branded, so only a factory's return value type-checks and a hand-written look-alike is a compile error. Duck-typed modes are not a supported extension point; the members are an internal contract between the mode module and the Router.
 
 **Memory mode (v1.11, D42).** For tests (no jsdom history gymnastics) and embedded/iframe apps that must not touch the host page's URL. An in-memory entry stack replaces `history`: `push()` truncates forward entries and appends (browser semantics); `router.go(n)`/`back()`/`forward()` (§9) move the stack index and run the pipeline as a pop. The full D19/D28/D30 pipeline — atomic commit, cancellation, sequential transitions, nested chains — runs unchanged. Differences, all deliberate:
 
