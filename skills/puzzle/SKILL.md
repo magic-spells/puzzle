@@ -231,12 +231,12 @@ Form controls bind themselves — write NO input handler:
 
 `app/routes.js` exports an array of `{ path, name, view, layout, guard, meta, children }`.
 
-- **Router mode** (puzzle ≥ 0.6.0): history routing is the default — omit
+- **Router mode** (puzzle ≥ 0.6.0): path routing is the default — omit
   `routerMode` entirely. Hash and memory routing are imported factories:
   `import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes'`,
   then `routerMode: hashRouter()` or `memoryRouter({ initialPath: '/' })`. The
   strings `'hash'`/`'memory'` throw at construction (the error names the
-  import) — history-mode apps ship none of the other modes' code.
+  import) — path-mode apps ship none of the other modes' code.
 - Nested routes: `children` with **relative** paths render at the parent view's
   `<Slot/>`; `layout` is top-level-only; params merge down the chain.
 - **Route guards** (puzzle ≥ 0.2.0): `guard: ({ to, from, ctx }) => verdict` on
@@ -294,7 +294,7 @@ Form controls bind themselves — write NO input handler:
   commits nothing.
 - Write template hrefs **path-shaped through the built-in `link` formatter**:
   `href="{ '/todos/' + t.id | link }"`. It emits the mode-appropriate href
-  (plain path in history mode, base-prefixed under `routerBase`, `#/...` in
+  (plain path in path mode, base-prefixed under `routerBase`, `#/...` in
   hash mode); strings not starting with `/` pass through (external URLs,
   `mailto:`, `#anchor`). Hand-written `#/...` hrefs still work in hash mode,
   but piped links are the portable spelling.

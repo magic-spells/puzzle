@@ -46,7 +46,7 @@ second specification. Decision cards hold rationale and git holds chronology.
 - Subpaths: `@magic-spells/puzzle/adapter`, `/morph`, `/router-modes`, `/ssg`,
   `/static`, `/testing`, `/fixtures`, and `/puzzle-env`. (`/router-modes` exports
   `hashRouter()` and `memoryRouter({ initialPath })`, the opt-in router modes —
-  history routing is the inline default and needs no import, D159; `/static` exports `mountStatic`, the
+  path routing is the inline default and needs no import, D159; `/static` exports `mountStatic`, the
   per-page kernel for `output: 'static'`; `/testing` exports the app-author
   test utilities — `mountView`, `createTestApp`, `settled`, `type` (drives a
   two-way-bound control, D147), `installFakeAnimate`, `installFakeObserver`,
@@ -270,7 +270,7 @@ second specification. Decision cards hold rationale and git holds chronology.
   `app.js`, stamping the target `data-puzzle-static` and emitting one per-page
   `dist/_puzzle/<slug>.js` (mountStatic + that page's classes) with shared
   runtime split into `dist/_puzzle/chunks/` and build-time data inlined as a
-  `data-puzzle-static-data` island. Hybrid requires history routing (a
+  `data-puzzle-static-data` island. Hybrid requires path routing (a
   hash/memory router would render home over every prerendered page — the build
   rejects it); static ignores `storage` with a warning (no persistence layer),
   and base-prefixes each page's module href under `routerBase` (D81).

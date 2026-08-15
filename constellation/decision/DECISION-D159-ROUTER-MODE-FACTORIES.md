@@ -16,7 +16,7 @@ verified_at: '2026-08-15T06:05:59.557Z'
 verified_sha: 61a37ae80b9104220be7d20d2ca9a4660cb4ec2f
 ---
 
-Hash and memory routing are opt-in imports, not config strings. History mode
+Hash and memory routing are opt-in imports, not config strings. Path mode
 stays the inline zero-config default; the other two modes ship only in bundles
 that import their factory from `@magic-spells/puzzle/router-modes`:
 
@@ -28,7 +28,7 @@ new PuzzleApp({ routerMode: hashRouter() });
 
 `routerMode` accepts a mode object produced by `hashRouter()` or
 `memoryRouter(options)`; the strings `'hash'`/`'memory'` are a constructor
-error whose message points at the import. History-mode apps — the default and
+error whose message points at the import. Path-mode apps — the default and
 the overwhelmingly common case — ship none of the hash fragment parsing, the
 memory stack, or their commit/click/scroll branches.
 
@@ -54,7 +54,7 @@ object supplies the deviations at the seams the router already owns:
 **Validation is duck-typing plus a build check.** The Router accepts any object
 with a callable `create`, then rejects a `create()` that returns nothing. The
 second check is the one worth naming: an unbuilt mode leaves `#mode` null, and
-a null `#mode` IS history mode at every seam, so a hash app would boot clean
+a null `#mode` IS path mode at every seam, so a hash app would boot clean
 and route wrong — the silent fallback this whole validation exists to prevent.
 Together the two checks cost a few bytes and catch every way a non-mode value
 reaches the constructor. Types carry the rest: `RouterMode` is branded with a
@@ -81,11 +81,11 @@ the bare specifier.
 ## Alternatives rejected
 
 - **`routerMode: 'hash' | 'memory'` config strings** — invisible to the
-  bundler, so every history-mode app shipped both other modes' code (~17
+  bundler, so every path-mode app shipped both other modes' code (~17
   scattered `#mode` branches). This was the status quo being removed.
 - **A D89 scan/define gate** — the signal lives in `app.js` JavaScript, not in
   templates; D89 rejected script-token scanning.
-- **Extracting history mode too, Vue Router-style (`createWebHistory()`
+- **Extracting path mode too, Vue Router-style (`createWebHistory()`
   required)** — punishes the zero-config default with a mandatory import and
   moves bytes without removing any: history is in every bundle regardless.
 - **A full strategy interface for all three modes** — dispatch indirection on

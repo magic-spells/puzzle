@@ -116,7 +116,7 @@ export class PuzzleApp {
 	 *   skips focusing for that navigation, a throw is logged and treated as
 	 *   falsy). Inert in memory mode, like `scrollBehavior`
 	 * @param {object} [config.routerMode] router URL carrier (v1.6, D34; v1.11,
-	 *   D42; opt-in imports since D159): omit for history routing (the pathname —
+	 *   D42; opt-in imports since D159): omit for path routing (the pathname —
 	 *   the default), or pass `hashRouter()` for `location.hash` routing on static
 	 *   hosts / `memoryRouter({ initialPath })` for URL-less routing in router
 	 *   state (tests/embeds), both imported from
@@ -299,7 +299,7 @@ export class PuzzleApp {
 
 		// 4. Router + the shared context object injected into every view. Pass
 		//    `mode` through only when routerMode is set, so the Router's own default
-		//    (history routing, inline) stands otherwise — mirroring how `storage` is
+		//    (path routing, inline) stands otherwise — mirroring how `storage` is
 		//    conditionally passed to the Store above (D34/D159).
 		const routerOptions = { scrollBehavior };
 		// focusBehavior → Router `focusBehavior`, passed through ONLY when set so the

@@ -23,7 +23,7 @@ Round out [[DECISION-D33-ROUTER-SCROLL]] to parity with mature routers: navigati
 ## Scope
 
 **In:**
-- **Anchor targets.** A `#anchor` suffix on a push target refines the default landing: `document.getElementById(anchor)`'s position, top fallback when absent (including a v1.8 skeleton whose target hasn't rendered — never re-applied). Pop's saved position beats the anchor; a custom `scrollBehavior` beats everything (`to.path` carries the anchor). Resolved as a `{ anchor }` sentinel inside the commit, after mount. The history-mode link interceptor now preserves `url.hash`; hash mode carries the anchor in-fragment (`#/docs#faq`), intercepted by the existing `#/` rule.
+- **Anchor targets.** A `#anchor` suffix on a push target refines the default landing: `document.getElementById(anchor)`'s position, top fallback when absent (including a v1.8 skeleton whose target hasn't rendered — never re-applied). Pop's saved position beats the anchor; a custom `scrollBehavior` beats everything (`to.path` carries the anchor). Resolved as a `{ anchor }` sentinel inside the commit, after mount. The path-mode link interceptor now preserves `url.hash`; hash mode carries the anchor in-fragment (`#/docs#faq`), intercepted by the existing `#/` rule.
 - **Persistence.** Every position save mirrors the in-memory map to one `sessionStorage` blob (`__puzzleScroll`); `start()` hydrates from it. Cap 50 entries, oldest evicted; all storage access fail-soft; `scrollBehavior: false` touches no storage. Works because `__puzzleScrollKey` rides in `history.state`, which survives reloads.
 
 **Out (rejected in D41):** an `{ el }` return shape for custom `scrollBehavior` fns; smooth-scroll options; scroll retention inside non-window containers.

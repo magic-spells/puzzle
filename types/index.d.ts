@@ -12,7 +12,7 @@
  * plus the internal/compiler-support exports re-exported from the package root.
  */
 
-// The opt-in router modes (D159) live in their own subpath so history-mode apps
+// The opt-in router modes (D159) live in their own subpath so path-mode apps
 // never bundle them; the config type re-exports the opaque handle they produce.
 import type { RouterMode } from './router-modes.js';
 export type { RouterMode };
@@ -313,7 +313,7 @@ export interface Router {
 	back(): void | Promise<void>;
 	/** Go forward one entry. */
 	forward(): void | Promise<void>;
-	/** Path-shaped route in, mode-encoded href out (`'/x'` history, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (v1.46, D79). */
+	/** Path-shaped route in, mode-encoded href out (`'/x'` path mode, `'#/x'` hash, unchanged memory); strings not starting with `/` pass through (v1.46, D79). */
 	url(path: string): string;
 	/** The current route snapshot, or null before the first navigation. */
 	readonly current: RouteSnapshot | null;
@@ -641,7 +641,7 @@ export interface PuzzleAppConfig {
 	focusBehavior?: false | FocusBehavior;
 	/**
 	 * Router URL carrier (v1.6 D34 / v1.11 D42, opt-in imports since D159). Omit
-	 * for history routing (the pathname — the default), or pass a mode object from
+	 * for path routing (the pathname — the default), or pass a mode object from
 	 * `@magic-spells/puzzle/router-modes`: `hashRouter()` or
 	 * `memoryRouter({ initialPath })`. A mode STRING is a constructor error.
 	 */

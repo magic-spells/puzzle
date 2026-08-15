@@ -119,7 +119,7 @@ describe('Router hash mode — construction & mode parity (D34)', () => {
 
 	it('throws when a mode descriptor builds nothing (D159)', () => {
 		// The silent failure this throw exists to prevent: #mode stays null, which
-		// reads as history mode EVERYWHERE, so a hash app would quietly serve
+		// reads as path mode EVERYWHERE, so a hash app would quietly serve
 		// history routes. A duck-typed descriptor passes the shape check, so the
 		// build result has to be checked too.
 		for (const empty of [null, undefined, 0, '']) {
@@ -132,7 +132,7 @@ describe('Router hash mode — construction & mode parity (D34)', () => {
 		);
 	});
 
-	it('omitting routerMode still selects history routing (D159)', () => {
+	it('omitting routerMode still selects path routing (D159)', () => {
 		// The absent-mode default must NOT be caught by the falsy-create guard:
 		// no mode at all is the zero-config history app, not a broken descriptor.
 		expect(() => new Router([], {})).not.toThrow();
@@ -173,7 +173,7 @@ describe('Router hash mode — construction & mode parity (D34)', () => {
 			{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
 		];
 
-		// omitted → default history mode
+		// omitted → default path mode
 		const el1 = container();
 		const rOmitted = new Router(routes);
 		routers.push(rOmitted);
@@ -185,7 +185,7 @@ describe('Router hash mode — construction & mode parity (D34)', () => {
 
 		history.replaceState({}, '', '/');
 
-		// explicit history mode → identical
+		// explicit path mode → identical
 		const el2 = container();
 		const rHistory = new Router(routes);
 		routers.push(rHistory);

@@ -17,7 +17,7 @@ quiet: `output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
 are greppable; the stricter write-response guard (0.6.0) is not — it depends on
 what your server returns, so it surfaces at runtime on the first save.
 
-**`routerMode` takes a factory, not a string (0.6.0, D159).** History routing is
+**`routerMode` takes a factory, not a string (0.6.0, D159).** Path routing is
 the zero-config default — omit `routerMode` entirely. Hash and memory routing
 are imports:
 
@@ -142,9 +142,9 @@ one is *not* a compile error; it silently builds a different product.
 ### Changed
 
 - **BREAKING: hash and memory routing are imported factories (D159).**
-  `routerMode` no longer takes a string. History routing stays the zero-config
+  `routerMode` no longer takes a string. Path routing stays the zero-config
   default (omit `routerMode`); hash and memory routing are opt-in imports from
-  the new `@magic-spells/puzzle/router-modes` subpath, so a history-mode app
+  the new `@magic-spells/puzzle/router-modes` subpath, so a path-mode app
   no longer ships either mode's code — the fragment parsing, the entry stack,
   and their commit/click/scroll branches all tree-shake away.
 
@@ -724,7 +724,7 @@ The features below all ship in 0.3.1.
   navigation is plain `<a>` page loads. Each page ships a small ES module that
   mounts only its own components over the prerendered markup.
 - **Path-shaped links (D79).** `router.url(path)` encodes a path-shaped route
-  into the mode-appropriate href — `/x` in history mode with the base prefix,
+  into the mode-appropriate href — `/x` in path mode with the base prefix,
   `#/x` in hash mode with an in-fragment base, unchanged in memory mode — and
   the built-in `link` formatter exposes it to templates:
   `href="{ '/collections/' + c.id | link }"`. Closes the last seam where a `#`

@@ -284,7 +284,7 @@ describe('Router scroll — anchor targets (v1.10, D41)', () => {
 		});
 	}
 
-	it('the history-mode interceptor preserves a #fragment in the pushed path', async () => {
+	it('the path-mode interceptor preserves a #fragment in the pushed path', async () => {
 		const { router } = await boot(ROUTES);
 		const pushSpy = vi.spyOn(router, 'push');
 
@@ -299,7 +299,7 @@ describe('Router scroll — anchor targets (v1.10, D41)', () => {
 		await tick();
 	});
 
-	it('a bare #anchor href still falls through to the browser (history mode)', async () => {
+	it('a bare #anchor href still falls through to the browser (path mode)', async () => {
 		const { router } = await boot(ROUTES);
 		const pushSpy = vi.spyOn(router, 'push');
 
@@ -359,7 +359,7 @@ describe('Router scroll — anchor targets (v1.10, D41)', () => {
 		window.dispatchEvent(new PopStateEvent('popstate'));
 		await tick();
 
-		// forward-pop to /docs#faq: the history-mode pop path drops the fragment
+		// forward-pop to /docs#faq: the path-mode pop path drops the fragment
 		// (#currentPath is pathname+search), and even if it carried one, a saved
 		// position beats the anchor — 275 restored, NOT the element's 500.
 		history.replaceState(docsState, '', '/docs#faq');

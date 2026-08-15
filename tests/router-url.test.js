@@ -68,7 +68,7 @@ describe('Router.url() — memory mode (D79)', () => {
 	});
 });
 
-describe('Router.url() — history mode (D79)', () => {
+describe('Router.url() — path mode (D79)', () => {
 	it('no base → path unchanged', () => {
 		const r = new Router([]);
 		expect(r.url('/a/b')).toBe('/a/b');
@@ -137,7 +137,7 @@ describe('built-in `link` formatter (D79)', () => {
 		expect(typeof app.formatters.getAll().link).toBe('function');
 	});
 
-	it('history-mode app (default): link(\'/x\') → \'/x\'', async () => {
+	it('path-mode app (default): link(\'/x\') → \'/x\'', async () => {
 		container();
 		const app = make({ target: '#app', routes });
 		await app.mount();

@@ -20,7 +20,7 @@ Part of the Puzzle docs — see [[DOC-SPEC]] for the frozen v1 contract.
 
 Puzzle is SPA-only, and the router is the piece that makes it feel like an application: it maps URLs to views, wraps them in layouts, delivers `:param` segments to `data()`, and keeps the browser history honest. This document covers the full v1 routing surface: route definitions, params, layouts and `<Slot/>`, navigation, and the route lifecycle.
 
-**The router defaults to the HTML5 history API.** In this default (history) mode your server — or `puzzle dev`, which does it for you — must serve `index.html` for every app route, the standard history-API fallback. For static hosts where you can't configure that fallback (GitHub Pages, S3, `file://`), **v1.6 adds opt-in hash routing** (`routerMode: hashRouter()`, D34/D159) which carries the route in `location.hash` instead — no server rewrite needed. See [Hash mode (v1.6)](#hash-mode-v16) below.
+**The router defaults to the HTML5 history API.** In this default (path) mode your server — or `puzzle dev`, which does it for you — must serve `index.html` for every app route, the standard history-API fallback. For static hosts where you can't configure that fallback (GitHub Pages, S3, `file://`), **v1.6 adds opt-in hash routing** (`routerMode: hashRouter()`, D34/D159) which carries the route in `location.hash` instead — no server rewrite needed. See [Hash mode (v1.6)](#hash-mode-v16) below.
 
 ---
 
@@ -556,11 +556,11 @@ const app = new PuzzleApp({
   target: '#app',
   routes,
   models,
-  routerMode: hashRouter(),   // route lives in location.hash; omit for history
+  routerMode: hashRouter(),   // route lives in location.hash; omit for path routing
 });
 ```
 
-The mode is an **imported factory** (D159), not a config string: history routing is the built-in default, and hash/memory routing only enters your bundle when you import it. A leftover `routerMode: 'hash'` string is a constructor throw that names the import.
+The mode is an **imported factory** (D159), not a config string: path routing is the built-in default, and hash/memory routing only enters your bundle when you import it. A leftover `routerMode: 'hash'` string is a constructor throw that names the import.
 
 The URL then looks like `https://host/app/index.html#/user/123?tab=posts` — the pathname stays put and the route (with any query) lives after the `#`.
 
@@ -583,7 +583,7 @@ Change that one config line (and its import) and everything else — views, layo
 <a href="{ '/user/' + user.id | link }">{ user.name }</a>
 ```
 
-The formatter calls `router.url(path)` at render time: history mode renders `/about` (prefixed under a `routerBase`), hash mode renders `#/about`, memory mode leaves it unchanged. Strings not starting with `/` pass through untouched, so external URLs and `mailto:` links can be piped safely (or just not piped). Because the **attribute itself** is rewritten, cmd-click, open-in-new-tab, and copy-link all get the correct URL — something click interception alone could never fix. Switching `routerMode` (or `routerBase`) is then truly a one-line change with zero template edits. `router.url()` is also public for script-land hrefs.
+The formatter calls `router.url(path)` at render time: path mode renders `/about` (prefixed under a `routerBase`), hash mode renders `#/about`, memory mode leaves it unchanged. Strings not starting with `/` pass through untouched, so external URLs and `mailto:` links can be piped safely (or just not piped). Because the **attribute itself** is rewritten, cmd-click, open-in-new-tab, and copy-link all get the correct URL — something click interception alone could never fix. Switching `routerMode` (or `routerBase`) is then truly a one-line change with zero template edits. `router.url()` is also public for script-land hrefs.
 
 How the interceptor treats hrefs in hash mode (unchanged by D79):
 
@@ -615,7 +615,7 @@ const app = new PuzzleApp({
 });
 ```
 
-Everything app-facing is unchanged: route definitions, `push()`, `current.path`, params, nested routes, transitions, and the atomic commit all behave exactly as in history mode. What's different, all deliberately:
+Everything app-facing is unchanged: route definitions, `push()`, `current.path`, params, nested routes, transitions, and the atomic commit all behave exactly as in path mode. What's different, all deliberately:
 
 - **Back/forward is programmatic** — there's no browser chrome, so use `router.back()` / `router.forward()` / `router.go(n)` (below). The router keeps its own entry stack with browser semantics (`push()` after going back truncates the forward entries).
 - **`meta.title` does not set `document.title`** — an embedded widget must not rename the host page's tab.
@@ -628,7 +628,7 @@ Everything app-facing is unchanged: route definitions, `push()`, `current.path`,
 
 ## Base path (v1.19)
 
-**Settled (D51, SPEC §23).** Deploying under a sub-path — `example.com/myapp/…` instead of the domain root — takes one config line. It works in both URL-carrying modes (history and hash) and is inert under memory mode, so the same config runs in tests.
+**Settled (D51, SPEC §23).** Deploying under a sub-path — `example.com/myapp/…` instead of the domain root — takes one config line. It works in both URL-carrying modes (path and hash) and is inert under memory mode, so the same config runs in tests.
 
 ```js
 // app.js
@@ -658,7 +658,7 @@ this.ctx.router.current.path; // '/user/1'
 
 Per mode:
 
-- **History mode** — the URL is `/myapp/user/1`. The click interceptor intercepts only same-origin URLs **under the base** (stripping it before `push()`); a same-origin link *outside* the base falls through to the browser as a real navigation away from the app. Loaded at a pathname outside the base, the router **warns once** and passes the pathname through un-stripped (typically landing on your catch-all) — visible and debuggable, not silent misrouting.
+- **Path mode** — the URL is `/myapp/user/1`. The click interceptor intercepts only same-origin URLs **under the base** (stripping it before `push()`); a same-origin link *outside* the base falls through to the browser as a real navigation away from the app. Loaded at a pathname outside the base, the router **warns once** and passes the pathname through un-stripped (typically landing on your catch-all) — visible and debuggable, not silent misrouting.
 - **Hash mode** — the base rides in-fragment: `#/myapp/user/1`. The [anchor convention](#anchor-targets-v110) composes untouched (`#/myapp/docs#faq` → path `/docs#faq`). With a base set, the exact `#<base>` fragment (→ `/`) and `#<base>/…` fragments are routes; any other `#/…` fragment is left to the browser like a bare in-page anchor.
 - **Memory mode** — there's no URL, so `routerBase` is accepted but **inert** (like `scrollBehavior` there).
 
@@ -689,9 +689,9 @@ The router is available in components as `this.ctx.router` (one of exactly three
 
 | Member | Signature | Description |
 | ------ | --------- | ----------- |
-| `push(path)` | `router.push('/user/123')` | Navigate to `path`, run the route lifecycle, update `document.title` (and managed head tags, v1.50) from `meta` (history/hash modes). |
+| `push(path)` | `router.push('/user/123')` | Navigate to `path`, run the route lifecycle, update `document.title` (and managed head tags, v1.50) from `meta` (path/hash modes). |
 | `replace(path)` (v1.49) | `router.replace('/items?q=cabin')` | Like `push()` — same pipeline, same atomic commit — but **replaces the current history entry** and leaves scroll untouched by default. For URL-backed transient state (see [URL-backed transient state](#url-backed-transient-state-query-hash-and-replace-v149)) — and the redirect verb (auth/guard redirects, post-action redirects). |
-| `go(n)` (v1.11) | `router.go(-2)` | Move through history: delegates to `history.go(n)` in history/hash mode; moves the internal stack in memory mode. Out-of-range `n` is a silent no-op. |
+| `go(n)` (v1.11) | `router.go(-2)` | Move through history: delegates to `history.go(n)` in path/hash mode; moves the internal stack in memory mode. Out-of-range `n` is a silent no-op. |
 | `back()` / `forward()` (v1.11) | `router.back()` | Shorthands for `go(-1)` / `go(1)`. |
 | `url(path)` (v1.46) | `router.url('/about')` | Encode a base-free path as a mode-correct href (`/about`, `#/about`, …). Templates should use the `link` formatter, which calls this. |
 

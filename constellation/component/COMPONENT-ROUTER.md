@@ -25,10 +25,10 @@ notes:
 
 # Router
 
-Route compiler and navigation state machine. HISTORY routing is inline here and
+Route compiler and navigation state machine. PATH routing is inline here and
 is the zero-config default; hash and memory routing are opt-in mode objects an
 app imports from `@magic-spells/puzzle/router-modes` (`router/modes.js`) and
-passes as `mode`, so a history-mode bundle carries neither
+passes as `mode`, so a path-mode bundle carries neither
 ([[DECISION-D159-ROUTER-MODE-FACTORIES]]). A mode string is a constructor throw
 naming the import. Public surface: `start`, `stop`, `push`, `replace` (push's
 no-history-entry sibling — same pipeline, `replaceState`/in-place memory-stack
@@ -38,7 +38,7 @@ href, the render-time inverse of the link interceptor; non-`/` strings pass
 through — D79), and the narrow `setMorphHandler` integration seam.
 
 `url()` is a thin call into the module-level `encodeURL(path, mode, base)`
-(`mode` = the Router's mode instance, or null for history),
+(`mode` = the Router's mode instance, or null for path routing),
 which the module exports alongside `normalizeBase` precisely so the DOM-free
 prerender paths can reuse the *same* encoder without a live Router: the static
 router stub and the hybrid prerender ctx both call it ([[COMPONENT-SSG]]). That
@@ -145,9 +145,9 @@ The morph slot calls `leave(oldRoot)` at out start and awaits its promise before
 destroy; `enter(newRoot, { initial })` runs post-commit/pre-paint. Errors are
 logged and never wedge navigation. Params-only updates do not fire morph hooks.
 
-History/hash modes intercept safe same-origin unmodified links and delegate
+Path/hash modes intercept safe same-origin unmodified links and delegate
 pop/go to browser history. Hash routing keeps app paths base-free inside the
-fragment. `routerBase` prefixes real URLs in history/hash and is inert in
+fragment. `routerBase` prefixes real URLs in path/hash and is inert in
 memory. Memory mode owns an entry stack and has no URL/title/scroll effects.
 
 Scroll defaults to top on push and saved position on pop, with per-entry keys,

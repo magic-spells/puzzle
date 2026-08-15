@@ -1,7 +1,7 @@
 /**
  * Declarations for the `@magic-spells/puzzle/router-modes` subpath (D159).
  *
- * History routing is the Router's built-in default and needs no import. Hash
+ * Path routing is the Router's built-in default and needs no import. Hash
  * (D34) and memory (D42) routing are opt-in factories that live here, so an app
  * that never imports them never bundles them:
  *
@@ -19,13 +19,13 @@ declare const puzzleRouterModeBrand: unique symbol;
 /**
  * A router mode, produced by `hashRouter()` or `memoryRouter()` and passed as
  * `routerMode`. OPAQUE: its members are an internal contract between the mode
- * module and the Router, never app API. Omitting `routerMode` selects history
+ * module and the Router, never app API. Omitting `routerMode` selects path
  * routing; a mode STRING is a constructor error.
  *
  * Branded, so only a value from a factory in this module type-checks. A
  * hand-written `{ name, create }` looks like a mode but is not one — nothing
  * outside this module can build the instance `create()` must return, and the
- * failure it produces (a Router that silently runs as history mode) is exactly
+ * failure it produces (a Router that silently runs as path mode) is exactly
  * what the runtime validation exists to catch.
  */
 export interface RouterMode {

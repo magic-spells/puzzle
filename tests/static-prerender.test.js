@@ -668,7 +668,7 @@ describe('static prerender router facade parity (D81, item B4)', () => {
 
 	it('hybrid prerender router.current is the page snapshot while url() stays unprefixed', async () => {
 		const cfg = { target: '#app', routes: [{ path: '/', name: 'home', view: Linked }] };
-		const { pages } = await prerender(cfg); // hybrid default, history-mode
+		const { pages } = await prerender(cfg); // hybrid default, path-mode
 		expect(pages[0].html).toContain('href="/next"');
 		expect(pages[0].html).toContain('>/</a>'); // current.path === '/', not 'NULL'
 	});
@@ -744,12 +744,12 @@ describe('hybrid × hash/memory guard (D81, item B6)', () => {
 
 	it('hybrid + hash rejects (a hash router would render home over every prerendered page)', async () => {
 		await expect(prerender(cfg(hashRouter()))).rejects.toThrow(
-			/hybrid prerender output requires history routing/
+			/hybrid prerender output requires path routing/
 		);
 	});
 
 	it('hybrid + memory rejects', async () => {
-		await expect(prerender(cfg(memoryRouter()))).rejects.toThrow(/history routing/);
+		await expect(prerender(cfg(memoryRouter()))).rejects.toThrow(/path routing/);
 	});
 
 	it('hybrid + an unset mode (history, the default) is allowed', async () => {
@@ -766,7 +766,7 @@ describe('hybrid × hash/memory guard (D81, item B6)', () => {
 		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-hybrid-hash-'));
 		const shellPath = writeShell(outDir);
 		await expect(prerenderToDir(cfg(hashRouter()), { outDir, shellPath })).rejects.toThrow(
-			/history routing/
+			/path routing/
 		);
 	});
 });

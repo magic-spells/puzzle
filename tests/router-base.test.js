@@ -151,7 +151,7 @@ describe('Router base — normalization (D51)', () => {
 	});
 });
 
-describe('Router base — history mode (D51)', () => {
+describe('Router base — path mode (D51)', () => {
 	it('initial nav at /myapp/user/1 matches /user/:id with a base-free current', async () => {
 		const { router, el } = await bootBase(baseRoutes, '/myapp/user/1');
 		expect(el.querySelector('.user')).not.toBeNull();
@@ -304,7 +304,7 @@ describe('Router base — hash mode (D51)', () => {
 		// Regression (Fix 3): '#' + base + '?...' with no trailing slash matched neither
 		// the exact-base nor base+'/' branch, so #currentPath returned null and start()
 		// fell back to '/', dropping the query. It must route the app root WITH the query,
-		// mirroring history mode (pathname === base keeps location.search).
+		// mirroring path mode (pathname === base keeps location.search).
 		const { router, el } = await bootBase(baseRoutes, '/#/myapp?tab=2', '/myapp', {
 			mode: hashRouter(),
 		});

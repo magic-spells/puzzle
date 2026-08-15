@@ -57,7 +57,7 @@ Sub-decisions, each with its rejected alternative:
 - **No document-level side effects at all.** Memory mode registers no popstate
   listener and — deliberately — does **not** set `document.title` from
   `meta.title`: an embedded widget must not rename the host page's tab, and a
-  test asserting title can use history mode. (Rejected: keeping title-setting —
+  test asserting title can use path mode. (Rejected: keeping title-setting —
   it is a document-level side effect exactly like the URL.)
 - **Scroll management is a no-op in memory mode.** `scrollBehavior` is accepted
   but inert (documented). There are no history entries to key restoration off,
@@ -86,7 +86,7 @@ Sub-decisions, each with its rejected alternative:
 - **History-API shim, memory-only navigation methods, title-setting, scroll
   keying, interceptor removal, fixed `'/'` start** — each covered above.
 - **Base-path support (the other half of the old followups card)** — still out;
-  deciding it properly means deciding it for history mode too (which assumes
+  deciding it properly means deciding it for path mode too (which assumes
   root deployment today) — deliberate scope widening for a later amendment.
 
 ## Consequences

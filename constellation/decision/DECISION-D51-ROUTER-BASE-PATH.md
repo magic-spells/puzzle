@@ -34,8 +34,8 @@ URL-carrying modes while route definitions, `push()`, `router.current`, `params`
 `this.route` stay base-free. See [[DOC-SPEC-ROUTER]] §23.
 
 ## Context
-History mode assumed root deployment; D42 deliberately deferred base support because
-deciding it for hash mode meant deciding it for history mode too. The router already
+Path mode assumed root deployment; D42 deliberately deferred base support because
+deciding it for hash mode meant deciding it for path mode too. The router already
 funnels ALL URL contact through three seams: `#currentPath()` (read), the commit's
 pushState (write), and the click interceptor.
 
@@ -54,7 +54,7 @@ pushState (write), and the click interceptor.
 - **App code is base-free; hrefs are not.** `push('/user/1')`, matching, `current`,
   `params`, `this.route` never see the base. But an `<a href>` is a REAL document URL
   — middle-click, copy-link, open-in-new-tab must work — so hrefs carry the base
-  (`href="/myapp/user/1"`, or relative). The history-mode interceptor intercepts only
+  (`href="/myapp/user/1"`, or relative). The path-mode interceptor intercepts only
   same-origin URLs **under the base** (stripping it on push); links outside the base
   fall through to the browser — a real navigation away from the app, which is *more*
   correct than today's intercept-everything. Hash mode mirrors it: with a base set,
@@ -65,7 +65,7 @@ pushState (write), and the click interceptor.
   → no base (default, zero behavior change); a base containing `#` or `?` is a
   constructor throw (config error posture, like unknown mode). Multi-segment bases
   work.
-- **Loaded outside the configured base (history mode):** warn once and pass the
+- **Loaded outside the configured base (path mode):** warn once and pass the
   pathname through un-stripped — typically the catch-all: visible and debuggable, not
   silent misrouting.
 

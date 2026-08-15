@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { STAYS } from './helpers.js';
 
-// examples/stays — history-mode, multi-route (/, /search, /account, …), seeded
+// examples/stays — path-mode, multi-route (/, /search, /account, …), seeded
 // in beforeMount so views render full content on first commit (Home is NOT a
 // <puzzle-skeleton> view). Used for the two scenarios transitions-demo can't
 // cover (it's memory-mode: no URL, no window scroll). The layout + hero hold
-// real <a href> links the history-mode router intercepts. Distinguishing
+// real <a href> links the path-mode router intercepts. Distinguishing
 // headings: Home has "Find your place"; Search has "Search stays".
 
 const searchLink = 'a[href="/search"]';
@@ -18,7 +18,7 @@ test('d. browser back/forward returns to the correct committed route (URL + view
 	await page.goto(STAYS + '/');
 	await expect(page.locator(homeMarker)).toBeVisible();
 
-	// Navigate to Search via a real link; the history-mode router intercepts it.
+	// Navigate to Search via a real link; the path-mode router intercepts it.
 	await page.locator(searchLink).first().click();
 	await expect(page).toHaveURL(/\/search$/);
 	await expect(page.locator(searchMarker)).toBeVisible();

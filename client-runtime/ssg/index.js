@@ -85,18 +85,18 @@ export async function prerender(config, opts = {}) {
 	const mode = opts.mode ?? 'hybrid';
 	const isStatic = mode === 'static';
 
-	// Hybrid output is history-mode ONLY. A hybrid page emits path-shaped files the
+	// Hybrid output is path-mode ONLY. A hybrid page emits path-shaped files the
 	// SPA takes over at navigation zero — but a hash or memory router boots at '/'
 	// and renders the HOME route over whatever prerendered page loaded, so every
 	// deep-linked page would flash home. `routerMode` is PuzzleApp runtime config the
 	// Go build can't inspect, so the guard lives here (throws → fails the build). A
-	// non-history app must use output: 'static' (no router) instead.
+	// non-path app must use output: 'static' (no router) instead.
 	if (!isStatic && config.routerMode != null) {
 		throw new Error(
-			`[puzzle] hybrid prerender output requires history routing, but this app sets ` +
+			`[puzzle] hybrid prerender output requires path routing, but this app sets ` +
 				`routerMode (${describeRouterMode(config.routerMode)}) — a hash/memory router boots ` +
 				`at "/" and would render the home route over every prerendered page. Use ` +
-				`output: 'static' for a non-history app, or drop routerMode (history is the default).`
+				`output: 'static' for a non-path app, or drop routerMode (path routing is the default).`
 		);
 	}
 
@@ -173,7 +173,7 @@ export async function prerender(config, opts = {}) {
 			// — a broken href for crawlers, no-JS visitors, and anyone clicking before
 			// takeover. Shadow url() with HISTORY encoding over the app's real base,
 			// through the same encoder Router.url() and the static stub use: hybrid
-			// output is history-only by construction (the guard above refuses anything
+			// output is path-only by construction (the guard above refuses anything
 			// else). The compiled route table stays the real memory Router the takeover
 			// expects.
 			const base = normalizeBase(config.routerBase);
@@ -724,7 +724,7 @@ export function enumerateRoutes(routes) {
  */
 function describeRouterMode(mode) {
 	if (typeof mode === 'string') return `the string "${mode}"`;
-	return mode?.name ? `${mode.name} routing` : 'a non-history mode';
+	return mode?.name ? `${mode.name} routing` : 'a non-path mode';
 }
 
 /** Whether any route definition at any depth declares a guard. */

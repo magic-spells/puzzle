@@ -54,7 +54,7 @@ npm install -D @magic-spells/puzzle
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath (local-only apps ship none of it)
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
-- **Nested routing** with view slots — history by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
+- **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter
 - **Virtual DOM** with efficient diffing and pk-aware list keying
 - **Built-in view & component animations** (Web Animations API), including visibility-triggered enters and app lifecycle hooks
 - **Route transitions**: sequential by default; overlapping cross-fades and shared-element morphs *(experimental — see below)*
