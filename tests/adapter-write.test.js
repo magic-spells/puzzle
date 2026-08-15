@@ -269,6 +269,40 @@ describe('save() — 2xx response merge', () => {
 		expect(todo.text).toBe('x');
 		expect(todo._synced).toBe(false);
 	});
+
+	// D158 contract: a write response is a pk-bearing JSON object or nothing.
+	// A 2xx body that is neither is a broken transport, not a silent success —
+	// the record stays un-synced, so the caller sees the failure and a retry
+	// re-sends the create rather than the record drifting as "saved".
+	it('rejects a non-object 2xx body (plain-text "OK") and leaves the record un-synced', async () => {
+		mockFetch({ body: 'OK' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		// NOT a PuzzleAdapterError: the HTTP write succeeded — only the response
+		// shape is unusable — matching the pk-collision guard's reasoning.
+		await expect(todo.save()).rejects.toThrow(/expected a JSON object or nullish response/);
+		expect(todo._synced).toBe(false);
+	});
+
+	it('rejects a 2xx object body carrying no primary key', async () => {
+		mockFetch({ body: { ok: true } });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+
+		await expect(todo.save()).rejects.toThrow(/requires primary key "id"/);
+		expect(todo._synced).toBe(false);
+	});
+
+	it('accepts a JSON null body as the "no echo" response', async () => {
+		mockFetch({ body: 'null' });
+		const store = apiStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'local' });
+
+		await todo.save();
+		expect(todo.text).toBe('local');
+		expect(todo._synced).toBe(true);
+	});
 });
 
 describe('save() — response reconciliation preserves in-flight edits', () => {

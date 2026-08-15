@@ -11,10 +11,11 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Five breaking changes are easy to miss on a multi-version jump. Most fail
-loudly — a compile error, a constructor throw, an unresolvable import. Two are
-quiet; grep for them: `output: 'static'` (renamed, 0.2.0) and `errorContent()`
-(removed, 0.6.0).
+Six breaking changes are easy to miss on a multi-version jump. Most fail
+loudly — a compile error, a constructor throw, an unresolvable import. Three are
+quiet: `output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
+are greppable; the stricter write-response guard (0.6.0) is not — it depends on
+what your server returns, so it surfaces at runtime on the first save.
 
 **`routerMode` takes a factory, not a string (0.6.0, D159).** History routing is
 the zero-config default — omit `routerMode` entirely. Hash and memory routing
@@ -49,6 +50,14 @@ const app = new PuzzleApp({ target: '#app', routes, models, adapter });
 Model `static adapter = { endpoint }` declarations are unchanged.
 `PuzzleAdapterError` moved to the subpath. Without the capability,
 `record.save()` is a plain `TypeError` at call time.
+
+**Write responses are shape-checked (0.6.0, D158).** `create`/`update` must
+resolve to an object carrying the primary key, or to nothing. A 2xx body that
+is neither — `"OK"`, `true`, `[]`, `{}`, or an object with no primary key —
+now throws where 0.5.0 marked the record synced, and the un-synced record means
+a retried `save()` re-POSTs. If your server acknowledges writes without echoing
+the record, write a `create`/`update` function that returns nothing (or unwraps
+the envelope); see the 0.6.0 entry for both shapes.
 
 **Composition markers are capitalized (0.4.0, D134).** Lowercase `<children/>`
 and `<slot>` are no longer valid in any position:
@@ -192,8 +201,8 @@ one is *not* a compile error; it silently builds a different product.
   The supplied `fetch` has the standard fetch signature and returns a normal
   `Response`; it additionally runs `beforeRequest` and uses the fixtures mock
   seam. Returning that `Response` from a framework verb asks Puzzle to check
-  status, parse JSON, and apply the normal response guards. Returning parsed
-  data is equally valid. `store.loadAll(type, options)` forwards pagination
+  status, parse JSON, and apply the response guards described in the write-body
+  note below. Returning parsed data is equally valid. `store.loadAll(type, options)` forwards pagination
   options to an author transport; the endpoint-generated default serializes
   them as a query string, and separate pages accumulate in the normalized
   store. `store.adapter(type)` exposes the same functions with enhanced fetch
@@ -219,8 +228,41 @@ one is *not* a compile error; it silently builds a different product.
   ```
 
   Each `defaults()` call returns a new frozen capability scoped to its app, so
-  multiple apps on one page can use different dialects. The normal Response
-  handling, shape guards, `beforeRequest`, and fixtures seam apply unchanged.
+  multiple apps on one page can use different dialects. `beforeRequest` and the
+  fixtures seam apply to defaults exactly as they do to per-model functions, and
+  their returns pass through the same Response handling and shape guards.
+
+- **BREAKING: a write response must be a pk-bearing object or nothing (D158).**
+  `create` and `update` return "the server's record, primary key included" or
+  nullish for "no echo" — that contract is now enforced. A 2xx body that is
+  neither (a primitive such as `"OK"` or `true`, an array, `{}`, or an object
+  missing the primary key) throws instead of being accepted. 0.5.0 accepted
+  those bodies and marked the record synced.
+
+  This matters most on `create`: because the throw leaves the record un-synced,
+  the write is reported as failed and a retried `save()` dispatches **`POST`
+  again**, duplicating the server row. A server that answers writes with a bare
+  `"OK"`, a `{ "data": … }` envelope, or an id-less acknowledgement needs one of:
+
+  ```js
+  // Return nothing — "no echo", keep local state and mark synced.
+  static adapter = {
+    endpoint: '/api/todos',
+    async create(fetch, record) {
+      await fetch('/api/todos', { method: 'POST', body: JSON.stringify(record.toJSON()) });
+    },
+  };
+
+  // Or unwrap the envelope so the record (with its pk) is what you return.
+  async create(fetch, record) {
+    const res = await fetch('/api/todos', { method: 'POST', body: JSON.stringify(record.toJSON()) });
+    return (await res.json()).data;
+  }
+  ```
+
+  Returning nothing is the right answer whenever the server's body is not the
+  record; a server-assigned id must arrive in a returned object, since that is
+  how the store adopts it. `loadAll`/`loadOne` shape guards are unchanged.
 
 - **Faster builds and dev rebuilds (D151–D156).** Emitted bytes and failure
   contracts are unchanged — builds still stage and atomically swap `dist/`,

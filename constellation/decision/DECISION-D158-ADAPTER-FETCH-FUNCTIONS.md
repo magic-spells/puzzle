@@ -14,15 +14,18 @@ connections:
 notes:
   - kind: gotcha
     text: >-
-      Verified behavior change vs 0.5.0 (2026-08-14 review, undocumented): the save-response guard
-      (adapter.js ~508-517) now throws for any non-nullish non-object 2xx body (text/plain "OK",
-      JSON `true`), where 0.5.0 kept local state and marked synced. Because the HTTP write already
-      succeeded but _synced stays false, the NEXT save() dispatches create again and duplicates the
-      server row. May be intended ("pk required … nullish for 'no echo'", this card line ~73) but it
-      is a silent migration hazard: not in the CHANGELOG, and adapter.js ~569-575 still carries the
-      now-unreachable `responsePk == null && pk in body` branch from the old contract (dead code).
-      Either restore non-object-body tolerance or document it as breaking and delete the dead branch
-      — Cory's call.
+      The write-response guards are STRICTER than 0.5.0, which accepted a non-object 2xx body
+      (text/plain "OK", JSON `true`) and marked the record synced. Enforcing the contract is the
+      decision; the migration hazard is real and is CHANGELOG'd as breaking. The shape to remember:
+      a rejected write leaves _synced false, so on create the row exists server-side while the next
+      save() dispatches POST again and duplicates it. A server that acknowledges without echoing the
+      record needs a create/update function that returns nothing.
+  - kind: gotcha
+    text: >-
+      adapter.js `responsePk == null && pk in body` (~line 569) looks unreachable after the pk guard
+      above it and is NOT — the guard and this branch read body[pk] separately, so an unstable
+      accessor (a getter returning a value then null) reaches it. It protects pk-index integrity
+      (a blanked local pk while the type map still keys the old id). Do not delete it.
 ---
 
 A model's `static adapter` object is a set of **fetch functions** the store
@@ -93,6 +96,23 @@ before applying the normal shape guards. That makes the
 "nonstandard URL, standard payload" case a one-liner
 (`loadAll: (fetch) => fetch('/v2/posts')`) with no helper API — the
 convenience is carried by the platform type, not a new vocabulary.
+
+**Write returns are enforced, not coerced.** `create`/`update` must resolve to
+an object carrying the primary key, or to nullish for "no echo". Any other 2xx
+body — a primitive, an array, `{}`, or an object missing the pk — throws;
+Puzzle does not guess which of "the server echoed nothing useful" and "the
+server echoed a record" it is looking at. The alternative is worse than a
+throw: silently treating an unusable body as success flips `_synced` on a
+record the store never reconciled, and a server-assigned id arriving in a shape
+Puzzle skipped is a record permanently keyed under its client-side id. Because
+the throw leaves `_synced` false, the write is reported failed and a retried
+`save()` re-dispatches `create` — correct when the POST failed, a duplicate row
+when it succeeded and only the body was unusable. That is the accepted cost of
+enforcement, and it is why the fix for such a server is a `create` function
+returning nothing rather than a tolerated body shape. These throw plain
+`Error`, not `PuzzleAdapterError`: the HTTP conversation succeeded, so status
+and response-body fields would be meaningless — the same reasoning the
+pk-collision guard states inline.
 
 **Returns feed the framework-owned pipeline, which no adapter reimplements:**
 upsert by primary key, D125 revision guards protecting in-flight edits, the
