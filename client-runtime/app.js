@@ -219,6 +219,13 @@ export class PuzzleApp {
 		// proceeds exactly as before — non-SSG behavior is untouched.
 		if (typeof document === 'undefined') return this;
 
+		// A static page's per-page bundle imports `app/app.js` when the app
+		// configured its adapter inline (D157 capture tier): the only thing it wants
+		// from that module is `app.config`, and booting the SPA over the prerendered
+		// page is exactly what static output must not do. The define is false in
+		// every other pass, so this folds away and costs no shipped bytes.
+		if (typeof __PUZZLE_CAPTURE__ !== 'undefined' && __PUZZLE_CAPTURE__) return this;
+
 		// Claim this attempt's mount generation (see the #mountEpoch field comment).
 		// AFTER the early-outs above — an already-mounted no-op must not burn the
 		// epoch of the in-flight mount it is declining to redo — and before any

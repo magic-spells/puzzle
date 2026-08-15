@@ -32,7 +32,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { installAdapterCapability } from '../capabilities.js';
+import { installAdapterCapability, isConfiguredAdapter } from '../capabilities.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { Router, encodeURL, normalizeBase } from '../router/router.js';
@@ -125,6 +125,17 @@ export async function prerender(config, opts = {}) {
 
 	const pages = [];
 	const skipped = [];
+	// A skipped route reports its chain modules in static mode (D155): it is never
+	// rendered, but its views still hang off the route table in the prerender
+	// graph, and the render-wide walk cuts at chain roots. Omit them and the walk
+	// descends THROUGH the skipped route, marking every component it shares with a
+	// rendered page render-wide — which turns one component edit into a full
+	// re-render of the site. `/blog` beside `/blog/:id` is the everyday shape.
+	const skip = (routePath, reason, entry) => {
+		const record = { path: routePath, reason };
+		if (isStatic && entry) record.modules = collectSkippedModules(entry);
+		skipped.push(record);
+	};
 	const warnings = [];
 	let hasCatchAll = false;
 	let builtContext = false;
@@ -216,7 +227,7 @@ export async function prerender(config, opts = {}) {
 		const underCatchAll = !isCatchAll && chain[0].path === '*';
 		const entryIndex = isCatchAll || underCatchAll ? null : compiledEntryIndex++;
 		if (underCatchAll) {
-			skipped.push({ path: fullPath, reason: 'unreachable' });
+			skip(fullPath, 'unreachable', entry);
 			warnings.push(
 				`[puzzle] skipped route "${fullPath}" — it is a child of the catch-all route ` +
 					"'*', which the Router matches as a single leaf, so this path is " +
@@ -229,7 +240,7 @@ export async function prerender(config, opts = {}) {
 		// other segment are regex-escaped literal text by the Router and therefore
 		// produce ordinary prerenderable static paths here.
 		if (!isCatchAll && fullPath.split('/').some(isDynamicSegment)) {
-			skipped.push({ path: fullPath, reason: 'dynamic' });
+			skip(fullPath, 'dynamic', entry);
 			warnings.push(
 				`[puzzle] skipped dynamic route "${fullPath}" — SSG v1 renders static paths only ` +
 					'(a :param route needs a staticPaths() hook, a post-v1 follow-up)'
@@ -243,7 +254,7 @@ export async function prerender(config, opts = {}) {
 		// keeps the page.
 		if (!isStatic && shadowedByIndex.has(entryIndex)) {
 			const shadowedBy = shadowedByIndex.get(entryIndex);
-			skipped.push({ path: fullPath, reason: 'shadowed' });
+			skip(fullPath, 'shadowed', entry);
 			warnings.push(
 				`[puzzle] skipped shadowed route "${fullPath}" — earlier route "${shadowedBy}" ` +
 					'matches it first in hybrid output (routes match in declaration order)'
@@ -352,11 +363,18 @@ export async function prerender(config, opts = {}) {
  *   paths (see prerender). Every other page is reported in `written` with
  *   `reused: true` and NO file is written for it; the caller must place the
  *   previous render's file at the reported `file` path.
+ * @param {*} [options.adapterModule] static mode only — the default export of the
+ *   app's conventional `app/adapter.js`, passed by the Go build when that file
+ *   exists so the summary can report whether it IS `config.adapter`. Present but
+ *   `undefined` is a real answer (a module that exports no default); the KEY's
+ *   absence is what means "no such module".
  * @returns {Promise<{ outDir: string, written: Array<object>, skipped: Array<{path,reason}>,
  *   warnings: string[], count: number, mode?: string, target?: string,
- *   apiURL?: string|null, hasFormatters?: boolean, hasAdapter?: boolean }>}
+ *   apiURL?: string|null, hasFormatters?: boolean, hasAdapter?: boolean,
+ *   adapterConfigured?: boolean, adapterModuleMatches?: boolean|null }>}
  */
-export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid', only } = {}) {
+export async function prerenderToDir(config, options = {}) {
+	const { outDir, shellPath, mode = 'hybrid', only } = options;
 	if (!outDir) throw new Error('[puzzle] prerenderToDir requires an outDir');
 	if (!shellPath) throw new Error('[puzzle] prerenderToDir requires a shellPath');
 
@@ -373,7 +391,17 @@ export async function prerenderToDir(config, { outDir, shellPath, mode = 'hybrid
 	const { pages, skipped, warnings } = await prerender(config, { mode, routeRouter, only });
 
 	if (mode === 'static') {
-		return writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings });
+		return writeStaticDir({
+			config,
+			outDir,
+			shell,
+			targetId,
+			pages,
+			skipped,
+			warnings,
+			adapterModuleMatches:
+				'adapterModule' in options ? options.adapterModule === config.adapter : null,
+		});
 	}
 
 	// Claim the output paths FIRST (paths only, no HTML). Two route paths can
@@ -468,8 +496,9 @@ async function writeFiles(files) {
  * The static-mode (D81) writer: strip the app-bundle tag once, then per page compute
  * a collision-free slug, inject the static shell (content + `data-puzzle-static`
  * marker, inline JSON data island, per-page module script), and collect the extended
- * summary the Go static build consumes (per page: `entry`, `modules`, `route`; top
- * level: `mode`, `target`, `apiURL`, `hasFormatters`, `hasAdapter`).
+ * summary the Go static build consumes (per page: `entry`, `modules`, `route`; per
+ * skipped route: `modules`; top level: `mode`, `target`, `apiURL`, `hasFormatters`,
+ * `hasAdapter`, `adapterConfigured`, `adapterModuleMatches`).
  *
  * A page whose output file an earlier page already claimed is skipped here with
  * reason `'duplicate'` rather than overwriting it (see claimedPaths below).
@@ -479,7 +508,16 @@ async function writeFiles(files) {
  * `reused: true` — but no file is produced for it. Everything order-dependent
  * therefore lands identically to a full render; only the writes differ.
  */
-async function writeStaticDir({ config, outDir, shell, targetId, pages, skipped, warnings }) {
+async function writeStaticDir({
+	config,
+	outDir,
+	shell,
+	targetId,
+	pages,
+	skipped,
+	warnings,
+	adapterModuleMatches = null,
+}) {
 	// The app-bundle tag is stripped once (the shell is identical for every page) so
 	// a missing tag warns once, not per page.
 	const { shell: baseShell, found } = stripAppBundle(shell);
@@ -528,7 +566,7 @@ async function writeStaticDir({ config, outDir, shell, targetId, pages, skipped,
 		for (const page of pages) {
 			const outPath = pageOutputPath(outDir, page.path);
 			if (claimedPaths.has(outPath)) {
-				skipped.push({ path: page.path, reason: 'duplicate' });
+				skipped.push({ path: page.path, reason: 'duplicate', modules: page.modules });
 				warnings.push(
 					`[puzzle] skipped duplicate route "${page.path}" — earlier route ` +
 						`"${claimedPaths.get(outPath)}" already writes ${path.relative(outDir, outPath)} ` +
@@ -590,6 +628,12 @@ async function writeStaticDir({ config, outDir, shell, targetId, pages, skipped,
 		hasModels: Object.keys(config.models ?? {}).length > 0,
 		hasFormatters: Object.keys(config.formatters ?? {}).length > 0,
 		hasAdapter: Boolean(config.adapter),
+		// The two facts that tell the Go build WHICH adapter value a page must
+		// install. A configured capability holds functions, so it cannot cross this
+		// summary — only its identity can, and the build resolves that into an
+		// import (see the three-tier entry generation in prerender_pages.go).
+		adapterConfigured: isConfiguredAdapter(config.adapter),
+		adapterModuleMatches,
 	};
 }
 
@@ -736,6 +780,22 @@ function collectModules(entry) {
 		views.push(requireStamp(node.view, entry.fullPath, 'view'));
 	}
 	const layout = entry.layout ? requireStamp(entry.layout, entry.fullPath, 'layout') : null;
+	return { views, layout };
+}
+
+/**
+ * The same stamps for a route the render SKIPPED, which ships no per-page module
+ * and therefore cannot be held to CONTRACT 2: a missing stamp is dropped rather
+ * than thrown on. The static dev builder reads these as extra chain roots, so a
+ * root it never learns about only costs conservatism (the walk descends past it
+ * and marks more of the graph render-wide), never correctness.
+ */
+function collectSkippedModules(entry) {
+	const views = [];
+	for (const node of entry.chain) {
+		if (typeof node.view?.__pzlModule === 'string') views.push(node.view.__pzlModule);
+	}
+	const layout = typeof entry.layout?.__pzlModule === 'string' ? entry.layout.__pzlModule : null;
 	return { views, layout };
 }
 

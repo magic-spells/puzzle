@@ -30,6 +30,13 @@ type bundleFlags struct {
 	// node-platform prerender bundle, which GENERATES the markup and never
 	// adopts it.
 	Takeover bool
+	// Capture selects __PUZZLE_CAPTURE__: "a PuzzleApp in this bundle exists to be
+	// READ, not to boot". True for the true-static per-page bundles only, whose
+	// generated entry may import `app/app.js` purely to reach `app.config` (the
+	// D157 capture tier). A static page mounts through mountStatic, so a top-level
+	// `app.mount()` in the app entry has to be inert there; everywhere else the
+	// define is false and PuzzleApp.mount()'s guard folds away entirely.
+	Capture bool
 	// Splitting enables esbuild code splitting for the browser bundle: a dynamic
 	// import() emits a lazy chunk under chunks/ instead of being inlined into
 	// app.js. Opt-in per app (build.splitting in puzzle.config.js).
@@ -94,7 +101,8 @@ func newBundleOptions(absRoot, entry, outdir string, pl *plugin.Plugin, flags bu
 // bundleDefines builds the literal define map. The __PUZZLE_HAS_* values are
 // SOURCE facts: plugin.ScanUsage reads templates for flip, Portal, and raw-block
 // usage.
-// __PUZZLE_DEV__ and __PUZZLE_TAKEOVER__ are BUILD facts carried by bundleFlags.
+// __PUZZLE_DEV__, __PUZZLE_TAKEOVER__ and __PUZZLE_CAPTURE__ are BUILD facts
+// carried by bundleFlags.
 //
 // __PUZZLE_TAKEOVER__ = false strips the router's three `data-puzzle-ssg`
 // branches, which drops the last importer of ssg/preload.js so the module
@@ -115,6 +123,7 @@ func bundleDefines(pl *plugin.Plugin, flags bundleFlags) map[string]string {
 		"__PUZZLE_HAS_PORTAL__": strconv.FormatBool(f.Portal),
 		"__PUZZLE_HAS_RAW_AT__": strconv.FormatBool(f.RawAt),
 		"__PUZZLE_TAKEOVER__":   strconv.FormatBool(flags.Takeover),
+		"__PUZZLE_CAPTURE__":    strconv.FormatBool(flags.Capture),
 	}
 }
 

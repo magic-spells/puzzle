@@ -153,6 +153,13 @@ import adapter from './adapter.js';
 new PuzzleApp({ target: '#app', routes, models, adapter });
 ```
 
+Writing the dialect inline in `app.js` is equally supported. The one place the
+split is visible is `output: 'static'`, where each page's generated entry has to
+import the exact capability value the prerender used: `app/adapter.js` is a
+module a page can import on its own, while an inline dialect makes the page
+import the app entry to reach it (D157's three tiers — same behavior, heavier
+pages, and the build says so).
+
 Dispatch precedence, most-specific wins: the model's own function → the app
 default → the endpoint-generated REST transport. App-level functions receive
 `{ type, endpoint }` as a trailing context argument (they serve many models,

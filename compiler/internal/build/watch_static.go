@@ -100,6 +100,12 @@ type StaticWatchBuilder struct {
 	usage   plugin.Usage
 	defined plugin.Features
 
+	// adapterModule is the conventional app/adapter module resolved when the
+	// prerender context was built ("" for none). It is part of that context's
+	// FROZEN stdin, so the contexts are rebuilt when the file appears or
+	// disappears — and only then, since its contents are an ordinary graph input.
+	adapterModule string
+
 	// graph is the reverse dependency graph captured after the last rebuild that
 	// produced both metafiles AND landed in dist/ (route_deps.go). nil means
 	// "render everything".
@@ -284,7 +290,8 @@ func (b *StaticWatchBuilder) buildContexts() error {
 		return fmt.Errorf("puzzle dev: creating esbuild context: %s", ctxErr.Error())
 	}
 
-	preStdin, err := staticPrerenderStdin(b.root)
+	adapterModule := findStaticModule(b.root, "app/adapter.js", "app/adapter.ts")
+	preStdin, err := staticPrerenderStdin(b.root, adapterModule)
 	if err != nil {
 		appCtx.Dispose()
 		return err
@@ -306,6 +313,7 @@ func (b *StaticWatchBuilder) buildContexts() error {
 	b.appCtx, b.preCtx = appCtx, preCtx
 	b.usage = usage
 	b.defined = usage.Features()
+	b.adapterModule = adapterModule
 	// The page context's Defines are frozen too, so it has to go with the others;
 	// the next Rebuild recreates it from its (freshly generated) entry set.
 	b.pageEntries = nil
@@ -368,17 +376,20 @@ func (b *StaticWatchBuilder) rebuild(changed []string, prof *PhaseProfile) error
 	b.cache.Evict(changed)
 	endEvict()
 
-	// Feature defines are frozen into every context. A source edit that turns one
-	// on or off invalidates all three, so rebuild them before doing any work —
-	// still far cheaper than a cold build, and the pathological case (an edit
-	// that flips `flip` usage) is rare.
+	// Feature defines are frozen into every context, and so is the prerender
+	// entry's source — which names the conventional adapter module when one
+	// exists. A source edit that turns a define on or off, or a save that creates
+	// or deletes app/adapter.js, invalidates them, so rebuild before doing any
+	// work — still far cheaper than a cold build, and both cases are rare
+	// (EDITING that file is an ordinary graph input and changes nothing here).
 	endScan := prof.phase("usage scan")
 	usage, err := scanUsageWith(b.root, b.scanner)
 	if err != nil {
 		endScan()
 		return err
 	}
-	if usage.Features() != b.defined {
+	adapterModule := findStaticModule(b.root, "app/adapter.js", "app/adapter.ts")
+	if usage.Features() != b.defined || adapterModule != b.adapterModule {
 		endScan()
 		if err := b.buildContexts(); err != nil {
 			return err
@@ -657,9 +668,14 @@ func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, 
 	// distinction, and going through it is what keeps a symlinked or monorepo
 	// layout from silently producing zero chain roots (which would demote every
 	// rebuild to a full render).
-	chainRoots := make(map[string]bool, len(summary.Written)*2)
-	addChainRoot := func(mod string) {
-		chainRoots[resolvePath(filepath.FromSlash(absModuleImport(b.root, mod)))] = true
+	chainRoots := make(map[string]bool, (len(summary.Written)+len(summary.Skipped))*2)
+	addChainRoots := func(mods staticModules) {
+		for _, mod := range mods.Views {
+			chainRoots[resolvePath(filepath.FromSlash(absModuleImport(b.root, mod)))] = true
+		}
+		if mods.Layout != nil {
+			chainRoots[resolvePath(filepath.FromSlash(absModuleImport(b.root, *mods.Layout)))] = true
+		}
 	}
 	for _, page := range summary.Written {
 		slug, err := slugFromEntry(page.Entry)
@@ -667,12 +683,16 @@ func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, 
 			return
 		}
 		entryRoutes[filepath.Join(entriesDir, slug+".js")] = page.Path
-		for _, mod := range page.Modules.Views {
-			addChainRoot(mod)
-		}
-		if page.Modules.Layout != nil {
-			addChainRoot(*page.Modules.Layout)
-		}
+		addChainRoots(page.Modules)
+	}
+	// A SKIPPED route ships no page and so has no entry to attribute anything to,
+	// but its views hang off the route table just the same. Without them the walk
+	// descends through the skipped route and marks everything below it — including
+	// every component it shares with a rendered page — render-wide, so a `/blog`
+	// index and a dynamic `/blog/:id` sharing a card component would make each save
+	// re-render the whole site.
+	for _, sk := range summary.Skipped {
+		addChainRoots(sk.Modules)
 	}
 	// The page pass anchors AbsWorkingDir to its output tree's parent (the warm
 	// root); the prerender pass sets none, so esbuild resolved its metafile keys
@@ -795,7 +815,10 @@ func (b *StaticWatchBuilder) reusePages(staging string, summary staticSummary) e
 func (b *StaticWatchBuilder) syncPageEntries(summary staticSummary) ([]string, error) {
 	modelsModule := findStaticModule(b.root, "app/models/index.js", "app/models/index.ts")
 	formattersModule := findStaticModule(b.root, "app/formatters.js", "app/formatters.ts")
-	adapterModule := findStaticModule(b.root, "app/adapter.js", "app/adapter.ts")
+	// b.adapterModule, not a fresh resolve: the summary being turned into entries
+	// was produced by a prerender entry built against THAT value, and the identity
+	// answer it reports is only about that module.
+	adapterModule := b.adapterModule
 
 	entriesDir := filepath.Join(b.warm, prerenderDir, "entries")
 	if err := os.MkdirAll(entriesDir, 0o755); err != nil {

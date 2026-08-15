@@ -64,6 +64,13 @@ export interface RouteEntry {
 export interface SkippedRoute {
 	path: string;
 	reason: string;
+	/**
+	 * The route's view/layout `__pzlModule` stamps — static mode only. A skipped
+	 * route ships no page, but its views are still chain roots for the dev
+	 * builder's render-wide walk (D155). A stamp the route does not carry is
+	 * omitted rather than reported as an error.
+	 */
+	modules?: { views: string[]; layout: string | null };
 }
 
 /** The result of `prerender`. */
@@ -113,6 +120,18 @@ export interface PrerenderToDirResult {
 	hasFormatters?: boolean;
 	/** Whether the app passed the adapter capability — static mode only. */
 	hasAdapter?: boolean;
+	/**
+	 * Whether that capability carries app-wide defaults (`adapter.defaults(...)`)
+	 * rather than being the bare export — static mode only. A configured
+	 * capability holds functions, so a page entry cannot re-create it and has to
+	 * import the exact value instead.
+	 */
+	adapterConfigured?: boolean;
+	/**
+	 * Whether `options.adapterModule` IS `config.adapter` — static mode only, and
+	 * `null` when no such module was passed.
+	 */
+	adapterModuleMatches?: boolean | null;
 }
 
 /** Options for `prerenderToDir`. */
@@ -135,6 +154,13 @@ export interface PrerenderToDirOptions {
 	 * render's file at the reported path. Omitted renders everything.
 	 */
 	only?: string[];
+	/**
+	 * Static mode only — the default export of the app's conventional
+	 * `app/adapter.js`, so the summary can report whether it IS `config.adapter`
+	 * (`adapterModuleMatches`). Present but `undefined` is a real answer (a module
+	 * exporting no default); the KEY's absence is what means "no such module".
+	 */
+	adapterModule?: unknown;
 }
 
 /**
