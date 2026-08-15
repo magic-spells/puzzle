@@ -603,6 +603,252 @@ describe('errorView retry', () => {
 		expect(reports.map((r) => r.info.phase)).toEqual(['mount', 'mount']);
 	});
 
+	it('holds the face and stays pressable when a guard BLOCKS the retried navigation', async () => {
+		let attempts = 0;
+		let guardOk = true;
+		const errorViews = [];
+		const reports = [];
+		const ErrorView = errorViewClass(errorViews);
+
+		class Page extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				attempts++;
+			}
+			async data() {
+				return {};
+			}
+			render() {
+				if (attempts === 1) throw new Error('first failure');
+				return h('span', { class: 'page' }, [text('page ok')]);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/', view: Page, guard: () => guardOk }],
+			errorView: ErrorView,
+			onError(error, info) {
+				reports.push({ error, info });
+			},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.find('.app-error')).not.toBeNull();
+
+		// The session expired between the failure and the press: the guard refuses the
+		// retried navigation, which never constructs a view and never commits.
+		guardOk = false;
+		const retry = errorViews[0].props.retry;
+		await retry();
+		await flush();
+		expect(app.find('.app-error')).not.toBeNull();
+		expect(app.container.innerHTML).not.toBe('<!--puzzle-->');
+		expect(errorViews).toHaveLength(1);
+		expect(errorViews[0].isDestroyed).toBe(false);
+		expect(attempts).toBe(1);
+		expect(reports).toHaveLength(1);
+
+		// A blocked retry changed nothing, so the same face must still be pressable.
+		guardOk = true;
+		await retry();
+		await flush();
+		expect(app.find('.page').textContent).toBe('page ok');
+		expect(app.find('.app-error')).toBeNull();
+		expect(errorViews[0].isDestroyed).toBe(true);
+		expect(attempts).toBe(2);
+	});
+
+	it('holds the face and stays pressable when a guard REDIRECTS the retry nowhere', async () => {
+		let attempts = 0;
+		let redirect = false;
+		const errorViews = [];
+		const ErrorView = errorViewClass(errorViews);
+
+		class Page extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				attempts++;
+			}
+			async data() {
+				return {};
+			}
+			render() {
+				if (attempts === 1) throw new Error('first failure');
+				return h('span', { class: 'page' }, [text('page ok')]);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/', view: Page, guard: () => (redirect ? '/' : true) }],
+			errorView: ErrorView,
+			onError() {},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.find('.app-error')).not.toBeNull();
+
+		// A redirect to the committed path is replace()'s same-path no-op: the guard
+		// verdict ends the navigation without a second pipeline run.
+		redirect = true;
+		const retry = errorViews[0].props.retry;
+		await retry();
+		await flush();
+		expect(app.find('.app-error')).not.toBeNull();
+		expect(app.container.innerHTML).not.toBe('<!--puzzle-->');
+		expect(errorViews).toHaveLength(1);
+		expect(attempts).toBe(1);
+
+		redirect = false;
+		await retry();
+		await flush();
+		expect(app.find('.page').textContent).toBe('page ok');
+		expect(app.find('.app-error')).toBeNull();
+		expect(attempts).toBe(2);
+	});
+
+	it('holds the face when a superseding navigation fails its own load and stays put', async () => {
+		let attempts = 0;
+		let release;
+		const errorViews = [];
+		const ErrorView = errorViewClass(errorViews);
+
+		class Page extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				attempts++;
+			}
+			async data() {
+				// The retried rebuild parks here so the push below supersedes it.
+				if (attempts === 2) await new Promise((resolve) => (release = resolve));
+				return {};
+			}
+			render() {
+				if (attempts === 1) throw new Error('first failure');
+				return h('span', { class: 'page' }, [text('page ok')]);
+			}
+		}
+		class Other extends PuzzleView {
+			async data() {
+				throw new Error('other load failure');
+			}
+			render() {
+				return h('span', { class: 'other' });
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [
+				{ path: '/', view: Page },
+				{ path: '/other', view: Other },
+			],
+			errorView: ErrorView,
+			onError() {},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.find('.app-error')).not.toBeNull();
+
+		const retry = errorViews[0].props.retry;
+		const retrying = retry();
+		for (let i = 0; i < 6 && !release; i++) await new Promise((r) => setTimeout(r, 10));
+		expect(release).toBeTypeOf('function');
+
+		// The push supersedes the retry, then fails its own load — so it stays put and
+		// never fills this position. The held face is what the user keeps seeing, still
+		// carrying the ORIGINAL error (a superseder does not forward its error here).
+		const nav = app.router.push('/other');
+		await new Promise((r) => setTimeout(r, 20));
+		release();
+		await Promise.all([retrying, nav]);
+		await flush();
+
+		expect(app.find('.app-error')).not.toBeNull();
+		expect(app.container.innerHTML).not.toBe('<!--puzzle-->');
+		expect(app.find('.message').textContent).toBe('first failure');
+		expect(app.router.current.path).toBe('/');
+		expect(errorViews).toHaveLength(1);
+
+		// The retry that lost the race left the face untouched, so it re-arms.
+		await retry();
+		await flush();
+		expect(app.find('.page').textContent).toBe('page ok');
+		expect(app.find('.app-error')).toBeNull();
+	});
+
+	it('lets a superseding navigation that COMMITS clear the held face and its placeholder', async () => {
+		let attempts = 0;
+		let release;
+		let errorDestroyed = 0;
+		const errorViews = [];
+
+		class ErrorView extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				errorViews.push(this);
+			}
+			destroyed() {
+				errorDestroyed++;
+			}
+			render() {
+				return h('p', { class: 'app-error' }, [text(this.props.error.message)]);
+			}
+		}
+		class Page extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				attempts++;
+			}
+			async data() {
+				if (attempts === 2) await new Promise((resolve) => (release = resolve));
+				return {};
+			}
+			render() {
+				if (attempts === 1) throw new Error('first failure');
+				return h('span', { class: 'page' });
+			}
+		}
+		class Other extends PuzzleView {
+			render() {
+				return h('span', { class: 'other' }, [text('other')]);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [
+				{ path: '/', view: Page },
+				{ path: '/other', view: Other },
+			],
+			errorView: ErrorView,
+			onError() {},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.find('.app-error')).not.toBeNull();
+
+		const retry = errorViews[0].props.retry;
+		const retrying = retry();
+		for (let i = 0; i < 6 && !release; i++) await new Promise((r) => setTimeout(r, 10));
+		expect(release).toBeTypeOf('function');
+
+		const nav = app.router.push('/other');
+		await new Promise((r) => setTimeout(r, 20));
+		release();
+		await Promise.all([retrying, nav]);
+		await flush();
+
+		expect(app.find('.other').textContent).toBe('other');
+		expect(app.find('.app-error')).toBeNull();
+		expect(errorDestroyed).toBe(1);
+		expect(errorViews).toHaveLength(1);
+		expect(app.container.innerHTML).toBe('<span class="other">other</span>');
+
+		// The commit vacated the position, so the loser's closure is permanently spent.
+		await retry();
+		await flush();
+		expect(app.router.current.path).toBe('/other');
+		expect(app.find('.other')).not.toBeNull();
+	});
+
 	it('is a no-op after a parent patch removes the failed position', async () => {
 		let attempts = 0;
 		let host;

@@ -1046,7 +1046,7 @@ export class Router {
 			memoryIndex = null,
 			// The failed view whose error view pressed retry (__failedView), or null for
 			// every ordinary navigation. Read ONLY by the load-failure catch below, which
-			// hands that position its face back — #navigate returns undefined on success
+			// refreshes that position's held face — #navigate returns undefined on success
 			// and failure alike, so the retry closure cannot detect the failure itself.
 			retryView = null,
 		}
@@ -1382,15 +1382,16 @@ export class Router {
 				// clamp + #swap skipOut path. The restored unit's playOut memo stays spent:
 				// a later navigation away swaps it out instantly, no second out animation.
 				this.#recoverFailedNavigation(token);
-				// Retry redraw (D145/v1.71). Staying put normally means the user keeps the
-				// page still on screen — but a retry navigation destroyed its own error view
-				// before rebuilding (PuzzleView's retry closure), so for THAT position
-				// "stay put" would be a blank slot until a page reload. Hand the face back
-				// with THIS failure's error/info and a fresh retry. Nothing about the commit
-				// contract moves: no URL, no history entry, no half-built page — only what an
-				// already-failed position DISPLAYS. Skipped once a newer navigation owns the
-				// token (the #recoverFailedNavigation posture): that one fills the container
-				// itself, and a late error face would land in a position it no longer holds.
+				// Retry redraw (D145/v1.71). Staying put means the user keeps the page still
+				// on screen, and a retry navigation keeps its error view mounted for exactly
+				// that reason — so this position is not blank, it is showing a face for the
+				// error BEFORE this one, holding a closure that already fired. Swap it for a
+				// face carrying THIS failure's error/info and a fresh retry. Nothing about
+				// the commit contract moves: no URL, no history entry, no half-built page —
+				// only what an already-failed position DISPLAYS. Skipped once a newer
+				// navigation owns the token (the #recoverFailedNavigation posture): that one
+				// owns the outcome, and the held face — original error, re-armed retry —
+				// stays up either way, so nothing here can leave the position empty.
 				if (retryView && token === this.#token) {
 					await retryView.__retryErrorView?.(err, info);
 				}

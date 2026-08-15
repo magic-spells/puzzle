@@ -49,7 +49,10 @@ position, and destroy the failed instance. With an app `errorView`, a fresh
 ordinary view mounts there with `{ error, info, retry }`; retry is stable,
 single-flight, and delegates to an already-owned rebuild path: the Router
 forces a same-location replacement for routed instances, while a child asks
-its parent to refresh so the normal D115 patch mounts a fresh child. Without
+its parent to refresh so the normal D115 patch mounts a fresh child. A routed
+retry keeps its error view mounted throughout, so a rebuild that never commits
+leaves the face standing rather than an empty position, and the latch re-arms
+whenever it does. Without
 one, the comment position remains for the owner's ordinary next patch.
 Error-view failures are reported as `phase: 'error-view'` and stop without
 recursion. There is no per-view `errorContent` API or ancestor walk

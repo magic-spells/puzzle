@@ -132,7 +132,11 @@ one is *not* a compile error; it silently builds a different product.
   `{ error, info, retry }` props; `retry()` re-runs the failed work through
   the normal pipeline (a same-location navigation for routed views, the
   owner's refresh for components), is single-flight, and never fires
-  automatically. The error view's own failure reports once as
+  automatically. A routed retry keeps the error view on screen for the whole
+  rebuild — a rebuild that commits replaces it, one that fails again refreshes
+  it with the new error, and one that never commits at all (a guard verdict, a
+  superseding navigation) leaves it standing and pressable — so Retry can never
+  blank the position. The error view's own failure reports once as
   `phase: 'error-view'` (replacing the old `boundary` phase) and never
   recurses. `onError` and the no-fallback default behavior are unchanged.
   Migration: move `errorContent()` markup into an `AppError.pzl` template and

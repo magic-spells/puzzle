@@ -550,17 +550,17 @@ export class PuzzleView {
 		const ErrorView = getErrorView(this.ctx);
 		if (!ErrorView) return false;
 
-		return this.#mountErrorView(ErrorView, error, info, this.#makeRetry());
+		return this.#mountErrorView(ErrorView, error, info);
 	}
 
 	/**
-	 * INTERNAL — redraw this failed position after a RETRY whose rebuild failed in
-	 * the router's LOAD phase (D145/v1.71). #makeRetry tears the error view down
-	 * before it re-runs the navigation, and a load failure obeys the D19/D61
-	 * stay-put rule — no URL, no history entry, no half-built page, the user keeps
-	 * the page already on screen. Here that page WAS this error view, so staying put
-	 * alone leaves the position blank until a reload. The router calls this from that
-	 * catch so the face comes back with the NEW error and a pressable retry.
+	 * INTERNAL — refresh this failed position's face after a RETRY whose rebuild
+	 * failed in the router's LOAD phase (D145/v1.71). A load failure obeys the
+	 * D19/D61 stay-put rule — no URL, no history entry, no half-built page, the user
+	 * keeps the page already on screen. Here that page IS the face the retry press
+	 * held up, so staying put alone would leave it showing a stale error with a
+	 * closure that can never fire again. The router calls this from that catch to
+	 * swap in a face carrying the NEW error and a pressable retry.
 	 *
 	 * Deliberately NOT folded into __showErrorView: this instance is already
 	 * destroyed, already marked chain-invalid in the router, and its placeholder
@@ -569,36 +569,62 @@ export class PuzzleView {
 	 * caller, since a torn-down position must never resurrect itself on its own.
 	 */
 	__retryErrorView(error, info) {
-		// Only a position that is still OURS and still EMPTY: an #errorView means
-		// something already refilled it (that face owns the retry now), no #vm means
-		// this instance never mounted, and an unparented placeholder means the
-		// position was released by a parent patch or a later navigation.
-		if (this.#errorView) return true;
+		// Only a position that is still OURS: no #vm means this instance never
+		// mounted, and an unparented placeholder means the position was released by a
+		// parent patch or a later navigation.
 		if (!this.#vm || !this.__failedPlaceholder?.parentNode) return false;
 
 		const ErrorView = getErrorView(this.ctx);
 		if (!ErrorView) return false;
-		return this.#mountErrorView(ErrorView, error, info, this.#makeRetry());
+		// Clear the link BEFORE tearing the held face down: its own __errorViewFailed
+		// hook nulls #errorView when it still points at that instance, which would
+		// otherwise drop the successor mounted below.
+		const held = this.#errorView;
+		this.#errorView = null;
+		held?.destroy();
+		return this.#mountErrorView(ErrorView, error, info);
 	}
 
 	/**
-	 * One single-flight retry closure per MOUNTED error view. Rebuilt for every
-	 * mount so a retry that fails and redraws the face is pressable again and again
-	 * — the latch guards double-presses of ONE face, and the closure a replaced face
-	 * handed out stays permanently spent.
+	 * One single-flight retry closure per MOUNTED error view, bound to the face it
+	 * was handed to — so the closure a REPLACED face gave out is permanently spent
+	 * while the live face's own closure keeps working.
+	 *
+	 * A retry HOLDS its face up for the whole rebuild. Nothing here tears it down;
+	 * the position is only ever vacated by something that immediately refills it — a
+	 * successful commit destroys this instance as it mounts the rebuilt chain (and
+	 * destroy() disposes the face with it), and a load failure swaps the face through
+	 * __retryErrorView. Every other outcome — a guard that blocks or redirects
+	 * nowhere, a supersession, a superseding navigation that itself stays put — leaves
+	 * the face exactly where it was, so no press can end at an empty position.
+	 *
+	 * The latch spans one press: it blocks a concurrent second press and RE-ARMS when
+	 * the rebuild ends with this same face still mounted, which is precisely the set
+	 * of outcomes that changed nothing on screen. A face that was replaced or disposed
+	 * fails the identity check instead, so the latch never has to tell them apart.
 	 */
-	#makeRetry() {
+	#makeRetry(face) {
 		let inFlight = false;
 		return async () => {
-			if (!this.#errorView || inFlight) return;
+			if (inFlight || this.#errorView !== face) return;
 			inFlight = true;
-			this.#errorView.destroy();
+			const rebuilt = this.ctx.router?.__failedView?.(this, true);
+			if (rebuilt) {
+				await rebuilt;
+				if (this.#errorView === face) inFlight = false;
+				return;
+			}
+			// A component position rebuilds through its OWNER's patch, and the patcher
+			// remounts a failed component only where it finds no face (viewManager's
+			// __hasErrorReplacement check) — so this path hands the position back empty
+			// and its closure stays spent. The owner's re-render refills it.
 			this.#errorView = null;
-			await (this.ctx.router?.__failedView?.(this, true) ?? this.__retryParent?.refresh());
+			face.destroy();
+			await this.__retryParent?.refresh();
 		};
 	}
 
-	async #mountErrorView(ErrorView, error, info, retry) {
+	async #mountErrorView(ErrorView, error, info) {
 		let errorView;
 		try {
 			errorView = new ErrorView(this.ctx);
@@ -619,7 +645,7 @@ export class PuzzleView {
 		};
 		try {
 			await errorView.mount(this.#vm.container, {
-				props: { error, info, retry },
+				props: { error, info, retry: this.#makeRetry(errorView) },
 				ref: this.__failedPlaceholder,
 			});
 			if (this.#errorView !== errorView) {

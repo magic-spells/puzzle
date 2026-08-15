@@ -320,9 +320,11 @@ error-view); unregistered → the original `console.error` per catch site.
 `errorView: AppErrorView` registers one ordinary compiled `.pzl` view as the
 app-wide fallback: a failed view or component is replaced in place by a fresh
 error-view instance (parent, siblings, and layout survive) receiving
-`{ error, info, retry }` props — `retry()` destroys it and reconstructs the
-original through the Router's full same-location rebuild or the component
-parent's ordinary refresh; never automatic, never recursive. Without
+`{ error, info, retry }` props — `retry()` reconstructs the original through
+the Router's full same-location rebuild or the component parent's ordinary
+refresh, holding the error view in place until the rebuild commits or fails
+again, so a rebuild that never commits (a guard verdict, a supersession) leaves
+the face up and the button pressable; never automatic, never recursive. Without
 `errorView`, failures report and the position keeps its recovery placeholder.
 Event handlers and formatters surface uncaught.
 
