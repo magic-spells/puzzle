@@ -1,6 +1,6 @@
 ---
 name: D159 — Hash and memory router modes as imported factories (v1.74)
-status: built
+status: verified
 connections:
   - DECISION-D34-HASH-ROUTING
   - DECISION-D42-MEMORY-MODE
@@ -12,6 +12,8 @@ connections:
   - DECISION-D94-TESTING-EXPORT
   - DOC-SPEC-ROUTER
   - DOC-RELEASE-SURFACE
+verified_at: '2026-08-15T06:05:59.557Z'
+verified_sha: 61a37ae80b9104220be7d20d2ca9a4660cb4ec2f
 ---
 
 Hash and memory routing are opt-in imports, not config strings. History mode

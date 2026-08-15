@@ -1,6 +1,6 @@
 ---
 name: 'D150 — Raw template block: lex braces as literal text while preserving HTML'
-status: built
+status: verified
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
@@ -14,6 +14,8 @@ connections:
   - DECISION-D70-TEMPLATE-COMMENTS
   - DECISION-D113-SSG-RAWTEXT-RULE
   - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
+verified_at: '2026-08-15T06:05:58.384Z'
+verified_sha: 61a37ae80b9104220be7d20d2ca9a4660cb4ec2f
 ---
 
 # D150 — Raw template block: lex braces as literal text while preserving HTML

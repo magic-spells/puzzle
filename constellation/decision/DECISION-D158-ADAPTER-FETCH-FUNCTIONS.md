@@ -1,6 +1,6 @@
 ---
 name: D158 — Adapters are per-model fetch functions; REST conventions are the shorthand (v1.73)
-status: built
+status: verified
 connections:
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D21-ADAPTER-READ-PATH
@@ -26,6 +26,8 @@ notes:
       above it and is NOT — the guard and this branch read body[pk] separately, so an unstable
       accessor (a getter returning a value then null) reaches it. It protects pk-index integrity
       (a blanked local pk while the type map still keys the old id). Do not delete it.
+verified_at: '2026-08-15T06:05:59.040Z'
+verified_sha: 61a37ae80b9104220be7d20d2ca9a4660cb4ec2f
 ---
 
 A model's `static adapter` object is a set of **fetch functions** the store
