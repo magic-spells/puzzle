@@ -49,7 +49,13 @@
                         title="{ row.id }"
                         @click={ selectKey(row.id) }>
                         <span class="min-w-0 truncate font-mono text-[11px] { row.nameClass }">{ row.id }</span>
-                        <span class="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">{ row.count }</span>
+                        {#if row.heldLabel}
+                          <span
+                            data-held="{ row.id }"
+                            title="{ row.heldTitle }"
+                            class="ml-auto shrink-0 rounded-sm bg-raised px-1 font-mono text-[9px] uppercase tracking-wide text-warn">{ row.heldLabel }</span>
+                        {/if}
+                        <span class="shrink-0 font-mono text-[10px] tabular-nums text-faint { row.countClass }">{ row.count }</span>
                       </div>
                     </li>
                   {/for}
@@ -71,6 +77,10 @@
           <span class="ml-auto shrink-0 font-mono text-[10px] tabular-nums text-faint">{ subscriberCount } subscriber{ subscriberSuffix }</span>
         </header>
 
+        {#if heldNote}
+          <p data-held-note class="m-0 shrink-0 px-3 py-1.5 border-b border-line bg-raised text-[10px] leading-snug text-warn">{ heldNote }</p>
+        {/if}
+
         <div class="flex-1 min-h-0 overflow-auto">
           {#if subscribers.length === 0}
             <p class="m-0 px-3 py-2 text-[11px] text-faint">No live subscribers.</p>
@@ -84,9 +94,16 @@
                     title="{ sub.title }"
                     @click={ openView(sub.viewId) }>
                     <ViewIdentity name={ sub.name } module={ sub.module } dim={ sub.dim } />
-                    {#if sub.navigable}
-                      <span class="ml-auto shrink-0 hidden group-hover:inline font-mono text-[9px] uppercase tracking-wide text-accent">show in views →</span>
-                    {/if}
+                    <span class="ml-auto shrink-0 flex items-center gap-2">
+                      {#if sub.held}
+                        <span
+                          data-subscriber-held
+                          class="rounded-sm bg-raised px-1 font-mono text-[9px] uppercase tracking-wide text-warn">pending</span>
+                      {/if}
+                      {#if sub.navigable}
+                        <span class="hidden group-hover:inline font-mono text-[9px] uppercase tracking-wide text-accent">show in views →</span>
+                      {/if}
+                    </span>
                   </div>
                 </li>
               {/for}
@@ -126,6 +143,21 @@ const FLUSH_DEBOUNCE_MS = 200;
 
 const ROW_SELECTED = 'bg-accent-soft dt-row-selected';
 const ROW_IDLE = 'hover:bg-raised';
+
+/**
+ * The explainer above a key with held subscribers.
+ *
+ * Without it the panel reports the truth and still misleads: during an open
+ * navigation a reused ancestor is subscribed to BOTH routes' keys (D146
+ * prepares before it commits, and deliberately over-subscribes so a discard can
+ * never weaken coverage), which looks exactly like a subscription leak.
+ */
+function heldNote(selected) {
+  const pending = selected?.held?.length ?? 0;
+  if (!pending) return '';
+  const of = `${pending} of ${selected.count} subscriber${selected.count === 1 ? '' : 's'}`;
+  return `${of} here came from a prepared data() run that has not committed. Live subscriptions, not a leak — a navigation is open, and they are released if it fails.`;
+}
 
 export default class SubscriptionsView extends PuzzleView {
   created() {
@@ -182,6 +214,7 @@ export default class SubscriptionsView extends PuzzleView {
       subscriberCount: selected?.count ?? 0,
       subscriberSuffix: (selected?.count ?? 0) === 1 ? '' : 's',
       subscribers: this.toSubscribers(selected),
+      heldNote: heldNote(selected),
 
       loadingClass: local.loading ? 'animate-spin text-accent' : '',
       error: local.error,
@@ -193,13 +226,26 @@ export default class SubscriptionsView extends PuzzleView {
     return entries
       .filter((entry) => entry.kind === kind)
       .sort((a, b) => a.id.localeCompare(b.id))
-      .map((entry) => ({
-        id: entry.id,
-        count: entry.count,
-        rowClass: entry.id === selectedKey ? ROW_SELECTED : ROW_IDLE,
-        nameClass: entry.id === selectedKey ? 'text-accent font-semibold' : 'text-ink',
-        pulseClass: entry.pulseAt ? 'dt-pulse' : '',
-      }));
+      .map((entry) => {
+        // Held subscribers are counted in `count` as well — they ARE subscribed —
+        // so the chip qualifies that number rather than replacing it: a row
+        // reading "1 pending · 3" has three subscribers, one of which goes away
+        // if the open navigation fails.
+        const pending = entry.held.length;
+        return {
+          id: entry.id,
+          count: entry.count,
+          heldLabel: pending ? (pending === entry.count ? 'pending' : `${pending} pending`) : '',
+          heldTitle: pending
+            ? `${pending} of ${entry.count} subscriber${entry.count === 1 ? '' : 's'} added by a prepared, uncommitted data() run — live now, gone if that navigation fails`
+            : '',
+          // The count keeps the right edge to itself only when no chip took it.
+          countClass: pending ? '' : 'ml-auto',
+          rowClass: entry.id === selectedKey ? ROW_SELECTED : ROW_IDLE,
+          nameClass: entry.id === selectedKey ? 'text-accent font-semibold' : 'text-ink',
+          pulseClass: entry.pulseAt ? 'dt-pulse' : '',
+        };
+      });
   }
 
   /**
@@ -210,7 +256,9 @@ export default class SubscriptionsView extends PuzzleView {
   toSubscribers(selected) {
     if (!selected) return [];
     const store = this.ctx.store;
+    const held = selected.held;
     return selected.subscribers.map((id, index) => {
+      const pending = held.includes(id);
       // 'fn' is the runtime's merged bucket for function subscribers — one
       // entry for all of them, with no identity to resolve or navigate to.
       if (id === 'fn') {
@@ -221,6 +269,7 @@ export default class SubscriptionsView extends PuzzleView {
           module: null,
           dim: true,
           navigable: false,
+          held: pending,
           rowClass: 'cursor-default',
           title: 'store.subscribe(fn) — the runtime reports these merged, without identity',
         };
@@ -233,8 +282,13 @@ export default class SubscriptionsView extends PuzzleView {
         module: record?.module ?? null,
         dim: !record,
         navigable: !!record,
+        held: pending,
         rowClass: record ? 'cursor-pointer hover:bg-raised' : 'cursor-default',
-        title: record ? `#${id} — click to show in the Views panel` : `#${id} (no longer mounted)`,
+        title: pending
+          ? `#${id} — subscribed by a prepared, uncommitted data() run; this goes away if the navigation fails`
+          : record
+            ? `#${id} — click to show in the Views panel`
+            : `#${id} (no longer mounted)`,
       };
     });
   }

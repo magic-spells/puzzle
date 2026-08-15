@@ -20,6 +20,27 @@ import { CONNECTION_ID, CONNECTION_STATE } from './models/connection.js';
 import { UI_ID } from './models/ui.js';
 import { subscriptionKind, subscriptionParts } from './values.js';
 
+/**
+ * Create-or-update against the CORE store.
+ *
+ * The store's own `upsert()` is the SERVER-sync merge, behind the opt-in
+ * `@magic-spells/puzzle/adapter` capability since D157 — the panel has no
+ * server, so enabling that whole runtime to borrow one method would be absurd.
+ * Every panel model keys on `id`, so create-or-update is a find and a branch.
+ *
+ * The two halves notify the same way the old call did: `createRecord` notifies
+ * on insert, `update` through `recordChanged` — so a row appearing and a row
+ * changing both reach the panels as ordinary store reactivity.
+ */
+function upsert(type, data) {
+	const existing = store.findOne(type, data.id);
+	if (existing) {
+		existing.update(data);
+		return existing;
+	}
+	return store.createRecord(type, data);
+}
+
 /** Ring capacity for the `event` model. Oldest records are destroyed past this. */
 export const EVENT_LIMIT = 200;
 
@@ -188,7 +209,7 @@ function onHello(message) {
 
 function onViewMounted(payload) {
 	if (!payload || typeof payload.id !== 'number') return;
-	store.upsert('pview', {
+	upsert('pview', {
 		id: payload.id,
 		name: payload.name || 'View',
 		module: payload.module ?? null,
@@ -330,7 +351,7 @@ export function applyViewSnapshot(roots) {
 		for (const node of Array.isArray(nodes) ? nodes : []) {
 			if (!node || typeof node.id !== 'number') continue;
 			const children = Array.isArray(node.children) ? node.children : [];
-			store.upsert('pview', {
+			upsert('pview', {
 				id: node.id,
 				name: node.name || 'View',
 				module: node.module ?? null,
@@ -366,7 +387,7 @@ export function applyRecordSnapshot(result, type) {
 	const names = [];
 	for (const [name, records] of Object.entries(buckets)) {
 		const rows = Array.isArray(records) ? records : [];
-		store.upsert('recordType', {
+		upsert('recordType', {
 			id: name,
 			records: rows,
 			count: rows.length,
@@ -392,18 +413,41 @@ export function applyRecordSnapshot(result, type) {
  * the Views inspector reads `byView` off each `pview`'s `subKeys`.
  *
  * Doing it here is what makes one request serve both panels.
+ *
+ * `held` is the third field (D146): per SUBSCRIBER, the keys a prepared but
+ * uncommitted `data()` run added. Those keys also appear in `byKey`/`byView` —
+ * they are live subscriptions — so dropping `held` would leave both panels
+ * showing a prepared ancestor subscribed to two routes' keys at once, which
+ * reads as exactly the leak `held` exists to disprove.
  */
 export function applySubscriptionSnapshot(result) {
 	if (!store) return 0;
+
+	// held arrives keyed BY SUBSCRIBER, like byView. The rail is keyed by store
+	// key, so invert it once here rather than per row.
+	const held = result?.held && typeof result.held === 'object' ? result.held : {};
+	const heldByKey = new Map();
+	for (const [subscriber, keys] of Object.entries(held)) {
+		const id = subscriberId(subscriber);
+		for (const key of Array.isArray(keys) ? keys : []) {
+			let bucket = heldByKey.get(key);
+			if (!bucket) heldByKey.set(key, (bucket = []));
+			if (!bucket.includes(id)) bucket.push(id);
+		}
+	}
 
 	const byKey = result?.byKey && typeof result.byKey === 'object' ? result.byKey : {};
 	const seen = new Set();
 	for (const [key, subscribers] of Object.entries(byKey)) {
 		const list = Array.isArray(subscribers) ? subscribers : [];
-		store.upsert('subscription', {
+		const pending = heldByKey.get(key) ?? [];
+		upsert('subscription', {
 			id: key,
 			subscribers: list,
 			count: list.length,
+			// Never report a holder the key does not actually list: the two halves
+			// are one snapshot, but a runtime bug there should not invent a row.
+			held: pending.filter((id) => list.includes(id)),
 			kind: subscriptionKind(key),
 		});
 		seen.add(key);
@@ -418,11 +462,30 @@ export function applySubscriptionSnapshot(result) {
 		// byView keys arrive as JSON object keys, so a numeric view id is a string.
 		const keys = byView[String(view.id)];
 		const next = Array.isArray(keys) ? keys : [];
-		if (next.length !== view.subKeys.length || next.some((k, i) => k !== view.subKeys[i])) {
-			view.update({ subKeys: next });
+		const heldNext = (Array.isArray(held[String(view.id)]) ? held[String(view.id)] : []).filter(
+			(key) => next.includes(key)
+		);
+		if (
+			next.length !== view.subKeys.length ||
+			next.some((k, i) => k !== view.subKeys[i]) ||
+			heldNext.length !== view.heldKeys.length ||
+			heldNext.some((k, i) => k !== view.heldKeys[i])
+		) {
+			view.update({ subKeys: next, heldKeys: heldNext });
 		}
 	}
 	return seen.size;
+}
+
+/**
+ * Normalize a subscriber id that came back as an OBJECT KEY. `byKey` sends view
+ * ids as numbers, but `held`/`byView` are keyed by them, and JSON object keys
+ * are always strings — so `3` and `'3'` have to be reconciled before either can
+ * be matched against the other. `'fn'`, the merged function bucket, passes
+ * through unchanged.
+ */
+function subscriberId(key) {
+	return /^\d+$/.test(key) ? Number(key) : key;
 }
 
 /**
@@ -442,7 +505,7 @@ export function applyProfileSnapshot(report) {
 	const source = report && typeof report === 'object' ? report : {};
 
 	profileSeq += 1;
-	store.upsert('profileSample', {
+	upsert('profileSample', {
 		id: profileSeq,
 		at: Date.now(),
 		recording: source.recording === true,
@@ -519,7 +582,7 @@ export function requestViewSelection(id) {
 	if (!store) return;
 	const current = store.findOne('ui', UI_ID);
 	if (current) current.update({ pendingViewId: id });
-	else store.upsert('ui', { id: UI_ID, pendingViewId: id });
+	else upsert('ui', { id: UI_ID, pendingViewId: id });
 }
 
 /** Consume the pending selection, if any. Reading it clears it. */
@@ -540,7 +603,7 @@ export function patchConnection(patch) {
 	if (!store) return null;
 	const current = store.findOne('connection', CONNECTION_ID);
 	if (!current) {
-		store.upsert('connection', { id: CONNECTION_ID, ...patch });
+		upsert('connection', { id: CONNECTION_ID, ...patch });
 		return store.findOne('connection', CONNECTION_ID);
 	}
 	current.update(patch);
@@ -586,13 +649,13 @@ export function resetSession({ port = 'connected' } = {}) {
 		error: null,
 	};
 	if (existing) existing.update(fresh);
-	else store.upsert('connection', fresh);
+	else upsert('connection', fresh);
 }
 
 /** Push one message onto the capped event ring. */
 function recordEvent(message) {
 	const id = nextEventId();
-	store.upsert('event', {
+	upsert('event', {
 		id,
 		type: message.type,
 		at: Date.now(),

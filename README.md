@@ -9,7 +9,7 @@ bridge registers into. There are no production bytes on either side: a productio
 compiles the bridge away entirely, and a page with no bridge simply reports
 "No Puzzle app detected".
 
-**Requires Puzzle 0.3.1+** running a **development** build (`puzzle dev`). The bridge
+**Requires Puzzle 0.6.0+** running a **development** build (`puzzle dev`). The bridge
 is compiled out of production bundles, so a production page correctly reports no app.
 
 ## The panels
@@ -19,7 +19,7 @@ is compiled out of production bundles, so a production page correctly reports no
 | **Connection** | Handshake state, framework/protocol versions, the last route commit, and a live ring of recent protocol messages. |
 | **Views** | Elements-style master/detail over the live component tree. Expand/collapse per node, hover to highlight the view on the page, per-row `log:view` (binds `$p`), and a re-render pulse on rows a `flush` notified. Selecting a row inspects it: params, props, the view's store subscriptions, and **the two state layers side by side** — the `data()` model layer and the `setData()` local layer, which is the split the panel exists for. |
 | **Store** | Record types with counts, a compact table of the active type (pk first, `_synced` as a badge), and a detail card that edits primitive fields through `edit:record` — applied by the runtime with the app's real `record.update()`, so §20 validation failures come back and render inline. An open card also keeps a per-flush change history (`field: old → new`). |
-| **Subscriptions** | The store's reverse index as a panel: subscription keys grouped into collections (`todo`) and records (`todo t2`), and for the selected key, **every view that re-renders when it changes** — the blast radius of a write. Click a subscriber to land on it in Views. This is the panel other frameworks structurally cannot build: it is a lookup, not an inference. |
+| **Subscriptions** | The store's reverse index as a panel: subscription keys grouped into collections (`todo`) and records (`todo t2`), and for the selected key, **every view that re-renders when it changes** — the blast radius of a write. Click a subscriber to land on it in Views. Subscriptions a **prepared, uncommitted** `data()` run added are marked `pending` rather than counted as ordinary listeners — during an open navigation a reused ancestor really is subscribed to both routes' keys, and the mark is what keeps that from reading as a leak. This is the panel other frameworks structurally cannot build: it is a lookup, not an inference. |
 | **Router** | The live route card — pathname, route pattern, params, the frozen query snapshot — over the matched chain root→leaf, and a navigation history feed rebuilt from the event ring. |
 | **Performance** | Record a session and see what it cost. **Wasted renders lead** — passes where the framework re-ran a view, re-diffed its tree and changed no DOM at all, which is the one number here that is unambiguously a bug. Under the totals: a sortable per-view table (renders, wasted, DOM mutations, render/patch/data ms) with a re-render heatmap scaled to the busiest view, hatching on views that are mostly waste, and a loud section for `recursive-loop` / `runaway-rerender` detections. Click a row to land on that view in Views. |
 

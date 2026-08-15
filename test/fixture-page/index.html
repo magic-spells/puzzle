@@ -732,6 +732,13 @@
 										5: ['list'],
 										fn: ['user'],
 									},
+									// A prepared-but-uncommitted data() run (D146). These keys are live —
+									// so they appear above too — but belong to a navigation that has not
+									// committed. #3 holds one of `todo`'s two subscribers (partial) and the
+									// only subscriber `todo t2` has (full): both states the rail renders.
+									held: {
+										3: ['todo', 'todo t2'],
+									},
 								};
 							case 'snapshot:route':
 								return route();

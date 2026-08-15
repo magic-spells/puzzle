@@ -1,6 +1,7 @@
 {
   "version": 1,
-  "registry": "/Users/coryschulz/Code/@magic-spells/puzzle-pieces/registry",
+  "registry": "npm:@magic-spells/puzzle-pieces@0.6.0",
+  "puzzle": "0.6.0",
   "pieces": {
     "badge": {
       "files": {
@@ -9,17 +10,17 @@
     },
     "copy-button": {
       "files": {
-        "app/components/ui/CopyButton.pzl": "sha256:7f89061986469b7a8460a67cd5fbb24ce2956afb853109a1b7198947280d21a4"
+        "app/components/ui/CopyButton.pzl": "sha256:d4d0bac5226723a90015bfeb61a9c8a3a06e9f62a9afcad6e06edaa184321d4f"
       }
     },
     "empty": {
       "files": {
-        "app/components/ui/Empty.pzl": "sha256:0b771254a491eb61f177799c27fe8d906dc0c32f0afa4a1d41277d0cd7ca98fd"
+        "app/components/ui/Empty.pzl": "sha256:9508da2a54c7de6d95e1a26bfbbcc23dcf83a8e7fcca1b4f003c5dedf39c3c29"
       }
     },
     "split-panel": {
       "files": {
-        "app/components/ui/SplitPanel.pzl": "sha256:21623f0311737ff1a39d5b3214a2803095956f5682f99259201abfd34383656a"
+        "app/components/ui/SplitPanel.pzl": "sha256:52ac5d52b7f681c104454263884b10cfdb210f5df6eda224c8bdb7927a092539"
       }
     },
     "theme/pieces.css": {

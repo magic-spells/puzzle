@@ -41,6 +41,14 @@ export default class PView extends PuzzleModel {
 		 * reads it the same way it reads the view's name.
 		 */
 		subKeys: Puzzle.array().default(() => []),
+		/**
+		 * The subset of `subKeys` this view holds from a PREPARED but uncommitted
+		 * `data()` run, from `snapshot:subscriptions.held` (D146). Real
+		 * subscriptions, but owned by a navigation that has not committed — so the
+		 * inspector marks them rather than showing a view subscribed to two routes'
+		 * keys with no explanation.
+		 */
+		heldKeys: Puzzle.array().default(() => []),
 		/** The most recent `inspect:view` payload — { params, props, model, local }. */
 		inspected: Puzzle.object().default(() => null),
 		inspectedAt: Puzzle.number().default(0),

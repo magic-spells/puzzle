@@ -320,12 +320,21 @@ export default class ViewsView extends PuzzleView {
       localEntries: entriesOf(inspect?.local),
       // From snapshot:subscriptions.byView, folded onto the pview record — the
       // store keys whose next write re-runs THIS view's data().
-      subEntries: (selectedRecord?.subKeys ?? []).map((key) => ({
-        label: key,
-        value: '',
-        full: key,
-        copy: key,
-      })),
+      //
+      // A key marked `pending` came from a PREPARED data() run that has not
+      // committed (D146): live now, released if the open navigation fails. That
+      // is why a reused ancestor mid-navigation lists two routes' keys.
+      subEntries: (selectedRecord?.subKeys ?? []).map((key) => {
+        const held = (selectedRecord?.heldKeys ?? []).includes(key);
+        return {
+          label: key,
+          value: held ? 'pending' : '',
+          full: held
+            ? `${key} — added by a prepared, uncommitted data() run; released if that navigation fails`
+            : key,
+          copy: key,
+        };
+      }),
     };
   }
 

@@ -195,6 +195,18 @@ describe('fixture page ↔ page hook', () => {
 		expect(result.byView['3']).toEqual(['todo', 'todo t2']);
 	});
 
+	it('reports held keys separately, and only ones it also reports as live', () => {
+		const { result } = request(REQUESTS.SNAPSHOT_SUBSCRIPTIONS);
+		// D146: a prepared, uncommitted data() run. Held keys are REAL
+		// subscriptions, so every one of them must also appear in byKey/byView —
+		// a held key missing there would be a fixture that lies.
+		expect(result.held['3']).toEqual(['todo', 'todo t2']);
+		for (const key of result.held['3']) {
+			expect(result.byKey[key]).toContain(3);
+			expect(result.byView['3']).toContain(key);
+		}
+	});
+
 	it('answers snapshot:route with the parsed URL state', () => {
 		const { result } = request(REQUESTS.SNAPSHOT_ROUTE);
 		expect(result.pathname).toBe('/todos');

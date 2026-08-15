@@ -95,6 +95,10 @@ function transcript() {
 				4: ['todo t2'],
 				fn: ['user'],
 			},
+			// Nothing is mid-navigation by default: the held-key tests fill this in,
+			// so every other assertion here also covers the empty case (and a
+			// runtime that predates `held` entirely).
+			held: {},
 		},
 		route: {
 			path: '/todos?filter=active',
@@ -241,6 +245,7 @@ function stubBridge() {
 			'snapshot:subscriptions': () => ({
 				byKey: { ...world.subscriptions.byKey },
 				byView: { ...world.subscriptions.byView },
+				held: { ...world.subscriptions.held },
 			}),
 			'snapshot:route': () => ({ ...world.route }),
 			'highlight:view': () => ({ ok: true }),
@@ -570,7 +575,10 @@ describe.skipIf(!built)('panel app (compiled bundle)', () => {
 
 	it('marks a record type stale when a flush names its key', async () => {
 		const app = await boot(bridge);
-		app.store.upsert('recordType', { id: 'todo', records: [], count: 0, dirty: false });
+		// createRecord, not upsert: `store.upsert()` is the server-sync merge and
+		// sits behind the opt-in adapter capability (D157), which this panel does
+		// not enable.
+		app.store.createRecord('recordType', { id: 'todo', records: [], count: 0, dirty: false });
 		bridge.emit('flush', { keys: ['todo t2', 'todo'], notified: [1] });
 		await settle(app);
 
@@ -836,6 +844,23 @@ describe.skipIf(!built)('Views panel', () => {
 
 		// One snapshot serves inspect AND the Subscriptions panel — not two.
 		expect(bridge.typesRequested().filter((t) => t === 'snapshot:subscriptions')).toHaveLength(1);
+	});
+
+	it('marks the keys a prepared, uncommitted data() run added', async () => {
+		// D146: #3 is mid-navigation, so `todo t2` is subscribed but not committed.
+		// It is a REAL subscription and shows up in byView too — the mark is what
+		// keeps a reused ancestor listing two routes' keys from reading as a leak.
+		bridge.world.subscriptions.held = { 3: ['todo t2'] };
+
+		treeRow('3').click();
+		await settle(app, 80);
+
+		const rows = [...groupFor('subscriptions').querySelectorAll('dl > div')];
+		const labels = rows.map((row) => row.querySelector('dt').textContent);
+		expect(labels).toEqual(['todo', 'todo t2']);
+		expect(rows[0].querySelector('dd').textContent).toBe(''); // committed
+		expect(rows[1].querySelector('dd').textContent).toContain('pending');
+		expect(rows[1].querySelector('dd').getAttribute('title')).toContain('uncommitted');
 	});
 
 	it('says so when a view subscribes to nothing', async () => {
@@ -1315,6 +1340,46 @@ describe.skipIf(!built)('Subscriptions panel', () => {
 		const after = bridge.typesRequested().filter((t) => t === 'snapshot:subscriptions').length;
 		expect(after).toBe(before + 1); // coalesced
 		expect(document.querySelector('[data-sub-key="todo"]').textContent).toContain('1');
+	});
+
+	it('marks held keys pending instead of counting them as settled subscribers', async () => {
+		// An open navigation: #3 prepared both keys, #4 prepared the record key.
+		// `todo` is then partly held (1 of 2) and `todo t2` wholly held (2 of 2) —
+		// the two states the chip has to tell apart.
+		bridge.world.subscriptions.held = { 3: ['todo', 'todo t2'], 4: ['todo t2'] };
+		bridge.emit('flush', { keys: ['todo'], notified: [2] });
+		await settle(app, 260);
+
+		expect(document.querySelector('[data-held="todo"]').textContent).toContain('1 pending');
+		expect(document.querySelector('[data-held="todo t2"]').textContent.trim()).toBe('pending');
+		// Held subscribers are still subscribers: the count is unchanged.
+		expect(document.querySelector('[data-sub-key="todo"]').textContent).toContain('2');
+		// A key with nothing held carries no chip at all.
+		expect(document.querySelector('[data-held="user"]')).toBeNull();
+	});
+
+	it('explains a held key on the detail side, per subscriber', async () => {
+		bridge.world.subscriptions.held = { 3: ['todo'] };
+		bridge.emit('flush', { keys: ['todo'], notified: [2] });
+		await settle(app, 260);
+
+		document.querySelector('[data-sub-key="todo"]').click();
+		await settle(app);
+
+		expect(document.querySelector('[data-held-note]').textContent).toContain('not a leak');
+
+		const rows = subscriberRows();
+		expect(rows[0].textContent).toContain('FixtureHome'); // #2, committed
+		expect(rows[0].querySelector('[data-subscriber-held]')).toBeNull();
+		expect(rows[1].textContent).toContain('FixtureRow'); // #3, prepared
+		expect(rows[1].querySelector('[data-subscriber-held]')).toBeTruthy();
+	});
+
+	it('shows no held marks against a runtime that does not report them', () => {
+		// `held` absent (or empty) has to render exactly as this panel did before
+		// the field existed — the whole reason it went in additively.
+		expect(document.querySelector('[data-held]')).toBeNull();
+		expect(document.querySelector('[data-held-note]')).toBeNull();
 	});
 
 	it('clicking a subscriber opens it in the Views panel, already selected', async () => {

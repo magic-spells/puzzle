@@ -50,6 +50,17 @@ To develop against an unpublished framework checkout:
   list with no compiler help, and a forgotten line is silent: the stale collection
   survives a page reload and reports the previous document's data under the new
   document's session-scoped view ids. Adding a collection means adding a line there.
+- **`store.upsert()` is NOT the local create-or-update.** It is the server-sync merge
+  and lives behind the opt-in `@magic-spells/puzzle/adapter` capability (framework D157),
+  which the panel deliberately does not enable — there is no server here. `bridge.js`
+  has its own `upsert(type, data)` (find by `id`, `update()` or `createRecord()`); use
+  it, and do not pull the adapter runtime in to borrow one method.
+- **A `snapshot:subscriptions` `held` key is not a leak.** Held keys come from a
+  PREPARED but uncommitted `data()` run (framework D146) and are reported in
+  `byKey`/`byView` as well, because they are live. During an open navigation a reused
+  ancestor is genuinely subscribed to both routes' keys; the panel marks those `pending`
+  rather than dropping `held`, which is what keeps that from reading as a bug in the
+  inspected app.
 - **Record subscription keys use a SPACE separator** (`type id`, from the store's
   `REC_SEP = ' '`), not a colon. Split once on the first space: a type can't contain a
   space, a primary key can. `values.js#subscriptionParts` is the single parser and is
@@ -101,8 +112,14 @@ traffic — including from the Performance panel, whose polling only ever runs b
 
 ## Registry pieces
 
-Installed with `puzzle add piece <name> --registry <path-to-puzzle-pieces/registry>`;
-`pieces.lock` records hashes. **In use:** `split-panel`, `copy-button`, `empty`, `badge`.
+Installed with `puzzle add piece <name>`, which since Puzzle 0.6.0 resolves
+`@magic-spells/puzzle-pieces` over npm at the CLI's major.minor — `pieces.lock` records
+the resolved coordinates, the CLI version, and each file's hash. **In use:**
+`split-panel`, `copy-button`, `empty`, `badge`.
+
+`PUZZLE_PIECES_REGISTRY` silently overrides that transport, and it is set in Cory's
+shell profile pointing at a local pieces checkout: `unset` it before any pieces command
+here, or the lock records a filesystem path and the npm resolution is never exercised.
 **Evaluated and rejected, with reasons worth preserving:**
 
 - `data-table` — no row-click callback and no row identity in the DOM, text-only cells
