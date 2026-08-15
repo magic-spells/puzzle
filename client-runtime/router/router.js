@@ -2734,7 +2734,11 @@ export class Router {
 
 		let url;
 		try {
-			url = new URL(a.href, location.href);
+			// SVG's <a> is a different element type: `.href` is an SVGAnimatedString,
+			// not a string, so reading it would resolve "[object SVGAnimatedString]"
+			// as a path — an intercepted, dead click. Fall back to the attribute and
+			// resolve it the way the element itself would, against baseURI (<base>).
+			url = new URL(typeof a.href === 'string' ? a.href : href, a.baseURI || location.href);
 		} catch {
 			return;
 		}
@@ -2795,7 +2799,10 @@ function findAnchor(e) {
 	const path = typeof e.composedPath === 'function' ? e.composedPath() : null;
 	if (path) {
 		for (const node of path) {
-			if (node?.nodeName === 'A') return node;
+			// localName, not nodeName: SVG's <a> is lowercase 'a' where HTML's is 'A',
+			// and both are links. This matches what closest('a') below already does —
+			// CSS type selectors ignore the namespace.
+			if (node?.localName === 'a') return node;
 			// Stop at the boundary: past the document the path holds only window,
 			// and nothing above it can be the clicked link.
 			if (node === document) break;

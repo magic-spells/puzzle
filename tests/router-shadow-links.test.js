@@ -69,6 +69,19 @@ function hostWithShadowLink(href, { mode = 'open', attrs = {} } = {}) {
 	return { host, a };
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** An SVG <a> — a different element type from HTML's, sharing only localName. */
+function svgLink(href, { attrs = {} } = {}) {
+	const svg = document.createElementNS(SVG_NS, 'svg');
+	const a = document.createElementNS(SVG_NS, 'a');
+	a.setAttribute('href', href);
+	for (const [k, v] of Object.entries(attrs)) a.setAttribute(k, v);
+	a.appendChild(document.createElementNS(SVG_NS, 'rect'));
+	svg.appendChild(a);
+	return { svg, a };
+}
+
 const clickEvent = () => new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, button: 0 });
 
 beforeEach(() => {
@@ -145,6 +158,69 @@ describe('Router — links inside shadow DOM', () => {
 		hostWithShadowLink('/about', { attrs: { target: '_self' } }).a.dispatchEvent(evt);
 
 		expect(evt.defaultPrevented).toBe(true);
+		expect(push).toHaveBeenCalledWith('/about');
+	});
+
+	// An SVG <a> is a different element type: its nodeName is lowercase 'a' and
+	// its .href is an SVGAnimatedString, not a string. Matching on nodeName 'A'
+	// missed it; reading .href produced a dead intercepted click on a garbage URL.
+	it('intercepts an SVG anchor in the light DOM', async () => {
+		const router = await boot();
+		const push = vi.spyOn(router, 'push');
+		const { svg, a } = svgLink('/about');
+		document.body.appendChild(svg);
+
+		const evt = clickEvent();
+		a.dispatchEvent(evt);
+
+		expect(evt.defaultPrevented).toBe(true);
+		expect(push).toHaveBeenCalledWith('/about');
+	});
+
+	it('intercepts an SVG anchor inside an open shadow root', async () => {
+		const router = await boot();
+		const push = vi.spyOn(router, 'push');
+		const host = document.createElement('x-icon-link');
+		const root = host.attachShadow({ mode: 'open' });
+		const { svg, a } = svgLink('/about');
+		root.appendChild(svg);
+		document.body.appendChild(host);
+
+		const evt = clickEvent();
+		a.dispatchEvent(evt);
+
+		// Retargeted to the host, so only composedPath can find this anchor.
+		expect(evt.target.tagName).toBe('X-ICON-LINK');
+		expect(evt.defaultPrevented).toBe(true);
+		expect(push).toHaveBeenCalledWith('/about');
+	});
+
+	it('applies the usual guards to an SVG anchor', async () => {
+		const router = await boot();
+		const push = vi.spyOn(router, 'push');
+
+		for (const link of [
+			svgLink('/about', { attrs: { target: '_blank' } }),
+			svgLink('/about', { attrs: { download: '' } }),
+			svgLink('https://example.com/x'),
+			svgLink('mailto:a@b.c'),
+		]) {
+			document.body.appendChild(link.svg);
+			link.a.dispatchEvent(clickEvent());
+		}
+
+		expect(push).not.toHaveBeenCalled();
+	});
+
+	it('resolves an SVG anchor href against the document base', async () => {
+		const router = await boot();
+		const push = vi.spyOn(router, 'push');
+		const { svg, a } = svgLink('about'); // relative, no leading slash
+		document.body.appendChild(svg);
+		history.replaceState({}, '', '/');
+
+		a.dispatchEvent(clickEvent());
+
 		expect(push).toHaveBeenCalledWith('/about');
 	});
 

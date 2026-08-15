@@ -108,6 +108,17 @@ one is *not* a compile error; it silently builds a different product.
   not an opt-out. `_blank`/`_parent`/`_top`/named targets still fall through to
   the browser.
 
+- **SVG `<a>` links now route.** An SVG anchor is a different element type from
+  the HTML one: its node name is lowercase and its `.href` is an
+  `SVGAnimatedString` rather than a string. Clicking one in the light DOM was
+  intercepted and then navigated to a garbage path built from that object
+  (`/[object%20SVGAnimatedString]`), which also defeated the external-link
+  guard — an SVG link to another origin was captured as an in-app route. Inside
+  a shadow root it was missed entirely and fell through to a full page load. The
+  interceptor now matches both element types and reads the href attribute when
+  `.href` is not a string, resolving it against the element's base URL so
+  `<base href>` still applies.
+
 ### Changed
 
 - **BREAKING: hash and memory routing are imported factories (D159).**
