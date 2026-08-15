@@ -414,7 +414,7 @@ describe('Router memory mode — link interception (D42)', () => {
 		link.remove();
 	});
 
-	it("leaves a bare '#anchor' href alone (falls through as in history mode)", async () => {
+	it("leaves a bare '#anchor' href alone (falls through as in path mode)", async () => {
 		const { router } = await bootMemory(routes);
 		const pushSpy = vi.spyOn(router, 'push');
 
@@ -719,7 +719,7 @@ describe('Router memory mode — scroll is a no-op (D42)', () => {
 	});
 });
 
-describe('Router go/back/forward — history mode delegates to history.go (D42)', () => {
+describe('Router go/back/forward — path mode delegates to history.go (D42)', () => {
 	const routes = [
 		{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
 		{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
@@ -727,7 +727,7 @@ describe('Router go/back/forward — history mode delegates to history.go (D42)'
 
 	async function bootHistory() {
 		const el = container();
-		const router = new Router(routes); // default history mode
+		const router = new Router(routes); // default path mode
 		routers.push(router);
 		await router.start(el, ctx());
 		return { router, el };
@@ -838,7 +838,7 @@ describe('route snapshot (v1.15, D47)', () => {
 // D61: the memory stack/index (the memory-mode equivalent of the URL) now commits
 // inside #swap's #committing window — after a sequential out settles — instead of
 // early in #navigate. A navigation superseded during its out therefore leaves the
-// stack untouched (no phantom entry), exactly like the history-mode pushState fix.
+// stack untouched (no phantom entry), exactly like the path-mode pushState fix.
 // Holding a nav in its out requires animations, so this block installs the fake
 // WAAPI; a nav superseded during the DATA gate already never committed (both old
 // and new), so animations are what make the D61 window observable.

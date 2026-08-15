@@ -25,7 +25,7 @@ wins). See [[DOC-SPEC-ROUTER]] §14.
 ## Context
 v1.5 (D33) made the router own window scroll but explicitly cut two things: anchor
 targets (navigating to `/docs#faq` landed at top, and the link interceptor silently
-*dropped* `url.hash` in history mode) and reload persistence (positions lived in an
+*dropped* `url.hash` in path mode) and reload persistence (positions lived in an
 in-memory Map, so refresh + back lost restoration). Both were carded as "small,
 router-only, independently shippable" (the old FEATURE-SCROLL-FOLLOWUPS card, now
 [[FEATURE-V1-10-SCROLL-FOLLOWUPS]]).
@@ -51,7 +51,7 @@ Sub-decisions, each with its rejected alternative:
   isn't in the skeleton DOM, so the landing falls back to top. Deferring the scroll
   until `loaded` would reintroduce exactly the late-jump D33 was designed to avoid.
   (Rejected: re-resolving the anchor when the real template lands.)
-- **The history-mode link interceptor preserves the fragment.** It now pushes
+- **The path-mode link interceptor preserves the fragment.** It now pushes
   `url.pathname + url.search + url.hash` (previously the hash was dropped). A bare
   `#anchor` href is still left to the browser — native in-page anchors are not the
   router's business.

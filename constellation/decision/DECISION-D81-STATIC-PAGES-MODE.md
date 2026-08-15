@@ -28,11 +28,11 @@ notes:
     sha: d9591d6
   - kind: decision
     text: >-
-      Two more static/hybrid policies (2026-07-24). (1) HYBRID IS HISTORY-MODE ONLY: hybrid
+      Two more static/hybrid policies (2026-07-24). (1) HYBRID IS PATH-MODE ONLY: hybrid
       prerenders path-shaped files, but a hash/memory router boots at '/' and renders the home route
       over every prerendered page. routerMode is PuzzleApp runtime config the Go build can't
       inspect, so prerender() now THROWS for mode==='hybrid' with routerMode 'hash'|'memory' (fails
-      the Go build) — a non-history app must use output:'static'. (2) STATIC IGNORES STORAGE:
+      the Go build) — a non-path app must use output:'static'. (2) STATIC IGNORES STORAGE:
       config.storage is a live object that JSON-serializes to a dead `{}` across the build→summary
       boundary; the Store then treats `{}` as truthy and its persistence calls no-op silently. So a
       static build no longer threads storage (dropped from the summary + the Go staticSummary struct

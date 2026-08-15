@@ -8,7 +8,7 @@ import { defineConfig, devices } from '@playwright/test';
 // Two dev servers, both driven by the REPO compiler via `go run`:
 //   • examples/transitions-demo (:4173) — memory-mode, two apps on one page
 //     (sequential + overlap side by side). Powers the transition-mechanics specs.
-//   • examples/stays (:4174) — history-mode, multi-route, tall scrollable pages
+//   • examples/stays (:4174) — path-mode, multi-route, tall scrollable pages
 //     that render full content on commit (no <puzzle-skeleton>, so scroll restore
 //     lands on real content). Powers the browser back/forward + scroll-restore
 //     specs (transitions-demo is memory-mode, so it has no URL/window scroll to

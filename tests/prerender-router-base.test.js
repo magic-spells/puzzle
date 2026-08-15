@@ -114,13 +114,13 @@ describe('hybrid prerender — default (no base, history) is unchanged', () => {
 describe('hash apps: rejected by hybrid, flattened to history by static output (P2.1)', () => {
 	it('hybrid + hash is rejected before any page renders', async () => {
 		await expect(prerender(config({ routerMode: hashRouter() }))).rejects.toThrow(
-			/hybrid prerender output requires history routing/
+			/hybrid prerender output requires path routing/
 		);
 	});
 
 	it('hybrid + memory is rejected the same way', async () => {
 		await expect(prerender(config({ routerMode: memoryRouter() }))).rejects.toThrow(
-			/hybrid prerender output requires history routing/
+			/hybrid prerender output requires path routing/
 		);
 	});
 

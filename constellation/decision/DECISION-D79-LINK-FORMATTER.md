@@ -39,7 +39,7 @@ ever appears in app code" was not yet true. See [[DOC-SPEC]] §6, §9, §15.
 D34 made the router *API* path-shaped in every mode — `push('/user/123')`,
 route defs, `current.path`, params never see a `#` — but `<a href>` in
 templates still had to hand-write the mode-specific shape: `href="#/library"`
-in hash mode, base-prefixed `href="/app/library"` under a history-mode
+in hash mode, base-prefixed `href="/app/library"` under a path-mode
 `routerBase` ([[DECISION-D51-ROUTER-BASE-PATH]] deliberately left the base to
 "the URL and `<a href>`"). Switching `routerMode` or `routerBase` therefore
 meant rewriting every link in every template — the opposite of D34's one-line
@@ -99,7 +99,7 @@ Sub-decisions, each with its rejected alternative:
 - App templates can be written path-shaped in every mode; `routerMode` and
   `routerBase` become one-line config changes with **no template edits** —
   D34's §15 claim ("no `#` ever appears in app code") now covers hrefs too,
-  and D51's base-prefixing chore in history mode disappears behind the same
+  and D51's base-prefixing chore in path mode disappears behind the same
   formatter.
 - SSG inherits the behavior for free: prerender runs the same
   `PuzzleApp.mount()` wiring, so static HTML gets correctly-shaped hrefs from

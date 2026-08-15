@@ -94,7 +94,7 @@ three different ways, none of them loud:
    catch-all.
 2. It was unreachable from links **by construction**: the click interceptor
    pushes `url.pathname + …`, and `URL.pathname` always begins with `/`. Only a
-   hand-written `router.push('about')` could reach it — and in history mode that
+   hand-written `router.push('about')` could reach it — and in path mode that
    calls `history.pushState` with a *relative* URL the browser resolves against
    the current directory, a second independent defect.
 3. `router.url('about')` returned it unchanged, so the `link` formatter emitted

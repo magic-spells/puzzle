@@ -343,7 +343,7 @@ const config: PuzzleAppConfig = {
 	formatters: { upcase },
 	apiURL: '',
 	beforeRequest: attachAuth,
-	// History routing is the default and needs no `routerMode`; the opt-in modes
+	// Path routing is the default and needs no `routerMode`; the opt-in modes
 	// are imported factories (D159), and the handle they produce is opaque.
 	routerBase: '/app',
 	transitionMode: 'sequential',

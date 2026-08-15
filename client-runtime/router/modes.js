@@ -1,7 +1,7 @@
 /**
  * Opt-in router modes (D159) — `@magic-spells/puzzle/router-modes`.
  *
- * History routing is the Router's inline, zero-config default and costs nothing
+ * Path routing is the Router's inline, zero-config default and costs nothing
  * to import. Hash (D34) and memory (D42) routing are the deviations from it, and
  * they live HERE so an app that never imports this module never ships them: the
  * ~17 scattered mode branches the Router used to carry are now a handful of
@@ -21,9 +21,9 @@
  * entry stack): the Router calls it once, at construction.
  *
  * The mode instance carries only the deviations:
- * - `encode(path, base)` — the write-side URL encoder (history: `base + path`).
+ * - `encode(path, base)` — the write-side URL encoder (path routing: `base + path`).
  * - `readPath(base)` — the read-side URL parser, `null` = "not a route"
- *   (history reads `location.pathname + location.search` inline).
+ *   (path routing reads `location.pathname + location.search` inline).
  * - `clickFragment(fragment, e, base, router)` — a `'#…'` href was clicked.
  * - `clickLink(url, e, base, router)` — a same-origin absolute URL was clicked;
  *   returns true when the mode owns the decision and the interceptor must stop.
@@ -63,7 +63,7 @@ const hashMode = {
 	 *
 	 * With a base the fragment must be exactly `'#' + base` (→ `'/'`), the base
 	 * followed directly by a query (→ `'/?…'` — the app ROOT carrying that query,
-	 * mirroring history mode's `pathname === base` branch), or under
+	 * mirroring path mode's `pathname === base` branch), or under
 	 * `'#' + base + '/'`; any OTHER fragment (including a `'#/...'` outside the
 	 * base) → `null`. A bare `''`/`'#'` still → `'/'` (the host root maps to the
 	 * app root).
@@ -153,7 +153,7 @@ function tryHashFragment(fragment, e, base, router) {
  * scroll and no focus management (stealing the host page's scroll or keyboard is
  * strictly worse than leaving them alone, D93). `routerBase` is inert (there is
  * no URL to prefix). The click interceptor STAYS ACTIVE: same-origin pathname
- * links route in memory exactly as in history mode, so a bare `#anchor` href
+ * links route in memory exactly as in path mode, so a bare `#anchor` href
  * falls through to the browser.
  *
  * @param {{ initialPath?: string }} [options] the first route (default `'/'`)

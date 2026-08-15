@@ -302,7 +302,7 @@ export default class RcLayout extends PuzzleView {
    * Await a navigation the router does NOT hand back a promise for.
    *
    * push()/replace() return the navigation promise, but go()/back()/forward()
-   * in history mode delegate to `history.go(n)` and return undefined — the
+   * in path mode delegate to `history.go(n)` and return undefined — the
    * navigation arrives later, through the popstate handler. Polling the
    * committed path is the only signal available, and it is a real one: #state
    * is written inside the atomic commit window, so `current.path` changing IS

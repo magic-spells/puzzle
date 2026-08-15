@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // Non-ASCII literal route paths use the browser's percent-encoded pathname as
-// their canonical internal form. These are deliberately history-mode tests:
+// their canonical internal form. These are deliberately path-mode tests:
 // memory mode has no URL, while push-only coverage would hide cold-load, link,
 // and popstate mismatches.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';

@@ -184,7 +184,7 @@
  * computed off-DOM, so #resolveScroll returns a { anchor } SENTINEL pre-commit
  * that #commitState resolves AFTER mount (rect top/left + current scroll offsets).
  * A pop's saved position still wins over an anchor; a custom scrollBehavior still
- * wins over everything (the anchor rides verbatim in to.path). The history-mode
+ * wins over everything (the anchor rides verbatim in to.path). The path-mode
  * link interceptor now preserves url.hash (previously dropped); hash mode carries
  * the anchor inside the fragment (`#/docs#faq`), intercepted by the existing `#/`
  * rule, parsed by #currentPath into the path-shaped `/docs#faq`.
@@ -234,7 +234,7 @@
  * skips focusing for that navigation (the announcement still fires), and a throw
  * is logged and treated as falsy (the same posture a throwing scrollBehavior has).
  *
- * Routing modes (v1.6 D34 hash, v1.11 D42 memory, restructured by D159): HISTORY
+ * Routing modes (v1.6 D34 hash, v1.11 D42 memory, restructured by D159): PATH
  * routing is inline here and is the zero-config default. Hash and memory routing
  * are OPT-IN IMPORTS — `hashRouter()` / `memoryRouter({ initialPath })` from
  * `@magic-spells/puzzle/router-modes` (router/modes.js) — passed as the `mode`
@@ -243,7 +243,7 @@
  * The public API stays PATH-SHAPED and mode-agnostic in every mode:
  * push('/user/123'), current.path === '/user/123'.
  *
- * A mode object supplies ONLY the deviations from history, at the seams below —
+ * A mode object supplies ONLY the deviations from path routing, at the seams below —
  * `readPath` (URL read, #currentPath), `encode` (URL write, #encodedUrl/url()),
  * `clickFragment`/`clickLink` (the interceptor), and, for a `urlless` mode, the
  * entry bookkeeping `history` normally provides (`start`/`commit`/`go`/
@@ -251,7 +251,7 @@
  * document-level side effect: no popstate listener, no scroll (#scrollEnabled),
  * no focus/announcement (#focusEnabled), no title/head (#syncHead) — an embed
  * shares the window with a host page the router has no claim on. Programmatic
- * history — go(n)/back()/forward() — works in all modes: history/hash delegate
+ * history — go(n)/back()/forward() — works in all modes: path/hash delegate
  * to history.go(n) (the popstate path runs the pipeline); a urlless mode moves
  * its own index and runs the pipeline as a POP, the index moving ONLY at commit
  * (a superseded pop leaves it put — D19). Out-of-range n is a silent no-op
@@ -261,7 +261,7 @@
  * Applied at the path-shape boundary, mode-agnostically — the SAME three seams
  * the mode uses: READ (#currentPath strips the base after the mode-specific raw
  * read), WRITE (the #navigate pushState site prefixes the base before the mode-
- * specific encoding — history url = base + path, hash url = '#' + base + path),
+ * specific encoding — path-mode url = base + path, hash url = '#' + base + path),
  * and the click interceptor (#handleClick takes only URLs under the base and
  * pushes the base-stripped path; outside-base same-origin links fall through to
  * the browser — a real navigation away). The app-facing surface stays base-free:
@@ -369,7 +369,7 @@ export class Router {
 	#onPopState;
 
 	// ---- routing mode (v1.6, D34; memory v1.11, D42; D159) ------------------
-	// NULL = history routing: the route rides in location.pathname, inline in this
+	// NULL = path routing: the route rides in location.pathname, inline in this
 	// file, the zero-config default. Otherwise the per-Router instance an imported
 	// mode factory produced (router/modes.js — hashRouter()/memoryRouter()),
 	// consulted only at the seams where that mode deviates. Only the
@@ -450,7 +450,7 @@ export class Router {
 	 *   to choose the target — called after mount, falsy = skip focusing for that
 	 *   navigation, a throw is logged and treated as falsy. Inert in memory mode.
 	 * @param {object} [options.mode] URL carrier (D34/D42, restructured by D159):
-	 *   omit for history routing (the pathname — the default), or pass the object
+	 *   omit for path routing (the pathname — the default), or pass the object
 	 *   an imported factory produced — `hashRouter()` / `memoryRouter(options)`
 	 *   from `@magic-spells/puzzle/router-modes`. A MODE STRING is a throw.
 	 * @param {string} [options.base] serve the app under a sub-path (v1.19, D51):
@@ -472,11 +472,11 @@ export class Router {
 	) {
 		// A mode is an OBJECT from an imported factory (D159). Strings used to select
 		// hash/memory routing; they now name a module the bundler can see, so every
-		// history-mode app stops shipping code it never runs. Fail fast and name the
+		// path-mode app stops shipping code it never runs. Fail fast and name the
 		// import — silently ignoring 'hash' would route the whole app wrong.
 		if (mode != null) {
 			const modesImport =
-				" — history routing is the default (omit it); for hash or memory routing import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes' and pass e.g. routerMode: hashRouter()";
+				" — path routing is the default (omit it); for hash or memory routing import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes' and pass e.g. routerMode: hashRouter()";
 			if (typeof mode !== 'object' || typeof mode.create !== 'function') {
 				// 'object' is the only typeof here that takes 'an' (strings are named
 				// outright, and number/boolean/function/symbol/bigint all take 'a').
@@ -492,7 +492,7 @@ export class Router {
 			// stack) must never be shared by two Routers built from one descriptor.
 			this.#mode = mode.create();
 			// A descriptor that builds nothing must not pass: #mode stays null, and a
-			// null #mode reads as HISTORY everywhere — the exact silent wrong-routing
+			// null #mode reads as PATH ROUTING everywhere — the exact silent wrong-routing
 			// this validation exists to prevent, only reached by a duck-typed object.
 			if (!this.#mode) {
 				throw new Error(
@@ -614,7 +614,7 @@ export class Router {
 	/**
 	 * The current route path for this mode, path-shaped (pathname+search style)
 	 * and BASE-STRIPPED (v1.19, D51) — the app-facing surface never sees the base.
-	 * History reads `location.pathname + location.search` inline; any other mode
+	 * Path routing reads `location.pathname + location.search` inline; any other mode
 	 * delegates to its own `readPath(base)` (hash parses `location.hash`, D34 —
 	 * see router/modes.js), which may return `null` for "not a route fragment", so
 	 * the caller leaves the view alone. A urlless mode never gets here (it seeds
@@ -854,7 +854,7 @@ export class Router {
 
 	/**
 	 * Programmatic history (v1.11, D42), all modes. Move `n` entries — negative =
-	 * back, positive = forward. History/hash mode delegate to `history.go(n)`: the
+	 * back, positive = forward. Path/hash mode delegate to `history.go(n)`: the
 	 * browser moves the URL and fires popstate, which the existing listener turns
 	 * into a pop navigation (the whole pipeline). A urlless mode walks its own
 	 * entry stack (modes.js) and runs the pipeline as a POP to the target entry's
@@ -893,7 +893,7 @@ export class Router {
 
 	/**
 	 * Render-time inverse of the click interceptor / #currentPath parsing (v1.46,
-	 * D79): a path-shaped route in, a mode-encoded href out — history `base + path`,
+	 * D79): a path-shaped route in, a mode-encoded href out — path mode `base + path`,
 	 * hash `'#' + base + path`, memory the path unchanged (no URL carrier). The #base
 	 * is used exactly as stored (D51 already normalized it — no re-normalization). A
 	 * string NOT starting with '/' is returned unchanged: the deliberate pass-through
@@ -1019,7 +1019,7 @@ export class Router {
 	 * capture the wrong URL, violating the router's "URL and mounted tree commit
 	 * together" invariant. Rewrite the entry the browser popped to back to `path`.
 	 *
-	 * We do NOT history.go(delta) back to the pre-pop entry: history/hash mode keeps
+	 * We do NOT history.go(delta) back to the pre-pop entry: path/hash mode keeps
 	 * no browser-history index (only a urlless mode tracks its own entry stack), so
 	 * the delta is unknowable. replaceState COLLAPSES the guarded entry — trading the
 	 * exact back/forward stack shape for the URL/tree invariant (the guarded forward
@@ -1027,7 +1027,7 @@ export class Router {
 	 * navigation to suppress and the guard cannot re-run — the very reason a
 	 * history.go revert (which would echo a popstate targeting `path`) was avoided.
 	 * The URL is re-encoded exactly as #commitLocation writes it (shared #encodedUrl:
-	 * base prefix, plain in history mode / '#'-encoded in hash mode); history.state rides through
+	 * base prefix, plain in path mode / '#'-encoded in hash mode); history.state rides through
 	 * untouched so the entry keeps whatever __puzzleScrollKey #handlePopState settled
 	 * on it. A urlless mode has no browser URL (and no popstate listener); its index
 	 * already stayed on the committed entry (the blocked pop cleared the pending pop
@@ -1039,7 +1039,7 @@ export class Router {
 	}
 
 	/**
-	 * The one write-side URL encoder: history prefixes the base (v1.19, D51);
+	 * The one write-side URL encoder: path routing prefixes the base (v1.19, D51);
 	 * every other mode owns the whole encoding (hash returns `'#' + base + path`,
 	 * D34 — modes.js). Every writer (#commitLocation, #restoreCommittedUrl) must
 	 * go through here so committed and restored URLs stay byte-identical.
@@ -1106,7 +1106,7 @@ export class Router {
 		// A real push supersedes any in-flight memory pop and truncates forward
 		// entries (D42), so the pending pop target is moot — reset it here (at the
 		// point supersession becomes real) so a go() arriving before this push commits
-		// bases off the committed index, not a stale pop target. No-op in history/hash
+		// bases off the committed index, not a stale pop target. No-op in path/hash
 		// mode and for pops (which set the pending target in go()). (Fix 3 / D42.) A
 		// replace supersedes a pending pop the same way (D83) — it targets the CURRENT
 		// entry, not the pop's.
@@ -2725,7 +2725,7 @@ export class Router {
 		const href = a.getAttribute('href');
 		if (!href) return;
 		if (href.startsWith('#')) {
-			// history mode: any '#'-href is an in-page anchor, left to the browser.
+			// path mode: any '#'-href is an in-page anchor, left to the browser.
 			// A mode may claim it instead — hash routing intercepts '#/...' (D34,
 			// modes.js) while still leaving a bare '#anchor' to the browser.
 			this.#mode?.clickFragment?.(href, e, this.#base, this);
@@ -2749,13 +2749,13 @@ export class Router {
 		// (hash routing: only a same-page URL carrying a route fragment is in-app).
 		if (this.#mode?.clickLink?.(url, e, this.#base, this)) return;
 
-		// history mode: with a base (D51) intercept ONLY same-origin URLs UNDER the
+		// path mode: with a base (D51) intercept ONLY same-origin URLs UNDER the
 		// base (=== base or under base + '/') and push the base-STRIPPED path; a
 		// same-origin link outside the base is a real navigation away from the app
 		// and falls through to the browser (more correct than intercept-everything).
 		// A urlless mode keeps the base inert — the interceptor stays active but
 		// never strips (there is no URL to prefix), so it behaves exactly as the
-		// base-less history path.
+		// base-less path-mode path.
 		if (this.#base && !this.#mode) {
 			if (url.pathname !== this.#base && !url.pathname.startsWith(this.#base + '/')) {
 				return; // outside the app base — let the browser navigate away
@@ -3014,8 +3014,8 @@ export function normalizeBase(base) {
  * stub (ssg/assemble.js) and the hybrid prerender ctx (ssg/index.js) both call it,
  * so a prerendered `href` and the client's re-render can never disagree. `base` is
  * an ALREADY-normalized base (normalizeBase above); `mode` is a Router mode
- * instance (router/modes.js) or null/undefined for history encoding — the SSG
- * callers are history-only by construction and pass nothing.
+ * instance (router/modes.js) or null/undefined for path encoding — the SSG
+ * callers are path-only by construction and pass nothing.
  */
 export function encodeURL(path, mode, base) {
 	if (typeof path !== 'string') {

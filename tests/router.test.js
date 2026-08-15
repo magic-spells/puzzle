@@ -1985,12 +1985,12 @@ describe('Router — a deferred redirect survives a synchronous commit throw (Fi
 	});
 });
 
-// ---- v1.49, D83: router.replace() + parsed query snapshot (history mode) ----
+// ---- v1.49, D83: router.replace() + parsed query snapshot (path mode) ----
 // Memory mode (router-memory.test.js) proves the stack semantics precisely;
 // this block proves the HISTORY seams: replaceState (never pushState), a
 // constant history.length, the preserved __puzzleScrollKey entry identity, real
 // jsdom back-traversal after a replace, and the leave-scroll-alone default.
-describe('router.replace() — history mode (v1.49, D83)', () => {
+describe('router.replace() — path mode (v1.49, D83)', () => {
 	class DocsView extends PuzzleView {
 		render() {
 			return h('puzzle-view', { class: 'docs' }, [text('DOCS')]);
@@ -2122,7 +2122,7 @@ describe('router.replace() — history mode (v1.49, D83)', () => {
 	});
 });
 
-describe('route snapshot query/hash — history mode (v1.49, D83)', () => {
+describe('route snapshot query/hash — path mode (v1.49, D83)', () => {
 	const routes = [
 		{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
 		{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },

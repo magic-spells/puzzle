@@ -28,7 +28,7 @@ build warning saying it is ignored.
 
 A 0.2.0 → 0.3.0 regression. The D81 hybrid guard throws for hash/memory —
 its message actively tells hash-mode users to switch to static ("Use
-`output: 'static'` for a non-history app"). Static then handed
+`output: 'static'` for a non-path app"). Static then handed
 `config.routerMode` straight to `makeRouterStub`, so the `link` formatter
 prerendered `href="#/about"` while the page physically lives at
 `/about/index.html`. Static pages install no router and no click
@@ -53,7 +53,7 @@ passthrough into dead links.
 
 ## Alternatives rejected
 
-- **Throwing** like hybrid does — hybrid genuinely cannot work off history
+- **Throwing** like hybrid does — hybrid genuinely cannot work off path
   mode (the SPA takeover boots at '/'); static works fine, the user's
   `routerMode` is just irrelevant. A throw would break the very apps D81's
   error message sent here.
