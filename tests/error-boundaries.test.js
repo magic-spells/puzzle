@@ -502,6 +502,107 @@ describe('errorView retry', () => {
 		expect(reports.map((r) => r.info.phase)).toEqual(['mount', 'mount']);
 	});
 
+	it('redraws the error view when a retried navigation fails in the load phase', async () => {
+		let attempts = 0;
+		let failLoad = true;
+		const errorViews = [];
+		const reports = [];
+		const ErrorView = errorViewClass(errorViews);
+
+		class Page extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				attempts++;
+			}
+			async data() {
+				// Attempt 1 loads cleanly so the FIRST failure is a mount-phase render
+				// throw; every retried rebuild then rejects in the LOAD phase instead,
+				// which fails the navigation before it can commit anything.
+				if (attempts > 1 && failLoad) throw new Error(`load failure ${attempts}`);
+				return {};
+			}
+			render() {
+				if (attempts === 1) throw new Error('first failure');
+				return h('span', { class: 'page' }, [text('page ok')]);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/', view: Page }],
+			errorView: ErrorView,
+			onError(error, info) {
+				reports.push({ error, info });
+			},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.find('.app-error')).not.toBeNull();
+		expect(errorViews).toHaveLength(1);
+
+		// The retry tears its own face down before rebuilding, so a load failure —
+		// which stays put by design — would leave this position blank. It must be
+		// redrawn instead, carrying the NEW error, not the mount-phase one.
+		await errorViews[0].props.retry();
+		await flush();
+		expect(errorViews).toHaveLength(2);
+		expect(errorViews[0].isDestroyed).toBe(true);
+		expect(errorViews[1].props.error.message).toBe('load failure 2');
+		expect(app.find('.message').textContent).toBe('load failure 2');
+		expect(app.router.current.path).toBe('/');
+
+		// The redrawn face is pressable: a failed retry must not latch the position.
+		await errorViews[1].props.retry();
+		await flush();
+		expect(errorViews).toHaveLength(3);
+		expect(errorViews[2].props.error.message).toBe('load failure 3');
+
+		failLoad = false;
+		await errorViews[2].props.retry();
+		await flush();
+		expect(app.find('.page').textContent).toBe('page ok');
+		expect(app.find('.app-error')).toBeNull();
+		expect(attempts).toBe(4);
+		expect(reports.map((r) => r.info.phase)).toEqual(['mount', 'navigation', 'navigation']);
+	});
+
+	it('redraws the error view when a retried routed view fails during mount', async () => {
+		let attempts = 0;
+		const errorViews = [];
+		const reports = [];
+		const ErrorView = errorViewClass(errorViews);
+
+		class Page extends PuzzleView {
+			constructor(ctx) {
+				super(ctx);
+				attempts++;
+			}
+			async data() {
+				return {}; // the load always succeeds — only the mount fails
+			}
+			render() {
+				throw new Error(`render failure ${attempts}`);
+			}
+		}
+
+		const app = await createTestApp({
+			routes: [{ path: '/', view: Page }],
+			errorView: ErrorView,
+			onError(error, info) {
+				reports.push({ error, info });
+			},
+		});
+		apps.push(app);
+		await flush();
+		expect(app.find('.app-error')).not.toBeNull();
+
+		await errorViews[0].props.retry();
+		await flush();
+		expect(errorViews).toHaveLength(2);
+		expect(errorViews[1].props.error.message).toBe('render failure 2');
+		expect(app.find('.message').textContent).toBe('render failure 2');
+		expect(reports.map((r) => r.info.phase)).toEqual(['mount', 'mount']);
+	});
+
 	it('is a no-op after a parent patch removes the failed position', async () => {
 		let attempts = 0;
 		let host;

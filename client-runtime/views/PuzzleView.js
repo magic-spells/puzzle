@@ -550,15 +550,52 @@ export class PuzzleView {
 		const ErrorView = getErrorView(this.ctx);
 		if (!ErrorView) return false;
 
+		return this.#mountErrorView(ErrorView, error, info, this.#makeRetry());
+	}
+
+	/**
+	 * INTERNAL — redraw this failed position after a RETRY whose rebuild failed in
+	 * the router's LOAD phase (D145/v1.71). #makeRetry tears the error view down
+	 * before it re-runs the navigation, and a load failure obeys the D19/D61
+	 * stay-put rule — no URL, no history entry, no half-built page, the user keeps
+	 * the page already on screen. Here that page WAS this error view, so staying put
+	 * alone leaves the position blank until a reload. The router calls this from that
+	 * catch so the face comes back with the NEW error and a pressable retry.
+	 *
+	 * Deliberately NOT folded into __showErrorView: this instance is already
+	 * destroyed, already marked chain-invalid in the router, and its placeholder
+	 * still holds the slot — so that prologue (plant, mark, destroy) must not run
+	 * again, and its `destroyed && !errorView` guard has to keep refusing every other
+	 * caller, since a torn-down position must never resurrect itself on its own.
+	 */
+	__retryErrorView(error, info) {
+		// Only a position that is still OURS and still EMPTY: an #errorView means
+		// something already refilled it (that face owns the retry now), no #vm means
+		// this instance never mounted, and an unparented placeholder means the
+		// position was released by a parent patch or a later navigation.
+		if (this.#errorView) return true;
+		if (!this.#vm || !this.__failedPlaceholder?.parentNode) return false;
+
+		const ErrorView = getErrorView(this.ctx);
+		if (!ErrorView) return false;
+		return this.#mountErrorView(ErrorView, error, info, this.#makeRetry());
+	}
+
+	/**
+	 * One single-flight retry closure per MOUNTED error view. Rebuilt for every
+	 * mount so a retry that fails and redraws the face is pressable again and again
+	 * — the latch guards double-presses of ONE face, and the closure a replaced face
+	 * handed out stays permanently spent.
+	 */
+	#makeRetry() {
 		let inFlight = false;
-		const retry = async () => {
+		return async () => {
 			if (!this.#errorView || inFlight) return;
 			inFlight = true;
 			this.#errorView.destroy();
 			this.#errorView = null;
 			await (this.ctx.router?.__failedView?.(this, true) ?? this.__retryParent?.refresh());
 		};
-		return this.#mountErrorView(ErrorView, error, info, retry);
 	}
 
 	async #mountErrorView(ErrorView, error, info, retry) {

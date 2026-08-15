@@ -32,16 +32,34 @@ export default class Card extends PuzzleView {}
 	files["app/views/Home.pzl"] = `<puzzle-view>
   <h1>Home</h1>
   <p>{label}</p>
+  <p>{site}</p>
+  <p>{noteText}</p>
   <Card>body</Card>
 </puzzle-view>
 <script>
 import { PuzzleView } from '@magic-spells/puzzle';
 import Card from '../components/Card.pzl';
 import { tone } from '../public/tokens.js';
+import { siteName } from '../lib/site-data.js';
+import { note } from '../lib/home-note.js';
 export default class Home extends PuzzleView {
-  data() { return { greeting: 'hello', label: tone }; }
+  data() { return { greeting: 'hello', label: tone, site: siteName, noteText: note }; }
 }
 </script>
+`
+	// site-data.js is the overlap the render-wide walk exists for: app.js reads
+	// it while wiring the app (so it shapes every page) AND Home.pzl imports it
+	// directly. home-note.js is the ordinary case next to it — a helper only one
+	// view imports, which must stay that route's business.
+	files["app/lib/site-data.js"] = "export const siteName = 'ORIGINAL SITE';\n"
+	files["app/lib/home-note.js"] = "export const note = 'ORIGINAL NOTE';\n"
+	files["app/app.js"] = `import { PuzzleApp } from '@magic-spells/puzzle';
+import routes from './routes.js';
+import { siteName } from './lib/site-data.js';
+const app = new PuzzleApp({ target: '#app', routes });
+app.siteName = siteName;
+app.mount();
+export default app;
 `
 	files["app/public/robots.txt"] = "User-agent: *\n"
 	files["app/public/assets/note.txt"] = "one\n"
@@ -259,6 +277,22 @@ export default class Card extends PuzzleView {}
 		write("app/public/tokens.js", "export const tone = 'REVISED';\n")
 	})
 
+	// A helper only Home.pzl imports sits BELOW its chain root, so the
+	// render-wide walk never reaches it: still one route. This is the fast path
+	// the cut is drawn to preserve.
+	step("view-private helper edit", []string{abs("app/lib/home-note.js")}, &wantPlan{routes: []string{"/"}}, func() {
+		write("app/lib/home-note.js", "export const note = 'REVISED NOTE';\n")
+	})
+
+	// The overlap case, against the REAL metafiles: site-data.js is page-reachable
+	// (Home.pzl imports it) and render-wide (app.js reads it while wiring the app,
+	// so it can move every page's markup and data island). Render-wide has to win
+	// — attributing it to '/' alone would leave /about and 404 serving stale HTML
+	// with nothing in the session to ever wash it out.
+	step("module both app.js and a view import", []string{abs("app/lib/site-data.js")}, &wantPlan{full: true}, func() {
+		write("app/lib/site-data.js", "export const siteName = 'REVISED SITE';\n")
+	})
+
 	// The one edit a content-hash-keyed transform memo cannot see on its own:
 	// the .pzl that inlines this icon is byte-identical across the change.
 	step("inlined svg edit", []string{abs("app/assets/icons/logo.svg")}, &wantPlan{routes: []string{"/"}}, func() {
@@ -301,7 +335,9 @@ export default class DefaultLayout extends PuzzleView {}
 	step("app entry edit (render-wide)", []string{abs("app/app.js")}, &wantPlan{full: true}, func() {
 		write("app/app.js", `import { PuzzleApp } from '@magic-spells/puzzle';
 import routes from './routes.js';
+import { siteName } from './lib/site-data.js';
 const app = new PuzzleApp({ target: '#app', routes });
+app.siteName = siteName;
 app.mount();
 export default app;
 // touched

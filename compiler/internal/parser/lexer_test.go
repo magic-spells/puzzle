@@ -532,6 +532,76 @@ func TestLexRawBlock(t *testing.T) {
 	}
 }
 
+// TestLexRawBraceAttrValue covers the nested raw lexer (the one parseRaw runs
+// over a captured body), where a brace-valued attribute is captured verbatim.
+// The bytes are never interpreted, but the value's END still has to be found the
+// way scanBraceGroup finds it — skipping strings, regex literals, and comments —
+// or a '}' written inside one of them cuts the literal short and derails the
+// rest of the tag (D150).
+func TestLexRawBraceAttrValue(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		attr  string
+		want  string
+	}{
+		{
+			name:  "object literal",
+			input: `<b data-json={ {"x": 1} }>`,
+			attr:  "data-json",
+			want:  `{ {"x": 1} }`,
+		},
+		{
+			name:  "brace inside a double-quoted string",
+			input: `<b data-json={ {"text": "}"} }>`,
+			attr:  "data-json",
+			want:  `{ {"text": "}"} }`,
+		},
+		{
+			name:  "brace inside a single-quoted string",
+			input: `<b data-json={ {'text': '}'} }>`,
+			attr:  "data-json",
+			want:  `{ {'text': '}'} }`,
+		},
+		{
+			name:  "brace inside a regex literal",
+			input: `<b data-x={ /}/ }>`,
+			attr:  "data-x",
+			want:  `{ /}/ }`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			lx := newRawLexer(tc.input, Position{Line: 1, Col: 1, Offset: 0}, "test.pzl")
+			var got []Token
+			for {
+				tk, err := lx.Next()
+				if err != nil {
+					t.Fatalf("unexpected lex error: %v", err)
+				}
+				if tk.Type == TokEOF {
+					break
+				}
+				got = append(got, tk)
+			}
+			// TagOpen, AttrName, Equals, AttrBare, TagEnd — a value that ends early
+			// leaves trailing bytes that lex as extra tokens (or error above).
+			want := []tv{{TokTagOpen, "b"}, {TokAttrName, tc.attr}, {TokEquals, ""}, {TokAttrBare, tc.want}, {TokTagEnd, ""}}
+			if len(got) != len(want) {
+				t.Fatalf("token count: got %d, want %d\n  got:  %v\n  want: %v", len(got), len(want), dump(got), want)
+			}
+			for i := range want {
+				if got[i].Type != want[i].typ || got[i].Value != want[i].val {
+					t.Errorf("token %d: got {%s %q}, want {%s %q}", i, got[i].Type, got[i].Value, want[i].typ, want[i].val)
+				}
+			}
+			if !got[3].Raw {
+				t.Errorf("attribute value token must be marked Raw")
+			}
+		})
+	}
+}
+
 func TestLexRawBlockErrors(t *testing.T) {
 	t.Run("unterminated error names closer and points at opener", func(t *testing.T) {
 		lx := newLexer("x\n  {#raw}{ x }", Position{Line: 1, Col: 1, Offset: 0}, "test.pzl")
