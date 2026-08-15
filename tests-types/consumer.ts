@@ -137,6 +137,14 @@ class FullyCustomPost extends PuzzleModel {
 	};
 }
 
+// The fixtures mock block is a first-class adapter key on the /adapter subpath
+// type too, not just the base ModelAdapter interface.
+const mockedAdapterConfig: AdapterConfig<Todo> = {
+	endpoint: '/todos',
+	mock: { data: [{ id: '1', title: 'seeded' }], failRate: 0 },
+};
+void mockedAdapterConfig;
+
 const publishingAdapter = {
 	endpoint: '/todos',
 	publish: (fetch: AdapterFetch, id: string) =>

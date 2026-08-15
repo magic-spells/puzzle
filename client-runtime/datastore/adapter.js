@@ -28,14 +28,14 @@ let installed = false;
 function validateAdapterConfig(type, Model, config) {
 	if (!config || typeof config !== 'object' || Array.isArray(config)) return;
 	const invalid = Object.entries(config)
-		.filter(([key, value]) => key !== 'endpoint' && typeof value !== 'function')
+		.filter(([key, value]) => key !== 'endpoint' && key !== 'mock' && typeof value !== 'function')
 		.map(([key]) => key);
 	if (!invalid.length || warnedAdapterConfigs.has(Model)) return;
 	warnedAdapterConfigs.add(Model);
 	console.warn(
 		`[puzzle] model '${type}' has invalid adapter ${invalid.length === 1 ? 'key' : 'keys'} ${invalid
 			.map((key) => JSON.stringify(key))
-			.join(', ')} — adapter keys must be "endpoint" or functions`
+			.join(', ')} — adapter keys must be "endpoint", "mock", or functions`
 	);
 }
 

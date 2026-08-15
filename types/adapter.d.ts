@@ -1,6 +1,11 @@
 /** Public declarations for the opt-in @magic-spells/puzzle/adapter subpath. */
 
-import type { PuzzleAdapterCapability, PuzzleModel, RequestOptions } from './index.js';
+import type {
+	AdapterMock,
+	PuzzleAdapterCapability,
+	PuzzleModel,
+	RequestOptions,
+} from './index.js';
 
 export type AdapterMaybePromise<T> = T | Promise<T>;
 
@@ -58,6 +63,8 @@ export interface AdapterDefaults<TRecord extends PuzzleModel = PuzzleModel> {
  */
 export interface AdapterConfig<TRecord extends PuzzleModel = PuzzleModel> {
 	endpoint?: string;
+	/** Development/test mock served in place of the network (v1.57, D95). */
+	mock?: AdapterMock;
 	loadAll?(
 		fetch: AdapterFetch,
 		options?: AdapterLoadAllOptions

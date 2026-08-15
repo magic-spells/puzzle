@@ -149,7 +149,8 @@ their conversation.
 **`endpoint` is required only by what needs it.** A verb the app invokes with
 neither an author function nor an `endpoint` to generate a default from is
 the existing "no adapter declared" error, now phrased per-verb. Config
-validation stays dev-loud: non-function, non-`endpoint` keys warn once.
+validation stays dev-loud: keys that are neither functions nor one of the two
+declarative keys — `endpoint` and the D95 `mock` block — warn once per model.
 
 D157 is unchanged: the capability passed to `PuzzleApp` is still what ships
 and installs the module; models with no `adapter` object remain purely local;
