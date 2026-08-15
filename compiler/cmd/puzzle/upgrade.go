@@ -27,12 +27,8 @@ var upgradeCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		check, _ := cmd.Flags().GetBool("check")
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("getting current directory: %w", err)
-		}
 		executable, _ := os.Executable()
-		return runUpgrade(os.Stdout, os.Stderr, ui.New(os.Stdout), cwd, executable, check, upgradeEnvironment{
+		return runUpgrade(os.Stdout, os.Stderr, ui.New(os.Stdout), executable, check, upgradeEnvironment{
 			homeDir:     os.UserHomeDir,
 			input:       os.Stdin,
 			interactive: ui.IsTerminal(os.Stdin),
@@ -144,7 +140,7 @@ type upgradeEnvironment struct {
 	interactive bool
 }
 
-func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, cwd, executable string, check bool, env upgradeEnvironment) error {
+func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, check bool, env upgradeEnvironment) error {
 	latest, err := fetchLatest(5 * time.Second)
 	if err != nil {
 		return fmt.Errorf("checking for updates: %w", err)
@@ -165,7 +161,7 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, cwd, executable strin
 		return nil
 	}
 
-	ctx, err := detectInstallContext(cwd, executable)
+	ctx, err := detectInstallContext(executable)
 	if err != nil {
 		return err
 	}
@@ -185,7 +181,9 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, cwd, executable strin
 	}
 
 	packageJSON := ctx.packageJSON
-	if ctx.kind == installGlobal {
+	if ctx.kind == installGlobal && !fsFileExists(packageJSON) {
+		// Unusual global layouts (a store the owner directory does not link
+		// into) still resolve by walking up from the binary itself.
 		packageJSON = findGlobalPackageJSON(ctx.executable)
 	}
 	installed, err := installedVersion(packageJSON)
@@ -196,7 +194,15 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, cwd, executable strin
 		return fmt.Errorf("upgrade installed puzzle %s, expected %s", installed, latest)
 	}
 
-	fmt.Fprintf(stdout, "%s upgraded %s → %s\n", out.Green("✓"), version.Version, latest)
+	// Name the scope that moved. The CLI the user invoked and a project they
+	// happen to be standing in are different installs, and a success line that
+	// says only "upgraded X → Y" reads as either one.
+	if ctx.kind == installGlobal {
+		fmt.Fprintf(stdout, "%s upgraded the global CLI %s → %s\n", out.Green("✓"), version.Version, latest)
+	} else {
+		fmt.Fprintf(stdout, "%s upgraded %s %s → %s in %s\n",
+			out.Green("✓"), puzzlePackage, version.Version, latest, ctx.dir)
+	}
 	_ = update.WriteCache(latest, time.Now())
 	refreshSkills(stdout, stderr, out, ctx, latest, env)
 	return nil
@@ -315,68 +321,106 @@ func binaryReportsVersion(path, want string) bool {
 	return len(fields) > 0 && fields[len(fields)-1] == want
 }
 
-func detectInstallContext(cwd, executable string) (installContext, error) {
-	project, found, err := findProjectInstall(cwd)
-	if err != nil || found {
-		return project, err
-	}
-
+// detectInstallContext derives the install context from the running executable
+// alone (D76, §41). The current directory plays no part: `puzzle upgrade`
+// upgrades the CLI that was invoked, so a project the user happens to be
+// standing in is never touched — and the install whose version is compared
+// against the registry, the install the package manager writes, and the install
+// the success line names are the same one by construction.
+func detectInstallContext(executable string) (installContext, error) {
 	resolved := executable
 	if real, err := filepath.EvalSymlinks(executable); err == nil {
 		resolved = real
 	}
-	if !hasPathSegment(resolved, "node_modules") {
-		return installContext{kind: installManual}, nil
+
+	owner, ok := nodeModulesOwner(resolved)
+	if !ok {
+		// No node_modules above the binary: `go install`, or a binary built
+		// straight out of the repo. npm owns neither.
+		return installContext{kind: installManual, executable: resolved}, nil
 	}
-	manager := "npm"
-	if hasPnpmSegment(resolved) {
-		manager = "pnpm"
+
+	// pnpm's global root is a real package directory — package.json plus a
+	// lockfile, listing every global install as a dependency — so it has to be
+	// recognised before the project test, or a pnpm global would upgrade itself
+	// as though it were an app. A pnpm *project* cannot false-positive here:
+	// the owner path stops above node_modules, and `.pnpm` only ever lives
+	// inside one.
+	if hasPnpmSegment(owner) {
+		return globalContext(owner, resolved, "pnpm"), nil
 	}
-	return installContext{
-		kind:       installGlobal,
-		dir:        cwd,
-		manager:    manager,
-		executable: resolved,
-	}, nil
+
+	dependency, dev, err := readPuzzleDependency(filepath.Join(owner, "package.json"))
+	if err != nil {
+		return installContext{}, err
+	}
+	if dependency {
+		return installContext{
+			kind:        installProject,
+			dir:         owner,
+			manager:     detectPackageManager(owner),
+			dev:         dev,
+			executable:  resolved,
+			packageJSON: filepath.Join(owner, "node_modules", "@magic-spells", "puzzle", "package.json"),
+		}, nil
+	}
+	return globalContext(owner, resolved, "npm"), nil
 }
 
-func findProjectInstall(start string) (installContext, bool, error) {
-	dir, err := filepath.Abs(start)
-	if err != nil {
-		return installContext{}, false, err
+// globalContext describes an install nobody's package.json declares — a global
+// prefix (`/usr/local/lib`, `/opt/homebrew/lib`, pnpm's global root). dir stays
+// empty so the package manager inherits this process's directory: `-g` does not
+// care where it runs, and picking a directory would smuggle the cwd back in.
+func globalContext(owner, executable, manager string) installContext {
+	return installContext{
+		kind:        installGlobal,
+		manager:     manager,
+		executable:  executable,
+		packageJSON: filepath.Join(owner, "node_modules", "@magic-spells", "puzzle", "package.json"),
 	}
-	for {
-		packageJSON := filepath.Join(dir, "package.json")
-		data, readErr := os.ReadFile(packageJSON)
-		if readErr == nil {
-			var pkg struct {
-				Dependencies    map[string]json.RawMessage `json:"dependencies"`
-				DevDependencies map[string]json.RawMessage `json:"devDependencies"`
-			}
-			if err := json.Unmarshal(data, &pkg); err != nil {
-				return installContext{}, false, fmt.Errorf("reading %s: %w", packageJSON, err)
-			}
-			_, dependency := pkg.Dependencies[puzzlePackage]
-			_, devDependency := pkg.DevDependencies[puzzlePackage]
-			if dependency || devDependency {
-				return installContext{
-					kind:        installProject,
-					dir:         dir,
-					manager:     detectPackageManager(dir),
-					dev:         !dependency && devDependency,
-					packageJSON: filepath.Join(dir, "node_modules", "@magic-spells", "puzzle", "package.json"),
-				}, true, nil
-			}
-		} else if !os.IsNotExist(readErr) {
-			return installContext{}, false, readErr
-		}
+}
 
+// nodeModulesOwner returns the directory owning the outermost node_modules on
+// path. Outermost, not nearest: the binary sits several levels in under every
+// layout — `<root>/node_modules/@magic-spells/puzzle-<platform>/bin/puzzle`
+// hoisted, `<root>/node_modules/.pnpm/<pkg>@<v>/node_modules/…` under pnpm — and
+// only the outermost segment's parent is the root that declares the dependency.
+func nodeModulesOwner(path string) (string, bool) {
+	owner := ""
+	dir := path
+	for {
+		if strings.EqualFold(filepath.Base(dir), "node_modules") {
+			owner = filepath.Dir(dir)
+		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return installContext{}, false, nil
+			return owner, owner != ""
 		}
 		dir = parent
 	}
+}
+
+// readPuzzleDependency reports whether packageJSON declares the CLI, and whether
+// it does so only as a devDependency. A missing file is not an error — most
+// directories have none.
+func readPuzzleDependency(packageJSON string) (declared, dev bool, err error) {
+	data, readErr := os.ReadFile(packageJSON)
+	if readErr != nil {
+		if os.IsNotExist(readErr) {
+			return false, false, nil
+		}
+		return false, false, readErr
+	}
+	var pkg struct {
+		Dependencies    map[string]json.RawMessage `json:"dependencies"`
+		DevDependencies map[string]json.RawMessage `json:"devDependencies"`
+	}
+	if err := json.Unmarshal(data, &pkg); err != nil {
+		return false, false, fmt.Errorf("reading %s: %w", packageJSON, err)
+	}
+	_, dependency := pkg.Dependencies[puzzlePackage]
+	_, devDependency := pkg.DevDependencies[puzzlePackage]
+	return dependency || devDependency, !dependency && devDependency, nil
 }
 
 func detectPackageManager(dir string) string {
@@ -435,20 +479,9 @@ func upgradeCommand(ctx installContext, latest string) (string, []string) {
 	}
 }
 
-func hasPathSegment(path, want string) bool {
-	for {
-		base := filepath.Base(path)
-		if strings.EqualFold(base, want) {
-			return true
-		}
-		parent := filepath.Dir(path)
-		if parent == path {
-			return false
-		}
-		path = parent
-	}
-}
-
+// hasPnpmSegment reports whether path runs through a pnpm-owned directory —
+// pnpm's global root (`~/Library/pnpm/global/5`, `~/.local/share/pnpm/…`) or a
+// corepack `pnpm@<v>` cache.
 func hasPnpmSegment(path string) bool {
 	for {
 		base := strings.ToLower(filepath.Base(path))

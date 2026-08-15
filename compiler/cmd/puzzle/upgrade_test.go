@@ -23,68 +23,217 @@ import (
 // (which is exactly what happened when 0.2.0 was hardcoded).
 const testLatest = "99.0.0"
 
-func TestFindProjectInstall(t *testing.T) {
-	tests := []struct {
-		name      string
-		lockfile  string
-		field     string
-		manager   string
-		wantDev   bool
-		fromChild bool
-	}{
-		{name: "pnpm dependency", lockfile: "pnpm-lock.yaml", field: "dependencies", manager: "pnpm"},
-		{name: "yarn dev dependency", lockfile: "yarn.lock", field: "devDependencies", manager: "yarn", wantDev: true},
-		{name: "bun text lock", lockfile: "bun.lock", field: "dependencies", manager: "bun"},
-		{name: "bun binary lock", lockfile: "bun.lockb", field: "devDependencies", manager: "bun", wantDev: true},
-		{name: "npm lock", lockfile: "package-lock.json", field: "dependencies", manager: "npm"},
-		{name: "npm default and walk up", field: "devDependencies", manager: "npm", wantDev: true, fromChild: true},
+// realTempDir is t.TempDir() with symlinks resolved, so fixtures compare equal
+// to the paths detection reports: detection runs the executable through
+// EvalSymlinks, and macOS hands out temp dirs under the /var → /private/var
+// link.
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
 	}
+	return dir
+}
+
+// TestDetectInstallContextFromExecutable pins the whole resolution table of §41.
+// Every case is a shape of executable path; none of them involves the working
+// directory, which detection must not read at all.
+func TestDetectInstallContextFromExecutable(t *testing.T) {
+	platform := filepath.Join("@magic-spells", platformPackageName(), "bin", "puzzle")
+
+	tests := []struct {
+		name string
+		// executable is built relative to a fresh root.
+		executable string
+		// packageJSON, when non-empty, is written at <root>/<ownerRel>.
+		ownerRel    string
+		packageJSON string
+		lockfile    string
+		wantKind    installKind
+		wantOwner   string // relative to root; the project dir, or "" for the rest
+		wantManager string
+		wantDev     bool
+	}{
+		{
+			name:       "go install binary",
+			executable: filepath.Join("bin", "puzzle"),
+			wantKind:   installManual,
+		},
+		{
+			name:       "repo-built binary",
+			executable: "puzzle",
+			wantKind:   installManual,
+		},
+		{
+			name:        "hoisted project dependency",
+			executable:  filepath.Join("app", "node_modules", platform),
+			ownerRel:    "app",
+			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "package-lock.json",
+			wantKind:    installProject,
+			wantOwner:   "app",
+			wantManager: "npm",
+		},
+		{
+			name:        "project dev dependency keeps the field",
+			executable:  filepath.Join("app", "node_modules", ".bin", "puzzle"),
+			ownerRel:    "app",
+			packageJSON: `{"devDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "yarn.lock",
+			wantKind:    installProject,
+			wantOwner:   "app",
+			wantManager: "yarn",
+			wantDev:     true,
+		},
+		{
+			// The `.pnpm` store sits INSIDE the project's node_modules, so a
+			// pnpm project must not be mistaken for a pnpm global.
+			name: "pnpm project through the .pnpm store",
+			executable: filepath.Join("app", "node_modules", ".pnpm",
+				"@magic-spells+"+platformPackageName()+"@0.6.0", "node_modules", platform),
+			ownerRel:    "app",
+			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "pnpm-lock.yaml",
+			wantKind:    installProject,
+			wantOwner:   "app",
+			wantManager: "pnpm",
+		},
+		{
+			name:        "bun project without a lockfile defaults to npm",
+			executable:  filepath.Join("app", "node_modules", platform),
+			ownerRel:    "app",
+			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			wantKind:    installProject,
+			wantOwner:   "app",
+			wantManager: "npm",
+		},
+		{
+			name:        "bun lockfile",
+			executable:  filepath.Join("app", "node_modules", platform),
+			ownerRel:    "app",
+			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "bun.lockb",
+			wantKind:    installProject,
+			wantOwner:   "app",
+			wantManager: "bun",
+		},
+		{
+			name:       "npm global prefix",
+			executable: filepath.Join("opt", "homebrew", "lib", "node_modules", platform),
+			wantKind:   installGlobal,
+			// No package.json above node_modules at all.
+			wantManager: "npm",
+		},
+		{
+			name:        "npm global prefix whose owner has an unrelated package.json",
+			executable:  filepath.Join("usr", "local", "lib", "node_modules", platform),
+			ownerRel:    filepath.Join("usr", "local", "lib"),
+			packageJSON: `{"dependencies":{"typescript":"^5.0.0"}}`,
+			wantKind:    installGlobal,
+			wantManager: "npm",
+		},
+		{
+			// pnpm's global root IS a package directory listing every global
+			// install as a dependency, so it must be classified before the
+			// project test — otherwise a global pnpm CLI upgrades itself with a
+			// project-shaped `pnpm add`.
+			name: "pnpm global root",
+			executable: filepath.Join("home", "Library", "pnpm", "global", "5", "node_modules",
+				".pnpm", "@magic-spells+puzzle@0.6.0", "node_modules", platform),
+			ownerRel:    filepath.Join("home", "Library", "pnpm", "global", "5"),
+			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "pnpm-lock.yaml",
+			wantKind:    installGlobal,
+			wantManager: "pnpm",
+		},
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			root := t.TempDir()
-			mustWrite(t, filepath.Join(root, "package.json"), `{"`+tt.field+`":{"@magic-spells/puzzle":"^0.1.0"}}`)
-			if tt.lockfile != "" {
-				mustWrite(t, filepath.Join(root, tt.lockfile), "")
+			root := realTempDir(t)
+			if tt.packageJSON != "" {
+				mustWrite(t, filepath.Join(root, tt.ownerRel, "package.json"), tt.packageJSON)
 			}
-			start := root
-			if tt.fromChild {
-				start = filepath.Join(root, "app", "nested")
-				if err := os.MkdirAll(start, 0o755); err != nil {
-					t.Fatal(err)
-				}
+			if tt.lockfile != "" {
+				mustWrite(t, filepath.Join(root, tt.ownerRel, tt.lockfile), "")
 			}
 
-			got, found, err := findProjectInstall(start)
+			ctx, err := detectInstallContext(filepath.Join(root, tt.executable))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !found {
-				t.Fatal("project install not found")
+			if ctx.kind != tt.wantKind {
+				t.Fatalf("kind = %v, want %v (context %#v)", ctx.kind, tt.wantKind, ctx)
 			}
-			if got.dir != root || got.manager != tt.manager || got.dev != tt.wantDev {
-				t.Fatalf("context = %#v, want dir=%q manager=%q dev=%v", got, root, tt.manager, tt.wantDev)
+			if tt.wantKind == installManual {
+				return
+			}
+			wantDir := ""
+			if tt.wantOwner != "" {
+				wantDir = filepath.Join(root, tt.wantOwner)
+			}
+			if ctx.dir != wantDir {
+				t.Errorf("dir = %q, want %q", ctx.dir, wantDir)
+			}
+			if ctx.manager != tt.wantManager || ctx.dev != tt.wantDev {
+				t.Errorf("manager = %q dev = %v, want %q / %v", ctx.manager, ctx.dev, tt.wantManager, tt.wantDev)
 			}
 		})
 	}
 }
 
-func TestDetectInstallContextWithoutProject(t *testing.T) {
-	dir := t.TempDir()
-	ctx, err := detectInstallContext(dir, filepath.Join(dir, "bin", "puzzle"))
-	if err != nil {
+// TestDetectInstallContextResolvesSymlinkedBin covers the shape a user actually
+// runs: node_modules/.bin/puzzle is a link into the package directory, and the
+// owner has to survive resolving it.
+func TestDetectInstallContextResolvesSymlinkedBin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs elevation on Windows")
+	}
+	project := realTempDir(t)
+	mustWrite(t, filepath.Join(project, "package.json"), `{"devDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`)
+	mustWrite(t, filepath.Join(project, "pnpm-lock.yaml"), "")
+
+	real := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+	mustWriteExecutable(t, real, "#!/bin/sh\n")
+	link := filepath.Join(project, "node_modules", ".bin", "puzzle")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if ctx.kind != installManual {
-		t.Fatalf("context = %#v, want manual install", ctx)
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
 	}
 
-	pnpmExecutable := filepath.Join(dir, "pnpm", "node_modules", "@magic-spells", "puzzle", "bin", "puzzle")
-	ctx, err = detectInstallContext(dir, pnpmExecutable)
+	ctx, err := detectInstallContext(link)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ctx.kind != installGlobal || ctx.manager != "pnpm" {
-		t.Fatalf("context = %#v, want global pnpm", ctx)
+	if ctx.kind != installProject || ctx.dir != project || ctx.manager != "pnpm" || !ctx.dev {
+		t.Fatalf("context = %#v, want a pnpm dev-dependency project at %q", ctx, project)
+	}
+}
+
+// TestDetectInstallContextIgnoresWorkingDirectory is the regression this design
+// exists for (D76): standing inside a Puzzle app while running a GLOBAL CLI must
+// resolve to the global install, not to the app whose dependency the command
+// never writes.
+func TestDetectInstallContextIgnoresWorkingDirectory(t *testing.T) {
+	project := realTempDir(t)
+	mustWrite(t, filepath.Join(project, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.5.0"}}`)
+	mustWrite(t, filepath.Join(project, "pnpm-lock.yaml"), "")
+	chdir(t, project)
+
+	global := filepath.Join(realTempDir(t), "opt", "homebrew", "lib", "node_modules",
+		"@magic-spells", platformPackageName(), "bin", "puzzle")
+	ctx, err := detectInstallContext(global)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.kind != installGlobal || ctx.manager != "npm" {
+		t.Fatalf("context = %#v, want a global npm install", ctx)
+	}
+	if ctx.dir == project {
+		t.Fatalf("detection adopted the working directory %q", project)
 	}
 }
 
@@ -123,7 +272,7 @@ func TestUpgradeCheckOnlyReports(t *testing.T) {
 	t.Cleanup(func() { update.CacheDir = oldCacheDir })
 
 	var stdout, stderr bytes.Buffer
-	if err := runUpgrade(&stdout, &stderr, plainPrinter(), t.TempDir(), "", true, emptyHomeEnvironment(t)); err != nil {
+	if err := runUpgrade(&stdout, &stderr, plainPrinter(), "", true, emptyHomeEnvironment(t)); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(stdout.String(), "puzzle "+testLatest+" available (current "+version.Version+")") {
@@ -140,7 +289,7 @@ func TestUpgradeUpToDateOutput(t *testing.T) {
 	t.Cleanup(func() { fetchLatest = oldFetchLatest })
 
 	var stdout bytes.Buffer
-	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), t.TempDir(), "", true, emptyHomeEnvironment(t)); err != nil {
+	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), "", true, emptyHomeEnvironment(t)); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := stdout.String(), "✓ puzzle "+version.Version+" is up to date\n"; got != want {
@@ -154,7 +303,8 @@ func TestUpgradeManualInstallInstructions(t *testing.T) {
 	t.Cleanup(func() { fetchLatest = oldFetchLatest })
 
 	var stdout bytes.Buffer
-	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), t.TempDir(), "/usr/local/bin/puzzle", false, emptyHomeEnvironment(t)); err != nil {
+	binary := filepath.Join(realTempDir(t), "usr", "local", "bin", "puzzle")
+	if err := runUpgrade(&stdout, &bytes.Buffer{}, plainPrinter(), binary, false, emptyHomeEnvironment(t)); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(stdout.String(), "go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest") {
@@ -206,10 +356,15 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
 			t.Cleanup(func() { fetchLatest = oldFetchLatest })
 
-			project := t.TempDir()
+			project := realTempDir(t)
 			mustWrite(t, filepath.Join(project, "package.json"), `{"`+tt.field+`":{"@magic-spells/puzzle":"0.1.0"}}`)
 			mustWrite(t, filepath.Join(project, tt.lockfile), "")
 			installedPackage := filepath.Join(project, "node_modules", "@magic-spells", "puzzle", "package.json")
+			// The CLI being upgraded is the project's own copy, and the process
+			// is standing somewhere else entirely: the project is reached
+			// through the executable, never through the cwd.
+			executable := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+			chdir(t, realTempDir(t))
 
 			stubDir := t.TempDir()
 			argsPath := filepath.Join(stubDir, "args")
@@ -233,7 +388,7 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			t.Cleanup(func() { update.CacheDir = oldCacheDir })
 
 			var stdout, stderr bytes.Buffer
-			if err := runUpgrade(&stdout, &stderr, plainPrinter(), project, filepath.Join(stubDir, "puzzle"), false, emptyHomeEnvironment(t)); err != nil {
+			if err := runUpgrade(&stdout, &stderr, plainPrinter(), executable, false, emptyHomeEnvironment(t)); err != nil {
 				t.Fatalf("runUpgrade: %v\nstderr: %s", err, stderr.String())
 			}
 			gotArgs := readLines(t, argsPath)
@@ -247,8 +402,9 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			if strings.TrimSpace(string(cwd)) != project {
 				t.Fatalf("command cwd = %q, want %q", strings.TrimSpace(string(cwd)), project)
 			}
-			if !strings.Contains(stdout.String(), "✓ upgraded "+version.Version+" → "+testLatest) {
-				t.Fatalf("success output missing:\n%s", stdout.String())
+			want := "✓ upgraded @magic-spells/puzzle " + version.Version + " → " + testLatest + " in " + project
+			if !strings.Contains(stdout.String(), want) {
+				t.Fatalf("success output missing %q:\n%s", want, stdout.String())
 			}
 			cached, err := update.ReadCache()
 			if err != nil {
@@ -256,6 +412,91 @@ func TestUpgradeCommandWithStubPackageManager(t *testing.T) {
 			}
 			if cached.Latest != testLatest {
 				t.Fatalf("cached latest = %q, want %q", cached.Latest, testLatest)
+			}
+		})
+	}
+}
+
+// TestUpgradeGlobalCLIFromInsideAProject is the launch-day regression, end to
+// end: a global CLI invoked while standing in a Puzzle app must run the GLOBAL
+// install command, confirm the GLOBAL package, and say so — the app's dependency
+// is npm's business, not the command's.
+func TestUpgradeGlobalCLIFromInsideAProject(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+
+	tests := []struct {
+		name       string
+		manager    string
+		globalRoot []string // path segments below the fixture root
+		wantArgs   []string
+	}{
+		{
+			name:       "npm global",
+			manager:    "npm",
+			globalRoot: []string{"opt", "homebrew", "lib"},
+			wantArgs:   []string{"install", "-g", "@magic-spells/puzzle@" + testLatest},
+		},
+		{
+			name:       "pnpm global",
+			manager:    "pnpm",
+			globalRoot: []string{"home", "Library", "pnpm", "global", "5"},
+			wantArgs:   []string{"add", "-g", "@magic-spells/puzzle@" + testLatest},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldFetchLatest := fetchLatest
+			fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
+			t.Cleanup(func() { fetchLatest = oldFetchLatest })
+
+			oldCacheDir := update.CacheDir
+			update.CacheDir = t.TempDir()
+			t.Cleanup(func() { update.CacheDir = oldCacheDir })
+
+			// A real Puzzle app, with a real dependency on the CLI, that the
+			// command must leave completely alone.
+			project := realTempDir(t)
+			mustWrite(t, filepath.Join(project, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.5.0"}}`)
+			mustWrite(t, filepath.Join(project, "package-lock.json"), "")
+			chdir(t, project)
+
+			root := append([]string{realTempDir(t)}, tt.globalRoot...)
+			globalRoot := filepath.Join(root...)
+			if tt.manager == "pnpm" {
+				// pnpm's global root declares its installs, which is exactly why
+				// it cannot be told apart from an app by package.json alone.
+				mustWrite(t, filepath.Join(globalRoot, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.5.0"}}`)
+				mustWrite(t, filepath.Join(globalRoot, "pnpm-lock.yaml"), "")
+			}
+			executable := filepath.Join(globalRoot, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+
+			stubDir := t.TempDir()
+			argsPath := filepath.Join(stubDir, "args")
+			mustWriteExecutable(t, filepath.Join(stubDir, tt.manager),
+				"#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$PUZZLE_TEST_ARGS\"\n"+
+					"mkdir -p \"$(dirname \"$PUZZLE_TEST_PACKAGE_JSON\")\"\n"+
+					"printf '{\"version\":\"%s\"}\\n' \"$PUZZLE_TEST_VERSION\" > \"$PUZZLE_TEST_PACKAGE_JSON\"\n")
+			t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("PUZZLE_TEST_ARGS", argsPath)
+			t.Setenv("PUZZLE_TEST_PACKAGE_JSON", filepath.Join(globalRoot, "node_modules", "@magic-spells", "puzzle", "package.json"))
+			t.Setenv("PUZZLE_TEST_VERSION", testLatest)
+
+			var stdout, stderr bytes.Buffer
+			if err := runUpgrade(&stdout, &stderr, plainPrinter(), executable, false, emptyHomeEnvironment(t)); err != nil {
+				t.Fatalf("runUpgrade: %v\nstderr: %s", err, stderr.String())
+			}
+			if got := readLines(t, argsPath); !reflect.DeepEqual(got, tt.wantArgs) {
+				t.Fatalf("argv = %#v, want %#v", got, tt.wantArgs)
+			}
+			if fsFileExists(filepath.Join(project, "node_modules")) {
+				t.Error("the surrounding project was installed into")
+			}
+			want := "✓ upgraded the global CLI " + version.Version + " → " + testLatest
+			if !strings.Contains(stdout.String(), want) {
+				t.Fatalf("success output missing %q:\n%s", want, stdout.String())
 			}
 		})
 	}
@@ -571,9 +812,12 @@ func runUpgradeWithStubs(t *testing.T, home string, interactive bool, seedProjec
 	update.CacheDir = t.TempDir()
 	t.Cleanup(func() { update.CacheDir = oldCacheDir })
 
-	project := t.TempDir()
+	project := realTempDir(t)
 	mustWrite(t, filepath.Join(project, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"0.1.0"}}`)
 	mustWrite(t, filepath.Join(project, "package-lock.json"), "")
+	// The running CLI is the project's own — the shape the refresh candidates
+	// (platform package, then node_modules/.bin) are written for.
+	executable := filepath.Join(project, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
 
 	stubDir := t.TempDir()
 	mustWriteExecutable(t, filepath.Join(stubDir, "npm"),
@@ -596,7 +840,7 @@ func runUpgradeWithStubs(t *testing.T, home string, interactive bool, seedProjec
 		homeDir:     func() (string, error) { return home, nil },
 		interactive: interactive,
 	}
-	if err := runUpgrade(&stdout, &stderr, plainPrinter(), project, filepath.Join(stubDir, "puzzle"), false, env); err != nil {
+	if err := runUpgrade(&stdout, &stderr, plainPrinter(), executable, false, env); err != nil {
 		t.Fatalf("runUpgrade: %v\nstderr: %s", err, stderr.String())
 	}
 	return stdout.String()
