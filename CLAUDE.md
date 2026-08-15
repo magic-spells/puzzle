@@ -127,7 +127,16 @@ run.
   chunk under `dist/chunks/` — default off, static mode forces it off, dev
   prunes stale chunks per rebuild, and the size banner gained a per-dependency
   composition report), which also bumps embedded esbuild 0.19.11 → 0.28.2.
-  Cards truthed
+  The 2026-08-15 launch-fix round (three PRs off the two release reviews)
+  closed the static-adapter identity gap with three-tier page entries (bare /
+  conventional `app/adapter.js` / capture-mode `app.js` import — inline
+  `adapter.defaults()` is legal and must keep working in static builds),
+  made errorView retry hold its face until something refills the position,
+  and landed the small fixes (`mock` allowlist, `/testing` alias, falsy
+  `create()` throw + branded `RouterMode`, SVG anchor clicks, D158 write-guard
+  CHANGELOG). Production sizes after that round — README banner matches:
+  hello-world **19.6 KB gzip**, todos **22.7 KB gzip** (the size scripts only
+  check the banner; the README line is edited by hand). Cards truthed
   through D160; the next free decision number is D161. **Publish sequencing:**
   `@magic-spells/puzzle-pieces` `0.6.0` (ready in its repo's `release/0.6.0`,
   not yet on npm — the package 404s) must be published at or before the CLI's

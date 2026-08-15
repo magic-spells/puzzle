@@ -1,6 +1,6 @@
 ---
 name: D157 — Server adapter as the /adapter subpath (v1.72)
-status: built
+status: verified
 connections:
   - DECISION-D21-ADAPTER-READ-PATH
   - DECISION-D50-ADAPTER-WRITE-SYNC
@@ -13,6 +13,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
+verified_at: '2026-08-15T06:30:34.091Z'
+verified_sha: 9ee1bddc34d8a2a3f1ce8e310af323169b6a3799
 ---
 
 The server adapter — the D21 read path, the D50 write path, `store.request()`,

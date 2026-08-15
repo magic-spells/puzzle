@@ -10,8 +10,8 @@ connections:
   - COMPONENT-SSG
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-BUILD-WATCH
-verified_at: '2026-08-13T04:52:53.633Z'
-verified_sha: e76df0fd873bd4739a754d9861197a9f24074a5f
+verified_at: '2026-08-15T06:30:33.983Z'
+verified_sha: 9ee1bddc34d8a2a3f1ce8e310af323169b6a3799
 notes:
   - kind: verified
     text: >-
