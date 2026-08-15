@@ -257,6 +257,29 @@ one is *not* a compile error; it silently builds a different product.
 
 ### Added
 
+- **`PUZZLE_RUNTIME` selects the JS runtime to build against.** Point it at a
+  Puzzle checkout (the directory holding `client-runtime/`) and the bare
+  specifier plus every subpath export — `/adapter`, `/morph`, `/router-modes`,
+  `/ssg`, `/static`, `/fixtures` — resolve there, overriding both the in-repo
+  walk and `node_modules`:
+
+  ```sh
+  PUZZLE_RUNTIME=~/Code/@magic-spells/puzzle puzzle dev
+  ```
+
+  This closes a gap for anyone testing a working-tree build in an app outside
+  the repo. The CLI is a Go binary, so running one from source swapped only the
+  COMPILER — the runtime still came from the target app's `node_modules`,
+  silently pairing a new compiler with a published runtime. The alternative was
+  `npm install /path/to/puzzle`, which writes a `file:` dependency into the app
+  and is easy to commit by accident; the env var touches nothing.
+
+  A set-but-invalid value exits rather than falling through to `node_modules` —
+  silently building the runtime you were trying to avoid is the failure this
+  prevents. `puzzle doctor` reports the override by name under "runtime
+  package", since a build against a forgotten checkout is otherwise
+  indistinguishable from a normal one.
+
 - **Opt-in SPA code splitting.** `build: { splitting: true }` makes every
   dynamic `import()` in the SPA bundle a lazy chunk under `dist/chunks/`
   instead of inlining it into `app.js`, so a heavy on-demand dependency is
