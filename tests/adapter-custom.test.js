@@ -468,4 +468,15 @@ describe('adapter config validation', () => {
 		expect(warn).toHaveBeenCalledTimes(1);
 		expect(warn.mock.calls[0][0]).toContain('"serializer", "retries"');
 	});
+
+	it('accepts the fixtures mock block without warning', () => {
+		class MockedPost extends Post {
+			static adapter = { endpoint: '/posts', mock: { data: [{ id: 'p1', title: 'Seeded' }] } };
+		}
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		new Store({ post: MockedPost }, { apiURL: API }).adapter('post');
+
+		expect(warn).not.toHaveBeenCalled();
+	});
 });

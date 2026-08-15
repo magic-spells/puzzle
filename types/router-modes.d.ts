@@ -14,17 +14,27 @@
  * Mirrors client-runtime/router/modes.js exactly.
  */
 
+declare const puzzleRouterModeBrand: unique symbol;
+
 /**
  * A router mode, produced by `hashRouter()` or `memoryRouter()` and passed as
  * `routerMode`. OPAQUE: its members are an internal contract between the mode
  * module and the Router, never app API. Omitting `routerMode` selects history
  * routing; a mode STRING is a constructor error.
+ *
+ * Branded, so only a value from a factory in this module type-checks. A
+ * hand-written `{ name, create }` looks like a mode but is not one — nothing
+ * outside this module can build the instance `create()` must return, and the
+ * failure it produces (a Router that silently runs as history mode) is exactly
+ * what the runtime validation exists to catch.
  */
 export interface RouterMode {
 	/** Diagnostic label only (`'hash'` / `'memory'`) — the Router never reads it. */
 	readonly name: string;
 	/** @internal builds the per-Router mode instance. */
 	create(): unknown;
+	/** @internal brand — not present at runtime. */
+	readonly [puzzleRouterModeBrand]: true;
 }
 
 /**

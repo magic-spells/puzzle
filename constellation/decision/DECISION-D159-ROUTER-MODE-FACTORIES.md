@@ -49,6 +49,16 @@ object supplies the deviations at the seams the router already owns:
   The scroll/focus/head suppressions stay as cheap core guards keyed off the
   mode object's declared capabilities rather than string comparisons.
 
+**Validation is duck-typing plus a build check.** The Router accepts any object
+with a callable `create`, then rejects a `create()` that returns nothing. The
+second check is the one worth naming: an unbuilt mode leaves `#mode` null, and
+a null `#mode` IS history mode at every seam, so a hash app would boot clean
+and route wrong — the silent fallback this whole validation exists to prevent.
+Together the two checks cost a few bytes and catch every way a non-mode value
+reaches the constructor. Types carry the rest: `RouterMode` is branded with a
+`unique symbol` (mirroring the adapter capability), so a structural look-alike
+fails to compile and only a factory's return value is assignable.
+
 **Internal consumers import the factory directly.** `/testing`'s
 `createTestApp` imports `memoryRouter` (its public contract is unchanged — it
 already forces memory and omits `routerMode` from its config type), and
@@ -79,3 +89,14 @@ the bare specifier.
 - **A full strategy interface for all three modes** — dispatch indirection on
   the default path and a wider public surface for no additional byte savings;
   the mode object only carries the deviations.
+- **A runtime brand on the mode object (a module-private `WeakSet` the Router
+  checks membership in)** — the airtight version of "only our factories make
+  modes", and the only way to reject a hand-written descriptor whose `create()`
+  happens to return something. It costs a `WeakSet` plus a registration call
+  and a lookup in every app that uses a mode, to buy a better error for a
+  mistake the duck-type check plus the compile-time brand already cover: the
+  shape check catches the wrong kind of value, the falsy-`create()` check
+  catches the descriptor that builds nothing, and the type brand catches the
+  look-alike before it runs. A forged descriptor that satisfies all three is
+  someone deliberately reimplementing the internal contract, which is
+  unsupported rather than defended against.

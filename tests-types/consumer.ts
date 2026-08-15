@@ -137,6 +137,14 @@ class FullyCustomPost extends PuzzleModel {
 	};
 }
 
+// The fixtures mock block is a first-class adapter key on the /adapter subpath
+// type too, not just the base ModelAdapter interface.
+const mockedAdapterConfig: AdapterConfig<Todo> = {
+	endpoint: '/todos',
+	mock: { data: [{ id: '1', title: 'seeded' }], failRate: 0 },
+};
+void mockedAdapterConfig;
+
 const publishingAdapter = {
 	endpoint: '/todos',
 	publish: (fetch: AdapterFetch, id: string) =>
@@ -390,6 +398,13 @@ void [restLoad, publishResult];
 const hashMode: RouterMode = hashRouter();
 const memoryMode: RouterMode = memoryRouter({ initialPath: '/about' });
 void memoryRouter(); // options are optional; initialPath defaults to '/'
+
+// A mode is only ever a factory's return value. A hand-written descriptor has
+// the right shape but cannot build the instance the Router needs, so the brand
+// rejects it at compile time rather than at `new Router(...)`.
+// @ts-expect-error a structural look-alike is not a RouterMode.
+const forgedMode: RouterMode = { name: 'hash', create: () => ({}) };
+void forgedMode;
 
 const hashApp = new PuzzleApp({ target: '#app', routes, routerMode: hashMode });
 const memoryApp = new PuzzleApp({

@@ -114,6 +114,30 @@ describe('Router hash mode — construction & mode parity (D34)', () => {
 		// A non-string, non-mode value is rejected too (a bare object, a function).
 		expect(() => new Router([], { mode: {} })).toThrow(/routerMode must be a mode object/);
 		expect(() => new Router([], { mode: 7 })).toThrow(/routerMode must be a mode object, not a number/);
+		expect(() => new Router([], { mode: {} })).toThrow(/not an object/);
+	});
+
+	it('throws when a mode descriptor builds nothing (D159)', () => {
+		// The silent failure this throw exists to prevent: #mode stays null, which
+		// reads as history mode EVERYWHERE, so a hash app would quietly serve
+		// history routes. A duck-typed descriptor passes the shape check, so the
+		// build result has to be checked too.
+		for (const empty of [null, undefined, 0, '']) {
+			expect(() => new Router([], { mode: { name: 'x', create: () => empty } })).toThrow(
+				/routerMode/
+			);
+		}
+		expect(() => new Router([], { mode: { name: 'x', create: () => null } })).toThrow(
+			/create\(\) returned nothing/
+		);
+	});
+
+	it('omitting routerMode still selects history routing (D159)', () => {
+		// The absent-mode default must NOT be caught by the falsy-create guard:
+		// no mode at all is the zero-config history app, not a broken descriptor.
+		expect(() => new Router([], {})).not.toThrow();
+		expect(() => new Router([], { mode: null })).not.toThrow();
+		expect(() => new Router([], { mode: undefined })).not.toThrow();
 	});
 
 	it('a history app registers no hash behavior at all (D159)', async () => {

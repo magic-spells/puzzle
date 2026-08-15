@@ -39,7 +39,13 @@ matching `{#comment}`.
 The parser emits raw-body text as ordinary `Text` nodes, so codegen emits string
 literals and never sends it through expression resolution. Every attribute
 inside the block is a static authored literal: a brace-valued attribute is
-static text, an `@`-prefixed name uses a private vnode-key escape so ViewManager
+static text — though finding where its value ENDS still uses the shared
+JS-lexically-aware brace scan, so a `}` inside a string, template literal,
+regex, or comment does not close it (`data-json={ {"text": "}"} }` survives),
+and an unbalanced quote inside such a value is a positioned compile error even
+though the bytes are otherwise uninterpreted. Boundary detection is the one
+thing the raw block cannot do byte-naively; only the span is taken from that
+scan, never a meaning. An `@`-prefixed name uses a private vnode-key escape so ViewManager
 and the SSG serializer write the authored name instead of binding a listener,
 and no raw attribute reaches directive handling — a sample `ref` skips ref
 validation and emission, `island` freezes nothing, and namespace checks do not
