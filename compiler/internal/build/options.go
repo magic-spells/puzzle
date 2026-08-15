@@ -2,10 +2,13 @@ package build
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
+	"github.com/magic-spells/puzzle/compiler/internal/fsutil"
 	"github.com/magic-spells/puzzle/compiler/internal/plugin"
 )
 
@@ -175,47 +178,106 @@ func configureRuntime(absRoot string, buildOpts *api.BuildOptions, pl *plugin.Pl
 
 	// Resolution of '@magic-spells/puzzle' (constellation/doc/DOC-COMPILER-DESIGN.md §b).
 	//
-	// v1 decision: when building an app that lives inside this repo (the
-	// examples/todos), the runtime is NOT installed in node_modules, so normal
-	// node resolution fails. We locate the repo's client-runtime/index.js by
-	// walking up from the app root for the package.json whose "name" is
-	// "@magic-spells/puzzle" and alias the bare specifier to it. When the
-	// package IS installed (a real, published app), no such ancestor exists and
-	// we leave resolution to esbuild's node_modules walk. Phase 3/publishing
-	// revisits this.
+	// Three sources, most explicit first:
+	//
+	//  1. PUZZLE_RUNTIME — an explicit checkout to build against, for testing a
+	//     working-tree runtime in an app that lives outside this repo.
+	//  2. The in-repo walk — when the app lives inside this repo (examples/todos)
+	//     the runtime is NOT installed in node_modules, so normal node resolution
+	//     fails. Walk up from the app root for the package.json whose "name" is
+	//     "@magic-spells/puzzle" and alias the bare specifier to it.
+	//  3. Nothing — the package IS installed (a real, published app), so leave
+	//     resolution to esbuild's node_modules walk.
+	if runtime := envRuntime(); runtime != "" {
+		aliasRuntime(buildOpts, pl, runtime)
+		return
+	}
+
 	if runtime := FindRuntime(absRoot); runtime != "" {
-		buildOpts.Alias["@magic-spells/puzzle"] = runtime
-		// Subpath exports need their own entries — the bare alias points at a
-		// FILE, so prefix substitution would produce index.js/morph. Longest
-		// key wins, so the bare specifier stays untouched (v1.23, D55).
-		buildOpts.Alias["@magic-spells/puzzle/adapter"] = filepath.Join(filepath.Dir(runtime), "datastore", "adapter.js")
-		buildOpts.Alias["@magic-spells/puzzle/morph"] = filepath.Join(filepath.Dir(runtime), "morph.js")
-		// The opt-in router modes (D159): hashRouter()/memoryRouter() live in their
-		// own module so a history-mode app never pulls them into the graph. Only an
-		// app that imports the subpath resolves it, so an older checkout missing the
-		// file errs only then — the same lazy posture as /ssg and /static below.
-		buildOpts.Alias["@magic-spells/puzzle/router-modes"] = filepath.Join(filepath.Dir(runtime), "router", "modes.js")
-		// The SSG runtime (prerenderToDir) resolves the same way — the hybrid
-		// build's prerender bundle imports it. The target file may not exist in
-		// an older checkout; esbuild only errs if something actually imports it,
-		// which happens only under `puzzle build --hybrid`.
-		buildOpts.Alias["@magic-spells/puzzle/ssg"] = filepath.Join(filepath.Dir(runtime), "ssg", "index.js")
-		// The static-pages kernel (mountStatic, D81) resolves the same way — each
-		// generated per-page entry imports it. Same lazy-error posture as /ssg: the
-		// file may be absent in an older checkout, and only a `puzzle build
-		// --static` page entry imports it, so esbuild errs only then.
-		buildOpts.Alias["@magic-spells/puzzle/static"] = filepath.Join(filepath.Dir(runtime), "static", "index.js")
-		// The detachable fixtures/mock module (D98) resolves the same way — only
-		// the `--fixtures` wrapper entry imports it, so esbuild errs only when the
-		// flag is set and the file is genuinely missing. A PUBLISHED app needs no
-		// alias at all: the generated wrapper lives under <appRoot>/.puzzle/, so
-		// node_modules resolution walks up to the project root on its own.
-		buildOpts.Alias["@magic-spells/puzzle/fixtures"] = filepath.Join(filepath.Dir(runtime), "fixtures", "index.js")
-		pl.SetRuntimeDir(filepath.Dir(runtime))
+		aliasRuntime(buildOpts, pl, runtime)
 		return
 	}
 
 	if runtime := FindInstalledRuntime(absRoot); runtime != "" {
 		pl.SetRuntimeDir(filepath.Dir(runtime))
 	}
+}
+
+// RuntimeEnvVar names a Puzzle checkout to resolve '@magic-spells/puzzle'
+// against, overriding both the in-repo walk and node_modules.
+//
+// It exists for the `puzzle-dev`-style workflow: building a working-tree
+// COMPILER against a working-tree RUNTIME in some other project. Without it the
+// compiler can only ever swap itself — the runtime is whatever that project's
+// node_modules holds — so a dev CLI silently pairs new compiler with published
+// runtime, and nothing says so.
+//
+// The value is the package ROOT (the directory holding client-runtime/), not
+// the index.js inside it, so it reads the same as a repo path:
+//
+//	PUZZLE_RUNTIME=~/Code/@magic-spells/puzzle puzzle dev
+const RuntimeEnvVar = "PUZZLE_RUNTIME"
+
+// envRuntime resolves RuntimeEnvVar to a client-runtime/index.js path, or ""
+// when unset.
+//
+// A set-but-wrong value is a hard stop rather than a fall-through: the whole
+// point of setting it is to NOT build against node_modules, so silently doing
+// exactly that would produce a green build of the wrong runtime — the failure
+// this variable exists to prevent.
+func envRuntime() string {
+	root := strings.TrimSpace(os.Getenv(RuntimeEnvVar))
+	if root == "" {
+		return ""
+	}
+
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "puzzle: %s=%q is not a usable path: %v\n", RuntimeEnvVar, root, err)
+		os.Exit(1)
+	}
+
+	idx := filepath.Join(abs, "client-runtime", "index.js")
+	if !fsutil.FileExists(idx) {
+		fmt.Fprintf(os.Stderr, "puzzle: %s=%q has no client-runtime/index.js\n", RuntimeEnvVar, root)
+		fmt.Fprintf(os.Stderr, "puzzle: point it at a Puzzle checkout (the directory holding client-runtime/)\n")
+		os.Exit(1)
+	}
+	if !PkgIsPuzzle(filepath.Join(abs, "package.json")) {
+		fmt.Fprintf(os.Stderr, "puzzle: %s=%q is not @magic-spells/puzzle\n", RuntimeEnvVar, root)
+		os.Exit(1)
+	}
+	return idx
+}
+
+// aliasRuntime points the bare specifier and every subpath export at one
+// resolved client-runtime/index.js.
+//
+// Subpath exports need their own entries — the bare alias points at a FILE, so
+// prefix substitution would produce index.js/morph. Longest key wins, so the
+// bare specifier stays untouched (v1.23, D55).
+//
+// Several targets may not exist in an older checkout. That is deliberate: an
+// alias is only consulted when something imports it, so a missing /ssg errs
+// under `puzzle build --hybrid` and nowhere else.
+func aliasRuntime(buildOpts *api.BuildOptions, pl *plugin.Plugin, runtime string) {
+	dir := filepath.Dir(runtime)
+	buildOpts.Alias["@magic-spells/puzzle"] = runtime
+	buildOpts.Alias["@magic-spells/puzzle/adapter"] = filepath.Join(dir, "datastore", "adapter.js")
+	buildOpts.Alias["@magic-spells/puzzle/morph"] = filepath.Join(dir, "morph.js")
+	// The opt-in router modes (D159): hashRouter()/memoryRouter() live in their
+	// own module so a history-mode app never pulls them into the graph.
+	buildOpts.Alias["@magic-spells/puzzle/router-modes"] = filepath.Join(dir, "router", "modes.js")
+	// The SSG runtime (prerenderToDir) — the hybrid build's prerender bundle
+	// imports it.
+	buildOpts.Alias["@magic-spells/puzzle/ssg"] = filepath.Join(dir, "ssg", "index.js")
+	// The static-pages kernel (mountStatic, D81) — each generated per-page entry
+	// imports it.
+	buildOpts.Alias["@magic-spells/puzzle/static"] = filepath.Join(dir, "static", "index.js")
+	// The detachable fixtures/mock module (D98) — only the `--fixtures` wrapper
+	// entry imports it. A PUBLISHED app needs no alias at all: the generated
+	// wrapper lives under <appRoot>/.puzzle/, so node_modules resolution walks up
+	// to the project root on its own.
+	buildOpts.Alias["@magic-spells/puzzle/fixtures"] = filepath.Join(dir, "fixtures", "index.js")
+	pl.SetRuntimeDir(dir)
 }

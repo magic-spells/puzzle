@@ -102,8 +102,15 @@ func runDoctor(w io.Writer, out *ui.Printer, dir string) int {
 		}
 	}
 
-	// Runtime package (warning): the installed package, or the in-repo fallback.
+	// Runtime package (warning): the env override, the installed package, or the
+	// in-repo fallback — reported in the same precedence configureRuntime uses.
+	// The override is called out by name because it is invisible otherwise: a
+	// build against a checkout you forgot you named looks exactly like a normal
+	// one, and mismatched compiler/runtime pairs are hard to diagnose after
+	// the fact.
 	switch {
+	case os.Getenv(build.RuntimeEnvVar) != "":
+		pass("runtime package", build.RuntimeEnvVar+"="+os.Getenv(build.RuntimeEnvVar))
 	case build.FindInstalledRuntime(dir) != "":
 		pass("runtime package", "@magic-spells/puzzle installed")
 	case build.FindRuntime(dir) != "":
