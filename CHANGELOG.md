@@ -108,7 +108,10 @@ one is *not* a compile error; it silently builds a different product.
   reads only the directory that owns the `node_modules` the binary lives in: no
   `node_modules` is a `go install` binary, an owning `package.json` that
   declares `@magic-spells/puzzle` is a project install, anything else (including
-  pnpm's global root) is a global one. The success line names the scope —
+  pnpm's global root) is a global one. A **workspace** root that hoisted the
+  binary out of a member package is neither: the command names the root and the
+  `-w <member>` install shape and exits without running anything, rather than
+  installing globally behind your back. The success line names the scope —
   `upgraded the global CLI …` or `upgraded @magic-spells/puzzle … in <dir>`.
 
 ## 0.6.0 — Unreleased

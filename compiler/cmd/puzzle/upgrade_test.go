@@ -50,8 +50,10 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 		ownerRel    string
 		packageJSON string
 		lockfile    string
+		// files are extra fixtures, keyed by path relative to root.
+		files       map[string]string
 		wantKind    installKind
-		wantOwner   string // relative to root; the project dir, or "" for the rest
+		wantOwner   string // relative to root; the owning dir, or "" for a global
 		wantManager string
 		wantDev     bool
 	}{
@@ -119,6 +121,47 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			wantManager: "bun",
 		},
 		{
+			// The dependency lives in a member package; the binary is hoisted to
+			// the root. Classifying that as global would install -g behind the
+			// user's back and then fail against the workspace's own copy.
+			name:        "npm workspaces root hoisting a member's dependency",
+			executable:  filepath.Join("mono", "node_modules", platform),
+			ownerRel:    "mono",
+			packageJSON: `{"name":"mono","workspaces":["packages/*"]}`,
+			lockfile:    "package-lock.json",
+			files: map[string]string{
+				filepath.Join("mono", "packages", "app", "package.json"): `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			},
+			wantKind:  installWorkspace,
+			wantOwner: "mono",
+		},
+		{
+			name:        "pnpm workspace root",
+			executable:  filepath.Join("mono", "node_modules", ".pnpm", "@magic-spells+puzzle@0.6.0", "node_modules", platform),
+			ownerRel:    "mono",
+			packageJSON: `{"name":"mono"}`,
+			lockfile:    "pnpm-lock.yaml",
+			files: map[string]string{
+				filepath.Join("mono", "pnpm-workspace.yaml"):             "packages:\n  - 'packages/*'\n",
+				filepath.Join("mono", "packages", "app", "package.json"): `{"devDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			},
+			wantKind:  installWorkspace,
+			wantOwner: "mono",
+		},
+		{
+			// A workspace root that declares the CLI itself is an ordinary
+			// project: the dependency test runs before the workspace guard.
+			name:        "workspace root that declares the CLI is a project",
+			executable:  filepath.Join("mono", "node_modules", platform),
+			ownerRel:    "mono",
+			packageJSON: `{"workspaces":["packages/*"],"devDependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "pnpm-lock.yaml",
+			wantKind:    installProject,
+			wantOwner:   "mono",
+			wantManager: "pnpm",
+			wantDev:     true,
+		},
+		{
 			name:       "npm global prefix",
 			executable: filepath.Join("opt", "homebrew", "lib", "node_modules", platform),
 			wantKind:   installGlobal,
@@ -157,6 +200,9 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			}
 			if tt.lockfile != "" {
 				mustWrite(t, filepath.Join(root, tt.ownerRel, tt.lockfile), "")
+			}
+			for rel, body := range tt.files {
+				mustWrite(t, filepath.Join(root, rel), body)
 			}
 
 			ctx, err := detectInstallContext(filepath.Join(root, tt.executable))
@@ -499,6 +545,58 @@ func TestUpgradeGlobalCLIFromInsideAProject(t *testing.T) {
 				t.Fatalf("success output missing %q:\n%s", want, stdout.String())
 			}
 		})
+	}
+}
+
+// TestUpgradeWorkspaceRootExplainsAndStops covers the guard end to end: a
+// hoisted monorepo CLI must run no package manager at all, since neither `-g`
+// nor a root install would touch the member that owns the dependency.
+func TestUpgradeWorkspaceRootExplainsAndStops(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-script package-manager stub")
+	}
+	oldFetchLatest := fetchLatest
+	fetchLatest = func(time.Duration) (string, error) { return testLatest, nil }
+	t.Cleanup(func() { fetchLatest = oldFetchLatest })
+
+	oldCacheDir := update.CacheDir
+	update.CacheDir = t.TempDir()
+	t.Cleanup(func() { update.CacheDir = oldCacheDir })
+
+	mono := realTempDir(t)
+	mustWrite(t, filepath.Join(mono, "package.json"), `{"name":"mono","workspaces":["packages/*"]}`)
+	mustWrite(t, filepath.Join(mono, "package-lock.json"), "")
+	mustWrite(t, filepath.Join(mono, "packages", "app", "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`)
+	// A stale hoisted copy: the version confirmation would have read this one
+	// and reported a mismatch, which is the second half of the wrong behaviour.
+	mustWrite(t, filepath.Join(mono, "node_modules", "@magic-spells", "puzzle", "package.json"), `{"version":"0.6.0"}`)
+	executable := filepath.Join(mono, "node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+
+	stubDir := t.TempDir()
+	ranPath := filepath.Join(stubDir, "ran")
+	for _, manager := range []string{"npm", "pnpm", "yarn", "bun"} {
+		mustWriteExecutable(t, filepath.Join(stubDir, manager),
+			"#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"$PUZZLE_TEST_RAN\"\n")
+	}
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("PUZZLE_TEST_RAN", ranPath)
+
+	var stdout, stderr bytes.Buffer
+	if err := runUpgrade(&stdout, &stderr, plainPrinter(), executable, false, emptyHomeEnvironment(t)); err != nil {
+		t.Fatalf("runUpgrade: %v\nstderr: %s", err, stderr.String())
+	}
+	if fsFileExists(ranPath) {
+		t.Fatalf("a package manager ran: %#v", readLines(t, ranPath))
+	}
+	out := stdout.String()
+	if !strings.Contains(out, mono) || !strings.Contains(out, "-w <member>") {
+		t.Fatalf("expected the workspace explanation naming %q, got:\n%s", mono, out)
+	}
+	if strings.Contains(out, "upgraded") {
+		t.Fatalf("nothing was upgraded, so nothing may claim it was:\n%s", out)
+	}
+	if _, err := update.ReadCache(); err == nil {
+		t.Fatal("a refusal must not write the update cache")
 	}
 }
 

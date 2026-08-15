@@ -121,6 +121,10 @@ const (
 	installManual installKind = iota
 	installProject
 	installGlobal
+	// installWorkspace is a refusal, not an install: the binary is hoisted into
+	// a workspace root that does not itself declare the CLI, so the dependency
+	// lives in a member package this command has no safe way to pick.
+	installWorkspace
 )
 
 type installContext struct {
@@ -165,9 +169,19 @@ func runUpgrade(stdout, stderr io.Writer, out *ui.Printer, executable string, ch
 	if err != nil {
 		return err
 	}
-	if ctx.kind == installManual {
+	switch ctx.kind {
+	case installManual:
 		fmt.Fprintln(stdout, "Install the latest release with:")
 		fmt.Fprintln(stdout, "  go install github.com/magic-spells/puzzle/compiler/cmd/puzzle@latest")
+		return nil
+	case installWorkspace:
+		// Guessing a member would install into a package the user never named,
+		// so the command stops and hands the decision back.
+		fmt.Fprintf(stdout, "This CLI is installed by the workspace at %s, which does not declare %s itself.\n",
+			ctx.dir, puzzlePackage)
+		fmt.Fprintf(stdout, "Upgrade it in the member package that does, for example:\n")
+		fmt.Fprintf(stdout, "  npm install %s@%s -w <member>\n", puzzlePackage, latest)
+		fmt.Fprintf(stdout, "  (pnpm/yarn/bun: the same add, run from that member's directory)\n")
 		return nil
 	}
 
@@ -350,19 +364,27 @@ func detectInstallContext(executable string) (installContext, error) {
 		return globalContext(owner, resolved, "pnpm"), nil
 	}
 
-	dependency, dev, err := readPuzzleDependency(filepath.Join(owner, "package.json"))
+	manifest, err := readOwnerManifest(filepath.Join(owner, "package.json"))
 	if err != nil {
 		return installContext{}, err
 	}
-	if dependency {
+	if manifest.declared {
 		return installContext{
 			kind:        installProject,
 			dir:         owner,
 			manager:     detectPackageManager(owner),
-			dev:         dev,
+			dev:         manifest.dev,
 			executable:  resolved,
 			packageJSON: filepath.Join(owner, "node_modules", "@magic-spells", "puzzle", "package.json"),
 		}, nil
+	}
+	// A workspace root hoists its members' dependencies, so the binary can sit
+	// under a root that declares nothing itself. That is not a global install —
+	// treating it as one would run `npm install -g` as a side effect and then
+	// fail confirmation against the workspace's own hoisted copy. Which member
+	// owns the dependency is the user's call, so the command explains and stops.
+	if manifest.workspaces || fsFileExists(filepath.Join(owner, "pnpm-workspace.yaml")) {
+		return installContext{kind: installWorkspace, dir: owner, executable: resolved}, nil
 	}
 	return globalContext(owner, resolved, "npm"), nil
 }
@@ -400,27 +422,43 @@ func nodeModulesOwner(path string) (string, bool) {
 	}
 }
 
-// readPuzzleDependency reports whether packageJSON declares the CLI, and whether
-// it does so only as a devDependency. A missing file is not an error — most
-// directories have none.
-func readPuzzleDependency(packageJSON string) (declared, dev bool, err error) {
+// ownerManifest is what the owning directory's package.json says about this
+// CLI: whether it declares it, whether only as a devDependency, and whether the
+// directory is a workspace root (which declares its members' dependencies on
+// their behalf without listing them itself).
+type ownerManifest struct {
+	declared   bool
+	dev        bool
+	workspaces bool
+}
+
+// readOwnerManifest reads packageJSON. A missing file is not an error — most
+// directories have none, and a global prefix never does.
+func readOwnerManifest(packageJSON string) (ownerManifest, error) {
 	data, readErr := os.ReadFile(packageJSON)
 	if readErr != nil {
 		if os.IsNotExist(readErr) {
-			return false, false, nil
+			return ownerManifest{}, nil
 		}
-		return false, false, readErr
+		return ownerManifest{}, readErr
 	}
 	var pkg struct {
 		Dependencies    map[string]json.RawMessage `json:"dependencies"`
 		DevDependencies map[string]json.RawMessage `json:"devDependencies"`
+		// Present in either shape npm/yarn/bun accept — an array of globs, or an
+		// object with a `packages` key. Only presence matters here.
+		Workspaces json.RawMessage `json:"workspaces"`
 	}
 	if err := json.Unmarshal(data, &pkg); err != nil {
-		return false, false, fmt.Errorf("reading %s: %w", packageJSON, err)
+		return ownerManifest{}, fmt.Errorf("reading %s: %w", packageJSON, err)
 	}
 	_, dependency := pkg.Dependencies[puzzlePackage]
 	_, devDependency := pkg.DevDependencies[puzzlePackage]
-	return dependency || devDependency, !dependency && devDependency, nil
+	return ownerManifest{
+		declared:   dependency || devDependency,
+		dev:        !dependency && devDependency,
+		workspaces: len(pkg.Workspaces) > 0,
+	}, nil
 }
 
 func detectPackageManager(dir string) string {
