@@ -21,19 +21,16 @@ notes:
     sha: 11b25c8a5d8331299c7780fbb0a7a2c4efbfbc35
   - kind: gotcha
     text: >-
-      Verified gap (2026-08-14 review, unreleased 0.6.0): retry() can blank a routed position
-      permanently. retry destroys the error view and clears #errorView BEFORE knowing the rebuild
-      will mount anything (PuzzleView.js retry closure → router __failedView(view, true)). A
-      rejection in the LOAD phase of the forced same-location replace (a still-failing data())
-      aborts pre-commit via #recoverFailedNavigation — a path with no errorView surface — leaving
-      only the recovery comment. A same-path push is then deduped, so the user cannot recover
-      without visiting a different route. Repro: routed view whose render() throws (error view
-      mounts fine) and whose data() rejects; one Retry click → blank page.
-      tests/error-boundaries.test.js covers the persistent-mounted()-throw case (post-commit,
-      re-surfaces fine); the load-phase case is uncovered. Fix direction: keep the error view until
-      the rebuild commits, or give the navigation-load failure path the same errorView surface mount
-      failures have. Contradicts this card's "a failed retry mounts a fresh error view" claim for
-      load-phase failures until fixed.
+      A routed retry HOLDS its error view mounted for the whole rebuild, and nothing in the retry
+      path may tear it down speculatively. The router pipeline has many pre-commit exits that render
+      nothing — guard block, guard redirect that no-ops, supersession, a superseding navigation that
+      itself stays put — and every one of them returns through #recoverFailedNavigation with no
+      errorView surface of its own. A routed position is therefore vacated ONLY by something that
+      immediately refills it: a commit (destroying the failed instance disposes its face) or the
+      load-failure catch calling __retryErrorView. Because a same-path push/replace is deduped, a
+      position blanked here is unrecoverable without visiting another route — which is why the rule
+      is invariant, not best-effort. Consequence for the single-flight latch: it must re-arm when
+      the rebuild ends with the SAME face still mounted, or a blocked retry latches the button dead.
 ---
 
 # D145 — app-level `onError` + the app error view (`errorView`)
@@ -82,21 +79,36 @@ where the failed view stood; the broken instance is destroyed first. An
 instance whose `data()` or render just threw is never asked to render its own
 fallback face.
 
-**Explicit retry through the owner's normal rebuild path.** `retry()` destroys
-the error view and asks the position's existing owner to rebuild from scratch.
-For a routed view or layout, the Router internally replaces its current
-location while bypassing only the public same-path short circuit;
-`chainInvalid` forces `keep = 0`, so the complete routed chain runs
-constructor, `created()`, `data()`, render, and mount again. For a child
-component, the failed instance's D115 placeholder remains at the vnode
-position and the parent runs its ordinary `refresh()`; `patchComponent` sees
-the destroyed instance and mounts a fresh child from the newly rendered vnode.
-This deliberately re-derives current props and slots instead of replaying
-captured mount inputs. Single-flight: calls during an active attempt are
-ignored. If the parent patch or a navigation already removed the error-view
-instance, retry is a no-op. A failed retry reports through the funnel and
-mounts a fresh error view carrying the new error. Nothing retries
-automatically, ever.
+**Explicit retry through the owner's normal rebuild path.** `retry()` asks the
+position's existing owner to rebuild from scratch. For a routed view or layout,
+the Router internally replaces its current location while bypassing only the
+public same-path short circuit; `chainInvalid` forces `keep = 0`, so the
+complete routed chain runs constructor, `created()`, `data()`, render, and
+mount again. For a child component, the failed instance's D115 placeholder
+remains at the vnode position and the parent runs its ordinary `refresh()`;
+`patchComponent` sees the destroyed instance and mounts a fresh child from the
+newly rendered vnode. This deliberately re-derives current props and slots
+instead of replaying captured mount inputs. Nothing retries automatically,
+ever.
+
+**A retry never blanks its position.** The error view stays mounted for the
+whole routed rebuild. That position is vacated only by something that
+immediately refills it: a successful commit destroys the failed instance and
+disposes its face while mounting the rebuilt chain, and a load-phase failure —
+which obeys the D19/D61 stay-put rule and commits nothing — swaps the face for
+one carrying the new error and a fresh callback. Every other pre-commit exit
+(guard block, guard redirect that no-ops, supersession, a superseding
+navigation that itself stays put) leaves the face exactly where it was, showing
+the error it already had. The component path is the one place the face is
+released on dispatch, because `patchComponent` remounts only a position it
+finds without one, and the owner's re-render refills it.
+
+**Single-flight spans one press.** A second call while the rebuild is in flight
+is ignored; the latch re-arms when that rebuild ends with the same face still
+mounted — precisely the outcomes that changed nothing — so a blocked or
+superseded retry stays pressable. The callback is bound to the error-view
+instance it was handed to, so a replaced face's callback is permanently spent,
+and one removed by a parent patch or a navigation is a no-op.
 
 **Ownership follows the failed position.** A failed child component's
 replacement is owned by the parent's patch — a later patch that removes or

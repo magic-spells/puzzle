@@ -125,8 +125,11 @@ view or the invisible recovery marker. Navigation away disposes that
 replacement normally. Explicit retry reconstructs the routed views and reruns
 all route-chain data by forcing an internal same-location `replace` through the
 ordinary navigation pipeline; `chainInvalid` makes `keep = 0`, and the commit
-naturally installs healthy instance bookkeeping. A superseding navigation
-makes the stale retry a no-op. The old ancestor-boundary chain
+naturally installs healthy instance bookkeeping. The replacement is HELD for the
+whole rebuild — the commit disposes it, or the load-failure catch swaps it for
+one carrying the new error — so no pre-commit exit (guard verdict, supersession,
+a superseding navigation that also stays put) can leave the position empty. The
+old ancestor-boundary chain
 truncation/invalidation path is gone—replacement never renders above the failed position
 ([[DECISION-D145-ERROR-BOUNDARIES]]).
 
