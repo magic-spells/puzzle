@@ -94,7 +94,27 @@ Pick `<Children/>` if that position received content from the call site, or
 `'static'` now produces a genuinely static site — no router, no `app.js`. This
 one is *not* a compile error; it silently builds a different product.
 
-## 0.6.0 — Unreleased
+## 0.7.0 — Unreleased
+
+### Fixed
+
+- **`puzzle upgrade` resolves the install it is upgrading from the running
+  executable (D76).** Documented since 0.5.0, but the resolution still walked up
+  from the current directory, so a globally installed CLI invoked inside a
+  Puzzle app upgraded the *app's* dependency, printed
+  `✓ upgraded <old> → <new>` comparing the running CLI's version against that
+  project's, and left the global CLI stale — which it then re-offered to upgrade
+  on every build. Detection now runs `os.Executable()` through its symlinks and
+  reads only the directory that owns the `node_modules` the binary lives in: no
+  `node_modules` is a `go install` binary, an owning `package.json` that
+  declares `@magic-spells/puzzle` is a project install, anything else (including
+  pnpm's global root) is a global one. A **workspace** root that hoisted the
+  binary out of a member package is neither: the command names the root and the
+  `-w <member>` install shape and exits without running anything, rather than
+  installing globally behind your back. The success line names the scope —
+  `upgraded the global CLI …` or `upgraded @magic-spells/puzzle … in <dir>`.
+
+## 0.6.0 — 2026-08-15
 
 ### Fixed
 
@@ -491,13 +511,6 @@ one is *not* a compile error; it silently builds a different product.
 - **`PORTAL_TAG` is a reserved script binding (D144),** alongside the existing
   `SLOT_TAG`. A module-scope binding or loop variable by that name in a `.pzl`
   `<script>` is a positioned compile error (D133).
-
-- **`puzzle upgrade` targets the running CLI, not the current directory (D76).**
-  It resolves its install context from the executable path rather than walking
-  up from the cwd. Bumping a project's dependency is npm's job. Previously a
-  globally installed CLI could run the package manager against an unrelated
-  project and report success for a package it never wrote, while the stale CLI
-  went untouched.
 
 ### Fixed
 
