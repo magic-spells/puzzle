@@ -1,12 +1,21 @@
 ---
 name: 'D76 — Update notification + `puzzle upgrade` (v1.43)'
-status: built
+status: verified
 connections:
   - COMPONENT-COMPILER-CLI
   - COMPONENT-DEV-SERVER
   - DOC-SPEC
   - DOC-SPEC-BUILD
   - FEATURE-V1-32-RELEASE-HARDENING
+verified_at: '2026-08-15T20:07:07.526Z'
+verified_sha: c4e46b0daf84d3c06f8008d0bf9f823ec6f855cb
+notes:
+  - kind: verified
+    text: >-
+      Executable-derived install context is now implemented as the card describes (it had been
+      documented-but-cwd-first); verified at the release/0.7.0 merge — detection table,
+      chdir-inertness, and global-from-inside-a-project stub tests all green.
+    sha: c4e46b0daf84d3c06f8008d0bf9f823ec6f855cb
 ---
 
 # D76 — Update notification + `puzzle upgrade` (v1.43)
