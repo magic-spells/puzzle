@@ -231,6 +231,12 @@ Form controls bind themselves — write NO input handler:
 
 `app/routes.js` exports an array of `{ path, name, view, layout, guard, meta, children }`.
 
+- **Router mode** (puzzle ≥ 0.6.0): history routing is the default — omit
+  `routerMode` entirely. Hash and memory routing are imported factories:
+  `import { hashRouter, memoryRouter } from '@magic-spells/puzzle/router-modes'`,
+  then `routerMode: hashRouter()` or `memoryRouter({ initialPath: '/' })`. The
+  strings `'hash'`/`'memory'` throw at construction (the error names the
+  import) — history-mode apps ship none of the other modes' code.
 - Nested routes: `children` with **relative** paths render at the parent view's
   `<Slot/>`; `layout` is top-level-only; params merge down the chain.
 - **Route guards** (puzzle ≥ 0.2.0): `guard: ({ to, from, ctx }) => verdict` on
@@ -605,6 +611,12 @@ production-host semantics for any mode (SPA deep-link fallback, static real
    config trigger a build warning); models are picked up from
    `app/models/index.js`. The `link` formatter is absent client-side in static
    output — its pass-through fallback still yields correct plain-path hrefs.
+   A configured adapter (`adapter.defaults(...)`) is best exported from
+   `app/adapter.js` and passed to the app from there: each static page then
+   imports just that module. Configuring it inline in `app.js` still builds
+   and behaves identically — the build falls back to importing the app entry
+   from every page to reach the exact configured value (an advisory notes the
+   page-weight cost). A bare `adapter` needs no file either way.
 6. `prerender: false` on a route emits an empty shell (invisible to any static
    search indexer): in hybrid it's an SPA island; in static it still gets its
    per-page module and renders fully client-side. Escape hatch for
