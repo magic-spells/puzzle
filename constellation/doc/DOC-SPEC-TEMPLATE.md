@@ -238,6 +238,13 @@ syntax:
 - HTML remains structural. `{#raw}<b>hi</b>{/raw}` emits a real `<b>` vnode,
   not the source string `"<b>hi</b>"`. Attributes inside that markup are static;
   `@click={ handler }` is an authored literal attribute, never a Puzzle listener.
+- A brace-valued attribute keeps its bytes verbatim, but the scan that finds its
+  closing `}` is JS-lexically aware — a `}` inside a string, template literal,
+  regex literal, or comment does not end the value, so `data-json={ {"text": "}"} }`
+  survives intact. The one consequence: an unbalanced quote inside such a value
+  swallows the closer and is a positioned compile error, even though nothing in
+  a raw block is otherwise interpreted. Only the boundary comes from that scan;
+  the bytes it spans are never given meaning.
 - The block does not nest. The first tolerant closer wins: `{/raw}`,
   `{/ raw }`, and `{/raw }` are equivalent. A literal `{/raw}` therefore cannot
   occur in the body. Content after the opener keyword is ignored, matching

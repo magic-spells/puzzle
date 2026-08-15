@@ -472,7 +472,10 @@ func (l *lexer) lexRawBraceValue() (Token, error) {
 	start := l.pos
 	_, end, err := scanBraceGroup(l.input, l.pos)
 	if err != nil {
-		return Token{}, l.errf(line, col, "unclosed literal brace attribute value inside {#raw}")
+		// The scan is JS-lexically aware, so the usual cause is not a missing '}'
+		// but an unbalanced quote earlier in the value, which swallowed it.
+		return Token{}, l.errf(line, col,
+			"unclosed literal brace attribute value inside {#raw} (check for an unbalanced quote, backtick, or comment inside it)")
 	}
 	l.jumpTo(end)
 	l.expectValue = false

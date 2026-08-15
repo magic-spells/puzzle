@@ -569,6 +569,26 @@ func TestLexRawBraceAttrValue(t *testing.T) {
 			attr:  "data-x",
 			want:  `{ /}/ }`,
 		},
+		{
+			// A template literal's own ${} braces are balanced, and a '}' inside its
+			// text is skipped like any other string byte.
+			name:  "brace inside a template literal",
+			input: "<b data-x={ `a${b}c}` }>",
+			attr:  "data-x",
+			want:  "{ `a${b}c}` }",
+		},
+		{
+			name:  "brace inside a line comment",
+			input: "<b data-x={ 1 // }\n }>",
+			attr:  "data-x",
+			want:  "{ 1 // }\n }",
+		},
+		{
+			name:  "brace inside a block comment",
+			input: `<b data-x={ 1 /* } */ }>`,
+			attr:  "data-x",
+			want:  `{ 1 /* } */ }`,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
