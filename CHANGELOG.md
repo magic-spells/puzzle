@@ -114,7 +114,7 @@ one is *not* a compile error; it silently builds a different product.
   installing globally behind your back. The success line names the scope —
   `upgraded the global CLI …` or `upgraded @magic-spells/puzzle … in <dir>`.
 
-## 0.6.0 — Unreleased
+## 0.6.0 — 2026-08-15
 
 ### Fixed
 
