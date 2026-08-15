@@ -82,9 +82,7 @@ run.
   (`chore/d134-capitalized-markers`, pushed) is not yet merged into its
   `main`/`release/0.2.0`, and the site's merge is pending an unrelated
   in-progress worktree.
-- `0.5.0` (2026-08-07, **published and `verify:published`-clean** — registry
-  metadata pins all four platform packages and a temp-dir install runs
-  `puzzle version 0.5.0`): D144
+- `0.5.0` (2026-08-07, published and `verify:published`-clean): D144
   Portal scoped v1
   (`<Portal>` marker + framework outlet + portal-aware `@event:outside`), D145
   error boundaries (`onError` funnel + script-side `errorContent()`), D146
@@ -97,10 +95,11 @@ run.
   (wrap `<Portal>` in a root element; documented in D144), and the D76 change
   that points `puzzle upgrade` at the running CLI rather than the cwd. Cards
   truthed through D149.
-- **`0.6.0` is in progress on `release/0.6.0`** (stamped but NOT published —
-  root manifest, the four platform manifests, `version.go`, `devtools.js`
-  `FRAMEWORK_VERSION`, and every example/template range read `0.6.0`; npm
-  `latest` is still `0.5.0`): D150 `{#raw}` static raw template
+- **`0.6.0` (2026-08-15, published and `verify:published`-clean — the current
+  `latest`;** registry metadata pins all four platform packages, a temp-dir
+  install runs `puzzle version 0.6.0`, and a fresh-app `puzzle add piece`
+  resolves `npm:@magic-spells/puzzle-pieces@0.6.0`; the `main` merge and tag
+  are pending — Cory does both): D150 `{#raw}` static raw template
   block; the pieces npm transport (a D32 amendment, not a new card — default
   registry is `npm:@magic-spells/puzzle-pieces` resolved to the CLI's
   major.minor, older-only fallback with a printed notice, `--pieces-version`
@@ -121,7 +120,8 @@ run.
   dialect tier (dispatch: model function → app default → generated REST); and
   D159 turns hash/memory routing into
   imported factories from `/router-modes` (`routerMode: hashRouter()` —
-  strings throw, history stays the inline default, `routerInitialPath` folds
+  strings throw, path routing stays the inline default — "path routing" is the
+  mode's official name, never "history"; `routerInitialPath` folds
   into `memoryRouter({ initialPath })`); and D160 adds opt-in SPA code
   splitting (`build: { splitting: true }` makes a dynamic `import()` a lazy
   chunk under `dist/chunks/` — default off, static mode forces it off, dev
@@ -137,11 +137,11 @@ run.
   CHANGELOG). Production sizes after that round — README banner matches:
   hello-world **19.6 KB gzip**, todos **22.7 KB gzip** (the size scripts only
   check the banner; the README line is edited by hand). Cards truthed
-  through D160; the next free decision number is D161. **Publish sequencing:**
-  `@magic-spells/puzzle-pieces` `0.6.0` (ready in its repo's `release/0.6.0`,
-  not yet on npm — the package 404s) must be published at or before the CLI's
-  release; no older pieces release exists to fall back to, so a fresh `0.6.0`
-  install's `puzzle add piece` hard-fails until it ships.
+  through D160; the next free decision number is D161. `@magic-spells/puzzle-pieces`
+  `0.6.0` is live on npm (`latest`) — the version-locked pieces resolution is
+  verified end-to-end. Note `PUZZLE_PIECES_REGISTRY` is set in Cory's shell
+  profile pointing at the local pieces checkout; unset it when smoke-testing
+  the npm transport.
 - Product line: v1 through v1.75 (D134 = v1.64, D141 = v1.65, D144 = v1.66,
   D145 = v1.67, D147 = v1.68, D148 = v1.69, D150 = v1.70, the D145 errorView
   amendment = v1.71, D157 = v1.72, D158 = v1.73, D159 = v1.74, D160 = v1.75;
