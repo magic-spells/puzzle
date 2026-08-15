@@ -459,28 +459,24 @@ func (l *lexer) lexQuotedValue() (Token, error) {
 }
 
 // lexRawBraceValue captures a brace-delimited attribute value inside {#raw} as
-// literal bytes, including its braces. The depth counter only finds the value's
-// boundary; none of the content is interpreted as template or JavaScript.
+// literal bytes, including its braces. Finding where the value ENDS is the one
+// thing that must still be lexically aware, so it defers to scanBraceGroup —
+// the single shared balanced scan — and inherits its rule that a '}' inside a
+// string, regex literal, or comment does not close the group. Without that,
+// `data-json={ {"text": "}"} }` is cut short at the brace in the string and the
+// remaining bytes derail the tag. Only the boundary comes from that scan: the
+// bytes it spans are taken verbatim, since nothing inside {#raw} is interpreted
+// as template or JavaScript (D150).
 func (l *lexer) lexRawBraceValue() (Token, error) {
 	line, col, off := l.line, l.col, l.baseOffset+l.pos
 	start := l.pos
-	depth := 0
-	for l.pos < len(l.input) {
-		switch l.cur() {
-		case '{':
-			depth++
-		case '}':
-			depth--
-			l.step()
-			if depth == 0 {
-				l.expectValue = false
-				return Token{Type: TokAttrBare, Value: l.input[start:l.pos], Raw: true, Line: line, Col: col, Offset: off}, nil
-			}
-			continue
-		}
-		l.step()
+	_, end, err := scanBraceGroup(l.input, l.pos)
+	if err != nil {
+		return Token{}, l.errf(line, col, "unclosed literal brace attribute value inside {#raw}")
 	}
-	return Token{}, l.errf(line, col, "unclosed literal brace attribute value inside {#raw}")
+	l.jumpTo(end)
+	l.expectValue = false
+	return Token{Type: TokAttrBare, Value: l.input[start:end], Raw: true, Line: line, Col: col, Offset: off}, nil
 }
 
 func isSpaceByte(b byte) bool {

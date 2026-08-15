@@ -13,10 +13,19 @@ package build
 //     in this set is attributable: only its routes can change.
 //   - The PRERENDER bundle's metafile is the graph rooted at the app entry —
 //     app.js, routes.js, the models registry, the formatters module, every
-//     lifecycle hook, and transitively every view. A file that is in THIS graph
-//     but in no page graph is global to the render: it can move `beforeMount`,
-//     the route table, the store seed, or the formatter set, and every page's
-//     markup and data island with it. That is a full render, always.
+//     lifecycle hook, and transitively every view. The part of THIS graph that
+//     sits ABOVE the route chain is global to the render: it can move
+//     `beforeMount`, the route table, the store seed, or the formatter set, and
+//     every page's markup and data island with it. That is a full render,
+//     always.
+//
+// The two sets OVERLAP, and that overlap is the whole subtlety. A module can be
+// page-reachable and render-wide at once — a store seed that app.js's
+// `beforeMount` runs AND that one view imports directly is the everyday shape —
+// so the two memberships are computed independently and render-wide wins.
+// Deciding one by subtracting the other would make page attribution silently
+// swallow such a module and leave every OTHER page serving stale HTML for the
+// rest of the session, with no periodic full render to wash it out.
 //
 // Everything else is decided by the most conservative rule that fits, because
 // the cost of being wrong is asymmetric: a needless re-render costs
@@ -40,8 +49,9 @@ type routeGraph struct {
 	// byModule maps a symlink-resolved absolute module path to the set of route
 	// paths whose per-page entry graph reaches it.
 	byModule map[string]map[string]bool
-	// global is the set of modules in the prerender bundle that no page entry
-	// reaches — the render-wide inputs.
+	// global is the set of render-wide modules: the part of the prerender graph
+	// that sits above the route chain. It is NOT disjoint from byModule — a
+	// module can be both, and when it is, this set wins.
 	global map[string]bool
 	// ready is false until both halves have been captured at least once.
 	ready bool
@@ -96,9 +106,11 @@ func resolvePath(p string) string {
 // buildRouteGraph walks the two metafiles into a routeGraph. entryRoutes maps
 // each generated per-page entry file (absolute) to its route path; pagesBase and
 // preBase are the working directories the respective passes resolved their
-// metafile input keys against. An unparseable metafile is an error, and the
-// caller keeps the previous graph rather than trusting a partial one.
-func buildRouteGraph(pagesMetafile, pagesBase, preMetafile, preBase string, entryRoutes map[string]string) (*routeGraph, error) {
+// metafile input keys against. chainRoots is every chain view and layout module
+// the prerender summary named, absolute and symlink-resolved — the cut the
+// render-wide walk stops at. An unparseable metafile is an error, and the caller
+// keeps the previous graph rather than trusting a partial one.
+func buildRouteGraph(pagesMetafile, pagesBase, preMetafile, preBase string, entryRoutes map[string]string, chainRoots map[string]bool) (*routeGraph, error) {
 	pageInputs, err := metafileGraph(pagesMetafile, pagesBase)
 	if err != nil {
 		return nil, err
@@ -120,14 +132,101 @@ func buildRouteGraph(pagesMetafile, pagesBase, preMetafile, preBase string, entr
 		}
 	}
 
-	global := make(map[string]bool, len(preInputs))
+	return &routeGraph{byModule: byModule, global: renderWide(preInputs, chainRoots), ready: true}, nil
+}
+
+// renderWide is the prerender graph ABOVE the route chain: walk it from its
+// roots and stop at every chain root, and what the walk reached is exactly the
+// set of modules that shape every page — the app entry, the route table, the
+// store seed, the models registry, the formatters module, the lifecycle hooks
+// and whatever those pull in. Membership here is computed WITHOUT reference to
+// page attribution, so a module that is both keeps its render-wide standing
+// (classify consults this set first).
+//
+// The cut is the chain roots rather than routes.js because nothing in the Go
+// build ever names routes.js: it is app.js's business, found only by convention.
+// The chain roots ARE known exactly — the prerender summary reports each page's
+// view and layout modules — so they are the one boundary this side can draw
+// honestly.
+//
+// Roots are found by IN-DEGREE ZERO rather than by name. The prerender pass is
+// rooted at a generated stdin module whose metafile key
+// (…/puzzle-prerender-entry.js) matches no file on disk, so there is nothing to
+// match against.
+//
+// Known limitation: a view or layout module imported DIRECTLY by app.js is
+// still a chain root, so the walk cuts at it and everything only IT reaches
+// stays page-attributed even though app.js can run it at module scope. That is
+// an unusual app shape and it is not handled.
+//
+// Every way the walk can fail to describe the graph — no chain roots at all, no
+// roots to start from (a cycle spanning every module), a metafile that carries
+// no inputs — falls back to marking the WHOLE prerender graph render-wide. That
+// keeps this rule on the same "when in doubt, full render" ladder as the rest of
+// the classifier: over-rendering costs milliseconds, under-rendering ships a dev
+// server that quietly disagrees with the build.
+func renderWide(preInputs map[string][]string, chainRoots map[string]bool) map[string]bool {
+	everything := func() map[string]bool {
+		out := make(map[string]bool, len(preInputs))
+		for mod := range preInputs {
+			out[mod] = true
+		}
+		return out
+	}
+	if len(chainRoots) == 0 || len(preInputs) == 0 {
+		return everything()
+	}
+
+	indegree := make(map[string]int, len(preInputs))
 	for mod := range preInputs {
-		if _, attributed := byModule[mod]; !attributed {
-			global[mod] = true
+		indegree[mod] = 0
+	}
+	for _, deps := range preInputs {
+		for _, dep := range deps {
+			if _, known := preInputs[dep]; known {
+				indegree[dep]++
+			}
+		}
+	}
+	visited := make(map[string]bool, len(preInputs))
+	stack := make([]string, 0, 1)
+	for mod, n := range indegree {
+		if n == 0 {
+			visited[mod] = true
+			stack = append(stack, mod)
+		}
+	}
+	if len(stack) == 0 {
+		return everything()
+	}
+	for len(stack) > 0 {
+		cur := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		// Never traverse INTO a chain root: below it is the route's own subtree,
+		// which the per-page graphs already attribute route by route.
+		if chainRoots[cur] {
+			continue
+		}
+		for _, dep := range preInputs[cur] {
+			if visited[dep] {
+				continue
+			}
+			if _, known := preInputs[dep]; !known {
+				continue
+			}
+			visited[dep] = true
+			stack = append(stack, dep)
 		}
 	}
 
-	return &routeGraph{byModule: byModule, global: global, ready: true}, nil
+	global := make(map[string]bool, len(visited))
+	for mod := range visited {
+		if chainRoots[mod] {
+			continue
+		}
+		global[mod] = true
+	}
+	return global
 }
 
 // metafileGraph parses an esbuild metafile into module → imported modules, with
@@ -262,11 +361,16 @@ func (g *routeGraph) classify(root string, changed []string, assetConsumers func
 		if _, err := os.Stat(p); err != nil {
 			return fullRender("a source file was added, deleted, or renamed")
 		}
-		if attribute(p) {
-			continue
-		}
+		// Render-wide FIRST. The two sets overlap (a store seed app.js runs and one
+		// view also imports is in both), and only this order is safe: attributing
+		// such a module to the pages that happen to import it renders those and
+		// leaves every other page's stale HTML — and its stale data island — in
+		// place for the rest of the session.
 		if g.global[p] {
 			return fullRender("a render-wide module changed (" + filepath.Base(p) + ")")
+		}
+		if attribute(p) {
+			continue
 		}
 		// Not a module. It may still be an asset a .pzl inlines with {#svg}, an
 		// edge no metafile carries — ask the compile cache, then attribute the
@@ -275,7 +379,13 @@ func (g *routeGraph) classify(root string, changed []string, assetConsumers func
 			if consumers := assetConsumers([]string{p}); len(consumers) > 0 {
 				ok := true
 				for _, c := range consumers {
-					if !attribute(resolvePath(c)) {
+					cp := resolvePath(c)
+					// Same precedence as a direct edit: a consumer that is itself
+					// render-wide carries the asset into every page.
+					if g.global[cp] {
+						return fullRender("an inlined asset reaches a render-wide module (" + filepath.Base(cp) + ")")
+					}
+					if !attribute(cp) {
 						ok = false
 					}
 				}

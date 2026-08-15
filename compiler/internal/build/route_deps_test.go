@@ -47,6 +47,11 @@ func testGraph(t *testing.T) (root string, g *routeGraph) {
 		// public/ is inside the module resolve tree: data.js is imported by one
 		// page's view, wide.js only by the app entry.
 		"app/public/data.js", "app/public/wide.js",
+		// The overlap: seed.js is imported by app.js (it seeds the store from
+		// beforeMount, so it shapes every page) AND directly by one view.
+		// helper.js is the ordinary case it must not be confused with — a private
+		// helper only one view imports.
+		"app/lib/seed.js", "app/lib/helper.js",
 		"app/styles/extra.css", "app/assets/icon.svg",
 	}
 	for _, f := range files {
@@ -62,25 +67,38 @@ func testGraph(t *testing.T) (root string, g *routeGraph) {
 	pages := metafileJSON(t, map[string][]string{
 		"a.js":                         {"../app/views/A.pzl"},
 		"b.js":                         {"../app/views/B.pzl"},
-		"../app/views/A.pzl":           {"../app/components/Shared.pzl", "../app/public/data.js"},
+		"../app/views/A.pzl":           {"../app/components/Shared.pzl", "../app/public/data.js", "../app/lib/seed.js", "../app/lib/helper.js"},
 		"../app/views/B.pzl":           {"../app/components/Shared.pzl"},
 		"../app/components/Shared.pzl": {},
 		"../app/public/data.js":        {},
+		"../app/lib/seed.js":           {},
+		"../app/lib/helper.js":         {},
 	})
 	pre := metafileJSON(t, map[string][]string{
-		"app/app.js":                {"app/routes.js", "app/public/wide.js"},
+		// The generated stdin entry: a module key that matches no file on disk,
+		// which is why the walk finds its roots by in-degree rather than by name.
+		"puzzle-prerender-entry.js": {"app/app.js"},
+		"app/app.js":                {"app/routes.js", "app/public/wide.js", "app/lib/seed.js"},
 		"app/routes.js":             {"app/views/A.pzl", "app/views/B.pzl"},
-		"app/views/A.pzl":           {"app/components/Shared.pzl", "app/public/data.js"},
+		"app/views/A.pzl":           {"app/components/Shared.pzl", "app/public/data.js", "app/lib/seed.js", "app/lib/helper.js"},
 		"app/views/B.pzl":           {"app/components/Shared.pzl"},
 		"app/components/Shared.pzl": {},
 		"app/public/data.js":        {},
 		"app/public/wide.js":        {},
+		"app/lib/seed.js":           {},
+		"app/lib/helper.js":         {},
 	})
 
+	// The chain roots the prerender summary reports: one view per route (this
+	// fixture has no layout).
+	chainRoots := map[string]bool{
+		resolvePath(filepath.Join(root, "app", "views", "A.pzl")): true,
+		resolvePath(filepath.Join(root, "app", "views", "B.pzl")): true,
+	}
 	g, err := buildRouteGraph(pages, base, pre, root, map[string]string{
 		filepath.Join(base, "a.js"): "/a",
 		filepath.Join(base, "b.js"): "/b",
-	})
+	}, chainRoots)
 	if err != nil {
 		t.Fatalf("buildRouteGraph: %v", err)
 	}
@@ -115,6 +133,18 @@ func TestRouteGraphClassify(t *testing.T) {
 		{"another public asset reaches none", []string{rel("app/public/logo.png")}, false, ""},
 		{"a public module a page imports is that page", []string{rel("app/public/data.js")}, false, "/a"},
 		{"a public module only the app entry imports is render-wide", []string{rel("app/public/wide.js")}, true, ""},
+		// The regression this file exists for. seed.js is page-reachable AND
+		// render-wide: app.js runs it for every page, and view A also imports it
+		// directly. Deciding render-wide membership by subtracting the page graph
+		// let page attribution swallow it, so editing the store seed re-rendered
+		// only /a and left /b serving stale HTML and a stale data island — with no
+		// periodic full render to ever wash it out.
+		{"a module both the app entry and a view import is render-wide", []string{rel("app/lib/seed.js")}, true, ""},
+		// …and the fast path it must not cost: a helper only one view imports sits
+		// below the chain root, so the walk never reaches it and it stays that
+		// route's business.
+		{"a view-private helper is still just its route", []string{rel("app/lib/helper.js")}, false, "/a"},
+		{"the most conservative member wins over a private helper", []string{rel("app/lib/helper.js"), rel("app/lib/seed.js")}, true, ""},
 		{"an imported public module unions with a view", []string{rel("app/public/data.js"), rel("app/views/B.pzl")}, false, "/a,/b"},
 		{"a standalone stylesheet reaches none", []string{rel("app/styles/extra.css")}, false, ""},
 		{"an inlined asset reaches its consumers", []string{rel("app/assets/icon.svg")}, false, "/a"},
@@ -205,10 +235,60 @@ func TestRouteGraphNotReady(t *testing.T) {
 }
 
 func TestBuildRouteGraphRejectsBadMetafile(t *testing.T) {
-	if _, err := buildRouteGraph("{", "/tmp", "{}", "/tmp", nil); err == nil {
+	if _, err := buildRouteGraph("{", "/tmp", "{}", "/tmp", nil, nil); err == nil {
 		t.Error("a malformed pages metafile must be an error, so the caller keeps the previous graph")
 	}
-	if _, err := buildRouteGraph("{}", "/tmp", "not json", "/tmp", nil); err == nil {
+	if _, err := buildRouteGraph("{}", "/tmp", "not json", "/tmp", nil, nil); err == nil {
 		t.Error("a malformed prerender metafile must be an error")
+	}
+}
+
+// TestRenderWideFallsBackWhole covers the guardrails: every way the cut walk can
+// fail to describe the prerender graph has to land on "the whole graph is
+// render-wide", because that is the only answer that cannot under-render.
+func TestRenderWideFallsBackWhole(t *testing.T) {
+	pre := map[string][]string{
+		"/app/entry.js": {"/app/app.js"},
+		"/app/app.js":   {"/app/views/A.pzl"},
+		"/app/views/A.pzl": {
+			"/app/lib/helper.js",
+		},
+		"/app/lib/helper.js": {},
+	}
+	whole := func(name string, got map[string]bool) {
+		t.Helper()
+		if len(got) != len(pre) {
+			t.Errorf("%s: %d render-wide modules, want all %d", name, len(got), len(pre))
+			return
+		}
+		for mod := range pre {
+			if !got[mod] {
+				t.Errorf("%s: %s is not render-wide", name, mod)
+			}
+		}
+	}
+
+	whole("no chain roots", renderWide(pre, nil))
+	whole("empty chain roots", renderWide(pre, map[string]bool{}))
+
+	// A cycle spanning every module leaves nothing with in-degree zero, so there
+	// is no honest place to start walking.
+	cyclic := map[string][]string{"/a.js": {"/b.js"}, "/b.js": {"/a.js"}}
+	got := renderWide(cyclic, map[string]bool{"/c.pzl": true})
+	if len(got) != 2 || !got["/a.js"] || !got["/b.js"] {
+		t.Errorf("a rootless graph must be wholly render-wide, got %v", got)
+	}
+
+	// The healthy shape, for contrast: the walk stops at the chain root, so the
+	// helper below it is NOT render-wide and neither is the chain root itself.
+	got = renderWide(pre, map[string]bool{"/app/views/A.pzl": true})
+	want := map[string]bool{"/app/entry.js": true, "/app/app.js": true}
+	if len(got) != len(want) {
+		t.Fatalf("cut walk produced %v, want %v", got, want)
+	}
+	for mod := range want {
+		if !got[mod] {
+			t.Errorf("cut walk lost %s (got %v)", mod, got)
+		}
 	}
 }

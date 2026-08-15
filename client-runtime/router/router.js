@@ -1038,7 +1038,18 @@ export class Router {
 
 	async #navigate(
 		rawPath,
-		{ push, pop = false, replace = false, savedPosition = null, memoryIndex = null }
+		{
+			push,
+			pop = false,
+			replace = false,
+			savedPosition = null,
+			memoryIndex = null,
+			// The failed view whose error view pressed retry (__failedView), or null for
+			// every ordinary navigation. Read ONLY by the load-failure catch below, which
+			// hands that position its face back — #navigate returns undefined on success
+			// and failure alike, so the retry closure cannot detect the failure itself.
+			retryView = null,
+		}
 	) {
 		const matchPath = stripPath(rawPath);
 		const matched = this.#match(matchPath);
@@ -1344,7 +1355,7 @@ export class Router {
 				if (layout && !reuseLayout && hasSkeleton(layout)) start(layout);
 				await Promise.all(loads);
 			} catch (err) {
-				reportError(
+				const info = reportError(
 					this.#ctx,
 					err,
 					{ phase: 'navigation', route: to },
@@ -1371,6 +1382,18 @@ export class Router {
 				// clamp + #swap skipOut path. The restored unit's playOut memo stays spent:
 				// a later navigation away swaps it out instantly, no second out animation.
 				this.#recoverFailedNavigation(token);
+				// Retry redraw (D145/v1.71). Staying put normally means the user keeps the
+				// page still on screen — but a retry navigation destroyed its own error view
+				// before rebuilding (PuzzleView's retry closure), so for THAT position
+				// "stay put" would be a blank slot until a page reload. Hand the face back
+				// with THIS failure's error/info and a fresh retry. Nothing about the commit
+				// contract moves: no URL, no history entry, no half-built page — only what an
+				// already-failed position DISPLAYS. Skipped once a newer navigation owns the
+				// token (the #recoverFailedNavigation posture): that one fills the container
+				// itself, and a late error face would land in a position it no longer holds.
+				if (retryView && token === this.#token) {
+					await retryView.__retryErrorView?.(err, info);
+				}
 				return; // stay put, no history entry (reused ancestors kept — soft-violation)
 			}
 
@@ -1888,7 +1911,9 @@ export class Router {
 		if (!st) return retry ? null : undefined;
 		const routed = st.layout === view || st.views.includes(view);
 		if (retry) {
-			return routed ? this.#navigate(st.path, { push: false, replace: true }) : null;
+			return routed
+				? this.#navigate(st.path, { push: false, replace: true, retryView: view })
+				: null;
 		}
 		if (st.layout === view) {
 			st.layoutInvalid = true;

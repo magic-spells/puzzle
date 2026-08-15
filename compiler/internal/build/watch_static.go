@@ -650,17 +650,34 @@ func (b *StaticWatchBuilder) captureGraph(summary staticSummary, pagesMetafile, 
 	}
 	entriesDir := filepath.Join(b.warm, prerenderDir, "entries")
 	entryRoutes := make(map[string]string, len(summary.Written))
+	// The chain roots the render-wide walk cuts at: every view and layout the
+	// summary named, in the same absolute, symlink-resolved spelling the
+	// metafiles resolve to. The stamps are app-relative POSIX paths, except when
+	// a .pzl resolved outside the app root — absModuleImport owns that
+	// distinction, and going through it is what keeps a symlinked or monorepo
+	// layout from silently producing zero chain roots (which would demote every
+	// rebuild to a full render).
+	chainRoots := make(map[string]bool, len(summary.Written)*2)
+	addChainRoot := func(mod string) {
+		chainRoots[resolvePath(filepath.FromSlash(absModuleImport(b.root, mod)))] = true
+	}
 	for _, page := range summary.Written {
 		slug, err := slugFromEntry(page.Entry)
 		if err != nil {
 			return
 		}
 		entryRoutes[filepath.Join(entriesDir, slug+".js")] = page.Path
+		for _, mod := range page.Modules.Views {
+			addChainRoot(mod)
+		}
+		if page.Modules.Layout != nil {
+			addChainRoot(*page.Modules.Layout)
+		}
 	}
 	// The page pass anchors AbsWorkingDir to its output tree's parent (the warm
 	// root); the prerender pass sets none, so esbuild resolved its metafile keys
 	// against the process working directory.
-	graph, err := buildRouteGraph(pagesMetafile, b.warm, preMetafile, cwd, entryRoutes)
+	graph, err := buildRouteGraph(pagesMetafile, b.warm, preMetafile, cwd, entryRoutes, chainRoots)
 	if err != nil {
 		return
 	}
