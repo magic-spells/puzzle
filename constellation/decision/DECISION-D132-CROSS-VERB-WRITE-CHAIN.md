@@ -10,8 +10,9 @@ connections:
   - COMPONENT-STORE
   - FILE-STORE
   - DOC-SPEC-DATA
-verified_at: '2026-07-27T06:25:22.809Z'
-verified_sha: f2bf7b6ab1c0487ce458b48443b62b447ff55ff6
+  - FILE-ADAPTER
+verified_at: '2026-08-16T04:31:44.209Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -25,18 +26,21 @@ notes:
 # D132 — save() and delete() serialize behind one per-record write chain
 
 Amends §22/D50. The per-record in-flight chain that already serialized
-concurrent `save()`s (`_saveChains`) now serializes **every server write** for a
-record — it is `_writeChains`, shared by `saveRecord` and `deleteRecord` through
-one extracted `_chain(record, fn)` helper.
+concurrent `save()`s now serializes **every server write** for a record:
+`saveRecord` and `deleteRecord` both route through one extracted
+`_chain(record, fn)` helper. The chains are module-private `WeakMap` state in
+the `/adapter` subpath — keyed by Store, then by record — so core carries no
+write-queue field and a record's queue is released with the record.
 
 ## The race this closes
 
 `deleteRecord` used to dispatch immediately, so `save(); delete()` on a fresh
 record ran POST and DELETE concurrently, and both orderings were wrong:
 
-- **DELETE lands first:** the DELETE 404s (absorbed as idempotent), local
-  removal succeeds — then the still-in-flight POST creates the row server-side.
-  A server orphan, with `save()` resolving as if nothing happened.
+- **DELETE lands first:** the DELETE 404s (absorbed as idempotent by the
+  generated transport), local removal succeeds — then the still-in-flight POST
+  creates the row server-side. A server orphan, with `save()` resolving as if
+  nothing happened.
 - **POST lands first (worse):** pk adoption re-keys the record, but the DELETE
   was built from the old client pk. Its §22 identity guard then misses at the
   vacated key, so nothing is removed anywhere — and `delete()` **resolves
@@ -51,9 +55,9 @@ builds its URL from the pk the save just reconciled.
 - **Never-synced `delete()` is a local removal with no request.** The server
   has no row; the old unconditional DELETE could only 404 — or worse, reject
   with a 4xx on an id the server never issued, stranding a record the app had
-  already discarded. The no-adapter (D21) rejection is checked first, so a
-  model without an endpoint still reports that rather than quietly behaving
-  like `destroy()`.
+  already discarded. The delete transport is *resolved first*, before this
+  short-circuit, so a model with neither a `delete` function nor an endpoint
+  still reports its missing verb rather than quietly behaving like `destroy()`.
 - **Already-`_deleted` (or store-less) `delete()` resolves idempotently** with
   the detached record — two concurrent `delete()`s issue exactly one request.
 - **`_saveRecordNow` re-checks `_deleted` at RUN time.** A save queued behind

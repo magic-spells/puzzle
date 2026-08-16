@@ -1,6 +1,6 @@
 ---
 name: Router
-status: built
+status: verified
 connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-VIEW-MANAGER
@@ -21,6 +21,8 @@ notes:
       else), and url() now delegates to the exported encodeURL shared with both prerender paths.
       Added the dev-only route-commit emit to the D100 bridge.
     sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-08-16T04:29:00.714Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # Router
@@ -52,16 +54,18 @@ top-level only; merged params reach every view; nearest leaf metadata wins for
 title and transition settings. Top-level `*` is the catch-all. Duplicate params,
 absolute child paths, nested catch-alls/layouts, invalid transition modes,
 non-function guards, and invalid base/memory config fail at construction. Each
+leaf entry compiles its inherited guard chain (`entry.guards`, root→leaf,
+catch-all included; D87).
 
 **The canonical internal form of a path is percent-encoded** — the form
 `location.pathname` reports, which is the one input the router cannot change.
 One normalizer is applied at every boundary: route compilation, `push()`,
 `replace()`, `encodeURL()`/`url()`, the memory-mode initial path, and
 `routerBase`. It encodes whole non-ASCII runs (whole runs, so surrogate pairs
-survive) plus the four ASCII characters the WHATWG path percent-encode set
+survive) plus the eight ASCII characters the WHATWG path percent-encode set
 escapes and `encodeURIComponent` would otherwise leave alone in a path —
-space, `"`, `<`, `>`, and `` ` ``. `?` and `#` are deliberately NOT encoded:
-they are structural delimiters the query/fragment split depends on.
+space, `"`, `<`, `>`, `` ` ``, `{`, `}`, and `^`. `?` and `#` are deliberately
+NOT encoded: they are structural delimiters the query/fragment split depends on.
 
 Everything else stays byte-identical, including regex metacharacters, malformed
 percent text, and existing `%XX` escapes — which is what makes the operation
@@ -72,8 +76,6 @@ cold load, in-app `<a>` clicks, and the back button all fell through to the
 catch-all, and declaring the route pre-encoded instead broke `push()`. Param
 values are unaffected — they were already decoded once at match time and must
 not be double-decoded.
-leaf entry compiles its inherited guard chain (`entry.guards`, root→leaf,
-catch-all included; D87).
 
 Navigation is guard-then-load-then-commit. Guards run in `#navigate` after the
 token bump and before any view/layout construction — sequentially root→leaf on

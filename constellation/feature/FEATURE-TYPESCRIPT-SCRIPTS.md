@@ -12,6 +12,8 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
   - DOC-COMPILER-DESIGN
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.22 — TypeScript scripts

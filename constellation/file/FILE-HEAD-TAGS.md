@@ -10,8 +10,8 @@ connections:
   - COMPONENT-SSG
   - DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY
   - DECISION-D84-HEAD-MANAGEMENT
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-08-16T04:33:32.494Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the

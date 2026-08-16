@@ -1,7 +1,7 @@
 ---
 name: Cross-fade / overlapping route transitions
 status: verified
-verified_at: '2026-07-25T05:24:37.660Z'
+verified_at: '2026-08-16T04:38:25.549Z'
 connections:
   - DECISION-D56-OVERLAP-TRANSITIONS
   - DECISION-D28-ANIMATIONS
@@ -31,7 +31,9 @@ notes:
       Playwright suite asserts outgoing+incoming coexist mid-transition and no inline position:fixed
       pin survives settle, on Chromium AND WebKit. Documented as EXPERIMENTAL for 0.1.0 in README
       (interaction-matrix caution: overlap×morph, overlap×nested-reused-layout).
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.24 — Overlapping route transitions

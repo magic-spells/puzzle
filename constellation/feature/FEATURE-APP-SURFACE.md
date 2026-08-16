@@ -16,6 +16,8 @@ notes:
       v1.31 (SPEC §34); settings/computed/methods, global keyboard events, $events, ctx.utils,
       devtools re-rejected with rationale in the DECISION card. Last planned feature card — backlog
       empty.
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # App-level surface

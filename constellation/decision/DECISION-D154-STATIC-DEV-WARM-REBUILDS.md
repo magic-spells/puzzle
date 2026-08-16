@@ -1,6 +1,6 @@
 ---
 name: D154 — warm static dev rebuilds
-status: built
+status: verified
 connections:
   - DECISION-D148-PREVIEW-AND-STATIC-DEV
   - DECISION-D81-STATIC-PAGES-MODE
@@ -10,6 +10,8 @@ connections:
   - COMPONENT-DEV-SERVER
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-BUILD-WATCH
+verified_at: '2026-08-16T04:34:43.370Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D154 — warm static dev rebuilds

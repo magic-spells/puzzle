@@ -12,6 +12,8 @@ connections:
   - DOC-ROUTER
   - DOC-VIEW-LIFECYCLE
   - DOC-APP-ANATOMY
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.28 — Atomic location commit (D61)

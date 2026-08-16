@@ -12,6 +12,8 @@ connections:
   - DOC-EVENTS
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.13 — DOM islands + backspace/delete key filters

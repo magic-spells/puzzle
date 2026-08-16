@@ -1,19 +1,23 @@
 ---
 name: "Public store.upsert() for custom-action responses"
 status: verified
-verified_at: '2026-07-22T09:00:00.000Z'
+verified_at: '2026-08-16T04:34:54.114Z'
 connections:
   - DECISION-D21-ADAPTER-READ-PATH
   - DECISION-D50-ADAPTER-WRITE-SYNC
   - COMPONENT-STORE
   - DOC-DATASTORE
   - DOC-MODELS
+  - FILE-ADAPTER
 notes:
   - kind: state
     text: >-
       Found by the habit-lab test app (2026-07-22): its checkIn() custom action
       receives fresh server state ({habit, checkin}) but must throw it away and
       re-fetch via two loadOne GETs, because Store._upsert is private.
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+release: RELEASE-V0-1-2
+change: feature
 ---
 
 # Public store.upsert() for custom-action responses
@@ -21,62 +25,57 @@ notes:
 ## Intent
 
 The documented custom-endpoint idiom — a model method wrapping
-`store.request(type, path, opts)` — returns fresh server state and then gives the
-caller **no sanctioned way to put it in the store**. Every custom action pays extra
-GETs (`loadOne` refreshes) to re-fetch data it is already holding. Promote the
-existing merge machinery to the public surface.
+`store.request(type, path, opts)` — returns fresh server state, and the caller
+needs a sanctioned way to put it in the store. Without one, every custom action
+pays extra GETs (`loadOne` refreshes) to re-fetch data it is already holding.
+`store.upsert()` promotes the existing merge machinery to the public surface.
 
-## Current shape
+## Shape
 
-`_upsert(type, data)` (`client-runtime/datastore/store.js:349-363`) already does
-exactly what's needed and is self-contained: identity-preserving `safeMerge` onto an
-existing instance keyed by pk, validation-exempt instantiation otherwise
-(server-authoritative, per [[DECISION-D21-ADAPTER-READ-PATH]]), `_synced = true`,
-subscriber `_notify`. Its callers (`loadAll` `store.js:316-317`, `loadOne`
-`store.js:330-331`) add `_persist()` after. `request()` (`store.js:555-568`) returns
-raw parsed JSON and never touches the index.
+`store.upsert(type, objectOrArray)` is installed by the `/adapter` capability
+alongside the other server verbs (`client-runtime/datastore/adapter.js`); it is
+not on the core Store. It routes through the same private merge the loaders
+use: identity-preserving `safeMerge` onto an existing instance keyed by pk,
+validation-exempt instantiation otherwise (server-authoritative, per
+[[DECISION-D21-ADAPTER-READ-PATH]]), `_synced = true`, subscriber notify.
 
-## Design
+- A single object returns the record; an array returns records and persists
+  once for the whole batch.
+- Every payload must be a plain object carrying a non-null primary key, and an
+  array is preflighted in full before any element is applied — so a bad element
+  cannot half-apply the batch.
+- **The pk guard is load-bearing, not defensive.** The private merge with a
+  pk-less payload falls through to `_instantiate`, which auto-generates a key
+  and stamps `_synced = true` — a phantom "synced" record whose next `save()`
+  PUTs to a URL the server never issued. The public API refuses that and says
+  why. The same guard was later extended to the loaders
+  ([[DECISION-D137-LOAD-PK-GUARD]]).
+- Unlike the loaders, `upsert` does **not** take the D125/D138 revision gate: it
+  is an explicit imperative call whose caller intends the payload to land, so it
+  stays an unconditional overwrite.
 
-**Primary API — `store.upsert(type, data)`** (public):
+## Semantics
 
-- Single object: require `data[pk] != null`, route through `_upsert`, then
-  `_persist()`; return the record.
-- Array: mirror `loadAll`'s per-element shape guard (`store.js:309-315`) — every
-  element must be a plain object; upsert each; single `_persist()`; return records.
-- **Reject pk-less objects with a clear error.** This is the one sharp edge found in
-  research: `_upsert` with a pk-less payload falls through to `_instantiate`, which
-  auto-generates a pk and stamps `_synced = true` — a silent phantom "synced" record
-  that will PUT to a nonsense URL on next save. The public API must not inherit
-  that; require the pk and say so in the error message.
+`upsert` means "this came from the server": validation-exempt, `_synced = true`,
+identity-preserving. It is not a general-purpose local write — that stays
+`createRecord`/`update()`. Notification batching and persistence behave exactly
+like `loadOne`.
 
-**Convenience — `request(type, path, { merge: true })`** (optional second step):
-after `readBody`, route object/array responses through `store.upsert` with the same
-guards, then return the parsed body unchanged. Callers keep the raw response (e.g.
-habit-lab's `{habit, checkin}` envelope shape would NOT merge — `merge` only makes
-sense when the response body IS the record(s); envelope users call `store.upsert`
-per key themselves). Document that distinction explicitly in DOC-DATASTORE.
+Envelope responses stay explicit. `store.request()` returns the parsed body and
+never touches the index, so a `{ habit, checkin }` payload is applied with one
+`upsert` per key. A `request(..., { merge: true })` convenience was considered
+and not built: `merge` only makes sense when the response body *is* the
+record(s), which is the case the caller can already express in one line, and the
+envelope case — the one that actually motivated this feature — would not be
+served by it.
 
-## Semantics to document
+## Coverage
 
-- `upsert` means "this came from the server": validation-exempt, `_synced = true`,
-  identity-preserving. It is not a general-purpose local write — that stays
-  `createRecord`/`update()`.
-- Notification batching and persistence behave exactly like `loadOne`.
-
-## Scope
-
-**In:** `store.upsert(type, objectOrArray)` + tests + DOC-DATASTORE/DOC-MODELS
-updates (rewrite the custom-endpoint idiom to use it; habit-lab's `checkIn()` is
-the reference consumer).
-**Out (initially):** the `request({merge})` flag — add after `upsert` proves out;
-any offline/queue semantics (explicit non-goals per DOC-DATASTORE).
-
-## Test plan
-
-- Merge path: existing record updated in place (`===` identity), `_synced` set,
-  subscribers notified once per flush, persisted.
-- Instantiate path: new record appears under server pk.
-- Array path: element shape guard rejects non-objects; one persist.
-- Guard: pk-less object → throws with actionable message; store unchanged.
-- Round-trip with the write path: `upsert` then `save()` issues PUT (not POST).
+`tests/store.test.js` — the "Store — public server-authoritative upsert
+(D21/D50)" group: the merge path preserving object identity, upsert remaining an
+unconditional overwrite after a local edit, and array upserts applying in order
+with a single persist. `tests/adapter-write.test.js` pins the provenance
+round-trip (a record from public upsert is synced, so its first `save()` PUTs)
+and that an upsert of an existing record keeps its prototype and `_store` with
+no pollution. `tests/adapter-custom.test.js` covers the documented idiom of a
+custom adapter method composing with `upsert`.

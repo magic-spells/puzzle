@@ -14,8 +14,8 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-ASSEMBLE
   - FEATURE-V1-49-QUERY-REPLACE
-verified_at: '2026-07-25T05:24:23.400Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:35:45.709Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D83 — Router query snapshot + `router.replace()` (v1.49)

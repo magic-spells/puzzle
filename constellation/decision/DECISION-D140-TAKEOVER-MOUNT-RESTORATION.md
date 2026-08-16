@@ -1,11 +1,13 @@
 ---
 name: 'D140 — Prerendered DOM restored when a takeover mount fails'
-status: built
+status: verified
 connections:
   - COMPONENT-ROUTER
   - COMPONENT-SSG
   - DECISION-D130-TAKEOVER-BUILD-DEFINE
   - DOC-SPEC-BUILD
+verified_at: '2026-08-16T04:37:40.501Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 A takeover mount no longer destroys the prerendered page it cannot replace: both

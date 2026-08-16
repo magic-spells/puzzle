@@ -11,6 +11,8 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-VIEW
   - DECISION-D56-OVERLAP-TRANSITIONS
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.1 — View & component animations

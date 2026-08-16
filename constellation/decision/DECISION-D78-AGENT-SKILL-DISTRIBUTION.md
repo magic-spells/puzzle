@@ -8,8 +8,8 @@ connections:
   - DECISION-D77-INIT-PROMPTS
   - DECISION-D32-CLI-TOOLING
   - FILE-CLI-ADD
-verified_at: '2026-07-25T00:10:00.000Z'
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_at: '2026-08-16T04:49:21.550Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -20,7 +20,7 @@ notes:
 
 # D78 — Agent-skill distribution: embedded skill + `puzzle add skills` (v1.45)
 
-The repo now ships a distilled AI-agent skill for building Puzzle apps
+The repo ships a distilled AI-agent skill for building Puzzle apps
 (`skills/puzzle/SKILL.md`, cross-agent SKILL.md format), and the CLI installs it:
 `puzzle add skills` (alias `skill`) copies the embedded skill into every detected
 agent config dir. See [[DOC-SPEC-BUILD]] §13.
@@ -44,17 +44,21 @@ into the binary via a root-level `go:embed` package (`skills/embed.go`), and
 - Target detection: a target is offered iff the tool's root config dir exists —
   `~/.claude` (Claude Code), `~/.codex` (Codex), `~/.cursor` (Cursor).
   Destination `<root>/skills/puzzle/` is created as needed (Cursor typically
-  lacks `skills/`).
+  lacks `skills/`). `--skill-root <dir>` (repeatable) names the config dirs
+  outright instead, and skips detection and the target prompt — explicit roots
+  are explicit intent.
 - On a TTY: a `charmbracelet/huh` multi-select checkbox list, all detected
   targets pre-selected (space toggles, enter confirms). Deselecting all
   installs nothing, exit 0.
 - Non-TTY: installs to ALL detected targets silently — the never-prompt,
   never-hang convention from D32/D77.
-- Existing `<root>/skills/puzzle/` refuses without `--overwrite`
-  (all-or-nothing pre-flight, same idiom as pieces). Copy is recursive, so a
-  future `references/` folder ships without CLI changes.
+- An existing `<root>/skills/puzzle/` is a refresh case rather than an error;
+  which installs are current, which are asked about, and which are refused
+  belongs to [[DECISION-D99-SKILL-REFRESH-PROMPT]]. `--overwrite` is the
+  unconditional write, and the only way through a symlinked destination.
+- Copy is recursive, so a future `references/` folder ships without CLI changes.
 - Embedding at build time is the versioning story: the installed skill always
-  matches the CLI that wrote it; `puzzle upgrade` + re-run refreshes it.
+  matches the CLI that wrote it.
 
 ## Alternatives rejected
 
@@ -76,29 +80,27 @@ into the binary via a root-level `go:embed` package (`skills/embed.go`), and
 
 - First TUI dependency: `github.com/charmbracelet/huh` (+ bubbletea/lipgloss
   tree). Compile-time only for non-`add skills` paths.
-- `ui.IsTerminal` was fixed as part of this work: it now does a real isatty
-  check (`mattn/go-isatty`, already in the graph) instead of the
-  `ModeCharDevice` heuristic — `/dev/null` is a char device and previously
-  counted as a TTY, which would have made huh block forever under cron/CI
-  stdin. `init`/`main` gates inherit the stricter (more correct) check.
+- `ui.IsTerminal` does a real isatty check (`mattn/go-isatty`, already in the
+  graph) rather than a `ModeCharDevice` heuristic — `/dev/null` is a char device
+  and would otherwise count as a TTY, making huh block forever under cron/CI
+  stdin. `init`/`main` gates inherit the stricter check.
 - The D3 no-JS-rewriting rule is untouched (the command writes only skill
   files under tool config dirs, never project JavaScript).
 - The skill file is release-checklist surface: its content must be re-verified
-  against the docs whenever the public surface changes. **Nothing enforced this,
-  and it drifted** — `SKILL.md` went stale past D91/D93/D94/D95/D98/D100 before
-  anyone noticed. `constellation/plan.md`'s release checklist now carries it as
-  an explicit numbered item.
+  against the docs whenever the public surface changes. **Nothing in the build
+  enforces this, and it has drifted** — `SKILL.md` sat stale past
+  D91/D93/D94/D95/D98/D100 before anyone noticed. `constellation/plan.md`'s
+  release checklist carries it as an explicit numbered item.
 
-## Refresh, as later decided
+## Refresh
 
-This card closed with "`puzzle upgrade` + re-run refreshes it" — a manual re-run
-nobody remembers. Two follow-ons made the refresh real:
+Re-running the install IS the refresh mechanism, and two follow-ons make it
+something other than a manual step nobody remembers:
 
 - [[DECISION-D97-UPGRADE-SKILL-REFRESH]] — `puzzle upgrade` offers the refresh
   after a version actually changes, and must **re-exec the newly installed
   binary** to do it, because the payload is `go:embed`-ed and the running
   process still holds the old one.
-- [[DECISION-D99-SKILL-REFRESH-PROMPT]] — re-running `puzzle add skills` IS the
-  refresh mechanism, so an existing install now asks instead of aborting, and
-  installs carry a `.puzzle-skill-version` stamp that turns "is this current?"
-  from an inference into a fact. Adds `puzzle upgrade skills`.
+- [[DECISION-D99-SKILL-REFRESH-PROMPT]] — an existing install asks instead of
+  aborting, and installs carry a `.puzzle-skill-version` stamp that turns "is
+  this current?" from an inference into a fact. Adds `puzzle upgrade skills`.

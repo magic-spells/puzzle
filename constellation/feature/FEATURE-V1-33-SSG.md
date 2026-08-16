@@ -12,6 +12,8 @@ connections:
   - DOC-SPEC
   - DECISION-D81-STATIC-PAGES-MODE
   - FEATURE-V1-47-STATIC-PAGES
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.33 — Static site generation (D67)

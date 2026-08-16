@@ -7,8 +7,8 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
-verified_at: '2026-07-29T05:19:19.240Z'
-verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
+verified_at: '2026-08-16T04:34:16.663Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: gotcha
     text: >-
@@ -71,16 +71,18 @@ the parser's — an unterminated literal must end at exactly `len(expr)`, since
 the copy path slices `expr[i:j]`.
 
 Emission covers host/component vnodes, coalesced text/interpolation,
-formatters, dynamic/mixed attrs, events, slots, refs, islands, inline SVG,
-conditionals/case, and item/range loops. Markers emit `new ViewNode(SLOT_TAG)`
+formatters, dynamic/mixed attrs, events, slots, portals, refs, islands, inline
+SVG, conditionals/case, and item/range loops. Markers emit `new ViewNode(SLOT_TAG)`
 / `new ViewNode(SLOT_TAG, { name })` when self-closing (or empty-paired), and
 carry their fallback body as the marker vnode's children through the ordinary
 child-emission path when paired (D141) — formatters, control flow, components,
-and `{#svg}` all work inside a fallback. Formatter calls use bracket access and
-the runtime missing-name guard. Item loops auto-key through `ViewNode.keyOf`;
-an explicit root `key` replaces the synthetic key. Valueless attrs follow a
-strict contract: a bare attribute emits `true`, an explicit `=""` emits an empty
-string (a former bug compiled `value=""` to `true` and rendered "true").
+and `{#svg}` all work inside a fallback. `<Portal>` (D144) emits one
+`PORTAL_TAG` vnode carrying the teleported children through that same
+child-emission path; a component template whose ROOT is a `<Portal>` is a
+positioned error steering to a wrapper element. The injected import line is
+built per file from what the file actually needs: `ViewNode` always, `SLOT_TAG`
+when a marker is present in the template or skeleton, `PORTAL_TAG` when a
+portal is, and `displayValue as __s` when an interpolation coerces for display.
 
 Raw-block bodies arrive as ordinary static Text/Element AST nodes, so their
 text takes only the JS-string path and never expression resolution. A literal
@@ -98,12 +100,16 @@ Implicit two-way binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]) lives in
 global, and reserved-`event` roots never classify; a bare loop variable never
 classifies, a loop-var-rooted member path does) and `detectAutoBind` applies the
 element-level conditions (form-control tag, no author `@input`/`@change`, no
-static `readonly`/`disabled`, static classifiable `type`). Both `attrsMultiline`
+static `readonly`/`disabled`, no `multiple` on a `<select>`, static
+classifiable `type`). Both `attrsMultiline`
 and `emitAttrs` consume it — inline SVG calls that pair directly — appending
 `'@<event>:bind': this.__bind(target, field, spec)` after the authored attrs.
 The synthesized attr counts toward the width trial (layout stays deterministic)
 and consumes no `__h` site index; `attrKV` runs twice per attr, so a counter
 there would drift every golden. Non-classifying templates emit byte-identically.
+The bind attr name is matched case-SENSITIVELY (`value`/`checked`), because the
+runtime's property-write lookup is; a `VALUE={ x }` spelling stays a plain
+one-way attribute rather than a bind the runtime would never honor.
 
 Conditional branches are arity-stabilized when occupancy is provably fixed.
 `if`/`unless`/`case` compute their maximum static child count recursively and

@@ -10,6 +10,8 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-ROUTER
   - COMPONENT-VIEW-MANAGER
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.3 — Nested routes

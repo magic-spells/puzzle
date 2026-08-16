@@ -19,6 +19,8 @@ notes:
       at ship (loaded flips at swap, last-wins, destroy cancels; parser/codegen byte-identity for
       absent/0); tests/skeleton-antiflash.test.js (5) + Go parser/codegen cases + full suite green
       (480 vitest + all Go).
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.20 — Skeleton follow-ups

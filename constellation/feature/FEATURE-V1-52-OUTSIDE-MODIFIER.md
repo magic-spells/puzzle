@@ -9,8 +9,8 @@ connections:
   - DOC-EVENTS
   - FILE-VIEW-MANAGER
   - FILE-PARSER
-verified_at: '2026-07-25T05:24:41.662Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:33:12.665Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -18,6 +18,8 @@ notes:
       panel survives its own opening interaction (capture race), inside pointerdown/click never
       dismisses, outside pointerdown closes; golden pins '@click' + '@click:outside' coexisting.
     sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+release: RELEASE-V0-2-0
+change: feature
 ---
 
 # v1.52 — @event:outside modifier (D86)
@@ -29,15 +31,18 @@ element. Framework-owned cleanup on unmount. Ship
 
 ## Scope
 
+
 - In (compiler): `outside` joins the generic-modifier table
   (`eventGenericMods`, parser) — valid on any event, existing D38 validation
   (unknown/duplicate/component-prop rules) unchanged; a golden/parser test.
 - In (runtime, `viewManager.js`): outside-flagged bindings attach/detach on
   `document` with capture through the existing `setAttr`/`removeAttr` `@`
   paths (LISTENERS bookkeeping unchanged — full-name keys); the wrapper's
-  outside-gate (`el.contains(event.target)` bails) runs before key-gate/
-  once/prevent/stop; `releaseSubtree` detaches outside-listeners for every
-  removal shape (the D72 ref-null walk).
+  outside-gate (a logically-contained target bails —
+  `portalAwareContains`, which is plain `el.contains` when no portal is live
+  or Portal is compiled out) runs before key-gate/once/prevent/stop;
+  `releaseSubtree` detaches outside-listeners for every removal shape (the
+  D72 ref-null walk).
 - Out (per D86): event-type restrictions, iframe reach, any SSG/grammar/
   tooling change (none needed).
 

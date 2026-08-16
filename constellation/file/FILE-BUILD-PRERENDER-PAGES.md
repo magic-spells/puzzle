@@ -8,11 +8,21 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-SSG
   - DECISION-D81-STATIC-PAGES-MODE
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-08-16T04:34:20.754Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
-Source binding for the owning component card. Behavioral intent stays in the connected component ([[COMPONENT-SSG]], static mode of [[DECISION-D81-STATIC-PAGES-MODE]]); this card anchors that plan to `compiler/internal/build/prerender_pages.go`. Generates one `dist/_puzzle/<slug>.js` mountStatic entry per written page (keyed on the codegen `__pzlModule` stamps), derives slugs + suffixes collisions, detects models/formatters modules (`findStaticModule` probes `.ts` variants as well as `.js`), warns on app.js-only formatters AND on a missing models module, and drops `staging/app.js`.
+Source binding for the owning component card. Behavioral intent stays in the connected component ([[COMPONENT-SSG]], static mode of [[DECISION-D81-STATIC-PAGES-MODE]]); this card anchors that plan to `compiler/internal/build/prerender_pages.go`. Generates one `dist/_puzzle/<slug>.js` mountStatic entry per written page (keyed on the codegen `__pzlModule` stamps), derives slugs + suffixes collisions, detects models/formatters/adapter modules (`findStaticModule` probes `.ts` variants as well as `.js`), warns on app.js-only formatters AND on a missing models module, and drops `staging/app.js`.
+
+The adapter capability reaches a static page through three tiers, cheapest
+first: no adapter at all; a conventional `app/adapter.js`/`.ts` the entry
+imports directly; and — when the capability is only reachable from `app.js` —
+a capture-mode import of the app entry, which pulls the route table and every
+view into the shared page chunk and therefore prints a steering note. An
+inline `adapter.defaults()` in `app.js` is legal and must keep working through
+that capture tier. The pass runs with `Splitting` on, so shared code lands in
+`_puzzle/chunks/` automatically, and it picks its source-map mode up front from
+`staticPagesSourcemap(cfg, dev)` rather than emitting maps to delete later.
 
 Two shapes here are load-bearing and easy to undo:
 

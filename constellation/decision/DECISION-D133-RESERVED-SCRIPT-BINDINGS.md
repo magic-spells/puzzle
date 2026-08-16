@@ -9,8 +9,8 @@ connections:
   - COMPONENT-CODEGEN
   - FILE-CODEGEN
   - DOC-COMPILER-DESIGN
-verified_at: '2026-07-27T06:25:25.148Z'
-verified_sha: f2bf7b6ab1c0487ce458b48443b62b447ff55ff6
+verified_at: '2026-08-16T04:34:36.755Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -36,27 +36,31 @@ skewed by the generated preamble.
 
 ## Mechanism
 
+
+
 `scriptcollide.go`'s existing string/comment/regex-aware tokenizer (the same
 LexSkip walk behind the import-shadow warning and classname extraction) gains a
 top-level declaration scan: identifiers bound by `const`/`let`/`var`/
 `function`/`class` at brace-depth 0, merged with the import-clause locals it
 already collected. `compile()` checks that set against **exactly the names this
-file will emit** — `ViewNode` always, `SLOT_TAG` when the template has a slot,
-`__s` when display coercion is compiled (D127), `__svg_N` in SVG-dedup mode —
+file will emit** — `ViewNode` always, `SLOT_TAG` when the template has a
+composition marker, `PORTAL_TAG` when it has a `<Portal>`, `__s` when display
+coercion is compiled (D127), `__svg_N` in SVG-dedup mode —
 right after the import line is assembled. Nothing is reserved unconditionally:
 `const __s` in a module that never coerces still compiles, and the
 function-scope helpers (`__d`, `__f`) never collide because they are shadowed
-inside the render body, not redeclared.
+inside the render body, not redeclared. The error message names what the file
+imports as that identifier and why THIS file imports it, so it explains a
+reservation the `.pzl` cannot see.
 
 The scan is deliberately conservative — destructuring patterns, later
 declarators of a list, and `function`/`class` in expression position are
 skipped (a named class expression binds its name inside the expression only),
 and TS `declare` statements are ignored as type-only. The asymmetry is the
-point: a **miss falls through to today's esbuild error**, while a false hit
-would reject legal code. This partially supersedes the DOC-COMPILER-DESIGN
-claim that the compiler "cannot detect the collision earlier": it cannot
-*parse* the script (that contract holds — the script's bytes are the user's),
-but the token scan detects the common forms without parsing.
+point: a **miss falls through to esbuild's own duplicate-binding error**, while
+a false hit would reject legal code. The compiler cannot *parse* the script
+(that contract holds — the script's bytes are the user's), but the token scan
+detects the common forms without parsing.
 
 Known residual: a scriptless `.pzl` whose filename synthesizes a reserved class
 name (`ViewNode.pzl`) still fails at esbuild — the scan reads the user's

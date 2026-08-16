@@ -1,6 +1,6 @@
 ---
 name: ViewManager and ViewNode
-status: built
+status: verified
 connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-CODEGEN
@@ -40,6 +40,8 @@ notes:
       probes post-reduction, detection covers component props) appended to this card's body — prior
       stamp (d9591d6) predated that paragraph.
     sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
+verified_at: '2026-08-16T04:32:50.424Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # ViewManager and ViewNode

@@ -20,6 +20,8 @@ notes:
       test:types, verify:pack green; scaffolded todos demos handler-less binding out of the box;
       real-browser pass done.
     sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
+release: RELEASE-V0-5-0
+change: feature
 ---
 
 # Implicit two-way form binding

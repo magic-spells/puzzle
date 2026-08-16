@@ -1,6 +1,6 @@
 ---
 name: PuzzleView
-status: built
+status: verified
 connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ANIMATIONS
@@ -16,6 +16,8 @@ notes:
       Keep raw source values and data()-derived display values under different
       keys. A successful data() replaces the model layer, so reusing one key for
       raw local state and a reshaped model value loses the raw value by design.
+verified_at: '2026-08-16T04:32:49.836Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # PuzzleView
@@ -58,11 +60,12 @@ Error-view failures are reported as `phase: 'error-view'` and stop without
 recursion. There is no per-view `errorContent` API or ancestor walk
 ([[DECISION-D145-ERROR-BOUNDARIES]]).
 
-Public instance surface includes `ctx`, `props`, `route`, `element`, `refs`,
-`getData`, `setData`, `refresh`, `memo`, `isDestroyed`, `playIn`, `playOut`, and
-`destroyAnimated`. `this.route` is the frozen per-navigation snapshot that is
-safe inside the pre-commit data gate. `memo(key, deps, factory)` compares deps
-with `Object.is` and keeps reference-stable derived props.
+Public instance surface includes `ctx`, `props`, `params`, `route`, `element`,
+`refs`, `loaded`, `getData`, `setData`, `refresh`, `memo`, `isDestroyed`,
+`playIn`, `playOut`, `skipEnter`, and `destroyAnimated`. `this.route` is the
+frozen per-navigation snapshot that is safe inside the pre-commit data gate.
+`memo(key, deps, factory)` compares deps with `Object.is` and keeps
+reference-stable derived props.
 
 Static `ref="name"` bindings use cached `__ref` callbacks. Replacements repoint
 the ref; removals and destroy clear it. Development builds register mounted
@@ -73,17 +76,32 @@ reload.
 binding ([[DECISION-D147-IMPLICIT-TWO-WAY-BINDING]]), memoized on the same
 principle as `__ref` (a Map for null-target locals, a WeakMap-of-Maps for
 member targets) so patches see one stable handler identity per (target, key,
-spec). The handler ignores mid-IME-composition events, applies the compile-time
+spec). A member path whose root resolves to a primitive is not writable and
+degrades to a single shared inert handler rather than throwing at render. The
+handler ignores mid-IME-composition events, applies the compile-time
 coercion (`v` string, `vn` numeric with `''`→`null` and NaN skipped, `c`
 boolean), then `#bindWrite` picks an arm at write time: local → `setData` +
 `refresh`; record (duck-typed `update` + string `_type` — this file never
 imports model.js) → validated `update()` with a rejected write reported through
 `reportError` as `phase: 'bind'`, mutating nothing; plain object → mutate +
-repaint. A dev-only diagnostic arms `#bindPending` before the refresh and, at
-the tail of `#recompose`, warns once per key (`#bindWarned`) when a `data()`
-commit reverts a bound local key — the value compare keeps the legitimate
-read-own-write echo idiom silent. Every touchpoint gates inline on
-`__PUZZLE_DEV__`.
+repaint. Both refreshing arms funnel a synchronous throw and an async rejection
+into the D145 path as `phase: 'bind'`, because a bind handler is a
+fire-and-forget DOM listener with no other caller.
+
+Two dev-only diagnostics watch for writes that silently disappear, both gated
+inline on `__PUZZLE_DEV__` and never allocated in production. The layer-clobber
+check arms `#bindPending` before the local arm's refresh and, at the tail of
+`#recompose`, warns once per key (`#bindWarned`) when a `data()` commit reverts
+a bound local key — the value compare keeps the legitimate read-own-write echo
+idiom silent. The rebuilt-target check arms `#bindMemberPending` on the
+plain-object arm and resolves it at the tail of the next completed render:
+`__bind` records which member objects that render actually used
+(`#bindMemberLast`), and the warning (`#bindMemberWarned`, once per key) fires
+only when the written object never returned, exactly one unambiguous
+replacement did, and that replacement did not preserve the value. The
+completed-render fence is what keeps a loop's ordinary traversal order from
+false-positiving; record writes never arm it, so store-record replacement stays
+silent.
 
 D121 adds development-only attribution around `data()`, render-tree
 construction, patching, memo, slot-only updates, and scheduled causes. All

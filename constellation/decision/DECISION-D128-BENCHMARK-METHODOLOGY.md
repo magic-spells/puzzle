@@ -14,8 +14,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-FORMATTERS
   - FILE-DEVPERF
-verified_at: '2026-07-27T04:56:00.000Z'
-verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
+verified_at: '2026-08-16T04:35:04.774Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D128 — the production benchmark harness: production-only measurement, medians, and structural exit codes

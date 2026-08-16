@@ -10,8 +10,8 @@ connections:
   - FILE-ROUTER
   - FILE-SSG-ASSEMBLE
   - FILE-STATIC-MOUNT
-verified_at: '2026-07-25T05:24:39.593Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:38:26.427Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -19,6 +19,8 @@ notes:
       check — replace() per keystroke with zero history growth, back-after-replace lands on the
       rewritten entry, this.route.query live in data().
     sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+release: RELEASE-V0-2-0
+change: feature
 ---
 
 # v1.49 — Router query snapshot + replace() (D83)

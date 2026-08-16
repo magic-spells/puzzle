@@ -16,6 +16,8 @@ notes:
       leave snapshots + click-pins) while it still receives them — forward-only list→detail morphs
       on request. No separate FEATURE card (rides this one, like D45 rode v1.13); SPEC §37 amended
       in place.
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.35 — cross-view (sibling-swap) morphs land in `enableMorph`

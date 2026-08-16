@@ -9,8 +9,8 @@ connections:
   - DECISION-D27-FAST-DEV-REBUILDS
   - DECISION-D57-HMR-STATE-RELOAD
   - DOC-SPEC
-verified_at: '2026-07-25T05:24:33.876Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:35:01.948Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 A failed `puzzle dev` build now shows up **in the page**, not only in the terminal. The reload channel carries typed events, the server retains the current error so late-connecting clients see it, and a first-ever failed build serves a self-healing error shell instead of a bare 404.

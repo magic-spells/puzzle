@@ -1,12 +1,14 @@
 ---
 name: 'D143 — A mounted() throw resolves by owner'
-status: built
+status: verified
 connections:
   - DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT
   - DECISION-D140-TAKEOVER-MOUNT-RESTORATION
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ROUTER
   - DOC-VIEW-LIFECYCLE
+verified_at: '2026-08-16T04:33:06.308Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 A `mounted()` throw is handled by whoever owns the view's lifetime, and each
@@ -27,15 +29,17 @@ owner protects its own invariant:
   through.
 
 Each path's console message names its outcome, so ownership is visible in
-the console rather than only in source:
+the console rather than only in source. The component-owned message splits on
+whether an app `errorView` is configured:
 
 - `[puzzle] routed view mount failed — the failed position was replaced:`
+- `[puzzle] component mount failed — the failed position was replaced:`
 - `[puzzle] component mount failed — the component was destroyed and will
   remount on the next patch:`
 - `[puzzle] component mount failed — the component was destroyed and the
   prerendered content restored (static pages have no later patch/remount):`
 
-All three behaviors are pinned by tests (`tests/error-boundaries.test.js`, `tests/router.test.js`,
+All four behaviors are pinned by tests (`tests/error-boundaries.test.js`, `tests/router.test.js`,
 `tests/keyed-reconciliation.test.js`, `tests/static-kernel.test.js`,
 `tests/mount-failure-recovery-race.test.js`).
 

@@ -8,14 +8,16 @@ connections:
   - DOC-SPEC
   - DOC-ROUTER
   - FILE-ROUTER
-verified_at: '2026-07-25T05:24:47.904Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:38:27.260Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
       Merged and verified per the card's Verification section: full suite 957 green, go test,
       test:types, stays build. Browser smoke pending.
     sha: 214406a27c9beb7a34a7a1a265f5dd8bf8f28fc0
+release: RELEASE-V0-2-0
+change: feature
 ---
 
 # v1.53 — route guards (D87)
@@ -30,9 +32,11 @@ redirect (replace semantics, loop-capped). Ship
 - In (runtime, `router.js`): `entry.guards` compiled per leaf at construction
   (with non-function validation, catch-all included); the guard phase in
   `#navigate` after the token bump with a per-await supersession recheck; the
-  hoisted frozen `to` snapshot (now built before any construction); redirects
-  re-entering through public `replace()`; the ten-redirect cycle cap reset on
-  commit; the shared failed-navigation recovery helper; frozen `from`
+  hoisted frozen `to` snapshot (built before any construction); redirects
+  re-entering through public `replace()`; the ten-redirect cycle cap, reset on
+  commit and at the start of every externally-initiated navigation (a guard
+  redirect's own re-entry is flagged as a continuation and keeps the count);
+  the shared failed-navigation recovery helper; frozen `from`
   (null on navigation #0).
 - In (SSG, `ssg/index.js`): hybrid warning per rendered page whose chain
   declares a guard (quiet under `prerender: false`); one static-build warning

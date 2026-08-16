@@ -8,8 +8,8 @@ connections:
   - DOC-SPEC-TEMPLATE
   - FILE-CODEGEN
   - FEATURE-V1-48-A11Y-WARNINGS
-verified_at: '2026-07-24T00:26:43.400Z'
-verified_sha: df909f7f5581b312acbbc45a58cbd2b5e681a2a8
+verified_at: '2026-08-16T04:34:34.581Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D82 — Compiler accessibility warnings: five conservative template diagnostics (v1.48)

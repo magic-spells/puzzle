@@ -6,8 +6,8 @@ connections:
   - DOC-SPEC
   - COMPONENT-ROUTER
   - DOC-VIEW-LIFECYCLE
-verified_at: '2026-07-25T05:53:22.510Z'
-verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+verified_at: '2026-08-16T04:32:34.721Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -91,12 +91,13 @@ Saved positions are held in an in-memory map and — since v1.10 (D41) — mirro
 - `history.scrollRestoration = 'manual'` is set between `start()` and `stop()` (the previous value is restored on `stop()`), so the browser's automatic restoration — which fires on popstate **before** the old view has swapped out — never scrolls the wrong content.
 - Positions are keyed by a per-entry `__puzzleScrollKey` stamped into `history.state`: `pushState` carries a fresh key; entries the router did not create (a foreign entry, or the initial one) get a key lazily via `replaceState` (preserving any other state).
 - On **popstate** the outgoing position is saved under the **in-memory current key** *before* the target entry's key is adopted — the browser has already moved `history.state` to the target entry, so the key the window still shows must be read from the router's own bookkeeping, not from `history.state`.
+- On **push** the outgoing position is the one captured **synchronously at navigation start**, not read live at commit: by commit time the outgoing view is torn down and a real browser has clamped `window.scrollY` to 0 on the collapsed page, so every saved position would be `{0,0}`.
 
 **Config (`scrollBehavior`).** An optional field on the PuzzleApp config (v1.5 amendment to the frozen §2 surface):
 
 - **omitted** → the default above.
 - **`false`** → the router never touches scroll. For apps whose shell scrolls an inner panel rather than the window (e.g. the music example's `overflow-hidden` layout), where a window scroll-to-top is meaningless.
-- **`(to, from, savedPosition) => {x, y} | null`** → custom. `to` and `from` are `{ path, params, route, chain }` snapshots (`from` is `null` on the initial navigation); `savedPosition` is the entry's saved `{x, y}` and is **non-null only on a pop** (`null` on push). A **falsy return** (`null`/`false`/`undefined`) leaves scroll alone; a **throw** is logged and treated as falsy — the navigation itself is unaffected.
+- **`(to, from, savedPosition) => {x, y} | null`** → custom. `to` and `from` are the frozen route snapshots (§19/§44 shape; `from` is `null` on the initial navigation); `savedPosition` is the entry's saved `{x, y}` and is **non-null only on a pop** (`null` on push and replace). A **falsy return** (`null`/`false`/`undefined`) leaves scroll alone; a **throw** is logged and treated as falsy — the navigation itself is unaffected.
 
 **Anchor targets (v1.10, D41).** A `#anchor` suffix on a navigation target refines the **default push landing**: `push('/docs#faq')` (or a link whose href carries the fragment — the path-mode interceptor now preserves `url.hash` instead of dropping it) lands the window at `document.getElementById('faq')` (id `decodeURIComponent`-ed), **falling back to top** when no such element is in the committed DOM — including a v1.8 skeleton view whose anchor target hasn't rendered yet (the scroll is never re-applied when the real template lands). On a **pop**, a saved position still wins over the anchor. A custom `scrollBehavior` function still wins over everything; the anchor rides verbatim in `to.path`. Resolution happens inside the commit, after mount (an element position can't be computed off-DOM); timing is otherwise unchanged. In **hash mode** the anchor rides *inside* the fragment — `push('/docs#faq')` writes `#/docs#faq`, and `<a href="#/docs#faq">` is intercepted by the existing `#/` rule (browsers tolerate the double hash; bare `#faq` hrefs remain native, and remain the §15 hazard).
 
@@ -172,12 +173,12 @@ data(params, props) {
 
 **Semantics.**
 
-- `this.route` is `{ path, route, params, chain }` — **the same shape as `router.current`** (`route` = the leaf route node, `chain` = the root→leaf node list) — but it describes **the navigation that delivered this view's params**, not the committed state. Inside a gated `data()` run it names where the navigation is *going*; `router.current` still names where the app *is*. The two agree again the moment the navigation commits.
-- The router threads one **frozen** snapshot per navigation through every gated `preload()`/`refresh()` (fresh views and reused ancestors alike) and through the reused layout's post-commit refresh. It rides the same channel as `params` — snapshot and params always describe the same navigation, in every router mode (path/hash/memory) and on push, pop, and initial navigation alike.
+- `this.route` is `{ path, pathname, query, hash, route, params, chain }` — **the same shape as `router.current`** (`route` = the leaf route node, `chain` = the root→leaf node list; `pathname`, `query`, and `hash` are the parsed URL parts of §44) — but it describes **the navigation that delivered this view's params**, not the committed state. Inside a gated `data()` run it names where the navigation is *going*; `router.current` still names where the app *is*. The two agree again the moment the navigation commits.
+- The router threads one **frozen** snapshot per navigation through the route's guards (§48) and every gated `preload()`/`refresh()` (fresh views and reused ancestors alike), and through the reused layout's post-commit refresh. It rides the same channel as `params` — snapshot and params always describe the same navigation, in every router mode (path/hash/memory) and on push, pop, and initial navigation alike.
 - A **store-change** re-run (`refresh()` with no arguments) keeps the stored snapshot — `this.route` only moves when a navigation delivers a new one.
 - `this.route` is `null` for components the router does not manage (a plain component mounted by a parent template). Non-routed components that need route state should receive it as props from their routed ancestor.
 - **Failure semantics are inherited from params, not widened:** a failed or superseded navigation changes neither the URL nor `router.current` (D19), and neither the params nor the snapshot of a reused ancestor. An ancestor's gated `data()` sees the destination through `this.route`/`this.params`, but that run commits only with the navigation (D146) — a rejection leaves the whole chain on the live route.
-- **Ordering fix that shipped with it:** a reused root layout's post-commit refresh now runs **after** `#commitState` (matching the params-only branch), so `router.current` read from a layout's `data()` is never stale either.
+- **Ordering:** a reused root layout's post-commit refresh runs **after** the state commit (matching the params-only branch), so `router.current` read from a layout's `data()` is never stale either.
 
 **Matching idiom, stated plainly:** compare **route names** (`this.route.route.name`, or `this.route.chain[0].name` for "which section am I in") rather than string-comparing `this.route.path` — names are immune to query strings, `#anchor` suffixes (D41), and mode differences. `path` is the raw pushed path and may carry both.
 
@@ -291,4 +292,3 @@ After every committed navigation the router moves focus to the incoming view and
 - **`push`, `replace`, and `pop` all move focus.** Browsers do not restore focus for client-side navigation. *(Amended, D135: a **params-only replace** — the committed leaf is reused, `keep === chain.length` — moves no focus and makes no announcement. It is §44's URL-backed transient-state churn — a filter keystroke rewriting `?q=` — not a route change; focusing the leaf root stole the input's focus on every character. This is the focus half of §44's "replace never touches scroll by default". Params-only pushes still take the normal focus + announcement path.)*
 - **A custom function that declines focus still announces** — the route changed. Focus is applied before the announcement, because a polite update issued immediately before a focus change is routinely dropped by assistive tech. A throw is logged and treated as falsy, matching §14's posture.
 - **Output modes:** `output: 'static'` pages have no router (§36), so they get neither focus management nor a live region.
-

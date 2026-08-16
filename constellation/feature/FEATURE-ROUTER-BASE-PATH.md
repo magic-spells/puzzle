@@ -18,6 +18,8 @@ notes:
       Verified at the merged main sha: three-seam base application reviewed against SPEC §23 at
       ship; tests/router-base.test.js (20) + all router suites + full suite green (480
       vitest).
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.19 — Router base-path support

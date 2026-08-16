@@ -13,6 +13,8 @@ connections:
   - COMPONENT-STORE
 verified_at: '2026-07-28T22:30:08.488Z'
 verified_sha: f639b5d1aa8f59ffe385936b7e5b5d66b1235da8
+release: RELEASE-V0-5-0
+change: fix
 ---
 
 # Transactional reused-ancestor refresh

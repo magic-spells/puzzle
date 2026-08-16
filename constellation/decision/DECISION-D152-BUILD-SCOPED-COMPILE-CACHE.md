@@ -1,6 +1,6 @@
 ---
 name: 'D152 — Build-scoped compile cache: one transform per source, shared by every esbuild pass'
-status: built
+status: verified
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-CODEGEN
@@ -14,6 +14,8 @@ connections:
   - FLOW-BUILD
   - DECISION-D46-INLINE-SVG
   - DECISION-D81-STATIC-PAGES-MODE
+verified_at: '2026-08-16T04:34:42.074Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D152 — Build-scoped compile cache: one transform per source, shared by every esbuild pass

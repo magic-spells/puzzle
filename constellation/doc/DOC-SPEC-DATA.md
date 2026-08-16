@@ -6,8 +6,8 @@ connections:
   - DOC-SPEC
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
-verified_at: '2026-07-25T05:53:21.105Z'
-verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
+verified_at: '2026-08-16T04:29:50.967Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -142,6 +142,8 @@ static schema = {
 
 ## 22. Adapter write sync (v1.18)
 
+
+
 The write half of the D21 adapter story. Shipped in v1.18 (D50), moved to the
 opt-in subpath by D157, and generalized by D158. The model's `static adapter`
 supplies per-verb transports; `endpoint` generates any missing REST defaults.
@@ -158,7 +160,7 @@ await store.request('todo', `/${todo.id}/archive`, { method: 'POST' }); // custo
 ```
 
 - **`record.save()`** — validates first (§20): invalid rejects with `PuzzleValidationError`, no request made. POST for a never-synced record, PUT for a synced one (synced = came from `loadAll`/`loadOne`/an upsert, or was saved successfully; **since §35 storage hydration restores the record's real persisted provenance** — a locally-created, never-saved record still POSTs after a reload — with markerless old-format blobs defaulting to synced). A 2xx JSON-object response merges via the exempt upsert path, **per-field since D125** — a field whose local value changed after the request was dispatched keeps the local value, while every other field (including server-computed ones the client never touched) merges as before; 204/empty keeps local state. On a **first** save whose response carries a different primary key the store re-keys atomically (the one sanctioned pk change); on an update-save a differing response pk warns and is ignored. A failed save keeps the dirty local state and rejects — retry by calling again. **Reconciliation guards (§35):** a record destroyed (or replaced at its key) while its request was in flight resolves detached — the response is never merged and the record is never re-inserted (local destruction wins); a first-save response whose assigned pk already belongs to a *different* record rejects with a plain `Error` (the HTTP call succeeded; local reconciliation refused), leaving both records untouched. **In-flight edit guard (D125):** per-field mutation revisions gate the merge above, so a save response never overwrites a keystroke made during its own round trip — the queued follow-up save then sends the newer value rather than re-sending the stale one. Pk adoption stays unconditional (identity is not a user-editable field), and `_synced` still flips to true: it records server provenance and selects POST vs PUT, so clearing it would make the queued save POST a duplicate.
-- **`record.delete()`** — confirmed delete: DELETE first, local remove (normal notify path) on 2xx **or 404** (idempotent); other failures reject and the record stays. `record.destroy()` remains local-only, unchanged. **Since D132:** a **never-synced** record's `delete()` is a local removal with **no request** — the server has no row, so the old unconditional DELETE could only 404 or strand the record behind a 4xx (the D21 no-adapter rejection is checked first, so an endpoint-less model still reports that rather than quietly acting like `destroy()`); a `delete()` whose record is already `_deleted` (or store-less) when its turn comes resolves idempotently with no request, so two concurrent `delete()`s issue exactly one DELETE.
+- **`record.delete()`** — confirmed delete: dispatch the delete transport first, local remove (normal notify path) once it resolves; a rejection leaves the record in the store. **404 tolerance is a property of the endpoint-generated transport, not a framework-level rule:** the generated `DELETE endpoint/:id` treats a 404 as already-gone and resolves, because it owns that HTTP conversation. An author-supplied `delete` function that returns a non-OK `Response` — 404 included — is status-checked like every other verb and rejects with `PuzzleAdapterError`; an author who wants idempotent-on-404 semantics implements them inside their own transport (swallow the 404 and return). `record.destroy()` remains local-only, unchanged. **Since D132:** a **never-synced** record's `delete()` is a local removal with **no request** — the server has no row, so the old unconditional DELETE could only 404 or strand the record behind a 4xx (the missing-verb rejection is checked first, so an endpoint-less model still reports that rather than quietly acting like `destroy()`); a `delete()` whose record is already `_deleted` (or store-less) when its turn comes resolves idempotently with no request, so two concurrent `delete()`s issue exactly one DELETE.
 - **Write serialization (D132):** ALL of a record's server writes — `save()` **and** `delete()` — run through one per-record in-flight chain (formerly the save-only chain). Each link reads the record's state when it *reaches the front*, never when it was enqueued: a delete fired during a first save waits and builds its URL from the **adopted server pk** (previously the concurrent DELETE either left a server orphan or missed the re-keyed record and resolved having deleted nothing), and a queued save that finds its record removed rejects with the same message `record.save()` gives at call time instead of resurrecting the row. Rejections stay isolated across verbs exactly as within save-save chaining: the prior link's failure is swallowed for chaining only, and every caller observes its own promise.
 - **`store.request(type, path, { method, body, headers })`** — the custom-endpoint escape hatch: prefixes `apiURL + adapter.endpoint`, JSON in/out, normalized errors. Idiom: wrap it in model instance methods.
 - **Errors:** the new verbs reject with `PuzzleAdapterError` (`.status`, `.statusText`, `.body` when parseable) — exported from `@magic-spells/puzzle/adapter`. The D21 read path keeps its existing plain-Error messages.
@@ -191,8 +193,8 @@ merges duplicate primary keys. `store.adapter(type)` returns a stable per-store,
 per-type view with enhanced fetch pre-bound to every function, generated verbs
 included; custom methods are author-invoked only and commonly compose with
 `store.upsert()`. A function using global fetch instead bypasses the hook and
-mock seam exactly as written. Non-function keys other than `endpoint` warn once
-per model in development.
+mock seam exactly as written. Non-function keys other than `endpoint` and
+`mock` warn once per model in development.
 
 ## 49. Adapter request hook: `beforeRequest` (v1.55)
 

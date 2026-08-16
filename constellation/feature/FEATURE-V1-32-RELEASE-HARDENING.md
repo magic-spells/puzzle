@@ -15,6 +15,8 @@ notes:
       test:types, e2e-pack (real tarball install + build), verify-pack. Release remainders tracked
       outside this card: license text, NODE_AUTH_TOKEN secret, v0.1.0 tag.
 verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+release: RELEASE-V0-1-0
+change: chore
 ---
 
 The pre-0.1.0 hardening bundle (branch fix/pre-0.1.0-hardening, SPEC §35): the fifth

@@ -7,8 +7,8 @@ connections:
   - DECISION-D116-PACK-TIME-PIN-INJECTION
   - FEATURE-V1-32-RELEASE-HARDENING
   - FILE-PACKAGE
-verified_at: '2026-07-25T07:15:55.373Z'
-verified_sha: d6d6b659166337cc54e2909e116efce20faf45c7
+verified_at: '2026-08-16T04:34:45.474Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -101,13 +101,16 @@ injected dependencies, so nothing is stripped from under them.
 
 ## Consequences
 
+
+
 - 0.3.0 is permanently broken on npm and cannot be repaired in place; it is
-  superseded by 0.3.1 and should be deprecated rather than unpublished.
-- `prepublishOnly` no longer runs `release-prep.mjs`. A tarball publish would not
-  have fired it anyway, so the pre-publish suite is explicitly a `npm run
+  superseded by 0.3.1 and is deprecated rather than unpublished.
+- `prepublishOnly` does not run `release-prep.mjs`. A tarball publish would not
+  fire it anyway, so the pre-publish suite is explicitly a `npm run
   release:prep` step, not something a publish drags along behind it.
-- The scaffold templates pin `^0.3.1` rather than `^0.3.0`, so a fresh app cannot
-  name the broken version even though the caret range would resolve past it.
-- A correct tarball is no longer sufficient evidence that a release is
+- The `go:embed`ed scaffold templates and the examples pin the version actually
+  being published, so a fresh app can never resolve a release known to be
+  broken — a caret range does not skip a bad patch on its own.
+- A correct tarball is not sufficient evidence that a release is
   installable. `verify:pack` proves the artifact; `verify:published` proves the
   release. Both are required, and only the second one runs after publishing.

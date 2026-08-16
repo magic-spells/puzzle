@@ -7,8 +7,8 @@ summary: The public npm manifest — exports map, files allowlist, bin shim, and
 connections:
   - DOC-RELEASE-SURFACE
   - DECISION-D116-PACK-TIME-PIN-INJECTION
-verified_at: '2026-07-25T05:24:54.083Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:34:34.488Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # package.json

@@ -10,6 +10,8 @@ connections:
   - DOC-ROUTER
   - DOC-SPEC
   - DOC-SPEC-ROUTER
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.10 — Anchor-target scrolling + sessionStorage scroll persistence

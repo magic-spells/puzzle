@@ -11,12 +11,14 @@ connections:
   - DOC-MODELS
   - DOC-SPEC
   - DOC-SPEC-DATA
-verified_at: '2026-07-12T00:14:59.496Z'
+  - FILE-ADAPTER
+verified_at: '2026-08-16T04:49:16.498Z'
 notes:
   - kind: verified
     text: >-
       Decision implemented as written and verified at the merged main sha (480 vitest green); no
       deviations from the recorded contract.
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D50 — Adapter write path: explicit `save()`/`delete()` verbs, local-first, validate-before-sync (v1.18)
@@ -33,6 +35,7 @@ custom adapter methods' shape, whether query fault-in rides along, and dev-serve
 mocks.
 
 ## Decision
+
 - **Local mutations keep their exact v1 semantics; sync is a separate, explicit verb.**
   `createRecord`/`update`/`destroy` stay local-and-instant (the app is optimistic by
   construction); `save()`/`delete()` ship state to the server. This answers
@@ -46,17 +49,20 @@ mocks.
   resurrection through the subscription pipeline for marginal UX.)
 - **`record.save()`**: D48-validates the full record first — invalid rejects with
   `PuzzleValidationError`, **no request made**. Then POST `apiURL+endpoint` for a
-  never-synced record, PUT `endpoint/:id` otherwise (a non-enumerable synced flag:
-  set by `loadAll`/`loadOne`/upserts and successful saves; hydrated-from-storage
-  records count as synced — they predate the session; PUT-to-missing surfaces as an
-  error the app can handle). A 2xx JSON-object response merges via the exempt upsert
+  never-synced record, PUT `endpoint/:id` otherwise — the endpoint-generated
+  transports (a non-enumerable synced flag: set by `loadAll`/`loadOne`/upserts and
+  successful saves, and carried out-of-band through persistence so a hydrated record
+  keeps its real provenance; PUT-to-missing surfaces as an error the app can handle).
+  A 2xx JSON-object response merges via the exempt upsert
   path (server-computed fields); empty/204 keeps local state. **Server pk adoption:**
   on a first save whose response carries a different primary key, the store re-keys
   its index atomically (the one sanctioned pk change, performed by the store itself);
   on an update-save a differing response pk warns and is ignored.
 - **`record.delete()`**: DELETE `endpoint/:id`; 2xx **or 404** (already gone —
-  idempotent) removes locally via the normal notify path; other failures reject and
-  keep the record. `record.destroy()` is untouched — local-only, exactly as shipped.
+  idempotent, a tolerance the generated transport owns) removes locally via the normal
+  notify path; other failures reject and keep the record. A never-synced record has no
+  server row, so it is removed locally and nothing is sent. `record.destroy()` is
+  untouched — local-only, exactly as shipped.
 - **`store.request(type, path, { method, body, headers })`** is the custom-endpoint
   surface: prefixes `apiURL + adapter.endpoint`, JSON-encodes/decodes, normalizes
   errors. The documented idiom wraps it in model instance methods
@@ -70,8 +76,6 @@ mocks.
   return is load-bearing for the tracking/subscription machinery and the render
   contract; transparent faulting changes its type and timing. Stays out until it can
   be its own decision.
-- **`puzzle dev` /api mocks: still an open question** — unchanged, tracked in
-  [[DOC-SPEC]] open questions; nothing in this amendment needs it.
 
 ## Alternatives rejected
 Covered inline above (write-through, optimistic delete, adapter.methods map,

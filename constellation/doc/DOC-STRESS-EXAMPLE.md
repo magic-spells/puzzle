@@ -1,7 +1,7 @@
 ---
 name: Puzzle Stress Lab (examples/stress) — the performance measurement app
 kind: reference-app
-status: built
+status: verified
 connections:
   - DECISION-D128-BENCHMARK-METHODOLOGY
   - DECISION-D121-DEV-PERFORMANCE-PROFILING
@@ -16,12 +16,14 @@ connections:
   - COMPONENT-FORMATTERS
   - FLOW-REACTIVITY
   - FILE-DEVPERF
+verified_at: '2026-08-16T04:35:12.750Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # Puzzle Stress Lab (examples/stress)
 
-The app the framework is measured *with*. Nine scenarios, each a real Puzzle app
-— real routes, real views, real store records, real reconciliation — built
+The app the framework is measured *with*. Thirteen scenarios, each a real Puzzle
+app — real routes, real views, real store records, real reconciliation — built
 around **one question that can be answered wrong**, and each validating the DOM
 it just rendered before reporting anything, because a benchmark taken over a
 broken render is worse than no benchmark.
@@ -40,7 +42,7 @@ entirely against it:
 ```js
 window.__STRESS__ = {
   ready,                  // Promise — resolves once the app has mounted
-  scenarios,              // string[] — the nine names below
+  scenarios,              // string[] — the thirteen names below
   definitions,            // [{ name, label, blurb, ops }]
   async select(name, params),
   async reset(), async warmup(),
@@ -68,7 +70,7 @@ Three properties of that contract are load-bearing:
 `__STRESS__.run()` deliberately bypasses the 50k confirmation arm — a benchmark
 driver has already opted in.
 
-## The nine built scenarios and what each probes
+## The thirteen built scenarios and what each probes
 
 | scenario | the question | the answer |
 | --- | --- | --- |
@@ -80,12 +82,18 @@ driver has already opted in.
 | `write-storm` | does the rAF-batched flush hold under mutation pressure, and what does persistence cost? | batching holds unconditionally; persistence is the finding |
 | `islands` | does `island` really freeze its subtree, and what does the freeze still cost? | 0 violations; 20,000 child vnodes rebuilt per render |
 | `formatters` | what does the built-in registry cost across a large re-render? | was 91.4% — priced the Intl cache that cut it to ~23%; `count-intl` now pins 0 constructions |
+| `listener-churn` | what does removing and re-adding a DOM listener on every render actually cost? | `churn` costs 46% more than `stable` at 1k rows and 32% at 10k; `stable` and `none` are within noise of each other |
+| `route-churn` | how many times does a REUSED route ancestor render per committed navigation? | `depth + 2` — 27 ancestor renders per navigation against 6 `data()` runs, 81.5% mutating nothing |
+| `form-state` | what does a keystroke cost the rest of a 400-control form? | both controlled form properties write only on a real change (0 writes on a clean re-render); one `record.update()` rebuilds the schema descriptor map three times |
+| `flip-churn` | what do N rows cost the D85 FLIP path at once? | flip is **98.8%** of a 500-row reorder — 68.5ms against 0.80ms for the identical rotation with no `flip` attribute |
 | `loop-trap` | does the D121 loop detector actually fire in a browser? | both arms, at exactly the documented thresholds |
 
 `loop-trap` is **not** in the benchmark op matrix at all: the harness measures a
 production bundle, where [[FILE-DEVPERF]] does not exist, so there would be no
 detector to detect anything. It is exercised through `benchmarks/probe.mjs`
-instead ([[DECISION-D128-BENCHMARK-METHODOLOGY]]).
+instead ([[DECISION-D128-BENCHMARK-METHODOLOGY]]), which also runs the two
+scenario-specific probe scripts `probe-route-churn.mjs` and
+`probe-listener-churn.mjs` for the counters their matrix rows cannot express.
 
 ## `keyed-list` is deliberately NOT virtualized
 
@@ -116,8 +124,22 @@ Recorded here as measurements only; each is reachable from the card it concerns.
 - **Async `data()` is fully serialized** — `maxInFlight` 1 of 20 in production,
   from a concurrency census rather than the clock ([[COMPONENT-STORE]],
   [[FLOW-REACTIVITY]]).
-- **Reused layouts and views render twice per committed navigation**
+- **A reused route ancestor at depth `d` renders `d + 2` times per committed
+  navigation**, so the reused prefix costs **O(depth²)** renders rather than two
+  per level. Over five ancestor levels that is 27 renders against 6 `data()`
+  runs, 81.5% of them mutating nothing
   ([[DECISION-D122-DEVTOOLS-PROFILER-PROTOCOL]]).
+- **Rebinding a DOM listener every render is a real cost** — the `churn` arm
+  runs 46% over `stable` at 1,000 rows and 32% over it at 10,000, which is the
+  price an invoker pattern would recover ([[COMPONENT-VIEW-MANAGER]],
+  [[DECISION-D62-HANDLER-CACHING]]).
+- **Caret safety is emergent, not mechanical** — nothing in `client-runtime/`
+  touches `selectionStart` or `document.activeElement`; `patchAttrs` compares
+  against the live DOM first, so a re-render mid-keystroke writes no `value` and
+  never disturbs the caret ([[COMPONENT-VIEW-MANAGER]]).
+- **FLIP is 98.8% of a reorder** — 500 rows through `playFlip()` cost 68.5ms
+  against 0.80ms for the identical rotation with no `flip` attribute, and the
+  cost is forced layout and style rather than framework JavaScript.
 - **`island` freezes patching, not allocation** — 20,000 child vnodes rebuilt
   and discarded per render, measured by read-counting getters rather than
   inferred ([[DECISION-D44-DOM-ISLANDS]], [[COMPONENT-VIEW-MANAGER]]).
@@ -138,12 +160,20 @@ Recorded here as measurements only; each is reachable from the card it concerns.
 ## Durable gotchas
 
 - **Counters that must survive production live in the app, not the framework.**
-  `app/row-metrics.js` (`childDataRuns`) and `app/nest-metrics.js`
-  (`nodeDataRuns`) are plain integers incremented at the top of the child's
-  `data()`, because [[FILE-DEVPERF]]'s counters are compiled out of a production
-  bundle. `write-storm` and `islands` do the equivalent by wrapping
+  `app/row-metrics.js` (`childDataRuns`), `app/nest-metrics.js`
+  (`nodeDataRuns`) and `app/rc-metrics.js` (the per-level route counters) are
+  plain integers incremented at the top of the child's `data()`, because
+  [[FILE-DEVPERF]]'s counters are compiled out of a production bundle.
+  `write-storm` and `islands` do the equivalent by wrapping
   `store.flush` / `store._persistNow` on the **live instance** for the duration
   of a run and restoring after. The runtime is never modified.
+- **`route-churn` is the one scenario not hosted in Home's stage.** It measures
+  the router, so it needs real route nodes: it is a sibling subtree at `/rc/…`
+  with its own layout (`app/rc-routes.js`), and selecting it navigates out of
+  `/` so Home unmounts. A second `PuzzleApp` was rejected because
+  `devtools.js` holds exactly one app slot and would rebind then tear down the
+  bridge; nesting under `/` was rejected because it would make heavyweight Home
+  a measured ancestor.
 - **A scenario's host must make no store query.** `subscriptions`' parent and
   `loop-trap`'s host both deliberately query nothing: a parent subscribed to the
   collection would re-render on the write and re-render all N children, and both
@@ -159,6 +189,13 @@ Recorded here as measurements only; each is reachable from the card it concerns.
   order, which cannot be permuted in place. `swap-rows` is therefore two genuine
   reactive writes at the cost of one O(n log n) sort per render — inside both
   the measured op and the baseline render, so it does not distort comparisons.
+- **`form-state`'s grid binds `String(...)`, not the bare member path**, and its
+  `draftText` key is one `data()` deliberately never returns — if it did,
+  `#recompose()`'s `{ ...#local, ...#model }` would overlay the model value on
+  the local one and the first store flush would erase the draft mid-typing.
+  Every op installs both probe sets so the two typing arms carry identical
+  instrument load, which is also why none of that scenario's timings are clean:
+  the finding there is counts-only.
 - **No `window.confirm()` or `alert()` anywhere.** The 50k safety arm (a
   confirming second click that relabels the button) and `loop-trap`'s stop
   control are in-page state on purpose: a modal blocks the event loop, which
@@ -183,6 +220,11 @@ Recorded here as measurements only; each is reachable from the card it concerns.
   arming. Worth knowing when reading a real `perf-warning`: the count it names is
   the window's, and the window remembers the last second of everything that view
   did.
+- **A dev-build `route-churn` run must stay PACED.** Its unpaced arms trip the
+  D121 cross-frame detector, and while the detector no longer suppresses
+  renders, its own bookkeeping distorts the very render counts being measured —
+  which is why the production build is the primary run for that scenario and
+  the development one is only an independent cross-check.
 - **The persistence figure is a lower bound.** The probe attaches an in-memory
   storage shim, because 2.5MB is past the localStorage quota and `_persistNow`
   swallows the resulting `QuotaExceededError` — a "real" run would be timing a
@@ -196,17 +238,9 @@ Recorded here as measurements only; each is reachable from the card it concerns.
 
 ## Not built
 
-Four scenarios from the original plan remain **future work**, referenced nowhere
-in the app: `route-churn` (navigation cost, superseded navigations,
-back/forward), `form-state` (`setData` throughput under a typing burst),
-`virtual-scroll` (the userland windowing recipe as its own scenario, largely
-superseded by `virtual-list`), and `morph-flip` (morph transitions and `flip`
-reordering under load).
-
-`route-churn` had scaffolding in an earlier draft — a five-level nested route
-tree with 50 generated leaf routes — importing six `.pzl` files that were never
-written. That subtree was **deleted**; the app now has exactly one route and
-scenario selection rides the query string.
+One scenario from the original plan remains **future work**, referenced nowhere
+in the app: `virtual-scroll` (the userland windowing recipe as its own scenario,
+largely superseded by `virtual-list`).
 
 Separately, several ops exist in the app but not in the benchmark matrix
 (`replace-all`, `append-1k`, `remove-row`, and `select-row` outside the handler

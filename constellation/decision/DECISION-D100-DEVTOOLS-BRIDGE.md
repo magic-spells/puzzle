@@ -11,8 +11,8 @@ connections:
   - COMPONENT-PUZZLE-VIEW
   - COMPONENT-DEVSTATE
   - DOC-SPEC
-verified_at: '2026-07-25T03:05:46.023Z'
-verified_sha: acb9aefb0dcb65bd4cbd379d1f8877dbb089700c
+verified_at: '2026-08-16T04:35:03.380Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -51,6 +51,8 @@ invisible without tooling.
 
 ## Decision
 
+
+
 **Repo split (Cory's call).** Extension in `magic-spells/puzzle-devtools`
 (public from day one): independent release cadence (Chrome Web Store vs npm),
 separate issues/PRs, a different contributor audience. The ONLY interface
@@ -67,8 +69,10 @@ existing dev-gated code: the `__PUZZLE_APP__` publish/clear (app),
 internal readers land on `PuzzleView` beside `_localState()`: `_modelState()`
 and `_vnodeTree()` (the `__devSnapshot` empty-method-residue precedent).
 
-**Protocol v1** (SPEC §55 is the contract): envelope
-`{ puzzle: 1, v: 1, type, payload }`; events `hello` / `app-mounted` /
+**Protocol v1** (SPEC §55 is the contract, and it is the enumeration to trust —
+the set grows additively without a version bump, which is how
+[[DECISION-D122-DEVTOOLS-PROFILER-PROTOCOL]] added the profiler messages):
+envelope `{ puzzle: 1, v: 1, type, payload }`; events `hello` / `app-mounted` /
 `app-unmounted` / `view-mounted` / `view-destroyed` / `flush` /
 `route-commit`; requests `snapshot:views|records|subscriptions|route`,
 `inspect:view`, `edit:record` (through the real `record.update()` so
@@ -85,10 +89,14 @@ one's child — deliberately avoiding any read of the router's private state.
 connects; content script relays; background service worker routes per-tab; the
 panel is a **Puzzle app** (dogfooding — protocol messages upsert into a Puzzle
 store, panels are plain reactive views), themed to Chrome DevTools' light/dark.
-v1 ships the Views panel (model/local layers side by side) and the Store
-record inspector; the subscriptions graph, router panel, and timeline follow.
+v1 shipped the Views panel (model/local layers side by side) and the Store
+record inspector, and the panel set grows with the protocol — the subscriptions
+graph and the D122 Performance panel among them. What is built over there is
+tracked over there; this card owns only the runtime half.
 
 ## Consequences
+
+
 
 - Zero production bytes: the `__PUZZLE_DEV__` define folds every call site and
   the module tree-shakes away — pinned by extending the existing
@@ -99,8 +107,9 @@ record inspector; the subscriptions graph, router panel, and timeline follow.
   is solved by D63's scheduling, not by new throttling.
 - Mixed versions in the wild are a protocol-negotiation problem by design,
   not a repo-layout problem.
-- The panel app depends on `@magic-spells/puzzle` via a `file:` link until
-  0.2.0 publishes — one more reason to publish.
+- The bridge reports a hardcoded `FRAMEWORK_VERSION` in `hello`, which is why
+  `release:prep` asserts it against package.json — a stale literal makes every
+  panel misreport the runtime it is attached to.
 
 ## Alternatives rejected
 

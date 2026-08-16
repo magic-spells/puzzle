@@ -8,8 +8,8 @@ connections:
   - DECISION-D79-LINK-FORMATTER
   - COMPONENT-SSG
   - FILE-SSG-RUNTIME
-verified_at: '2026-08-14T05:01:18.315Z'
-verified_sha: d74916a0e021b6bb86394551171838fbab161347
+verified_at: '2026-08-16T04:36:43.565Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -19,10 +19,11 @@ notes:
 ---
 
 Under `output: 'static'`, the router stub that backs `router.url()` and the
-`link` formatter is forced to `'history'` mode in BOTH the prerender pass
-(`ssg/index.js`) and the browser kernel (`static/index.js`), regardless of the
-app's configured `routerMode`. A configured `hash`/`memory` mode produces a
-build warning saying it is ignored.
+`link` formatter emits path-shaped (history-style) hrefs in BOTH the prerender
+pass (`ssg/index.js`) and the browser kernel (`static/index.js`), regardless of
+the app's configured `routerMode`. The encoding is hard-coded in
+`makeRouterStub` — the stub takes no mode at all — and a configured
+`hash`/`memory` mode produces a build warning saying it is ignored.
 
 ## Context
 
@@ -39,36 +40,39 @@ passthrough into dead links.
 ## Decision
 
 - `routerMode` is meaningless under static output: there is no router, and
-  the emitted file layout is path-shaped by construction. Force the stub to
-  `'history'` in both places — the prerendered HTML and the client re-render
-  must produce **byte-identical** hrefs (the existing stub-equivalence rule).
+  the emitted file layout is path-shaped by construction. The stub encodes
+  path-shaped hrefs in both places — the prerendered HTML and the client
+  re-render must produce **byte-identical** hrefs (the existing
+  stub-equivalence rule), so the encoding is a constant of the mode rather than
+  a parameter either caller can get wrong.
 - `routerBase` keeps flowing through: a based static site still wants
   prefixed hrefs.
 - A configured `hash`/`memory` mode under static output pushes a
   `prerender()` warning (surfaced by the build like every other prerender
   warning) rather than throwing — the output is correct either way; the
   config is simply inert.
+- **`routerMode` never reaches the page.** The Go-generated per-page entry
+  (`prerender_pages.go`) does not emit it and the static summary does not carry
+  it, so `mountStatic` has no such option to ignore — the value cannot travel
+  from app config to a static page at all. A Go test pins the absence.
 - [[DECISION-D81-STATIC-PAGES-MODE]]'s hybrid throw is untouched and remains
   hybrid-scoped — it was never wrong, just silent about static.
 
 ## Alternatives rejected
 
 - **Throwing** like hybrid does — hybrid genuinely cannot work off path
-  mode (the SPA takeover boots at '/'); static works fine, the user's
+  routing (the SPA takeover boots at '/'); static works fine, the user's
   `routerMode` is just irrelevant. A throw would break the very apps D81's
   error message sent here.
 - **Emitting hash-shaped pages** to honor the config — there is no router to
   interpret `#/about` on a static page; the file layout is the URL space.
+- **Threading the mode through to the kernel as an accepted-but-ignored
+  option** — an inert option is a standing invitation to make it live again;
+  dropping it from the entry and the summary makes the guarantee structural.
 
 ## Consequences
 
 - `output: 'static'` + `routerMode: hashRouter()` apps get working path-shaped
-  links again, plus a warning explaining why the mode is ignored.
+  links, plus a warning explaining why the mode is ignored.
 - The D79 stub-equivalence property (prerender href === rehydration href)
-  now holds under every routerMode, not just history.
-- **Inert residual:** the Go-generated per-page entry (`prerender_pages.go`)
-  still passes the app's configured `routerMode` into `mountStatic`, and the
-  static summary still reports it — both now ignored by the kernel (the
-  option is documented "accepted for entry-module compatibility only"). A
-  Go-side cleanup could drop the passthrough, but a Go test pins it and the
-  value is harmless; not worth the churn this round.
+  holds under every `routerMode`, not just the path-routing default.

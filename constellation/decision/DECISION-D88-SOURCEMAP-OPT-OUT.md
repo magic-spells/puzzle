@@ -7,8 +7,8 @@ connections:
   - FILE-BUILD-OPTIONS
   - DOC-SPEC
   - DOC-RELEASE-SURFACE
-verified_at: '2026-07-25T00:10:00.000Z'
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_at: '2026-08-16T04:34:35.088Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 name: 'D88 — `build.sourceMap`: production linked source maps become opt-in (off by default)'
 ---
 
@@ -22,18 +22,22 @@ The framework's stance is that a production `dist/` should be shippable as-is wi
 
 ## Decision
 
+
+
 Add `build.sourceMap` (boolean, default **false**) to the config, applied to **production** bundles only — both the SPA production build and the true-static (`output: 'static'`, D81) per-page bundles:
 
-- `options.go` now bases the shared bundle on `api.SourceMapNone`; **dev** builds set `api.SourceMapLinked` (dev behavior unchanged), and the production branch in `build.go` re-enables `api.SourceMapLinked` only when `cfg.Build.SourceMap` is true.
-- The **temporary Node prerender bundle** (the intermediate esbuild output the SSG/static prerender pass runs under Node) keeps its existing inline map — it is never shipped, so the opt-out does not gate it.
-- The **static** per-page pass still emits maps from esbuild, then a post-pass (`removeStaticSourceMaps`) strips `.js.map` sidecars and trailing `//# sourceMappingURL=` comments from `dist/_puzzle` when production and `sourceMap` is false — the pragmatic way to apply the opt-out to that separate browser bundle without threading the flag through its options.
+- `options.go` bases the shared bundle on `api.SourceMapNone`; **dev** builds set `api.SourceMapLinked`, and the production branch in `build.go` re-enables `api.SourceMapLinked` only when `cfg.Build.SourceMap` is true.
+- The **temporary Node prerender bundle** (the intermediate esbuild output the SSG/static prerender pass runs under Node) keeps its inline map — it is never shipped, so the opt-out does not gate it.
+- The **static** per-page pass decides the same way, before esbuild runs: `staticPagesSourcemap(cfg, dev)` returns linked for a development build or an explicit `build.sourceMap`, and `api.SourceMapNone` otherwise. Nothing is generated in order to be deleted afterwards, so a chunk's content hash is computed over bytes that carry no `sourceMappingURL` comment and therefore describes what actually ships.
 - `config.go` parses/validates `build.sourceMap` (non-boolean rejected, named precisely, same as `dropConsole`).
 
 ## Alternatives rejected
 
+
+
 - **Keep maps on by default** — the status quo; leaks source structure and ~0.5 MB per bundle onto every static host by default.
 - **A single global `sourceMap` (dev included)** — dev debugging genuinely wants maps; the split (dev always linked, prod opt-in) matches how the other prod-only knobs (minify, dropConsole) behave.
-- **Gate the static bundle's esbuild options instead of post-stripping** — the static pass builds its options separately; the post-pass keeps the change localized and leaves the shared options path simple.
+- **Emit maps from the static per-page pass unconditionally and strip the `.js.map` sidecars + `sourceMappingURL` comments afterwards** — localized, but it makes esbuild generate output solely to throw it away, and the content hash it stamps into each chunk name is computed over bytes that include a comment the shipped file does not carry. Deciding the mode up front costs one helper and makes the hash describe the real artifact.
 
 ## Consequences
 

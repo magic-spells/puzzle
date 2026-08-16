@@ -1,7 +1,7 @@
 ---
 name: "D81 — True static-pages output mode; old mode renamed 'hybrid'"
 status: verified
-verified_at: '2026-07-25T05:24:22.452Z'
+verified_at: '2026-08-16T04:37:39.949Z'
 connections:
   - DECISION-D67-SSG-STATIC-BUILD
   - DECISION-D01-SPA-ONLY
@@ -51,7 +51,7 @@ notes:
       consumed as scratch and os.RemoveAll'd while the build reported success (reproduced in both
       modes). The guard probes the post-copyPublic STAGING state so app/public vs flat public/
       resolution and file-vs-dir spellings can't dodge it.
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D81 — True static-pages output mode; old mode renamed 'hybrid'

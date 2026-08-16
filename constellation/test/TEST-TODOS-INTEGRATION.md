@@ -1,7 +1,7 @@
 ---
 name: Todos end-to-end integration test
 status: verified
-verified_at: '2026-07-25T00:10:00.000Z'
+verified_at: '2026-08-16T04:30:28.408Z'
 framework: vitest
 connections:
   - FLOW-REACTIVITY
@@ -46,10 +46,12 @@ notes:
       (which now carries the v1.12 formatter-guard emission and v1.20/v1.21 codegen — byte-identical
       for the todos fixtures, which use neither min-duration nor named slots). Todos app semantics
       untouched by v1.16–v1.21 (its schema rules were already satisfied by the app's writes).
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # Todos integration test
+
+
 
 The canonical end-to-end runtime proof uses a real [[COMPONENT-PUZZLE-APP]] in
 jsdom and drives only public behavior.
@@ -57,12 +59,20 @@ jsdom and drives only public behavior.
 The shared suite covers add, special-character text, toggle, filter, keyed DOM
 identity, delete, clear-completed, empty state, persistence into a second app
 instance, adapter `loadAll` upsert without duplicates, and repeated
-add/toggle/delete cycles.
+add/toggle/delete cycles. A further group covers `TodoItem`'s row animations
+against the fake WAAPI: an added row's enter animation, a deleted row's
+deferred removal until its leave animation finishes, instance preservation
+across a filter change (no spurious enter/leave on surviving rows), and the
+fill handback when an enter animation is released.
+
+The suite installs the `/adapter` capability itself, since the server-load
+assertion exercises the real `loadAll` path.
 
 It runs in two lanes:
 
 - handwritten fixture modules under `tests/fixtures/todos/`;
-- modules freshly compiled from `examples/todos/app/` by the real Go compiler.
+- modules freshly compiled from `examples/todos/app/` by the real Go compiler,
+  emitted into `tests/fixtures/todos-compiled/`.
 
 Both lanes execute the same helper assertions. This keeps runtime behavior and
 compiler calling conventions aligned.

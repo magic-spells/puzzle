@@ -3,8 +3,8 @@ name: >-
   D131 — The zero-production-bytes oracle is metafile attribution plus sentinel absence, never
   artifact identity
 status: verified
-verified_at: '2026-07-27T04:55:00.000Z'
-verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
+verified_at: '2026-08-16T04:35:05.484Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 connections:
   - DECISION-D121-DEV-PERFORMANCE-PROFILING
   - DECISION-D122-DEVTOOLS-PROFILER-PROTOCOL
@@ -31,6 +31,8 @@ Go suite instead of shipping.
 
 ## Why identity was the wrong oracle, twice
 
+
+
 - **It measured the wrong thing.** The observed four-byte gzip delta that kept
   D121 unverifiable was minified-identifier allocation drift — dead imported
   bindings perturb esbuild's global name assignment even at zero attributed
@@ -42,8 +44,10 @@ Go suite instead of shipping.
   as a regression when nothing regressed. D122 had already recorded this lesson
   for its own verification ("the invariant is the identity, never an absolute
   size — re-verify by stash-and-compare"); stash-and-compare remains a valid
-  spot-check convenience, but it is not the enforced contract because it
-  requires a hand-built counterfactual no CI-less repo re-runs.
+  spot-check convenience, but it is not the enforced contract because it needs
+  a hand-built counterfactual that nothing re-runs on its own — the Go suite
+  can assert attribution, but it cannot construct the without-this-change build
+  an identity check would have to compare against.
 
 ## Rejected
 

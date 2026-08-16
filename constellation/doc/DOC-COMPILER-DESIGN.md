@@ -1,7 +1,7 @@
 ---
 name: Compiler design
 status: verified
-verified_at: '2026-07-25T00:10:00.000Z'
+verified_at: '2026-08-16T04:34:18.827Z'
 connections:
   - DOC-SPEC
   - DOC-COMPILATION-FLOW
@@ -15,7 +15,7 @@ connections:
   - FILE-CODEGEN
   - FILE-CODEGEN-EXPRESSIONS
   - FILE-ESBUILD-PLUGIN
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # Compiler design
@@ -52,17 +52,22 @@ component/event forms, and directive nesting.
 
 ## Code generation
 
+
 [[COMPONENT-CODEGEN]] preserves the user's script body, discovers the exported
-class name without parsing JavaScript — from the line-anchored
-`export default class X extends …` declaration, so an anonymous default export
-is a build error — and appends a prototype render assignment. Generated render code constructs ViewNode trees and resolves
-identifiers against lexical loop/event scope before falling back to component
-data.
+class name without parsing JavaScript, and appends a prototype render
+assignment. The name comes from the first REAL
+`export default class X extends …` keyword sequence in the shared
+string/comment/regex-aware token stream, so an anonymous default export and a
+missing `extends` are both build errors, and a commented-out declaration at
+column 0 is not a candidate. Generated render code constructs ViewNode trees and
+resolves identifiers against lexical loop/event scope before falling back to
+component data.
 
 Notable emission contracts:
 
 - the appended import makes a small set of module-scope names compiler-owned in
-  a `.pzl` script: `ViewNode`, `SLOT_TAG` (when slots are present), the `__s`
+  a `.pzl` script: `ViewNode`, `SLOT_TAG` (when a composition marker is
+  present), `PORTAL_TAG` (when a `<Portal>` is), the `__s`
   display alias (when display coercion is compiled), and `__svg_N` (SVG-dedup
   mode). Codegen's function-scope scratch names (`__d`, `__f`, `__ev`, `__i`,
   …) are NOT reserved — a module-scope binding is merely shadowed inside the
@@ -80,15 +85,13 @@ Notable emission contracts:
   formatter-free views carry no dead registry read.
 - text interpolation routes through the runtime's `displayValue` helper, emitted
   as `__s(...)` and imported only when a module actually contains one (D127).
-  `null` and `undefined` render as an empty string — never the literal words —
-  while `0`, `false`, `''`, `NaN`, and objects coerce exactly as `String` would;
-  the runtime, not the compiler, owns that rule, so quoted and brace-only
-  attributes agree. `undefined` also warns once in development, since it almost
-  always means a mistyped or missing field, and that diagnostic folds out of
-  production builds entirely. Before D127 the compiler emitted `String(value)`
-  directly, which rendered `"null"` on the page and left the runtime's own
-  nullish guard permanently dead; DOM text nodes provide structural
-  injection safety;
+  The runtime, not the compiler, owns the coercion rule, so quoted and
+  brace-only attributes agree: `null` and `undefined` render as an empty string —
+  never the literal words — while `0`, `false`, `''`, `NaN`, and objects coerce
+  exactly as `String` would. `undefined` also warns once in development, since
+  it almost always means a mistyped or missing field, and that diagnostic folds
+  out of production builds entirely. DOM text nodes provide structural injection
+  safety;
 - formatter calls use the tree-shaken runtime map and the missing-formatter
   guard;
 - data-independent handlers and ref setters are cached per instance;

@@ -6,6 +6,8 @@ connections:
   - DECISION-D53-NAMED-SLOTS
   - DOC-SPEC
 verified_at: '2026-07-14T07:08:23.035Z'
+release: RELEASE-V0-1-0
+change: chore
 ---
 
 # Virtual scrolling

@@ -1,6 +1,6 @@
 ---
 name: esbuild plugin and build pipeline
-status: built
+status: verified
 connections:
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
@@ -15,8 +15,8 @@ connections:
   - FILE-CONFIG
   - FILE-STYLES
   - FILE-STYLES-WATCH
-verified_at: '2026-07-25T05:26:57.523Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:34:17.457Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # esbuild plugin and build pipeline
@@ -51,17 +51,17 @@ an over-reported consumer costs one re-render.
 The project usage walk has the same shape of problem: it reads and fully parses
 every `.pzl` to answer the formatter union and three runtime feature facts
 (`flip`, Portal, and any raw block), which a one-shot build pays once and a dev
-session paid per rebuild.
+session would otherwise pay per rebuild.
 `plugin.UsageScanner` is that walk with a per-file memo keyed by path + mtime +
-size; `ScanUsage` is now a one-shot scanner, so the two share `scanFileUsage`
-and cannot answer differently. Both long-lived builders keep one scanner for the
+size; `ScanUsage` is a one-shot scanner over the same `scanFileUsage`, so the
+two cannot answer differently. Both long-lived builders keep one scanner for the
 session.
 Scripts use JS or TS loader according to `<script lang>`; styles collect in a
 mutex-protected path map; inline SVG dependencies join esbuild's watch set.
 
 [[DECISION-D156-BUILD-PIPELINE-PERFORMANCE]] makes the SPA
 call site honor that incremental shape: startup reuses the constructor scan and
-non-`.pzl` batches do not re-walk the project. The CSS collector gains a
+non-`.pzl` batches do not re-walk the project. The CSS collector carries a
 monotonic revision that changes only when a block is added, changed, or pruned,
 letting the watch builder skip re-joining and re-promoting its committed
 snapshot when an incremental graph rebuild leaves styles identical (the dev
@@ -86,8 +86,8 @@ assembled by `newBundleOptions`, `prerenderBundleOptions`, and
 identical passes open as persistent contexts and the shipped bytes cannot depend
 on which driver ran them. The per-page pass anchors `AbsWorkingDir` to its
 output tree: unminified output carries a `// <input path>` comment per module
-resolved against the process cwd, so the staging dir's random suffix used to
-leak into `_puzzle/*.js` and two dev builds of identical sources produced
+resolved against the process cwd, so without the anchor a staging dir's random
+suffix leaks into `_puzzle/*.js` and two dev builds of identical sources produce
 different bytes. Production is unaffected (minification strips the comments). Production targets ES2022,
 minifies, and drops console calls unless `build.dropConsole: false`; development
 keeps readable output and console. Failed builds discard staging and preserve
@@ -104,17 +104,18 @@ than public collision, user-code execution, or artifact semantics.
 
 Every transient directory a build needs lives under `<root>/.puzzle/tmp/` —
 the staging tree (`staging-*`) and swapOutput's holding dir for the previous
-output (`dist-old-*`), which used to be `.dist-staging-*` / `dist.old-*`
-siblings of `dist/`. Same filesystem, so the install is still an atomic rename;
-but `<root>/.puzzle` carries a `.gitignore` holding `*`, so a leftover from a
-killed build is invisible to every tool that respects gitignore. That matters
-beyond tidiness: Tailwind v4 walks the project for sources, and a stale copy of
-`dist/` under a name no `dist` ignore rule matches turned a 112ms source scan
-into 14s on the reference site. `Build` and `puzzle dev` both call
+output (`dist-old-*`). Same filesystem, so the install is still an atomic
+rename; but `<root>/.puzzle` carries a `.gitignore` holding `*`, so a leftover
+from a killed build is invisible to every tool that respects gitignore. That
+matters beyond tidiness: Tailwind v4 walks the project for sources, and a stale
+copy of `dist/` under a name no `dist` ignore rule matches turns a 112ms source
+scan into 14s on the reference site. `Build` and `puzzle dev` both call
 `SweepWorkDirs` at startup, which removes entries under `.puzzle/tmp` — and
-legacy `.dist-staging-*` / `dist.old-*` siblings, so existing projects self-heal
-— matching the exact known prefixes, real directories only (never a symlink),
-untouched for over ten minutes so a concurrently running build survives.
+legacy `.dist-staging-*` / `dist.old-*` app-root siblings, so existing projects
+self-heal — matching the exact known prefixes, real directories only (never a
+symlink), untouched for over ten minutes so a concurrently running build
+survives. A running build re-stamps its staging root once a minute so that age
+rule stays true for a long build that writes only into subdirectories.
 
 The SPA pass splits on request ([[DECISION-D160-SPA-CODE-SPLITTING]]):
 `build: { splitting: true }` gives `newBundleOptions` a `Splitting` flag and
@@ -153,21 +154,25 @@ staged one-shot/static pipelines, not the SPA incremental path.
 
 JavaScript `puzzle.config.js` loads once through a bounded Node process; Go
 never parses it. Optional scalar keys (`build.dropConsole`, `build.sourceMap`,
-`output`) are decoded from `json.RawMessage`, and "was this key set?" is a
-shared `unset()` helper that treats **JSON `null` as unset**, not just an absent
-key. A length check alone is wrong: `null` decodes to a four-byte
+`build.splitting`, `output`) are decoded from `json.RawMessage`, and "was this
+key set?" is a shared `unset()` helper that treats **JSON `null` as unset**, not
+just an absent key. A length check alone is wrong: `null` decodes to a four-byte
 `RawMessage`, and `json.Unmarshal` of `null` into a scalar is a documented no-op
-that returns no error and leaves the zero value — so `dropConsole: null` read as
-an explicit `false` and silently flipped production from strip-console to
-keep-console, while `output: null` failed with the confusing `output "" is not
-supported`. Styles support the Tailwind-first pipeline. Production runs a
+that returns no error and leaves the zero value — so `dropConsole: null` would
+read as an explicit `false` and silently flip production from strip-console to
+keep-console, while `output: null` would fail with the confusing `output "" is
+not supported`. Styles support the Tailwind-first pipeline. Production runs a
 one-shot CLI; dev maintains a warm watcher. Collected component CSS follows
 Tailwind output, and scoped blocks wrap in `@scope ([data-<path-hash>])` using
 the same symlink-normalized app-relative name as codegen.
 
-Resolution aliases the root package, `/adapter`, `/morph`, `/ssg`, `/static`,
-and `/fixtures` for in-repo builds. Subpaths have explicit aliases because the
-bare alias resolves to a file and cannot resolve suffixes. Under `--fixtures`
+Resolution aliases the root package plus every published subpath for in-repo
+builds: `/adapter`, `/morph`, `/router-modes`, `/ssg`, `/static`, `/testing`,
+and `/fixtures`. Subpaths have explicit aliases because the
+bare alias resolves to a file and cannot resolve suffixes; longest key wins, so
+the bare specifier stays untouched. `PUZZLE_RUNTIME` overrides both the in-repo
+walk and `node_modules`, and a set-but-wrong value is a hard stop rather than a
+silent fall-through to the installed runtime. Under `--fixtures`
 (D98) the entry point is a
 generated wrapper whose two imports a small resolver plugin pins
 `SideEffects: true` — the package declares `"sideEffects": false`, and without
@@ -178,28 +183,34 @@ installed-package resolution remain normal esbuild behavior.
 
 Build-time usage tree-shaking walks first-party project sources with the same
 fail-soft, over-inclusive policy as D31: unreadable or unparseable files are
-skipped and generated/vendor trees are pruned. Parsed `.pzl` ASTs still seed
+skipped and generated/vendor trees are pruned. Parsed `.pzl` ASTs seed
 the virtual formatter manifest from observed built-ins, while element attrs or
 component props named `flip`, `*parser.Portal` nodes, and parser-recorded raw
 blocks drive the literal `__PUZZLE_HAS_FLIP__`, `__PUZZLE_HAS_PORTAL__`, and
-`__PUZZLE_HAS_RAW_AT__` esbuild defines. The managed-head gate and its raw
-`.js`/`.ts` token scan are gone, so the walk reads only `.pzl` files. The scan runs ONCE per `build.Build`
+`__PUZZLE_HAS_RAW_AT__` esbuild defines. There is no managed-head gate (D111),
+so the walk reads only `.pzl` files. The scan runs ONCE per `build.Build`
 and its immutable result is threaded to every pass through a `passContext` —
 the constructor build code uses instead of `plugin.New`, so a pass cannot start
-from an unscanned zero `Usage` and drop a used runtime module. A static build's
-three esbuild passes previously each redid the walk over identical bytes. The
+from an unscanned zero `Usage` and drop a used runtime module. The
 long-lived builders compare the complete feature struct and replace a context
 when any bit changes; they re-scan only when a `.pzl` changed. Esbuild
 re-runs the formatter virtual module's `OnLoad` on every rebuild; this is
 regression-guarded by `TestFormatterManifestFreshAcrossIncrementalRebuilds`.
+
+Two more build facts ride the same define channel rather than the usage scan:
+`__PUZZLE_TAKEOVER__` (hybrid, static per-page, and dev bundles may adopt
+prerendered DOM; a plain SPA bundle folds the router's `data-puzzle-ssg`
+branches and drops `ssg/preload.js` entirely) and `__PUZZLE_CAPTURE__` (a
+static per-page entry may import `app/app.js` only to READ `app.config`, so
+`PuzzleApp.mount()` must be inert there). Every runtime probe uses the
+`typeof … === 'undefined' ||` idiom, so an absent define means the feature is on
+for vitest and third-party bundlers.
 
 Static output performs a second node-platform bundle and runs
 [[COMPONENT-SSG]] before the staging swap. A timeout or render failure preserves
 the last good dist and surfaces source-mapped user errors. The per-page browser
 bundle pass follows the SAME source-map policy as the main `app.js` pass —
 development linked, production only under `build.sourceMap` — decided BEFORE
-esbuild runs rather than by emitting maps unconditionally and deleting them
-after. Because a chunk's content hash is computed over bytes that no longer
-carry a `sourceMappingURL` comment, production `_puzzle/chunks/*` filenames
-differ from the generate-then-strip era; the contents are unchanged, and the
-hash now actually describes the shipped bytes.
+esbuild runs, so nothing is generated to be deleted afterwards. Because a
+chunk's content hash is therefore computed over bytes carrying no
+`sourceMappingURL` comment, the hash actually describes the shipped bytes.

@@ -11,6 +11,8 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
 verified_at: '2026-07-14T07:08:15.922Z'
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.26 — List keying

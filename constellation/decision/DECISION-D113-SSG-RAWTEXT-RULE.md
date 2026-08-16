@@ -10,8 +10,8 @@ connections:
   - DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY
   - COMPONENT-SSG
   - FILE-SSG-SERIALIZER
-verified_at: '2026-07-25T01:46:58.397Z'
-verified_sha: bf351981a2ed01bf1e9c21f30acc529959247221
+verified_at: '2026-08-16T04:36:42.879Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-

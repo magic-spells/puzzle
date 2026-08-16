@@ -1,6 +1,6 @@
 ---
 name: D144 — Portal (scoped v1)
-status: built
+status: verified
 connections:
   - DECISION-D134-CAPITALIZED-COMPOSITION-MARKERS
   - DECISION-D141-MARKER-FALLBACK-BODIES
@@ -10,8 +10,8 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-TEMPLATE-PARSER
   - COMPONENT-CODEGEN
-verified_at: '2026-07-28T22:30:07.016Z'
-verified_sha: f639b5d1aa8f59ffe385936b7e5b5d66b1235da8
+verified_at: '2026-08-16T04:33:06.402Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D144 — Portal (scoped v1)

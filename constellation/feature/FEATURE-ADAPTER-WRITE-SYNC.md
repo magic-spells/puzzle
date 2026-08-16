@@ -11,13 +11,17 @@ connections:
   - DOC-MODELS
   - DOC-SPEC
   - DOC-SPEC-DATA
-verified_at: '2026-07-12T00:14:45.180Z'
+  - FILE-ADAPTER
+verified_at: '2026-08-16T04:34:58.988Z'
 notes:
   - kind: verified
     text: >-
       Verified at the merged main sha: save/delete/request semantics reviewed against SPEC §22 at
       ship (validate-first, POST/PUT provenance, pk adoption, confirmed deletes);
       tests/adapter-write.test.js (27) + full suite green (480 vitest).
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.18 — Adapter write sync & custom adapter methods
@@ -32,14 +36,18 @@ driven by the same bare `static adapter = { endpoint }` the read path uses.
 
 ## Scope
 
+
+
 **In (shipped):**
 - **Explicit verbs, local-first:** `createRecord`/`update`/`destroy` keep exact
   v1 semantics; `record.save()` ships state (D48-validates first — invalid
   rejects with `PuzzleValidationError`, no request; POST when never-synced, PUT
   thereafter via a non-enumerable `_synced` provenance flag; 2xx JSON-object
   responses merge via the exempt path; failed saves keep dirty state and
-  reject), `record.delete()` is a confirmed delete (DELETE first; 2xx or 404
-  removes locally; otherwise rejects and the record stays). Since
+  reject), `record.delete()` is a confirmed delete (dispatch the delete
+  transport first, remove locally once it resolves; otherwise reject and the
+  record stays — 404-as-success belongs to the endpoint-generated transport,
+  not to the framework). Since
   [[DECISION-D132-CROSS-VERB-WRITE-CHAIN]] both verbs share the per-record
   write chain — a delete queued behind a first save targets the adopted server
   pk — and a never-synced record's `delete()` removes locally with no request.
@@ -59,8 +67,13 @@ queueing, conflict resolution.
 
 ## Outcome
 
+
+
 Shipped in v1.18 and extracted to `@magic-spells/puzzle/adapter` by D157. Core
 keeps `_synced` provenance and local mutation; the subpath installs the server
-verbs and exports the adapter error. Acceptance met in tests: a
-todos-shaped app persists create/toggle/delete with zero hand-written fetch.
-Suite at 460 at ship time.
+verbs and exports the adapter error. Under
+[[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]] the endpoint shorthand generates the
+transports these verbs dispatch, while every reconciliation rule above stays
+framework-owned and identical for author-supplied transports. Acceptance met in
+tests: a todos-shaped app persists create/toggle/delete with zero hand-written
+fetch.

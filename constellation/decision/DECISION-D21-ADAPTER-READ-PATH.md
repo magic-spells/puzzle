@@ -8,6 +8,7 @@ connections:
   - DOC-DATASTORE
   - DOC-SPEC-DATA
   - DOC-SPEC
+  - FILE-ADAPTER
 ---
 
 # D21 — Server data in v1: explicit load methods reading the model's adapter declaration

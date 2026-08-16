@@ -764,12 +764,19 @@ The features below all ship in 0.3.1.
 
 - **Embedded agent skill and `puzzle add skills` (D78).** The skill is
   self-contained — no external references.
+- **`dev.proxy`** — point a same-origin path at a local backend from
+  `puzzle.config.js`, so development requests need no CORS setup.
+- **Public `store.upsert()`** — merge a server payload for a custom action
+  response without going through a declared adapter verb.
+- Datastore fixes: `record.delete()` is self-idempotent (a second call
+  resolves instead of rejecting), and `createRecord` enforces primary-key
+  parity with `Model.validate()` — a blank `.primary().required()` key is
+  rejected rather than silently generated.
 
 ## 0.1.1 — 2026-07-22
 
 - **`puzzle init` prompts (D77)** — TTY-gated template and TypeScript
   selection.
-- Datastore fixes.
 
 ## 0.1.0 — 2026-07-22
 

@@ -57,6 +57,8 @@ notes:
       sanity at :3461 (dev seed): board + task overlay + Studio (all icon sets) render, zero console
       errors. The prebuilt repo-root ./puzzle binary was rebuilt (go build -o puzzle
       ./compiler/cmd/puzzle) so ./puzzle build uses the new codegen.
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.14 — `{#svg}` inline SVG assets

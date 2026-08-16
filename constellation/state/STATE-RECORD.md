@@ -83,8 +83,8 @@ connections:
   - DECISION-D57-HMR-STATE-RELOAD
   - FEATURE-DELETE-IDEMPOTENCY
   - FEATURE-VALIDATE-PK-PARITY
+  - FILE-ADAPTER
 ---
-
 
 # Store record lifecycle
 

@@ -8,8 +8,9 @@ connections:
   - DECISION-D81-STATIC-PAGES-MODE
   - DOC-SPEC
   - DOC-DATASTORE
-verified_at: '2026-07-25T05:24:29.299Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+  - FILE-ADAPTER
+verified_at: '2026-08-16T04:49:17.153Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 Every adapter fetch routes through one private `Store._fetch(url, init, context)`
@@ -31,22 +32,21 @@ The four fetch sites had also drifted apart: the read path passed nothing, `_sav
 One seam, one hook, deliberately narrow.
 
 - **`Store._fetch(url, init, context)` is the only place generated transports, D158's enhanced fetch, and `store.request()` reach the network.** Global fetch used explicitly by author code bypasses it. `_` prefix, not `#` — the datastore is uniformly `_` helpers.
-- **The read path now sends an explicit `{ method: 'GET' }`** rather than a bare `fetch(url)`. Identical on the wire, and it means a hook never has to special-case the read path against a missing init.
+- **The read path sends an explicit `{ method: 'GET' }`** rather than a bare `fetch(url)`. Identical on the wire, and it means a hook never has to special-case the read path against a missing init.
 - **The hook is synchronous** and may either mutate `init` in place *or* return a replacement object; a truthy object return wins, otherwise the possibly-mutated original is used. Both shapes are supported deliberately — mutation reads better for pushing a header, a return for a spread. A returned replacement is shallow-COPIED before the method/body re-stamp: the store never writes into an object the app owns, so `Object.freeze({ ...init, … })` and getter-only fields are supported shapes, not TypeErrors.
 - **`method` and `body` are re-stamped from the original init after the hook runs.** This is load-bearing, not defensive. The write path captures `requestKey = record[pk]` *before* the await and reconciles against exactly that key afterwards (§22, D50); a hook that flipped POST→PUT or rewrote the body would silently break identity re-checks, pk adoption, and the `_synced` contract. The URL is a separate `fetch` argument, so it is out of reach by construction. A hook can change *how* a request is sent, never *what* it is.
 - **The context argument is frozen.** It is information about the request, not a second output channel.
 - **A throwing hook is not caught.** It is app code, and an auth error raised there must reject the calling verb rather than ship an unauthenticated request. Every caller is async, so it surfaces as a rejection.
-- **Stored only when it is a function**, so the overwhelmingly common no-hook path costs one truthiness check and nothing else.
-- **Threaded conditionally from config**, matching the established `storage` / `routerMode` / `routerBase` convention where an option is passed through only when set so the constructee's own default stands.
+- **The Store keeps it only when it is a function**, and null otherwise, so the overwhelmingly common no-hook path costs one truthiness check and nothing else. The app config value is handed straight through to the Store, which owns that normalization rather than making every caller repeat it.
 
 ## Consequences
 
 - Authenticated apps can use `loadAll`/`loadOne`/`save`/`delete` as designed instead of routing around them.
 - Request cancellation falls out for free — the app attaches its own `AbortSignal`.
 - The prerender path carries the hook too (`ssg/index.js` `buildContext`), so a build-time `beforeMount` store seed hits an authenticated API the same way the browser store would.
-- **`output: 'static'` cannot carry the hook.** `mountStatic`'s options are serialized into a Go-generated per-page entry module, and a function does not survive that boundary. True-static pages get no hook on their client-side store. This is a documented limitation of the output mode, not a bug to fix here; closing it needs a different mechanism (the page module wiring it itself).
+- **`output: 'static'` cannot carry the hook.** `mountStatic` takes no `beforeRequest` option: a page entry's options are serialized into a Go-generated module, and a function does not survive that boundary. True-static pages get no hook on their client-side store. This is a documented limitation of the output mode, not a bug to fix here; closing it needs the page entry to bind the value from a real module import, the way it binds the adapter capability.
 - **Returning a bare replacement object drops the original headers.** `return {}` on a write loses `Content-Type: application/json`. That is the "replacement wins" contract behaving as specified — the idiom is `return { ...init, headers: … }`. Merging instead was rejected: it would make removing a header impossible.
-- Three pre-existing read-path assertions moved from `toHaveBeenCalledWith(url)` to `toHaveBeenCalledWith(url, { method: 'GET' })`. They were asserting argument count, not behavior; the replacement regression tests pin the exact call shape of all four verbs with no hook configured, which is a stronger guarantee than what they replaced.
+- Regression tests pin the exact call shape of all four verbs with no hook configured, which is what keeps the re-stamp and the explicit read-path init honest.
 
 ## Alternatives rejected
 

@@ -12,6 +12,8 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
 verified_at: '2026-07-14T07:08:22.704Z'
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # Scoped styles (`<style scoped>`)

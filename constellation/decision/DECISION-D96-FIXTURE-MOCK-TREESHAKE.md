@@ -9,8 +9,8 @@ connections:
   - FILE-BUILD-OPTIONS
   - DOC-SPEC
   - DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY
-verified_at: '2026-07-25T00:10:00.000Z'
-verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+verified_at: '2026-08-16T04:34:36.636Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 **SUPERSEDED by [[DECISION-D98-FIXTURES-MODULE-FLAG]] (v1.61, same release — never published).** The scan/define approach had two structural hazards D98 records: a compiler older than these defines ships the whole runtime (fail-safe probes), and the conservative token scan compiles an app's own `store.seed()` seeding into production. The fixtures/mock scan bits reverted; D89's scanning stays — its `flip` half only, since [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]] later retired the head-tags half too. Kept for rationale.

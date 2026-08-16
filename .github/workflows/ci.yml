@@ -1,10 +1,13 @@
 name: CI
 
+# Release branches are the working trunk: feature branches PR into
+# release/x.y.z, and main is only touched at launch. Gating on main alone would
+# leave every day-to-day branch and PR uncovered until the very last merge.
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'release/**']
 
 jobs:
   go:

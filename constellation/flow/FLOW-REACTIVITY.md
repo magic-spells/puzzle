@@ -13,7 +13,7 @@ connections:
   - FILE-PUZZLE-VIEW
   - FILE-VIEW-MANAGER
   - DECISION-D62-HANDLER-CACHING
-verified_at: '2026-07-29T05:19:20.181Z'
+verified_at: '2026-08-16T04:49:21.640Z'
 notes:
   - kind: gotcha
     text: >-
@@ -26,7 +26,7 @@ notes:
       identity; the store carries live data. If a framework-level answer is ever wanted
       (always-refresh children, or record versioning), it needs a D-number — SPEC §4's
       shallow-differ rule is the documented contract.
-verified_sha: 770ef49d53752b85892311f5d2a82e2bf19fd39c
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # Reactivity flow

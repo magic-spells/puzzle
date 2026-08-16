@@ -11,7 +11,7 @@ connections:
   - FILE-COMPILER-INTERNAL-PARSER-SLOT
   - FILE-TESTS-SLOT-FORWARDING-TEST
   - FILE-TESTS-SLOT-FORWARDING-COMPILED-TEST
-verified_at: '2026-07-25T05:24:14.145Z'
+verified_at: '2026-08-16T04:33:00.918Z'
 notes:
   - kind: verified
     text: >-
@@ -31,12 +31,13 @@ notes:
       in a layout — same marker node); bare lowercase `<slot/>` in that position is a positioned
       compile error like everywhere else. Forwarding semantics, the named-marker rejection, and the
       expansion walk are unchanged. See DECISION-D74-CHILDREN-MARKER.
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D71 — Default-child forwarding through a component invocation
 
 ## Context
+
 
 A routed layout may wrap its outlet in reusable chrome:
 
@@ -44,14 +45,13 @@ A routed layout may wrap its outlet in reusable chrome:
 <puzzle-view class="layout">
   <Header/>
   <Card>
-    <children/>
+    <Children/>
   </Card>
 </puzzle-view>
 ```
 
-Without forwarding, the marker in Card's call-site children remained a literal
-element and the routed page never reached Card. D74 later respelled the original
-bare lowercase marker as `<children/>`; the mechanism is unchanged.
+Without forwarding, the marker in Card's call-site children stays a literal
+element and the routed page never reaches Card.
 
 ## Decision
 
@@ -72,6 +72,7 @@ would splice the same bucket twice.
 
 ## Consequences
 
-Wrapper layouts such as `<Card><children/></Card>` work in the browser and the
+
+Wrapper layouts such as `<Card><Children/></Card>` work in the browser and the
 SSG serializer. Parser, runtime, compiled-fixture, and forwarding tests cover
 the rule. Named-slot forwarding remains deliberately unshipped.

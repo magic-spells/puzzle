@@ -1,6 +1,6 @@
 ---
 name: D160 — Opt-in SPA code splitting via build.splitting (v1.75)
-status: built
+status: verified
 connections:
   - FEATURE-SPA-CODE-SPLITTING
   - DECISION-D09-GO-ESBUILD-COMPILER
@@ -14,6 +14,8 @@ connections:
   - FILE-CLI
   - DOC-SPEC-BUILD
   - DOC-RELEASE-SURFACE
+verified_at: '2026-08-16T04:34:44.168Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 A dynamic `import()` in the SPA bundle emits a lazy chunk instead of being

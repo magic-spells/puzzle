@@ -1,7 +1,7 @@
 ---
 name: Formatter registry
 status: verified
-verified_at: '2026-07-25T05:23:34.249Z'
+verified_at: '2026-08-16T04:28:30.612Z'
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-CODEGEN
@@ -48,10 +48,11 @@ notes:
 
       Preset resolution uses Object.hasOwn before the lookup, so an unknown preset name collapses
       onto the `date` entry instead of minting one per typo.
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # Formatter registry
+
 
 
 Liquid-style, display-only transformations used by compiled template chains. The registry seeds built-ins, applies user registrations last (user overrides win), exposes the raw function map to render functions, and supports arbitrary string keys through bracket access.
@@ -62,7 +63,16 @@ An unknown formatter calls `__missing(name)`: warn once per registry, include a 
 
 Built-ins are pure named exports. A JSON name manifest is embedded by the Go build scanner, which serves a virtual module importing only formatters observed in project templates. The scan deliberately errs toward inclusion; `escape`, `raw`, and `noescape` remain safety defaults. Raw/test imports use the full built-in map.
 
-One built-in is not a pure export: `link` (D79) needs the live router, so PuzzleApp registers it at mount after constructing the router — only if absent, so a user `link` from config wins. It delegates to `router.url()` (nullish → `''`, non-strings coerced, non-`/` strings pass through). The tree-shake scanner ignores the name (not on the allowlist), the same handling as any custom formatter.
+One built-in is not a pure export: `link` (D79) needs the live router. Every
+registry is therefore built by one shared `makeFormatterRegistry(custom, url)`
+helper — built-ins, then the app's custom formatters, then `link` only when the
+app did not supply its own, so a user `link` from config wins. `PuzzleApp`
+constructs its registry alongside the Store and passes a closure that reads
+`this.router` lazily, so a re-mount can never capture a stale Router; the static
+kernel builds the same registry against its per-page router. `link` delegates to
+`router.url()` (nullish → `''`, non-strings coerced, non-`/` strings pass
+through). The tree-shake scanner ignores the name (not on the allowlist), the
+same handling as any custom formatter.
 
 All built-ins fail soft on nullish or invalid display input. Numeric precision normalizes to an integer in the `toFixed` range; date/locale/time-zone failures fall back to a string; sort copies before comparing and treats numeric arrays numerically. `raw`/`noescape` only skip formatter escaping—they do not inject HTML into text vnodes. `reverse` iterates strings by code POINT (`[...v]`, since 0.3.0), not UTF-16 code unit — `split('')` tore surrogate pairs, so emoji/astral text reversed into lone-surrogate garbage; a user-visible output change for such strings.
 
@@ -79,21 +89,3 @@ Invalid-Date fail-soft path, and `in_timezone` passes it through UNSHIFTED —
 a day names no instant to re-express. The `iso` preset is idempotent on such
 inputs; Date instances, timestamps, and full ISO datetimes parse exactly as
 before.
-
-## Measured cost: the Intl cache, and what it bought
-
-Measured, not inferred, through [[DOC-STRESS-EXAMPLE]]'s `formatters` scenario
-and the production harness ([[DECISION-D128-BENCHMARK-METHODOLOGY]]). Before
-the date family cached its Intl objects, a 10,000-row re-render running
-`date('short')` and `timeago` on each row constructed **10,000
-`Intl.DateTimeFormat`** and **10,000 `Intl.RelativeTimeFormat`** objects — one
-per formatter call — and the formatters were **91.4%** of the re-render:
-376.1ms against 32.4ms for an identical tree rendering plain record strings.
-That measurement priced the cache; the gotcha note on this card carries its
-design constraints (keyed Maps, insert-after-success).
-
-With the cache shipped, the same A/B reads **40.8ms against 31.4ms** — the two
-formatters cost ~9ms, roughly a quarter of the formatted arm — and the
-scenario's `count-intl` op asserts **zero** Intl constructions across a warmed
-render. That op is the cache's regression pin in the production benchmark
-baseline: a count above zero fails the run.

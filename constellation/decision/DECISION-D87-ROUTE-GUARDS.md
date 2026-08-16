@@ -14,8 +14,8 @@ connections:
   - DECISION-D83-QUERY-REPLACE
   - FILE-ROUTER
   - FEATURE-V1-53-ROUTE-GUARDS
-verified_at: '2026-07-25T05:24:26.723Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:35:46.337Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -76,11 +76,15 @@ through it) made a single insertion point possible.
   A thrown guard follows the data()-failure posture: log, stay put. The
   shared post-failure cleanup (stalled-transition + pending-memory-index
   recovery) is one helper used by both paths.
-- **Loop safety:** at most ten guard redirects without an intervening commit;
-  the next is treated as a cycle (console.error, stay put). A real A↔B cycle
-  never commits, so the cap catches it; the query-param deny idiom commits on
-  `/login` and resets the counter. Redirect-to-committed-path stays the D83
-  same-path no-op.
+- **Loop safety:** at most ten guard-owned redirects per logical navigation;
+  the next is treated as a cycle (console.error, stay put). The counter resets
+  on a successful commit AND at the start of every externally-initiated
+  navigation — a guard redirect re-entering through `replace()` is flagged as a
+  continuation and keeps the count, everything else starts from zero. Resetting
+  only at commit would let the count accumulate across INDEPENDENT user
+  navigations, because a redirect to the already-committed path is the D83
+  same-path no-op and never commits. A real A↔B cycle never commits either, so
+  the cap still catches it; the query-param deny idiom commits on `/login`.
 - **Output modes — warnings only, no enforcement** (Cory: the developer's
   call; guards are UX, not a secrecy boundary — prerendered files are public
   bytes and servers must authorize independently). Hybrid prerender warns per

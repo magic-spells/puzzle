@@ -11,8 +11,9 @@ connections:
   - DOC-SPEC-DATA
   - FILE-STORE
   - FILE-PUZZLE-MODEL
-verified_at: '2026-07-27T04:56:00.000Z'
-verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
+  - FILE-ADAPTER
+verified_at: '2026-08-16T04:31:44.116Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D125 — a save response never overwrites a field edited while its request was in flight

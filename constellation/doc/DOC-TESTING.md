@@ -1,7 +1,7 @@
 ---
 name: Testing strategy
-status: built
-verified_at: '2026-07-22T00:04:06.191Z'
+status: verified
+verified_at: '2026-08-16T04:35:12.628Z'
 connections:
   - DOC-DEVELOPMENT
   - DOC-BUILD-PLAN
@@ -9,6 +9,7 @@ connections:
   - FLOW-BUILD
   - FLOW-REACTIVITY
   - TEST-TODOS-INTEGRATION
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # Testing strategy
@@ -94,6 +95,8 @@ release candidate.
 
 ## Testing a Puzzle app (the shipped surface)
 
+
+
 App authors do **not** use anything in `tests/helpers/`. They import
 `@magic-spells/puzzle/testing` (D94, SPEC §53):
 
@@ -102,6 +105,7 @@ import {
   mountView,
   createTestApp,
   settled,
+  type,
   measureRenders,
   installFakeAnimate,
   installFakeObserver,
@@ -110,6 +114,7 @@ import {
 
 const view = await mountView(TodoList, { props: { filter: 'open' }, store });
 await view.click('.toggle');
+await view.type('.title', 'walk the dog');
 
 const app = await createTestApp({ routes, models });
 await app.visit('/todos/42');
@@ -119,9 +124,11 @@ const profile = await measureRenders(view, () => view.click('.toggle'));
 ```
 
 - `mountView` mounts one view against a detached container; the handle exposes
-  `element`/`find`/`findAll`/`click`/`setProps`/`destroy`.
+  `element`/`find`/`findAll`/`click`/`type`/`setProps`/`destroy`.
 - `createTestApp` runs a real app in memory mode, so `visit()` drives the real
-  load-then-commit pipeline, guards, and lifecycle.
+  load-then-commit pipeline, guards, and lifecycle. It imports the D159
+  `memoryRouter()` factory itself, so a test never wires a router mode; a
+  `routerInitialPath` in the config is consumed by the helper.
 - **`settled()` is the piece that matters.** It drains stores, rAF-scheduled
   `setData` renders, and last-wins `data()`/navigation promises to a fixed point.
   It is bounded (`settled({ maxPasses })`) and **throws** naming the churn source
@@ -130,6 +137,11 @@ const profile = await measureRenders(view, () => view.click('.toggle'));
 - **Know its non-guarantees** — it does not advance user timers or skeleton
   `min-duration` holds, resolve promises `data()` never awaited, fire
   IntersectionObserver callbacks, or finish fire-and-forget enter animations.
+- `type(target, text)` sets the value and dispatches the bubbling `input` and
+  `change` events a real edit-then-leave produces, then settles — the way to
+  drive D147 two-way bindings from a test. It takes a selector or an element
+  (the mounted handles expose it as `handle.type(...)`) and **throws** on a
+  checkbox or radio, which have no text value; toggle those with `click()`.
 - `measureRenders(handle, callback)` temporarily observes actual
   `ViewManager.render` entries, awaits the callback and `settled()`, and returns
   a deeply frozen report covering useful/wasted renders, DOM mutations,

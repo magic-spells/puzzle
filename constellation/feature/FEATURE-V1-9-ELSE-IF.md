@@ -8,6 +8,8 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.9 — `{:else if}` conditional chaining

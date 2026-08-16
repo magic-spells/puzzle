@@ -6,8 +6,8 @@ language: go
 summary: In-memory pzl onLoad transform, CSS collection, and diagnostics.
 connections:
   - COMPONENT-ESBUILD-PLUGIN
-verified_at: '2026-07-24T23:40:00.000Z'
-verified_sha: 8f349ab8b27dbd3d86f819b25d0e0bfa3d51cf69
+verified_at: '2026-08-16T04:34:27.009Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/plugin/plugin.go`.

@@ -1,13 +1,14 @@
 ---
 name: "record.delete() self-idempotency"
 status: verified
-verified_at: '2026-07-22T09:00:00.000Z'
+verified_at: '2026-08-16T04:33:31.500Z'
 connections:
   - DECISION-D50-ADAPTER-WRITE-SYNC
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-STORE
   - DOC-DATASTORE
   - DOC-MODELS
+  - FILE-ADAPTER
 notes:
   - kind: state
     text: >-
@@ -15,80 +16,74 @@ notes:
       documented "DELETE treats 2xx and 404 both as success" contract holds at
       store.deleteRecord, but a second record.delete() on the same reference
       rejects locally before any network call.
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+release: RELEASE-V0-1-2
+change: fix
 ---
 
 # record.delete() self-idempotency
 
 ## Intent
 
-Deleting an already-deleted record should succeed quietly — that is the spirit of
-the D50 contract ("2xx and 404 both count as success"), and it is what UI code
-naturally does when two code paths (a button handler and a stale list item, a
-double-click, a retry) both hold the same record reference. Today the second
-`record.delete()` rejects with a misleading error that suggests the record was
-never real.
+Deleting an already-deleted record succeeds quietly. That is the spirit of the
+D50 contract, and it is what UI code naturally does when two paths — a button
+handler and a stale list item, a double-click, a retry — both hold the same
+record reference. The alternative was a reject whose message ("never added to a
+store") described a different situation entirely and sent readers looking for a
+bug in record creation.
 
-## Current shape
+## Shape
 
-- `deleteRecord` (`client-runtime/datastore/store.js:520-546`) is properly
-  idempotent against the **server** (404 tolerated, `store.js:533`) and against
-  **store races** (identity re-check at `store.js:540` before `removeRecord`).
-- But `removeRecord` (`store.js:282-290`) sets `record._store = null`, and
-  `record.delete()` (`model.js:482-489`) rejects any store-less record with
-  "cannot delete() a store-less record — create it via store.createRecord() first"
-  — an async reject **before any network call**. The guard cannot tell "deleted"
-  from "never added".
+One non-enumerable `_deleted` flag, declared beside `_synced` in the
+`PuzzleModel` constructor (`client-runtime/model.js`), carries the whole
+contract. `removeRecord` — which stays in core, `client-runtime/datastore/store.js`
+— sets it **before** detaching `_store`, so the flag is the single terminal
+state for both local `destroy()` and confirmed `delete()`. Ordering matters:
+because `removeRecord` nulls `_store` unconditionally, a guard that tested
+`_store` first could never tell "deleted" from "never added".
 
-## Design
+The server verbs live in the opt-in adapter subpath
+(`client-runtime/datastore/adapter.js`), installed onto `Store.prototype` and
+`PuzzleModel.prototype` by the capability:
 
-Add a non-enumerable `_deleted` flag beside `_synced` in the model constructor
-(`model.js:318-322`), and check it **first** in `delete()`:
+- `delete()` checks `_deleted` first and resolves with the record; only then
+  does it reject a store-less record with the never-added message. A freshly
+  `new`'d record has `_deleted === false` and `_store === null`, so it still
+  takes the reject branch.
+- `deleteRecord` queues on the record's write chain; `_deleteRecordNow`
+  re-checks `_deleted`/`_store` when its turn arrives, so CONCURRENT double
+  deletes resolve with exactly one DELETE reaching the adapter
+  ([[DECISION-D132-CROSS-VERB-WRITE-CHAIN]]).
+- An identity re-check before `removeRecord` keeps an in-flight delete of A
+  from evicting a newer B that reused A's id.
+- 404 tolerance is **not** part of this flag's contract. It belongs to the
+  endpoint-generated transport, which treats a 404 on `DELETE endpoint/:id` as
+  already-gone; an author-supplied `delete` function returning a non-OK
+  `Response` rejects with `PuzzleAdapterError` like any other verb.
 
-```js
-delete() {
-  if (this._deleted) return Promise.resolve(this);   // idempotent success
-  if (!this._store) return Promise.reject(new Error('…never added…'));
-  return this._store.deleteRecord(this);
-}
-```
+`save()` reads the same flag: a deleted record rejects with one shared
+"cannot save a deleted record" message rather than POSTing a resurrected copy.
+The message is defined once in the adapter module because two sites raise it —
+`save()` at call time, and `_saveRecordNow` when a queued save discovers the
+removal only on reaching the front of the chain — and callers must not be able
+to tell those apart.
 
-Set `_deleted = true` on the confirmed-delete ack path in `deleteRecord`
-(`store.js:540-542`, alongside `removeRecord`). Because `removeRecord` nulls
-`_store` unconditionally, checking `_deleted` before `_store` is exactly what makes
-the second call resolve instead of reject.
+`destroy()` sets the flag too, by virtue of routing through `removeRecord`:
+"this instance is gone" is one concept, and no public path re-adds an existing
+instance (`createRecord` always builds fresh), so a stale flag is unreachable
+through the documented surface. Being non-enumerable keeps it out of
+`toJSON()` and persistence.
 
-Since [[DECISION-D132-CROSS-VERB-WRITE-CHAIN]] the same idempotency holds for
-CONCURRENT double deletes: both calls queue on the record's write chain,
-`_deleteRecordNow` re-checks `_deleted`/`_store` when its turn comes, and the
-second link resolves with no request — exactly one DELETE reaches the adapter.
+## Not in scope
 
-**Decision to make during implementation:** does `destroy()` (local-only removal,
-`model.js:454-457` → `removeRecord`) also set `_deleted`? Recommendation: set it in
-`removeRecord` itself, so `destroy()`-then-`delete()` resolves too — "this instance
-is gone" is one concept, and there is no public path that re-adds an existing
-instance (createRecord always builds fresh), so a stale flag is unreachable through
-the documented surface. Non-enumerable keeps it out of `toJSON()` either way.
+Resurrect/undelete APIs. `store.deleteRecord`'s server-facing semantics were
+already correct and are unchanged.
 
-The never-added case is preserved by flag ordering: a `new`'d record has
-`_deleted === false` and `_store === null` → still rejects with the (reworded)
-"never added" message.
+## Coverage
 
-## Scope
-
-**In:** `_deleted` flag, `delete()` short-circuit, `save()` after delete should
-also reject clearly ("cannot save a deleted record") rather than POST a resurrected
-copy — audit `save()`'s store-less guard message at `model.js:467-474` in the same
-pass; tests; DOC-MODELS + DOC-DATASTORE contract note.
-**Out:** resurrect/undelete APIs; changing `store.deleteRecord`'s existing
-semantics (already correct).
-
-## Test plan
-
-- create → save → delete → delete again: second resolves, store still empty, no
-  second network request beyond the first pair.
-- delete on a never-added `new` record: rejects with the never-added message.
-- destroy() → delete(): per the decision above (resolve, if flag lives in
-  removeRecord).
-- save() after delete: rejects, no POST fired.
-- Habit-lab Sync Lab scenario 5 (the origin repro) passes against the new build
-  without its store-level workaround.
+`tests/adapter-write.test.js` pins the matrix: a second delete on the same
+removed instance resolving without another request, `destroy()`-then-`delete()`
+resolving locally, `save()` after delete rejecting without a POST, the
+identity guard against an id-reusing newer record, a never-synced `delete()`
+removing locally with no request, two concurrent deletes issuing exactly one
+DELETE, and a store-less `delete()` still rejecting asynchronously.

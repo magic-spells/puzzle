@@ -7,6 +7,8 @@ connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
   - DOC-SPEC-BUILD
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.4 — CLI tooling surface

@@ -13,8 +13,8 @@ connections:
   - DOC-SPEC-BUILD
   - DOC-SPEC-ROUTER
   - FILE-ROUTER
-verified_at: '2026-07-27T04:56:00.000Z'
-verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
+verified_at: '2026-08-16T04:36:44.191Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: state
     text: >-
@@ -57,14 +57,20 @@ path-shape truth for both consumers:
   matched in the browser but were skipped as "dynamic" by the prerenderer — a
   404 in `--static`, and a 404 in `--hybrid` unless the host had an SPA rewrite.
 - **`validateTopLevelPath(path)`** — must be `'*'` or start with `/`.
+- **`normalizeRoutePath(path)`** — the idempotent percent-encoding canonicalizer
+  every path-shape boundary runs (route compilation, `push()`/`replace()`,
+  `encodeURL()`, the memory mode's initial path, `routerBase`, and the prerender
+  route snapshot), so a route declared `/café` and the `/caf%C3%A9` the browser
+  reports are the same path on both sides.
 - **`findShadowedPaths(entries)`** — for each fully-static leaf, test it against
   every *earlier* compiled regex.
 
-`prerender()` constructs one `new Router(routes, { mode: 'memory' })` and reads
-its `routeEntries`; `prerenderToDir` builds a second one up front purely so a bad
-route table fails the build before the target selector and the shell read. The
-SSG therefore compiles no matchers of its own — there is exactly one regex
-compiler in the system, and it stays in the Router.
+`prerenderToDir` constructs one `new Router(routes, { mode: memoryRouter() })`
+up front, purely so a bad route table fails the build before the target selector
+and the shell read, and hands that same instance to `prerender()`, which reads
+its `routeEntries`. The SSG therefore compiles no matchers of its own — there is
+exactly one regex compiler in the system, and it stays in the Router, and
+exactly one compiled matcher table per build.
 
 ## A non-bare `*` stays legal
 

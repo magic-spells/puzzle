@@ -19,6 +19,8 @@ notes:
       — pre-existing goldens unchanged), and ViewManager partition/fallback expansion reviewed
       against SPEC §24 at ship; tests/named-slots.test.js (7) + ~14 Go subtests + full suite green
       (480 vitest + all Go).
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.21 — Named slots

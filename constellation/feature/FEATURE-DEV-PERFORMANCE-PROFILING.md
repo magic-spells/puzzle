@@ -12,6 +12,8 @@ connections:
   - FILE-DEVPERF
   - FILE-TESTING-RENDER-PROFILE
   - FILE-TESTS-DEVPERF
+release: RELEASE-V0-4-0
+change: feature
 ---
 
 # Dev runtime performance instrumentation and render assertions

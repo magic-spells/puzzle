@@ -1,6 +1,6 @@
 ---
 name: "SPA code splitting (lazy chunks for dynamic import())"
-status: built
+status: verified
 connections:
   - FILE-BUILD-OPTIONS
   - FILE-BUILD
@@ -21,6 +21,10 @@ notes:
       static assets and load it with a native browser import() whose URL lives
       in a variable so esbuild leaves it alone. This feature makes that
       workaround unnecessary.
+verified_at: '2026-08-16T04:34:46.188Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+release: RELEASE-V0-6-0
+change: feature
 ---
 
 # SPA code splitting

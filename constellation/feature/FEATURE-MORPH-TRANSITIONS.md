@@ -48,6 +48,8 @@ notes:
       the router's leave hook (both directions, pops included — no click needed) and art-morph.js +
       data-art-morph are deleted from the music example. The D55 live-pair contract this card
       describes is unchanged and keeps priority.
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.23 — shared-element morph route transitions (`data-puzzle-morph` + `enableMorph`)

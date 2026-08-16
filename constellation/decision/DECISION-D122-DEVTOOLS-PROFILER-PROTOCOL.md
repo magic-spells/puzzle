@@ -8,8 +8,8 @@ connections:
   - FILE-DEVTOOLS
   - FILE-DEVPERF
   - DOC-SPEC-BUILD
-verified_at: '2026-07-27T04:52:00.000Z'
-verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
+verified_at: '2026-08-16T04:35:04.082Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: state
     text: >-
@@ -152,7 +152,7 @@ Two earlier diagnoses in this card were wrong and were corrected in place. The
 lesson worth keeping: a surprising profiler reading is more often the fixture
 than the instrument.
 
-## Confirmed: layouts and views render twice per navigation
+## Confirmed: a reused route ancestor renders `depth + 2` times per navigation
 
 The `photo-gallery` recording is a clean navigation-only sample — 0 store
 flushes, 0 notifications, so every render came from routing. Across a handful of
@@ -160,7 +160,11 @@ route changes: `DefaultLayout` 6 renders (18 mutations, 6.7ms patch),
 `AlbumView` 6 renders of which **3 wasted (50%)**, `AlbumIndex` 3 renders of
 which 2 wasted (67%).
 
-That is the predicted double-render: the router pushes the new chain through the
-reused layout via slot-only `applyParentUpdate`, then calls `#refreshLogged`
-after commit, so each reused ancestor renders twice per committed navigation and
-the second pass frequently produces nothing.
+The router pushes the new chain through each reused ancestor via slot-only
+`applyParentUpdate`, then calls `#refreshLogged` after commit, so an ancestor at
+depth `d` renders `d + 2` times per committed navigation and most of those
+passes produce nothing. `photo-gallery`'s tree is shallow, which is why its
+layout reads as a flat two per navigation; the exact per-level counters come
+from `examples/stress`'s `route-churn` scenario, where five ancestor levels cost
+**27 renders against 6 `data()` runs, 81.5% of them mutating nothing**. The
+reused prefix is therefore O(depth²) in renders, not two per level.

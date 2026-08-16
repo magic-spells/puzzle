@@ -7,8 +7,8 @@ summary: Application service wiring, lifecycle, mount, unmount, HMR, and morph f
 connections:
   - COMPONENT-PUZZLE-APP
   - COMPONENT-DEVSTATE
-verified_at: '2026-08-14T05:01:09.803Z'
-verified_sha: d74916a0e021b6bb86394551171838fbab161347
+verified_at: '2026-08-16T04:32:54.269Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `client-runtime/app.js`.

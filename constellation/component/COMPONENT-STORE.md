@@ -1,6 +1,6 @@
 ---
 name: Store
-status: built
+status: verified
 connections:
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-PUZZLE-VIEW
@@ -31,8 +31,8 @@ notes:
       Re-verified after D112: recordKey index normalization reviewed line-by-line against the card's
       identity-rule paragraph; store suites + full runs green at merged main.
     sha: 11f64be1b6828318f5085a5dc16ebe8f53ebfbd4
-verified_at: '2026-07-25T05:23:37.483Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:27:36.110Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # Store

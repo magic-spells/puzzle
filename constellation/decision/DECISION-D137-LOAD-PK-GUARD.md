@@ -1,6 +1,6 @@
 ---
 name: 'D137 — loadAll/loadOne require the primary key on every server record (v1.64)'
-status: built
+status: verified
 connections:
   - DECISION-D21-ADAPTER-READ-PATH
   - DECISION-D50-ADAPTER-WRITE-SYNC
@@ -8,6 +8,9 @@ connections:
   - COMPONENT-STORE
   - DOC-SPEC-DATA
   - FILE-STORE
+  - FILE-ADAPTER
+verified_at: '2026-08-16T04:32:28.061Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D137 — `loadAll`/`loadOne` require the primary key on every server record (v1.64)

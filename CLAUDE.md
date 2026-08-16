@@ -40,6 +40,19 @@ Run focused checks as well when appropriate: `npm run test:types`,
 `npm run verify:pack`, example builds, or browser tests. Report anything not
 run.
 
+CI exists (`.github/workflows/ci.yml`: Go vet/build/test, `npm test`,
+`verify:pack`, `test:types`, `test:e2e-pack`, and a Playwright browser smoke),
+so do not describe this repo as having none — what it has no job for is
+*publishing*. Run the suites locally anyway: CI is a backstop, not a substitute
+for verifying your own change.
+
+Two footguns in the scripts: `npm run build` at the repo root is aliased to
+`node scripts/release-prep.mjs`, so it runs the whole release preparation —
+cross-compiling four Go binaries and packing a tarball — not a framework build.
+And `release:prep` hard-fails on the `@magic-spells/puzzle` ranges in the
+scaffold templates and every `examples/*/package.json`, so that sweep is
+enforced, not merely advised.
+
 ## Current release state
 
 - Published: `0.1.0` (2026-07-21), `0.1.1` (2026-07-22, D77 init prompts),
@@ -165,8 +178,10 @@ run.
 - Canonical app: `examples/todos`. Other examples are acceptance cases for
   routing, data, TypeScript, morphs, static output, DOM islands, canvas, and
   virtual scrolling.
-- Releases are published by hand: bump versions in package.json, the four
-  platform manifests, and version.go. The repo manifest must **not** declare
+- Releases are published by hand: bump versions in **five** places —
+  package.json, the four platform manifests, version.go, and the
+  `FRAMEWORK_VERSION` literal in `client-runtime/devtools.js` (it ships in the
+  runtime and `release:prep` asserts it). The repo manifest must **not** declare
   `optionalDependencies` — the platform pins are injected at pack time by
   `scripts/inject-platform-pins.mjs` (`prepack` injects, `postpack` restores),
   and `npm run verify:pack` fails if the repo manifest carries them. Then run

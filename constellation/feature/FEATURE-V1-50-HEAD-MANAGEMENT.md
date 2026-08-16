@@ -11,8 +11,8 @@ connections:
   - FILE-SSG-RUNTIME
   - FEATURE-V1-49-QUERY-REPLACE
   - DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY
-verified_at: '2026-07-25T05:24:40.039Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:38:27.007Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -21,14 +21,17 @@ notes:
       restores on back, adoption never duplicates. Note the D84 semantic delta: explicit title:null
       now suppresses (pre-D84 inherited).
     sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+release: RELEASE-V0-2-0
+change: feature
 ---
 
 # v1.50 — Route head management (D84)
 
 Reserved `meta` head fields — `title`, `description`, `canonical`,
-`socialImage` — resolved per-field leaf→root (`null` suppresses) and rendered
-as `data-puzzle-head`-marked managed tags by both the SSG shell injection and
-the SPA commit path. Ship [[DECISION-D84-HEAD-MANAGEMENT]].
+`socialImage` — resolved per-field leaf→root (`null` suppresses). The browser
+assigns `document.title`; the managed `data-puzzle-head` tags are baked into
+prerendered HTML by the SSG shell injection, the one copy every crawler reads.
+Ship [[DECISION-D84-HEAD-MANAGEMENT]].
 
 Builds on v1.49's snapshot/commit-path work — queued behind
 [[FEATURE-V1-49-QUERY-REPLACE]] (shared `router.js` / `ssg/index.js`
@@ -36,39 +39,30 @@ surface).
 
 ## Scope
 
-- In (runtime): NEW `client-runtime/head.js` (`resolveHead(chain)` +
-  `syncHead` with identity adoption); the router's `#setTitle` site becomes
-  the head sync (memory mode stays a document no-op; title-only apps
-  byte-identical; no-title-anywhere leaves `document.title` alone).
+- In (runtime): `client-runtime/head.js` — `resolveHead(chain)` plus the
+  one-line `syncTitle`. The router's title site resolves the whole head and
+  assigns `document.title` from it, and does nothing else with the head
+  (memory mode stays a document no-op; title-only apps byte-identical;
+  no title resolved anywhere leaves `document.title` alone).
 - In (SSG): `renderRoute` resolves `head` (page keeps `title` for
   compatibility); `injectShell`/`injectStaticShell` replace same-identity
-  managed tags and insert the rest before `</head>` — escaped string surgery,
-  no HTML parser. Hybrid takeover adopts existing marked tags (no
-  duplicates).
+  managed tags, remove non-resolving ones, and insert the rest before
+  `</head>` — escaped string surgery, no HTML parser. `headTags.js`
+  (`MANAGED_TAGS`) is build-time only and has no browser importer, so the
+  hybrid takeover leaves the prerendered tags exactly as they are
+  ([[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]]).
 - In (types): `Route['meta']` reserved fields + `PrerenderedPage.head`.
 - Out (per D84): `robots`/`themeColor`, data-derived head values, per-network
-  overrides, raw head HTML, component-level head declarations.
+  overrides, raw head HTML, component-level head declarations, and a
+  browser-side managed-tag sync.
 
 ## Acceptance
 
 - Static + hybrid output carry crawler-visible tags before JS runs; SPA
-  navigation updates/removes managed tags atomically with the commit; failed
+  navigation updates `document.title` atomically with the commit; a failed
   navigation never touches the head; hostile values escape; unmanaged head
-  elements untouched; full suites green.
-
-## Superseded in part by D111 — the SPA half was removed
-
-This card records what v1.50 **shipped**; the scope above is accurate as
-history. [[DECISION-D111-MANAGED-HEAD-BUILD-TIME-ONLY]] later deleted the
-runtime half outright, so three claims here no longer describe current
-behavior:
-
-- managed tags are **not** rendered "by … the SPA commit path" — only by the
-  SSG shell injection;
-- `syncHead` with identity adoption is gone. `head.js` keeps `resolveHead` and
-  a one-line `syncTitle`; the router assigns `document.title` and nothing else;
-- **hybrid takeover no longer adopts** the marked tags — it leaves them exactly
-  as prerendered, which is what every crawler fetches anyway.
-
-Everything about resolution, leaf→root inheritance, null suppression, escaping,
-and the SSG injectors still holds.
+  elements — and any `<title>`/`data-puzzle-head` in rendered body markup —
+  are untouched; full suites green.
+- Semantic delta from pre-D84 behavior: an explicit `meta.title: null` now
+  suppresses rather than inheriting. Apps relying on inherit-on-null must
+  omit the field instead.

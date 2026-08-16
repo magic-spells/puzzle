@@ -8,7 +8,8 @@ connections:
   - DECISION-D73-SCROLL-TRIGGER-ANIMATIONS
   - FILE-ANIMATE
   - FILE-VISIBILITY
-verified_at: '2026-07-22T00:04:07.016Z'
+verified_at: '2026-08-16T04:32:49.125Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # Animation and visibility runtime

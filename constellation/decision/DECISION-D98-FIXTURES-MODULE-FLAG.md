@@ -12,8 +12,8 @@ connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
   - DOC-TESTING
-verified_at: '2026-07-24T20:06:12.576Z'
-verified_sha: a72c1eb93fd8d536a9c270b0b3513c96c363705c
+verified_at: '2026-08-16T04:49:20.859Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -65,7 +65,7 @@ in practice, on top of Cory's direct objection to the core clutter:
 ## Decision
 
 **Runtime.** All fixture/mock code lives in `client-runtime/fixtures/`
-(`index.js` + `generator.js` + `mock.js`), exported as
+(`index.js` + `generator.js` + `mock.js` + `state.js`), exported as
 `@magic-spells/puzzle/fixtures` and re-exported from `/testing`.
 `installFixtures(config)` patches from outside — JS resolves methods at call
 time, so nothing needs to be pre-wired:
@@ -110,7 +110,9 @@ Two modules, not one: static imports hoist, so the install call must live in a
 dependency's body to execute before the real entry constructs and mounts the
 app. Without the flag, nothing references the module — it cannot be bundled
 **by construction**, with any compiler version. `--fixtures` with
-`--static`/`--hybrid` is rejected (prerender interplay deferred).
+`--static`/`--hybrid` is rejected: a prerender pass runs the app in Node at
+build time, so an installed fixtures module would bake generated records into
+the shipped HTML.
 
 **The app fixtures file** is the one place all fake-data config lives:
 
@@ -160,9 +162,12 @@ state to defend against.
   flip/head-tags, which still scan per rebuild).
 - Vitest needs no compiler: tests import `installFixtures` directly and pair
   it with `uninstall()` per test.
-- `.puzzle/` is a generated dot-directory under the app root (usage scan
-  already prunes dot-dirs); removed after one-shot builds, kept for a dev
-  process's lifetime.
+- The wrapper lives in the shared `.puzzle/` scratch directory
+  ([[DECISION-D153-PUZZLE-SCRATCH-DIR]]), which the usage scan prunes as a
+  dot-dir. A one-shot build removes the wrapper only when that build created
+  `.puzzle/` itself: a `puzzle dev --fixtures` session in the same app root
+  keeps its generated entry alive for the process lifetime, and a build that
+  deleted it out from under that session would break every later rebuild.
 
 ## Alternatives rejected
 

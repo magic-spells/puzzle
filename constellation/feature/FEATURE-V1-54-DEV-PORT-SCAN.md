@@ -6,8 +6,10 @@ connections:
   - COMPONENT-DEV-SERVER
   - COMPONENT-COMPILER-CLI
   - FILE-DEV-SERVER
-verified_at: '2026-07-25T05:24:48.860Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:35:11.459Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
+release: RELEASE-V0-2-0
+change: feature
 ---
 
 `puzzle dev` binds the first free loopback port at or above `--port` instead of
@@ -17,11 +19,15 @@ everywhere. `--strict-port` keeps bind-or-fail. Ship
 
 ## Scope
 
-- In (Go): `internal/dev/dev.go` — new `listenDev(port, strict)` (bounded scan,
-  `portScanLimit = 10`, first-error-wins) and `boundPort(ln, fallback)`; Serve
+
+- In (Go): `internal/serve/serve.go` — `Listen(port, strict)` (bounded scan,
+  `PortScanLimit = 10`, first-error-wins, port 0 passed through) and
+  `BoundPort(ln, fallback)`, shared by `puzzle dev` and `puzzle preview`
+  ([[DECISION-D148-PREVIEW-AND-STATIC-DEV]]). `internal/dev/dev.go` — `Serve`
   reads the bound port for the banner URL, `openBrowser`, and `httpSrv.Addr`,
-  and logs one warning line when the port moved. `Options.StrictPort` added.
-  `cmd/puzzle/main.go` — `--strict-port` flag; `--port` help notes the scan.
+  and logs one warning line when the port moved; `Options.StrictPort`.
+  `cmd/puzzle/main.go` — a `--strict-port` flag on both `dev` and `preview`;
+  `--port` help notes the scan.
 - Out: a `puzzle.config.js` `strictPort` key; LAN/host binding (still loopback
   only, no host option in v1); scanning downward or across a configured list.
 

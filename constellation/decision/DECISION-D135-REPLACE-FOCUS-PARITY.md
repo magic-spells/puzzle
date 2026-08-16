@@ -1,6 +1,6 @@
 ---
 name: 'D135 — params-only replace() moves no focus, announces nothing (v1.64)'
-status: built
+status: verified
 connections:
   - DECISION-D83-QUERY-REPLACE
   - DECISION-D93-ROUTER-FOCUS-MANAGEMENT
@@ -8,6 +8,8 @@ connections:
   - COMPONENT-ROUTER
   - DOC-SPEC-ROUTER
   - FILE-ROUTER
+verified_at: '2026-08-16T04:36:44.291Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D135 — params-only `replace()` moves no focus, announces nothing (v1.64)

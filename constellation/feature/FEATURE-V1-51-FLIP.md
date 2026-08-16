@@ -9,8 +9,8 @@ connections:
   - FILE-VIEW-MANAGER
   - FILE-ANIMATE
   - FILE-SSG-SERIALIZER
-verified_at: '2026-07-25T05:24:41.038Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+verified_at: '2026-08-16T04:33:12.321Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
@@ -30,6 +30,8 @@ notes:
       D85 "simultaneous author-controlled transform animations can conflict" consequence in its most
       likely concrete form, since inserts and reorders interleave naturally in any list a user is
       manipulating.
+release: RELEASE-V0-2-0
+change: feature
 ---
 
 # v1.51 — FLIP keyed-reorder animation (D85)

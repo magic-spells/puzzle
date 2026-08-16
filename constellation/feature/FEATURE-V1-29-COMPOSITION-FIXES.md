@@ -9,6 +9,8 @@ connections:
   - DECISION-D64-MEMO-HELPER
   - DOC-THIRD-PARTY-DOM
   - DOC-SPEC
+release: RELEASE-V0-1-0
+change: fix
 ---
 
 # v1.29 — composition-layer fixes

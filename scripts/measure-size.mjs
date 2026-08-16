@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Canonical bundle-size benchmark (`npm run measure:size`).
 //
-// Builds the two reference apps in production and reports dist/app.js size.
+// Builds the two reference apps in production and reports the size of ALL
+// emitted JavaScript — `dist/app.js` plus any lazy chunks — concatenated and
+// then compressed, so splitting never reads as a free win (see distScripts).
 // These are the ONLY numbers the README banner may cite:
 //
 //   - examples/hello-world — the minimal one-route floor app

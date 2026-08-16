@@ -1,6 +1,6 @@
 ---
 name: 'D138 — background loads respect in-flight edits (D125 parity, v1.64)'
-status: built
+status: verified
 connections:
   - DECISION-D125-SAVE-RECONCILE-REVISION
   - DECISION-D21-ADAPTER-READ-PATH
@@ -8,6 +8,9 @@ connections:
   - COMPONENT-STORE
   - DOC-SPEC-DATA
   - FILE-STORE
+  - FILE-ADAPTER
+verified_at: '2026-08-16T04:32:28.157Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D138 — background loads respect in-flight edits (D125 parity, v1.64)

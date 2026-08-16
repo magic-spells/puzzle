@@ -8,6 +8,8 @@ connections:
   - DOC-ROUTER
   - DOC-SPEC
   - DOC-SPEC-ROUTER
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.5 — Router scroll behavior

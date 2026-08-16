@@ -1,6 +1,6 @@
 ---
 name: 'D153 — All transient build directories live in a self-ignoring .puzzle/'
-status: built
+status: verified
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-COMPILER-CLI
@@ -8,6 +8,8 @@ connections:
   - FILE-BUILD
   - FLOW-BUILD
   - DECISION-D98-FIXTURES-MODULE-FLAG
+verified_at: '2026-08-16T04:34:42.876Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D153 — All transient build directories live in a self-ignoring .puzzle/

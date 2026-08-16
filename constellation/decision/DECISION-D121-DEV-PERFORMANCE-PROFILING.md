@@ -12,8 +12,8 @@ connections:
   - DECISION-D94-TESTING-EXPORT
   - FILE-DEVPERF
   - FILE-TESTING-RENDER-PROFILE
-verified_at: '2026-07-27T04:52:00.000Z'
-verified_sha: c6b0dd9b8a28e8686d17b364150ae9b82912e92f
+verified_at: '2026-08-16T04:35:03.476Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: gotcha
     text: >-

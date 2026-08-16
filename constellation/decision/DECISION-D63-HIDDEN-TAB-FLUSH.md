@@ -1,11 +1,12 @@
 ---
 name: D63 — store flush scheduling gains a hidden-tab timer fallback
 status: verified
-verified_at: '2026-07-15T08:17:25.000Z'
+verified_at: '2026-08-16T04:32:27.359Z'
 connections:
   - COMPONENT-STORE
   - DOC-DATASTORE
   - FEATURE-V1-29-COMPOSITION-FIXES
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D63 — store flush scheduling gains a hidden-tab timer fallback
@@ -28,8 +29,13 @@ debugging; the `document.hidden` gotcha is now in three docs).
 
 ## Decision
 
+
+
 Keep rAF as the primary scheduler (frame-aligned batching is right for the
-visible case). Add two guards in `_notify`:
+visible case). Two guards live in `_scheduleFlush`, the one arming point shared
+by `_notify` (subscriber delivery) and `_persist` (the batched storage write),
+so a mutation that only persists — no key notified — is covered by the same
+rules:
 
 1. **Schedule-time branch:** if `document.hidden` (or no rAF — the existing
    node/test fallback), schedule with `setTimeout(0)` instead of rAF.
@@ -55,13 +61,18 @@ no-ops), so the rAF and the fallback timer can never double-deliver.
 
 ## Consequences
 
+
+
 - Hidden-tab delivery is **delayed, never dropped**: Chrome throttles hidden
   timers to ≥1 s, and to ~1/min after 5 min (intensive throttling). Subscribers
-  in hidden tabs now hear about changes on that cadence instead of never.
+  in hidden tabs hear about changes on that cadence instead of never.
 - Visible-tab happy path unchanged except one armed-then-cleared timer per
   flush batch (negligible). If the main thread stalls past the fallback delay,
   the timer may flush *before* the rAF — an earlier flush, harmless by
   idempotence.
 - Node/test environments unchanged (they already took the setTimeout path).
-- The `document.hidden` debugging gotcha recorded in DESIGN.md / memory /
-  [[DOC-THIRD-PARTY-DOM]] becomes historical after this ships.
+- The `document.hidden` freeze is no longer a debugging hazard in the store:
+  a backgrounded tab delivers on the timer cadence rather than going silent.
+  What remains hidden-tab-sensitive is rAF-driven work *outside* the store's
+  scheduler — animation flights in particular — so a browser check run in a
+  background tab still cannot be trusted to reproduce foreground timing.

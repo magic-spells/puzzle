@@ -1,6 +1,6 @@
 ---
 name: D156 — observable, change-aware, concurrent build pipeline
-status: built
+status: verified
 connections:
   - DECISION-D27-FAST-DEV-REBUILDS
   - DECISION-D89-FEATURE-USAGE-TREESHAKE
@@ -17,6 +17,8 @@ connections:
   - FILE-DEV-SERVER
   - DOC-SPEC-BUILD
   - FEATURE-BUILD-PIPELINE-PERFORMANCE-HARDENING
+verified_at: '2026-08-16T04:34:44.069Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D156 — observable, change-aware, concurrent build pipeline

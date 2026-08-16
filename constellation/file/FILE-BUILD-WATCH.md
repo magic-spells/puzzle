@@ -7,8 +7,8 @@ summary: Reusable esbuild context, CSS graph pruning, and public-asset mirroring
 connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-DEV-SERVER
-verified_at: '2026-08-14T05:01:11.093Z'
-verified_sha: d74916a0e021b6bb86394551171838fbab161347
+verified_at: '2026-08-16T04:34:24.780Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 Source binding for the owning component card. Behavioral intent stays in the connected component; this card anchors that plan to `compiler/internal/build/watch.go`.

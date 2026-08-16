@@ -10,8 +10,9 @@ connections:
   - DECISION-D50-ADAPTER-WRITE-SYNC
   - COMPONENT-STORE
   - FILE-STORE
-verified_at: '2026-07-25T05:23:40.318Z'
-verified_sha: 47b929360bc00d6c19b4b39113a4b502e7957952
+  - FILE-ADAPTER
+verified_at: '2026-08-16T04:30:59.015Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-

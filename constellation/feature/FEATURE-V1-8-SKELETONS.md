@@ -11,6 +11,8 @@ connections:
   - DOC-SPEC
   - DOC-SPEC-VIEW
   - DOC-PUZZLE-FILE
+release: RELEASE-V0-1-0
+change: feature
 ---
 
 # v1.8 — Skeleton loading templates

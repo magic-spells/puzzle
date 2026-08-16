@@ -1,6 +1,6 @@
 ---
 name: 'D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown (v1.64)'
-status: built
+status: verified
 connections:
   - DECISION-D115-MOUNT-FAILURE-RECOVERY-CONTRACT
   - DECISION-D118-LIFECYCLE-HOOK-CONTAINMENT
@@ -11,6 +11,8 @@ connections:
   - DOC-VIEW-LIFECYCLE
   - FILE-PUZZLE-VIEW
   - FILE-VIEW-MANAGER
+verified_at: '2026-08-16T04:33:05.780Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
 # D136 — anchor-race enter deferral, failure recovery, leave inertness, start-abort teardown (v1.64)

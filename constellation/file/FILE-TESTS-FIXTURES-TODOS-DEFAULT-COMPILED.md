@@ -1,13 +1,14 @@
 ---
 name: Default.compiled.js
-status: built
+status: verified
 path: tests/fixtures/todos/Default.compiled.js
 language: JavaScript
 summary: Load-bearing file for TEST-TODOS-INTEGRATION.
 connections:
   - TEST-TODOS-INTEGRATION
+verified_at: '2026-08-16T04:30:32.538Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
-
 
 # Default.compiled.js
 

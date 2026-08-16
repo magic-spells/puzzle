@@ -6,14 +6,16 @@ connections:
   - COMPONENT-CODEGEN
   - DOC-SPEC
   - FILE-CODEGEN
-verified_at: '2026-07-24T00:26:21.569Z'
-verified_sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+verified_at: '2026-08-16T04:34:46.777Z'
+verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 notes:
   - kind: verified
     text: >-
       Merged (PR #12) and verified: 27-case a11y_test.go green, goldens byte-identical, positioned
       warnings confirmed via pzlc smoke; all example fixtures compile warning-free.
     sha: 0858d1e52af13ecfe031278ca8e1db496ca3ff2c
+release: RELEASE-V0-2-0
+change: feature
 ---
 
 # v1.48 — Compiler accessibility warnings (D82)
