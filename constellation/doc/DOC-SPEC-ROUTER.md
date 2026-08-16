@@ -5,6 +5,7 @@ status: verified
 connections:
   - DOC-SPEC
   - COMPONENT-ROUTER
+  - DOC-VIEW-LIFECYCLE
 verified_at: '2026-07-25T05:53:22.510Z'
 verified_sha: b9d736f51b1ba592e87c7946c8e1108da8c8a616
 notes:

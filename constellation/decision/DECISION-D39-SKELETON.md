@@ -9,6 +9,8 @@ connections:
   - COMPONENT-ROUTER
   - DOC-SPEC
   - DOC-SPEC-VIEW
+  - DOC-PUZZLE-FILE
+  - DECISION-D19-NAVIGATION-COMMIT
 ---
 
 # D39 — `<puzzle-skeleton>`: declarative loading template, auto-swapped (v1.8)

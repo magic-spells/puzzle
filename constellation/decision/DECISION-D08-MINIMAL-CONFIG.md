@@ -6,6 +6,7 @@ connections:
   - COMPONENT-PUZZLE-APP
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
+  - DECISION-D33-ROUTER-SCROLL
 ---
 
 # D8 — Minimal v1 config surface

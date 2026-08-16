@@ -25,6 +25,7 @@ notes:
       confirmed present. 1016 vitest + full Go suite green; todos/music drop both modules, blog
       retains flip.js, static-docs retains head tags across 5 prerendered pages.
     sha: 1400ec61c149495743ed81d9bc0aebf0ce920bd5
+name: 'D89 — pay-for-what-you-use runtime: feature-usage scan drives DCE defines'
 ---
 
 # D89 — pay-for-what-you-use runtime: feature-usage scan drives DCE defines

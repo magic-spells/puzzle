@@ -10,6 +10,7 @@ connections:
   - DOC-VIEW-LIFECYCLE
   - DOC-SPEC
   - DOC-SPEC-VIEW
+  - DECISION-D56-OVERLAP-TRANSITIONS
 ---
 
 # v1.1 — View & component animations

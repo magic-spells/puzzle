@@ -1,5 +1,5 @@
 ---
-name: v1.54 — dev server port scan + `--strict-port` (D88)
+name: v1.54 — dev server port scan + `--strict-port` (D90)
 status: verified
 connections:
   - DECISION-D90-DEV-PORT-SCAN

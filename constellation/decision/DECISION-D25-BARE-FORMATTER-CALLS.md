@@ -5,6 +5,7 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-CODEGEN
   - COMPONENT-FORMATTERS
+  - DECISION-D14-TODOS-MILESTONE
 ---
 
 # D25 — Formatter calls compile to bare __f.name(...); the __missing typo-guard is deferred

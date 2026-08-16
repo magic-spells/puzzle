@@ -8,6 +8,7 @@ connections:
   - DOC-TEMPLATE-SYNTAX
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
+  - DECISION-D31-FORMATTER-TREESHAKE
 ---
 
 # D37 — `{#case}` / `{:when}`: Liquid-style multi-branch block (v1.7)

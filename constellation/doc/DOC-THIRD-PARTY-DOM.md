@@ -6,9 +6,7 @@ verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - DECISION-D44-DOM-ISLANDS
   - COMPONENT-VIEW-MANAGER
-  - DOC-GRIMOIRE-EXAMPLE
 ---
-
 
 # Wrapping third-party DOM libraries — island vs shared subtree
 
@@ -42,11 +40,12 @@ reactivity.
 
 ## Restructuring / owning libraries → island ([[DECISION-D44-DOM-ISLANDS]])
 
+
 A library (or the browser) that **clones, reparents, rewraps, or rewrites**
 nodes inside the subtree corrupts `vnode.el` links — reconciliation is unsafe.
 Freeze the container with `island`: template children seed once, never patch
 again; reset via key change. This is the `contenteditable` case
-([[DOC-GRIMOIRE-EXAMPLE]]) and the Swiper/Slick case (loop-mode slide clones).
+(`examples/grimoire`) and the Swiper/Slick case (loop-mode slide clones).
 Cost: island children can never be data-reactive, and a composition marker
 (`<Children/>`/`<Slot/>`/`<Slot name="…"/>`) is a compile
 error inside — content must be seeded from the wrapper's own template or managed

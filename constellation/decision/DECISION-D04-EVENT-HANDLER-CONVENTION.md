@@ -7,6 +7,7 @@ connections:
   - DOC-EVENTS
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
+  - DECISION-D38-EVENT-MODIFIERS
 ---
 
 # D4 — Event handler convention: bare identifier vs call expression

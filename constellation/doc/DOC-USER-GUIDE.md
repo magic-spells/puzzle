@@ -3,14 +3,13 @@ name: USER_GUIDE.md — application building guide
 status: verified
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
-  - DOC-BLOG-EXAMPLE
   - DOC-SPEC
   - DOC-PUZZLE-FILE
   - DOC-DATASTORE
   - DOC-COMPILATION-FLOW
 ---
 
-End-to-end app-building guide, worked against the in-repo [[DOC-BLOG-EXAMPLE]] reference app: project structure (app/ source, dist/ output), app entry, models with builders, views/components, event handling, and the two data() gotchas. Every example is valid JS per [[DOC-SPEC]] §4.
+End-to-end app-building guide, worked against the in-repo `examples/blog` reference app: project structure (app/ source, dist/ output), app entry, models with builders, views/components, event handling, and the two data() gotchas. Every example is valid JS per [[DOC-SPEC]] §4.
 
 # Puzzle User Guide
 

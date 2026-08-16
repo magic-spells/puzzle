@@ -7,6 +7,9 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-PUZZLE-APP
   - DECISION-D28-ANIMATIONS
+  - DECISION-D07-NAMING
+  - DECISION-D22-NO-ESCAPE-BY-DEFAULT
+  - DECISION-D25-BARE-FORMATTER-CALLS
 ---
 
 # D31 — Compile-time formatter tree-shaking: manifest-seeded registry (Approach B)

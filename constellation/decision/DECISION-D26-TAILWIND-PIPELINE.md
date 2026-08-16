@@ -7,6 +7,7 @@ connections:
   - COMPONENT-DEV-SERVER
   - FLOW-BUILD
   - DECISION-D12-TAILWIND-FIRST
+  - DECISION-D03-SCRIPTS-REAL-JS
 ---
 
 # D26 — Tailwind pipeline: node-read config, one-shot-per-build CLI, unified composition

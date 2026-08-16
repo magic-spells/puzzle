@@ -10,6 +10,7 @@ connections:
   - COMPONENT-ROUTER
   - DOC-SPEC
   - DOC-SPEC-VIEW
+  - DOC-PUZZLE-FILE
 ---
 
 # v1.8 — Skeleton loading templates

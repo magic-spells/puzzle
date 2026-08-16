@@ -7,6 +7,7 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - DOC-COMPILER-DESIGN
   - DOC-SPEC-ANATOMY
+  - DECISION-D03-SCRIPTS-REAL-JS
 ---
 
 # D24 — Compiled component name comes from the export default class declaration

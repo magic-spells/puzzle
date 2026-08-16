@@ -214,8 +214,19 @@ const tarPkg = (() => {
 			problems.push(`unexpected optionalDependency in the tarball: ${dep}`);
 		}
 	}
-	if (PLATFORM_PACKAGES.length !== PLATFORM_DEPS.length) {
-		problems.push('inject-platform-pins PLATFORM_PACKAGES and verify-pack PLATFORM_DEPS disagree');
+	// Compare CONTENTS, not counts: the two lists are maintained by hand in
+	// different files and in different orders, so a rename on one side that keeps
+	// the count is exactly the drift this guard exists to catch.
+	const injected = [...PLATFORM_PACKAGES].sort();
+	const expected = [...PLATFORM_DEPS].sort();
+	const onlyInjected = injected.filter((name) => !expected.includes(name));
+	const onlyExpected = expected.filter((name) => !injected.includes(name));
+	if (onlyInjected.length > 0 || onlyExpected.length > 0) {
+		problems.push(
+			'inject-platform-pins PLATFORM_PACKAGES and verify-pack PLATFORM_DEPS disagree' +
+				(onlyInjected.length ? `; only in inject-platform-pins: ${onlyInjected.join(', ')}` : '') +
+				(onlyExpected.length ? `; only in verify-pack: ${onlyExpected.join(', ')}` : '')
+		);
 	}
 	if (problems.length > 0) {
 		fail(

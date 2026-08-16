@@ -9,6 +9,7 @@ connections:
   - DOC-RELEASE-SURFACE
 verified_at: '2026-07-25T00:10:00.000Z'
 verified_sha: 87078756d4e8a665c4a582864fbe7273cbf6f286
+name: 'D88 — `build.sourceMap`: production linked source maps become opt-in (off by default)'
 ---
 
 # D88 — build.sourceMap: production linked source maps become opt-in (off by default)

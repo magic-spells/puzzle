@@ -11,6 +11,7 @@ connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
   - DECISION-D81-STATIC-PAGES-MODE
+  - FEATURE-V1-47-STATIC-PAGES
 ---
 
 # v1.33 — Static site generation (D67)

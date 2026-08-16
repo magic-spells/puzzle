@@ -6,6 +6,7 @@ connections:
   - COMPONENT-CODEGEN
   - COMPONENT-FORMATTERS
   - COMPONENT-VIEW-MANAGER
+  - DOC-COMPILER-DESIGN
 ---
 
 # D22 — Interpolation safety under the vdom: no escape-by-default

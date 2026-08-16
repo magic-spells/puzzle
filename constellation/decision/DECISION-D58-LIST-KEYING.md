@@ -9,6 +9,7 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-PUZZLE-MODEL
   - DOC-SPEC
+  - TEST-TODOS-INTEGRATION
 verified_at: '2026-07-14T07:07:57.217Z'
 notes:
   - kind: verified

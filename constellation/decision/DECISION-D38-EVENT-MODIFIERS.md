@@ -8,6 +8,8 @@ connections:
   - DOC-EVENTS
   - DOC-SPEC
   - DOC-SPEC-TEMPLATE
+  - DECISION-D16-COMPOSITION-SLOTS-CALLBACKS
+  - DECISION-D18-PER-NODE-LISTENERS
 notes:
   - kind: state
     text: >-

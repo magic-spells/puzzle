@@ -10,6 +10,7 @@ connections:
   - DOC-USER-GUIDE
   - DOC-DATASTORE
   - DOC-COMPILATION-FLOW
+  - DOC-ROUTER
 ---
 
 Single-file component anatomy: the four blocks (template, optional skeleton, scripts, styles), the class contract table (data/events/lifecycle/animations), the real-JS rules, the v1 ctx surface (store/router/formatters exactly), and styles-block semantics.

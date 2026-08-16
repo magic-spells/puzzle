@@ -10,6 +10,7 @@ connections:
   - DOC-DATASTORE
   - DOC-SPEC
   - DOC-SPEC-DATA
+  - FEATURE-ADAPTER-WRITE-SYNC
 verified_at: '2026-07-12T00:14:41.892Z'
 notes:
   - kind: verified

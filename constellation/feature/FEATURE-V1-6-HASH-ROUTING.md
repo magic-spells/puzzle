@@ -8,6 +8,7 @@ connections:
   - DOC-ROUTER
   - DOC-SPEC
   - DOC-SPEC-ROUTER
+  - DECISION-D159-ROUTER-MODE-FACTORIES
 ---
 
 # v1.6 — Hash routing

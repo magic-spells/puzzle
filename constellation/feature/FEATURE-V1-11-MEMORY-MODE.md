@@ -11,6 +11,7 @@ connections:
   - DOC-ROUTER
   - DOC-SPEC
   - DOC-SPEC-ROUTER
+  - DECISION-D159-ROUTER-MODE-FACTORIES
 ---
 
 # v1.11 — memory routing (`memoryRouter()`) + go/back/forward API

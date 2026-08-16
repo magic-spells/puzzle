@@ -8,6 +8,7 @@ connections:
   - DOC-SPEC-TEMPLATE
   - DOC-PUZZLE-FILE
   - DOC-EVENTS
+  - DOC-USER-GUIDE
 ---
 
 # Puzzle Template Syntax (v1)

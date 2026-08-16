@@ -9,6 +9,7 @@ connections:
   - DOC-VIEW-LIFECYCLE
   - DOC-SPEC
   - DOC-SPEC-ROUTER
+  - COMPONENT-VIEW-MANAGER
 ---
 
 # v1.3 — Nested routes

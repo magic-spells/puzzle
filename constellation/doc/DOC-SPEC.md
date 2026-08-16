@@ -4,6 +4,7 @@ status: verified
 verified_at: '2026-08-14T05:01:26.637Z'
 connections:
   - DOC-VIEW-LIFECYCLE
+  - DECISION-D144-PORTAL
 verified_sha: d74916a0e021b6bb86394551171838fbab161347
 notes:
   - kind: verified

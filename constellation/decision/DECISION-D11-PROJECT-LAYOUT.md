@@ -6,7 +6,6 @@ connections:
   - COMPONENT-COMPILER-CLI
   - DOC-SPEC
   - DOC-SPEC-ANATOMY
-  - DECISION-D27B-BLOG-EXAMPLE
 ---
 
 # D11 — Project layout: `app/` source, `dist/` output
@@ -22,4 +21,5 @@ The prototype defaulted its source directory to `./src`.
 - `examples/todos/` is the canonical reference application.
 
 ## Consequences
-`example-app/` has since been removed — replaced by `examples/blog/` (see [[DECISION-D27B-BLOG-EXAMPLE]]).
+
+`example-app/` has since been removed — replaced by `examples/blog/`.

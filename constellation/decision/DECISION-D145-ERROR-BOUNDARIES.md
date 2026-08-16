@@ -44,15 +44,28 @@ hole.
 
 ## The funnel (`client-runtime/errors.js`)
 
+
 Every framework-contained app error reports through `reportError(ctx, error,
 info, ...consoleArgs)`. `new PuzzleApp({ onError })` registers the hook;
 without one, the funnel replays the exact `console.error` call the catch site
 always made. The hook receives `(error, info)` with a frozen stable
-`info = { phase, view, route }` — phases include `mount`, `refresh`,
-`navigation`, `transition`, `leave`, `bind`, and `error-view`. A throwing (or
-rejecting async) `onError` is contained at the funnel with its own
-`console.error` and never re-enters the funnel. The handler lives in a WeakMap
-keyed by ctx — the documented three-service ctx object is NOT widened.
+`info = { phase, view, route }`. The phase set is closed, and it is these
+eleven:
+
+- **View positions** — `mount`, `refresh`, `bind`, `enter`, `leave`, `unmount`.
+- **Navigation** — `navigation`, `transition`.
+- **App lifecycle** — `app-mount`, `app-unmount`.
+- **Terminal** — `error-view`, the one phase that never produces a replacement.
+
+The funnel normalizes the shape rather than trusting call sites: `view` and
+`route` are each coerced to `null` when the reporting site has none, so the two
+app-level phases — reported from `PuzzleApp` with no instance in hand — always
+arrive as `view: null`. That is why `info` can be documented as a fixed triple
+in [[DOC-SPEC-VIEW]] §60 even though the call sites pass partial objects.
+
+A throwing (or rejecting async) `onError` is contained at the funnel with its
+own `console.error` and never re-enters the funnel. The handler lives in a
+WeakMap keyed by ctx — the documented three-service ctx object is NOT widened.
 
 ## The app error view (`errorView`)
 

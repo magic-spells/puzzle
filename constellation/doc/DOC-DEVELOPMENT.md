@@ -10,6 +10,7 @@ connections:
   - FLOW-BUILD
   - COMPONENT-DEV-SERVER
   - COMPONENT-COMPILER-CLI
+  - DOC-STRESS-EXAMPLE
 ---
 
 # Development guide

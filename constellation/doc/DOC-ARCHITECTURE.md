@@ -18,6 +18,7 @@ connections:
   - COMPONENT-ESBUILD-PLUGIN
   - COMPONENT-DEV-SERVER
   - COMPONENT-SSG
+  - COMPONENT-COMPILER-CLI
 ---
 
 # Puzzle architecture

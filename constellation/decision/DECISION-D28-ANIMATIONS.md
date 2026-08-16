@@ -11,6 +11,8 @@ connections:
   - DOC-SPEC-VIEW
   - DECISION-D20-PUZZLE-VIEW-ELEMENT
   - DECISION-D19-NAVIGATION-COMMIT
+  - DECISION-D03-SCRIPTS-REAL-JS
+  - DOC-USER-GUIDE
 notes:
   - kind: gotcha
     text: >-
