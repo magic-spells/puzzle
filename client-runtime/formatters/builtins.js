@@ -244,7 +244,22 @@ const TIMEZONE_FORMATTERS = new Map();
 // on first use so importing the module never constructs an Intl object.
 let relativeTimeFormatter;
 
+/**
+ * "There is no date here." `new Date(v)` coerces its argument with ToNumber, and
+ * ToNumber(null) is 0, ToNumber(false) is 0, ToNumber(true) is 1, ToNumber('') is
+ * 0 — so every one of those rendered the Unix epoch ("12/31/1969", "56 years ago")
+ * while `undefined` correctly rendered nothing. An unset `todo.completedAt` is the
+ * common case, and null is what a cleared field, an absent column and a JSON `null`
+ * all arrive as. They are all absent, and absent renders like `undefined` does.
+ *
+ * Numeric 0 is deliberately NOT here: it is a legitimate epoch timestamp.
+ */
+const noDate = (v) => v == null || v === '' || typeof v === 'boolean';
+
 function parseDateInput(v) {
+	// Invalid Date is exactly what `new Date(undefined)` already produced, so every
+	// caller's existing undefined path covers these without a second branch.
+	if (noDate(v)) return new Date(NaN);
 	if (typeof v === 'string' && DATE_ONLY.test(v)) {
 		const [y, m, d] = v.split('-').map(Number);
 		const local = new Date(y, m - 1, d);
@@ -289,6 +304,11 @@ export function in_timezone(v, tz = 'UTC') {
 }
 
 export function date(v, preset = 'date', locale = undefined) {
+	// An absent value renders NOTHING, in every preset (`iso` included). The invalid
+	// -date fall-through below already does that for null/undefined/'' via str(), but
+	// not for a boolean — 'false' is not a date worth echoing back — so the empty
+	// path is explicit.
+	if (noDate(v)) return '';
 	const d = parseDateInput(v);
 	if (isNaN(d.getTime())) return str(v);
 
@@ -331,6 +351,8 @@ export function datetime(v, preset = 'datetime', locale = undefined) {
 }
 
 export function timeago(v) {
+	// `{ todo.completedAt | timeago }` on an incomplete todo: nothing to say.
+	if (noDate(v)) return '';
 	const then = parseDateInput(v).getTime();
 	if (isNaN(then)) return str(v);
 

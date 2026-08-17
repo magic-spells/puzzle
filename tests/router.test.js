@@ -1294,6 +1294,74 @@ describe('Router — history integration', () => {
 	});
 });
 
+describe('Router — path routing keeps location.hash (D83)', () => {
+	class DocsView extends PuzzleView {
+		render() {
+			return h('puzzle-view', { class: 'docs' }, [text('DOCS')]);
+		}
+	}
+	const docsRoutes = [
+		{ path: '/', name: 'home', view: HomeView, layout: DefaultLayout },
+		{ path: '/docs', name: 'docs', view: DocsView, layout: DefaultLayout },
+		{ path: '/about', name: 'about', view: AboutView, layout: DefaultLayout },
+	];
+
+	it('matches /docs#faq and reports the fragment on navigation #0', async () => {
+		history.replaceState({}, '', '/docs#faq');
+		const { router, el } = await boot(docsRoutes);
+
+		// stripPath drops the fragment before matching, so the route still resolves.
+		expect(router.current.route.name).toBe('docs');
+		expect(el.querySelector('.docs')).not.toBeNull();
+		expect(router.current.path).toBe('/docs#faq');
+		expect(router.current.pathname).toBe('/docs');
+		expect(router.current.hash).toBe('#faq');
+	});
+
+	it('populates current.hash after a popstate to a hashed URL', async () => {
+		history.replaceState({}, '', '/docs');
+		const { router } = await boot(docsRoutes);
+		await router.push('/about');
+		expect(router.current.hash).toBe('');
+
+		// Back to the anchored entry: the browser moves the URL, then fires popstate.
+		history.replaceState({}, '', '/docs#faq');
+		window.dispatchEvent(new PopStateEvent('popstate'));
+		await tick();
+
+		expect(router.current.route.name).toBe('docs');
+		expect(router.current.path).toBe('/docs#faq');
+		expect(router.current.hash).toBe('#faq');
+	});
+
+	it('treats a re-click on the SAME path + hash as a no-op', async () => {
+		history.replaceState({}, '', '/docs#faq');
+		const { router } = await boot(docsRoutes);
+
+		const spy = vi.spyOn(history, 'pushState');
+		await router.push('/docs#faq');
+		expect(spy).not.toHaveBeenCalled();
+		expect(router.current.hash).toBe('#faq');
+
+		// A DIFFERENT fragment on the same path is a real navigation.
+		await router.push('/docs#intro');
+		expect(spy).toHaveBeenCalledTimes(1);
+		expect(spy.mock.calls[0][2]).toBe('/docs#intro');
+		expect(router.current.hash).toBe('#intro');
+		spy.mockRestore();
+	});
+
+	it('keeps query and hash together, in URL order', async () => {
+		history.replaceState({}, '', '/docs?tab=api#faq');
+		const { router } = await boot(docsRoutes);
+
+		expect(router.current.path).toBe('/docs?tab=api#faq');
+		expect(router.current.pathname).toBe('/docs');
+		expect(router.current.query.tab).toBe('api');
+		expect(router.current.hash).toBe('#faq');
+	});
+});
+
 describe('Router — click interceptor (D19)', () => {
 	it('intercepts plain same-origin link clicks and ignores modified/external ones', async () => {
 		const routes = [
