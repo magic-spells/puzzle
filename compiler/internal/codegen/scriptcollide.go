@@ -113,6 +113,11 @@ func scriptImportBindings(toks []jsTok) map[string]bool {
 // statement. It fully consumes the clause's braces, so the caller's depth
 // counter stays balanced.
 func collectImportClause(toks []jsTok, j int, bind func(name string, off int)) int {
+	// Comments are import-grammar whitespace, including between the `import`
+	// keyword and a TS `type` modifier.
+	for j < len(toks) && toks[j].comment {
+		j++
+	}
 	if j >= len(toks) {
 		return j
 	}
@@ -120,9 +125,27 @@ func collectImportClause(toks []jsTok, j int, bind func(name string, off int)) i
 	if toks[j].ch == '(' || toks[j].ch == '.' {
 		return j
 	}
+	// `import type ...` is type-only when `type` is followed by a named,
+	// namespace, or default binding. esbuild erases the whole clause before the
+	// compiler's injected import lands, so none of those identifiers collide.
+	// The one value-space exception is `import type from 'x'`: that imports the
+	// default export into a binding literally named `type`.
+	if toks[j].ident == "type" {
+		if k, ok := nextNonCommentToken(toks, j+1); !ok ||
+			toks[k].ch == '{' || toks[k].ch == '*' ||
+			(toks[k].ident != "" && toks[k].ident != "from") {
+			return consumeTypeOnlyImportClause(toks, j+1)
+		}
+	}
+
+	inNamedClause := false
 	for j < len(toks) {
 		t := toks[j]
 		if t.opaque {
+			if t.comment {
+				j++
+				continue
+			}
 			// A string here is a bare `import 'x'` specifier: no bindings. Consume it
 			// and an optional trailing ';'.
 			j++
@@ -131,12 +154,22 @@ func collectImportClause(toks []jsTok, j int, bind func(name string, off int)) i
 			}
 			return j
 		}
+		if t.ch != 0 {
+			switch t.ch {
+			case '{':
+				inNamedClause = true
+			case '}':
+				inNamedClause = false
+			}
+			j++
+			continue
+		}
 		if t.ident != "" {
 			switch t.ident {
 			case "from":
 				j++ // 'from'
-				if j < len(toks) && toks[j].opaque {
-					j++ // module specifier string
+				if k, ok := nextNonCommentToken(toks, j); ok && toks[k].opaque && !toks[k].comment {
+					j = k + 1 // module specifier string
 				}
 				if j < len(toks) && toks[j].ch == ';' {
 					j++
@@ -145,17 +178,24 @@ func collectImportClause(toks []jsTok, j int, bind func(name string, off int)) i
 			case "as":
 				// `X as local` / `* as ns` — the LOCAL binding is the next ident.
 				j++
-				if j < len(toks) && toks[j].ident != "" {
-					bind(toks[j].ident, toks[j].off)
-					j++
+				if k, ok := nextNonCommentToken(toks, j); ok && toks[k].ident != "" {
+					bind(toks[k].ident, toks[k].off)
+					j = k + 1
 				}
 				continue
 			default:
+				// TS 4.5 inline modifiers: `type X` and `type X as Y` are
+				// erased and introduce no value binding. `{ type }` still imports a
+				// binding named `type`, while `{ type as Y }` is a normal rename.
+				if inNamedClause && t.ident == "type" && inlineTypeOnlySpecifier(toks, j+1) {
+					j = skipNamedImportSpecifier(toks, j+1)
+					continue
+				}
 				// A binding name — UNLESS the next token is `as` (then the local name
 				// is the one after `as`, added by the case above; the pre-`as` name is
 				// the exported name, not a local binding).
-				if j+1 < len(toks) && toks[j+1].ident == "as" {
-					j++
+				if k, ok := nextNonCommentToken(toks, j+1); ok && toks[k].ident == "as" {
+					j = k
 					continue
 				}
 				bind(t.ident, t.off)
@@ -163,7 +203,53 @@ func collectImportClause(toks []jsTok, j int, bind func(name string, off int)) i
 				continue
 			}
 		}
-		// Punctuation inside the clause ('{', '}', ',', '*'): skip.
+	}
+	return j
+}
+
+// nextNonCommentToken returns the next token that participates in import
+// grammar. Comments are whitespace; other opaque units are module specifiers.
+func nextNonCommentToken(toks []jsTok, j int) (int, bool) {
+	for j < len(toks) && toks[j].comment {
+		j++
+	}
+	return j, j < len(toks)
+}
+
+// consumeTypeOnlyImportClause consumes through the module specifier without
+// reporting bindings. Stopping at the specifier (rather than requiring a
+// semicolon) preserves automatic-semicolon-insertion behavior for the caller.
+func consumeTypeOnlyImportClause(toks []jsTok, j int) int {
+	for j < len(toks) {
+		if toks[j].opaque && !toks[j].comment {
+			j++
+			if j < len(toks) && toks[j].ch == ';' {
+				j++
+			}
+			return j
+		}
+		if toks[j].ch == ';' {
+			return j + 1
+		}
+		j++
+	}
+	return j
+}
+
+// inlineTypeOnlySpecifier reports whether `type` starts a TS inline type-only
+// specifier. Only `type` followed by `,`, `}`, or `as` is a value import; every
+// other shape is conservatively type-only because a false value binding would
+// reject otherwise-legal TypeScript.
+func inlineTypeOnlySpecifier(toks []jsTok, j int) bool {
+	k, ok := nextNonCommentToken(toks, j)
+	if !ok {
+		return true
+	}
+	return toks[k].ch != ',' && toks[k].ch != '}' && toks[k].ident != "as"
+}
+
+func skipNamedImportSpecifier(toks []jsTok, j int) int {
+	for j < len(toks) && toks[j].ch != ',' && toks[j].ch != '}' {
 		j++
 	}
 	return j

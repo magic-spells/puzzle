@@ -158,9 +158,10 @@ prologDone:
 }
 
 // scanSVGRootAttrs parses the root open tag without the template attribute
-// classifier. Every value is copied verbatim into a StaticAttr, so both
-// attr="{foo}" and attr={foo} retain the braces and can never become a
-// MixedAttr/DynamicAttr that references render data in a shared SVG module.
+// classifier. Every name and value is copied verbatim into a literal
+// StaticAttr, so both attr="{foo}" and attr={foo} retain the braces and can
+// never become a MixedAttr/DynamicAttr or a framework directive in a shared
+// SVG module.
 func scanSVGRootAttrs(s string, start, openEnd int, selfClose bool, filename string) ([]Attr, *ParseError) {
 	end := openEnd - 1 // exclude '>'
 	if selfClose {
@@ -200,7 +201,7 @@ func scanSVGRootAttrs(s string, start, openEnd int, selfClose bool, filename str
 			i++
 		}
 		if i >= end || s[i] != '=' {
-			attrs = append(attrs, &StaticAttr{Name: name, Valueless: true, Pos: npos})
+			attrs = append(attrs, &StaticAttr{Name: name, Valueless: true, LiteralName: true, Pos: npos})
 			continue
 		}
 		i++
@@ -230,7 +231,7 @@ func scanSVGRootAttrs(s string, start, openEnd int, selfClose bool, filename str
 			}
 			value = s[valueStart:i]
 		}
-		attrs = append(attrs, &StaticAttr{Name: name, Value: value, Pos: npos})
+		attrs = append(attrs, &StaticAttr{Name: name, Value: value, LiteralName: true, Pos: npos})
 	}
 	return attrs, nil
 }

@@ -1051,8 +1051,9 @@ func hasKeyAttr(attrs []parser.Attr) bool {
 	for _, a := range attrs {
 		switch at := a.(type) {
 		case *parser.StaticAttr:
-			// A `key` captured inside {#raw} is authored markup, not the directive
-			// (D150), so it must not suppress the synthetic key.
+			// A literal `key` captured inside {#raw} or on a {#svg} asset root is
+			// authored markup, not the directive, so it must not suppress the
+			// synthetic key.
 			if at.Name == "key" && !at.LiteralName {
 				return true
 			}
@@ -1074,9 +1075,8 @@ func hasKeyAttr(attrs []parser.Attr) bool {
 // removeAttr, and the SSG serializer all drop them before markup is produced.
 var reservedVnodeAttrs = map[string]bool{"key": true, "island": true, "ref": true, "flip": true}
 
-// dropReservedLiteralAttrs removes the attributes that were captured inside
-// {#raw} — where the name is authored markup rather than a directive (D150) —
-// but whose name the runtime reserves anyway.
+// dropReservedLiteralAttrs removes authored-literal attributes captured inside
+// {#raw} or on a {#svg} asset root whose names the runtime reserves anyway.
 //
 // Emitting them can only do harm and never good. It cannot render the authored
 // attribute: the runtime's interception is keyed on the bare name, and the
@@ -1200,9 +1200,8 @@ func (c *compiler) emitAttrs(tag string, attrs []parser.Attr, ind int, multiline
 func (c *compiler) attrKV(a parser.Attr, scope map[string]bool, isComponent bool, emit bool) (string, error) {
 	switch at := a.(type) {
 	case *parser.StaticAttr:
-		// LiteralName means the name came out of a {#raw} body, where it is
-		// authored markup rather than a directive (D150) — so a raw `ref` is a
-		// plain attribute value, never a this.refs wiring.
+		// LiteralName means the name came from authored-literal markup rather than
+		// framework grammar — so a literal `ref` is never this.refs wiring.
 		if at.Name == "ref" && !at.LiteralName {
 			// Element ref (v1.39, D72): a framework-owned static attr — never a DOM
 			// attribute. It is emitted as a per-instance cached setter call so the
@@ -1213,7 +1212,7 @@ func (c *compiler) attrKV(a parser.Attr, scope map[string]bool, isComponent bool
 		}
 		name := at.Name
 		if at.LiteralName && !isComponent && strings.HasPrefix(name, "@") {
-			// Runtime-private escape for an authored @-attribute inside {#raw}.
+			// Runtime-private escape for an authored literal @-attribute.
 			// `@@click` cannot collide with source grammar and decodes to `@click`.
 			// The escape is only defined for @-prefixed names — every other literal
 			// name is a legal DOM attribute and is emitted as authored.
@@ -1382,6 +1381,10 @@ func (c *compiler) buildTextRun(run []parser.Node, scope map[string]bool) (strin
 	for _, n := range run {
 		switch t := n.(type) {
 		case *parser.Text:
+			if t.Raw {
+				segs = append(segs, seg{js: jsString(t.Value), static: true})
+				continue
+			}
 			s, keep := processText(t.Value)
 			if keep {
 				segs = append(segs, seg{js: jsString(s), static: true})

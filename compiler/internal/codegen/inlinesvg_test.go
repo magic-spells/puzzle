@@ -70,20 +70,27 @@ func TestInlineSVGAttrsAndInner(t *testing.T) {
 }
 
 func TestInlineSVGRootAttrsStayLiteral(t *testing.T) {
-	svg := `<svg data-quoted="{foo}" data-bare={foo}><path/></svg>`
+	svg := `<svg ref="my-chart" island key="asset-key" flip class="icon" bind:value="v" data-quoted="{foo}" data-bare={foo}><path/></svg>`
 	dir := writeAssets(t, map[string]string{"literal.svg": svg})
 
 	inline, err := compileTemplate(t, `<puzzle-view>{#svg 'literal.svg'}</puzzle-view>`, dir)
 	if err != nil {
 		t.Fatalf("inline compile: %v", err)
 	}
-	for _, want := range []string{"'data-quoted': '{foo}'", "'data-bare': '{foo}'"} {
+	for _, want := range []string{
+		"class: 'icon'",
+		"'bind:value': 'v'",
+		"'data-quoted': '{foo}'",
+		"'data-bare': '{foo}'",
+	} {
 		if !strings.Contains(inline.JS, want) {
 			t.Errorf("inline output missing %q\n%s", want, inline.JS)
 		}
 	}
-	if strings.Contains(inline.JS, "__d.foo") {
-		t.Errorf("inline SVG root attrs must not read render data:\n%s", inline.JS)
+	for _, forbidden := range []string{"__d.foo", "this.__ref(", "ref: 'my-chart'", "island: true", "key: 'asset-key'", "flip: true"} {
+		if strings.Contains(inline.JS, forbidden) {
+			t.Errorf("inline SVG root attr reached a directive/data path (%q):\n%s", forbidden, inline.JS)
+		}
 	}
 
 	// Deduplicated builds serve SVGAssetModule through the plugin. Its shared
@@ -92,13 +99,36 @@ func TestInlineSVGRootAttrsStayLiteral(t *testing.T) {
 	if err != nil {
 		t.Fatalf("deduplicated module: %v", err)
 	}
-	for _, want := range []string{"'data-quoted': '{foo}'", "'data-bare': '{foo}'"} {
+	for _, want := range []string{
+		"class: 'icon'",
+		"'bind:value': 'v'",
+		"'data-quoted': '{foo}'",
+		"'data-bare': '{foo}'",
+	} {
 		if !strings.Contains(shared, want) {
 			t.Errorf("deduplicated module missing %q\n%s", want, shared)
 		}
 	}
-	if strings.Contains(shared, "__d.foo") {
-		t.Errorf("deduplicated SVG module must not read render data:\n%s", shared)
+	for _, forbidden := range []string{"__d.foo", "this.__ref(", "ref: 'my-chart'", "island: true", "key: 'asset-key'", "flip: true"} {
+		if strings.Contains(shared, forbidden) {
+			t.Errorf("deduplicated SVG root attr reached a directive/data path (%q):\n%s", forbidden, shared)
+		}
+	}
+}
+
+func TestInlineSVGKeyDoesNotSuppressSyntheticKey(t *testing.T) {
+	dir := writeAssets(t, map[string]string{
+		"literal-key.svg": `<svg key="asset-key"><path/></svg>`,
+	})
+	res, err := compileTemplate(t, `<puzzle-view>{#for row in rows}{#svg 'literal-key.svg'}{/for}</puzzle-view>`, dir)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	if !strings.Contains(res.JS, "key: ViewNode.keyOf(row)") {
+		t.Errorf("synthetic {#for} key was suppressed by a literal SVG root key:\n%s", res.JS)
+	}
+	if strings.Contains(res.JS, "key: 'asset-key'") {
+		t.Errorf("literal SVG root key reached the vnode directive path:\n%s", res.JS)
 	}
 }
 

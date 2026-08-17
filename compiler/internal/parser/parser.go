@@ -181,7 +181,7 @@ func (p *parser) parseChildren(ctx openCtx) ([]Node, *ParseError) {
 			return nil, p.unclosedErr(ctx)
 		case TokText:
 			if t.Value != "" {
-				nodes = append(nodes, &Text{Value: t.Value, Pos: tokPos(t)})
+				nodes = append(nodes, &Text{Value: t.Value, Raw: p.raw, Pos: tokPos(t)})
 			}
 			if err := p.advance(); err != nil {
 				return nil, toPE(err)
@@ -248,7 +248,7 @@ func (p *parser) parseRaw(t Token, ctx openCtx) ([]Node, *ParseError) {
 		if t.Value == "" {
 			return nil, nil
 		}
-		return []Node{&Text{Value: t.Value, Pos: pos}}, nil
+		return []Node{&Text{Value: t.Value, Raw: true, Pos: pos}}, nil
 	}
 	lx := newRawLexer(t.Value, pos, p.file)
 	nested, err := newParser(lx, p.file)

@@ -145,6 +145,53 @@ func TestScriptImportBindings(t *testing.T) {
 			want:    []string{"Real"},
 			notWant: []string{"Fake"},
 		},
+		{
+			name:    "type-only named import binds nothing",
+			scripts: "import type { ViewNode } from '@magic-spells/puzzle';",
+			notWant: []string{"type", "ViewNode"},
+		},
+		{
+			name:    "comment before type-only named import binds nothing",
+			scripts: "import /* c */ type { ViewNode } from '@magic-spells/puzzle';",
+			notWant: []string{"type", "ViewNode"},
+		},
+		{
+			name:    "type-only namespace import binds nothing",
+			scripts: "import type * as ViewNode from '@magic-spells/puzzle';",
+			notWant: []string{"type", "ViewNode"},
+		},
+		{
+			name:    "type-only default import binds nothing",
+			scripts: "import type ViewNode from '@magic-spells/puzzle';",
+			notWant: []string{"type", "ViewNode"},
+		},
+		{
+			name:    "default import binding named type",
+			scripts: "import type from './value.js';",
+			want:    []string{"type"},
+		},
+		{
+			name:    "inline type modifier binds only value imports",
+			scripts: "import { type ViewNode, other } from '@magic-spells/puzzle';",
+			want:    []string{"other"},
+			notWant: []string{"type", "ViewNode"},
+		},
+		{
+			name:    "inline aliased type import binds nothing",
+			scripts: "import { type ViewNode as LocalViewNode } from '@magic-spells/puzzle';",
+			notWant: []string{"type", "ViewNode", "LocalViewNode"},
+		},
+		{
+			name:    "named import literally named type",
+			scripts: "import { type } from './value.js';",
+			want:    []string{"type"},
+		},
+		{
+			name:    "renamed value import binds local type",
+			scripts: "import { ViewNode as type } from './value.js';",
+			want:    []string{"type"},
+			notWant: []string{"ViewNode"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -160,6 +207,20 @@ func TestScriptImportBindings(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestTypeOnlyReservedImportDoesNotCollide(t *testing.T) {
+	res := compileResult(t, `<puzzle-view><span>{ ViewNode }</span></puzzle-view>
+
+<script lang="ts">
+import { PuzzleView } from '@magic-spells/puzzle';
+import type { ViewNode } from '@magic-spells/puzzle';
+export default class T extends PuzzleView {}
+</script>
+`)
+	if warningFor(res.Warnings, "ViewNode") != nil {
+		t.Errorf("type-only imports must not participate in value-scope warnings: %#v", res.Warnings)
 	}
 }
 

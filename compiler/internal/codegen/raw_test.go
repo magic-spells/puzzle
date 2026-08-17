@@ -36,6 +36,41 @@ export default class T extends PuzzleView {}
 	}
 }
 
+// Raw text bypasses the ordinary template whitespace policy byte-for-byte,
+// including the single-text-node RAWTEXT path for script/style and whitespace-
+// only segments coalesced beside ordinary text.
+func TestRawTextPreservesLiteralBytes(t *testing.T) {
+	src := `<puzzle-view>
+  <script type="application/json">{#raw}{
+  "name": "Puzzle",
+  "enabled": true
+}{/raw}</script>
+  {#raw}<pre>const a = 1;
+const b = 2;
+// note
+const c = 3;</pre>{/raw}
+  <p>before{#raw}
+` + "  \t\n" + `{/raw}after</p>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+export default class T extends PuzzleView {}
+</script>
+`
+	got := compileSrc(t, src)
+
+	for _, want := range []string{
+		`'{\n  "name": "Puzzle",\n  "enabled": true\n}'`,
+		`'const a = 1;\nconst b = 2;\n// note\nconst c = 3;'`,
+		`'before' + '\n  \t\n' + 'after'`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("compiled raw text did not preserve %q:\n%s", want, got)
+		}
+	}
+}
+
 // TestRawDirectiveAttrsStayLiteral pins the other half of D150's literal-name
 // rule: `ref`/`island`/`key`/`flip` inside a raw body are authored markup, so
 // none of them may reach a directive path. The four names the runtime reserves

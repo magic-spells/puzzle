@@ -316,6 +316,7 @@ func svgAssetModule(attrs []parser.Attr, inner, filename, viewNodeImport string)
 // object literal for the shared module. SVG file attrs are all static, but attrKV
 // handles every attr kind (with an empty scope, since no expressions occur).
 func (c *compiler) svgAttrsLiteral(attrs []parser.Attr) (string, error) {
+	attrs = dropReservedLiteralAttrs(attrs)
 	if len(attrs) == 0 {
 		return "{}", nil
 	}

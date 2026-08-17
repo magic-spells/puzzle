@@ -69,9 +69,12 @@ type Portal struct {
 }
 
 // Text is literal text between tags/directives. Brace escapes (\{ \}) are
-// already resolved to literal braces.
+// already resolved to literal braces. Raw marks bytes captured from a D150
+// {#raw} body; codegen must preserve those bytes instead of applying the normal
+// template whitespace policy.
 type Text struct {
 	Value string
+	Raw   bool
 	Pos   Position
 }
 
@@ -176,13 +179,12 @@ type StaticAttr struct {
 	Name      string
 	Value     string
 	Valueless bool
-	// LiteralName marks an attribute captured inside {#raw}, where the name is
-	// authored markup rather than Puzzle grammar (D150). It suppresses every
-	// directive reading of the name: `ref` is not validated or wired to
-	// this.refs (refs.go, codegen), `island` does not mark a frozen subtree
-	// (island.go), `key` does not suppress a synthetic {#for} key (codegen), and
-	// an @-prefixed name gets the runtime-private vnode-key escape so the DOM
-	// attribute is written as authored instead of binding a listener.
+	// LiteralName marks an attribute captured from authored literal markup:
+	// inside {#raw} or on an inlined {#svg} asset root. It suppresses every
+	// directive reading of the name: `ref` is not wired to this.refs, `island`
+	// does not mark a frozen subtree, `key` does not suppress a synthetic {#for}
+	// key, and an @-prefixed name gets the runtime-private vnode-key escape so
+	// the DOM attribute is written as authored instead of binding a listener.
 	LiteralName bool
 	Pos         Position
 }
