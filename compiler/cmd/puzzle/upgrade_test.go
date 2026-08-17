@@ -190,7 +190,24 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 			wantKind:    installGlobal,
 			wantManager: "pnpm",
 		},
+		{
+			// A directory merely named pnpm is not pnpm's global root: a
+			// project under one is classified by its own manifest, never
+			// shipped to `pnpm add -g`.
+			name:        "project under a directory named pnpm stays a project",
+			executable:  filepath.Join("home", "pnpm", "app", "node_modules", platform),
+			ownerRel:    filepath.Join("home", "pnpm", "app"),
+			packageJSON: `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`,
+			lockfile:    "package-lock.json",
+			wantKind:    installProject,
+			wantOwner:   filepath.Join("home", "pnpm", "app"),
+			wantManager: "npm",
+		},
 	}
+
+	// The table runs with $PNPM_HOME unset so no fixture can collide with the
+	// developer's real pnpm home.
+	t.Setenv("PNPM_HOME", "")
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -226,6 +243,28 @@ func TestDetectInstallContextFromExecutable(t *testing.T) {
 				t.Errorf("manager = %q dev = %v, want %q / %v", ctx.manager, ctx.dev, tt.wantManager, tt.wantDev)
 			}
 		})
+	}
+}
+
+// TestDetectInstallContextPnpmHome covers a $PNPM_HOME that is not itself named
+// pnpm: the `global/<n>` root under it must still be recognised by shape.
+func TestDetectInstallContextPnpmHome(t *testing.T) {
+	root := realTempDir(t)
+	home := filepath.Join(root, "tools")
+	t.Setenv("PNPM_HOME", home)
+
+	owner := filepath.Join(home, "global", "5")
+	mustWrite(t, filepath.Join(owner, "package.json"), `{"dependencies":{"@magic-spells/puzzle":"^0.6.0"}}`)
+	mustWrite(t, filepath.Join(owner, "pnpm-lock.yaml"), "")
+
+	executable := filepath.Join(owner, "node_modules", ".pnpm", "@magic-spells+puzzle@0.6.0",
+		"node_modules", "@magic-spells", platformPackageName(), "bin", "puzzle")
+	ctx, err := detectInstallContext(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ctx.kind != installGlobal || ctx.manager != "pnpm" {
+		t.Fatalf("context = %#v, want a pnpm global install", ctx)
 	}
 }
 

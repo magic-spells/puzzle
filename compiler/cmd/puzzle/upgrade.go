@@ -357,10 +357,10 @@ func detectInstallContext(executable string) (installContext, error) {
 	// pnpm's global root is a real package directory — package.json plus a
 	// lockfile, listing every global install as a dependency — so it has to be
 	// recognised before the project test, or a pnpm global would upgrade itself
-	// as though it were an app. A pnpm *project* cannot false-positive here:
-	// the owner path stops above node_modules, and `.pnpm` only ever lives
-	// inside one.
-	if hasPnpmSegment(owner) {
+	// as though it were an app. Only the global-root shape counts: matching any
+	// `pnpm` path segment would misclassify a project that merely lives under a
+	// directory named pnpm (`~/pnpm/app`) and run `pnpm add -g` against it.
+	if isPnpmGlobalRoot(owner) {
 		return globalContext(owner, resolved, "pnpm"), nil
 	}
 
@@ -517,21 +517,29 @@ func upgradeCommand(ctx installContext, latest string) (string, []string) {
 	}
 }
 
-// hasPnpmSegment reports whether path runs through a pnpm-owned directory —
-// pnpm's global root (`~/Library/pnpm/global/5`, `~/.local/share/pnpm/…`) or a
-// corepack `pnpm@<v>` cache.
-func hasPnpmSegment(path string) bool {
-	for {
-		base := strings.ToLower(filepath.Base(path))
-		if base == "pnpm" || base == ".pnpm" || strings.HasPrefix(base, "pnpm@") {
-			return true
-		}
-		parent := filepath.Dir(path)
-		if parent == path {
-			return false
-		}
-		path = parent
+// isPnpmGlobalRoot reports whether owner is pnpm's global package directory:
+// `<pnpm home>/global/<n>`, where the pnpm home is a directory named `pnpm`
+// (`~/Library/pnpm`, `~/.local/share/pnpm`), a corepack `pnpm@<v>` cache, or
+// wherever $PNPM_HOME points. The full shape is required — a mere `pnpm` path
+// segment is not pnpm's, so a project living under one stays a project.
+func isPnpmGlobalRoot(owner string) bool {
+	global := filepath.Dir(owner)
+	if !strings.EqualFold(filepath.Base(global), "global") {
+		return false
 	}
+	root := filepath.Dir(global)
+	base := strings.ToLower(filepath.Base(root))
+	if base == "pnpm" || strings.HasPrefix(base, "pnpm@") {
+		return true
+	}
+	home := os.Getenv("PNPM_HOME")
+	if home == "" {
+		return false
+	}
+	if resolved, err := filepath.EvalSymlinks(home); err == nil {
+		home = resolved
+	}
+	return filepath.Clean(home) == root
 }
 
 func findGlobalPackageJSON(executable string) string {
