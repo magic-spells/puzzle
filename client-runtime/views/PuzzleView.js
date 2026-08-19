@@ -1039,7 +1039,6 @@ export class PuzzleView {
 	 */
 	#settleData(store, run, expectsAsync, isStale, parked) {
 		let rounds = 0;
-		let requested = null; // the in-flight round's keys, for the exhaustion message
 
 		const afterPass = (model, requests, channel) => {
 			if (isStale()) {
@@ -1058,11 +1057,10 @@ export class PuzzleView {
 				else channel.reconcile?.(true);
 				return model;
 			}
-			requested = [...requests.keys()];
 			if (++rounds > MAX_SETTLE_ROUNDS) {
 				channel.reconcile?.(false);
 				throw new Error(
-					`[puzzle] ${this.constructor.name}: data() still needed server data after ${MAX_SETTLE_ROUNDS} settle rounds — last round requested ${requested.join(', ')}`
+					`[puzzle] ${this.constructor.name}: data() still needed server data after ${MAX_SETTLE_ROUNDS} settle rounds — last round requested ${[...requests.keys()].join(', ')}`
 				);
 			}
 			return Promise.all(requests.values()).then(
