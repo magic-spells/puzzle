@@ -81,17 +81,20 @@ const app = new PuzzleApp({
     },
   },
 
-  // Seed the store from the static JSON (D21 read path) before navigation #0.
-  // loadAll upserts by primary key and notifies subscribers, so it must never run
-  // inside data(). Seeding here is visible to the first data(); then hydrate
-  // persisted state and wire the persistence writes.
+  // Load every collection up front, before navigation #0. Views never need this
+  // — a tracked findOne/findMany in data() fetches what is missing on its own
+  // (D161) — but the localStorage restore below flips flags on records it can
+  // only reach once they exist, so this app asks for everything here. loadMany
+  // with no options marks each type complete, so the views' finds then read a
+  // warm store and issue nothing. Then hydrate persisted state and wire the
+  // persistence writes.
   async beforeMount(app) {
     await Promise.all([
-      app.store.loadAll('listing').catch((err) => console.error('[stays] listing seed failed:', err)),
-      app.store.loadAll('host').catch((err) => console.error('[stays] host seed failed:', err)),
-      app.store.loadAll('review').catch((err) => console.error('[stays] review seed failed:', err)),
-      app.store.loadAll('trip').catch((err) => console.error('[stays] trip seed failed:', err)),
-      app.store.loadAll('traveler').catch((err) => console.error('[stays] traveler seed failed:', err)),
+      app.store.loadMany('listing').catch((err) => console.error('[stays] listing seed failed:', err)),
+      app.store.loadMany('host').catch((err) => console.error('[stays] host seed failed:', err)),
+      app.store.loadMany('review').catch((err) => console.error('[stays] review seed failed:', err)),
+      app.store.loadMany('trip').catch((err) => console.error('[stays] trip seed failed:', err)),
+      app.store.loadMany('traveler').catch((err) => console.error('[stays] traveler seed failed:', err)),
     ]);
 
     // Restore wishlist + locally-created reservations from localStorage.

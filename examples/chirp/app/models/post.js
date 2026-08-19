@@ -48,7 +48,8 @@ export default class Post extends PuzzleModel {
     });
   }
 
-  // Server location (D21): consumed by store.loadAll('post') on the read path.
+  // Server location (D21): read by store.loadMany('post'), and by any tracked
+  // findMany('post') in a data() run (D161).
   static adapter = {
     endpoint: '/posts.json',
   };

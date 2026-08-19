@@ -36,7 +36,8 @@ export default class Artist extends PuzzleModel {
     return `linear-gradient(135deg, ${a.from || '#3a3a44'}, ${a.to || '#22222a'})`;
   }
 
-  // Server location (D21): consumed by store.loadAll('artist') on the read path.
+  // Server location (D21): read by store.loadMany('artist'), and by any tracked
+  // findMany('artist') in a data() run (D161).
   static adapter = {
     endpoint: '/artists.json',
   };

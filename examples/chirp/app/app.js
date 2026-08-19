@@ -79,12 +79,12 @@ const app = new PuzzleApp({
     },
   },
 
-  // Seed the store from the static JSON via the memoized seedStore (D21 read
-  // path) before navigation #0. loadAll upserts by primary key and notifies
-  // subscribers, so it must never run inside data() — seedStore guarantees a
-  // single load that skeleton views can safely re-await. Seeding here is visible
-  // to the first data(); then hydrate the persisted local-only state and wire the
-  // persistence writes.
+  // Load the whole store from the static JSON via the memoized seedStore before
+  // navigation #0. Views never need this — a tracked findOne/findMany in data()
+  // fetches what is missing on its own (D161) — but the persisted local-only
+  // state restored below flips flags on records it can only reach once they
+  // exist. See app/seed.js for why the load is memoized; then hydrate that state
+  // and wire the persistence writes.
   async beforeMount(app) {
     await seedStore(app.store).catch((err) => console.error('[chirp] seed failed:', err));
 

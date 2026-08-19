@@ -9,7 +9,9 @@
 // With the flag, the compiler generates a wiring entry that installs
 // @magic-spells/puzzle/fixtures with this default export before app.js runs.
 //
-// Todos is a local-first app (no loadAll/save calls), so seeding is the whole
+// Todos is a local-first app (no adapter, so no reads or writes ever leave the
+// browser — a tracked find on a model with no read verb stays a local read), so
+// seeding is the whole
 // story here. An adapter-backed app would also declare per-type mock config —
 // merged over the model's own `static adapter.mock`, this file winning per key:
 //

@@ -47,10 +47,12 @@ export default class Todo extends PuzzleModel {
     return this;
   }
 
-  // Server sync (D21/D157): store.loadAll/loadOne + record.save()/delete()
-  // against this endpoint. The adapter capability is passed once in app.js.
-  // No backend? Delete this block and the app.js adapter import/key to shrink
-  // the bundle — everything else works without a server.
+  // Server sync (D21/D157/D161) against this endpoint: reads are generated from
+  // it, so a tracked findOne/findMany in a view's data() fetches whatever the
+  // store is missing and settles before the view commits — no loading code —
+  // and record.save()/delete() write back. The adapter capability is passed
+  // once in app.js. No backend? Delete this block and the app.js adapter
+  // import/key to shrink the bundle — everything else works without a server.
   static adapter = {
     endpoint: '/api/todos',
   };

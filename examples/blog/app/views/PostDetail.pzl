@@ -52,16 +52,13 @@
       </form>
     </section>
   {:else}
-    {#if loaded}
-      <div class="p-10 text-center text-muted bg-surface border border-dashed border-faint rounded-xl">
-        <h1 class="text-ink mb-2">Post not found</h1>
-        <p>That post does not exist. <a href="/posts">Back to all posts</a>.</p>
-      </div>
-    {:else}
-      <div class="p-10 text-center text-muted bg-surface border border-dashed border-faint rounded-xl">
-        <p>Loading post…</p>
-      </div>
-    {/if}
+    <!-- A committed `post` of null means the id does not exist — never "still
+         loading". The view is only mounted once its data() settled (D161), so
+         this branch needs no loaded/pending flag to disambiguate. -->
+    <div class="p-10 text-center text-muted bg-surface border border-dashed border-faint rounded-xl">
+      <h1 class="text-ink mb-2">Post not found</h1>
+      <p>That post does not exist. <a href="/posts">Back to all posts</a>.</p>
+    </div>
   {/if}
 </puzzle-view>
 
@@ -78,13 +75,27 @@ export default class PostDetailView extends PuzzleView {
     });
   }
 
+  // A deep link to /posts/3 arrives with an empty store. This data() still reads
+  // like plain synchronous code: the settle loop re-runs it behind the fetches
+  // its tracked finds queue and commits the first pass whose reads all hit
+  // (D161). Round 1 misses the post and queues its loadOne; round 2 has the post
+  // and queues the author; round 3 has both and commits. Dependent reads settle
+  // on their own — nothing here declares an order.
   data(params, props) {
     const store = this.ctx.store;
     const local = this.getData();
 
-    const allPosts = store.findMany('post');
     const post = store.findOne('post', params.id);
-    const author = post ? post.author : null;
+
+    // `post.author` is a relationship, and relationships never fetch (D49/D161)
+    // — a 50-row list must not turn into 50 GETs. Where a view genuinely needs
+    // the related record, it asks for it: one more tracked find on the foreign
+    // key faults the user in, and the record is then in the store for
+    // `post.author` and every other consumer.
+    const author = post ? store.findOne('user', post.authorId) : null;
+
+    // Comments are browser-created and their model declares no adapter, so this
+    // stays a pure local read no matter how it is reached.
     const comments = post
       ? [...post.comments].sort((a, b) => a.createdAt - b.createdAt)
       : [];
@@ -93,9 +104,6 @@ export default class PostDetailView extends PuzzleView {
       post,
       author,
       comments,
-      // Distinguish "still loading" from a genuine miss: once any post has been
-      // seeded, a null lookup means the id really does not exist.
-      loaded: allPosts.length > 0,
       commentText: local.commentText,
       authorName: local.authorName
     };

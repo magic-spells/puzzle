@@ -17,7 +17,8 @@ export default class Notification extends PuzzleModel {
     read:      Puzzle.boolean().default(false), // local-only, persisted
   };
 
-  // Server location (D21): consumed by store.loadAll('notification').
+  // Server location (D21): read by store.loadMany('notification'), and by any tracked
+  // findMany('notification') in a data() run (D161).
   static adapter = {
     endpoint: '/notifications.json',
   };

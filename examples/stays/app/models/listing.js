@@ -75,7 +75,8 @@ export default class Listing extends PuzzleModel {
     return h % 5 === 0;
   }
 
-  // Server location (D21): consumed by store.loadAll('listing') on the read path.
+  // Server location (D21): read by store.loadMany('listing'), and by any tracked
+  // findMany('listing') in a data() run (D161).
   static adapter = {
     endpoint: '/listings.json',
   };
