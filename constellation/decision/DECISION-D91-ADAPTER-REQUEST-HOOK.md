@@ -21,11 +21,7 @@ surface at once.
 
 ## Context
 
-`store.loadAll()` / `loadOne()` were literally `await fetch(this.apiURL + endpoint + suffix)` — a bare fetch with **no init object at all**. No headers, no `credentials`, no `AbortSignal`, no cancellation.
-
-The consequence was worse than an inconvenience: an app with token auth **could not use the D21 read path at all**. Its only recourse was to hand-roll `store.request()` (which did accept per-call headers) followed by `store.upsert()`, which bypasses exactly the adapter design D21 and D50 exist to provide. Every comparable framework has this seam — Angular `HttpInterceptor`, Ember Data adapter `headers`, Axios interceptors.
-
-The four fetch sites had also drifted apart: the read path passed nothing, `_saveRecordNow` hardcoded `Content-Type`, `deleteRecord` passed only `{ method: 'DELETE' }`, and `request()` merged caller headers.
+`store.loadMany()` / `loadOne()` were literally `await fetch(this.apiURL + endpoint + suffix)` — a bare fetch with **no init object at all**. No headers, no `credentials`, no `AbortSignal`, no cancellation.
 
 ## Decision
 
@@ -41,7 +37,7 @@ One seam, one hook, deliberately narrow.
 
 ## Consequences
 
-- Authenticated apps can use `loadAll`/`loadOne`/`save`/`delete` as designed instead of routing around them.
+- Authenticated apps can use `loadMany`/`loadOne`/`save`/`delete` as designed instead of routing around them — and since D161, the tracked fault path inherits the hook the same way (it runs these same verbs).
 - Request cancellation falls out for free — the app attaches its own `AbortSignal`.
 - The prerender path carries the hook too (`ssg/index.js` `buildContext`), so a build-time `beforeMount` store seed hits an authenticated API the same way the browser store would.
 - **`output: 'static'` cannot carry the hook.** `mountStatic` takes no `beforeRequest` option: a page entry's options are serialized into a Go-generated module, and a function does not survive that boundary. True-static pages get no hook on their client-side store. This is a documented limitation of the output mode, not a bug to fix here; closing it needs the page entry to bind the value from a real module import, the way it binds the adapter capability.

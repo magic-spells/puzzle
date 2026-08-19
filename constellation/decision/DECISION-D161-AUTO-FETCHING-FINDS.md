@@ -14,6 +14,23 @@ connections:
   - COMPONENT-SSG
   - DOC-DATASTORE
   - DOC-SPEC-DATA
+notes:
+  - kind: gotcha
+    text: >-
+      router.stop() bumps its token but never destroys a view still in preload(), so an abandoned
+      pre-commit view has no supersession signal and takes one more settle round (bounded by dedup,
+      the caches, and the 10-round cap) before going quiet. Accepted for 0.7.0; a router-side
+      destroy/abandon signal is the fix if it ever matters. Related fixture lesson: data() is
+      contractually re-runnable — a test view with a one-shot gate in data() is a wrong fixture, not
+      a framework bug.
+  - kind: gotcha
+    text: >-
+      Bundle boundary mechanics: the settle loop is installed onto PuzzleView.prototype by
+      installAdapter() (AdapterViewMethods), and static/index.js reaches the read-state codecs
+      through a capabilities.js relay — never import datastore/adapter.js from core or from the
+      static kernel. Cost of the core seam on a no-adapter app is +177 B gzip (fault-hook branches +
+      _settleData call sites); the loop itself is provably absent (grep the built bundle for
+      MAX_SETTLE / "settle rounds" — both 0).
 ---
 
 # D161 — Tracked finds fault in missing data; the settle loop commits complete passes (v1.76)

@@ -30,7 +30,7 @@ notes:
 A computed property ([[DECISION-D06-COMPUTED-GETTERS]]) is an ordinary getter on
 the model class. Every record write path funnels through one helper —
 `assignSkipping`, shared by `safeAssign` (construction), `safeAssignTracked`
-(`update()`), and `safeMerge` (server echo, `loadAll`/`loadOne`, `_upsert`) — and
+(`update()`), and `safeMerge` (server echo, `loadMany`/`loadOne`, `_upsert`) — and
 that helper assigns with `target[key] = src[key]`. ESM is always strict mode, so
 assigning a key that resolves to a getter with no setter throws `TypeError`.
 
@@ -42,7 +42,7 @@ what makes it more than a noisy error:
 - `record._synced = true` runs AFTER `safeMerge` in the save path, so a save
   whose HTTP write already succeeded never records that fact. The next `save()`
   POSTs the same row again;
-- `loadAll`/`loadOne` and `new Model(data)` reject outright, so one colliding key
+- `loadMany`/`loadOne` and `new Model(data)` reject outright, so one colliding key
   in a list payload takes down the whole read.
 
 [[DECISION-D49-MODEL-RELATIONSHIPS]] already met this hazard for relationship

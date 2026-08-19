@@ -349,7 +349,7 @@ Per [[DOC-SPEC-DATA]] §7 and §20, v1 draws a precise line between what the sto
   - `err.errors` is `[{ field, rule, message }]` in schema-declaration order (rules within a field in declared order); `err.message` is the first error's message. Both methods keep their return-the-record contract on success.
   - **Non-throwing surface for form UX:** static **`Model.validate(data, { fields }?)`** (pre-create check) and instance **`record.validate()`** (current field values) return `{ valid, errors }` with the same errors shape — validate first, then write. Static validation mirrors `createRecord` acceptance: an omitted/null primary field produces no `required` error because the store will generate it; an empty-string primary key remains invalid because the store does not generate for `''`. Pass `{ fields: ['name', 'email'] }` to validate only an edited subset. There is no persistent `record.errors` state.
   - **Rule semantics** (no type coercion — rules compare what they are given): outside the static primary-key exception above, `required` fails on `undefined`/`null`/`''` and short-circuits that field's remaining rules; a non-required field that is `undefined`/`null` skips its remaining rules; `min`/`max` compare `.length` for strings/arrays and value for numbers/dates (an incomparable/NaN-ish comparison passes, never throws); `oneOf` is strict `===` membership; a custom `validate(fn)` treats a falsy return as invalid but lets a *thrown* exception propagate. **Type-aware bounds (SPEC §35):** on a field *declared* `number()`/`date()`, a wrong-runtime-type value fails `min`/`max` with a type-mismatch message (`"age" must be a number`) instead of silently measuring `.length` — form inputs hand you strings, so convert (`Number(input.value)`) before writing. Type mismatches on `string()`/`array()` fields are still not validated.
-  - **Exempt by design:** `store.loadAll`/`loadOne` and public `store.upsert` (server data is authoritative — backend drift must not crash the read path) plus storage hydration (fail-soft startup). See [[DOC-SPEC-DATA]] §20.
+  - **Exempt by design:** `store.loadMany`/`loadOne` and public `store.upsert` (server data is authoritative — backend drift must not crash the read path) plus storage hydration (fail-soft startup). See [[DOC-SPEC-DATA]] §20.
 
   A worked form flow — validate first, then write:
 
@@ -386,15 +386,15 @@ Per [[DOC-SPEC-DATA]] §7 and §20, v1 draws a precise line between what the sto
   static schema = {
     id:       Puzzle.string().primary(),
     authorId: Puzzle.string(),
-    author:   Puzzle.belongsTo('user'),   // → findOne('user', this.authorId)
-    comments: Puzzle.hasMany('comment')   // → findMany('comment', c => c.postId === this.id)
+    author:   Puzzle.belongsTo('user'),   // → the user under this.authorId, local read
+    comments: Puzzle.hasMany('comment')   // → local comments where c.postId === this.id
   };
   ```
 
-  - **Resolution is a live store query.** `post.author` ⇒ `findOne('user', post.authorId)` (`null` on a miss, a null/undefined FK, or a store-less record); `post.comments` ⇒ `findMany('comment', { filter: c => c.postId === post.id })` (`[]` when store-less; store insertion order — sort in `data()`). No materialization or caching. Cycles (`post.author.posts`) are safe because resolution is lazy.
+  - **Resolution is a live LOCAL store query.** `post.author` resolves the `user` under `post.authorId` (`null` on a miss, a null/undefined FK, or a store-less record); `post.comments` resolves the matching comments (`[]` when store-less; store insertion order — sort in `data()`). No materialization or caching, and **a traversal never fetches** (D161): auto-fetch belongs to the public finds, so a related record the store lacks is fetched by one more tracked `findOne` on the FK in `data()`. Cycles (`post.author.posts`) are safe because resolution is lazy.
   - **FK by convention, overridable.** `belongsTo` infers `<relationshipName>Id` (`author:` → `authorId`); `hasMany` infers `<ownerType>Id` (a `comments:` on the `post` model → `postId`). Override either with `Puzzle.belongsTo('user', { key: 'writtenBy' })`. The FK is resolved from the model-registry key when the Store installs the getters at construction.
   - **Not fields.** A relationship builder is a distinct kind (no `.required()`/`.default()` etc.): excluded from `normalizedSchema()`, so defaults, primary-key lookup, and §20 validation never see it. `toJSON()` serializes the FK, never the resolved object graph (the getters are non-enumerable).
-  - **Traverse in `data()` to subscribe.** Because a getter calls the ordinary query methods, a traversal inside a tracked `data()` auto-subscribes exactly like the manual join it replaces — return traversals from `data()`:
+  - **Traverse in `data()` to subscribe.** The getters record the same subscription keys as the public finds, so a traversal inside a tracked `data()` auto-subscribes exactly like the manual join it replaces — return traversals from `data()`:
 
     ```js
     data(params) {
@@ -410,14 +410,18 @@ Per [[DOC-SPEC-DATA]] §7 and §20, v1 draws a precise line between what the sto
     **Template-access caveat:** reading a relationship in the template renders current state but subscribes nothing (render runs outside the tracked eval) — always seed the traversal from `data()`.
   - **The property name is reserved.** Assigning to it (e.g. an embedded `{ author: {...} }` server payload) warns once and is ignored — set the FK field instead. This keeps `Object.assign(record, payload)` safe on the server read path.
 
-- **Server access (D21 read + D50 write, extracted by D157 and generalized by
-  D158):** declare a bare model adapter. `{ endpoint: '/api/todos' }` generates
+- **Server access (D21 read + D50 write, extracted by D157, generalized by
+  D158, auto-fetching since D161):** declare a bare model adapter.
+  `{ endpoint: '/api/todos' }` generates
   the REST five; author fetch functions override per verb or work without an
   endpoint. Import `adapter`
   from `@magic-spells/puzzle/adapter` in `app.js`, and pass it once to
-  `new PuzzleApp({ ..., adapter })`. The capability installs the server verbs;
-  without it core records have no `save()`/`delete()` and the
-  Store has no `loadAll()`/`loadOne()`/`adapter()`/`upsert()`/`request()`.
+  `new PuzzleApp({ ..., adapter })`. The capability installs the server verbs
+  and the D161 settle loop — a tracked `findOne`/`findMany` miss in a view's
+  `data()` runs the model's read verb and the view commits once settled;
+  without the capability core records have no `save()`/`delete()`, the
+  Store has no `loadMany()`/`loadOne()`/`adapter()`/`upsert()`/`request()`,
+  and the finds stay pure local.
   Transports receive enhanced fetch; Puzzle then preserves identity and owns
   reconciliation. `save()` validates before any request. A returned non-OK
   Response rejects with the subpath's `PuzzleAdapterError`.
@@ -438,7 +442,7 @@ Per [[DOC-SPEC-DATA]] §7 and §20, v1 draws a precise line between what the sto
   }
   ```
 
-  Each upserted object must carry its model's primary key. **Query fault-in and automatic write-through — Status: Planned — not in v1.** See [[DOC-SPEC-DATA]] §22. Local persistence is in-memory with optional localStorage.
+  Each upserted object must carry its model's primary key. **Automatic write-through — Status: Planned — not in v1** (reads fault in since D161; writes stay explicit verbs). See [[DOC-SPEC-DATA]] §22 and §61. Local persistence is in-memory with optional localStorage.
 
 ---
 

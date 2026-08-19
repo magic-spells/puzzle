@@ -5,11 +5,13 @@ connections:
   - COMPONENT-VIEW-MANAGER
   - COMPONENT-ANIMATIONS
   - COMPONENT-STORE
+  - COMPONENT-ADAPTER
   - COMPONENT-DEVSTATE
   - FLOW-REACTIVITY
   - FILE-PUZZLE-VIEW
   - DECISION-D39-SKELETON
   - DECISION-D52-SKELETON-ANTIFLASH
+  - DECISION-D161-AUTO-FETCHING-FINDS
 notes:
   - kind: gotcha
     text: >-
@@ -37,6 +39,24 @@ navigation — it evaluates `data()` against the destination without touching
 committed state and hands back commit/discard
 ([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]).
 
+With the adapter capability installed, every tracked `data()` evaluation runs
+inside the D161 settle loop — `_settleData`, installed onto the prototype by
+[[COMPONENT-ADAPTER]]; core holds only the `!this._settleData` branch at its
+three call sites, so no-adapter apps ship a single-pass evaluator and none of
+the loop. Each pass carries its own pending-request Map and held reconcile; a
+pass that queued fetches is not committed — the batch is awaited, the
+provisional pass's subscriptions are unwound, and `data()` re-runs, so only
+the final warm pass's subscriptions and model commit
+([[DECISION-D161-AUTO-FETCHING-FINDS]]). A sync, hit-only first pass stays
+synchronous. Ten rounds throw through the normal data-failure path naming the
+view and the round's request keys. Store notifications arriving mid-settle
+coalesce into `_settleDirty` — one more pass, never a competing refresh —
+while prepared (D146) runs keep their live-update behavior. A destroyed,
+leaving, or superseded view stops the loop after its current await without
+aborting shared requests. `refresh()`, `preload()`, and
+`prepareRefresh().ready` therefore resolve only after settlement, and a
+previously-sync `data()` may return a promise when it misses.
+
 Lifecycle: `created` → awaited/tracked `data` → render → `mounted`, with
 `beforeUpdate`/`afterUpdate` around later patches and idempotent `destroyed`
 teardown. `preload()` performs created/data off-DOM for the router, and a later
@@ -45,6 +65,9 @@ async components wait. When `renderSkeleton` is defined, the `#loaded` latch
 renders the skeleton while unloaded, `mounted()` fires against it, and the mount
 resolves without awaiting `data()`, with an anti-flash min-duration hold before
 the swap (see [[DECISION-D39-SKELETON]] / [[DECISION-D52-SKELETON-ANTIFLASH]]).
+All D161 settle rounds count as one load: the skeleton shows from the first
+miss and holds through every round, and a loaded view keeps its existing
+content through later settles.
 
 Contained mount/refresh failures report once, preserve the manager's exact
 position, and destroy the failed instance. With an app `errorView`, a fresh
@@ -116,6 +139,8 @@ layer — the DevTools bridge shows the two state layers separately, so the merg
 vnode tree, which the bridge walks to find child instances and so build the live
 component forest without reaching into Router privates ([[FILE-DEVTOOLS]],
 D100). `_localState()` predates them and serves the same convention.
+`_settleData`/`_settlingToken`/`_settleDirty` follow the same underscore
+convention — internal, adapter-installed, never author-facing.
 
 Enter/leave specs and the four show/hide hooks delegate to
 [[COMPONENT-ANIMATIONS]]. Teardown catches leave-hook failures and still removes

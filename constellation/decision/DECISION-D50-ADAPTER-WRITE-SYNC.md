@@ -4,6 +4,7 @@ status: verified
 connections:
   - DECISION-D21-ADAPTER-READ-PATH
   - DECISION-D48-SCHEMA-VALIDATION
+  - DECISION-D161-AUTO-FETCHING-FINDS
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
   - FEATURE-ADAPTER-WRITE-SYNC
@@ -50,7 +51,7 @@ mocks.
 - **`record.save()`**: D48-validates the full record first — invalid rejects with
   `PuzzleValidationError`, **no request made**. Then POST `apiURL+endpoint` for a
   never-synced record, PUT `endpoint/:id` otherwise — the endpoint-generated
-  transports (a non-enumerable synced flag: set by `loadAll`/`loadOne`/upserts and
+  transports (a non-enumerable synced flag: set by `loadMany`/`loadOne`/upserts and
   successful saves, and carried out-of-band through persistence so a hydrated record
   keeps its real provenance; PUT-to-missing surfaces as an error the app can handle).
   A 2xx JSON-object response merges via the exempt upsert
@@ -70,22 +71,27 @@ mocks.
   (Rejected: a declarative `adapter.methods` map — codegen-ish surface for something a
   three-line instance method states more clearly.)
 - **Failures reject with `PuzzleAdapterError`** (`.status`, `.statusText`, `.body`
-  when parseable) — exported from `@magic-spells/puzzle/adapter`. The D21 read path keeps its plain
-  Errors (message-stable); new verbs get the structured shape.
-- **Query fault-in: explicitly re-deferred.** `findMany`'s synchronous, pure-local
-  return is load-bearing for the tracking/subscription machinery and the render
-  contract; transparent faulting changes its type and timing. Stays out until it can
-  be its own decision.
+  when parseable) — exported from `@magic-spells/puzzle/adapter`. Reads share the
+  structured shape ([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]] normalizes every
+  generated transport through it — the
+  [[DECISION-D161-AUTO-FETCHING-FINDS]] negative cache keys off `status`).
+- **Writes are verbs, reads are queries.** The write side stays explicit —
+  `save()`/`delete()` are commands with failure semantics an app must own, so
+  implicit network in a hot local path stays rejected. The read side faults in
+  transparently through tracked `findOne`/`findMany`
+  ([[DECISION-D161-AUTO-FETCHING-FINDS]]), which kept the sync, pure-local return
+  the tracking machinery depends on: a tracked miss still returns its local value
+  synchronously; the settle loop re-runs `data()` and commits the warm pass.
 
 ## Alternatives rejected
-Covered inline above (write-through, optimistic delete, adapter.methods map,
-fault-in). Also rejected: `record.destroy()` growing a `{ server: true }` option —
+Covered inline above (write-through, optimistic delete, adapter.methods map).
+Also rejected: `record.destroy()` growing a `{ server: true }` option —
 mutating shipped semantics behind a flag; a distinct verb is honest.
 
 ## Consequences
 Runtime-only in the opt-in `/adapter` module, which installs the verbs on the
 core model/store prototypes ([[DECISION-D157-ADAPTER-SUBPATH]]). Acceptance: a todos app persists
 create/toggle/delete to a REST endpoint with **no hand-written fetch** —
-`store.loadAll` at boot, `todo.save()` after create/toggle, `todo.delete()` on remove.
+tracked finds fault the data in, `todo.save()` after create/toggle, `todo.delete()` on remove.
 Validation composes (D48): nothing invalid leaves the client. The synced flag is
 provenance-only — no dirty-tracking/changeset layer (would be its own decision).

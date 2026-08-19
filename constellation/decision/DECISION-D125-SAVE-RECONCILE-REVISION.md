@@ -82,9 +82,9 @@ released with the record.
 - `_saveRecordNow` captures `recordMutationRevision(record)` beside the serialized body,
   so the revision and the bytes on the wire are taken at the same instant.
 - `safeMerge(record, src, throughRevision)` skips any field whose stamped revision is
-  greater than `throughRevision`. The third argument is optional — every other merge
-  site (`loadAll`/`loadOne` upserts, storage hydration) omits it and stays
-  server-authoritative, byte-for-byte as before.
+  greater than `throughRevision`. The third argument is optional — storage hydration
+  omits it and stays server-authoritative; `loadMany`/`loadOne` upserts pass their own
+  dispatch-time snapshot (D138 parity).
 
 All four response branches reconcile through it: the normal merge, the
 mismatched-pk and null-pk `rest` branches, and pk adoption. Pk adoption forces the

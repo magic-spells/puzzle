@@ -51,14 +51,12 @@ verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 
 # Todos integration test
 
-
-
 The canonical end-to-end runtime proof uses a real [[COMPONENT-PUZZLE-APP]] in
 jsdom and drives only public behavior.
 
 The shared suite covers add, special-character text, toggle, filter, keyed DOM
 identity, delete, clear-completed, empty state, persistence into a second app
-instance, adapter `loadAll` upsert without duplicates, and repeated
+instance, adapter `loadMany` upsert without duplicates, and repeated
 add/toggle/delete cycles. A further group covers `TodoItem`'s row animations
 against the fake WAAPI: an added row's enter animation, a deleted row's
 deferred removal until its leave animation finishes, instance preservation
@@ -66,7 +64,9 @@ across a filter change (no spurious enter/leave on surviving rows), and the
 fill handback when an enter animation is released.
 
 The suite installs the `/adapter` capability itself, since the server-load
-assertion exercises the real `loadAll` path.
+assertion exercises the real `loadMany` path; the test app's endpoint-backed
+model means tracked finds fault during mount (D161), so the suite stubs an
+empty-collection fetch and asserts the collection arrives as part of mount.
 
 It runs in two lanes:
 

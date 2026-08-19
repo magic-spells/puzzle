@@ -6,6 +6,7 @@ connections:
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-PUZZLE-APP
+  - COMPONENT-PUZZLE-VIEW
   - COMPONENT-SSG
   - COMPONENT-FIXTURES
   - COMPONENT-TESTING
@@ -28,10 +29,10 @@ connections:
   - DECISION-D138-LOAD-REVISION-MERGE
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
+  - DECISION-D161-AUTO-FETCHING-FINDS
   - FEATURE-ADAPTER-WRITE-SYNC
   - FEATURE-STORE-PUBLIC-UPSERT
 ---
-
 
 # Server adapter runtime
 
@@ -47,13 +48,17 @@ surprise.
 
 ## What installing grafts on
 
-Installing copies two method bags onto the core prototypes as ordinary property
-descriptors.
+Installing copies three method bags onto the core prototypes as ordinary
+property descriptors.
 
-- [[COMPONENT-STORE]] gains `adapter(type)`, `loadAll`, `loadOne`, `upsert`,
+- [[COMPONENT-STORE]] gains `adapter(type)`, `loadMany`, `loadOne`, `upsert`,
   `saveRecord`, `deleteRecord`, `request`, and the private helpers behind them —
   including the `beforeRequest` hook seam and the single network seam beneath it.
 - [[COMPONENT-PUZZLE-MODEL]] gains `save()` and `delete()`.
+- [[COMPONENT-PUZZLE-VIEW]] gains `_settleData` — the
+  [[DECISION-D161-AUTO-FETCHING-FINDS]] settle executor. Core PuzzleView holds
+  only the call seam (`!this._settleData` branches at its three entry points),
+  so a no-adapter app ships none of the loop.
 
 Install is idempotent and realm-global: the first call wins, later ones are
 no-ops, and several apps on one page share one installed surface.
@@ -66,7 +71,13 @@ identical surface.
 
 What is *per Store* is the dialect, not the install: the capability object the
 app passed is retained on the Store, and verb dispatch reads its app-default
-functions from there.
+functions from there. Per Store too is the D161 read state, in module-level
+`WeakMap`s: in-flight single-record requests keyed type + `recordKey(id)`,
+in-flight collection requests keyed by type, a 1000-entry insertion-ordered
+negative LRU, and the collection-complete type set. Implicit faults dedup
+against the in-flight maps; explicit `loadOne`/`loadMany` always issue a
+request, and explicit `loadOne` bypasses the negative cache (the force-refresh
+escape hatch — its outcome still refreshes the entry).
 
 `adapter.defaults({ ...verbs })` returns a second capability closing over
 app-wide verb functions. Only the bare export still offers `defaults()`, and
@@ -85,18 +96,32 @@ no URL prefixing and no automatic JSON; its only additions are the request hook
 and the network seam.
 
 `PuzzleAdapterError` is exported here and carries `status`, `statusText`, and the
-parsed-or-raw `body`.
+parsed-or-raw `body`. Generated read transports normalize non-OK responses
+through it (D158) — the D161 negative cache records absence on exactly
+`status === 404`; every other failure rejects and poisons nothing.
+
+`serializeReadState(store)` and `hydrateReadState(store, envelope)` are the
+D161 read-state codecs — envelope `{ v: 1, complete: [...types], absent:
+['type recordKey', ...] }`. Records hydrate first; hydrate drops any absence
+whose record is present and ignores unknown versions. The static kernel and
+devstate reach these through the `capabilities.js` relay (the adapter registers
+its codecs there at module scope) so neither ever imports this module.
 
 Development builds validate two shapes and warn rather than throw: a model's
 adapter keys must be `endpoint`, `mock`, or functions (warned once per model
 class), and `adapter.defaults()` keys must be the five verb names with function
-values. Both checks are folded out of production.
+values. The exception is `loadAll` — the pre-0.7.0 spelling throws in
+production too, everywhere it can appear (`store.loadAll()` trap, model key at
+Store init, `defaults()` key, verb binding), one message naming `loadMany`.
+Development also warns once per store per verb when user code calls
+`loadOne`/`loadMany` inside a tracked `data()` run — the fault path calls
+un-warned internal loaders.
 
 ## Invariants
 
 - **Core owns no server verbs.** An app that never passes the capability has no
-  `loadAll`, no `upsert`, no `save()`/`delete()`, no write chain, and no adapter
-  error class — and never links this module at all.
+  `loadMany`, no `upsert`, no `save()`/`delete()`, no write chain, no settle
+  loop, and no adapter error class — and never links this module at all.
 - **The dependency points one way.** This module imports core; core never
   imports it, and holds the capability as an opaque value it does not interpret.
 - **The bound adapter view is memoized on first use.** A model that rewrites its
@@ -110,9 +135,16 @@ values. Both checks are folded out of production.
   getter-only object is a supported shape rather than a `TypeError`.
 - **A body is read exactly once**, preferring JSON and preserving non-JSON text;
   an empty body reads as absent.
-- **Per-record write-chain state lives in module-level `WeakMap`s keyed by
-  Store**, so two stores never share a queue and a discarded store's chains are
-  collectable.
+- **Per-record write-chain state and the D161 read state live in module-level
+  `WeakMap`s keyed by Store**, so two stores never share a queue or a cache and
+  a discarded store's state is collectable.
+- **Every in-flight read entry clears in `finally` with an identity check, and
+  every started fault promise carries a rejection observer** — a data pass that
+  throws or is superseded can never leave an unhandled rejection or a stuck
+  in-flight key.
+- **A `loadOne` response must be the record asked for**: a pk that differs from
+  the requested id under `recordKey` normalization rejects before mutation, on
+  the explicit and implicit paths alike.
 
 ## Gotchas
 
@@ -131,3 +163,11 @@ values. Both checks are folded out of production.
 - The generated transports are the only thing tied to REST. Nothing above them
   is: an app can replace every verb and keep validation, identity, ordering,
   reconciliation, and notification exactly as they are.
+- Collection completeness comes ONLY from a successful no-options collection
+  load — implicit fault or explicit `loadMany(type)` with no argument
+  (`null` counts as no-options; `{}` does not). `loadOne`, `createRecord`,
+  `upsert`, `save`, hydration, and options-bearing loads never mark a type
+  complete, so paginated partial loads keep accumulating and page 2 can't
+  masquerade as the whole collection. An empty-array success DOES mark complete.
+- A confirmed `record.delete()` records a negative entry (the server said
+  gone); a local `destroy()` does not — it proves nothing about the server.

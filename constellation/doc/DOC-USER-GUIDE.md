@@ -43,7 +43,7 @@ one of the two in-repo v1 reference apps. It has this structure:
 examples/blog/
 ├── package.json              # Dependencies & scripts
 └── app/                      # Application source
-    ├── app.js                # App init, formatters, post-mount store seeding
+    ├── app.js                # App init, adapter capability, formatters
     ├── routes.js             # Route definitions
     ├── models/               # Data models
     │   ├── index.js          # Model registry
@@ -64,7 +64,7 @@ examples/blog/
     │   └── Default.pzl       # Default layout (nav + <Slot/> + footer + base styles)
     └── public/               # Static assets & HTML
         ├── index.html        # Main HTML file
-        └── api/              # Static JSON seeds for store.loadAll
+        └── api/              # Static JSON the adapter endpoints read
             ├── users.json
             └── posts.json
 # dist/ (build output from `puzzle build`) is generated and git-ignored
@@ -117,6 +117,7 @@ resolved against `app/assets/`, and CSS `@import`s are unaffected.
 ## App Entry Point
 
 ### app/app.js
+
 ```javascript
 import { PuzzleApp } from '@magic-spells/puzzle';
 import { adapter } from '@magic-spells/puzzle/adapter';
@@ -136,27 +137,21 @@ const app = new PuzzleApp({
   // Models registration
   models,
 
-  // Install the optional server adapter verbs once for this app.
+  // Install server sync once for every model with a static adapter config.
+  // With it installed, store.findOne()/store.findMany() inside a view's data()
+  // fetch whatever the store is missing and settle before the view commits
+  // (D161, SPEC §61) — no app has to seed anything by hand.
   adapter,
 
-  // Base URL for the D21 server read path. Adapter endpoints are joined onto
-  // this, so store.loadAll('post') fetches /api/posts.json — a static JSON seed
-  // copied from app/public/api/ into dist/api/ at build time.
+  // Base URL for the server read path. Adapter endpoints are joined onto this,
+  // so `findMany('post')` GETs /api/posts.json — a static JSON file copied from
+  // app/public/api/ into dist/api/ at build time.
   apiURL: '/api',
 
   // Global formatters available in all templates
   // (display transformation only — logic belongs in data())
   formatters: {
     byline: (name) => (name ? `By ${name}` : 'By an unknown author')
-  },
-
-  // Seed the store from the server (D21 read path) before navigation #0 runs
-  // (v1.31 app lifecycle hook, SPEC §34). loadAll upserts by primary key and
-  // notifies subscribers, so it must NEVER run inside data() — a view
-  // subscribed to that type would refetch forever. Fire it once, here.
-  beforeMount(app) {
-    app.store.loadAll('user').catch((err) => console.error('[blog] user seed failed:', err));
-    app.store.loadAll('post').catch((err) => console.error('[blog] post seed failed:', err));
   }
 });
 
@@ -165,7 +160,7 @@ app.mount();
 export default app;
 ```
 
-The v1 config surface is `target`, `routes`, `models`, `formatters`, and `apiURL`, plus optional capabilities and amendments (`adapter`, `scrollBehavior`, `routerMode`, the v1.31 lifecycle hooks `beforeMount`/`mounted`/`beforeUnmount`, …) — see [[DOC-SPEC]] §2 and §34. Seeding the store with `store.loadAll` in `beforeMount` is the D21 read path; see [Two data() gotchas](#two-data-gotchas) for why it must never run inside `data()`.
+The v1 config surface is `target`, `routes`, `models`, `formatters`, and `apiURL`, plus optional capabilities and amendments (`adapter`, `scrollBehavior`, `routerMode`, the v1.31 lifecycle hooks `beforeMount`/`mounted`/`beforeUnmount`, …) — see [[DOC-SPEC]] §2 and §34. There is no seeding step: tracked finds fault their own data in (D161, [[DOC-SPEC-DATA]] §61); see [Two data() gotchas](#two-data-gotchas) for the rules that keep that automatic.
 
 ### app/routes.js
 ```javascript
@@ -238,8 +233,8 @@ Models define your data structure with `Puzzle` schema field builders, plus comp
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
 
 export default class User extends PuzzleModel {
-  // Schema definition — see [[DOC-SPEC]] §7. String ids so the server-seeded
-  // records (loadAll) upsert stably by primary key.
+  // Schema definition — see [[DOC-SPEC]] §7. String ids so the server-loaded
+  // records upsert stably by primary key.
   static schema = {
     id:       Puzzle.string().primary(),
     name:     Puzzle.string().required(),
@@ -250,7 +245,7 @@ export default class User extends PuzzleModel {
   };
 
   // Computed properties — plain getters ([[DOC-SPEC]] §7).
-  // loadAll-seeded dates arrive as ISO strings, so coerce defensively.
+  // Server-loaded dates arrive as ISO strings, so coerce defensively.
   get initials() {
     return String(this.name)
       .trim()
@@ -265,10 +260,21 @@ export default class User extends PuzzleModel {
     return new Date(this.joinedAt);
   }
 
-  // Server location (D21): consumed by store.loadAll('user') on the read path,
-  // and by record.save()/delete() for write sync (v1.18, D50).
+  // Server location (D21/D158): `findMany('user')` GETs /api/users.json.
   static adapter = {
-    endpoint: '/users.json'
+    endpoint: '/users.json',
+
+    // Same static-file mapping as Post — see models/post.js for why the
+    // generated per-record GET does not fit this demo's "server".
+    async loadOne(fetch, id) {
+      const res = await fetch('/api/users.json');
+      if (!res.ok) return res;
+      const users = await res.json();
+      return (
+        users.find((user) => String(user.id) === String(id)) ??
+        new Response(null, { status: 404 })
+      );
+    }
   };
 }
 ```
@@ -286,11 +292,17 @@ export default class Post extends PuzzleModel {
     body:        Puzzle.string().required(),
     authorId:    Puzzle.string(),
     tags:        Puzzle.array().default(() => []),
-    publishedAt: Puzzle.date()
+    publishedAt: Puzzle.date(),
+
+    // Relationships ([[DOC-SPEC]] §21, D49) — lazy store-backed getters.
+    // `author` infers the FK 'authorId'; `comments` infers 'postId' from this
+    // owner's registry type. Traverse them inside data() to subscribe.
+    author:      Puzzle.belongsTo('user'),
+    comments:    Puzzle.hasMany('comment')
   };
 
   // Computed properties — plain getters ([[DOC-SPEC]] §7).
-  // loadAll-seeded dates arrive as ISO strings, so coerce defensively.
+  // Server-loaded dates arrive as ISO strings, so coerce defensively.
   get publishedDate() {
     return new Date(this.publishedAt);
   }
@@ -305,9 +317,28 @@ export default class Post extends PuzzleModel {
     return Math.max(1, Math.round(words / 200));
   }
 
-  // Server location (D21): consumed by store.loadAll('post') on the read path.
+  // Server location (D21/D158). The endpoint is all the generated REST reads
+  // need: `findMany('post')` GETs apiURL + endpoint — /api/posts.json.
   static adapter = {
-    endpoint: '/posts.json'
+    endpoint: '/posts.json',
+
+    // The generated `loadOne` would GET /api/posts.json/3, and this demo's
+    // "server" is a static file per collection — there are no per-record URLs.
+    // A model can replace any single verb with its own fetch function (D158),
+    // so map the per-record read onto the collection file instead: read it,
+    // pick the record out, and hand back a 404 Response for an id that is not
+    // in it. The framework normalizes a non-OK Response into a
+    // PuzzleAdapterError, and a 404 on the auto-fetch path becomes the
+    // committed `null` that PostDetail's "Post not found" branch tests (D161).
+    async loadOne(fetch, id) {
+      const res = await fetch('/api/posts.json');
+      if (!res.ok) return res;
+      const posts = await res.json();
+      return (
+        posts.find((post) => String(post.id) === String(id)) ??
+        new Response(null, { status: 404 })
+      );
+    }
   };
 }
 ```
@@ -317,8 +348,9 @@ export default class Post extends PuzzleModel {
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
 
 export default class Comment extends PuzzleModel {
-  // Comments are created in the browser (createRecord), never seeded, so this
-  // model declares NO adapter — the server read path (loadAll) is opt-in per model.
+  // Comments are created in the browser (createRecord), never server-loaded,
+  // so this model declares NO adapter — with no resolvable read verb, tracked
+  // finds for 'comment' stay pure local reads (D161).
   static schema = {
     id:        Puzzle.string().primary(),
     postId:    Puzzle.string(),
@@ -348,12 +380,14 @@ export default models;
 config bare: `endpoint` generates the REST transports, while author fetch
 functions override individual verbs or form a no-endpoint adapter. Then import `adapter` from
 `@magic-spells/puzzle/adapter` in `app.js` and pass it once to `PuzzleApp`. The
-capability installs `loadAll`/`loadOne`, `adapter`/`upsert`/`request`, and record
-`save`/`delete`. A model with no adapter simply opts out, and an app that never
-passes the capability ships none of that runtime.
+capability installs `loadMany`/`loadOne`, `adapter`/`upsert`/`request`, record
+`save`/`delete`, and the auto-fetch behavior itself: a `findOne`/`findMany`
+miss inside a view's `data()` runs the model's read verb and the view commits
+once everything settles (D161). A model with no adapter simply opts out, and
+an app that never passes the capability ships none of that runtime.
 `record.destroy()` stays local-only. Validation remains core: `createRecord` and
 `update` throw `PuzzleValidationError`, while `validate()` returns a renderable
-result. See [[DOC-SPEC]] §20/§22/§58 and D21/D48/D50/D157/D158.
+result. See [[DOC-SPEC]] §20/§22/§58/§61 and D21/D48/D50/D157/D158/D161.
 
 ---
 
@@ -362,6 +396,7 @@ result. See [[DOC-SPEC]] §20/§22/§58 and D21/D48/D50/D157/D158.
 Views are page components that load and display data. The pattern is simple:
 
 ### views/Home.pzl
+
 ```html
 <puzzle-view class="home">
   <section class="hero">
@@ -384,7 +419,7 @@ Views are page components that load and display data. The pattern is simple:
       </div>
     {:else}
       <div class="empty">
-        <p>Posts are loading…</p>
+        <p>No posts yet.</p>
       </div>
     {/if}
   </section>
@@ -396,9 +431,12 @@ import Button from '../components/Button.pzl';
 import PostCard from '../components/PostCard.pzl';
 
 export default class HomeView extends PuzzleView {
-  // data() reads the store and derives the three newest posts. The store starts
-  // empty and is seeded after mount (see app.js); when the seed lands, the
-  // 'post' subscription re-runs data() and the list fills in.
+  // data() reads the store and derives the three newest posts. There is no
+  // loading code and nothing seeds the store first: `findMany('post')` in a
+  // tracked data() run fetches the collection when the store does not have it
+  // and the view commits only once every read came up warm (D161). So an empty
+  // `recentPosts` here means the blog has no posts, not that they are on the
+  // way — the {:else} branch says exactly that.
   data(params, props) {
     const posts = this.ctx.store.findMany('post');
     const recentPosts = [...posts]
@@ -461,7 +499,7 @@ export default class HomeView extends PuzzleView {
 </style>
 ```
 
-`@press` on the `<Button>` tag is a **callback prop** (D16): the compiler hands the child a function on `this.props.press`, and the child's own `@click` handler invokes it. `<PostCard>` renders each summary as a real `<a href>` that the router intercepts for SPA navigation.
+`@press` on the `<Button>` tag is a **callback prop** (D16): the compiler hands the child a function on `this.props.press`, and the child's own `@click` handler invokes it. `<PostCard>` renders each summary as a real `<a href>` that the router intercepts for SPA navigation. Note the data story: no seeding, no loading flag — the tracked `findMany` fetches on miss and the view renders once, settled (D161), so the `{:else}` branch honestly means "no posts".
 
 ### views/PostDetail.pzl
 
@@ -525,16 +563,13 @@ params and props** in `data(params, props)` — the router does not inject a
       </form>
     </section>
   {:else}
-    {#if loaded}
-      <div class="empty">
-        <h1 class="empty__title">Post not found</h1>
-        <p>That post does not exist. <a href="/posts">Back to all posts</a>.</p>
-      </div>
-    {:else}
-      <div class="empty">
-        <p>Loading post…</p>
-      </div>
-    {/if}
+    <!-- A committed `post` of null means the id does not exist — never "still
+         loading". The view only commits once its data() settled (D161), so
+         this branch needs no loaded/pending flag to disambiguate. -->
+    <div class="empty">
+      <h1 class="empty__title">Post not found</h1>
+      <p>That post does not exist. <a href="/posts">Back to all posts</a>.</p>
+    </div>
   {/if}
 </puzzle-view>
 
@@ -555,20 +590,25 @@ export default class PostDetailView extends PuzzleView {
     const store = this.ctx.store;
     const local = this.getData();
 
-    const allPosts = store.findMany('post');
     const post = store.findOne('post', params.id);
+
+    // `post.author` is a relationship, and relationships never fetch
+    // (D49/D161) — a 50-row list must not turn into 50 GETs. Where a view
+    // genuinely needs the related record, it asks for it: one more tracked
+    // find on the foreign key faults the user in, and the record is then in
+    // the store for `post.author` and every other consumer.
     const author = post ? store.findOne('user', post.authorId) : null;
-    const comments = store
-      .findMany('comment', { filter: (comment) => comment.postId === params.id })
-      .sort((a, b) => a.createdAt - b.createdAt);
+
+    // Comments are browser-created and their model declares no adapter, so
+    // this stays a pure local read no matter how it is reached.
+    const comments = post
+      ? [...post.comments].sort((a, b) => a.createdAt - b.createdAt)
+      : [];
 
     return {
       post,
       author,
       comments,
-      // Distinguish "still loading" from a genuine miss: once any post has been
-      // seeded, a null lookup means the id really does not exist.
-      loaded: allPosts.length > 0,
       commentText: local.commentText,
       authorName: local.authorName
     };
@@ -663,9 +703,10 @@ export default class PostDetailView extends PuzzleView {
 
 Notes on this view:
 - **`params.id`** comes from the `/posts/:id` route; `data()` re-runs when it changes.
+- **The data story is D161 end-to-end:** the tracked `findOne('post', …)` faults the post in (round 1), the follow-up `findOne('user', post.authorId)` faults the author (round 2), and the view commits once settled — so the `{:else}` branch means a genuine 404 (the model's custom `loadOne` returns a 404 Response for unknown ids), never "still loading". No seed, no loading flag.
+- **`post.comments` is a relationship traversal** — reactive, local-only, never a request; sorting happens in `data()` like any query.
 - The comment form carries **no field handlers at all**: `value={ authorName }` and `value={ commentText }` are two-way bindings on bare local keys (D147), so `events` only has to `createRecord('comment', …)` on submit and clear the draft.
 - `<CommentItem @remove={ removeComment(comment) }>` is a **callback prop** carrying the loop variable; the child reports intent and the **parent owns the mutation** (`comment.destroy()`).
-- The nested conditional shown (`{#if post}…{:else}{#if loaded}…{/if}{/if}`) predates v1.9 — since `{:else if}` chaining shipped (D40) you can flatten it to `{#if post}…{:else if loaded}…{:else}…{/if}`.
 - The `<style>` block above is abridged and is a standalone walkthrough of the `<style>` feature — the shipped `examples/blog/app/views/PostDetail.pzl` now styles this view with Tailwind instead (see the D27 decision card), so this section no longer mirrors that file verbatim.
 
 ### Form idioms (v1.68, D147)
@@ -971,22 +1012,30 @@ data(params, props) {
 
 ### Two data() gotchas
 
-**Never call `store.loadAll` (or `loadOne`) inside `data()`.** `loadAll` upserts
-records and notifies subscribers on *every* call, so a view subscribed to that
-type would re-run `data()`, refetch, notify, and loop forever. Seed the store
-**once**, in the app's `beforeMount` hook (v1.31, SPEC §34 — it runs before the
-first navigation, so an awaited seed is visible to the first `data()`):
+**Don't call `store.loadMany` (or `loadOne`) inside `data()` — the finds already
+fetch.** With the adapter capability installed, a tracked `findOne`/`findMany`
+miss runs the model's read verb itself and the view commits once everything
+settles (D161, [[DOC-SPEC-DATA]] §61) — a committed `null` means the record
+does not exist, never "still loading". Adding an explicit load on top is
+redundant network work, and development warns when it happens. The explicit
+loads remain as escape hatches *outside* tracked runs — `store.loadOne` in an
+event handler is the force-refresh idiom (it bypasses the negative cache):
 
 ```javascript
-// app.js — seed once in beforeMount, never inside a view's data()
-const app = new PuzzleApp({
-  // …target, routes, models…
-  async beforeMount(app) {
-    await Promise.all([app.store.loadAll('user'), app.store.loadAll('post')]);
-  }
-});
-app.mount();
+// A view needing a related record asks for it with one more tracked find —
+// the settle loop fetches the post in round 1 and the author in round 2:
+data(params, props) {
+  const store = this.ctx.store;
+  const post = store.findOne('post', params.id);
+  const author = post ? store.findOne('user', post.authorId) : null;
+  return { post, author, notFound: post === null };
+}
 ```
+
+Relationships (`post.author`) never fetch — that is what keeps a 50-row list
+from firing 50 GETs — so when a view genuinely needs the related record, it
+writes the tracked find on the foreign key as above. Event handlers read local
+snapshots and call `this.refresh()` when server-backed state should update.
 
 **Derived lists computed in `data()` need `setData(...)` + `this.refresh()` (D23).**
 `setData()` updates local state but does *not* re-run `data()`, so a list derived

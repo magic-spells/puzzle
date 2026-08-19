@@ -41,16 +41,19 @@ resurrection) and `delete()` resolves idempotently; a never-added instance still
 rejects both, asynchronously.
 
 The model's static adapter is a set of fetch functions. Endpoint shorthand
-generates `loadAll`, `loadOne`, `create`, `update`, and `delete`; any author
+generates `loadMany`, `loadOne`, `create`, `update`, and `delete`; any author
 function overrides its verb, and endpoint is optional when the invoked verbs
-are supplied directly. Those functions own only transport. Store-owned
+are supplied directly. A `loadAll` key throws at Store init naming `loadMany`
+(D158). Those functions own only transport. Store-owned
 validation, mutation-revision guards, pk adoption, `_synced` provenance, write
 chaining, persistence, and notification remain identical across generated and
-author transports.
+author transports — the D161 tracked fault path runs the same verbs.
 
 Relationships are excluded from defaults, validation, and JSON. The Store
 installs lazy prototype getters using conventional or overridden foreign keys;
-reads flow through normal queries and therefore participate in tracking.
+reads go through local-only lookups that record the same subscription keys as
+the public finds but never fault-in (D49/D161), so traversals participate in
+tracking without ever issuing a request.
 
 Assignment uses pollution-safe copy helpers. Fresh data rejects
 `__proto__`/`constructor`/`prototype`; server/storage merges also reject
