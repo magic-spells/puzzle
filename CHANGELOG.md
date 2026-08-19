@@ -11,11 +11,35 @@ numbered `Dnn` cards, referenced below.
 
 ## Upgrading across versions
 
-Six breaking changes are easy to miss on a multi-version jump. Most fail
-loudly — a compile error, a constructor throw, an unresolvable import. Three are
+Seven breaking changes are easy to miss on a multi-version jump. Most fail
+loudly — a compile error, a constructor throw, an unresolvable import. Four are
 quiet: `output: 'static'` (renamed, 0.2.0) and `errorContent()` (removed, 0.6.0)
 are greppable; the stricter write-response guard (0.6.0) is not — it depends on
-what your server returns, so it surfaces at runtime on the first save.
+what your server returns, so it surfaces at runtime on the first save — and
+neither is the behavior change under auto-fetching finds (0.7.0), which turns
+some reads that used to be local into requests.
+
+**Tracked `findOne`/`findMany` fetch what is missing (0.7.0, D161).** The
+rename half is loud: `store.loadAll` and the `loadAll` adapter verb are
+`loadMany` now, and every old spelling throws (see the 0.7.0 entry). The
+behavior half is quiet, and only affects apps that pass the `/adapter`
+capability:
+
+- **A mount-time seed keeps working but is now redundant.** An eager
+  `loadMany` in `beforeMount` still loads and still marks the type complete, so
+  the views that follow read a warm store and issue nothing. Delete the seed
+  and its "never load inside `data()`" comment when convenient; keep it only if
+  something at boot (a persisted-state restore, say) needs the records present
+  before the first navigation.
+- **A find that used to return `null` forever may now issue a request.** If a
+  view called `findOne('post', id)` on an adapter-backed model for an id the
+  store did not hold and treated the `null` as an answer, that read now fetches
+  and the view waits for it. The result is the same `null` only when the server
+  404s. Reads outside `data()` — event handlers, model methods — are unchanged
+  and still never fetch.
+- **`data()` runs more than once per navigation.** It always could, under store
+  notifications; the settle loop guarantees it. A `data()` with a side effect
+  or a one-shot gate in it was already wrong and now fails visibly.
 
 **`routerMode` takes a factory, not a string (0.6.0, D159).** Path routing is
 the zero-config default — omit `routerMode` entirely. Hash and memory routing
@@ -113,6 +137,159 @@ one is *not* a compile error; it silently builds a different product.
   `-w <member>` install shape and exits without running anything, rather than
   installing globally behind your back. The success line names the scope —
   `upgraded the global CLI …` or `upgraded @magic-spells/puzzle … in <dir>`.
+
+### Changed
+
+- **BREAKING: tracked `findOne`/`findMany` fetch what the store is missing
+  (D161).** Reading server data no longer needs any loading code. Inside a
+  view's `data()`, a find that misses returns its local value and queues a
+  fetch; the view does **not** commit that pass. Puzzle re-runs `data()` behind
+  the batch and commits the first pass whose reads all came up warm, so `data()`
+  keeps reading like plain synchronous code:
+
+  ```js
+  data(params) {
+    const store = this.ctx.store;
+    const post = store.findOne('post', params.id);
+    const author = post ? store.findOne('user', post.authorId) : null;
+    return { post, author };
+  }
+  ```
+
+  Deep-linked into an empty store that settles in three rounds — miss the post,
+  get the post and miss the author, get both — and renders once, fully
+  populated. Dependent reads resolve on their own; nothing declares an order.
+
+  The contract that makes this usable is that **a committed `null` means the
+  record does not exist**, never "still loading", so `{#if post} … {:else} Not
+  found` needs no companion `loaded` flag. Everything else follows from
+  protecting it:
+
+  | Read | Behavior |
+  |---|---|
+  | Tracked hit | synchronous return, no request |
+  | Tracked miss, resolvable read verb | local value + queued fetch, deduped by identity |
+  | Tracked miss, identity known absent | `null`, no request |
+  | `findMany` on a collection-complete type | pure local; `{ filter }` is always local |
+  | No `/adapter` capability, or no resolvable verb | pure local — exactly the 0.6.0 behavior |
+  | Outside `data()` (handlers, model methods) | pure local snapshot, never fetches |
+  | `belongsTo`/`hasMany` getters | local lookup, never fetches |
+
+  A miss faults only when D158 dispatch resolves a read verb — model function,
+  app default, or endpoint-generated REST — so `findOne` needs a `loadOne` and
+  `findMany` needs a `loadMany`. Fixture-driven and local-first apps are
+  untouched: no capability, no endpoint, no verb, no request. Relationships
+  deliberately never fault (a 50-row list must not become 50 GETs); when a view
+  needs a related record that may be missing, it adds one more tracked find on
+  the foreign key, and `post.author` then resolves off the warm store.
+
+  Only a framework-normalized 404 becomes a committed `null`. Network failures,
+  5xx, 401/403, and malformed bodies reject the run through the normal
+  navigation-failure / `errorView` path and poison no cache. Ten settle rounds
+  without converging **throws**, naming the view and the last round's request
+  keys — never a partial commit, which would make `null` ambiguous again.
+
+  Caching a migrating app should know about: a type is collection-complete only
+  after a **successful no-options** collection load (an empty array counts), so
+  `loadMany(type, options)` — including `{}` — stays partial and accumulating;
+  absent identities go in a never-persisted 1000-entry LRU and clear the moment
+  the identity arrives by any path (create, upsert, load, hydration, save
+  reconcile, primary-key adoption); a confirmed `record.delete()` records
+  absence but a local `destroy()` does not; and explicit `store.loadOne` bypasses
+  the negative cache, which makes it the force-refresh escape hatch. `data()`
+  now runs however many times the waterfall needs, so keep it a pure derivation.
+
+  The eager-seed idiom is retired. The 0.6.0 advice — seed whole collections
+  after `mount()`, and *never* load inside `data()`, or the upsert's own
+  notification loops the view — is what this replaces; the loop discards each
+  intermediate pass's subscriptions, so the cycle it warned about cannot form.
+  A leftover seed still works (it marks the types complete, and the views that
+  follow read a warm store), so migration is deletion at your convenience, not a
+  breaking edit. Calling `store.loadOne`/`store.loadMany` from inside a tracked
+  `data()` run warns once in dev and points at `findOne`/`findMany`.
+
+  Prerendering fetches at build time through the same loop: a request failure
+  fails the build naming the route, `beforeRequest` runs in the build context,
+  and `prerender: false` is still the opt-out. Skeletons are unchanged — every
+  settle round counts as one load, held by the existing `min-duration`.
+  Deliberately deferred: server-side query/pagination pass-through on
+  `findMany`, TTL/`reload(type)` invalidation, and request cancellation.
+
+- **BREAKING: the collection verb is `loadMany`, and `loadAll` throws (D161).**
+  One/Many is the framework's naming pair, and the old spelling is not aliased:
+  a silent fallback to generated REST would quietly hit different URLs than the
+  adapter you wrote. Every site that could have accepted it rejects it by name
+  instead, so an unmigrated app fails at boot rather than rendering empty lists.
+
+  | Before | After |
+  |---|---|
+  | `store.loadAll(type, options)` | `store.loadMany(type, options)` |
+  | `static adapter = { loadAll }` | `static adapter = { loadMany }` |
+  | `adapter.defaults({ loadAll })` | `adapter.defaults({ loadMany })` |
+  | `store.adapter(type).loadAll` | `store.adapter(type).loadMany` |
+
+  The four guards, all carrying the same message:
+
+  - `store.loadAll()` is kept as a throwing trap, not removed — an app that
+    still calls it would otherwise look migrated while its models never renamed
+    their verb.
+  - A registered model whose `static adapter` carries an own `loadAll` key
+    throws at **Store construction**, before any navigation.
+  - `adapter.defaults({ loadAll })` throws immediately, in production too: an
+    app-wide default silently covers every model.
+  - The verb-binding loop rejects `loadAll` **before** its custom-function
+    branch, so it cannot bind as a harmless custom verb nothing ever calls.
+
+  TypeScript follows: `AdapterLoadAllOptions` is `AdapterLoadManyOptions`.
+
+- **BREAKING: generated read failures are `PuzzleAdapterError` (D161).** A
+  non-OK response to a generated `loadMany`/`loadOne` now normalizes exactly
+  like a write does, and like an author function returning a non-OK `Response`.
+  Reads previously rejected with a plain `Error` carrying only a message:
+
+  ```
+  before:  [puzzle] load 'post' failed: 404 Not Found
+  after:   [puzzle] adapter request failed: 404 Not Found   (PuzzleAdapterError, .status === 404)
+  ```
+
+  The auto-fetch path needs the status to tell "absent" from "broken", and a
+  plain `Error` carries none. Code that matched on the old message string must
+  match on `err instanceof PuzzleAdapterError` and `err.status` instead; import
+  `PuzzleAdapterError` from `@magic-spells/puzzle/adapter`. A custom `loadOne`
+  reports "no such record" the same way — `return new Response(null, { status:
+  404 })`. Returning `null` remains a response-shape error, not an alternate
+  not-found convention.
+
+### Added
+
+- **`output: 'static'` pages carry the build's read state (D161).** Each
+  prerendered page already ships its records in a `data-puzzle-static-data`
+  island; it now ships what the build *learned* beside them, so `mountStatic`
+  does not refetch every collection and re-404 every id the build already
+  settled. A second inline island follows the record island immediately:
+
+  ```html
+  <script type="application/json" data-puzzle-static-read>
+  {"v":1,"complete":["post","user"],"absent":["post 999"]}
+  </script>
+  ```
+
+  `complete` is the collection-complete type names; `absent` is the identities
+  the build confirmed missing, spelled `"<type> <recordKey>"`. The kernel
+  hydrates records **first**, then the read state, and drops any absence whose
+  record turned out to be present — a build that 404'd an id another page later
+  supplied cannot suppress a live read. The envelope is versioned so an older
+  kernel rejects a newer one rather than misreading it, and it is **omitted
+  entirely** when the page settled nothing, so an adapter-less build emits the
+  same bytes it did before the envelope existed. `output: 'hybrid'` transfers
+  nothing new by design: its SPA takeover re-runs `data()` as a fresh session.
+
+- **HMR preserves read state across a dev reload (D161).** The dev-state
+  snapshot carries the collection-complete set and the negative cache along with
+  the records, so editing a template does not re-issue every collection load the
+  session had already settled. In-flight promises are never carried — an
+  unresolved miss simply refetches after the reload — and app persistence stays
+  records-only.
 
 ## 0.6.0 — 2026-08-15
 
