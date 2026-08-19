@@ -1,9 +1,10 @@
 ---
 name: "D49 — hasMany/belongsTo resolve as lazy store-backed getters with FK-by-convention (v1.17)"
-status: verified
+status: building
 connections:
   - DECISION-D05-SCHEMA-BUILDERS
   - DECISION-D48-SCHEMA-VALIDATION
+  - DECISION-D161-AUTO-FETCHING-FINDS
   - COMPONENT-PUZZLE-MODEL
   - COMPONENT-STORE
   - FEATURE-MODEL-RELATIONSHIPS
@@ -23,10 +24,11 @@ notes:
 # D49 — `hasMany`/`belongsTo` resolve as lazy store-backed getters with FK-by-convention (v1.17)
 
 Activates the schema entries reserved since v1 (SPEC §7). `Puzzle.belongsTo(type)` /
-`Puzzle.hasMany(type)` in a model's `static schema` now install **lazy prototype
-getters** that resolve against local store contents through the ordinary query path —
-so reactivity falls out of the existing subscription machinery for free. See
-[[DOC-SPEC-DATA]] §21.
+`Puzzle.hasMany(type)` in a model's `static schema` install **lazy prototype
+getters** that resolve against local store contents through local-only lookups
+recording the same subscription keys as the public finds — so reactivity falls
+out of the existing subscription machinery for free, and a traversal never
+issues a request. See [[DOC-SPEC-DATA]] §21.
 
 ## Context
 Related records were hand-joined in every `data()` (`store.findMany('comment',
@@ -35,14 +37,20 @@ case). The reserved builders needed: a foreign-key convention, lazy vs eager
 resolution, and a story for how subscription tracking sees a traversal.
 
 ## Decision
-- **Lazy getters over the live store; no materialization.** `post.author` ⇒
-  `store.findOne('user', post.authorId)`; `post.comments` ⇒ `store.findMany('comment',
-  { filter: c => c.postId === post.id })`. Because they call the ordinary query
-  methods, a traversal made inside a tracked `data()` evaluation **auto-subscribes
-  exactly like the manual join it replaces** — no new reactivity machinery. Outside a
-  tracked eval (template-only access) it reads current state without subscribing; the
-  documented idiom stays "return the traversal from `data()`". (Rejected: eager
-  materialization — stale copies plus an invalidation protocol, for nothing.)
+- **Lazy getters over the live store; no materialization; never fault-in.**
+  `post.author` resolves the `user` with `post.authorId`; `post.comments`
+  resolves the `comment` records whose FK matches — through private local-only
+  lookups that record the same subscription keys as `findOne`/`findMany` but
+  bypass [[DECISION-D161-AUTO-FETCHING-FINDS]] fault-in. A traversal made
+  inside a tracked `data()` evaluation **auto-subscribes exactly like the
+  manual join it replaces** — no new reactivity machinery — and a later query
+  that inserts the related record still reacts. A traversal never issues a
+  request: `post.author` across a 50-row list must not become 50 GETs; fetching
+  a missing related record is one more tracked find in `data()`. Outside a
+  tracked eval (template-only access) it reads current state without
+  subscribing; the documented idiom stays "return the traversal from
+  `data()`". (Rejected: eager materialization — stale copies plus an
+  invalidation protocol, for nothing.)
 - **FK by convention, overridable.** `belongsTo` infers `<relationshipName>Id`
   (`author:` → `authorId`); `hasMany` infers `<ownerTypeName>Id` (`post`'s `comments:`
   → `postId`). Both accept `{ key: '...' }` to override. Inference uses the model
@@ -66,7 +74,9 @@ resolution, and a story for how subscription tracking sees a traversal.
 
 ## Alternatives rejected
 - Eager materialization / inverse bookkeeping / many-to-many — out of scope per the
-  backlog card; fault-in of missing records is [[FEATURE-ADAPTER-WRITE-SYNC]]-layer.
+  backlog card. Relationship fault-in is rejected in
+  [[DECISION-D161-AUTO-FETCHING-FINDS]]: traversals stay local so list views
+  can't trigger N+1 request storms.
 - A reactive template-side traversal (subscribing during render) — render runs outside
   the tracked eval by design (D17/D23); changing that is its own decision.
 - `.key()` chain modifier — an options object is one obvious spelling, and
