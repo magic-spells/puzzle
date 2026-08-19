@@ -16,6 +16,8 @@
  * the hooks stay present but inert — nothing calls them without the dev client.
  */
 
+import { hydrateReadState, serializeReadState } from './capabilities.js';
+
 // Never dereference __PUZZLE_DEV__ directly: unbundled it is an undeclared
 // identifier and a bare read throws ReferenceError — the typeof probe is the
 // point. Bundled, esbuild replaces it with the literal so the whole expression
@@ -212,6 +214,16 @@ function snapshotImpl(app) {
 			blob.store = {};
 		}
 
+		// The adapter's read state rides along (D161) so a code save does not refetch
+		// every complete collection and re-404 every known miss. In-flight requests are
+		// deliberately NOT carried: an unresolved miss simply faults again after the
+		// reload. Null (no adapter) is simply absent from the blob.
+		try {
+			blob.read = serializeReadState(app.store);
+		} catch {
+			blob.read = null;
+		}
+
 		// View state: each live view's LOCAL layer (setData + created()-seeded
 		// state) through the JSON-safe filter (Change D). Only genuinely-local state
 		// crosses the reload — store-derived values in the model layer are recomputed
@@ -280,6 +292,14 @@ function restoreStoreImpl(app) {
 			app.store._hydrateAll(blob.store, { replace: true });
 		} catch {
 			// store restore is best-effort
+		}
+
+		// Read state AFTER the records, so an absence recorded before the save is
+		// dropped when the record it names is present in the transplant (D161).
+		try {
+			hydrateReadState(app.store, blob.read);
+		} catch {
+			// read-state restore is best-effort too — a cold read session still works
 		}
 
 		return blob; // hand the (validated) blob to phase 2 for view-local restore
