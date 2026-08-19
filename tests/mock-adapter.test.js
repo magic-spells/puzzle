@@ -509,3 +509,62 @@ describe('production posture — one advisory warning per model', () => {
 		);
 	});
 });
+
+// D161: the mock serves the auto-fetch path too — a mocked app is a server-backed
+// app as far as a tracked query is concerned, which is what makes the mock the
+// supported way to develop a settling view without a running API.
+describe('tracked queries settle against the mock', () => {
+	/** One settle round: run the tracked pass, await what it queued, repeat. */
+	async function settle(store, fn) {
+		for (;;) {
+			const requests = new Map();
+			const value = store.withTracking({}, fn, false, {}, requests);
+			if (requests.size === 0) return value;
+			await Promise.all(requests.values());
+		}
+	}
+
+	it('a tracked findMany loads the mock collection once, then filters locally', async () => {
+		const store = storeWith({
+			data: [
+				{ id: 't1', text: 'a', done: false },
+				{ id: 't2', text: 'b', done: true },
+			],
+		});
+
+		const done = await settle(store, () => store.findMany('todo', { filter: (t) => t.done }));
+		expect(done.map((todo) => todo.id)).toEqual(['t2']);
+
+		// Complete now: a second tracked pass is pure local.
+		const requests = new Map();
+		store.withTracking({}, () => store.findMany('todo'), false, {}, requests);
+		expect(requests.size).toBe(0);
+	});
+
+	it('a tracked findOne for a record the mock does not have settles to null', async () => {
+		const store = storeWith({ data: [{ id: 't1', text: 'a' }] });
+
+		expect(await settle(store, () => store.findOne('todo', 't1'))).toMatchObject({ text: 'a' });
+		expect(await settle(store, () => store.findOne('todo', 'ghost'))).toBeNull();
+
+		// The mock's 404 was recorded as absence — asking again requests nothing.
+		const requests = new Map();
+		store.withTracking({}, () => store.findOne('todo', 'ghost'), false, {}, requests);
+		expect(requests.size).toBe(0);
+	});
+
+	it('a mock failure rejects the run and leaves the type incomplete', async () => {
+		const store = storeWith({ data: [{ id: 't1', text: 'a' }], fail: true });
+		const requests = new Map();
+		store.withTracking({}, () => store.findMany('todo'), false, {}, requests);
+
+		const error = await Promise.all(requests.values()).catch((err) => err);
+		expect(error).toBeInstanceOf(PuzzleAdapterError);
+		expect(error.status).toBe(500);
+
+		const retry = new Map();
+		store.withTracking({}, () => store.findMany('todo'), false, {}, retry);
+		expect(retry.size).toBe(1);
+		await Promise.all(retry.values()).catch(() => {});
+	});
+});

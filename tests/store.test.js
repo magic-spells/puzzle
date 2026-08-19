@@ -1161,3 +1161,62 @@ describe('Store — held-eval refcounting (D146)', () => {
 		expect(keysOf(store, sub).some((k) => k.includes('t2'))).toBe(false);
 	});
 });
+
+// D161: core Store owns only the tracking hook. A store whose models resolve no
+// read verb — and any read made outside a tracked evaluation — is exactly the
+// local snapshot it has always been.
+describe('Store — local reads and the D161 fault hook', () => {
+	it('never fetches for a model with no adapter surface, tracked or not', async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal('fetch', fetchMock);
+		try {
+			const store = makeStore();
+			const requests = new Map();
+			store.withTracking({}, () => [store.findOne('todo', 'nope'), store.findMany('todo')], false, {}, requests);
+
+			expect(requests.size).toBe(0);
+			expect(fetchMock).not.toHaveBeenCalled();
+			expect(store.findOne('todo', 'nope')).toBeNull();
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
+
+	it('the local query helpers subscribe exactly like the public ones', () => {
+		const store = makeStore();
+		const todo = store.createRecord('todo', { id: 't1', text: 'x' });
+		const subscriber = {};
+
+		store.withTracking(subscriber, () => [
+			store._findOneLocal('todo', 't1'),
+			store._findManyLocal('todo', { filter: (r) => r.completed }),
+		]);
+
+		expect([...store.keysBySubscriber.get(subscriber)].sort()).toEqual(['todo', 'todo t1']);
+		expect(store._findOneLocal('todo', 't1')).toBe(todo);
+		expect(store._findManyLocal('todo')).toEqual([todo]);
+	});
+
+	it('a request map is installed only for the evaluation it was handed to', () => {
+		const store = makeStore();
+		const requests = new Map();
+		let inner = 'unset';
+		store.withTracking(
+			{},
+			() => {
+				expect(store._requests).toBe(requests);
+				// A nested evaluation without one restores the outer scope on exit.
+				store.withTracking({}, () => {
+					inner = store._requests;
+				});
+				expect(store._requests).toBe(requests);
+			},
+			false,
+			{},
+			requests
+		);
+
+		expect(inner).toBeNull();
+		expect(store._requests).toBeNull();
+	});
+});
