@@ -122,8 +122,8 @@ describe('static kernel — mountStatic (D81)', () => {
 		}
 		class Probe extends PuzzleView {
 			async data() {
-				const notes = await this.ctx.store.loadAll('note');
-				return { installed: typeof this.ctx.store.loadAll === 'function', count: notes.length };
+				const notes = await this.ctx.store.loadMany('note');
+				return { installed: typeof this.ctx.store.loadMany === 'function', count: notes.length };
 			}
 			render() {
 				return h('main', {}, [text(`${this.getData().installed}:${this.getData().count}`)]);
@@ -131,7 +131,7 @@ describe('static kernel — mountStatic (D81)', () => {
 		}
 		stamp(Probe, 'app/views/Probe.pzl');
 		const configured = adapter.defaults({
-			loadAll: async () => [{ id: 'n1' }],
+			loadMany: async () => [{ id: 'n1' }],
 		});
 		const cfg = {
 			target: '#app',

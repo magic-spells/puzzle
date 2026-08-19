@@ -55,10 +55,10 @@ const fakeStorage = () => {
 // ---- Fix 1: safeAssign skips the full pollution family --------------------------
 
 describe('Fix 1 — safeAssign/safeMerge unified skip-set (model.js)', () => {
-	it('a loadAll payload carrying constructor/prototype keys never shadows the model class', async () => {
+	it('a loadMany payload carrying constructor/prototype keys never shadows the model class', async () => {
 		mockFetch([{ id: 't1', constructor: 'x', prototype: 'y', text: 'hi' }]);
 		const store = apiStore();
-		const [record] = await store.loadAll('todo');
+		const [record] = await store.loadMany('todo');
 
 		// The class reference is intact — the exact operations that blanked the render.
 		expect(record.constructor).toBe(ApiTodo);

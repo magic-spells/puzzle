@@ -70,6 +70,11 @@ export class Store {
 		this._tracking = null; // current subscriber during data() evaluation
 		this._asyncTrackingChain = null; // in-flight async tracked eval, or null
 		this._trackingAdded = null; // keys the in-flight eval has queried (transactional reset)
+		// D161: the current evaluation's request map (key → promise) while a view's
+		// settle loop is running data(), else null. Its presence is what makes a
+		// query fault in what it missed; the adapter module owns everything about
+		// the requests themselves, so an app with no adapter never sets this.
+		this._requests = null;
 		// D146: subscriber → Map<key, holdCount> for PREPARED (evaluated but not yet
 		// committed/discarded) evals. Held keys are live subscriptions that no OTHER
 		// eval may reclaim as garbage: a store-change refresh landing mid-gate runs
@@ -144,8 +149,11 @@ export class Store {
 			configurable: true,
 			enumerable: false, // never own-enumerable → excluded from toJSON()'s spread
 			get() {
-				// Resolution is an ordinary query, so a traversal inside a tracked
-				// data() auto-subscribes exactly like the manual join it replaces.
+				// Resolution is an ordinary LOCAL query, so a traversal inside a tracked
+				// data() auto-subscribes exactly like the manual join it replaces — and
+				// deliberately never faults in a missing record (D161): a list of 50
+				// posts reading post.author must not become 50 requests. An author who
+				// wants the dependent fetch writes store.findOne() in data().
 				if (def.kind === 'belongsTo') {
 					if (!this._store) return null;
 					const fk = this[fkKey];
@@ -154,13 +162,13 @@ export class Store {
 					// via update(), which notifies this record's own key — and the
 					// component's data() also read this record, so it re-runs.
 					if (fk === null || fk === undefined) return null;
-					return this._store.findOne(def.type, fk);
+					return this._store._findOneLocal(def.type, fk);
 				}
 				// hasMany: filter the related collection by the owner's primary key.
 				if (!this._store) return [];
 				const ownerPk = this.constructor.primaryKey();
 				const ownerKey = recordKey(this[ownerPk]);
-				return this._store.findMany(def.type, {
+				return this._store._findManyLocal(def.type, {
 					filter: (r) => recordKey(r[fkKey]) === ownerKey,
 				});
 			},
@@ -265,13 +273,40 @@ export class Store {
 		return record;
 	}
 
+	/**
+	 * Query one record by primary key (D161). Inside a TRACKED data() run that
+	 * carries a request set — and only there — a miss also asks the installed
+	 * adapter for the record: the view's settle loop awaits whatever gets queued
+	 * and re-runs data(), so the model it commits is settled and a committed null
+	 * means "does not exist". Everywhere else (event handlers, model methods, an
+	 * app with no adapter) this is the local snapshot it has always been.
+	 */
 	findOne(type, id) {
-		this._subscribe(type + REC_SEP + id);
-		return this._typeMap(type).get(recordKey(id)) ?? null;
+		const record = this._findOneLocal(type, id);
+		if (!record && this._requests) this._faultOne(type, id, this._requests);
+		return record;
 	}
 
 	/** @param {object} [options] { filter: (record) => boolean } */
 	findMany(type, options = {}) {
+		// The collection, not the filter, is what can be missing: a filter is always
+		// applied locally and is never serialized into a request.
+		if (this._requests) this._faultMany(type, this._requests);
+		return this._findManyLocal(type, options);
+	}
+
+	/**
+	 * The local halves of the two queries, subscribing exactly as the public
+	 * methods do but never faulting. The relationship getters use these: traversing
+	 * `post.author` must record the subscription that makes it reactive without
+	 * turning a rendered list into N requests (D49, D161).
+	 */
+	_findOneLocal(type, id) {
+		this._subscribe(type + REC_SEP + id);
+		return this._typeMap(type).get(recordKey(id)) ?? null;
+	}
+
+	_findManyLocal(type, options = {}) {
 		this._subscribe(type);
 		let records = [...this._typeMap(type).values()];
 		if (typeof options.filter === 'function') {
@@ -347,8 +382,13 @@ export class Store {
 	 *   eval's own additions, leaving the live set exactly as it was). Scope restore
 	 *   (`_tracking`/`_trackingAdded`) is NEVER deferred — that is stack discipline.
 	 *   A failing eval reconciles(false) immediately and leaves `pending` untouched.
+	 * @param {?Map} [requests=null] D161 per-evaluation request map. Installed as
+	 *   `_requests` for the duration of the eval, which is what lets a missed
+	 *   findOne/findMany queue the fetch the caller's settle loop then awaits.
+	 *   Per EVALUATION, never Store-global: concurrent views may share a request
+	 *   promise but never each other's bookkeeping.
 	 */
-	withTracking(subscriber, fn, expectsAsync = false, pending = null) {
+	withTracking(subscriber, fn, expectsAsync = false, pending = null, requests = null) {
 		// Liveness probe: a subscriber destroyed since this eval was scheduled must
 		// never (re-)subscribe. Run fn UNTRACKED so any in-flight promise chain
 		// still settles for its caller, but no query inside can add a subscription.
@@ -361,7 +401,7 @@ export class Store {
 		// whole call (before we touch subscriptions or run fn) until it settles,
 		// then retry. Only async evals serialize — a sync eval is safe inline.
 		if (this._asyncTrackingChain && expectsAsync) {
-			const retry = () => this.withTracking(subscriber, fn, true, pending);
+			const retry = () => this.withTracking(subscriber, fn, true, pending, requests);
 			if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 				return devperfTrackingDeferred(
 					subscriber,
@@ -385,9 +425,14 @@ export class Store {
 		const before = new Set(this.keysBySubscriber.get(subscriber) ?? []);
 		const prevTracking = this._tracking;
 		const prevAdded = this._trackingAdded;
+		const prevRequests = this._requests;
 		const added = new Set();
 		this._tracking = subscriber;
 		this._trackingAdded = added;
+		// Same save/restore stack discipline as _tracking, for the same reason: a
+		// nested synchronous eval must not leave its request map installed under the
+		// suspended scope that resumes after it (D161).
+		this._requests = requests;
 
 		// How many UNCOMMITTED prepared evals currently hold this key for this
 		// subscriber (D146). Refcounted, so two overlapping prepares that query the
@@ -458,6 +503,7 @@ export class Store {
 			} else reconcile(ok);
 			this._tracking = prevTracking;
 			this._trackingAdded = prevAdded;
+			this._requests = prevRequests;
 		};
 
 		let result;
@@ -484,7 +530,7 @@ export class Store {
 			if (this._asyncTrackingChain) {
 				result.then(noop, noop); // observe the abandoned promise — no unhandled rejection
 				finalize(false);
-				const retry = () => this.withTracking(subscriber, fn, true, pending);
+				const retry = () => this.withTracking(subscriber, fn, true, pending, requests);
 				if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 					return devperfTrackingDeferred(
 						subscriber,
@@ -530,6 +576,7 @@ export class Store {
 		if (this._tracking === subscriber) {
 			this._tracking = null;
 			this._trackingAdded = null;
+			this._requests = null; // a destroyed subscriber's resumed eval must not fetch either
 		}
 		// D146: a destroyed subscriber holds nothing. Any prepared eval still pointing
 		// at it resolves to a reconcile over an already-empty key set (a no-op).
@@ -584,7 +631,7 @@ export class Store {
 	/**
 	 * Arm the batched flush() if one isn't already scheduled. Shared by _notify
 	 * (subscriber delivery) and _persist (the batched storage write) so a mutation
-	 * that only persists — no key notified, e.g. loadAll of an empty array or a
+	 * that only persists — no key notified, e.g. loadMany of an empty array or a
 	 * save whose 204 body changes nothing observable — still guarantees the
 	 * pending storage write lands.
 	 *
@@ -725,10 +772,10 @@ export class Store {
 
 	/**
 	 * Mark the store dirty and schedule the flush that writes it. Called from every
-	 * mutation path (createRecord / recordChanged / removeRecord / the loadAll &
+	 * mutation path (createRecord / recordChanged / removeRecord / the loadMany &
 	 * save reconciliation sites). The actual serialize + storage.setItem is O(store)
 	 * and used to run SYNCHRONOUSLY on every mutation — once per keystroke's
-	 * update(), once per record in loadAll's upsert loop — so it is now batched:
+	 * update(), once per record in loadMany's upsert loop — so it is now batched:
 	 * this only flags, and flush() does the single write after subscriber delivery
 	 * (the D63 scheduler already guarantees flush() runs soon, hidden tabs included).
 	 * A caller needing the write NOW calls flush(). No-op without configured storage.

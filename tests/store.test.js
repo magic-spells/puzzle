@@ -896,14 +896,14 @@ describe('Store — server read path (D21)', () => {
 			});
 	};
 
-	it('loadAll fetches apiURL + endpoint and creates real model instances', async () => {
+	it('loadMany fetches apiURL + endpoint and creates real model instances', async () => {
 		const fetchSpy = mockFetch([
 			{ id: 't1', text: 'from server', completed: true },
 			{ id: 't2', text: 'also server' },
 		]);
 		const store = apiStore();
 
-		const records = await store.loadAll('todo');
+		const records = await store.loadMany('todo');
 		// Explicit GET init (v1.55, D91): wire-identical to a bare fetch(url), and
 		// the shape beforeRequest sees on the read path.
 		expect(fetchSpy).toHaveBeenCalledWith('https://x.test/v1/api/todos', { method: 'GET' });
@@ -913,19 +913,19 @@ describe('Store — server read path (D21)', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('loadAll upserts: matching primary keys update in place, no duplicates', async () => {
+	it('loadMany upserts: matching primary keys update in place, no duplicates', async () => {
 		mockFetch([{ id: 't1', text: 'server version' }]);
 		const store = apiStore();
 		const local = store.createRecord('todo', { id: 't1', text: 'local version' });
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 		expect(store.findMany('todo')).toHaveLength(1); // no dupe
 		expect(store.findOne('todo', 't1')).toBe(local); // same instance, updated
 		expect(local.text).toBe('server version');
 		vi.unstubAllGlobals();
 	});
 
-	it('loadAll preserves fields edited during its flight and merges untouched server fields', async () => {
+	it('loadMany preserves fields edited during its flight and merges untouched server fields', async () => {
 		const resolveFetch = deferredFetch();
 		const store = apiStore();
 		const local = store.createRecord('todo', {
@@ -934,7 +934,7 @@ describe('Store — server read path (D21)', () => {
 			completed: false,
 		});
 
-		const loading = store.loadAll('todo');
+		const loading = store.loadMany('todo');
 		local.update({ text: 'typed' });
 		resolveFetch([{ id: 't1', text: 'stale server text', completed: true }]);
 
@@ -967,7 +967,7 @@ describe('Store — server read path (D21)', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('loadAll overwrites edits made before dispatch', async () => {
+	it('loadMany overwrites edits made before dispatch', async () => {
 		mockFetch([{ id: 't1', text: 'server text', completed: true }]);
 		const store = apiStore();
 		const local = store.createRecord('todo', {
@@ -977,7 +977,7 @@ describe('Store — server read path (D21)', () => {
 		});
 		local.update({ text: 'edited before load' });
 
-		const [loaded] = await store.loadAll('todo');
+		const [loaded] = await store.loadMany('todo');
 		expect(loaded).toBe(local);
 		expect(local.text).toBe('server text');
 		expect(local.completed).toBe(true);
@@ -985,11 +985,11 @@ describe('Store — server read path (D21)', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('loadAll fully overwrites a colliding record created after dispatch', async () => {
+	it('loadMany fully overwrites a colliding record created after dispatch', async () => {
 		const resolveFetch = deferredFetch();
 		const store = apiStore();
 
-		const loading = store.loadAll('todo');
+		const loading = store.loadMany('todo');
 		const local = store.createRecord('todo', {
 			id: 't1',
 			text: 'created during load',
@@ -1012,7 +1012,7 @@ describe('Store — server read path (D21)', () => {
 		const component = { onStoreChange: vi.fn() };
 		store.withTracking(component, () => store.findMany('todo'));
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 		store.flush();
 		expect(component.onStoreChange).toHaveBeenCalledTimes(1);
 		vi.unstubAllGlobals();
@@ -1047,11 +1047,11 @@ describe('Store — server read path (D21)', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('loadAll rejects on any non-object element and inserts nothing (whole response)', async () => {
+	it('loadMany rejects on any non-object element and inserts nothing (whole response)', async () => {
 		mockFetch([null, 'bad', { id: 'good', text: 'x' }]); // one null, one string, one good
 		const store = apiStore();
-		await expect(store.loadAll('todo')).rejects.toThrow(
-			/loadAll\('todo'\) expected an array of JSON objects/
+		await expect(store.loadMany('todo')).rejects.toThrow(
+			/loadMany\('todo'\) expected an array of JSON objects/
 		);
 		// the per-element guard runs up front, before any upsert — not even the
 		// good element half-applies from a mid-array failure
@@ -1062,8 +1062,8 @@ describe('Store — server read path (D21)', () => {
 	it('rejects with a clear message when the model declares no adapter', async () => {
 		mockFetch([]);
 		const store = makeStore(); // Todo has no static adapter
-		await expect(store.loadAll('todo')).rejects.toThrow(
-			/no adapter loadAll\(\) declared for 'todo'/
+		await expect(store.loadMany('todo')).rejects.toThrow(
+			/no adapter loadMany\(\) declared for 'todo'/
 		);
 		vi.unstubAllGlobals();
 	});
@@ -1071,7 +1071,7 @@ describe('Store — server read path (D21)', () => {
 	it('rejects on non-OK responses with the status', async () => {
 		mockFetch(null, false, 503);
 		const store = apiStore();
-		await expect(store.loadAll('todo')).rejects.toThrow(/503/);
+		await expect(store.loadMany('todo')).rejects.toThrow(/503/);
 		vi.unstubAllGlobals();
 	});
 });

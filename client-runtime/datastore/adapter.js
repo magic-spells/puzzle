@@ -17,13 +17,25 @@ import {
 } from '../model.js';
 
 const DELETED_SAVE_MESSAGE = '[puzzle] cannot save a deleted record';
-const ADAPTER_VERBS = ['loadAll', 'loadOne', 'create', 'update', 'delete'];
+const ADAPTER_VERBS = ['loadMany', 'loadOne', 'create', 'update', 'delete'];
+// The 0.6 spelling of loadMany. Every site that could accept it as an ordinary
+// custom verb rejects it by name instead, so an unmigrated app fails at build/boot
+// rather than silently never loading a collection (D161).
+const LEGACY_LOAD_ALL = 'loadAll';
 
 const noop = () => {};
 const writeChainsByStore = new WeakMap();
 const adapterBindingsByStore = new WeakMap();
 const warnedAdapterConfigs = new WeakSet();
+const warnedTrackedLoads = new WeakMap();
 let installed = false;
+
+// Core Store methods this module WRAPS rather than replaces. Captured before
+// installAdapter() overwrites them on the prototype (D157 keeps the read-state
+// bookkeeping out of store.js, so the hooks it needs are added from out here).
+const baseCreateRecord = Store.prototype.createRecord;
+const baseHydrateAll = Store.prototype._hydrateAll;
+const baseInstallRelationships = Store.prototype._installRelationships;
 
 function validateAdapterConfig(type, Model, config) {
 	if (!config || typeof config !== 'object' || Array.isArray(config)) return;
@@ -36,6 +48,44 @@ function validateAdapterConfig(type, Model, config) {
 		`[puzzle] model '${type}' has invalid adapter ${invalid.length === 1 ? 'key' : 'keys'} ${invalid
 			.map((key) => JSON.stringify(key))
 			.join(', ')} — adapter keys must be "endpoint", "mock", or functions`
+	);
+}
+
+/** The one migration message, so every guard site reads identically. */
+function legacyLoadAllError(where) {
+	return new Error(
+		`[puzzle] ${where} — the adapter verb 'loadAll' was renamed 'loadMany' in 0.7.0; rename it (and store.loadAll() → store.loadMany())`
+	);
+}
+
+/** Fail at Store construction, before any navigation, on an unrenamed verb. */
+function assertRenamedVerbs(models) {
+	for (const [type, Model] of Object.entries(models)) {
+		const config = Model?.adapter;
+		if (
+			config &&
+			typeof config === 'object' &&
+			Object.prototype.hasOwnProperty.call(config, LEGACY_LOAD_ALL)
+		) {
+			throw legacyLoadAllError(`model '${type}' declares adapter.loadAll`);
+		}
+	}
+}
+
+/**
+ * Dev nudge (D161): the imperative loaders inside a tracked data() run are almost
+ * always a leftover from hand-rolled loading — findOne/findMany fetch what is
+ * missing and settle before the view commits. Once per store per verb; the
+ * internal fault path calls _loadOne/_loadMany and never lands here.
+ */
+function warnTrackedLoad(store, verb, replacement) {
+	if (!store._tracking) return;
+	let warned = warnedTrackedLoads.get(store);
+	if (!warned) warnedTrackedLoads.set(store, (warned = new Set()));
+	if (warned.has(verb)) return;
+	warned.add(verb);
+	console.warn(
+		`[puzzle] store.${verb}() was called inside a tracked data() run — use store.${replacement}(), which fetches what is missing and settles before the view commits`
 	);
 }
 
@@ -53,7 +103,7 @@ function validateAdapterDefaults(verbs) {
 	console.warn(
 		`[puzzle] adapter.defaults() has invalid ${invalid.length === 1 ? 'key' : 'keys'} ${invalid
 			.map((key) => JSON.stringify(key))
-			.join(', ')} — defaults keys must be loadAll, loadOne, create, update, or delete, and every value must be a function`
+			.join(', ')} — defaults keys must be loadMany, loadOne, create, update, or delete, and every value must be a function`
 	);
 }
 
@@ -111,10 +161,10 @@ function isResponse(value) {
 	return typeof Response !== 'undefined' && value instanceof Response;
 }
 
-async function generatedTransport(type, url, verb, fetch, arg) {
+async function generatedTransport(url, verb, fetch, arg) {
 	let method;
 	let body;
-	if (verb === 'loadAll') {
+	if (verb === 'loadMany') {
 		method = 'GET';
 		url = queryURL(url, arg);
 	} else if (verb === 'loadOne') {
@@ -134,12 +184,9 @@ async function generatedTransport(type, url, verb, fetch, arg) {
 		init.body = body;
 	}
 	const response = await fetch(url, init);
-	if (verb === 'loadAll' || verb === 'loadOne') {
-		if (!response.ok) {
-			throw new Error(`[puzzle] load '${type}' failed: ${response.status} ${response.statusText}`);
-		}
-		return readBody(response);
-	}
+	// Reads normalize through PuzzleAdapterError exactly like writes and like an
+	// author function that returns a non-OK Response (D161): the auto-fetch path
+	// recognises absence by `status === 404`, and a plain Error carries no status.
 	if (verb === 'delete' && response.status === 404) return;
 	return responseData(response);
 }
@@ -153,7 +200,134 @@ function writeChainsFor(store) {
 	return chains;
 }
 
+// ---- read state (D161) -------------------------------------------------------
+//
+// Every piece of fetch bookkeeping the auto-fetching finds need lives HERE,
+// keyed by Store in a module WeakMap, never as Store fields: a no-adapter app
+// imports none of this file, so it must ship none of this state (D157).
+
+const readStateByStore = new WeakMap();
+// Bounded so a page that walks user-supplied ids cannot grow the negative cache
+// without limit. No TTL: an identity the server 404s is absent until something
+// makes it present (see clearAbsent's call sites).
+const MAX_ABSENT = 1000;
+const REC_SEP = ' '; // matches Store's record-key convention: a type name has no space
+
+function readStateFor(store) {
+	let state = readStateByStore.get(store);
+	if (!state) {
+		state = {
+			one: new Map(), // "type id" → in-flight single-record request
+			many: new Map(), // type → in-flight complete-collection request
+			absent: new Map(), // "type id" → true, insertion-ordered (LRU)
+			complete: new Set(), // types whose complete collection has loaded
+		};
+		readStateByStore.set(store, state);
+	}
+	return state;
+}
+
+/**
+ * The cache key for one record identity, or null when the id has no stable
+ * spelling. `recordKey` normalizes numbers, so 7 and '7' share an entry while
+ * '01' and 1 do not; anything else (an object used as an id) is unkeyable, and
+ * an absence we cannot record is one we must never fetch for — otherwise the
+ * settle loop would re-request it every round until the cap.
+ */
+function identityKey(type, id) {
+	const key = recordKey(id);
+	return typeof key === 'string' ? type + REC_SEP + key : null;
+}
+
+function markAbsent(state, key) {
+	state.absent.delete(key); // re-insert so the eviction order is true LRU
+	state.absent.set(key, true);
+	if (state.absent.size > MAX_ABSENT) {
+		state.absent.delete(state.absent.keys().next().value);
+	}
+}
+
+function isAbsent(state, key) {
+	if (!state.absent.has(key)) return false;
+	markAbsent(state, key); // a consulted entry is a used entry
+	return true;
+}
+
+/** Drop the negative entry for one identity — it just became present. */
+function clearAbsent(store, type, id) {
+	const state = readStateByStore.get(store);
+	if (!state || state.absent.size === 0) return;
+	const key = identityKey(type, id);
+	if (key !== null) state.absent.delete(key);
+}
+
+/** Drop every negative entry whose record is now in the store (bulk inserts). */
+function sweepAbsent(store) {
+	const state = readStateByStore.get(store);
+	if (!state || state.absent.size === 0) return;
+	for (const key of [...state.absent.keys()]) {
+		const sep = key.indexOf(REC_SEP);
+		const map = store.recordsByType.get(key.slice(0, sep));
+		if (map && map.has(key.slice(sep + 1))) state.absent.delete(key);
+	}
+}
+
+/**
+ * The read state a prerendered page hands its browser kernel (D161). Records
+ * travel in the existing data island; this is what the island cannot infer from
+ * them — which collections are known complete and which identities are known
+ * absent. Versioned so an older kernel can reject a newer envelope.
+ */
+export function serializeReadState(store) {
+	const state = readStateByStore.get(store);
+	if (!state) return { v: 1, complete: [], absent: [] };
+	return {
+		v: 1,
+		complete: [...state.complete],
+		absent: [...state.absent.keys()],
+	};
+}
+
+/**
+ * Adopt a serialized envelope. Call AFTER the records hydrate: a negative entry
+ * whose record is present is dropped rather than trusted, so a build that 404'd
+ * an id another page later supplied cannot suppress a live read. In-flight work
+ * is never transferred — an unresolved miss simply refetches.
+ */
+export function hydrateReadState(store, envelope) {
+	if (!envelope || envelope.v !== 1) return;
+	const state = readStateFor(store);
+	if (Array.isArray(envelope.complete)) {
+		for (const type of envelope.complete) state.complete.add(type);
+	}
+	if (Array.isArray(envelope.absent)) {
+		for (const key of envelope.absent) {
+			if (typeof key === 'string' && key.includes(REC_SEP)) markAbsent(state, key);
+		}
+	}
+	sweepAbsent(store);
+}
+
 class AdapterStoreMethods {
+	// ---- wrapped core methods (D161 read-state invalidation) --
+
+	/** Store init is where an unrenamed adapter verb has to be caught (D161). */
+	_installRelationships() {
+		assertRenamedVerbs(this.models);
+		baseInstallRelationships.call(this);
+	}
+
+	createRecord(type, data) {
+		const record = baseCreateRecord.call(this, type, data);
+		clearAbsent(this, type, record[this.modelFor(type).primaryKey()]);
+		return record;
+	}
+
+	_hydrateAll(data, options) {
+		baseHydrateAll.call(this, data, options);
+		sweepAbsent(this); // storage / static-island / HMR restore all land here
+	}
+
 	// ---- adapter dispatch + bound author surface (D158) -------
 
 	/**
@@ -186,6 +360,12 @@ class AdapterStoreMethods {
 		};
 		const bound = {};
 		for (const [key, value] of Object.entries(config)) {
+			// Rejected BEFORE the custom-verb branch below (D161): an unrenamed
+			// loadAll is a function, so it would otherwise bind as a harmless custom
+			// verb nothing ever calls.
+			if (key === LEGACY_LOAD_ALL) {
+				throw legacyLoadAllError(`model '${type}' declares adapter.loadAll`);
+			}
 			bound[key] = typeof value === 'function' ? (...args) => value(fetch, ...args) : value;
 		}
 		const defaultContext = { type, endpoint: config.endpoint };
@@ -195,7 +375,7 @@ class AdapterStoreMethods {
 				if (typeof defaults?.[verb] === 'function') {
 					bound[verb] = (...args) => defaults[verb](fetch, ...args, defaultContext);
 				} else if (config.endpoint) {
-					bound[verb] = (arg) => generatedTransport(type, url, verb, fetch, arg);
+					bound[verb] = (arg) => generatedTransport(url, verb, fetch, arg);
 				}
 			}
 		}
@@ -216,11 +396,33 @@ class AdapterStoreMethods {
 	// ---- server read path (D21) ------------------------------
 
 	/**
+	 * The 0.6 spelling. Kept as a trap rather than an alias: an app that keeps
+	 * calling it would otherwise look migrated while its models never renamed
+	 * their verb (D161).
+	 */
+	loadAll() {
+		throw legacyLoadAllError('store.loadAll() no longer exists');
+	}
+
+	/**
 	 * GET apiURL + adapter.endpoint and upsert every record in the response.
 	 * Records with matching primary keys are updated in place — no duplicates.
 	 * Subscribers are notified as data lands (batched, as usual).
+	 *
+	 * Imperative and unconditional: it always issues a request (the force-refresh
+	 * escape hatch), unlike the deduplicated fault the tracked findMany queues.
+	 * Called with NO options it is a complete-collection load, so the type becomes
+	 * collection-complete; an options-bearing call — `{}` included — is a partial,
+	 * accumulating load and marks nothing (D161).
 	 */
-	async loadAll(type, options) {
+	loadMany(type, options) {
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			warnTrackedLoad(this, 'loadMany', 'findMany');
+		}
+		return this._loadMany(type, options);
+	}
+
+	async _loadMany(type, options) {
 		const pk = this.modelFor(type).primaryKey();
 		const revisionsAtDispatch = new Map(
 			Array.from(this._typeMap(type).values(), (record) => [
@@ -228,9 +430,9 @@ class AdapterStoreMethods {
 				recordMutationRevision(record),
 			])
 		);
-		const list = await this._adapterResult(this._adapterVerb(type, 'loadAll')(options));
+		const list = await this._adapterResult(this._adapterVerb(type, 'loadMany')(options));
 		if (!Array.isArray(list)) {
-			throw new Error(`[puzzle] loadAll('${type}') expected a JSON array from the server`);
+			throw new Error(`[puzzle] loadMany('${type}') expected a JSON array from the server`);
 		}
 		// Per-element shape guard (mirrors loadOne): validate EVERY entry up front,
 		// before any upsert, so a null/array/non-object mid-array can't half-apply
@@ -240,27 +442,55 @@ class AdapterStoreMethods {
 		for (const data of list) {
 			if (data == null || typeof data !== 'object' || Array.isArray(data)) {
 				throw new Error(
-					`[puzzle] loadAll('${type}') expected an array of JSON objects from the server`
+					`[puzzle] loadMany('${type}') expected an array of JSON objects from the server`
 				);
 			}
 			if (data[pk] == null) {
 				throw new Error(
-					`[puzzle] loadAll('${type}') requires primary key "${pk}" on every record`
+					`[puzzle] loadMany('${type}') requires primary key "${pk}" on every record`
 				);
 			}
 		}
 		const records = list.map((data) =>
 			this._upsert(type, data, revisionsAtDispatch.get(recordKey(data[pk])))
 		);
+		// A complete collection answers "is this identity absent?" for every id it
+		// omits, so both facts land together (D161). An empty array counts.
+		if (options == null) readStateFor(this).complete.add(type);
 		this._persist();
 		return records;
 	}
 
-	/** GET apiURL + adapter.endpoint + '/' + id and upsert the single record. */
-	async loadOne(type, id) {
+	/**
+	 * GET apiURL + adapter.endpoint + '/' + id and upsert the single record.
+	 *
+	 * Imperative: it always issues a request and deliberately BYPASSES the negative
+	 * cache, which makes it the force-refresh escape hatch for an id the framework
+	 * has recorded as absent. A 404 refreshes that entry; success clears it (D161).
+	 */
+	loadOne(type, id) {
+		if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
+			warnTrackedLoad(this, 'loadOne', 'findOne');
+		}
+		return this._loadOne(type, id);
+	}
+
+	async _loadOne(type, id) {
 		const existing = this._typeMap(type).get(recordKey(id));
 		const revisionAtDispatch = existing ? recordMutationRevision(existing) : undefined;
-		const data = await this._adapterResult(this._adapterVerb(type, 'loadOne')(id));
+		let data;
+		try {
+			data = await this._adapterResult(this._adapterVerb(type, 'loadOne')(id));
+		} catch (err) {
+			// The one error the framework reads as a fact about the data rather than
+			// about the request. Everything else (network, 5xx, 401) leaves the caches
+			// untouched and stays retryable.
+			if (err instanceof PuzzleAdapterError && err.status === 404) {
+				const key = identityKey(type, id);
+				if (key !== null) markAbsent(readStateFor(this), key);
+			}
+			throw err;
+		}
 		// Response-shape guard (mirrors loadAll): a null/array/non-object body would
 		// slip through _upsert → _instantiate as a bogus record (200 null → an empty
 		// record with a generated pk marked _synced; an array spreads indices as fields).
@@ -271,6 +501,15 @@ class AdapterStoreMethods {
 		if (data[pk] == null) {
 			throw new Error(
 				`[puzzle] loadOne('${type}', id) requires primary key "${pk}" on the record`
+			);
+		}
+		// Identity guard (D161), checked BEFORE any mutation: a response for some
+		// other record would leave the requested id still missing, so an implicit
+		// fault would re-request it every settle round until the cap. Normalized, so
+		// a numeric id answering a string request is the same identity.
+		if (recordKey(data[pk]) !== recordKey(id)) {
+			throw new Error(
+				`[puzzle] loadOne('${type}', ${JSON.stringify(id)}) returned a record with primary key ${JSON.stringify(data[pk])} — the response must be the requested record`
 			);
 		}
 		const record = this._upsert(type, data, revisionAtDispatch);
@@ -313,6 +552,75 @@ class AdapterStoreMethods {
 		return isArray ? records : records[0];
 	}
 
+	// ---- tracked auto-fetch (D161) ---------------------------
+
+	/**
+	 * Core Store calls this from findOne() when a tracked evaluation missed. It
+	 * decides — with all the state that decision needs living out here — whether a
+	 * request is owed, and records the one to wait for under its diagnostic key.
+	 *
+	 * Silent (no request, no entry) when: the id is nullish or unkeyable, the
+	 * identity is known absent, or the model resolves no loadOne verb. A pending
+	 * identical request is joined rather than reissued.
+	 */
+	_faultOne(type, id, requests) {
+		if (id == null) return;
+		const key = identityKey(type, id);
+		if (key === null) return;
+		const state = readStateFor(this);
+		if (isAbsent(state, key)) return;
+		const inflight = state.one.get(key);
+		if (inflight) {
+			requests.set(key, inflight);
+			return;
+		}
+		if (typeof this.adapter(type).loadOne !== 'function') return;
+
+		const request = (async () => {
+			try {
+				await this._loadOne(type, id);
+			} catch (err) {
+				// A 404 is an answer: the identity is absent, the round resolves, and the
+				// committed null means "does not exist". Everything else fails the run.
+				if (!(err instanceof PuzzleAdapterError) || err.status !== 404) throw err;
+			} finally {
+				if (state.one.get(key) === request) state.one.delete(key);
+			}
+		})();
+		state.one.set(key, request);
+		request.catch(noop); // observed even if the pass that started it is discarded
+		requests.set(key, request);
+	}
+
+	/**
+	 * The findMany half. Completeness is tracked independently of record presence:
+	 * local records prove nothing about the rest of the collection, so the first
+	 * tracked findMany on a type still loads it once. Filters stay local.
+	 */
+	_faultMany(type, requests) {
+		const state = readStateFor(this);
+		if (state.complete.has(type)) return;
+		const inflight = state.many.get(type);
+		if (inflight) {
+			requests.set(type, inflight);
+			return;
+		}
+		if (typeof this.adapter(type).loadMany !== 'function') return;
+
+		const request = (async () => {
+			try {
+				await this._loadMany(type);
+			} finally {
+				// Failure clears the in-flight entry WITHOUT marking the type complete
+				// (_loadMany marks it only on success), so a retry is a real retry.
+				if (state.many.get(type) === request) state.many.delete(type);
+			}
+		})();
+		state.many.set(type, request);
+		request.catch(noop);
+		requests.set(type, request);
+	}
+
 	async _adapterResult(result) {
 		const value = await result;
 		return isResponse(value) ? responseData(value) : value;
@@ -327,6 +635,7 @@ class AdapterStoreMethods {
 	 */
 	_upsert(type, data, throughRevision) {
 		const pk = this.modelFor(type).primaryKey();
+		clearAbsent(this, type, data?.[pk]); // present now, whichever branch below runs
 		const existing = data?.[pk] != null ? this._typeMap(type).get(recordKey(data[pk])) : null;
 		if (existing) {
 			safeMerge(existing, data, throughRevision);
@@ -553,6 +862,7 @@ class AdapterStoreMethods {
 				safeMerge(record, { [pk]: adoptedPk });
 				safeMerge(record, rest, requestRevision);
 				map.set(recordKey(record[pk]), record);
+				clearAbsent(this, type, record[pk]); // the adopted identity is present now
 				record._synced = true;
 				this._notify(type, oldId); // old key: subscribers of the gone id
 				this._notify(type, record[pk]); // new key + collection
@@ -648,6 +958,11 @@ class AdapterStoreMethods {
 		// would evict an unrelated B that reused A's id.
 		if (this._typeMap(type).get(requestKey) === record) {
 			this.removeRecord(record); // notifies as usual
+			// A CONFIRMED delete proves server absence, so a later tracked findOne for
+			// this id returns null without re-requesting. Local destroy() proves
+			// nothing and deliberately records nothing (D161).
+			const key = identityKey(type, requestKey);
+			if (key !== null) markAbsent(readStateFor(this), key);
 		}
 		return record;
 	}
@@ -729,6 +1044,12 @@ function installAdapter() {
 }
 
 function createDefaultsCapability(verbs = {}) {
+	// Unconditional, production included: an app-wide loadAll default silently
+	// covers every model, so a missed rename would look like a working app whose
+	// collections never load (D161).
+	if (verbs && Object.prototype.hasOwnProperty.call(verbs, LEGACY_LOAD_ALL)) {
+		throw legacyLoadAllError('adapter.defaults({ loadAll })');
+	}
 	if (typeof __PUZZLE_DEV__ === 'undefined' || __PUZZLE_DEV__) {
 		validateAdapterDefaults(verbs);
 	}

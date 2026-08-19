@@ -68,11 +68,22 @@ beforeEach(() => {
 	history.replaceState({}, '', '/');
 	document.title = '';
 	document.body.innerHTML = '';
+	// D161: Todo declares an endpoint, so a tracked findMany('todo') in a view's
+	// data() loads the collection once. Answer it with an empty one; the tests
+	// about server data stub their own fetch over this.
+	vi.stubGlobal('fetch', async () => ({
+		ok: true,
+		status: 200,
+		statusText: 'OK',
+		text: async () => '[]',
+		json: async () => [],
+	}));
 });
 
 afterEach(() => {
 	apps.forEach((a) => a.unmount());
 	apps = [];
+	vi.unstubAllGlobals(); // a stubbed fetch must not leak into the next test
 	vi.restoreAllMocks();
 });
 
@@ -128,10 +139,10 @@ describe('PuzzleApp — boot (APP_ANATOMY §3)', () => {
 		container('first');
 		container('second');
 		const firstAdapter = adapter.defaults({
-			loadAll: async () => [{ id: 't1', text: 'First dialect' }],
+			loadMany: async () => [{ id: 't1', text: 'First dialect' }],
 		});
 		const secondAdapter = adapter.defaults({
-			loadAll: async () => [{ id: 't1', text: 'Second dialect' }],
+			loadMany: async () => [{ id: 't1', text: 'Second dialect' }],
 		});
 		const first = make({
 			target: '#first',
@@ -148,8 +159,8 @@ describe('PuzzleApp — boot (APP_ANATOMY §3)', () => {
 
 		await Promise.all([first.mount(), second.mount()]);
 		const [firstRecords, secondRecords] = await Promise.all([
-			first.store.loadAll('todo'),
-			second.store.loadAll('todo'),
+			first.store.loadMany('todo'),
+			second.store.loadMany('todo'),
 		]);
 
 		expect(firstRecords[0].text).toBe('First dialect');
@@ -249,7 +260,7 @@ describe('PuzzleApp — models & store wiring', () => {
 		expect(typeof todo.id).toBe('string'); // pk generated
 	});
 
-	it('passes apiURL to the store so loadAll fetches apiURL + adapter.endpoint', async () => {
+	it('passes apiURL to the store so loadMany fetches apiURL + adapter.endpoint', async () => {
 		container();
 		const fetchMock = vi.fn(async () => ({
 			ok: true,
@@ -269,7 +280,7 @@ describe('PuzzleApp — models & store wiring', () => {
 		});
 		await app.mount();
 
-		const records = await app.store.loadAll('todo');
+		const records = await app.store.loadMany('todo');
 		// The read path passes an explicit GET init (v1.55, D91) — wire-identical to
 		// a bare fetch(url), but the same init shape every other adapter verb hands
 		// to beforeRequest.
@@ -411,11 +422,15 @@ describe('PuzzleApp — full teardown (unmount destroys the view chain)', () => 
 
 	it('unmount during a pending navigation (slow async data()) mounts nothing, subscribes nothing, throws nothing', async () => {
 		let resolveData;
+		// ONE gate for every invocation: data() is contractually re-runnable and the
+		// tracked findMany below settles across rounds (D161), so a per-call promise
+		// would strand the second run forever.
+		const gate = new Promise((r) => {
+			resolveData = r;
+		});
 		class SlowView extends PuzzleView {
 			async data() {
-				await new Promise((r) => {
-					resolveData = r;
-				});
+				await gate;
 				return { todos: this.ctx.store.findMany('todo') };
 			}
 			render() {

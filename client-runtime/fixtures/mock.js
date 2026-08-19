@@ -6,7 +6,7 @@
  * Part of the detachable `/fixtures` module (D98): nothing in the core runtime
  * imports this file. Interception happens in `Store._network` — the seam the
  * adapter capability installs — which `installFixtures()` replaces on the prototype. That
- * placement is the entire point of the design: `loadAll` / `loadOne` / `save()` /
+ * placement is the entire point of the design: `loadMany` / `loadOne` / `save()` /
  * `delete()` / `request()` run COMPLETELY UNMODIFIED, so what a mocked app
  * exercises is the real D21 read path and the real D50 write path (pk adoption,
  * the `_synced` flip, the identity re-checks), not a parallel test-only code path.
@@ -67,7 +67,7 @@ const notFound = (method, url) =>
 /**
  * The mock's live collection for `type`, lazily built from the mock config's
  * `data` on first use and then owned by the store's fixture state — a `save()`
- * followed by a `loadAll()` MUST see the new record. Deep-cloned at init so the
+ * followed by a `loadMany()` MUST see the new record. Deep-cloned at init so the
  * fixture array a test passes in is never mutated underneath it.
  */
 function mockCollection(state, type, config, pk) {
@@ -212,8 +212,8 @@ function defaultCrud({ method, path, body, collection, pk, state, url }) {
  * when a test gets slower is not deterministic at all.
  *
  * A failure resolves a non-ok 500 rather than rejecting the fetch, so it flows
- * through the real error paths — `PuzzleAdapterError` for the write verbs, the
- * D21 plain throw for reads — instead of surfacing as a network exception the
+ * through the real error paths — `PuzzleAdapterError` for every verb, reads
+ * included (D161) — instead of surfacing as a network exception the
  * store has no contract for.
  *
  * @param {Store}  store

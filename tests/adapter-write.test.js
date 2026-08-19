@@ -64,13 +64,13 @@ describe('adapter write sync — package surface', () => {
 	it('keeps prototype installation capability-gated (module import alone is inert)', async () => {
 		vi.resetModules();
 		const { Store: FreshStore } = await import('../client-runtime/datastore/store.js');
-		expect(FreshStore.prototype.loadAll).toBeUndefined();
+		expect(FreshStore.prototype.loadMany).toBeUndefined();
 
 		const { adapter: freshAdapter } = await import('../client-runtime/datastore/adapter.js');
-		expect(FreshStore.prototype.loadAll).toBeUndefined();
+		expect(FreshStore.prototype.loadMany).toBeUndefined();
 
 		freshAdapter.install();
-		expect(FreshStore.prototype.loadAll).toBeTypeOf('function');
+		expect(FreshStore.prototype.loadMany).toBeTypeOf('function');
 	});
 
 	it('exports PuzzleAdapterError only from the adapter subpath', () => {
@@ -84,19 +84,19 @@ describe('adapter write sync — package surface', () => {
 	});
 
 	it('exports one frozen capability and installs idempotently', () => {
-		const loadAll = Store.prototype.loadAll;
+		const loadMany = Store.prototype.loadMany;
 		expect(Object.isFrozen(adapter)).toBe(true);
 		adapter.install();
-		expect(Store.prototype.loadAll).toBe(loadAll);
+		expect(Store.prototype.loadMany).toBe(loadMany);
 	});
 });
 
 describe('adapter read response bodies', () => {
-	it('loadAll reports its shape guard for a 204 response', async () => {
+	it('loadMany reports its shape guard for a 204 response', async () => {
 		mockFetch(new Response(null, { status: 204 }));
 
-		await expect(apiStore().loadAll('todo')).rejects.toThrow(
-			"[puzzle] loadAll('todo') expected a JSON array from the server"
+		await expect(apiStore().loadMany('todo')).rejects.toThrow(
+			"[puzzle] loadMany('todo') expected a JSON array from the server"
 		);
 	});
 
@@ -108,22 +108,22 @@ describe('adapter read response bodies', () => {
 		);
 	});
 
-	it('loadAll reports its shape guard for a non-JSON 200 response', async () => {
+	it('loadMany reports its shape guard for a non-JSON 200 response', async () => {
 		mockFetch(new Response('<html>not JSON</html>', { status: 200 }));
 
-		await expect(apiStore().loadAll('todo')).rejects.toThrow(
-			"[puzzle] loadAll('todo') expected a JSON array from the server"
+		await expect(apiStore().loadMany('todo')).rejects.toThrow(
+			"[puzzle] loadMany('todo') expected a JSON array from the server"
 		);
 	});
 
-	it('loadAll and loadOne still accept valid JSON responses', async () => {
+	it('loadMany and loadOne still accept valid JSON responses', async () => {
 		mockFetch(
 			new Response(JSON.stringify([{ id: 't1', text: 'all' }]), { status: 200 }),
 			new Response(JSON.stringify({ id: 't2', text: 'one' }), { status: 200 })
 		);
 		const store = apiStore();
 
-		const records = await store.loadAll('todo');
+		const records = await store.loadMany('todo');
 		const record = await store.loadOne('todo', 't2');
 
 		expect(records.map((item) => item.toJSON())).toEqual([
@@ -132,7 +132,7 @@ describe('adapter read response bodies', () => {
 		expect(record.toJSON()).toEqual({ id: 't2', text: 'one', completed: false });
 	});
 
-	it('loadAll rejects a pk-less element before storing any response records', async () => {
+	it('loadMany rejects a pk-less element before storing any response records', async () => {
 		mockFetch({
 			body: [
 				{ id: 't1', text: 'valid but must not land' },
@@ -141,8 +141,8 @@ describe('adapter read response bodies', () => {
 		});
 		const store = apiStore();
 
-		await expect(store.loadAll('todo')).rejects.toThrow(
-			`[puzzle] loadAll('todo') requires primary key "id" on every record`
+		await expect(store.loadMany('todo')).rejects.toThrow(
+			`[puzzle] loadMany('todo') requires primary key "id" on every record`
 		);
 		expect(store.findMany('todo')).toEqual([]);
 	});
@@ -637,13 +637,13 @@ describe('save() — concurrent in-flight guard', () => {
 });
 
 describe('save() — synced provenance from read/hydrate paths', () => {
-	it('a record from loadAll/_upsert is synced → first save() PUTs', async () => {
+	it('a record from loadMany/_upsert is synced → first save() PUTs', async () => {
 		const fetchSpy = mockFetch(
-			{ body: [{ id: 't1', text: 'from server' }] }, // loadAll GET
+			{ body: [{ id: 't1', text: 'from server' }] }, // loadMany GET
 			{ body: '' } // save PUT
 		);
 		const store = apiStore();
-		const [record] = await store.loadAll('todo');
+		const [record] = await store.loadMany('todo');
 		expect(record._synced).toBe(true);
 
 		record.update({ completed: true });
@@ -706,11 +706,11 @@ describe('save() — persisted synced provenance round-trips (§22, D50)', () =>
 	it('a server-loaded record persists as SYNCED → save() PUTs after reload', async () => {
 		const storage = roundTripStorage();
 		const fetchSpy = mockFetch(
-			{ body: [{ id: 's1', text: 'srv' }] }, // loadAll GET
+			{ body: [{ id: 's1', text: 'srv' }] }, // loadMany GET
 			{ body: '' } // save PUT after reload
 		);
 		const store1 = new Store({ todo: ApiTodo }, { apiURL: 'https://x.test/v1', storage });
-		await store1.loadAll('todo'); // _synced true → persisted with the marker
+		await store1.loadMany('todo'); // _synced true → persisted with the marker
 		store1.flush(); // persistence is batched into flush() — force the write now
 
 		const store2 = new Store({ todo: ApiTodo }, { apiURL: 'https://x.test/v1', storage });

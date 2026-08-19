@@ -12,8 +12,8 @@ export type AdapterMaybePromise<T> = T | Promise<T>;
 /** The fetch-compatible function Puzzle binds to every adapter function. */
 export type AdapterFetch = typeof globalThis.fetch;
 
-/** Values serialized by the endpoint-generated loadAll transport. */
-export type AdapterLoadAllOptions = Record<
+/** Values serialized by the endpoint-generated loadMany transport. */
+export type AdapterLoadManyOptions = Record<
 	string,
 	string | number | boolean | null | undefined
 >;
@@ -29,9 +29,9 @@ export interface AdapterDefaultContext {
 
 /** App-wide implementations for the five framework adapter verbs. */
 export interface AdapterDefaults<TRecord extends PuzzleModel = PuzzleModel> {
-	loadAll?(
+	loadMany?(
 		fetch: AdapterFetch,
-		options: AdapterLoadAllOptions | undefined,
+		options: AdapterLoadManyOptions | undefined,
 		context: AdapterDefaultContext
 	): AdapterMaybePromise<Response | AdapterRecord[]>;
 	loadOne?(
@@ -65,9 +65,9 @@ export interface AdapterConfig<TRecord extends PuzzleModel = PuzzleModel> {
 	endpoint?: string;
 	/** Development/test mock served in place of the network (v1.57, D95). */
 	mock?: AdapterMock;
-	loadAll?(
+	loadMany?(
 		fetch: AdapterFetch,
-		options?: AdapterLoadAllOptions
+		options?: AdapterLoadManyOptions
 	): AdapterMaybePromise<Response | AdapterRecord[]>;
 	loadOne?(fetch: AdapterFetch, id: any): AdapterMaybePromise<Response | AdapterRecord>;
 	create?(
@@ -82,8 +82,8 @@ export interface AdapterConfig<TRecord extends PuzzleModel = PuzzleModel> {
 }
 
 type BoundAdapterVerbs<TRecord extends PuzzleModel> = {
-	loadAll(
-		options?: AdapterLoadAllOptions
+	loadMany(
+		options?: AdapterLoadManyOptions
 	): AdapterMaybePromise<Response | AdapterRecord[]>;
 	loadOne(id: any): AdapterMaybePromise<Response | AdapterRecord>;
 	create(
@@ -145,9 +145,13 @@ declare module './index.js' {
 		adapter<TConfig extends AdapterConfig<any> = AdapterConfig>(
 			type: string
 		): BoundAdapterConfig<TConfig>;
-		/** GET the collection endpoint and upsert every record. */
-		loadAll(type: string, options?: AdapterLoadAllOptions): Promise<any[]>;
-		/** GET one record by id and upsert it. */
+		/**
+		 * GET the collection endpoint and upsert every record. Called with no
+		 * options it is a complete-collection load and marks the type complete;
+		 * an options-bearing call stays partial (D161).
+		 */
+		loadMany(type: string, options?: AdapterLoadManyOptions): Promise<any[]>;
+		/** GET one record by id and upsert it. Bypasses the negative cache. */
 		loadOne(type: string, id: any): Promise<any>;
 		/** Apply server-authoritative object(s), preserving record identity. */
 		upsert(type: string, objectOrArray: Record<string, any> | Record<string, any>[]): any;

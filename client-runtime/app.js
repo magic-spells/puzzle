@@ -95,7 +95,7 @@ export class PuzzleApp {
 	 *   `@magic-spells/puzzle/adapter`; installs the optional server sync surface
 	 * @param {Function} [config.beforeRequest] adapter request hook (v1.55, D91):
 	 *   `beforeRequest(init, { type, method, url })`, called SYNCHRONOUSLY before
-	 *   every adapter fetch (`loadAll`/`loadOne`, `save()`, `delete()`,
+	 *   every adapter fetch (`loadMany`/`loadOne`, `save()`, `delete()`,
 	 *   `request()`). Mutate `init` in place or return a replacement object to
 	 *   attach auth headers, `credentials`, or an AbortSignal; the context arg is
 	 *   frozen, and `method`/`body` are re-stamped by the Store (a hook cannot
