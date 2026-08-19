@@ -32,7 +32,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { installAdapterCapability, isConfiguredAdapter } from '../capabilities.js';
+import {
+	installAdapterCapability,
+	isConfiguredAdapter,
+	hasReadState,
+	serializeReadState,
+} from '../capabilities.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { Router, encodeURL, normalizeBase } from '../router/router.js';
@@ -52,7 +57,8 @@ import { MANAGED_TAGS } from '../headTags.js';
  *   formatters, apiURL, beforeMount, … }
  * @param {object} [opts]
  * @param {'hybrid'|'static'} [opts.mode] `'hybrid'` (default) is the router-takeover
- *   mode; `'static'` additionally captures each page's store snapshot (`data`), its
+ *   mode; `'static'` additionally captures each page's store snapshot (`data`), the
+ *   adapter read state it settled (`readState`, omitted when empty), its
  *   view/layout `__pzlModule` stamps (`modules`), and a plain-JSON `route` snapshot
  *   so prerenderToDir can emit true static pages (D81).
  * @param {Router} [opts.routeRouter] INTERNAL — an already-constructed memory
@@ -72,7 +78,8 @@ import { MANAGED_TAGS } from '../headTags.js';
  *     head: { title: string|null, description: string|null, canonical: string|null,
  *       socialImage: string|null } | null,
  *     prerender?: boolean,
- *     data?: object, modules?: { views: string[], layout: string|null }, route?: object }>,
+ *     data?: object, readState?: object, modules?: { views: string[], layout: string|null },
+ *     route?: object }>,
  *   skipped: Array<{ path: string, reason: string }>,
  *   warnings: string[]
  * }>} `html`/`title`/`head` are null for a `prerender: false` page (the shell is
@@ -601,6 +608,7 @@ async function writeStaticDir({
 				head: page.head, // null for prerender:false → no head injection (D84)
 				slug,
 				data: page.data ?? {},
+				readState: page.readState ?? null,
 			});
 			written.push({
 				path: page.path,
@@ -763,6 +771,12 @@ async function renderRoute(entry, ctx) {
  */
 function attachStaticFields(page, entry, ctx) {
 	page.data = ctx.store._serializeAll();
+	// What the records cannot say (D161): which collections this page settled
+	// completely, and which identities it settled as absent. Attached only when the
+	// app has an adapter AND something was actually read, so an adapter-less page's
+	// HTML is unchanged.
+	const readState = serializeReadState(ctx.store);
+	if (hasReadState(readState)) page.readState = readState;
 	page.modules = collectModules(entry);
 	page.route = serializeRouteJSON(entry);
 }
@@ -901,7 +915,10 @@ function stripAppBundle(shell) {
  *    to the shell's head region (D151).
  * The caller has already stripped the app-bundle tag from `shell`.
  */
-export function injectStaticShell(shell, { targetId, content, title, head, slug, data, base = '' }) {
+export function injectStaticShell(
+	shell,
+	{ targetId, content, title, head, slug, data, readState = null, base = '' }
+) {
 	const plan = getShellPlan(shell);
 	const ops = [];
 
@@ -927,8 +944,17 @@ export function injectStaticShell(shell, { targetId, content, title, head, slug,
 	// it instead of 404ing at the domain root. `base` is the already-normalized prefix
 	// ('' for a root deploy → unchanged `/_puzzle/…`). The shell's own asset hrefs
 	// (styles.css, favicon) stay the app author's responsibility under a base.
+	// The read-state island rides beside the record island and is OMITTED entirely
+	// when the page settled nothing (D161) — an adapter-less build emits the exact
+	// bytes it emitted before the envelope existed.
+	const readIsland = hasReadState(readState)
+		? `<script type="application/json" data-puzzle-static-read>${escapeScriptJson(
+				JSON.stringify(readState)
+			)}</script>`
+		: '';
 	const scripts =
 		`<script type="application/json" data-puzzle-static-data>${json}</script>` +
+		readIsland +
 		`<script type="module" src="${base}/_puzzle/${slug}.js"></script>`;
 	// The island rides before the SHELL's `</body>` — a fixed offset from the plan, so
 	// rendered content can never move the anchor (a `</body>` inside a raw <script>

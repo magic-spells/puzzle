@@ -6,7 +6,7 @@
  * never pass it keep the entire implementation out of their bundle.
  */
 
-import { createAdapterCapability } from '../capabilities.js';
+import { createAdapterCapability, registerReadState } from '../capabilities.js';
 import { Store } from './store.js';
 import { PuzzleView } from '../views/PuzzleView.js';
 import {
@@ -314,6 +314,11 @@ export function hydrateReadState(store, envelope) {
 	}
 	sweepAbsent(store);
 }
+
+// The prerenderer, the static kernel and the HMR snapshot reach the two functions
+// above through capabilities.js, never by importing this module: a no-adapter app
+// must not pull the sync runtime into its pages (D157).
+registerReadState({ serialize: serializeReadState, hydrate: hydrateReadState });
 
 class AdapterStoreMethods {
 	// ---- wrapped core methods (D161 read-state invalidation) --
