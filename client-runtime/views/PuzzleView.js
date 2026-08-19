@@ -51,6 +51,13 @@ import {
 // definition, so the differ never churns the listener, and typing does nothing.
 const INERT_BIND = () => {};
 
+// D161: how many times one refresh may re-run data() behind fetches before it
+// gives up. Ten is deep enough for any realistic dependency chain and shallow
+// enough that a query which can never be satisfied fails fast instead of
+// hammering the API. Exhaustion THROWS — committing partial data would make a
+// null mean "still loading", which is exactly the contract this feature buys.
+const MAX_SETTLE_ROUNDS = 10;
+
 export class PuzzleView {
 	// Two-layer component state (Change C, SPEC §4). #local holds values written
 	// via setData() (and created()-seeded state, which uses setData); #model holds
@@ -123,6 +130,12 @@ export class PuzzleView {
 	#destroyed = false;
 	#updateScheduled = false;
 	#runToken = 0;
+	// D161 settle loop: the run token of the refresh currently re-running data()
+	// behind fetches (0 = none), and whether a store change landed during it. A
+	// notification mid-settle folds into that run as one more pass rather than
+	// starting a competing refresh.
+	#settlingToken = 0;
+	#settleDirty = false;
 
 	// D146: the { params, props, route } a PREPARED (not yet committed) data() run
 	// evaluates against. Non-null only while such an evaluation is in flight; the
@@ -959,14 +972,125 @@ export class PuzzleView {
 			}
 			return this.data(this.#params, this.#props);
 		};
-		const result = this.ctx.store
-			? this.ctx.store.withTracking(this, run, this.data.constructor.name === 'AsyncFunction')
-			: run();
+		const store = this.ctx.store;
+		const expectsAsync = this.data.constructor.name === 'AsyncFunction';
+		let result;
+		if (!store) {
+			result = run();
+		} else if (!store._faultOne) {
+			// No adapter capability installed: no query can fault, so this is the
+			// single-evaluation path it has always been (D157 bundle boundary).
+			result = store.withTracking(this, run, expectsAsync);
+		} else {
+			this.#settlingToken = token;
+			this.#settleDirty = false;
+			const isStale = () => this.#destroyed || this.#leaving || token !== this.#runToken;
+			try {
+				result = this.#settleData(store, run, expectsAsync, isStale, null);
+			} catch (err) {
+				this.#endSettle(token);
+				throw err;
+			}
+		}
 
 		if (result && typeof result.then === 'function') {
-			return result.then((model) => this.#commit(token, model));
+			return result.then(
+				(model) => {
+					this.#endSettle(token);
+					this.#commit(token, model);
+				},
+				(err) => {
+					this.#endSettle(token);
+					throw err;
+				}
+			);
 		}
+		this.#endSettle(token);
 		this.#commit(token, result);
+	}
+
+	/** Close this run's settle window (no-op for a run that never opened one). */
+	#endSettle(token) {
+		if (this.#settlingToken !== token) return;
+		this.#settlingToken = 0;
+		this.#settleDirty = false;
+	}
+
+	/**
+	 * Run data() until it queries nothing it has to fetch (D161).
+	 *
+	 * Each pass evaluates data() with its OWN request map and its own held
+	 * subscription reconciliation. A pass that queued nothing is the committed one:
+	 * its subscriptions are adopted (or parked for a D146 prepare) and its model
+	 * returned. A pass that queued requests is provisional — its subscriptions are
+	 * unwound once the batch settles, and data() runs again against the records
+	 * that landed. Dependent reads (post → post.authorId → author) therefore settle
+	 * across rounds, while queries discovered in the same pass fetch in parallel.
+	 *
+	 * Returns the model synchronously when the FIRST pass is synchronous and clean,
+	 * which is what keeps a hit-only data() free of a skeleton (D39).
+	 *
+	 * @param {function(): any} run             the data() invocation, re-runnable
+	 * @param {function(): boolean} isStale     stop without committing (destroyed,
+	 *   leaving, or superseded by a newer run) — shared in-flight requests are
+	 *   deliberately NOT aborted; other consumers may still need them
+	 * @param {?object} parked  D146 held-eval channel; when given, the final pass's
+	 *   reconcile is parked on it for the caller's commit/discard decision
+	 */
+	#settleData(store, run, expectsAsync, isStale, parked) {
+		let rounds = 0;
+		let requested = null; // the in-flight round's keys, for the exhaustion message
+
+		const afterPass = (model, requests, channel) => {
+			if (isStale()) {
+				channel.reconcile?.(false);
+				return undefined;
+			}
+			if (requests.size === 0) {
+				// A store change delivered during this run (see #onStoreChangeInner)
+				// takes one more pass here rather than a second competing refresh.
+				if (!parked && this.#settleDirty) {
+					this.#settleDirty = false;
+					channel.reconcile?.(false);
+					return pass();
+				}
+				if (parked) parked.reconcile = channel.reconcile;
+				else channel.reconcile?.(true);
+				return model;
+			}
+			requested = [...requests.keys()];
+			if (++rounds > MAX_SETTLE_ROUNDS) {
+				channel.reconcile?.(false);
+				throw new Error(
+					`[puzzle] ${this.constructor.name}: data() still needed server data after ${MAX_SETTLE_ROUNDS} settle rounds — last round requested ${requested.join(', ')}`
+				);
+			}
+			return Promise.all(requests.values()).then(
+				() => {
+					// Release this pass's hold BEFORE the next pass runs: a held key still
+					// looks live to the committing pass's reconciliation, so an unreleased
+					// intermediate branch would strand subscriptions the final pass dropped.
+					channel.reconcile?.(false);
+					if (!parked) this.#settleDirty = false;
+					return isStale() ? undefined : pass();
+				},
+				(err) => {
+					channel.reconcile?.(false);
+					throw err;
+				}
+			);
+		};
+
+		const pass = () => {
+			const requests = new Map();
+			const channel = {};
+			const result = store.withTracking(this, run, expectsAsync, channel, requests);
+			return result && typeof result.then === 'function'
+				? result.then((model) => afterPass(model, requests, channel))
+				: afterPass(result, requests, channel);
+		};
+
+		return pass();
 	}
 
 	/**
@@ -1051,14 +1175,24 @@ export class PuzzleView {
 			return out;
 		};
 
-		const result = this.ctx.store
-			? this.ctx.store.withTracking(
-					this,
-					run,
-					this.data.constructor.name === 'AsyncFunction',
-					pending
-				)
-			: run();
+		const store = this.ctx.store;
+		const expectsAsync = this.data.constructor.name === 'AsyncFunction';
+		// D161: a prepared run settles through the same loop. Intermediate passes are
+		// discarded as they are anywhere else; the FINAL pass's reconcile is parked on
+		// `pending`, so commit()/discard() below are unchanged. Store notifications
+		// are NOT coalesced here — while the gate is open the ancestor still shows its
+		// committed route and must keep taking live updates (D146).
+		const result = !store
+			? run()
+			: store._faultOne
+				? this.#settleData(
+						store,
+						run,
+						expectsAsync,
+						() => this.#destroyed || this.#leaving,
+						pending
+					)
+				: store.withTracking(this, run, expectsAsync, pending);
 
 		let model;
 		const ready = Promise.resolve(result).then((m) => {
@@ -1145,6 +1279,14 @@ export class PuzzleView {
 
 	#onStoreChangeInner() {
 		if (this.#destroyed || this.#leaving) return;
+		// D161: a notification landing while this view is settling folds into that
+		// run — it takes one more pass before committing. Refreshing here instead
+		// would supersede the settle, and the caller awaiting it (router preload,
+		// mount) would resolve with no model ever committed.
+		if (this.#settlingToken !== 0) {
+			this.#settleDirty = true;
+			return;
+		}
 		// Fire-and-forget: a data() failure on the store-change path is logged
 		// rather than escaping into Store.flush() (where an uncaught throw would
 		// abort delivery to every later subscriber). A rejecting ASYNC data() comes
