@@ -5,7 +5,7 @@ A SPA-first JavaScript framework with single-file components, reactive data bind
 **[▶ Live demo](https://puzzle-music-demo.vercel.app/)** — the [music example app](examples/music) built with Puzzle.
 
 - **~200 ms production builds** — compile, bundle, Tailwind, and minify, end to end (todos example, Apple Silicon)
-- **Small apps, honestly measured** — a minimal app is 19.6 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 22.7 KB gzip. Regenerated every release by `npm run measure:size`
+- **Small apps, honestly measured** — a minimal app is 19.8 KB gzip with the router, store, and validation included, not just a view layer; the complete todos example ships at 22.9 KB gzip. Regenerated every release by `npm run measure:size`
 - **Zero JavaScript toolchain** — the CLI is one prebuilt Go binary; no Babel, no bundler config, no postinstall scripts
 
 ## Quick start
@@ -52,6 +52,7 @@ npm install -D @magic-spells/puzzle
 - **Reactive data** with automatic view updates
 - **Two-way form binding with no directive** — `value={ draft }` and `checked={ todo.completed }` read *and* write; the compiler synthesizes the handler, so there is no `bind:` prefix and no mirror handler to maintain
 - **Model/store architecture** with adapters, relationships, schema validation, persistence, and read/write server sync — opt-in via the `@magic-spells/puzzle/adapter` subpath (local-only apps ship none of it)
+- **Server data with no loading code** — `findOne`/`findMany` inside a view's `data()` fetch whatever the store is missing and settle before the view commits, so a committed `null` always means "does not exist", never "still loading"
 - **Chainable display formatters** — `{ title | downcase | truncate(40) }`
 - **Raw template blocks** — `{#raw}…{/raw}` turns off template-expression parsing so JSON, JavaScript, CSS, and syntax examples with literal braces compile as-is (HTML inside still renders normally)
 - **Nested routing** with view slots — path routing by default, hash/memory via `hashRouter()`/`memoryRouter()` from `@magic-spells/puzzle/router-modes`; scroll restoration; base paths; anchors; mode-agnostic path-shaped hrefs via the built-in `link` formatter

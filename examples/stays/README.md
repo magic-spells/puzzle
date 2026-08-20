@@ -22,7 +22,8 @@ puzzle dev examples/stays        # from the repo root: go run ./compiler/cmd/puz
 ### App wiring
 - **app/app.js** — `PuzzleApp` config with seven display-only formatters
   (`currency`, `rating`, `plural`, `compact`, `monthDay`, `monthYear`,
-  `dateRange`), post-mount seeding via `store.loadAll` for five models, and
+  `dateRange`), an up-front `store.loadMany` for five models so the persisted
+  state can be restored onto them at boot, and
   localStorage persistence for wishlist hearts + locally-created trips.
 - **app/routes.js** — flat routes plus a **nested `/account` branch**: the
   `AccountShell` view renders its matched child (`''` | `trips` | `wishlist`)

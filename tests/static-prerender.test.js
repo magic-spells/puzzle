@@ -6,7 +6,7 @@
 // injected, `</script>` in a record cannot break the JSON island, data-puzzle-static
 // marker), and the extended summary fields. Prerender remains DOM-free; jsdom is
 // present only for the hybrid/static/live-router markup parity assertion.
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -953,5 +953,163 @@ describe('static subset render (D155)', () => {
 		});
 		expect(summary.written.every((page) => !page.reused)).toBe(true);
 		expect(fs.existsSync(path.join(outDir, 'index.html'))).toBe(true);
+	});
+});
+
+// ---- read-state transfer (D161) ---------------------------------------------
+//
+// A prerender that faults tracked queries settles them at build time. The records
+// ride in the data island as before; what the records CANNOT say — which
+// collections came back complete, which identities came back 404 — rides in a
+// second, versioned island so the browser session does not repeat either read.
+// Hybrid deliberately transfers none of it (its SPA boot is a fresh session).
+
+class ApiNote extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		body: Puzzle.string(),
+	};
+	static adapter = { endpoint: '/notes' };
+}
+
+class Feed extends PuzzleView {
+	data() {
+		const store = this.ctx.store;
+		return { notes: store.findMany('note'), gone: store.findOne('note', 'gone') };
+	}
+	render() {
+		const d = this.getData();
+		return h('ul', {}, [
+			...d.notes.map((n) => h('li', { key: n.id }, [text(n.body)])),
+			h('em', {}, [text(d.gone === null ? 'missing' : 'found')]),
+		]);
+	}
+}
+stamp(Feed, 'app/views/Feed.pzl');
+
+const apiResponse = (body, status = 200) => ({
+	ok: status >= 200 && status < 300,
+	status,
+	statusText: status === 404 ? 'Not Found' : status === 500 ? 'Server Error' : 'OK',
+	text: async () => JSON.stringify(body),
+	json: async () => body,
+});
+
+/** Serve the collection, 404 the one missing id, and record every URL asked for. */
+function stubApi({ collectionStatus = 200 } = {}) {
+	const calls = [];
+	vi.stubGlobal(
+		'fetch',
+		vi.fn(async (url) => {
+			const href = String(url);
+			calls.push(href);
+			if (href.endsWith('/notes/gone')) return apiResponse({ error: 'nope' }, 404);
+			return apiResponse([{ id: 'a', body: 'alpha' }], collectionStatus);
+		})
+	);
+	return calls;
+}
+
+const feedConfig = () => ({
+	target: '#app',
+	apiURL: 'https://api.test',
+	adapter,
+	models: { note: ApiNote },
+	routes: [{ path: '/', name: 'home', view: Feed, meta: { title: 'Feed' } }],
+});
+
+describe('static read-state island (D161)', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('settles tracked queries at build time and captures what the records cannot say', async () => {
+		stubApi();
+		const { pages } = await prerender(feedConfig(), { mode: 'static' });
+
+		// The prerendered markup carries the FETCHED record and the settled null.
+		expect(pages[0].html).toContain('alpha');
+		expect(pages[0].html).toContain('missing');
+		expect(pages[0].data.note).toHaveLength(1);
+		expect(pages[0].readState).toEqual({ v: 1, complete: ['note'], absent: ['note gone'] });
+	});
+
+	it('writes the envelope as a second JSON island beside the record island', async () => {
+		stubApi();
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-read-'));
+		const shellPath = writeShell(outDir);
+		await prerenderToDir(feedConfig(), { outDir, shellPath, mode: 'static' });
+
+		const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+		const start = index.indexOf('data-puzzle-static-read>') + 'data-puzzle-static-read>'.length;
+		const island = index.slice(start, index.indexOf('</script>', start));
+		expect(JSON.parse(island)).toEqual({ v: 1, complete: ['note'], absent: ['note gone'] });
+		// It rides between the record island and the per-page module.
+		expect(index.indexOf('data-puzzle-static-data')).toBeLessThan(
+			index.indexOf('data-puzzle-static-read')
+		);
+		expect(index.indexOf('data-puzzle-static-read')).toBeLessThan(
+			index.indexOf('src="/_puzzle/index.js"')
+		);
+	});
+
+	it('omits the island entirely for a page with no adapter', async () => {
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-noread-'));
+		const shellPath = writeShell(outDir);
+		const summary = await prerenderToDir(staticConfig(), { outDir, shellPath, mode: 'static' });
+
+		expect(summary.written.every((page) => page.readState === undefined)).toBe(true);
+		const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+		expect(index).not.toContain('data-puzzle-static-read');
+	});
+
+	it('omits the island when an adapter page settled nothing', async () => {
+		stubApi();
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-static-emptyread-'));
+		const shellPath = writeShell(outDir);
+		const cfg = { ...feedConfig(), routes: [{ path: '/', name: 'home', view: Home }] };
+		await prerenderToDir(cfg, { outDir, shellPath, mode: 'static' });
+
+		const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+		expect(index).not.toContain('data-puzzle-static-read');
+	});
+
+	it('escapes the envelope so a record identity cannot break out of the island', () => {
+		const out = injectStaticShell(SHELL.replace('<script type="module" src="/app.js"></script>', ''), {
+			targetId: 'app',
+			content: '<p>x</p>',
+			title: null,
+			slug: 'index',
+			data: {},
+			readState: { v: 1, complete: [], absent: ['note </script><script>alert(1)</script>'] },
+		});
+		const start = out.indexOf('data-puzzle-static-read>') + 'data-puzzle-static-read>'.length;
+		const island = out.slice(start, out.indexOf('</script>', start));
+		expect(island).not.toContain('<script>');
+		expect(JSON.parse(island).absent[0]).toBe('note </script><script>alert(1)</script>');
+	});
+
+	it('fails the build naming the route when a tracked fault rejects', async () => {
+		stubApi({ collectionStatus: 500 });
+		await expect(prerender(feedConfig(), { mode: 'static' })).rejects.toThrow(
+			/prerender failed for route "\/"/
+		);
+	});
+
+	it('transfers nothing in hybrid mode — the SPA boot is a fresh read session', async () => {
+		stubApi();
+		const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puzzle-hybrid-read-'));
+		const shellPath = writeShell(outDir);
+		const { pages } = await prerender(feedConfig());
+
+		// Hybrid settles the same queries — it just keeps none of the bookkeeping.
+		expect(pages[0].html).toContain('alpha');
+		expect(pages[0].readState).toBeUndefined();
+		expect(pages[0].data).toBeUndefined();
+
+		await prerenderToDir(feedConfig(), { outDir, shellPath });
+		const index = fs.readFileSync(path.join(outDir, 'index.html'), 'utf8');
+		expect(index).not.toContain('data-puzzle-static-read');
+		expect(index).not.toContain('data-puzzle-static-data');
 	});
 });

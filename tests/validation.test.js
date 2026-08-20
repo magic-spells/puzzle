@@ -405,7 +405,7 @@ describe('update enforcement (SPEC §20)', () => {
 });
 
 describe('exempt read paths accept data that would fail validation (SPEC §20)', () => {
-	it('_upsert (loadAll/loadOne) skips validation', async () => {
+	it('_upsert (loadMany/loadOne) skips validation', async () => {
 		const fetchFn = vi.fn(async () => ({
 			ok: true,
 			status: 200,
@@ -426,7 +426,36 @@ describe('exempt read paths accept data that would fail validation (SPEC §20)',
 		}
 		const store = new Store({ user: ApiUser }, { apiURL: 'https://x.test' });
 
-		await expect(store.loadAll('user')).resolves.toHaveLength(1);
+		await expect(store.loadMany('user')).resolves.toHaveLength(1);
+		expect(store.findOne('user', 's1').name).toBe(''); // invalid data landed
+		vi.unstubAllGlobals();
+	});
+
+	it('a tracked fault lands invalid server data too — same exempt path (D161)', async () => {
+		const payload = { id: 's1', name: '', role: 'ghost', email: 'no-at' };
+		vi.stubGlobal('fetch', async () => ({
+			ok: true,
+			status: 200,
+			statusText: 'OK',
+			text: async () => JSON.stringify(payload),
+			json: async () => payload,
+		}));
+
+		class ApiUser extends PuzzleModel {
+			static schema = {
+				id: Puzzle.string().primary(),
+				name: Puzzle.string().required().min(2),
+				role: Puzzle.string().oneOf(['admin', 'member']),
+				email: Puzzle.string().validate((v) => v.includes('@')),
+			};
+			static adapter = { endpoint: '/api/users' };
+		}
+		const store = new Store({ user: ApiUser }, { apiURL: 'https://x.test' });
+
+		const requests = new Map();
+		store.withTracking({}, () => store.findOne('user', 's1'), false, {}, requests);
+		await Promise.all(requests.values());
+
 		expect(store.findOne('user', 's1').name).toBe(''); // invalid data landed
 		vi.unstubAllGlobals();
 	});

@@ -11,7 +11,7 @@ adapter.install();
 
 // Adapter request hook (constellation/doc/DOC-SPEC.md, v1.55, D91): one
 // synchronous `beforeRequest(init, { type, method, url })` in front of EVERY
-// adapter fetch — the D21 read path (loadAll/loadOne) and the D50 write verbs
+// adapter fetch — the D21 read path (loadMany/loadOne) and the D50 write verbs
 // (save/delete/request) alike — so auth headers, credentials, and AbortSignals
 // attach in one place instead of forcing apps off the adapter design entirely.
 
@@ -52,12 +52,12 @@ afterEach(() => {
 });
 
 describe('beforeRequest — fires for every adapter verb with the right context', () => {
-	it('loadAll: GET the collection endpoint', async () => {
+	it('loadMany: GET the collection endpoint', async () => {
 		mockFetch({ body: [{ id: 't1', text: 'a' }] });
 		const calls = [];
 		const store = hookedStore((init, ctx) => calls.push(ctx));
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 
 		expect(calls).toEqual([{ type: 'todo', method: 'GET', url: `${API}/api/todos` }]);
 	});
@@ -121,7 +121,7 @@ describe('beforeRequest — fires for every adapter verb with the right context'
 			init.headers = { Authorization: 'Bearer t' };
 		});
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 
 		expect(order).toEqual(['hook', 'fetch']);
 		expect(fetchSpy.mock.calls[0][1].headers.Authorization).toBe('Bearer t');
@@ -136,7 +136,7 @@ describe('beforeRequest — mutate in place OR return a replacement', () => {
 			init.credentials = 'include';
 		});
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 
 		const init = fetchSpy.mock.calls[0][1];
 		expect(init.method).toBe('GET');
@@ -229,7 +229,7 @@ describe('beforeRequest — mutate in place OR return a replacement', () => {
 			Object.freeze({ ...init, headers: { Authorization: 'Bearer t' } })
 		);
 
-		const todos = await store.loadAll('todo');
+		const todos = await store.loadMany('todo');
 
 		const init = fetchSpy.mock.calls[0][1];
 		expect(init.method).toBe('GET');
@@ -260,7 +260,7 @@ describe('beforeRequest — mutate in place OR return a replacement', () => {
 			return null;
 		});
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 
 		expect(fetchSpy.mock.calls[0][1]).toMatchObject({ method: 'GET', credentials: 'omit' });
 	});
@@ -293,7 +293,7 @@ describe('beforeRequest — cannot change what the request IS', () => {
 			init.body = 'sneaky';
 		});
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 
 		const init = fetchSpy.mock.calls[0][1];
 		expect(init.method).toBe('GET');
@@ -325,7 +325,7 @@ describe('beforeRequest — cannot change what the request IS', () => {
 			}
 		});
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 
 		expect(fetchSpy.mock.calls[0][0]).toBe(`${API}/api/todos`);
 	});
@@ -339,7 +339,7 @@ describe('beforeRequest — the context argument is frozen', () => {
 			captured = ctx;
 		});
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 
 		expect(Object.isFrozen(captured)).toBe(true);
 		expect(() => {
@@ -351,13 +351,13 @@ describe('beforeRequest — the context argument is frozen', () => {
 });
 
 describe('beforeRequest — a throwing hook rejects the operation', () => {
-	it('loadAll rejects with the thrown error and never fetches', async () => {
+	it('loadMany rejects with the thrown error and never fetches', async () => {
 		const fetchSpy = mockFetch({ body: [] });
 		const store = hookedStore(() => {
 			throw new Error('no auth token');
 		});
 
-		await expect(store.loadAll('todo')).rejects.toThrow('no auth token');
+		await expect(store.loadMany('todo')).rejects.toThrow('no auth token');
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
 
@@ -416,7 +416,7 @@ describe('beforeRequest — an AbortSignal attached by the hook actually aborts'
 			init.signal = controller.signal;
 		});
 
-		const pending = store.loadAll('todo');
+		const pending = store.loadMany('todo');
 		controller.abort();
 
 		await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
@@ -457,15 +457,15 @@ describe('no hook configured — requests are byte-identical to before (regressi
 	it('a non-function config value is ignored, not invoked', async () => {
 		const fetchSpy = mockFetch({ body: [] });
 		const store = hookedStore('Bearer abc');
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 		expect(fetchSpy).toHaveBeenCalledWith(`${API}/api/todos`, { method: 'GET' });
 	});
 
-	it('loadAll / loadOne pass exactly (url, { method: GET })', async () => {
+	it('loadMany / loadOne pass exactly (url, { method: GET })', async () => {
 		const fetchSpy = mockFetch({ body: [] }, { body: { id: 't1', text: 'a' } });
 		const store = hookedStore(undefined);
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 		await store.loadOne('todo', 't1');
 
 		expect(fetchSpy.mock.calls[0]).toEqual([`${API}/api/todos`, { method: 'GET' }]);
@@ -567,7 +567,7 @@ describe('PuzzleApp config threading (v1.55, D91)', () => {
 		});
 		await boot({ beforeRequest: hook });
 
-		await app.store.loadAll('todo');
+		await app.store.loadMany('todo');
 
 		expect(app.store.beforeRequest).toBe(hook);
 		expect(hook).toHaveBeenCalledTimes(1);

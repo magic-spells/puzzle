@@ -97,7 +97,7 @@ describe('install / uninstall — fixture patches are fully detached', () => {
 		}));
 		vi.stubGlobal('fetch', fetchSpy);
 
-		await storeWith(undefined).loadAll('todo');
+		await storeWith(undefined).loadMany('todo');
 
 		expect(fetchSpy).toHaveBeenCalledTimes(1);
 		expect(fetchSpy.mock.calls[0][0]).toBe(`${API}/api/todos`);
@@ -112,7 +112,7 @@ describe('install / uninstall — fixture patches are fully detached', () => {
 
 		// The live config is the second one…
 		const store = storeWith(undefined);
-		expect((await store.loadAll('todo')).map((r) => r.id)).toEqual(['b']);
+		expect((await store.loadMany('todo')).map((r) => r.id)).toEqual(['b']);
 
 		// …and ONE uninstall (the originals were captured once) puts the core back.
 		installFixtures({}); // a third install must not re-capture the patched members
@@ -134,7 +134,7 @@ describe('mock config — model block and fixtures file merge per key', () => {
 		const store = storeWith({ data: [{ id: 't1', text: 'a' }], latency: 400 });
 
 		let outcome = null;
-		const pending = store.loadAll('todo').then(
+		const pending = store.loadMany('todo').then(
 			() => (outcome = 'ok'),
 			() => (outcome = 'fail')
 		);
@@ -154,7 +154,7 @@ describe('mock config — model block and fixtures file merge per key', () => {
 		});
 		vi.stubGlobal('fetch', fetchSpy);
 
-		const records = await storeWith(undefined).loadAll('todo');
+		const records = await storeWith(undefined).loadMany('todo');
 
 		expect(records.map((r) => r.text)).toEqual(['from the file']);
 		expect(fetchSpy).not.toHaveBeenCalled();
@@ -162,7 +162,7 @@ describe('mock config — model block and fixtures file merge per key', () => {
 
 	it('a model block alone still works with no fixtures-file mock', async () => {
 		install();
-		const records = await storeWith({ data: [{ id: 't1', text: 'from the model' }] }).loadAll(
+		const records = await storeWith({ data: [{ id: 't1', text: 'from the model' }] }).loadMany(
 			'todo'
 		);
 		expect(records.map((r) => r.text)).toEqual(['from the model']);

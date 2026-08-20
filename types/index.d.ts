@@ -237,7 +237,7 @@ export interface AdapterRequestContext {
 
 /**
  * Adapter request hook (v1.55, D91). Called synchronously before every adapter
- * fetch — `loadAll`/`loadOne` (D21), `save()`/`delete()` and `request()` (D50).
+ * fetch — `loadMany`/`loadOne` (D21), `save()`/`delete()` and `request()` (D50).
  * Mutate `init` in place or return a replacement object (a truthy object return
  * wins) to attach auth headers, `credentials`, or an `AbortSignal`. `method` and
  * `body` are re-stamped by the Store afterwards, and the URL is not reachable —
@@ -269,9 +269,18 @@ export interface StoreOptions {
 export interface Store {
 	/** Create a record; applies schema defaults, validates, inserts. */
 	createRecord(type: string, data?: Record<string, any>): any;
-	/** Look up one record by primary key (auto-subscribes). Null when absent. */
+	/**
+	 * Look up one record by primary key (auto-subscribes). Null when absent.
+	 * Inside a tracked `data()` run with the adapter capability installed, a miss
+	 * also fetches the record and the view settles before it commits, so a
+	 * committed null means the record does not exist (D161).
+	 */
 	findOne(type: string, id: any): any;
-	/** List records of a type, optionally filtered (auto-subscribes). */
+	/**
+	 * List records of a type, optionally filtered (auto-subscribes). Inside a
+	 * tracked `data()` run the collection loads once if it has not already; the
+	 * filter always runs locally (D161).
+	 */
 	findMany(type: string, options?: FindManyOptions): any[];
 	// Adapter methods are attached by the app's adapter capability and declared through
 	// module augmentation in types/adapter.d.ts.
@@ -482,7 +491,7 @@ export interface AdapterMockResult {
 /**
  * Development/test mock for a model's adapter (v1.57, D95). Declared on the
  * model; served only when `@magic-spells/puzzle/fixtures` is installed (D98),
- * which replaces the Store's one network seam. `loadAll` / `loadOne` / `save()` /
+ * which replaces the Store's one network seam. `loadMany` / `loadOne` / `save()` /
  * `delete()` / `request()` are unchanged and the real read and write paths still
  * run. `beforeRequest` still fires; no network call does. Without the fixtures
  * module this block is inert data — the request goes to the real endpoint.

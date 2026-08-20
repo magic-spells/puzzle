@@ -24,7 +24,7 @@
  * page by the Go static build (compiler/internal/build), one entry per written page.
  */
 
-import { installAdapterCapability } from '../capabilities.js';
+import { hydrateReadState, installAdapterCapability } from '../capabilities.js';
 import { Store } from '../datastore/store.js';
 import { makeFormatterRegistry } from '../formatters.js';
 import { mount } from '../views/viewManager.js';
@@ -94,7 +94,10 @@ export async function mountStatic({
 	// Rehydrate the store from the inline data island (the same wire shape the HMR
 	// snapshot uses). Absent, empty, or corrupt island → continue with the store's
 	// configured persistence state (or a cold store). Silent only on absence/empty.
+	// Records FIRST, then the read state (D161): hydrateReadState drops an absence
+	// whose record turned out to be present, which only works in that order.
 	hydrateStore(ctx.store);
+	hydrateReadState(ctx.store, readIsland());
 
 	const { topVnode, instances } = await assembleChain(entry, ctx, routeSnapshot);
 
@@ -206,6 +209,26 @@ function hydrateStore(store) {
 			'[puzzle] static data island is corrupt — mounting with the available store state',
 			err
 		);
+	}
+}
+
+/**
+ * The build's read-state envelope (D161): which collections the prerender settled
+ * completely and which identities it settled as absent. Without it the browser
+ * session would refetch every collection and re-404 every miss the build already
+ * resolved. The island is only emitted when the page settled something, so absent
+ * or corrupt → null, and the session simply faults as it would have.
+ */
+function readIsland() {
+	const el = document.querySelector('script[data-puzzle-static-read]');
+	if (!el) return null;
+	const raw = el.textContent;
+	if (!raw || !raw.trim()) return null;
+	try {
+		return JSON.parse(raw);
+	} catch (err) {
+		console.error('[puzzle] static read-state island is corrupt — ignoring it', err);
+		return null;
 	}
 }
 

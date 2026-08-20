@@ -1,6 +1,6 @@
 ---
-name: "D21 — Server data in v1: explicit load methods reading the model's adapter declaration"
-status: verified
+name: 'D21 — Server data: tracked finds fault in through the model''s adapter declaration'
+status: building
 verified_at: '2026-07-15T08:17:25.000Z'
 connections:
   - COMPONENT-STORE
@@ -9,33 +9,58 @@ connections:
   - DOC-SPEC-DATA
   - DOC-SPEC
   - FILE-ADAPTER
+  - DECISION-D161-AUTO-FETCHING-FINDS
+  - DECISION-D157-ADAPTER-SUBPATH
+  - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
 ---
 
-# D21 — Server data in v1: explicit load methods reading the model's adapter declaration
+# D21 — Server data: tracked finds fault in through the model's adapter declaration
 
-Settled. In v1 the model file is the single source of truth for schema and server location, and the store consumes the model's `adapter` declaration on the read path only via two explicit load methods.
+The model file is the single source of truth for schema and server location
+(`static adapter = { endpoint: '/api/posts' }`), and the store consumes that
+declaration on the read path **transparently**: a `findOne`/`findMany` miss
+inside a tracked `data()` evaluation faults the missing data in through the
+model's read verbs, and the view commits once the pass settles
+([[DECISION-D161-AUTO-FETCHING-FINDS]] owns the loop, dedup, and cache
+policy).
 
 ## Context
-The model file is the single source of truth for both schema and server location:
-`static adapter = { endpoint: '/api/posts' }`. The app passes the `adapter`
-capability from `@magic-spells/puzzle/adapter` once to `PuzzleApp`. v1 needs a
-read path that consumes that declaration without committing to a full ORM-style
-sync engine.
+
+The app passes the `adapter` capability from `@magic-spells/puzzle/adapter`
+once to `PuzzleApp` ([[DECISION-D157-ADAPTER-SUBPATH]]); a store without it
+has no server read path at all. The read path had to consume the model's
+declaration without an ORM-style sync engine, without loading code leaking
+into views, and without a second fetching surface for developers to learn.
 
 ## Decision
-**v1 consumes the declaration on the read path** via explicit store methods:
 
-- `store.loadAll(type, options?)` — dispatch the model's collection transport and bulk-upsert the results (existing records with matching primary keys are updated, not duplicated). D158 makes `endpoint` the generated GET shorthand and forwards pagination options.
-- `store.loadOne(type, id)` — GET `apiURL + endpoint + '/' + id`, upsert one record.
+- **Tracked reads are the read path.** `store.findOne(type, id)` /
+  `store.findMany(type, { filter })` return local data synchronously; a miss
+  during a tracked `data()` run additionally queues the model's read
+  transport when D158 dispatch resolves one. Loaded records flow through the
+  normal subscription pipeline. `apiURL` ([[DOC-SPEC]] §2) is the base for
+  generated transports.
+- **Explicit imperative loads remain, as escape hatches:**
+  `store.loadMany(type, options?)` (collection transport + bulk upsert,
+  pagination options forwarded) and `store.loadOne(type, id)` (one record,
+  bypasses the negative cache — the force-refresh idiom). Both return
+  promises, both stay off the taught beginner surface, and both warn in dev
+  when called inside a tracked run.
+- A model with no resolvable read verb makes the tracked path pure-local and
+  the explicit loads a rejected promise with a clear message.
 
-Both are installed by the app-level adapter capability and return promises (awaitable from
-async `data()` or app startup). Loaded records flow through the normal
-subscription pipeline — subscribed views re-render when data arrives. `apiURL`
-from the PuzzleApp config ([[DOC-SPEC]] §2) is the base; a model with no
-`adapter` makes `loadAll`/`loadOne` a rejected promise with a clear message.
+## Alternatives rejected
+
+- **Explicit-only loads** (v1 through 0.6.0's `loadAll`/`loadOne` as the
+  entire read path): the only workable pattern was eager whole-collection
+  seeding after `mount()`, because a load awaited inside `data()` re-triggers
+  itself through its own upsert. Per-route on-demand fetching effectively
+  didn't exist, and the loop footgun had to be documented instead of
+  designed away.
+- A full ORM-style sync engine — far more surface than the framework needs.
 
 ## Consequences
-**Still deferred (post-v1):** transparent query fault-in (`findMany` fetching on miss), automatic write-through (`update()`/`destroy()` POSTing back), and caching/dedup policy. D50 supplied explicit write verbs; D158 supplied author and custom adapter fetch functions. Manual `fetch` in async `data()` remains fully supported.
 
-The server read path is opt-in through [[DECISION-D157-ADAPTER-SUBPATH]]; an app
-that never passes the capability has no adapter verbs on its Store prototype.
+Views fetch by reading. The eager-seed idiom is retired; manual `fetch` in
+async `data()` remains fully supported. Write-through stayed with D50's
+explicit verbs; transport authorship is [[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]].

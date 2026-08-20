@@ -1,8 +1,8 @@
 import { PuzzleModel, Puzzle } from '@magic-spells/puzzle';
 
 export default class User extends PuzzleModel {
-  // Schema definition — see constellation/doc/DOC-SPEC.md §7. String ids so the server-seeded
-  // records (loadAll) upsert stably by primary key.
+  // Schema definition — see constellation/doc/DOC-SPEC.md §7. String ids so the
+  // server-loaded records upsert stably by primary key.
   static schema = {
     id:       Puzzle.string().primary(),
     name:     Puzzle.string().required(),
@@ -13,7 +13,7 @@ export default class User extends PuzzleModel {
   };
 
   // Computed properties — plain getters (constellation/doc/DOC-SPEC.md §7).
-  // loadAll-seeded dates arrive as ISO strings, so coerce defensively.
+  // Server-loaded dates arrive as ISO strings, so coerce defensively.
   get initials() {
     return String(this.name)
       .trim()
@@ -28,9 +28,20 @@ export default class User extends PuzzleModel {
     return new Date(this.joinedAt);
   }
 
-  // Server location (D21): consumed by store.loadAll('user') on the read path.
-  // Write sync and custom adapter methods are post-v1.
+  // Server location (D21/D158): `findMany('user')` GETs /api/users.json.
   static adapter = {
-    endpoint: '/users.json'
+    endpoint: '/users.json',
+
+    // Same static-file mapping as Post — see app/models/post.js for why the
+    // generated per-record GET does not fit this demo's "server".
+    async loadOne(fetch, id) {
+      const res = await fetch('/api/users.json');
+      if (!res.ok) return res;
+      const users = await res.json();
+      return (
+        users.find((user) => String(user.id) === String(id)) ??
+        new Response(null, { status: 404 })
+      );
+    }
   };
 }

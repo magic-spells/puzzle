@@ -82,7 +82,7 @@ describe('PuzzleModel computed-getter payload collisions', () => {
 		expect(fetch.mock.calls[1][0]).toBe('https://example.test/records/r1');
 	});
 
-	it('loadAll constructs a complete synced record when the payload includes the getter key', async () => {
+	it('loadMany constructs a complete synced record when the payload includes the getter key', async () => {
 		const Model = computedModel();
 		const fetch = vi.fn(async () =>
 			response([{ id: 'r1', a: 'server-a', computed: 5, b: 'server-b' }])
@@ -91,7 +91,7 @@ describe('PuzzleModel computed-getter payload collisions', () => {
 		vi.spyOn(console, 'warn').mockImplementation(() => {});
 
 		const store = new Store({ record: Model }, { apiURL: 'https://example.test' });
-		await expect(store.loadAll('record')).resolves.toHaveLength(1);
+		await expect(store.loadMany('record')).resolves.toHaveLength(1);
 
 		const record = store.findOne('record', 'r1');
 		expect(record).toBeInstanceOf(Model);

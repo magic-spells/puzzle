@@ -8,10 +8,10 @@
 // DOM, and (3) the store is rehydrated so data() sees the build-time records with no
 // network. Also: the router stub throws, and hydration is skipped when the island is
 // absent/empty.
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { prerender } from '../client-runtime/ssg/index.js';
 import { mountStatic } from '../client-runtime/static/index.js';
-import { adapter } from '../client-runtime/datastore/adapter.js';
+import { adapter, serializeReadState } from '../client-runtime/datastore/adapter.js';
 import { Puzzle, PuzzleModel } from '../client-runtime/model.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode, SLOT_TAG } from '../client-runtime/views/ViewNode.js';
@@ -122,8 +122,8 @@ describe('static kernel — mountStatic (D81)', () => {
 		}
 		class Probe extends PuzzleView {
 			async data() {
-				const notes = await this.ctx.store.loadAll('note');
-				return { installed: typeof this.ctx.store.loadAll === 'function', count: notes.length };
+				const notes = await this.ctx.store.loadMany('note');
+				return { installed: typeof this.ctx.store.loadMany === 'function', count: notes.length };
 			}
 			render() {
 				return h('main', {}, [text(`${this.getData().installed}:${this.getData().count}`)]);
@@ -131,7 +131,7 @@ describe('static kernel — mountStatic (D81)', () => {
 		}
 		stamp(Probe, 'app/views/Probe.pzl');
 		const configured = adapter.defaults({
-			loadAll: async () => [{ id: 'n1' }],
+			loadMany: async () => [{ id: 'n1' }],
 		});
 		const cfg = {
 			target: '#app',
@@ -718,5 +718,151 @@ describe('static kernel — mountStatic (D81)', () => {
 				route: { path: '/', params: {}, chain: [{ path: '/', name: 'home' }] },
 			})
 		).rejects.toThrow(/static mount target not found/);
+	});
+});
+
+// ---- read-state transfer (D161) ---------------------------------------------
+//
+// The build's read-state island is the other half of flash-free static parity:
+// without it the browser session refetches every collection the build already
+// completed and re-404s every identity it already settled — over an API the page
+// may not even be able to reach. Records hydrate FIRST, so a stale absence whose
+// record is present is dropped rather than trusted.
+
+class ApiNote extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		body: Puzzle.string(),
+	};
+	static adapter = { endpoint: '/notes' };
+}
+
+let lastStore = null;
+
+class Feed extends PuzzleView {
+	created() {
+		lastStore = this.ctx.store;
+	}
+	data() {
+		const store = this.ctx.store;
+		return { notes: store.findMany('note'), gone: store.findOne('note', 'gone') };
+	}
+	render() {
+		const d = this.getData();
+		return h('ul', {}, [
+			...d.notes.map((n) => h('li', { key: n.id }, [text(n.body)])),
+			h('em', {}, [text(d.gone === null ? 'missing' : 'found')]),
+		]);
+	}
+}
+stamp(Feed, 'app/views/Feed.pzl');
+
+/** The shell surgery's output for an adapter page: record island + read island. */
+function seedReadDocument({ data, readState }) {
+	document.body.innerHTML =
+		'<div id="app" data-puzzle-static></div>' +
+		`<script type="application/json" data-puzzle-static-data>${JSON.stringify(data)}</script>` +
+		(readState
+			? `<script type="application/json" data-puzzle-static-read>${readState}</script>`
+			: '');
+}
+
+const mountFeed = () =>
+	mountStatic({
+		target: '#app',
+		views: [Feed],
+		route: { path: '/', params: {}, chain: [{ path: '/', name: 'home' }] },
+		models: { note: ApiNote },
+		apiURL: 'https://api.test',
+		adapter,
+	});
+
+describe('static kernel — read-state island (D161)', () => {
+	let fetchMock;
+
+	beforeEach(() => {
+		lastStore = null;
+		fetchMock = vi.fn(async (url) => {
+			const missing = String(url).endsWith('/notes/gone');
+			const body = missing ? { error: 'nope' } : [];
+			return {
+				ok: !missing,
+				status: missing ? 404 : 200,
+				statusText: missing ? 'Not Found' : 'OK',
+				text: async () => JSON.stringify(body),
+				json: async () => body,
+			};
+		});
+		vi.stubGlobal('fetch', fetchMock);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('adopts the envelope so the browser session repeats none of the build reads', async () => {
+		seedReadDocument({
+			data: { note: [{ id: 'a', body: 'alpha' }] },
+			readState: JSON.stringify({ v: 1, complete: ['note'], absent: ['note gone'] }),
+		});
+
+		await mountFeed();
+
+		expect(document.querySelector('#app').innerHTML).toContain('alpha');
+		expect(document.querySelector('#app').innerHTML).toContain('missing');
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(serializeReadState(lastStore)).toEqual({
+			v: 1,
+			complete: ['note'],
+			absent: ['note gone'],
+		});
+	});
+
+	it('faults normally with no envelope — an adapter page without one behaves as before', async () => {
+		seedReadDocument({ data: { note: [{ id: 'a', body: 'alpha' }] }, readState: null });
+
+		await mountFeed();
+
+		expect(fetchMock).toHaveBeenCalled();
+	});
+
+	it('ignores an empty or foreign-version envelope', async () => {
+		seedReadDocument({
+			data: { note: [{ id: 'a', body: 'alpha' }] },
+			readState: JSON.stringify({ v: 2, complete: ['note'], absent: ['note gone'] }),
+		});
+
+		await mountFeed();
+
+		// Ignored wholesale: the session loaded the collection and re-asked for the
+		// identity the build already settled.
+		const asked = fetchMock.mock.calls.map(([url]) => String(url));
+		expect(asked).toContain('https://api.test/notes');
+		expect(asked).toContain('https://api.test/notes/gone');
+	});
+
+	it('drops an absence whose record rode in the island — records hydrate first', async () => {
+		seedReadDocument({
+			data: { note: [{ id: 'a', body: 'alpha' }] },
+			readState: JSON.stringify({ v: 1, complete: ['note'], absent: ['note a', 'note gone'] }),
+		});
+
+		await mountFeed();
+
+		expect(serializeReadState(lastStore).absent).toEqual(['note gone']);
+	});
+
+	it('ignores a corrupt envelope without losing the records', async () => {
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		seedReadDocument({ data: { note: [{ id: 'a', body: 'alpha' }] }, readState: '{ nope' });
+
+		await mountFeed();
+
+		expect(document.querySelector('#app').innerHTML).toContain('alpha');
+		expect(err).toHaveBeenCalledWith(
+			expect.stringContaining('static read-state island is corrupt'),
+			expect.anything()
+		);
+		err.mockRestore();
 	});
 });

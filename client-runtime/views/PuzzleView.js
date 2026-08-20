@@ -51,6 +51,7 @@ import {
 // definition, so the differ never churns the listener, and typing does nothing.
 const INERT_BIND = () => {};
 
+
 export class PuzzleView {
 	// Two-layer component state (Change C, SPEC §4). #local holds values written
 	// via setData() (and created()-seeded state, which uses setData); #model holds
@@ -123,6 +124,15 @@ export class PuzzleView {
 	#destroyed = false;
 	#updateScheduled = false;
 	#runToken = 0;
+	// D161 settle loop: the run token of the refresh currently re-running data()
+	// behind fetches (0 = none), and whether a store change landed during it. A
+	// notification mid-settle folds into that run as one more pass rather than
+	// starting a competing refresh. Underscore-public, not private: the loop that
+	// reads them is installed onto this prototype by the adapter capability, so an
+	// app with no adapter — where a pending set can never fill — ships none of it
+	// (D157). Internal; nothing outside the framework may touch them.
+	_settlingToken = 0;
+	_settleDirty = false;
 
 	// D146: the { params, props, route } a PREPARED (not yet committed) data() run
 	// evaluates against. Non-null only while such an evaluation is in flight; the
@@ -959,15 +969,45 @@ export class PuzzleView {
 			}
 			return this.data(this.#params, this.#props);
 		};
-		const result = this.ctx.store
-			? this.ctx.store.withTracking(this, run, this.data.constructor.name === 'AsyncFunction')
-			: run();
+		const store = this.ctx.store;
+		const expectsAsync = this.data.constructor.name === 'AsyncFunction';
+		let result;
+		if (!store) {
+			result = run();
+		} else if (!this._settleData) {
+			// No adapter capability installed: no query can fault, so this is the
+			// single-evaluation path it has always been, and the settle loop is not
+			// even in the bundle (D157 boundary — the capability installs it).
+			result = store.withTracking(this, run, expectsAsync);
+		} else {
+			// The loop owns the settle window it opens under `token`, so this stays one
+			// call and the commit tail below is the same one it always was.
+			result = this._settleData(
+				store,
+				run,
+				expectsAsync,
+				() => this.#destroyed || this.#leaving || token !== this.#runToken,
+				null,
+				token
+			);
+		}
 
 		if (result && typeof result.then === 'function') {
 			return result.then((model) => this.#commit(token, model));
 		}
 		this.#commit(token, result);
 	}
+
+	/**
+	 * INTERNAL — the D161 settle loop, ATTACHED by the adapter capability and absent
+	 * without it: `_settleData(store, run, expectsAsync, isStale, parked, token)`
+	 * re-runs data() until a pass queries nothing it has to fetch, then returns that
+	 * pass's model (synchronously when the first pass was synchronous and clean).
+	 * With a `token` it also owns `_settlingToken`/`_settleDirty` — the window
+	 * onStoreChange below folds a notification into — for that run's lifetime.
+	 * Every entry point (refresh, preload, prepareRefresh, nested and skeleton
+	 * mounting, prerender, static mounting) reaches the one implementation.
+	 */
 
 	/**
 	 * TRANSACTIONAL refresh (D146) — the two-phase form the router uses for a REUSED
@@ -1051,14 +1091,24 @@ export class PuzzleView {
 			return out;
 		};
 
-		const result = this.ctx.store
-			? this.ctx.store.withTracking(
-					this,
-					run,
-					this.data.constructor.name === 'AsyncFunction',
-					pending
-				)
-			: run();
+		const store = this.ctx.store;
+		const expectsAsync = this.data.constructor.name === 'AsyncFunction';
+		// D161: a prepared run settles through the same loop. Intermediate passes are
+		// discarded as they are anywhere else; the FINAL pass's reconcile is parked on
+		// `pending`, so commit()/discard() below are unchanged. Store notifications
+		// are NOT coalesced here — while the gate is open the ancestor still shows its
+		// committed route and must keep taking live updates (D146).
+		const result = !store
+			? run()
+			: this._settleData
+				? this._settleData(
+						store,
+						run,
+						expectsAsync,
+						() => this.#destroyed || this.#leaving,
+						pending
+					)
+				: store.withTracking(this, run, expectsAsync, pending);
 
 		let model;
 		const ready = Promise.resolve(result).then((m) => {
@@ -1145,6 +1195,14 @@ export class PuzzleView {
 
 	#onStoreChangeInner() {
 		if (this.#destroyed || this.#leaving) return;
+		// D161: a notification landing while this view is settling folds into that
+		// run — it takes one more pass before committing. Refreshing here instead
+		// would supersede the settle, and the caller awaiting it (router preload,
+		// mount) would resolve with no model ever committed.
+		if (this._settlingToken !== 0) {
+			this._settleDirty = true;
+			return;
+		}
 		// Fire-and-forget: a data() failure on the store-change path is logged
 		// rather than escaping into Store.flush() (where an uncaught throw would
 		// abort delivery to every later subscriber). A rejecting ASYNC data() comes

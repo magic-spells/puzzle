@@ -53,11 +53,14 @@ exports `adapter` — a frozen marker whose internal `install()` grafts the
 server surface (mixin-style, `Object.defineProperties` of descriptors, one
 time, idempotent) onto the existing classes:
 
-- `Store.prototype`: `loadAll`, `loadOne`, `adapter`, `upsert` (the public
+- `Store.prototype`: `loadMany`, `loadOne`, `adapter`, `upsert` (the public
   server-authoritative merge), `saveRecord`, `deleteRecord`, `request`, and
   the private dispatch, enhanced-fetch, reconciliation, network, and write-chain
   helpers.
 - `PuzzleModel.prototype`: `save`, `delete`.
+- `PuzzleView.prototype`: the [[DECISION-D161-AUTO-FETCHING-FINDS]] settle
+  executor (`_settleData`) — installed here so a no-adapter app ships none of
+  the loop; core keeps only the call seam.
 
 `PuzzleApp` validates `config.adapter` (anything truthy that is not the
 capability — e.g. a stray `{ endpoint }` object — is a construction-time error
@@ -120,7 +123,10 @@ text (the D96 lesson).
 
 The per-record write-chain state lives at adapter-module scope keyed by store
 (WeakMap — the fixtures `state.js` precedent), so the Store constructor
-carries no adapter fields beyond `apiURL`/`beforeRequest`.
+carries no adapter fields beyond `apiURL`/`beforeRequest`. The D161 read-state
+caches (in-flight dedup, negative LRU, collection-complete set) follow the
+same WeakMap pattern, and the static kernel reaches the read-state codecs
+through a `capabilities.js` relay rather than importing this module.
 
 **Fixtures.** `/fixtures` imports the capability and installs it during
 `installFixtures()`, so `Store.prototype._network` exists for it to replace

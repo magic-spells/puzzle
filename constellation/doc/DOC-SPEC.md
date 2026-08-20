@@ -100,6 +100,7 @@ The spec is split across six domain cards. Section numbers are globally unique a
 | 58 | Opt-in server adapter subpath (v1.72; fetch-function contract v1.73) | [[DOC-SPEC-DATA]] |
 | 59 | Opt-in SPA code splitting — `build.splitting` (v1.75) | [[DOC-SPEC-BUILD]] |
 | 60 | App-level error handling: `onError` + the `errorView` replacement view (v1.67; error-view contract v1.71) | [[DOC-SPEC-VIEW]] |
+| 61 | Auto-fetching finds: tracked fault-in and the settle loop (v1.76) | [[DOC-SPEC-DATA]] |
 | — | Deferred features (post-v1) | this card |
 | — | Open questions (tracked, not blocking) | this card |
 
@@ -125,7 +126,7 @@ Explicitly out of scope for v1. Docs may describe them only if marked **"Planned
 - ~~Named slots~~ — shipped in v1.21 (§24, D53); scoped slots remain deferred. (Event modifiers, `{#unless}`, and multi-branch `{#case}` shipped in v1.7 — D36/D37/D38; the `{#switch}` name was rejected in favor of `{#case}`.)
 - ~~Scoped styles (`<style scoped>`)~~ — shipped in v1.27 (§29, D59: native `@scope` wrapping, root-stamped attribute). A hard child boundary (`to (…)`) remains deferred on top of it.
 - ~~Schema validation enforcement, relationships~~ — both shipped: validation enforcement in v1.16 (§20, D48), `hasMany`/`belongsTo` resolution in v1.17 (§21, D49)
-- ~~Adapter write sync, custom adapter methods~~ — shipped in v1.18 (§22, D50: `save()`/`delete()`/`store.request()`). Query fault-in remains deferred (re-affirmed in D50).
+- ~~Adapter write sync, custom adapter methods~~ — shipped in v1.18 (§22, D50: `save()`/`delete()`/`store.request()`). ~~Query fault-in~~ shipped in v1.76 (§61, D161: tracked `findOne`/`findMany` fault misses in through the settle loop); server-side query/pagination keys, TTL invalidation, and relationship fault-in remain deferred on top of it.
 - App-level `settings`, `computed`, global `events`, `methods` — re-rejected at the D60 triage (module constants / singleton store records / view-scoped listeners cover the observed demand). ~~App lifecycle hooks~~ — shipped in v1.28 (§30, D60: `beforeMount`/`mounted`/`beforeUnmount` on the config).
 - Global event bus (`this.$events`), `ctx.utils`, devtools hook — re-rejected at the D60 triage (singleton store records are the bus; the 3-service ctx is a selling point; `window.__PUZZLE_APP__` covers dev introspection, D57). The D60 rejection was of an **app-config** hook and still stands; the D100 DevTools bridge (§55) is a different object — a dev-only wire protocol with no config surface and no production bytes.
 - Virtual scrolling

@@ -342,7 +342,7 @@ and keeps its existing signature unchanged:
 import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default adapter.defaults({
-  async loadAll(fetch, options, { endpoint }) {
+  async loadMany(fetch, options, { endpoint }) {
     const response = await fetch(endpoint);
     return (await response.json()).data;
   },
@@ -358,16 +358,71 @@ Register model classes in the app's `models` config.
 
 Views reach the store as `this.ctx.store`:
 
-- Local: `createRecord(type, data)` (validates, defaults, notifies),
-  `findOne(type, id)`, `findMany(type, { filter }?)`.
-- Server (needs a `static adapter` plus the `/adapter` capability passed once
-  to `PuzzleApp`): `loadOne`/`loadAll` (identity-preserving upsert),
-  `record.save()`, and `record.delete()`. `{ endpoint: '/api/todos' }` is the
-  REST shorthand: it generates GET/POST/PUT/DELETE transports. Override only
-  the verbs your API changes, or omit `endpoint` for a fully custom adapter.
-  `store.request()` remains the endpoint-prefixed JSON escape hatch.
-- Records mutate in place: `record.update(patch)`, `record.destroy()`,
+- Reads: `findOne(type, id)`, `findMany(type, { filter }?)`.
+- Writes: `createRecord(type, data)` (validates, defaults, notifies), then
+  records mutate in place — `record.update(patch)`, `record.destroy()`,
   `record.validate()` → `{ valid, errors }` (non-throwing, for form UX).
+- Server sync (needs a `static adapter` plus the `/adapter` capability passed
+  once to `PuzzleApp`): `record.save()` and `record.delete()` write back.
+  `{ endpoint: '/api/todos' }` is the REST shorthand: it generates
+  GET/POST/PUT/DELETE transports. Override only the verbs your API changes, or
+  omit `endpoint` for a fully custom adapter. `store.request()` remains the
+  endpoint-prefixed JSON escape hatch.
+
+### Server data: one rule
+
+**Server data comes from `data()`. `findOne`/`findMany` fetch what the store is
+missing. A committed `null` means the record does not exist.**
+
+There is no loading code to write, no `load()` hook, no `{#await}`, no seeding
+step. A tracked find that misses returns `null` (or an empty array) and queues
+the fetch; the view does not commit that pass. Puzzle re-runs `data()` behind
+the batch until a pass comes back with every read warm, and commits that one. So
+this is the entire data layer of a deep-linkable detail page:
+
+```js
+data(params) {
+  const store = this.ctx.store;
+  const post = store.findOne('post', params.id);
+  const author = post ? store.findOne('user', post.authorId) : null;
+  return { post, author };
+}
+```
+
+Land on it with an empty store and it settles in three rounds — miss the post,
+get the post and miss the author, get both — then renders once, fully populated.
+Nothing declares that the author depends on the post; the loop discovers it.
+
+What follows from the rule:
+
+- **`null` is never "still loading."** `{#if post} … {:else} Not found` needs no
+  companion `loaded` flag. A `null` you can see is a 404 (or a model with no
+  read verb), full stop.
+- **Only tracked `data()` runs fetch.** Event handlers, model methods, and
+  anything outside `data()` get a local snapshot and never issue a request. A
+  handler that needs fresh server data changes state and calls `this.refresh()`,
+  which re-enters the loop. Calling `store.loadOne`/`store.loadMany` from inside
+  `data()` warns in dev and points you at `findOne`/`findMany` — the imperative
+  loaders are a force-refresh escape hatch, not the read path.
+- **Relationships never fetch.** `post.author` and `post.comments` are local
+  lookups by design, so a 50-row list cannot become 50 GETs. When a view needs a
+  related record that may be missing, it asks for it: one more tracked find on
+  the foreign key, as above.
+- **No adapter, no read verb ⇒ nothing changes.** A model with no `static
+  adapter` (or a fixtures/local-first app) keeps pure local finds. `findOne`
+  needs a resolvable `loadOne`; `findMany` needs a resolvable `loadMany`.
+- **Requests dedupe and cache for the session.** Concurrent misses on the same
+  identity share one request; a successful no-options `findMany(type)` marks the
+  type complete so later finds on it are pure local reads; a 404 is remembered,
+  so a missing id is not re-requested on every render.
+- **`data()` must tolerate running several times per navigation.** Keep it a
+  pure derivation — no side effects, no one-shot gates.
+- **Errors fail the navigation.** A network failure, a 500, or a malformed body
+  rejects the run and goes to `errorView`. Only a 404 becomes a committed
+  `null`.
+
+Skeletons need no change: every settle round counts as one load, so a
+`<puzzle-skeleton>` shows once and holds until the view commits.
 
 Adapter functions receive an enhanced `fetch` as their first argument. It has
 the standard fetch signature and returns a standard `Response`, but also runs
@@ -379,11 +434,11 @@ validation and reconciliation after a framework verb returns:
 static adapter = { endpoint: '/api/posts' };
 
 // Different URL, standard payload: Puzzle checks/parses the Response.
-static adapter = { loadAll: (fetch) => fetch('/v2/posts') };
+static adapter = { loadMany: (fetch) => fetch('/v2/posts') };
 
 // Envelope + custom method
 static adapter = {
-  async loadAll(fetch, options) {
+  async loadMany(fetch, options) {
     const query = new URLSearchParams(options);
     return (await (await fetch(`/v2/posts?${query}`)).json()).data;
   },
@@ -392,13 +447,24 @@ static adapter = {
   },
 };
 
-await store.loadAll('post', { page: 1 });
-await store.loadAll('post', { page: 2 }); // pages accumulate; existing ids merge
+// Imperative loads (outside data()): a force refresh, or pagination.
+await store.loadMany('post', { page: 1 });
+await store.loadMany('post', { page: 2 }); // pages accumulate; existing ids merge
 const post = store.upsert('post', await store.adapter('post').publish(id));
 ```
 
 Using global `fetch` instead of the supplied parameter is legal and literal:
 it bypasses both `beforeRequest` and fixtures interception.
+
+A custom `loadOne` reports "no such record" by returning a non-OK `Response`
+(`new Response(null, { status: 404 })`) — Puzzle normalizes it into a
+`PuzzleAdapterError`, and on the auto-fetch path that 404 is what becomes the
+committed `null`. Returning `null` instead is a response-shape error, not a
+not-found convention.
+
+The collection verb is `loadMany` (`store.loadMany`, `static adapter.loadMany`,
+`adapter.defaults({ loadMany })`). The 0.6 spelling `loadAll` throws everywhere
+it could appear rather than being silently ignored.
 
 **Record identity ignores number/string spelling.** `findOne('todo', id)` returns
 the same record whether `id` is `7` or `'7'` — which matters constantly, because
@@ -509,8 +575,11 @@ builds.
 
 `<puzzle-skeleton>` is an optional TOP-LEVEL section of a `.pzl` file — a
 sibling of `<puzzle-view>`, not a tag inside it. Its content renders while the
-component's **first `data()`** is pending (async data), then swaps for the real
-template. No loading flag, no API — declare it and Puzzle handles timing.
+component's **first `data()`** is pending — an async `data()`, or a synchronous
+one whose tracked finds are still fetching — then swaps for the real template.
+Every settle round counts as one load, so the skeleton appears once and holds
+until the view commits. No loading flag, no API — declare it and Puzzle handles
+timing.
 
 ```html
 <puzzle-view>…real template…</puzzle-view>

@@ -38,6 +38,15 @@ let waapi = null;
 // below deliberately DON'T call settle so they can inspect a mid-flight animation
 // before finishing it by hand.
 const raf = () => new Promise((r) => requestAnimationFrame(() => r()));
+
+// A Response-shaped stand-in — exactly the surface the adapter reads.
+const jsonResponse = (body) => ({
+	ok: true,
+	status: 200,
+	statusText: 'OK',
+	text: async () => JSON.stringify(body),
+	json: async () => body,
+});
 async function settle(app) {
 	app.store.flush();
 	waapi?.finishAll();
@@ -161,6 +170,10 @@ export function runTodosSuite({ TodoHome, DefaultLayout, Todo, label }) {
 		// (jsdom has no Element.prototype.animate). settle() finishes animations so
 		// the behavioural assertions stay timing-stable.
 		waapi = installFakeAnimate();
+		// D161: the home view's tracked findMany('todo') loads the collection once,
+		// and this model declares an endpoint — so every boot issues one GET. Answer
+		// it with an empty collection; tests about server data stub their own fetch.
+		vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([])));
 	});
 
 	afterEach(() => {
@@ -381,7 +394,7 @@ export function runTodosSuite({ TodoHome, DefaultLayout, Todo, label }) {
 	});
 
 	describe(`Todos app [${label}] — server load (D21 read path)`, () => {
-		it('loadAll populates the list from fetch and a second load does not duplicate rows (upsert)', async () => {
+		it('loadMany populates the list from fetch and a second load does not duplicate rows (upsert)', async () => {
 			const payload = [
 				{ id: 's1', text: 'server one', completed: false },
 				{ id: 's2', text: 'server two', completed: true },
@@ -397,18 +410,17 @@ export function runTodosSuite({ TodoHome, DefaultLayout, Todo, label }) {
 
 			const { app, el } = boot({ apiURL: 'https://api.test' });
 			await app.mount();
-			expect(el.textContent).toContain('Nothing here yet');
-
-			await app.store.loadAll('todo');
 			await settle(app);
 
-			// Explicit GET init (v1.55, D91): wire-identical to a bare fetch(url).
+			// D161: the home view's tracked findMany faulted the collection in during
+			// mount — no explicit load, no loading flag. Explicit GET init (v1.55,
+			// D91): wire-identical to a bare fetch(url).
 			expect(fetchMock).toHaveBeenCalledWith('https://api.test/api/todos', { method: 'GET' });
 			expect(texts(el).sort()).toEqual(['server one', 'server two']);
 			expect(stats(el)).toEqual({ active: 1, completed: 1, total: 2 });
 
-			// second load of the same payload upserts by id — no duplicate rows
-			await app.store.loadAll('todo');
+			// an explicit re-load of the same payload upserts by id — no duplicate rows
+			await app.store.loadMany('todo');
 			await settle(app);
 
 			expect(fetchMock).toHaveBeenCalledTimes(2);

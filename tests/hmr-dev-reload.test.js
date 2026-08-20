@@ -17,6 +17,7 @@ import { PuzzleApp } from '../client-runtime/app.js';
 import { PuzzleView } from '../client-runtime/views/PuzzleView.js';
 import { ViewNode } from '../client-runtime/views/ViewNode.js';
 import { PuzzleModel, Puzzle } from '../client-runtime/model.js';
+import { adapter } from '../client-runtime/datastore/adapter.js';
 import { safeState } from '../client-runtime/devstate.js';
 
 const h = (tag, attrs = {}, children = []) => new ViewNode(tag, attrs, children);
@@ -454,5 +455,165 @@ describe('HMR view-state filter — safeState (§27, D57)', () => {
 		for (let i = 0; i < 20; i++) deep = { child: deep };
 		// Should not throw; the over-cap subtree is dropped, leaving a shallow shell.
 		expect(() => safeState(deep)).not.toThrow();
+	});
+});
+
+// ---- read state across the reload (D161) ------------------------------------
+//
+// A code save must not re-run the whole read session: the collections the app
+// completed and the identities it settled as absent cross the reload with the
+// records. In-flight work deliberately does NOT — an unresolved miss simply
+// faults again. App persistence stays records-only; this is the dev blob alone.
+
+class ApiTodo extends PuzzleModel {
+	static schema = {
+		id: Puzzle.string().primary(),
+		text: Puzzle.string().required(),
+	};
+	static adapter = { endpoint: '/todos' };
+}
+
+let lastApiView = null;
+class ApiListView extends PuzzleView {
+	data() {
+		const store = this.ctx.store;
+		return { todos: store.findMany('todo'), gone: store.findOne('todo', 'gone') };
+	}
+	mounted() {
+		lastApiView = this;
+	}
+	render() {
+		const { todos } = this.getData();
+		return h(
+			'ul',
+			{},
+			todos.map((t) => h('li', { key: t.id }, [text(t.text)]))
+		);
+	}
+}
+
+describe('HMR dev reload — adapter read state (D161)', () => {
+	let fetchMock;
+
+	function makeApiApp() {
+		const app = new PuzzleApp({
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: ApiListView }],
+			models: { todo: ApiTodo },
+			apiURL: 'https://api.test',
+			adapter,
+		});
+		apps.push(app);
+		return app;
+	}
+
+	beforeEach(() => {
+		lastApiView = null;
+		fetchMock = vi.fn(async (url) => {
+			const missing = String(url).endsWith('/todos/gone');
+			const body = missing ? { error: 'nope' } : [{ id: 't1', text: 'ship it' }];
+			return {
+				ok: !missing,
+				status: missing ? 404 : 200,
+				statusText: missing ? 'Not Found' : 'OK',
+				text: async () => JSON.stringify(body),
+				json: async () => body,
+			};
+		});
+		vi.stubGlobal('fetch', fetchMock);
+	});
+
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	it('carries collection-complete + absent state across the reload, so nothing refetches', async () => {
+		container();
+		const app = makeApiApp();
+		await app.mount();
+
+		// Navigation zero settled both reads.
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(lastApiView.getData().todos).toHaveLength(1);
+
+		app.__devSnapshot();
+		const blob = JSON.parse(sessionStorage.getItem(HMR_KEY));
+		expect(blob.read).toEqual({ v: 1, complete: ['todo'], absent: ['todo gone'] });
+		app.unmount();
+
+		container();
+		fetchMock.mockClear();
+		const fresh = makeApiApp();
+		await fresh.mount();
+
+		expect(lastApiView.getData().todos).toHaveLength(1);
+		expect(lastApiView.getData().gone).toBeNull();
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('drops a restored absence whose record rode along in the same blob', async () => {
+		container();
+		const app = makeApiApp();
+		await app.mount();
+		app.__devSnapshot();
+		app.unmount();
+
+		// The reload's blob claims 't1' is absent while carrying the record — records
+		// hydrate first, so the stale absence loses.
+		const blob = JSON.parse(sessionStorage.getItem(HMR_KEY));
+		blob.read.absent.push('todo t1');
+		sessionStorage.setItem(HMR_KEY, JSON.stringify(blob));
+
+		container();
+		fetchMock.mockClear();
+		const fresh = makeApiApp();
+		await fresh.mount();
+
+		expect(fresh.store.findOne('todo', 't1').text).toBe('ship it');
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it('keeps app persistence records-only — a real reload starts a fresh read session', async () => {
+		const written = new Map();
+		const storage = {
+			getItem: (k) => written.get(k) ?? null,
+			setItem: (k, v) => written.set(k, v),
+			removeItem: (k) => written.delete(k),
+		};
+		container();
+		const app = new PuzzleApp({
+			target: '#app',
+			routes: [{ path: '/', name: 'home', view: ApiListView }],
+			models: { todo: ApiTodo },
+			apiURL: 'https://api.test',
+			adapter,
+			storage,
+		});
+		apps.push(app);
+		await app.mount();
+		app.store.flush();
+
+		const persisted = JSON.parse([...written.values()][0]);
+		expect(Object.keys(persisted)).toEqual(['todo']);
+		expect(JSON.stringify(persisted)).not.toContain('absent');
+	});
+
+	it('cold-starts the read session when the blob carries no read state', async () => {
+		container();
+		const app = makeApiApp();
+		await app.mount();
+		app.__devSnapshot();
+		app.unmount();
+
+		const blob = JSON.parse(sessionStorage.getItem(HMR_KEY));
+		delete blob.read; // a blob written before the envelope existed
+		sessionStorage.setItem(HMR_KEY, JSON.stringify(blob));
+
+		container();
+		fetchMock.mockClear();
+		const fresh = makeApiApp();
+		await fresh.mount();
+
+		expect(fetchMock).toHaveBeenCalledTimes(2);
 	});
 });

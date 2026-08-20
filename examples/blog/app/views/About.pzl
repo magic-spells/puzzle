@@ -31,7 +31,7 @@
         {/for}
       </div>
     {:else}
-      <p class="text-muted">Loading the team…</p>
+      <p class="text-muted">Nobody has joined yet.</p>
     {/if}
   </section>
 </puzzle-view>
@@ -40,6 +40,9 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 export default class AboutView extends PuzzleView {
+  // One tracked read is the whole data layer: `findMany('user')` fetches
+  // /api/users.json the first time this route is visited and returns the warm
+  // collection on every later visit (D161).
   data(params, props) {
     const members = this.ctx.store.findMany('user');
 

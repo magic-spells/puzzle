@@ -113,7 +113,7 @@ class FullyCustomPost extends PuzzleModel {
 	};
 
 	static adapter: AdapterConfig<FullyCustomPost> = {
-		async loadAll() {
+		async loadMany() {
 			const response = await fetch('/custom/posts');
 			return (await response.json()).items as AdapterRecord[];
 		},
@@ -317,7 +317,7 @@ const replaceInit: BeforeRequestHook = (init) => ({ ...init, credentials: 'inclu
 void replaceInit;
 
 const appDefaults: AdapterDefaults = {
-	async loadAll(fetch, _options, { type, endpoint }: AdapterDefaultContext) {
+	async loadMany(fetch, _options, { type, endpoint }: AdapterDefaultContext) {
 		const response = await fetch(`${endpoint}?type=${type}`);
 		return (await response.json()).data as AdapterRecord[];
 	},
@@ -353,7 +353,7 @@ const config: PuzzleAppConfig = {
 	async beforeMount(app) {
 		// `this` is the PuzzleApp; store is live and awaited before nav #0 (§34).
 		const self: PuzzleApp = this;
-		await self.store.loadAll('todo');
+		await self.store.loadMany('todo');
 		app.store.createRecord('todo', { title: 'seeded' });
 	},
 	mounted(app) {
@@ -381,12 +381,12 @@ void [adapterCapability, configuredApp, rawAdapterAccepted];
 const app = new PuzzleApp(config);
 
 const restAdapter = app.store.adapter<typeof Todo.adapter>('todo');
-const restLoad = restAdapter.loadAll({ page: 2, limit: 20 });
+const restLoad = restAdapter.loadMany({ page: 2, limit: 20 });
 const customAdapter = app.store.adapter<typeof publishingAdapter>('todo');
 const publishResult: Promise<Response> = customAdapter.publish('server-1');
 const noEndpointAdapter = app.store.adapter<typeof FullyCustomPost.adapter>('post');
-void noEndpointAdapter.loadAll?.();
-void app.store.loadAll('todo', { page: 2, limit: 20 });
+void noEndpointAdapter.loadMany?.();
+void app.store.loadMany('todo', { page: 2, limit: 20 });
 void [restLoad, publishResult];
 
 // ---------------------------------------------------------------------------

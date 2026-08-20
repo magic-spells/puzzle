@@ -508,9 +508,9 @@ func TestBuildStaticEmitsPages(t *testing.T) {
 }
 
 // inlineAdapterFixture is a static app whose adapter is configured IN app.js —
-// `adapter.defaults({ loadAll })` passed straight into the config, the shape a
+// `adapter.defaults({ loadMany })` passed straight into the config, the shape a
 // small app writes before it ever grows an app/adapter.js. Its one model is
-// endpoint-less on purpose: only that app-level default can serve `loadAll`, so
+// endpoint-less on purpose: only that app-level default can serve `loadMany`, so
 // a page that installs any other capability fails loudly instead of quietly
 // agreeing. adapterModule, when non-empty, adds an app/adapter.js the config
 // deliberately ignores.
@@ -535,9 +535,9 @@ const app = new PuzzleApp({
   routes,
   models,
   adapter: adapter.defaults({
-    loadAll: async () => [{ id: '1', text: 'INLINE_ADAPTER_MARKER' }],
+    loadMany: async () => [{ id: '1', text: 'INLINE_ADAPTER_MARKER' }],
   }),
-  beforeMount({ store }) { return store.loadAll('item'); },
+  beforeMount({ store }) { return store.loadMany('item'); },
 });
 app.mount();
 export default app;
@@ -556,7 +556,7 @@ export default class Home extends PuzzleView {
 		files[adapterModule] = `import { adapter } from '@magic-spells/puzzle/adapter';
 
 export default adapter.defaults({
-  loadAll: async () => [{ id: '1', text: 'CONVENTIONAL_MODULE_MARKER' }],
+  loadMany: async () => [{ id: '1', text: 'CONVENTIONAL_MODULE_MARKER' }],
 });
 `
 	}
@@ -588,7 +588,7 @@ func staticPageBundleSources(t *testing.T, dist string) string {
 // TestBuildStaticShipsTheConfiguredAdapter is the end-to-end claim behind the
 // three-tier entry generation: an app that configures its adapter inline builds,
 // and the pages ship THAT adapter. The regression it guards produced a green
-// build whose every page threw `no adapter loadAll() declared` in the browser,
+// build whose every page threw `no adapter loadMany() declared` in the browser,
 // because the generated entry re-imported the bare capability and the configured
 // verbs never reached the client.
 func TestBuildStaticShipsTheConfiguredAdapter(t *testing.T) {
@@ -611,14 +611,14 @@ func TestBuildStaticShipsTheConfiguredAdapter(t *testing.T) {
 	}
 
 	dist := filepath.Join(root, "dist")
-	// The prerender ran the configured loadAll: its records are in the markup.
+	// The prerender ran the configured loadMany: its records are in the markup.
 	if home := readFile(t, filepath.Join(dist, "index.html")); !strings.Contains(home, "INLINE_ADAPTER_MARKER") {
 		t.Errorf("prerendered page missing the configured adapter's data:\n%s", home)
 	}
 	// And the same verb ships, so the client re-render resolves identically.
 	bundles := staticPageBundleSources(t, dist)
 	if !strings.Contains(bundles, "INLINE_ADAPTER_MARKER") {
-		t.Error("the page bundles do not carry the configured adapter's loadAll — the client would install the bare capability and throw")
+		t.Error("the page bundles do not carry the configured adapter's loadMany — the client would install the bare capability and throw")
 	}
 }
 

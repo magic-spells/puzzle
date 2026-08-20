@@ -30,10 +30,10 @@ afterEach(() => {
 });
 
 describe('author adapter transports', () => {
-	it('accepts parsed envelope data from author loadAll/loadOne functions', async () => {
+	it('accepts parsed envelope data from author loadMany/loadOne functions', async () => {
 		class EnvelopePost extends Post {
 			static adapter = {
-				async loadAll(fetch) {
+				async loadMany(fetch) {
 					return (await (await fetch('/v2/posts')).json()).data;
 				},
 				async loadOne(fetch, id) {
@@ -48,7 +48,7 @@ describe('author adapter transports', () => {
 		vi.stubGlobal('fetch', fetchSpy);
 		const store = new Store({ post: EnvelopePost });
 
-		const all = await store.loadAll('post');
+		const all = await store.loadMany('post');
 		const one = await store.loadOne('post', 'p2');
 
 		expect(all.map((post) => post.id)).toEqual(['p1']);
@@ -58,7 +58,7 @@ describe('author adapter transports', () => {
 
 	it('accepts a Response-return one-liner and normalizes non-OK responses', async () => {
 		class ResponsePost extends Post {
-			static adapter = { loadAll: (fetch) => fetch('/v2/posts') };
+			static adapter = { loadMany: (fetch) => fetch('/v2/posts') };
 		}
 		const fetchSpy = vi
 			.fn()
@@ -69,8 +69,8 @@ describe('author adapter transports', () => {
 		vi.stubGlobal('fetch', fetchSpy);
 		const store = new Store({ post: ResponsePost });
 
-		await expect(store.loadAll('post')).resolves.toHaveLength(1);
-		const failure = store.loadAll('post');
+		await expect(store.loadMany('post')).resolves.toHaveLength(1);
+		const failure = store.loadMany('post');
 		await expect(failure).rejects.toBeInstanceOf(PuzzleAdapterError);
 		await expect(failure).rejects.toMatchObject({
 			status: 403,
@@ -82,7 +82,7 @@ describe('author adapter transports', () => {
 	it('supports a fully custom adapter with no endpoint and global fetch', async () => {
 		class CustomPost extends Post {
 			static adapter = {
-				async loadAll() {
+				async loadMany() {
 					const res = await fetch('/bespoke/posts?state=live');
 					return (await res.json()).items;
 				},
@@ -125,7 +125,7 @@ describe('author adapter transports', () => {
 		const beforeRequest = vi.fn();
 		const store = new Store({ post: CustomPost }, { apiURL: API, beforeRequest });
 
-		await expect(store.loadAll('post')).resolves.toHaveLength(1);
+		await expect(store.loadMany('post')).resolves.toHaveLength(1);
 		await expect(store.loadOne('post', 'p2')).resolves.toMatchObject({ title: 'One' });
 		const post = store.createRecord('post', { id: 'p3', title: 'Draft' });
 		await post.save();
@@ -146,10 +146,10 @@ describe('author adapter transports', () => {
 
 	it('reports the exact missing verb on a partial no-endpoint adapter', async () => {
 		class ReadOnlyPost extends Post {
-			static adapter = { loadAll: async () => [{ id: 'p1', title: 'Read only' }] };
+			static adapter = { loadMany: async () => [{ id: 'p1', title: 'Read only' }] };
 		}
 		const store = new Store({ post: ReadOnlyPost });
-		await store.loadAll('post');
+		await store.loadMany('post');
 		const post = store.createRecord('post', { id: 'p2', title: 'Unsavable' });
 
 		await expect(post.save()).rejects.toThrow(
@@ -170,8 +170,8 @@ describe('pagination', () => {
 		vi.stubGlobal('fetch', fetchSpy);
 		const restStore = new Store({ post: RestPost }, { apiURL: API });
 
-		await restStore.loadAll('post', { page: 1, cursor: null, limit: 20 });
-		await restStore.loadAll('post', { page: 2, cursor: undefined, limit: 20 });
+		await restStore.loadMany('post', { page: 1, cursor: null, limit: 20 });
+		await restStore.loadMany('post', { page: 2, cursor: undefined, limit: 20 });
 
 		expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
 			`${API}/posts?page=1&limit=20`,
@@ -183,13 +183,13 @@ describe('pagination', () => {
 		let received;
 		class PaginatedPost extends Post {
 			static adapter = {
-				loadAll(_fetch, value) {
+				loadMany(_fetch, value) {
 					received = value;
 					return [{ id: 'p3', title: 'Author page' }];
 				},
 			};
 		}
-		await new Store({ post: PaginatedPost }).loadAll('post', options);
+		await new Store({ post: PaginatedPost }).loadMany('post', options);
 		expect(received).toBe(options);
 	});
 });
@@ -212,7 +212,7 @@ describe('bound adapter surface and enhanced fetch', () => {
 		const bound = store.adapter('post');
 
 		expect(store.adapter('post')).toBe(bound);
-		expect(bound.loadAll).toBeTypeOf('function');
+		expect(bound.loadMany).toBeTypeOf('function');
 		const post = store.upsert('post', await bound.publish('p1'));
 
 		expect(post.published).toBe(true);
@@ -223,7 +223,7 @@ describe('bound adapter surface and enhanced fetch', () => {
 		class FixturePost extends Post {
 			static adapter = {
 				endpoint: '/posts',
-				async loadAll(fetch) {
+				async loadMany(fetch) {
 					const res = await fetch(`${API}/posts/published`, {
 						headers: { 'X-Author': 'yes' },
 					});
@@ -255,7 +255,7 @@ describe('bound adapter surface and enhanced fetch', () => {
 				expect(Object.isFrozen(context)).toBe(true);
 				return fixtureNetwork.call(this, url, init, context);
 			};
-			await expect(store.loadAll('post')).resolves.toHaveLength(1);
+			await expect(store.loadMany('post')).resolves.toHaveLength(1);
 			expect(beforeRequest).toHaveBeenCalledWith(
 				expect.objectContaining({
 					method: 'GET',
@@ -285,7 +285,7 @@ describe('app-wide adapter defaults', () => {
 			static adapter = pageConfig;
 		}
 		const configured = adapter.defaults({
-			async loadAll(fetch, _options, { endpoint }) {
+			async loadMany(fetch, _options, { endpoint }) {
 				return (await (await fetch(API + endpoint)).json()).data;
 			},
 		});
@@ -299,8 +299,8 @@ describe('app-wide adapter defaults', () => {
 			{ apiURL: API, adapter: configured }
 		);
 
-		await expect(store.loadAll('article')).resolves.toMatchObject([{ title: 'Article' }]);
-		await expect(store.loadAll('page')).resolves.toMatchObject([{ title: 'Page' }]);
+		await expect(store.loadMany('article')).resolves.toMatchObject([{ title: 'Article' }]);
+		await expect(store.loadMany('page')).resolves.toMatchObject([{ title: 'Page' }]);
 
 		expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
 			`${API}/articles`,
@@ -314,12 +314,12 @@ describe('app-wide adapter defaults', () => {
 		const appLoadAll = vi.fn(async () => [{ id: 'default', title: 'Default' }]);
 		const modelLoadAll = vi.fn(async () => [{ id: 'model', title: 'Model' }]);
 		class SpecificPost extends Post {
-			static adapter = { endpoint: '/posts', loadAll: modelLoadAll };
+			static adapter = { endpoint: '/posts', loadMany: modelLoadAll };
 		}
-		const configured = adapter.defaults({ loadAll: appLoadAll });
+		const configured = adapter.defaults({ loadMany: appLoadAll });
 		const store = new Store({ post: SpecificPost }, { adapter: configured });
 
-		await expect(store.loadAll('post')).resolves.toMatchObject([{ title: 'Model' }]);
+		await expect(store.loadMany('post')).resolves.toMatchObject([{ title: 'Model' }]);
 		expect(modelLoadAll).toHaveBeenCalledTimes(1);
 		expect(appLoadAll).not.toHaveBeenCalled();
 	});
@@ -371,17 +371,17 @@ describe('app-wide adapter defaults', () => {
 			static adapter = { endpoint: '/posts' };
 		}
 		const first = adapter.defaults({
-			loadAll: async () => [{ id: 'p1', title: 'First dialect' }],
+			loadMany: async () => [{ id: 'p1', title: 'First dialect' }],
 		});
 		const second = adapter.defaults({
-			loadAll: async () => [{ id: 'p1', title: 'Second dialect' }],
+			loadMany: async () => [{ id: 'p1', title: 'Second dialect' }],
 		});
 		const firstStore = new Store({ post: SharedPost }, { adapter: first });
 		const secondStore = new Store({ post: SharedPost }, { adapter: second });
 
 		const [firstRecords, secondRecords] = await Promise.all([
-			firstStore.loadAll('post'),
-			secondStore.loadAll('post'),
+			firstStore.loadMany('post'),
+			secondStore.loadMany('post'),
 		]);
 
 		expect(firstRecords[0].title).toBe('First dialect');
@@ -393,7 +393,7 @@ describe('app-wide adapter defaults', () => {
 			static adapter = { endpoint: '/posts' };
 		}
 		const configured = adapter.defaults({
-			async loadAll(fetch, _options, { endpoint }) {
+			async loadMany(fetch, _options, { endpoint }) {
 				const res = await fetch(`${API}${endpoint}/published`, {
 					headers: { 'X-Dialect': 'envelope' },
 				});
@@ -422,7 +422,7 @@ describe('app-wide adapter defaults', () => {
 				{ post: FixturePost },
 				{ apiURL: API, adapter: configured, beforeRequest }
 			);
-			await expect(store.loadAll('post')).resolves.toMatchObject([
+			await expect(store.loadMany('post')).resolves.toMatchObject([
 				{ title: 'Fixture default' },
 			]);
 			expect(beforeRequest).toHaveBeenCalledWith(
@@ -459,7 +459,7 @@ describe('adapter config validation', () => {
 	it('tells a configured capability from the bare export', () => {
 		expect(isConfiguredAdapter(adapter)).toBe(false);
 		expect(isConfiguredAdapter(adapter.defaults({}))).toBe(true);
-		expect(isConfiguredAdapter(adapter.defaults({ loadAll: async () => [] }))).toBe(true);
+		expect(isConfiguredAdapter(adapter.defaults({ loadMany: async () => [] }))).toBe(true);
 		// Nothing that is not a capability at all can pass.
 		expect(isConfiguredAdapter(undefined)).toBe(false);
 		expect(isConfiguredAdapter({ install() {} })).toBe(false);

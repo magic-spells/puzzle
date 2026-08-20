@@ -12,6 +12,16 @@ let app = null;
 
 beforeEach(async () => {
 	vi.spyOn(console, 'log').mockImplementation(() => {});
+	// D161: the home view's tracked findMany('todo') loads the collection once and
+	// this model declares an endpoint, so the boot issues one GET — answered here
+	// with an empty collection.
+	vi.stubGlobal('fetch', async () => ({
+		ok: true,
+		status: 200,
+		statusText: 'OK',
+		text: async () => '[]',
+		json: async () => [],
+	}));
 	app = await createTestApp({
 		routes: [
 			{
@@ -30,6 +40,7 @@ beforeEach(async () => {
 afterEach(() => {
 	app?.destroy();
 	app = null;
+	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
 });
 

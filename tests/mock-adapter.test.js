@@ -7,7 +7,7 @@ import { installFixtures } from '../client-runtime/fixtures/index.js';
 // Adapter mock (v1.57, D95): `static adapter = { endpoint, mock: {…} }` is served
 // from memory by the /fixtures module's replacement of Store._network — the ONE
 // seam the opt-in adapter installs (D98/D157). That placement is the whole design:
-// loadAll/loadOne/save/delete/request run completely unmodified, so these tests
+// loadMany/loadOne/save/delete/request run completely unmodified, so these tests
 // exercise the real D21 read path and the real D50 write path (pk adoption, the
 // _synced flip, the identity re-checks).
 
@@ -53,10 +53,10 @@ afterEach(() => {
 });
 
 describe('interception — no network, real verbs', () => {
-	it('loadAll serves the mock collection and never calls fetch', async () => {
+	it('loadMany serves the mock collection and never calls fetch', async () => {
 		const store = storeWith({ data: [{ id: 't1', text: 'a' }, { id: 't2', text: 'b' }] });
 
-		const records = await store.loadAll('todo');
+		const records = await store.loadMany('todo');
 
 		expect(records.map((r) => r.text)).toEqual(['a', 'b']);
 		expect(store.findMany('todo')).toHaveLength(2);
@@ -69,14 +69,14 @@ describe('interception — no network, real verbs', () => {
 		const fixtures = [{ id: 't1', text: 'a', done: false }];
 		const store = storeWith({ data: fixtures });
 
-		const [record] = await store.loadAll('todo');
+		const [record] = await store.loadMany('todo');
 		record.update({ text: 'changed' });
 		await record.save(); // PUT merges into the mock's own copy
 
 		expect(fixtures).toEqual([{ id: 't1', text: 'a', done: false }]);
 		// A second store built on the same array still sees the original.
 		const other = storeWith({ data: fixtures });
-		expect((await other.loadAll('todo'))[0].text).toBe('a');
+		expect((await other.loadMany('todo'))[0].text).toBe('a');
 	});
 
 	it('collection state persists across calls within a store', async () => {
@@ -84,19 +84,19 @@ describe('interception — no network, real verbs', () => {
 		const created = store.createRecord('todo', { id: 't2', text: 'b' });
 
 		await created.save(); // POST inserts into the mock collection
-		const list = await store.loadAll('todo');
+		const list = await store.loadMany('todo');
 
 		expect(list.map((r) => r.id).sort()).toEqual(['t1', 't2']);
 	});
 
 	it('an empty/omitted data block starts from an empty collection', async () => {
 		const store = storeWith({});
-		expect(await store.loadAll('todo')).toEqual([]);
+		expect(await store.loadMany('todo')).toEqual([]);
 	});
 
 	it('a model with no mock block still goes to the network', async () => {
 		const store = storeWith(undefined);
-		await expect(store.loadAll('todo')).rejects.toThrow('[test] fetch must not be called');
+		await expect(store.loadMany('todo')).rejects.toThrow('[test] fetch must not be called');
 		expect(fetchSpy).toHaveBeenCalledTimes(1);
 	});
 });
@@ -108,9 +108,11 @@ describe('default CRUD — all five shapes, end to end', () => {
 		const record = await store.loadOne('todo', 't1');
 		expect(record.text).toBe('a');
 
-		await expect(store.loadOne('todo', 'nope')).rejects.toThrow(
-			"[puzzle] load 'todo' failed: 404 Not Found"
-		);
+		// D161: reads normalize through PuzzleAdapterError, so the auto-fetch path
+		// can read the status off it.
+		const error = await store.loadOne('todo', 'nope').catch((err) => err);
+		expect(error).toBeInstanceOf(PuzzleAdapterError);
+		expect(error.status).toBe(404);
 	});
 
 	it('POST inserts and answers 201 with the created object (the _synced flip)', async () => {
@@ -121,7 +123,7 @@ describe('default CRUD — all five shapes, end to end', () => {
 		await record.save();
 
 		expect(record._synced).toBe(true);
-		expect((await store.loadAll('todo')).map((r) => r.id)).toEqual(['t1']);
+		expect((await store.loadMany('todo')).map((r) => r.id)).toEqual(['t1']);
 	});
 
 	it('POST assigns a primary key when the body carries none', async () => {
@@ -134,7 +136,7 @@ describe('default CRUD — all five shapes, end to end', () => {
 
 	it('PUT merges and answers 200 with the merged object', async () => {
 		const store = storeWith({ data: [{ id: 't1', text: 'a', done: false }] });
-		const [record] = await store.loadAll('todo');
+		const [record] = await store.loadMany('todo');
 
 		record.update({ done: true });
 		await record.save(); // synced → PUT
@@ -157,12 +159,12 @@ describe('default CRUD — all five shapes, end to end', () => {
 
 	it('DELETE answers a bodiless 204 and removes from both sides', async () => {
 		const store = storeWith({ data: [{ id: 't1', text: 'a' }, { id: 't2', text: 'b' }] });
-		const [first] = await store.loadAll('todo');
+		const [first] = await store.loadMany('todo');
 
 		await first.delete();
 
 		expect(store.findOne('todo', 't1')).toBeNull();
-		expect((await store.loadAll('todo')).map((r) => r.id)).toEqual(['t2']);
+		expect((await store.loadMany('todo')).map((r) => r.id)).toEqual(['t2']);
 	});
 
 	it('DELETE of an unknown id 404s — which D50 treats as already gone', async () => {
@@ -247,7 +249,7 @@ describe('latency — the knob that makes skeletons developable', () => {
 		const store = storeWith({ data: [{ id: 't1', text: 'a' }], latency: 400 });
 
 		let settled = false;
-		const pending = store.loadAll('todo').then((r) => {
+		const pending = store.loadMany('todo').then((r) => {
 			settled = true;
 			return r;
 		});
@@ -261,8 +263,8 @@ describe('latency — the knob that makes skeletons developable', () => {
 
 	it('a [min, max] range lands inside the range and replays identically', async () => {
 		vi.useFakeTimers();
-		const first = await settleTick(storeWith({ data: [], latency: [300, 500] }).loadAll('todo'));
-		const second = await settleTick(storeWith({ data: [], latency: [300, 500] }).loadAll('todo'));
+		const first = await settleTick(storeWith({ data: [], latency: [300, 500] }).loadMany('todo'));
+		const second = await settleTick(storeWith({ data: [], latency: [300, 500] }).loadMany('todo'));
 
 		expect(first).toBeGreaterThanOrEqual(300);
 		expect(first).toBeLessThanOrEqual(500);
@@ -274,7 +276,7 @@ describe('latency — the knob that makes skeletons developable', () => {
 		const store = storeWith({ data: [{ id: 't1', text: 'a' }] });
 		// No timer is advanced anywhere in this test — a mock that always armed a
 		// setTimeout would hang here under fake timers.
-		expect(await store.loadAll('todo')).toHaveLength(1);
+		expect(await store.loadMany('todo')).toHaveLength(1);
 	});
 
 	it('a throwing handler with latency rejects instead of leaving the request pending', async () => {
@@ -310,9 +312,9 @@ describe('failure — the only supported way to make data() reject on purpose', 
 
 	it('fail: true rejects reads through the D21 error path', async () => {
 		const store = storeWith({ data: [{ id: 't1', text: 'a' }], fail: true });
-		await expect(store.loadAll('todo')).rejects.toThrow(
-			"[puzzle] load 'todo' failed: 500 Internal Server Error"
-		);
+		const error = await store.loadMany('todo').catch((err) => err);
+		expect(error).toBeInstanceOf(PuzzleAdapterError);
+		expect(error.status).toBe(500);
 	});
 
 	it('fail: true rejects delete() and keeps the record', async () => {
@@ -329,12 +331,12 @@ describe('failure — the only supported way to make data() reject on purpose', 
 		const record = store.createRecord('todo', { id: 't1', text: 'a' });
 
 		await expect(record.save()).rejects.toBeInstanceOf(PuzzleAdapterError);
-		await expect(store.loadAll('todo')).rejects.toThrow(/500/);
+		await expect(store.loadMany('todo')).rejects.toThrow(/500/);
 	});
 
 	it('failRate: 0 never fails', async () => {
 		const store = storeWith({ data: [], failRate: 0 });
-		for (let i = 0; i < 20; i++) await store.loadAll('todo');
+		for (let i = 0; i < 20; i++) await store.loadMany('todo');
 	});
 
 	it('a partial failRate is reproducible from the seed', async () => {
@@ -342,7 +344,7 @@ describe('failure — the only supported way to make data() reject on purpose', 
 			const store = storeWith({ data: [], failRate: 0.5 });
 			const outcomes = [];
 			for (let i = 0; i < 24; i++) {
-				outcomes.push(await store.loadAll('todo').then(() => 'ok', () => 'fail'));
+				outcomes.push(await store.loadMany('todo').then(() => 'ok', () => 'fail'));
 			}
 			return outcomes;
 		};
@@ -360,7 +362,7 @@ describe('failure — the only supported way to make data() reject on purpose', 
 			const store = storeWith({ data: [], failRate: 0.5 });
 			const outcomes = [];
 			for (let i = 0; i < 24; i++) {
-				outcomes.push(await store.loadAll('todo').then(() => 'ok', () => 'fail'));
+				outcomes.push(await store.loadMany('todo').then(() => 'ok', () => 'fail'));
 			}
 			return outcomes;
 		};
@@ -408,7 +410,7 @@ describe('handler — the custom-path escape hatch', () => {
 			},
 		});
 
-		const records = await store.loadAll('todo');
+		const records = await store.loadMany('todo');
 
 		expect(records).toHaveLength(1);
 		expect(seen).toEqual(['GET ']);
@@ -464,7 +466,7 @@ describe('composition with beforeRequest (D91)', () => {
 			}
 		);
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 		await store.createRecord('todo', { id: 't2', text: 'b' }).save();
 
 		expect(calls).toHaveLength(2);
@@ -484,7 +486,7 @@ describe('composition with beforeRequest (D91)', () => {
 				},
 			}
 		);
-		await expect(store.loadAll('todo')).rejects.toThrow('session expired');
+		await expect(store.loadMany('todo')).rejects.toThrow('session expired');
 	});
 });
 
@@ -494,7 +496,7 @@ describe('production posture — one advisory warning per model', () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const store = storeWith({ data: [{ id: 't1', text: 'a' }] });
 
-		await store.loadAll('todo');
+		await store.loadMany('todo');
 		await store.loadOne('todo', 't1');
 		await store.request('todo', '/t1');
 
@@ -505,5 +507,64 @@ describe('production posture — one advisory warning per model', () => {
 		expect(mockWarnings[0][0]).toBe(
 			"[puzzle] model 'todo' is served by its adapter mock — no request reaches /api/todos"
 		);
+	});
+});
+
+// D161: the mock serves the auto-fetch path too — a mocked app is a server-backed
+// app as far as a tracked query is concerned, which is what makes the mock the
+// supported way to develop a settling view without a running API.
+describe('tracked queries settle against the mock', () => {
+	/** One settle round: run the tracked pass, await what it queued, repeat. */
+	async function settle(store, fn) {
+		for (;;) {
+			const requests = new Map();
+			const value = store.withTracking({}, fn, false, {}, requests);
+			if (requests.size === 0) return value;
+			await Promise.all(requests.values());
+		}
+	}
+
+	it('a tracked findMany loads the mock collection once, then filters locally', async () => {
+		const store = storeWith({
+			data: [
+				{ id: 't1', text: 'a', done: false },
+				{ id: 't2', text: 'b', done: true },
+			],
+		});
+
+		const done = await settle(store, () => store.findMany('todo', { filter: (t) => t.done }));
+		expect(done.map((todo) => todo.id)).toEqual(['t2']);
+
+		// Complete now: a second tracked pass is pure local.
+		const requests = new Map();
+		store.withTracking({}, () => store.findMany('todo'), false, {}, requests);
+		expect(requests.size).toBe(0);
+	});
+
+	it('a tracked findOne for a record the mock does not have settles to null', async () => {
+		const store = storeWith({ data: [{ id: 't1', text: 'a' }] });
+
+		expect(await settle(store, () => store.findOne('todo', 't1'))).toMatchObject({ text: 'a' });
+		expect(await settle(store, () => store.findOne('todo', 'ghost'))).toBeNull();
+
+		// The mock's 404 was recorded as absence — asking again requests nothing.
+		const requests = new Map();
+		store.withTracking({}, () => store.findOne('todo', 'ghost'), false, {}, requests);
+		expect(requests.size).toBe(0);
+	});
+
+	it('a mock failure rejects the run and leaves the type incomplete', async () => {
+		const store = storeWith({ data: [{ id: 't1', text: 'a' }], fail: true });
+		const requests = new Map();
+		store.withTracking({}, () => store.findMany('todo'), false, {}, requests);
+
+		const error = await Promise.all(requests.values()).catch((err) => err);
+		expect(error).toBeInstanceOf(PuzzleAdapterError);
+		expect(error.status).toBe(500);
+
+		const retry = new Map();
+		store.withTracking({}, () => store.findMany('todo'), false, {}, retry);
+		expect(retry.size).toBe(1);
+		await Promise.all(retry.values()).catch(() => {});
 	});
 });

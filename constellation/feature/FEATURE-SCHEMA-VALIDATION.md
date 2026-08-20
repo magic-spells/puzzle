@@ -36,8 +36,6 @@ of flowing silently into the store — the activation [[DOC-MODELS]] promised
 
 ## Scope
 
-
-
 **In (shipped):**
 - **Throwing boundary:** `store.createRecord` (validates after defaults + pk
   generation; on failure nothing inserted/notified/persisted) and
@@ -49,7 +47,7 @@ of flowing silently into the store — the activation [[DOC-MODELS]] promised
   validate applies schema `.default()`s first, so it accepts exactly what
   `createRecord` would; the auto-generatable primary key is exempt from the
   required error under the parity rule (FEATURE-VALIDATE-PK-PARITY).
-- **Exempt paths:** `loadAll`/`loadOne` upserts (server authoritative) and
+- **Exempt paths:** `loadMany`/`loadOne` upserts (server authoritative) and
   storage hydration (fail-soft startup) skip validation.
 - Rule semantics per §20: required-first short-circuit, null/undefined skip for
   non-required fields, length bounds for strings/arrays and value bounds for

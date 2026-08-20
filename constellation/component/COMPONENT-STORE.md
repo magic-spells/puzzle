@@ -40,7 +40,12 @@ verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 Reactive record registry for the configured model classes. `createRecord`
 applies defaults, generates/honors the model primary key, validates, rejects
 duplicates, indexes the instance, and schedules notifications. `findOne` and
-`findMany` support identity lookup and collection filtering; record
+`findMany` support identity lookup and collection filtering — and, inside a
+tracked `data()` run with the adapter capability installed, fault missing data
+in: a miss returns its local value synchronously and adds a deduped fetch
+promise to the run's pending set ([[DECISION-D161-AUTO-FETCHING-FINDS]]).
+Untracked reads, nullish/unkeyable ids, and stores without a resolvable read
+verb stay pure-local. Record
 `update()`/`destroy()` call back into the Store. Record identity is
 number/string-insensitive ([[DECISION-D112-STORE-ID-KEY-NORMALIZATION]]):
 every id-keyed access to the record index — and both sides of `hasMany`'s FK
@@ -51,15 +56,18 @@ always had. Record fields keep their original type; only numbers normalize
 comparison uses the same rule so a numeric echo of a string-keyed id merges
 instead of warning.
 
-`withTracking(subscriber, fn, expectsAsync, pending)` records collection and
-record-key queries performed by `data()`. Retracking replaces subscriptions;
-destroying a view unsubscribes it. The optional `pending` channel is the D146
-held eval: a successful run parks its reconcile there instead of applying it,
-so the router's prepare/commit decides whether the run's keys replace the
-last-good set or are unwound, while `_heldKeys` fences those keys from any
-other eval's garbage collection until that decision lands
-([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]). Scope restore is never
-deferred, and a failing run reconciles immediately. `flush()` snapshots affected subscribers, notifies each
+`withTracking(subscriber, fn, expectsAsync, pending, requests)` records
+collection and record-key queries performed by `data()`. Retracking replaces
+subscriptions; destroying a view unsubscribes it. The optional `pending`
+channel is the D146 held eval: a successful run parks its reconcile there
+instead of applying it, so the router's prepare/commit decides whether the
+run's keys replace the last-good set or are unwound, while `_heldKeys` fences
+those keys from any other eval's garbage collection until that decision lands
+([[DECISION-D146-TRANSACTIONAL-ANCESTOR-REFRESH]]). The `requests` channel is
+the D161 pending set — per evaluation, never store-global, managed with the
+same save/restore stack discipline as the tracking scope itself. Scope restore
+is never deferred, and a failing run reconciles immediately. `flush()`
+snapshots affected subscribers, notifies each
 once in isolation, observes thenable failures, and continues after a throwing
 subscriber. Scheduling uses rAF when visible plus a 220ms fallback, and timers
 directly in hidden/non-DOM contexts. In dev builds `flush()` closes by reporting
@@ -81,9 +89,14 @@ literal, so a bare index also reaches `Object.prototype`: a persisted blob keyed
 that must stay fail-soft.
 
 The core Store owns no server verbs. Passing the `adapter` capability from
-`@magic-spells/puzzle/adapter` to `PuzzleApp` installs `loadAll`, `loadOne`,
+`@magic-spells/puzzle/adapter` to `PuzzleApp` installs `loadMany`, `loadOne`,
 `adapter`, `upsert`, `saveRecord`, `deleteRecord`, `request`, and their private
-helpers on its prototype ([[DECISION-D157-ADAPTER-SUBPATH]]). Under
+helpers on its prototype ([[DECISION-D157-ADAPTER-SUBPATH]]); `loadAll` — the
+pre-0.7.0 spelling — is a throwing trap naming `loadMany`. Core's own share of
+D161 is deliberately tiny: the `_requests` field, the fault branch in each
+find, and the `_findOneLocal`/`_findManyLocal` split — every decision (verb
+resolution, in-flight dedup, the negative LRU, collection completeness) lives
+in the adapter module's WeakMap state. Under
 [[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]], a model's adapter is per-verb fetch
 functions. Dispatch resolves the model's own function first, the app
 capability's `adapter.defaults()` function second, and endpoint-generated REST
@@ -96,7 +109,9 @@ record across save and delete using adapter-module `WeakMap` state keyed by
 Store. The installed implementation
 validates before sync, adopts server keys atomically, protects against
 destroy/replacement/collision races, and throws the subpath's
-`PuzzleAdapterError` for adapter failures. `removeRecord` stays in core and flags the instance
+`PuzzleAdapterError` for adapter failures — generated reads included, which is
+what lets the D161 negative cache key off a normalized 404. `removeRecord`
+stays in core and flags the instance
 `_deleted` before detaching it — one terminal state shared by local `destroy()`
 and confirmed `delete()`, so stale references delete idempotently and can never
 `save()` a resurrected copy.
@@ -113,7 +128,9 @@ nothing about either module; `seed()`/`resetFixtureSeed()` are likewise absent
 unless fixtures are installed.
 
 Relationship getters are installed on model prototypes at Store construction.
-Their queries use the same tracking path as explicit Store calls.
+Their queries use `_findOneLocal`/`_findManyLocal` — the same subscription keys
+as the public finds, no fault-in — so a traversal is reactive but can never
+issue a request (D49/D161).
 
 Optional Storage hydration is fail-soft, and that guarantee has to cover the
 hydration walk itself, not just the read+parse: `_load()` runs from the
@@ -121,10 +138,13 @@ constructor, so anything escaping it escapes `PuzzleApp` construction too and
 leaves a permanently blank page — one that survives reload, because the bad blob
 is still in storage. `_hydrateAll`'s own guards only cover shapes it recognises,
 so the call sits inside the same try/catch; whatever hydrated before the failure
-is kept and the rest of the blob is dropped with a warning. The HMR restore path
+is kept and the rest of the blob is dropped with a warning. Hydration also
+sweeps the D161 negative cache — an absence whose record just arrived is
+dropped. The HMR restore path
 calls `_hydrateAll` directly and still propagates — that one is developer-facing.
 The persisted wire shape includes an out-of-band `__synced` marker while record
-JSON remains clean. Mutations only
+JSON remains clean; D161 read state (completeness, negatives) is never
+persisted to app storage. Mutations only
 mark persistence dirty; the O(store) serialization/write runs once after
 subscriber delivery in `flush()`. `PuzzleApp` forces a final flush after router
 teardown and holds a window `pagehide` listener that flushes while mounted, so

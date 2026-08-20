@@ -34,6 +34,7 @@ lands, without schema changes." The open questions from the backlog card: throw 
 Ember-style `record.errors`, and always-on vs opt-in.
 
 ## Decision
+
 - **Throw at the write boundary.** `createRecord(type, data)` (after defaults + pk
   generation) and `record.update(patch)` (patched fields only) throw
   `PuzzleValidationError` — exported from the package root — with `.errors` as
@@ -52,7 +53,7 @@ Ember-style `record.errors`, and always-on vs opt-in.
   and reactive error display already has a home in component state.)
 - **Always-on at the local write API; server + hydration paths exempt.** No opt-out
   flag: enforcement only fires where an app *declared* rules, and the docs promised
-  exactly this activation. `loadAll`/`loadOne` upserts skip validation (the server is
+  exactly this activation. `loadMany`/`loadOne` upserts skip validation (the server is
   authoritative — a backend quirk must not crash the read path), and storage hydration
   skips it (fail-soft startup, same posture as the duplicate-pk skip). (Rejected:
   per-call `{ validate: false }` — an escape hatch nobody asked for yet; can layer on

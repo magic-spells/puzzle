@@ -1,20 +1,21 @@
-// Memoized store seeding. Safe to await from a view's async data(): the load is
-// initiated at most once; later calls get the SAME promise back. This is what
-// lets skeleton views (SPEC §16) await real fetch latency from data() without
-// re-initiating loads — loadAll upserts by primary key and notifies subscribers,
-// so it must never run more than once from a render path (the D21 gotcha).
+// Memoized whole-store load. Views do not need this — a tracked findOne/findMany
+// in data() fetches what is missing on its own (D161) — but this demo restores
+// persisted like/rechirp/follow flags onto records at boot, which only works once
+// those records exist, so it loads everything up front.
 //
-// app.js awaits this once at boot to seed; skeleton views (Home, PostDetail)
-// await it again at the top of their async data() to be sure the store is
-// populated before they read from it — the memo makes that second await free.
+// The memo is what makes the load safe to await from a view's async data(): it is
+// initiated at most once and later calls get the SAME promise back, so the
+// skeleton views (SPEC §16) can await real fetch latency without issuing a second
+// request. app.js awaits it once at boot; Home and PostDetail await it again at
+// the top of their async data(), which the memo makes free.
 let seeded = null;
 
 export function seedStore(store) {
   if (!seeded) {
     seeded = Promise.all([
-      store.loadAll('user'),
-      store.loadAll('post'),
-      store.loadAll('notification'),
+      store.loadMany('user'),
+      store.loadMany('post'),
+      store.loadMany('notification'),
     ]);
   }
   return seeded;

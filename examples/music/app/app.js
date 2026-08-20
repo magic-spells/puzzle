@@ -41,16 +41,17 @@ const app = new PuzzleApp({
     plural: (count, singular, plural) => (count === 1 ? singular : plural || `${singular}s`),
   },
 
-  // Seed the store from the static JSON (D21 read path) + restore persisted state
-  // before navigation #0. loadAll upserts by primary key and notifies subscribers,
-  // so it must never run inside data(). beforeMount is awaited, so the store is
-  // fully populated before the first data() runs — a missing record is genuinely
-  // not-found, not a mid-load blank (SPEC §16/§30).
+  // Load the whole catalog up front and restore persisted state before
+  // navigation #0. Views never need this — a tracked findOne/findMany in data()
+  // fetches what is missing on its own (D161) — but the localStorage restore
+  // below flips flags on records it can only reach once they exist, so this app
+  // asks for everything here. loadMany with no options marks each type complete,
+  // so the views' finds then read a warm store and issue nothing.
   async beforeMount(app) {
     await Promise.all([
-      app.store.loadAll('artist').catch((err) => console.error('[music] artist seed failed:', err)),
-      app.store.loadAll('album').catch((err) => console.error('[music] album seed failed:', err)),
-      app.store.loadAll('track').catch((err) => console.error('[music] track seed failed:', err)),
+      app.store.loadMany('artist').catch((err) => console.error('[music] artist seed failed:', err)),
+      app.store.loadMany('album').catch((err) => console.error('[music] album seed failed:', err)),
+      app.store.loadMany('track').catch((err) => console.error('[music] track seed failed:', err)),
     ]);
 
     // Restore likes + last session from localStorage.

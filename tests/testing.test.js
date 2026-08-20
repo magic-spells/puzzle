@@ -36,7 +36,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 	it('accepts the adapter capability option and rejects a raw object', async () => {
 		class Probe extends PuzzleView {
 			data() {
-				return { installed: typeof this.ctx.store.loadAll === 'function' };
+				return { installed: typeof this.ctx.store.loadMany === 'function' };
 			}
 			render() {
 				return h('span', {}, [text(this.getData().installed)]);
@@ -51,7 +51,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 			static adapter = { endpoint: '/notes' };
 		}
 		const configured = adapter.defaults({
-			loadAll: async () => [{ id: 'n1' }],
+			loadMany: async () => [{ id: 'n1' }],
 		});
 		const view = await mountView(Probe, {
 			adapter: configured,
@@ -59,7 +59,7 @@ describe('@magic-spells/puzzle/testing — mountView', () => {
 		});
 		handles.push(view);
 		expect(view.element.textContent).toBe('true');
-		await expect(view.store.loadAll('note')).resolves.toHaveLength(1);
+		await expect(view.store.loadMany('note')).resolves.toHaveLength(1);
 	});
 
 	it('mounts detached with the complete ctx, query helpers, click(), and setProps()', async () => {

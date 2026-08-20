@@ -1,12 +1,13 @@
 ---
 name: D158 — Adapters are per-model fetch functions; REST conventions are the shorthand (v1.73)
-status: verified
+status: building
 connections:
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D21-ADAPTER-READ-PATH
   - DECISION-D50-ADAPTER-WRITE-SYNC
   - DECISION-D91-ADAPTER-REQUEST-HOOK
   - DECISION-D95-FIXTURES-MOCK-ADAPTER
+  - DECISION-D161-AUTO-FETCHING-FINDS
   - COMPONENT-STORE
   - COMPONENT-PUZZLE-MODEL
   - DOC-SPEC
@@ -42,13 +43,13 @@ static adapter = { endpoint: '/api/posts' };
 
 // nonstandard URL, standard JSON — return the Response, Puzzle reads it
 static adapter = {
-  loadAll: (fetch) => fetch('/v2/posts?include=all'),
+  loadMany: (fetch) => fetch('/v2/posts?include=all'),
 };
 
 // envelope API — you unwrap, because you know the shape
 static adapter = {
   endpoint: '/api/posts',
-  async loadAll(fetch) {
+  async loadMany(fetch) {
     const res = await fetch('/api/posts');
     return (await res.json()).data;
   },
@@ -85,19 +86,39 @@ generated REST default only when `endpoint` is present:
 
 | verb | called by | default (with `endpoint`) | must return |
 |---|---|---|---|
-| `loadAll(fetch, options?)` | `store.loadAll(type, options?)` | `GET endpoint`, options serialized as the query string, naked array | records array — or a `Response` |
-| `loadOne(fetch, id)` | `store.loadOne(type, id)` | `GET endpoint/id`, naked object | one record object — or a `Response` |
+| `loadMany(fetch, options?)` | `store.loadMany(type, options?)` and a tracked `findMany` fault ([[DECISION-D161-AUTO-FETCHING-FINDS]]) | `GET endpoint`, options serialized as the query string, naked array | records array — or a `Response` |
+| `loadOne(fetch, id)` | `store.loadOne(type, id)` and a tracked `findOne` fault | `GET endpoint/id`, naked object | one record object — or a `Response` |
 | `create(fetch, record)` | `record.save()` (never synced) | `POST endpoint`, record JSON | the server's record (pk required — server-assigned ids arrive here), nullish for "no echo" — or a `Response` |
 | `update(fetch, record)` | `record.save()` (synced) | `PUT endpoint/pk`, record JSON | same as create |
 | `delete(fetch, record)` | `record.delete()` | `DELETE endpoint/pk`; 404 = already gone | nothing — or a `Response` (status checked) |
+
+The read verbs are named for cardinality like the finds they serve —
+One/Many is the framework's naming pair. The pre-0.7.0 spelling `loadAll`
+throws with one message naming `loadMany` everywhere it can appear:
+`store.loadAll()` (a throwing trap), a model adapter carrying an own
+`loadAll` key (caught at Store init, before navigation), an
+`adapter.defaults({ loadAll })` call, and the verb-binding loop in
+`store.adapter(type)`. The guard is loud in production too, because the
+silent alternative — the unknown key being ignored and dispatch falling
+through to generated REST — would quietly hit different URLs.
 
 **The `Response` convenience:** an author function may return the `Response`
 from its fetch instead of parsed data — Puzzle then does the ok-check
 (non-OK → `PuzzleAdapterError` with status and body) and JSON-parses the body
 before applying the normal shape guards. That makes the
 "nonstandard URL, standard payload" case a one-liner
-(`loadAll: (fetch) => fetch('/v2/posts')`) with no helper API — the
+(`loadMany: (fetch) => fetch('/v2/posts')`) with no helper API — the
 convenience is carried by the platform type, not a new vocabulary.
+
+**Read failures are normalized, and `loadOne` responses must be the record
+asked for.** Generated read transports take the same response path as writes
+and author `Response` returns, so a non-OK GET throws `PuzzleAdapterError`
+(status + body) rather than a plain `Error` — the D161 negative cache keys
+off exactly `status === 404`, and everything else stays a retryable failure
+that poisons nothing. A `loadOne` response whose primary key differs from the
+requested id under `recordKey` normalization rejects **before** upsert, on
+the explicit and implicit paths alike: upserting a different id would satisfy
+nothing, and an implicit fault would re-miss every settle round until the cap.
 
 **Write returns are enforced, not coerced.** `create`/`update` must resolve to
 an object carrying the primary key, or to nullish for "no echo". Any other 2xx
@@ -121,9 +142,10 @@ upsert by primary key, D125 revision guards protecting in-flight edits, the
 `_synced` provenance flip, atomic pk adoption/re-keying, the per-record write
 chain, persistence, and subscriber notification. An adapter function owns the
 HTTP conversation only; after the return, the store's semantics are identical
-for generated and author verbs. Throwing (or returning a non-OK `Response`)
-marks the operation failed; local state stays consistent and the error
-rethrows to the caller.
+for generated and author verbs — a tracked fault and an explicit load run the
+same function. Throwing (or returning a non-OK `Response`) marks the
+operation failed; local state stays consistent and the error rethrows to the
+caller.
 
 **Custom methods.** Any other function key (`publish`, `findBySlug`,
 `search`) is outside the store's contract — never called by the framework.
@@ -161,19 +183,21 @@ import the app entry to reach it (D157's three tiers — same behavior, heavier
 pages, and the build says so).
 
 Dispatch precedence, most-specific wins: the model's own function → the app
-default → the endpoint-generated REST transport. App-level functions receive
+default → the endpoint-generated REST transport. The same precedence decides
+whether a tracked find is allowed to fault at all — a verb no tier resolves
+makes the tracked path pure-local (D161). App-level functions receive
 `{ type, endpoint }` as a trailing context argument (they serve many models,
 so unlike a per-model function they cannot close over their URL; `endpoint`
 is undefined for models without one). Defaults apply to the five verbs only —
-keys that are not verb names warn in dev. `adapter.defaults()` returns a new
-recognized capability (the identity check accepts every capability the module
-created, so configured and bare capabilities validate alike); the defaults
-ride the capability value into each store, so two apps in one page can carry
-different dialects. **This is the LAST tier.** Sub-verb hooks (`buildURL`,
-`handleResponse` — Ember's concept explosion), per-group defaults, and
-serializer-style transforms are out of scope permanently; a dialect the three
-tiers cannot express is written as whole verb functions, which fully own
-their conversation.
+keys that are not verb names warn in dev (except `loadAll`, which throws).
+`adapter.defaults()` returns a new recognized capability (the identity check
+accepts every capability the module created, so configured and bare
+capabilities validate alike); the defaults ride the capability value into
+each store, so two apps in one page can carry different dialects. **This is
+the LAST tier.** Sub-verb hooks (`buildURL`, `handleResponse` — Ember's
+concept explosion), per-group defaults, and serializer-style transforms are
+out of scope permanently; a dialect the three tiers cannot express is written
+as whole verb functions, which fully own their conversation.
 
 **`endpoint` is required only by what needs it.** A verb the app invokes with
 neither an author function nor an `endpoint` to generate a default from is
@@ -203,10 +227,11 @@ the adapter module only.
 - **An app-level adapter registry (`adapters: { post: {...} }`)** — moves the
   fetch logic away from the model it serves; the model file is where schema,
   relationships, and server shape belong together.
-- **Query-owns-fetch (`findMany` fetching lazily, full TanStack)** —
-  re-rejected as in D50: `data()` is synchronous and pure; reads are always
-  local, fetching is always explicit. TanStack's contract is adopted for the
-  transport layer only.
+- **Full TanStack (the query cache owning transport, caching, and state
+  wholesale)** — adopted for the transport contract only. The normalized
+  identity-keyed store, validation, and framework-owned reconciliation stay;
+  D161's tracked fault-in drives these same verbs rather than installing a
+  parallel query-cache layer with its own keys and staleness vocabulary.
 - **A `request` helper object (`request.get/post/patch` returning parsed
   bodies, axios-shaped)** — tidy one-liners for the common overrides, but a
   permanent second HTTP vocabulary to document and learn, with
@@ -228,3 +253,7 @@ the adapter module only.
   (`static adapter = api('/api/posts')`) — still a fine complementary idiom,
   but as the only mechanism it edits every model file to express an app-level
   fact; the dialect belongs on the capability.
+- **Keeping `loadAll` alongside `loadMany`, or a deprecation alias** — a
+  framework whose read pair is One/Many cannot teach a transport pair that is
+  One/All; an alias is a second spelling to document forever, and pre-1.0 is
+  the last cheap moment for the rename.

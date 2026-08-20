@@ -1,5 +1,5 @@
 ---
-name: 'D137 — loadAll/loadOne require the primary key on every server record (v1.64)'
+name: D137 — loadMany/loadOne require the primary key on every server record (v1.64)
 status: verified
 connections:
   - DECISION-D21-ADAPTER-READ-PATH
@@ -13,18 +13,18 @@ verified_at: '2026-08-16T04:32:28.061Z'
 verified_sha: 9c955bc1f77a97a0a6af37f80822820f4ca31adb
 ---
 
-# D137 — `loadAll`/`loadOne` require the primary key on every server record (v1.64)
+# D137 — `loadMany`/`loadOne` require the primary key on every server record (v1.64)
 
 The read-path loaders apply the same primary-key preflight public `upsert()`
 has always had: every element is checked up front — before any upsert — and a
-pk-less record throws (`[puzzle] loadAll('todo') requires primary key "id" on
-every record`), storing nothing (loadAll's existing all-or-nothing posture).
+pk-less record throws (`[puzzle] loadMany('todo') requires primary key "id" on
+every record`), storing nothing (loadMany's existing all-or-nothing posture).
 
 ## Context
 
 `upsert()`'s guard documents itself as load-bearing: without it, `_upsert` →
 `_instantiate` auto-generates an id and marks the phantom record `_synced`,
-so its next `save()` PUTs to a URL the server never had. `loadAll`/`loadOne`
+so its next `save()` PUTs to a URL the server never had. `loadMany`/`loadOne`
 reached the identical hazard through the identical `_upsert` with only
 null/array/non-object shape checks — I1 of the 2026-07-27 pass-2 review.
 "Fail-soft, server-authoritative" never excused it here: the loaders already
@@ -41,4 +41,7 @@ Both loaders preflight the pk exactly like `upsert()`. Unchanged by design:
   a shape check beside the existing array/object guards, not validation.
 
 Amends the §8 read-path contract (D21); closes the half-fixed hazard D50's
-provenance rules documented.
+provenance rules documented. `loadOne` additionally rejects a response whose
+pk differs from the requested id under `recordKey` normalization
+([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]) — same before-mutation posture,
+guarding the [[DECISION-D161-AUTO-FETCHING-FINDS]] implicit fault path.

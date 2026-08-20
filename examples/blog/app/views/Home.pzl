@@ -19,7 +19,7 @@
       </div>
     {:else}
       <div class="p-8 text-center text-muted bg-surface border border-dashed border-faint rounded-xl">
-        <p>Posts are loading…</p>
+        <p>No posts published yet.</p>
       </div>
     {/if}
   </section>
@@ -31,9 +31,12 @@ import Button from '../components/Button.pzl';
 import PostCard from '../components/PostCard.pzl';
 
 export default class HomeView extends PuzzleView {
-  // data() reads the store and derives the three newest posts. The store starts
-  // empty and is seeded after mount (see app.js); when the seed lands, the
-  // 'post' subscription re-runs data() and the list fills in.
+  // data() reads the store and derives the three newest posts. There is no
+  // loading code and nothing seeds the store first: `findMany('post')` in a
+  // tracked data() run fetches the collection when the store does not have it
+  // and the view commits only once every read came up warm (D161). So an empty
+  // `recentPosts` here means the blog has no posts, not that they are on the
+  // way — the {:else} branch says exactly that.
   data(params, props) {
     const posts = this.ctx.store.findMany('post');
     // Just the three newest posts — no position-tagging needed. The template

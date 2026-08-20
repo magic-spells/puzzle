@@ -57,7 +57,8 @@ export default class User extends PuzzleModel {
     });
   }
 
-  // Server location (D21): consumed by store.loadAll('user') on the read path.
+  // Server location (D21): read by store.loadMany('user'), and by any tracked
+  // findMany('user') in a data() run (D161).
   static adapter = {
     endpoint: '/users.json',
   };

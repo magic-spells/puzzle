@@ -24,6 +24,7 @@ connections:
   - DECISION-D138-LOAD-REVISION-MERGE
   - DECISION-D157-ADAPTER-SUBPATH
   - DECISION-D158-ADAPTER-FETCH-FUNCTIONS
+  - DECISION-D161-AUTO-FETCHING-FINDS
   - FEATURE-ADAPTER-WRITE-SYNC
   - FEATURE-STORE-PUBLIC-UPSERT
   - FILE-ADAPTER
@@ -49,12 +50,17 @@ moved by an endpoint-generated REST default or by a function the author wrote.
      naming the import
    - a model declaring `static adapter` while no capability was passed warns in
      development with the model name and the fix
-2. Installing grafts the server surface onto `Store` and `PuzzleModel`
-   prototypes before any Store is constructed. It is idempotent, and an app that
-   never opts in ships none of it — no verbs, no write chain, no adapter error
-   class.
-3. A verb is invoked. Reads (`loadAll`, `loadOne`, `upsert`, `request`) run
-   straight away; writes (`save`, `delete`) enqueue on that record's single
+2. Installing grafts the server surface onto `Store`, `PuzzleModel`, and
+   `PuzzleView` prototypes before any Store is constructed. It is idempotent,
+   and an app that
+   never opts in ships none of it — no verbs, no write chain, no settle loop,
+   no adapter error class.
+3. A verb is invoked. The read verbs (`loadMany`, `loadOne`, `upsert`,
+   `request`) run straight away — called explicitly, or by a
+   [[DECISION-D161-AUTO-FETCHING-FINDS]] tracked fault, which first consults
+   the in-flight dedup maps, the negative cache, and the collection-complete
+   set and only then dispatches the same loader. Writes (`save`, `delete`)
+   enqueue on that record's single
    write chain and wait ([[DECISION-D132-CROSS-VERB-WRITE-CHAIN]]).
 4. At the front of the chain the write re-reads the record, then pre-flights.
    - a save whose record was removed while it waited rejects with the same
@@ -65,7 +71,9 @@ moved by an endpoint-generated REST default or by a function the author wrote.
 5. Transport dispatch resolves in three tiers: the model's own function, then
    the app `adapter.defaults()` function, then the endpoint-generated REST
    default ([[DECISION-D158-ADAPTER-FETCH-FUNCTIONS]]). Nothing at any tier is a
-   per-verb error naming the signature to add.
+   per-verb error naming the signature to add — except on the tracked fault
+   path, where an unresolvable read verb simply means the find stays
+   pure-local.
 6. The Store captures the reconciliation boundary **before** awaiting: the map
    key this record is currently indexed under, and its local mutation revision
    ([[DECISION-D125-SAVE-RECONCILE-REVISION]]).
@@ -83,20 +91,26 @@ moved by an endpoint-generated REST default or by a function the author wrote.
 9. The result is normalized. A returned `Response` is status-checked and its
    body read exactly once — parsed JSON when it parses, raw text when it does
    not, `undefined` when empty; parsed data an author returned directly passes
-   through untouched.
+   through untouched. A non-OK status — generated transports included — throws
+   `PuzzleAdapterError` with status and body.
 10. Shape and key guards run **before any mutation**: loads require object
     shapes carrying the primary key on every element, checked up front and
-    all-or-nothing ([[DECISION-D137-LOAD-PK-GUARD]]); writes require a pk-bearing
-    object or a nullish no-echo.
+    all-or-nothing ([[DECISION-D137-LOAD-PK-GUARD]]), and a `loadOne` response
+    pk must match the requested id under `recordKey` normalization; writes
+    require a pk-bearing object or a nullish no-echo.
 11. Identity is re-checked against the key captured in step 6. If this is no
     longer the indexed record there, every local effect is skipped and the verb
     resolves with the detached record.
 12. Reconciliation applies: revision-gated merge, primary-key adoption on a
     first save, `_synced` set, or `removeRecord` on a delete ack — see
-    [[STATE-RECORD]] for what each does to the record's position.
+    [[STATE-RECORD]] for what each does to the record's position. D161 read
+    state reconciles beside it: a landed identity clears its negative entry, a
+    normalized 404 records one, a no-options collection success marks the type
+    complete, and a confirmed delete records absence.
 13. The Store notifies the affected record and collection keys and flags
     persistence; the batched `flush()` delivers subscribers once and writes the
-    storage snapshot once.
+    storage snapshot once. A view mid-settle coalesces the notification into
+    one more pass instead of a competing refresh.
 
 ## Ordering that is load-bearing
 
@@ -114,12 +128,13 @@ moved by an endpoint-generated REST default or by a function the author wrote.
   delete queued behind a first save builds its request from the *adopted* server
   key; a chained link's rejection is swallowed for chaining only, so every
   caller observes its own outcome and nothing inherits a neighbour's failure.
+- **In-flight read entries clear in `finally` with an identity check**, and
+  every fault promise carries a rejection observer, so a superseded or throwing
+  data pass can neither strand an in-flight key nor leak an unhandled
+  rejection.
 
 ## Gotchas
 
-- **The error type on a failed read depends on which tier served it.** A
-  generated read rejects with a plain `Error` carrying the status; an author
-  transport that returns a non-OK `Response` rejects with `PuzzleAdapterError`.
 - **404-tolerance on delete belongs to the generated transport**, not the
   framework. An author's delete that returns a 404 `Response` rejects; to keep
   the idempotent behaviour, handle it inside the function.
@@ -140,3 +155,7 @@ moved by an endpoint-generated REST default or by a function the author wrote.
   gets the enhanced fetch, and its result is usually handed to `upsert()`.
 - **Configured dialects are per Store**, so two apps on one page can carry
   different app defaults.
+- **Only a normalized 404 means absence on the fault path.** An author function
+  signalling not-found any other way (returning `null`, throwing a bare object
+  with `status: 404`) is a shape error or an ordinary failure — the convention
+  is `new Response(null, { status: 404 })`.

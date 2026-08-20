@@ -50,7 +50,9 @@ class Todo extends PuzzleModel {
 		text: Puzzle.string().required(),
 		completed: Puzzle.boolean().default(false),
 	};
-	static adapter = { endpoint: '/api/todos' };
+	// No endpoint: these tests are about beforeMount seeding, and a declared
+	// endpoint would make the view's tracked findMany fault a collection load in
+	// (D161) — a different story, told in tests/store.test.js.
 }
 
 const container = (id = 'app') => {
