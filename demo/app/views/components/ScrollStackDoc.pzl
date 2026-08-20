@@ -5,8 +5,8 @@
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Scroll Stack</h1>
         <p class="mt-2 text-body">
           A natively scrolling list whose items animate at the scrollport edges instead of clipping.
-          The exiting item pins itself with <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">position: sticky</code>,
-          fades and shrinks in place, and the next one slides over it. No scroll hijacking — the
+          The exiting item stops dead at the boundary, fades and shrinks in place, and the next
+          one slides over it. No scroll hijacking — the
           browser scrolls, the component only reads.
         </p>
         <p class="mt-3 text-body">
@@ -23,7 +23,8 @@
         <p class="mt-3 text-sm text-muted">
           Every live example on this page runs with <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">snap</code>
           on, so each list comes to rest on an item boundary rather than mid-fade. It is off by
-          default — see <a class="text-brand underline underline-offset-2" href="#snap">Snap carousel</a>.
+          default, and it is <strong class="font-medium text-ink">mandatory</strong> — see
+          <a class="text-brand underline underline-offset-2" href="#snap">Snap carousel</a>.
         </p>
       </header>
 
@@ -54,8 +55,8 @@
         <p class="mb-3 mt-4 text-sm text-body">
           Then merge the component's stylesheet into your app's style entry
           (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">app/styles/styles.css</code>).
-          It is where the effects, the sticky pinning, the snapping and the per-view sizing actually
-          live, so the piece does nothing without it:
+          It is where the effects, the pinning, the snapping and the per-view sizing actually live,
+          so the piece does nothing without it:
         </p>
         <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
@@ -98,6 +99,14 @@
             <span class="font-medium text-ink">Style the inner element, not the item.</span>
             Padding, background, borders and rounding all belong on the child; the item should stay
             a bare box.
+          </li>
+          <li>
+            <span class="font-medium text-ink">No block margins on that child.</span>
+            The pin travels in percentages of the content box, so a margin desynchronises it from
+            the item box and the pin drifts a few pixels per item. The component's stylesheet sets
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">margin: 0</code>
+            on it for you — use the <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">gap</code>
+            prop for spacing between items.
           </li>
         </ul>
         <p class="mt-3 text-sm text-muted">
@@ -172,6 +181,15 @@
               of their leading edges.
             </p>
             <p class="text-sm text-muted">
+              Bare <span class="font-medium text-ink">snap</span> and
+              <span class="font-medium text-ink">snap="center"</span> are
+              <strong class="font-medium text-ink">mandatory</strong>. They can be because items are
+              plain flow boxes whose snap areas never move — while the pin was
+              <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">position: sticky</code>
+              a stuck item's snap area tracked the scroll offset and mandatory truncated every fling.
+              <span class="font-medium text-ink">snap="proximity"</span> is the softer opt-out.
+            </p>
+            <p class="text-sm text-muted">
               This example also fixes the count — <span class="font-medium text-ink">perView={ 3 }</span>
               divides the port three ways instead of fitting as many as clear the minimum — and uses
               <span class="font-medium text-ink">effect="fade-scale"</span>, which is the default's
@@ -200,7 +218,7 @@
             <p class="text-sm text-muted">
               <span class="font-medium text-ink">pin</span> decides stickiness;
               <span class="font-medium text-ink">effect</span> only decides pixels. With
-              <span class="font-medium text-ink">pin="both"</span> each item is sticky at the top and
+              <span class="font-medium text-ink">pin="both"</span> each item is pinned at the top and
               the bottom, so the next card waits pinned at the bottom edge, fading up as it is dealt,
               while the spent one pins at the top and recedes. Omit <span class="font-medium text-ink">pin</span>
               and the effect implies one — <span class="font-medium text-ink">stack-fade</span> pins
@@ -342,7 +360,8 @@ const codeHorizontal = `// perView="auto" fits as many whole items as clear item
 
 // A fixed count instead: perView={ 3 } divides the port three ways.`;
 
-const codeSnap = `// snap={ true } snaps item starts to the edge; snap="center" centers them.
+const codeSnap = `// snap={ true } and snap="center" are MANDATORY; snap="proximity" is the
+// softer opt-out. Mandatory is safe because nothing is sticky.
 // fade-scale is stack-fade's visuals without the pinning.
 <ScrollStack
   class="rounded-xl border border-border p-3"
@@ -355,7 +374,7 @@ const codeSnap = `// snap={ true } snaps item starts to the edge; snap="center" 
   …items…
 </ScrollStack>`;
 
-const codePin = `// pin is independent of effect. "both" makes every item sticky at the top
+const codePin = `// pin is independent of effect. "both" pins every item at the top
 // AND the bottom, so the list deals like a deck in either direction.
 <ScrollStack
   class="h-96 rounded-xl border border-border p-3"
@@ -400,7 +419,7 @@ const propRows = [
   { name: 'pin', desc: "'start' | 'end' | 'both' | 'none' — which edges hold an item still while its flow position keeps moving. Omit it and the effect implies one: stack-fade → start, everything else → none." },
   { name: 'zone', desc: "'item' (default) | '<n>px' | '<n>%' — how deep the animation band reaches in from an edge. Capped at 45% of the scrollport so the two bands can never overlap." },
   { name: 'edges', desc: "'both' (default) | 'start' | 'end' — which scrollport edges animate at all." },
-  { name: 'snap', desc: "true snaps item starts to the edge; 'center' snaps their centers. Native CSS scroll snapping." },
+  { name: 'snap', desc: "Native CSS scroll snapping. true snaps item starts to the edge and 'center' snaps their centers — both MANDATORY, which is safe because items are plain flow boxes. 'proximity' is the softer opt-out, start-aligned." },
   { name: 'perView', desc: "A positive integer, or 'auto' to fit as many whole items as clear itemMin. Resolves to each item's flex-basis, so it works on either axis." },
   { name: 'itemMin', desc: 'CSS length (px, rem, % of the scrollport — a bare number means px). Floor for the resolved item length, and the input to the auto count.' },
   { name: 'itemMax', desc: 'CSS length. Ceiling for the resolved item length; when it is smaller than the fitted slot the row stops filling the port exactly.' },

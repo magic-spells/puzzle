@@ -22,8 +22,8 @@
 import { PuzzleView } from '@magic-spells/puzzle';
 
 // ScrollStack — a natively scrolling list whose items animate at the scrollport
-// edges instead of clipping: the exiting item pins itself with position:sticky,
-// fades and shrinks in place, and the next one slides over it.
+// edges instead of clipping: the exiting item stops dead at the boundary, fades
+// and shrinks in place, and the next one slides over it.
 //
 // THIS PIECE IS A WRAPPER, NOT A PORT — the first one in the registry.
 // Every other piece reimplements its source component's behavior in Puzzle.
@@ -33,15 +33,15 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //   1. There is almost nothing to port. The component is a progress
 //      BROADCASTER — JS writes one eased 0→1 number per item as
 //      `--scroll-stack-progress` (plus `--scroll-stack-edge`), and every visual
-//      effect, the sticky pinning, the snapping and the per-view sizing are
-//      plain CSS rules keyed off those values. A port would be a port of the
-//      stylesheet, and the stylesheet is already fully restylable from outside.
+//      effect, the pinning, the snapping and the per-view sizing are plain CSS
+//      rules keyed off those values. The pin in particular is pure CSS: the item
+//      declares a `view-timeline` and its content counter-translates along it, so
+//      a port would be a port of the stylesheet — and the stylesheet is already
+//      fully restylable from outside.
 //   2. What IS in the JS is the part you least want forked: cached-offset
-//      measurement with boundary damping, a `measuring` attribute that unsticks
-//      items because a stuck sticky box lies through offsetTop, an rAF that
-//      schedules zero frames at rest, and a write-skip that keeps a
-//      ResizeObserver from looping. Subtle, load-bearing, and maintained
-//      upstream.
+//      measurement with boundary damping, an rAF that schedules zero frames at
+//      rest, and a write-skip that keeps a ResizeObserver from looping. Subtle,
+//      load-bearing, and maintained upstream.
 //
 //   <ScrollStack class="h-96 rounded-xl border border-border">
 //     <scroll-stack-item><div class="p-4">One</div></scroll-stack-item>
@@ -60,6 +60,10 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //     neither fights the other. An item with no element child is skipped with
 //     one console warning.
 //   * Put your Tailwind classes on that inner element, not on the item.
+//   * NO BLOCK MARGINS on that element. The pin travels in percentages of the
+//     content box, so a margin would desynchronise it from the item box and the
+//     pin would drift a few px per item. The component's stylesheet sets
+//     `margin: 0` on it for you — use the `gap` prop for spacing between items.
 //   * Do NOT put a dynamic `style={ … }` binding on an item: the patcher
 //     rewrites the whole style attribute and would clobber the component's
 //     per-frame custom-property writes (same rule as morph elements).
@@ -73,7 +77,10 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //                  everything else → none.
 //   zone           'item' (default) | '<n>px' | '<n>%' — animation band depth
 //   edges          'both' (default) | 'start' | 'end'
-//   snap           true → snap to item starts; 'center' → snap centers
+//   snap           true → mandatory snapping to item starts; 'center' → mandatory,
+//                  centred; 'proximity' → the softer opt-out, start-aligned.
+//                  Mandatory is the default and is safe because items are plain
+//                  flow boxes (nothing is sticky, so snap areas never move).
 //   perView        positive integer | 'auto' → the `per-view` attribute
 //   itemMin        CSS length (px / rem / % — bare number = px) → `item-min`
 //   itemMax        CSS length → `item-max`
@@ -101,6 +108,15 @@ import { PuzzleView } from '@magic-spells/puzzle';
 // The layer is not optional cosmetics: the component styles itself with plain
 // element selectors, and an unlayered import would outrank every Tailwind
 // utility you put on the element.
+//
+// BROWSER SUPPORT. The pin needs CSS scroll-driven animations
+// (`animation-timeline: view()`) — Chrome/Edge 115+, Safari 26+. Where they are
+// missing (Firefox at time of writing) the stylesheet's `@supports not` block
+// reinstates the original `position: sticky` pin, and forces snapping down to
+// `proximity` even on a list that asked for mandatory: a sticky item is both the
+// snap target and the stuck box, so its snap area tracks the scroll offset and
+// mandatory truncates flings. It degrades, it does not break — and there is no
+// JS branch for any of it.
 
 // A prop that was not passed renders no attribute — `false` is the compiler's
 // omit sentinel, the same one ScrollArea uses for its optional role/label.
@@ -134,7 +150,8 @@ export default class ScrollStack extends PuzzleView {
       edgesAttr: oneOf(props.edges, ['both', 'start', 'end']),
       // presence alone means "snap to starts"; normalize `true` to the explicit
       // value so the attribute never renders empty
-      snapAttr: props.snap === true ? 'start' : oneOf(props.snap, ['start', 'center']),
+      snapAttr:
+        props.snap === true ? 'start' : oneOf(props.snap, ['start', 'center', 'proximity']),
       perViewAttr: attr(props.perView),
       itemMinAttr: attr(props.itemMin),
       itemMaxAttr: attr(props.itemMax),
