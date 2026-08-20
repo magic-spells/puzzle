@@ -201,6 +201,8 @@ export const SECTIONS = [
 			description: "Renders a stored rich text document — RichTextEditor's Shopify-style JSON tree — as semantic HTML with the shared typography classes; XSS-safe tree walker with zero npm dependencies" },
 		{ name: "scroll-area", title: "Scroll Area", path: "/components/scroll-area",
 			description: "Overlay-scrollbar wrapper — native scrolling with a fading, draggable custom thumb in vertical, horizontal, or both orientations" },
+		{ name: "scroll-stack", title: "Scroll Stack", path: "/components/scroll-stack",
+			description: "Natively scrolling list whose items animate at the scrollport edges instead of clipping — sticky stack handoff, vertical or horizontal, scroll snapping, responsive per-view item sizing, and effects driven by a progress custom property; wraps the @magic-spells/scroll-stack web component rather than porting it" },
 		{ name: "separator", title: "Separator", path: "/components/separator",
 			description: "Hairline divider in horizontal or vertical orientation" },
 		{ name: "sidebar", title: "Sidebar", path: "/components/sidebar",

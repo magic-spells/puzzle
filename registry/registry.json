@@ -778,6 +778,18 @@
       "targetDir": "app/components/ui"
     },
     {
+      "name": "scroll-stack",
+      "description": "Natively scrolling list whose items animate at the scrollport edges instead of clipping — sticky stack handoff, vertical or horizontal, scroll snapping, responsive per-view item sizing, and effects driven by a progress custom property; wraps the @magic-spells/scroll-stack web component rather than porting it",
+      "files": [
+        "ScrollStack.pzl"
+      ],
+      "registryDependencies": [],
+      "dependencies": [
+        "@magic-spells/scroll-stack"
+      ],
+      "targetDir": "app/components/ui"
+    },
+    {
       "name": "search-field",
       "description": "Search input with a leading magnifier icon and a trailing clear button; submits on Enter",
       "files": [

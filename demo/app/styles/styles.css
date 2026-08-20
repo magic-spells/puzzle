@@ -1,6 +1,23 @@
 @import "tailwindcss";
 
 /*
+ * The scroll-stack piece WRAPS the @magic-spells/scroll-stack web component
+ * rather than porting it, so the component's own stylesheet has to be loaded —
+ * it is where every effect, the sticky pinning, snapping and the per-view
+ * flex-basis actually live. Tailwind v4 resolves this bare specifier out of
+ * node_modules, so the rules land in dist/styles.css with everything else.
+ *
+ * Consuming apps do the same one-line merge (documented on the Scroll Stack
+ * docs page). `layer(components)` matters: the component's rules are plain
+ * element selectors (`scroll-stack`, `scroll-stack-item`) and an unlayered
+ * import would beat every Tailwind utility, so `gap-4` or `rounded-xl` on the
+ * element would silently do nothing. In the components layer the normal
+ * mental model holds — utilities win, the component's defaults fill in the
+ * rest.
+ */
+@import "@magic-spells/scroll-stack/css" layer(components);
+
+/*
  * Tailwind v4 content detection: scan the app's .pzl components/views/layouts
  * and JS so the utility classes they use are generated. Paths are relative to
  * this stylesheet (app/styles/), so "../" is the app root.

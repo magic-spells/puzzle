@@ -1,0 +1,170 @@
+<puzzle-view>
+  <scroll-stack
+    class={ rootClass }
+    style={ rootStyle }
+    direction={ directionAttr }
+    effect={ effectAttr }
+    pin={ pinAttr }
+    zone={ zoneAttr }
+    edges={ edgesAttr }
+    snap={ snapAttr }
+    per-view={ perViewAttr }
+    item-min={ itemMinAttr }
+    item-max={ itemMaxAttr }
+    easing={ easingAttr }
+    reduced-motion={ reducedMotionAttr }
+    disabled={ disabledAttr }>
+    <Slot/>
+  </scroll-stack>
+</puzzle-view>
+
+<script>
+import { PuzzleView } from '@magic-spells/puzzle';
+
+// ScrollStack — a natively scrolling list whose items animate at the scrollport
+// edges instead of clipping: the exiting item pins itself with position:sticky,
+// fades and shrinks in place, and the next one slides over it.
+//
+// THIS PIECE IS A WRAPPER, NOT A PORT — the first one in the registry.
+// Every other piece reimplements its source component's behavior in Puzzle.
+// This one renders the real <scroll-stack> custom element from
+// @magic-spells/scroll-stack and binds attributes to it. Two reasons:
+//
+//   1. There is almost nothing to port. The component is a progress
+//      BROADCASTER — JS writes one eased 0→1 number per item as
+//      `--scroll-stack-progress` (plus `--scroll-stack-edge`), and every visual
+//      effect, the sticky pinning, the snapping and the per-view sizing are
+//      plain CSS rules keyed off those values. A port would be a port of the
+//      stylesheet, and the stylesheet is already fully restylable from outside.
+//   2. What IS in the JS is the part you least want forked: cached-offset
+//      measurement with boundary damping, a `measuring` attribute that unsticks
+//      items because a stuck sticky box lies through offsetTop, an rAF that
+//      schedules zero frames at rest, and a write-skip that keeps a
+//      ResizeObserver from looping. Subtle, load-bearing, and maintained
+//      upstream.
+//
+//   <ScrollStack class="h-96 rounded-xl border border-border">
+//     <scroll-stack-item><div class="p-4">One</div></scroll-stack-item>
+//     <scroll-stack-item><div class="p-4">Two</div></scroll-stack-item>
+//   </ScrollStack>
+//
+// ITEM MARKUP CONTRACT — read this before using the piece. Children are
+// parent-authored and go through the default slot untouched, so YOU write the
+// item elements:
+//
+//   * Every child must be a <scroll-stack-item>. It is the layout and pinning
+//     box, and it carries the progress custom properties.
+//   * Every <scroll-stack-item> needs exactly one ELEMENT child. That child is
+//     what the effect is applied to (`scroll-stack-item > *` in the component's
+//     stylesheet) — the wrapper pins while the content fades and scales, so
+//     neither fights the other. An item with no element child is skipped with
+//     one console warning.
+//   * Put your Tailwind classes on that inner element, not on the item.
+//   * Do NOT put a dynamic `style={ … }` binding on an item: the patcher
+//     rewrites the whole style attribute and would clobber the component's
+//     per-frame custom-property writes (same rule as morph elements).
+//
+// Props (every one maps to an attribute on the element; unset props render no
+// attribute at all, so the component's own defaults apply)
+//   direction      'vertical' (default) | 'horizontal'
+//   effect         'stack-fade' (default) | 'fade-scale' | 'fade' | 'scale' | 'none'
+//   pin            'start' | 'end' | 'both' | 'none' — which edges hold an item
+//                  still. Omit and the effect implies one: stack-fade → start,
+//                  everything else → none.
+//   zone           'item' (default) | '<n>px' | '<n>%' — animation band depth
+//   edges          'both' (default) | 'start' | 'end'
+//   snap           true → snap to item starts; 'center' → snap centers
+//   perView        positive integer | 'auto' → the `per-view` attribute
+//   itemMin        CSS length (px / rem / % — bare number = px) → `item-min`
+//   itemMax        CSS length → `item-max`
+//   easing         'linear' (default) | 'ease-in' | 'ease-out' | 'ease-in-out'
+//   reducedMotion  'auto' (default) | 'ignore' → the `reduced-motion` attribute
+//   disabled       true → zeroes every var and detaches the engine
+//   class          merged onto the element
+//   style          merged after the piece's own custom-property declarations
+//   gap            shorthand for `--scroll-stack-gap` (a CSS length string).
+//                  Tailwind's `gap-*` also works — the component's stylesheet is
+//                  imported into the `components` layer, so utilities win.
+//
+// LOADING. The package registers its custom elements at module scope with
+// `class extends HTMLElement`, which is a ReferenceError under Node — so a
+// top-level import would crash the prerender pass of any app on static or
+// hybrid output. The import lives in mounted() instead, which never runs
+// server-side. The markup prerenders correctly either way: an un-upgraded
+// <scroll-stack> is an unknown element with no styles of its own, and the
+// component's stylesheet already lays it out, so the list is readable and
+// scrollable before the JS lands and simply starts animating when it arrives.
+//
+// STYLESHEET. This piece needs the component's CSS, which is not part of the
+// copied file. Add it once to your app's style entry:
+//   @import "@magic-spells/scroll-stack/css" layer(components);
+// The layer is not optional cosmetics: the component styles itself with plain
+// element selectors, and an unlayered import would outrank every Tailwind
+// utility you put on the element.
+
+// A prop that was not passed renders no attribute — `false` is the compiler's
+// omit sentinel, the same one ScrollArea uses for its optional role/label.
+function attr(value) {
+  return value === undefined || value === null || value === '' ? false : String(value);
+}
+
+function oneOf(value, allowed) {
+  return allowed.includes(value) ? value : false;
+}
+
+export default class ScrollStack extends PuzzleView {
+  data(params, props) {
+    const declarations = [];
+    if (props.gap) declarations.push(`--scroll-stack-gap:${props.gap}`);
+    if (props.style) declarations.push(String(props.style));
+
+    return {
+      rootClass: props.class || false,
+      rootStyle: declarations.length ? declarations.join(';') : false,
+      directionAttr: oneOf(props.direction, ['vertical', 'horizontal']),
+      effectAttr: oneOf(props.effect, [
+        'stack-fade',
+        'fade-scale',
+        'fade',
+        'scale',
+        'none',
+      ]),
+      pinAttr: oneOf(props.pin, ['start', 'end', 'both', 'none']),
+      zoneAttr: attr(props.zone),
+      edgesAttr: oneOf(props.edges, ['both', 'start', 'end']),
+      // presence alone means "snap to starts"; normalize `true` to the explicit
+      // value so the attribute never renders empty
+      snapAttr: props.snap === true ? 'start' : oneOf(props.snap, ['start', 'center']),
+      perViewAttr: attr(props.perView),
+      itemMinAttr: attr(props.itemMin),
+      itemMaxAttr: attr(props.itemMax),
+      easingAttr: oneOf(props.easing, [
+        'linear',
+        'ease-in',
+        'ease-out',
+        'ease-in-out',
+      ]),
+      reducedMotionAttr: oneOf(props.reducedMotion, ['auto', 'ignore']),
+      // an explicit value rather than a bare boolean: `disabled` is a real
+      // boolean attribute on native elements but only an attribute on a custom
+      // one, and the component reads it with hasAttribute()
+      disabledAttr: props.disabled ? 'true' : false,
+    };
+  }
+
+  mounted() {
+    // Browser-only by construction — see LOADING above. The guard is belt and
+    // braces for any host that runs lifecycle hooks outside a document.
+    if (typeof window === 'undefined') return;
+    // Fire-and-forget: the elements upgrade in place the moment the module
+    // lands, and the markup is already correct before that happens.
+    import('@magic-spells/scroll-stack').catch((error) => {
+      console.error(
+        '[ScrollStack] failed to load @magic-spells/scroll-stack — the list will ' +
+          'scroll but not animate.',
+        error
+      );
+    });
+  }
+}
+</script>
