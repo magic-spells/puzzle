@@ -101,12 +101,15 @@
             a bare box.
           </li>
           <li>
-            <span class="font-medium text-ink">No block margins on that child.</span>
-            The pin travels in percentages of the content box, so a margin desynchronises it from
-            the item box and the pin drifts a few pixels per item. The component's stylesheet sets
-            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">margin: 0</code>
-            on it for you — use the <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">gap</code>
-            prop for spacing between items.
+            <span class="font-medium text-ink">No scroll-axis margins on that child.</span>
+            The pin travels in percentages of the content box. The component stretches the content
+            to fill the item box and zeroes its margins along the scroll axis
+            (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">margin-block</code> vertically,
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">margin-inline</code> horizontally) — cross-axis margins like
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">mx-auto</code> are left alone. That reset is only element-selector strength,
+            though, so a Tailwind <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">my-*</code> on a vertical list's content still wins and
+            desynchronises the pin by that many pixels per item. Use the
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">gap</code> prop for spacing between items.
           </li>
         </ul>
         <p class="mt-3 text-sm text-muted">

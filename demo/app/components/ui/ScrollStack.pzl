@@ -60,10 +60,13 @@ import { PuzzleView } from '@magic-spells/puzzle';
 //     neither fights the other. An item with no element child is skipped with
 //     one console warning.
 //   * Put your Tailwind classes on that inner element, not on the item.
-//   * NO BLOCK MARGINS on that element. The pin travels in percentages of the
-//     content box, so a margin would desynchronise it from the item box and the
-//     pin would drift a few px per item. The component's stylesheet sets
-//     `margin: 0` on it for you — use the `gap` prop for spacing between items.
+//   * NO SCROLL-AXIS MARGINS on that element. The pin travels in percentages
+//     of the content box, so the component stretches the content to fill the
+//     item box and zeroes its margins along the scroll axis (cross-axis
+//     margins like mx-auto are left alone) — but only at element-selector
+//     strength, so a Tailwind my-* on a vertical list's content would win and
+//     desynchronise the pin by that many px per item. Use the `gap` prop for
+//     spacing between items.
 //   * Do NOT put a dynamic `style={ … }` binding on an item: the patcher
 //     rewrites the whole style attribute and would clobber the component's
 //     per-frame custom-property writes (same rule as morph elements).
