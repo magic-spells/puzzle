@@ -158,7 +158,7 @@
             open={ panelDialogOpen }
             title="Preferences"
             description="Drill in and use Escape to step back before closing the dialog."
-            @close={ closePanelDialog }>
+            @hide={ closePanelDialog }>
             <div class="h-[300px] w-full rounded-xl border border-border bg-surface">
               <PanelStack stack={ dialogStack } @change={ setDialogStack }>
                 <div
@@ -264,7 +264,7 @@ const codeStack = `<PanelStack stack={ stack } effect="stack" @change={ setStack
   </div>
 </PanelStack>`;
 
-const codeDialog = `<Dialog open={ open } title="Preferences" @close={ closeDialog }>
+const codeDialog = `<Dialog open={ open } title="Preferences" @hide={ closeDialog }>
   <div class="h-[300px] rounded-xl">
     <PanelStack stack={ stack } @change={ setStack }>
       <div data-stack-panel="root"

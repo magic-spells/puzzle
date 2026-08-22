@@ -4,22 +4,52 @@
       <header class="mb-8">
         <h1 class="text-3xl font-semibold tracking-tight text-ink">Dialog</h1>
         <p class="mt-2 text-body">
-          A modal dialog on the native dialog element — focus trapping, Escape and
-          backdrop dismiss, title and description ARIA wiring, and a footer slot. The
-          parent owns the open flag; the piece only asks to close.
+          A centered modal on the native dialog element: the browser traps focus, inerts the page
+          and owns the top layer, and the piece adds the panel chrome, the ARIA wiring and one
+          dismiss policy.
+        </p>
+        <p class="mt-3 text-body">
+          This piece is a <strong class="font-medium text-ink">wrapper</strong>, not a port: it
+          renders the real
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<dialog-panel>' }</code>
+          and
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">{ '<dialog-backdrop>' }</code>
+          custom elements from
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/dialog-panel</code>
+          and lets them run the open and close machine. Sheet and Bottom Sheet sit on the same
+          component, so all three overlays share one loaded module and one close-and-notify
+          contract. What is left here is exactly what a piece should own: a token-styled panel.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          The dialog closes <strong class="font-medium text-ink">itself</strong> on Escape, a
+          backdrop click, or any
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">data-action-hide-dialog</code>
+          button, and reports through
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@hide</code>.
+          Your job is to flip <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">open</code>
+          back to false there — see <a class="text-brand underline underline-offset-2" href="#usage">Usage</a>.
         </p>
       </header>
 
       <ExampleBox code={ codeHero }>
-        <Button variant="outline" @press={ openDialog }>Open dialog</Button>
+        <div class="flex flex-col items-center gap-2">
+          <Button variant="outline" @press={ openHero }>Delete project</Button>
+          <span class="text-sm text-muted">last result: { lastResult }</span>
+        </div>
         <Dialog
-          open={ dialogOpen }
+          open={ heroOpen }
           title="Delete project?"
           description="This permanently removes the project and all of its data."
-          @close={ closeDialog }>
-          <p class="text-sm text-body">You cannot undo this action once the project is gone.</p>
-          <Button slot="footer" variant="ghost" @press={ closeDialog }>Cancel</Button>
-          <Button slot="footer" variant="destructive" @press={ confirmDialog }>Delete</Button>
+          @hide={ closeHero }>
+          <div class="space-y-2 text-sm text-body">
+            <p>You cannot undo this action once the project is gone.</p>
+            <p>Each footer button carries data-action-hide-dialog and a data-result, so @hide receives which one closed the dialog. The readout next to the trigger is that value. Escape and a backdrop click both report null — that is how a dismissal is told apart from an answer.</p>
+            <p>Neither button has a click handler. The component closes the dialog and the page catches up in @hide, which is the one place that has to flip open back to false.</p>
+          </div>
+          <div slot="footer" class="flex gap-2">
+            <button type="button" data-action-hide-dialog data-result="cancel" class={ cancelButtonClass }>Cancel</button>
+            <button type="button" data-action-hide-dialog data-result="delete" class={ deleteButtonClass }>Delete project</button>
+          </div>
         </Dialog>
       </ExampleBox>
 
@@ -29,9 +59,28 @@
           Copy the piece into your app — it compiles with your build and the code is yours:
         </p>
         <CodeBlock code={ installCmd }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Like Sheet, Bottom Sheet and Scroll Stack, this piece has a runtime dependency: the web
+          component it wraps. It is the same package those two already pull in as a peer, so if
+          you use any of them it is installed once and shared.
+        </p>
+        <CodeBlock code={ installDep }/>
+        <p class="mb-3 mt-4 text-sm text-body">
+          Then merge the component's stylesheet into your app's style entry
+          (<code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">app/styles/styles.css</code>).
+          It owns the dialog and overlay transport — the state-driven fade, the backdrop element,
+          and the page scroll lock. Without it the dialog is an unstyled native dialog with no
+          animation and no scrim:
+        </p>
+        <CodeBlock code={ installCss }/>
         <p class="mt-3 text-sm text-muted">
-          Requires the pieces.css tokens merged into your app styles (see Introduction). The
-          morph-engine install backs the optional morph prop.
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">layer(components)</code>
+          is not optional cosmetics: the stylesheet uses plain element selectors, and an unlayered
+          import would outrank every Tailwind utility on the panel — including the size cap and
+          the surface color this piece sets.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Requires the pieces.css tokens merged into your app styles (see Introduction).
         </p>
       </section>
 
@@ -39,60 +88,204 @@
         <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Usage</h2>
         <CodeBlock code={ usageImport }/>
         <CodeBlock code={ usageMarkup } class="mt-3"/>
+        <p class="mt-3 text-sm text-muted">
+          <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">open</code>
+          is <strong class="font-medium text-ink">edge-triggered</strong>: only a change to it acts.
+          That is what makes a self-closing dialog safe — an unrelated re-render never re-opens a
+          dialog the user just dismissed while your state still says it is open.
+        </p>
+        <p class="mt-3 text-sm text-muted">
+          Coming from the ported piece: @close(reason) is gone. The dialog reports through @hide,
+          whose detail carries result and triggerElement — result names the button that closed it
+          and is null for every dismissal. The morph prop is gone too; see
+          <a class="text-brand underline underline-offset-2" href="#morph">Morphing dialogs</a>.
+          dismissible, title, description, size and class all mean what they did.
+        </p>
       </section>
 
       <div class="mt-12 space-y-12">
-        <ExampleBox id="non-dismissible" title="Non-dismissible" code={ codeLocked }>
+        <ExampleBox id="non-dismissible" title="A dialog that may not be waved away" code={ codeLocked }>
           <Button variant="outline" @press={ openLocked }>Open locked dialog</Button>
           <Dialog
             open={ lockedOpen }
             dismissible={ false }
             title="Finishing up"
-            description="Escape and backdrop clicks do nothing here — the only way out is the button.">
-            <p class="text-sm text-body">Use this when a choice must be made before the dialog can close.</p>
+            description="Escape and backdrop clicks do nothing here — the only way out is the button."
+            @hide={ closeLocked }>
+            <div class="space-y-2 text-sm text-body">
+              <p>Use this when a choice must be made before the dialog can close.</p>
+              <p>dialog-panel has no dismiss policy of its own, so the piece cancels the component's beforeHide event instead. A close that carries a button, or one the parent asked for by flipping open, goes through; Escape and the backdrop arrive with nothing attached and are refused, silently and with no event fired.</p>
+            </div>
             <Button slot="footer" variant="primary" @press={ closeLocked }>Done</Button>
           </Dialog>
         </ExampleBox>
 
-        <ExampleBox id="footer" title="Footer slot" code={ codeFooter }>
-          <Button variant="outline" @press={ openFooter }>Open with footer</Button>
+        <ExampleBox id="sizes" title="Sizes" code={ codeSizes }>
+          <div class="flex flex-col items-center gap-2">
+            <div class="flex flex-wrap justify-center gap-2">
+              {#for option in sizeOptions}
+                <Button key={ option.value } variant="outline" @press={ openSize(option.value) }>{ option.label }</Button>
+              {/for}
+            </div>
+            <span class="text-sm text-muted">size: { size }</span>
+          </div>
           <Dialog
-            open={ footerOpen }
-            title="Rename file"
-            description="Buttons slotted into footer sit right-aligned at the bottom of the panel."
-            @close={ closeFooter }>
-            <p class="text-sm text-body">Any markup can go in the body; footer buttons call the parent's own handlers.</p>
-            <Button slot="footer" variant="ghost" @press={ closeFooter }>Cancel</Button>
-            <Button slot="footer" variant="primary" @press={ saveFooter }>Save</Button>
+            open={ sizeOpen }
+            size={ size }
+            title="Panel width"
+            description="Three width caps on the panel; the height cap is the component's own 85vh."
+            @hide={ closeSize }>
+            <div class="space-y-2 text-sm text-body">
+              <p>size is a max-width on the panel and nothing else: sm is 24rem, md (the default) is 32rem, lg is 42rem. Below that cap the panel is 90vw, so a phone gets the same gutter at every size.</p>
+              <p>Height is not a prop. The panel caps at 85vh and scrolls inside its own rounded corners, which is why long content never pushes the footer off screen.</p>
+            </div>
+            <Button slot="footer" variant="ghost" @press={ closeSize }>Close</Button>
           </Dialog>
         </ExampleBox>
 
-        <ExampleBox id="morph" title="Morph from the trigger" code={ codeMorph }>
-          <div class="w-full max-w-sm">
-            <button
-              type="button"
-              id="dialog-morph-card"
-              class="block w-full cursor-pointer rounded-xl border border-border bg-surface p-5 text-left transition-colors hover:border-border-strong outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-              @click={ openMorph }>
-              <p class="text-xs font-medium uppercase tracking-wide text-muted">Container transform</p>
-              <p class="mt-1.5 text-sm font-semibold text-ink">Release v0.1 is ready</p>
-              <p class="mt-1 text-sm text-muted">Click this card — it grows into the dialog.</p>
-            </button>
-            <Dialog
-              open={ morphOpen }
-              morph="#dialog-morph-card"
-              title="Release v0.1 is ready"
-              description="The card you clicked morphed into this modal, and it morphs back on close."
-              @close={ closeMorph }>
-              <p class="text-sm text-body">
-                Pass a CSS selector for the trigger via the morph prop; the panel flies out of it
-                on open and settles back into it on close. Escape or the backdrop both morph back.
-              </p>
-              <Button slot="footer" variant="ghost" @press={ closeMorph }>Close</Button>
-              <Button slot="footer" variant="primary" @press={ shipMorph }>Ship it</Button>
-            </Dialog>
-          </div>
+        <ExampleBox id="close-button" title="Close button and a scrolling body" code={ codeClose }>
+          <Button variant="outline" @press={ openScroll }>Open release notes</Button>
+          <Dialog
+            open={ scrollOpen }
+            showClose
+            size="lg"
+            title="Release notes"
+            description="showClose pins an X in the corner. It is a data-action-hide-dialog button with no handler of its own."
+            @hide={ closeScroll }>
+            <div class="space-y-3 text-sm text-body">
+              <p>The X sits outside the scroll region, so it stays in the corner while the body moves under it. It closes through the component like every other button and reports result null, because there is nothing to answer.</p>
+              {#for n in paragraphs}
+                <p key={ n }>Change { n } — the panel caps at 85vh and scrolls here, inside the rounded corners, instead of growing past the viewport.</p>
+              {/for}
+            </div>
+          </Dialog>
         </ExampleBox>
+
+        <ExampleBox id="header-slot" title="Custom header" code={ codeHeader }>
+          <Button variant="outline" @press={ openHeader }>Open with custom header</Button>
+          <Dialog
+            open={ headerOpen }
+            labelledby="dialog-promo-title"
+            @hide={ closeHeader }>
+            <div slot="header" class="mb-4 flex items-center gap-2">
+              <span class="flex size-8 items-center justify-center rounded-full bg-brand-tint text-brand">
+                <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 2 15 9l7 .5-5.5 4.5L18 21l-6-3.5L6 21l1.5-7L2 9.5 9 9z"/>
+                </svg>
+              </span>
+              <h2 id="dialog-promo-title" class="text-lg font-semibold text-ink">Summer promo</h2>
+              <span class="rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink">New</span>
+            </div>
+            <div class="space-y-2 text-sm text-body">
+              <p>Filling the header slot replaces the stock title and description entirely, so a custom header brings its own heading and points labelledby at it. There is no is-slot-filled probe — the piece cannot render the fallback alongside your markup.</p>
+              <p>slot="header" has to sit on a direct child of the Dialog tag; the compiler routes slots at compile time, so a conditional block at that level cannot be targeted.</p>
+            </div>
+            <Button slot="footer" variant="ghost" @press={ closeHeader }>Close</Button>
+          </Dialog>
+        </ExampleBox>
+
+        <section id="morph" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Morphing dialogs</h2>
+          <p class="mb-3 text-sm text-body">
+            The ported piece grew a container transform out of its trigger through
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">@magic-spells/morph-engine</code>,
+            and the wrapper drops it. dialog-panel does accept a duck-typed engine, but no engine
+            in this family implements that seam on its own — Sheet builds it inside its own
+            component. A morphing centered dialog is therefore already a piece:
+          </p>
+          <CodeBlock code={ codeMorph }/>
+          <p class="mt-3 text-sm text-muted">
+            Same flight, same reduced-motion fallback, and the trigger doubles as the focus-return
+            target. See <a class="text-brand underline underline-offset-2" href="#/components/sheet">Sheet</a>
+            for the live example. Without a morph, Dialog still returns focus on its own: whatever
+            was focused when you flipped open is handed to the component as the return target.
+          </p>
+        </section>
+
+        <section id="reference" class="scroll-mt-20">
+          <h2 class="mb-4 text-xl font-semibold tracking-tight text-ink">Reference</h2>
+
+          <h3 class="mb-2 mt-6 text-sm font-semibold text-ink">Props</h3>
+          <div class="text-sm">
+            {#for row in propRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Callbacks</h3>
+          <div class="text-sm">
+            {#for row in callbackRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Slots</h3>
+          <div class="text-sm">
+            {#for row in slotRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-44 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Styling the panel</h3>
+          <p class="mb-3 text-sm text-body">
+            dialog-panel publishes exactly one custom property, so unlike Sheet there is no
+            variable bridge to build: the panel is plain token utilities, and
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">class</code>
+            and
+            <code class="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink">backdropClass</code>
+            append to them. Four properties belong to the component's state machine and must not
+            be set from a utility:
+          </p>
+          <div class="text-sm">
+            {#for row in cssRows}
+              <div key={ row.name } class="flex gap-4 border-b border-border py-2">
+                <code class="w-56 shrink-0 font-mono text-ink">{ row.name }</code>
+                <span class="text-body">{ row.desc }</span>
+              </div>
+            {/for}
+          </div>
+
+          <h3 class="mb-2 mt-8 text-sm font-semibold text-ink">Known gaps</h3>
+          <div class="space-y-3 text-sm text-body">
+            <p>
+              A <strong class="font-medium text-ink">keyboard</strong> activation of a
+              data-action-hide-dialog button closes the dialog but reports result: null. A
+              pointerless click carries coordinates of 0,0, which dialog-panel reads as a click
+              outside the panel before the delegated handler runs. A mouse click reports the
+              data-result correctly. Fix pending upstream in dialog-panel; the piece already
+              watches for that click so a non-dismissible dialog still lets the button through.
+            </p>
+            <p>
+              The hidden detail carries no reason, so @hide cannot tell Escape from a backdrop
+              click. Only a data-action-hide-dialog close is distinguishable, through result.
+            </p>
+            <p>
+              <strong class="font-medium text-ink">title and description have to be stable.</strong>
+              They render in the header slot's fallback body, which the compiler paints once and
+              never patches — so a heading bound to state keeps whatever text it had when the view
+              mounted. Everything outside the slot (the size cap, class, aria-labelledby) updates
+              normally. A heading that has to change belongs in a filled header slot, where
+              ordinary call-site content patches as usual. Sheet and Bottom Sheet share the shape
+              and the gap.
+            </p>
+            <p>
+              dialog-panel's drawer position attribute is deliberately not exposed. Its rules
+              re-position the dialog and take over the transform, which collides with the size cap
+              here — and an edge-anchored panel is what
+              <a class="text-brand underline underline-offset-2" href="#/components/sheet">Sheet</a>
+              is for.
+            </p>
+          </div>
+        </section>
       </div>
     </article>
 
@@ -110,95 +303,246 @@ import Toc from '@/components/docs/Toc.pzl';
 import { toast } from '@/components/ui/toast.js';
 
 const installCmd = 'puzzle add piece dialog';
-const usageImport = `import Dialog from '@/components/ui/Dialog.pzl';`;
-const usageMarkup = `<Dialog open={ dialogOpen } title="Delete project?" description="This permanently removes the project and all of its data." @close={ closeDialog }></Dialog>`;
+const installDep = 'npm install @magic-spells/dialog-panel';
+const installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dialog-panel/css" layer(components);`;
 
-const codeHero = `<Button variant="outline" @press={ openDialog }>Open dialog</Button>
-<Dialog
-  open={ dialogOpen }
-  title="Delete project?"
-  description="This permanently removes the project and all of its data."
-  @close={ closeDialog }>
-  <p>You cannot undo this action.</p>
-  <Button slot="footer" variant="ghost" @press={ closeDialog }>Cancel</Button>
-  <Button slot="footer" variant="destructive" @press={ confirmDialog }>Delete</Button>
+const usageImport = `import Dialog from '@/components/ui/Dialog.pzl';`;
+const usageMarkup = `<Dialog open={ open } title="Delete project?" description="This cannot be undone." @hide={ finish }>
+  <p>The project and all of its data are removed.</p>
+  <div slot="footer" class="flex gap-2">
+    <button type="button" data-action-hide-dialog data-result="cancel" class="…">Cancel</button>
+    <button type="button" data-action-hide-dialog data-result="delete" class="…">Delete</button>
+  </div>
 </Dialog>
 
-// parent owns the open flag; the dialog only asks to close
-events = {
-  openDialog: () => this.setData('dialogOpen', true),
-  closeDialog: () => this.setData('dialogOpen', false),
-  confirmDialog: () => this.setData('dialogOpen', false),
-};`;
+// open is EDGE-TRIGGERED: only a change to it acts. The dialog dismisses
+// itself on Escape, a backdrop click, or any [data-action-hide-dialog]
+// descendant, then reports through @hide — where you flip open back to
+// false so the next open is a fresh edge.`;
+
+// The footer button class strings are spelled out once here and elided as
+// class="…" in the code samples, following the docs convention for long utility
+// strings. Every sample's MARKUP matches its live example exactly.
+const cancelButtonClass =
+  'cursor-pointer rounded-lg border border-border bg-surface px-4 py-2 text-sm ' +
+  'font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken ' +
+  'focus-visible:outline-2 focus-visible:outline-offset-2';
+
+const deleteButtonClass =
+  'cursor-pointer rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-ink ' +
+  'transition-colors outline-ring hover:bg-danger-dark focus-visible:outline-2 ' +
+  'focus-visible:outline-offset-2';
+
+const SIZE_OPTIONS = [
+  { value: 'sm', label: 'Small' },
+  { value: 'md', label: 'Medium' },
+  { value: 'lg', label: 'Large' },
+];
+
+const codeHero = `<Button variant="outline" @press={ openHero }>Delete project</Button>
+<span class="text-sm text-muted">last result: { lastResult }</span>
+
+<Dialog
+  open={ heroOpen }
+  title="Delete project?"
+  description="This permanently removes the project and all of its data."
+  @hide={ closeHero }>
+  <p>You cannot undo this action once the project is gone.</p>
+
+  <div slot="footer" class="flex gap-2">
+    <button type="button" data-action-hide-dialog data-result="cancel" class="…">Cancel</button>
+    <button type="button" data-action-hide-dialog data-result="delete" class="…">Delete project</button>
+  </div>
+</Dialog>
+
+// events = {
+//   openHero: () => this.setData('heroOpen', true),
+//   closeHero: ({ result }) => {
+//     this.setData({ heroOpen: false, lastResult: result ?? 'dismissed' });
+//     if (result === 'delete') this.deleteProject();
+//   },
+// };
+
+// data-action-hide-dialog closes the dialog through the component; the
+// button's data-result rides along in the @hide detail, so one handler can
+// tell which answer was given. Escape and a backdrop click report null.
+// Those attributes have to sit on a real <button> — a component tag takes
+// them as props and never puts them in the DOM.
+// The footer slot takes a single direct child, so two buttons share a
+// wrapper div that carries slot="footer".`;
 
 const codeLocked = `<Dialog
   open={ lockedOpen }
   dismissible={ false }
   title="Finishing up"
-  description="Escape and backdrop clicks do nothing here.">
+  description="Escape and backdrop clicks do nothing here."
+  @hide={ closeLocked }>
+  <p>Use this when a choice must be made before the dialog can close.</p>
   <Button slot="footer" variant="primary" @press={ closeLocked }>Done</Button>
-</Dialog>`;
+</Dialog>
 
-const codeFooter = `<Dialog open={ footerOpen } title="Rename file" @close={ closeFooter }>
-  <p>Any markup can go in the body.</p>
-  <Button slot="footer" variant="ghost" @press={ closeFooter }>Cancel</Button>
-  <Button slot="footer" variant="primary" @press={ saveFooter }>Save</Button>
-</Dialog>`;
+// dismissible={ false } cancels the component's beforeHide for any close
+// that arrives with no button attached — Escape, the backdrop, a click on
+// the panel's own margin. A [data-action-hide-dialog] button still closes
+// it, and so does the parent flipping open back to false.`;
 
-const codeMorph = `<!-- morph takes a CSS selector for the trigger element -->
-<button id="new-project-card" @click={ openIt }>…a card, a button, anything…</button>
+const codeSizes = `<Button variant="outline" @press={ openSize('sm') }>Small</Button>
+<span class="text-sm text-muted">size: { size }</span>
 
-<Dialog open={ open } morph="#new-project-card"
-        title="Release v0.1 is ready" @close={ closeIt }>
-  …
-</Dialog>`;
+<Dialog
+  open={ sizeOpen }
+  size={ size }
+  title="Panel width"
+  description="Three width caps on the panel."
+  @hide={ closeSize }>
+  <SizeNotes/>
+  <Button slot="footer" variant="ghost" @press={ closeSize }>Close</Button>
+</Dialog>
+
+// size is a max-width and nothing else: sm 24rem, md 32rem (default),
+// lg 42rem. Below the cap the panel is 90vw. Height is not a prop — the
+// panel caps at 85vh and scrolls inside its own rounded corners.
+// The title is a constant here on purpose: it renders in the header slot's
+// FALLBACK body, which the compiler paints once and never patches. A
+// heading that has to change belongs in a filled header slot.`;
+
+const codeClose = `<Dialog
+  open={ scrollOpen }
+  showClose
+  size="lg"
+  title="Release notes"
+  description="showClose pins an X in the corner."
+  @hide={ closeScroll }>
+  <ReleaseNotes/>
+</Dialog>
+
+// The X is a [data-action-hide-dialog] button with no handler of its own,
+// pinned outside the scroll region so it stays put while the body moves.
+// It reports result null — there is nothing to answer. closeLabel renames
+// it for screen readers; the default is "Close".`;
+
+const codeHeader = `<Dialog open={ headerOpen } labelledby="dialog-promo-title" @hide={ closeHeader }>
+  <div slot="header" class="mb-4 flex items-center gap-2">
+    <span class="…"><StarIcon/></span>
+    <h2 id="dialog-promo-title" class="text-lg font-semibold text-ink">Summer promo</h2>
+    <span class="…">New</span>
+  </div>
+  <PromoDetails/>
+  <Button slot="footer" variant="ghost" @press={ closeHeader }>Close</Button>
+</Dialog>
+
+// A filled header slot replaces the stock title AND description, so it must
+// bring its own heading and point labelledby at that heading's id. Pass
+// describedby the same way if the header carries a description.
+// slot="header" must sit on a direct child of the Dialog tag.`;
+
+const codeMorph = `<button id="new-project-card" @click={ open }>…a card, a button, anything…</button>
+
+<Sheet
+  open={ cardOpen }
+  position="center"
+  morphTrigger="#new-project-card"
+  title="Release v0.1 is ready"
+  @hide={ close }>
+  <p>The card you clicked grew into this panel, and it shrinks back on close.</p>
+</Sheet>
+
+// Sheet at position="center" IS a centered modal dialog — same
+// dialog-panel underneath, same @show / @hide contract — and it is the
+// piece that owns the container-transform flight.`;
 
 export default class DialogDoc extends PuzzleView {
   created() {
-    this.setData({ dialogOpen: false, lockedOpen: false, footerOpen: false, morphOpen: false });
+    this.setData({
+      heroOpen: false,
+      lockedOpen: false,
+      sizeOpen: false,
+      size: 'md',
+      scrollOpen: false,
+      headerOpen: false,
+      lastResult: '—',
+    });
   }
 
   data(params, props) {
     return {
       ...this.getData(),
       installCmd,
+      installDep,
+      installCss,
       usageImport,
       usageMarkup,
+      cancelButtonClass,
+      deleteButtonClass,
       codeHero,
       codeLocked,
-      codeFooter,
+      codeSizes,
+      codeClose,
+      codeHeader,
       codeMorph,
+      sizeOptions: SIZE_OPTIONS,
+      paragraphs: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      propRows: [
+        { name: 'open', desc: 'Controlled, and EDGE-TRIGGERED: only a change acts. true opens, false closes. An unrelated re-render never re-opens a dialog the user already dismissed.' },
+        { name: 'title', desc: 'Heading text rendered by the stock header, which also generates its id and wires aria-labelledby. Ignored once the header slot is filled.' },
+        { name: 'description', desc: 'Supporting paragraph in the stock header, with a generated id wired to aria-describedby. Ignored once the header slot is filled.' },
+        { name: 'labelledby', desc: 'Id of the labelling heading when the header slot is filled.' },
+        { name: 'describedby', desc: 'Id of the describing element when the header slot is filled.' },
+        { name: 'dismissible', desc: 'Default true. false refuses Escape and the backdrop by cancelling the component\'s beforeHide; buttons and the parent still close it, and a refused attempt fires no event at all.' },
+        { name: 'size', desc: '"sm" | "md" (default) | "lg" — the panel\'s max-width: 24rem, 32rem, 42rem. Below the cap it is 90vw. There is no height prop; the panel caps at 85vh and scrolls.' },
+        { name: 'showClose', desc: 'Default false. true pins a close (X) button in the panel\'s top-right corner, outside the scroll region. It closes through the component and reports result null.' },
+        { name: 'closeLabel', desc: 'Accessible name for that button. Default "Close".' },
+        { name: 'class', desc: 'Merged onto the dialog element, after the piece\'s own panel classes.' },
+        { name: 'backdropClass', desc: 'Merged onto the dialog-backdrop element, after the piece\'s overlay classes.' },
+      ],
+      callbackRows: [
+        { name: '@hide(detail)', desc: 'The exit finished. detail is { result, triggerElement }: result is the data-result of the [data-action-hide-dialog] button that closed it, and null for Escape or a backdrop click. Flip open back to false here.' },
+        { name: '@show()', desc: 'The entrance settled and the native dialog is in the top layer.' },
+      ],
+      slotRows: [
+        { name: 'header', desc: 'Replaces the stock title and description block entirely; a filled header brings its own heading and points labelledby at it. Takes one direct child.' },
+        { name: 'footer', desc: 'A right-aligned row below the body, hidden while empty. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute.' },
+        { name: 'default', desc: 'Untagged children become the body, between the header and the footer, inside the scroll region.' },
+      ],
+      cssRows: [
+        { name: 'opacity', desc: 'The component fades the panel and the backdrop between its four states. Setting it from a utility fights the animation and can strand the panel mid-transition.' },
+        { name: 'transform', desc: 'The entrance and exit scale. Same rule: leave it to the state machine.' },
+        { name: 'transition', desc: 'Owned per state, with a faster exit than entrance. Overriding it desynchronises the panel from the backdrop.' },
+        { name: 'display', desc: 'The backdrop only renders from the first opening frame, which is what keeps a closed panel free of a full-viewport blur layer. Never give the dialog a bare display utility either — it defeats the browser\'s own rule that a closed dialog is display: none. Use the open: variant.' },
+        { name: '--dialog-backdrop-z-index', desc: 'The component\'s one custom property (default 1000). Raise it from your own CSS only as far as the page\'s stacking requires; very large values make the top-layer promotion flicker.' },
+      ],
       toc: [
         { label: 'Installation', href: '#installation' },
         { label: 'Usage', href: '#usage' },
         { label: 'Non-dismissible', href: '#non-dismissible' },
-        { label: 'Footer slot', href: '#footer' },
-        { label: 'Morph from the trigger', href: '#morph' },
+        { label: 'Sizes', href: '#sizes' },
+        { label: 'Close button', href: '#close-button' },
+        { label: 'Custom header', href: '#header-slot' },
+        { label: 'Morphing dialogs', href: '#morph' },
+        { label: 'Reference', href: '#reference' },
       ],
     };
   }
 
   events = {
-    openDialog: () => this.setData('dialogOpen', true),
-    closeDialog: () => this.setData('dialogOpen', false),
-    confirmDialog: () => {
-      this.setData('dialogOpen', false);
-      toast({ message: 'Project deleted.', variant: 'danger' });
+    openHero: () => this.setData('heroOpen', true),
+    // The one handler that reads the @hide detail: data-result tells a deliberate
+    // answer apart from a dismissal, which reports null.
+    closeHero: (detail) => {
+      const result = detail?.result ?? null;
+      this.setData({ heroOpen: false, lastResult: result ?? 'dismissed' });
+      if (result === 'delete') toast({ message: 'Project deleted.', variant: 'danger' });
     },
     openLocked: () => this.setData('lockedOpen', true),
     closeLocked: () => this.setData('lockedOpen', false),
-    openFooter: () => this.setData('footerOpen', true),
-    closeFooter: () => this.setData('footerOpen', false),
-    saveFooter: () => {
-      this.setData('footerOpen', false);
-      toast({ message: 'Saved.', variant: 'success' });
-    },
-    openMorph: () => this.setData('morphOpen', true),
-    closeMorph: () => this.setData('morphOpen', false),
-    shipMorph: () => {
-      this.setData('morphOpen', false);
-      toast({ message: 'Shipped.', variant: 'success' });
-    },
+    openSize: (value) => this.setData({ size: value, sizeOpen: true }),
+    closeSize: () => this.setData('sizeOpen', false),
+    openScroll: () => this.setData('scrollOpen', true),
+    closeScroll: () => this.setData('scrollOpen', false),
+    openHeader: () => this.setData('headerOpen', true),
+    closeHeader: () => this.setData('headerOpen', false),
   };
 }
 </script>

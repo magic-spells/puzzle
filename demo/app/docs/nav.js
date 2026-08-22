@@ -82,7 +82,7 @@ export const SECTIONS = [
 		label: "Overlays",
 		items: [
 		{ name: "alert-dialog", title: "Alert Dialog", path: "/components/alert-dialog",
-			description: "Confirm/cancel modal for destructive or consequential actions on the native <dialog role=\"alertdialog\"> element — no backdrop dismiss, no close X, Escape cancels, initial focus on Cancel" },
+			description: "Confirm/cancel modal for destructive or consequential actions on the native <dialog role=\"alertdialog\"> element — inert backdrop, no close X, Escape cancels, initial focus on Cancel; wraps the @magic-spells/dialog-panel web component rather than porting it" },
 		{ name: "bottom-sheet", title: "Bottom Sheet", path: "/components/bottom-sheet",
 			description: "Native-dialog bottom sheet dragged, flicked and dismissed with a finger, with optional height snap points that settle on a velocity-aware spring, a pinned footer, inset mode and a dismissal-tracking scrim; wraps the @magic-spells/bottom-sheet web component rather than porting it" },
 		{ name: "command", title: "Command", path: "/components/command",
@@ -90,7 +90,7 @@ export const SECTIONS = [
 		{ name: "context-menu", title: "Context Menu", path: "/components/context-menu",
 			description: "Right-click context menu — dropdown-menu's grouped items, danger rows, and keyboard nav opened at the pointer position with viewport clamping" },
 		{ name: "dialog", title: "Dialog", path: "/components/dialog",
-			description: "Modal dialog on the native <dialog> element — focus trapping, escape/backdrop dismiss, title/description ARIA wiring, footer slot" },
+			description: "Centered modal on the native <dialog> element — focus trapping, an Escape/backdrop dismiss policy, title/description ARIA wiring, size caps, an optional close button and header/footer slots; wraps the @magic-spells/dialog-panel web component rather than porting it" },
 		{ name: "dropdown-menu", title: "Dropdown Menu", path: "/components/dropdown-menu",
 			description: "Click-toggle dropdown menu with grouped items, dividers, danger items, keyboard nav, and outside-click dismiss" },
 		{ name: "hover-card", title: "Hover Card", path: "/components/hover-card",

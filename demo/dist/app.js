@@ -17566,7 +17566,7 @@ var SECTIONS = [
         name: "alert-dialog",
         title: "Alert Dialog",
         path: "/components/alert-dialog",
-        description: 'Confirm/cancel modal for destructive or consequential actions on the native <dialog role="alertdialog"> element \u2014 no backdrop dismiss, no close X, Escape cancels, initial focus on Cancel'
+        description: 'Confirm/cancel modal for destructive or consequential actions on the native <dialog role="alertdialog"> element \u2014 inert backdrop, no close X, Escape cancels, initial focus on Cancel; wraps the @magic-spells/dialog-panel web component rather than porting it'
       },
       {
         name: "bottom-sheet",
@@ -17590,7 +17590,7 @@ var SECTIONS = [
         name: "dialog",
         title: "Dialog",
         path: "/components/dialog",
-        description: "Modal dialog on the native <dialog> element \u2014 focus trapping, escape/backdrop dismiss, title/description ARIA wiring, footer slot"
+        description: "Centered modal on the native <dialog> element \u2014 focus trapping, an Escape/backdrop dismiss policy, title/description ARIA wiring, size caps, an optional close button and header/footer slots; wraps the @magic-spells/dialog-panel web component rather than porting it"
       },
       {
         name: "dropdown-menu",
@@ -30963,226 +30963,217 @@ AvatarGroup.prototype.render = function() {
 AvatarGroup.__pzlModule = "app/components/ui/AvatarGroup.pzl";
 
 // app/components/ui/Dialog.pzl
-init_morph_engine_esm();
 var uid15 = 0;
-var PANEL_BASE3 = "m-auto w-[calc(100%-2rem)] rounded-xl border border-border bg-surface p-6 shadow-xl text-body overscroll-contain [&::backdrop]:bg-black/50 [&::backdrop]:backdrop-blur-sm [&::backdrop]:transition-opacity [&::backdrop]:duration-150 [&[data-closing]::backdrop]:opacity-0";
-var MORPH_POS = "fixed inset-0 h-fit";
+var OVERLAY = "bg-black/50 backdrop-blur-sm";
+var PANEL = "m-auto rounded-xl border border-border bg-surface text-body shadow-xl overflow-hidden open:flex open:flex-col";
+var BODY = "min-h-0 flex-1 overflow-y-auto overscroll-contain p-6";
 var SIZE5 = {
   sm: "max-w-sm",
   md: "max-w-lg",
   lg: "max-w-2xl"
 };
+var CLOSE = "absolute right-3 top-3 flex size-8 cursor-pointer items-center justify-center rounded-full text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2";
 var Dialog = class extends PuzzleView {
-  // dialog.close() queues its event, so this counter survives the async gap and
-  // overlapping internal closes cannot be mistaken for native user closes.
-  #expectedCloses = 0;
-  #nativeClosed = false;
+  #id = `dialog-${++uid15}`;
+  #panel = null;
+  #live = false;
+  #ready = false;
+  #lastOpen = false;
+  // A hide the wrapper asked for, and a hide a close button asked for without
+  // being able to say so. Both are read by the dismissible guard; both are set
+  // for one synchronous stretch only.
+  #selfHiding = false;
+  #buttonHide = false;
+  // dialog-panel's events bubble, so a nested overlay's close would otherwise
+  // reach this panel's listeners too — and be reported as, or refused as, this
+  // dialog's own.
+  #mine(event) {
+    return event.target === this.#panel;
+  }
+  #onShown = (event) => {
+    if (!this.#mine(event)) return;
+    this.props.show?.();
+  };
+  #onHidden = (event) => {
+    if (!this.#mine(event)) return;
+    const detail = event.detail || {};
+    this.props.hide?.({
+      result: detail.result ?? null,
+      triggerElement: detail.triggerElement ?? null
+    });
+  };
+  // The whole of dismissible={ false }. beforeHide is cancelable and fires for
+  // every close path, so refusing the ones that carry no trigger refuses
+  // Escape and the backdrop while leaving buttons and the parent alone.
+  #onBeforeHide = (event) => {
+    if (!this.#mine(event)) return;
+    if (this.props.dismissible !== false) return;
+    if (this.#selfHiding || this.#buttonHide) return;
+    if (event.detail?.triggerElement) return;
+    event.preventDefault();
+  };
+  // Capture phase, on the root: it runs before dialog-panel's own handlers no
+  // matter which listener was registered first (the element may already be
+  // upgraded by the time this view mounts, if another overlay loaded the
+  // module). A keyboard-activated close button arrives at (0,0) and is read as
+  // a backdrop tap upstream, so this is the only place the intent is still
+  // legible — see KNOWN GAPS.
+  #onClickCapture = (event) => {
+    if (!event.target?.closest?.("[data-action-hide-dialog]")) return;
+    this.#buttonHide = true;
+    setTimeout(() => {
+      this.#buttonHide = false;
+    }, 0);
+  };
   data(params, props) {
-    const id = this._id ??= `pp-dialog-${++uid15}`;
     const title = props.title || "";
     const description = props.description || "";
+    const showClose = props.showClose === true;
     return {
-      // `open` is not used by the template — it is read imperatively in
-      // syncOpen() — but returning it keeps the dependency explicit and the
-      // update cycle (afterUpdate) firing when the parent flips it.
-      open: !!props.open,
       title,
       description,
       hasHeader: !!(title || description),
-      titleId: `${id}-title`,
-      descId: `${id}-desc`,
-      labelledby: title ? `${id}-title` : false,
-      describedby: description ? `${id}-desc` : false,
-      panelClass: [
-        PANEL_BASE3,
-        SIZE5[props.size] || SIZE5.md,
-        props.morph ? MORPH_POS : "",
-        props.class || ""
-      ].filter(Boolean).join(" ")
-    };
-  }
-  // Reconcile the native element with the controlled `open` prop. Idempotent:
-  // the dialog.open / animation guards make repeat calls (any afterUpdate)
-  // safe. Closing is asynchronous now — the element holds open through the
-  // exit animation (or the morph-back) before the native close() runs.
-  syncOpen() {
-    const dialog = this.element;
-    if (!dialog) return;
-    const shouldOpen = !!this.props.open;
-    if (!shouldOpen) this.#nativeClosed = false;
-    if (shouldOpen) {
-      if (this.#nativeClosed) return;
-      if (this._exit) {
-        this._exit.cancel();
-        this._exit = null;
-        delete dialog.dataset.closing;
-      }
-      if (this._morphState() === "hiding") {
-        this._morph.show({ from: this._morphTrigger(), to: dialog, display: "block" });
-        return;
-      }
-      if (this._morphState() === "showing" || this._morphState() === "shown") return;
-      if (!dialog.open) {
-        if (this._tryMorphOpen(dialog)) return;
-        dialog.showModal();
-        this.playEnter(dialog);
-      }
-    } else {
-      const morphLive = this._morphState() === "showing" || this._morphState() === "shown";
-      if (morphLive) {
-        this.#closeDialog(dialog);
-        this._morph.hide();
-        return;
-      }
-      if (dialog.open && !this._exit) this.playExit(dialog);
-    }
-  }
-  // ---- morph (opt-in) --------------------------------------------------------
-  _morphState() {
-    return this._morph ? this._morph.state : "idle";
-  }
-  _morphTrigger() {
-    return this.props.morph ? document.querySelector(this.props.morph) : null;
-  }
-  _tryMorphOpen(dialog) {
-    if (!this.props.morph) return false;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return false;
-    const trigger = this._morphTrigger();
-    if (!trigger) return false;
-    this._morph ??= this._createMorph();
-    if (this._morph.state !== "idle") return false;
-    this._morph.show({ from: trigger, to: dialog, display: "block" });
-    return true;
-  }
-  _createMorph() {
-    const engine = new MorphEngine({ friction: 0.36, lockScroll: false, zIndex: 1e4 });
-    engine.on("reveal", () => {
-      const dialog = this.element;
-      if (dialog && !dialog.open && this.props.open && !this.#nativeClosed) {
-        dialog.showModal();
-      }
-    });
-    return engine;
-  }
-  // ---- fade in / out (non-morph path) ----------------------------------------
-  #closeDialog(dialog = this.element) {
-    if (!dialog?.open) return;
-    this.#expectedCloses += 1;
-    dialog.close();
-  }
-  playEnter(dialog) {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    dialog.animate(
-      [
-        { opacity: 0, transform: "scale(0.96)" },
-        { opacity: 1, transform: "scale(1)" }
-      ],
-      { duration: 180, easing: "ease-out" }
-    );
-  }
-  // Hold the element open through a reverse scale+fade, then run the native
-  // close(). data-closing drives the ::backdrop's CSS opacity transition
-  // (pseudo-elements are out of WAAPI's reach).
-  playExit(dialog) {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      this.#closeDialog(dialog);
-      return;
-    }
-    dialog.dataset.closing = "";
-    const anim = dialog.animate(
-      [
-        { opacity: 1, transform: "scale(1)" },
-        { opacity: 0, transform: "scale(0.96)" }
-      ],
-      { duration: 150, easing: "ease-in", fill: "forwards" }
-    );
-    this._exit = anim;
-    anim.onfinish = () => {
-      if (this._exit !== anim) return;
-      this._exit = null;
-      this.#closeDialog(dialog);
-      anim.cancel();
-      delete dialog.dataset.closing;
+      showClose,
+      titleId: `${this.#id}-title`,
+      descId: `${this.#id}-desc`,
+      // The stock header keeps clear of the close button's corner.
+      headerClass: showClose ? "mb-4 pr-8" : "mb-4",
+      labelledby: props.labelledby || (title ? `${this.#id}-title` : false),
+      describedby: props.describedby || (description ? `${this.#id}-desc` : false),
+      closeLabel: props.closeLabel || "Close",
+      closeClass: CLOSE,
+      bodyClass: BODY,
+      backdropClass: [OVERLAY, props.backdropClass].filter(Boolean).join(" "),
+      dialogClass: [PANEL, SIZE5[props.size] || SIZE5.md, props.class].filter(Boolean).join(" ")
     };
   }
   mounted() {
-    this.syncOpen();
+    if (typeof window === "undefined") return;
+    this.#live = true;
+    this.#panel = this.refs.panel;
+    this.#lastOpen = !!this.props.open;
+    this.#panel?.addEventListener("shown", this.#onShown);
+    this.#panel?.addEventListener("hidden", this.#onHidden);
+    this.#panel?.addEventListener("beforeHide", this.#onBeforeHide);
+    this.#panel?.addEventListener("click", this.#onClickCapture, true);
+    Promise.resolve().then(() => (init_dialog_panel_esm(), dialog_panel_esm_exports)).then(() => {
+      if (!this.#live) return;
+      this.#ready = true;
+      this.#sync();
+    }).catch((error) => {
+      console.error(
+        "[Dialog] failed to load @magic-spells/dialog-panel \u2014 the dialog will not open.",
+        error
+      );
+    });
   }
   afterUpdate() {
-    this.syncOpen();
+    if (!this.#live) return;
+    const open = !!this.props.open;
+    if (open !== this.#lastOpen) {
+      this.#lastOpen = open;
+      this.#sync();
+    }
   }
   destroyed() {
-    this._exit?.cancel();
-    this._morph?.destroy();
-    this._morph = null;
+    this.#live = false;
+    this.#panel?.removeEventListener("shown", this.#onShown);
+    this.#panel?.removeEventListener("hidden", this.#onHidden);
+    this.#panel?.removeEventListener("beforeHide", this.#onBeforeHide);
+    this.#panel?.removeEventListener("click", this.#onClickCapture, true);
+    if (this.#panel?.isOpen) this.#panel.hide();
+    this.#panel = null;
   }
-  events = {
-    // Escape key (native `cancel`). Always preventDefault so the browser can't
-    // close the element behind the vdom's back; then ask the parent to close if
-    // dismissible. If not dismissible, Escape is a no-op.
-    handleCancel: (event) => {
-      event.preventDefault();
-      if (this.props.dismissible === false) return;
-      const { close: close2 } = this.props;
-      if (typeof close2 === "function") close2(event);
-    },
-    handleClose: () => {
-      if (this.#expectedCloses > 0) {
-        this.#expectedCloses -= 1;
-        return;
+  // Edge-triggered, never level-triggered: called only when `open` actually
+  // changed (or when the module finally landed on a dialog that mounted open).
+  // The isOpen guards make a redundant edge — the parent flipping `open` false
+  // inside @hide, for a dialog that already closed itself — a no-op.
+  #sync() {
+    if (!this.#ready || !this.#panel) return;
+    if (this.#lastOpen) {
+      if (!this.#panel.isOpen) this.#panel.show(this.#trigger());
+    } else if (this.#panel.isOpen) {
+      this.#selfHiding = true;
+      try {
+        this.#panel.hide();
+      } finally {
+        this.#selfHiding = false;
       }
-      this.#nativeClosed = true;
-      this.props.close?.();
-    },
-    // Backdrop click: the click lands on the <dialog> element itself only when
-    // it hit the ::backdrop (clicks on inner content have a deeper target).
-    handleBackdropClick: (event) => {
-      if (event.target !== this.element) return;
-      if (this.props.dismissible === false) return;
-      const { close: close2 } = this.props;
-      if (typeof close2 === "function") close2(event);
     }
-  };
+  }
+  // The element show() returns focus to. Whatever the user was on when the
+  // parent opened the dialog is the honest answer, and it keeps focus return
+  // working with no prop to pass.
+  #trigger() {
+    const active = document.activeElement;
+    return active && active !== document.body && active.focus ? active : void 0;
+  }
 };
 Dialog.prototype.render = function() {
   const __d = this.getData();
-  return new ViewNode("dialog", {
-    class: __d.panelClass,
-    "aria-labelledby": __d.labelledby,
-    "aria-describedby": __d.describedby,
-    "@cancel": (this.__h ??= {})[0] ??= (event) => this.events.handleCancel(event),
-    "@close": (this.__h ??= {})[1] ??= (event) => this.events.handleClose(event),
-    "@click": (this.__h ??= {})[2] ??= (event) => this.events.handleBackdropClick(event)
-  }, [
-    ...__d.hasHeader ? [
-      new ViewNode("header", { class: "mb-4" }, [
-        ...__d.title ? [
-          new ViewNode("h2", {
-            id: __d.titleId,
-            class: "text-lg font-semibold text-ink"
+  return new ViewNode("dialog-panel", { ref: this.__ref("panel") }, [
+    new ViewNode("dialog-backdrop", { class: __d.backdropClass }, []),
+    new ViewNode("dialog", {
+      class: __d.dialogClass,
+      "aria-labelledby": __d.labelledby,
+      "aria-describedby": __d.describedby
+    }, [
+      new ViewNode("div", { class: __d.bodyClass }, [
+        new ViewNode(SLOT_TAG, { name: "header" }, [
+          ...__d.hasHeader ? [
+            new ViewNode("header", { class: __d.headerClass }, [
+              ...__d.title ? [
+                new ViewNode("h2", {
+                  id: __d.titleId,
+                  class: "text-lg font-semibold text-ink"
+                }, [
+                  new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
+                ])
+              ] : [
+                new ViewNode("#")
+              ],
+              ...__d.description ? [
+                new ViewNode("p", {
+                  id: __d.descId,
+                  class: "mt-1.5 text-sm text-muted"
+                }, [
+                  new ViewNode("text", { value: displayValue(__d.description, true ? "description" : 0) })
+                ])
+              ] : [
+                new ViewNode("#")
+              ]
+            ])
+          ] : [
+            new ViewNode("#")
+          ]
+        ]),
+        new ViewNode(SLOT_TAG),
+        new ViewNode("div", { class: "mt-6 flex justify-end gap-2 empty:mt-0 empty:hidden" }, [
+          new ViewNode(SLOT_TAG, { name: "footer" })
+        ])
+      ]),
+      ...__d.showClose ? [
+        new ViewNode("button", {
+          type: "button",
+          "data-action-hide-dialog": true,
+          "aria-label": __d.closeLabel,
+          class: __d.closeClass
+        }, [
+          new ViewNode("svg", {
+            class: "size-4",
+            viewBox: "0 0 24 24",
+            fill: "none",
+            stroke: "currentColor",
+            "stroke-width": "2",
+            "stroke-linecap": "round",
+            "aria-hidden": "true"
           }, [
-            new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
+            new ViewNode("path", { d: "M18 6 6 18M6 6l12 12" }, [])
           ])
-        ] : [
-          new ViewNode("#")
-        ],
-        ...__d.description ? [
-          new ViewNode("p", {
-            id: __d.descId,
-            class: "mt-1.5 text-sm text-muted"
-          }, [
-            new ViewNode("text", { value: displayValue(__d.description, true ? "description" : 0) })
-          ])
-        ] : [
-          new ViewNode("#")
-        ]
-      ])
-    ] : [
-      new ViewNode("#")
-    ],
-    new ViewNode(SLOT_TAG),
-    new ViewNode("div", { class: "mt-6 flex justify-end gap-2 empty:mt-0 empty:hidden" }, [
-      new ViewNode(SLOT_TAG, { name: "footer" })
+        ])
+      ] : [
+        new ViewNode("#")
+      ]
     ])
   ]);
 };
@@ -31358,7 +31349,7 @@ Separator.__pzlModule = "app/components/ui/Separator.pzl";
 
 // app/components/ui/Tooltip.pzl
 var uid16 = 0;
-var PANEL_BASE4 = "pointer-events-none select-none absolute z-50 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-xs text-page shadow-sm";
+var PANEL_BASE3 = "pointer-events-none select-none absolute z-50 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-xs text-page shadow-sm";
 var PLACEMENT = {
   top: "bottom-full left-1/2 -translate-x-1/2 mb-1.5",
   bottom: "top-full left-1/2 -translate-x-1/2 mt-1.5",
@@ -31409,7 +31400,7 @@ var Tooltip = class extends PuzzleView {
       visible,
       text: props.text != null ? String(props.text) : "",
       tipId: props.id || `pieces-tooltip-${this._uid}`,
-      panelClass: [PANEL_BASE4, PLACEMENT[placement], props.class || ""].join(" "),
+      panelClass: [PANEL_BASE3, PLACEMENT[placement], props.class || ""].join(" "),
       arrowClass: [ARROW_BASE, ARROW[placement]].join(" ")
     };
   }
@@ -32329,7 +32320,7 @@ BankingDemo.prototype.render = function() {
       open: __d.transferOpen,
       title: "Send money",
       description: "Move funds to a saved recipient. This is a demo \u2014 nothing is actually sent.",
-      close: (this.__h ??= {})[11] ??= (event) => this.events.closeTransfer(event)
+      hide: (this.__h ??= {})[11] ??= (event) => this.events.closeTransfer(event)
     }, [
       new ViewNode("div", { class: "space-y-4" }, [
         new ViewNode("div", {}, [
@@ -37261,123 +37252,208 @@ AlertDoc.__pzlModule = "app/views/components/AlertDoc.pzl";
 
 // app/components/ui/AlertDialog.pzl
 var uid19 = 0;
-var PANEL = "m-auto w-[calc(100%-2rem)] max-w-md rounded-xl border border-border bg-surface p-6 shadow-xl text-body overscroll-contain [&::backdrop]:bg-black/50 [&::backdrop]:backdrop-blur-sm";
+var OVERLAY2 = "bg-black/50 backdrop-blur-sm";
+var PANEL2 = "m-auto max-w-md rounded-xl border border-border bg-surface text-body shadow-xl overflow-hidden open:flex open:flex-col";
+var BODY2 = "min-h-0 flex-1 overflow-y-auto overscroll-contain p-6";
 var BTN_BASE2 = "inline-flex items-center justify-center gap-2 whitespace-nowrap select-none rounded-lg font-medium cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring disabled:opacity-50 disabled:pointer-events-none h-9 px-4 text-sm";
 var BTN_PRIMARY2 = "bg-brand text-brand-ink hover:bg-brand-dark";
 var BTN_DESTRUCTIVE = "bg-danger text-danger-ink hover:bg-danger-dark";
 var BTN_OUTLINE2 = "border border-border bg-surface text-ink hover:border-border-strong hover:bg-surface-sunken";
 var AlertDialog = class extends PuzzleView {
+  #id = `alert-dialog-${++uid19}`;
+  #panel = null;
+  #dialog = null;
+  #live = false;
+  #ready = false;
+  #lastOpen = false;
+  // Three one-macrotask facts the dismiss guard needs and the `beforeHide`
+  // detail cannot supply: the wrapper asked for this close, a close button
+  // asked for it without being able to say so, and Escape asked for it.
+  #selfHiding = false;
+  #buttonHide = false;
+  #escaping = false;
+  // dialog-panel's events bubble, so a nested overlay's close would otherwise
+  // reach this panel's listeners too — and be reported as, or refused as, this
+  // dialog's own.
+  #mine(event) {
+    return event.target === this.#panel;
+  }
+  #onShown = (event) => {
+    if (!this.#mine(event)) return;
+    this.props.show?.();
+  };
+  #onHidden = (event) => {
+    if (!this.#mine(event)) return;
+    const detail = event.detail || {};
+    this.props.hide?.({
+      result: detail.result ?? null,
+      triggerElement: detail.triggerElement ?? null
+    });
+  };
+  // The dismiss policy in one place: a button, the parent, or Escape may close
+  // this prompt. A backdrop click — the one remaining path, which arrives with
+  // no trigger and no escape flag — is refused, and nothing is reported.
+  #onBeforeHide = (event) => {
+    if (!this.#mine(event)) return;
+    if (this.#selfHiding || this.#buttonHide || this.#escaping) return;
+    if (event.detail?.triggerElement) return;
+    event.preventDefault();
+  };
+  // Capture phase, on the <dialog> itself: it runs ahead of dialog-panel's own
+  // bubble-phase `cancel` handler, which is what turns Escape into hide().
+  #onCancelCapture = () => {
+    this.#escaping = true;
+    setTimeout(() => {
+      this.#escaping = false;
+    }, 0);
+  };
+  // Capture phase, on the root — see KNOWN GAPS. A keyboard-activated button
+  // arrives at (0,0) and is read as a backdrop tap upstream, so this is the
+  // only place the intent is still legible, and without it the inert backdrop
+  // would swallow a keyboard answer entirely.
+  #onClickCapture = (event) => {
+    if (!event.target?.closest?.("[data-action-hide-dialog]")) return;
+    this.#buttonHide = true;
+    setTimeout(() => {
+      this.#buttonHide = false;
+    }, 0);
+  };
   data(params, props) {
-    const id = this._id ??= `pp-alertdialog-${++uid19}`;
     const title = props.title || "";
     const description = props.description || "";
     return {
-      // `open` is read imperatively in syncOpen(), not by the template — returning
-      // it keeps the afterUpdate() cycle firing when the parent flips it.
-      open: !!props.open,
       title,
       description,
-      titleId: `${id}-title`,
-      descId: `${id}-desc`,
-      labelledby: title ? `${id}-title` : false,
-      describedby: description ? `${id}-desc` : false,
-      panelClass: [PANEL, props.class || ""].filter(Boolean).join(" "),
+      titleId: `${this.#id}-title`,
+      descId: `${this.#id}-desc`,
+      labelledby: props.labelledby || (title ? `${this.#id}-title` : false),
+      describedby: props.describedby || (description ? `${this.#id}-desc` : false),
       confirmLabel: props.confirmLabel || "Continue",
       cancelLabel: props.cancelLabel || "Cancel",
       cancelClass: [BTN_BASE2, BTN_OUTLINE2].join(" "),
-      confirmClass: [BTN_BASE2, props.destructive ? BTN_DESTRUCTIVE : BTN_PRIMARY2].join(" ")
+      confirmClass: [BTN_BASE2, props.destructive ? BTN_DESTRUCTIVE : BTN_PRIMARY2].join(" "),
+      bodyClass: BODY2,
+      backdropClass: [OVERLAY2, props.backdropClass].filter(Boolean).join(" "),
+      dialogClass: [PANEL2, props.class].filter(Boolean).join(" ")
     };
   }
-  // Reconcile the native element with the controlled `open` prop. Idempotent: the
-  // dialog.open guards make repeat afterUpdate() calls safe and stop showModal()
-  // from throwing on an already-open dialog.
-  syncOpen() {
-    const dialog = this.element;
-    if (!dialog) return;
-    const shouldOpen = !!this.props.open;
-    if (shouldOpen && !dialog.open) {
-      dialog.showModal();
-      this.playEnter(dialog);
-    } else if (!shouldOpen && dialog.open) {
-      dialog.close();
-    }
-  }
-  playEnter(dialog) {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    dialog.animate(
-      [
-        { opacity: 0, transform: "scale(0.96)" },
-        { opacity: 1, transform: "scale(1)" }
-      ],
-      { duration: 180, easing: "ease-out" }
-    );
-  }
   mounted() {
-    this.syncOpen();
+    if (typeof window === "undefined") return;
+    this.#live = true;
+    this.#panel = this.refs.panel;
+    this.#dialog = this.refs.dialog;
+    this.#lastOpen = !!this.props.open;
+    this.#panel?.addEventListener("shown", this.#onShown);
+    this.#panel?.addEventListener("hidden", this.#onHidden);
+    this.#panel?.addEventListener("beforeHide", this.#onBeforeHide);
+    this.#panel?.addEventListener("click", this.#onClickCapture, true);
+    this.#dialog?.addEventListener("cancel", this.#onCancelCapture, true);
+    Promise.resolve().then(() => (init_dialog_panel_esm(), dialog_panel_esm_exports)).then(() => {
+      if (!this.#live) return;
+      this.#ready = true;
+      this.#sync();
+    }).catch((error) => {
+      console.error(
+        "[AlertDialog] failed to load @magic-spells/dialog-panel \u2014 the dialog will not open.",
+        error
+      );
+    });
   }
   afterUpdate() {
-    this.syncOpen();
-  }
-  events = {
-    // Escape (native `cancel`) and the Cancel button both land here. Always
-    // preventDefault the native cancel so the browser can't close the element
-    // behind the vdom's back, then ask the parent to cancel. a11y requires an
-    // exit, so — unlike a plain non-dismissible dialog — this is never swallowed.
-    handleCancel: (event) => {
-      if (event?.type === "cancel") event.preventDefault();
-      const { cancel } = this.props;
-      if (typeof cancel === "function") cancel(event);
-    },
-    handleConfirm: (event) => {
-      const { confirm } = this.props;
-      if (typeof confirm === "function") confirm(event);
+    if (!this.#live) return;
+    const open = !!this.props.open;
+    if (open !== this.#lastOpen) {
+      this.#lastOpen = open;
+      this.#sync();
     }
-  };
+  }
+  destroyed() {
+    this.#live = false;
+    this.#panel?.removeEventListener("shown", this.#onShown);
+    this.#panel?.removeEventListener("hidden", this.#onHidden);
+    this.#panel?.removeEventListener("beforeHide", this.#onBeforeHide);
+    this.#panel?.removeEventListener("click", this.#onClickCapture, true);
+    this.#dialog?.removeEventListener("cancel", this.#onCancelCapture, true);
+    if (this.#panel?.isOpen) this.#panel.hide();
+    this.#panel = null;
+    this.#dialog = null;
+  }
+  // Edge-triggered, never level-triggered: called only when `open` actually
+  // changed (or when the module finally landed on a prompt that mounted open).
+  // The isOpen guards make a redundant edge — the parent flipping `open` false
+  // inside @hide, for a prompt that already closed itself — a no-op.
+  #sync() {
+    if (!this.#ready || !this.#panel) return;
+    if (this.#lastOpen) {
+      if (!this.#panel.isOpen) this.#panel.show(this.#trigger());
+    } else if (this.#panel.isOpen) {
+      this.#selfHiding = true;
+      try {
+        this.#panel.hide();
+      } finally {
+        this.#selfHiding = false;
+      }
+    }
+  }
+  // The element show() returns focus to. Whatever the user was on when the
+  // parent opened the prompt is the honest answer, and it keeps focus return
+  // working with no prop to pass.
+  #trigger() {
+    const active = document.activeElement;
+    return active && active !== document.body && active.focus ? active : void 0;
+  }
 };
 AlertDialog.prototype.render = function() {
   const __d = this.getData();
-  return new ViewNode("dialog", {
-    role: "alertdialog",
-    class: __d.panelClass,
-    "aria-labelledby": __d.labelledby,
-    "aria-describedby": __d.describedby,
-    "@cancel": (this.__h ??= {})[0] ??= (event) => this.events.handleCancel(event)
-  }, [
-    ...__d.title ? [
-      new ViewNode("h2", {
-        id: __d.titleId,
-        class: "text-lg font-semibold text-ink"
-      }, [
-        new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
-      ])
-    ] : [
-      new ViewNode("#")
-    ],
-    ...__d.description ? [
-      new ViewNode("p", {
-        id: __d.descId,
-        class: "mt-1.5 text-sm text-muted"
-      }, [
-        new ViewNode("text", { value: displayValue(__d.description, true ? "description" : 0) })
-      ])
-    ] : [
-      new ViewNode("#")
-    ],
-    new ViewNode("div", { class: "mt-6 flex justify-end gap-3" }, [
-      new ViewNode("button", {
-        type: "button",
-        class: __d.cancelClass,
-        autofocus: true,
-        "@click": (this.__h ??= {})[1] ??= (event) => this.events.handleCancel(event)
-      }, [
-        new ViewNode("text", { value: displayValue(__d.cancelLabel, true ? "cancelLabel" : 0) })
-      ]),
-      new ViewNode("button", {
-        type: "button",
-        class: __d.confirmClass,
-        "@click": (this.__h ??= {})[2] ??= (event) => this.events.handleConfirm(event)
-      }, [
-        new ViewNode("text", { value: displayValue(__d.confirmLabel, true ? "confirmLabel" : 0) })
+  return new ViewNode("dialog-panel", { ref: this.__ref("panel") }, [
+    new ViewNode("dialog-backdrop", { class: __d.backdropClass }, []),
+    new ViewNode("dialog", {
+      ref: this.__ref("dialog"),
+      role: "alertdialog",
+      class: __d.dialogClass,
+      "aria-labelledby": __d.labelledby,
+      "aria-describedby": __d.describedby
+    }, [
+      new ViewNode("div", { class: __d.bodyClass }, [
+        ...__d.title ? [
+          new ViewNode("h2", {
+            id: __d.titleId,
+            class: "text-lg font-semibold text-ink"
+          }, [
+            new ViewNode("text", { value: displayValue(__d.title, true ? "title" : 0) })
+          ])
+        ] : [
+          new ViewNode("#")
+        ],
+        ...__d.description ? [
+          new ViewNode("p", {
+            id: __d.descId,
+            class: "mt-1.5 text-sm text-muted"
+          }, [
+            new ViewNode("text", { value: displayValue(__d.description, true ? "description" : 0) })
+          ])
+        ] : [
+          new ViewNode("#")
+        ],
+        new ViewNode("div", { class: "mt-6 flex justify-end gap-3" }, [
+          new ViewNode("button", {
+            type: "button",
+            "data-action-hide-dialog": true,
+            "data-result": "cancel",
+            autofocus: true,
+            class: __d.cancelClass
+          }, [
+            new ViewNode("text", { value: displayValue(__d.cancelLabel, true ? "cancelLabel" : 0) })
+          ]),
+          new ViewNode("button", {
+            type: "button",
+            "data-action-hide-dialog": true,
+            "data-result": "confirm",
+            class: __d.confirmClass
+          }, [
+            new ViewNode("text", { value: displayValue(__d.confirmLabel, true ? "confirmLabel" : 0) })
+          ])
+        ])
       ])
     ])
   ]);
@@ -37386,68 +37462,139 @@ AlertDialog.__pzlModule = "app/components/ui/AlertDialog.pzl";
 
 // app/views/components/AlertDialogDoc.pzl
 var installCmd3 = "puzzle add piece alert-dialog";
+var installDep = "npm install @magic-spells/dialog-panel";
+var installCss = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dialog-panel/css" layer(components);`;
 var usageImport3 = `import AlertDialog from '@/components/ui/AlertDialog.pzl';`;
-var usageMarkup3 = `<AlertDialog open={ alertOpen } title="Delete project?" description="This permanently removes the project and all of its data." confirmLabel="Delete" destructive @confirm={ confirmAlert } @cancel={ cancelAlert } />`;
+var usageMarkup3 = `<AlertDialog
+  open={ open }
+  title="Delete project?"
+  description="This permanently removes the project and all of its data."
+  confirmLabel="Delete"
+  destructive
+  @hide={ finish } />
+
+// events = {
+//   finish: ({ result }) => {
+//     this.setData('open', false);
+//     if (result === 'confirm') this.deleteProject();
+//   },
+// };
+
+// open is EDGE-TRIGGERED: only a change to it acts. Both buttons close the
+// prompt through the component and report through @hide \u2014 result is
+// 'confirm', 'cancel', or null when Escape closed it.`;
 var codeHero3 = `<Button variant="destructive" @press={ openAlert }>Delete project\u2026</Button>
+<span class="text-sm text-muted">last result: { lastResult }</span>
+
 <AlertDialog
   open={ alertOpen }
   title="Delete project?"
   description="This permanently removes the project and all of its data."
   confirmLabel="Delete"
   destructive
-  @confirm={ confirmAlert }
-  @cancel={ cancelAlert } />
+  @hide={ closeAlert } />
 
-// parent owns open and flips it false in BOTH confirm and cancel
-events = {
-  openAlert: () => this.setData('alertOpen', true),
-  cancelAlert: () => this.setData('alertOpen', false),
-  confirmAlert: () => {
-    this.setData('alertOpen', false);
-    remove();
-  },
-};`;
+// events = {
+//   openAlert: () => this.setData('alertOpen', true),
+//   closeAlert: ({ result }) => {
+//     this.setData({ alertOpen: false, lastResult: result ?? 'dismissed' });
+//     if (result === 'confirm') this.deleteProject();
+//   },
+// };
+
+// destructive swaps the confirm button to the danger recipe. Initial focus
+// lands on Cancel either way \u2014 the safe default for a prompt you cannot undo.`;
 var codeConfirm = `<AlertDialog
   open={ confirmOpen }
   title="Publish this post?"
   description="It will be visible to everyone right away."
   confirmLabel="Publish"
-  @confirm={ confirmPublish }
-  @cancel={ cancelConfirm } />
+  cancelLabel="Not yet"
+  @hide={ closeConfirm } />
 
-// no destructive prop \u2192 the confirm button uses the primary recipe`;
+// No destructive prop, so the confirm button uses the primary recipe.
+// Both labels are free text; the results they report are always the fixed
+// 'confirm' and 'cancel'.`;
+var codeDismiss = `<AlertDialog
+  open={ policyOpen }
+  title="Discard your draft?"
+  description="Click the backdrop: nothing happens. Press Escape: it closes."
+  confirmLabel="Discard"
+  destructive
+  @hide={ closePolicy } />
+
+// The backdrop is inert \u2014 the piece cancels the component's beforeHide for
+// that one path, and nothing is reported. Escape is allowed through because
+// accessibility requires an exit, and it reports result: null. Anything that
+// is not 'confirm' is a cancel.`;
 var AlertDialogDoc = class extends PuzzleView {
   created() {
-    this.setData({ alertOpen: false, confirmOpen: false });
+    this.setData({
+      alertOpen: false,
+      confirmOpen: false,
+      policyOpen: false,
+      lastResult: "\u2014",
+      policyResult: "\u2014"
+    });
   }
   data(params, props) {
     return {
       ...this.getData(),
       installCmd: installCmd3,
+      installDep,
+      installCss,
       usageImport: usageImport3,
       usageMarkup: usageMarkup3,
       codeHero: codeHero3,
       codeConfirm,
+      codeDismiss,
+      propRows: [
+        { name: "open", desc: "Controlled, and EDGE-TRIGGERED: only a change acts. true opens, false closes. An unrelated re-render never re-opens a prompt the user already answered." },
+        { name: "title", desc: 'Heading text, with a generated id wired to aria-labelledby. role="alertdialog" REQUIRES an accessible name, so always pass this or labelledby.' },
+        { name: "description", desc: "Supporting paragraph, with a generated id wired to aria-describedby." },
+        { name: "labelledby", desc: "Id of the labelling element, to wire by hand instead of using title." },
+        { name: "describedby", desc: "Id of the describing element, to wire by hand instead of using description." },
+        { name: "confirmLabel", desc: 'Text on the affirmative button. Default "Continue". The result it reports is always "confirm".' },
+        { name: "cancelLabel", desc: 'Text on the safe button, which also takes initial focus. Default "Cancel". The result it reports is always "cancel".' },
+        { name: "destructive", desc: "Swaps the confirm button from the primary recipe to the danger one. Presentation only \u2014 it changes no behaviour." },
+        { name: "class", desc: "Merged onto the dialog element, after the piece's own panel classes. The panel is capped at max-w-md; a prompt is narrow." },
+        { name: "backdropClass", desc: "Merged onto the dialog-backdrop element, after the piece's overlay classes. The backdrop is still inert." }
+      ],
+      callbackRows: [
+        { name: "@hide(detail)", desc: 'The prompt closed. detail is { result, triggerElement }: result is "confirm", "cancel", or null when Escape closed it. Flip open back to false here, and treat anything that is not "confirm" as a cancel.' },
+        { name: "@show()", desc: "The entrance settled and the native dialog is in the top layer, with focus on Cancel." }
+      ],
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
-        { label: "Non-destructive confirm", href: "#non-destructive" }
+        { label: "Non-destructive confirm", href: "#non-destructive" },
+        { label: "Dismiss policy", href: "#dismiss" },
+        { label: "Reference", href: "#reference" }
       ]
     };
   }
   events = {
     openAlert: () => this.setData("alertOpen", true),
-    cancelAlert: () => this.setData("alertOpen", false),
-    confirmAlert: () => {
-      this.setData("alertOpen", false);
-      toast({ title: "Project deleted", message: "The project and its data were removed.", variant: "danger" });
+    closeAlert: (detail) => {
+      const result = detail?.result ?? null;
+      this.setData({ alertOpen: false, lastResult: result ?? "dismissed" });
+      if (result === "confirm") {
+        toast({
+          title: "Project deleted",
+          message: "The project and its data were removed.",
+          variant: "danger"
+        });
+      }
     },
     openConfirm: () => this.setData("confirmOpen", true),
-    cancelConfirm: () => this.setData("confirmOpen", false),
-    confirmPublish: () => {
+    closeConfirm: (detail) => {
       this.setData("confirmOpen", false);
-      toast({ message: "Post published.", variant: "success" });
-    }
+      if (detail?.result === "confirm") toast({ message: "Post published.", variant: "success" });
+    },
+    openPolicy: () => this.setData("policyOpen", true),
+    closePolicy: (detail) => this.setData({ policyOpen: false, policyResult: detail?.result ?? "dismissed" })
   };
 };
 AlertDialogDoc.prototype.render = function() {
@@ -37460,15 +37607,68 @@ AlertDialogDoc.prototype.render = function() {
             new ViewNode("text", { value: "Alert Dialog" })
           ]),
           new ViewNode("p", { class: "mt-2 text-body" }, [
-            new ViewNode("text", { value: "A confirm and cancel modal for consequential actions, on the native alertdialog element. Backdrop clicks do nothing, Escape cancels, and focus starts on Cancel \u2014 so the choice is made deliberately, never dismissed by a stray click." })
+            new ViewNode("text", { value: "A confirm and cancel modal for consequential actions, on the native alertdialog element. The backdrop is inert, there is no close X, and initial focus starts on Cancel \u2014 so the choice is made deliberately, never dismissed by a stray click." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-body" }, [
+            new ViewNode("text", { value: "This piece is a " }),
+            new ViewNode("strong", { class: "font-medium text-ink" }, [
+              new ViewNode("text", { value: "wrapper" })
+            ]),
+            new ViewNode("text", { value: ", not a port, and a thin variant of " }),
+            new ViewNode("a", {
+              class: "text-brand underline underline-offset-2",
+              href: "#/components/dialog"
+            }, [
+              new ViewNode("text", { value: "Dialog" })
+            ]),
+            new ViewNode("text", { value: ": the same" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: displayValue("<dialog-panel>", true ? "'<dialog-panel>'" : 0) })
+            ]),
+            new ViewNode("text", { value: "custom element from" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "@magic-spells/dialog-panel" })
+            ]),
+            new ViewNode("text", { value: ", the same edge-triggered open flag, the same close-and-notify contract. What differs is the dismiss policy and the two buttons." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "Both buttons close the prompt " }),
+            new ViewNode("strong", { class: "font-medium text-ink" }, [
+              new ViewNode("text", { value: "themselves" })
+            ]),
+            new ViewNode("text", { value: " and report through" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "@hide" })
+            ]),
+            new ViewNode("text", { value: ", whose detail carries" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "result" })
+            ]),
+            new ViewNode("text", { value: ": 'confirm', 'cancel', or null when Escape closed it. Your job is to flip" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "open" })
+            ]),
+            new ViewNode("text", { value: "back to false there \u2014 see " }),
+            new ViewNode("a", {
+              class: "text-brand underline underline-offset-2",
+              href: "#usage"
+            }, [
+              new ViewNode("text", { value: "Usage" })
+            ]),
+            new ViewNode("text", { value: "." })
           ])
         ]),
         new ViewNode(ExampleBox, { code: __d.codeHero }, [
-          new ViewNode(Button, {
-            variant: "destructive",
-            press: (this.__h ??= {})[0] ??= (event) => this.events.openAlert(event)
-          }, [
-            new ViewNode("text", { value: "Delete project\u2026" })
+          new ViewNode("div", { class: "flex flex-col items-center gap-2" }, [
+            new ViewNode(Button, {
+              variant: "destructive",
+              press: (this.__h ??= {})[0] ??= (event) => this.events.openAlert(event)
+            }, [
+              new ViewNode("text", { value: "Delete project\u2026" })
+            ]),
+            new ViewNode("span", { class: "text-sm text-muted" }, [
+              new ViewNode("text", { value: "last result: " + displayValue(__d.lastResult, true ? "lastResult" : 0) })
+            ])
           ]),
           new ViewNode(AlertDialog, {
             open: __d.alertOpen,
@@ -37476,8 +37676,7 @@ AlertDialogDoc.prototype.render = function() {
             description: "This permanently removes the project and all of its data. This action cannot be undone.",
             confirmLabel: "Delete",
             destructive: true,
-            confirm: (this.__h ??= {})[1] ??= (event) => this.events.confirmAlert(event),
-            cancel: (this.__h ??= {})[2] ??= (event) => this.events.cancelAlert(event)
+            hide: (this.__h ??= {})[1] ??= (event) => this.events.closeAlert(event)
           }, [])
         ]),
         new ViewNode("section", {
@@ -37491,6 +37690,24 @@ AlertDialogDoc.prototype.render = function() {
             new ViewNode("text", { value: "Copy the piece into your app \u2014 it compiles with your build and the code is yours:" })
           ]),
           new ViewNode(CodeBlock, { code: __d.installCmd }, []),
+          new ViewNode("p", { class: "mb-3 mt-4 text-sm text-body" }, [
+            new ViewNode("text", { value: "Like Dialog, Sheet and Bottom Sheet, this piece has a runtime dependency: the web component it wraps. All four share it, so it is installed once." })
+          ]),
+          new ViewNode(CodeBlock, { code: __d.installDep }, []),
+          new ViewNode("p", { class: "mb-3 mt-4 text-sm text-body" }, [
+            new ViewNode("text", { value: "Then merge the component's stylesheet into your app's style entry (" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "app/styles/styles.css" })
+            ]),
+            new ViewNode("text", { value: "). It owns the dialog and overlay transport \u2014 the state-driven fade, the backdrop element, and the page scroll lock:" })
+          ]),
+          new ViewNode(CodeBlock, { code: __d.installCss }, []),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "layer(components)" })
+            ]),
+            new ViewNode("text", { value: "is not optional cosmetics: the stylesheet uses plain element selectors, and an unlayered import would outrank every Tailwind utility on the panel." })
+          ]),
           new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
             new ViewNode("text", { value: "Requires the pieces.css tokens merged into your app styles (see Introduction)." })
           ])
@@ -37506,7 +37723,20 @@ AlertDialogDoc.prototype.render = function() {
           new ViewNode(CodeBlock, {
             code: __d.usageMarkup,
             class: "mt-3"
-          }, [])
+          }, []),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "open" })
+            ]),
+            new ViewNode("text", { value: "is " }),
+            new ViewNode("strong", { class: "font-medium text-ink" }, [
+              new ViewNode("text", { value: "edge-triggered" })
+            ]),
+            new ViewNode("text", { value: ": only a change to it acts. An unrelated re-render never re-opens a prompt the user already answered while your state still says it is open." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "Coming from the ported piece: @confirm and @cancel are gone, replaced by one @hide whose result is 'confirm', 'cancel' or null. One callback, one place to flip open back to false, and the same contract every other overlay in the library uses. title, description, confirmLabel, cancelLabel and destructive all mean what they did." })
+          ])
         ]),
         new ViewNode("div", { class: "mt-12 space-y-12" }, [
           new ViewNode(ExampleBox, {
@@ -37516,7 +37746,7 @@ AlertDialogDoc.prototype.render = function() {
           }, [
             new ViewNode(Button, {
               variant: "outline",
-              press: (this.__h ??= {})[3] ??= (event) => this.events.openConfirm(event)
+              press: (this.__h ??= {})[2] ??= (event) => this.events.openConfirm(event)
             }, [
               new ViewNode("text", { value: "Publish\u2026" })
             ]),
@@ -37525,9 +37755,121 @@ AlertDialogDoc.prototype.render = function() {
               title: "Publish this post?",
               description: "It will be visible to everyone right away. You can unpublish later.",
               confirmLabel: "Publish",
-              confirm: (this.__h ??= {})[4] ??= (event) => this.events.confirmPublish(event),
-              cancel: (this.__h ??= {})[5] ??= (event) => this.events.cancelConfirm(event)
+              cancelLabel: "Not yet",
+              hide: (this.__h ??= {})[3] ??= (event) => this.events.closeConfirm(event)
             }, [])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "dismiss",
+            title: "The dismiss policy",
+            code: __d.codeDismiss
+          }, [
+            new ViewNode("div", { class: "flex flex-col items-center gap-2" }, [
+              new ViewNode(Button, {
+                variant: "outline",
+                press: (this.__h ??= {})[4] ??= (event) => this.events.openPolicy(event)
+              }, [
+                new ViewNode("text", { value: "Try to dismiss it" })
+              ]),
+              new ViewNode("span", { class: "text-sm text-muted" }, [
+                new ViewNode("text", { value: "last result: " + displayValue(__d.policyResult, true ? "policyResult" : 0) })
+              ])
+            ]),
+            new ViewNode(AlertDialog, {
+              open: __d.policyOpen,
+              title: "Discard your draft?",
+              description: "Click the backdrop: nothing happens. Press Escape: it closes, and reports null.",
+              confirmLabel: "Discard",
+              destructive: true,
+              hide: (this.__h ??= {})[5] ??= (event) => this.events.closePolicy(event)
+            }, [])
+          ]),
+          new ViewNode("section", {
+            id: "reference",
+            class: "scroll-mt-20"
+          }, [
+            new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
+              new ViewNode("text", { value: "Reference" })
+            ]),
+            new ViewNode("h3", { class: "mb-2 mt-6 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Props" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.propRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Callbacks" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.callbackRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Slots" })
+            ]),
+            new ViewNode("p", { class: "text-sm text-body" }, [
+              new ViewNode("text", { value: "None. A prompt is config-first on purpose: title, description and two labelled buttons are the whole surface. Reach for" }),
+              new ViewNode("a", {
+                class: "text-brand underline underline-offset-2",
+                href: "#/components/dialog"
+              }, [
+                new ViewNode("text", { value: "Dialog" })
+              ]),
+              new ViewNode("text", { value: "the moment you need markup inside it." })
+            ]),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "How the dismiss policy works" })
+            ]),
+            new ViewNode("div", { class: "space-y-3 text-sm text-body" }, [
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "dialog-panel reports neither Escape nor a backdrop click: both arrive at its cancelable beforeHide event with nothing attached and no reason. So the piece tells them apart itself. Escape reaches the dialog as a native cancel event first, and the piece listens for that in the capture phase \u2014 which runs ahead of the component's own handler regardless of which listener was registered first. A backdrop click raises no such flag and is the one path refused." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "Everything else goes through: either button, and the parent flipping open back to false. A reason in the component's own hidden detail would retire the mechanism." })
+              ])
+            ]),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Known gaps" })
+            ]),
+            new ViewNode("div", { class: "space-y-3 text-sm text-body" }, [
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "A " }),
+                new ViewNode("strong", { class: "font-medium text-ink" }, [
+                  new ViewNode("text", { value: "keyboard" })
+                ]),
+                new ViewNode("text", { value: " activation of either button closes the prompt but reports result: null, so a confirm answered with Tab and Enter is indistinguishable from Escape. A pointerless click carries coordinates of 0,0, which dialog-panel reads as a click outside the panel before the delegated handler runs. The piece already watches for that click so the button still closes against the inert backdrop; recovering the result is pending upstream. Until it lands, write the handler so a null result is treated as a cancel \u2014 which is what the examples on this page do." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: 'role="alertdialog" requires an accessible name, so always pass title (or wire labelledby yourself). There is no runtime warning if you forget.' })
+              ])
+            ])
           ])
         ])
       ]),
@@ -38685,7 +39027,7 @@ function attr(value) {
 }
 var THEME = "[--bs-panel-background:var(--color-surface)] [--bs-handle-color:var(--color-faint)] [--bs-overlay-background:rgb(0_0_0_/_0.5)] [--bs-overlay-blur:8px]";
 var NO_GRABBER = "[--bs-handle-height:0px] [--bs-handle-width:0px]";
-var PANEL2 = "text-body";
+var PANEL3 = "text-body";
 var HEADER = "pt-6";
 var HEADER_NO_GRABBER = "pt-4";
 var TITLE = "pb-3 text-base font-semibold text-ink text-center";
@@ -38696,7 +39038,10 @@ var BottomSheet2 = class extends PuzzleView {
   #live = false;
   #ready = false;
   #lastOpen = false;
-  #lastSnap;
+  // The parent's last rendered `snap`, and the rungs the component announced
+  // through @snapChange that the parent has not written back yet.
+  #lastProp;
+  #pending = [];
   #onShown = () => {
     this.props.show?.();
   };
@@ -38713,7 +39058,8 @@ var BottomSheet2 = class extends PuzzleView {
   #onSnapChange = (event) => {
     const to = event.detail?.to;
     if (typeof to !== "number") return;
-    this.#lastSnap = to;
+    this.#pending.push(to);
+    if (this.#pending.length > 16) this.#pending.shift();
     this.props.snapChange?.(to);
   };
   data(params, props) {
@@ -38728,7 +39074,7 @@ var BottomSheet2 = class extends PuzzleView {
       rootClass: THEME,
       backdropClass: attr(props.backdropClass),
       headerClass: grabber ? HEADER : HEADER_NO_GRABBER,
-      panelClass: [PANEL2, grabber ? "" : NO_GRABBER, props.class].filter(Boolean).join(" "),
+      panelClass: [PANEL3, grabber ? "" : NO_GRABBER, props.class].filter(Boolean).join(" "),
       panelStyle: attr(props.style),
       snapPointsAttr: attr(snapPoints),
       springAttr: attr(props.spring),
@@ -38743,9 +39089,9 @@ var BottomSheet2 = class extends PuzzleView {
     this.#panel = this.refs.panel;
     this.#sheet = this.refs.sheet;
     this.#lastOpen = !!this.props.open;
-    this.#lastSnap = this.props.snap;
-    if (this.#lastSnap !== void 0 && this.#lastSnap !== null) {
-      this.#sheet?.setAttribute("snap", String(this.#lastSnap));
+    this.#lastProp = this.props.snap;
+    if (this.#lastProp !== void 0 && this.#lastProp !== null) {
+      this.#sheet?.setAttribute("snap", String(this.#lastProp));
     }
     this.#panel?.addEventListener("shown", this.#onShown);
     this.#panel?.addEventListener("hidden", this.#onHidden);
@@ -38769,9 +39115,15 @@ var BottomSheet2 = class extends PuzzleView {
       this.#sync();
     }
     const snap2 = this.props.snap;
-    if (snap2 !== void 0 && snap2 !== this.#lastSnap) {
-      this.#lastSnap = snap2;
-      if (this.#ready) this.#sheet?.snapTo?.(Number(snap2));
+    if (snap2 !== this.#lastProp) {
+      this.#lastProp = snap2;
+      const echo = snap2 === void 0 || snap2 === null ? -1 : this.#pending.indexOf(Number(snap2));
+      if (echo !== -1) {
+        this.#pending.splice(0, echo + 1);
+      } else if (snap2 !== void 0 && snap2 !== null) {
+        this.#pending.length = 0;
+        if (this.#ready) this.#sheet?.snapTo?.(Number(snap2));
+      }
     }
   }
   destroyed() {
@@ -38848,10 +39200,10 @@ BottomSheet2.__pzlModule = "app/components/ui/BottomSheet.pzl";
 
 // app/views/components/BottomSheetDoc.pzl
 var installCmd10 = "puzzle add piece bottom-sheet";
-var installDep = `npm install @magic-spells/bottom-sheet
+var installDep2 = `npm install @magic-spells/bottom-sheet
 # Yarn 1 only \u2014 npm 7+ and pnpm install the peer for you
 # yarn add @magic-spells/bottom-sheet @magic-spells/dialog-panel`;
-var installCss = `/* app/styles/styles.css */
+var installCss2 = `/* app/styles/styles.css */
 @import "tailwindcss";
 @import "@magic-spells/dialog-panel/css" layer(components);
 @import "@magic-spells/bottom-sheet/css" layer(components);`;
@@ -38999,8 +39351,8 @@ var BottomSheetDoc = class extends PuzzleView {
     return {
       ...this.getData(),
       installCmd: installCmd10,
-      installDep,
-      installCss,
+      installDep: installDep2,
+      installCss: installCss2,
       usageImport: usageImport10,
       usageMarkup: usageMarkup10,
       closeButtonClass,
@@ -39018,7 +39370,7 @@ var BottomSheetDoc = class extends PuzzleView {
         { name: "title", desc: "Heading text rendered by the stock header, which also generates its id and wires aria-labelledby. Ignored once the header slot is filled." },
         { name: "labelledby", desc: "Id of the labelling heading when the header slot is filled." },
         { name: "snapPoints", desc: "Comma- or space-separated percentages of the viewport height, or an array of numbers. Each is a HEIGHT, which is what pins the footer at every rung. Sorted and deduped; anything outside 0\u2013100 is dropped. Omit for the two-state sheet." },
-        { name: "snap", desc: "Optional-controlled resting snap in dvh percent \u2014 a VALUE, not an index. Set at mount it is also the opening rung; changed later it calls snapTo(). Undeclared values are ignored, not clamped. Pair with @snapChange." },
+        { name: "snap", desc: "Optional-controlled resting snap in dvh percent \u2014 a VALUE, not an index. Set at mount it is also the opening rung; only a change later calls snapTo(), and a change that writes back a rung the sheet itself announced through @snapChange is absorbed \u2014 a late render can never drag the sheet back to a rung the user already left. Undeclared values are ignored, not clamped. Pair with @snapChange." },
         { name: "spring", desc: '"attraction,friction" override for the snap settle, both dials in (0, 1); "none" settles on the CSS curve instead. Governs the SETTLE only \u2014 opening, closing and every sheet without snapPoints stay on plain transitions.' },
         { name: "inset", desc: "Detaches the sheet from all three edges and rounds every corner. CSS only; the off-screen position is corrected so the exit still clears the gap." },
         { name: "maxDisplayWidth", desc: "Largest viewport width where the sheet may open. It also closes an open sheet when a resize crosses the limit. Above it show() returns early and no event fires." },
@@ -42676,7 +43028,7 @@ var uid22 = 0;
 var INPUT_BASE6 = "h-9 w-full rounded-lg border bg-surface pl-3 pr-9 text-sm text-ink placeholder:text-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:pointer-events-none";
 var INPUT_OK3 = "border-border outline-ring focus-visible:outline-ring";
 var INPUT_ERROR3 = "border-danger outline-danger focus-visible:outline-danger";
-var PANEL_BASE5 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
+var PANEL_BASE4 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
 var PANEL_PLACEMENT2 = { bottom: "top-full mt-1", top: "bottom-full mb-1" };
 var OPTION_BASE2 = "relative flex items-center gap-2 px-3 py-1.5 text-sm select-none";
 var GROUP_CLASS2 = "px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none";
@@ -42930,7 +43282,7 @@ var Combobox = class extends PuzzleView {
       hiddenValue: selectedOpt ? selectedOpt.value : "",
       rootClass: props.class || "",
       inputClass: [INPUT_BASE6, error ? INPUT_ERROR3 : INPUT_OK3].join(" "),
-      panelClass: [PANEL_BASE5, PANEL_PLACEMENT2[placement]].filter(Boolean).join(" "),
+      panelClass: [PANEL_BASE4, PANEL_PLACEMENT2[placement]].filter(Boolean).join(" "),
       panelStyle: prev.maxHeight ? `max-height:${prev.maxHeight}px;` : ""
     };
   }
@@ -43734,7 +44086,7 @@ ComboboxDoc.__pzlModule = "app/views/components/ComboboxDoc.pzl";
 
 // app/components/ui/Command.pzl
 var uid23 = 0;
-var PANEL_BASE6 = "m-auto mt-[15vh] w-full max-w-lg rounded-xl border border-border bg-surface p-0 text-body shadow-xl overflow-hidden [&::backdrop]:bg-black/50";
+var PANEL_BASE5 = "m-auto mt-[15vh] w-full max-w-lg rounded-xl border border-border bg-surface p-0 text-body shadow-xl overflow-hidden [&::backdrop]:bg-black/50";
 var OPTION_BASE3 = "flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm select-none";
 var GROUP_CLS = "px-2 pt-2 pb-1 text-xs font-medium text-muted";
 function wordPrefix2(text, q2) {
@@ -43856,7 +44208,7 @@ var Command = class extends PuzzleView {
       placeholder: props.placeholder || "Type a command or search\u2026",
       emptyText: props.emptyText || "No results found.",
       ariaLabel: props.label || "Command palette",
-      panelClass: [PANEL_BASE6, props.class || ""].join(" ")
+      panelClass: [PANEL_BASE5, props.class || ""].join(" ")
     };
   }
   // ---- open / close (native <dialog> reconciled with the `open` prop) -------
@@ -45973,88 +46325,224 @@ DescriptionListDoc.__pzlModule = "app/views/components/DescriptionListDoc.pzl";
 
 // app/views/components/DialogDoc.pzl
 var installCmd31 = "puzzle add piece dialog";
+var installDep3 = "npm install @magic-spells/dialog-panel";
+var installCss3 = `/* app/styles/styles.css */
+@import "tailwindcss";
+@import "@magic-spells/dialog-panel/css" layer(components);`;
 var usageImport31 = `import Dialog from '@/components/ui/Dialog.pzl';`;
-var usageMarkup31 = `<Dialog open={ dialogOpen } title="Delete project?" description="This permanently removes the project and all of its data." @close={ closeDialog }></Dialog>`;
-var codeHero31 = `<Button variant="outline" @press={ openDialog }>Open dialog</Button>
-<Dialog
-  open={ dialogOpen }
-  title="Delete project?"
-  description="This permanently removes the project and all of its data."
-  @close={ closeDialog }>
-  <p>You cannot undo this action.</p>
-  <Button slot="footer" variant="ghost" @press={ closeDialog }>Cancel</Button>
-  <Button slot="footer" variant="destructive" @press={ confirmDialog }>Delete</Button>
+var usageMarkup31 = `<Dialog open={ open } title="Delete project?" description="This cannot be undone." @hide={ finish }>
+  <p>The project and all of its data are removed.</p>
+  <div slot="footer" class="flex gap-2">
+    <button type="button" data-action-hide-dialog data-result="cancel" class="\u2026">Cancel</button>
+    <button type="button" data-action-hide-dialog data-result="delete" class="\u2026">Delete</button>
+  </div>
 </Dialog>
 
-// parent owns the open flag; the dialog only asks to close
-events = {
-  openDialog: () => this.setData('dialogOpen', true),
-  closeDialog: () => this.setData('dialogOpen', false),
-  confirmDialog: () => this.setData('dialogOpen', false),
-};`;
+// open is EDGE-TRIGGERED: only a change to it acts. The dialog dismisses
+// itself on Escape, a backdrop click, or any [data-action-hide-dialog]
+// descendant, then reports through @hide \u2014 where you flip open back to
+// false so the next open is a fresh edge.`;
+var cancelButtonClass2 = "cursor-pointer rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2";
+var deleteButtonClass2 = "cursor-pointer rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-ink transition-colors outline-ring hover:bg-danger-dark focus-visible:outline-2 focus-visible:outline-offset-2";
+var SIZE_OPTIONS = [
+  { value: "sm", label: "Small" },
+  { value: "md", label: "Medium" },
+  { value: "lg", label: "Large" }
+];
+var codeHero31 = `<Button variant="outline" @press={ openHero }>Delete project</Button>
+<span class="text-sm text-muted">last result: { lastResult }</span>
+
+<Dialog
+  open={ heroOpen }
+  title="Delete project?"
+  description="This permanently removes the project and all of its data."
+  @hide={ closeHero }>
+  <p>You cannot undo this action once the project is gone.</p>
+
+  <div slot="footer" class="flex gap-2">
+    <button type="button" data-action-hide-dialog data-result="cancel" class="\u2026">Cancel</button>
+    <button type="button" data-action-hide-dialog data-result="delete" class="\u2026">Delete project</button>
+  </div>
+</Dialog>
+
+// events = {
+//   openHero: () => this.setData('heroOpen', true),
+//   closeHero: ({ result }) => {
+//     this.setData({ heroOpen: false, lastResult: result ?? 'dismissed' });
+//     if (result === 'delete') this.deleteProject();
+//   },
+// };
+
+// data-action-hide-dialog closes the dialog through the component; the
+// button's data-result rides along in the @hide detail, so one handler can
+// tell which answer was given. Escape and a backdrop click report null.
+// Those attributes have to sit on a real <button> \u2014 a component tag takes
+// them as props and never puts them in the DOM.
+// The footer slot takes a single direct child, so two buttons share a
+// wrapper div that carries slot="footer".`;
 var codeLocked = `<Dialog
   open={ lockedOpen }
   dismissible={ false }
   title="Finishing up"
-  description="Escape and backdrop clicks do nothing here.">
+  description="Escape and backdrop clicks do nothing here."
+  @hide={ closeLocked }>
+  <p>Use this when a choice must be made before the dialog can close.</p>
   <Button slot="footer" variant="primary" @press={ closeLocked }>Done</Button>
-</Dialog>`;
-var codeFooter2 = `<Dialog open={ footerOpen } title="Rename file" @close={ closeFooter }>
-  <p>Any markup can go in the body.</p>
-  <Button slot="footer" variant="ghost" @press={ closeFooter }>Cancel</Button>
-  <Button slot="footer" variant="primary" @press={ saveFooter }>Save</Button>
-</Dialog>`;
-var codeMorph3 = `<!-- morph takes a CSS selector for the trigger element -->
-<button id="new-project-card" @click={ openIt }>\u2026a card, a button, anything\u2026</button>
+</Dialog>
 
-<Dialog open={ open } morph="#new-project-card"
-        title="Release v0.1 is ready" @close={ closeIt }>
-  \u2026
-</Dialog>`;
+// dismissible={ false } cancels the component's beforeHide for any close
+// that arrives with no button attached \u2014 Escape, the backdrop, a click on
+// the panel's own margin. A [data-action-hide-dialog] button still closes
+// it, and so does the parent flipping open back to false.`;
+var codeSizes7 = `<Button variant="outline" @press={ openSize('sm') }>Small</Button>
+<span class="text-sm text-muted">size: { size }</span>
+
+<Dialog
+  open={ sizeOpen }
+  size={ size }
+  title="Panel width"
+  description="Three width caps on the panel."
+  @hide={ closeSize }>
+  <SizeNotes/>
+  <Button slot="footer" variant="ghost" @press={ closeSize }>Close</Button>
+</Dialog>
+
+// size is a max-width and nothing else: sm 24rem, md 32rem (default),
+// lg 42rem. Below the cap the panel is 90vw. Height is not a prop \u2014 the
+// panel caps at 85vh and scrolls inside its own rounded corners.
+// The title is a constant here on purpose: it renders in the header slot's
+// FALLBACK body, which the compiler paints once and never patches. A
+// heading that has to change belongs in a filled header slot.`;
+var codeClose = `<Dialog
+  open={ scrollOpen }
+  showClose
+  size="lg"
+  title="Release notes"
+  description="showClose pins an X in the corner."
+  @hide={ closeScroll }>
+  <ReleaseNotes/>
+</Dialog>
+
+// The X is a [data-action-hide-dialog] button with no handler of its own,
+// pinned outside the scroll region so it stays put while the body moves.
+// It reports result null \u2014 there is nothing to answer. closeLabel renames
+// it for screen readers; the default is "Close".`;
+var codeHeader2 = `<Dialog open={ headerOpen } labelledby="dialog-promo-title" @hide={ closeHeader }>
+  <div slot="header" class="mb-4 flex items-center gap-2">
+    <span class="\u2026"><StarIcon/></span>
+    <h2 id="dialog-promo-title" class="text-lg font-semibold text-ink">Summer promo</h2>
+    <span class="\u2026">New</span>
+  </div>
+  <PromoDetails/>
+  <Button slot="footer" variant="ghost" @press={ closeHeader }>Close</Button>
+</Dialog>
+
+// A filled header slot replaces the stock title AND description, so it must
+// bring its own heading and point labelledby at that heading's id. Pass
+// describedby the same way if the header carries a description.
+// slot="header" must sit on a direct child of the Dialog tag.`;
+var codeMorph3 = `<button id="new-project-card" @click={ open }>\u2026a card, a button, anything\u2026</button>
+
+<Sheet
+  open={ cardOpen }
+  position="center"
+  morphTrigger="#new-project-card"
+  title="Release v0.1 is ready"
+  @hide={ close }>
+  <p>The card you clicked grew into this panel, and it shrinks back on close.</p>
+</Sheet>
+
+// Sheet at position="center" IS a centered modal dialog \u2014 same
+// dialog-panel underneath, same @show / @hide contract \u2014 and it is the
+// piece that owns the container-transform flight.`;
 var DialogDoc = class extends PuzzleView {
   created() {
-    this.setData({ dialogOpen: false, lockedOpen: false, footerOpen: false, morphOpen: false });
+    this.setData({
+      heroOpen: false,
+      lockedOpen: false,
+      sizeOpen: false,
+      size: "md",
+      scrollOpen: false,
+      headerOpen: false,
+      lastResult: "\u2014"
+    });
   }
   data(params, props) {
     return {
       ...this.getData(),
       installCmd: installCmd31,
+      installDep: installDep3,
+      installCss: installCss3,
       usageImport: usageImport31,
       usageMarkup: usageMarkup31,
+      cancelButtonClass: cancelButtonClass2,
+      deleteButtonClass: deleteButtonClass2,
       codeHero: codeHero31,
       codeLocked,
-      codeFooter: codeFooter2,
+      codeSizes: codeSizes7,
+      codeClose,
+      codeHeader: codeHeader2,
       codeMorph: codeMorph3,
+      sizeOptions: SIZE_OPTIONS,
+      paragraphs: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+      propRows: [
+        { name: "open", desc: "Controlled, and EDGE-TRIGGERED: only a change acts. true opens, false closes. An unrelated re-render never re-opens a dialog the user already dismissed." },
+        { name: "title", desc: "Heading text rendered by the stock header, which also generates its id and wires aria-labelledby. Ignored once the header slot is filled." },
+        { name: "description", desc: "Supporting paragraph in the stock header, with a generated id wired to aria-describedby. Ignored once the header slot is filled." },
+        { name: "labelledby", desc: "Id of the labelling heading when the header slot is filled." },
+        { name: "describedby", desc: "Id of the describing element when the header slot is filled." },
+        { name: "dismissible", desc: "Default true. false refuses Escape and the backdrop by cancelling the component's beforeHide; buttons and the parent still close it, and a refused attempt fires no event at all." },
+        { name: "size", desc: `"sm" | "md" (default) | "lg" \u2014 the panel's max-width: 24rem, 32rem, 42rem. Below the cap it is 90vw. There is no height prop; the panel caps at 85vh and scrolls.` },
+        { name: "showClose", desc: "Default false. true pins a close (X) button in the panel's top-right corner, outside the scroll region. It closes through the component and reports result null." },
+        { name: "closeLabel", desc: 'Accessible name for that button. Default "Close".' },
+        { name: "class", desc: "Merged onto the dialog element, after the piece's own panel classes." },
+        { name: "backdropClass", desc: "Merged onto the dialog-backdrop element, after the piece's overlay classes." }
+      ],
+      callbackRows: [
+        { name: "@hide(detail)", desc: "The exit finished. detail is { result, triggerElement }: result is the data-result of the [data-action-hide-dialog] button that closed it, and null for Escape or a backdrop click. Flip open back to false here." },
+        { name: "@show()", desc: "The entrance settled and the native dialog is in the top layer." }
+      ],
+      slotRows: [
+        { name: "header", desc: "Replaces the stock title and description block entirely; a filled header brings its own heading and points labelledby at it. Takes one direct child." },
+        { name: "footer", desc: "A right-aligned row below the body, hidden while empty. Takes one direct child, so wrap multiple buttons in a div that carries the slot attribute." },
+        { name: "default", desc: "Untagged children become the body, between the header and the footer, inside the scroll region." }
+      ],
+      cssRows: [
+        { name: "opacity", desc: "The component fades the panel and the backdrop between its four states. Setting it from a utility fights the animation and can strand the panel mid-transition." },
+        { name: "transform", desc: "The entrance and exit scale. Same rule: leave it to the state machine." },
+        { name: "transition", desc: "Owned per state, with a faster exit than entrance. Overriding it desynchronises the panel from the backdrop." },
+        { name: "display", desc: "The backdrop only renders from the first opening frame, which is what keeps a closed panel free of a full-viewport blur layer. Never give the dialog a bare display utility either \u2014 it defeats the browser's own rule that a closed dialog is display: none. Use the open: variant." },
+        { name: "--dialog-backdrop-z-index", desc: "The component's one custom property (default 1000). Raise it from your own CSS only as far as the page's stacking requires; very large values make the top-layer promotion flicker." }
+      ],
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
         { label: "Non-dismissible", href: "#non-dismissible" },
-        { label: "Footer slot", href: "#footer" },
-        { label: "Morph from the trigger", href: "#morph" }
+        { label: "Sizes", href: "#sizes" },
+        { label: "Close button", href: "#close-button" },
+        { label: "Custom header", href: "#header-slot" },
+        { label: "Morphing dialogs", href: "#morph" },
+        { label: "Reference", href: "#reference" }
       ]
     };
   }
   events = {
-    openDialog: () => this.setData("dialogOpen", true),
-    closeDialog: () => this.setData("dialogOpen", false),
-    confirmDialog: () => {
-      this.setData("dialogOpen", false);
-      toast({ message: "Project deleted.", variant: "danger" });
+    openHero: () => this.setData("heroOpen", true),
+    // The one handler that reads the @hide detail: data-result tells a deliberate
+    // answer apart from a dismissal, which reports null.
+    closeHero: (detail) => {
+      const result = detail?.result ?? null;
+      this.setData({ heroOpen: false, lastResult: result ?? "dismissed" });
+      if (result === "delete") toast({ message: "Project deleted.", variant: "danger" });
     },
     openLocked: () => this.setData("lockedOpen", true),
     closeLocked: () => this.setData("lockedOpen", false),
-    openFooter: () => this.setData("footerOpen", true),
-    closeFooter: () => this.setData("footerOpen", false),
-    saveFooter: () => {
-      this.setData("footerOpen", false);
-      toast({ message: "Saved.", variant: "success" });
-    },
-    openMorph: () => this.setData("morphOpen", true),
-    closeMorph: () => this.setData("morphOpen", false),
-    shipMorph: () => {
-      this.setData("morphOpen", false);
-      toast({ message: "Shipped.", variant: "success" });
-    }
+    openSize: (value) => this.setData({ size: value, sizeOpen: true }),
+    closeSize: () => this.setData("sizeOpen", false),
+    openScroll: () => this.setData("scrollOpen", true),
+    closeScroll: () => this.setData("scrollOpen", false),
+    openHeader: () => this.setData("headerOpen", true),
+    closeHeader: () => this.setData("headerOpen", false)
   };
 };
 DialogDoc.prototype.render = function() {
@@ -46067,38 +46555,103 @@ DialogDoc.prototype.render = function() {
             new ViewNode("text", { value: "Dialog" })
           ]),
           new ViewNode("p", { class: "mt-2 text-body" }, [
-            new ViewNode("text", { value: "A modal dialog on the native dialog element \u2014 focus trapping, Escape and backdrop dismiss, title and description ARIA wiring, and a footer slot. The parent owns the open flag; the piece only asks to close." })
+            new ViewNode("text", { value: "A centered modal on the native dialog element: the browser traps focus, inerts the page and owns the top layer, and the piece adds the panel chrome, the ARIA wiring and one dismiss policy." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-body" }, [
+            new ViewNode("text", { value: "This piece is a " }),
+            new ViewNode("strong", { class: "font-medium text-ink" }, [
+              new ViewNode("text", { value: "wrapper" })
+            ]),
+            new ViewNode("text", { value: ", not a port: it renders the real" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: displayValue("<dialog-panel>", true ? "'<dialog-panel>'" : 0) })
+            ]),
+            new ViewNode("text", { value: "and" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: displayValue("<dialog-backdrop>", true ? "'<dialog-backdrop>'" : 0) })
+            ]),
+            new ViewNode("text", { value: "custom elements from" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "@magic-spells/dialog-panel" })
+            ]),
+            new ViewNode("text", { value: "and lets them run the open and close machine. Sheet and Bottom Sheet sit on the same component, so all three overlays share one loaded module and one close-and-notify contract. What is left here is exactly what a piece should own: a token-styled panel." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "The dialog closes " }),
+            new ViewNode("strong", { class: "font-medium text-ink" }, [
+              new ViewNode("text", { value: "itself" })
+            ]),
+            new ViewNode("text", { value: " on Escape, a backdrop click, or any" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "data-action-hide-dialog" })
+            ]),
+            new ViewNode("text", { value: "button, and reports through" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "@hide" })
+            ]),
+            new ViewNode("text", { value: ". Your job is to flip " }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "open" })
+            ]),
+            new ViewNode("text", { value: "back to false there \u2014 see " }),
+            new ViewNode("a", {
+              class: "text-brand underline underline-offset-2",
+              href: "#usage"
+            }, [
+              new ViewNode("text", { value: "Usage" })
+            ]),
+            new ViewNode("text", { value: "." })
           ])
         ]),
         new ViewNode(ExampleBox, { code: __d.codeHero }, [
-          new ViewNode(Button, {
-            variant: "outline",
-            press: (this.__h ??= {})[0] ??= (event) => this.events.openDialog(event)
-          }, [
-            new ViewNode("text", { value: "Open dialog" })
+          new ViewNode("div", { class: "flex flex-col items-center gap-2" }, [
+            new ViewNode(Button, {
+              variant: "outline",
+              press: (this.__h ??= {})[0] ??= (event) => this.events.openHero(event)
+            }, [
+              new ViewNode("text", { value: "Delete project" })
+            ]),
+            new ViewNode("span", { class: "text-sm text-muted" }, [
+              new ViewNode("text", { value: "last result: " + displayValue(__d.lastResult, true ? "lastResult" : 0) })
+            ])
           ]),
           new ViewNode(Dialog, {
-            open: __d.dialogOpen,
+            open: __d.heroOpen,
             title: "Delete project?",
             description: "This permanently removes the project and all of its data.",
-            close: (this.__h ??= {})[1] ??= (event) => this.events.closeDialog(event)
+            hide: (this.__h ??= {})[1] ??= (event) => this.events.closeHero(event)
           }, [
-            new ViewNode("p", { class: "text-sm text-body" }, [
-              new ViewNode("text", { value: "You cannot undo this action once the project is gone." })
+            new ViewNode("div", { class: "space-y-2 text-sm text-body" }, [
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "You cannot undo this action once the project is gone." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "Each footer button carries data-action-hide-dialog and a data-result, so @hide receives which one closed the dialog. The readout next to the trigger is that value. Escape and a backdrop click both report null \u2014 that is how a dismissal is told apart from an answer." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "Neither button has a click handler. The component closes the dialog and the page catches up in @hide, which is the one place that has to flip open back to false." })
+              ])
             ]),
-            new ViewNode(Button, {
+            new ViewNode("div", {
               slot: "footer",
-              variant: "ghost",
-              press: (this.__h ??= {})[2] ??= (event) => this.events.closeDialog(event)
+              class: "flex gap-2"
             }, [
-              new ViewNode("text", { value: "Cancel" })
-            ]),
-            new ViewNode(Button, {
-              slot: "footer",
-              variant: "destructive",
-              press: (this.__h ??= {})[3] ??= (event) => this.events.confirmDialog(event)
-            }, [
-              new ViewNode("text", { value: "Delete" })
+              new ViewNode("button", {
+                type: "button",
+                "data-action-hide-dialog": true,
+                "data-result": "cancel",
+                class: __d.cancelButtonClass
+              }, [
+                new ViewNode("text", { value: "Cancel" })
+              ]),
+              new ViewNode("button", {
+                type: "button",
+                "data-action-hide-dialog": true,
+                "data-result": "delete",
+                class: __d.deleteButtonClass
+              }, [
+                new ViewNode("text", { value: "Delete project" })
+              ])
             ])
           ])
         ]),
@@ -46113,8 +46666,26 @@ DialogDoc.prototype.render = function() {
             new ViewNode("text", { value: "Copy the piece into your app \u2014 it compiles with your build and the code is yours:" })
           ]),
           new ViewNode(CodeBlock, { code: __d.installCmd }, []),
+          new ViewNode("p", { class: "mb-3 mt-4 text-sm text-body" }, [
+            new ViewNode("text", { value: "Like Sheet, Bottom Sheet and Scroll Stack, this piece has a runtime dependency: the web component it wraps. It is the same package those two already pull in as a peer, so if you use any of them it is installed once and shared." })
+          ]),
+          new ViewNode(CodeBlock, { code: __d.installDep }, []),
+          new ViewNode("p", { class: "mb-3 mt-4 text-sm text-body" }, [
+            new ViewNode("text", { value: "Then merge the component's stylesheet into your app's style entry (" }),
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "app/styles/styles.css" })
+            ]),
+            new ViewNode("text", { value: "). It owns the dialog and overlay transport \u2014 the state-driven fade, the backdrop element, and the page scroll lock. Without it the dialog is an unstyled native dialog with no animation and no scrim:" })
+          ]),
+          new ViewNode(CodeBlock, { code: __d.installCss }, []),
           new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
-            new ViewNode("text", { value: "Requires the pieces.css tokens merged into your app styles (see Introduction). The morph-engine install backs the optional morph prop." })
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "layer(components)" })
+            ]),
+            new ViewNode("text", { value: "is not optional cosmetics: the stylesheet uses plain element selectors, and an unlayered import would outrank every Tailwind utility on the panel \u2014 including the size cap and the surface color this piece sets." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "Requires the pieces.css tokens merged into your app styles (see Introduction)." })
           ])
         ]),
         new ViewNode("section", {
@@ -46128,17 +46699,37 @@ DialogDoc.prototype.render = function() {
           new ViewNode(CodeBlock, {
             code: __d.usageMarkup,
             class: "mt-3"
-          }, [])
+          }, []),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+              new ViewNode("text", { value: "open" })
+            ]),
+            new ViewNode("text", { value: "is " }),
+            new ViewNode("strong", { class: "font-medium text-ink" }, [
+              new ViewNode("text", { value: "edge-triggered" })
+            ]),
+            new ViewNode("text", { value: ": only a change to it acts. That is what makes a self-closing dialog safe \u2014 an unrelated re-render never re-opens a dialog the user just dismissed while your state still says it is open." })
+          ]),
+          new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+            new ViewNode("text", { value: "Coming from the ported piece: @close(reason) is gone. The dialog reports through @hide, whose detail carries result and triggerElement \u2014 result names the button that closed it and is null for every dismissal. The morph prop is gone too; see" }),
+            new ViewNode("a", {
+              class: "text-brand underline underline-offset-2",
+              href: "#morph"
+            }, [
+              new ViewNode("text", { value: "Morphing dialogs" })
+            ]),
+            new ViewNode("text", { value: ". dismissible, title, description, size and class all mean what they did." })
+          ])
         ]),
         new ViewNode("div", { class: "mt-12 space-y-12" }, [
           new ViewNode(ExampleBox, {
             id: "non-dismissible",
-            title: "Non-dismissible",
+            title: "A dialog that may not be waved away",
             code: __d.codeLocked
           }, [
             new ViewNode(Button, {
               variant: "outline",
-              press: (this.__h ??= {})[4] ??= (event) => this.events.openLocked(event)
+              press: (this.__h ??= {})[2] ??= (event) => this.events.openLocked(event)
             }, [
               new ViewNode("text", { value: "Open locked dialog" })
             ]),
@@ -46146,102 +46737,322 @@ DialogDoc.prototype.render = function() {
               open: __d.lockedOpen,
               dismissible: false,
               title: "Finishing up",
-              description: "Escape and backdrop clicks do nothing here \u2014 the only way out is the button."
+              description: "Escape and backdrop clicks do nothing here \u2014 the only way out is the button.",
+              hide: (this.__h ??= {})[3] ??= (event) => this.events.closeLocked(event)
             }, [
-              new ViewNode("p", { class: "text-sm text-body" }, [
-                new ViewNode("text", { value: "Use this when a choice must be made before the dialog can close." })
+              new ViewNode("div", { class: "space-y-2 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Use this when a choice must be made before the dialog can close." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "dialog-panel has no dismiss policy of its own, so the piece cancels the component's beforeHide event instead. A close that carries a button, or one the parent asked for by flipping open, goes through; Escape and the backdrop arrive with nothing attached and are refused, silently and with no event fired." })
+                ])
               ]),
               new ViewNode(Button, {
                 slot: "footer",
                 variant: "primary",
-                press: (this.__h ??= {})[5] ??= (event) => this.events.closeLocked(event)
+                press: (this.__h ??= {})[4] ??= (event) => this.events.closeLocked(event)
               }, [
                 new ViewNode("text", { value: "Done" })
               ])
             ])
           ]),
           new ViewNode(ExampleBox, {
-            id: "footer",
-            title: "Footer slot",
-            code: __d.codeFooter
+            id: "sizes",
+            title: "Sizes",
+            code: __d.codeSizes
           }, [
-            new ViewNode(Button, {
-              variant: "outline",
-              press: (this.__h ??= {})[6] ??= (event) => this.events.openFooter(event)
-            }, [
-              new ViewNode("text", { value: "Open with footer" })
+            new ViewNode("div", { class: "flex flex-col items-center gap-2" }, [
+              new ViewNode(
+                "div",
+                { class: "flex flex-wrap justify-center gap-2" },
+                __d.sizeOptions.map(
+                  (option) => new ViewNode(Button, {
+                    key: option.value,
+                    variant: "outline",
+                    press: (event) => this.events.openSize(option.value)
+                  }, [
+                    new ViewNode("text", { value: displayValue(option.label, true ? "option.label" : 0) })
+                  ])
+                )
+              ),
+              new ViewNode("span", { class: "text-sm text-muted" }, [
+                new ViewNode("text", { value: "size: " + displayValue(__d.size, true ? "size" : 0) })
+              ])
             ]),
             new ViewNode(Dialog, {
-              open: __d.footerOpen,
-              title: "Rename file",
-              description: "Buttons slotted into footer sit right-aligned at the bottom of the panel.",
-              close: (this.__h ??= {})[7] ??= (event) => this.events.closeFooter(event)
+              open: __d.sizeOpen,
+              size: __d.size,
+              title: "Panel width",
+              description: "Three width caps on the panel; the height cap is the component's own 85vh.",
+              hide: (this.__h ??= {})[5] ??= (event) => this.events.closeSize(event)
             }, [
-              new ViewNode("p", { class: "text-sm text-body" }, [
-                new ViewNode("text", { value: "Any markup can go in the body; footer buttons call the parent's own handlers." })
+              new ViewNode("div", { class: "space-y-2 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "size is a max-width on the panel and nothing else: sm is 24rem, md (the default) is 32rem, lg is 42rem. Below that cap the panel is 90vw, so a phone gets the same gutter at every size." })
+                ]),
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Height is not a prop. The panel caps at 85vh and scrolls inside its own rounded corners, which is why long content never pushes the footer off screen." })
+                ])
               ]),
               new ViewNode(Button, {
                 slot: "footer",
                 variant: "ghost",
-                press: (this.__h ??= {})[8] ??= (event) => this.events.closeFooter(event)
+                press: (this.__h ??= {})[6] ??= (event) => this.events.closeSize(event)
               }, [
-                new ViewNode("text", { value: "Cancel" })
-              ]),
-              new ViewNode(Button, {
-                slot: "footer",
-                variant: "primary",
-                press: (this.__h ??= {})[9] ??= (event) => this.events.saveFooter(event)
-              }, [
-                new ViewNode("text", { value: "Save" })
+                new ViewNode("text", { value: "Close" })
               ])
             ])
           ]),
           new ViewNode(ExampleBox, {
-            id: "morph",
-            title: "Morph from the trigger",
-            code: __d.codeMorph
+            id: "close-button",
+            title: "Close button and a scrolling body",
+            code: __d.codeClose
           }, [
-            new ViewNode("div", { class: "w-full max-w-sm" }, [
-              new ViewNode("button", {
-                type: "button",
-                id: "dialog-morph-card",
-                class: "block w-full cursor-pointer rounded-xl border border-border bg-surface p-5 text-left transition-colors hover:border-border-strong outline-ring focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                "@click": (this.__h ??= {})[10] ??= (event) => this.events.openMorph(event)
+            new ViewNode(Button, {
+              variant: "outline",
+              press: (this.__h ??= {})[7] ??= (event) => this.events.openScroll(event)
+            }, [
+              new ViewNode("text", { value: "Open release notes" })
+            ]),
+            new ViewNode(Dialog, {
+              open: __d.scrollOpen,
+              showClose: true,
+              size: "lg",
+              title: "Release notes",
+              description: "showClose pins an X in the corner. It is a data-action-hide-dialog button with no handler of its own.",
+              hide: (this.__h ??= {})[8] ??= (event) => this.events.closeScroll(event)
+            }, [
+              new ViewNode("div", { class: "space-y-3 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "The X sits outside the scroll region, so it stays in the corner while the body moves under it. It closes through the component like every other button and reports result null, because there is nothing to answer." })
+                ]),
+                ...__d.paragraphs.map(
+                  (n2) => new ViewNode("p", { key: n2 }, [
+                    new ViewNode("text", { value: "Change " + displayValue(n2, true ? "n" : 0) + " \u2014 the panel caps at 85vh and scrolls here, inside the rounded corners, instead of growing past the viewport." })
+                  ])
+                )
+              ])
+            ])
+          ]),
+          new ViewNode(ExampleBox, {
+            id: "header-slot",
+            title: "Custom header",
+            code: __d.codeHeader
+          }, [
+            new ViewNode(Button, {
+              variant: "outline",
+              press: (this.__h ??= {})[9] ??= (event) => this.events.openHeader(event)
+            }, [
+              new ViewNode("text", { value: "Open with custom header" })
+            ]),
+            new ViewNode(Dialog, {
+              open: __d.headerOpen,
+              labelledby: "dialog-promo-title",
+              hide: (this.__h ??= {})[10] ??= (event) => this.events.closeHeader(event)
+            }, [
+              new ViewNode("div", {
+                slot: "header",
+                class: "mb-4 flex items-center gap-2"
               }, [
-                new ViewNode("p", { class: "text-xs font-medium uppercase tracking-wide text-muted" }, [
-                  new ViewNode("text", { value: "Container transform" })
+                new ViewNode("span", {
+                  class: "flex size-8 items-center justify-center rounded-full bg-brand-tint text-brand"
+                }, [
+                  new ViewNode("svg", {
+                    class: "size-4",
+                    viewBox: "0 0 24 24",
+                    fill: "none",
+                    stroke: "currentColor",
+                    "stroke-width": "2",
+                    "stroke-linecap": "round",
+                    "stroke-linejoin": "round",
+                    "aria-hidden": "true"
+                  }, [
+                    new ViewNode("path", { d: "M12 2 15 9l7 .5-5.5 4.5L18 21l-6-3.5L6 21l1.5-7L2 9.5 9 9z" }, [])
+                  ])
                 ]),
-                new ViewNode("p", { class: "mt-1.5 text-sm font-semibold text-ink" }, [
-                  new ViewNode("text", { value: "Release v0.1 is ready" })
+                new ViewNode("h2", {
+                  id: "dialog-promo-title",
+                  class: "text-lg font-semibold text-ink"
+                }, [
+                  new ViewNode("text", { value: "Summer promo" })
                 ]),
-                new ViewNode("p", { class: "mt-1 text-sm text-muted" }, [
-                  new ViewNode("text", { value: "Click this card \u2014 it grows into the dialog." })
+                new ViewNode("span", {
+                  class: "rounded-full bg-brand px-2 py-0.5 text-xs font-medium text-brand-ink"
+                }, [
+                  new ViewNode("text", { value: "New" })
                 ])
               ]),
-              new ViewNode(Dialog, {
-                open: __d.morphOpen,
-                morph: "#dialog-morph-card",
-                title: "Release v0.1 is ready",
-                description: "The card you clicked morphed into this modal, and it morphs back on close.",
-                close: (this.__h ??= {})[11] ??= (event) => this.events.closeMorph(event)
-              }, [
-                new ViewNode("p", { class: "text-sm text-body" }, [
-                  new ViewNode("text", { value: "Pass a CSS selector for the trigger via the morph prop; the panel flies out of it on open and settles back into it on close. Escape or the backdrop both morph back." })
+              new ViewNode("div", { class: "space-y-2 text-sm text-body" }, [
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: "Filling the header slot replaces the stock title and description entirely, so a custom header brings its own heading and points labelledby at it. There is no is-slot-filled probe \u2014 the piece cannot render the fallback alongside your markup." })
                 ]),
-                new ViewNode(Button, {
-                  slot: "footer",
-                  variant: "ghost",
-                  press: (this.__h ??= {})[12] ??= (event) => this.events.closeMorph(event)
-                }, [
-                  new ViewNode("text", { value: "Close" })
-                ]),
-                new ViewNode(Button, {
-                  slot: "footer",
-                  variant: "primary",
-                  press: (this.__h ??= {})[13] ??= (event) => this.events.shipMorph(event)
-                }, [
-                  new ViewNode("text", { value: "Ship it" })
+                new ViewNode("p", {}, [
+                  new ViewNode("text", { value: 'slot="header" has to sit on a direct child of the Dialog tag; the compiler routes slots at compile time, so a conditional block at that level cannot be targeted.' })
                 ])
+              ]),
+              new ViewNode(Button, {
+                slot: "footer",
+                variant: "ghost",
+                press: (this.__h ??= {})[11] ??= (event) => this.events.closeHeader(event)
+              }, [
+                new ViewNode("text", { value: "Close" })
+              ])
+            ])
+          ]),
+          new ViewNode("section", {
+            id: "morph",
+            class: "scroll-mt-20"
+          }, [
+            new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
+              new ViewNode("text", { value: "Morphing dialogs" })
+            ]),
+            new ViewNode("p", { class: "mb-3 text-sm text-body" }, [
+              new ViewNode("text", { value: "The ported piece grew a container transform out of its trigger through" }),
+              new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+                new ViewNode("text", { value: "@magic-spells/morph-engine" })
+              ]),
+              new ViewNode("text", { value: ", and the wrapper drops it. dialog-panel does accept a duck-typed engine, but no engine in this family implements that seam on its own \u2014 Sheet builds it inside its own component. A morphing centered dialog is therefore already a piece:" })
+            ]),
+            new ViewNode(CodeBlock, { code: __d.codeMorph }, []),
+            new ViewNode("p", { class: "mt-3 text-sm text-muted" }, [
+              new ViewNode("text", { value: "Same flight, same reduced-motion fallback, and the trigger doubles as the focus-return target. See " }),
+              new ViewNode("a", {
+                class: "text-brand underline underline-offset-2",
+                href: "#/components/sheet"
+              }, [
+                new ViewNode("text", { value: "Sheet" })
+              ]),
+              new ViewNode("text", { value: "for the live example. Without a morph, Dialog still returns focus on its own: whatever was focused when you flipped open is handed to the component as the return target." })
+            ])
+          ]),
+          new ViewNode("section", {
+            id: "reference",
+            class: "scroll-mt-20"
+          }, [
+            new ViewNode("h2", { class: "mb-4 text-xl font-semibold tracking-tight text-ink" }, [
+              new ViewNode("text", { value: "Reference" })
+            ]),
+            new ViewNode("h3", { class: "mb-2 mt-6 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Props" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.propRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Callbacks" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.callbackRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Slots" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.slotRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-44 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Styling the panel" })
+            ]),
+            new ViewNode("p", { class: "mb-3 text-sm text-body" }, [
+              new ViewNode("text", { value: "dialog-panel publishes exactly one custom property, so unlike Sheet there is no variable bridge to build: the panel is plain token utilities, and" }),
+              new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+                new ViewNode("text", { value: "class" })
+              ]),
+              new ViewNode("text", { value: "and" }),
+              new ViewNode("code", { class: "rounded bg-surface-sunken px-1 py-0.5 font-mono text-[13px] text-ink" }, [
+                new ViewNode("text", { value: "backdropClass" })
+              ]),
+              new ViewNode("text", { value: "append to them. Four properties belong to the component's state machine and must not be set from a utility:" })
+            ]),
+            new ViewNode(
+              "div",
+              { class: "text-sm" },
+              __d.cssRows.map(
+                (row) => new ViewNode("div", {
+                  key: row.name,
+                  class: "flex gap-4 border-b border-border py-2"
+                }, [
+                  new ViewNode("code", { class: "w-56 shrink-0 font-mono text-ink" }, [
+                    new ViewNode("text", { value: displayValue(row.name, true ? "row.name" : 0) })
+                  ]),
+                  new ViewNode("span", { class: "text-body" }, [
+                    new ViewNode("text", { value: displayValue(row.desc, true ? "row.desc" : 0) })
+                  ])
+                ])
+              )
+            ),
+            new ViewNode("h3", { class: "mb-2 mt-8 text-sm font-semibold text-ink" }, [
+              new ViewNode("text", { value: "Known gaps" })
+            ]),
+            new ViewNode("div", { class: "space-y-3 text-sm text-body" }, [
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "A " }),
+                new ViewNode("strong", { class: "font-medium text-ink" }, [
+                  new ViewNode("text", { value: "keyboard" })
+                ]),
+                new ViewNode("text", { value: " activation of a data-action-hide-dialog button closes the dialog but reports result: null. A pointerless click carries coordinates of 0,0, which dialog-panel reads as a click outside the panel before the delegated handler runs. A mouse click reports the data-result correctly. Fix pending upstream in dialog-panel; the piece already watches for that click so a non-dismissible dialog still lets the button through." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "The hidden detail carries no reason, so @hide cannot tell Escape from a backdrop click. Only a data-action-hide-dialog close is distinguishable, through result." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("strong", { class: "font-medium text-ink" }, [
+                  new ViewNode("text", { value: "title and description have to be stable." })
+                ]),
+                new ViewNode("text", { value: "They render in the header slot's fallback body, which the compiler paints once and never patches \u2014 so a heading bound to state keeps whatever text it had when the view mounted. Everything outside the slot (the size cap, class, aria-labelledby) updates normally. A heading that has to change belongs in a filled header slot, where ordinary call-site content patches as usual. Sheet and Bottom Sheet share the shape and the gap." })
+              ]),
+              new ViewNode("p", {}, [
+                new ViewNode("text", { value: "dialog-panel's drawer position attribute is deliberately not exposed. Its rules re-position the dialog and take over the transform, which collides with the size cap here \u2014 and an edge-anchored panel is what" }),
+                new ViewNode("a", {
+                  class: "text-brand underline underline-offset-2",
+                  href: "#/components/sheet"
+                }, [
+                  new ViewNode("text", { value: "Sheet" })
+                ]),
+                new ViewNode("text", { value: "is for." })
               ])
             ])
           ])
@@ -53277,7 +54088,7 @@ FieldDoc.__pzlModule = "app/views/components/FieldDoc.pzl";
 
 // app/components/ui/HoverCard.pzl
 var uid27 = 0;
-var PANEL_BASE7 = "absolute z-50 w-72 rounded-lg border border-border bg-surface p-4 shadow-md text-sm text-body";
+var PANEL_BASE6 = "absolute z-50 w-72 rounded-lg border border-border bg-surface p-4 shadow-md text-sm text-body";
 var ALIGN5 = {
   start: "left-0",
   center: "left-1/2 -translate-x-1/2",
@@ -53338,7 +54149,7 @@ var HoverCard = class extends PuzzleView {
       label: props.label != null ? String(props.label) : "",
       panelId: props.id || `pieces-hover-card-${this._uid}`,
       panelClass: [
-        PANEL_BASE7,
+        PANEL_BASE6,
         placement === "top" ? "bottom-full mb-2" : "top-full mt-2",
         ALIGN5[align],
         props.class || ""
@@ -77945,20 +78756,20 @@ function init$1({
     // ＜＞
   ];
   for (let i3 = 0; i3 < bracketPairs.length; i3++) {
-    const [OPEN, CLOSE] = bracketPairs[i3];
+    const [OPEN, CLOSE2] = bracketPairs[i3];
     const UrlOpen = tt2(Url$1, OPEN);
     tt2(UrlNonaccept, OPEN, UrlOpen);
     const UrlOpenQ = makeState(Url);
     ta(UrlOpen, qsAccepting, UrlOpenQ);
     const UrlOpenSyms = makeState();
     ta(UrlOpen, qsNonAccepting, UrlOpenSyms);
-    tt2(UrlOpen, CLOSE, Url$1);
+    tt2(UrlOpen, CLOSE2, Url$1);
     ta(UrlOpenQ, qsAccepting, UrlOpenQ);
     ta(UrlOpenQ, qsNonAccepting, UrlOpenSyms);
     ta(UrlOpenSyms, qsAccepting, UrlOpenQ);
     ta(UrlOpenSyms, qsNonAccepting, UrlOpenSyms);
-    tt2(UrlOpenQ, CLOSE, Url$1);
-    tt2(UrlOpenSyms, CLOSE, Url$1);
+    tt2(UrlOpenQ, CLOSE2, Url$1);
+    tt2(UrlOpenSyms, CLOSE2, Url$1);
   }
   tt2(Start, LOCALHOST, DomainDotTld);
   tt2(Start, NL, Nl);
@@ -88428,7 +89239,7 @@ var codeValueText = `// Meter never formats numbers itself \u2014 pass a preform
   optimum={ 0 }
   label="Battery pack"
   valueText="7.2 kWh / 10 kWh" />`;
-var codeSizes7 = `<Meter value={ 40 } low={ 60 } high={ 85 } optimum={ 0 } size="sm" label="Small" />
+var codeSizes8 = `<Meter value={ 40 } low={ 60 } high={ 85 } optimum={ 0 } size="sm" label="Small" />
 <Meter value={ 40 } low={ 60 } high={ 85 } optimum={ 0 } size="md" label="Medium" />`;
 var MeterDoc = class extends PuzzleView {
   created() {
@@ -88446,7 +89257,7 @@ var MeterDoc = class extends PuzzleView {
       codeBands,
       codeCustomRange,
       codeValueText,
-      codeSizes: codeSizes7,
+      codeSizes: codeSizes8,
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
@@ -88667,7 +89478,7 @@ var CONTROL_ERROR2 = "border-danger outline-danger focus-within:outline-danger";
 var INPUT_BASE8 = "h-7 min-w-[4rem] flex-1 bg-transparent text-sm text-ink placeholder:text-muted focus:outline-none disabled:cursor-not-allowed";
 var CHIP_CLASS2 = "inline-flex max-w-full items-center gap-1 rounded-full bg-brand-tint py-0.5 pl-2 pr-1 text-xs font-medium text-brand";
 var CHIP_REMOVE_CLASS2 = "inline-flex size-4 shrink-0 items-center justify-center rounded-full text-brand transition-colors hover:bg-brand hover:text-brand-ink disabled:pointer-events-none";
-var PANEL_BASE8 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
+var PANEL_BASE7 = "absolute left-0 right-0 z-50 min-w-full overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-lg";
 var PANEL_PLACEMENT3 = { bottom: "top-full mt-1", top: "bottom-full mb-1" };
 var OPTION_BASE4 = "relative flex items-center gap-2 px-3 py-1.5 text-sm select-none";
 var GROUP_CLASS3 = "px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted select-none";
@@ -88960,7 +89771,7 @@ var MultiSelect = class extends PuzzleView {
         disabled ? "opacity-50 pointer-events-none" : ""
       ].filter(Boolean).join(" "),
       inputClass: INPUT_BASE8,
-      panelClass: [PANEL_BASE8, PANEL_PLACEMENT3[placement]].filter(Boolean).join(" "),
+      panelClass: [PANEL_BASE7, PANEL_PLACEMENT3[placement]].filter(Boolean).join(" "),
       panelStyle: prev.maxHeight ? `max-height:${prev.maxHeight}px;` : ""
     };
   }
@@ -89792,7 +90603,7 @@ var TRIGGER_BASE5 = "inline-flex items-center gap-1 whitespace-nowrap select-non
 var LINK_BASE = "inline-flex items-center whitespace-nowrap select-none rounded-md px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
 var LINK_ACTIVE = "text-ink underline decoration-2 underline-offset-8 decoration-brand";
 var LINK_INACTIVE = "text-body hover:text-ink";
-var PANEL_BASE9 = "absolute left-0 top-full mt-2 z-40 w-max max-w-lg rounded-lg border border-border bg-surface p-2 shadow-md";
+var PANEL_BASE8 = "absolute left-0 top-full mt-2 z-40 w-max max-w-lg rounded-lg border border-border bg-surface p-2 shadow-md";
 var CARD_BASE2 = "block rounded-md p-3 transition-colors hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
 var CARD_LABEL = "block text-sm font-medium text-ink";
 var CARD_LABEL_ACTIVE = "underline decoration-2 underline-offset-4 decoration-brand";
@@ -89850,7 +90661,7 @@ var NavigationMenu = class extends PuzzleView {
         triggerId: `nav-trigger-${seed}-${i3}`,
         panelId: `nav-panel-${seed}-${i3}`,
         triggerClass: TRIGGER_BASE5,
-        panelClass: [PANEL_BASE9, grid].join(" ")
+        panelClass: [PANEL_BASE8, grid].join(" ")
       };
     });
     const prev = this.getData();
@@ -91073,7 +91884,7 @@ var codeStack = `<PanelStack stack={ stack } effect="stack" @change={ setStack }
     <button data-action-stack-pop data-stack-focus>Back</button>
   </div>
 </PanelStack>`;
-var codeDialog = `<Dialog open={ open } title="Preferences" @close={ closeDialog }>
+var codeDialog = `<Dialog open={ open } title="Preferences" @hide={ closeDialog }>
   <div class="h-[300px] rounded-xl">
     <PanelStack stack={ stack } @change={ setStack }>
       <div data-stack-panel="root"
@@ -91387,7 +92198,7 @@ PanelStackDoc.prototype.render = function() {
               open: __d.panelDialogOpen,
               title: "Preferences",
               description: "Drill in and use Escape to step back before closing the dialog.",
-              close: (this.__h ??= {})[3] ??= (event) => this.events.closePanelDialog(event)
+              hide: (this.__h ??= {})[3] ??= (event) => this.events.closePanelDialog(event)
             }, [
               new ViewNode("div", { class: "h-[300px] w-full rounded-xl border border-border bg-surface" }, [
                 new ViewNode(PanelStack, {
@@ -92178,7 +92989,7 @@ PopconfirmDoc.__pzlModule = "app/views/components/PopconfirmDoc.pzl";
 // app/components/ui/Popover.pzl
 var uid34 = 0;
 var TRIGGER_BASE6 = "inline-flex items-center gap-1 text-sm text-body cursor-pointer transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 outline-ring focus-visible:outline-ring";
-var PANEL_BASE10 = "absolute z-50 w-max max-w-xs rounded-lg border border-border bg-surface p-4 shadow-lg text-sm text-body";
+var PANEL_BASE9 = "absolute z-50 w-max max-w-xs rounded-lg border border-border bg-surface p-4 shadow-lg text-sm text-body";
 var ALIGN6 = {
   start: "left-0",
   center: "left-1/2 -translate-x-1/2",
@@ -92216,7 +93027,7 @@ var Popover = class extends PuzzleView {
       panelId: props.id || `pieces-popover-${this._uid}`,
       triggerClass: [TRIGGER_BASE6, props.triggerClass || ""].join(" "),
       panelClass: [
-        PANEL_BASE10,
+        PANEL_BASE9,
         placement === "top" ? "bottom-full mb-1" : "top-full mt-1",
         ALIGN6[align],
         props.class || ""
@@ -92480,7 +93291,7 @@ events = {
 };`;
 var codeIndeterminate = `// Omit value to render the indeterminate (pulsing) state.
 <Progress label="Syncing" />`;
-var codeSizes8 = `<Progress value={ 40 } size="sm" />
+var codeSizes9 = `<Progress value={ 40 } size="sm" />
 <Progress value={ 40 } size="md" />`;
 var ProgressDoc = class extends PuzzleView {
   created() {
@@ -92494,7 +93305,7 @@ var ProgressDoc = class extends PuzzleView {
       usageMarkup: usageMarkup61,
       codeHero: codeHero61,
       codeIndeterminate,
-      codeSizes: codeSizes8,
+      codeSizes: codeSizes9,
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
@@ -92629,7 +93440,7 @@ var installCmd62 = "puzzle add piece progress-ring";
 var usageImport62 = `import ProgressRing from '@/components/ui/ProgressRing.pzl';`;
 var usageMarkup62 = `<ProgressRing value={ 73 } />`;
 var codeHero62 = `<ProgressRing value={ 73 } />`;
-var codeSizes9 = `// size is a px diameter or a preset: sm/md/lg = 48/96/128.
+var codeSizes10 = `// size is a px diameter or a preset: sm/md/lg = 48/96/128.
 <ProgressRing value={ 66 } size="sm" />
 <ProgressRing value={ 66 } size="md" />
 <ProgressRing value={ 66 } size="lg" />
@@ -92659,7 +93470,7 @@ var ProgressRingDoc = class extends PuzzleView {
       usageImport: usageImport62,
       usageMarkup: usageMarkup62,
       codeHero: codeHero62,
-      codeSizes: codeSizes9,
+      codeSizes: codeSizes10,
       codeColors: codeColors2,
       codeThickness,
       codeNoValue,
@@ -93270,7 +94081,7 @@ events = {
 var codeDisplay = `// readOnly renders a static row; the value rounds to the nearest half.
 <Rating value={ 3.5 } readOnly />
 <Rating value={ 4.5 } readOnly />`;
-var codeSizes10 = `<Rating value={ 4 } readOnly size="sm" />
+var codeSizes11 = `<Rating value={ 4 } readOnly size="sm" />
 <Rating value={ 4 } readOnly size="md" />
 <Rating value={ 4 } readOnly size="lg" />`;
 var codeColors3 = `// Filled stars inherit the root text color \u2014 pass any text-* token to retint.
@@ -93296,7 +94107,7 @@ var RatingDoc = class extends PuzzleView {
       usageMarkup: usageMarkup65,
       codeHero: codeHero65,
       codeDisplay,
-      codeSizes: codeSizes10,
+      codeSizes: codeSizes11,
       codeColors: codeColors3,
       codeForms,
       codeKeyboard: codeKeyboard8,
@@ -95605,8 +96416,8 @@ ScrollStack2.__pzlModule = "app/components/ui/ScrollStack.pzl";
 
 // app/views/components/ScrollStackDoc.pzl
 var installCmd69 = "puzzle add piece scroll-stack";
-var installDep2 = "npm install @magic-spells/scroll-stack";
-var installCss2 = `/* app/styles/styles.css */
+var installDep4 = "npm install @magic-spells/scroll-stack";
+var installCss4 = `/* app/styles/styles.css */
 @import "tailwindcss";
 @import "@magic-spells/scroll-stack/css" layer(components);`;
 var usageImport69 = `import ScrollStack from '@/components/ui/ScrollStack.pzl';`;
@@ -95748,8 +96559,8 @@ var ScrollStackDoc = class extends PuzzleView {
       cards: CARDS2,
       tiles: TILES,
       installCmd: installCmd69,
-      installDep: installDep2,
-      installCss: installCss2,
+      installDep: installDep4,
+      installCss: installCss4,
       usageImport: usageImport69,
       usageMarkup: usageMarkup69,
       codeHero: codeHero69,
@@ -96893,7 +97704,7 @@ var MODES3 = ["edge", "card"];
 var EFFECTS2 = ["slide", "fade-scale", "slide-fade"];
 var THEME2 = "[--sheet-panel-background:var(--color-surface)] [--sheet-handle-color:var(--color-faint)] [--sheet-overlay-background:rgb(0_0_0_/_0.5)] [--sheet-overlay-blur:8px]";
 var NO_GRABBER2 = "[--sheet-handle-height:0px] [--sheet-handle-side-thickness:0px] [--sheet-handle-inset:var(--sheet-content-padding)] [--sheet-handle-side-inset:0px]";
-var PANEL3 = "text-body";
+var PANEL4 = "text-body";
 var TITLE2 = "pb-3 text-base font-semibold text-ink text-center [[data-position=left]_&]:text-left [[data-position=right]_&]:text-left";
 var Sheet = class extends PuzzleView {
   #id = `sheet-${++uid37}`;
@@ -96902,7 +97713,10 @@ var Sheet = class extends PuzzleView {
   #live = false;
   #ready = false;
   #lastOpen = false;
-  #lastSnap;
+  // The parent's last rendered `snap`, and the rungs the component announced
+  // through @snapChange that the parent has not written back yet.
+  #lastProp;
+  #pending = [];
   #onShown = () => {
     this.props.show?.();
   };
@@ -96916,7 +97730,8 @@ var Sheet = class extends PuzzleView {
   #onSnapChange = (event) => {
     const to = event.detail?.to;
     if (typeof to !== "number") return;
-    this.#lastSnap = to;
+    this.#pending.push(to);
+    if (this.#pending.length > 16) this.#pending.shift();
     this.props.snapChange?.(to);
   };
   data(params, props) {
@@ -96929,7 +97744,7 @@ var Sheet = class extends PuzzleView {
       labelledby: props.labelledby || (title ? `${this.#id}-title` : false),
       rootClass: THEME2,
       backdropClass: attr3(props.backdropClass),
-      panelClass: [PANEL3, props.showGrabber === false ? NO_GRABBER2 : "", props.class].filter(Boolean).join(" "),
+      panelClass: [PANEL4, props.showGrabber === false ? NO_GRABBER2 : "", props.class].filter(Boolean).join(" "),
       panelStyle: attr3(props.style),
       snapPointsAttr: attr3(snapPoints),
       initialSnapAttr: attr3(props.initialSnap),
@@ -96957,7 +97772,7 @@ var Sheet = class extends PuzzleView {
     this.#panel = this.refs.panel;
     this.#sheet = this.refs.sheet;
     this.#lastOpen = !!this.props.open;
-    this.#lastSnap = this.props.snap;
+    this.#lastProp = this.props.snap;
     this.#panel?.addEventListener("shown", this.#onShown);
     this.#panel?.addEventListener("hidden", this.#onHidden);
     this.#sheet?.addEventListener("snapchange", this.#onSnapChange);
@@ -96980,9 +97795,15 @@ var Sheet = class extends PuzzleView {
       this.#sync();
     }
     const snap2 = this.props.snap;
-    if (snap2 !== void 0 && snap2 !== this.#lastSnap) {
-      this.#lastSnap = snap2;
-      if (this.#ready) this.#sheet?.snapTo?.(Number(snap2));
+    if (snap2 !== this.#lastProp) {
+      this.#lastProp = snap2;
+      const echo = snap2 === void 0 || snap2 === null ? -1 : this.#pending.indexOf(Number(snap2));
+      if (echo !== -1) {
+        this.#pending.splice(0, echo + 1);
+      } else if (snap2 !== void 0 && snap2 !== null) {
+        this.#pending.length = 0;
+        if (this.#ready) this.#sheet?.snapTo?.(Number(snap2));
+      }
     }
   }
   destroyed() {
@@ -97076,10 +97897,10 @@ Sheet.__pzlModule = "app/components/ui/Sheet.pzl";
 
 // app/views/components/SheetDoc.pzl
 var installCmd73 = "puzzle add piece sheet";
-var installDep3 = `npm install @magic-spells/sheet
+var installDep5 = `npm install @magic-spells/sheet
 # Yarn 1 only \u2014 npm 7+ and pnpm install the peer for you
 # yarn add @magic-spells/sheet @magic-spells/dialog-panel`;
-var installCss3 = `/* app/styles/styles.css */
+var installCss5 = `/* app/styles/styles.css */
 @import "tailwindcss";
 @import "@magic-spells/dialog-panel/css" layer(components);
 @import "@magic-spells/sheet/css" layer(components);`;
@@ -97094,14 +97915,14 @@ var usageMarkup73 = `<Sheet open={ cartOpen } title="Your cart" @hide={ () => th
 // [data-action-hide-dialog] descendant, then reports through @hide \u2014
 // where you flip open back to false so the next open is a fresh edge.`;
 var closeButtonClass2 = "absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full text-xl leading-none text-muted transition-colors outline-ring hover:bg-surface-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2";
-var cancelButtonClass2 = "flex-1 cursor-pointer rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2";
+var cancelButtonClass3 = "flex-1 cursor-pointer rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2";
 var SNAP_STEP2 = "cursor-pointer rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-body transition-colors outline-ring hover:bg-surface-sunken focus-visible:outline-2 focus-visible:outline-offset-2";
 var SNAP_STEPS2 = ["25vh", "55vh", "85vh"].map((label, index) => ({
   index,
   label,
   class: SNAP_STEP2
 }));
-var deleteButtonClass2 = "flex-1 cursor-pointer rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-ink transition-colors outline-ring hover:bg-danger-dark focus-visible:outline-2 focus-visible:outline-offset-2";
+var deleteButtonClass3 = "flex-1 cursor-pointer rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-ink transition-colors outline-ring hover:bg-danger-dark focus-visible:outline-2 focus-visible:outline-offset-2";
 var codeHero73 = `<Button variant="outline" @press={ openSheet }>Open sheet</Button>
 <Sheet
   open={ sheetOpen }
@@ -97290,7 +98111,7 @@ var codeEffects = `<Sheet open={ popOpen } labelledby="sheet-pop-title" position
 // Effects: slide | fade-scale | slide-fade.
 // exitEffect / desktopExitEffect fall back to the entrance effects,
 // so saying nothing keeps leaving as the mirror of arriving.`;
-var codeDismiss = `<Button variant="outline" @press={ openConfirm }>Delete project</Button>
+var codeDismiss2 = `<Button variant="outline" @press={ openConfirm }>Delete project</Button>
 <span class="text-sm text-muted">last result: { lastResult }</span>
 
 <Sheet
@@ -97327,7 +98148,7 @@ var codeSpring = `<Sheet open={ sheetOpen } labelledby="sheet-spring-title" spri
 
 // spring="attraction friction", both dials exclusive of 0 and 1.
 // Overrides the entrance only; exits and snaps keep their presets.`;
-var codeHeader2 = `<Sheet
+var codeHeader3 = `<Sheet
   open={ sheetOpen }
   labelledby="sheet-promo-title"
   desktopPosition="right"
@@ -97379,13 +98200,13 @@ var SheetDoc = class extends PuzzleView {
     return {
       ...state,
       installCmd: installCmd73,
-      installDep: installDep3,
-      installCss: installCss3,
+      installDep: installDep5,
+      installCss: installCss5,
       usageImport: usageImport73,
       usageMarkup: usageMarkup73,
       closeButtonClass: closeButtonClass2,
-      cancelButtonClass: cancelButtonClass2,
-      deleteButtonClass: deleteButtonClass2,
+      cancelButtonClass: cancelButtonClass3,
+      deleteButtonClass: deleteButtonClass3,
       codeHero: codeHero73,
       codeSnaps,
       codeResponsive: codeResponsive2,
@@ -97393,9 +98214,9 @@ var SheetDoc = class extends PuzzleView {
       codeModes,
       codeEffects,
       codeMorphTrigger,
-      codeDismiss,
+      codeDismiss: codeDismiss2,
       codeSpring,
-      codeHeader: codeHeader2,
+      codeHeader: codeHeader3,
       paragraphs: [1, 2, 3, 4, 5, 6, 7, 8],
       snapSteps: SNAP_STEPS2,
       propRows: [
@@ -97413,7 +98234,7 @@ var SheetDoc = class extends PuzzleView {
         { name: "desktopExitEffect", desc: "Desktop exit; falls back to exitEffect, then desktopEffect." },
         { name: "snapPoints", desc: 'Space-separated CSS heights, or an array of them. A MOBILE BOTTOM prop only \u2014 every other profile sizes itself by measurement. Default "85vh".' },
         { name: "initialSnap", desc: "Zero-based snap index the sheet opens at. Default: the largest." },
-        { name: "snap", desc: "Optional-controlled snap index; a change calls snapTo(). Pair with @snapChange. It does not seed the opening index \u2014 use initialSnap." },
+        { name: "snap", desc: "Optional-controlled snap index. Only a change calls snapTo(), and a change that writes back a rung the sheet itself announced through @snapChange is absorbed \u2014 a late render can never drag the sheet back to a rung the user already left. Pair with @snapChange. It does not seed the opening index \u2014 use initialSnap." },
         { name: "dismiss", desc: 'Which of swipe, backdrop, escape may dismiss. Absent or "all" opens all three; "none" refuses all three. A refused sheet still tracks your finger and springs back.' },
         { name: "maxDisplayWidth", desc: "Largest viewport width where opening is allowed. Above it show() refuses silently, so open={true} there leaves the page out of sync until you flip it back." },
         { name: "spring", desc: '"attraction friction" entrance override, both dials in (0, 1).' },
@@ -100800,7 +101621,7 @@ events = {
 var codeVariants5 = `<SplitButton variant="primary"   label="Save" actions={ actions } @press={ p } @select={ s }/>
 <SplitButton variant="secondary" label="Save" actions={ actions } @press={ p } @select={ s }/>
 <SplitButton variant="outline"   label="Save" actions={ actions } @press={ p } @select={ s }/>`;
-var codeSizes11 = `<SplitButton size="sm" label="Save" actions={ actions } @press={ p } @select={ s }/>
+var codeSizes12 = `<SplitButton size="sm" label="Save" actions={ actions } @press={ p } @select={ s }/>
 <SplitButton size="md" label="Save" actions={ actions } @press={ p } @select={ s }/>
 <SplitButton size="lg" label="Save" actions={ actions } @press={ p } @select={ s }/>`;
 var codeDanger3 = `<SplitButton label="Export" actions={ exportActions } @press={ onPress } @select={ onSelect }/>
@@ -100824,7 +101645,7 @@ var SplitButtonDoc = class extends PuzzleView {
       usageMarkup: usageMarkup79,
       codeHero: codeHero79,
       codeVariants: codeVariants5,
-      codeSizes: codeSizes11,
+      codeSizes: codeSizes12,
       codeDanger: codeDanger3,
       codeDisabled: codeDisabled12,
       toc: [
@@ -105181,7 +106002,7 @@ events = {
 };`;
 var codeVariants6 = `<Toggle pressed={ a } @change={ setA }>Default</Toggle>
 <Toggle variant="outline" pressed={ b } @change={ setB }>Outline</Toggle>`;
-var codeSizes12 = `<Toggle size="sm" pressed={ a } @change={ setA }>Small</Toggle>
+var codeSizes13 = `<Toggle size="sm" pressed={ a } @change={ setA }>Small</Toggle>
 <Toggle size="md" pressed={ b } @change={ setB }>Medium</Toggle>
 <Toggle size="lg" pressed={ c } @change={ setC }>Large</Toggle>`;
 var ToggleDoc = class extends PuzzleView {
@@ -105204,7 +106025,7 @@ var ToggleDoc = class extends PuzzleView {
       usageMarkup: usageMarkup91,
       codeHero: codeHero91,
       codeVariants: codeVariants6,
-      codeSizes: codeSizes12,
+      codeSizes: codeSizes13,
       toc: [
         { label: "Installation", href: "#installation" },
         { label: "Usage", href: "#usage" },
