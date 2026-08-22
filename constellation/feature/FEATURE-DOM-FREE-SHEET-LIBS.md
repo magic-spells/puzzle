@@ -18,6 +18,15 @@ notes:
       bottom-sheet (still a port at that point) imports it — it goes when bottom-sheet is converted
       (phase 2 of notes/2026-08-22-sheet-wrapper-plan.md). This card is history for how the port was
       built, not a description of current code.
+  - kind: state
+    text: >-
+      2026-08-22 (phase 2, feat/sheet-wrapper): sheet-math.js is gone too. bottom-sheet became a
+      wrapper over @magic-spells/bottom-sheet, so registry/lib/sheet-math.js, its demo copy and
+      test/sheet-math.test.js were deleted and the sheet-math row was trimmed from
+      test/sheet-parity.test.js (which now only asserts the two wrapper .pzl copies stay
+      byte-identical). Nothing in this repo ports sheet motion any more — every suite under test/
+      that named a sheet lib is deleted; test/sheet-wrapper.test.js now carries the static wiring
+      guards for BOTH wrapper pieces.
 ---
 
 # Port DOM-free sheet motion libraries

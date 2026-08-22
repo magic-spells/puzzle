@@ -1,6 +1,5 @@
 import './sheet-parity.test.js';
 import './sheet-wrapper.test.js';
-import './sheet-math.test.js';
 import './input-otp-component.test.js';
 import './rich-text-doc.test.js';
 import './rich-text-parity.test.js';

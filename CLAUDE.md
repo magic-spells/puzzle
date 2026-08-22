@@ -69,7 +69,8 @@ Rules that follow from this:
   never appears here. Examples: morph pieces → `@magic-spells/morph-engine`, `sheet` →
   `@magic-spells/sheet` + `@magic-spells/dialog-panel` (it wraps the web component; the
   second is its peer, which yarn 1 will not install on its own), `bottom-sheet` →
-  `@magic-spells/physics-engine` (still a port), the rich-text/markdown editors →
+  `@magic-spells/bottom-sheet` + the same `@magic-spells/dialog-panel` peer (also a
+  wrapper — one dialog-panel copy serves both), the rich-text/markdown editors →
   `@tiptap/*`, `code` → `highlight.js`, `markdown` → `marked`.
 
 ## Versioning
@@ -102,15 +103,13 @@ CLI — it is unrelated and must not be bumped along with the release.
   are taken by sibling projects). Browser-smoke interactive pieces in a FOREGROUNDED tab —
   Puzzle's rAF-based view scheduler stalls re-renders in a hidden/backgrounded tab.
 - **Node tests:** `npm test` at the repo root runs the DOM-free suites in `test/` against
-  `registry/lib/`: `sheet-math.js` (bottom-sheet's dismissal math), the markdown and
-  rich-text document models, an InputOTP suite, static wiring guards for the `sheet`
-  wrapper piece, and parity suites that assert the demo copies are byte-identical to their
-  `registry/` sources. These are repo-internal — nothing under `test/` or the root
-  `package.json` is ever copied to a consumer. The sheet MOTION suites (engine, drag,
-  snap points, scroll policy) are gone with the sheet port — that behavior now lives in
-  `@magic-spells/sheet` and is tested there; `sheet-math.js` stays because `bottom-sheet`
-  is still a port and still imports it. Its assertions are ported byte-identical from the
-  source repo and pin exact numbers, not bounds — never loosen one to make a port fit.
+  `registry/lib/`: the markdown and rich-text document models, an InputOTP suite, static
+  wiring guards for the `sheet` and `bottom-sheet` wrapper pieces, and parity suites that
+  assert the demo copies are byte-identical to their `registry/` sources. These are
+  repo-internal — nothing under `test/` or the root `package.json` is ever copied to a
+  consumer. Every sheet MOTION suite (engine, drag, snap points, scroll policy, dismissal
+  math) is gone with the two ports — that behavior now lives in `@magic-spells/sheet` and
+  `@magic-spells/bottom-sheet` and is tested there.
 
 ## Piece conventions
 

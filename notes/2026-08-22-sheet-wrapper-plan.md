@@ -185,6 +185,16 @@ web-component users, decide separately). The wrapper must work against 0.1.1 as-
   `detail === 0` (a pointerless click can never be a scrim tap); the sheet's pointerless
   guard then only has to protect non-closing controls. Affects the plain web component too.
 
+- **bottom-sheet 2.0.2 paints two overlays.** Its `dialog-panel:has(bottom-sheet) > dialog-backdrop
+  { display:none }` (0,0,3) loses to dialog-panel 2.0.1's `dialog-panel[state='shown'] >
+  dialog-backdrop { display:block }` (0,1,2), so dialog-panel's 30% backdrop paints under the
+  component's own 50% `dialog::backdrop` scrim (overlay reads darker; `backdropClass` is inert).
+  Already fixed on `../bottom-sheet` main (scrim moved onto `<dialog-backdrop>`,
+  `--bs-backdrop-progress` added) — **publish 2.0.3**, then bump the piece/demo range.
+- **bottom-sheet's ESM bundle does not side-effect-import its dialog-panel peer** (sheet's does).
+  The wrapper imports both packages in `mounted()`; upstream could add the import for parity
+  with sheet so consumers of the plain component get one-import installs too.
+
 ## Verification (Claude, not the implementing agent)
 
 Diff review; `npm test` green at the root; demo build; browser smoke of every SheetDoc

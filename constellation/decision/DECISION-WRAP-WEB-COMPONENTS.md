@@ -28,6 +28,22 @@ notes:
       date-picker, tarot pkgs, color-picker at the time of the survey) cannot be wrapped at all.
       Also: the demo pins some wrappers to file:../../<repo>, so a green demo build does not prove
       the npm tarball works — smoke against the published version before shipping.
+  - kind: state
+    text: >-
+      2026-08-22 (phase 2, feat/sheet-wrapper, uncommitted): bottom-sheet is now a wrapper too —
+      registry/ui/bottom-sheet/BottomSheet.pzl renders dialog-panel > dialog >
+      bottom-sheet(-header/-content/-footer) from @magic-spells/bottom-sheet, replacing the
+      1,123-line port and sheet-math.js. Two gotchas the sheet conversion did not hit: (1) the
+      bottom-sheet ESM bundle does NOT side-effect-import its dialog-panel peer (sheet's does), so
+      mounted() must dynamically import BOTH packages or show() throws "panel?.show is not a
+      function"; (2) its snap API is a VALUE in dvh percent, not an index — the component reflects
+      the committed snap back into the snap attribute, so the wrapper never binds that attribute (it
+      writes it once at mount as the opening rung and drives it with snapTo() after), and the event
+      is camelCase snapChange with detail { from, to }. Upstream gap found in the browser: published
+      bottom-sheet 2.0.2 still paints its scrim on dialog::backdrop and its display:none rule for
+      dialog-backdrop loses on specificity to dialog-panel 2.0.1's [state='shown'] rule, so two
+      overlays paint at once (cosmetic; fixed on the component's main branch, which needs a 2.0.3
+      publish).
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work
