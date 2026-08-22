@@ -8,7 +8,7 @@
       </a>
       <div class="flex items-center gap-4">
         <SearchDialog/>
-        <span class="hidden text-xs text-muted sm:inline">{ pieceCount } pieces · v0.6.0</span>
+        <span class="hidden text-xs text-muted sm:inline">{ pieceCount } pieces · v0.7.0</span>
         <DropdownMenu
           align="end"
           items={ schemeItems }
