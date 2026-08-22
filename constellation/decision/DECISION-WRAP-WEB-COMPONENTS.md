@@ -6,6 +6,28 @@ connections:
   - DECISION-CONFIG-FIRST-API
   - DECISION-COPY-IN-DISTRIBUTION
   - FEATURE-DOM-FREE-SHEET-LIBS
+notes:
+  - kind: gotcha
+    text: >-
+      Wrap-safety criteria sharpened by the 2026-08-22 registry-wide survey
+      (notes/2026-08-22-wrap-candidates-assessment.md, §2). The attribute-diff fact is necessary but
+      not sufficient. Three more gates: (1) SIBLING-NODE RULE — a component may set
+      attributes/inline styles on itself or on slotted children freely, and may create ONE node the
+      template can pre-author (dialog-panel's <dialog-backdrop>); but a component that
+      inserts/moves/removes nodes AMONG template-rendered siblings is unsafe under a KEYED child
+      list — patchKeyedChildren's move guard (puzzle client-runtime/views/viewManager.js ~L1169,
+      nextPersistentSibling ~L1188) skips only mid-leave elements, not foreign nodes, so it
+      re-inserts on every patch. Unkeyed fixed lists survive (that is why ScrollStack works).
+      tarot-puzzle/docs/PUZZLE-FRICTION.md is independent prior art. (2) ATTRIBUTE-DRIVABILITY —
+      most @magic-spells components have no usable observedAttributes (dialog-panel, dropdown-panel,
+      tab-group, select-dropdown declare none); a wrapper then drives them imperatively from
+      mounted()/afterUpdate() (show()/hide()/setActiveTab()), which is fine for a few methods
+      (sheet/dialog) and 'more glue than the port' when the whole API is imperative. A wrapper can
+      only expose callbacks the component actually emits. (3) PUBLISHED UPSTREAM — piece.json
+      dependencies resolve from npm, so an unpublished component (range-slider, notification-stack,
+      date-picker, tarot pkgs, color-picker at the time of the survey) cannot be wrapped at all.
+      Also: the demo pins some wrappers to file:../../<repo>, so a green demo build does not prove
+      the npm tarball works — smoke against the published version before shipping.
 ---
 
 # Wrap @magic-spells web components; port only when wrapping can't work
