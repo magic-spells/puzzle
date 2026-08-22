@@ -1,12 +1,12 @@
 {
   "name": "dialog",
-  "description": "Modal dialog on the native <dialog> element — focus trapping, escape/backdrop dismiss, title/description ARIA wiring, footer slot",
+  "description": "Centered modal on the native <dialog> element — focus trapping, an Escape/backdrop dismiss policy, title/description ARIA wiring, size caps, an optional close button and header/footer slots; wraps the @magic-spells/dialog-panel web component rather than porting it",
   "files": [
     "Dialog.pzl"
   ],
   "registryDependencies": [],
   "dependencies": [
-    "@magic-spells/morph-engine"
+    "@magic-spells/dialog-panel"
   ],
   "targetDir": "app/components/ui"
 }

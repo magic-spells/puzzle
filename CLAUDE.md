@@ -66,12 +66,14 @@ Rules that follow from this:
 - `registryDependencies` — other registry files pulled in transitively: `lib/*.js` files go
   to `app/lib/`; sibling pieces (e.g. DatePicker → `calendar`) go to their own targetDir.
 - `dependencies` — **real npm packages, plain JS only.** `.pzl` never ships via npm, so it
-  never appears here. Examples: morph pieces → `@magic-spells/morph-engine`, `sheet` →
-  `@magic-spells/sheet` + `@magic-spells/dialog-panel` (it wraps the web component; the
-  second is its peer, which yarn 1 will not install on its own), `bottom-sheet` →
-  `@magic-spells/bottom-sheet` + the same `@magic-spells/dialog-panel` peer (also a
-  wrapper — one dialog-panel copy serves both), the rich-text/markdown editors →
-  `@tiptap/*`, `code` → `highlight.js`, `markdown` → `marked`.
+  never appears here. Examples: morph pieces (Select, DatePicker) →
+  `@magic-spells/morph-engine`, `sheet` → `@magic-spells/sheet` +
+  `@magic-spells/dialog-panel` (it wraps the web component; the second is its peer, which
+  yarn 1 will not install on its own), `bottom-sheet` → `@magic-spells/bottom-sheet` + the
+  same `@magic-spells/dialog-panel` peer (also a wrapper), `dialog` and `alert-dialog` →
+  `@magic-spells/dialog-panel` alone (wrappers over it directly — one dialog-panel copy
+  serves all four overlays), the rich-text/markdown editors → `@tiptap/*`, `code` →
+  `highlight.js`, `markdown` → `marked`.
 
 ## Versioning
 

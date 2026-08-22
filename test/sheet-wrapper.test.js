@@ -2,20 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-// Static guards for the overlay WRAPPER pieces — `sheet` and `bottom-sheet`.
-// There is nothing left to unit test in this repo for either: the motion, the
-// gestures and the snap policy all live in @magic-spells/sheet and
-// @magic-spells/bottom-sheet now and are tested there. What can still regress
-// here is the wiring: the declared dependencies, the manifest/index agreement,
-// and the two prerender rules a wrapper piece has to keep (no top-level import
-// of a package that defines custom elements at module scope, and no
-// customElements touch of its own).
+// Static guards for the overlay WRAPPER pieces — `sheet`, `bottom-sheet`,
+// `dialog` and `alert-dialog`. There is nothing left to unit test in this repo
+// for any of them: the motion, the gestures, the snap policy and the
+// open/close state machine all live in @magic-spells/sheet,
+// @magic-spells/bottom-sheet and @magic-spells/dialog-panel now, and are
+// tested there. What can still regress here is the wiring: the declared
+// dependencies, the manifest/index agreement, and the two prerender rules a
+// wrapper piece has to keep (no top-level import of a package that defines
+// custom elements at module scope, and no customElements touch of its own).
 
 const readJSON = async (path) =>
 	JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
 
-// Every wrapper here also declares @magic-spells/dialog-panel: it is a PEER of
-// the package being wrapped, and yarn 1 will not install it on its own.
+// Every wrapper here also declares @magic-spells/dialog-panel: the two sheets
+// wrap a package that only PEERs on it, and yarn 1 will not install a peer on
+// its own; the two dialogs wrap dialog-panel itself.
+const DIALOG_PANEL = '@magic-spells/dialog-panel';
 const WRAPPERS = [
 	{
 		piece: 'sheet',
@@ -31,15 +34,29 @@ const WRAPPERS = [
 		source: '../registry/ui/bottom-sheet/BottomSheet.pzl',
 		package: '@magic-spells/bottom-sheet',
 	},
+	{
+		piece: 'dialog',
+		file: 'Dialog.pzl',
+		manifest: '../registry/ui/dialog/piece.json',
+		source: '../registry/ui/dialog/Dialog.pzl',
+		package: DIALOG_PANEL,
+	},
+	{
+		piece: 'alert-dialog',
+		file: 'AlertDialog.pzl',
+		manifest: '../registry/ui/alert-dialog/piece.json',
+		source: '../registry/ui/alert-dialog/AlertDialog.pzl',
+		package: DIALOG_PANEL,
+	},
 ];
 
 for (const wrapper of WRAPPERS) {
-	test(`the ${wrapper.piece} piece declares both npm packages and no registry dependencies`, async () => {
+	test(`the ${wrapper.piece} piece declares its npm packages and no registry dependencies`, async () => {
 		const piece = await readJSON(wrapper.manifest);
 
 		assert.deepEqual(piece.files, [wrapper.file]);
 		assert.deepEqual(piece.registryDependencies, []);
-		for (const pkg of [wrapper.package, '@magic-spells/dialog-panel']) {
+		for (const pkg of new Set([wrapper.package, DIALOG_PANEL])) {
 			assert.ok(
 				piece.dependencies.includes(pkg),
 				`piece.json must declare ${pkg} — dialog-panel is a peer that yarn 1 will not install on its own`

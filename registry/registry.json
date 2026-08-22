@@ -46,12 +46,14 @@
     },
     {
       "name": "alert-dialog",
-      "description": "Confirm/cancel modal for destructive or consequential actions on the native <dialog role=\"alertdialog\"> element — no backdrop dismiss, no close X, Escape cancels, initial focus on Cancel",
+      "description": "Confirm/cancel modal for destructive or consequential actions on the native <dialog role=\"alertdialog\"> element — inert backdrop, no close X, Escape cancels, initial focus on Cancel; wraps the @magic-spells/dialog-panel web component rather than porting it",
       "files": [
         "AlertDialog.pzl"
       ],
       "registryDependencies": [],
-      "dependencies": [],
+      "dependencies": [
+        "@magic-spells/dialog-panel"
+      ],
       "targetDir": "app/components/ui"
     },
     {
@@ -352,13 +354,13 @@
     },
     {
       "name": "dialog",
-      "description": "Modal dialog on the native <dialog> element — focus trapping, escape/backdrop dismiss, title/description ARIA wiring, footer slot",
+      "description": "Centered modal on the native <dialog> element — focus trapping, an Escape/backdrop dismiss policy, title/description ARIA wiring, size caps, an optional close button and header/footer slots; wraps the @magic-spells/dialog-panel web component rather than porting it",
       "files": [
         "Dialog.pzl"
       ],
       "registryDependencies": [],
       "dependencies": [
-        "@magic-spells/morph-engine"
+        "@magic-spells/dialog-panel"
       ],
       "targetDir": "app/components/ui"
     },

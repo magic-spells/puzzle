@@ -9,6 +9,12 @@ const copies = [
 		'../registry/ui/bottom-sheet/BottomSheet.pzl',
 		'../demo/app/components/ui/BottomSheet.pzl',
 	],
+	['Dialog.pzl', '../registry/ui/dialog/Dialog.pzl', '../demo/app/components/ui/Dialog.pzl'],
+	[
+		'AlertDialog.pzl',
+		'../registry/ui/alert-dialog/AlertDialog.pzl',
+		'../demo/app/components/ui/AlertDialog.pzl',
+	],
 ];
 
 test('registry and demo overlay-wrapper copies stay byte-identical', async () => {

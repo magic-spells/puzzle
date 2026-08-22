@@ -1,8 +1,12 @@
 {
   "name": "alert-dialog",
-  "description": "Confirm/cancel modal for destructive or consequential actions on the native <dialog role=\"alertdialog\"> element — no backdrop dismiss, no close X, Escape cancels, initial focus on Cancel",
-  "files": ["AlertDialog.pzl"],
+  "description": "Confirm/cancel modal for destructive or consequential actions on the native <dialog role=\"alertdialog\"> element — inert backdrop, no close X, Escape cancels, initial focus on Cancel; wraps the @magic-spells/dialog-panel web component rather than porting it",
+  "files": [
+    "AlertDialog.pzl"
+  ],
   "registryDependencies": [],
-  "dependencies": [],
+  "dependencies": [
+    "@magic-spells/dialog-panel"
+  ],
   "targetDir": "app/components/ui"
 }
